@@ -143,7 +143,7 @@ public class MySqlFunctionsSqlGenerationTests
     [Fact]
     public void MariaDbOnlyDateAndNumberFunctions_ShouldRenderNatively()
     {
-        using var ctx = MariaDbTestContext.Create();
+        using var ctx = MariaDbTestContext.Create(new Version(12, 3));
         var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Select(x => SqlFunctions.MySql.add_months(x.Datetime, 2)))
@@ -156,6 +156,21 @@ public class MySqlFunctionsSqlGenerationTests
             .Should().Contain("to_date(_utf8mb4 X'323032332d30312d3032', _utf8mb4 X'595959592d4d4d2d4444')");
         SqlOf(ctx, e.Select(x => SqlFunctions.MySql.to_number("100.00", "999.99")))
             .Should().Contain("to_number(_utf8mb4 X'3130302e3030', _utf8mb4 X'3939392e3939')");
+    }
+
+    [Fact]
+    public void MariaDbVersionGatedFunctions_Unset_ShouldThrow()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var months = () => SqlOf(ctx, e.Select(x => SqlFunctions.MySql.months_between(x.Datetime, x.Datetime)));
+        var date = () => SqlOf(ctx, e.Select(x => SqlFunctions.MySql.to_date("2023-01-02", "YYYY-MM-DD")));
+        var number = () => SqlOf(ctx, e.Select(x => SqlFunctions.MySql.to_number("100.00", "999.99")));
+
+        months.Should().Throw<NotSupportedException>().WithMessage("*months_between*not supported*");
+        date.Should().Throw<NotSupportedException>().WithMessage("*to_date*not supported*");
+        number.Should().Throw<NotSupportedException>().WithMessage("*to_number*not supported*");
     }
 
     [Fact]

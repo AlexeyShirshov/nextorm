@@ -614,7 +614,7 @@ to the ledger on 2026-09-29; item 49 (eager loading) moved on 2026-10-17; item 5
     `SETVAL`/`LASTVAL`) are members of `SqlFunctions.MySql`, supported per name by
     `MariaDbDialect.MySqlFunctions` and rejected by MySQL. SQL Server exposes the same `NEXT VALUE FOR`
     through `SqlFunctions.SqlServer.next_value_for`/`nextval`
-    ([#218](https://github.com/AlexeyShirshov/nextorm/issues/218)). See
+    ([#218](https://github.com/AlexeyShirshov/nextorm/issues/218)). The shipped surface is version-gated: `MONTHS_BETWEEN`/`TO_NUMBER` (12.2.1), `TO_DATE` (12.3) and the `UUID_V4()`/`UUID_V7()` generators (11.7) are emitted only for an explicitly configured server version at or above the minimum, and an unversioned `MariaDbDataContext` refuses them with `NotSupportedException` instead of emitting SQL MariaDB 11.4 rejects ([#280](https://github.com/AlexeyShirshov/nextorm/issues/280)). See
     [MySQL and MariaDB-specific SQL](../../guide/provider-specific-sql/mysql.md#mariadb).
 41. **SQLite built-in function gaps — <span style="color:green">shipped</span>.** `SqlFunctions.Sqlite` (`SqliteFunctions`) plus
     `ISqlDialect.SqliteFunctions` cover the core scalars (`printf`/`format`, `hex`/`unhex`,

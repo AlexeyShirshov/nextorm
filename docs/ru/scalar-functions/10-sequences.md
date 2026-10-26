@@ -94,10 +94,12 @@ var rows = dataContext.From<IOrderEntity>()
 
 | C# | PostgreSQL | SQL Server | MySQL | MariaDB | ClickHouse | SQLite |
 |---|---|---|---|---|---|---|
-| `gen_random_uuid()` | `gen_random_uuid()` (13+) | `newid()` | — | `UUID_v4()` | `generateUUIDv4()` | — |
-| `uuidv7()` | `uuidv7()` (18+) | — | — | `UUID_v7()` (11.7+) | `generateUUIDv7()` | — |
+| `gen_random_uuid()` | `gen_random_uuid()` (13+) | `newid()` | — | `uuid_v4()` (11.7+) | `generateUUIDv4()` | — |
+| `uuidv7()` | `uuidv7()` (18+) | — | — | `uuid_v7()` (11.7+) | `generateUUIDv7()` | — |
 
-У MySQL есть только `UUID()` (v1), у SQLite генератора UUID нет, поэтому оба отклоняют вызов. Это
+У MySQL есть только `UUID()` (v1), у SQLite генератора UUID нет, поэтому оба отклоняют вызов. В MariaDB оба
+генератора требуют явно заданной версии сервера 11.7 или новее; **контекст без версии**
+(`MariaDbDataContext`) отклоняет их с `NotSupportedException`, а `UUID()` (v1) не подставляется. Это
 серверные генераторы, вычисляемые на каждую строку базой; `Guid.NewGuid()` — клиентское значение и
 заменой не является. SQL Server дополнительно открывает `newsequentialid()`
 (`SqlFunctions.SqlServer.newsequentialid()`), допустимый только как `DEFAULT` колонки, но не в

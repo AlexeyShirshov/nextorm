@@ -147,6 +147,12 @@ time) и материализуют `DateTimeOffset` с нулевым offset'о
 (рендерит PostgreSQL `make_date`), `date_add`, `date_diff`, `date_trunc` и члены `DateTime` (см.
 [Арифметику дат](#арифметика-дат) ниже).
 
+Oracle-совместимые конверсии MariaDB **зависят от версии** и не входят в переносимую поверхность:
+`months_between` (12.2.1), `to_date` (12.3) и `to_number` (семейство 12.2, принудительный минимум 12.2.1)
+отклоняются с `NotSupportedException` контекстом `MariaDbDataContext` без версии; `add_months`/`to_char`
+доступны с MariaDB 10.6. См.
+[MySQL и MariaDB-специфичный SQL](../guide/provider-specific-sql/mysql.md#mariadb).
+
 ## Форматирование дат и чисел в строки
 
 nextorm транслирует culture-invariant подмножество CLR-форматирования — `string.Format`,

@@ -90,15 +90,23 @@ var updated = dataContext.From<IComplexEntity>()
 | `nvl(value, fallback)` | `nvl(...)` | синоним `IFNULL` |
 | `nvl2(value, whenNotNull, whenNull)` | `nvl2(...)` | выбор по NULL-ности `value` |
 | `add_months(date, months)` | `add_months(...)` | MariaDB 10.6.1+; при переполнении — последний день месяца |
-| `months_between(a, b)` | `months_between(...)` | MariaDB 12.2+; дробные месяцы |
+| `months_between(a, b)` | `months_between(...)` | MariaDB 12.2.1+ (принудительный минимум; 12.2 и 12.2.0 отклоняются); дробные месяцы |
 | `to_char(value, format)` | `to_char(...)` | MariaDB 10.6+; маска формата Oracle |
 | `to_date(value, format)` | `to_date(...)` | MariaDB 12.3+; разбор в стиле Oracle |
-| `to_number(value, format)` | `to_number(...)` | MariaDB 12.2+; возвращает `DOUBLE` |
+| `to_number(value, format)` | `to_number(...)` | семейство MariaDB 12.2, принудительный минимум 12.2.1; возвращает `DOUBLE` |
 | `kdf(password, salt, info, kdfName)` | `kdf(...)` | MariaDB 11.3+; вывод ключа, возвращает binary |
 | `xxh3(value)` / `xxh32(value)` | то же | MariaDB 13.1+; быстрый 64/32-битный xxHash |
 | `json_detailed(json)` / `json_compact(json)` | то же | переформатирование / удаление пробелов |
 | `json_equals(json1, json2)` | `json_equals(...)` | `1`, если JSON-документы равны (порядок ключей объекта не важен), `0`, если различаются, `null` при SQL NULL; базовая версия MariaDB 11.4, MySQL отклоняет |
 | `json_normalize(json)` | `json_normalize(...)` | канонический текст JSON (ключи объекта отсортированы, лишние пробелы удалены, идемпотентно), `null` при SQL NULL; базовая версия MariaDB 11.4, MySQL отклоняет |
+
+Эти три Oracle-совместимые конверсии (`months_between`, `to_date`, `to_number`) **зависят от версии**:
+в MariaDB 11.4 их нет, поэтому `MariaDbDialect` рендерит каждую только тогда, когда контекст создан с явно
+заданной версией сервера не ниже её минимума. **Без версии** (конструктор по умолчанию с двумя аргументами)
+MariaDB-контекст отклоняет вызов с `NotSupportedException` при подготовке, вместо того чтобы эмитить SQL,
+который сервер отвергнет; платформенные эквиваленты (`TIMESTAMPDIFF`, `STR_TO_DATE`, `CAST(... AS DECIMAL)`)
+не подставляются. Генераторы UUID подчиняются тому же правилу с минимумом MariaDB 11.7 (см.
+[Последовательности и генераторы UUID](../../scalar-functions/10-sequences.md)).
 
 Доступ к последовательностям провайдерный; см. общий раздел
 [Последовательности и генераторы UUID](../../scalar-functions/10-sequences.md).

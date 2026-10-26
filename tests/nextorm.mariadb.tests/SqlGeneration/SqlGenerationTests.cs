@@ -232,7 +232,7 @@ public class SqlGenerationTests
     [Fact]
     public void UuidGenerators_ShouldUseMariaDbNames()
     {
-        using var ctx = MariaDbTestContext.Create();
+        using var ctx = MariaDbTestContext.Create(new Version(11, 7));
         var e = ctx.From<IComplexEntity>();
 
         var sql = SqlOf(ctx, e.Select(x => new
@@ -243,6 +243,19 @@ public class SqlGenerationTests
 
         sql.Should().Contain("uuid_v4()");
         sql.Should().Contain("uuid_v7()");
+    }
+
+    [Fact]
+    public void UuidGenerators_Unset_ShouldThrow()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var v4 = () => SqlOf(ctx, e.Select(x => new { U = SqlFunctions.Sql.gen_random_uuid() }));
+        var v7 = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Sql.uuidv7() }));
+
+        v4.Should().Throw<NotSupportedException>().WithMessage("*gen_random_uuid*not supported*");
+        v7.Should().Throw<NotSupportedException>().WithMessage("*uuidv7*not supported*");
     }
 
     [Fact]

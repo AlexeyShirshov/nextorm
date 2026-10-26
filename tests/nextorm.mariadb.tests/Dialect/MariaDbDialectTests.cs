@@ -111,11 +111,19 @@ public class MariaDbDialectTests
     [Fact]
     public void UuidHooks_ShouldUseMariaDbForms()
     {
+        var versioned = new MariaDbDialect(new Version(11, 7));
+
+        versioned.UuidGenerators.Should().NotBeNull();
+        versioned.UuidGenerators!.Supports("gen_random_uuid").Should().BeTrue();
+        versioned.UuidGenerators!.Supports("uuidv7").Should().BeTrue();
+        versioned.UuidGenerators!.Render("gen_random_uuid").Should().Be("uuid_v4()");
+        versioned.UuidGenerators!.Render("uuidv7").Should().Be("uuid_v7()");
+
         Dialect.UuidGenerators.Should().NotBeNull();
-        Dialect.UuidGenerators!.Supports("gen_random_uuid").Should().BeTrue();
-        Dialect.UuidGenerators!.Supports("uuidv7").Should().BeTrue();
-        Dialect.UuidGenerators!.Render("gen_random_uuid").Should().Be("uuid_v4()");
-        Dialect.UuidGenerators!.Render("uuidv7").Should().Be("uuid_v7()");
+        Dialect.UuidGenerators!.Supports("gen_random_uuid").Should().BeFalse();
+        Dialect.UuidGenerators!.Supports("uuidv7").Should().BeFalse();
+        var unset = () => Dialect.UuidGenerators!.Render("uuidv7");
+        unset.Should().Throw<NotSupportedException>().WithMessage("*uuidv7*11.7*");
     }
 
     [Fact]
@@ -162,10 +170,7 @@ public class MariaDbDialectTests
         Dialect.MySqlFunctions!.Render("nvl", ["a", "b"]).Should().Be("nvl(a, b)");
         Dialect.MySqlFunctions!.Render("nvl2", ["a", "b", "c"]).Should().Be("nvl2(a, b, c)");
         Dialect.MySqlFunctions!.Render("add_months", ["d", "2"]).Should().Be("add_months(d, 2)");
-        Dialect.MySqlFunctions!.Render("months_between", ["a", "b"]).Should().Be("months_between(a, b)");
         Dialect.MySqlFunctions!.Render("to_char", ["d", "'YYYY'"]).Should().Be("to_char(d, 'YYYY')");
-        Dialect.MySqlFunctions!.Render("to_date", ["'s'", "'YYYY'"]).Should().Be("to_date('s', 'YYYY')");
-        Dialect.MySqlFunctions!.Render("to_number", ["'1'", "'9'"]).Should().Be("to_number('1', '9')");
         Dialect.MySqlFunctions!.Render("kdf", ["'p'", "'s'", "'i'", "'hkdf'"]).Should().Be("kdf('p', 's', 'i', 'hkdf')");
         Dialect.MySqlFunctions!.Render("xxh3", ["x"]).Should().Be("xxh3(x)");
         Dialect.MySqlFunctions!.Render("xxh32", ["x"]).Should().Be("xxh32(x)");
@@ -176,5 +181,32 @@ public class MariaDbDialectTests
         Dialect.MySqlFunctions!.Render("nextval", ["'s'"]).Should().Be("nextval(s)");
         Dialect.MySqlFunctions!.Render("setval", ["'s'", "42"]).Should().Be("setval(s, 42)");
         Dialect.MySqlFunctions!.Render("lastval", ["'s'"]).Should().Be("lastval(s)");
+    }
+
+    [Fact]
+    public void T280_VersionGatedFunctionHooks_ShouldFollowTheConfiguredVersion()
+    {
+        var versioned = new MariaDbDialect(new Version(12, 3));
+        string[] gated = ["months_between", "to_date", "to_number"];
+
+        foreach (var name in gated)
+        {
+            versioned.MySqlFunctions!.Supports(name).Should().BeTrue(name);
+            Dialect.MySqlFunctions!.Supports(name).Should().BeFalse(name);
+
+            var unset = () => Dialect.MySqlFunctions!.Render(name, ["a", "b"]);
+            unset.Should().Throw<NotSupportedException>().WithMessage($"*{name}*requires MariaDB*");
+        }
+
+        versioned.MySqlFunctions!.Render("months_between", ["a", "b"]).Should().Be("months_between(a, b)");
+        versioned.MySqlFunctions!.Render("to_date", ["'s'", "'YYYY'"]).Should().Be("to_date('s', 'YYYY')");
+        versioned.MySqlFunctions!.Render("to_number", ["'1'", "'9'"]).Should().Be("to_number('1', '9')");
+
+        // The MariaDB-11.4 baseline names stay unconditional.
+        Dialect.MySqlFunctions!.Supports("add_months").Should().BeTrue();
+        Dialect.MySqlFunctions!.Supports("to_char").Should().BeTrue();
+
+        var unknown = () => versioned.MySqlFunctions!.Render("no_such_function", ["a"]);
+        unknown.Should().Throw<NotSupportedException>();
     }
 }

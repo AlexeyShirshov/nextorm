@@ -17,21 +17,35 @@ public sealed class MariaDbDialect : MySqlDialect
     public static new readonly MariaDbDialect Instance = new();
 
     private readonly Version? _version;
+    private readonly MariaDbNativeFunctions _mySqlFunctions;
+    private readonly MariaDbUuidGenerators _uuidGenerators;
 
     /// <summary>
     /// Creates an unversioned MariaDB dialect: no version-gated form is emitted, so
-    /// <c>UPDATE ... RETURNING</c> is rejected. Equivalent to the shared <see cref="Instance"/>.
+    /// <c>UPDATE ... RETURNING</c> and every version-gated native function are rejected. Equivalent
+    /// to the shared <see cref="Instance"/>.
     /// </summary>
     public MariaDbDialect()
+        : this(null)
     {
     }
 
     /// <summary>
     /// Creates a MariaDB dialect for <paramref name="serverVersion"/>. MariaDB 13.0+ exposes
-    /// <c>UPDATE ... RETURNING</c>; <see langword="null"/> is the unversioned (pre-13) form.
+    /// <c>UPDATE ... RETURNING</c>; the native functions carry their own minima. <see langword="null"/>
+    /// is the unversioned form, which rejects every version-gated feature.
     /// </summary>
     /// <param name="serverVersion">The MariaDB server version, or <see langword="null"/> for unset.</param>
-    public MariaDbDialect(Version? serverVersion) => _version = serverVersion;
+    public MariaDbDialect(Version? serverVersion)
+    {
+        _version = serverVersion;
+        _mySqlFunctions = serverVersion is null
+            ? MariaDbNativeFunctions.Instance
+            : new MariaDbNativeFunctions(serverVersion);
+        _uuidGenerators = serverVersion is null
+            ? MariaDbUuidGenerators.Instance
+            : new MariaDbUuidGenerators(serverVersion);
+    }
 
     /// <summary>
     /// MariaDB 13.0+ appends <c>RETURNING</c> to a single-table <c>UPDATE</c>. INSERT/DELETE
@@ -72,8 +86,11 @@ public sealed class MariaDbDialect : MySqlDialect
     /// </summary>
     public override bool SupportsAnyValueAggregate => false;
 
-    /// <summary>MariaDB 11.7+ renders both UUID generators; MySQL has no v4/v7 generator.</summary>
-    public override IUuidGenerators UuidGenerators => MariaDbUuidGenerators.Instance;
+    /// <summary>
+    /// MariaDB 11.7+ renders both UUID generators; MySQL has no v4/v7 generator. An unversioned
+    /// dialect rejects them, because 11.4 has neither.
+    /// </summary>
+    public override IUuidGenerators UuidGenerators => _uuidGenerators;
 
     /// <summary>MariaDB 10.3+ supports the <c>FOR SYSTEM_TIME</c> temporal-table clause on system-versioned tables.</summary>
     public override bool SupportsTemporalTable => true;
@@ -93,9 +110,11 @@ public sealed class MariaDbDialect : MySqlDialect
     /// and adds the MariaDB-only names (extended regexp, <c>NVL</c>/<c>NVL2</c>, <c>ADD_MONTHS</c>,
     /// <c>MONTHS_BETWEEN</c>, <c>TO_CHAR</c>/<c>TO_DATE</c>/<c>TO_NUMBER</c>, <c>KDF</c>,
     /// <c>XXH3</c>/<c>XXH32</c>, <c>JSON_DETAILED</c>/<c>JSON_COMPACT</c>, the JSON canonicalisation pair
-    /// <c>JSON_EQUALS</c>/<c>JSON_NORMALIZE</c> and sequence access).
+    /// <c>JSON_EQUALS</c>/<c>JSON_NORMALIZE</c> and sequence access). <c>MONTHS_BETWEEN</c>,
+    /// <c>TO_DATE</c> and <c>TO_NUMBER</c> carry their own version minima, so an unversioned dialect
+    /// rejects them.
     /// </summary>
-    public override IMySqlFunctions MySqlFunctions => MariaDbNativeFunctions.Instance;
+    public override IMySqlFunctions MySqlFunctions => _mySqlFunctions;
 }
 
 /// <summary>
@@ -106,24 +125,52 @@ public sealed class MariaDbDialect : MySqlDialect
 /// (extended regexp, <c>nvl</c>/<c>nvl2</c>, the Oracle-compatible date/number conversions, <c>kdf</c>,
 /// <c>xxh3</c>/<c>xxh32</c>, <c>json_detailed</c>/<c>json_compact</c>, <c>json_equals</c>/<c>json_normalize</c>
 /// and sequence access). MySQL's renderer does not report the MariaDB-only names, so MySQL rejects them.
+/// <para>
+/// <c>months_between</c> (12.2.1), <c>to_date</c> (12.3) and <c>to_number</c> (12.2.1) are absent from
+/// MariaDB 11.4, so they are enabled only when the dialect was built with a version at or above the
+/// per-name minimum; an unversioned dialect refuses them instead of emitting SQL the server rejects.
+/// </para>
 /// </summary>
 internal sealed class MariaDbNativeFunctions : IMySqlFunctions
 {
-    public static readonly MariaDbNativeFunctions Instance = new();
+    public static readonly MariaDbNativeFunctions Instance = new(null);
 
     private static readonly IMySqlFunctions Inner = MySqlDialect.Instance.MySqlFunctions!;
 
+    private static readonly Version MonthsBetweenMinVersion = new(12, 2, 1);
+    private static readonly Version ToDateMinVersion = new(12, 3);
+    private static readonly Version ToNumberMinVersion = new(12, 2, 1);
+
+    private readonly Version? _version;
+
+    /// <summary>Creates the renderer for <paramref name="serverVersion"/>; unset refuses the version-gated names.</summary>
+    /// <param name="serverVersion">The MariaDB server version, or <see langword="null"/> for unset.</param>
+    public MariaDbNativeFunctions(Version? serverVersion) => _version = serverVersion;
+
     private static bool IsMariaDbOnly(string name) => name is
         "regexp_substr" or "regexp_instr" or "regexp_replace" or
-        "nvl" or "nvl2" or "add_months" or "months_between" or
-        "to_char" or "to_date" or "to_number" or "kdf" or
+        "nvl" or "nvl2" or "add_months" or
+        "to_char" or "kdf" or
         "xxh3" or "xxh32" or "json_detailed" or "json_compact" or
         "json_equals" or "json_normalize" or
         "next_value_for" or "nextval" or "setval" or "lastval";
 
+    private static Version? MinimumVersion(string name) => name switch
+    {
+        "months_between" => MonthsBetweenMinVersion,
+        "to_date" => ToDateMinVersion,
+        "to_number" => ToNumberMinVersion,
+        _ => null
+    };
+
+    private bool IsVersionGated(string name) =>
+        MinimumVersion(name) is { } minimum && _version is not null && _version >= minimum;
+
     /// <inheritdoc/>
     public bool Supports(string name) =>
-        IsMariaDbOnly(name) || (name is not ("uuid_to_bin" or "bin_to_uuid" or "json_storage_free") && Inner.Supports(name));
+        IsVersionGated(name) ||
+        (IsMariaDbOnly(name) ||
+            (name is not ("uuid_to_bin" or "bin_to_uuid" or "json_storage_free") && Inner.Supports(name)));
 
     /// <inheritdoc/>
     public string Render(string name, IReadOnlyList<string> args) => name switch
@@ -134,10 +181,10 @@ internal sealed class MariaDbNativeFunctions : IMySqlFunctions
         "nvl" => $"nvl({args[0]}, {args[1]})",
         "nvl2" => $"nvl2({args[0]}, {args[1]}, {args[2]})",
         "add_months" => $"add_months({args[0]}, {args[1]})",
-        "months_between" => $"months_between({args[0]}, {args[1]})",
+        "months_between" => RenderGated(name, $"months_between({args[0]}, {args[1]})"),
         "to_char" => $"to_char({args[0]}, {args[1]})",
-        "to_date" => $"to_date({args[0]}, {args[1]})",
-        "to_number" => $"to_number({args[0]}, {args[1]})",
+        "to_date" => RenderGated(name, $"to_date({args[0]}, {args[1]})"),
+        "to_number" => RenderGated(name, $"to_number({args[0]}, {args[1]})"),
         "kdf" => $"kdf({args[0]}, {args[1]}, {args[2]}, {args[3]})",
         "xxh3" => $"xxh3({args[0]})",
         "xxh32" => $"xxh32({args[0]})",
@@ -153,6 +200,13 @@ internal sealed class MariaDbNativeFunctions : IMySqlFunctions
             ? Inner.Render(name, args)
             : throw new NotSupportedException($"The {name} function is not supported by MariaDB.")
     };
+
+    private string RenderGated(string name, string sql) =>
+        IsVersionGated(name)
+            ? sql
+            : throw new NotSupportedException(
+                $"The {name} function requires MariaDB {MinimumVersion(name)} or later; " +
+                $"the configured server version is {(_version is null ? "unset" : _version.ToString())}.");
 
     private static string SequenceName(string argument) =>
         argument.Length >= 2 && argument[0] == '\'' && argument[^1] == '\''
@@ -188,16 +242,41 @@ internal sealed class MariaDbLockRenderer : ILockRenderer
     };
 }
 
+/// <summary>
+/// Renders <c>gen_random_uuid</c> and <c>uuidv7</c> with MariaDB's <c>uuid_v4()</c>/<c>uuid_v7()</c>.
+/// Both functions arrived in MariaDB 11.7, so the generators are enabled only for an explicit version
+/// at or above 11.7; an unversioned dialect refuses them instead of rendering SQL 11.4 rejects.
+/// </summary>
 internal sealed class MariaDbUuidGenerators : IUuidGenerators
 {
-    public static readonly MariaDbUuidGenerators Instance = new();
+    public static readonly MariaDbUuidGenerators Instance = new(null);
 
-    public bool Supports(string name) => name is "gen_random_uuid" or "uuidv7";
+    private static readonly Version MinVersion = new(11, 7);
 
-    public string Render(string name) => name switch
+    private readonly Version? _version;
+
+    /// <summary>Creates the generator surface for <paramref name="serverVersion"/>; unset refuses both names.</summary>
+    /// <param name="serverVersion">The MariaDB server version, or <see langword="null"/> for unset.</param>
+    public MariaDbUuidGenerators(Version? serverVersion) => _version = serverVersion;
+
+    private bool IsEnabled => _version is not null && _version >= MinVersion;
+
+    /// <inheritdoc/>
+    public bool Supports(string name) => IsEnabled && name is ("gen_random_uuid" or "uuidv7");
+
+    /// <inheritdoc/>
+    public string Render(string name)
     {
-        "gen_random_uuid" => "uuid_v4()",
-        "uuidv7" => "uuid_v7()",
-        _ => throw new NotSupportedException($"The {name} UUID generator function is not supported by MariaDB.")
-    };
+        if (!IsEnabled)
+            throw new NotSupportedException(
+                $"The {name} UUID generator function requires MariaDB {MinVersion} or later; " +
+                $"the configured server version is {(_version is null ? "unset" : _version.ToString())}.");
+
+        return name switch
+        {
+            "gen_random_uuid" => "uuid_v4()",
+            "uuidv7" => "uuid_v7()",
+            _ => throw new NotSupportedException($"The {name} UUID generator function is not supported by MariaDB.")
+        };
+    }
 }

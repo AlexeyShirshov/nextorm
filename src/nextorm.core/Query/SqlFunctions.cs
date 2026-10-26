@@ -512,7 +512,9 @@ public static partial class SqlFunctions
         /// Generates a random UUID v4 (<c>gen_random_uuid()</c>). Requires a provider that supports it
         /// (see <see cref="ISqlDialect.UuidGenerators"/> and
         /// <see cref="IUuidGenerators.Supports"/>): PostgreSQL 13+, SQL Server
-        /// (<c>newid()</c>), MariaDB (<c>uuid_v4()</c>) and ClickHouse (<c>generateUUIDv4()</c>).
+        /// (<c>newid()</c>), MariaDB 11.7+ (<c>uuid_v4()</c>) and ClickHouse
+        /// (<c>generateUUIDv4()</c>). An unversioned MariaDB dialect rejects it: MariaDB 11.4 has no
+        /// <c>UUID_V4()</c> and <c>UUID()</c> (v1) is not substituted.
         /// </summary>
         public Guid? gen_random_uuid() => default!;
 
@@ -520,7 +522,8 @@ public static partial class SqlFunctions
         /// Generates a UUID v7 (<c>uuidv7()</c>). Requires a provider that supports it
         /// (see <see cref="ISqlDialect.UuidGenerators"/> and
         /// <see cref="IUuidGenerators.Supports"/>): PostgreSQL 18+, MariaDB 11.7+
-        /// (<c>uuid_v7()</c>) and ClickHouse (<c>generateUUIDv7()</c>).
+        /// (<c>uuid_v7()</c>) and ClickHouse (<c>generateUUIDv7()</c>). An unversioned MariaDB dialect
+        /// rejects it.
         /// </summary>
         public Guid? uuidv7() => default!;
 

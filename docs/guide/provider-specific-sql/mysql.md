@@ -92,15 +92,23 @@ entry point. MySQL's dialect does not report them, so a MySQL query using one of
 | `nvl(value, fallback)` | `nvl(...)` | `IFNULL` synonym |
 | `nvl2(value, whenNotNull, whenNull)` | `nvl2(...)` | picks by the null-ness of `value` |
 | `add_months(date, months)` | `add_months(...)` | MariaDB 10.6.1+; clamps to the month's last day |
-| `months_between(a, b)` | `months_between(...)` | MariaDB 12.2+; fractional months |
+| `months_between(a, b)` | `months_between(...)` | MariaDB 12.2.1+ (the enforced minimum; 12.2 and 12.2.0 refuse); fractional months |
 | `to_char(value, format)` | `to_char(...)` | MariaDB 10.6+; Oracle-style format mask |
 | `to_date(value, format)` | `to_date(...)` | MariaDB 12.3+; Oracle-style parse |
-| `to_number(value, format)` | `to_number(...)` | MariaDB 12.2+; returns `DOUBLE` |
+| `to_number(value, format)` | `to_number(...)` | MariaDB 12.2 family, enforced minimum 12.2.1; returns `DOUBLE` |
 | `kdf(password, salt, info, kdfName)` | `kdf(...)` | MariaDB 11.3+; key derivation, returns binary |
 | `xxh3(value)` / `xxh32(value)` | same | MariaDB 13.1+; fast 64/32-bit xxHash |
 | `json_detailed(json)` / `json_compact(json)` | same | re-indent / strip whitespace |
 | `json_equals(json1, json2)` | `json_equals(...)` | `1` when the JSON documents are equal (object key order does not matter), `0` when they differ, `null` for SQL NULL; MariaDB 11.4 baseline, MySQL rejects it |
 | `json_normalize(json)` | `json_normalize(...)` | canonical JSON text (sorted object keys, no unnecessary whitespace, idempotent), `null` for SQL NULL; MariaDB 11.4 baseline, MySQL rejects it |
+
+These three Oracle-compatible conversions (`months_between`, `to_date`, `to_number`) are **version-gated**:
+MariaDB has none of them on 11.4, so `MariaDbDialect` emits each one only when the context was built with an
+explicit server version at or above its minimum. An **unversioned** MariaDB context (the default two-argument
+constructor) refuses the call with `NotSupportedException` during preparation instead of emitting SQL the
+server rejects; the platform equivalents (`TIMESTAMPDIFF`, `STR_TO_DATE`, `CAST(... AS DECIMAL)`) are never
+substituted. The UUID generators follow the same rule with a MariaDB 11.7 minimum (see
+[Sequences and UUID generators](../../scalar-functions/10-sequences.md)).
 
 Sequence access is provider-specific; see the common
 [Sequences and UUID generators](../../scalar-functions/10-sequences.md) page.

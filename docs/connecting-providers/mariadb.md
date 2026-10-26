@@ -60,10 +60,25 @@ using var ctx = new MariaDbDataContext(
     "Server=localhost;Database=app;...", new DataContextBuilder(), new Version(13, 0));
 ```
 
-Unlike PostgreSQL, MariaDB imposes **no** one-version-per-concrete-context-type guard: its only
-version-gated axis (`UPDATE ... RETURNING`) is a mutation whose SQL is not plan-cached, so the same
-concrete context type may be built with different versions. A strongly typed subclass is still a
-convenient way to pin one version:
+The same explicit version also gates the native functions MariaDB added after 11.4. Each is emitted only at or
+above its own minimum; an **unversioned** context (the two-argument constructor) refuses it with
+`NotSupportedException` at translation/preparation rather than emitting SQL the server rejects:
+
+| Member | Native form | Minimum |
+|---|---|---|
+| `SqlFunctions.MySql.months_between(a, b)` | `months_between(...)` | 12.2.1 |
+| `SqlFunctions.MySql.to_date(value, format)` | `to_date(...)` | 12.3 |
+| `SqlFunctions.MySql.to_number(value, format)` | `to_number(...)` | 12.2 family, enforced 12.2.1 |
+| `SqlFunctions.Sql.gen_random_uuid()` | `uuid_v4()` | 11.7 |
+| `SqlFunctions.Sql.uuidv7()` | `uuid_v7()` | 11.7 |
+
+These are **function** minima, not a raised provider floor: the package still supports MariaDB 10.4+ and
+`add_months`/`to_char`/the rest of the catalogue keep their own availability. The MariaDB-11.4 baseline names
+(`add_months`, `to_char`, `nvl`, the JSON family, sequences) are not version-gated.
+
+Unlike PostgreSQL, MariaDB imposes **no** one-version-per-concrete-context-type guard: each context carries
+its own dialect instance and capability predicate, so the same concrete context type may be built with
+different versions. A strongly typed subclass is still a convenient way to pin one version:
 
 ```csharp
 public sealed class MariaDb130DataContext : MariaDbDataContext

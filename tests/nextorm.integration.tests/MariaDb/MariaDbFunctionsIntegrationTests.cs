@@ -351,6 +351,75 @@ public sealed class MariaDbFunctionsIntegrationTests : IDisposable
         act.Should().Throw<ArgumentException>();
     }
 
+    [Fact]
+    public void T280_GatedFunctions_UnversionedContext_ShouldRefuseBeforeSendingSql()
+    {
+        AssertGatedFunctionsRefused(_ctx);
+    }
+
+    [Fact]
+    public void T280_GatedFunctions_V114Context_ShouldRefuseBeforeSendingSql()
+    {
+        using var ctx = new MariaDbDataContext(
+            MariaDbContainer.ConnectionString, new DataContextBuilder(), new Version(11, 4));
+
+        AssertGatedFunctionsRefused(ctx);
+    }
+
+    [Fact]
+    public void T280_Controls_ShouldStillExecuteOnMariaDb114()
+    {
+        var r = Probe
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Added = SqlFunctions.MySql.add_months(x.Dt, 2),
+                Formatted = SqlFunctions.MySql.to_char(x.Dt, "YYYY-MM-DD"),
+                MonthDiff = SqlFunctions.Sql.date_diff("month", new DateTime(2024, 1, 15), new DateTime(2024, 2, 15)),
+                Parsed = SqlFunctions.MySql.str_to_date("2023-01-02", "%Y-%m-%d")
+            })
+            .First();
+
+        r.Added.Should().Be(new DateTime(2023, 3, 1, 10, 0, 0));
+        r.Formatted.Should().Be("2023-01-01");
+        r.MonthDiff.Should().Be(1);
+        r.Parsed.Should().Be(new DateTime(2023, 1, 2));
+
+        Convert.ToInt64(Scalar("select cast('42' as signed)")).Should().Be(42L);
+
+        var v1 = (Guid)Scalar("select uuid()")!;
+        v1.Version.Should().Be(1, "UUID() is the v1 generator and must not stand in for UUID_V4()");
+    }
+
+    private static void AssertGatedFunctionsRefused(IDataContext ctx)
+    {
+        var e = ctx.From<IFnProbe>();
+
+        Action months = () => ctx.GetPreparedQueryCommand(
+            e.Select(x => SqlFunctions.MySql.months_between(x.Dt, x.Dt)), false, false, CancellationToken.None);
+        Action date = () => ctx.GetPreparedQueryCommand(
+            e.Select(_ => SqlFunctions.MySql.to_date("2023-01-02", "YYYY-MM-DD")), false, false, CancellationToken.None);
+        Action number = () => ctx.GetPreparedQueryCommand(
+            e.Select(_ => SqlFunctions.MySql.to_number("100.00", "999.99")), false, false, CancellationToken.None);
+        Action v4 = () => ctx.GetPreparedQueryCommand(
+            e.Select(_ => new { U = SqlFunctions.Sql.gen_random_uuid() }), false, false, CancellationToken.None);
+        Action v7 = () => ctx.GetPreparedQueryCommand(
+            e.Select(_ => new { V = SqlFunctions.Sql.uuidv7() }), false, false, CancellationToken.None);
+
+        months.Should().Throw<NotSupportedException>().WithMessage("*months_between*not supported*");
+        date.Should().Throw<NotSupportedException>().WithMessage("*to_date*not supported*");
+        number.Should().Throw<NotSupportedException>().WithMessage("*to_number*not supported*");
+        v4.Should().Throw<NotSupportedException>().WithMessage("*gen_random_uuid*not supported*");
+        v7.Should().Throw<NotSupportedException>().WithMessage("*uuidv7*not supported*");
+    }
+
+    private object? Scalar(string sql)
+    {
+        ((DataContext)_ctx).EnsureConnectionOpen();
+        using var cmd = ((DataContext)_ctx).CreateCommand(sql);
+        return cmd.ExecuteScalar();
+    }
+
     private void Seed()
     {
         Execute("drop table if exists fn_probe");
