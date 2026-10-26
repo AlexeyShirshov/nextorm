@@ -346,6 +346,34 @@ projection behaves like any other converted column. The refusal applies to serve
 preparation only: the in-memory provider materializes the projection from the source objects, so an
 enum scalar keeps working there.
 
+## Whole-entity projection
+
+A mapped single source can be projected as a whole entity with `Select(it => it)`. The statement
+reuses the entity's ordinary mapped column selection, so it renders the explicit mapped columns —
+never `*` — and materialises the rows like a projection-less read of the same source:
+
+```csharp
+var rows = await dataContext.From<SimpleEntity>()
+    .Where(it => it.Id < 3)
+    .Select(it => it)
+    .ToListAsync();
+```
+
+```sql
+select id
+ from simple_entity where (id < 3)
+```
+
+An entity with several columns renders every mapped column in its declared order. The rendered text
+is the same `CommandText` the query produces through `ToCommand()`, so the identity form is not a
+separate projection pipeline: it resolves through the same entity select list and its cache entry.
+
+Whole-object shapes that are not a mapped identity fail closed during preparation instead of
+rendering a malformed statement. A conversion of the row to an unrelated type
+(`Select(it => (object)it)`) is refused with `DataContextException`, and a prepared select list that
+resolved no columns at all is rejected with
+[`BuildSqlCommandException`](xref:NextORM.Core.BuildSqlCommandException) before anything is rendered.
+
 ## Nested entity and calculated columns over a projection
 
 A [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) can itself be used as the source of another query with

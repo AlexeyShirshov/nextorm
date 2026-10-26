@@ -646,6 +646,21 @@ internal readonly struct SqlBuilder
             string? r = null;
             if (!_ctx.ParamMode)
             {
+                // An empty (non-null) prepared select list only truncates the render when the projection
+                // shape itself has no output columns to render: a whole-object read (a bare source
+                // parameter, optionally converted), a zero-argument construction or a zero-binding
+                // member init. That is the one case where no later stage has a diagnostic to raise, so
+                // the renderer fails closed with the typed build exception instead of emitting the
+                // malformed "selec" head. Any other empty list means column classification failed for a
+                // projection that does declare output: the row mapper or the JSON projection validation
+                // owns that diagnostic and this check must not pre-empt it. A null list means
+                // "wildcard" (the arm above); IgnoreColumns keeps its wildcard too.
+                if (!cmd.IgnoreColumns
+                    && selectList is { Length: 0 }
+                    && IsColumnlessProjection(cmd.ProjectionExpression))
+                    throw new BuildSqlCommandException(
+                        "The prepared select list is empty: the projection resolved no columns to render. Use a mapped source or specify an explicit Select with named columns.");
+
                 selectBuilder!.Length -= 2;
                 if (selectInto is not null)
                     selectBuilder.Append(selectInto);
@@ -1734,6 +1749,19 @@ internal readonly struct SqlBuilder
         if (cmd.From is null || cmd.From.SubQuery is not null)
             throw new BuildSqlCommandException("SelectWhereMax/SelectWhereMin requires a single physical-table source.");
     }
+
+    /// <summary>
+    /// Whether a projection declares no output column at all, so an empty prepared select list is its
+    /// complete rendering rather than a failed column classification: a whole-object read of the source
+    /// (a bare parameter expression, optionally converted) or a construction / member init with no
+    /// members. The empty-select-list guard uses it to fail closed instead of rendering the truncated
+    /// "selec" head, while leaving a projection that does declare output to its later diagnostic.
+    /// </summary>
+    private static bool IsColumnlessProjection(LambdaExpression? projection)
+        => projection?.Body is { } body
+            && (TypeFacts.UnwrapConvert(body) is ParameterExpression
+                || body is NewExpression { Arguments.Count: 0 }
+                || body is MemberInitExpression { Bindings.Count: 0 });
 
     /// <summary>
     /// Renders a query tag as a single-line block comment. Line breaks are folded to spaces and both

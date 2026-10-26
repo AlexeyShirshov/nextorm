@@ -619,6 +619,48 @@ public partial class QueryCommand
                             columnsPlanHash = columnsPlanHash * 13 + scalarShape[0].PlanHashCode;
                         }
                     }
+                    // A whole-projection (identity) read over a mapped single physical source
+                    // (From<T>().Select(x => x)) reuses the ordinary entity column selection and its
+                    // cache instead of falling through with no columns (#306). The column-shape arms
+                    // above keep precedence: a typed-CTE/derived source is resolved from its own
+                    // defining select list, and this arm is reached only when there is no ColumnShape.
+                    // A joined projection item is a member read and stays in the branch below, so a
+                    // bare parameter body can only mean the source itself. The projected type must be
+                    // exactly the source/entity type: a whole-object conversion to an unrelated type
+                    // (`(object)x`) is not an identity projection and must not become one. A
+                    // dynamic-columns-store entity is refused here rather than cached without its
+                    // store column, which would poison the shared SelectListCache entry the ordinary
+                    // projection-less path builds for the same type.
+                    else if (TypeFacts.UnwrapConvert(cmd._exp.Body) is ParameterExpression
+                        && cmd._from?.ColumnShape is null
+                        && cmd._dataContext!.NeedMapping
+                        && cmd._exp.Body.Type == (cmd.ProjectionType ?? srcType)
+                        && DataContextCache.Metadata.TryGetValue(cmd._exp.Body.Type, out var identityMeta)
+                        && identityMeta.DynamicColumnsStore is null)
+                    {
+                        var identityType = cmd._exp.Body.Type;
+                        if (!DataContextCache.SelectListCache.TryGetValue(identityType, out var identityColumns))
+                        {
+                            // Same helper the ordinary projection-less path uses; the per-column plan
+                            // hash is folded in below and stored with the entry so a later read of
+                            // either shape sees the identical cached metadata.
+                            var (identityBuiltColumns, _) = EntitySelectListBuilder.Build(identityType, identityMeta, cancellationToken);
+                            identityColumns = identityBuiltColumns;
+                            if (!cmd._dontCache && !noHash)
+                            {
+                                for (var i = 0; i < identityColumns.Length; i++)
+                                    identityColumns[i].PlanHashCode = cmd.GetSelectExpressionPlanEqualityComparer().GetHashCode(identityColumns[i]);
+                                DataContextCache.SelectListCache[identityType] = identityColumns;
+                            }
+                        }
+
+                        selectList = identityColumns;
+                        if (!cmd._dontCache && !noHash) unchecked
+                        {
+                            for (var i = 0; i < selectList.Length; i++)
+                                columnsPlanHash = columnsPlanHash * 13 + selectList[i].PlanHashCode;
+                        }
+                    }
                     else if (TryGetDirectEntityItem(cmd, out var directItemType, out var directSlot, out var directMemberName, out var directItemExpression))
                     {
                         // A direct whole-entity projection of a recognized joined projection item
