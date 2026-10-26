@@ -1113,7 +1113,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             ?? throw new InvalidOperationException("BulkInsert is synchronous but the source is async; use BulkInsertAsync instead.");
 
         return BulkInsertRows(
-            SqlMutationBuilder.RenderTableReference(Dialect, QuoteIdentifiers, command.TableName, command.TableSchema, command.IsTableNameAuto, command.EntityType, NamingConvention),
+            SqlMutationBuilder.RenderBulkTarget(Dialect, QuoteIdentifiers, command, NamingConvention),
             ResolveBulkColumnNames(command.Columns),
             command.Columns,
             rows,
@@ -1129,7 +1129,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         var rows = command.AsyncRows ?? new SyncToAsyncEnumerable<object?[]>(command.SyncRows!);
 
         return await BulkInsertRowsAsync(
-            SqlMutationBuilder.RenderTableReference(Dialect, QuoteIdentifiers, command.TableName, command.TableSchema, command.IsTableNameAuto, command.EntityType, NamingConvention),
+            SqlMutationBuilder.RenderBulkTarget(Dialect, QuoteIdentifiers, command, NamingConvention),
             ResolveBulkColumnNames(command.Columns),
             command.Columns,
             rows,

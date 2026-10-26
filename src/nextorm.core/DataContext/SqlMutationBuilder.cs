@@ -1309,6 +1309,26 @@ internal static class SqlMutationBuilder
             : tableName;
 
     /// <summary>
+    /// Renders the target reference of a bulk-insert command, applying the destination qualification
+    /// (schema/database) carried by its options to the convention-resolved table name. With no destination
+    /// option set this is byte-identical to <see cref="RenderTableReference(ISqlDialect, bool, string, string?, bool, Type, INamingConvention?)"/>.
+    /// </summary>
+    /// <param name="dialect">The active SQL dialect.</param>
+    /// <param name="quoteIdentifiers">Whether physical identifiers must be quoted.</param>
+    /// <param name="command">The bulk-insert command.</param>
+    /// <param name="namingConvention">Convention applied to auto-derived table names, or <see langword="null"/>.</param>
+    /// <returns>The rendered target reference.</returns>
+    internal static string RenderBulkTarget(
+        ISqlDialect dialect,
+        bool quoteIdentifiers,
+        BulkInsertCommand command,
+        INamingConvention? namingConvention)
+    {
+        var name = ResolveTableName(command.TableName, command.IsTableNameAuto, command.EntityType, namingConvention);
+        return BulkInsertDestination.From(command.Options).Render(dialect, quoteIdentifiers, name);
+    }
+
+    /// <summary>
     /// Renders a (possibly schema-qualified) target table reference, applying the naming convention to an
     /// auto-derived name and quoting the name and the schema as separate identifiers. Used by the insert and
     /// the native bulk-insert paths so an explicit target (<see cref="BulkInsertOptions.TableName"/> /

@@ -109,6 +109,18 @@ internal sealed class PortableBulkInsertExecutor(IMutationExecutor mutation) : I
 
     internal static void EnsurePortableOptionsSupported(BulkInsertCommand command)
     {
+        // An explicit Native request that reaches the portable executor cannot be honoured: either the
+        // provider has no native bulk path (SQLite) or the request needs a portable-only form. Refuse it
+        // instead of silently falling back. Auto keeps its documented fallback and is unaffected.
+        if (command.Mode == BulkInsertMode.Native)
+            throw new NotSupportedException(
+                "Bulk insert Mode.Native was requested, but this provider or request has no compatible native bulk path. "
+                + "Use Mode.Auto to let nextorm pick a compatible path, or Mode.Portable to request the parameterised INSERT path.");
+
+        // Resolve the destination before any row is pulled: a server qualification and disagreeing schema
+        // aliases are refused up front.
+        _ = BulkInsertDestination.From(command.Options);
+
         if (command.TimeoutSeconds is not null)
             throw new NotSupportedException(
                 "A bulk-insert Timeout is only supported on the native bulk path; the portable INSERT ... VALUES path uses the provider's default command timeout.");

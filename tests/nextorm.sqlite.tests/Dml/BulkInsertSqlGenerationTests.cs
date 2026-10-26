@@ -90,4 +90,25 @@ public class BulkInsertSqlGenerationTests
 
         sql.Should().Be("insert into simple_entity (id) values ($p0)");
     }
+
+    [Fact]
+    public async Task BulkInsert_NativeMode_ShouldThrowBeforeEnumeratingTheSource()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var enumerated = false;
+
+        var act = () => ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.Mode(BulkInsertMode.Native))
+            .Values(TrackingSource(() => enumerated = true))
+            .BulkInsertAsync();
+
+        await act.Should().ThrowAsync<NotSupportedException>().WithMessage("*Mode.Native*");
+        enumerated.Should().BeFalse();
+    }
+
+    private static async IAsyncEnumerable<IInsertEntity> TrackingSource(Action onEnumerated)
+    {
+        onEnumerated();
+        await Task.Yield();
+        yield return Row("a", 1, "d");
+    }
 }

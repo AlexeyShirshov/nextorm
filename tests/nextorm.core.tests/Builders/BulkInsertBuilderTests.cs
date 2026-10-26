@@ -426,6 +426,76 @@ public class BulkInsertBuilderTests
         server.Should().Throw<ArgumentException>();
     }
 
+    [Fact]
+    public void Destination_ShouldQuoteEachQualificationPartIndependently()
+    {
+        var destination = BulkInsertDestination.From(new BulkInsertOptions { DatabaseName = "app", SchemaName = "staging" });
+
+        destination.Render(NextORM.SqlServer.SqlServerDialect.Instance, quoteIdentifiers: true, "orders")
+            .Should().Be("[app].[staging].[orders]");
+        destination.Render(NextORM.SqlServer.SqlServerDialect.Instance, quoteIdentifiers: false, "orders")
+            .Should().Be("app.staging.orders");
+    }
+
+    [Fact]
+    public void Destination_WithoutOptions_ShouldLeaveTheTableReferenceUnchanged()
+    {
+        var destination = BulkInsertDestination.From(new BulkInsertOptions());
+
+        destination.IsEmpty.Should().BeTrue();
+        destination.Render(NextORM.SqlServer.SqlServerDialect.Instance, quoteIdentifiers: true, "orders")
+            .Should().Be("[orders]");
+    }
+
+    [Fact]
+    public void Destination_SchemaOnly_ShouldResolveAgainstTheMappedTableName()
+    {
+        var independent = BulkInsertDestination.From(new BulkInsertOptions { SchemaName = "staging" });
+        var legacyAlias = BulkInsertDestination.From(new BulkInsertOptions { TableSchema = "staging" });
+
+        independent.Table.Should().BeNull();
+        independent.Render(NextORM.Sqlite.SqliteDialect.Instance, quoteIdentifiers: false, "orders")
+            .Should().Be("staging.orders");
+        legacyAlias.Render(NextORM.Sqlite.SqliteDialect.Instance, quoteIdentifiers: false, "orders")
+            .Should().Be("staging.orders");
+    }
+
+    [Fact]
+    public void Destination_EqualSchemaAliases_ShouldCollapseToOnePart()
+    {
+        var destination = BulkInsertDestination.From(new BulkInsertOptions { TableSchema = "staging", SchemaName = "staging" });
+
+        destination.Schema.Should().Be("staging");
+        destination.Render(NextORM.Sqlite.SqliteDialect.Instance, quoteIdentifiers: false, "orders")
+            .Should().Be("staging.orders");
+    }
+
+    [Fact]
+    public void Destination_ConflictingSchemaAliases_ShouldThrowBeforeInput()
+    {
+        var act = () => BulkInsertDestination.From(new BulkInsertOptions { TableSchema = "staging", SchemaName = "archive" });
+
+        act.Should().Throw<ArgumentException>().WithMessage("*TableSchema*SchemaName*");
+    }
+
+    [Fact]
+    public void Destination_ServerName_ShouldBeRefused()
+    {
+        var act = () => BulkInsertDestination.From(new BulkInsertOptions { ServerName = "primary" });
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*ServerName*");
+    }
+
+    [Fact]
+    public void Destination_UnsupportedDialectQualification_ShouldThrow()
+    {
+        var destination = BulkInsertDestination.From(new BulkInsertOptions { DatabaseName = "other" });
+
+        var act = () => destination.Render(NextORM.Postgres.PostgresDialect.Instance, quoteIdentifiers: true, "orders");
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*DatabaseName*");
+    }
+
     private static async IAsyncEnumerable<BulkEntity> EmptyAsync()
     {
         await Task.CompletedTask;
