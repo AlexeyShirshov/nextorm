@@ -320,6 +320,26 @@ internal sealed class MergeAssignmentValueVisitor : BaseExpressionVisitor
         _parameterProvider = options.ParameterProvider;
     }
 
+    /// <summary>
+    /// Clones into another role-aware visitor. A nested render (a function argument, for example) goes
+    /// through <see cref="BaseExpressionVisitor.VisitToString"/>, which clones; the base clone would drop
+    /// the role bindings and render a role read as a plain target column.
+    /// </summary>
+    /// <returns>A fresh visitor over the same assignment set and statement shape.</returns>
+    public override BaseExpressionVisitor Clone()
+    {
+        if (IsParamMode)
+            throw new NotSupportedException("Cannot clone in param mode");
+
+        var clone = new MergeAssignmentValueVisitor(Options, _assignments, _info)
+        {
+            SuppressColumnCollation = SuppressColumnCollation,
+            ConverterContext = ConverterContext,
+        };
+        Adopt(clone);
+        return clone;
+    }
+
     /// <inheritdoc/>
     protected override Expression VisitMember(MemberExpression node)
     {
