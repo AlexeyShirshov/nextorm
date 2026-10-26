@@ -336,8 +336,13 @@ public static partial class SqlFunctions
         [Browsable(false)]
         internal static readonly MethodInfo MaxMI = AggregateMethod(nameof(max));
 
+        /// <summary>
+        /// Canonical <c>avg</c> translation marker. The AVG family is declared per numeric input
+        /// type (see <see cref="AverageMethodFor"/>), so the marker is a concrete declaration instead
+        /// of a generic definition; call sites select the real overload from the selector type.
+        /// </summary>
         [Browsable(false)]
-        internal static readonly MethodInfo AvgMI = AggregateMethod(nameof(avg));
+        internal static readonly MethodInfo AvgMI = typeof(CommonFunctions).GetMethod(nameof(avg), [typeof(double?)])!;
 
         [Browsable(false)]
         internal static readonly MethodInfo SumMI = AggregateMethod(nameof(sum));
@@ -376,6 +381,18 @@ public static partial class SqlFunctions
                 ? candidates[0]
                 : candidates.Single(m => Nullable.GetUnderlyingType(m.GetParameters()[0].ParameterType) is not null);
         }
+
+        /// <summary>
+        /// Resolves the concrete numeric <c>avg</c> declaration for the selector's input type. AVG is
+        /// declared per numeric input type (the result type is fixed by the input type), so the
+        /// terminal and the terminal rewriter select the overload by parameter type instead of
+        /// closing a generic definition.
+        /// </summary>
+        /// <param name="inputType">The selector's value type, its <see cref="Nullable{T}"/> form included.</param>
+        /// <returns>The matching <c>avg</c> declaration.</returns>
+        internal static MethodInfo AverageMethodFor(Type inputType)
+            => typeof(CommonFunctions).GetMethod(nameof(avg), [inputType])
+                ?? throw new NotSupportedException($"The AVG aggregate has no numeric overload for '{inputType}'.");
 
         /// <summary>
         /// <c>exists(subquery)</c>: true when the correlated subquery returns at least one row. ANSI
@@ -877,15 +894,171 @@ public static partial class SqlFunctions
         /// <param name="property">The value to aggregate.</param>
         public T? max<T>(T? property) => default!;
 
-        /// <summary><c>avg</c> aggregate: the arithmetic mean of the non-null values.</summary>
-        /// <typeparam name="T">The value type.</typeparam>
+        /// <summary><c>avg</c> aggregate over <c>byte</c> values; the mean is the fractional <see cref="double"/> value of the non-null rows.</summary>
         /// <param name="property">The value to aggregate.</param>
-        public T? avg<T>(T? property) => default!;
+        public double? avg(byte property) => default!;
 
-        /// <summary><c>avg(distinct ...)</c>: the arithmetic mean of the distinct non-null values.</summary>
-        /// <typeparam name="T">The value type.</typeparam>
+        /// <summary><c>avg</c> aggregate over nullable <c>byte</c> values; <see langword="null"/> rows are ignored and the mean is the fractional <see cref="double"/> value.</summary>
         /// <param name="property">The value to aggregate.</param>
-        public T? avg_distinct<T>(T? property) => default!;
+        public double? avg(byte? property) => default!;
+        /// <summary><c>avg</c> aggregate over <c>sbyte</c> values; the mean is the fractional <see cref="double"/> value of the non-null rows.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public double? avg(sbyte property) => default!;
+
+        /// <summary><c>avg</c> aggregate over nullable <c>sbyte</c> values; <see langword="null"/> rows are ignored and the mean is the fractional <see cref="double"/> value.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public double? avg(sbyte? property) => default!;
+        /// <summary><c>avg</c> aggregate over <c>short</c> values; the mean is the fractional <see cref="double"/> value of the non-null rows.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public double? avg(short property) => default!;
+
+        /// <summary><c>avg</c> aggregate over nullable <c>short</c> values; <see langword="null"/> rows are ignored and the mean is the fractional <see cref="double"/> value.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public double? avg(short? property) => default!;
+        /// <summary><c>avg</c> aggregate over <c>ushort</c> values; the mean is the fractional <see cref="double"/> value of the non-null rows.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public double? avg(ushort property) => default!;
+
+        /// <summary><c>avg</c> aggregate over nullable <c>ushort</c> values; <see langword="null"/> rows are ignored and the mean is the fractional <see cref="double"/> value.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public double? avg(ushort? property) => default!;
+        /// <summary><c>avg</c> aggregate over <c>int</c> values; the mean is the fractional <see cref="double"/> value of the non-null rows.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public double? avg(int property) => default!;
+
+        /// <summary><c>avg</c> aggregate over nullable <c>int</c> values; <see langword="null"/> rows are ignored and the mean is the fractional <see cref="double"/> value.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public double? avg(int? property) => default!;
+        /// <summary><c>avg</c> aggregate over <c>uint</c> values; the mean is the fractional <see cref="double"/> value of the non-null rows.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public double? avg(uint property) => default!;
+
+        /// <summary><c>avg</c> aggregate over nullable <c>uint</c> values; <see langword="null"/> rows are ignored and the mean is the fractional <see cref="double"/> value.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public double? avg(uint? property) => default!;
+        /// <summary><c>avg</c> aggregate over <c>long</c> values; the mean is the fractional <see cref="double"/> value of the non-null rows.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public double? avg(long property) => default!;
+
+        /// <summary><c>avg</c> aggregate over nullable <c>long</c> values; <see langword="null"/> rows are ignored and the mean is the fractional <see cref="double"/> value.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public double? avg(long? property) => default!;
+        /// <summary><c>avg</c> aggregate over <c>ulong</c> values; the mean is the fractional <see cref="double"/> value of the non-null rows.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public double? avg(ulong property) => default!;
+
+        /// <summary><c>avg</c> aggregate over nullable <c>ulong</c> values; <see langword="null"/> rows are ignored and the mean is the fractional <see cref="double"/> value.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public double? avg(ulong? property) => default!;
+        /// <summary><c>avg</c> aggregate over <c>float</c> values; the mean is the fractional <see cref="float"/> value of the non-null rows.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public float? avg(float property) => default!;
+
+        /// <summary><c>avg</c> aggregate over nullable <c>float</c> values; <see langword="null"/> rows are ignored and the mean is the fractional <see cref="float"/> value.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public float? avg(float? property) => default!;
+        /// <summary><c>avg</c> aggregate over <c>double</c> values; the mean is the fractional <see cref="double"/> value of the non-null rows.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public double? avg(double property) => default!;
+
+        /// <summary><c>avg</c> aggregate over nullable <c>double</c> values; <see langword="null"/> rows are ignored and the mean is the fractional <see cref="double"/> value.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public double? avg(double? property) => default!;
+        /// <summary><c>avg</c> aggregate over <c>decimal</c> values; the mean is the fractional <see cref="decimal"/> value of the non-null rows.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public decimal? avg(decimal property) => default!;
+
+        /// <summary><c>avg</c> aggregate over nullable <c>decimal</c> values; <see langword="null"/> rows are ignored and the mean is the fractional <see cref="decimal"/> value.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public decimal? avg(decimal? property) => default!;
+
+        /// <summary><c>avg(distinct ...)</c> over <c>byte</c> values: the mean of the distinct non-null rows as a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public double? avg_distinct(byte property) => default!;
+
+        /// <summary><c>avg(distinct ...)</c> over nullable <c>byte</c> values: <see langword="null"/> rows are ignored and the mean is a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public double? avg_distinct(byte? property) => default!;
+
+        /// <summary><c>avg(distinct ...)</c> over <c>sbyte</c> values: the mean of the distinct non-null rows as a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public double? avg_distinct(sbyte property) => default!;
+
+        /// <summary><c>avg(distinct ...)</c> over nullable <c>sbyte</c> values: <see langword="null"/> rows are ignored and the mean is a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public double? avg_distinct(sbyte? property) => default!;
+
+        /// <summary><c>avg(distinct ...)</c> over <c>short</c> values: the mean of the distinct non-null rows as a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public double? avg_distinct(short property) => default!;
+
+        /// <summary><c>avg(distinct ...)</c> over nullable <c>short</c> values: <see langword="null"/> rows are ignored and the mean is a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public double? avg_distinct(short? property) => default!;
+
+        /// <summary><c>avg(distinct ...)</c> over <c>ushort</c> values: the mean of the distinct non-null rows as a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public double? avg_distinct(ushort property) => default!;
+
+        /// <summary><c>avg(distinct ...)</c> over nullable <c>ushort</c> values: <see langword="null"/> rows are ignored and the mean is a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public double? avg_distinct(ushort? property) => default!;
+
+        /// <summary><c>avg(distinct ...)</c> over <c>int</c> values: the mean of the distinct non-null rows as a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public double? avg_distinct(int property) => default!;
+
+        /// <summary><c>avg(distinct ...)</c> over nullable <c>int</c> values: <see langword="null"/> rows are ignored and the mean is a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public double? avg_distinct(int? property) => default!;
+
+        /// <summary><c>avg(distinct ...)</c> over <c>uint</c> values: the mean of the distinct non-null rows as a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public double? avg_distinct(uint property) => default!;
+
+        /// <summary><c>avg(distinct ...)</c> over nullable <c>uint</c> values: <see langword="null"/> rows are ignored and the mean is a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public double? avg_distinct(uint? property) => default!;
+
+        /// <summary><c>avg(distinct ...)</c> over <c>long</c> values: the mean of the distinct non-null rows as a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public double? avg_distinct(long property) => default!;
+
+        /// <summary><c>avg(distinct ...)</c> over nullable <c>long</c> values: <see langword="null"/> rows are ignored and the mean is a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public double? avg_distinct(long? property) => default!;
+
+        /// <summary><c>avg(distinct ...)</c> over <c>ulong</c> values: the mean of the distinct non-null rows as a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public double? avg_distinct(ulong property) => default!;
+
+        /// <summary><c>avg(distinct ...)</c> over nullable <c>ulong</c> values: <see langword="null"/> rows are ignored and the mean is a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public double? avg_distinct(ulong? property) => default!;
+
+        /// <summary><c>avg(distinct ...)</c> over <c>float</c> values: the mean of the distinct non-null rows as a fractional <see cref="float"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public float? avg_distinct(float property) => default!;
+
+        /// <summary><c>avg(distinct ...)</c> over nullable <c>float</c> values: <see langword="null"/> rows are ignored and the mean is a fractional <see cref="float"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public float? avg_distinct(float? property) => default!;
+
+        /// <summary><c>avg(distinct ...)</c> over <c>double</c> values: the mean of the distinct non-null rows as a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public double? avg_distinct(double property) => default!;
+
+        /// <summary><c>avg(distinct ...)</c> over nullable <c>double</c> values: <see langword="null"/> rows are ignored and the mean is a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public double? avg_distinct(double? property) => default!;
+
+        /// <summary><c>avg(distinct ...)</c> over <c>decimal</c> values: the mean of the distinct non-null rows as a fractional <see cref="decimal"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public decimal? avg_distinct(decimal property) => default!;
+
+        /// <summary><c>avg(distinct ...)</c> over nullable <c>decimal</c> values: <see langword="null"/> rows are ignored and the mean is a fractional <see cref="decimal"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public decimal? avg_distinct(decimal? property) => default!;
 
         /// <summary><c>sum</c> aggregate: the sum of the non-null values.</summary>
         /// <typeparam name="T">The value type.</typeparam>
@@ -1003,8 +1176,115 @@ public static partial class SqlFunctions
         /// <summary>Filtered <c>max(property)</c> (the ANSI <c>filter (where ...)</c> clause or the ClickHouse <c>maxIf</c>).</summary>
         public T? max<T>(T? property, Expression<Func<bool>> filter) => default!;
 
-        /// <summary>Filtered <c>avg(property)</c> (the ANSI <c>filter (where ...)</c> clause or the ClickHouse <c>avgIf</c>).</summary>
-        public T? avg<T>(T? property, Expression<Func<bool>> filter) => default!;
+        /// <summary>Filtered <c>avg(property)</c> over <c>byte</c> values (the ANSI <c>filter (where ...)</c> clause or the ClickHouse <c>avgIf</c>); the mean is a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        /// <param name="filter">The predicate the aggregated rows must satisfy.</param>
+        public double? avg(byte property, Expression<Func<bool>> filter) => default!;
+
+        /// <summary>Filtered <c>avg(property)</c> over nullable <c>byte</c> values (the ANSI <c>filter (where ...)</c> clause or the ClickHouse <c>avgIf</c>); <see langword="null"/> rows are ignored and the mean is a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        /// <param name="filter">The predicate the aggregated rows must satisfy.</param>
+        public double? avg(byte? property, Expression<Func<bool>> filter) => default!;
+
+        /// <summary>Filtered <c>avg(property)</c> over <c>sbyte</c> values (the ANSI <c>filter (where ...)</c> clause or the ClickHouse <c>avgIf</c>); the mean is a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        /// <param name="filter">The predicate the aggregated rows must satisfy.</param>
+        public double? avg(sbyte property, Expression<Func<bool>> filter) => default!;
+
+        /// <summary>Filtered <c>avg(property)</c> over nullable <c>sbyte</c> values (the ANSI <c>filter (where ...)</c> clause or the ClickHouse <c>avgIf</c>); <see langword="null"/> rows are ignored and the mean is a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        /// <param name="filter">The predicate the aggregated rows must satisfy.</param>
+        public double? avg(sbyte? property, Expression<Func<bool>> filter) => default!;
+
+        /// <summary>Filtered <c>avg(property)</c> over <c>short</c> values (the ANSI <c>filter (where ...)</c> clause or the ClickHouse <c>avgIf</c>); the mean is a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        /// <param name="filter">The predicate the aggregated rows must satisfy.</param>
+        public double? avg(short property, Expression<Func<bool>> filter) => default!;
+
+        /// <summary>Filtered <c>avg(property)</c> over nullable <c>short</c> values (the ANSI <c>filter (where ...)</c> clause or the ClickHouse <c>avgIf</c>); <see langword="null"/> rows are ignored and the mean is a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        /// <param name="filter">The predicate the aggregated rows must satisfy.</param>
+        public double? avg(short? property, Expression<Func<bool>> filter) => default!;
+
+        /// <summary>Filtered <c>avg(property)</c> over <c>ushort</c> values (the ANSI <c>filter (where ...)</c> clause or the ClickHouse <c>avgIf</c>); the mean is a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        /// <param name="filter">The predicate the aggregated rows must satisfy.</param>
+        public double? avg(ushort property, Expression<Func<bool>> filter) => default!;
+
+        /// <summary>Filtered <c>avg(property)</c> over nullable <c>ushort</c> values (the ANSI <c>filter (where ...)</c> clause or the ClickHouse <c>avgIf</c>); <see langword="null"/> rows are ignored and the mean is a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        /// <param name="filter">The predicate the aggregated rows must satisfy.</param>
+        public double? avg(ushort? property, Expression<Func<bool>> filter) => default!;
+
+        /// <summary>Filtered <c>avg(property)</c> over <c>int</c> values (the ANSI <c>filter (where ...)</c> clause or the ClickHouse <c>avgIf</c>); the mean is a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        /// <param name="filter">The predicate the aggregated rows must satisfy.</param>
+        public double? avg(int property, Expression<Func<bool>> filter) => default!;
+
+        /// <summary>Filtered <c>avg(property)</c> over nullable <c>int</c> values (the ANSI <c>filter (where ...)</c> clause or the ClickHouse <c>avgIf</c>); <see langword="null"/> rows are ignored and the mean is a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        /// <param name="filter">The predicate the aggregated rows must satisfy.</param>
+        public double? avg(int? property, Expression<Func<bool>> filter) => default!;
+
+        /// <summary>Filtered <c>avg(property)</c> over <c>uint</c> values (the ANSI <c>filter (where ...)</c> clause or the ClickHouse <c>avgIf</c>); the mean is a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        /// <param name="filter">The predicate the aggregated rows must satisfy.</param>
+        public double? avg(uint property, Expression<Func<bool>> filter) => default!;
+
+        /// <summary>Filtered <c>avg(property)</c> over nullable <c>uint</c> values (the ANSI <c>filter (where ...)</c> clause or the ClickHouse <c>avgIf</c>); <see langword="null"/> rows are ignored and the mean is a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        /// <param name="filter">The predicate the aggregated rows must satisfy.</param>
+        public double? avg(uint? property, Expression<Func<bool>> filter) => default!;
+
+        /// <summary>Filtered <c>avg(property)</c> over <c>long</c> values (the ANSI <c>filter (where ...)</c> clause or the ClickHouse <c>avgIf</c>); the mean is a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        /// <param name="filter">The predicate the aggregated rows must satisfy.</param>
+        public double? avg(long property, Expression<Func<bool>> filter) => default!;
+
+        /// <summary>Filtered <c>avg(property)</c> over nullable <c>long</c> values (the ANSI <c>filter (where ...)</c> clause or the ClickHouse <c>avgIf</c>); <see langword="null"/> rows are ignored and the mean is a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        /// <param name="filter">The predicate the aggregated rows must satisfy.</param>
+        public double? avg(long? property, Expression<Func<bool>> filter) => default!;
+
+        /// <summary>Filtered <c>avg(property)</c> over <c>ulong</c> values (the ANSI <c>filter (where ...)</c> clause or the ClickHouse <c>avgIf</c>); the mean is a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        /// <param name="filter">The predicate the aggregated rows must satisfy.</param>
+        public double? avg(ulong property, Expression<Func<bool>> filter) => default!;
+
+        /// <summary>Filtered <c>avg(property)</c> over nullable <c>ulong</c> values (the ANSI <c>filter (where ...)</c> clause or the ClickHouse <c>avgIf</c>); <see langword="null"/> rows are ignored and the mean is a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        /// <param name="filter">The predicate the aggregated rows must satisfy.</param>
+        public double? avg(ulong? property, Expression<Func<bool>> filter) => default!;
+
+        /// <summary>Filtered <c>avg(property)</c> over <c>float</c> values (the ANSI <c>filter (where ...)</c> clause or the ClickHouse <c>avgIf</c>); the mean is a fractional <see cref="float"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        /// <param name="filter">The predicate the aggregated rows must satisfy.</param>
+        public float? avg(float property, Expression<Func<bool>> filter) => default!;
+
+        /// <summary>Filtered <c>avg(property)</c> over nullable <c>float</c> values (the ANSI <c>filter (where ...)</c> clause or the ClickHouse <c>avgIf</c>); <see langword="null"/> rows are ignored and the mean is a fractional <see cref="float"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        /// <param name="filter">The predicate the aggregated rows must satisfy.</param>
+        public float? avg(float? property, Expression<Func<bool>> filter) => default!;
+
+        /// <summary>Filtered <c>avg(property)</c> over <c>double</c> values (the ANSI <c>filter (where ...)</c> clause or the ClickHouse <c>avgIf</c>); the mean is a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        /// <param name="filter">The predicate the aggregated rows must satisfy.</param>
+        public double? avg(double property, Expression<Func<bool>> filter) => default!;
+
+        /// <summary>Filtered <c>avg(property)</c> over nullable <c>double</c> values (the ANSI <c>filter (where ...)</c> clause or the ClickHouse <c>avgIf</c>); <see langword="null"/> rows are ignored and the mean is a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        /// <param name="filter">The predicate the aggregated rows must satisfy.</param>
+        public double? avg(double? property, Expression<Func<bool>> filter) => default!;
+
+        /// <summary>Filtered <c>avg(property)</c> over <c>decimal</c> values (the ANSI <c>filter (where ...)</c> clause or the ClickHouse <c>avgIf</c>); the mean is a fractional <see cref="decimal"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        /// <param name="filter">The predicate the aggregated rows must satisfy.</param>
+        public decimal? avg(decimal property, Expression<Func<bool>> filter) => default!;
+
+        /// <summary>Filtered <c>avg(property)</c> over nullable <c>decimal</c> values (the ANSI <c>filter (where ...)</c> clause or the ClickHouse <c>avgIf</c>); <see langword="null"/> rows are ignored and the mean is a fractional <see cref="decimal"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        /// <param name="filter">The predicate the aggregated rows must satisfy.</param>
+        public decimal? avg(decimal? property, Expression<Func<bool>> filter) => default!;
 
         /// <summary>Filtered <c>sum(property)</c> (the ANSI <c>filter (where ...)</c> clause or the ClickHouse <c>sumIf</c>).</summary>
         public T? sum<T>(T? property, Expression<Func<bool>> filter) => default!;
@@ -1090,8 +1370,93 @@ public static partial class SqlFunctions
         /// <summary>Windowed <c>sum</c>. The <c>_over</c> suffix avoids clashing with the scalar aggregate.</summary>
         public WindowFunction<T?> sum_over<T>(T? property) => default!;
 
-        /// <summary>Windowed <c>avg</c>.</summary>
-        public WindowFunction<T?> avg_over<T>(T? property) => default!;
+        /// <summary>Windowed <c>avg</c> over <c>byte</c> values; the window result is a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public WindowFunction<double?> avg_over(byte property) => default!;
+
+        /// <summary>Windowed <c>avg</c> over nullable <c>byte</c> values; <see langword="null"/> rows are ignored and the window result is a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public WindowFunction<double?> avg_over(byte? property) => default!;
+
+        /// <summary>Windowed <c>avg</c> over <c>sbyte</c> values; the window result is a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public WindowFunction<double?> avg_over(sbyte property) => default!;
+
+        /// <summary>Windowed <c>avg</c> over nullable <c>sbyte</c> values; <see langword="null"/> rows are ignored and the window result is a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public WindowFunction<double?> avg_over(sbyte? property) => default!;
+
+        /// <summary>Windowed <c>avg</c> over <c>short</c> values; the window result is a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public WindowFunction<double?> avg_over(short property) => default!;
+
+        /// <summary>Windowed <c>avg</c> over nullable <c>short</c> values; <see langword="null"/> rows are ignored and the window result is a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public WindowFunction<double?> avg_over(short? property) => default!;
+
+        /// <summary>Windowed <c>avg</c> over <c>ushort</c> values; the window result is a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public WindowFunction<double?> avg_over(ushort property) => default!;
+
+        /// <summary>Windowed <c>avg</c> over nullable <c>ushort</c> values; <see langword="null"/> rows are ignored and the window result is a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public WindowFunction<double?> avg_over(ushort? property) => default!;
+
+        /// <summary>Windowed <c>avg</c> over <c>int</c> values; the window result is a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public WindowFunction<double?> avg_over(int property) => default!;
+
+        /// <summary>Windowed <c>avg</c> over nullable <c>int</c> values; <see langword="null"/> rows are ignored and the window result is a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public WindowFunction<double?> avg_over(int? property) => default!;
+
+        /// <summary>Windowed <c>avg</c> over <c>uint</c> values; the window result is a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public WindowFunction<double?> avg_over(uint property) => default!;
+
+        /// <summary>Windowed <c>avg</c> over nullable <c>uint</c> values; <see langword="null"/> rows are ignored and the window result is a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public WindowFunction<double?> avg_over(uint? property) => default!;
+
+        /// <summary>Windowed <c>avg</c> over <c>long</c> values; the window result is a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public WindowFunction<double?> avg_over(long property) => default!;
+
+        /// <summary>Windowed <c>avg</c> over nullable <c>long</c> values; <see langword="null"/> rows are ignored and the window result is a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public WindowFunction<double?> avg_over(long? property) => default!;
+
+        /// <summary>Windowed <c>avg</c> over <c>ulong</c> values; the window result is a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public WindowFunction<double?> avg_over(ulong property) => default!;
+
+        /// <summary>Windowed <c>avg</c> over nullable <c>ulong</c> values; <see langword="null"/> rows are ignored and the window result is a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public WindowFunction<double?> avg_over(ulong? property) => default!;
+
+        /// <summary>Windowed <c>avg</c> over <c>float</c> values; the window result is a fractional <see cref="float"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public WindowFunction<float?> avg_over(float property) => default!;
+
+        /// <summary>Windowed <c>avg</c> over nullable <c>float</c> values; <see langword="null"/> rows are ignored and the window result is a fractional <see cref="float"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public WindowFunction<float?> avg_over(float? property) => default!;
+
+        /// <summary>Windowed <c>avg</c> over <c>double</c> values; the window result is a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public WindowFunction<double?> avg_over(double property) => default!;
+
+        /// <summary>Windowed <c>avg</c> over nullable <c>double</c> values; <see langword="null"/> rows are ignored and the window result is a fractional <see cref="double"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public WindowFunction<double?> avg_over(double? property) => default!;
+
+        /// <summary>Windowed <c>avg</c> over <c>decimal</c> values; the window result is a fractional <see cref="decimal"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public WindowFunction<decimal?> avg_over(decimal property) => default!;
+
+        /// <summary>Windowed <c>avg</c> over nullable <c>decimal</c> values; <see langword="null"/> rows are ignored and the window result is a fractional <see cref="decimal"/>.</summary>
+        /// <param name="property">The value to aggregate.</param>
+        public WindowFunction<decimal?> avg_over(decimal? property) => default!;
 
         /// <summary>Windowed <c>min</c>.</summary>
         public WindowFunction<T?> min_over<T>(T? property) => default!;

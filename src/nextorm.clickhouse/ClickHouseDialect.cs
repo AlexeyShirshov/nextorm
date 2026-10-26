@@ -411,6 +411,28 @@ public class ClickHouseDialect : SqlDialectBase
     public override string WrapCount(string countExpression, bool big) =>
         big ? $"toInt64({countExpression})" : $"toInt32({countExpression})";
 
+    // ClickHouse avg() over an empty or all-NULL input is nan, not NULL (unlike the SQL standard). The
+    // row-eligibility check (count/countIf over the same argument) restores NULL without inspecting the
+    // result value, so a genuine NaN or infinity from non-empty data is preserved unchanged.
+    /// <summary>ClickHouse <c>avg</c> returns <c>nan</c> for an empty input, so the AVG result is wrapped in an eligibility check.</summary>
+    public override bool WrapsAverageResult => true;
+
+    /// <summary>
+    /// Wraps a rendered AVG expression as <c>if(count(...)=0, cast(null as Nullable(Float64)), agg)</c>;
+    /// the filtered form checks <c>countIf(isNotNull(x) AND predicate)</c> and the window form uses the
+    /// identical <c>over</c> clause for the count.
+    /// </summary>
+    public override string MakeAverageResult(string aggregate, string argument, string? filterPredicate = null, string? windowClause = null)
+    {
+        var eligibility = windowClause is not null
+            ? $"count({argument}){windowClause}"
+            : filterPredicate is not null
+                ? $"countIf(isNotNull({argument}) AND {filterPredicate})"
+                : $"count({argument})";
+
+        return $"if({eligibility}=0, cast(null as Nullable(Float64)), {aggregate})";
+    }
+
     // ClickHouse's ranking window functions (row_number/rank/dense_rank/ntile) return UInt64, which the
     // row reader cannot materialise into the int the function declares (WindowFunction<int>), so the
     // rendered window is narrowed to Int32 (the many-to-many JoinInto link occurrence reads it as int).

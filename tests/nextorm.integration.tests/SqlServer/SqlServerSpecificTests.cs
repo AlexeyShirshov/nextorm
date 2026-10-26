@@ -102,12 +102,11 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
     }
 
     [Fact]
-    public void Avg_OnIntColumn_ShouldTruncate()
+    public void Avg_OnIntColumn_ShouldWidenToFraction()
     {
-        // T-SQL evaluates AVG over an integer column as an integer, unlike PostgreSQL and SQLite
-        // which return the fractional value. The shared suite skips its rounding assertion for
-        // this provider; here the actual behaviour is pinned explicitly.
-        _sut.SimpleEntity.Select(x => SqlFunctions.Sql.avg(x.Id)).First().Should().Be(5);
+        // T-SQL evaluates AVG over an integer column as an integer, so T291 widens the argument to
+        // float inside the aggregate; the fractional mean reaches the CLR instead of being truncated.
+        _sut.SimpleEntity.Select(x => SqlFunctions.Sql.avg(x.Id)).First().Should().Be(5.5);
     }
 
     [Fact]

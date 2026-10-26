@@ -132,6 +132,14 @@ ClickHouse arm was verified at SQL generation only (`stddevSamp`/`stddevPop`/`va
 not against a live server: no live result is claimed and no NaN/Inf normalization is implied. The live
 arms of this change were SQLite and PostgreSQL.
 
+The `avg` result follows the SQL-standard contract on ClickHouse: over an empty input or an input whose
+values are all `NULL` it is SQL `NULL`, not ClickHouse's native `nan`. The dialect restores that with a
+row-eligibility check around the aggregate — `if(count(x)=0, cast(null as Nullable(Float64)), avg(x))`,
+`if(countIf(isNotNull(x) AND p)=0, ..., avgIf(x, p))` for a filtered AVG and the same `count(x) over (...)`
+check for a window AVG (with the identical partition/order/frame). No `nan`/`isFinite` test is involved:
+the check counts eligible rows, not the result, so a genuine `NaN` or ±infinity produced by non-empty
+data is returned unchanged. This applies to ordinary, `DISTINCT`, filtered and window AVG alike.
+
 ClickHouse has no recursive CTE support, so the dialect declares every CTE with plain `with`.
 
 ## Registering the provider

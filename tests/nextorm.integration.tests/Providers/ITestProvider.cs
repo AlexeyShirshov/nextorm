@@ -21,9 +21,10 @@ public interface ITestProvider
     bool SupportsFullJoin { get; }
 
     /// <summary>
-    /// True when AVG over an integer column keeps the fractional result. PostgreSQL and SQLite
-    /// return a fractional value, while a SQL Server integer AVG is itself an integer, so the
-    /// shared assertion does not apply there.
+    /// True when AVG over an integer column keeps the fractional result. SQLite, PostgreSQL, MySQL
+    /// and ClickHouse return a fractional value natively; since T291 (#291) SQL Server widens the
+    /// argument to <c>float</c> inside the aggregate instead of truncating the result, so the
+    /// shared fractional assertion applies there too.
     /// </summary>
     bool SupportsFractionalAverage { get; }
 

@@ -217,6 +217,37 @@ select id, sum(id) over (partition by nullableint) as 'total', count(*) over (pa
  from complex_entity
 ```
 
+`avg_over` inherits the grouped `avg` contract: an integral property yields `double?` and SQL Server
+widens the argument inside the aggregate (`avg(cast(id as float)) over (...)`), while the other
+dialects keep the native argument — exactly as described in
+[AVG result types and argument policy](05-grouping-and-aggregates.md#avg-result-types-and-argument-policy).
+A running average therefore never loses the fraction:
+
+```csharp
+var rows = dataContext.From<ISimpleEntity>()
+    .Select(e => new
+    {
+        e.Id,
+        runningAvg = SqlFunctions.Sql.avg_over(e.Id).Over(
+            SqlFunctions.Sql.asc(() => e.Id),
+            WindowFrame.RowsUnboundedPrecedingToCurrentRow)
+    })
+    .ToList();
+```
+
+```sql
+select id, avg(id) over (order by id rows between unbounded preceding and current row) as 'runningAvg'
+ from simple_entity
+```
+
+Output for the rows with `id` 1, 2, 3 (`[1, 2, 3]`):
+
+| Id | runningAvg |
+|----|----|
+| 1 | 1 |
+| 2 | 1.5 |
+| 3 | 2 |
+
 ## Frames
 
 A frame restricts the rows an aggregate sees. [`WindowFrame`](xref:NextORM.Core.WindowFrame) has factory methods for both SQL frame

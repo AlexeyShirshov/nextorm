@@ -52,8 +52,18 @@ internal static class AggregateFilter
     /// where <paramref name="value"/> is the aggregate's already-typed value argument (the rendered
     /// argument is appended only in the SQL pass). <paramref name="combinator"/> is the mapped name
     /// (see <see cref="CombinatorName"/>), for example <c>sumIf</c> or <c>countIf</c>.
+    /// <paramref name="rewriteArgument"/> optionally rewrites the rendered value argument (the AVG
+    /// argument policy); it is not applied in parameter mode. <paramref name="capture"/> receives the
+    /// rendered value argument and predicate text (both empty in parameter mode) for a caller that has
+    /// to compose a wrapper around the combinator call.
     /// </summary>
-    internal static void AppendCombinator(BaseExpressionVisitor visitor, string combinator, Expression? value, Expression filterExpression)
+    internal static void AppendCombinator(
+        BaseExpressionVisitor visitor,
+        string combinator,
+        Expression? value,
+        Expression filterExpression,
+        Func<string, string>? rewriteArgument = null,
+        Action<string, string>? capture = null)
     {
         if (visitor.IsParamMode)
         {
@@ -61,16 +71,28 @@ internal static class AggregateFilter
                 visitor.Visit(value);
 
             AppendPredicate(visitor, filterExpression);
+            capture?.Invoke(string.Empty, string.Empty);
             return;
         }
 
         visitor.Builder!.Append(combinator).Append('(');
 
+        var renderedValue = string.Empty;
         if (value is not null)
-            visitor.Builder!.Append(visitor.VisitToString(value)).Append(", ");
+        {
+            var rendered = visitor.VisitToString(value);
+            if (rewriteArgument is not null)
+                rendered = rewriteArgument(rendered);
+            visitor.Builder!.Append(rendered).Append(", ");
+            renderedValue = rendered;
+        }
 
+        var predicateStart = visitor.Builder!.Length;
         AppendPredicate(visitor, filterExpression);
+        var renderedPredicate = visitor.Builder!.ToString(predicateStart, visitor.Builder!.Length - predicateStart);
         visitor.Builder!.Append(')');
+
+        capture?.Invoke(renderedValue, renderedPredicate);
     }
 
     /// <summary>

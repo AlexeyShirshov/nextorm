@@ -106,6 +106,8 @@ internal static class WindowFunctionTranslator
         // its dialect spelling (the opening parenthesis is part of MakeCount); the ranking/value
         // functions are ANSI and shared by every provider.
         var functionArgs = functionCall.Arguments;
+        string? averageArgument = null;
+        var overStart = -1;
         if (isPercentile)
         {
             visitor.Builder!.Append(functionName).Append('(');
@@ -137,10 +139,24 @@ internal static class WindowFunctionTranslator
                 for (var (i, cnt) = (0, functionArgs.Count); i < cnt; i++)
                 {
                     if (i > 0) visitor.Builder!.Append(", ");
-                    visitor.Visit(functionArgs[i]);
+
+                    if (functionName == "avg")
+                    {
+                        // Window AVG shares the ordinary argument policy (SQL Server widens an integral
+                        // argument inside the aggregate); the rendered fragment is composed so any
+                        // placeholder inside it keeps its real offset.
+                        var rendered = visitor.VisitToString(functionArgs[i]);
+                        averageArgument = visitor.Dialect.MakeAverageArgument(rendered, functionArgs[i].Type);
+                        visitor.AppendTransformed(averageArgument, rendered);
+                    }
+                    else
+                    {
+                        visitor.Visit(functionArgs[i]);
+                    }
                 }
             }
 
+            overStart = visitor.Builder!.Length;
             visitor.Builder!.Append(named ? visitor.Kw(") over ") : visitor.Kw(") over ("));
         }
 
@@ -181,6 +197,18 @@ internal static class WindowFunctionTranslator
             }
 
             visitor.Builder!.Append(')');
+        }
+
+        // ClickHouse returns nan for avg over an empty window frame, so the whole window expression is
+        // wrapped in an eligibility check that repeats the identical window clause for count().
+        if (functionName == "avg"
+            && averageArgument is not null
+            && overStart >= 0
+            && visitor.Dialect.WrapsAverageResult)
+        {
+            var windowSuffix = visitor.Builder!.ToString(overStart + 1, visitor.Builder!.Length - overStart - 1);
+            AppendWrapped(visitor, windowStart, windowMark,
+                rendered => visitor.Dialect.MakeAverageResult(rendered, averageArgument, windowClause: windowSuffix));
         }
 
         if (functionName == "count" && visitor.Dialect.WrapsCountResult)

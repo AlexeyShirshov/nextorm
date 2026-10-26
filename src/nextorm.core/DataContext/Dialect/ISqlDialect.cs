@@ -993,6 +993,37 @@ public interface ISqlDialect
     /// Maps an aggregate function name to the provider specific one, e.g. stdev -> stddev.
     /// </summary>
     string MakeAggregate(string name);
+    /// <summary>
+    /// Renders the argument of an <c>avg</c> aggregate from its already-rendered form. The default is
+    /// the identity; a dialect whose integer <c>avg</c> truncates widens an integral argument before
+    /// the aggregation instead of casting the aggregate result. Applied to ordinary, distinct,
+    /// filtered and window AVG, inside the parentheses and after <c>distinct</c>.
+    /// </summary>
+    /// <param name="argument">The rendered argument expression.</param>
+    /// <param name="inputType">The argument's CLR type (its nullable form included).</param>
+    /// <returns>The argument text the aggregate receives.</returns>
+    string MakeAverageArgument(string argument, Type inputType);
+    /// <summary>
+    /// Whether the rendered <c>avg</c> expression must be wrapped so that an empty or all-NULL input
+    /// yields SQL NULL. The default is <see langword="false"/>: every other provider already returns
+    /// NULL there. ClickHouse returns <c>nan</c>/<c>inf</c> instead and overrides this to
+    /// <see langword="true"/>.
+    /// </summary>
+    bool WrapsAverageResult => false;
+    /// <summary>
+    /// Wraps a fully rendered <c>avg</c> expression so that an empty or all-NULL input yields SQL NULL
+    /// (row eligibility, never the result value: a genuine NaN or infinity from non-empty data is kept).
+    /// The default is the identity; only called when <see cref="WrapsAverageResult"/> is
+    /// <see langword="true"/>. Applied to ordinary, distinct, filtered and window AVG after the
+    /// aggregate (and its window clause) has been composed.
+    /// </summary>
+    /// <param name="aggregate">The fully rendered aggregate, including its filter or window clause.</param>
+    /// <param name="argument">The rendered value argument, as it appears inside the aggregate.</param>
+    /// <param name="filterPredicate">The rendered aggregate filter predicate, or <see langword="null"/>.</param>
+    /// <param name="windowClause">The rendered <c>over ...</c> window suffix, or <see langword="null"/>.</param>
+    /// <returns>The expression to emit in place of <paramref name="aggregate"/>.</returns>
+    string MakeAverageResult(string aggregate, string argument, string? filterPredicate = null, string? windowClause = null)
+        => aggregate;
     /// <summary>Renders a string length function over <paramref name="value"/> (SQL Server <c>len</c>, others <c>length</c>).</summary>
     string MakeStringLength(string value);
     /// <summary>Renders an upper case conversion.</summary>

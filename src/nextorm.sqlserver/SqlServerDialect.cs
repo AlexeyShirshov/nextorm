@@ -401,6 +401,20 @@ public sealed class SqlServerDialect : SqlDialectBase
         _ => base.MakeTypeName(type)
     };
 
+    /// <summary>
+    /// SQL Server evaluates <c>avg</c> over an integer column as an integer and truncates the
+    /// fractional part. Widen the argument to <c>float</c> inside the aggregate; casting the
+    /// aggregate result cannot recover the discarded fraction.
+    /// </summary>
+    public override string MakeAverageArgument(string argument, Type inputType)
+    {
+        var type = Nullable.GetUnderlyingType(inputType) ?? inputType;
+        return type == typeof(byte) || type == typeof(sbyte) || type == typeof(short) || type == typeof(ushort)
+            || type == typeof(int) || type == typeof(uint) || type == typeof(long) || type == typeof(ulong)
+            ? $"cast({argument} as float)"
+            : argument;
+    }
+
     // SQL Server has no length(); its equivalent is len().
     /// <summary>SQL Server has no <c>length</c>; it renders <c>len(value)</c>.</summary>
     public override string MakeStringLength(string value) => $"len({value})";

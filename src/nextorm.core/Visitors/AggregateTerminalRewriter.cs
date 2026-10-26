@@ -34,6 +34,17 @@ internal static class AggregateTerminalRewriter
             var body = Expression.Call(CommonFunctions.SQLExpression, CountMI, Expression.NewArrayInit(typeof(object)));
             selectLambda = Expression.Lambda(body, parameter);
         }
+        else if (node.Method.Name == nameof(EntityBuilderExtensions.Avg))
+        {
+            // AVG's result type is declared by the selected numeric overload, not by the selector:
+            // an integral selector returns a fractional nullable result. The concrete declaration is
+            // resolved from the selector's own type, so the projection column keeps that contract.
+            var selector = UnwrapLambda(node.Arguments[1]);
+            var aggregate = CommonFunctions.AverageMethodFor(selector.Body.Type);
+            resultType = aggregate.ReturnType;
+            var body = Expression.Call(CommonFunctions.SQLExpression, aggregate, selector.Body);
+            selectLambda = Expression.Lambda(body, selector.Parameters);
+        }
         else
         {
             var selector = UnwrapLambda(node.Arguments[1]);

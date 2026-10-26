@@ -24,9 +24,9 @@ predicate. They are named exactly as follows:
 |---|---|---|---|
 | `count()` | `int` | `count_distinct(...)` | `int` |
 | `count_big()` | `long` | `count_big_distinct(...)` | `long` |
-| `min(x)` | same as `x` | `avg_distinct(x)` | same as `x` |
+| `min(x)` | same as `x` | `avg_distinct(x)` | same as `avg(x)` |
 | `max(x)` | same as `x` | `sum_distinct(x)` | same as `x` |
-| `avg(x)` | same as `x` | `stdev_distinct(x)` | same as `x` |
+| `avg(x)` | `double?` / `float?` / `decimal?` (by input type) | `stdev_distinct(x)` | same as `x` |
 | `sum(x)` | same as `x` | `stdevp_distinct(x)` | same as `x` |
 | `stdev(x)` | same as `x` | `var_distinct(x)` | same as `x` |
 | `stdevp(x)` | same as `x` | `varp_distinct(x)` | same as `x` |
@@ -40,6 +40,43 @@ The common aggregates also have convenience terminals on `EntityBuilder<T>`: [`C
 `Avg(x)`, `Sum(x)`, `Stdev(x)`, `Stdevp(x)`, `Var(x)` and `Varp(x)`, each with an `...Async` twin and
 an overload that accepts positional parameters. `count`, `count_big`, `count_distinct` and
 `count_big_distinct` have no entity terminal and are used through ``
+
+## AVG result types and argument policy
+
+`avg` does not return its input type: an integral column produces a fractional result, so `avg` over
+`[1, 2]` is `1.5` instead of the integral value earlier versions returned (`2`; `1` on SQL Server,
+where native integer `AVG` truncates). The result is nullable on every provider, so an empty or
+all-`NULL` input yields `null` rather than an unguarded read.
+
+| Input | `avg(x)` result |
+|---|---|
+| `byte`, `sbyte`, `short`, `ushort`, `int`, `uint`, `long`, `ulong` and their nullable forms | `double?` |
+| `float`, `float?` | `float?` |
+| `double`, `double?` | `double?` |
+| `decimal`, `decimal?` | `decimal?` |
+
+The argument policy is per provider. SQL Server evaluates `AVG` over a non-floating argument as an
+integer, so the argument is widened *inside* the aggregate; the other dialects keep the native
+argument. The policy applies to `avg`, `avg_distinct` and the windowed `avg_over` alike:
+
+| Provider | Rendered argument |
+|---|---|
+| SQLite, PostgreSQL, MySQL, MariaDB, ClickHouse | `avg(id)` |
+| SQL Server | `avg(cast(id as float))` |
+
+The nullable result and the widening are an intentional source break, not a binary-compatible
+change:
+
+```csharp
+int average = dataContext.From<ISimpleEntity>().Avg(e => e.Id);        // does not compile
+var average = dataContext.From<ISimpleEntity>().Avg(e => e.Id);        // double?
+var direct  = dataContext.From<ISimpleEntity>().Select(e => SqlFunctions.Sql.avg(e.Id)).First(); // double?
+```
+
+Explicit generic arguments that named the old truncating form (`Avg<TEntity, TResult>` with an
+integral `TResult`, `avg<T>(...)`) no longer compile either; let overload resolution pick the
+declaration from the selector type and read the value through `double?` (or `float?`/`decimal?` for
+those inputs).
 
 ## GroupBy
 
@@ -271,8 +308,10 @@ Output:
 |-----|
 | 55 |
 
-`avg` keeps the fractional part on SQLite and PostgreSQL; SQL Server evaluates `AVG` over an integer
-column as an integer. Every aggregate also has an entity terminal that forwards to the same function:
+`avg` returns a fractional nullable result for every numeric input (see
+[AVG result types and argument policy](#avg-result-types-and-argument-policy)), so `[1, 2]` is `1.5`
+on every provider, SQL Server included. Every aggregate also has an entity terminal that forwards to
+the same function:
 `Sum`, `Avg`, `Min` and `Max` are equivalent to `Select(...)` followed by `First()`, and `Count()` to
 `Select(e => SqlFunctions.Sql.count()).First()`:
 
@@ -373,7 +412,7 @@ Output:
 
 | Avg |
 |-----|
-| 6 |
+| 5.5 |
 
 Output:
 
@@ -629,12 +668,12 @@ See [Scalar functions](../scalar-functions/05-aggregates.md#aggregate-filter) fo
 | Provider | `count_big` | Aggregate names | Integer `AVG` | `var` / `varp` |
 |---|---|---|---|---|
 | SQLite | emits `count(*)` (already 64-bit) | kept as written; `stdev`/`var` come from the custom aggregates registered by the provider | fractional (5.5 stays 5.5) | supported through those custom aggregates |
-| SQL Server | emits `count_big(...)` | kept as written; `stdev`/`var` are native | integer (5.5 becomes 5) | native |
+| SQL Server | emits `count_big(...)` | kept as written; `stdev`/`var` are native | fractional; the argument is widened (`avg(cast(id as float))`) | native |
 | PostgreSQL | emits `count(*)` (already 64-bit) | `stdev` → `stddev`, `stdevp` → `stddev_pop`, `var` → `variance`, `varp` → `var_pop` | fractional | native |
 | MySQL | emits `count(*)` (already 64-bit) | `stdev` → `stddev_samp`, `stdevp` → `stddev_pop`, `var` → `var_samp`, `varp` → `var_pop` | fractional | native (`var_samp` / `var_pop`) |
 | MariaDB | emits `count(*)` (already 64-bit) | same mapping as MySQL (`stddev_samp` / `stddev_pop` / `var_samp` / `var_pop`) | fractional | native (`var_samp` / `var_pop`) |
 | ClickHouse | casts `count`/`count_distinct` (and the filtered `countIf`) to `toInt32(...)` and `count_big`/`count_big_distinct` to `toInt64(...)` (native `UInt64` is not materialisable) | `stdev` → `stddevSamp`, `stdevp` → `stddevPop`, `var` → `varSamp`, `varp` → `varPop`, `covar_*` → `covarPop`/`covarSamp`, `bit_*` → `groupBit*`, an aggregate filter → the `<fn>If` combinator (`sumIf`, `countIf`) | fractional | `varSamp` / `varPop` |
-| In-memory | not covered by the in-memory test suite | not covered | not covered | not covered |
+| In-memory | not covered by the in-memory test suite | not covered | fractional (`double?` for integral inputs) | not covered |
 
 Group ordering is not defined by SQL; assert by group key, not by position. PostgreSQL and SQLite
 differ on `NULL` ordering (PostgreSQL first, SQLite last).

@@ -527,6 +527,16 @@ public abstract class SqlDialectBase : ISqlDialect
     /// <inheritdoc/>
     public virtual string MakeAggregate(string name) => name;
 
+    /// <inheritdoc/>
+    public virtual string MakeAverageArgument(string argument, Type inputType) => argument;
+
+    /// <inheritdoc/>
+    public virtual bool WrapsAverageResult => false;
+
+    /// <inheritdoc/>
+    public virtual string MakeAverageResult(string aggregate, string argument, string? filterPredicate = null, string? windowClause = null)
+        => aggregate;
+
     // Scalar function defaults are ANSI/portable; a dialect overrides only where it deviates
     // (SQL Server len/datepart, SQLite strftime/datetime, PostgreSQL/ SQLite natural log, ...).
     /// <inheritdoc/>

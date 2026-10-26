@@ -72,17 +72,14 @@ public abstract partial class CommonTestSuite
     }
 
     [Fact]
-    public void Avg_ShouldReturn6()
+    public void Avg_ShouldReturn5_5()
     {
-        // PostgreSQL and SQLite keep the fractional part of an integer AVG (5.5 rounds to 6 when
-        // projected as int); SQL Server evaluates AVG over an integer column as an integer, so the
-        // assertion below only applies where the provider supports fractional results.
-        Assert.SkipUnless(Provider.SupportsFractionalAverage,
-            "This provider evaluates AVG over an integer column as an integer.");
-
+        // T291: an integer AVG now exposes the fractional mean on every provider; SQL Server widens
+        // the argument inside the aggregate instead of truncating the result, so no capability gate
+        // is needed here.
         var cnt = _sut.SimpleEntity.Select(e => SqlFunctions.Sql.avg(e.Id)).First();
 
-        cnt.Should().Be(6);
+        cnt.Should().Be(5.5);
 
         _sut.SimpleEntity.Avg(e => e.Id).Should().Be(cnt);
     }
@@ -204,14 +201,12 @@ public abstract partial class CommonTestSuite
     }
 
     [Fact]
-    public async Task AvgAsync_ShouldReturn6()
+    public async Task AvgAsync_ShouldReturn5_5()
     {
-        Assert.SkipUnless(Provider.SupportsFractionalAverage,
-            "This provider evaluates AVG over an integer column as an integer.");
-
+        // T291: the asynchronous terminal shares the fractional result contract on every provider.
         var cnt = _sut.SimpleEntity.Select(e => SqlFunctions.Sql.avg(e.Id)).First();
 
-        cnt.Should().Be(6);
+        cnt.Should().Be(5.5);
 
         (await _sut.SimpleEntity.AvgAsync(e => e.Id)).Should().Be(cnt);
     }
