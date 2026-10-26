@@ -180,6 +180,34 @@ public sealed class ProcessWideCacheIsolationTests
             + string.Join(Environment.NewLine, failures));
     }
 
+    /// <summary>
+    /// D5 (T342) order lever: the three explicit modes are pure, deterministic permutations of the
+    /// ordinal <c>UniqueID</c> sequence, and an unknown mode is refused by name instead of being
+    /// mapped onto a mode nobody asked for. Without this the reproduction driver could silently run
+    /// in the default (randomized) collection order and prove nothing.
+    /// </summary>
+    [Fact]
+    public void T342_CollectionOrderer_ShouldPermuteDeterministically()
+    {
+        string[] ids = ["b", "d", "a", "c"];
+
+        T342CollectionOrderer.ReorderIds(ids, T342CollectionOrderer.AscendingMode)
+            .Should().Equal(["a", "b", "c", "d"], "id-asc is an ordinal ascending sort");
+        T342CollectionOrderer.ReorderIds(ids, T342CollectionOrderer.DescendingMode)
+            .Should().Equal(["d", "c", "b", "a"], "id-desc is the reverse of the ordinal ascending sort");
+
+        string[] ascending = ["a", "b", "c", "d"];
+        var half = ascending.Length / 2;
+        var expectedRotation = ascending.Skip(half).Concat(ascending.Take(half)).ToArray();
+
+        T342CollectionOrderer.ReorderIds(ids, T342CollectionOrderer.RotateMode)
+            .Should().Equal(expectedRotation, "id-rotate continues the ascending sequence from index count/2");
+
+        FluentActions.Invoking(() => T342CollectionOrderer.ReorderIds(ids, "id-shuffle"))
+            .Should().Throw<InvalidOperationException>()
+            .WithMessage("*id-shuffle*");
+    }
+
     // -- checks (pure over relativePath + sourceText) -------------------------
 
     private static IReadOnlyList<GuardDiagnostic> CheckRegistration(IReadOnlyList<SourceFile> sources)
