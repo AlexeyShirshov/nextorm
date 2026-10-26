@@ -1295,7 +1295,10 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
                     FormName = "key-upsert",
                     TargetReference = native ? QuotedMergeTableReference(command) : "target",
                     QualifyTarget = !native && Dialect.SupportsMergeTargetQualification,
-                    SupportsExcluded = native && Dialect.SupportsOnConflict,
+                    // A native upsert exposes the proposed row under both provider spellings: ON CONFLICT's
+                    // excluded.<column> and ON DUPLICATE KEY UPDATE's VALUES(<column>) (the dialect's own
+                    // MakeUpsertValueReference decides which). A provider with neither has no proposed row.
+                    SupportsExcluded = native && (Dialect.SupportsOnConflict || Dialect.SupportsOnDuplicateKey),
                     SourceRow = command.SourceRow,
                     Metadata = ResolveMergeMetadata(command.EntityType),
                     Dialect = Dialect,
