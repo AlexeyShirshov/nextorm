@@ -69,21 +69,20 @@ public class ClickHouseDialect : SqlDialectBase
     public override bool SupportsTableValuedParameters => true;
 
     /// <summary>
-    /// ClickHouse is not marked as having a native bulk path: the driver's <c>ClickHouseBulkCopy</c> is
-    /// obsolete in favour of <c>ClickHouseClient.InsertBinaryAsync</c>, which needs a client built from
-    /// the connection string rather than the context's connection, so the portable
-    /// <c>INSERT ... VALUES</c> path is used instead (bound large sets with <c>MaxBatchSize</c>).
+    /// ClickHouse has a native bulk path: the driver's <c>ClickHouseClient.InsertBinaryAsync</c> streams
+    /// RowBinary rows over HTTP, so the native path is selected where a ClickHouse client is available and
+    /// the portable <c>INSERT ... VALUES</c> path stays the compatible fallback. The legacy
+    /// <c>ClickHouseBulkCopy</c> wrapper is not used.
     /// </summary>
-    public override bool SupportsBulkCopy => false;
+    public override bool SupportsBulkCopy => true;
 
     /// <summary>
-    /// ClickHouse has no unique constraints, so skipping duplicates is a no-op: the head stays a plain
-    /// <c>INSERT INTO</c> and every row is written.
+    /// ClickHouse has no unique constraint and no <c>INSERT IGNORE</c> form, so a duplicate-skipping
+    /// request cannot be expressed. Capability is reported as <see langword="false"/> so the request is
+    /// refused by name instead of being silently rendered as a plain <c>INSERT INTO</c> that writes every
+    /// row.
     /// </summary>
-    public override bool SupportsInsertIgnore => true;
-
-    /// <inheritdoc/>
-    public override string MakeInsertIgnoreInto(KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, "insert into ");
+    public override bool SupportsInsertIgnore => false;
 
     /// <summary>ClickHouse deletes through the synchronous <c>ALTER TABLE ... DELETE</c> mutation with <c>SETTINGS mutations_sync = 1</c>.</summary>
     public override string MakeDeleteHead(string table, KeywordCase keywordCase = KeywordCase.Lower) => $"{Kw(keywordCase, "alter table ")}{table}{Kw(keywordCase, " delete")}";
