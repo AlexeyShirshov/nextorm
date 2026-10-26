@@ -40,6 +40,38 @@ public abstract partial class CommonTestSuite
     private const int T301ATargetId = 7301;
     private const int T301AMissingId = 7302;
 
+    // E13: the proposed row is the row the server would insert, so a BEFORE INSERT trigger rewrite is part
+    // of it. The trigger overwrites "total" with 777 whenever the marker column is set, which keeps the
+    // trigger-written value distinguishable from the column default (500), the source value (0) and the
+    // pre-update target value (1000). PostgreSQL only: PL/pgSQL DDL plus the ON CONFLICT proposed row.
+    // Each DDL step is a separate command, so no batch protocol behaviour is assumed.
+    private const string T301BDdl = """
+        drop table if exists t301b_trigger;
+        """;
+
+    private const string T301BCreate = """
+        create table t301b_trigger (id int not null primary key, a int not null, b int not null, total int not null default 500, marker int not null default 0);
+        """;
+
+    private const string T301BTriggerFunction = """
+        create or replace function t301b_trigger_fn() returns trigger language plpgsql as $t301b$
+        begin
+            if new.marker <> 0 then
+                new.total := 777;
+            end if;
+            return new;
+        end
+        $t301b$;
+        """;
+
+    private const string T301BTrigger = """
+        create trigger t301b_before_insert before insert on t301b_trigger for each row execute function t301b_trigger_fn();
+        """;
+
+    private const int T301BTargetId = 7311;
+    private const int T301BTriggerTotal = 777;
+    private const int T301BDefaultTotal = 500;
+
     private DataContext T301ADataContext => (DataContext)_sut.DataProvider;
 
     /// <summary>True when the active provider renders a general multi-branch <c>MERGE</c> statement.</summary>
@@ -79,6 +111,23 @@ public abstract partial class CommonTestSuite
 
     private static MergeAssignTarget T301ASource(int id, int a, int b) => new() { Id = id, A = a, B = b, Total = 0 };
 
+    /// <summary>Recreates the PostgreSQL trigger fixture (table, trigger function, BEFORE INSERT trigger) and its target row.</summary>
+    private void T301BResetFixture()
+    {
+        var ctx = _sut.DataProvider;
+        T301AExecute(ctx, T301BDdl);
+        T301AExecute(ctx, T301BCreate);
+        T301AExecute(ctx, T301BTriggerFunction);
+        T301AExecute(ctx, T301BTrigger);
+        T301AExecute(ctx, $"insert into t301b_trigger (id, a, b, total) values ({T301BTargetId}, 7, 3, 1000)");
+    }
+
+    private MergeTriggerTarget T301BRead()
+        => _sut.DataProvider.From<MergeTriggerTarget>().Where(x => x.Id == T301BTargetId).Single();
+
+    /// <summary>The original source row for the trigger fixture: marker set, so the insert path rewrites <c>total</c>.</summary>
+    private static MergeTriggerTarget T301BSource() => new() { Id = T301BTargetId, A = 1, B = 10, Total = 0, Marker = 1 };
+
     private MergeCommandRecorder T301ARecord(IDataContext ctx)
     {
         var recorder = new MergeCommandRecorder();
@@ -89,9 +138,9 @@ public abstract partial class CommonTestSuite
     private static void T301ALog(string message) => T301MatrixLog.Write(message);
 
     /// <summary>Records the observed statement (text plus bound parameters) of one form on this engine.</summary>
-    private void T301ALogCommand(string label, MergeCommandRecorder recorder)
+    private void T301ALogCommand(string label, MergeCommandRecorder recorder, string table = "t301a_target")
     {
-        var command = recorder.Commands.LastOrDefault(c => c.Sql.Contains("t301a_target"));
+        var command = recorder.Commands.LastOrDefault(c => c.Sql.Contains(table));
         var parameters = command is null
             ? "-"
             : string.Join(", ", command.Parameters.Select(p => $"{p.Name}={p.Value ?? "null"}"));
@@ -360,6 +409,48 @@ public abstract partial class CommonTestSuite
     }
 
     /// <summary>
+    /// R04/R06 + §7 PostgreSQL <c>BEFORE INSERT</c> trigger proof: the proposed row is the row the server
+    /// would insert, so a trigger rewrite of an inserted column is part of <c>excluded</c>. The insert arm
+    /// omits <c>total</c> (column default <c>500</c>) and supplies the marker; the trigger overwrites the
+    /// proposed <c>total</c> with <c>777</c>; the update arm stores <c>excluded.Total</c>. The stored value
+    /// is therefore <c>777</c> — not the column default <c>500</c>, not the source <c>Total</c> (<c>0</c>,
+    /// which a source↔proposed substitution would store) and not the pre-update target (<c>1000</c>) — in
+    /// one statement. PostgreSQL only: the fixture is PL/pgSQL DDL and the claim is provider-specific.
+    /// </summary>
+    [Fact]
+    public void MergeAssignments_KeyUpsert_ExcludedShouldCarryTheBeforeInsertTriggerRewrite()
+    {
+        Assert.SkipUnless(
+            Provider.Name == "postgres",
+            "The BEFORE INSERT trigger proof is PostgreSQL-only (PL/pgSQL fixture over the ON CONFLICT proposed row).");
+
+        T301BResetFixture();
+        var ctx = _sut.DataProvider;
+        var recorder = T301ARecord(ctx);
+
+        ctx.CreateMergeBuilder<MergeTriggerTarget>()
+            .Using(T301BSource())
+            .OnKeys()
+            .WhenMatchedUpdate((t, s, excluded) => new { Total = excluded.Total })
+            .WhenNotMatchedInsert(s => new { Id = s.Id, A = s.A, B = s.B, Marker = s.Marker })
+            .Merge();
+
+        var command = recorder.Commands.Should().ContainSingle(c => c.Sql.Contains("t301b_trigger")).Which;
+        recorder.Executing.Should().Be(1, "the expression statement executes exactly once (no read-modify-write)");
+        var executedStatements = recorder.Executing;
+        T301ALogCommand("key-upsert before-insert trigger", recorder, "t301b_trigger");
+        command.Sql.Should().ContainEquivalentOf("excluded.", "a native ON CONFLICT upsert reads excluded.<column>");
+
+        var stored = T301BRead();
+        T301ALog($"[T301:{T301ADataContext.Dialect.GetType().Name}] before-insert trigger | values | stored={stored.Total} source={T301BSource().Total} previousTarget=1000 columnDefault={T301BDefaultTotal} marker={stored.Marker} executedStatements={executedStatements}");
+        stored.Total.Should().Be(T301BTriggerTotal, "excluded carries the BEFORE INSERT trigger's rewrite of the proposed row");
+        stored.Total.Should().NotBe(T301BDefaultTotal, "the column default alone is not the trigger-written proposed value");
+        stored.Total.Should().NotBe(0, "the excluded value is not the original source row's total");
+        stored.Total.Should().NotBe(1000, "the excluded value is not the pre-update target row's total");
+        stored.Marker.Should().Be(0, "the update arm writes only the assigned column; the marker shaped only the proposed row");
+    }
+
+    /// <summary>
     /// R03/R09: a constant right-hand side is a bound statement parameter, never an inlined caller value, and
     /// the statement executes on every engine.
     /// </summary>
@@ -582,6 +673,31 @@ public sealed class MergeAssignTarget
 
     [Column("total")]
     public int Total { get; set; }
+}
+
+/// <summary>
+/// The E13 PostgreSQL trigger fixture: <c>marker</c> makes the table's <c>BEFORE INSERT</c> trigger rewrite
+/// <c>total</c> on the proposed row, so the proposed-row role can be told apart from the column default,
+/// the original source row and the pre-update target row.
+/// </summary>
+[SqlTable("t301b_trigger")]
+public sealed class MergeTriggerTarget
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("a")]
+    public int A { get; set; }
+
+    [Column("b")]
+    public int B { get; set; }
+
+    [Column("total")]
+    public int Total { get; set; }
+
+    [Column("marker")]
+    public int Marker { get; set; }
 }
 
 /// <summary>One command observed on the context's execution axis: its text and its bound parameters.</summary>
