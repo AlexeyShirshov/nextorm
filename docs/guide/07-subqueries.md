@@ -69,6 +69,13 @@ which does not make a bare derived read of the same DTO reusable. Add the outer 
 positional-record projections; the tested constructor-only class projection has a known pre-existing
 failure (`Cannot find inner column Id`), so use one of those supported forms instead.
 
+A **single-column scalar** derived source — a member projection or a set-operation command such as
+`left.UnionAll(right)` — has no row shape to build, so it materialises directly to `List<T>` regardless
+of whether the type's process-wide select-list cache is cold or was already populated by an earlier
+scalar read. The derived read builds its own one-column shape; it does not reuse or overwrite the cached
+entry. Before the fix the warm path reused the cached object-materialisation list and threw
+`QueryPreparationException: Cannot get ctor from T`, while the cold path succeeded.
+
 Two different aliases appear in these examples. The **table alias** (`t1`, `t2`, ...) names the derived
 source in `FROM` and qualifies every reference to it (`t1.id`); the provider generates it, you never
 write it. The **output-column alias** is what the derived `SELECT` itself declares: a projected member's
