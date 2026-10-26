@@ -622,44 +622,44 @@ public sealed class BuilderGuardBranchCoverage3Tests : ProviderTestSuite
         FluentActions
             .Invoking(() => Context.CreateMergeBuilder<Bg10MergeRow>()
                 .Using(new Bg10MergeRow { Id = 1, Name = "a", Qty = 1 })
-                .WhenMatched().ThenUpdate(x => new object()))
+                .WhenMatched().ThenUpdate((t, s) => new object()))
             .Should().Throw<ArgumentException>()
-            .WithMessage("*does not name any mapped column*");
+            .WithMessage("*MERGE assignments must be a non-empty anonymous initializer*");
 
         FluentActions
             .Invoking(() => Context.CreateMergeBuilder<Bg10MergeRow>()
                 .Using(new Bg10MergeRow { Id = 1, Name = "a", Qty = 1 })
-                .WhenMatched().ThenUpdate(x => new { Extra = x.Extra }))
-            .Should().Throw<BuildSqlCommandException>()
-            .WithMessage("*is not a mapped, writable column*");
+                .WhenMatched().ThenUpdate((t, s) => new { Extra = s.Extra }))
+            .Should().Throw<ArgumentException>()
+            .WithMessage("*is not a mapped CLR property*");
 
         FluentActions
             .Invoking(() => Context.CreateMergeBuilder<Bg10MergeRow>()
                 .Using(new Bg10MergeRow { Id = 1, Name = "a", Qty = 1 })
-                .WhenMatched().ThenUpdate(x => new { Value = x.Id + 1 }))
-            .Should().Throw<BuildSqlCommandException>()
-            .WithMessage("*may only name mapped columns*");
+                .WhenMatched().ThenUpdate((t, s) => new { Qty = s.Name }))
+            .Should().Throw<ArgumentException>()
+            .WithMessage("*has incompatible value type*");
 
         FluentActions
             .Invoking(() => Context.CreateMergeBuilder<Bg10MergeRow>()
                 .Using(new Bg10MergeRow { Id = 1, Name = "a", Qty = 1 })
-                .WhenMatched().ThenUpdate(x => new { x.Doubled }))
+                .WhenMatched().ThenUpdate((t, s) => new { Doubled = t.Qty }))
             .Should().Throw<NotSupportedException>()
-            .WithMessage("*is computed and cannot be written*");
+            .WithMessage("*cannot assign computed property 'Doubled'*");
 
         FluentActions
             .Invoking(() => Context.CreateMergeBuilder<Bg10InsertTarget>()
                 .Using(new Bg10InsertTarget { Name = "a" })
-                .WhenMatched().ThenUpdate(x => new { x.Id }))
+                .WhenMatched().ThenUpdate((t, s) => new { Id = t.Id }))
             .Should().Throw<NotSupportedException>()
-            .WithMessage("*is database-generated and cannot be written by a merge branch*");
+            .WithMessage("*cannot assign identity property 'Id'*");
 
         FluentActions
             .Invoking(() => Context.CreateMergeBuilder<Bg10KeyRow>()
                 .Using(new Bg10KeyRow { Code = "c", Name = "a" })
-                .WhenMatched().ThenUpdate(x => new { x.Code }))
+                .WhenMatched().ThenUpdate((t, s) => new { Code = t.Code }))
             .Should().Throw<NotSupportedException>()
-            .WithMessage("*is the merge match key*");
+            .WithMessage("*cannot assign merge key property 'Code'*");
     }
 
     [Fact]

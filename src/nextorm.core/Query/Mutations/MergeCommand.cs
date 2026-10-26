@@ -37,12 +37,14 @@ internal sealed class MergeBranch
     /// <param name="action">The action performed on the row.</param>
     /// <param name="columns">The written columns (empty for a delete branch).</param>
     /// <param name="condition">An extra <c>AND</c> search condition over <c>(target, source)</c>, or <see langword="null"/>.</param>
-    public MergeBranch(MergeMatchKind match, MergeActionKind action, IReadOnlyList<IPropertyMetadata> columns, LambdaExpression? condition = null)
+    /// <param name="assignments">The explicit per-column assignments of an expression-based branch, or <see langword="null"/> for the same-name source behaviour.</param>
+    public MergeBranch(MergeMatchKind match, MergeActionKind action, IReadOnlyList<IPropertyMetadata> columns, LambdaExpression? condition = null, MergeAssignmentSet? assignments = null)
     {
         Match = match;
         Action = action;
         Columns = columns;
         Condition = condition;
+        Assignments = assignments;
     }
 
     /// <summary>The class of candidate row this branch handles.</summary>
@@ -59,6 +61,13 @@ internal sealed class MergeBranch
     /// <c>(target, source)</c> row, or <see langword="null"/> for an unconditional branch.
     /// </summary>
     public LambdaExpression? Condition { get; }
+
+    /// <summary>
+    /// The explicit per-column assignments of an expression-based branch, or <see langword="null"/> when
+    /// the branch assigns the same-named source columns (the no-argument behaviour). When set, only the
+    /// assigned destinations are written and no dynamic store key is appended.
+    /// </summary>
+    public MergeAssignmentSet? Assignments { get; }
 }
 
 /// <summary>
@@ -84,6 +93,9 @@ internal sealed class MergeCommand : MutationCommand
     /// <param name="registry">A <see cref="QueryCommand"/> carrier used to render condition expressions (the target entity's command), or <see langword="null"/>.</param>
     /// <param name="dynamicColumns">The entity store's dynamic columns carried in the source/INSERT/SET, or <see langword="null"/>.</param>
     /// <param name="filterScope">The effective global-filter scope of the builder (the filters the statement must honor), or <see langword="null"/> for none.</param>
+    /// <param name="keyUpdateAssignments">The explicit key-upsert update assignments, or <see langword="null"/> for the no-argument form.</param>
+    /// <param name="keyInsertAssignments">The explicit key-upsert insert assignments, or <see langword="null"/> for the no-argument form.</param>
+    /// <param name="sourceRow">The single materialized source entity, used to bind original-source values of a native key upsert, or <see langword="null"/>.</param>
     public MergeCommand(
         Type entityType,
         string tableName,
@@ -98,7 +110,10 @@ internal sealed class MergeCommand : MutationCommand
         LambdaExpression? matchCondition = null,
         QueryCommand? registry = null,
         DynamicColumnSet? dynamicColumns = null,
-        QueryFilterScope? filterScope = null)
+        QueryFilterScope? filterScope = null,
+        MergeAssignmentSet? keyUpdateAssignments = null,
+        MergeAssignmentSet? keyInsertAssignments = null,
+        object? sourceRow = null)
         : base(SqlStatementType.Merge, entityType)
     {
         FilterScope = filterScope ?? QueryFilterScope.None;
@@ -114,7 +129,29 @@ internal sealed class MergeCommand : MutationCommand
         MatchCondition = matchCondition;
         Registry = registry;
         DynamicColumns = dynamicColumns;
+        KeyUpdateAssignments = keyUpdateAssignments;
+        KeyInsertAssignments = keyInsertAssignments;
+        SourceRow = sourceRow;
     }
+
+    /// <summary>
+    /// The explicit assignments of the key-upsert matched branch, or <see langword="null"/> when the
+    /// no-argument <c>WhenMatchedUpdate()</c> form assigns the same-named source columns.
+    /// </summary>
+    public MergeAssignmentSet? KeyUpdateAssignments { get; }
+
+    /// <summary>
+    /// The explicit assignments of the key-upsert insert branch, or <see langword="null"/> when the
+    /// no-argument <c>WhenNotMatchedInsert()</c> form inserts every written column from the source.
+    /// When set, the insert column list is exactly the assigned destinations (no implicit keys).
+    /// </summary>
+    public MergeAssignmentSet? KeyInsertAssignments { get; }
+
+    /// <summary>
+    /// The single materialized source entity of a native key upsert, used to bind original-source values
+    /// through statement parameters, or <see langword="null"/> when the statement references no source row.
+    /// </summary>
+    public object? SourceRow { get; }
 
     /// <summary>
     /// The full-<c>MERGE</c> branches, or <see langword="null"/> for a key upsert. When set, the dialect

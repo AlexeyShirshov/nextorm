@@ -218,8 +218,8 @@ public class MergeSqlGenerationTests
         ctx.CreateMergeBuilder<IMergeEntity>()
             .Using(new MergeEntity { Id = 1, Name = "a", Age = 5 })
             .OnKeys()
-            .WhenMatched().ThenUpdate(d => new { d.Name })
-            .WhenNotMatched().ThenInsert(d => new { d.Id, d.Name })
+            .WhenMatched().ThenUpdate((t, s) => new { Name = s.Name })
+            .WhenNotMatched().ThenInsert(s => new { Id = s.Id, Name = s.Name })
             .ToSql()
             .Should().Be("merge into merge_entity as target using (values (@p0, @p1, @p2)) as source (id, name, age) on target.id = source.id when matched then update set name = source.name when not matched then insert (id, name) values (source.id, source.name)");
     }

@@ -1264,21 +1264,61 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             // A filtered SQL Server key upsert (SupportsMerge) is routed through the same filtered MERGE
             // renderer as the full-MERGE form: the target predicate is rendered into its ON. Every other
             // dialect has already refused in the builder's capability guard, so there is no filter here.
+            var hasAssignments = command.KeyUpdateAssignments is not null || command.KeyInsertAssignments is not null;
             IParameterProvider? keyProvider = null;
             List<Parameter>? keyAccumulator = null;
             string? keyFilterSql = null;
-            if (Dialect.SupportsMerge && command.Registry is { } keyRegistry)
+            if (hasAssignments || (Dialect.SupportsMerge && command.Registry is not null))
             {
                 keyProvider = new DefaultParameterProvider();
                 keyAccumulator = [];
-                keyFilterSql = _planner.RenderMergeTargetFilter(command.EntityType, command.FilterScope, keyRegistry, keyProvider, keyAccumulator, QuoteIdentifiers, NamingConvention, KeywordCase);
+            }
+
+            if (Dialect.SupportsMerge && command.Registry is { } keyRegistry)
+                keyFilterSql = _planner.RenderMergeTargetFilter(command.EntityType, command.FilterScope, keyRegistry, keyProvider!, keyAccumulator!, QuoteIdentifiers, NamingConvention, KeywordCase);
+
+            MergeAssignmentFragment? keyUpdateFragment = null;
+            MergeAssignmentFragment? keyInsertFragment = null;
+            if (hasAssignments)
+            {
+                if (keyProvider is null || keyAccumulator is null || command.Registry is null)
+                    throw new BuildSqlCommandException("A key-upsert expression requires an assignment render context.");
+
+                // The native upsert reads the target table and (on a provider that has one) the proposed row;
+                // SQL Server renders the key upsert as a general MERGE, so its source is a real relation and
+                // its target is the MERGE alias. The original input row is always bound as parameters.
+                var native = !Dialect.SupportsMerge;
+                var renderInfo = new MergeAssignmentRenderInfo
+                {
+                    Form = native ? MergeAssignmentForm.NativeUpsert : MergeAssignmentForm.FullMerge,
+                    ProviderName = Dialect.GetType().Name,
+                    FormName = "key-upsert",
+                    TargetReference = native ? QuotedMergeTableReference(command) : "target",
+                    QualifyTarget = !native && Dialect.SupportsMergeTargetQualification,
+                    SupportsExcluded = native && Dialect.SupportsOnConflict,
+                    SourceRow = command.SourceRow,
+                    Metadata = ResolveMergeMetadata(command.EntityType),
+                    Dialect = Dialect,
+                    QuoteIdentifiers = QuoteIdentifiers,
+                    NamingConvention = NamingConvention,
+                };
+
+                if (command.KeyUpdateAssignments is { } updateAssignments)
+                {
+                    keyUpdateFragment = _planner.RenderMergeAssignments(updateAssignments, renderInfo.WithKind(MergeAssignmentFragmentKind.UpdateSet), command.EntityType, command.Registry, keyProvider, keyAccumulator, QuoteIdentifiers, NamingConvention, KeywordCase);
+                }
+
+                if (command.KeyInsertAssignments is { } insertAssignments)
+                {
+                    keyInsertFragment = _planner.RenderMergeAssignments(insertAssignments, renderInfo.WithKind(MergeAssignmentFragmentKind.Insert), command.EntityType, command.Registry, keyProvider, keyAccumulator, QuoteIdentifiers, NamingConvention, KeywordCase);
+                }
             }
 
             if (command.Source is null)
-                return SqlMutationBuilder.MakeMerge(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, keyProvider, null, null, keyAccumulator, null, null, keyFilterSql, this, renderKind);
+                return SqlMutationBuilder.MakeMerge(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, keyProvider, null, null, keyAccumulator, null, null, keyFilterSql, this, renderKind, keyUpdateFragment: keyUpdateFragment, keyInsertFragment: keyInsertFragment);
 
             var (withInsert, sourceInsert, sourceInsertParameters, keyMaxRecursionStmt) = _planner.RenderSource(command.Source);
-            var (insertSql, insertParameters) = SqlMutationBuilder.MakeMerge(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, keyProvider, sourceInsert, sourceInsertParameters, keyAccumulator, null, null, keyFilterSql, this, renderKind);
+            var (insertSql, insertParameters) = SqlMutationBuilder.MakeMerge(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, keyProvider, sourceInsert, sourceInsertParameters, keyAccumulator, null, null, keyFilterSql, this, renderKind, keyUpdateFragment: keyUpdateFragment, keyInsertFragment: keyInsertFragment);
             return (AppendMaxRecursionStmt(withInsert is null ? insertSql : withInsert + insertSql, keyMaxRecursionStmt), insertParameters);
         }
 
@@ -1310,19 +1350,71 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             branchConditions[i] = _planner.RenderMergeCondition(condition, command.EntityType, registry, provider, accumulator, quoteIdentifiers, namingConvention, keywordCase);
         }
 
+        // Explicit branch assignments are rendered after the conditions and before the VALUES rows, so the
+        // statement keeps one parameter sequence. A full MERGE reads the target alias and the source
+        // relation; it has no proposed-row (excluded) reference.
+        MergeAssignmentFragment?[]? branchAssignments = null;
+        for (var i = 0; i < command.Branches.Count; i++)
+        {
+            if (command.Branches[i].Assignments is not { } assignments)
+                continue;
+
+            branchAssignments ??= new MergeAssignmentFragment?[command.Branches.Count];
+            branchAssignments[i] = _planner.RenderMergeAssignments(
+                assignments,
+                MergeBranchAssignmentInfo(command.EntityType, command.Branches[i]),
+                command.EntityType,
+                registry,
+                provider,
+                accumulator,
+                quoteIdentifiers,
+                namingConvention,
+                keywordCase);
+        }
+
         if (command.Source is null)
         {
-            var (sql, parameters) = SqlMutationBuilder.MakeMerge(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, provider, null, null, accumulator, matchConditionSql, branchConditions, targetFilterSql, this, renderKind);
+            var (sql, parameters) = SqlMutationBuilder.MakeMerge(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, provider, null, null, accumulator, matchConditionSql, branchConditions, targetFilterSql, this, renderKind, branchAssignments);
             return (sql, parameters);
         }
 
         var (withSql, sourceSql, _, maxRecursionStmt) = _planner.RenderSource(command.Source, provider, accumulator);
         // The source parameters already sit in the shared accumulator, so MakeMerge must not re-add them;
         // passing them again would duplicate every @pN.
-        var (fullSql, fullParameters) = SqlMutationBuilder.MakeMerge(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, provider, sourceSql, null, accumulator, matchConditionSql, branchConditions, targetFilterSql, this, renderKind);
+        var (fullSql, fullParameters) = SqlMutationBuilder.MakeMerge(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, provider, sourceSql, null, accumulator, matchConditionSql, branchConditions, targetFilterSql, this, renderKind, branchAssignments);
         // MERGE is terminated with ';' (SQL Server): OPTION goes before that terminator, not after it.
         return (AppendMaxRecursionStmt(withSql is null ? fullSql : withSql + fullSql, maxRecursionStmt), fullParameters);
     }
+
+    // The SQL that names the merge target table of a native upsert, quoted exactly like the statement's own
+    // table reference so a target-role read and the INSERT target cannot diverge.
+    private string QuotedMergeTableReference(MergeCommand command)
+    {
+        var table = SqlMutationBuilder.ResolveTableName(command.TableName, command.IsTableNameAuto, command.EntityType, NamingConvention);
+        return QuoteIdentifiers ? Dialect.QuoteIdentifier(table) : table;
+    }
+
+    // The target entity metadata used to resolve an assignment right-hand-side member to its mapped column.
+    private static IEntityMetadata? ResolveMergeMetadata(Type entityType)
+        => DataContextCache.Metadata.TryGetValue(entityType, out var metadata) ? metadata : null;
+
+    // The render info of one full-MERGE branch assignment set.
+    private MergeAssignmentRenderInfo MergeBranchAssignmentInfo(Type entityType, MergeBranch branch)
+        => new()
+        {
+            Form = MergeAssignmentForm.FullMerge,
+            Kind = branch.Action == MergeActionKind.Insert ? MergeAssignmentFragmentKind.Insert : MergeAssignmentFragmentKind.UpdateSet,
+            ProviderName = Dialect.GetType().Name,
+            FormName = "MERGE",
+            TargetReference = "target",
+            QualifyTarget = Dialect.SupportsMergeTargetQualification,
+            SupportsExcluded = false,
+            SourceRow = null,
+            Metadata = ResolveMergeMetadata(entityType),
+            Dialect = Dialect,
+            QuoteIdentifiers = QuoteIdentifiers,
+            NamingConvention = NamingConvention,
+        };
 
     private (string Sql, List<Parameter> Parameters) BuildTruncateSql(TruncateCommand command)
     {
