@@ -187,8 +187,8 @@ public class SqliteFunctionsSqlGenerationTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        var eachSql = SqlOf(ctx, ctx.FromTableFunction(() => SqlFunctions.Sqlite.json_each("[1,2,3]")).Select(r => r.Value));
-        var treeSql = SqlOf(ctx, ctx.FromTableFunction(() => SqlFunctions.Sqlite.json_tree("[1,2,3]")).Select(r => r.Value));
+        var eachSql = SqlOf(ctx, ctx.From(() => SqlFunctions.Sqlite.json_each("[1,2,3]")).Select(r => r.Value));
+        var treeSql = SqlOf(ctx, ctx.From(() => SqlFunctions.Sqlite.json_tree("[1,2,3]")).Select(r => r.Value));
 
         eachSql.Should().Contain("json_each('[1,2,3]')");
         treeSql.Should().Contain("json_tree('[1,2,3]')");
@@ -298,7 +298,7 @@ public class SqliteFunctionsSqlGenerationTests
         using var ctx = SqliteTestContext.Create();
 
         var sql = SqlOf(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.Sqlite.MatchTable<ISimpleEntity>("docs_fts", "hello"))
+            .From(() => SqlFunctions.Sqlite.MatchTable<ISimpleEntity>("docs_fts", "hello"))
             .Select(r => r.Id));
 
         sql.Should().Contain("\"docs_fts\"('hello')");
@@ -313,13 +313,13 @@ public class SqliteFunctionsSqlGenerationTests
         // The FROM match value is a constant built-in table-function argument; it must render as an
         // escaped SQL literal ('O''Brien'), never as an injectable 'O'Brien' fragment.
         var escaped = SqlOf(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.Sqlite.MatchTable<ISimpleEntity>("docs_fts", "O'Brien"))
+            .From(() => SqlFunctions.Sqlite.MatchTable<ISimpleEntity>("docs_fts", "O'Brien"))
             .Select(r => r.Id));
         escaped.Should().Contain("\"docs_fts\"('O''Brien')");
         escaped.Should().NotContain("'O'Brien'");
 
         var injected = SqlOf(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.Sqlite.MatchTable<ISimpleEntity>("docs_fts", "x'); drop table sentinel; --"))
+            .From(() => SqlFunctions.Sqlite.MatchTable<ISimpleEntity>("docs_fts", "x'); drop table sentinel; --"))
             .Select(r => r.Id));
         injected.Should().Contain("\"docs_fts\"('x''); drop table sentinel; --')");
         injected.Should().NotContain("'x'); drop table sentinel; --'");
@@ -484,10 +484,10 @@ public class SqliteFunctionsSqlGenerationTests
         using var ctx = SqliteTestContext.Create();
 
         var nullToken = () => SqlOf(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.Sqlite.MatchTable<ISimpleEntity>((string?)null, "hello"))
+            .From(() => SqlFunctions.Sqlite.MatchTable<ISimpleEntity>((string?)null, "hello"))
             .Select(r => r.Id));
         var emptyToken = () => SqlOf(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.Sqlite.MatchTable<ISimpleEntity>("", "hello"))
+            .From(() => SqlFunctions.Sqlite.MatchTable<ISimpleEntity>("", "hello"))
             .Select(r => r.Id));
 
         nullToken.Should().Throw<NotSupportedException>().WithMessage("*verbatim table-function argument*constant string*");

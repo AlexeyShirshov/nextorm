@@ -1349,23 +1349,23 @@ public class SqlGenerationTests
         var source = "a,b";
         var pattern = ",";
 
-        var arrayElements = () => SqlOf(ctx, ctx.FromTableFunction(() => SqlFunctions.Postgres.jsonb_array_elements(json))
+        var arrayElements = () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.jsonb_array_elements(json))
             .Select(r => new { r.Value }));
         arrayElements.Should().Throw<NotSupportedException>().WithMessage("*jsonb_array_elements*");
 
-        var each = () => SqlOf(ctx, ctx.FromTableFunction(() => SqlFunctions.Postgres.jsonb_each(json))
+        var each = () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.jsonb_each(json))
             .Select(r => new { r.Key }));
         each.Should().Throw<NotSupportedException>().WithMessage("*jsonb_each*");
 
-        var split = () => SqlOf(ctx, ctx.FromTableFunction(() => SqlFunctions.Postgres.regexp_split_to_table(source, pattern))
+        var split = () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.regexp_split_to_table(source, pattern))
             .Select(r => new { r.Value }));
         split.Should().Throw<NotSupportedException>().WithMessage("*regexp_split_to_table*");
 
-        var record = () => SqlOf(ctx, ctx.FromTableFunction(() => SqlFunctions.Postgres.jsonb_to_record<int>(json))
+        var record = () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.jsonb_to_record<int>(json))
             .Select(r => new { V = r }));
         record.Should().Throw<NotSupportedException>().WithMessage("*jsonb_to_record*");
 
-        var values = () => SqlOf(ctx, ctx.FromTableFunction(() => SqlFunctions.ClickHouse.values<int>("(1)"))
+        var values = () => SqlOf(ctx, ctx.From(() => SqlFunctions.ClickHouse.values<int>("(1)"))
             .Select(r => new { V = r }));
         values.Should().Throw<NotSupportedException>().WithMessage("*values*");
     }
@@ -1944,17 +1944,13 @@ public class SqlGenerationTests
 
     private static class Tvf
     {
-        [SqlTableFunction("all_rows")]
-        public static IQueryable<ITvfRow> AllRows() => throw new NotSupportedException();
+        public static TvfEntityBuilder<ITvfRow> AllRows() => new("all_rows");
 
-        [SqlTableFunction("rows_by_id")]
-        public static IQueryable<ITvfRow> ById(long id) => throw new NotSupportedException();
+        public static TvfEntityBuilder<ITvfRow> ById(long id) => new("rows_by_id");
 
-        [SqlTableFunction("rows_between", Schema = "app")]
-        public static IQueryable<ITvfRow> Between(long lo, long hi) => throw new NotSupportedException();
+        public static TvfEntityBuilder<ITvfRow> Between(long lo, long hi) => new("rows_between", "app");
 
-        [SqlTableFunction("openjson", WithClause = "name nvarchar(50) '$.name', age int '$.age'")]
-        public static IQueryable<IOpenJsonTypedRow> OpenJsonTyped(string json) => throw new NotSupportedException();
+        public static TvfEntityBuilder<IOpenJsonTypedRow> OpenJsonTyped(string json) => new("openjson", null, "name nvarchar(50) '$.name', age int '$.age'", null, Array.Empty<int>(), TableFunctionSchema.None);
     }
 
     [Fact]
@@ -1962,7 +1958,7 @@ public class SqlGenerationTests
     {
         using var ctx = SqlServerTestContext.Create();
 
-        SqlOf(ctx, ctx.FromTableFunction(() => Tvf.AllRows()).Select(r => new { r.Id }))
+        SqlOf(ctx, ctx.From(() => Tvf.AllRows()).Select(r => new { r.Id }))
             .Should().Be("select id\n from all_rows() as [t1]");
     }
 
@@ -1972,7 +1968,7 @@ public class SqlGenerationTests
         using var ctx = SqlServerTestContext.Create();
         var id = 5L;
 
-        var command = Prepare(ctx, ctx.FromTableFunction(() => Tvf.ById(id)).Select(r => new { r.Id }));
+        var command = Prepare(ctx, ctx.From(() => Tvf.ById(id)).Select(r => new { r.Id }));
 
         Normalize(command.DbCommand.CommandText).Should().Be("select id\n from rows_by_id(@id) as [t1]");
         command.DbCommandParams.Cast<DbParameter>().Should().ContainSingle()
@@ -1986,7 +1982,7 @@ public class SqlGenerationTests
         var lo = 1L;
         var hi = 3L;
 
-        var command = Prepare(ctx, ctx.FromTableFunction(() => Tvf.Between(lo, hi)).Select(r => new { r.Id }));
+        var command = Prepare(ctx, ctx.From(() => Tvf.Between(lo, hi)).Select(r => new { r.Id }));
 
         Normalize(command.DbCommand.CommandText).Should().Be("select id\n from app.rows_between(@lo, @hi) as [t1]");
         command.DbCommandParams.Cast<DbParameter>().Select(p => p.ParameterName)
@@ -2000,7 +1996,7 @@ public class SqlGenerationTests
         var complex = ctx.From<IComplexEntity>();
 
         var sql = SqlOf(ctx, ctx
-            .FromTableFunction(() => Tvf.AllRows())
+            .From(() => Tvf.AllRows())
             .Join(complex, (r, c) => r.Id == c.Id)
             .Select(p => new { p.Item1.Value, p.Item2.String }));
 
@@ -2014,7 +2010,7 @@ public class SqlGenerationTests
         var simple = ctx.From<ISimpleEntity>();
 
         var sql = SqlOf(ctx, simple
-            .Join(ctx.FromTableFunction(() => Tvf.AllRows()), (s, r) => r.Id == s.Id)
+            .Join(ctx.From(() => Tvf.AllRows()), (s, r) => r.Id == s.Id)
             .Select(p => new { p.Item1.Id, p.Item2.Value }));
 
         sql.Should().Be("select t1.id, t2.value\n from simple_entity as [t1]\n join all_rows() as [t2] on t2.id = cast(t1.id as bigint)");
@@ -2027,7 +2023,7 @@ public class SqlGenerationTests
         var simple = ctx.From<ISimpleEntity>();
 
         var sql = SqlOf(ctx, simple
-            .CrossApply(ctx.FromTableFunction(() => Tvf.AllRows()))
+            .CrossApply(ctx.From(() => Tvf.AllRows()))
             .Select(p => new { p.Item1.Id, p.Item2.Value }));
 
         sql.Should().Be("select t1.id, t2.value\n from simple_entity as [t1]\n cross apply all_rows() as [t2]");
@@ -2040,7 +2036,7 @@ public class SqlGenerationTests
         var simple = ctx.From<ISimpleEntity>();
 
         var sql = SqlOf(ctx, simple
-            .CrossApply(s => ctx.FromTableFunction(() => Tvf.ById(s.Id)))
+            .CrossApply(s => ctx.From(() => Tvf.ById(s.Id)))
             .Select(p => new { p.Item1.Id, p.Item2.Value }));
 
         sql.Should().Be("select t1.id, t3.value\n from simple_entity as [t1]\n cross apply (select t2.id, t2.value\n from rows_by_id(cast(t1.id as bigint)) as [t2]) as [t3]");
@@ -2054,7 +2050,7 @@ public class SqlGenerationTests
         var separator = ",";
 
         var command = Prepare(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.SqlServer.string_split(csv, separator))
+            .From(() => SqlFunctions.SqlServer.string_split(csv, separator))
             .Select(r => new { r.Value }));
 
         Normalize(command.DbCommand.CommandText).Should().Be("select value\n from string_split(@csv, @separator) as [t1]");
@@ -2069,7 +2065,7 @@ public class SqlGenerationTests
         var json = "{\"a\":1}";
 
         var command = Prepare(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.SqlServer.openjson(json))
+            .From(() => SqlFunctions.SqlServer.openjson(json))
             .Select(r => new { r.Key, r.Value, r.Type }));
 
         Normalize(command.DbCommand.CommandText).Should()
@@ -2085,7 +2081,7 @@ public class SqlGenerationTests
         var search = "cat";
 
         var command = Prepare(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.SqlServer.containstable<int>("complex_entity", "somestring", search))
+            .From(() => SqlFunctions.SqlServer.containstable<int>("complex_entity", "somestring", search))
             .Join(ctx.From<IComplexEntity>(), (k, c) => k.Key == c.Id)
             .Select(p => new { p.Item1.Rank, p.Item2.Id }));
 
@@ -2102,7 +2098,7 @@ public class SqlGenerationTests
         var search = "cat";
 
         var command = Prepare(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.SqlServer.freetexttable<int>("complex_entity", "somestring", search))
+            .From(() => SqlFunctions.SqlServer.freetexttable<int>("complex_entity", "somestring", search))
             .Select(r => new { r.Key, r.Rank }));
 
         Normalize(command.DbCommand.CommandText).Should()
@@ -2118,7 +2114,7 @@ public class SqlGenerationTests
         var json = "{\"name\":\"a\",\"age\":1}";
 
         var command = Prepare(ctx, ctx
-            .FromTableFunction(() => Tvf.OpenJsonTyped(json))
+            .From(() => Tvf.OpenJsonTyped(json))
             .Select(r => new { r.Name, r.Age }));
 
         Normalize(command.DbCommand.CommandText).Should()

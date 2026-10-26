@@ -1483,33 +1483,6 @@ public static class DataContextExtensions
     }
 
     /// <summary>
-    /// Starts a query from a table-valued function. <paramref name="call"/> must be a call to a static
-    /// method annotated with <see cref="SqlTableFunctionAttribute"/> (or declared in an annotated
-    /// type); its arguments are rendered as the function arguments and are parameterised like any
-    /// other expression. The function must already exist in the target database - nextorm only emits
-    /// the call.
-    /// <para>
-    /// Example: <c>ctx.FromTableFunction(() =&gt; Db.MyTvf(1, "x")).Select(r =&gt; new { r.Id })</c>.
-    /// </para>
-    /// </summary>
-    public static EntityBuilder<T> FromTableFunction<T>(this IDataContext dataContext, Expression<Func<IQueryable<T>>> call)
-    {
-        ArgumentNullException.ThrowIfNull(dataContext);
-        ArgumentNullException.ThrowIfNull(call);
-
-        var body = call.Body;
-        if (body is UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked } unary)
-            body = unary.Operand;
-
-        if (body is not MethodCallExpression methodCall)
-            throw new ArgumentException("The expression must be a call to a method mapped with [SqlTableFunction].", nameof(call));
-
-        var entity = dataContext.From<T>();
-        entity.SourceFrom = new FromExpression(TableFunctionExpression.Create(methodCall));
-        return entity;
-    }
-
-    /// <summary>
     /// Explicit factory alias of <see cref="From{T}(IDataContext, Action{EntityMetadataBuilder{T}}?)"/>: starts a
     /// query over the mapping of <typeparamref name="T"/>.
     /// </summary>
@@ -1620,17 +1593,6 @@ public static class DataContextExtensions
     /// <returns>A builder for composing the query.</returns>
     public static EntityBuilder<TableAlias> CreateQueryBuilderFromSql(this IDataContext dataContext, string sql, object? parameters = null)
         => dataContext.FromSql(sql, parameters);
-
-    /// <summary>
-    /// Explicit factory alias of <see cref="FromTableFunction{T}(IDataContext, Expression{Func{IQueryable{T}}})"/>:
-    /// starts a query from a table-valued function.
-    /// </summary>
-    /// <typeparam name="T">The function's row type.</typeparam>
-    /// <param name="dataContext">The context to execute against.</param>
-    /// <param name="call">A call to a static method annotated with <see cref="SqlTableFunctionAttribute"/>.</param>
-    /// <returns>A builder for composing the query.</returns>
-    public static EntityBuilder<T> CreateQueryBuilderFromTableFunction<T>(this IDataContext dataContext, Expression<Func<IQueryable<T>>> call)
-        => dataContext.FromTableFunction(call);
 
     /// <summary>Starts a CTE scope with a single non-recursive declaration.</summary>
     public static CteQuery With(this IDataContext dataContext, string name, QueryCommand query)

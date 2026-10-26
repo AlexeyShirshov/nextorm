@@ -314,7 +314,7 @@ public class T320RuntimeTvfSqlTests(ITestOutputHelper output)
         // custom-versus-built-in classification, not a different rendering.
         var builtIn = Prepare(
             ctx,
-            ctx.FromTableFunction(() => SqlFunctions.ClickHouse.numbers(count)).Select(r => r.Value),
+            ctx.From(() => SqlFunctions.ClickHouse.numbers(count)).Select(r => r.Value),
             false);
         Normalize(builtIn.DbCommand.CommandText).Should().Be(customSql, "the cast wrapper is name-based and route-independent");
 
@@ -322,7 +322,7 @@ public class T320RuntimeTvfSqlTests(ITestOutputHelper output)
         // the custom descriptor above is user-defined and emitted verbatim.
         Action mismatch = () => Prepare(
             ctx,
-            ctx.FromTableFunction(() => SqlFunctions.Postgres.generate_series(1, 3)).Select(r => r.Value),
+            ctx.From(() => SqlFunctions.Postgres.generate_series(1, 3)).Select(r => r.Value),
             false);
         mismatch.Should().Throw<NotSupportedException>()
             .WithMessage("*'generate_series'*not supported by this provider*");

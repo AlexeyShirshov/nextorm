@@ -355,15 +355,15 @@ public class T320RuntimeTvfSqlTests(ITestOutputHelper output)
     }
 
     [Fact]
-    public void RuntimeTvf_F_BuiltInThroughRuntimePath_ShouldBeRejectedByTheFactoryContract()
+    public void RuntimeTvf_F_BuiltInThroughRuntimePath_ShouldBeARuntimeFactory()
     {
         using var ctx = SqlServerTestContext.Create();
         var csv = "a,b,c";
         var separator = ",";
 
-        // The runtime route is typed Expression<Func<EntityBuilder<T>>> and a factory must return
-        // TvfEntityBuilder<T>. A built-in returns IQueryable<T> rows, so it cannot be a runtime factory:
-        // the refusal is the factory contract, stated by the descriptor type, not a silent fallback.
+        // Built-ins were migrated to the same runtime descriptor surface: string_split declares
+        // TvfEntityBuilder<T>, so the runtime FROM route accepts it. The built-in support gate is a
+        // separate classification (covered by the next fact), not a factory-contract refusal.
         var builtIn = typeof(SqlServerFunctions).GetMethod(
             nameof(SqlServerFunctions.string_split),
             [typeof(string), typeof(string)])!;
@@ -372,21 +372,19 @@ public class T320RuntimeTvfSqlTests(ITestOutputHelper output)
         output.WriteLine(
             $"built-in {builtIn.Name} returns {builtIn.ReturnType}; is a runtime factory: {returnsTvfDescriptor}");
 
-        returnsTvfDescriptor.Should().BeFalse(
-            "a built-in table function is not a runtime TVF factory, so no runtime lowering accepts it");
-        builtIn.ReturnType.GetGenericTypeDefinition().Should().Be(typeof(IQueryable<>));
+        returnsTvfDescriptor.Should().BeTrue(
+            "a built-in table function declares the same runtime descriptor as a custom factory");
+        builtIn.ReturnType.GetGenericTypeDefinition().Should().Be(typeof(TvfEntityBuilder<>));
 
-        // The legacy annotation route still renders the same built-in: the reference statement the
-        // runtime route would have to reproduce if built-ins were supported there.
-        var legacy = Prepare(
+        var prepared = Prepare(
             ctx,
-            ctx.FromTableFunction(() => SqlFunctions.SqlServer.string_split(csv, separator)).Select(r => new { r.Value }),
+            ctx.From(() => SqlFunctions.SqlServer.string_split(csv, separator)).Select(r => new { r.Value }),
             false);
-        var legacySql = Normalize(legacy.DbCommand.CommandText);
-        output.WriteLine($"built-in legacy: sql=<<{legacySql}>>; parameters=[{string.Join(", ", ParametersOf(legacy))}]");
+        var sql = Normalize(prepared.DbCommand.CommandText);
+        output.WriteLine($"built-in: sql=<<{sql}>>; parameters=[{string.Join(", ", ParametersOf(prepared))}]");
 
-        legacySql.Should().Be("select value\n from string_split(@csv, @separator) as [t1]");
-        ParametersOf(legacy).Should().Equal("csv=a,b,c", "separator=,");
+        sql.Should().Be("select value\n from string_split(@csv, @separator) as [t1]");
+        ParametersOf(prepared).Should().Equal("csv=a,b,c", "separator=,");
     }
 
     [Fact]
@@ -397,7 +395,7 @@ public class T320RuntimeTvfSqlTests(ITestOutputHelper output)
         // A built-in name SQL Server does not support is gated by the built-in classification.
         Action builtIn = () => Prepare(
             ctx,
-            ctx.FromTableFunction(() => SqlFunctions.Postgres.generate_series(1, 3)).Select(r => r.Value),
+            ctx.From(() => SqlFunctions.Postgres.generate_series(1, 3)).Select(r => r.Value),
             false);
         builtIn.Should().Throw<NotSupportedException>()
             .WithMessage("*'generate_series'*not supported by this provider*");

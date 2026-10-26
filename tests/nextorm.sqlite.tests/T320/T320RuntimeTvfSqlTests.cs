@@ -6,19 +6,17 @@ using NextORM.Core;
 namespace NextORM.Sqlite.Tests;
 
 /// <summary>
-/// The legacy attribute-declared TVF surface and the runtime <see cref="TvfEntityBuilder{T}"/> factory used
-/// as a pair: the two declarations carry identical metadata, so any rendering difference between them is a
-/// lowering defect rather than a metadata difference.
+/// Two runtime <see cref="TvfEntityBuilder{T}"/> factory declarations used as a pair: the two carry
+/// identical metadata, so any rendering difference between them is a lowering defect rather than a
+/// metadata difference.
 /// </summary>
 internal static class T320ProbeTvf
 {
-    [SqlTableFunction("probe_tvf")]
-    public static IQueryable<ISimpleEntity> LegacyProbe(int id) => throw new NotSupportedException();
+    public static TvfEntityBuilder<ISimpleEntity> LegacyProbe(int id) => new("probe_tvf");
 
     public static TvfEntityBuilder<ISimpleEntity> ProbeTvf(int id) => new("probe_tvf");
 
-    [SqlTableFunction("probe_tvf_text")]
-    public static IQueryable<ISimpleEntity> LegacyProbeText(string? text) => throw new NotSupportedException();
+    public static TvfEntityBuilder<ISimpleEntity> LegacyProbeText(string? text) => new("probe_tvf_text");
 
     public static TvfEntityBuilder<ISimpleEntity> ProbeTvfText(string? text) => new("probe_tvf_text");
 
@@ -47,8 +45,8 @@ internal static class T320ProbeTvf
 
 /// <summary>
 /// #320 (T320) SQL-generation parity: the runtime factory route must render exactly the statement the
-/// legacy attribute route renders for identical metadata, and a user value must never be injected into
-/// the statement text. No database connection is opened: the SQLite connection string is a placeholder.
+/// first factory declaration renders for identical metadata, and a user value must never be injected
+/// into the statement text. No database connection is opened: the SQLite connection string is a placeholder.
 /// </summary>
 [Trait("Category", "T320")]
 public class T320RuntimeTvfSqlTests(ITestOutputHelper output)
@@ -93,7 +91,7 @@ public class T320RuntimeTvfSqlTests(ITestOutputHelper output)
         using var ctx = SqliteTestContext.Create();
 
         var (legacySql, legacyParameters) =
-            Render(ctx, ctx.FromTableFunction(() => T320ProbeTvf.LegacyProbe(42)).Select(r => new { r.Id }));
+            Render(ctx, ctx.From(() => T320ProbeTvf.LegacyProbe(42)).Select(r => new { r.Id }));
         var (runtimeSql, runtimeParameters) =
             Render(ctx, ctx.From(() => T320ProbeTvf.ProbeTvf(42)).Select(r => new { r.Id }));
 
@@ -114,7 +112,7 @@ public class T320RuntimeTvfSqlTests(ITestOutputHelper output)
         var id = 42;
 
         var (legacySql, legacyParameters) =
-            Render(ctx, ctx.FromTableFunction(() => T320ProbeTvf.LegacyProbe(id)).Select(r => new { r.Id }));
+            Render(ctx, ctx.From(() => T320ProbeTvf.LegacyProbe(id)).Select(r => new { r.Id }));
         var (runtimeSql, runtimeParameters) =
             Render(ctx, ctx.From(() => T320ProbeTvf.ProbeTvf(id)).Select(r => new { r.Id }));
 
@@ -134,7 +132,7 @@ public class T320RuntimeTvfSqlTests(ITestOutputHelper output)
         var text = "x'; DROP TABLE t; --";
 
         var (legacySql, legacyParameters) =
-            Render(ctx, ctx.FromTableFunction(() => T320ProbeTvf.LegacyProbeText(text)).Select(r => new { r.Id }));
+            Render(ctx, ctx.From(() => T320ProbeTvf.LegacyProbeText(text)).Select(r => new { r.Id }));
         var (runtimeSql, runtimeParameters) =
             Render(ctx, ctx.From(() => T320ProbeTvf.ProbeTvfText(text)).Select(r => new { r.Id }));
 
@@ -154,7 +152,7 @@ public class T320RuntimeTvfSqlTests(ITestOutputHelper output)
         using var ctx = SqliteTestContext.Create();
 
         var (legacySql, legacyParameters) =
-            Render(ctx, ctx.FromTableFunction(() => T320ProbeTvf.LegacyProbeText("x'; DROP TABLE t; --")).Select(r => new { r.Id }));
+            Render(ctx, ctx.From(() => T320ProbeTvf.LegacyProbeText("x'; DROP TABLE t; --")).Select(r => new { r.Id }));
         var (runtimeSql, runtimeParameters) =
             Render(ctx, ctx.From(() => T320ProbeTvf.ProbeTvfText("x'; DROP TABLE t; --")).Select(r => new { r.Id }));
 
@@ -229,9 +227,9 @@ public class T320RuntimeTvfSqlTests(ITestOutputHelper output)
     }
 
     /// <summary>
-    /// AC08 at the real plan store: the legacy attribute route and the runtime factory route carry the
-    /// same SQL identity, so on one context the second preparation must hit the first one's single
-    /// stored plan entry instead of adding another, and both must render the same statement.
+    /// AC08 at the real plan store: two runtime factory declarations carry the same SQL identity, so on
+    /// one context the second preparation must hit the first one's single stored plan entry instead of
+    /// adding another, and both must render the same statement.
     /// </summary>
     [Fact]
     public void RuntimeTvf_AndLegacyTvf_WithTheSameSqlIdentity_ShouldLeaveOnePlanStoreEntry()
@@ -239,7 +237,7 @@ public class T320RuntimeTvfSqlTests(ITestOutputHelper output)
         using var ctx = SqliteTestContext.Create();
         ctx.PurgeQueryCache();
 
-        var legacy = Prepare(ctx, ctx.FromTableFunction(() => T320ProbeTvf.LegacyProbe(42)).Select(r => r.Id), true);
+        var legacy = Prepare(ctx, ctx.From(() => T320ProbeTvf.LegacyProbe(42)).Select(r => r.Id), true);
         var legacySql = Normalize(legacy.DbCommand.CommandText);
         var plansAfterLegacy = QueryPlanStore.Values.Count();
         output.WriteLine(

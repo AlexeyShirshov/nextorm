@@ -81,12 +81,12 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
 
     /// <summary>
     /// Query-root operators that start a fresh chain from a source argument or an explicit type
-    /// argument (<c>From</c>/<c>CreateQueryBuilder</c>/<c>FromSql</c>/<c>FromTableFunction</c>). Used by
+    /// argument (<c>From</c>/<c>CreateQueryBuilder</c>/<c>FromSql</c>). Used by
     /// the syntax recovery path (#230) when the source's semantic type is unavailable.
     /// </summary>
     private static readonly HashSet<string> QueryRootOperators = new(StringComparer.Ordinal)
     {
-        "From", "CreateQueryBuilder", "FromSql", "FromTableFunction"
+        "From", "CreateQueryBuilder", "FromSql"
     };
 
     /// <summary>
@@ -400,7 +400,7 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
 
     /// <summary>
     /// Recovers a fresh chain root from a query-root invocation (<c>From</c>/<c>CreateQueryBuilder</c>/
-    /// <c>FromSql</c>/<c>FromTableFunction</c>) when its semantic type is unavailable because it depends on
+    /// <c>FromSql</c>) when its semantic type is unavailable because it depends on
     /// a generated builder type. The root's element type is read from the explicit type argument or the
     /// source argument, entirely from syntax; the new chain carries no join aliases.
     /// </summary>

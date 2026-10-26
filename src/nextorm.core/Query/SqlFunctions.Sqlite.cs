@@ -9,7 +9,7 @@ public static partial class SqlFunctions
     /// the date helpers and the math-extension functions). Every member is gated by
     /// <see cref="ISqlDialect.SqliteFunctions"/>; other providers reject it with a clear message.
     /// </summary>
-    public static SqliteFunctions Sqlite => default!;
+    public static SqliteFunctions Sqlite { get; } = new();
 
     /// <summary>
     /// Row shape produced by <see cref="SqliteFunctions.json_each(string)"/> and
@@ -269,23 +269,19 @@ public class SqliteFunctions : CommonFunctions
     /// <c>json_each(json)</c> as a FROM source: one row per immediate child (see
     /// <see cref="SqlFunctions.IJsonEachRow"/>).
     /// </summary>
-    [SqlTableFunction("json_each")]
-    public IQueryable<SqlFunctions.IJsonEachRow> json_each(string? json) => throw new NotSupportedException();
+    public TvfEntityBuilder<SqlFunctions.IJsonEachRow> json_each(string? json) => new("json_each");
 
     /// <summary><c>json_each(json, path)</c> as a FROM source, walking the element selected by <paramref name="path"/>.</summary>
-    [SqlTableFunction("json_each")]
-    public IQueryable<SqlFunctions.IJsonEachRow> json_each(string? json, string? path) => throw new NotSupportedException();
+    public TvfEntityBuilder<SqlFunctions.IJsonEachRow> json_each(string? json, string? path) => new("json_each");
 
     /// <summary>
     /// <c>json_tree(json)</c> as a FROM source: one row per element of the recursive walk (see
     /// <see cref="SqlFunctions.IJsonTreeRow"/>).
     /// </summary>
-    [SqlTableFunction("json_tree")]
-    public IQueryable<SqlFunctions.IJsonTreeRow> json_tree(string? json) => throw new NotSupportedException();
+    public TvfEntityBuilder<SqlFunctions.IJsonTreeRow> json_tree(string? json) => new("json_tree");
 
     /// <summary><c>json_tree(json, path)</c> as a FROM source, walking the element selected by <paramref name="path"/>.</summary>
-    [SqlTableFunction("json_tree")]
-    public IQueryable<SqlFunctions.IJsonTreeRow> json_tree(string? json, string? path) => throw new NotSupportedException();
+    public TvfEntityBuilder<SqlFunctions.IJsonTreeRow> json_tree(string? json, string? path) => new("json_tree");
 
     // -------------------------------------------------------------------------------------------------
     // FTS3/FTS4/FTS5 full-text search (FTS support exists only when SQLite was compiled with the
@@ -308,12 +304,11 @@ public class SqliteFunctions : CommonFunctions
     /// FTS5 <c>table(query)</c> as a FROM source: the table-valued form of an FTS5 search over
     /// <paramref name="table"/> using the <paramref name="match"/> query. <typeparamref name="TEntity"/>
     /// is the mapped row shape of the FTS table; project it like any other source. Use through
-    /// <see cref="DataContextExtensions.FromTableFunction{T}(IDataContext, System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{T}}})"/>.
+    /// <c>ctx.From(() =&gt; ...)</c>.
     /// <paramref name="table"/> is a trusted constant token emitted verbatim (never built from user
     /// input); <paramref name="match"/> stays parameterised. FTS5 only.
     /// </summary>
-    [SqlTableFunction(Fts5TableFunction, VerbatimArguments = new[] { 0 })]
-    public IQueryable<TEntity> MatchTable<TEntity>(string? table, string? match) => throw new NotSupportedException(InMemoryFtsMessage);
+    public TvfEntityBuilder<TEntity> MatchTable<TEntity>(string? table, string? match) => new(Fts5TableFunction, null, null, null, [0], TableFunctionSchema.None);
 
     /// <summary>FTS5 <c>bm25(table)</c>: the BM25 ranking score of each matching row (smaller is a better match). SQL-only.</summary>
     public double? FTS5bm25(string? table) => throw new NotSupportedException(InMemoryFtsMessage);

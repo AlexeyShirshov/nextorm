@@ -47,8 +47,7 @@ public class SqliteBenchmarkFeaturePlanBuild
 
     private static class Tvf
     {
-        [SqlTableFunction("json_each")]
-        public static IQueryable<JsonEachRow> JsonEach(string json) => throw new NotSupportedException();
+        public static TvfEntityBuilder<JsonEachRow> JsonEach(string json) => new("json_each");
     }
 
     [GlobalSetup]
@@ -274,7 +273,7 @@ public class SqliteBenchmarkFeaturePlanBuild
         IPreparedQueryCommand<long>? r = null;
         for (var i = 0; i < Iterations; i++)
             r = _db.GetPreparedQueryCommand(
-                _db.FromTableFunction(() => Tvf.JsonEach("[1,2,3]")).Select(t => t.Value), false, false, CancellationToken.None);
+                _db.From(() => Tvf.JsonEach("[1,2,3]")).Select(t => t.Value), false, false, CancellationToken.None);
         return r!;
     }
 }

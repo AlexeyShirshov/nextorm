@@ -722,7 +722,7 @@ public class JoinAliasGeneratorDiagnosticTests
     // ---------------------------------------------------------------------------------------------
 
     private static readonly string[] ExpectedQueryRootOperators =
-        ["CreateQueryBuilder", "From", "FromSql", "FromTableFunction"];
+        ["CreateQueryBuilder", "From", "FromSql"];
 
     private static readonly string[] ExpectedElementPreservingOperators =
     [

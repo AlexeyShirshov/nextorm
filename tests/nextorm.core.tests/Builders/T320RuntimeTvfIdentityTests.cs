@@ -6,14 +6,13 @@ using NextORM.Core;
 namespace NextORM.Core.Tests;
 
 /// <summary>
-/// The legacy attribute-declared declaration and the runtime <see cref="TvfEntityBuilder{T}"/> factory
-/// used as a pair. The two carry identical SQL metadata and identical arguments, so their lowered
-/// sources are the same SQL identity and must share one plan key (AC08).
+/// Two runtime <see cref="TvfEntityBuilder{T}"/> factories used as a pair. The two carry identical SQL
+/// metadata and identical arguments, so their lowered sources are the same SQL identity and must share
+/// one plan key (AC08).
 /// </summary>
 internal static class T320IdentityTvf
 {
-    [SqlTableFunction("probe_tvf")]
-    public static IQueryable<T320TvfRow> LegacyProbe(int id) => throw new NotSupportedException();
+    public static TvfEntityBuilder<T320TvfRow> LegacyProbe(int id) => new("probe_tvf");
 
     public static TvfEntityBuilder<T320TvfRow> ProbeTvf(int id) => new("probe_tvf");
 }
@@ -24,14 +23,13 @@ internal static class T320IdentityTvf
 /// </summary>
 internal sealed class T320BuiltInTvf : CommonFunctions
 {
-    [SqlTableFunction("probe_tvf")]
-    public static IQueryable<T320TvfRow> BuiltInProbe(int id) => throw new NotSupportedException();
+    public static TvfEntityBuilder<T320TvfRow> BuiltInProbe(int id) => new("probe_tvf");
 }
 
 /// <summary>
 /// #320 (T320) AC08: source identity is the SQL identity, never the factory method. The plan-key
-/// comparer must merge a runtime factory and a legacy attribute declaration with identical metadata and
-/// arguments, and it must keep every SQL-visible difference apart. Comparer level only: no database.
+/// comparer must merge two runtime factories with identical metadata and arguments, and it must keep
+/// every SQL-visible difference apart. Comparer level only: no database.
 /// </summary>
 [Trait("Category", "T320")]
 public class T320RuntimeTvfIdentityTests
@@ -82,16 +80,16 @@ public class T320RuntimeTvfIdentityTests
     // ---- the claim: same SQL identity -> one plan key, whatever produced it ----------------------
 
     [Fact]
-    public void RuntimeFactory_AndLegacyAttributeTvf_WithTheSameSqlIdentity_ShouldShareThePlanKey()
+    public void TwoRuntimeFactories_WithTheSameSqlIdentity_ShouldShareThePlanKey()
     {
         using var ctx = new InMemoryDataContext();
 
-        var legacy = ctx.FromTableFunction(() => T320IdentityTvf.LegacyProbe(42)).SourceFrom!;
+        var legacy = ctx.From(() => T320IdentityTvf.LegacyProbe(42)).SourceFrom!;
         var runtime = ctx.From(() => T320IdentityTvf.ProbeTvf(42)).SourceFrom!;
 
         legacy.TableFunction!.Name.Should().Be("probe_tvf");
         runtime.TableFunction!.Name.Should().Be("probe_tvf");
-        legacy.TableFunction.ResultType.Should().BeNull("a legacy declaration without a result schema carries no result type");
+        legacy.TableFunction.ResultType.Should().Be(typeof(T320TvfRow), "a runtime factory node knows its row type");
         runtime.TableFunction.ResultType.Should().Be(typeof(T320TvfRow), "the runtime node always knows its row type");
         legacy.TableFunction.ResultSchema.Should().Be(TableFunctionSchema.None);
         runtime.TableFunction.ResultSchema.Should().Be(TableFunctionSchema.None);

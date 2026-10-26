@@ -922,7 +922,7 @@ public sealed class SqliteSpecificTests : ProviderTestSuite
     public void SqliteJsonEachTableFunction_ShouldReturnRows()
     {
         var values = _sut.DataProvider
-            .FromTableFunction(() => SqlFunctions.Sqlite.json_each("[\"a\",\"b\",\"c\"]"))
+            .From(() => SqlFunctions.Sqlite.json_each("[\"a\",\"b\",\"c\"]"))
             .Select(r => r.Value)
             .ToList();
 
@@ -933,7 +933,7 @@ public sealed class SqliteSpecificTests : ProviderTestSuite
     public void SqliteJsonTreeTableFunction_ShouldReturnRows()
     {
         var count = _sut.DataProvider
-            .FromTableFunction(() => SqlFunctions.Sqlite.json_tree("{\"a\":{\"b\":1}}"))
+            .From(() => SqlFunctions.Sqlite.json_tree("{\"a\":{\"b\":1}}"))
             .Select(r => r.FullKey)
             .ToList();
 
@@ -1231,7 +1231,7 @@ public sealed class SqliteSpecificTests : ProviderTestSuite
         var query = "hello";
 
         var rows = ctx
-            .FromTableFunction(() => SqlFunctions.Sqlite.MatchTable<Fts5Doc>("fts5_docs", query))
+            .From(() => SqlFunctions.Sqlite.MatchTable<Fts5Doc>("fts5_docs", query))
             .Where(x => x.RowId > 0)
             .OrderBy(x => x.RowId)
             .Select(x => new { x.RowId, x.Title })
@@ -1591,7 +1591,7 @@ public sealed class SqliteSpecificTests : ProviderTestSuite
         // The join forces the table-valued source to carry an alias; the projection must then qualify
         // rowid/title through that alias (distinct from the ordinary `FROM fts5_docs WHERE fts5_docs MATCH`).
         var rows = ctx
-            .FromTableFunction(() => SqlFunctions.Sqlite.MatchTable<Fts5Doc>("fts5_docs", query))
+            .From(() => SqlFunctions.Sqlite.MatchTable<Fts5Doc>("fts5_docs", query))
             .Join(ctx.From<Fts5Doc>(), (a, b) => a.RowId == b.RowId)
             .Select(x => new { x.Item1.RowId, x.Item1.Title })
             .ToList()
@@ -1689,7 +1689,7 @@ public sealed class SqliteSpecificTests : ProviderTestSuite
             // The FROM table token is a verbatim argument echoed as one quoted identifier, so the
             // injected statement stays inside the identifier and SQLite rejects the missing table.
             var act = () => ctx
-                .FromTableFunction(() => SqlFunctions.Sqlite.MatchTable<Fts5Doc>("fts5_docs\"; drop table sentinel; --", "hello"))
+                .From(() => SqlFunctions.Sqlite.MatchTable<Fts5Doc>("fts5_docs\"; drop table sentinel; --", "hello"))
                 .Select(x => x.RowId)
                 .ToList();
 

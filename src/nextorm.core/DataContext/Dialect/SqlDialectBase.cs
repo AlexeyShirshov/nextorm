@@ -781,8 +781,8 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual string MakeFunction(string name, string? schema)
         => string.IsNullOrEmpty(schema) ? name : $"{schema}.{name}";
 
-    // Built-in SqlFunctions.Sql table functions are provider-specific; user-defined [SqlTableFunction]
-    // functions are emitted verbatim and never consult this.
+    // Built-in SqlFunctions.Sql table functions are provider-specific; user-defined runtime
+    // table-function factories are emitted verbatim and never consult this.
     /// <inheritdoc/>
     public virtual bool SupportsTableFunction(string name) => false;
 

@@ -121,7 +121,7 @@ public sealed class SqliteDialect : SqlDialectBase
     /// <summary>SQLite's built-in JSON table-valued functions <c>json_each</c>/<c>json_tree</c> and the FTS5 table-valued search placeholder.</summary>
     public override bool SupportsTableFunction(string name) => name is "json_each" or "json_tree" or "fts5";
 
-    // The FTS5 table-valued search is rendered by the generic [SqlTableFunction] pipeline as
+    // The FTS5 table-valued search is rendered by the generic TvfEntityBuilder<T> factory pipeline as
     // fts5(<table>, <query>) (the table token is a verbatim constant argument), then rewritten here to
     // the native <table>(<query>) form. The table token arrives as its own structured argument and is
     // echoed as one quoted identifier, so a token carrying commas, quotes, semicolons or comment text

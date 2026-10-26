@@ -52,8 +52,7 @@ public class CreateCommandBuilderFactoryTests
 
     private static class Tvf
     {
-        [SqlTableFunction("cqb_rows")]
-        public static IQueryable<ITvfRow> AllRows() => throw new NotSupportedException();
+        public static TvfEntityBuilder<ITvfRow> AllRows() => new("cqb_rows");
     }
 
     /// <summary>Provider-free dialect: raw SQL FROM sources are enabled so the <c>FromSql</c> forms render.</summary>
@@ -322,10 +321,10 @@ public class CreateCommandBuilderFactoryTests
         Count("CreateQueryBuilder", 2).Should().Be(5);
         Count("CreateQueryBuilder", 3).Should().Be(4);
         Count("CreateQueryBuilderFromSql", 3).Should().Be(1);
-        Count("CreateQueryBuilderFromTableFunction", 2).Should().Be(1);
+        Count("CreateQueryBuilderFromTableFunction", 2).Should().Be(0);
 
-        var totalForwarders = methods.Count(m => m.Name is "CreateQueryBuilder" or "CreateQueryBuilderFromSql" or "CreateQueryBuilderFromTableFunction");
-        totalForwarders.Should().Be(11);
+        var totalForwarders = methods.Count(m => m.Name is "CreateQueryBuilder" or "CreateQueryBuilderFromSql");
+        totalForwarders.Should().Be(10);
     }
 
     [Fact]
@@ -587,24 +586,22 @@ public class CreateCommandBuilderFactoryTests
     // ---------------------------------------------------------------- table function ---------------
 
     [Fact]
-    public void CreateQueryBuilderFromTableFunction_ShouldTranslateLikeFromTableFunction()
+    public void From_Tvf_ShouldEmitTheRuntimeFactoryCall()
     {
         using IDataContext ctx = new TestContext();
-        var viaForwarder = ctx.CreateQueryBuilderFromTableFunction(() => Tvf.AllRows());
-        var viaOriginal = ctx.FromTableFunction(() => Tvf.AllRows());
-        AssertSameBuilderType(viaForwarder, viaOriginal);
+        var builder = ctx.From(() => Tvf.AllRows());
+        AssertSameBuilderType(builder, ctx.From(() => Tvf.AllRows()));
 
-        SqlOf(ctx, viaForwarder.Select(r => new { r.Id }))
-            .Should().Be(SqlOf(ctx, viaOriginal.Select(r => new { r.Id })));
-        SqlOf(ctx, viaForwarder.Select(r => new { r.Id })).Should().Contain("cqb_rows()");
+        SqlOf(ctx, builder.Select(r => new { r.Id }))
+            .Should().Contain("cqb_rows()");
     }
 
     [Fact]
-    public void CreateQueryBuilderFromTableFunction_InMemory_ShouldStillThrowNotSupported()
+    public void From_Tvf_InMemory_ShouldStillThrowNotSupported()
     {
         using var ctx = new InMemoryDataContext();
 
-        var act = () => ctx.CreateQueryBuilderFromTableFunction(() => Tvf.AllRows())
+        var act = () => ctx.From(() => Tvf.AllRows())
             .Select(r => new { r.Id })
             .ToList();
 

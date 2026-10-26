@@ -403,7 +403,7 @@ public class T320RuntimeTvfSqlTests(ITestOutputHelper output)
         // MariaDB (like MySQL) has no generate_series table function.
         Action builtIn = () => Prepare(
             ctx,
-            ctx.FromTableFunction(() => SqlFunctions.Postgres.generate_series(1, 3)).Select(r => r.Value),
+            ctx.From(() => SqlFunctions.Postgres.generate_series(1, 3)).Select(r => r.Value),
             false);
         builtIn.Should().Throw<NotSupportedException>()
             .WithMessage("*'generate_series'*not supported by this provider*");

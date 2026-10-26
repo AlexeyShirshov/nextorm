@@ -1206,8 +1206,8 @@ public interface ISqlDialect
     /// <paramref name="name"/> declared in <see cref="CommonFunctions"/> (for example
     /// <c>generate_series</c>, <c>unnest</c>, <c>string_split</c>, <c>openjson</c>,
     /// <c>numbers</c>/<c>numbers_mt</c>, <c>zeros</c>/<c>zeros_mt</c>). User-defined
-    /// <see cref="SqlTableFunctionAttribute"/> functions are not gated by this and are emitted
-    /// verbatim on every provider.
+    /// table-function factories (returning <see cref="TvfEntityBuilder{T}"/>) are not gated by this
+    /// and are emitted verbatim on every provider.
     /// </summary>
     bool SupportsTableFunction(string name);
     /// <summary>

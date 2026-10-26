@@ -342,42 +342,36 @@ namespace NextORM.Core;
         /// <c>numbers(count)</c> as a FROM source; select <see cref="SqlFunctions.INumbersRow.Value"/>. Yields
         /// <paramref name="count"/> consecutive integers starting at zero. Requires a provider that supports
         /// table functions (see <see cref="ISqlDialect.SupportsTableFunction"/>; ClickHouse). Use through
-        /// <see cref="DataContextExtensions.FromTableFunction{T}(IDataContext, System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{T}}})"/>.
+        /// <c>ctx.From(() =&gt; ...)</c>.
         /// </summary>
-        [SqlTableFunction("numbers")]
-        public IQueryable<SqlFunctions.INumbersRow> numbers(long count) => throw new NotSupportedException();
+        public TvfEntityBuilder<SqlFunctions.INumbersRow> numbers(long count) => new("numbers");
 
         /// <summary><c>numbers(start, stop)</c> as a FROM source: integers in <c>[start, stop)</c>.</summary>
-        [SqlTableFunction("numbers")]
-        public IQueryable<SqlFunctions.INumbersRow> numbers(long start, long stop) => throw new NotSupportedException();
+        public TvfEntityBuilder<SqlFunctions.INumbersRow> numbers(long start, long stop) => new("numbers");
 
         /// <summary><c>numbers(start, stop, step)</c> as a FROM source.</summary>
-        [SqlTableFunction("numbers")]
-        public IQueryable<SqlFunctions.INumbersRow> numbers(long start, long stop, long step) => throw new NotSupportedException();
+        public TvfEntityBuilder<SqlFunctions.INumbersRow> numbers(long start, long stop, long step) => new("numbers");
 
         /// <summary>
         /// <c>numbers_mt(count)</c> as a FROM source: as <see cref="numbers(long)"/> but evaluated with
         /// multiple threads.
         /// </summary>
-        [SqlTableFunction("numbers_mt")]
-        public IQueryable<SqlFunctions.INumbersRow> numbers_mt(long count) => throw new NotSupportedException();
+        public TvfEntityBuilder<SqlFunctions.INumbersRow> numbers_mt(long count) => new("numbers_mt");
 
         /// <summary>
         /// <c>zeros(count)</c> as a FROM source; select <see cref="SqlFunctions.IZerosRow.Value"/>. Yields
         /// <paramref name="count"/> rows whose single <c>zero UInt8</c> column is <c>0</c>. Requires a
         /// provider that supports table functions (see <see cref="ISqlDialect.SupportsTableFunction"/>;
         /// ClickHouse). Use through
-        /// <see cref="DataContextExtensions.FromTableFunction{T}(IDataContext, System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{T}}})"/>.
+        /// <c>ctx.From(() =&gt; ...)</c>.
         /// </summary>
-        [SqlTableFunction("zeros")]
-        public IQueryable<SqlFunctions.IZerosRow> zeros(long count) => throw new NotSupportedException();
+        public TvfEntityBuilder<SqlFunctions.IZerosRow> zeros(long count) => new("zeros");
 
         /// <summary>
         /// <c>zeros_mt(count)</c> as a FROM source: as <see cref="zeros(long)"/> but evaluated with
         /// multiple threads.
         /// </summary>
-        [SqlTableFunction("zeros_mt")]
-        public IQueryable<SqlFunctions.IZerosRow> zeros_mt(long count) => throw new NotSupportedException();
+        public TvfEntityBuilder<SqlFunctions.IZerosRow> zeros_mt(long count) => new("zeros_mt");
 
         /// <summary>
         /// <c>generateRandom(...)</c> as a FROM source; select
@@ -385,18 +379,16 @@ namespace NextORM.Core;
         /// the fixed structure <c>id UInt64, value Float64, name String</c>, so apply a page/limit.
         /// Requires a provider that supports table functions (see
         /// <see cref="ISqlDialect.SupportsTableFunction"/>; ClickHouse). Use through
-        /// <see cref="DataContextExtensions.FromTableFunction{T}(IDataContext, System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{T}}})"/>.
+        /// <c>ctx.From(() =&gt; ...)</c>.
         /// </summary>
-        [SqlTableFunction("generateRandom")]
-        public IQueryable<SqlFunctions.IGenerateRandomRow> generate_random() => throw new NotSupportedException();
+        public TvfEntityBuilder<SqlFunctions.IGenerateRandomRow> generate_random() => new("generateRandom");
 
         /// <summary>
         /// <c>generateRandom(structure, seed)</c> as a FROM source: as
         /// <see cref="generate_random()"/> but with a fixed <paramref name="seed"/> so the generated
         /// values are reproducible.
         /// </summary>
-        [SqlTableFunction("generateRandom")]
-        public IQueryable<SqlFunctions.IGenerateRandomRow> generate_random(long seed) => throw new NotSupportedException();
+        public TvfEntityBuilder<SqlFunctions.IGenerateRandomRow> generate_random(long seed) => new("generateRandom");
 
         /// <summary>
         /// <c>values(structure, values...)</c> as a FROM source: a temporary table whose result schema is
@@ -406,12 +398,11 @@ namespace NextORM.Core;
         /// <c>"(1, 'x'), (2, 'y')"</c>, emitted after it. Only trusted developer-authored SQL may be
         /// passed as <paramref name="tuples"/>. Requires a provider that supports a typed result schema
         /// (see <see cref="ISqlDialect.SupportsResultSchema(TableFunctionSchema)"/>; ClickHouse). Use through
-        /// <see cref="DataContextExtensions.FromTableFunction{T}(IDataContext, System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{T}}})"/>.
+        /// <c>ctx.From(() =&gt; ...)</c>.
         /// </summary>
         /// <typeparam name="TRow">The caller-declared row shape; its <c>[Column]</c> names/types form the structure.</typeparam>
         /// <param name="tuples">The verbatim tuple list, for example <c>"(1, 'x'), (2, 'y')"</c>.</param>
-        [SqlTableFunction("values", ResultSchema = TableFunctionSchema.LeadingArgument, VerbatimArguments = new[] { 0 })]
-        public IQueryable<TRow> values<TRow>(string tuples) => throw new NotSupportedException();
+        public TvfEntityBuilder<TRow> values<TRow>(string tuples) => new("values", null, null, null, [0], TableFunctionSchema.LeadingArgument);
 
         /// <summary>
         /// <c>url(url, format, structure)</c> as a FROM source: reads the resource at
@@ -420,12 +411,11 @@ namespace NextORM.Core;
         /// declared by the caller through <typeparamref name="TRow"/>, whose <c>[Column]</c> names must
         /// match <paramref name="structure"/>. Requires a provider that supports table functions (see
         /// <see cref="ISqlDialect.SupportsTableFunction"/>; ClickHouse). Use through
-        /// <see cref="DataContextExtensions.FromTableFunction{T}(IDataContext, System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{T}}})"/>.
+        /// <c>ctx.From(() =&gt; ...)</c>.
         /// The URL selects the backend: an HTTP(S) URL is fetched directly, a recognised non-HTTP
         /// scheme (<c>file://</c>, <c>s3://</c>, …) is delegated to the matching function.
         /// </summary>
-        [SqlTableFunction("url")]
-        public IQueryable<TRow> url<TRow>(string url, string format, string structure) => throw new NotSupportedException();
+        public TvfEntityBuilder<TRow> url<TRow>(string url, string format, string structure) => new("url");
 
         /// <summary>
         /// <c>s3(url, format, structure)</c> as a FROM source: reads an object from Amazon S3 or Google
@@ -434,8 +424,7 @@ namespace NextORM.Core;
         /// table functions (see <see cref="ISqlDialect.SupportsTableFunction"/>; ClickHouse). Credentials
         /// are taken from the server configuration or a named collection; do not pass secrets in the URL.
         /// </summary>
-        [SqlTableFunction("s3")]
-        public IQueryable<TRow> s3<TRow>(string url, string format, string structure) => throw new NotSupportedException();
+        public TvfEntityBuilder<TRow> s3<TRow>(string url, string format, string structure) => new("s3");
 
         /// <summary>
         /// <c>file(path, format, structure)</c> as a FROM source: reads a file under the server's
@@ -444,8 +433,7 @@ namespace NextORM.Core;
         /// supports table functions (see <see cref="ISqlDialect.SupportsTableFunction"/>; ClickHouse).
         /// The path is resolved by the server and is not a client filesystem path.
         /// </summary>
-        [SqlTableFunction("file")]
-        public IQueryable<TRow> file<TRow>(string path, string format, string structure) => throw new NotSupportedException();
+        public TvfEntityBuilder<TRow> file<TRow>(string path, string format, string structure) => new("file");
 
         /// <summary>
         /// <c>remote(addresses, database, table)</c> as a FROM source: reads <paramref name="table"/> from
@@ -455,15 +443,13 @@ namespace NextORM.Core;
         /// table functions (see <see cref="ISqlDialect.SupportsTableFunction"/>; ClickHouse). Credentials
         /// come from the server's <c>remote_servers</c> configuration, never from query arguments.
         /// </summary>
-        [SqlTableFunction("remote")]
-        public IQueryable<TRow> remote<TRow>(string addresses, string database, string table) => throw new NotSupportedException();
+        public TvfEntityBuilder<TRow> remote<TRow>(string addresses, string database, string table) => new("remote");
 
         /// <summary>
         /// <c>remoteSecure(addresses, database, table)</c> as a FROM source: the TLS counterpart of
         /// <see cref="remote{TRow}(string, string, string)"/> (default secure port 9440).
         /// </summary>
-        [SqlTableFunction("remoteSecure")]
-        public IQueryable<TRow> remote_secure<TRow>(string addresses, string database, string table) => throw new NotSupportedException();
+        public TvfEntityBuilder<TRow> remote_secure<TRow>(string addresses, string database, string table) => new("remoteSecure");
 
         /// <summary>
         /// <c>cluster(cluster, database, table)</c> as a FROM source: reads <paramref name="table"/> from
@@ -472,16 +458,14 @@ namespace NextORM.Core;
         /// table functions (see <see cref="ISqlDialect.SupportsTableFunction"/>; ClickHouse). Connection
         /// settings and credentials come from the server's <c>remote_servers</c> configuration.
         /// </summary>
-        [SqlTableFunction("cluster")]
-        public IQueryable<TRow> cluster<TRow>(string cluster, string database, string table) => throw new NotSupportedException();
+        public TvfEntityBuilder<TRow> cluster<TRow>(string cluster, string database, string table) => new("cluster");
 
         /// <summary>
         /// <c>clusterAllReplicas(cluster, database, table)</c> as a FROM source: like
         /// <see cref="cluster{TRow}(string, string, string)"/> but queries every replica of every shard as
         /// a separate connection.
         /// </summary>
-        [SqlTableFunction("clusterAllReplicas")]
-        public IQueryable<TRow> cluster_all_replicas<TRow>(string cluster, string database, string table) => throw new NotSupportedException();
+        public TvfEntityBuilder<TRow> cluster_all_replicas<TRow>(string cluster, string database, string table) => new("clusterAllReplicas");
 
         /// <summary>
         /// <c>arrayJoin(array)</c>: expands the array into one row per element. Requires a provider that

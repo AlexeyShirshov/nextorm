@@ -913,8 +913,8 @@ internal static class SqlSourceRenderer
         var function = from.TableFunction!;
         var arguments = function.Arguments;
 
-        // The built-in SqlFunctions.Sql table functions are provider-specific; user-defined [SqlTableFunction]
-        // functions are emitted verbatim and are the caller's responsibility.
+        // The built-in SqlFunctions.Sql table functions are provider-specific; user-defined runtime
+        // table-function factories are emitted verbatim and are the caller's responsibility.
         var isBuiltIn = typeof(CommonFunctions).IsAssignableFrom(function.Call.Method.DeclaringType);
         if (isBuiltIn && !ctx.Dialect.SupportsTableFunction(function.Name))
             throw new NotSupportedException($"The table function '{function.Name}' is not supported by this provider.");

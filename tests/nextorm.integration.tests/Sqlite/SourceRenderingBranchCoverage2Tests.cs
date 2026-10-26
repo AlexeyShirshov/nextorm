@@ -446,16 +446,16 @@ public sealed class SourceRenderingBranchCoverage2Tests : ProviderTestSuite
     /// while the same function without the declared schema executes <c>json_each</c> live.
     /// </summary>
     [Fact]
-    public void FromTableFunction_DeclaredResultSchemaOnSqlite_ShouldBeRejectedWhileThePlainFunctionRuns()
+    public void From_DeclaredResultSchemaOnSqlite_ShouldBeRejectedWhileThePlainFunctionRuns()
     {
-        var live = Context.FromTableFunction(() => Sr2Tvf.JsonEach("[1,2,3]"))
+        var live = Context.From(() => Sr2Tvf.JsonEach("[1,2,3]"))
             .OrderBy(r => r.Value)
             .Select(r => r.Value)
             .ToList();
 
         live.Should().Equal(1L, 2L, 3L);
 
-        var declared = () => Context.FromTableFunction(() => Sr2Tvf.JsonEachWithSchema("[1,2,3]"))
+        var declared = () => Context.From(() => Sr2Tvf.JsonEachWithSchema("[1,2,3]"))
             .Select(r => r.Value)
             .ToList();
 
@@ -475,10 +475,8 @@ public sealed class SourceRenderingBranchCoverage2Tests : ProviderTestSuite
 
     private static class Sr2Tvf
     {
-        [SqlTableFunction("json_each")]
-        public static IQueryable<ISr2JsonEachRow> JsonEach(string json) => throw new NotSupportedException();
+        public static TvfEntityBuilder<ISr2JsonEachRow> JsonEach(string json) => new("json_each");
 
-        [SqlTableFunction("json_each", ResultSchema = TableFunctionSchema.AliasColumnList)]
-        public static IQueryable<ISr2JsonEachRow> JsonEachWithSchema(string json) => throw new NotSupportedException();
+        public static TvfEntityBuilder<ISr2JsonEachRow> JsonEachWithSchema(string json) => new("json_each", null, null, null, Array.Empty<int>(), TableFunctionSchema.AliasColumnList);
     }
 }

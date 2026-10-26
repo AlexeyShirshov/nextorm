@@ -539,15 +539,15 @@ public class SqlGenerationTests
         var source = "a,b";
         var pattern = ",";
 
-        var arrayElements = () => SqlOf(ctx, ctx.FromTableFunction(() => SqlFunctions.Postgres.jsonb_array_elements(json))
+        var arrayElements = () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.jsonb_array_elements(json))
             .Select(r => new { r.Value }));
         arrayElements.Should().Throw<NotSupportedException>().WithMessage("*jsonb_array_elements*");
 
-        var each = () => SqlOf(ctx, ctx.FromTableFunction(() => SqlFunctions.Postgres.jsonb_each(json))
+        var each = () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.jsonb_each(json))
             .Select(r => new { r.Key }));
         each.Should().Throw<NotSupportedException>().WithMessage("*jsonb_each*");
 
-        var split = () => SqlOf(ctx, ctx.FromTableFunction(() => SqlFunctions.Postgres.regexp_split_to_table(source, pattern))
+        var split = () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.regexp_split_to_table(source, pattern))
             .Select(r => new { r.Value }));
         split.Should().Throw<NotSupportedException>().WithMessage("*regexp_split_to_table*");
     }
@@ -1637,7 +1637,7 @@ public class SqlGenerationTests
         var count = 3L;
 
         var command = Prepare(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.ClickHouse.numbers(count))
+            .From(() => SqlFunctions.ClickHouse.numbers(count))
             .Select(r => new { r.Value }));
 
         Normalize(command.DbCommand.CommandText)
@@ -1651,7 +1651,7 @@ public class SqlGenerationTests
         var count = 3L;
 
         var command = Prepare(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.ClickHouse.numbers_mt(count))
+            .From(() => SqlFunctions.ClickHouse.numbers_mt(count))
             .Select(r => new { r.Value }));
 
         Normalize(command.DbCommand.CommandText).Should().Contain("from numbers_mt(@count)");
@@ -1664,7 +1664,7 @@ public class SqlGenerationTests
         var count = 3L;
 
         var command = Prepare(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.ClickHouse.zeros(count))
+            .From(() => SqlFunctions.ClickHouse.zeros(count))
             .Select(r => new { r.Value }));
 
         Normalize(command.DbCommand.CommandText).Should().Contain("from zeros(@count)");
@@ -1677,7 +1677,7 @@ public class SqlGenerationTests
         var count = 3L;
 
         var command = Prepare(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.ClickHouse.zeros_mt(count))
+            .From(() => SqlFunctions.ClickHouse.zeros_mt(count))
             .Select(r => new { r.Value }));
 
         Normalize(command.DbCommand.CommandText).Should().Contain("from zeros_mt(@count)");
@@ -1689,7 +1689,7 @@ public class SqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
 
         var command = Prepare(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.ClickHouse.generate_random())
+            .From(() => SqlFunctions.ClickHouse.generate_random())
             .Page(3, 0)
             .Select(r => new { r.Id, r.Value, r.Name }));
 
@@ -1704,7 +1704,7 @@ public class SqlGenerationTests
         var seed = 42L;
 
         var command = Prepare(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.ClickHouse.generate_random(seed))
+            .From(() => SqlFunctions.ClickHouse.generate_random(seed))
             .Page(3, 0)
             .Select(r => new { r.Id }));
 
@@ -1721,7 +1721,7 @@ public class SqlGenerationTests
         var structure = "id UInt64, name String";
 
         var command = Prepare(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.ClickHouse.url<IServerTableRow>(location, format, structure))
+            .From(() => SqlFunctions.ClickHouse.url<IServerTableRow>(location, format, structure))
             .Select(r => new { r.Id, r.Name }));
 
         Normalize(command.DbCommand.CommandText)
@@ -1737,7 +1737,7 @@ public class SqlGenerationTests
         var structure = "id UInt64, name String";
 
         var command = Prepare(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.ClickHouse.s3<IServerTableRow>(location, format, structure))
+            .From(() => SqlFunctions.ClickHouse.s3<IServerTableRow>(location, format, structure))
             .Select(r => new { r.Id }));
 
         Normalize(command.DbCommand.CommandText)
@@ -1753,7 +1753,7 @@ public class SqlGenerationTests
         var structure = "id UInt64, name String";
 
         var command = Prepare(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.ClickHouse.file<IServerTableRow>(path, format, structure))
+            .From(() => SqlFunctions.ClickHouse.file<IServerTableRow>(path, format, structure))
             .Select(r => new { r.Id }));
 
         Normalize(command.DbCommand.CommandText)
@@ -1769,7 +1769,7 @@ public class SqlGenerationTests
         var table = "hits";
 
         var command = Prepare(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.ClickHouse.remote<IServerTableRow>(addresses, database, table))
+            .From(() => SqlFunctions.ClickHouse.remote<IServerTableRow>(addresses, database, table))
             .Select(r => new { r.Id }));
 
         Normalize(command.DbCommand.CommandText)
@@ -1785,7 +1785,7 @@ public class SqlGenerationTests
         var table = "hits";
 
         var command = Prepare(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.ClickHouse.remote_secure<IServerTableRow>(addresses, database, table))
+            .From(() => SqlFunctions.ClickHouse.remote_secure<IServerTableRow>(addresses, database, table))
             .Select(r => new { r.Id }));
 
         Normalize(command.DbCommand.CommandText)
@@ -1801,7 +1801,7 @@ public class SqlGenerationTests
         var table = "hits";
 
         var command = Prepare(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.ClickHouse.cluster<IServerTableRow>(cluster, database, table))
+            .From(() => SqlFunctions.ClickHouse.cluster<IServerTableRow>(cluster, database, table))
             .Select(r => new { r.Id }));
 
         Normalize(command.DbCommand.CommandText)
@@ -1817,7 +1817,7 @@ public class SqlGenerationTests
         var table = "hits";
 
         var command = Prepare(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.ClickHouse.cluster_all_replicas<IServerTableRow>(cluster, database, table))
+            .From(() => SqlFunctions.ClickHouse.cluster_all_replicas<IServerTableRow>(cluster, database, table))
             .Select(r => new { r.Id }));
 
         Normalize(command.DbCommand.CommandText)
@@ -1830,7 +1830,7 @@ public class SqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
 
         var command = Prepare(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.ClickHouse.values<IDynamicValuesRow>("(1, 'x'), (2, 'y')"))
+            .From(() => SqlFunctions.ClickHouse.values<IDynamicValuesRow>("(1, 'x'), (2, 'y')"))
             .Select(r => new { r.A, r.B }));
 
         Normalize(command.DbCommand.CommandText)
@@ -1843,7 +1843,7 @@ public class SqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
 
         var command = Prepare(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.ClickHouse.values<IDynamicNullableValuesRow>("(1, 2)"))
+            .From(() => SqlFunctions.ClickHouse.values<IDynamicNullableValuesRow>("(1, 2)"))
             .Select(r => new { r.A, r.C }));
 
         Normalize(command.DbCommand.CommandText)
@@ -1856,7 +1856,7 @@ public class SqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
 
         var act = () => SqlOf(ctx, ctx
-            .FromTableFunction(() => UnsupportedAliasColumnListTvf.Record("{}"))
+            .From(() => UnsupportedAliasColumnListTvf.Record("{}"))
             .Select(r => new { r.A }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*AliasColumnList*");
@@ -1868,7 +1868,7 @@ public class SqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
 
         var act = () => SqlOf(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.Postgres.jsonb_to_recordset<IDynamicValuesRow>(SqlFunctions.Parameter<System.Text.Json.JsonDocument>(0)))
+            .From(() => SqlFunctions.Postgres.jsonb_to_recordset<IDynamicValuesRow>(SqlFunctions.Parameter<System.Text.Json.JsonDocument>(0)))
             .Select(r => new { r.A }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*jsonb_to_recordset*");
@@ -3264,8 +3264,7 @@ public interface IDynamicValuesRow
 
 internal static class UnsupportedAliasColumnListTvf
 {
-    [SqlTableFunction("user_record", ResultSchema = TableFunctionSchema.AliasColumnList)]
-    public static IQueryable<IDynamicValuesRow> Record(string json) => throw new NotSupportedException();
+    public static TvfEntityBuilder<IDynamicValuesRow> Record(string json) => new("user_record", null, null, null, Array.Empty<int>(), TableFunctionSchema.AliasColumnList);
 }
 
 public interface IDynamicNullableValuesRow

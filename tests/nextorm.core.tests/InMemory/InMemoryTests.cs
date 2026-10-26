@@ -983,8 +983,7 @@ public class InMemoryTests
 
     private static class Tvf
     {
-        [SqlTableFunction("simple_tvf")]
-        public static IQueryable<SimpleEntity> SimpleTvf() => throw new NotSupportedException();
+        public static TvfEntityBuilder<SimpleEntity> SimpleTvf() => new("simple_tvf");
     }
 
     [Fact]
@@ -993,7 +992,7 @@ public class InMemoryTests
         // The in-memory provider cannot evaluate a database table-valued function, so it must fail
         // loudly instead of silently returning an empty (or otherwise wrong) result set.
         var act = () => _sut.DataProvider
-            .FromTableFunction(() => Tvf.SimpleTvf())
+            .From(() => Tvf.SimpleTvf())
             .Select(it => new { it.Id })
             .ToList();
 

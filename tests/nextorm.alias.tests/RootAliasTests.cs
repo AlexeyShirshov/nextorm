@@ -458,8 +458,7 @@ public class RootAliasTests
     /// <summary>Static table-valued function stub (SQL Server/PostgreSQL-style `all_rows()`).</summary>
     public static class Tvf
     {
-        [SqlTableFunction("all_rows")]
-        public static IQueryable<ITvfRow> AllRows() => throw new NotSupportedException();
+        public static TvfEntityBuilder<ITvfRow> AllRows() => new("all_rows");
     }
 
     private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> command)
@@ -582,7 +581,7 @@ public class RootAliasTests
         try
         {
             var people = ctx.From<Person>(b => b.Table("person"));
-            var rooted = ctx.FromTableFunction(() => Tvf.AllRows()).WithAlias(Alias.Root);
+            var rooted = ctx.From(() => Tvf.AllRows()).WithAlias(Alias.Root);
 
             var joined = rooted.Join<Person>(people, (o, p) => o.Root.Id == p.Id, Alias.Buyer);
 

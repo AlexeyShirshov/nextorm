@@ -124,9 +124,9 @@ public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromE
     /// Compares two table-function sources by their <b>SQL identity</b>, never by the factory method or
     /// the descriptor instance that produced them: name, schema and clause text, the verbatim argument
     /// positions, the declared result placement/shape, the built-in classification and the argument
-    /// expressions. A legacy <see cref="SqlTableFunctionAttribute"/> declaration and a runtime
-    /// <see cref="TvfEntityBuilder{T}"/> factory with the same SQL identity must share a cached plan
-    /// (AC08); anything that changes the rendered statement or its support checks must not.
+    /// expressions. Two runtime <see cref="TvfEntityBuilder{T}"/> factories with the same SQL identity
+    /// must share a cached plan (AC08); anything that changes the rendered statement or its support
+    /// checks must not.
     /// </summary>
     private bool TableFunctionEquals(TableFunctionExpression x, TableFunctionExpression y)
     {

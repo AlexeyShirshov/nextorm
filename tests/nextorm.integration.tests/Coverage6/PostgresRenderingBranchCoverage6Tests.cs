@@ -99,14 +99,14 @@ public sealed class PostgresRenderingBranchCoverage6Tests : ProviderTestSuite
     [Fact]
     public void TableFunction_GenerateSeriesBareAndJoined_ShouldReturnTheGeneratedRows()
     {
-        var plain = Context.FromTableFunction(() => SqlFunctions.Postgres.generate_series(1L, 4L))
+        var plain = Context.From(() => SqlFunctions.Postgres.generate_series(1L, 4L))
             .OrderBy(r => r.Value)
             .Select(r => r.Value)
             .ToList();
 
         plain.Should().Equal(new long[] { 1, 2, 3, 4 }, "generate_series(1, 4) yields four rows");
 
-        var joined = Context.FromTableFunction(() => SqlFunctions.Postgres.generate_series(1L, 4L))
+        var joined = Context.From(() => SqlFunctions.Postgres.generate_series(1L, 4L))
             .Join(Context.From<Sr6PostgresMarker>(), (g, m) => g.Value == m.Id)
             .OrderBy(p => p.Item1.Value)
             .Select(p => new { p.Item1.Value, p.Item2.Name })
