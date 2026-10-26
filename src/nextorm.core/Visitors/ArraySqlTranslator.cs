@@ -144,10 +144,10 @@ internal static class ArraySqlTranslator
                 EmitFunction(visitor, "array_positions", args);
                 return true;
             case nameof(PostgresFunctions.array_reverse) when args.Count == 1:
-                EmitFunction(visitor, "array_reverse", args);
+                EmitGuardedFunction(visitor, "array_reverse", args);
                 return true;
             case nameof(PostgresFunctions.array_sort) when args.Count == 1:
-                EmitFunction(visitor, "array_sort", args);
+                EmitGuardedFunction(visitor, "array_sort", args);
                 return true;
             case nameof(PostgresFunctions.array_shuffle) when args.Count == 1:
                 EmitFunction(visitor, "array_shuffle", args);
@@ -416,6 +416,21 @@ internal static class ArraySqlTranslator
     private static void EmitFunction(BaseExpressionVisitor visitor, string sqlName, IReadOnlyList<Expression> args)
     {
         RequireArraySupport(visitor);
+        SqlOperandTranslator.EmitFunction(visitor, sqlName, args);
+    }
+
+    /// <summary>
+    /// Renders an array function that is additionally gated per name by
+    /// <see cref="ISqlDialect.SupportsArrayFunction(string)"/>, so a missing or version-gated server
+    /// function is refused at preparation, before its arguments are visited or its name is emitted.
+    /// </summary>
+    private static void EmitGuardedFunction(BaseExpressionVisitor visitor, string sqlName, IReadOnlyList<Expression> args)
+    {
+        RequireArraySupport(visitor);
+
+        if (!visitor.Dialect.SupportsArrayFunction(sqlName))
+            throw new NotSupportedException($"The PostgreSQL function '{sqlName}' is not supported by this provider.");
+
         SqlOperandTranslator.EmitFunction(visitor, sqlName, args);
     }
 

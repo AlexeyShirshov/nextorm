@@ -20,6 +20,10 @@ public class PostgresDialect : SqlDialectBase
     // The first PostgreSQL release with the ANSI aggregate FILTER clause (SQL:2003 T612, 9.4).
     private static readonly Version AggregatesFilterMinVersion = new(9, 4);
 
+    // PostgreSQL 18 introduced array_sort() and uuidv7(); array_reverse() does not exist in any
+    // current PostgreSQL release.
+    private static readonly Version ArraySortMinVersion = new(18, 0);
+
     /// <summary>PostgreSQL supports <c>SAVEPOINT</c>/<c>ROLLBACK TO SAVEPOINT</c>/<c>RELEASE SAVEPOINT</c>.</summary>
     public override bool SupportsSavepoints => true;
 
@@ -30,10 +34,13 @@ public class PostgresDialect : SqlDialectBase
     public static readonly PostgresDialect Instance = new();
 
     private readonly Version? _version;
+    private readonly PostgresUuidGenerators _uuidGenerators;
 
     /// <summary>
     /// Creates an unversioned PostgreSQL dialect: every supported form (including the ANSI aggregate
-    /// <c>FILTER</c> clause) is emitted. Equivalent to the shared <see cref="Instance"/>.
+    /// <c>FILTER</c> clause) is emitted. The version-gated functions of PostgreSQL 18
+    /// (<c>array_sort</c>, <c>uuidv7</c>) are refused, and <c>array_reverse</c> is always refused
+    /// because no current PostgreSQL release provides it. Equivalent to the shared <see cref="Instance"/>.
     /// </summary>
     /// <remarks>
     /// The constructor is public so an external assembly can derive a custom dialect from
@@ -41,18 +48,27 @@ public class PostgresDialect : SqlDialectBase
     /// </remarks>
     public PostgresDialect()
     {
+        _uuidGenerators = PostgresUuidGenerators.Instance;
     }
 
     /// <summary>
     /// Creates a PostgreSQL dialect for <paramref name="serverVersion"/>. A version below 9.4 gates off
-    /// the ANSI aggregate <c>FILTER</c> clause; <see langword="null"/> is the unversioned form.
+    /// the ANSI aggregate <c>FILTER</c> clause; <c>array_sort</c> and <c>uuidv7</c> render only from an
+    /// explicit 18. A <c>null</c> version is the unversioned form, which refuses those two and
+    /// <c>array_reverse</c> (never available).
     /// </summary>
     /// <param name="serverVersion">The PostgreSQL server version, or <see langword="null"/> for unset.</param>
     /// <remarks>
     /// The constructor is public so an external assembly can derive a custom dialect from
     /// <see cref="PostgresDialect"/>; passing <see langword="null"/> equals the parameterless form.
     /// </remarks>
-    public PostgresDialect(Version? serverVersion) => _version = serverVersion;
+    public PostgresDialect(Version? serverVersion)
+    {
+        _version = serverVersion;
+        _uuidGenerators = serverVersion is null
+            ? PostgresUuidGenerators.Instance
+            : new PostgresUuidGenerators(serverVersion);
+    }
 
     /// <inheritdoc/>
     public override string ConcatStringOperator => "||";
@@ -306,6 +322,19 @@ public class PostgresDialect : SqlDialectBase
     /// <inheritdoc/>
     public override bool SupportsArrays => true;
 
+    /// <summary>
+    /// Per-name availability of the PostgreSQL array functions: <c>array_reverse</c> is not available in
+    /// any current PostgreSQL release, and <c>array_sort</c> arrived in PostgreSQL 18, so it needs an
+    /// explicit 18+ version (an unset version refuses it). Every other name keeps the family default.
+    /// </summary>
+    /// <param name="name">The SQL name of the array function, without schema qualification.</param>
+    public override bool SupportsArrayFunction(string name) => name switch
+    {
+        "array_reverse" => false,
+        "array_sort" => _version is not null && _version >= ArraySortMinVersion,
+        _ => base.SupportsArrayFunction(name)
+    };
+
     // PostgreSQL has native range types (int4range/int8range/numrange/tsrange/tstzrange/daterange).
     /// <inheritdoc/>
     public override bool SupportsRanges => true;
@@ -481,7 +510,7 @@ public class PostgresDialect : SqlDialectBase
     public override ISessionInfoFunctions SessionInfoFunctions => PostgresSessionInfoFunctions.Instance;
 
     /// <summary>PostgreSQL renders both UUID generators through the core functions.</summary>
-    public override IUuidGenerators UuidGenerators => PostgresUuidGenerators.Instance;
+    public override IUuidGenerators UuidGenerators => _uuidGenerators;
 
     /// <summary>PostgreSQL renders every cross-provider scalar function natively (<c>space</c> as <c>repeat(' ', n)</c>).</summary>
     public override IScalarFunctions ScalarFunctions => PostgresScalarFunctions.Instance;
@@ -710,16 +739,39 @@ internal sealed class PostgresSessionInfoFunctions : ISessionInfoFunctions
     };
 }
 
+/// <summary>
+/// Renders <c>gen_random_uuid</c> (available since PostgreSQL 13) and <c>uuidv7</c> (PostgreSQL 18+).
+/// <c>uuidv7</c> is enabled only for an explicit version at or above 18; an unversioned dialect refuses
+/// it in both <see cref="Supports"/> and <see cref="Render"/> instead of emitting SQL the server rejects.
+/// </summary>
 internal sealed class PostgresUuidGenerators : IUuidGenerators
 {
-    public static readonly PostgresUuidGenerators Instance = new();
+    public static readonly PostgresUuidGenerators Instance = new(null);
 
-    public bool Supports(string name) => name is "gen_random_uuid" or "uuidv7";
+    // uuidv7() arrived in PostgreSQL 18.
+    private static readonly Version UuidV7MinVersion = new(18, 0);
+
+    private readonly Version? _version;
+
+    /// <summary>Creates the generator surface for <paramref name="serverVersion"/>; unset refuses <c>uuidv7</c>.</summary>
+    /// <param name="serverVersion">The PostgreSQL server version, or <see langword="null"/> for unset.</param>
+    public PostgresUuidGenerators(Version? serverVersion) => _version = serverVersion;
+
+    private bool IsUuidV7Enabled => _version is not null && _version >= UuidV7MinVersion;
+
+    public bool Supports(string name) => name switch
+    {
+        "gen_random_uuid" => true,
+        "uuidv7" => IsUuidV7Enabled,
+        _ => false
+    };
 
     public string Render(string name) => name switch
     {
         "gen_random_uuid" => "gen_random_uuid()",
-        "uuidv7" => "uuidv7()",
+        "uuidv7" when IsUuidV7Enabled => "uuidv7()",
+        "uuidv7" => throw new NotSupportedException(
+            "The uuidv7 function is not supported by this provider."),
         _ => throw new NotSupportedException($"The {name} UUID generator function is not supported by PostgreSQL.")
     };
 }

@@ -67,6 +67,8 @@ public abstract class SqlDialectBase : ISqlDialect
     /// <inheritdoc/>
     public virtual bool SupportsArrayFunctions => false;
     /// <inheritdoc/>
+    public virtual bool SupportsArrayFunction(string name) => true;
+    /// <inheritdoc/>
     public virtual bool SupportsTupleFunctions => Tuple is not null;
 
     /// <inheritdoc/>

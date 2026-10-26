@@ -95,7 +95,12 @@ var rows = dataContext.From<IOrderEntity>()
 | C# | PostgreSQL | SQL Server | MySQL | MariaDB | ClickHouse | SQLite |
 |---|---|---|---|---|---|---|
 | `gen_random_uuid()` | `gen_random_uuid()` (13+) | `newid()` | — | `uuid_v4()` (11.7+) | `generateUUIDv4()` | — |
-| `uuidv7()` | `uuidv7()` (18+) | — | — | `uuid_v7()` (11.7+) | `generateUUIDv7()` | — |
+| `uuidv7()` | `uuidv7()` (18+, требуется явная версия) | — | — | `uuid_v7()` (11.7+) | `generateUUIDv7()` | — |
+
+В PostgreSQL `uuidv7()` рендерится только когда контекст настроен на явную версию сервера 18+; версия
+ниже 18 или **незаданная** версия отклоняет вызов при подготовке обычным `NotSupportedException`:
+`The uuidv7 function is not supported by this provider.` Генератор v4 никогда не подставляется, а
+`NULL` никогда не возвращается; `gen_random_uuid()` (v4) сохраняет прежнее поведение на PostgreSQL 13+.
 
 У MySQL есть только `UUID()` (v1), у SQLite генератора UUID нет, поэтому оба отклоняют вызов. В MariaDB оба
 генератора требуют явно заданной версии сервера 11.7 или новее; **контекст без версии**

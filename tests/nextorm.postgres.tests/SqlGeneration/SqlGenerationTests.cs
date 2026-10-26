@@ -2384,12 +2384,17 @@ public class SqlGenerationTests
 
         var sql = SqlOf(ctx, e.Select(x => new
         {
-            U = SqlFunctions.Sql.gen_random_uuid(),
-            V7 = SqlFunctions.Sql.uuidv7()
+            U = SqlFunctions.Sql.gen_random_uuid()
         }));
 
         sql.Should().Contain("gen_random_uuid()");
-        sql.Should().Contain("uuidv7()");
+
+        // T260 (#260): uuidv7() exists only from PostgreSQL 18, so an unversioned context refuses it
+        // instead of emitting SQL the server rejects; the explicit-18 native rendering is covered by
+        // T260PostgresFunctionCapabilityTests.
+        var v7 = () => SqlOf(ctx, e.Select(x => new { V7 = SqlFunctions.Sql.uuidv7() }));
+        v7.Should().Throw<NotSupportedException>()
+            .WithMessage("The uuidv7 function is not supported by this provider.");
     }
 
     [Fact]
@@ -3555,8 +3560,6 @@ public class SqlGenerationTests
             .Where(x => SqlFunctions.Postgres.array_replace(SqlFunctions.Parameter<long[]>(5), x.Id, x.Id) != null)
             .Where(x => SqlFunctions.Postgres.array_fill(x.Id, 2, 3) != null)
             .Where(x => SqlFunctions.Postgres.array_positions(SqlFunctions.Parameter<long[]>(7), x.Id) != null)
-            .Where(x => SqlFunctions.Postgres.array_reverse(SqlFunctions.Parameter<long[]>(8)) != null)
-            .Where(x => SqlFunctions.Postgres.array_sort(SqlFunctions.Parameter<long[]>(9)) != null)
             .Where(x => SqlFunctions.Postgres.string_to_array(x.String, ",") != null)
             .Select(x => new
             {
@@ -3571,8 +3574,6 @@ public class SqlGenerationTests
         sql.Should().Contain("array_fill(id, @");
         sql.Should().Contain("array_dims(@norm_p6)");
         sql.Should().Contain("array_positions(@norm_p7, id)");
-        sql.Should().Contain("array_reverse(@norm_p8)");
-        sql.Should().Contain("array_sort(@norm_p9)");
         sql.Should().Contain("string_to_array(somestring, E',')");
     }
 
