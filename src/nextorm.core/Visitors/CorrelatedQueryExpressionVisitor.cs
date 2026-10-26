@@ -435,7 +435,23 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
         var selectCall = AggregateTerminalRewriter.Rewrite(node, builderReceiver);
         var cmd = GetQueryCommand(selectCall);
         var firstCall = Expression.Call(selectCall, selectCall.Type.GetMethod("First", Type.EmptyTypes)!);
-        return ReplaceQueryCommand(firstCall, cmd);
+        var scalar = ReplaceQueryCommand(firstCall, cmd);
+
+        // #303: an aggregate terminal used as a value must expose the *value*, not the untyped
+        // Func<IQueryRegistry, QueryCommand> placeholder the generic terminal returns - a delegate has
+        // no numeric operator, so `Sum(...) > 6` fails inside Expression.MakeBinary. Re-type the
+        // returned placeholder into the result-typed registry-index shape (the one
+        // ReplaceScalarQueryCommand produces) and reuse the index it was just registered under: the
+        // command stays prepared and registered exactly once, and `limit 1` / the FirstOrDefault
+        // default still come from the First() terminal above.
+        if (scalar is LambdaExpression { Parameters.Count: 1 } placeholder
+            && placeholder.Parameters[0].Type == typeof(IQueryRegistry)
+            && placeholder.Body is IndexExpression { Arguments: [ConstantExpression { Value: int idx }] })
+        {
+            return TypedScalarPlaceholder(idx, cmd.ResultType ?? typeof(object));
+        }
+
+        return scalar;
     }
 
     /// <summary>
@@ -1241,16 +1257,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
     private Expression RegisterScalarTyped(QueryCommand cmd, Type resultType)
     {
         PrepareAndRegister(cmd, out var idx);
-        _registryParameter ??= Expression.Parameter(typeof(IQueryRegistry));
-
-        var queryValue = Expression.Property(
-            Expression.Property(_registryParameter, ReferencedQueriesPI),
-            ItemPI,
-            Expression.Constant(idx));
-
-        // Route through object so the placeholder works for both a value type (unboxing) and a
-        // reference type (an arbitrary explicit reference conversion the direct Convert would refuse).
-        return Expression.Convert(Expression.Convert(queryValue, typeof(object)), resultType);
+        return TypedScalarPlaceholder(idx, resultType);
     }
 
     /// <summary>True when <paramref name="expression"/> reads a scalar member through a reference navigation.</summary>
@@ -1455,7 +1462,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
         }
         else
         {
-            var constRepl = new ReplaceConstantsExpressionVisitor(_outerParams, _queryProvider);
+            var constRepl = new ReplaceConstantsExpressionVisitor(NormalizationParameters(exp), _queryProvider);
             var body = constRepl.Visit(exp);
 
             if (constRepl.Params.Count > 0)
@@ -1513,6 +1520,65 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
         }
 
         return cmd;
+    }
+
+    /// <summary>
+    /// The outer-parameter set the preparation-local normalization rewrites into outer references: the
+    /// pushed lambda parameters plus any free parameter that is a navigation-join alias of the command
+    /// being prepared (<see cref="QueryCommand.NavigationPaths"/>). <see cref="NavigationExpansion"/>
+    /// injects such an alias on the outer command and a nested correlated lambda can capture it; it is
+    /// not a lambda parameter, so it never reaches the pushed outer parameters, and the nested command
+    /// does not own it either. Without this the alias stays free and compiling the nested command fails
+    /// with "variable 'navigationN' ... is not defined". Ownership is matched by reference against the
+    /// enclosing command's own path registry - never by name - and nothing is mutated or copied.
+    /// </summary>
+    private IEnumerable<ParameterExpression> NormalizationParameters(Expression expression)
+    {
+        if (_queryProvider is not QueryCommand { NavigationPaths: { Count: > 0 } paths })
+            return (IEnumerable<ParameterExpression>?)_outerParams ?? [];
+
+        var collector = new JoinedParameterCollector(paths, _outerParams);
+        collector.Visit(expression);
+
+        return collector.Found.Count == 0
+            ? (IEnumerable<ParameterExpression>?)_outerParams ?? []
+            : (_outerParams ?? []).Concat(collector.Found);
+    }
+
+    /// <summary>
+    /// Collects the free navigation-join aliases of the enclosing command that appear in an expression,
+    /// skipping the parameters already treated as outer.
+    /// </summary>
+    private sealed class JoinedParameterCollector(
+        IReadOnlyDictionary<ParameterExpression, string> paths,
+        IEnumerable<ParameterExpression>? outerParameters) : ExpressionVisitor
+    {
+        private readonly HashSet<ParameterExpression> _seen = outerParameters is null ? [] : [.. outerParameters];
+        private readonly List<ParameterExpression> _found = [];
+
+        internal List<ParameterExpression> Found => _found;
+
+        protected override Expression VisitParameter(ParameterExpression node)
+        {
+            if (!_seen.Contains(node) && IsJoinedParameter(node))
+            {
+                _seen.Add(node);
+                _found.Add(node);
+            }
+
+            return base.VisitParameter(node);
+        }
+
+        private bool IsJoinedParameter(ParameterExpression node)
+        {
+            foreach (var parameter in paths.Keys)
+            {
+                if (ReferenceEquals(parameter, node))
+                    return true;
+            }
+
+            return false;
+        }
     }
 
     /// <summary>
@@ -1611,15 +1677,25 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
 
         var idx = _queryProvider!.AddCommand(cmd);
 
+        return TypedScalarPlaceholder(idx, cmd.ResultType ?? typeof(object));
+    }
+
+    /// <summary>
+    /// Builds the result-typed registry-index placeholder for the command registered at
+    /// <paramref name="idx"/>: a read of the registry slot routed through <c>object</c>, so a value
+    /// type unboxes and a reference type takes the explicit conversion. The SQL renderer walks the
+    /// two conversions down to the index (see <see cref="ReplaceScalarQueryCommand"/>); sharing this
+    /// builder keeps every typed scalar placeholder in that one recognised shape.
+    /// </summary>
+    private Expression TypedScalarPlaceholder(int idx, Type resultType)
+    {
         _registryParameter ??= Expression.Parameter(typeof(IQueryRegistry));
+
         var queryValue = Expression.Property(
             Expression.Property(_registryParameter, ReferencedQueriesPI),
             ItemPI,
             Expression.Constant(idx));
 
-        // Route through object: a QueryCommand has no direct coercion to the numeric result type, and
-        // the reference-then-unbox shape is what the SQL renderer walks to the registry index.
-        var resultType = cmd.ResultType ?? typeof(object);
         return Expression.Convert(Expression.Convert(queryValue, typeof(object)), resultType);
     }
 
@@ -1767,8 +1843,45 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
             }
         }
 
+        // #303: a non-equality comparison whose operand is still a registry-query placeholder cannot
+        // be built - a Func has no numeric operator - and Expression.MakeBinary would surface an
+        // internal InvalidOperationException. Fail closed with a public preparation exception that
+        // names the terminal and the operator. The equality arm above keeps its boxed-object path, and
+        // Any/EXISTS (a bool-valued lambda) never carries a QueryCommand body, so it is not affected.
+        if (node.NodeType is ExpressionType.GreaterThan or ExpressionType.GreaterThanOrEqual
+                or ExpressionType.LessThan or ExpressionType.LessThanOrEqual)
+        {
+            var comparisonLeft = Visit(node.Left)!;
+            var comparisonRight = Visit(node.Right)!;
+
+            if (IsRegistryQueryPlaceholder(comparisonLeft) || IsRegistryQueryPlaceholder(comparisonRight))
+            {
+                var terminal = TerminalName(node.Left) ?? TerminalName(node.Right) ?? "<unknown>";
+                throw new QueryPreparationException(
+                    $"The query terminal '{terminal}' cannot be used with the '{node.NodeType}' operator: it does not "
+                    + "lower to a scalar value, so the operand is still a correlated-subquery placeholder. Only the "
+                    + "aggregate terminals Count, Min, Max, Avg, Sum, Stdev, Stdevp, Var and Varp can be composed in a comparison.");
+            }
+
+            return node.Update(comparisonLeft, node.Conversion, comparisonRight);
+        }
+
         return base.VisitBinary(node);
     }
+
+    /// <summary>
+    /// True when <paramref name="expression"/> is still the untyped subquery placeholder: a lambda over
+    /// the shared <see cref="IQueryRegistry"/> whose body is a <see cref="QueryCommand"/> (the
+    /// <c>Func&lt;IQueryRegistry, QueryCommand&gt;</c> shape the generic terminals return).
+    /// </summary>
+    private static bool IsRegistryQueryPlaceholder(Expression expression)
+        => expression is LambdaExpression { Parameters.Count: 1 } placeholder
+           && placeholder.Parameters[0].Type == typeof(IQueryRegistry)
+           && placeholder.Body.Type.IsAssignableTo(typeof(QueryCommand));
+
+    /// <summary>The terminal method name of a pre-visit comparison operand, when it is a method call.</summary>
+    private static string? TerminalName(Expression operand)
+        => operand is MethodCallExpression call ? call.Method.Name : null;
     /// <summary>
     /// Visits a conversion, preserving a lambda whose body is a <c>QueryCommand</c> (a subquery)
     /// instead of wrapping it in a new conversion node.

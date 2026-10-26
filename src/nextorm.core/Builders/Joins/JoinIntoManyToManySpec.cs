@@ -561,6 +561,13 @@ internal sealed class JoinIntoManyToManySpec<TEntity, TChild> : IJoinIntoSpec<TE
         JoinOptions options,
         IDataContext dataContext)
     {
+        // Fold the child's own Where into the caller predicate exactly once, before the specification
+        // captures it: the composed predicate then reaches spec.Predicate (and the direct assignment
+        // inside it), the link-to-child join condition and its original condition. The child edge is
+        // rebuilt from spec.Predicate on the in-memory path, so normalizing here — never again at the
+        // edge construction below — keeps every representation on the same single fold.
+        predicate = EntityBuilder<TEntity>.FoldJoinIntoChildPredicate(child, predicate);
+
         var isSql = dataContext.NeedMapping;
         var spec = new JoinIntoManyToManySpec<TEntity, TChild>(child, predicate, collection, relationship, joinType, isSql);
         var junction = relationship.Junction!;

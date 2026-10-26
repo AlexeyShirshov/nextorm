@@ -763,6 +763,16 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// <param name="options">Optional per-join configuration, for example <c>j =&gt; j.Global()</c> or <c>j =&gt; j.WithStrictness(JoinStrictness.Any)</c>.</param>
     /// <returns>A copy of this builder carrying the join declaration.</returns>
     /// <exception cref="NotSupportedException">The join kind or relationship is not supported.</exception>
+    /// <remarks>
+    /// A <c>Where</c> declared on the child source is folded into the join's <c>ON</c> condition together
+    /// with <paramref name="predicate"/>, so a matched parent keeps only the filtered children while a
+    /// <c>LEFT</c> join still keeps a parent whose children are all filtered out. Only the child's own
+    /// <c>Where</c> is supported: any other child-query modifier (ordering, paging, <c>Distinct</c>,
+    /// grouping, joins, a table modifier or a nested eager load) throws
+    /// <see cref="NotSupportedException"/> at the declaration, before the query is prepared or executed. A
+    /// derived (<c>As</c>) child source is supported when its only modifier is its own
+    /// <c>Where</c>; any other modifier on or inside it is rejected the same way.
+    /// </remarks>
     public EntityBuilder<TEntity> JoinInto<TChild>(
         EntityBuilder<TChild> child,
         Expression<Func<TEntity, TChild, bool>> predicate,
@@ -787,8 +797,9 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
             return AddJoinInto(manyToMany, linkJoin, childJoin);
         }
 
-        var spec = new JoinIntoSpec<TEntity, TChild>(child, predicate, collection, relationship, joinType);
-        return AddJoinInto(spec, new JoinExpression(predicate, joinType)
+        var joinPredicate = FoldJoinIntoChildPredicate(child, predicate);
+        var spec = new JoinIntoSpec<TEntity, TChild>(child, joinPredicate, collection, relationship, joinType);
+        return AddJoinInto(spec, new JoinExpression(joinPredicate, joinType)
         {
             From = JoinSourceLock.Apply(GetJoinSource(child), opts),
             Strictness = opts.Strictness ?? JoinStrictness.Default,
@@ -844,6 +855,15 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// <param name="options">Optional per-join configuration, for example <c>j =&gt; j.Global()</c> or <c>j =&gt; j.WithStrictness(JoinStrictness.Any)</c>.</param>
     /// <returns>A copy of this builder carrying the join declaration.</returns>
     /// <exception cref="NotSupportedException">The join kind, relationship kind or keys are not supported.</exception>
+    /// <remarks>
+    /// A <c>Where</c> declared on the child source is folded into the join's <c>ON</c> condition together
+    /// with <paramref name="predicate"/>, so a matched parent keeps only the filtered child while a
+    /// <c>LEFT</c> join still keeps a parent whose child is filtered out (the reference stays
+    /// <see langword="null"/>). Only the child's own <c>Where</c> is supported: any other child-query
+    /// modifier throws <see cref="NotSupportedException"/> at the declaration, before the query is
+    /// prepared or executed. A derived (<c>As</c>) child source is supported when its only modifier is
+    /// its own <c>Where</c>; any other modifier on or inside it is rejected the same way.
+    /// </remarks>
     public EntityBuilder<TEntity> JoinInto<TChild>(
         EntityBuilder<TChild> child,
         Expression<Func<TEntity, TChild, bool>> predicate,
@@ -862,8 +882,9 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         options?.Invoke(opts);
 
         var relationship = ResolveJoinIntoReferenceRelationship(navigation, opts);
-        var spec = new JoinIntoReferenceSpec<TEntity, TChild>(child, predicate, navigation, relationship, joinType);
-        return AddJoinInto(spec, new JoinExpression(predicate, joinType)
+        var joinPredicate = FoldJoinIntoChildPredicate(child, predicate);
+        var spec = new JoinIntoReferenceSpec<TEntity, TChild>(child, joinPredicate, navigation, relationship, joinType);
+        return AddJoinInto(spec, new JoinExpression(joinPredicate, joinType)
         {
             From = JoinSourceLock.Apply(GetJoinSource(child), opts),
             Strictness = opts.Strictness ?? JoinStrictness.Default,
@@ -889,6 +910,15 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// <param name="options">Optional per-join configuration, for example <c>j =&gt; j.Global()</c> or <c>j =&gt; j.WithStrictness(JoinStrictness.Any)</c>.</param>
     /// <returns>A copy of this builder carrying the join declaration.</returns>
     /// <exception cref="NotSupportedException">The key selectors select different types.</exception>
+    /// <remarks>
+    /// A <c>Where</c> declared on the child source is folded into the join's <c>ON</c> condition together
+    /// with <paramref name="predicate"/>, so a matched parent keeps only the filtered children while the
+    /// <c>LEFT</c> join still keeps a parent whose children are all filtered out. Only the child's own
+    /// <c>Where</c> is supported: any other child-query modifier throws
+    /// <see cref="NotSupportedException"/> at the declaration, before the query is prepared or executed. A
+    /// derived (<c>As</c>) child source is supported when its only modifier is its own
+    /// <c>Where</c>; any other modifier on or inside it is rejected the same way.
+    /// </remarks>
     public EntityBuilder<TEntity> JoinInto<TChild, TKey>(
         EntityBuilder<TChild> child,
         Expression<Func<TEntity, TChild, bool>> predicate,
@@ -909,8 +939,9 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         var opts = new JoinOptions();
         options?.Invoke(opts);
 
-        var spec = new JoinIntoSpec<TEntity, TChild, TKey>(child, predicate, collection, parentKey, childKey, JoinType.Left);
-        return AddJoinInto(spec, new JoinExpression(predicate, JoinType.Left)
+        var joinPredicate = FoldJoinIntoChildPredicate(child, predicate);
+        var spec = new JoinIntoSpec<TEntity, TChild, TKey>(child, joinPredicate, collection, parentKey, childKey, JoinType.Left);
+        return AddJoinInto(spec, new JoinExpression(joinPredicate, JoinType.Left)
         {
             From = JoinSourceLock.Apply(GetJoinSource(child), opts),
             Strictness = opts.Strictness ?? JoinStrictness.Default,
@@ -933,6 +964,39 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         if (_query is not null || typeof(TEntity).TryGetProjectionDimension(out _))
             throw new NotSupportedException(
                 $"{method} cannot be applied to a derived (As) or joined projection source.");
+    }
+    /// <summary>
+    /// Rejects every child-query shape a <c>JoinInto</c> cannot represent in the join's <c>ON</c>
+    /// condition, then folds the child's own <c>Where</c> into <paramref name="predicate"/> exactly once.
+    /// The join selects the child source itself, so only the child's own <c>Where</c> has a place in the
+    /// predicate; ordering, paging, grouping, joins, table modifiers and a nested eager-load graph are
+    /// reported instead of being silently dropped. Composing here — at the terminal overload, never in a
+    /// forwarding one — keeps the declaration's spec, <see cref="JoinExpression.JoinCondition"/> and
+    /// <see cref="JoinExpression.OriginalJoinCondition"/> on one and the same composed predicate.
+    /// </summary>
+    /// <typeparam name="TChild">The child entity type.</typeparam>
+    /// <param name="child">The child source declared on the join.</param>
+    /// <param name="predicate">The caller predicate over the parent and child.</param>
+    /// <returns>The caller predicate, AND-composed with the child's own <c>Where</c> when it has one.</returns>
+    /// <exception cref="NotSupportedException">The child query carries an unsupported shape.</exception>
+    internal static Expression<Func<TEntity, TChild, bool>> FoldJoinIntoChildPredicate<TChild>(
+        EntityBuilder<TChild> child,
+        Expression<Func<TEntity, TChild, bool>> predicate)
+    {
+        var unsupported = child.UnsupportedJoinIntoChildShapes();
+        if (unsupported.Count > 0)
+            throw new NotSupportedException(
+                $"JoinInto cannot fold the child query's {string.Join(", ", unsupported)} into the join predicate: " +
+                "only the child's own Where is supported. Remove the unsupported modifier before calling JoinInto.");
+
+        if (child.Condition is not { } condition)
+            return predicate;
+
+        var body = Expression.AndAlso(
+            predicate.Body,
+            JoinIntoSpecHelpers.ReplaceParameter(condition.Body, condition.Parameters[0], predicate.Parameters[1]));
+
+        return Expression.Lambda<Func<TEntity, TChild, bool>>(body, predicate.Parameters);
     }
     /// <summary>
     /// Finds the declared relationship whose navigation is <paramref name="collection"/> on the parent,
@@ -1188,6 +1252,124 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         => UnsupportedChildShapes(allowOrderingAndPaging: false);
 
     /// <summary>
+    /// Names the child-query shapes a <c>JoinInto</c> declaration cannot fold into its join predicate.
+    /// Reuses the single-query inventory and adds the shapes that inventory does not report but the join
+    /// cannot carry either: a nested eager-load graph on the child (<c>LoadWith</c>) needs a projection
+    /// the declaration does not build, and non-default array-element binding belongs to the ClickHouse
+    /// array-join projection rather than to an <c>ON</c> predicate.
+    /// <para>
+    /// A derived (<c>As</c>) child source is supported when it carries nothing but its own <c>Where</c>:
+    /// the subquery applies its own predicate itself and the declaration folds the derived builder's own
+    /// <c>Where</c> exactly once, so no predicate is dropped. Every other modifier stays rejected, whether
+    /// it is attached to the derived builder or carried inside the derived subquery.
+    /// </para>
+    /// </summary>
+    /// <returns>The unsupported shape names; empty when the child query carries only a <c>Where</c>.</returns>
+    internal IReadOnlyList<string> UnsupportedJoinIntoChildShapes()
+    {
+        var shapes = UnsupportedChildShapes(allowOrderingAndPaging: false, allowDerivedSource: true).ToList();
+        if (_loadSpecs is { Count: > 0 })
+            shapes.Add("LoadWith");
+        if (_bindArrayJoinElement)
+            shapes.Add("ArrayJoin element binding");
+
+        // A derived source applies its own modifiers inside the subquery, so nothing there is folded
+        // into the ON condition; such a modifier is still reported instead of being silently accepted.
+        if (_query is { } derived)
+            AddUnsupportedDerivedChildShapes(derived, shapes);
+        else if (_from?.SubQuery is { } subQuery)
+            AddUnsupportedDerivedChildShapes(subQuery, shapes);
+
+        return shapes.Distinct().ToArray();
+    }
+    /// <summary>
+    /// Collects the modifiers a derived (<c>As</c>) child subquery carries beyond its own <c>Where</c>.
+    /// The subquery is the join source, so its modifiers are rendered inside the derived table rather than
+    /// folded into the join predicate; the <c>JoinInto</c> contract accepts only the child's own
+    /// <c>Where</c>, therefore anything else is reported with the same shape names as
+    /// <see cref="UnsupportedChildShapes"/> and rejected. A nested derived source is walked recursively.
+    /// </summary>
+    /// <param name="source">The derived child subquery to inspect.</param>
+    /// <param name="shapes">The shape list to append to.</param>
+    private static void AddUnsupportedDerivedChildShapes(QueryCommand source, List<string> shapes)
+    {
+        if (source.Sorting is { Length: > 0 })
+            shapes.Add("OrderBy");
+
+        if (!source.Paging.IsEmpty)
+            shapes.Add("Limit/Offset/Page");
+
+        if (source.IsDistinct)
+            shapes.Add("Distinct");
+
+        if (source.GroupBy is not null)
+            shapes.Add("GroupBy");
+
+        if (source.Having is not null)
+            shapes.Add("Having");
+
+        if (source.DistinctOn is not null)
+            shapes.Add("DistinctOn");
+
+        if (source.ExtremeRow is not null)
+            shapes.Add("SelectWhereExtreme");
+
+        if (source.LimitBy is not null)
+            shapes.Add("LimitBy");
+
+        if (source.Joins is { Length: > 0 })
+            shapes.Add("Join");
+
+        if (source.Final)
+            shapes.Add("Final");
+
+        if (source.PreWhere is not null)
+            shapes.Add("PreWhere");
+
+        if (source.ArrayJoinExpressions is { Count: > 0 })
+            shapes.Add("ArrayJoin");
+
+        if (source.TableSample is not null)
+            shapes.Add("TableSample");
+
+        if (source.SampleRatio is not null || source.SampleOffset != 0)
+            shapes.Add("Sample");
+
+        if (source.Temporal is not null)
+            shapes.Add("ForSystemTime");
+
+        if (source.RowLock is not null)
+            shapes.Add("ForUpdate/ForShare");
+
+        if (source.SourceLockClause is not null)
+            shapes.Add("ForUpdate/ForShare OF");
+
+        if (source.Windows is { Count: > 0 })
+            shapes.Add("Window");
+
+        if (source.Settings is { Count: > 0 })
+            shapes.Add("Settings");
+
+        if (source.Ctes is { Count: > 0 })
+            shapes.Add("Cte");
+
+        if (source.TableHints is { Count: > 0 })
+            shapes.Add("TableHint");
+
+        if (source.IndexHints is { Count: > 0 })
+            shapes.Add("IndexHint");
+
+        if (source.TablesInScopeHints is { Count: > 0 })
+            shapes.Add("TablesInScopeHint");
+
+        if (source.From?.SourceLock is not null)
+            shapes.Add("ForUpdate/ForShare OF");
+
+        if (source.From?.SubQuery is { } nested)
+            AddUnsupportedDerivedChildShapes(nested, shapes);
+    }
+
+    /// <summary>
     /// Names the child-query shapes the single-query per-parent paging source cannot fold into its ranked
     /// derived table. Unlike <see cref="UnsupportedSingleQueryChildShapes"/>, the child's own ordering and
     /// paging are consumed by the <c>row_number()</c> window and its page bounds, so they are supported;
@@ -1200,11 +1382,14 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// <summary>
     /// Collects the child-query shape names the single-query fold cannot carry. Ordering and paging are
     /// reported only when <paramref name="allowOrderingAndPaging"/> is <see langword="false"/>; the
-    /// per-parent paging source consumes them, so it allows them.
+    /// per-parent paging source consumes them, so it allows them. A derived (<c>As</c>) source is reported
+    /// unless <paramref name="allowDerivedSource"/> is set, because the single-query fold cannot read a
+    /// subquery's condition — <c>JoinInto</c> opts in and inspects the subquery itself instead.
     /// </summary>
     /// <param name="allowOrderingAndPaging">Whether <c>OrderBy</c> and <c>Limit</c>/<c>Offset</c>/<c>Page</c> are supported.</param>
+    /// <param name="allowDerivedSource">Whether a derived (<c>As</c>) child source is accepted by the caller.</param>
     /// <returns>The unsupported shape names.</returns>
-    private IReadOnlyList<string> UnsupportedChildShapes(bool allowOrderingAndPaging)
+    private IReadOnlyList<string> UnsupportedChildShapes(bool allowOrderingAndPaging, bool allowDerivedSource = false)
     {
         var shapes = new List<string>();
         if (!allowOrderingAndPaging && _sorting is { Count: > 0 })
@@ -1277,7 +1462,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         if (TablesInScopeHints is { Count: > 0 })
             shapes.Add("TablesInScopeHint");
 
-        if (_query is not null || _from?.SubQuery is not null)
+        if (!allowDerivedSource && (_query is not null || _from?.SubQuery is not null))
             shapes.Add("derived (As) source");
 
         return shapes;
@@ -2926,6 +3111,36 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         ArgumentNullException.ThrowIfNull(joinCondition);
 
         return JoinAliasEntity<TNext, TNextEntity, TJoinEntity>(create, _, joinCondition, joinType, options);
+    }
+
+    /// <summary>
+    /// Source-less alias-join seam for generated alias-join builders (issue #322): the implicit
+    /// <c>FROM</c> source for <typeparamref name="TJoinEntity"/> is created from this builder's data
+    /// context (<c>From&lt;TJoinEntity&gt;()</c>) and forwarded to the same assembly path as the
+    /// source-explicit conditional overload, so a generated extension method can expose the
+    /// <c>Alias.X</c> marker without also handing the caller an <c>EntityBuilder&lt;TJoinEntity&gt;</c>.
+    /// </summary>
+    /// <typeparam name="TNext">The generated builder type that receives the join chain.</typeparam>
+    /// <typeparam name="TNextEntity">The projection type <typeparamref name="TNext"/> is built over.</typeparam>
+    /// <typeparam name="TJoinEntity">The entity type being joined.</typeparam>
+    /// <param name="create">Creates an empty <typeparamref name="TNext"/> bound to this builder's data context.</param>
+    /// <param name="joinCondition">A predicate relating the current projection to the joined entity.</param>
+    /// <param name="joinType">The kind of join to add.</param>
+    /// <param name="options">Optional per-join configuration; applied exactly once by the shared assembly path.</param>
+    /// <returns>A new <typeparamref name="TNext"/> carrying this builder's joins plus the new one.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="create"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    /// <exception cref="NotSupportedException">The in-memory provider cannot project named aliases.</exception>
+    public TNext JoinAlias<TNext, TNextEntity, TJoinEntity>(
+        Func<IDataContext, TNext> create,
+        Expression<Func<TEntity, TJoinEntity, bool>> joinCondition,
+        JoinType joinType = JoinType.Inner,
+        Action<JoinOptions>? options = null)
+        where TNext : EntityBuilder<TNextEntity>
+    {
+        ArgumentNullException.ThrowIfNull(create);
+        ArgumentNullException.ThrowIfNull(joinCondition);
+
+        return JoinAliasEntity<TNext, TNextEntity, TJoinEntity>(create, _dataProvider.From<TJoinEntity>(), joinCondition, joinType, options);
     }
 
     /// <summary>

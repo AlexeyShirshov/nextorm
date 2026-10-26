@@ -44,6 +44,21 @@ Output:
 | 9 |
 | 10 |
 
+Constructing a derived source and materializing it are two different steps. `From(inner)` composes the
+derived table; reading its rows requires an **outer `Select`**, because the enclosing query can only
+address the output columns the derived `SELECT` declares. A bare `From(inner).ToList()` is accepted only
+when the inner projection is already a set of resolved column references (a mapped column, a renamed
+projected member, a computed scalar read through its output name). A projection whose members are
+row-member expressions — an anonymous `new { it.Id }` or a DTO `new Dto { Id = it.Id }` — cannot be
+reused that way and is refused during preparation with a `QueryPreparationException`; the rule is the
+**expression shape** of the inner projection, not the CLR type of its result. Add the outer selection
+(`From(inner).Select(it => it.Id)`, as above) to read such a source.
+This rewrite works with member-init DTO and positional-record projections; the tested
+constructor-only class projection has a known pre-existing failure
+(`Cannot find inner column Id`), so use one of those supported forms instead. See
+[Limitations](../advanced/limitations.md#limitations). See
+[Subqueries](07-subqueries.md#subquery-as-a-from-source) for the construction/materialization split.
+
 A derived source may also project a computed scalar instead of a named member. The enclosing query
 addresses that value through the output column the derived select list exposes, so it can be ordered,
 filtered and projected like any other column:

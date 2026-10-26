@@ -55,6 +55,20 @@ var nested = dataContext.From<IComplexEntity>().Select(x => new { x.Id, Calc = x
 var rows = dataContext.From(nested).Select(t => new { t.Id, t.Calc }).ToList();
 ```
 
+Building the derived source and reading its rows are separate steps: `From(nested)` composes the
+derived table, while materializing it needs an explicit outer `Select`, since the enclosing query can
+only address the output columns the derived `SELECT` declares. A bare `From(nested).ToList()` works
+only when the inner projection is already a set of resolved column references (a mapped column, the
+renamed `Calc` above, or a computed scalar addressed by its output name). A projection built from
+row-member expressions — an anonymous `new { x.Id }` or a DTO `new Dto { Id = x.Id }` — would have to
+be re-translated against the derived source, so preparation refuses it with a
+`QueryPreparationException`. That restriction is about the **expression shape**, not about anonymous
+types: DTO projections are fully supported for a direct read (see [Projections](02-projections.md)),
+which does not make a bare derived read of the same DTO reusable. Add the outer `Select`
+(`From(nested).Select(t => t.Id)`) to read such a source. This rewrite works with member-init DTO and
+positional-record projections; the tested constructor-only class projection has a known pre-existing
+failure (`Cannot find inner column Id`), so use one of those supported forms instead.
+
 Two different aliases appear in these examples. The **table alias** (`t1`, `t2`, ...) names the derived
 source in `FROM` and qualifies every reference to it (`t1.id`); the provider generates it, you never
 write it. The **output-column alias** is what the derived `SELECT` itself declares: a projected member's
@@ -243,6 +257,36 @@ select t1.id, (select count(*)
 limit 1) as 'cnt'
  from complex_entity as 't1'
 ```
+
+The same aggregate terminal may stand on the left of a comparison in the filter, where it becomes a
+correlated scalar subquery evaluated once per outer row:
+
+```csharp
+var rows = await dataContext.From<IComplexEntity>()
+    .Where(it => dataContext.From<IComplexEntity>().Where(c => c.Id == it.Id).Sum(c => c.Int) > 6)
+    .Select(it => it.Id)
+    .ToListAsync();
+```
+
+```sql
+select t1.id
+ from complex_entity as 't1'
+ where ((select sum(t2.nullableint)
+ from complex_entity as 't2'
+ where t2.id = t1.id
+limit 1) > 6)
+```
+
+`Count`, `Sum`, `Min`, `Max` and `Avg` compose this way with the ordered comparisons, `==`/`!=`,
+arithmetic and the logical operators. The comparison stays outside the inner `select`, and SQL NULL
+semantics apply: a sum over no rows or over only `NULL` values is `NULL`, and a row whose aggregate is
+`NULL` never satisfies the comparison - it is not treated as zero. On the reported data (parent `8001`
+with child amounts 5 and 7, `8002` with only a `NULL` amount, `8003` with no children) the predicate
+returns `[8001]` only.
+
+`LongCount` and other builder terminals outside the supported aggregate list cannot take part in such a
+comparison: preparation fails closed with `QueryPreparationException` naming the terminal and the
+operator, instead of raising an internal expression-tree error.
 
 Correlation nests arbitrarily: a correlated subquery may itself contain a correlated subquery, and
 each outer reference resolves to the alias of the scope that declared it.

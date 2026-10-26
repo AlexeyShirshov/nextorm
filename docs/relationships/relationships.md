@@ -6,7 +6,7 @@
 
 ## Overview
 
-nextorm resolves a graph from **declared** metadata, not from a mapper convention: an entity without declared relationships is mapped exactly as before, and a navigation property is excluded from the column mapping only when it participates in a declared relationship. This page covers the metadata model and [`JoinInto`](xref:NextORM.Core.EntityBuilder`1), the explicit single-query relationship loader. Implicit navigation queries are supported for **declared** relationships — a reference navigation as a scalar chain or a presence check, and a collection navigation through exactly four direct terminals (see [Implicit navigation queries](implicit-navigation.md)) — not inferred by convention. Navigation **after** a temp-table/TVP boundary is **not available (fail-closed)**, and a table-valued parameter is parameter-only (no query root).
+nextorm resolves a graph from **declared** metadata, not from a mapper convention: an entity without declared relationships is mapped exactly as before, and a navigation property is excluded from the column mapping only when it participates in a declared relationship. This page covers the metadata model and [`JoinInto`](xref:NextORM.Core.EntityBuilder`1), the explicit single-query relationship loader. Implicit navigation queries are supported for **declared** relationships — a reference navigation as a scalar chain or a presence check, a reference hop used inside a correlated predicate or scalar subquery, and a collection navigation through exactly four direct terminals (see [Implicit navigation queries](implicit-navigation.md)) — not inferred by convention. The correlated-predicate form joins the hop on the outer command and reads the joined alias from the nested one (`LEFT JOIN` plus a correlated `EXISTS`/scalar subquery, no `APPLY`); it is a predicate/scalar surface, not correlated eager loading, which stays reserved and rejected (`EagerLoadMode.Correlated`). Navigation **after** a temp-table/TVP boundary is **not available (fail-closed)**, and a table-valued parameter is parameter-only (no query root).
 
 `JoinInto` and [`LoadWith`](eager-loading.md) are two ways to fill a parent collection and share one assignment contract: `JoinInto` is one denormalized query over all parents, and `LoadWith` defaults to a split query with one extra child statement per key chunk (or one denormalized query when the builder passes `EagerLoadMode.SingleQuery` to `LoadWith`). `JoinInto` fills **one** declared navigation; a multi-level (level 2+) graph is expressed by nesting `LoadWith` child queries, where each level runs in one graph-wide mode (see [Nested graphs](eager-loading.md#nested-graphs-level-2-and-deeper)).
 
@@ -241,6 +241,8 @@ A `Where` after `JoinInto` is applied to the **joined query** — it filters the
 - with `Inner` it is an ordinary filter.
 
 A `Where` written **before** `JoinInto` filters the parent source. The predicate passed to `JoinInto` is the `ON` condition and only pairs rows; it never removes a `LEFT` parent.
+
+`JoinInto` folds a child source's `Where` predicate into the join's `ON` condition, preserving unmatched parents for LEFT joins; unsupported child-query modifiers throw `NotSupportedException` before execution. A derived (`As`) child source is supported when its only modifier is its own `Where`; any other modifier on or inside it is rejected.
 
 ## Parent paging
 

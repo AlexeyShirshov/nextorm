@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Linq.Expressions;
 using FluentAssertions;
 using NextORM.Core;
 
@@ -247,7 +248,8 @@ public sealed class CorrelatedTerminalBranchCoverage5Tests : ProviderTestSuite
     /// Distinguishing arm: <c>AggregateTerminalRewriter.Rewrite</c> (:22-81) inside a PROJECTION over
     /// nullable columns - the neighbour always filters <c>Amount != null</c>, whereas 9002 owns exactly
     /// one child whose amount is NULL, so the non-empty all-NULL set arm (NULL/0) is asserted here next
-    /// to the childless 9003 (NULL/0). No aggregate terminal is placed in a WHERE predicate (#303).
+    /// to the childless 9003 (NULL/0). The same terminals inside a WHERE predicate are asserted by
+    /// <see cref="CorrelatedAggregateTerminalInPredicate_ShouldFilterOnNullableAggregates"/> (#303).
     /// </summary>
     [Fact]
     public void CorrelatedAggregateTerminalsInProjection_ShouldReportNullableAggregatesForAllNullAndEmptySets()
@@ -474,8 +476,7 @@ public sealed class CorrelatedTerminalBranchCoverage5Tests : ProviderTestSuite
     /// <c>double?</c> <c>Avg</c> over the non-nullable weight - so <c>AggregateMethodFor</c> is driven
     /// with both nullable result types. Every selector is projected as nullable so the childless 9003
     /// really yields NULL (a non-nullable projection could only ever return a default value) and the
-    /// all-NULL-amount 9002 is asserted next to it. The aggregate terminals stay in a PROJECTION only
-    /// (never a predicate, #303).
+    /// all-NULL-amount 9002 is asserted next to it.
     /// </summary>
     [Fact]
     public void CorrelatedAggregateTerminals_TypedOverloadsInProjection_ShouldReportExactValues()
@@ -514,6 +515,50 @@ public sealed class CorrelatedTerminalBranchCoverage5Tests : ProviderTestSuite
         rows[3].SumAmount.Should().Be(9.0);
         rows[3].AvgAmount.Should().Be(9.0);
         rows[3].AvgWeight.Should().Be(9.0);
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // 14. Aggregate terminals inside a WHERE predicate (#303, flipped carve-out)
+    // ---------------------------------------------------------------------------------------------
+    /// <summary>
+    /// #303: the same aggregate terminals now lower inside a WHERE PREDICATE as a correlated scalar
+    /// subquery, so they filter rows instead of throwing in the expression tree. The all-NULL amount
+    /// set of 9002 and the empty set of 9003 never satisfy a positive threshold (SQL NULL is not
+    /// zero), while the ordered/equality arms keep their own comparison semantics.
+    /// </summary>
+    [Fact]
+    public void CorrelatedAggregateTerminalInPredicate_ShouldFilterOnNullableAggregates()
+    {
+        List<int> Match(Expression<Func<Ct5Parent, bool>> predicate) => Context.From<Ct5Parent>()
+            .Where(p => p.Id >= 9001 && p.Id <= 9004)
+            .Where(predicate)
+            .OrderBy(p => p.Id)
+            .Select(p => p.Id)
+            .ToList();
+
+        Match(p => Context.From<Ct5Child>().Where(c => c.ParentId == p.Id).Sum(c => c.Amount) > 6)
+            .Should().Equal(new[] { 9001, 9004 }, "12 and 9 are both above 6; 9002 is NULL and 9003 is empty");
+
+        Match(p => Context.From<Ct5Child>().Where(c => c.ParentId == p.Id).Sum(c => c.Amount) >= 12)
+            .Should().Equal(new[] { 9001 }, "9004 sums to 9");
+
+        Match(p => Context.From<Ct5Child>().Where(c => c.ParentId == p.Id).Count() > 1)
+            .Should().Equal(new[] { 9001 });
+
+        Match(p => Context.From<Ct5Child>().Where(c => c.ParentId == p.Id).Count() == 1)
+            .Should().Equal(new[] { 9002, 9004 });
+
+        Match(p => Context.From<Ct5Child>().Where(c => c.ParentId == p.Id).Count() != 1)
+            .Should().Equal(new[] { 9001, 9003 }, "the equality arm keeps its own comparison semantics");
+
+        Match(p => Context.From<Ct5Child>().Where(c => c.ParentId == p.Id).Min(c => c.Amount) > 5)
+            .Should().Equal(new[] { 9004 }, "the minimum of 9001 is 5; 9002 is NULL and 9003 is empty");
+
+        Match(p => Context.From<Ct5Child>().Where(c => c.ParentId == p.Id).Max(c => c.Amount) < 8)
+            .Should().Equal(new[] { 9001 }, "the maximum of 9004 is 9");
+
+        Match(p => Context.From<Ct5Child>().Where(c => c.ParentId == p.Id).Avg(c => c.Amount) > 6)
+            .Should().Equal(new[] { 9004 }, "6.0 is not above 6, and 9002's all-NULL average is NULL");
     }
 
     /// <summary>Parent marker row of the class-owned <c>ct5_parent</c> table.</summary>

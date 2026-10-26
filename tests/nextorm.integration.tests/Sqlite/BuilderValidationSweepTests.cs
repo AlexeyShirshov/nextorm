@@ -184,6 +184,23 @@ public sealed class BuilderValidationSweepTests : ProviderTestSuite
         _sut.ComplexEntity.SelectWhereMax(x => x.Id).Select(x => x.Id).ToList().Should().Equal(3L);
     }
 
+    /// <summary>
+    /// #294: a bare read over the same name-addressed source reaches the projection-shape refusal with
+    /// no mapped columns and no derived subquery projection to reuse, so it reports the source message —
+    /// never the derived-source one. The projection-less extreme-row form above is reported earlier by
+    /// its own mapped-source guard (#315), which is why it keeps a different message.
+    /// </summary>
+    [Fact]
+    public void BareReadOverUnmappedSource_ShouldReportNoReusableProjection()
+    {
+        var ctx = _sut.DataProvider;
+
+        FluentActions
+            .Invoking(() => ctx.From("simple_entity").ToList())
+            .Should().Throw<QueryPreparationException>()
+            .WithMessage("Cannot materialize this source because it has no mapped columns or reusable projection. Use a mapped source or specify an explicit Select with named columns.");
+    }
+
     /// <summary>SqlBuilder.cs:1509 — an extreme-row query over a derived source is rejected.</summary>
     [Fact]
     public void ExtremeRowOverDerivedSource_ShouldBeRejected()
