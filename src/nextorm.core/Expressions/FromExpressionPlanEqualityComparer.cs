@@ -104,12 +104,7 @@ public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromE
         {
             if (x.TableFunction is null || y.TableFunction is null) return false;
 
-            // The declared result schema is rendered into the SQL, so its row type and placement must
-            // be part of the key: two calls that differ only in that schema must not share a plan.
-            if (x.TableFunction.ResultType != y.TableFunction.ResultType) return false;
-            if (x.TableFunction.ResultSchema != y.TableFunction.ResultSchema) return false;
-
-            return _expComparer.Equals(x.TableFunction.Call, y.TableFunction.Call);
+            return TableFunctionEquals(x.TableFunction, y.TableFunction);
         }
 
         if (x.Pivot is not null || y.Pivot is not null)
@@ -123,6 +118,92 @@ public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromE
         }
 
         return _equalityComparer.Value.Equals(x.SubQuery, y.SubQuery);
+    }
+
+    /// <summary>
+    /// Compares two table-function sources by their <b>SQL identity</b>, never by the factory method or
+    /// the descriptor instance that produced them: name, schema and clause text, the verbatim argument
+    /// positions, the declared result placement/shape, the built-in classification and the argument
+    /// expressions. A legacy <see cref="SqlTableFunctionAttribute"/> declaration and a runtime
+    /// <see cref="TvfEntityBuilder{T}"/> factory with the same SQL identity must share a cached plan
+    /// (AC08); anything that changes the rendered statement or its support checks must not.
+    /// </summary>
+    private bool TableFunctionEquals(TableFunctionExpression x, TableFunctionExpression y)
+    {
+        if (!string.Equals(x.Name, y.Name, StringComparison.Ordinal)) return false;
+        if (!string.Equals(x.Schema, y.Schema, StringComparison.Ordinal)) return false;
+        if (!string.Equals(x.WithClause, y.WithClause, StringComparison.Ordinal)) return false;
+        if (!string.Equals(x.CallClause, y.CallClause, StringComparison.Ordinal)) return false;
+
+        // The declared result placement is rendered into the SQL, so it is part of identity for every
+        // value. The row type only matters when a schema is actually derived from it: a legacy source
+        // without a declared schema carries no result type, while the runtime node always knows its row
+        // type, and that difference must not split two identical SQL identities.
+        if (x.ResultSchema != y.ResultSchema) return false;
+        if (x.ResultSchema != TableFunctionSchema.None && x.ResultType != y.ResultType) return false;
+
+        // Built-in functions get the dialect support check and the string-literal rendering policy from
+        // this classification (see SqlSourceRenderer.MakeTableFunction), so it is part of identity.
+        if (IsBuiltInTableFunction(x) != IsBuiltInTableFunction(y)) return false;
+
+        if (!VerbatimArgumentsEqual(x.VerbatimArguments, y.VerbatimArguments)) return false;
+
+        // Compare the argument expressions themselves, not the whole factory call: the factory method
+        // is not part of the SQL identity.
+        var xArguments = x.Arguments;
+        var yArguments = y.Arguments;
+        if (xArguments.Count != yArguments.Count) return false;
+
+        for (var i = 0; i < xArguments.Count; i++)
+        {
+            if (!_expComparer.Equals(xArguments[i], yArguments[i])) return false;
+        }
+
+        return true;
+    }
+
+    private static bool IsBuiltInTableFunction(TableFunctionExpression function)
+        => typeof(CommonFunctions).IsAssignableFrom(function.Call.Method.DeclaringType);
+
+    private static bool VerbatimArgumentsEqual(IReadOnlyList<int>? x, IReadOnlyList<int>? y)
+    {
+        // Null and an empty list both mean "no verbatim arguments".
+        var xCount = x?.Count ?? 0;
+        var yCount = y?.Count ?? 0;
+        if (xCount != yCount) return false;
+
+        for (var i = 0; i < xCount; i++)
+        {
+            if (x![i] != y![i]) return false;
+        }
+
+        return true;
+    }
+
+    private int TableFunctionHash(TableFunctionExpression function)
+    {
+        var hash = new System.HashCode();
+        hash.Add(function.Name, StringComparer.Ordinal);
+        hash.Add(function.Schema, StringComparer.Ordinal);
+        hash.Add(function.WithClause, StringComparer.Ordinal);
+        hash.Add(function.CallClause, StringComparer.Ordinal);
+        hash.Add((int)function.ResultSchema);
+        if (function.ResultSchema != TableFunctionSchema.None)
+            hash.Add(function.ResultType is null ? 0 : System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(function.ResultType));
+        hash.Add(IsBuiltInTableFunction(function));
+
+        var verbatimArguments = function.VerbatimArguments;
+        hash.Add(verbatimArguments?.Count ?? 0);
+        if (verbatimArguments is not null)
+        {
+            for (var i = 0; i < verbatimArguments.Count; i++)
+                hash.Add(verbatimArguments[i]);
+        }
+
+        foreach (var argument in function.Arguments)
+            hash.Add(_expComparer.GetHashCode(argument));
+
+        return hash.ToHashCode();
     }
 
     private bool PivotEquals(PivotExpression? x, PivotExpression? y)
@@ -289,13 +370,7 @@ public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromE
             return System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj.LinqSource);
 
         if (obj.TableFunction is not null)
-        {
-            var tableFunctionHash = new System.HashCode();
-            tableFunctionHash.Add(obj.TableFunction.ResultType is null ? 0 : System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj.TableFunction.ResultType));
-            tableFunctionHash.Add((int)obj.TableFunction.ResultSchema);
-            tableFunctionHash.Add(_expComparer.GetHashCode(obj.TableFunction.Call));
-            return tableFunctionHash.ToHashCode();
-        }
+            return TableFunctionHash(obj.TableFunction);
 
         if (obj.Pivot is not null)
             return PivotHash(obj.Pivot);

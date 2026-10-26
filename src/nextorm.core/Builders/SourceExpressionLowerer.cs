@@ -121,7 +121,16 @@ internal static class SourceExpressionLowerer
         {
             var outer = source.Parameters[0];
             var delegateType = typeof(Func<,>).MakeGenericType(outer.Type, typeof(EntityBuilder<T>));
-            factory = Expression.Quote(Expression.Lambda(delegateType, call, outer));
+
+            // Declare a fresh, unused parameter in the quoted factory lambda instead of reusing the
+            // outer parameter instance. Reusing it makes the plan-key comparer reject the whole
+            // ApplySource ("a nested lambda reused an outer parameter"), so two identical correlated
+            // APPLY sources would never share a cached plan and every execution would add a new plan
+            // entry. The body keeps the outer parameter as a free variable: PushOuter matches it by
+            // reference at preparation time, and the Quote is only inspected, never compiled, so the
+            // free variable is not a scope error.
+            var declared = Expression.Parameter(outer.Type, outer.Name);
+            factory = Expression.Quote(Expression.Lambda(delegateType, call, declared));
             applyMethod = BuildCorrelatedApplyFromOuterMI.MakeGenericMethod(outer.Type, typeof(T));
         }
         else

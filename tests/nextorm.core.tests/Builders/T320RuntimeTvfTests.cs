@@ -11,6 +11,11 @@ public sealed class T320TvfRow
     public int Id { get; set; }
 }
 
+public sealed class T320OtherRow
+{
+    public int Id { get; set; }
+}
+
 internal static class T320TvfDb
 {
     public static TvfEntityBuilder<T320TvfRow> Echo(int id) => new("echo_rows", "dbo");
@@ -24,6 +29,35 @@ internal static class T320TvfDb
         null,
         new[] { 0 },
         TableFunctionSchema.None);
+
+    /// <summary>
+    /// Runtime configuration a factory may read instead of an SQL argument. This is the documented
+    /// metadata source for a runtime factory: it is captured separately from the call expression, so the
+    /// descriptor's metadata is stable while the arguments stay in the caller's tree.
+    /// </summary>
+    public static string ConfigurationName { get; set; } = "echo_configured";
+
+    public static TvfEntityBuilder<T320TvfRow> Configured(int id) => new(ConfigurationName, "dbo");
+
+    public static TvfEntityBuilder<T320TvfRow> Pair(int id, string? label) => new("echo_pair", "dbo");
+
+    /// <summary>
+    /// Deliberately <b>outside</b> the purity contract: the metadata depends on the value of a formal SQL
+    /// argument. Used to observe what the metadata-only projection actually produces, not to detect it.
+    /// </summary>
+    public static TvfEntityBuilder<T320TvfRow> DefaultDriven(int id) => new($"echo_{id}", null);
+
+    public static TvfEntityBuilder<T320TvfRow> VerbatimOutOfRange(int id) => new(
+        "echo_rows",
+        "dbo",
+        null,
+        null,
+        new[] { 1 },
+        TableFunctionSchema.None);
+
+    public static TvfEntityBuilder<T320TvfRow> NoDescriptor(int id) => null!;
+
+    public static TvfEntityBuilder<T320OtherRow> OtherRow(int id) => new("echo_other_rows");
 }
 
 /// <summary>
@@ -221,7 +255,8 @@ public class T320RuntimeTvfTests
 
         var act = () => ctx.From(() => new EntityBuilder<T320TvfRow>(ctx));
 
-        act.Should().Throw<NotSupportedException>();
+        act.Should().Throw<NotSupportedException>()
+            .Which.Message.Should().Contain("must be a direct call to a runtime table-valued-function factory");
     }
 
     // ---- D2: the same lambda source on the ordinary join family ----------------------------------
@@ -435,5 +470,216 @@ public class T320RuntimeTvfTests
 
         act.Should().Throw<NotSupportedException>()
             .Which.Message.Should().Contain("does not return TvfEntityBuilder<T>");
+    }
+
+    // ---- D1 probe: what the metadata-only projection and the argument preservation actually do --------
+
+    private static readonly MethodInfo EchoFactory =
+        typeof(T320TvfDb).GetMethod(nameof(T320TvfDb.Echo), BindingFlags.Public | BindingFlags.Static)!;
+
+    [Fact]
+    public void From_ConfigurationCapturedOutsideTheSqlArguments_ShouldSupplyTheMetadata()
+    {
+        using var ctx = new InMemoryDataContext();
+        var id = 3;
+        var previous = T320TvfDb.ConfigurationName;
+
+        try
+        {
+            T320TvfDb.ConfigurationName = "echo_configured";
+
+            var builder = ctx.From(() => T320TvfDb.Configured(id));
+            var function = builder.SourceFrom!.TableFunction!;
+
+            function.Name.Should().Be("echo_configured", "the name is captured configuration, not an SQL argument");
+            function.Schema.Should().Be("dbo");
+            function.Call.Method.Name.Should().Be(nameof(T320TvfDb.Configured));
+
+            var argument = function.Arguments.Should().ContainSingle().Subject;
+            argument.NodeType.Should().Be(ExpressionType.MemberAccess, "the caller's closure field is preserved untouched");
+            Expression.Lambda<Func<int>>(argument).Compile()().Should().Be(3);
+
+            // A second lowering after the configuration changed picks the new value up: proof that the
+            // metadata comes from the captured configuration and never from the argument expression.
+            T320TvfDb.ConfigurationName = "echo_configured_2";
+            ctx.From(() => T320TvfDb.Configured(id)).SourceFrom!.TableFunction!.Name
+                .Should().Be("echo_configured_2");
+        }
+        finally
+        {
+            T320TvfDb.ConfigurationName = previous;
+        }
+    }
+
+    [Fact]
+    public void From_LambdaSource_ShouldPreserveANonDefaultLiteralAndACapturedArgument()
+    {
+        using var ctx = new InMemoryDataContext();
+        var id = 9;
+
+        var builder = ctx.From(() => T320TvfDb.Pair(id, "literal-x"));
+        var function = builder.SourceFrom!.TableFunction!;
+
+        function.Arguments.Should().HaveCount(2);
+        function.Arguments.Should().NotContain(
+            argument => argument is DefaultExpression,
+            "the typed defaults used for the metadata projection must never reach SQL lowering");
+
+        var captured = function.Arguments[0].Should().BeAssignableTo<MemberExpression>().Subject;
+        captured.NodeType.Should().Be(ExpressionType.MemberAccess);
+        captured.Member.Name.Should().Be("id");
+        Expression.Lambda<Func<int>>(function.Arguments[0]).Compile()().Should().Be(9);
+
+        var literal = function.Call.Arguments[1].Should().BeOfType<ConstantExpression>().Subject;
+        literal.Value.Should().Be("literal-x");
+    }
+
+    [Fact]
+    public void CorrelatedApply_ShouldKeepTheOuterMemberAccessAndEvaluateNothing()
+    {
+        // The in-memory provider rejects a correlated APPLY explicitly (EntityBuilder.JoinApply), so the
+        // probe needs a SQL provider. No connection is opened: only the builder state is inspected.
+        using var ctx = new SqlServerDataContext(
+            "Server=localhost,1433;Database=nextorm;User Id=sa;Password=nextorm!Passw0rd;TrustServerCertificate=True",
+            new DataContextBuilder());
+
+        var joined = ctx.From<T320TvfRow>(meta => meta.Table("t320_outer"))
+            .CrossApply(row => T320TvfDb.Echo(row.Id));
+
+        var applySource = joined.JoinCondition.ApplySource;
+        applySource.Should().NotBeNull("the correlated form must carry the outer parameter");
+        applySource!.Parameters.Should().ContainSingle();
+
+        var factoryCall = FindFactoryCall(applySource.Body, EchoFactory);
+        var argument = factoryCall.Arguments.Should().ContainSingle().Subject;
+
+        argument.NodeType.Should().Be(
+            ExpressionType.MemberAccess,
+            "a correlated argument stays an outer-column member access; evaluating it would turn it into a ConstantExpression");
+
+        var outer = argument.Should().BeAssignableTo<MemberExpression>().Subject;
+        outer.Member.Name.Should().Be(nameof(T320TvfRow.Id));
+        outer.Expression.Should().BeAssignableTo<ParameterExpression>(
+            "the member access must still be rooted in the outer parameter, never in a captured value");
+        ((ParameterExpression)outer.Expression!).Name.Should().Be("row");
+    }
+
+    [Fact]
+    public void From_MetadataDerivedFromASqlArgument_ShouldUseTheTypedDefaultAsADocumentedObligation()
+    {
+        // DOCUMENTED CALLER OBLIGATION (purity contract): the metadata is materialised by invoking the
+        // factory once with a typed default in every formal SQL argument position, because the original
+        // argument expressions must never be evaluated to obtain a descriptor. A factory whose metadata
+        // depends on an argument value is therefore outside the contract. This fact observes that
+        // contract; it deliberately does not detect, reject or police an impure factory.
+        using var ctx = new InMemoryDataContext();
+
+        var builder = ctx.From(() => T320TvfDb.DefaultDriven(7));
+        var function = builder.SourceFrom!.TableFunction!;
+
+        function.Name.Should().Be(
+            "echo_0",
+            "default(int) is what the metadata projection passes, so the documented caller obligation is that metadata must not depend on an argument value");
+        function.Arguments.Should().ContainSingle()
+            .Which.Should().BeOfType<ConstantExpression>()
+            .Which.Value.Should().Be(7, "the SQL argument itself is still the caller's untouched 7");
+    }
+
+    // ---- D3: the remaining fail-closed negatives, each with its named message -----------------------
+
+    [Fact]
+    public void Descriptor_EmptyName_ShouldBeRejected()
+    {
+        var act = () => new TvfEntityBuilder<T320TvfRow>("   ");
+
+        act.Should().Throw<ArgumentException>()
+            .Which.Message.Should().Contain("cannot be empty");
+    }
+
+    [Fact]
+    public void Descriptor_NegativeVerbatimIndex_ShouldBeRejected()
+    {
+        var act = () => new TvfEntityBuilder<T320TvfRow>(
+            "echo_rows",
+            null,
+            null,
+            null,
+            new[] { -1 },
+            TableFunctionSchema.None);
+
+        act.Should().Throw<ArgumentException>()
+            .Which.Message.Should().Contain("cannot be negative");
+    }
+
+    [Fact]
+    public void Descriptor_DuplicateVerbatimIndex_ShouldBeRejected()
+    {
+        var act = () => new TvfEntityBuilder<T320TvfRow>(
+            "echo_rows",
+            null,
+            null,
+            null,
+            new[] { 0, 0 },
+            TableFunctionSchema.None);
+
+        act.Should().Throw<ArgumentException>()
+            .Which.Message.Should().Contain("declared more than once");
+    }
+
+    [Fact]
+    public void From_OutOfRangeVerbatimIndex_ShouldBeRejected()
+    {
+        using var ctx = new InMemoryDataContext();
+
+        var act = () => ctx.From(() => T320TvfDb.VerbatimOutOfRange(1));
+
+        act.Should().Throw<ArgumentException>()
+            .Which.Message.Should().Contain("out of range");
+    }
+
+    [Fact]
+    public void From_FactoryReturningNoDescriptor_ShouldBeRejected()
+    {
+        using var ctx = new InMemoryDataContext();
+
+        var act = () => ctx.From(() => T320TvfDb.NoDescriptor(1));
+
+        act.Should().Throw<NotSupportedException>()
+            .Which.Message.Should().Contain("returned no table-valued-function descriptor");
+    }
+
+    [Fact]
+    public void From_FactoryReturningADifferentRowType_ShouldBeRejected()
+    {
+        using var ctx = new InMemoryDataContext();
+        Expression<Func<EntityBuilder<T320TvfRow>>> source =
+            () => (EntityBuilder<T320TvfRow>)(object)T320TvfDb.OtherRow(1);
+
+        var act = () => ctx.From(source);
+
+        act.Should().Throw<NotSupportedException>()
+            .Which.Message.Should().Contain("does not match the source row type");
+    }
+
+    private static MethodCallExpression FindFactoryCall(Expression expression, MethodInfo factory)
+    {
+        var finder = new FactoryCallFinder(factory);
+        finder.Visit(expression);
+
+        return finder.Call
+            ?? throw new InvalidOperationException($"The factory call '{factory.DeclaringType?.Name}.{factory.Name}' is not in the lowered APPLY source.");
+    }
+
+    private sealed class FactoryCallFinder(MethodInfo factory) : ExpressionVisitor
+    {
+        public MethodCallExpression? Call { get; private set; }
+
+        protected override Expression VisitMethodCall(MethodCallExpression node)
+        {
+            if (Call is null && node.Method == factory)
+                Call = node;
+
+            return base.VisitMethodCall(node);
+        }
     }
 }
