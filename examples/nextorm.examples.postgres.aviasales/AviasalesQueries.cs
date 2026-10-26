@@ -52,7 +52,7 @@ public static class AviasalesQueries
             .AsCte("delay_chains");
 
         var rows = await ctx.From(delayChains)
-            .Join(ctx.From<IAirplaneData>(), (dc, ac) => dc.airplane_code == ac.AirplaneCode)
+            .Join<IAirplaneData>((dc, ac) => dc.airplane_code == ac.AirplaneCode)
             .Where(p => p.Item1.delay_minutes > 30 && p.Item1.prev_delay_minutes > 30)
             .OrderBy(p => p.Item1.airplane_code)
             .OrderBy(p => p.Item1.scheduled_departure)
@@ -83,8 +83,8 @@ public static class AviasalesQueries
 
         // CTE flight_occupancy: COUNT(bp.seat_no) per flight (no seats join, so no fan-out).
         var occupancy = ctx.From<ITimetable>()
-            .Join(ctx.From<ISegment>(), (f, tf) => f.FlightId == tf.FlightId && tf.FareConditions == "Business")
-            .LeftJoin(ctx.From<IBoardingPass>(),
+            .Join<ISegment>((f, tf) => f.FlightId == tf.FlightId && tf.FareConditions == "Business")
+            .LeftJoin<IBoardingPass>(
                 (p, bp) => p.Item2.FlightId == bp.FlightId && p.Item2.TicketNo == bp.TicketNo)
             .Where(p => p.Item1.Status == "Departed" || p.Item1.Status == "Arrived")
             .GroupBy(p => new { p.Item1.FlightId, p.Item1.AirplaneCode, p.Item1.ScheduledDeparture })
@@ -103,7 +103,7 @@ public static class AviasalesQueries
         // FROM flight_occupancy JOIN flight_business_capacity JOIN airplanes_data.
         var rows = await ctx.From(occupancy)
             .Join(capacity, (fo, cap) => fo.airplane_code == cap.airplane_code)
-            .Join(ctx.From<IAirplaneData>(), (p, ac) => p.Item1.airplane_code == ac.AirplaneCode)
+            .Join<IAirplaneData>((p, ac) => p.Item1.airplane_code == ac.AirplaneCode)
             .GroupBy(p => new { model = SqlFunctions.Postgres.json_get_text(p.Item3.Model, "ru") })
             .OrderBy(p => SqlFunctions.Postgres.json_get_text(p.Item3.Model, "ru"))
             .Select(p => new
@@ -149,9 +149,9 @@ public static class AviasalesQueries
     {
         // CTE passenger_flight_history: carries the is_noshow flag exactly as the original.
         var history = ctx.From<ITicket>()
-            .Join(ctx.From<ISegment>(), (t, tf) => t.TicketNo == tf.TicketNo)
-            .Join(ctx.From<IFlight>(), (p, f) => p.Item2.FlightId == f.FlightId)
-            .LeftJoin(ctx.From<IBoardingPass>(),
+            .Join<ISegment>((t, tf) => t.TicketNo == tf.TicketNo)
+            .Join<IFlight>((p, f) => p.Item2.FlightId == f.FlightId)
+            .LeftJoin<IBoardingPass>(
                 (p, bp) => p.Item2.FlightId == bp.FlightId && p.Item2.TicketNo == bp.TicketNo)
             .Where(p => p.Item3.Status == "Departed" || p.Item3.Status == "Arrived")
             .Select(p => new
@@ -237,10 +237,10 @@ public static class AviasalesQueries
     {
         // CTE route_monthly_revenue.
         var monthly = ctx.From<ITimetable>()
-            .Join(ctx.From<IAirportData>(), (f, dep) => f.DepartureAirport == dep.AirportCode)
-            .Join(ctx.From<IAirportData>(), (p, arr) => p.Item1.ArrivalAirport == arr.AirportCode)
-            .Join(ctx.From<ISegment>(), (p, tf) => p.Item1.FlightId == tf.FlightId)
-            .Join(ctx.From<ITicket>(), (p, t) => p.Item4.TicketNo == t.TicketNo)
+            .Join<IAirportData>((f, dep) => f.DepartureAirport == dep.AirportCode)
+            .Join<IAirportData>((p, arr) => p.Item1.ArrivalAirport == arr.AirportCode)
+            .Join<ISegment>((p, tf) => p.Item1.FlightId == tf.FlightId)
+            .Join<ITicket>((p, t) => p.Item4.TicketNo == t.TicketNo)
             .GroupBy(p => new
             {
                 route = SqlFunctions.Postgres.json_get_text(p.Item2.City, "ru")
@@ -307,9 +307,9 @@ public static class AviasalesQueries
     public static async Task<object> TopRoutesByCity(IDataContext ctx, CancellationToken ct)
     {
         var routeRevenue = ctx.From<ITimetable>()
-            .Join(ctx.From<ISegment>(), (f, tf) => f.FlightId == tf.FlightId)
-            .Join(ctx.From<IAirportData>(), (p, dep) => p.Item1.DepartureAirport == dep.AirportCode)
-            .Join(ctx.From<IAirportData>(), (p, arr) => p.Item1.ArrivalAirport == arr.AirportCode)
+            .Join<ISegment>((f, tf) => f.FlightId == tf.FlightId)
+            .Join<IAirportData>((p, dep) => p.Item1.DepartureAirport == dep.AirportCode)
+            .Join<IAirportData>((p, arr) => p.Item1.ArrivalAirport == arr.AirportCode)
             .Where(p => p.Item1.Status == "Departed" || p.Item1.Status == "Arrived")
             .GroupBy(p => new
             {
@@ -359,7 +359,7 @@ public static class AviasalesQueries
     public static async Task<object> AirportOnTimePerformance(IDataContext ctx, CancellationToken ct)
     {
         var flights = ctx.From<ITimetable>()
-            .Join(ctx.From<IAirportData>(), (f, dep) => f.DepartureAirport == dep.AirportCode)
+            .Join<IAirportData>((f, dep) => f.DepartureAirport == dep.AirportCode)
             .Where(p => p.Item1.Status == "Departed" || p.Item1.Status == "Arrived" || p.Item1.Status == "Cancelled")
             .Select(p => new
             {
@@ -406,7 +406,7 @@ public static class AviasalesQueries
     public static async Task<object> DelayPercentilesByModel(IDataContext ctx, CancellationToken ct)
     {
         var stats = ctx.From<ITimetable>()
-            .Join(ctx.From<IAirplaneData>(), (f, a) => f.AirplaneCode == a.AirplaneCode)
+            .Join<IAirplaneData>((f, a) => f.AirplaneCode == a.AirplaneCode)
             .Where(p => (p.Item1.Status == "Departed" || p.Item1.Status == "Arrived") && p.Item1.ActualDeparture != null)
             .GroupBy(p => new { Model = SqlFunctions.Postgres.json_get_text(p.Item2.Model, "ru") })
             .Select(p => new
@@ -432,10 +432,10 @@ public static class AviasalesQueries
     public static async Task<object> FrequentFlyers(IDataContext ctx, CancellationToken ct)
     {
         var rows = await ctx.From<ITicket>()
-            .Join(ctx.From<ISegment>(), (t, tf) => t.TicketNo == tf.TicketNo)
-            .Join(ctx.From<ITimetable>(), (p, f) => p.Item2.FlightId == f.FlightId)
-            .Join(ctx.From<IAirportData>(), (p, dep) => p.Item3.DepartureAirport == dep.AirportCode)
-            .Join(ctx.From<IAirportData>(), (p, arr) => p.Item3.ArrivalAirport == arr.AirportCode)
+            .Join<ISegment>((t, tf) => t.TicketNo == tf.TicketNo)
+            .Join<ITimetable>((p, f) => p.Item2.FlightId == f.FlightId)
+            .Join<IAirportData>((p, dep) => p.Item3.DepartureAirport == dep.AirportCode)
+            .Join<IAirportData>((p, arr) => p.Item3.ArrivalAirport == arr.AirportCode)
             .Where(p => p.Item3.Status == "Departed" || p.Item3.Status == "Arrived")
             .GroupBy(p => new { p.Item1.PassengerId, p.Item1.PassengerName })
             .Having(g => SqlFunctions.Sql.count() >= 5)
@@ -461,8 +461,8 @@ public static class AviasalesQueries
     public static async Task<object> PassengerGrowth(IDataContext ctx, CancellationToken ct)
     {
         var monthly = ctx.From<ITimetable>()
-            .Join(ctx.From<ISegment>(), (f, tf) => f.FlightId == tf.FlightId)
-            .Join(ctx.From<ITicket>(), (p, t) => p.Item2.TicketNo == t.TicketNo)
+            .Join<ISegment>((f, tf) => f.FlightId == tf.FlightId)
+            .Join<ITicket>((p, t) => p.Item2.TicketNo == t.TicketNo)
             .Where(p => p.Item1.Status == "Departed" || p.Item1.Status == "Arrived")
             .GroupBy(p => new { Month = SqlFunctions.Sql.date_trunc("month", p.Item1.ScheduledDeparture) })
             .Select(p => new
@@ -503,8 +503,8 @@ public static class AviasalesQueries
     public static async Task<object> CancellationByRoute(IDataContext ctx, CancellationToken ct)
     {
         var perRoute = ctx.From<ITimetable>()
-            .Join(ctx.From<IAirportData>(), (f, dep) => f.DepartureAirport == dep.AirportCode)
-            .Join(ctx.From<IAirportData>(), (p, arr) => p.Item1.ArrivalAirport == arr.AirportCode)
+            .Join<IAirportData>((f, dep) => f.DepartureAirport == dep.AirportCode)
+            .Join<IAirportData>((p, arr) => p.Item1.ArrivalAirport == arr.AirportCode)
             .GroupBy(p => new
             {
                 Route = SqlFunctions.Postgres.json_get_text(p.Item2.City, "ru")

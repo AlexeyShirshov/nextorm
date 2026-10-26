@@ -1,6 +1,6 @@
 # Examples verification report
 
-> **Last verified: 2026-10-17** (the examples are now **comparison projects**: every query has a
+> **Last verified: 2026-10-20** (the examples are now **comparison projects**: every query has a
 > nextorm arm and a linq2db arm, and both are executed against the same dataset; BenchmarkDotNet runs
 > through `--benchmark`). Re-run the examples whenever the engine gains features and update the tables
 > below. This file is the source of truth for "what works / what does not and why"; the topics are owned
@@ -32,7 +32,7 @@ as `FAIL`; any other exception aborts the run.
 | `nextorm.examples.mssql.adventureworks` | **11/11** | — |
 | `nextorm.examples.clickhouse.analytics` | **10/11** | `Incremental` (nextorm arm only) |
 
-Query-by-query counts on 2026-10-17 (warm volumes, Podman):
+Query-by-query counts on 2026-10-20 (warm volumes, Podman) — identical to the 2026-10-17 run:
 
 * postgres: aircraft delay chains 30, occupancy matrix 8, no-show 0, rolling revenue 91, ABC/XYZ 614,
   top routes 186, airport OTP 63, percentiles 8, frequent flyers 10, passenger growth 2, cancellations 15
@@ -61,7 +61,7 @@ reference `WITH OrderMargins AS (<5-table join>) ... PIVOT (...)` is expressed d
   are unchanged.
 
 * **Examples moved to the published packages.** The three projects now reference the `nextorm.*` NuGet
-  packages (`NextOrmVersion = 1.0.9-rc2` in [`Directory.Packages.props`](../Directory.Packages.props))
+  packages (`NextOrmVersion = 1.0.9-rc3` in [`Directory.Packages.props`](../Directory.Packages.props))
   instead of `src/`, so they build against what ships on nuget.org. Re-run against Testcontainers after
   the switch: postgres `11/11`, mssql `11/11`, clickhouse `10/11` (`Incremental` only).
 * **Databases are cached in named Docker volumes (the examples are read-only).** Each `DemoDatabase`
@@ -112,6 +112,20 @@ reference `WITH OrderMargins AS (<5-table join>) ... PIVOT (...)` is expressed d
   reads. The only remaining by-name reads are the MSSQL `Pivot` result columns, which are dynamic. Re-run
   unchanged: postgres `11/11`, mssql `11/11`, clickhouse `10/11` (`Incremental` only).
 
+* **Re-verified against the `1.0.9-rc3` packages (2026-10-20).** `NextOrmVersion` bumped
+  `1.0.9-rc2 → 1.0.9-rc3` for postgres/clickhouse (mssql keeps the `ProjectReference` to the current
+  checkout). Results and row counts are unchanged: postgres `11/11`, mssql `11/11`, clickhouse `10/11`
+  (`Incremental` only). One example now exercises a fix shipped in this release: MSSQL `VipChurn` aliases
+  the CTE-producing chain itself (`WithAlias(Alias.Order)` plus `Alias.Customer`/`Alias.Person`) and then
+  consumes it from the aliased `CustomerMetrics` chain — the shape that used to drop every downstream
+  alias (`Alias.Metrics`/`SalesPerson`/`Manager` → `CS0117`, [#230](https://github.com/AlexeyShirshov/nextorm/issues/230)).
+  The metrics root still projects the named `CustomerMetricRow` DTO: an anonymous chain type is rejected
+  with `NORMGEN009` ([#229](https://github.com/AlexeyShirshov/nextorm/issues/229)), so aliasing it is not
+  possible by design. `VipChurn` still returns 146 rows in both arms. The same pass moved every eligible
+  join in the postgres and mssql examples to the source-less (type-only) form
+  (`.Join<T>((l, r) => …)` instead of `.Join(ctx.From<T>(), …)`) and left the descriptor form for CTE
+  sides (`.Join(cte, …)`, which needs no `ctx.From(cte)` wrapper); SQL and row counts are unchanged.
+
 ## Comparison conversion (2026-10-17)
 
 * **Every example is now a comparison project.** The eleven queries per dataset are implemented twice:
@@ -136,7 +150,7 @@ reference `WITH OrderMargins AS (<5-table join>) ... PIVOT (...)` is expressed d
   for `AirportOnTimePerformance`/`DelayPercentilesByModel` (values then match exactly).
 * **Packages.** The examples add `linq2db` 6.5.0 plus the PostgreSQL/SQL Server/ClickHouse providers
   (`Linq2DbVersion` in [`Directory.Packages.props`](Directory.Packages.props)). The nextorm package
-  model is unchanged: postgres/clickhouse use the published `1.0.9-rc2` packages, mssql stays on
+  model is unchanged: postgres/clickhouse use the published `1.0.9-rc3` packages, mssql stays on
   `ProjectReference` for the typed `Pivot` surface.
 * **Full benchmark run (2026-10-17, Release, `ShortRun` + `InProcessEmitToolchain`, warm volumes).**
   PostgreSQL 22/22 cases (28:53), MSSQL 22/22 (02:43), ClickHouse 19/21 (06:29; `Nextorm_DailyTraffic`

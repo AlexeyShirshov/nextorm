@@ -105,19 +105,18 @@ it fails, why. Where nextorm lacks a capability the query is expressed naturally
 construct has no LINQ surface at all, throws `NotSupportedException`); the gap is tracked in the roadmap
 instead of being masked:
 
-* **Derived query as the primary `FROM` source** — `ctx.From(derivedQuery).Join(...)` still fails during
-  preparation (`QueryPreparationException: Select must return new anonymous type`). The reference
-  queries declare those subqueries as `WITH`, and the examples express them with the typed CTE API
-  `query.AsCte(name)` / `ctx.From(cte)` — which supports `Join`, `GroupBy`, `Having`, `OrderBy` and
-  `Limit` (the string `With(name, query).From(name)` API remains available) —
-  so none of the demo queries hit this gap. Tracked in
-  [`sql-capabilities-gap-analysis.md`](../docs/specs/roadmap/sql-capabilities-gap-analysis.md) (known
-  gap 10); see the [CTE guide](../docs/guide/10-cte.md).
+* **Derived query as the primary `FROM` source** — `ctx.From(derivedQuery).Join(...)` is supported (a
+  `Where` before the join is pushed onto the derived query; other modifiers stay inside it). The
+  reference queries declare those subqueries as `WITH`, and the examples express them with the typed CTE
+  API `query.AsCte(name)` / `ctx.From(cte)` — which supports `Join`, `GroupBy`, `Having`, `OrderBy` and
+  `Limit` (the string `With(name, query).From(name)` API remains available); see the
+  [CTE guide](../docs/guide/10-cte.md).
 * **T-SQL `FORMAT`** — no portable built-in, so the example declares a provider-specific
   `[SqlFunction("format")]` UDF (`DemoUdf.Format`) instead of projecting the raw `DateTime`.
-* **SQL Server `PIVOT`** — the native `EntityBuilder.Pivot` now exists, but it accepts only a plain
-  table/entity source; query 5 pivots a join-derived `WITH OrderMargins` CTE with a computed aggregate
-  and `FOR` column, so it throws instead of being rewritten as conditional aggregation.
+* **SQL Server `PIVOT`** — the native `EntityBuilder.Pivot(...)` is a SQL Server provider extension (the
+  example adds `using NextORM.SqlServer;`) and accepts a derived source, so query 5 pivots the
+  join-derived `WITH OrderMargins` CTE with its computed aggregate and `FOR` column directly instead of
+  being rewritten as conditional aggregation.
 * **ClickHouse** — `windowFunnel`, `lagInFrame` → `lag_in_frame`, `multiIf` → `multi_if`,
   `countIf`/`uniq` are expressed natively in LINQ (`runningAccumulate` is still approximated by a framed
   `sum_over`), and the array / higher-order-lambda surface (`splitByChar`, `arrayMap`, `arrayFilter`,
@@ -142,7 +141,7 @@ datasets. The examples deliberately express the original SQL without workarounds
 means one arm hit a documented gap; `DIFF` means the two arms returned different row counts; any other
 error still aborts.
 
-Last run against Testcontainers (Podman), 2026-10-17:
+Last run against Testcontainers (Podman), 2026-10-20 (`NextOrmVersion = 1.0.9-rc3`):
 
 | Project | Matched in both arms | Remaining `FAIL`s (documented gaps) |
 |---|---|---|
