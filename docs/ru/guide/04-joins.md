@@ -373,7 +373,7 @@ select t2.id as 'Buyer', t3.id as 'Approver'
 добавляет ни источник, ни слот — и работает для любого семейства корневых источников: `From<T>`
 (mapped-сущность), `From("table")` и `CreateQueryBuilder("table")` (источник [`TableAlias`](xref:NextORM.Core.TableAlias)),
 `FromSql`, типизированный [`Cte<T>`](xref:NextORM.Core.Cte`1), ленивая временная таблица,
-`FromTableFunction<T>`, `From(QueryCommand<T>)` и forwarder'ы `CreateQueryBuilder*`. Физический
+`From(() => ...)` (runtime-фабрика табличной функции), `From(QueryCommand<T>)` и forwarder'ы `CreateQueryBuilder*`. Физический
 источник сохраняется: производный корень (`FromSql`, `From(query)`, `From(builder)`) остаётся
 производной таблицей с псевдонимом `t1`, а mapped-сущность по-прежнему читает свою физическую
 таблицу. `Where`, `OrderBy`, `GroupBy`, `Having` и paging, применённые до `.WithAlias`, переносятся на
@@ -618,32 +618,13 @@ var rows = await dataContext.From<ISimpleEntity>()
 
 ### APPLY по табличной функции
 
-Применяемый источник может быть табличной функцией (см. [Табличные функции](13-table-valued-functions.md)):
-[`FromTableFunction`](xref:NextORM.Core.DataContextExtensions.FromTableFunction``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{``0}}})) возвращает `EntityBuilder<T>`, поэтому передаётся точно так же, как сущность. Некоррелированная функция применяется напрямую:
+Применяемый источник может быть runtime-фабрикой табличной функции (см.
+[Табличные функции](13-table-valued-functions.md)): тело коррелированной lambda — это вызов фабрики,
+поэтому аргументы функции сохраняют свои выражения, а член внешней строки остаётся ссылкой на колонку.
 
 ```csharp
 var rows = dataContext.From<ISimpleEntity>()
-    .CrossApply(dataContext.FromTableFunction(() => Tvf.AllRows()))
-    .Select(p => new { p.Item1.Id, p.Item2.Value })
-    .ToList();
-```
-
-```sql
--- SQL Server
-select t1.id, t2.value
- from simple_entity as [t1]
- cross apply all_rows() as [t2]
--- PostgreSQL / MySQL / MariaDB
-select t1.id, t2.value
- from simple_entity as t1
- cross join lateral all_rows() as t2
-```
-
-Корреляция функции со строкой левой стороны передаёт столбец этой строки аргументом функции; вызов тогда оборачивается в lateral-производную таблицу:
-
-```csharp
-var rows = dataContext.From<ISimpleEntity>()
-    .CrossApply(s => dataContext.FromTableFunction(() => Tvf.ById(s.Id)))
+    .CrossApply(s => Tvf.ById(s.Id))
     .Select(p => new { p.Item1.Id, p.Item2.Value })
     .ToList();
 ```
@@ -654,12 +635,26 @@ select t1.id, t3.value
  from simple_entity as [t1]
  cross apply (select t2.id, t2.value
  from rows_by_id(cast(t1.id as bigint)) as [t2]) as [t3]
--- PostgreSQL / MySQL / MariaDB
+-- PostgreSQL
 select t1.id, t3.value
- from simple_entity as t1
+ from simple_entity as "t1"
  cross join lateral (select t2.id, t2.value
- from rows_by_id(cast(t1.id as bigint)) as t2) as t3
+ from rows_by_id(cast(t1.id as bigint)) as "t2") as "t3"
 ```
+
+Некоррелированная функция передаётся с пустым списком параметров и применяется один раз:
+
+```csharp
+var rows = dataContext.From<ISimpleEntity>()
+    .CrossApply(() => Tvf.AllRows())
+    .Select(p => new { p.Item1.Id, p.Item2.Value })
+    .ToList();
+```
+
+Коррелированный `JSON_TABLE` в MySQL/MariaDB рендерится как сам источник соединения — без производной
+обёртки и без ключевого слова `LATERAL` (в MariaDB его нет, а MySQL отклоняет внешнюю ссылку внутри
+табличной функции под `LATERAL`): `join json_table(t1.children_json, '$[*]' columns(...)) as jt`, или
+`left join json_table(...) as jt on true` для `OuterApply`.
 
 Как и любой коррелированный apply, коррелированная форма функции требует lateral-источника и отклоняется с `NotSupportedException` в SQLite/ClickHouse и в in-memory-провайдере; некоррелированная форма подчиняется правилам источника конкретного провайдера (`CROSS APPLY` в SQL Server, `CROSS JOIN LATERAL` в PostgreSQL/MySQL/MariaDB).
 
@@ -771,7 +766,7 @@ var mixed = dataContext
 Соединение с необработанной таблицей (`TableAlias`) теперь учитывает явно заданный источник на
 присоединяемом построителе. Если присоединяемая сторона — это необработанный SQL (`FromSql`),
 переопределение таблицы (`b => b.Table("...")` / `WithTableName`), производный запрос
-(`From(query)`), табличная функция (`FromTableFunction`) или типизированный CTE (`Cte<T>`), в
+(`From(query)`), табличная функция (`From(() => ...)`) или типизированный CTE (`Cte<T>`), в
 качестве `FROM` соединения используется именно этот источник, а не метаданные сущности. Для обычной
 сопоставленной сущности без явного источника сохраняется запасной путь через метаданные.
 `SemiJoin`/`AntiJoin` не затрагиваются: присоединяемый тип по-прежнему разрешается через метаданные

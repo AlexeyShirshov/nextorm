@@ -253,12 +253,12 @@ var rows = dataContext.From<Event>()
 ## Табличные функции
 
 `numbers`/`numbers_mt` и генераторы строк `zeros`/`zeros_mt` доступны через
-[`FromTableFunction`](xref:NextORM.Core.DataContextExtensions.FromTableFunction``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{``0}}})). Колонка `number` типа `UInt64` приводится к
+[`From`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{NextORM.Core.EntityBuilder{``0}}})) с вызовом runtime-фабрики. Колонка `number` типа `UInt64` приводится к
 `Int64` внутри оборачивающего подзапроса, чтобы материализоваться в CLR `long`; `zeros`
 материализуется сразу в `byte`:
 
 ```csharp
-var rows = dataContext.FromTableFunction(() => SqlFunctions.ClickHouse.zeros(3))
+var rows = dataContext.From(() => SqlFunctions.ClickHouse.zeros(3))
     .Select(r => new { r.Value })
     .ToList();
 ```

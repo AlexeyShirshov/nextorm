@@ -116,13 +116,13 @@ var rows = dataContext.From<IComplexEntity>()
 ## `json_each` / `json_tree` table functions
 
 `json_each` walks the immediate children of a JSON value and `json_tree` walks it recursively. Use them
-through [`FromTableFunction`](../13-table-valued-functions.md) and project the row shape returned by the
-call; the columns are `key`, `value`, `type`, `fullkey` and `path` (plus `id`/`parent` for
-`json_tree`).
+through the runtime-factory source [`From(() => ...)`](../13-table-valued-functions.md) and project the row
+shape returned by the call; the columns are `key`, `value`, `type`, `fullkey` and `path` (plus `id`/`parent`
+for `json_tree`).
 
 ```csharp
 var values = dataContext
-    .FromTableFunction(() => SqlFunctions.Sqlite.json_each("[\"a\",\"b\",\"c\"]"))
+    .From(() => SqlFunctions.Sqlite.json_each("[\"a\",\"b\",\"c\"]"))
     .Select(r => r.Value)
     .ToList();
 ```
@@ -260,7 +260,7 @@ The table-valued form filters in `FROM`, so it composes with the rest of the bui
 
 ```csharp
 var rows = dataContext
-    .FromTableFunction(() => SqlFunctions.Sqlite.MatchTable<Article>("article_fts", query))
+    .From(() => SqlFunctions.Sqlite.MatchTable<Article>("article_fts", query))
     .Where(x => x.RowId > 0)
     .OrderBy(x => x.RowId)
     .Select(x => new { x.RowId, x.Title })

@@ -201,7 +201,7 @@ ctx.CreateInsertBuilder<IOrder>()
 В PostgreSQL источником может быть даже модифицирующий CTE (`ctx.With(имя, insert.Returning(...))`); см.
 [Модифицирующий CTE (PostgreSQL)](#модифицирующий-cte-postgresql).
 
-**Табличная функция** тоже годится как источник: `FromTableFunction` даёт `EntityBuilder<TSource>`,
+**Табличная функция** тоже годится как источник: источник-runtime-фабрика даёт `EntityBuilder<TSource>`,
 поэтому `unnest`/`generate_series` могут питать вставку. Массив — настоящий параметр, поэтому
 передавайте его захваченной переменной: рантайм-плейсхолдер `SqlFunctions.Parameter` отклоняется (см.
 выше):
@@ -210,7 +210,7 @@ ctx.CreateInsertBuilder<IOrder>()
 var ids = new long[] { 1, 2, 3 };
 
 ctx.CreateInsertBuilder<IdRow>()
-    .Values(ctx.FromTableFunction(() => SqlFunctions.Postgres.unnest(ids)), r => new { r.Value })
+    .Values(ctx.From(() => SqlFunctions.Postgres.unnest(ids)), r => new { r.Value })
     .Insert();
 // insert into id_row (value) select unnest as "Value"
 // from (select unnest

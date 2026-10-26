@@ -200,7 +200,7 @@ ctx.CreateInsertBuilder<IOrder>()
 On PostgreSQL the source may even be a data-modifying CTE (`ctx.With(name, insert.Returning(...))`); see
 [Data-modifying CTE (PostgreSQL)](#data-modifying-cte-postgresql).
 
-A **table-valued function** is a valid source too: `FromTableFunction` yields an `EntityBuilder<TSource>`,
+A **table-valued function** is a valid source too: the runtime-factory source yields an `EntityBuilder<TSource>`,
 so `unnest`/`generate_series` can feed the insert. The array is a real parameter, so pass it as a captured
 variable - the runtime `SqlFunctions.Parameter` placeholder is rejected (as above):
 
@@ -208,7 +208,7 @@ variable - the runtime `SqlFunctions.Parameter` placeholder is rejected (as abov
 var ids = new long[] { 1, 2, 3 };
 
 ctx.CreateInsertBuilder<IdRow>()
-    .Values(ctx.FromTableFunction(() => SqlFunctions.Postgres.unnest(ids)), r => new { r.Value })
+    .Values(ctx.From(() => SqlFunctions.Postgres.unnest(ids)), r => new { r.Value })
     .Insert();
 // insert into id_row (value) select unnest as "Value"
 // from (select unnest

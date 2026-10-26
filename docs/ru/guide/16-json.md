@@ -161,7 +161,7 @@ select id
 ### Развернуть JSON в строки через `openjson`
 
 `SqlFunctions.SqlServer.openjson(json)` — табличная функция (SQL Server 2016+), используемая через
-[`FromTableFunction`](xref:NextORM.Core.DataContextExtensions.FromTableFunction``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{``0}}})). Её
+[`From`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{NextORM.Core.EntityBuilder{``0}}})) с вызовом фабрики. Её
 схема по умолчанию выдаёт свойства JSON-объекта или элементы JSON-массива в виде
 [`SqlFunctions.IOpenJsonRow`](xref:NextORM.Core.SqlFunctions.IOpenJsonRow) (`Key`/`Value`/`Type`):
 
@@ -169,7 +169,7 @@ select id
 var json = """{"a":1,"b":2}""";
 
 var entries = dataContext
-    .FromTableFunction(() => SqlFunctions.SqlServer.openjson(json))
+    .From(() => SqlFunctions.SqlServer.openjson(json))
     .Select(r => new { r.Key, r.Value, r.Type })
     .ToList();
 ```
@@ -179,8 +179,9 @@ select [key] as [Key], value, type
  from openjson(@json) as [t1]
 ```
 
-Для типизированной проекции объявите собственный `[SqlTableFunction("openjson")]`-враппер, форма строки
-которого совпадает с предложением `WITH (...)`; nextorm только генерирует вызов и не создаёт функцию.
+Для типизированной проекции объявите собственную фабрику `TvfEntityBuilder<T>`, форма строки которой
+совпадает с предложением `WITH (...)`, и передайте тело предложения как `withClause`; nextorm только
+генерирует вызов и не создаёт функцию.
 `SqlFunctions.SqlServer.string_split` устроен так же для строки с разделителем. Обе функции включаются
 через [`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect.SupportsTableFunction(System.String)), поэтому их генерирует только SQL Server.
 
@@ -429,7 +430,7 @@ select json_value(jsonb_build_object('a', 1), cast('$.a' as jsonpath)) as "Value
 | Прочитать поле из JSON-значения | `json_value(col, '$.x')` | `col ->> 'x'` |
 | Проверить, что значение — JSON | `isjson(col)` | значение уже типизировано как `json`/`jsonb` колонкой |
 | Фильтр по содержимому JSON | `json_value(col, '$.x') = ...` | `col @> ...`, `col ? 'x'`, `col #> ...` |
-| Развернуть JSON в строки | `openjson(...)` как источник `FROM` | встроенного помощника нет; объявите `[SqlTableFunction]`-враппер |
+| Развернуть JSON в строки | `openjson(...)` как источник `FROM` | встроенного помощника нет; объявите фабрику `TvfEntityBuilder<T>` |
 
 ## Ограничения
 

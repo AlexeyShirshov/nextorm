@@ -190,11 +190,11 @@ order by rowid
 ```
 
 FTS5 also has a table-valued `FROM` form, `MatchTable`, which composes like any other source
-(`FromTableFunction`):
+(`From(() => ...)`):
 
 ```csharp
 var rows = ctx
-    .FromTableFunction(() => SqlFunctions.Sqlite.MatchTable<Article>("article_fts", query))
+    .From(() => SqlFunctions.Sqlite.MatchTable<Article>("article_fts", query))
     .OrderBy(x => x.RowId)
     .Select(x => new { x.RowId, x.Title })
     .ToList();

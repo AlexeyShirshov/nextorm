@@ -36,7 +36,7 @@
 | `ctx.From<T>()`, `ctx.From<T>(o => ...)` | `EntityBuilder<T>` | `SELECT` по маппингу сущности, с [опциями источника](../guide/01-query-sources.md) |
 | `ctx.From("table")` | `EntityBuilder<TableAlias>` | `SELECT` по «сырому» имени таблицы или CTE |
 | `ctx.FromSql(sql, parameters)` | `EntityBuilder<TableAlias>` | `SELECT` по derived-table SQL |
-| `ctx.FromTableFunction(() => Db.MyTvf(...))` | `EntityBuilder<T>` | `SELECT` по табличной функции |
+| `ctx.From(() => Db.MyTvf(...))` | `EntityBuilder<T>` | `SELECT` по табличной функции |
 | `ctx.From(query)` / `ctx.From(cte)` / `ctx.From(tempTable)` / `ctx.From(builder)` | `EntityBuilder<TResult>` (`EntityBuilder<TableAlias>` для временной таблицы) | `SELECT` по подзапросу, CTE, ленивой временной таблице или другому билдеру |
 | `ctx.CreateInsertBuilder<T>()`, `CreateBulkInsertBuilder<T>()`, `CreateUpdateBuilder<T>()`, `CreateDeleteBuilder<T>()`, `CreateMergeBuilder<T>()`, `CreateTruncateBuilder<T>()` | `InsertBuilder<T>`, `BulkInsertBuilder<T>`, `UpdateBuilder<T>`, `DeleteBuilder<T>`, `MergeBuilder<T>`, `TruncateBuilder<T>` | утверждения DML |
 | `ctx.CreateBatchBuilder()` | `BatchBuilder` | несколько утверждений за один round trip |

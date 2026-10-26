@@ -192,11 +192,11 @@ order by rowid
 ```
 
 У FTS5 есть также табличная форма `FROM` — `MatchTable`, которая композируется как любой другой
-источник (`FromTableFunction`):
+источник (`From(() => ...)`):
 
 ```csharp
 var rows = ctx
-    .FromTableFunction(() => SqlFunctions.Sqlite.MatchTable<Article>("article_fts", query))
+    .From(() => SqlFunctions.Sqlite.MatchTable<Article>("article_fts", query))
     .OrderBy(x => x.RowId)
     .Select(x => new { x.RowId, x.Title })
     .ToList();

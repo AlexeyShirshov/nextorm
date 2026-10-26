@@ -24,6 +24,8 @@
   href: 12-user-defined-functions.md
 - name: Table-valued functions
   href: 13-table-valued-functions.md
+- name: Table-valued function result schemas
+  href: 13-tvf-result-schemas.md
 - name: Raw SQL
   href: 14-raw-sql.md
 - name: Query hints

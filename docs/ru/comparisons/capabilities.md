@@ -47,7 +47,7 @@
 | Полнотекстовый поиск | yes (SQL Server, PostgreSQL, MySQL/MariaDB; SQLite FTS3/4/5 — запрос + `FROM`, билдер FTS5 maintenance/control) | yes | partial |
 | Условные функции (`iif`/`choose`/`multi_if`) | yes | no | no |
 | Пользовательские скалярные функции | yes (`[SqlFunction]`) | yes (`DbFunction` / `Sql.Ext`) | yes |
-| Табличные функции | yes (`[SqlTableFunction]`) | yes (`TableFunction`; TVF из БД можно скаффолдить) | yes |
+| Табличные функции | yes (runtime-фабрики `TvfEntityBuilder<T>`) | yes (`TableFunction`; TVF из БД можно скаффолдить) | yes |
 | Динамическая схема результата табличных функций | yes | no | no |
 | Нативный источник `PIVOT` / `UNPIVOT` | yes (SQL Server) | no | no |
 | `FOR JSON` / `FOR XML` | yes (SQL Server) | yes | partial |
@@ -91,7 +91,7 @@
 | `SelectMany` / `GroupJoin` | partial (только in-memory; SQL-провайдеры отклоняют) | yes (трансляция в SQL) | yes |
 | In-memory-провайдер (только чтение, зарегистрированные CLR-наборы) | yes | partial | partial |
 | Жизненный цикл соединения (`IConnectionManager`: переданное vs собственное, переиспользование, dispose) | yes | yes | yes |
-| Расширяемость (диалект, `[SqlFunction]`/`[SqlTableFunction]`, интерцепторы, глобальные фильтры, сырой SQL) | yes | yes (обширно) | yes |
+| Расширяемость (диалект, `[SqlFunction]`/фабрики `TvfEntityBuilder<T>`, интерцепторы, глобальные фильтры, сырой SQL) | yes | yes (обширно) | yes |
 | **Итого** | 71 / 5 / 3 | 48 / 21 / 10 | 27 / 27 / 24 |
 
 ## Где Nextorm впереди

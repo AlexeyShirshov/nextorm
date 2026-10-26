@@ -159,7 +159,7 @@ select id
 ### Turn JSON into rows with `openjson`
 
 `SqlFunctions.SqlServer.openjson(json)` is a table-valued function (SQL Server 2016+) used through
-[`FromTableFunction`](xref:NextORM.Core.DataContextExtensions.FromTableFunction``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{``0}}})). Its default
+[`From`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{NextORM.Core.EntityBuilder{``0}}})) with a factory call. Its default
 schema yields the properties of a JSON object or the elements of a JSON array as
 [`SqlFunctions.IOpenJsonRow`](xref:NextORM.Core.SqlFunctions.IOpenJsonRow) (`Key`/`Value`/`Type`):
 
@@ -167,7 +167,7 @@ schema yields the properties of a JSON object or the elements of a JSON array as
 var json = """{"a":1,"b":2}""";
 
 var entries = dataContext
-    .FromTableFunction(() => SqlFunctions.SqlServer.openjson(json))
+    .From(() => SqlFunctions.SqlServer.openjson(json))
     .Select(r => new { r.Key, r.Value, r.Type })
     .ToList();
 ```
@@ -177,8 +177,9 @@ select [key] as [Key], value, type
  from openjson(@json) as [t1]
 ```
 
-For a typed projection declare your own `[SqlTableFunction("openjson")]` wrapper whose row shape
-matches the `WITH (...)` clause; nextorm only emits the call, it does not create the function.
+For a typed projection declare your own `TvfEntityBuilder<T>` factory whose row shape matches the
+`WITH (...)` clause and pass the clause body as `withClause`; nextorm only emits the call, it does not
+create the function.
 `SqlFunctions.SqlServer.string_split` follows the same pattern for a comma-separated string. Both are
 gated by [`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect.SupportsTableFunction(System.String)), so only SQL Server emits them.
 
@@ -425,7 +426,7 @@ The construction and aggregation functions return `string?`; deserialize with
 | Read a field from a JSON value | `json_value(col, '$.x')` | `col ->> 'x'` |
 | Test that a value is JSON | `isjson(col)` | the value is typed `json`/`jsonb` by the column |
 | Filter by JSON content | `json_value(col, '$.x') = ...` | `col @> ...`, `col ? 'x'`, `col #> ...` |
-| Expand JSON into rows | `openjson(...)` as a `FROM` source | no built-in helper; declare a `[SqlTableFunction]` wrapper |
+| Expand JSON into rows | `openjson(...)` as a `FROM` source | no built-in helper; declare a `TvfEntityBuilder<T>` factory |
 
 ## Limitations
 

@@ -46,7 +46,7 @@ provider list is not scored). The per-engine API breadth is on [Provider feature
 | Full-text search | yes (SQL Server, PostgreSQL, MySQL/MariaDB; SQLite FTS3/4/5 query + `FROM`, FTS5 maintenance builder) | yes | partial |
 | Conditional functions (`iif`/`choose`/`multi_if`) | yes | no | no |
 | User-defined scalar functions | yes (`[SqlFunction]`) | yes (`DbFunction` / `Sql.Ext`) | yes |
-| Table-valued functions | yes (`[SqlTableFunction]`) | yes (`TableFunction`; DB TVFs can be scaffolded) | yes |
+| Table-valued functions | yes (runtime `TvfEntityBuilder<T>` factories) | yes (`TableFunction`; DB TVFs can be scaffolded) | yes |
 | Dynamic result schema for table functions | yes | no | no |
 | Native `PIVOT` / `UNPIVOT` source | yes (SQL Server) | no | no |
 | `FOR JSON` / `FOR XML` | yes (SQL Server) | yes | partial |
@@ -90,7 +90,7 @@ provider list is not scored). The per-engine API breadth is on [Provider feature
 | `SelectMany` / `GroupJoin` | partial (in-memory only; SQL providers reject) | yes (SQL translation) | yes |
 | In-memory provider (query-only, registered CLR datasets) | yes | partial | partial |
 | Connection lifecycle (`IConnectionManager`: supplied vs owned, reuse, disposal) | yes | yes | yes |
-| Extensibility (dialect, `[SqlFunction]`/`[SqlTableFunction]`, interceptors, global query filters, raw SQL) | yes | yes (extensive) | yes |
+| Extensibility (dialect, `[SqlFunction]`/`TvfEntityBuilder<T>` factories, interceptors, global query filters, raw SQL) | yes | yes (extensive) | yes |
 | **Total** | 71 / 5 / 3 | 48 / 21 / 10 | 27 / 27 / 24 |
 
 ## Where Nextorm leads

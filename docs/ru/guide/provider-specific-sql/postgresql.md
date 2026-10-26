@@ -226,7 +226,7 @@ select distinct on (somestring) id, somestring
 ## Функции, возвращающие наборы
 
 Функции PostgreSQL, возвращающие набор, доступны как табличные функции через
-[`FromTableFunction`](xref:NextORM.Core.DataContextExtensions.FromTableFunction``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{``0}}})):
+[`From`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{NextORM.Core.EntityBuilder{``0}}})) с вызовом runtime-фабрики:
 
 | `SqlFunctions.Postgres.*` | Колонки SQL | Row-shape |
 | --- | --- | --- |
@@ -392,7 +392,7 @@ select a, b
   по `FieldCount`/`ColumnNames` без материализации, а [`ToDataReader`](../28-large-objects.md) отдаёт
   их как `DbDataReader`;
 * `jsonb_each` / `jsonb_each_text` / `jsonb_object_keys` разворачивают JSON-объект в строки
-  ключ/значение — см. [Динамическая схема результата](../13-table-valued-functions.md#dynamic-result-schema).
+  ключ/значение — см. [Динамическая схема результата](../13-tvf-result-schemas.md#dynamic-result-schema).
 
 Варианты `json_populate_record(set)` (заполняющие переданную вызывающим базовую запись, а не
 свободный список колонок) остаются вне области охвата. См.
