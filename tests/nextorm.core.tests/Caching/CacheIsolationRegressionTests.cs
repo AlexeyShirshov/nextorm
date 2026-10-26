@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using FluentAssertions;
 
 namespace NextORM.Core.Tests;
@@ -63,6 +64,76 @@ public class CacheIsolationRegressionTests
         finally
         {
             DataContextCache.CacheSlidingExpiration = previousWindow;
+            DataContextCache.Clear();
+        }
+    }
+
+    /// <summary>Key type the fixture control owns in all five process-wide caches.</summary>
+    private sealed class FixtureSentinel
+    {
+        public int Id { get; set; }
+    }
+
+    /// <summary>
+    /// Value source for the metadata sentinel. Resolving it writes only its own auto-path entry, so the
+    /// five <see cref="FixtureSentinel"/> keys stay untouched until the control inserts them.
+    /// </summary>
+    private sealed class FixtureMetadataSource;
+
+    /// <summary>
+    /// E12 (T342) fixture control: inserting one sentinel into each of the five process-wide caches and
+    /// arming a non-default window, then running the assembly fixture's start and finish callbacks
+    /// directly (the bodies the runner invokes) must remove every sentinel and restore the window that
+    /// the fixture captured at assembly start.
+    /// </summary>
+    [Fact]
+    public void T342_FixtureTeardown_Should_RestoreWindowAndRemoveSentinels()
+    {
+        var expectedWindow = DataContextCache.CacheSlidingExpiration;
+        var finishCountBefore = ProcessWideCacheIsolationFixture.FinishCount;
+        var fixture = new ProcessWideCacheIsolationFixture();
+        var sentinelType = typeof(FixtureSentinel);
+        var expressionKey = new ExpressionKey(
+            (Expression<Func<FixtureSentinel, int>>)(x => x.Id), new QueryProvider());
+        var inValuesKey = new ExpressionKey(
+            (Expression<Func<FixtureSentinel, int>>)(x => x.Id + 1), new QueryProvider());
+
+        try
+        {
+            DataContextCache.CacheSlidingExpiration = TimeSpan.FromMilliseconds(1234);
+
+            var metadata = DataContextExtensions.ResolveMetadata(null, typeof(FixtureMetadataSource));
+            DataContextCache.Metadata[sentinelType] = metadata;
+            DataContextCache.TvpMetadata[sentinelType] = metadata;
+            DataContextCache.SelectListCache[sentinelType] = [];
+            DataContextCache.ExpressionsCache[expressionKey] = (Func<FixtureSentinel, int>)(x => x.Id);
+            DataContextCache.InValuesCache[inValuesKey] = _ => null;
+
+            DataContextCache.Metadata.ContainsKey(sentinelType).Should().BeTrue("the control seeds the metadata cache");
+            DataContextCache.TvpMetadata.ContainsKey(sentinelType).Should().BeTrue("the control seeds the TVP metadata cache");
+            DataContextCache.SelectListCache.ContainsKey(sentinelType).Should().BeTrue("the control seeds the select-list cache");
+            DataContextCache.ExpressionsCache.ContainsKey(expressionKey).Should().BeTrue("the control seeds the expression cache");
+            DataContextCache.InValuesCache.ContainsKey(inValuesKey).Should().BeTrue("the control seeds the in-values cache");
+
+            fixture.Start(nameof(T342_FixtureTeardown_Should_RestoreWindowAndRemoveSentinels));
+            fixture.Finish(nameof(T342_FixtureTeardown_Should_RestoreWindowAndRemoveSentinels));
+
+            DataContextCache.Metadata.ContainsKey(sentinelType).Should().BeFalse("the fixture teardown clears the metadata cache");
+            DataContextCache.TvpMetadata.ContainsKey(sentinelType).Should().BeFalse("the fixture teardown clears the TVP metadata cache");
+            DataContextCache.SelectListCache.ContainsKey(sentinelType).Should().BeFalse("the fixture teardown clears the select-list cache");
+            DataContextCache.ExpressionsCache.ContainsKey(expressionKey).Should().BeFalse("the fixture teardown clears the expression cache");
+            DataContextCache.InValuesCache.ContainsKey(inValuesKey).Should().BeFalse("the fixture teardown clears the in-values cache");
+
+            DataContextCache.CacheSlidingExpiration.Should().Be(
+                expectedWindow, "the fixture restores the window captured at assembly start");
+            ProcessWideCacheIsolationFixture.LastRestoredWindow.Should().Be(
+                expectedWindow, "the restored window is observable to controls");
+            ProcessWideCacheIsolationFixture.FinishCount.Should().Be(
+                finishCountBefore + 1, "one direct finish callback increments the counter exactly once");
+        }
+        finally
+        {
+            DataContextCache.CacheSlidingExpiration = expectedWindow;
             DataContextCache.Clear();
         }
     }
