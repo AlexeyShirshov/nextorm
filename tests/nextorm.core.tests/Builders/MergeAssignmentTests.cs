@@ -1,9 +1,12 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Data;
 using System.Data.Common;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Text;
+using System.Text.RegularExpressions;
 using FluentAssertions;
 using NextORM.Core;
 
@@ -47,16 +50,60 @@ public class MergeAssignmentTests
         public string? Name { get; set; }
     }
 
+    /// <summary>A destination with a nullable value column (the typed-null RHS case).</summary>
+    [SqlTable("ma_nullable")]
+    private sealed class NullableItem
+    {
+        [Key]
+        public int Id { get; set; }
+
+        public int? Total { get; set; }
+
+        public string? Name { get; set; }
+    }
+
+    /// <summary>A destination whose value is a server-clock column (the server-function case).</summary>
+    [SqlTable("ma_stamped")]
+    private sealed class Stamped
+    {
+        [Key]
+        public int Id { get; set; }
+
+        public DateTime Created { get; set; }
+    }
+
+    /// <summary>A destination the target-filter facts scope by tenant.</summary>
+    [SqlTable("ma_scoped")]
+    private sealed class Scoped
+    {
+        [Key]
+        public int Id { get; set; }
+
+        public string? Name { get; set; }
+
+        public int TenantId { get; set; }
+
+        public int A { get; set; }
+
+        public int Total { get; set; }
+    }
+
     /// <summary>A provider-free renderer: <c>ToSql</c> renders text and never opens a connection.</summary>
     private sealed class RenderingContext(ISqlDialect dialect) : DataContext(new DataContextBuilder())
     {
+        /// <summary>Connections the context tried to allocate; a fail-closed guard keeps this at zero.</summary>
+        public int ConnectionAttempts { get; private set; }
+
         public override ISqlDialect Dialect => dialect;
 
         public override DbParameter CreateParam(string name, object? value)
             => throw new NotSupportedException("The render-only test context never mints a command parameter.");
 
         protected override DbConnection CreateDbConnection(string? connectionString)
-            => throw new InvalidOperationException("The test context must not open a connection.");
+        {
+            ConnectionAttempts++;
+            throw new InvalidOperationException("The test context must not open a connection.");
+        }
     }
 
     /// <summary>A dialect with the general multi-branch <c>MERGE</c> and no native proposed row.</summary>
@@ -89,9 +136,29 @@ public class MergeAssignmentTests
         }
     }
 
+    /// <summary>A dialect with the general multi-branch <c>MERGE</c> and a <c>RETURNING</c> terminal.</summary>
+    private sealed class ReturningMergeDialect : SqlDialectBase
+    {
+        public static readonly ReturningMergeDialect Instance = new();
+
+        public override bool SupportsMergeStatement => true;
+
+        public override bool SupportsMergeConditionalBranches => true;
+
+        public override bool SupportsReturning => true;
+
+        public override string MakeParam(string name) => "@" + name;
+
+        public override void MakePage(Paging paging, StringBuilder sqlBuilder, KeywordCase keywordCase = KeywordCase.Lower)
+        {
+        }
+    }
+
     private static IDataContext FullMerge() => new RenderingContext(FullMergeDialect.Instance);
 
     private static IDataContext NativeUpsert() => new RenderingContext(NativeUpsertDialect.Instance);
+
+    private const string TenantKey = "ma_tenant";
 
     private static Item Source() => new() { Id = 1, Name = "a" };
 
@@ -510,5 +577,484 @@ public class MergeAssignmentTests
         inserted.Should().Be(1);
         rows.Should().HaveCount(2);
         rows.Single(r => r.Id == 2).Name.Should().Be("b");
+    }
+
+    // --- S6: parameterisation (R03) --------------------------------------------------------------
+
+    [Fact]
+    public void ConstantValue_ShouldBeBoundAsAParameter()
+    {
+        using var ctx = new CapturingContext(FullMergeDialect.Instance);
+
+        var affected = ctx.CreateMergeBuilder<Item>()
+            .Using(Source())
+            .On((t, s) => t.Id == s.Id)
+            .WhenMatched().ThenUpdate((target, source) => new { Total = target.Total + 1 })
+            .WhenNotMatched().ThenInsert()
+            .Merge();
+
+        affected.Should().Be(0);
+        var command = ctx.Commands.Should().ContainSingle().Which;
+        command.CommandText.Should().NotMatchRegex(@"\+\s*1\b", "a constant value is bound as a parameter, never inlined");
+        var parameter = Parameter(command, ParameterTokenAfter(command.CommandText, "target.Total = "));
+        parameter.Value.Should().Be(1);
+        parameter.Value.Should().BeOfType<int>("the parameter keeps the destination value's CLR type");
+    }
+
+    [Fact]
+    public void ServerFunction_ShouldNotBeFoldedIntoAClientConstant()
+    {
+        using var ctx = new CapturingContext(FullMergeDialect.Instance);
+
+        ctx.CreateMergeBuilder<Stamped>()
+            .Using(new Stamped { Id = 1 })
+            .On((t, s) => t.Id == s.Id)
+            .WhenMatched().ThenUpdate((target, source) => new { Created = DateTime.UtcNow })
+            .WhenNotMatched().ThenInsert()
+            .Merge();
+
+        var command = ctx.Commands.Should().ContainSingle().Which;
+        var value = Between(command.CommandText, "target.Created = ", " when not matched");
+        value.Should().Be("target.Created = now() at time zone 'utc'",
+            "a parameter-free server function stays server-side instead of becoming a captured timestamp");
+    }
+
+    // --- S7: null (R08) --------------------------------------------------------------------------
+
+    [Fact]
+    public void NullableValueTypeNull_ShouldBeANullParameter()
+    {
+        using var ctx = new CapturingContext(FullMergeDialect.Instance);
+
+        ctx.CreateMergeBuilder<NullableItem>()
+            .Using(new NullableItem { Id = 1, Name = "a" })
+            .On((t, s) => t.Id == s.Id)
+            .WhenMatched().ThenUpdate((target, source) => new { Total = (int?)null })
+            .WhenNotMatched().ThenInsert()
+            .Merge();
+
+        var command = ctx.Commands.Should().ContainSingle().Which;
+        command.CommandText.Should().NotMatchRegex(@"(?i)\bnull\b",
+            "a typed null is a parameter, never the SQL NULL literal or an interpolated value");
+        Parameter(command, ParameterTokenAfter(command.CommandText, "target.Total = ")).Value.Should().BeNull();
+    }
+
+    [Fact]
+    public void TypedNullReference_ShouldBeANullParameter()
+    {
+        using var ctx = new CapturingContext(FullMergeDialect.Instance);
+
+        ctx.CreateMergeBuilder<Item>()
+            .Using(Source())
+            .On((t, s) => t.Id == s.Id)
+            .WhenMatched().ThenUpdate((target, source) => new { Name = (string?)null })
+            .WhenNotMatched().ThenInsert()
+            .Merge();
+
+        var command = ctx.Commands.Should().ContainSingle().Which;
+        command.CommandText.Should().NotMatchRegex(@"(?i)\bnull\b", "a typed null reference is parameterised");
+        command.CommandText.Should().NotContain("''", "no interpolated empty literal stands in for the null");
+        Parameter(command, ParameterTokenAfter(command.CommandText, "target.Name = ")).Value.Should().BeNull();
+    }
+
+    // --- S8: statement-wide allocator + reuse (R09) ----------------------------------------------
+
+    [Fact]
+    public void CapturedClosure_ShouldBeReevaluatedOnEveryBuild()
+    {
+        var delta = 5;
+        using var ctx = new CapturingContext(FullMergeDialect.Instance);
+        var builder = ctx.CreateMergeBuilder<Item>()
+            .Using(Source())
+            .On((t, s) => t.Id == s.Id)
+            .WhenMatched().ThenUpdate((target, source) => new { Total = source.A + delta })
+            .WhenNotMatched().ThenInsert();
+
+        builder.Merge().Should().Be(0);
+        var first = ctx.Commands.Should().ContainSingle().Which;
+        first.CommandText.Should().NotMatchRegex(@"\+\s*5\b", "the captured closure value is bound, never inlined");
+        Parameter(first, ParameterTokenAfter(first.CommandText, "target.Total = ")).Value.Should().Be(5);
+
+        delta = 7;
+        builder.Merge().Should().Be(0);
+        ctx.Commands.Should().HaveCount(2, "a second build renders a second statement");
+        Parameter(ctx.Commands[1], ParameterTokenAfter(ctx.Commands[1].CommandText, "target.Total = "))
+            .Value.Should().Be(7, "the builder retains no closure value from the previous statement");
+    }
+
+    [Fact]
+    public void StatementWideAllocator_ShouldGiveEveryOccurrenceItsOwnParameter()
+    {
+        using var ctx = new CapturingContext(FullMergeDialect.Instance);
+        ctx.Properties[TenantKey] = 1;
+        ctx.From<Scoped>(b => b.HasQueryFilter("tenant", (e, c) => e.TenantId == (int)c.Properties[TenantKey]));
+
+        ctx.CreateMergeBuilder<Scoped>()
+            .Using(new Scoped { Id = 1, Name = "a", TenantId = 1, A = 1, Total = 2 })
+            .On((t, s) => t.Id == s.Id && s.A > 4)
+            .WhenMatched().ThenUpdate((target, source) => new { Total = target.Total + 5 })
+            .WhenNotMatched().ThenInsert()
+            .Merge();
+
+        var command = ctx.Commands.Should().ContainSingle().Which;
+        var names = command.Parameters.Cast<DbParameter>().Select(p => p.ParameterName).ToArray();
+
+        names.Should().NotBeEmpty();
+        names.Should().OnlyHaveUniqueItems("one statement-wide allocator hands out a distinct name per occurrence");
+        foreach (var name in names)
+        {
+            Regex.Matches(command.CommandText, "@" + Regex.Escape(name) + @"\b").Count
+                .Should().Be(1, $"parameter '{name}' must back exactly one occurrence");
+        }
+
+        command.CommandText.Should().Contain("target.TenantId = @", "the filter constant is a parameter");
+        command.CommandText.Should().Contain("source.A > 4",
+            "a predicate literal keeps the engine's existing inline rendering (QueryPlanner.RenderMergeCondition, not the assignment path)");
+        command.CommandText.Should().NotMatchRegex(@"\+\s*5\b", "the assignment constant is a parameter");
+    }
+
+    [Fact]
+    public void ExpressionStatement_ShouldNotMutateAReusableCommandCacheFlag()
+    {
+        using var ctx = new RenderingContext(FullMergeDialect.Instance);
+        var shared = ctx.From<Item>().Select(x => x.Id);
+        shared.Cache.Should().BeTrue("the reusable command starts cache-enabled");
+
+        ctx.CreateMergeBuilder<Item>()
+            .Using(Source())
+            .On((t, s) => t.Id == s.Id)
+            .WhenMatched().ThenUpdate((target, source) => new { Total = source.A })
+            .WhenNotMatched().ThenInsert(source => new { Id = source.Id, Name = source.Name })
+            .ToSql()
+            .Should().Contain("when matched then update set ");
+
+        shared.Cache.Should().BeTrue("building an expression-assignment statement must not clear the sticky plan-cache flag");
+    }
+
+    // --- S9: filters (R10) -----------------------------------------------------------------------
+
+    [Fact]
+    public void ActiveFilter_ExpressionInsert_ShouldRefuseBeforeExecution()
+    {
+        using var ctx = new RenderingContext(FullMergeDialect.Instance);
+        ctx.Properties[TenantKey] = 1;
+        ctx.From<Scoped>(b => b.HasQueryFilter("tenant", (e, c) => e.TenantId == (int)c.Properties[TenantKey]));
+
+        var act = () => ctx.CreateMergeBuilder<Scoped>()
+            .Using(new Scoped { Id = 1, Name = "a", TenantId = 1 })
+            .On((t, s) => t.Id == s.Id)
+            .WhenMatched().ThenUpdate()
+            .WhenNotMatched().ThenInsert(source => new { Id = source.Id, Name = source.Name })
+            .Merge();
+
+        act.Should().Throw<NotSupportedException>()
+            .WithMessage("*MERGE expression INSERT with active target filters is not supported*IgnoreFilters()*");
+        ctx.ConnectionAttempts.Should().Be(0, "the refusal is a metadata decision taken before any command is executed");
+    }
+
+    [Fact]
+    public void ActiveFilter_IgnoredExpressionInsert_ShouldBuild()
+    {
+        using var ctx = new RenderingContext(FullMergeDialect.Instance);
+        ctx.Properties[TenantKey] = 1;
+        ctx.From<Scoped>(b => b.HasQueryFilter("tenant", (e, c) => e.TenantId == (int)c.Properties[TenantKey]));
+
+        var sql = ctx.CreateMergeBuilder<Scoped>()
+            .Using(new Scoped { Id = 1, Name = "a", TenantId = 1 })
+            .IgnoreFilters()
+            .On((t, s) => t.Id == s.Id)
+            .WhenMatched().ThenUpdate()
+            .WhenNotMatched().ThenInsert(source => new { Id = source.Id, Name = source.Name })
+            .ToSql();
+
+        sql.Should().StartWith("merge into", "IgnoreFilters() is the explicit opt-out");
+        sql.Should().Contain("when not matched then insert (Id, Name) values (source.Id, source.Name)");
+    }
+
+    [Fact]
+    public void ActiveFilter_NoArgInsert_ShouldKeepTheFilteredStatement()
+    {
+        using var ctx = new RenderingContext(FullMergeDialect.Instance);
+        ctx.Properties[TenantKey] = 1;
+        ctx.From<Scoped>(b => b.HasQueryFilter("tenant", (e, c) => e.TenantId == (int)c.Properties[TenantKey]));
+
+        var sql = ctx.CreateMergeBuilder<Scoped>()
+            .Using(new Scoped { Id = 1, Name = "a", TenantId = 1 })
+            .On((t, s) => t.Id == s.Id)
+            .WhenMatched().ThenUpdate()
+            .WhenNotMatched().ThenInsert()
+            .ToSql();
+
+        sql.Should().StartWith("merge into");
+        sql.Should().Contain("target.TenantId = @", "the no-arg form keeps the target filter in its ON");
+        sql.Should().Contain("when not matched then insert (");
+    }
+
+    // --- S10: mixed forms + Returning (R12) -----------------------------------------------------
+
+    [Fact]
+    public void MixedForms_ShouldRenderBothArms()
+    {
+        using var ctx = new RenderingContext(FullMergeDialect.Instance);
+
+        var noArg = ctx.CreateMergeBuilder<Item>()
+            .Using(Source())
+            .On((t, s) => t.Id == s.Id)
+            .WhenMatched().ThenUpdate()
+            .WhenNotMatched().ThenInsert()
+            .ToSql();
+
+        var mixed = ctx.CreateMergeBuilder<Item>()
+            .Using(Source())
+            .On((t, s) => t.Id == s.Id)
+            .WhenMatched().ThenUpdate()
+            .WhenNotMatched().ThenInsert(source => new { Id = source.Id, Name = source.Name })
+            .ToSql();
+
+        Between(mixed, "when matched then update set ", " when not matched")
+            .Should().Be(Between(noArg, "when matched then update set ", " when not matched"),
+                "the no-arg arm keeps its previous SQL shape");
+        mixed.Should().Contain("when not matched then insert (Id, Name) values (source.Id, source.Name)");
+    }
+
+    [Fact]
+    public void Returning_ShouldKeepItsColumnsAndInjectNoAssignmentColumn()
+    {
+        using var ctx = new RenderingContext(ReturningMergeDialect.Instance);
+
+        var entity = ctx.CreateMergeBuilder<Item>()
+            .Using(Source())
+            .On((t, s) => t.Id == s.Id)
+            .WhenMatched().ThenUpdate((target, source) => new { Total = source.A })
+            .WhenNotMatched().ThenInsert()
+            .Returning()
+            .ToSql();
+
+        Tail(entity, " returning ").Should().StartWith("Id, Name, A, B, Total",
+            "Returning() keeps the entity's own column list in metadata order");
+
+        var projected = ctx.CreateMergeBuilder<Item>()
+            .Using(Source())
+            .On((t, s) => t.Id == s.Id)
+            .WhenMatched().ThenUpdate((target, source) => new { Total = source.A })
+            .WhenNotMatched().ThenInsert()
+            .Returning(x => new { x.Id })
+            .ToSql();
+
+        var tail = Tail(projected, " returning ");
+        tail.Should().StartWith("Id");
+        tail.Should().NotContain("Total", "an assignment destination is never injected into the returning list");
+    }
+
+    /// <summary>Extracts the first placeholder token after <paramref name="marker"/> in rendered SQL.</summary>
+    private static string ParameterTokenAfter(string sql, string marker)
+    {
+        var match = Regex.Match(sql, Regex.Escape(marker) + @"[^,]*?(@\w+)");
+        match.Success.Should().BeTrue($"the SQL should carry a parameter after '{marker}'");
+        return match.Groups[1].Value;
+    }
+
+    /// <summary>Resolves a rendered placeholder (<c>@p3</c>) to the parameter the command binds.</summary>
+    private static DbParameter Parameter(RecordingCommand command, string token)
+        => command.Parameters.Cast<DbParameter>().Single(p => p.ParameterName == token.TrimStart('@'));
+
+    /// <summary>The SQL slice between two markers.</summary>
+    private static string Between(string sql, string start, string end)
+    {
+        var from = sql.IndexOf(start, StringComparison.Ordinal);
+        from.Should().BeGreaterThanOrEqualTo(0, $"the SQL should contain '{start}'");
+        var to = sql.IndexOf(end, from + start.Length, StringComparison.Ordinal);
+        to.Should().BeGreaterThan(from, $"the SQL should contain '{end}' after '{start}'");
+        return sql[from..to];
+    }
+
+    /// <summary>The SQL tail after a marker.</summary>
+    private static string Tail(string sql, string marker)
+    {
+        var index = sql.IndexOf(marker, StringComparison.Ordinal);
+        index.Should().BeGreaterThanOrEqualTo(0, $"the SQL should contain '{marker}'");
+        return sql[(index + marker.Length)..];
+    }
+
+    /// <summary>
+    /// A database-shaped context that records the mutation command instead of executing it: the
+    /// recording connection mints the command the executor binds, and the terminal reports zero
+    /// affected rows. It exists so a fact can assert the parameter list a statement would execute with.
+    /// </summary>
+    private sealed class CapturingContext(ISqlDialect dialect) : DataContext(new DataContextBuilder())
+    {
+        private readonly List<RecordingCommand> _commands = [];
+
+        public override ISqlDialect Dialect => dialect;
+
+        public IReadOnlyList<RecordingCommand> Commands => _commands;
+
+        public override DbParameter CreateParam(string name, object? value)
+            => new RecordingParameter(name) { Value = value };
+
+        protected override DbConnection CreateDbConnection(string? connectionString) => new RecordingConnection(this);
+
+        internal void Record(RecordingCommand command) => _commands.Add(command);
+    }
+
+    /// <summary>A connection that never opens: it only hands out the recording command.</summary>
+    private sealed class RecordingConnection(CapturingContext owner) : DbConnection
+    {
+        private ConnectionState _state = ConnectionState.Closed;
+
+        [AllowNull]
+        public override string ConnectionString { get; set; } = string.Empty;
+
+        public override string Database => "nextorm";
+
+        public override string DataSource => "recording";
+
+        public override string ServerVersion => "1.0";
+
+        public override ConnectionState State => _state;
+
+        public override void ChangeDatabase(string databaseName)
+        {
+        }
+
+        public override void Close() => _state = ConnectionState.Closed;
+
+        public override void Open() => _state = ConnectionState.Open;
+
+        protected override DbTransaction BeginDbTransaction(IsolationLevel isolationLevel)
+            => throw new NotSupportedException();
+
+        protected override DbCommand CreateDbCommand()
+        {
+            var command = new RecordingCommand();
+            owner.Record(command);
+            return command;
+        }
+    }
+
+    /// <summary>The command the context binds: records the SQL and the parameters, executes nothing.</summary>
+    private sealed class RecordingCommand : DbCommand
+    {
+        private readonly RecordingParameterCollection _parameters = new();
+
+        [AllowNull]
+        protected override DbConnection DbConnection { get; set; } = null!;
+
+        protected override DbParameterCollection DbParameterCollection => _parameters;
+
+        [AllowNull]
+        protected override DbTransaction DbTransaction { get; set; } = null!;
+
+        [AllowNull]
+        public override string CommandText { get; set; } = string.Empty;
+
+        public override int CommandTimeout { get; set; }
+
+        public override CommandType CommandType { get; set; }
+
+        public override bool DesignTimeVisible { get; set; }
+
+        public override UpdateRowSource UpdatedRowSource { get; set; }
+
+        public override void Cancel()
+        {
+        }
+
+        public override int ExecuteNonQuery() => 0;
+
+        public override object? ExecuteScalar() => null;
+
+        public override void Prepare()
+        {
+        }
+
+        protected override DbParameter CreateDbParameter() => new RecordingParameter(string.Empty);
+
+        protected override DbDataReader ExecuteDbDataReader(CommandBehavior behavior)
+            => throw new NotSupportedException();
+    }
+
+    /// <summary>A parameter that keeps the value exactly as bound (a CLR null stays null).</summary>
+    private sealed class RecordingParameter(string name) : DbParameter
+    {
+        public override DbType DbType { get; set; }
+
+        public override ParameterDirection Direction { get; set; }
+
+        public override bool IsNullable { get; set; }
+
+        [AllowNull]
+        public override string ParameterName { get; set; } = name;
+
+        public override int Size { get; set; }
+
+        [AllowNull]
+        public override string SourceColumn { get; set; } = string.Empty;
+
+        public override bool SourceColumnNullMapping { get; set; }
+
+        public override object? Value { get; set; }
+
+        public override void ResetDbType()
+        {
+        }
+    }
+
+    private sealed class RecordingParameterCollection : DbParameterCollection
+    {
+        private readonly List<DbParameter> _items = [];
+
+        public override int Count => _items.Count;
+
+        public override object SyncRoot => this;
+
+        public override int Add(object value)
+        {
+            _items.Add((DbParameter)value);
+            return _items.Count - 1;
+        }
+
+        public override void AddRange(Array values)
+        {
+            foreach (var value in values)
+                Add(value!);
+        }
+
+        public override void Clear() => _items.Clear();
+
+        public override bool Contains(object value) => _items.Contains((DbParameter)value);
+
+        public override bool Contains(string? value) => _items.Any(p => p.ParameterName == value);
+
+        public override void CopyTo(Array array, int index) => ((System.Collections.ICollection)_items).CopyTo(array, index);
+
+        public override System.Collections.IEnumerator GetEnumerator() => _items.GetEnumerator();
+
+        public override int IndexOf(object value) => _items.IndexOf((DbParameter)value);
+
+        public override int IndexOf(string? parameterName) => _items.FindIndex(p => p.ParameterName == parameterName);
+
+        public override void Insert(int index, object value) => _items.Insert(index, (DbParameter)value);
+
+        public override void Remove(object value) => _items.Remove((DbParameter)value);
+
+        public override void RemoveAt(int index) => _items.RemoveAt(index);
+
+        public override void RemoveAt(string? parameterName) => _items.RemoveAll(p => p.ParameterName == parameterName);
+
+        protected override DbParameter GetParameter(int index) => _items[index];
+
+        protected override DbParameter GetParameter(string? parameterName) => _items[IndexOf(parameterName)];
+
+        protected override void SetParameter(int index, DbParameter value) => _items[index] = value;
+
+        protected override void SetParameter(string? parameterName, DbParameter value)
+        {
+            var index = IndexOf(parameterName);
+            if (index < 0)
+                Add(value);
+            else
+                _items[index] = value;
+        }
     }
 }
