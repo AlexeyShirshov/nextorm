@@ -24,6 +24,11 @@
     <!-- Pivot/Unpivot moved to the SQL Server provider; the PostgreSQL generation tests call them as
          public extension methods to assert the cross-dialect rejection. -->
     <ProjectReference Include="..\..\src\nextorm.sqlserver\nextorm.sqlserver.csproj" />
+    <!-- T260 provider-isolation cases assert that the PostgreSQL per-name refusal does not leak into
+         another dialect, so the remaining dialects are referenced directly (no database is opened). -->
+    <ProjectReference Include="..\..\src\nextorm.sqlite\nextorm.sqlite.csproj" />
+    <ProjectReference Include="..\..\src\nextorm.mysql\nextorm.mysql.csproj" />
+    <ProjectReference Include="..\..\src\nextorm.mariadb\nextorm.mariadb.csproj" />
     <!-- The join-alias generator runs as an analyzer over this test assembly so Alias.Buyer and the
          generated projection/builder types bind in JoinAliasSqlGenerationTests. -->
     <ProjectReference Include="..\..\src\nextorm.core.sourcegenerator\nextorm.core.sourcegenerator.csproj"

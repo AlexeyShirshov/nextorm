@@ -83,7 +83,10 @@ These throw `NotSupportedException` rather than emitting SQL with different sema
 * `Math.Log(value, base)` - the two-argument form has a provider-specific argument order, so it is left
   unsupported (`SqlGenerationTests.MathLogWithBase_ShouldThrowClearException`,
   `tests/nextorm.sqlite.tests/SqlGeneration/SqlGenerationTests.cs:985`). The PostgreSQL two-argument form is available
-  as `SqlFunctions.Postgres.log(base, x)` in the extended scalar library instead.
+  as `SqlFunctions.Postgres.log(base, x)` in the extended scalar library instead. PostgreSQL's only
+  two-argument overload is `log(numeric, numeric)`, so it renders
+  `log((base)::numeric, (x)::numeric)` with both operands cast; one-argument `Math.Log` keeps
+  rendering `ln(...)`.
 * `Math.Round` overloads that take a `MidpointRounding` (more than two arguments) - not portable.
 * `string.Substring(Range)` - no SQL equivalent.
 * `string.Trim(c)`/`TrimStart(c)`/`TrimEnd(c)` - SQL trims whitespace only, not an arbitrary character

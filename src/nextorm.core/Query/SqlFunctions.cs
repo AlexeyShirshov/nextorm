@@ -522,8 +522,11 @@ public static partial class SqlFunctions
         /// Generates a UUID v7 (<c>uuidv7()</c>). Requires a provider that supports it
         /// (see <see cref="ISqlDialect.UuidGenerators"/> and
         /// <see cref="IUuidGenerators.Supports"/>): PostgreSQL 18+, MariaDB 11.7+
-        /// (<c>uuid_v7()</c>) and ClickHouse (<c>generateUUIDv7()</c>). An unversioned MariaDB dialect
-        /// rejects it.
+        /// (<c>uuid_v7()</c>) and ClickHouse (<c>generateUUIDv7()</c>). PostgreSQL renders it only
+        /// when the dialect is configured with an explicit server version 18 or later; a version
+        /// below 18 and an unset version refuse at preparation with <see cref="NotSupportedException"/>,
+        /// and no v4 generator or <see langword="null"/> is substituted. An unversioned MariaDB
+        /// dialect rejects it.
         /// </summary>
         public Guid? uuidv7() => default!;
 

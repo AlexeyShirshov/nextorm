@@ -21,7 +21,8 @@
   следствием является то, что псевдоним выдаётся всегда);
 - `INTERSECT ALL` / `EXCEPT ALL` поддерживаются ([`SupportsIntersectExceptAll`](xref:NextORM.Core.ISqlDialect.SupportsIntersectExceptAll) равно `true`);
 - массивы поддерживаются ([`SupportsArrays`](xref:NextORM.Core.ISqlDialect.SupportsArrays) равно `true`): параметры-массивы с квантификаторами
-  `any`/`all` и функции для массивов;
+  `any`/`all` и функции для массивов, с двумя исключениями по имени ([`SupportsArrayFunction`](xref:NextORM.Core.ISqlDialect.SupportsArrayFunction(System.String)):
+  `array_reverse` отклоняется на любой версии PostgreSQL, а `array_sort` рендерится только при явной 18+);
 - JSON/JSONB поддерживается ([`SupportsPostgresJsonSql`](xref:NextORM.Core.ISqlDialect.SupportsPostgresJsonSql) равно `true`, только PostgreSQL; нативное хранение `jsonb` —
   [`SupportsJson`](xref:NextORM.Core.ISqlDialect.SupportsJson)): агрегаты `json_agg`/`jsonb_agg`, функции
   построения/доступа и операторы `->`/`->>`/`@>`/`?`, а параметры `JsonDocument`/`JsonElement`/`JsonNode`
@@ -54,7 +55,8 @@
   `current_database`/`version` — как `current_database()`/`version()`;
 - генераторы UUID включены ([`UuidGenerators`](xref:NextORM.Core.ISqlDialect.UuidGenerators) равно `true`):
   `SqlFunctions.Sql.gen_random_uuid()` отрисовывается как `gen_random_uuid()` (PostgreSQL 13+), а
-  `uuidv7()` — как `uuidv7()` (PostgreSQL 18+);
+  `uuidv7()` — как `uuidv7()` только при **явно** заданной версии сервера 18 или новее; ниже 18 и при
+  незаданной версии вызов отклоняется при подготовке с `NotSupportedException`, и UUID v4 не подставляется;
 - логические, битовые, статистические и упорядоченные агрегаты включены ([`SupportsBooleanAggregates`](xref:NextORM.Core.ISqlDialect.SupportsBooleanAggregates),
   [`SupportsBitAggregates`](xref:NextORM.Core.ISqlDialect.SupportsBitAggregates), [`SupportsStatisticalAggregates`](xref:NextORM.Core.ISqlDialect.SupportsStatisticalAggregates) и [`SupportsOrderedAggregates`](xref:NextORM.Core.ISqlDialect.SupportsOrderedAggregates) равны `true`):
   `bool_and`/`bool_or`/`every`, `bit_and`/`bit_or`/`bit_xor`, `corr`/`covar_*`/`regr_*` и
@@ -62,6 +64,9 @@
 - имена агрегатов переотображаются: `stdev`→`stddev`, `stdevp`→`stddev_pop`, `var`→`variance`,
   `varp`→`var_pop`;
 - `Math.Log` отображается на `ln(...)` (в PostgreSQL `log()` — это логарифм по основанию 10);
+- `SqlFunctions.Postgres.log(base, x)` рендерится как `log((base)::numeric, (x)::numeric)`: единственная
+  двухаргументная перегрузка — `log(numeric, numeric)`, поэтому оба операнда приводятся к `numeric`,
+  а `null` в операнде даёт SQL `NULL`;
 - `Math.Round(x, digits)` приводит первый аргумент `double`/`float` к `numeric`
   (`round((x)::numeric, digits)`): в PostgreSQL нет `round(double precision, integer)`;
 - `SqlFunctions.Postgres.setseed(seed)` рендерит `setseed(seed)` (гейт
@@ -107,12 +112,25 @@ using IDataContext ctx = new PostgresDataContext("Host=localhost;Database=app;..
 PostgreSQL 9.4 или новее, поэтому предложение ANSI `FILTER (WHERE ...)` у агрегатов остаётся
 включённым. Версия ниже 9.4 его отключает: фильтрующий агрегат бросает `NotSupportedException`.
 
+Функции массивов и UUID с решением по имени — сознательное исключение из этого разрешающего
+поведения незаданной версии. В PostgreSQL нет `array_reverse` ни в одном текущем релизе, а `array_sort`
+и `uuidv7` появились только в 18, поэтому незаданная версия **отклоняет все три при подготовке**, а не
+предполагает версию. Явная 18+ включает `array_sort`/`uuidv7`; `array_reverse` отклоняется на любой
+версии. Никакие другие гейты незаданной версии не меняются, и никакой запасной вариант (`NULL`,
+неизменённый массив, UUID v4) не подставляется.
+
 ```csharp
-// Версия не задана: фильтрующие агрегаты включены (предполагается 9.4+).
+// Версия не задана: фильтрующие агрегаты включены (предполагается 9.4+), а array_reverse, array_sort и uuidv7 отклоняются.
 using var current = new PostgresDataContext("Host=localhost;Database=app;...", new DataContextBuilder());
 
 // Привязка к 9.3: предложение FILTER (WHERE ...) у агрегатов отклоняется.
 using var legacy = new PostgresDataContext("Host=localhost;Database=app;...", new DataContextBuilder(), new Version(9, 3));
+
+// Привязка к 17: array_sort() и uuidv7() тоже отклоняются при подготовке; array_reverse отклоняется всегда.
+using var pg17 = new PostgresDataContext("Host=localhost;Database=app;...", new DataContextBuilder(), new Version(17, 0));
+
+// Привязка к 18: array_sort() и uuidv7() рендерятся нативно; array_reverse по-прежнему отклоняется.
+using var pg18 = new PostgresDataContext("Host=localhost;Database=app;...", new DataContextBuilder(), new Version(18, 0));
 ```
 
 Версия неизменяема и фиксируется на **конкретный тип контекста** на всё время жизни процесса. Два
@@ -190,8 +208,10 @@ select id
 ```
 
 Функции для массивов (`cardinality`, `array_length`, `array_position`, ...) и операторы `@>`/`&&`
-описаны в разделе [Скалярные функции](../scalar-functions/06-arrays.md#массивы-postgresql). Остальные
-провайдеры отклоняют их с `NotSupportedException`.
+описаны в разделе [Скалярные функции](../scalar-functions/06-arrays.md#массивы-postgresql). Два имени
+отклоняются при подготовке даже на PostgreSQL: `array_reverse` (ни один релиз её не предоставляет) и
+`array_sort` ниже явной 18+. Остальные провайдеры отклоняют поверхность массивов с
+`NotSupportedException`.
 
 ## Range-типы
 

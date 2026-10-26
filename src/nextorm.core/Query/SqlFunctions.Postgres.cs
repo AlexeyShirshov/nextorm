@@ -81,10 +81,20 @@ namespace NextORM.Core;
         /// <summary>All 1-based positions of <paramref name="element"/> in <paramref name="array"/>.</summary>
         public int[]? array_positions<T>(T[] array, T element) => default!;
 
-        /// <summary>Reverses the elements of <paramref name="array"/> (<c>array_reverse</c>, PostgreSQL 18+).</summary>
+        /// <summary>
+        /// Reverses the elements of <paramref name="array"/>. No current PostgreSQL release provides
+        /// <c>array_reverse</c>, so the PostgreSQL provider refuses the call at preparation with
+        /// <see cref="NotSupportedException"/> and never emits the function; no fallback (a
+        /// <see langword="null"/> array or an unchanged array) is substituted.
+        /// </summary>
         public T[] array_reverse<T>(T[] array) => default!;
 
-        /// <summary>Sorts the elements of <paramref name="array"/> (<c>array_sort</c>, PostgreSQL 18+).</summary>
+        /// <summary>
+        /// Sorts the elements of <paramref name="array"/> (<c>array_sort</c>, PostgreSQL 18+). The
+        /// PostgreSQL provider renders it only for an explicit server version 18 or later; a version
+        /// below 18 and an unset version refuse the call at preparation with
+        /// <see cref="NotSupportedException"/>.
+        /// </summary>
         public T[] array_sort<T>(T[] array) => default!;
 
         /// <summary>Returns a randomly shuffled copy of <paramref name="array"/> (<c>array_shuffle</c>, PostgreSQL 16+).</summary>

@@ -67,14 +67,23 @@ The array functions and operators map to their PostgreSQL names:
 | `SqlFunctions.Postgres.array_fill(value, dims)` | `array_fill(value, dims)` |
 | `SqlFunctions.Postgres.array_dims(a)` | `array_dims(a)` |
 | `SqlFunctions.Postgres.array_positions(a, element)` | `array_positions(a, element)` |
-| `SqlFunctions.Postgres.array_reverse(a)` | `array_reverse(a)` (PostgreSQL 18+) |
-| `SqlFunctions.Postgres.array_sort(a)` | `array_sort(a)` (PostgreSQL 18+) |
+| `SqlFunctions.Postgres.array_reverse(a)` | — (no PostgreSQL release provides `array_reverse`; refused at preparation) |
+| `SqlFunctions.Postgres.array_sort(a)` | `array_sort(a)` (PostgreSQL 18+, explicit version required) |
 | `SqlFunctions.Postgres.array_shuffle(a)` | `array_shuffle(a)` (PostgreSQL 16+) |
 | `SqlFunctions.Postgres.array_sample(a, n)` | `array_sample(a, n)` (PostgreSQL 16+) |
 | `SqlFunctions.Postgres.array_to_string(a, delimiter)` | `array_to_string(a, delimiter)` |
 | `SqlFunctions.Postgres.string_to_array(s, delimiter)` | `string_to_array(s, delimiter)` |
 
-> The functions that return an array (`array_append`, `array_cat`, `array_reverse`, `string_to_array`,
+> `array_reverse` and `array_sort` are gated per name by
+> [`SupportsArrayFunction`](xref:NextORM.Core.ISqlDialect.SupportsArrayFunction(System.String)): the
+> PostgreSQL provider refuses both at preparation, before any SQL is sent, with a plain
+> `NotSupportedException`. `array_reverse` is refused on **every** PostgreSQL version — no release
+> provides it — with `The PostgreSQL function 'array_reverse' is not supported by this provider.`;
+> `array_sort` is refused below PostgreSQL 18 **and when the server version is unset**, with
+> `The PostgreSQL function 'array_sort' is not supported by this provider.` The refusal is never a
+> `NULL`, an unchanged array or a driver `42883`.
+
+> The functions that return an array (`array_append`, `array_cat`, `string_to_array`,
 > ...) can be used inside a query (a predicate, `having` or a nested expression) or projected directly:
 > the row reader materialises an `Array(T)` result as a CLR `T[]`.
 

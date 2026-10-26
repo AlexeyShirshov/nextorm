@@ -92,7 +92,13 @@ provider rejects them. Tracked in
 | C# | PostgreSQL | SQL Server | MySQL | MariaDB | ClickHouse | SQLite |
 |---|---|---|---|---|---|---|
 | `gen_random_uuid()` | `gen_random_uuid()` (13+) | `newid()` | — | `uuid_v4()` (11.7+) | `generateUUIDv4()` | — |
-| `uuidv7()` | `uuidv7()` (18+) | — | — | `uuid_v7()` (11.7+) | `generateUUIDv7()` | — |
+| `uuidv7()` | `uuidv7()` (18+, explicit version) | — | — | `uuid_v7()` (11.7+) | `generateUUIDv7()` | — |
+
+On PostgreSQL, `uuidv7()` renders only when the context is configured with an explicit 18+ server
+version; a version below 18 or an **unset** version refuses the call at preparation with a plain
+`NotSupportedException`: `The uuidv7 function is not supported by this provider.` The v4 generator is
+never substituted and `NULL` is never returned; `gen_random_uuid()` (v4) keeps its existing
+PostgreSQL 13+ behaviour.
 
 MySQL has only `UUID()` (v1) and SQLite has no UUID generator, so both reject the calls. On MariaDB both
 generators require an explicit server version 11.7 or later; an **unversioned** `MariaDbDataContext` refuses

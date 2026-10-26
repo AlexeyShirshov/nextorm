@@ -1120,11 +1120,13 @@ PostgreSQL **165/165**, core **156/156**. Предыдущая проверка 
   (`like`, `version`, `current_user` и т.п. ведут себя так же), не регресс от UUID-промоушена; тестов
   in-memory на новое семейство нет. Если in-memory должен явно отклонять серверные функции, нужен
   отдельный guard — вне рамок этого изменения.
-- **Флаг возможностей не зависит от версии сервера.** `PostgresDialect.cs:97` разрешает `uuidv7` на любой
-  PostgreSQL (функция с PG18), `MariaDbDialect.cs:23` — на любой MariaDB (11.7+), `gen_random_uuid` — на
-  PG13+. На старом сервере генерируется SQL, падающий на сервере («function uuidv7() does not exist»), а
-  не `NotSupportedException` библиотеки. Диалект статичен и версии не знает; ограничение оговорено в
-  XML-доках (`SqlFunctions.cs:222-223,230-231`) и `docs/guide/11` — принято (см. `API-NAMING-REVIEW.md`, UG3).
+- **Флаг возможностей не зависит от версии сервера.** MariaDB-часть закрыта T280: `MariaDbDialect.cs:23`
+  версионно-гейтит `uuid_v4()`/`uuid_v7()` (11.7+), контекст без версии отклоняет их с
+  `NotSupportedException`. PostgreSQL-часть закрыта 26.10.2026 (T260, #260): `PostgresUuidGenerators`
+  гейтит `uuidv7()` явной версией 18+ (незаданная версия и 17- — `NotSupportedException` при
+  подготовке, без подстановки v4), `array_reverse` отклоняется на любой версии, `array_sort` — только
+  при явной 18+ (точечный `SupportsArrayFunction`). `gen_random_uuid` остаётся без версионного гейта
+  (PostgreSQL 13+). Заявлено как реализация; сертификация — за CHECK (см. `API-NAMING-REVIEW.md`, UG3).
 - **Путь рантайма покрыт неравномерно.** Unit (SQL-gen + dialect-hooks) — все шесть провайдеров;
   интеграционно: PostgreSQL `PostgresSpecificTests.cs:20` — только v4, ClickHouse
   `ClickHouseIntegrationTests.cs:32-33` — v4+v7, SQL Server `SqlServerSpecificTests.cs:50` — v4 (v7

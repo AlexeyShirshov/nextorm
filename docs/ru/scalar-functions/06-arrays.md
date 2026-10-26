@@ -68,14 +68,23 @@ select id
 | `SqlFunctions.Postgres.array_fill(value, dims)` | `array_fill(value, dims)` |
 | `SqlFunctions.Postgres.array_dims(a)` | `array_dims(a)` |
 | `SqlFunctions.Postgres.array_positions(a, element)` | `array_positions(a, element)` |
-| `SqlFunctions.Postgres.array_reverse(a)` | `array_reverse(a)` (PostgreSQL 18+) |
-| `SqlFunctions.Postgres.array_sort(a)` | `array_sort(a)` (PostgreSQL 18+) |
+| `SqlFunctions.Postgres.array_reverse(a)` | — (ни один релиз PostgreSQL не предоставляет `array_reverse`; отказ при подготовке) |
+| `SqlFunctions.Postgres.array_sort(a)` | `array_sort(a)` (PostgreSQL 18+, требуется явная версия) |
 | `SqlFunctions.Postgres.array_shuffle(a)` | `array_shuffle(a)` (PostgreSQL 16+) |
 | `SqlFunctions.Postgres.array_sample(a, n)` | `array_sample(a, n)` (PostgreSQL 16+) |
 | `SqlFunctions.Postgres.array_to_string(a, delimiter)` | `array_to_string(a, delimiter)` |
 | `SqlFunctions.Postgres.string_to_array(s, delimiter)` | `string_to_array(s, delimiter)` |
 
-> Функции, возвращающие массив (`array_append`, `array_cat`, `array_reverse`, `string_to_array`, ...),
+> `array_reverse` и `array_sort` гейтятся по имени через
+> [`SupportsArrayFunction`](xref:NextORM.Core.ISqlDialect.SupportsArrayFunction(System.String)): провайдер
+> PostgreSQL отклоняет оба при подготовке, до отправки любого SQL, обычным `NotSupportedException`.
+> `array_reverse` отклоняется на **любой** версии PostgreSQL — ни один релиз её не предоставляет — с
+> `The PostgreSQL function 'array_reverse' is not supported by this provider.`; `array_sort`
+> отклоняется ниже PostgreSQL 18 **и когда версия сервера не задана**, с
+> `The PostgreSQL function 'array_sort' is not supported by this provider.` Отказ никогда не
+> превращается в `NULL`, неизменённый массив или `42883` от драйвера.
+
+> Функции, возвращающие массив (`array_append`, `array_cat`, `string_to_array`, ...),
 > можно использовать внутри запроса (предикат, `having` или вложенное выражение) или проецировать
 > напрямую: row reader материализует результат `Array(T)` как CLR `T[]`.
 

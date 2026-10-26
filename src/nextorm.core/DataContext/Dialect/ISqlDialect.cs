@@ -217,6 +217,18 @@ public interface ISqlDialect
     bool SupportsArrayFunctions { get; }
 
     /// <summary>
+    /// True when the provider renders the named array function of <see cref="PostgresFunctions"/> on
+    /// the array surface enabled by <see cref="SupportsArrays"/>. The default preserves the family
+    /// gate: every function an array-capable provider rendered before is still rendered. A provider
+    /// that must answer per name — because the server function is missing or version-gated
+    /// (PostgreSQL <c>array_reverse</c>/<c>array_sort</c>) — overrides it, and the translator refuses
+    /// the call at preparation instead of emitting SQL the server does not have. Declared as a
+    /// default interface method so existing external implementations keep compiling.
+    /// </summary>
+    /// <param name="name">The SQL name of the array function, without schema qualification.</param>
+    bool SupportsArrayFunction(string name) => true;
+
+    /// <summary>
     /// True when the provider translates the higher-order (lambda) array functions of
     /// <see cref="ClickHouseFunctions"/> (<c>arrayMap</c>, <c>arrayFilter</c>, <c>arrayExists</c>,
     /// <c>arrayAll</c>, <c>arrayCount</c>, <c>arrayFirst*</c>, <c>arrayLast*</c>). The safe default is

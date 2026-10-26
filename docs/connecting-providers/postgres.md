@@ -21,7 +21,9 @@
   consequence is that an alias is always emitted);
 - `INTERSECT ALL` / `EXCEPT ALL` are supported ([`SupportsIntersectExceptAll`](xref:NextORM.Core.ISqlDialect.SupportsIntersectExceptAll) is `true`);
 - arrays are supported ([`SupportsArrays`](xref:NextORM.Core.ISqlDialect.SupportsArrays) is `true`): array parameters with the `any`/`all` quantifiers
-  and the array functions;
+  and the array functions, with two per-name exceptions ([`SupportsArrayFunction`](xref:NextORM.Core.ISqlDialect.SupportsArrayFunction(System.String))):
+  `array_reverse` is refused on every PostgreSQL version, and `array_sort` renders only from an
+  explicit 18+;
 - JSON/JSONB is supported ([`SupportsPostgresJsonSql`](xref:NextORM.Core.ISqlDialect.SupportsPostgresJsonSql) is `true`, PostgreSQL only; native `jsonb` storage is
   [`SupportsJson`](xref:NextORM.Core.ISqlDialect.SupportsJson)): the `json_agg`/`jsonb_agg` aggregates, the
   construction/access functions and the `->`/`->>`/`@>`/`?` operators, with `JsonDocument`/`JsonElement`/
@@ -52,8 +54,10 @@
   `SqlFunctions.Sql.current_user`/`session_user`/`current_schema` render the key words and
   `current_database`/`version` render `current_database()`/`version()`;
 - the UUID generators are enabled ([`UuidGenerators`](xref:NextORM.Core.ISqlDialect.UuidGenerators) is `true`):
-  `SqlFunctions.Sql.gen_random_uuid()` renders `gen_random_uuid()` (PostgreSQL 13+) and `uuidv7()`
-  renders `uuidv7()` (PostgreSQL 18+);
+  `SqlFunctions.Sql.gen_random_uuid()` renders `gen_random_uuid()` (PostgreSQL 13+), and
+  `uuidv7()` renders `uuidv7()` only when the configured server version is an **explicit** 18 or later;
+  below 18 and when the version is unset the call is refused at preparation with
+  `NotSupportedException` and no v4 UUID is substituted;
 - the boolean, bitwise, statistical and ordered-set aggregates are enabled
   ([`SupportsBooleanAggregates`](xref:NextORM.Core.ISqlDialect.SupportsBooleanAggregates), [`SupportsBitAggregates`](xref:NextORM.Core.ISqlDialect.SupportsBitAggregates), [`SupportsStatisticalAggregates`](xref:NextORM.Core.ISqlDialect.SupportsStatisticalAggregates) and
   [`SupportsOrderedAggregates`](xref:NextORM.Core.ISqlDialect.SupportsOrderedAggregates) are `true`): `bool_and`/`bool_or`/`every`, `bit_and`/`bit_or`/`bit_xor`,
@@ -61,6 +65,9 @@
 - aggregate names are remapped: `stdev`→`stddev`, `stdevp`→`stddev_pop`, `var`→`variance`,
   `varp`→`var_pop`;
 - `Math.Log` maps to `ln(...)` (PostgreSQL's `log()` is base 10);
+- `SqlFunctions.Postgres.log(base, x)` renders `log((base)::numeric, (x)::numeric)`: the only
+  two-argument overload is `log(numeric, numeric)`, so both operands are cast, and a null operand
+  yields SQL `NULL`;
 - `Math.Round(x, digits)` casts a `double`/`float` first argument to `numeric`
   (`round((x)::numeric, digits)`): PostgreSQL has no `round(double precision, integer)`;
 - `SqlFunctions.Postgres.setseed(seed)` renders `setseed(seed)` (gated by
@@ -106,12 +113,24 @@ The dialect can be pinned to the server version, which gates version-dependent s
 so the ANSI aggregate `FILTER (WHERE ...)` clause stays enabled. A version below 9.4 disables it: a
 filtered aggregate rejects with `NotSupportedException`.
 
+The per-name array and UUID functions are a deliberate exception to that permissive unset default.
+PostgreSQL provides no `array_reverse` in any current release and added `array_sort` and `uuidv7` only
+in 18, so an unset version **refuses all three at preparation** instead of assuming a version.
+An explicit 18+ enables `array_sort`/`uuidv7`; `array_reverse` stays refused on every version. No other
+unset-version gate changes, and no fallback (`NULL`, an unchanged array, a v4 UUID) is substituted.
+
 ```csharp
-// Unset: filtered aggregates are enabled (assumed 9.4+).
+// Unset: filtered aggregates are enabled (assumed 9.4+), while array_reverse, array_sort and uuidv7 are refused.
 using var current = new PostgresDataContext("Host=localhost;Database=app;...", new DataContextBuilder());
 
 // Pin 9.3: the aggregate `FILTER (WHERE ...)` clause is rejected.
 using var legacy = new PostgresDataContext("Host=localhost;Database=app;...", new DataContextBuilder(), new Version(9, 3));
+
+// Pin 17: array_sort() and uuidv7() are refused at preparation too; array_reverse is always refused.
+using var pg17 = new PostgresDataContext("Host=localhost;Database=app;...", new DataContextBuilder(), new Version(17, 0));
+
+// Pin 18: array_sort() and uuidv7() render natively; array_reverse is still refused.
+using var pg18 = new PostgresDataContext("Host=localhost;Database=app;...", new DataContextBuilder(), new Version(18, 0));
 ```
 
 The version is immutable and fixed per **concrete context type** for the process lifetime. Two contexts
@@ -188,8 +207,9 @@ select id
 ```
 
 The array functions (`cardinality`, `array_length`, `array_position`, ...) and the `@>`/`&&` operators
-are documented in [Scalar functions](../scalar-functions/06-arrays.md#arrays-postgresql). Other
-providers reject them with `NotSupportedException`.
+are documented in [Scalar functions](../scalar-functions/06-arrays.md#arrays-postgresql). Two names are
+refused at preparation even on PostgreSQL: `array_reverse` (no release provides it) and `array_sort`
+below an explicit 18+. Other providers reject the array surface with `NotSupportedException`.
 
 ## Range types
 
