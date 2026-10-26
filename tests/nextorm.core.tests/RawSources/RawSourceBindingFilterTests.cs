@@ -13,6 +13,7 @@ namespace NextORM.Core.Tests;
 /// tests) and never log emission (that is pinned in <c>RawSourceBindingDiagnosticsTests</c> on SQLite,
 /// because the in-memory context has no logger factory and the warning is emitted by the SQL planner).
 /// </summary>
+[Collection("Query cache controls")]
 public class RawSourceBindingFilterTests
 {
     private const string TenantKey = "rsb_tenant";
