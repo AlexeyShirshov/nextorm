@@ -7,6 +7,12 @@
 > by the roadmap backlog under [`docs/specs/roadmap/`](../docs/specs/roadmap) and
 > [`docs/specs/`](../docs/specs). Run mechanics live in
 > [`.opencode/skills/running-examples/SKILL.md`](../.opencode/skills/running-examples/SKILL.md).
+>
+> **The numbers below are from 2026-10-20 and predate the typed-join migration** (`#231`:
+> `Join(ctx.From<T>(), …)` → `Join<T>(…)`, 24 sites in aviasales and 23 in adventureworks). The
+> examples reference the **published** packages, so they are not re-run against working-tree sources:
+> re-verification happens once the next package version is published, when `NextOrmVersion` is bumped
+> and all three apps are executed again and the tables below are replaced with what was observed.
 
 ## Environment
 
