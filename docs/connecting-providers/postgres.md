@@ -61,6 +61,9 @@
 - aggregate names are remapped: `stdev`→`stddev`, `stdevp`→`stddev_pop`, `var`→`variance`,
   `varp`→`var_pop`;
 - `Math.Log` maps to `ln(...)` (PostgreSQL's `log()` is base 10);
+- `SqlFunctions.Postgres.log(base, x)` renders `log((base)::numeric, (x)::numeric)`: the only
+  two-argument overload is `log(numeric, numeric)`, so both operands are cast, and a null operand
+  yields SQL `NULL`;
 - `Math.Round(x, digits)` casts a `double`/`float` first argument to `numeric`
   (`round((x)::numeric, digits)`): PostgreSQL has no `round(double precision, integer)`;
 - `SqlFunctions.Postgres.setseed(seed)` renders `setseed(seed)` (gated by

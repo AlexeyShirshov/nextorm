@@ -62,6 +62,9 @@
 - имена агрегатов переотображаются: `stdev`→`stddev`, `stdevp`→`stddev_pop`, `var`→`variance`,
   `varp`→`var_pop`;
 - `Math.Log` отображается на `ln(...)` (в PostgreSQL `log()` — это логарифм по основанию 10);
+- `SqlFunctions.Postgres.log(base, x)` рендерится как `log((base)::numeric, (x)::numeric)`: единственная
+  двухаргументная перегрузка — `log(numeric, numeric)`, поэтому оба операнда приводятся к `numeric`,
+  а `null` в операнде даёт SQL `NULL`;
 - `Math.Round(x, digits)` приводит первый аргумент `double`/`float` к `numeric`
   (`round((x)::numeric, digits)`): в PostgreSQL нет `round(double precision, integer)`;
 - `SqlFunctions.Postgres.setseed(seed)` рендерит `setseed(seed)` (гейт

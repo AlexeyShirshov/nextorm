@@ -83,7 +83,10 @@ in-memory-провайдер отклоняют оба имени с `NotSupport
 * `Math.Log(value, base)` — у двухаргументной формы порядок аргументов зависит от провайдера, поэтому она
   оставлена неподдерживаемой (`SqlGenerationTests.MathLogWithBase_ShouldThrowClearException`,
   `tests/nextorm.sqlite.tests/SqlGeneration/SqlGenerationTests.cs:985`). Двухаргументная форма PostgreSQL доступна как
-  `SqlFunctions.Postgres.log(base, x)` в расширенной библиотеке скалярных функций.
+  `SqlFunctions.Postgres.log(base, x)` в расширенной библиотеке скалярных функций. Единственная
+  двухаргументная перегрузка PostgreSQL — `log(numeric, numeric)`, поэтому вызов рендерится как
+  `log((base)::numeric, (x)::numeric)` с приведением обоих операндов; одноаргументный `Math.Log`
+  по-прежнему рендерится как `ln(...)`.
 * Перегрузки `Math.Round`, принимающие `MidpointRounding` (больше двух аргументов), — не переносимы.
 * `string.Substring(Range)` — нет эквивалента в SQL.
 * `string.Trim(c)`/`TrimStart(c)`/`TrimEnd(c)` — SQL обрезает только пробельные символы, не

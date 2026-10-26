@@ -234,6 +234,82 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
     }
 
     [Fact]
+    public void ExtendedLogFunction_TwoArgumentParameters_ShouldCompute()
+    {
+        LogViaParameters(2.0, 8.0).Should().BeApproximately(3.0, 1e-12);
+        LogViaParameters(10.0, 100.0).Should().BeApproximately(2.0, 1e-12);
+        LogViaParameters(4.0, 8.0).Should().BeApproximately(1.5, 1e-12);
+    }
+
+    [Fact]
+    public void ExtendedLogFunction_NullOperands_ShouldReturnNull()
+    {
+        LogViaParameters(null, 8.0).Should().BeNull();
+        LogViaParameters(2.0, null).Should().BeNull();
+        LogViaParameters(null, null).Should().BeNull();
+    }
+
+    [Fact]
+    public void ExtendedLogFunction_LiteralAndConvertedOperands_ShouldCompute()
+    {
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Ints = SqlFunctions.Postgres.log(2, 8),
+                Longs = SqlFunctions.Postgres.log(2L, 8L),
+                Converted = SqlFunctions.Postgres.log((double?)2m, (double?)8m),
+                ColumnAndLiteral = SqlFunctions.Postgres.log(2.0, x.Double)
+            })
+            .First();
+
+        r.Ints.Should().BeApproximately(3.0, 1e-12);
+        r.Longs.Should().BeApproximately(3.0, 1e-12);
+        r.Converted.Should().BeApproximately(3.0, 1e-12);
+        // complex_entity row 1 stores 5 in the double precision column: log base 2 of 5.
+        r.ColumnAndLiteral.Should().BeApproximately(Math.Log(5.0, 2.0), 1e-12);
+    }
+
+    [Fact]
+    public void ExtendedLogFunction_IntegralParameters_ShouldCompute()
+    {
+        LogViaIntParameters(2, 8).Should().BeApproximately(3.0, 1e-12);
+        LogViaLongParameters(10L, 100L).Should().BeApproximately(2.0, 1e-12);
+    }
+
+    private double? LogViaIntParameters(int baseValue, int x) =>
+        _sut.ComplexEntity.Where(e => e.Id == 1)
+            .Select(e => new
+            {
+                Log = SqlFunctions.Postgres.log(
+                    SqlFunctions.Parameter<int>(0),
+                    SqlFunctions.Parameter<int>(1))
+            })
+            .First(baseValue, x)
+            .Log;
+
+    private double? LogViaLongParameters(long baseValue, long x) =>
+        _sut.ComplexEntity.Where(e => e.Id == 1)
+            .Select(e => new
+            {
+                Log = SqlFunctions.Postgres.log(
+                    SqlFunctions.Parameter<long>(0),
+                    SqlFunctions.Parameter<long>(1))
+            })
+            .First(baseValue, x)
+            .Log;
+
+    private double? LogViaParameters(double? baseValue, double? x) =>
+        _sut.ComplexEntity.Where(e => e.Id == 1)
+            .Select(e => new
+            {
+                Log = SqlFunctions.Postgres.log(
+                    SqlFunctions.Parameter<double?>(0),
+                    SqlFunctions.Parameter<double?>(1))
+            })
+            .First(baseValue, x)
+            .Log;
+
+    [Fact]
     public void ExtendedStringFunctions_ShouldTransform()
     {
         var r = _sut.ComplexEntity.Where(x => x.Id == 1)

@@ -3223,8 +3223,57 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
+        // PostgreSQL only has log(numeric, numeric); both operands are cast to select it.
         SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.log(2.0, x.Int) }))
-            .Should().Contain("log(2, cast(nullableint as double precision))");
+            .Should().Contain("log((2)::numeric, (cast(nullableint as double precision))::numeric)");
+    }
+
+    [Fact]
+    public void ExtendedLogFunction_ShouldCastLiteralOperandShapesToNumeric()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            Ints = SqlFunctions.Postgres.log(2, 8),
+            Longs = SqlFunctions.Postgres.log(2L, 8L),
+            Doubles = SqlFunctions.Postgres.log(2.0, 8.0),
+            Converted = SqlFunctions.Postgres.log((double?)2m, (double?)8m)
+        }));
+
+        // Integral operands are widened to double precision by the facade, then cast to numeric.
+        sql.Should().Contain(
+            "log((cast(2 as double precision))::numeric, (cast(8 as double precision))::numeric) as \"Ints\"");
+        sql.Should().Contain(
+            "log((cast(2 as double precision))::numeric, (cast(8 as double precision))::numeric) as \"Longs\"");
+        // double and explicitly converted decimal operands are already double precision.
+        sql.Should().Contain("log((2)::numeric, (8)::numeric) as \"Doubles\"");
+        sql.Should().Contain("log((2)::numeric, (8)::numeric) as \"Converted\"");
+    }
+
+    [Fact]
+    public void ExtendedLogFunction_ShouldCastParameterOperandsToNumeric()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            Doubles = SqlFunctions.Postgres.log(
+                SqlFunctions.Parameter<double?>(0), SqlFunctions.Parameter<double?>(1)),
+            Ints = SqlFunctions.Postgres.log(
+                SqlFunctions.Parameter<int>(0), SqlFunctions.Parameter<int>(1)),
+            Longs = SqlFunctions.Postgres.log(
+                SqlFunctions.Parameter<long>(0), SqlFunctions.Parameter<long>(1))
+        }));
+
+        sql.Should().Contain("log((@norm_p0)::numeric, (@norm_p1)::numeric) as \"Doubles\"");
+        // Integral parameters are widened to double precision before the numeric cast.
+        sql.Should().Contain(
+            "log((cast(@norm_p0 as double precision))::numeric, (cast(@norm_p1 as double precision))::numeric) as \"Ints\"");
+        sql.Should().Contain(
+            "log((cast(@norm_p0 as double precision))::numeric, (cast(@norm_p1 as double precision))::numeric) as \"Longs\"");
     }
 
     [Fact]

@@ -74,7 +74,7 @@ var rows = dataContext.From<IComplexEntity>()
 | `SqlFunctions.Postgres.sinh(x)` / `cosh(x)` / `tanh(x)` | `sinh(x)` / `cosh(x)` / `tanh(x)` |
 | `SqlFunctions.Postgres.asinh(x)` / `acosh(x)` / `atanh(x)` | `asinh(x)` / `acosh(x)` / `atanh(x)` |
 | `SqlFunctions.Postgres.random()` | `random()` |
-| `SqlFunctions.Postgres.log(base, x)` | `log(base, x)` |
+| `SqlFunctions.Postgres.log(base, x)` | `log((base)::numeric, (x)::numeric)` — оба операнда приводятся к `numeric`, потому что двухаргументная форма в PostgreSQL есть только у `log(numeric, numeric)`; одноаргументный `log` остаётся `ln` |
 | `SqlFunctions.Postgres.gcd(a, b)` / `lcm(a, b)` | `gcd(a, b)` / `lcm(a, b)` |
 | `SqlFunctions.Postgres.factorial(n)` | `factorial(n)` |
 | `SqlFunctions.Postgres.width_bucket(x, low, high, count)` | `width_bucket(x, low, high, count)` |

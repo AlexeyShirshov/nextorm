@@ -540,12 +540,18 @@ public class PostgresDialect : SqlDialectBase
         _ => name
     };
 
-    // PostgreSQL's log() is base 10; the natural logarithm (Math.Log) is ln().
-    /// <inheritdoc/>
+    /// <summary>
+    /// PostgreSQL's <c>log()</c> is base 10; the natural logarithm (<c>Math.Log</c>) is
+    /// <c>ln()</c>. The two-argument form only exists as <c>log(numeric, numeric)</c>, so both operands
+    /// are cast to <c>numeric</c>.
+    /// </summary>
     public override string MakeMathFunction(string name, IReadOnlyList<string> args) =>
-        name == "log" && args.Count == 1
-            ? $"ln({args[0]})"
-            : base.MakeMathFunction(name, args);
+        name switch
+        {
+            "log" when args.Count == 1 => $"ln({args[0]})",
+            "log" when args.Count == 2 => $"log(({args[0]})::numeric, ({args[1]})::numeric)",
+            _ => base.MakeMathFunction(name, args)
+        };
 
     /// <summary>
     /// PostgreSQL's two-argument <c>round</c> only accepts <c>numeric</c>, so a double precision/real
