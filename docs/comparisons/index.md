@@ -86,10 +86,12 @@ boundaries:
 Relationship modelling, change tracking/`SaveChanges`, migrations and database-first scaffolding are
 **deliberate boundaries**, not growth points — they are listed in
 [Limitations and out-of-scope features](../advanced/limitations.md). Two composition boundaries are of the
-same kind: a correlated `APPLY` takes a single-entity source rather than an existing join projection, and
-the in-memory provider stops correlated subqueries at depth one, while every SQL provider nests them
-arbitrarily. These are API-shape choices, not missing SQL capabilities — the supported forms are covered by
-the [capabilities](capabilities.md) matrix and the guide.
+same kind: a correlated `APPLY` extends an existing join chain but stops at eight total sources, and the
+in-memory provider stops correlated subqueries at depth one, while every SQL provider nests them
+arbitrarily. `APPLY`/`LATERAL` itself needs a lateral source: MariaDB 11.4, SQLite and ClickHouse refuse it
+before execution, and the in-memory provider does not support it. These are API-shape and provider
+boundaries, not missing SQL capabilities — the supported forms are covered by the
+[capabilities](capabilities.md) matrix and the guide.
 
 ## Summary
 

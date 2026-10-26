@@ -339,7 +339,7 @@ select t2.id as 'Buyer', t3.id as 'Approver'
 ```
 
 `Join<TJoin>((left, right) => ..., Alias.X[, options])`, and the same shape for `LeftJoin`, `RightJoin`
-and `FullJoin`, is the complete source-less alias surface. It is also the **only** alias surface that
+and `FullJoin`, is the complete source-less alias surface. It is also the **only join** alias surface that
 takes options: `(condition, marker, Action<JoinOptions> options)` accepts an omitted argument, an
 explicit `null` or a callback — the first two mean "no options", and a supplied callback runs exactly
 once per call with the same hint, lock and relationship semantics as the positional join overloads.
@@ -517,11 +517,17 @@ set of sources that a regular join accepts — a typed entity, a `QueryCommand<T
 table or a table-valued function — but there is no `ON` condition:
 
 * [`CrossApply`](xref:NextORM.Core.EntityBuilder`1.CrossApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions})) keeps only the left-hand rows for which the applied source returns at least one row
-  (SQL Server `CROSS APPLY`; PostgreSQL/MySQL/MariaDB `CROSS JOIN LATERAL`, or a plain `CROSS JOIN`
+  (SQL Server `CROSS APPLY`; PostgreSQL/MySQL 8.0.14+ `CROSS JOIN LATERAL`, or a plain `CROSS JOIN`
   when the applied source is a plain table — `LATERAL` is only valid before a subquery or function);
 * [`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions})) also keeps left-hand rows whose applied source is empty, filling the right side with
-  `NULL` (SQL Server `OUTER APPLY`; PostgreSQL/MySQL/MariaDB `LEFT JOIN LATERAL ... ON true`, or a
+  `NULL` (SQL Server `OUTER APPLY`; PostgreSQL/MySQL 8.0.14+ `LEFT JOIN LATERAL ... ON true`, or a
   plain `LEFT JOIN ... ON true` for a plain table).
+
+**MariaDB 11.4 has no lateral derived table**, so `MariaDbDialect` reports `SupportsApply == false` and
+**both** [`CrossApply`](xref:NextORM.Core.EntityBuilder`1.CrossApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions})) and [`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions})) are refused with `NotSupportedException`
+while the command is prepared — before any SQL reaches the server (see [Limitations](../advanced/limitations.md)).
+SQLite and ClickHouse report the same capability as `false`, and the in-memory provider does not support
+`APPLY` at all.
 
 ```csharp
 var rows = await dataContext.From<ISimpleEntity>()
@@ -535,7 +541,7 @@ var rows = await dataContext.From<ISimpleEntity>()
 select t1.id, t2.somestring
  from simple_entity as [t1]
  cross apply complex_entity as [t2]
--- PostgreSQL / MySQL / MariaDB
+-- PostgreSQL / MySQL 8.0.14+
 select t1.id, t2.somestring
  from simple_entity as t1
  cross join complex_entity as t2
@@ -560,7 +566,7 @@ var rows = dataContext.From<ISimpleEntity>()
  from simple_entity as [t1]
  outer apply (select id, somestring
  from complex_entity where ...) as [t2]
--- PostgreSQL / MySQL / MariaDB
+-- PostgreSQL / MySQL 8.0.14+
 ...
  from simple_entity as t1
  left join lateral (select ...) as t2 on true
@@ -588,7 +594,7 @@ var rows = await dataContext.From<ISimpleEntity>()
  from simple_entity as [t1]
  cross apply (select ...
  from complex_entity as [t2] where t2.id = t1.id) as [t3]
--- PostgreSQL / MySQL / MariaDB
+-- PostgreSQL / MySQL 8.0.14+
 ...
  from simple_entity as t1
  cross join lateral (select ...) as t3
@@ -598,9 +604,97 @@ The lambda parameter behaves like the outer parameter of a correlated scalar sub
 left-hand row (here `s.Id`) becomes an outer reference resolved to the left-hand table alias.
 [`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions})) also keeps left-hand rows whose applied source is empty, projecting `NULL`s.
 
-Correlation needs a lateral source: dialects with `SupportsApply == false` (SQLite, ClickHouse) reject a
-correlated apply with `NotSupportedException`, as does the in-memory provider. A correlated apply cannot
-reference a join projection; apply it to a single-entity source instead.
+Correlation needs a lateral source: dialects with `SupportsApply == false` — SQLite, ClickHouse and
+MariaDB 11.4 — reject every `CrossApply`/`OuterApply` with `NotSupportedException` while the command is
+prepared, before SQL is rendered for execution; the in-memory provider rejects them too. A correlated
+apply can also follow a join — see [Correlated APPLY after a join](#correlated-apply-after-a-join).
+
+### Correlated APPLY after a join
+
+`CrossApply`/`OuterApply` accept a correlated source on a receiver that already carries joined sources. The
+form is available on the flat `JoinedEntityBuilder<T1..Tn>` receivers (a result of **3–8 total sources**,
+i.e. 2–7 preceding sources plus the applied one) and on the generated alias receivers, with both lambda
+returns — `EntityBuilder<T>` (the whole entity) and `QueryCommand<T>` (a projected derived query). The
+hand-written overloads take an optional `Action<JoinOptions>` after the lambda; on an alias receiver the
+marker form adds `Alias.<Name>` as its last argument and takes no options, while the positional transition
+adds an unnamed `ItemN` and takes the optional options callback instead.
+
+The applied source is the **next slot** of the same flat projection — never nested inside the previous
+item — so with two joined sources the result reads `p.Item1`, `p.Item2`, `p.Item3`:
+
+```csharp
+var rows = await dataContext.From<Order>(b => b.Table("orders"))
+    .Join(dataContext.From<Person>(b => b.Table("person")), (o, buyer) => o.BuyerId == buyer.Id)
+    .CrossApply((Projection<Order, Person> p) => dataContext.From<OrderLine>(b => b.Table("order_lines"))
+        .Where(l => l.OrderId == p.Item1.Id && l.CreatedBy == p.Item2.Id)
+        .Select(l => new { l.Id, l.Total }))
+    .Select(p => new { OrderId = p.Item1.Id, Buyer = p.Item2.Name, Total = p.Item3.Total })
+    .ToListAsync();
+```
+
+```sql
+-- SQL Server
+select t1.id as 'OrderId', t2.name as 'Buyer', t4.total as 'Total'
+ from orders as [t1]
+ join person as [t2] on t1.buyerid = t2.id
+ cross apply (select t3.id, t3.total
+ from order_lines as [t3]
+ where (t3.orderid = t1.id and t3.createdby = t2.id)) as [t4]
+-- PostgreSQL / MySQL 8.0.14+
+select t1.id as "OrderId", t2.name as "Buyer", t4.total as "Total"
+ from orders as t1
+ join person as t2 on t1.buyerid = t2.id
+ cross join lateral (select t3.id, t3.total
+ from order_lines as t3
+ where (t3.orderid = t1.id and t3.createdby = t2.id)) as t4
+```
+
+`CrossApply` keeps a parent row only when the applied source returns at least one row, so an order with
+no matching line disappears. [`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions})) keeps it: the parent row survives, the applied columns
+come back as SQL `NULL`, and a whole-entity applied projection materialises as `null`:
+
+```csharp
+var rows = await dataContext.From<Order>(b => b.Table("orders"))
+    .Join(dataContext.From<Person>(b => b.Table("person")), (o, buyer) => o.BuyerId == buyer.Id)
+    .OuterApply((Projection<Order, Person> p) => dataContext.From<OrderLine>(b => b.Table("order_lines"))
+        .Where(l => l.OrderId == p.Item1.Id))
+    .Select(p => new { OrderId = p.Item1.Id, Line = p.Item3 })
+    .ToListAsync(); // an order without lines is kept, with Line == null
+```
+
+```sql
+-- SQL Server
+select t1.id as 'OrderId', t4.id, t4.order_id, t4.created_by, t4.total
+ from orders as [t1]
+ join person as [t2] on t1.buyerid = t2.id
+ outer apply (select t3.id, t3.order_id, t3.created_by, t3.total
+ from order_lines as [t3]
+ where t3.orderid = t1.id) as [t4]
+-- PostgreSQL / MySQL 8.0.14+
+...
+ left join lateral (select ...) as t4 on true
+```
+
+Correlation binds to the **exact preceding source occurrence**, not to the CLR type: after a self-join, or
+when the applied body uses the same CLR type as an earlier source, `p.Item2` still addresses the second
+occurrence and `p.Item1` the base one. A named slot addresses the same occurrence (`p.Buyer` is
+`p.Item2`), and the generated alias APPLY adds one flat slot that keeps both identities:
+
+```csharp
+var people = dataContext.From<Person>(b => b.Table("person"));
+
+var rows = await dataContext.From<Order>(b => b.Table("orders"))
+    .WithAlias(Alias.Order)
+    .Join<Person>(people, (o, buyer) => o.Order.BuyerId == buyer.Id, Alias.Buyer)
+    .OuterApply(p => people.Where(x => x.Id == p.Order.ApproverId), Alias.Approver)
+    .Select(p => new { OrderId = p.Order.Id, Approver = p.Approver.Name })
+    .ToListAsync();
+```
+
+The flat chain is capped at the usual **eight total sources** (`Projection<T1..T8>`). A ninth correlated
+source is refused with `NotSupportedException` while the query is prepared — before the applied source is
+evaluated — instead of nesting the projection. Project the accumulated join into a named type with `As`
+(or start from `From(query)`) when the chain no longer fits.
 
 ### APPLY over a table-valued function
 
@@ -619,7 +713,7 @@ var rows = dataContext.From<ISimpleEntity>()
 select t1.id, t2.value
  from simple_entity as [t1]
  cross apply all_rows() as [t2]
--- PostgreSQL / MySQL / MariaDB
+-- PostgreSQL / MySQL 8.0.14+
 select t1.id, t2.value
  from simple_entity as t1
  cross join lateral all_rows() as t2
@@ -640,7 +734,7 @@ select t1.id, t3.value
  from simple_entity as [t1]
  cross apply (select t2.id, t2.value
  from rows_by_id(cast(t1.id as bigint)) as [t2]) as [t3]
--- PostgreSQL / MySQL / MariaDB
+-- PostgreSQL / MySQL 8.0.14+
 select t1.id, t3.value
  from simple_entity as t1
  cross join lateral (select t2.id, t2.value
@@ -648,8 +742,9 @@ select t1.id, t3.value
 ```
 
 Like every correlated apply, the correlated function form needs a lateral source and is rejected with
-`NotSupportedException` on SQLite/ClickHouse and in the in-memory provider; the uncorrelated form follows
-the provider's source rules (`CROSS APPLY` on SQL Server, `CROSS JOIN LATERAL` on PostgreSQL/MySQL/MariaDB).
+`NotSupportedException` on SQLite, ClickHouse, MariaDB 11.4 and in the in-memory provider; the uncorrelated
+form follows the provider's source rules (`CROSS APPLY` on SQL Server, `CROSS JOIN LATERAL` on
+PostgreSQL/MySQL 8.0.14+).
 
 ## Joining a subquery
 
@@ -947,7 +1042,8 @@ every other provider and the in-memory context reject them with `NotSupportedExc
 | SQLite | `as 't1'` | always emitted (optional in SQLite itself) | left/right/full supported | not supported (`NotSupportedException`) |
 | SQL Server | `as [t1]` | required | left/right/full supported | `CROSS APPLY` / `OUTER APPLY` |
 | PostgreSQL | `as "t1"` | required | left/right/full supported | `CROSS JOIN LATERAL` / `LEFT JOIN LATERAL ... ON true` (plain tables: `CROSS JOIN` / `LEFT JOIN ... ON true`) |
-| MySQL / MariaDB | `as \`t1\`` | required | left/right supported (no full) | `CROSS JOIN LATERAL` / `LEFT JOIN LATERAL ... ON true` (plain tables: `CROSS JOIN` / `LEFT JOIN ... ON true`) |
+| MySQL 8.0.14+ | `as \`t1\`` | required | left/right supported (no full) | `CROSS JOIN LATERAL` / `LEFT JOIN LATERAL ... ON true` (plain tables: `CROSS JOIN` / `LEFT JOIN ... ON true`) |
+| MariaDB 11.4 | `as \`t1\`` | required | left/right supported (no full) | not supported (`NotSupportedException`, both kinds refused before SQL execution) |
 | ClickHouse | `as \`t1\`` | required | left/right/full supported | not supported (`NotSupportedException`) |
 | In-memory | not applicable (delegate execution) | not applicable | inner/left/right/full/cross supported; APPLY and table-valued function sources are not | not supported (correlated apply included) |
 

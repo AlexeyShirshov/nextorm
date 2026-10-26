@@ -195,4 +195,14 @@ internal interface IOuterSlotSourceRegistry
     /// <param name="projectionType">The projection type the rendered command is built over.</param>
     /// <param name="slot">The one-based projection slot (Item1 = 1).</param>
     int? ResolveProjectionSlotSourceIndex(Type projectionType, int slot);
+
+    /// <summary>
+    /// Returns the query command registered as the source at <paramref name="sourceIndex"/>, or
+    /// <see langword="null"/> when that source is a plain physical table (no derived projection to
+    /// expose) or the index is not a registered source. An APPLY/derived slot is rendered through the
+    /// identity its own projection aliases, so the consumer never re-derives a name from the
+    /// underlying physical column (#324).
+    /// </summary>
+    /// <param name="sourceIndex">A registration index returned by this registry or the columns provider.</param>
+    QueryCommand? FindSourceCommand(int sourceIndex);
 }

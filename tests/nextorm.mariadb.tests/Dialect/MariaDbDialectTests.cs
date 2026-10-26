@@ -85,7 +85,8 @@ public class MariaDbDialectTests
         Dialect.SupportsRightFullJoin.Should().BeTrue();
         Dialect.SupportsFullJoin.Should().BeFalse();
         Dialect.SupportsIntersectExceptAll.Should().BeTrue();
-        Dialect.SupportsApply.Should().BeTrue();
+        Dialect.SupportsApply.Should().BeFalse(
+            "MariaDB 11.4 rejects the generated lateral spelling, so APPLY is a capability refusal");
         Dialect.SupportsQueryHints.Should().BeTrue();
         Dialect.SupportsAnyValueAggregate.Should().BeFalse();
         Dialect.MakeAggregate("any_agg").Should().Be("ANY_VALUE");

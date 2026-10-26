@@ -594,7 +594,7 @@ public class SqlGenerationTests
     }
 
     [Fact]
-    public void XmlNodes_ShouldThrowBecauseOnlySqlServerHasThem()
+    public void XmlNodes_ShouldThrowBecauseMariaDbHasNoApply()
     {
         using var ctx = MariaDbTestContext.Create();
 
@@ -602,7 +602,9 @@ public class SqlGenerationTests
             .CrossApply(x => SqlFunctions.SqlServer.xml_nodes(x.String, "/root/item"))
             .Select(p => new { p.Item2.Value }));
 
-        act.Should().Throw<NotSupportedException>().WithMessage("*xml.nodes*");
+        // The capability gate runs before the APPLY body is rendered, so the missing lateral source is
+        // the reported reason on this provider (the same contract as SQLite/ClickHouse).
+        act.Should().Throw<NotSupportedException>().WithMessage("*CrossApply*");
     }
 
     [Fact]

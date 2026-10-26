@@ -103,8 +103,9 @@ public class MySqlDialect : SqlDialectBase
     /// <inheritdoc/>
     public override string MakeUpsertValueReference(string column, KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, "values(") + column + ")";
 
-    // MySQL 8.0.14+ (and MariaDB 10.3+) spell the APPLY surface as an ANSI lateral join, which is
-    // the SqlDialectBase default.
+    // MySQL 8.0.14+ spells the APPLY surface as an ANSI lateral join, which is the SqlDialectBase
+    // default. MySQL only: MariaDB rejects the generated lateral syntax, so MariaDbDialect overrides
+    // this to false rather than inheriting it.
     /// <inheritdoc/>
     public override bool SupportsApply => true;
 

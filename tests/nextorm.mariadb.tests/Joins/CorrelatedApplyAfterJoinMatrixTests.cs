@@ -1,7 +1,4 @@
 using System.Data.Common;
-using System.Security.Cryptography;
-using System.Text;
-using System.Text.Json;
 using FluentAssertions;
 using NextORM.Core;
 using NextORM.Generated.nextorm_mariadb_tests;
@@ -10,22 +7,20 @@ namespace NextORM.MariaDb.Tests;
 
 /// <summary>
 /// T324 D6b2 — the MariaDB half of the E06/AC06 matrix (cells M25-M32), expanded over the
-/// preceding join kind and the flat total of sources (3-8). Every case is rendered by the real
+/// preceding join kind and the flat total of sources (3-8). Every case is prepared by the real
 /// MariaDB planner over a placeholder connection string; no connection is opened.
 /// <para>
 /// Columns are the receiver surface (positional <c>JoinedEntityBuilder&lt;T1..Tn&gt;</c> or the generated
 /// alias receiver) crossed with the lambda return form (<c>EntityBuilder&lt;T&gt;</c> or
 /// <c>QueryCommand&lt;T&gt;</c>); rows are the APPLY kind (M25-M28 cross, M29-M32 outer). Each variant is a
 /// homogeneous chain: every preceding join uses the same kind, which is the strongest per-kind reading of
-/// "preceding Join, LeftJoin, RightJoin, FullJoin, CrossJoin". The dialect spells APPLY as an ANSI lateral join: <c>cross join lateral (…) alias</c> with no <c>ON TRUE</c> for cross, <c>left join lateral (…) alias on true</c> for outer.
+/// "preceding Join, LeftJoin, RightJoin, FullJoin, CrossJoin". MariaDB 11.4 rejects the ANSI lateral
+/// spelling the renderer would emit, so since the r=2 capability correction every cell is a
+/// <em>capability negative</em>: the dialect gate in <c>SqlSourceRenderer.MakeApplyJoin</c> refuses the
+/// command with its exact message while the command is prepared, before any SQL executes.
 /// </para>
 /// <para>
-/// MariaDB inherits the MySQL family and likewise has no FULL join (<c>ISqlDialect.SupportsFullJoin == false</c>), so the Full preceding kind is a recorded capability guard, not a silent omission: every cell asserts the dialect's exact refusal message at every total in <c>Guard_full_preceding_join_is_refused_by_the_dialect</c>. The executed set is therefore 8 cells x 4 kinds x 6 totals.
-/// </para>
-/// <para>
-/// When <c>NEXTORM_T324_SQL_DUMP</c> names a directory the case appends one JSON line with the normalized
-/// SQL, its SHA-256 and the cell identity. The dump is evidence plumbing only: without the variable the
-/// assertions run unchanged and nothing is written.
+/// MariaDB inherits the MySQL family and likewise has no FULL join (<c>ISqlDialect.SupportsFullJoin == false</c>), so the Full preceding kind is a recorded capability guard, not a silent omission: every cell asserts the dialect's exact Full-join message at every total in <c>Guard_full_preceding_join_is_refused_by_the_dialect</c>. That guard renders the chain before the APPLY clause, so it observes the Full gate and cannot mask the APPLY negatives. The executed set is therefore 8 cells x 4 kinds x 6 totals, all refusing.
 /// </para>
 /// </summary>
 
@@ -112,21 +107,21 @@ public enum JoinKind
 /// <summary>The M-cell identity of the MariaDB matrix.</summary>
 public enum MatrixCell
 {
-    /// <summary>Cross lateral, positional receiver, <c>EntityBuilder</c> lambda.</summary>
+    /// <summary>Cross APPLY (refused), positional receiver, <c>EntityBuilder</c> lambda.</summary>
     M25,
-    /// <summary>Cross lateral, positional receiver, <c>QueryCommand</c> lambda.</summary>
+    /// <summary>Cross APPLY (refused), positional receiver, <c>QueryCommand</c> lambda.</summary>
     M26,
-    /// <summary>Cross lateral, alias receiver, <c>EntityBuilder</c> lambda.</summary>
+    /// <summary>Cross APPLY (refused), alias receiver, <c>EntityBuilder</c> lambda.</summary>
     M27,
-    /// <summary>Cross lateral, alias receiver, <c>QueryCommand</c> lambda.</summary>
+    /// <summary>Cross APPLY (refused), alias receiver, <c>QueryCommand</c> lambda.</summary>
     M28,
-    /// <summary>Outer lateral, positional receiver, <c>EntityBuilder</c> lambda.</summary>
+    /// <summary>Outer APPLY (refused), positional receiver, <c>EntityBuilder</c> lambda.</summary>
     M29,
-    /// <summary>Outer lateral, positional receiver, <c>QueryCommand</c> lambda.</summary>
+    /// <summary>Outer APPLY (refused), positional receiver, <c>QueryCommand</c> lambda.</summary>
     M30,
-    /// <summary>Outer lateral, alias receiver, <c>EntityBuilder</c> lambda.</summary>
+    /// <summary>Outer APPLY (refused), alias receiver, <c>EntityBuilder</c> lambda.</summary>
     M31,
-    /// <summary>Outer lateral, alias receiver, <c>QueryCommand</c> lambda.</summary>
+    /// <summary>Outer APPLY (refused), alias receiver, <c>QueryCommand</c> lambda.</summary>
     M32,
 }
 
@@ -164,35 +159,35 @@ public class CorrelatedApplyAfterJoinMatrixTests
 
     [Theory]
     [MemberData(nameof(KindsAndTotals))]
-    public void M25_cross_lateral_positional_entity_builder(JoinKind kind, int total) => Run(MatrixCell.M25, kind, total);
+    public void M25_cross_apply_positional_entity_builder_is_refused(JoinKind kind, int total) => Run(MatrixCell.M25, kind, total);
 
     [Theory]
     [MemberData(nameof(KindsAndTotals))]
-    public void M26_cross_lateral_positional_query_command(JoinKind kind, int total) => Run(MatrixCell.M26, kind, total);
+    public void M26_cross_apply_positional_query_command_is_refused(JoinKind kind, int total) => Run(MatrixCell.M26, kind, total);
 
     [Theory]
     [MemberData(nameof(KindsAndTotals))]
-    public void M27_cross_lateral_alias_entity_builder(JoinKind kind, int total) => Run(MatrixCell.M27, kind, total);
+    public void M27_cross_apply_alias_entity_builder_is_refused(JoinKind kind, int total) => Run(MatrixCell.M27, kind, total);
 
     [Theory]
     [MemberData(nameof(KindsAndTotals))]
-    public void M28_cross_lateral_alias_query_command(JoinKind kind, int total) => Run(MatrixCell.M28, kind, total);
+    public void M28_cross_apply_alias_query_command_is_refused(JoinKind kind, int total) => Run(MatrixCell.M28, kind, total);
 
     [Theory]
     [MemberData(nameof(KindsAndTotals))]
-    public void M29_outer_lateral_positional_entity_builder(JoinKind kind, int total) => Run(MatrixCell.M29, kind, total);
+    public void M29_outer_apply_positional_entity_builder_is_refused(JoinKind kind, int total) => Run(MatrixCell.M29, kind, total);
 
     [Theory]
     [MemberData(nameof(KindsAndTotals))]
-    public void M30_outer_lateral_positional_query_command(JoinKind kind, int total) => Run(MatrixCell.M30, kind, total);
+    public void M30_outer_apply_positional_query_command_is_refused(JoinKind kind, int total) => Run(MatrixCell.M30, kind, total);
 
     [Theory]
     [MemberData(nameof(KindsAndTotals))]
-    public void M31_outer_lateral_alias_entity_builder(JoinKind kind, int total) => Run(MatrixCell.M31, kind, total);
+    public void M31_outer_apply_alias_entity_builder_is_refused(JoinKind kind, int total) => Run(MatrixCell.M31, kind, total);
 
     [Theory]
     [MemberData(nameof(KindsAndTotals))]
-    public void M32_outer_lateral_alias_query_command(JoinKind kind, int total) => Run(MatrixCell.M32, kind, total);
+    public void M32_outer_apply_alias_query_command_is_refused(JoinKind kind, int total) => Run(MatrixCell.M32, kind, total);
 
     /// <summary>Every cell at every flat total, used by the FULL-join capability guard.</summary>
     public static TheoryData<MatrixCell, int> CellsAndTotals { get; } = CreateCellsAndTotals();
@@ -222,13 +217,24 @@ public class CorrelatedApplyAfterJoinMatrixTests
             .WithMessage("The Full join is not supported by this SQL dialect");
     }
 
+    /// <summary>
+    /// Every M25-M32 cell at every preceding kind and total is a capability negative: the APPLY is
+    /// refused with the dialect gate's exact message while the command is prepared, and the execution
+    /// counter proves no SQL reached a connection.
+    /// </summary>
     private static void Run(MatrixCell cell, JoinKind kind, int total)
     {
-        using var ctx = MariaDbTestContext.Create();
-        var sql = SqlOf(ctx, Build(ctx, cell, kind, total));
+        var recorder = new RecordingInterceptor();
+        using var ctx = MariaDbTestContext.Create(recorder);
+        var outer = cell is MatrixCell.M29 or MatrixCell.M30 or MatrixCell.M31 or MatrixCell.M32;
 
-        AssertShape(cell, kind, total, sql);
-        Dump(cell, kind, total, sql);
+        var act = () => SqlOf(ctx, Build(ctx, cell, kind, total));
+
+        act.Should().Throw<NotSupportedException>()
+            .WithMessage(outer
+                ? "The OuterApply join is not supported by this SQL dialect"
+                : "The CrossApply join is not supported by this SQL dialect");
+        recorder.Executed.Should().Be(0, "the capability refusal must precede SQL execution");
     }
 
     private static QueryCommand<MatrixRow> Build(IDataContext ctx, MatrixCell cell, JoinKind kind, int total)
@@ -688,105 +694,17 @@ public class CorrelatedApplyAfterJoinMatrixTests
 
 
     // ---------------------------------------------------------------------------------------------
-    // Assertions
+    // Preparation helper and the execution counter.
     // ---------------------------------------------------------------------------------------------
-
-    private static void AssertShape(MatrixCell cell, JoinKind kind, int total, string sql)
-    {
-        var outer = cell is MatrixCell.M29 or MatrixCell.M30 or MatrixCell.M31 or MatrixCell.M32;
-        var appliedAlias = total + 1;
-        var bodyAlias = total;
-        var precedingJoins = total - 2;
-        var flat = sql.ToLowerInvariant();
-
-        // Exact provider form: the ANSI lateral spelling, never the SQL Server CROSS/OUTER APPLY spelling.
-        if (outer)
-        {
-            CountOf(flat, "left join lateral (").Should().Be(1, "the cell must render exactly one left lateral join");
-            CountOf(flat, "cross join lateral").Should().Be(0, "an outer cell must not render a cross lateral join");
-            CountOf(flat, "on true").Should().Be(1, "a left lateral join needs exactly one ON TRUE");
-        }
-        else
-        {
-            CountOf(flat, "cross join lateral (").Should().Be(1, "the cell must render exactly one cross lateral join");
-            CountOf(flat, "left join lateral").Should().Be(0, "a cross cell must not render a left lateral join");
-
-            // AC06 named negative: a cross lateral join must never acquire ON TRUE.
-            flat.Should().NotContain("on true", "a cross join lateral must not acquire ON TRUE");
-        }
-
-        flat.Should().NotContain("apply", "this dialect renders the ANSI lateral spelling, never APPLY");
-
-        // The preceding chain survives the APPLY: one join keyword per preceding join plus the lateral
-        // join itself, and every qualified spelling is counted exactly so the chain stays homogeneous.
-        CountOf(flat, " join ").Should().Be(precedingJoins + 1, "every preceding join must survive the APPLY");
-        CountOf(flat, " left join ").Should().Be((kind == JoinKind.Left ? precedingJoins : 0) + (outer ? 1 : 0));
-        CountOf(flat, " right join ").Should().Be(kind == JoinKind.Right ? precedingJoins : 0);
-        CountOf(flat, " full join ").Should().Be(kind == JoinKind.Full ? precedingJoins : 0);
-        CountOf(flat, " cross join ").Should().Be((kind == JoinKind.Cross ? precedingJoins : 0) + (outer ? 0 : 1));
-        (CountOf(flat, " join ") - CountOf(flat, " left join ") - CountOf(flat, " right join ")
-            - CountOf(flat, " full join ") - CountOf(flat, " cross join "))
-            .Should().Be(kind == JoinKind.Inner ? precedingJoins : 0, "the chain is homogeneous in its join kind");
-
-        // Correlation: the applied body references the last preceding occurrence ({slot total-1}) and
-        // the FROM occurrence (slot 1) by their exact aliases.
-        flat.Should().Contain($"t{bodyAlias}.ref = t{total - 1}.id", "the last preceding source occurrence must be addressed");
-        flat.Should().Contain($"t{bodyAlias}.id = t1.id", "the FROM source occurrence must be addressed");
-        flat.Should().NotContain("= ref");
-        flat.Should().Contain($"as `t{appliedAlias}`", "the applied source needs its own alias");
-        flat.Should().Contain($"t{appliedAlias}.id", "the projection must read the applied source");
-    }
-
-    private static int CountOf(string text, string value)
-    {
-        var count = 0;
-        var index = 0;
-        while ((index = text.IndexOf(value, index, StringComparison.Ordinal)) >= 0)
-        {
-            count++;
-            index += value.Length;
-        }
-
-        return count;
-    }
-
-    private static string Normalize(string sql) => sql.Replace("\r\n", "\n", StringComparison.Ordinal).TrimEnd();
 
     private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> command)
-        => Normalize(((DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(command, false, false, CancellationToken.None)).DbCommand.CommandText);
+        => ((DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(command, false, false, CancellationToken.None))
+            .DbCommand.CommandText;
 
-    // ---------------------------------------------------------------------------------------------
-    // Evidence dump (only when NEXTORM_T324_SQL_DUMP names a directory).
-    // ---------------------------------------------------------------------------------------------
-
-    private static readonly object DumpLock = new();
-
-    private static void Dump(MatrixCell cell, JoinKind kind, int total, string sql)
+    private sealed class RecordingInterceptor : IQueryInterceptor
     {
-        var directory = Environment.GetEnvironmentVariable("NEXTORM_T324_SQL_DUMP");
-        if (string.IsNullOrWhiteSpace(directory))
-            return;
+        public int Executed { get; private set; }
 
-        Directory.CreateDirectory(directory);
-        var outerApply = cell is MatrixCell.M29 or MatrixCell.M30 or MatrixCell.M31 or MatrixCell.M32;
-        var record = new Dictionary<string, object?>
-        {
-            ["cell"] = cell.ToString(),
-            ["provider"] = "mariadb",
-            ["kind"] = outerApply ? "outer" : "cross",
-            ["surface"] = cell is MatrixCell.M27 or MatrixCell.M28 or MatrixCell.M31 or MatrixCell.M32 ? "alias" : "positional",
-            ["lambdaForm"] = cell is MatrixCell.M26 or MatrixCell.M28 or MatrixCell.M30 or MatrixCell.M32 ? "QueryCommand" : "EntityBuilder",
-            ["joinKind"] = kind.ToString(),
-            ["total"] = total,
-            ["expectedForm"] = outerApply ? "left join lateral" : "cross join lateral",
-            ["executed"] = true,
-            ["sqlHash"] = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(sql))),
-            ["sql"] = sql,
-        };
-
-        var line = JsonSerializer.Serialize(record);
-
-        lock (DumpLock)
-            File.AppendAllText(Path.Combine(directory, "mariadb.jsonl"), line + Environment.NewLine);
+        public void CommandExecuting(CommandEventData eventData, DbCommand command) => Executed++;
     }
 }

@@ -353,4 +353,8 @@ public class DefaultColumnsProvider : IColumnsProvider, IOuterSlotSourceRegistry
         throw new InvalidOperationException(
             $"The SELECT projection addresses slot {slot} of '{projectionType}', but the active render frame of this command registers only {registered} source(s). A projection item and the APPLY correlation that shares its slot may only address the FROM source plus the joins that precede the correlated APPLY; a forward or out-of-frame slot is refused instead of resolving to another alias.");
     }
+
+    /// <inheritdoc/>
+    QueryCommand? IOuterSlotSourceRegistry.FindSourceCommand(int sourceIndex)
+        => (uint)sourceIndex < (uint)_list.Count ? _list[sourceIndex].Item2 : null;
 }

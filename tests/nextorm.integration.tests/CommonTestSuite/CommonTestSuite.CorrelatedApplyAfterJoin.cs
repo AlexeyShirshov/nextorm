@@ -17,12 +17,12 @@ namespace NextORM.Integration.Tests;
 /// the preserved outer row.
 /// </para>
 /// <para>
-/// Providers without a lateral/APPLY source (SQLite) execute the named capability refusal for the same
-/// shapes instead: a skip would hide the provider and would drift the pinned skip budget, while a positive
-/// lateral run is impossible there. ClickHouse is not part of this suite. MariaDB has no
-/// <see cref="CommonTestSuite"/> provider registration, so <c>MariaDbCorrelatedApplyAfterJoinIntegrationTests</c>
-/// reuses these same bodies against <c>MariaDbContainer.ConnectionString</c>; a MySQL run is never counted as
-/// MariaDB evidence.
+/// Providers without a lateral/APPLY source (SQLite, and MariaDB since the r=2 capability correction)
+/// execute the named capability refusal for the same shapes instead: a skip would hide the provider and
+/// would drift the pinned skip budget, while a positive lateral run is impossible there. ClickHouse is not
+/// part of this suite. MariaDB has no <see cref="CommonTestSuite"/> provider registration, so
+/// <c>MariaDbCorrelatedApplyAfterJoinIntegrationTests</c> calls these bodies directly; a MySQL run is never
+/// counted as MariaDB evidence.
 /// </para>
 /// </summary>
 public abstract partial class CommonTestSuite
