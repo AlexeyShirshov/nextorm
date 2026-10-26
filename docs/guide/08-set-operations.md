@@ -161,6 +161,25 @@ var count = dataContext.From(
     .Count();
 ```
 
+### Reading one scalar column directly
+
+When both sides project a single scalar column, `From(cmd)` materialises the rows directly instead of
+returning objects, and `UnionAll` keeps duplicates:
+
+```csharp
+var left = dataContext.From<ISimpleEntity>().Where(it => it.Id <= 2).Select(it => it.Id);
+var right = dataContext.From<ISimpleEntity>().Where(it => it.Id >= 2 && it.Id <= 3).Select(it => it.Id);
+
+var rows = dataContext.From(left.UnionAll(right)).ToList(); // 1, 2, 2, 3
+```
+
+This result is the same whether the type's process-wide select-list cache is cold or has already been
+populated by an earlier scalar read. Previously the cached projection was reused for the derived source;
+with a warm cache the read then failed with `QueryPreparationException: Cannot get ctor from
+System.Int32`, while the cold-cache read worked. The derived read now builds its own one-column shape
+and does not reuse or overwrite that cache entry. A derived source with more than one column still
+needs an explicit outer `Select` (see [Subqueries](07-subqueries.md#subquery-as-a-from-source)).
+
 ## Provider differences
 
 | Provider | `union` / `union all` | `intersect` / `except` | `intersect all` / `except all` |

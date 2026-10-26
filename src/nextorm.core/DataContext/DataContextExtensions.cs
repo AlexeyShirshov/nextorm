@@ -1273,6 +1273,16 @@ public static class DataContextExtensions
     /// <param name="dataContext">The context to execute against.</param>
     /// <param name="query">The command whose definition drives the query.</param>
     /// <returns>A builder for composing the query further.</returns>
+    /// <remarks>
+    /// A single-column scalar source — including a set-operation command such as
+    /// <c>left.UnionAll(right)</c> — materialises directly to <c>List&lt;T&gt;</c>. The read builds its own
+    /// one-column shape and does not reuse the process-wide select-list cache entry of the result type,
+    /// so a preceding scalar read that warmed that entry does not change the result. Before this
+    /// behaviour, the warm path reused a cached object-materialisation list and threw
+    /// <see cref="QueryPreparationException"/> ("Cannot get ctor from ..."), while the cold path
+    /// succeeded. A derived source with more than one column still requires an explicit outer
+    /// <c>Select</c>.
+    /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static EntityBuilder<TResult> From<TResult>(this IDataContext dataContext, QueryCommand<TResult> query)
         => new(dataContext, query) { Logger = dataContext.CommandLogger };
