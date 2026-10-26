@@ -363,9 +363,19 @@ public static partial class SqlFunctions
         /// overload, so a name-only <c>GetMethod</c> lookup is ambiguous; binding by parameter count
         /// selects the plain aggregate.
         /// </summary>
-        private static MethodInfo AggregateMethod(string name) =>
-            typeof(CommonFunctions).GetMethods(BindingFlags.Public | BindingFlags.Instance)
-                .Single(m => m.Name == name && m.GetParameters().Length == 1);
+        private static MethodInfo AggregateMethod(string name)
+        {
+            var candidates = typeof(CommonFunctions).GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                .Where(m => m.Name == name && m.GetParameters().Length == 1)
+                .ToList();
+
+            // The variability aggregates declare two single-value overloads: the value type and its
+            // Nullable<T> form. The translation marker keeps the nullable-input declaration, which
+            // accepts every selector shape; Min/Max/Avg/Sum still have exactly one.
+            return candidates.Count == 1
+                ? candidates[0]
+                : candidates.Single(m => Nullable.GetUnderlyingType(m.GetParameters()[0].ParameterType) is not null);
+        }
 
         /// <summary>
         /// <c>exists(subquery)</c>: true when the correlated subquery returns at least one row. ANSI
@@ -890,42 +900,82 @@ public static partial class SqlFunctions
         /// <summary><c>stdev</c> aggregate: the sample standard deviation of the non-null values.</summary>
         /// <typeparam name="T">The value type.</typeparam>
         /// <param name="property">The value to aggregate.</param>
-        public T? stdev<T>(T? property) => default!;
+        public T? stdev<T>(T property) where T : struct => default!;
 
-        /// <summary><c>stdev(distinct ...)</c>: the sample standard deviation of the distinct non-null values.</summary>
+        /// <summary><c>stdev</c> aggregate: the sample standard deviation of the non-null values; a nullable input is accepted and <see langword="null"/> values are ignored.</summary>
         /// <typeparam name="T">The value type.</typeparam>
         /// <param name="property">The value to aggregate.</param>
-        public T? stdev_distinct<T>(T? property) => default!;
+        public T? stdev<T>(T? property) where T : struct => default!;
+
+        /// <summary><c>stdev(distinct ...)</c> aggregate: the sample standard deviation of the distinct non-null values.</summary>
+        /// <typeparam name="T">The value type.</typeparam>
+        /// <param name="property">The value to aggregate.</param>
+        public T? stdev_distinct<T>(T property) where T : struct => default!;
+
+        /// <summary><c>stdev(distinct ...)</c> aggregate: the sample standard deviation of the distinct non-null values; a nullable input is accepted and <see langword="null"/> values are ignored.</summary>
+        /// <typeparam name="T">The value type.</typeparam>
+        /// <param name="property">The value to aggregate.</param>
+        public T? stdev_distinct<T>(T? property) where T : struct => default!;
 
         /// <summary><c>stdevp</c> aggregate: the population standard deviation of the non-null values.</summary>
         /// <typeparam name="T">The value type.</typeparam>
         /// <param name="property">The value to aggregate.</param>
-        public T? stdevp<T>(T? property) => default!;
+        public T? stdevp<T>(T property) where T : struct => default!;
 
-        /// <summary><c>stdevp(distinct ...)</c>: the population standard deviation of the distinct non-null values.</summary>
+        /// <summary><c>stdevp</c> aggregate: the population standard deviation of the non-null values; a nullable input is accepted and <see langword="null"/> values are ignored.</summary>
         /// <typeparam name="T">The value type.</typeparam>
         /// <param name="property">The value to aggregate.</param>
-        public T? stdevp_distinct<T>(T? property) => default!;
+        public T? stdevp<T>(T? property) where T : struct => default!;
+
+        /// <summary><c>stdevp(distinct ...)</c> aggregate: the population standard deviation of the distinct non-null values.</summary>
+        /// <typeparam name="T">The value type.</typeparam>
+        /// <param name="property">The value to aggregate.</param>
+        public T? stdevp_distinct<T>(T property) where T : struct => default!;
+
+        /// <summary><c>stdevp(distinct ...)</c> aggregate: the population standard deviation of the distinct non-null values; a nullable input is accepted and <see langword="null"/> values are ignored.</summary>
+        /// <typeparam name="T">The value type.</typeparam>
+        /// <param name="property">The value to aggregate.</param>
+        public T? stdevp_distinct<T>(T? property) where T : struct => default!;
 
         /// <summary><c>var</c> aggregate: the sample variance of the non-null values.</summary>
         /// <typeparam name="T">The value type.</typeparam>
         /// <param name="property">The value to aggregate.</param>
-        public T? var<T>(T? property) => default!;
+        public T? var<T>(T property) where T : struct => default!;
 
-        /// <summary><c>var(distinct ...)</c>: the sample variance of the distinct non-null values.</summary>
+        /// <summary><c>var</c> aggregate: the sample variance of the non-null values; a nullable input is accepted and <see langword="null"/> values are ignored.</summary>
         /// <typeparam name="T">The value type.</typeparam>
         /// <param name="property">The value to aggregate.</param>
-        public T? var_distinct<T>(T? property) => default!;
+        public T? var<T>(T? property) where T : struct => default!;
+
+        /// <summary><c>var(distinct ...)</c> aggregate: the sample variance of the distinct non-null values.</summary>
+        /// <typeparam name="T">The value type.</typeparam>
+        /// <param name="property">The value to aggregate.</param>
+        public T? var_distinct<T>(T property) where T : struct => default!;
+
+        /// <summary><c>var(distinct ...)</c> aggregate: the sample variance of the distinct non-null values; a nullable input is accepted and <see langword="null"/> values are ignored.</summary>
+        /// <typeparam name="T">The value type.</typeparam>
+        /// <param name="property">The value to aggregate.</param>
+        public T? var_distinct<T>(T? property) where T : struct => default!;
 
         /// <summary><c>varp</c> aggregate: the population variance of the non-null values.</summary>
         /// <typeparam name="T">The value type.</typeparam>
         /// <param name="property">The value to aggregate.</param>
-        public T? varp<T>(T? property) => default!;
+        public T? varp<T>(T property) where T : struct => default!;
 
-        /// <summary><c>varp(distinct ...)</c>: the population variance of the distinct non-null values.</summary>
+        /// <summary><c>varp</c> aggregate: the population variance of the non-null values; a nullable input is accepted and <see langword="null"/> values are ignored.</summary>
         /// <typeparam name="T">The value type.</typeparam>
         /// <param name="property">The value to aggregate.</param>
-        public T? varp_distinct<T>(T? property) => default!;
+        public T? varp<T>(T? property) where T : struct => default!;
+
+        /// <summary><c>varp(distinct ...)</c> aggregate: the population variance of the distinct non-null values.</summary>
+        /// <typeparam name="T">The value type.</typeparam>
+        /// <param name="property">The value to aggregate.</param>
+        public T? varp_distinct<T>(T property) where T : struct => default!;
+
+        /// <summary><c>varp(distinct ...)</c> aggregate: the population variance of the distinct non-null values; a nullable input is accepted and <see langword="null"/> values are ignored.</summary>
+        /// <typeparam name="T">The value type.</typeparam>
+        /// <param name="property">The value to aggregate.</param>
+        public T? varp_distinct<T>(T? property) where T : struct => default!;
 
         /// <summary>
         /// <c>any_value(property)</c>: an arbitrary value from the group. Distinct from the

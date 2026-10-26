@@ -99,6 +99,10 @@ var std   = ctx.From<IComplexEntity>().Select(x => SqlFunctions.Sql.stdev((doubl
 `count_big` / `count_big_distinct` render `count_big(...)`; plain `count`/`count_distinct` render
 `count(...)`. `stdev`, `stdevp`, `var` and `varp` keep their names (SQL Server provides them natively).
 `Math.Round`, `Math.Truncate`, `len`, `datepart`, `getdate` and `isnull` are all emitted as shown above.
+The variability aggregates follow the shared cardinality contract: `Stdev`/`Var` are `null` for zero or
+one contributing value, `Stdevp`/`Varp` are `null` for zero and `0.0` for one, and two or more values keep
+SQL Server's native formulas. The nullable result reaches the caller as `null` instead of throwing on a
+non-nullable `double`, so the same query returns the same shape here and on the other providers.
 
 BASE64 requires SQL Server 2025: `SqlFunctions.Sql.base64_encode` and `base64_decode` render
 `BASE64_ENCODE`/`BASE64_DECODE` there, with no compatibility-level or preview flag. `base64_decode`

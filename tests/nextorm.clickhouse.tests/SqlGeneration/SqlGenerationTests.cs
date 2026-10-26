@@ -22,6 +22,32 @@ public class SqlGenerationTests
     private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd) => Normalize(Prepare(ctx, cmd).DbCommand.CommandText);
 
     [Fact]
+    public void T292_VariabilityAggregateNames_ShouldRenderProviderSpelling()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        // T292 (#292): the eight variability facade forms keep their clickhouse spelling with the
+        // structurally nullable result; the DISTINCT forms keep the SQL DISTINCT keyword.
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.stdev((double)x.Id)))
+            .Should().Contain("stddevSamp(");
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.stdev_distinct((double)x.Id)))
+            .Should().Contain("stddevSamp(distinct ");
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.stdevp((double)x.Id)))
+            .Should().Contain("stddevPop(");
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.stdevp_distinct((double)x.Id)))
+            .Should().Contain("stddevPop(distinct ");
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.var((double)x.Id)))
+            .Should().Contain("varSamp(");
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.var_distinct((double)x.Id)))
+            .Should().Contain("varSamp(distinct ");
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.varp((double)x.Id)))
+            .Should().Contain("varPop(");
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.varp_distinct((double)x.Id)))
+            .Should().Contain("varPop(distinct ");
+    }
+
+    [Fact]
     public void QueryTag_ShouldRenderBlockCommentAfterSelect()
     {
         using var ctx = ClickHouseTestContext.Create();

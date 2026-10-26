@@ -99,6 +99,11 @@ var std   = ctx.From<IComplexEntity>().Select(x => SqlFunctions.Sql.stdev((doubl
 `count_big` / `count_big_distinct` отрисовывают `count_big(...)`; обычные `count`/`count_distinct` отрисовывают
 `count(...)`. `stdev`, `stdevp`, `var` и `varp` сохраняют свои имена (SQL Server предоставляет их нативно).
 `Math.Round`, `Math.Truncate`, `len`, `datepart`, `getdate` и `isnull` все выдаются, как показано выше.
+Агрегаты вариативности следуют общему контракту кардинальности: `Stdev`/`Var` дают `null` при нуле или
+одном вносящем вклад значении, `Stdevp`/`Varp` — `null` при нуле и `0.0` при одном, а два и более
+значений сохраняют нативные формулы SQL Server. Nullable-результат доходит до вызывающего как `null`, а
+не бросает исключение на non-nullable `double`, поэтому один и тот же запрос возвращает одинаковую форму
+здесь и на других провайдерах.
 
 BASE64 требует SQL Server 2025: там `SqlFunctions.Sql.base64_encode` и `base64_decode` рендерятся как
 `BASE64_ENCODE`/`BASE64_DECODE`, без compatibility level и preview-флага. `base64_decode` принимает

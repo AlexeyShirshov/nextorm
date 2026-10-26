@@ -126,6 +126,12 @@ and returns [`Instance`](xref:NextORM.ClickHouse.ClickHouseDialect.Instance) fro
   [`JoinOptions.Global`](xref:NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.Global(NextORM.Core.JoinOptions)) and combines with strictness
   (`global left any join`, [`SupportsGlobalJoin`](xref:NextORM.Core.ISqlDialect.SupportsGlobalJoin)).
 
+The declared contract for the variability aggregates is the shared one: `Stdev`/`Var` are `null` for
+zero or one contributing value, `Stdevp`/`Varp` are `null` for zero and `0.0` for one. For this change the
+ClickHouse arm was verified at SQL generation only (`stddevSamp`/`stddevPop`/`varSamp`/`varPop` above),
+not against a live server: no live result is claimed and no NaN/Inf normalization is implied. The live
+arms of this change were SQLite and PostgreSQL.
+
 ClickHouse has no recursive CTE support, so the dialect declares every CTE with plain `with`.
 
 ## Registering the provider

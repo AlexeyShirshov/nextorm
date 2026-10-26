@@ -36,6 +36,13 @@
 - переносимый условный [`SqlFunctions.Sql.iif`](xref:NextORM.Core.CommonFunctions.iif``1(System.Boolean,``0,``0)) отрисовывается как
   `if(condition, a, b)` ([`Iif`](xref:NextORM.Core.ISqlDialect.Iif), [`IIifRenderer.Render`](xref:NextORM.Core.IIifRenderer.Render(System.String,System.String,System.String))).
 
+Агрегаты вариативности следуют общему контракту кардинальности: `Stdev`/`Var` дают `null` при нуле или
+одном вносящем вклад значении, `Stdevp`/`Varp` — `null` при нуле и `0.0` при одном. Одно ограничение
+провайдера не связано с nullable-результатом: MySQL 8.4 отклоняет `DISTINCT` внутри
+`STDDEV_SAMP`/`STDDEV_POP`/`VAR_SAMP`/`VAR_POP` (`stddev_samp(distinct x)` завершается синтаксической
+ошибкой). Рендерер продолжает выдавать это написание для форм `*_distinct`, поэтому гарантирован только
+SQL-текст, а живой запрос distinct-дисперсии на MySQL 8.4 не заявлен как поддерживаемый.
+
 ## Регистрация провайдера
 
 На [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder) доступны две перегрузки

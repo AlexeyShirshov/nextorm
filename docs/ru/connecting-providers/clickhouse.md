@@ -128,6 +128,12 @@ ADO.NET-провайдер `ClickHouse.Driver`. Он создаёт `ClickHouseC
   комбинируется со strictness (`global left any join`,
   [`SupportsGlobalJoin`](xref:NextORM.Core.ISqlDialect.SupportsGlobalJoin)).
 
+Объявленный контракт для агрегатов вариативности — общий: `Stdev`/`Var` дают `null` при нуле или одном
+вносящем вклад значении, `Stdevp`/`Varp` — `null` при нуле и `0.0` при одном. Для этого изменения ветка
+ClickHouse проверена только на генерации SQL (`stddevSamp`/`stddevPop`/`varSamp`/`varPop` выше), а не на
+живом сервере: живой результат не заявлен, и нормализация NaN/Inf не подразумевается. Живыми ветками
+этого изменения были SQLite и PostgreSQL.
+
 ClickHouse не поддерживает рекурсивные CTE, поэтому диалект объявляет каждый CTE просто через `with`.
 
 ## Регистрация провайдера

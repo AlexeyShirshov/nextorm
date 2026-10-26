@@ -95,6 +95,13 @@ The in-memory provider shares the same `EntityBuilder<T>` fluent API as the SQL 
 object works against both — **except** [`SelectMany`](xref:NextORM.Core.EntityBuilder`1.SelectMany``1(System.Linq.Expressions.Expression{System.Func{`0,System.Collections.Generic.IEnumerable{``0}}}))/[`GroupJoin`](xref:NextORM.Core.EntityBuilder`1.GroupJoin``3(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``1}},System.Linq.Expressions.Expression{System.Func{``0,``1}},System.Linq.Expressions.Expression{System.Func{`0,System.Collections.Generic.IEnumerable{``0},``2}})), which are in-memory only: on a SQL provider
 they throw `NotSupportedException` immediately (see [Limitations](../advanced/limitations.md)).
 
+## Aggregate null semantics
+
+For the four variability families the in-memory provider now matches the SQL providers: `Stdev` and
+`Var` return `null` for zero or one contributing non-null value, `Stdevp` and `Varp` return `null`
+for zero and `0.0` for one, and two or more values keep the established formula. An undefined result
+is no longer substituted with zero, so the same query returns the same shape on both backends.
+
 ## LOB streaming
 
 The scalar LOB terminals work on the in-memory provider. [`ToStream`](xref:NextORM.Core.QueryCommandExtensions.ToStream(NextORM.Core.QueryCommand{System.Byte[]},System.ReadOnlySpan{System.Object}))/`ToStreamAsync` return a `MemoryStream` over the single projected `byte[]`, and [`ToTextReader`](xref:NextORM.Core.QueryCommandExtensions.ToTextReader(NextORM.Core.QueryCommand{System.String},System.ReadOnlySpan{System.Object}))/`ToTextReaderAsync` a `StringReader` over the single projected `string`. The projection must be exactly one `byte[]`/`string` column. Only the first row is read; an empty result and a first value that is `NULL` both return `Stream.Null`/`TextReader.Null` (the in-memory scalar API does not distinguish them). The returned object is an ordinary BCL `MemoryStream`/`StringReader` owned by the caller — nothing on the context needs disposing. Because the value is already materialised, there is no O(buffer) benefit in memory. The multi-column [`ToDataReader`](xref:NextORM.Core.QueryCommandExtensions.ToDataReader``1(NextORM.Core.QueryCommand{``0},System.ReadOnlySpan{System.Object})) remains unsupported (`NotSupportedException`: no `DbDataReader`). See [Streaming large objects](../guide/28-large-objects.md).

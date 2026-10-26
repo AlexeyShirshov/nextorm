@@ -148,6 +148,15 @@ provider-specific. The decision for every known divergence:
 The per-feature rows in the [limitations](../advanced/limitations.md) table spell out the resulting
 runtime behaviour.
 
+**Variability aggregates are unified, not left as a documented difference.** `Stdev`/`Stdevp`/`Var`/`Varp`
+and the eight `Sql.stdev*`/`Sql.var*` facade forms return a structurally nullable `T?` on every provider:
+a sample result over zero or one contributing non-null value is `null`, a population result over zero
+values is `null` and over one value is `0.0`, and two or more values keep each provider's established
+formula. The cardinality contract is the same for SQLite, PostgreSQL, SQL Server, MySQL/MariaDB and
+ClickHouse; only the native function name differs (`stddev`/`stddev_pop`/`variance`/`var_pop`,
+`stddev_samp`/`stddev_pop`/`var_samp`/`var_pop`, `stddevSamp`/`stddevPop`/`varSamp`/`varPop`). The
+verification status of each provider is stated on its own page.
+
 ### Server-version gates
 
 Two capabilities depend on the server version, and both are gated by an **explicitly configured

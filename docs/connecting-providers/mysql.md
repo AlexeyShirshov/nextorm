@@ -36,6 +36,13 @@ property. [`MySqlDialect`](xref:NextORM.MySql.MySqlDialect) (`src/nextorm.mysql/
 - the portable conditional [`SqlFunctions.Sql.iif`](xref:NextORM.Core.CommonFunctions.iif``1(System.Boolean,``0,``0)) renders as
   `if(condition, a, b)` ([`Iif`](xref:NextORM.Core.ISqlDialect.Iif), [`IIifRenderer.Render`](xref:NextORM.Core.IIifRenderer.Render(System.String,System.String,System.String))).
 
+The variability aggregates follow the shared cardinality contract: `Stdev`/`Var` are `null` for zero or
+one contributing value, `Stdevp`/`Varp` are `null` for zero and `0.0` for one. One provider limitation is
+independent of the nullable result: MySQL 8.4 rejects `DISTINCT` inside
+`STDDEV_SAMP`/`STDDEV_POP`/`VAR_SAMP`/`VAR_POP` (`stddev_samp(distinct x)` fails with a syntax error).
+The renderer keeps emitting that spelling for the `*_distinct` forms, so only the SQL text is guaranteed
+and a live distinct variance query is not claimed as supported on MySQL 8.4.
+
 ## Registering the provider
 
 Two overloads are available on [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder)

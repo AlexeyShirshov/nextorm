@@ -458,6 +458,26 @@ Projecting through `double` avoids the lossy integer conversion:
 var variance = dataContext.From<ISimpleEntity>().Select(x => SqlFunctions.Sql.varp((double)x.Id)).First();
 ```
 
+### Nullable results and cardinality
+
+The four variability families are structurally nullable: `Stdev`, `Stdevp`, `Var` and `Varp`, and
+the eight `Sql.stdev*`/`Sql.var*` facade forms, return `T?`. Cardinality counts the contributing
+non-null values after `DISTINCT`:
+
+| Contributing values | `Stdev` / `Var` (sample) | `Stdevp` / `Varp` (population) |
+|---|---|---|
+| 0 | `null` | `null` |
+| 1 | `null` | `0.0` |
+| 2 or more | the established formula | the established formula |
+
+A defined zero stays zero: two or more identical values fold to `0.0`, and a one-row population
+result is `0.0`. Only an undefined result is `null` — it is never replaced by an invented zero.
+
+Because the result is now a real `Nullable<T>` instead of an annotation on a plain `double`, the
+change is source-breaking for callers that assign the terminal to a non-nullable `int`/`double`.
+Keep the nullable result (`double?`) or unwrap it explicitly. Use `?? 0` only where zero genuinely
+means "no spread": it re-introduces the invented zero for the undefined case.
+
 ## Boolean, bitwise, statistical and ordered-set aggregates
 
 Beyond `count`/`min`/`max`/`sum`/`avg`/`stdev`/`var`, [`Sql`](xref:NextORM.Core.SqlFunctions.Sql) exposes several aggregate families,
