@@ -10,6 +10,7 @@ namespace NextORM.Core.Tests;
 /// No database is involved: the tests exercise <see cref="EntityMetadataBuilder{T}"/> directly and read
 /// the metadata model (and the configured <see cref="DataContextCache.Metadata"/> seam) without a query.
 /// </summary>
+[Collection("Query cache controls")]
 public class RelationshipMetadataTests
 {
     public RelationshipMetadataTests()
