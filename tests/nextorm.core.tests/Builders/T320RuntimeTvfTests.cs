@@ -1,3 +1,4 @@
+using System.Data.Common;
 using System.Linq.Expressions;
 using System.Reflection;
 using FluentAssertions;
@@ -58,6 +59,21 @@ internal static class T320TvfDb
     public static TvfEntityBuilder<T320TvfRow> NoDescriptor(int id) => null!;
 
     public static TvfEntityBuilder<T320OtherRow> OtherRow(int id) => new("echo_other_rows");
+
+    /// <summary>
+    /// Fails for every non-default argument: used to prove that the metadata projection substitutes the
+    /// typed default instead of evaluating the caller's SQL argument.
+    /// </summary>
+    public static TvfEntityBuilder<T320TvfRow> ExplosiveWhenEvaluated(int id)
+        => id == default
+            ? new("explosive_rows", "dbo")
+            : throw new InvalidOperationException("The SQL argument value must never be evaluated for metadata discovery.");
+
+    /// <summary>A static wrapper around a factory chain: the source body is not a factory call.</summary>
+    public static EntityBuilder<T320TvfRow> Wrapped(int id) => Echo(id).Where(row => row.Id > 0);
+
+    /// <summary>A predicate built outside the source lambda, so its node is a call rather than a lambda.</summary>
+    public static Expression<Func<T320TvfRow, bool>> PrecomputedPredicate() => row => row.Id > 0;
 }
 
 /// <summary>
@@ -484,17 +500,114 @@ public class T320RuntimeTvfTests
         sql.Should().NotContain("@", "the outer column must stay a column reference, not an evaluated argument value");
     }
 
-    // ---- D2: a composed descriptor chain keeps being rejected as lost provenance ------------------
+    // ---- F-04: a composed descriptor chain is a supported source expression -----------------------
 
     [Fact]
-    public void From_ComposedDescriptorChain_ShouldStillBeRejected()
+    public void From_ComposedDescriptorChain_ShouldKeepTheFactoryCallTheArgumentAndThePredicate()
+    {
+        using var ctx = new SqlServerDataContext(
+            "Server=localhost,1433;Database=nextorm;User Id=sa;Password=nextorm!Passw0rd;TrustServerCertificate=True",
+            new DataContextBuilder());
+        var id = 7;
+
+        var builder = ctx.From(() => T320TvfDb.Echo(id).Where(row => row.Id > 3));
+
+        // The outermost Where must not be mistaken for the factory: the source stays the originating call
+        // and its original argument expression, not the typed default used for metadata materialisation.
+        var function = builder.SourceFrom!.TableFunction!;
+        function.Name.Should().Be("echo_rows");
+        function.Call.Method.Name.Should().Be(nameof(T320TvfDb.Echo));
+        function.Arguments.Should().ContainSingle()
+            .Which.NodeType.Should().Be(ExpressionType.MemberAccess);
+
+        var prepared = (DbPreparedQueryCommand<int>)ctx.GetPreparedQueryCommand(
+            builder.Select(row => row.Id), false, false, CancellationToken.None);
+        var sql = prepared.DbCommand.CommandText.Replace("\r\n", "\n");
+
+        sql.Should().Contain("echo_rows(", "the factory call stays the source of the statement");
+        sql.Should().Contain("where", "the composed predicate is applied to the same statement");
+        sql.Should().Contain("3", "the predicate body is preserved");
+        prepared.DbCommandParams.Cast<DbParameter>().Should()
+            .Contain(parameter => Equals(parameter.Value, 7), "the original SQL argument stays the function argument");
+    }
+
+    [Fact]
+    public void From_ComposedDescriptorChain_ShouldKeepTheOrdering()
+    {
+        using var ctx = new SqlServerDataContext(
+            "Server=localhost,1433;Database=nextorm;User Id=sa;Password=nextorm!Passw0rd;TrustServerCertificate=True",
+            new DataContextBuilder());
+        var id = 7;
+
+        var builder = ctx.From(() => T320TvfDb.Echo(id).OrderBy(row => row.Id));
+
+        var prepared = (DbPreparedQueryCommand<int>)ctx.GetPreparedQueryCommand(
+            builder.Select(row => row.Id), false, false, CancellationToken.None);
+        var sql = prepared.DbCommand.CommandText.Replace("\r\n", "\n");
+
+        sql.Should().Contain("echo_rows(", "the factory call stays the source of the statement");
+        sql.Should().Contain("order by", "the composed ordering is preserved");
+        prepared.DbCommandParams.Cast<DbParameter>().Should().Contain(parameter => Equals(parameter.Value, 7));
+    }
+
+    [Fact]
+    public void From_ComposedDescriptorChain_WithATypeChangingProjection_ShouldKeepTheSource()
+    {
+        using var ctx = new SqlServerDataContext(
+            "Server=localhost,1433;Database=nextorm;User Id=sa;Password=nextorm!Passw0rd;TrustServerCertificate=True",
+            new DataContextBuilder());
+        var id = 7;
+
+        // The factory row type (T320TvfRow) and the composed result type (T320OtherRow) differ, so the
+        // lowering must track them separately while keeping the source and its argument.
+        var builder = ctx.From(() => T320TvfDb.Echo(id).As(row => new T320OtherRow { Id = row.Id }));
+
+        builder.Should().BeAssignableTo<EntityBuilder<T320OtherRow>>();
+
+        var prepared = (DbPreparedQueryCommand<int>)ctx.GetPreparedQueryCommand(
+            builder.Select(row => row.Id), false, false, CancellationToken.None);
+        var sql = prepared.DbCommand.CommandText.Replace("\r\n", "\n");
+
+        sql.Should().Contain("echo_rows(", "the composed source keeps the factory call");
+        prepared.DbCommandParams.Cast<DbParameter>().Should()
+            .Contain(parameter => Equals(parameter.Value, 7), "the original argument survives the projection");
+    }
+
+    [Fact]
+    public void From_ComposedDescriptorChain_ShouldNotEvaluateTheSqlArgumentForMetadata()
+    {
+        using var ctx = new InMemoryDataContext();
+        var id = 11;
+
+        // The factory throws for every non-default argument, so this only succeeds when the metadata
+        // projection substitutes the typed default instead of evaluating the caller's argument.
+        var builder = ctx.From(() => T320TvfDb.ExplosiveWhenEvaluated(id).Where(row => row.Id > 0));
+
+        builder.SourceFrom!.TableFunction!.Name.Should().Be("explosive_rows");
+        builder.SourceFrom.TableFunction.Arguments.Should().ContainSingle()
+            .Which.NodeType.Should().Be(ExpressionType.MemberAccess, "the original argument expression is preserved");
+    }
+
+    [Fact]
+    public void From_ChainOverANonFactoryStaticCall_ShouldBeRejected()
     {
         using var ctx = new InMemoryDataContext();
 
-        var act = () => ctx.From(() => T320TvfDb.Echo(1).Where(row => row.Id > 0));
+        var act = () => ctx.From(() => T320TvfDb.Wrapped(1));
 
         act.Should().Throw<NotSupportedException>()
             .Which.Message.Should().Contain("does not return TvfEntityBuilder<T>");
+    }
+
+    [Fact]
+    public void From_BuilderOperationWithAPrecomputedLambda_ShouldBeRejected()
+    {
+        using var ctx = new InMemoryDataContext();
+
+        var act = () => ctx.From(() => T320TvfDb.Echo(1).Where(T320TvfDb.PrecomputedPredicate()));
+
+        act.Should().Throw<NotSupportedException>()
+            .Which.Message.Should().Contain("is not supported as part of a table-valued-function source chain");
     }
 
     // ---- D1 probe: what the metadata-only projection and the argument preservation actually do --------

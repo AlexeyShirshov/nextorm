@@ -1436,12 +1436,15 @@ public static class DataContextExtensions
     /// <para>
     /// The factory must return <see cref="TvfEntityBuilder{T}"/> for the same row type, and its metadata
     /// must not depend on the argument values. The argument expressions are kept untouched — a member of
-    /// an outer row stays an outer-column reference, never an evaluated CLR value. A captured descriptor
-    /// or any other shape without the original call expression is rejected with
+    /// an outer row stays an outer-column reference, never an evaluated CLR value. Builder operations
+    /// composed on the descriptor in the same lambda (<c>Where</c>, ordering and other
+    /// builder-returning operations) are re-applied in their original order, so the source, its
+    /// arguments and the composed operations all reach the query. A captured descriptor or any other
+    /// shape without the original call expression is rejected with
     /// <see cref="NotSupportedException"/>.
     /// </para>
     /// </summary>
-    /// <typeparam name="T">The mapped row type the function returns.</typeparam>
+    /// <typeparam name="T">The mapped row type the function returns, i.e. the result type of the composed chain.</typeparam>
     /// <param name="dataContext">The context to execute against.</param>
     /// <param name="source">The expression that calls the runtime factory, for example <c>() =&gt; Db.MyTvf(42)</c>.</param>
     /// <returns>A builder for composing the query over the function.</returns>
@@ -1451,16 +1454,14 @@ public static class DataContextExtensions
     {
         ArgumentNullException.ThrowIfNull(dataContext);
 
-        var entity = dataContext.From<T>();
-        entity.SourceFrom = SourceExpressionLowerer.LowerTvfSource(source, nameof(source));
-        return entity;
+        return SourceExpressionLowerer.LowerTvfSource(dataContext, source, nameof(source));
     }
 
     /// <summary>
     /// Starts a query from a runtime table-valued-function descriptor supplied as an expression source,
     /// with per-source options. See <see cref="From{T}(IDataContext, Expression{Func{EntityBuilder{T}}})"/>.
     /// </summary>
-    /// <typeparam name="T">The mapped row type the function returns.</typeparam>
+    /// <typeparam name="T">The mapped row type the function returns, i.e. the result type of the composed chain.</typeparam>
     /// <param name="dataContext">The context to execute against.</param>
     /// <param name="source">The expression that calls the runtime factory.</param>
     /// <param name="configure">Configures the source placement, for example <c>o =&gt; o.WithSubQueryHint("NestLoop(t1)")</c>.</param>
@@ -1475,8 +1476,7 @@ public static class DataContextExtensions
         var fromOptions = new FromOptions();
         configure(fromOptions);
 
-        var entity = dataContext.From<T>();
-        entity.SourceFrom = SourceExpressionLowerer.LowerTvfSource(source, nameof(source));
+        var entity = SourceExpressionLowerer.LowerTvfSource(dataContext, source, nameof(source));
         entity.SubQueryHint = fromOptions.SubQueryHint;
         entity.SourceLockClause = fromOptions.SourceLock;
         return entity;

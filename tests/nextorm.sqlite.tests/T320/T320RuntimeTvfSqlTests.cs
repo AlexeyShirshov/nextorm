@@ -388,6 +388,69 @@ public class T320RuntimeTvfSqlTests(ITestOutputHelper output)
         ReferenceEquals(ctxA.AnyCommand, ctxB.AnyCommand).Should().BeFalse("each context owns its shared Any command");
     }
 
+    // ---- F-04: composed descriptor chains render the argument and the composition ----------------
+
+    /// <summary>
+    /// A runtime factory call composed with <c>Where</c> must render the originating call — with its own
+    /// argument — and the composed predicate on the same statement, not a bare call and not a rejected
+    /// expression.
+    /// </summary>
+    [Fact]
+    public void RuntimeTvf_ComposedWhereChain_ShouldRenderTheArgumentAndThePredicate()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var id = 42;
+
+        var prepared = Prepare(
+            ctx,
+            ctx.From(() => T320ProbeTvf.ProbeTvf(id).Where(r => r.Id > 10)).Select(r => r.Id),
+            false);
+        var sql = Normalize(prepared.DbCommand.CommandText);
+        var parameters = ParametersOf(prepared);
+        output.WriteLine($"composed where: sql=<<{sql}>>; parameters=[{string.Join(", ", parameters)}]");
+
+        sql.Should().Contain("from probe_tvf($id)", $"the originating factory call keeps its own argument; {sql}");
+        sql.Should().Contain("where", $"the composed predicate is applied to the same statement; {sql}");
+        parameters.Should().Equal(new[] { "id=42" }, $"the TVF argument stays a bound parameter of the call; {sql}");
+    }
+
+    /// <summary>The composed ordering must survive lowering on the same statement as the call.</summary>
+    [Fact]
+    public void RuntimeTvf_ComposedOrderingChain_ShouldKeepTheOrderingClause()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var id = 42;
+
+        var prepared = Prepare(ctx, ctx.From(() => T320ProbeTvf.ProbeTvf(id).OrderBy(r => r.Id)).Select(r => r.Id), false);
+        var sql = Normalize(prepared.DbCommand.CommandText);
+        var parameters = ParametersOf(prepared);
+        output.WriteLine($"composed ordering: sql=<<{sql}>>; parameters=[{string.Join(", ", parameters)}]");
+
+        sql.Should().Contain("from probe_tvf($id)", $"the originating factory call keeps its own argument; {sql}");
+        sql.Should().Contain("order by", $"the composed ordering is preserved; {sql}");
+        parameters.Should().Equal(new[] { "id=42" });
+    }
+
+    /// <summary>
+    /// A type-changing projection composed on the descriptor (the factory row type differs from the
+    /// composed result type) must still carry the factory call and its argument.
+    /// </summary>
+    [Fact]
+    public void RuntimeTvf_ComposedTypeChangingProjection_ShouldKeepTheSourceAndItsArgument()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var id = 42;
+
+        var source = ctx.From(() => T320ProbeTvf.ProbeTvf(id).As(r => new { r.Id }));
+        var prepared = Prepare(ctx, source.Select(r => r.Id), false);
+        var sql = Normalize(prepared.DbCommand.CommandText);
+        var parameters = ParametersOf(prepared);
+        output.WriteLine($"composed projection: sql=<<{sql}>>; parameters=[{string.Join(", ", parameters)}]");
+
+        sql.Should().Contain("probe_tvf($id)", $"the factory call and its argument survive the projection; {sql}");
+        parameters.Should().Equal(new[] { "id=42" });
+    }
+
     // ---- AC04/AC07: provider restriction --------------------------------------------------------
 
     /// <summary>
