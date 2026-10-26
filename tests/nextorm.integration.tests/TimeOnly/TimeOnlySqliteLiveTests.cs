@@ -17,6 +17,9 @@ public sealed class TimeOnlySqliteLiveTests : IDisposable
 {
     private const string Table = "t340_time_probe";
 
+    private const string Refusal =
+        "TimeOnly projection refused for SQLite: there is no native time-of-day type; use an explicit value converter.";
+
     private readonly string _path;
     private readonly SqliteDataContext _ctx;
     private readonly ITestOutputHelper _output;
@@ -71,8 +74,27 @@ public sealed class TimeOnlySqliteLiveTests : IDisposable
 
             var failure = act.Should().Throw<NotSupportedException>().Which;
             _output.WriteLine($"T340 SQLite mapped TimeOnly refusal: {failure.Message}");
-            failure.Message.Should().Be(
-                "TimeOnly projection refused for SQLite: there is no native time-of-day type; use an explicit value converter.");
+            failure.Message.Should().Be(Refusal);
+        }
+        finally
+        {
+            DropFixture();
+        }
+    }
+
+    /// <summary>The refusal is a policy, not a value check: a <c>NULL</c> row is refused too.</summary>
+    [Fact]
+    public void MappedTimeOnly_ShouldRefuseEvenForNullRows()
+    {
+        CreateFixture();
+        try
+        {
+            var act = FluentActions.Invoking(() => _ctx.From<ITimeProbe>()
+                .Where(x => x.Id == 2)
+                .Select(x => x.Ticks)
+                .First());
+
+            act.Should().Throw<NotSupportedException>().WithMessage(Refusal);
         }
         finally
         {

@@ -17,6 +17,9 @@ public sealed class TimeOnlyClickHouseLiveTests : ProviderTestSuite
 {
     private const string Table = "t340_time_probe";
 
+    private const string Refusal =
+        "TimeOnly projection refused for ClickHouse: there is no native time-of-day type and TimeOnly is bound as String; use an explicit value converter.";
+
     private readonly ITestOutputHelper _output;
 
     public TimeOnlyClickHouseLiveTests(ITestOutputHelper output) => _output = output;
@@ -61,8 +64,27 @@ public sealed class TimeOnlyClickHouseLiveTests : ProviderTestSuite
 
             var failure = act.Should().Throw<NotSupportedException>().Which;
             _output.WriteLine($"T340 ClickHouse mapped TimeOnly refusal: {failure.Message}");
-            failure.Message.Should().Be(
-                "TimeOnly projection refused for ClickHouse: there is no native time-of-day type and TimeOnly is bound as String; use an explicit value converter.");
+            failure.Message.Should().Be(Refusal);
+        }
+        finally
+        {
+            DropFixture();
+        }
+    }
+
+    /// <summary>The refusal is a policy, not a value check: a <c>NULL</c> row is refused too.</summary>
+    [Fact]
+    public void MappedTimeOnly_ShouldRefuseEvenForNullRows()
+    {
+        CreateFixture();
+        try
+        {
+            var act = FluentActions.Invoking(() => Context.From<ITimeProbe>()
+                .Where(x => x.Id == 3)
+                .Select(x => x.T)
+                .First());
+
+            act.Should().Throw<NotSupportedException>().WithMessage(Refusal);
         }
         finally
         {

@@ -313,6 +313,32 @@ public sealed class TimeOnlyPostgresLiveTests : ProviderTestSuite
         }
     }
 
+    /// <summary>AC6/CC6: the rendered SQL of the time projection, captured after the fix.</summary>
+    [Fact]
+    public void SqlControl_ShouldBeStable()
+    {
+        CreateFixture();
+        try
+        {
+            var sql = SqlOf(Context, Context.From<ISpanProbe>()
+                .Where(x => x.Id == 2)
+                .Select(x => new { x.Id, x.T7 }));
+
+            _output.WriteLine("T340 PostgreSQL time control SQL:\n" + sql);
+            sql.Should().Contain("t340_time_probe", "the control query reads this task's own table");
+            sql.Should().Contain("t7", "the projected column keeps its name");
+        }
+        finally
+        {
+            DropFixture();
+        }
+    }
+
+    private static string SqlOf<TResult>(IDataContext ctx, QueryCommand<TResult> command)
+        => ((DbPreparedQueryCommand<TResult>)((DataContext)ctx)
+                .GetPreparedQueryCommand(command, createEnumerator: false, storeInCache: false, CancellationToken.None))
+            .DbCommand.CommandText.Replace("\r\n", "\n");
+
     private static object Prepare(DataContext context)
         => context.GetPreparedQueryCommand(
             context.From<ITimeOnlyProbe>().OrderBy(x => x.Id).Select(x => new { x.Id, x.T7 }),

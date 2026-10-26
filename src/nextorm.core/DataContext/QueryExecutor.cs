@@ -809,6 +809,18 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         => _context is DataContext context ? context.TimeOnlyProjectionRefusalValue : TimeOnlyProjectionReader.GenericRefusal;
 
     /// <summary>
+    /// Refuses a <see cref="TimeOnly"/> scalar projection before the command runs when the provider has no
+    /// verified native reader. The refusal is a mapping policy, not a value check: a <c>NULL</c> payload must
+    /// be refused too, and a scalar terminal never composes a row mapper that could raise it.
+    /// </summary>
+    private void ThrowIfTimeOnlyProjectionRefused<TResult>()
+    {
+        if ((typeof(TResult) == typeof(TimeOnly) || typeof(TResult) == typeof(TimeOnly?))
+            && TimeOnlyProjectionRefusal is { } refusal)
+            throw new NotSupportedException(refusal);
+    }
+
+    /// <summary>
     /// Converts a raw scalar value to <typeparamref name="TResult"/>. SQLite has no bool type
     /// (comparisons/EXISTS come back as INTEGER/<see cref="long"/>), so typed fast paths are used
     /// to avoid boxing and <see cref="IConvertible"/> dispatch for the common scalar types.
@@ -887,6 +899,8 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
 
     public TResult? ExecuteScalar<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, ReadOnlySpan<object?> @params, bool throwIfNull)
     {
+        ThrowIfTimeOnlyProjectionRefused<TResult>();
+
         var compiledQuery = AsDbCommand(preparedQueryCommand);
 
         object? r;
@@ -913,6 +927,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     public async Task<TResult?> ExecuteScalar<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, bool throwIfNull, CancellationToken cancellationToken)
     {
         CheckDisposed();
+        ThrowIfTimeOnlyProjectionRefused<TResult>();
         var compiledQuery = AsDbCommand(preparedQueryCommand);
 
         object? r;

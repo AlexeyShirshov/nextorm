@@ -117,6 +117,70 @@ public class TimeOnlyProjectionTests
         alien.Should().Throw<NotSupportedException>().WithMessage(Alien);
     }
 
+    /// <summary>
+    /// The in-memory provider evaluates the projection client-side and has no reader, so it must keep
+    /// returning the exact value: the SQL reader policy must not leak into it.
+    /// </summary>
+    [Fact]
+    public void InMemory_TimeOnlyProjection_ShouldEvaluateClientSide()
+    {
+        using var context = new InMemoryDataContext();
+        context.From<InMemoryTimeOnlyRow>().WithData(
+        [
+            new InMemoryTimeOnlyRow { Id = 1, T = new TimeOnly(13, 45, 7, 123).Add(TimeSpan.FromTicks(4_567)) },
+            new InMemoryTimeOnlyRow { Id = 2, T = null },
+        ]);
+
+        var rows = context.From<InMemoryTimeOnlyRow>().OrderBy(x => x.Id).Select(x => x.T).ToList();
+
+        rows[0]!.Value.Ticks.Should().Be(495_071_234_567);
+        rows[1].Should().BeNull();
+    }
+
+    /// <summary>Row shape of the in-memory projection fact.</summary>
+    public sealed class InMemoryTimeOnlyRow
+    {
+        public long Id { get; set; }
+
+        public TimeOnly? T { get; set; }
+    }
+
+    /// <summary>
+    /// A converter-owned projection keeps its own route: converters are resolved before the TimeOnly arm, so
+    /// a refused provider does not block a column that opted in explicitly.
+    /// </summary>
+    [Fact]
+    public void MapColumn_ConverterOwnedTimeOnly_ShouldBypassTheRefusal()
+    {
+        var column = new SelectExpression(typeof(TimeOnly?))
+        {
+            Index = 0,
+            PropertyName = "T",
+            Converter = new TimeOnlyTextConverter(),
+        };
+        var record = Expression.Parameter(typeof(IDataRecord), "record");
+
+        var body = RowMapperFactory.MapColumn(column, record, supportsNativeDuration: true, dialect: null, timeOnlyRefusal: Refusal);
+        var mapper = Expression.Lambda<Func<IDataRecord, TimeOnly?>>(body, record).Compile();
+
+        body.Type.Should().Be(typeof(TimeOnly?));
+        mapper(new ScalarRecord("13:45:07.1234560"))!.Value.Ticks.Should().Be(495_071_234_560);
+    }
+
+    /// <summary>
+    /// Converter used by <see cref="MapColumn_ConverterOwnedTimeOnly_ShouldBypassTheRefusal"/>; a string
+    /// provider type keeps the accessor on <see cref="IDataRecord"/> (a typed <see cref="System.Data.Common.DbDataReader"/>
+    /// getter would need a real driver reader).
+    /// </summary>
+    private sealed class TimeOnlyTextConverter : ValueConverter<TimeOnly, string>
+    {
+        public override string ConvertToProvider(TimeOnly model)
+            => model.ToString("HH:mm:ss.fffffff", System.Globalization.CultureInfo.InvariantCulture);
+
+        public override TimeOnly ConvertFromProvider(string? provider)
+            => TimeOnly.ParseExact(provider!, "HH:mm:ss.fffffff", System.Globalization.CultureInfo.InvariantCulture);
+    }
+
     // The constructor derives Nullable from the declared type, so this column exercises the nullable wrapper.
     private static SelectExpression NullableColumn() => new(typeof(TimeOnly?))
     {
@@ -149,7 +213,7 @@ public class TimeOnlyProjectionTests
         public long GetInt64(int i) => throw new NotSupportedException();
         public string GetName(int i) => "T";
         public int GetOrdinal(string name) => 0;
-        public string GetString(int i) => throw new NotSupportedException();
+        public string GetString(int i) => (string)value!;
         public object GetValue(int i) => value!;
         public int GetValues(object[] values) { values[0] = value!; return 1; }
         public bool IsDBNull(int i) => value is null or DBNull;
