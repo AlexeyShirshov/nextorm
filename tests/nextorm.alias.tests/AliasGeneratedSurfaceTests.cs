@@ -33,6 +33,10 @@ public class AliasGeneratedSurfaceTests
         // Buyer2 in slot 2 (P1_A2_Buyer2) cannot.
         // Phase 2: the root alias adds A1_Root (root only), A1_Root_A2_Buyer (alias join after it) and
         // A1_Root_P2 (a generated positional instance transition after the root alias).
+        // #324: the correlated-APPLY coverage adds the after-join alias receiver Root3/Buyer3 with its
+        // positional continuation (A1_Root3, A1_Root3_P2, A1_Root3_A2_Buyer3, A1_Root3_A2_Buyer3_P3) and
+        // the marker APPLY schema A1_Root_A2_Buyer_A3_Approver (one schema serves both kinds and both
+        // lambda forms, so the four transitions do not multiply the frozen surface).
         // #206: Alias.Target is reused by two independent queries with different joined types
         // (Person/Product); the last-step joined type is the method type parameter, so the two chains
         // collapse into the single AliasJoin_P1_A2_Target pair added here.
@@ -48,6 +52,11 @@ public class AliasGeneratedSurfaceTests
 
         names.Should().Equal(
             "Alias",
+            "AliasJoin_A1_Root3_A2_Buyer3_P3`3",
+            "AliasJoin_A1_Root3_A2_Buyer3`2",
+            "AliasJoin_A1_Root3_P2`2",
+            "AliasJoin_A1_Root3`1",
+            "AliasJoin_A1_Root_A2_Buyer_A3_Approver`3",
             "AliasJoin_A1_Root_A2_Buyer`2",
             "AliasJoin_A1_Root_P2`2",
             "AliasJoin_A1_Root`1",
@@ -61,6 +70,11 @@ public class AliasGeneratedSurfaceTests
             "AliasJoin_P1_A2_Target`2",
             "AliasJoin_P1_P2_A3_Approver`3",
             "AliasJoin_P1_P2_A3_Buyer2`3",
+            "AliasProjection_A1_Root3_A2_Buyer3_P3`3",
+            "AliasProjection_A1_Root3_A2_Buyer3`2",
+            "AliasProjection_A1_Root3_P2`2",
+            "AliasProjection_A1_Root3`1",
+            "AliasProjection_A1_Root_A2_Buyer_A3_Approver`3",
             "AliasProjection_A1_Root_A2_Buyer`2",
             "AliasProjection_A1_Root_P2`2",
             "AliasProjection_A1_Root`1",

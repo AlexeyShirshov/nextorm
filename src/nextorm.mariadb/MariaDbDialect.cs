@@ -70,6 +70,13 @@ public sealed class MariaDbDialect : MySqlDialect
     /// </summary>
     public override bool SupportsBulkCopy => false;
 
+    /// <summary>
+    /// MariaDB has no lateral/APPLY source: 11.4 rejects the generated <c>cross join lateral (…)</c> and
+    /// <c>left join lateral (…) on true</c> derived-table spelling, so APPLY is refused by the capability
+    /// gate before any SQL is produced. MySQL 8.0.14+ does support it.
+    /// </summary>
+    public override bool SupportsApply => false;
+
     /// <inheritdoc/>
     public override bool SupportsIntersectExceptAll => true;
 

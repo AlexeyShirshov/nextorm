@@ -85,6 +85,12 @@ internal readonly struct SqlBuilder
         // resolves to that earlier alias (e.g. "from x as 't3' where t2.id = ...").
         _ctx.ColumnsProvider.PushSourceScope();
 
+        // #324: record which projection this frame renders, so a SELECT projection item and the same
+        // left row used as a correlated-APPLY source resolve through one frame-local slot map (and a
+        // frame that belongs to another command keeps its existing type/occurrence resolution).
+        if (_ctx.ColumnsProvider is IOuterSlotSourceRegistry slotFrames)
+            slotFrames.BindFrameProjection(cmd.EntityType is { } frameType && typeof(IProjection).IsAssignableFrom(frameType) ? frameType : null);
+
         try
         {
             // CTEs are rendered (or, in parameter mode, only walked for parameters) before the outer

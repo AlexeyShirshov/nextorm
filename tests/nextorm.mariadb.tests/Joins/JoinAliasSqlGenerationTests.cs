@@ -106,28 +106,31 @@ public class JoinAliasSqlGenerationTests
     }
 
     [Fact]
-    public void CrossApply_alias_join_emits_cross_join_on_plain_table_because_supported()
+    public void CrossApply_alias_join_is_refused_because_the_dialect_has_no_apply()
     {
         using var ctx = MariaDbTestContext.Create();
         var simple = ctx.From<ISimpleEntity>();
         var complex = ctx.From<IComplexEntity>();
 
-        var alias = SqlOf(ctx, simple.CrossApply(complex, Alias.Buyer).Select(p => p.Buyer.Id));
+        var act = () => SqlOf(ctx, simple.CrossApply(complex, Alias.Buyer).Select(p => p.Buyer.Id));
 
-        // A plain table cannot be LATERAL, so MariaDB renders a cross join.
-        alias.Should().Contain(" cross join complex_entity");
+        // The capability gate runs before the plain-table fallback, so even a non-correlated APPLY over a
+        // plain table is refused rather than rendered as `cross join <table>`.
+        act.Should().Throw<NotSupportedException>()
+            .WithMessage("The CrossApply join is not supported by this SQL dialect");
     }
 
     [Fact]
-    public void OuterApply_alias_join_emits_left_join_on_true_on_plain_table_because_supported()
+    public void OuterApply_alias_join_is_refused_because_the_dialect_has_no_apply()
     {
         using var ctx = MariaDbTestContext.Create();
         var simple = ctx.From<ISimpleEntity>();
         var complex = ctx.From<IComplexEntity>();
 
-        var alias = SqlOf(ctx, simple.OuterApply(complex, Alias.Buyer).Select(p => p.Buyer.Id));
+        var act = () => SqlOf(ctx, simple.OuterApply(complex, Alias.Buyer).Select(p => p.Buyer.Id));
 
-        alias.Should().Contain(" left join complex_entity").And.Contain(" on true");
+        act.Should().Throw<NotSupportedException>()
+            .WithMessage("The OuterApply join is not supported by this SQL dialect");
     }
 
     // ---------------------------------------------------------------------------------------------

@@ -69,6 +69,10 @@ public partial class QueryCommand
         // clone must carry them; otherwise the hash captured at construction would not match the
         // recomputed hash in QueryPlan.GetCacheVersion and the Debug.Assert would fail.
         dst._outerRefs = _outerRefs;
+        // The occurrence bindings travel with the outer references so a cached clone keeps the metadata
+        // needed to render its markers. They are runtime metadata only: neither is part of the plan key
+        // (QueryPlanEqualityComparer reads OuterReferences, never the binding side table).
+        dst._outerRefBindings = _outerRefBindings;
         dst.OuterRegistry = OuterRegistry;
 
         dst.ResultType = ResultType;
@@ -209,6 +213,7 @@ public partial class QueryCommand
     {
         var clone = (QueryCommand)((ICloneable)this).Clone();
         clone._outerRefs = null;
+        clone._outerRefBindings = null;
         clone._referencedQueries = null;
         clone.OuterRegistry = null;
         clone.ReferencedQueriesPlanHash = 0;

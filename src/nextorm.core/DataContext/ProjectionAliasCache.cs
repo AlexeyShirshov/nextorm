@@ -69,6 +69,18 @@ internal static class ProjectionAliasCache
     }
 
     /// <summary>
+    /// Returns the one-based projection slot a member addresses (<c>Item1</c> = 1, or the generated
+    /// <see cref="JoinSlotAttribute.Position"/>), or <see langword="null"/> when the member addresses no
+    /// projection slot. It is the single slot-derivation policy shared by the outer-reference binding and
+    /// the render-local projection resolution (#324), so both name the same slot for the same member.
+    /// </summary>
+    public static int? GetMemberSlot(MemberInfo member)
+    {
+        var position = GetMemberPosition(member);
+        return position < 0 ? null : position + 1;
+    }
+
+    /// <summary>
     /// Parses the 1-based position out of an engine projection member name (<c>Item1</c>..<c>Item8</c>):
     /// <c>Item</c> followed by one or more digits. Returns <see langword="false"/> for any other name, so
     /// a generated lexical alias that happens to end in a digit (for example <c>Buyer2</c>) is not

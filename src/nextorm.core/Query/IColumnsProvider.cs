@@ -141,3 +141,68 @@ public interface IColumnsProvider
     /// </summary>
     void PopSourceScope();
 }
+
+/// <summary>
+/// Render-local registry of correlated APPLY left-row bindings (#324). It maps an APPLY lambda
+/// parameter occurrence plus a one-based left-row slot to the exact source registration of the active
+/// render frame. The mapping is created per render and per source scope, so it never becomes
+/// process-wide state. A bound outer reference whose occurrence is absent fails closed instead of
+/// falling back to alias arithmetic or a type-based guess.
+/// </summary>
+internal interface IOuterSlotSourceRegistry
+{
+    /// <summary>
+    /// Returns the registration index of the <paramref name="slot"/>-th non-nested source of the
+    /// current source scope (1 = the first source registered by the command being rendered), or
+    /// <see langword="null"/> when the scope has fewer sources.
+    /// </summary>
+    /// <param name="slot">The one-based left-row slot.</param>
+    int? ResolveFrameSourceIndex(int slot);
+
+    /// <summary>Binds a left-row slot of <paramref name="owner"/> to a registration index in the current source scope.</summary>
+    /// <param name="owner">The APPLY lambda parameter occurrence.</param>
+    /// <param name="slot">The one-based left-row slot.</param>
+    /// <param name="sourceIndex">The registration index of the slot's source in this frame.</param>
+    void PushOuterSlotSource(ParameterExpression owner, int slot, int sourceIndex);
+
+    /// <summary>
+    /// Resolves a bound left-row slot from the innermost source scope outwards, or returns
+    /// <see langword="null"/> when no active frame registered it. Popped frames stop resolving.
+    /// </summary>
+    /// <param name="owner">The APPLY lambda parameter occurrence.</param>
+    /// <param name="slot">The one-based left-row slot.</param>
+    int? FindOuterSlotSource(ParameterExpression owner, int slot);
+
+    /// <summary>
+    /// Marks the innermost source scope as the frame of the command whose projection is
+    /// <paramref name="projectionType"/> (#324), so a SELECT projection item can be resolved through
+    /// the same frame-local slot map a correlated APPLY left row uses. Called once per
+    /// <c>MakeSelect</c>, immediately after the scope is pushed; <see langword="null"/> for a command
+    /// that is not rendered over a projection. A frame that is not marked never resolves a projection
+    /// slot, so an enclosing or nested command's frame cannot satisfy this command's lookups.
+    /// </summary>
+    /// <param name="projectionType">The command's projection type, or <see langword="null"/>.</param>
+    void BindFrameProjection(Type? projectionType);
+
+    /// <summary>
+    /// Resolves a projection item slot against the exact registration order of the innermost source
+    /// scope — the same order <see cref="ResolveFrameSourceIndex"/> established for a correlated APPLY's
+    /// left row — but only when that frame belongs to <paramref name="projectionType"/> and carries a
+    /// correlated-APPLY binding. Returns <see langword="null"/> when the frame is not bound that way, so
+    /// every other query keeps its existing type/occurrence resolution. A bound frame that cannot
+    /// address the slot fails closed instead of selecting another alias.
+    /// </summary>
+    /// <param name="projectionType">The projection type the rendered command is built over.</param>
+    /// <param name="slot">The one-based projection slot (Item1 = 1).</param>
+    int? ResolveProjectionSlotSourceIndex(Type projectionType, int slot);
+
+    /// <summary>
+    /// Returns the query command registered as the source at <paramref name="sourceIndex"/>, or
+    /// <see langword="null"/> when that source is a plain physical table (no derived projection to
+    /// expose) or the index is not a registered source. An APPLY/derived slot is rendered through the
+    /// identity its own projection aliases, so the consumer never re-derives a name from the
+    /// underlying physical column (#324).
+    /// </summary>
+    /// <param name="sourceIndex">A registration index returned by this registry or the columns provider.</param>
+    QueryCommand? FindSourceCommand(int sourceIndex);
+}

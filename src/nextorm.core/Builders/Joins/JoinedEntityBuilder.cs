@@ -119,6 +119,34 @@ public class JoinedEntityBuilder<T1, T2> : EntityBuilder<Projection<T1, T2>>
     /// <returns>A builder over the projection extended with <typeparamref name="T3"/>.</returns>
     public new JoinedEntityBuilder<T1, T2, T3> OuterApply<T3>(EntityBuilder<T3> _, Action<JoinOptions>? options = null)
         => JoinCore(_, JoinType.OuterApply, null, options);
+    /// <summary>Applies a correlated <c>CROSS APPLY</c> source per left-hand row of this 2-source join, adding it as one more flat slot.</summary>
+    /// <typeparam name="T3">The element type yielded by the applied source.</typeparam>
+    /// <param name="source">Builds the applied source from the flattened left-hand row; it may reference every preceding slot.</param>
+    /// <param name="options">Optional per-apply configuration (strictness, global, join/table hints, source lock).</param>
+    /// <returns>A builder over the flat 3-slot projection; no nested projection is produced.</returns>
+    public new JoinedEntityBuilder<T1, T2, T3> CrossApply<T3>(Expression<Func<Projection<T1, T2>, EntityBuilder<T3>>> source, Action<JoinOptions>? options = null)
+        => ApplyCorrelatedJoin<JoinedEntityBuilder<T1, T2, T3>, Projection<T1, T2, T3>, T3>(source, JoinType.CrossApply, options, static (dataProvider, _) => new JoinedEntityBuilder<T1, T2, T3>(dataProvider));
+    /// <summary>Applies a correlated <c>OUTER APPLY</c> source per left-hand row, keeping unmatched left rows of this 2-source join, adding it as one more flat slot.</summary>
+    /// <typeparam name="T3">The element type yielded by the applied source.</typeparam>
+    /// <param name="source">Builds the applied source from the flattened left-hand row; it may reference every preceding slot.</param>
+    /// <param name="options">Optional per-apply configuration (strictness, global, join/table hints, source lock).</param>
+    /// <returns>A builder over the flat 3-slot projection; no nested projection is produced.</returns>
+    public new JoinedEntityBuilder<T1, T2, T3> OuterApply<T3>(Expression<Func<Projection<T1, T2>, EntityBuilder<T3>>> source, Action<JoinOptions>? options = null)
+        => ApplyCorrelatedJoin<JoinedEntityBuilder<T1, T2, T3>, Projection<T1, T2, T3>, T3>(source, JoinType.OuterApply, options, static (dataProvider, _) => new JoinedEntityBuilder<T1, T2, T3>(dataProvider));
+    /// <summary>Applies a correlated <c>CROSS APPLY</c> derived query per left-hand row of this 2-source join, adding it as one more flat slot.</summary>
+    /// <typeparam name="T3">The element type yielded by the applied source.</typeparam>
+    /// <param name="source">Builds the applied source from the flattened left-hand row; it may reference every preceding slot.</param>
+    /// <param name="options">Optional per-apply configuration (strictness, global, join/table hints, source lock).</param>
+    /// <returns>A builder over the flat 3-slot projection; no nested projection is produced.</returns>
+    public new JoinedEntityBuilder<T1, T2, T3> CrossApply<T3>(Expression<Func<Projection<T1, T2>, QueryCommand<T3>>> source, Action<JoinOptions>? options = null)
+        => ApplyCorrelatedJoin<JoinedEntityBuilder<T1, T2, T3>, Projection<T1, T2, T3>, T3>(source, JoinType.CrossApply, options, static (dataProvider, _) => new JoinedEntityBuilder<T1, T2, T3>(dataProvider));
+    /// <summary>Applies a correlated <c>OUTER APPLY</c> derived query per left-hand row of this 2-source join, adding it as one more flat slot.</summary>
+    /// <typeparam name="T3">The element type yielded by the applied source.</typeparam>
+    /// <param name="source">Builds the applied source from the flattened left-hand row; it may reference every preceding slot.</param>
+    /// <param name="options">Optional per-apply configuration (strictness, global, join/table hints, source lock).</param>
+    /// <returns>A builder over the flat 3-slot projection; no nested projection is produced.</returns>
+    public new JoinedEntityBuilder<T1, T2, T3> OuterApply<T3>(Expression<Func<Projection<T1, T2>, QueryCommand<T3>>> source, Action<JoinOptions>? options = null)
+        => ApplyCorrelatedJoin<JoinedEntityBuilder<T1, T2, T3>, Projection<T1, T2, T3>, T3>(source, JoinType.OuterApply, options, static (dataProvider, _) => new JoinedEntityBuilder<T1, T2, T3>(dataProvider));
     // #159 direct Cte<T> continuation overloads (receiver arity 2).
     /// <summary>Adds a inner join over the typed CTE <paramref name="cte"/>.</summary>
     /// <typeparam name="T3">The CTE's projection type.</typeparam>
@@ -419,6 +447,34 @@ public class JoinedEntityBuilder<T1, T2, T3> : EntityBuilder<Projection<T1, T2, 
     /// <returns>A builder over the projection extended with <typeparamref name="T4"/>.</returns>
     public new JoinedEntityBuilder<T1, T2, T3, T4> OuterApply<T4>(EntityBuilder<T4> _, Action<JoinOptions>? options = null)
         => JoinCore(_, JoinType.OuterApply, null, options);
+    /// <summary>Applies a correlated <c>CROSS APPLY</c> source per left-hand row of this 3-source join, adding it as one more flat slot.</summary>
+    /// <typeparam name="T4">The element type yielded by the applied source.</typeparam>
+    /// <param name="source">Builds the applied source from the flattened left-hand row; it may reference every preceding slot.</param>
+    /// <param name="options">Optional per-apply configuration (strictness, global, join/table hints, source lock).</param>
+    /// <returns>A builder over the flat 4-slot projection; no nested projection is produced.</returns>
+    public new JoinedEntityBuilder<T1, T2, T3, T4> CrossApply<T4>(Expression<Func<Projection<T1, T2, T3>, EntityBuilder<T4>>> source, Action<JoinOptions>? options = null)
+        => ApplyCorrelatedJoin<JoinedEntityBuilder<T1, T2, T3, T4>, Projection<T1, T2, T3, T4>, T4>(source, JoinType.CrossApply, options, static (dataProvider, _) => new JoinedEntityBuilder<T1, T2, T3, T4>(dataProvider));
+    /// <summary>Applies a correlated <c>OUTER APPLY</c> source per left-hand row, keeping unmatched left rows of this 3-source join, adding it as one more flat slot.</summary>
+    /// <typeparam name="T4">The element type yielded by the applied source.</typeparam>
+    /// <param name="source">Builds the applied source from the flattened left-hand row; it may reference every preceding slot.</param>
+    /// <param name="options">Optional per-apply configuration (strictness, global, join/table hints, source lock).</param>
+    /// <returns>A builder over the flat 4-slot projection; no nested projection is produced.</returns>
+    public new JoinedEntityBuilder<T1, T2, T3, T4> OuterApply<T4>(Expression<Func<Projection<T1, T2, T3>, EntityBuilder<T4>>> source, Action<JoinOptions>? options = null)
+        => ApplyCorrelatedJoin<JoinedEntityBuilder<T1, T2, T3, T4>, Projection<T1, T2, T3, T4>, T4>(source, JoinType.OuterApply, options, static (dataProvider, _) => new JoinedEntityBuilder<T1, T2, T3, T4>(dataProvider));
+    /// <summary>Applies a correlated <c>CROSS APPLY</c> derived query per left-hand row of this 3-source join, adding it as one more flat slot.</summary>
+    /// <typeparam name="T4">The element type yielded by the applied source.</typeparam>
+    /// <param name="source">Builds the applied source from the flattened left-hand row; it may reference every preceding slot.</param>
+    /// <param name="options">Optional per-apply configuration (strictness, global, join/table hints, source lock).</param>
+    /// <returns>A builder over the flat 4-slot projection; no nested projection is produced.</returns>
+    public new JoinedEntityBuilder<T1, T2, T3, T4> CrossApply<T4>(Expression<Func<Projection<T1, T2, T3>, QueryCommand<T4>>> source, Action<JoinOptions>? options = null)
+        => ApplyCorrelatedJoin<JoinedEntityBuilder<T1, T2, T3, T4>, Projection<T1, T2, T3, T4>, T4>(source, JoinType.CrossApply, options, static (dataProvider, _) => new JoinedEntityBuilder<T1, T2, T3, T4>(dataProvider));
+    /// <summary>Applies a correlated <c>OUTER APPLY</c> derived query per left-hand row of this 3-source join, adding it as one more flat slot.</summary>
+    /// <typeparam name="T4">The element type yielded by the applied source.</typeparam>
+    /// <param name="source">Builds the applied source from the flattened left-hand row; it may reference every preceding slot.</param>
+    /// <param name="options">Optional per-apply configuration (strictness, global, join/table hints, source lock).</param>
+    /// <returns>A builder over the flat 4-slot projection; no nested projection is produced.</returns>
+    public new JoinedEntityBuilder<T1, T2, T3, T4> OuterApply<T4>(Expression<Func<Projection<T1, T2, T3>, QueryCommand<T4>>> source, Action<JoinOptions>? options = null)
+        => ApplyCorrelatedJoin<JoinedEntityBuilder<T1, T2, T3, T4>, Projection<T1, T2, T3, T4>, T4>(source, JoinType.OuterApply, options, static (dataProvider, _) => new JoinedEntityBuilder<T1, T2, T3, T4>(dataProvider));
     // #159 direct Cte<T> continuation overloads (receiver arity 3).
     /// <summary>Adds a inner join over the typed CTE <paramref name="cte"/>.</summary>
     /// <typeparam name="T4">The CTE's projection type.</typeparam>
@@ -703,6 +759,34 @@ public class JoinedEntityBuilder<T1, T2, T3, T4> : EntityBuilder<Projection<T1, 
     /// <returns>A builder over the projection extended with <typeparamref name="T5"/>.</returns>
     public new JoinedEntityBuilder<T1, T2, T3, T4, T5> OuterApply<T5>(EntityBuilder<T5> _, Action<JoinOptions>? options = null)
         => JoinCore(_, JoinType.OuterApply, null, options);
+    /// <summary>Applies a correlated <c>CROSS APPLY</c> source per left-hand row of this 4-source join, adding it as one more flat slot.</summary>
+    /// <typeparam name="T5">The element type yielded by the applied source.</typeparam>
+    /// <param name="source">Builds the applied source from the flattened left-hand row; it may reference every preceding slot.</param>
+    /// <param name="options">Optional per-apply configuration (strictness, global, join/table hints, source lock).</param>
+    /// <returns>A builder over the flat 5-slot projection; no nested projection is produced.</returns>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5> CrossApply<T5>(Expression<Func<Projection<T1, T2, T3, T4>, EntityBuilder<T5>>> source, Action<JoinOptions>? options = null)
+        => ApplyCorrelatedJoin<JoinedEntityBuilder<T1, T2, T3, T4, T5>, Projection<T1, T2, T3, T4, T5>, T5>(source, JoinType.CrossApply, options, static (dataProvider, _) => new JoinedEntityBuilder<T1, T2, T3, T4, T5>(dataProvider));
+    /// <summary>Applies a correlated <c>OUTER APPLY</c> source per left-hand row, keeping unmatched left rows of this 4-source join, adding it as one more flat slot.</summary>
+    /// <typeparam name="T5">The element type yielded by the applied source.</typeparam>
+    /// <param name="source">Builds the applied source from the flattened left-hand row; it may reference every preceding slot.</param>
+    /// <param name="options">Optional per-apply configuration (strictness, global, join/table hints, source lock).</param>
+    /// <returns>A builder over the flat 5-slot projection; no nested projection is produced.</returns>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5> OuterApply<T5>(Expression<Func<Projection<T1, T2, T3, T4>, EntityBuilder<T5>>> source, Action<JoinOptions>? options = null)
+        => ApplyCorrelatedJoin<JoinedEntityBuilder<T1, T2, T3, T4, T5>, Projection<T1, T2, T3, T4, T5>, T5>(source, JoinType.OuterApply, options, static (dataProvider, _) => new JoinedEntityBuilder<T1, T2, T3, T4, T5>(dataProvider));
+    /// <summary>Applies a correlated <c>CROSS APPLY</c> derived query per left-hand row of this 4-source join, adding it as one more flat slot.</summary>
+    /// <typeparam name="T5">The element type yielded by the applied source.</typeparam>
+    /// <param name="source">Builds the applied source from the flattened left-hand row; it may reference every preceding slot.</param>
+    /// <param name="options">Optional per-apply configuration (strictness, global, join/table hints, source lock).</param>
+    /// <returns>A builder over the flat 5-slot projection; no nested projection is produced.</returns>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5> CrossApply<T5>(Expression<Func<Projection<T1, T2, T3, T4>, QueryCommand<T5>>> source, Action<JoinOptions>? options = null)
+        => ApplyCorrelatedJoin<JoinedEntityBuilder<T1, T2, T3, T4, T5>, Projection<T1, T2, T3, T4, T5>, T5>(source, JoinType.CrossApply, options, static (dataProvider, _) => new JoinedEntityBuilder<T1, T2, T3, T4, T5>(dataProvider));
+    /// <summary>Applies a correlated <c>OUTER APPLY</c> derived query per left-hand row of this 4-source join, adding it as one more flat slot.</summary>
+    /// <typeparam name="T5">The element type yielded by the applied source.</typeparam>
+    /// <param name="source">Builds the applied source from the flattened left-hand row; it may reference every preceding slot.</param>
+    /// <param name="options">Optional per-apply configuration (strictness, global, join/table hints, source lock).</param>
+    /// <returns>A builder over the flat 5-slot projection; no nested projection is produced.</returns>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5> OuterApply<T5>(Expression<Func<Projection<T1, T2, T3, T4>, QueryCommand<T5>>> source, Action<JoinOptions>? options = null)
+        => ApplyCorrelatedJoin<JoinedEntityBuilder<T1, T2, T3, T4, T5>, Projection<T1, T2, T3, T4, T5>, T5>(source, JoinType.OuterApply, options, static (dataProvider, _) => new JoinedEntityBuilder<T1, T2, T3, T4, T5>(dataProvider));
     // #159 direct Cte<T> continuation overloads (receiver arity 4).
     /// <summary>Adds a inner join over the typed CTE <paramref name="cte"/>.</summary>
     /// <typeparam name="T5">The CTE's projection type.</typeparam>
@@ -987,6 +1071,34 @@ public class JoinedEntityBuilder<T1, T2, T3, T4, T5> : EntityBuilder<Projection<
     /// <returns>A builder over the projection extended with <typeparamref name="T6"/>.</returns>
     public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> OuterApply<T6>(EntityBuilder<T6> _, Action<JoinOptions>? options = null)
         => JoinCore(_, JoinType.OuterApply, null, options);
+    /// <summary>Applies a correlated <c>CROSS APPLY</c> source per left-hand row of this 5-source join, adding it as one more flat slot.</summary>
+    /// <typeparam name="T6">The element type yielded by the applied source.</typeparam>
+    /// <param name="source">Builds the applied source from the flattened left-hand row; it may reference every preceding slot.</param>
+    /// <param name="options">Optional per-apply configuration (strictness, global, join/table hints, source lock).</param>
+    /// <returns>A builder over the flat 6-slot projection; no nested projection is produced.</returns>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> CrossApply<T6>(Expression<Func<Projection<T1, T2, T3, T4, T5>, EntityBuilder<T6>>> source, Action<JoinOptions>? options = null)
+        => ApplyCorrelatedJoin<JoinedEntityBuilder<T1, T2, T3, T4, T5, T6>, Projection<T1, T2, T3, T4, T5, T6>, T6>(source, JoinType.CrossApply, options, static (dataProvider, _) => new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6>(dataProvider));
+    /// <summary>Applies a correlated <c>OUTER APPLY</c> source per left-hand row, keeping unmatched left rows of this 5-source join, adding it as one more flat slot.</summary>
+    /// <typeparam name="T6">The element type yielded by the applied source.</typeparam>
+    /// <param name="source">Builds the applied source from the flattened left-hand row; it may reference every preceding slot.</param>
+    /// <param name="options">Optional per-apply configuration (strictness, global, join/table hints, source lock).</param>
+    /// <returns>A builder over the flat 6-slot projection; no nested projection is produced.</returns>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> OuterApply<T6>(Expression<Func<Projection<T1, T2, T3, T4, T5>, EntityBuilder<T6>>> source, Action<JoinOptions>? options = null)
+        => ApplyCorrelatedJoin<JoinedEntityBuilder<T1, T2, T3, T4, T5, T6>, Projection<T1, T2, T3, T4, T5, T6>, T6>(source, JoinType.OuterApply, options, static (dataProvider, _) => new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6>(dataProvider));
+    /// <summary>Applies a correlated <c>CROSS APPLY</c> derived query per left-hand row of this 5-source join, adding it as one more flat slot.</summary>
+    /// <typeparam name="T6">The element type yielded by the applied source.</typeparam>
+    /// <param name="source">Builds the applied source from the flattened left-hand row; it may reference every preceding slot.</param>
+    /// <param name="options">Optional per-apply configuration (strictness, global, join/table hints, source lock).</param>
+    /// <returns>A builder over the flat 6-slot projection; no nested projection is produced.</returns>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> CrossApply<T6>(Expression<Func<Projection<T1, T2, T3, T4, T5>, QueryCommand<T6>>> source, Action<JoinOptions>? options = null)
+        => ApplyCorrelatedJoin<JoinedEntityBuilder<T1, T2, T3, T4, T5, T6>, Projection<T1, T2, T3, T4, T5, T6>, T6>(source, JoinType.CrossApply, options, static (dataProvider, _) => new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6>(dataProvider));
+    /// <summary>Applies a correlated <c>OUTER APPLY</c> derived query per left-hand row of this 5-source join, adding it as one more flat slot.</summary>
+    /// <typeparam name="T6">The element type yielded by the applied source.</typeparam>
+    /// <param name="source">Builds the applied source from the flattened left-hand row; it may reference every preceding slot.</param>
+    /// <param name="options">Optional per-apply configuration (strictness, global, join/table hints, source lock).</param>
+    /// <returns>A builder over the flat 6-slot projection; no nested projection is produced.</returns>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> OuterApply<T6>(Expression<Func<Projection<T1, T2, T3, T4, T5>, QueryCommand<T6>>> source, Action<JoinOptions>? options = null)
+        => ApplyCorrelatedJoin<JoinedEntityBuilder<T1, T2, T3, T4, T5, T6>, Projection<T1, T2, T3, T4, T5, T6>, T6>(source, JoinType.OuterApply, options, static (dataProvider, _) => new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6>(dataProvider));
     // #159 direct Cte<T> continuation overloads (receiver arity 5).
     /// <summary>Adds a inner join over the typed CTE <paramref name="cte"/>.</summary>
     /// <typeparam name="T6">The CTE's projection type.</typeparam>
@@ -1271,6 +1383,34 @@ public class JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> : EntityBuilder<Project
     /// <returns>A builder over the projection extended with <typeparamref name="T7"/>.</returns>
     public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> OuterApply<T7>(EntityBuilder<T7> _, Action<JoinOptions>? options = null)
         => JoinCore(_, JoinType.OuterApply, null, options);
+    /// <summary>Applies a correlated <c>CROSS APPLY</c> source per left-hand row of this 6-source join, adding it as one more flat slot.</summary>
+    /// <typeparam name="T7">The element type yielded by the applied source.</typeparam>
+    /// <param name="source">Builds the applied source from the flattened left-hand row; it may reference every preceding slot.</param>
+    /// <param name="options">Optional per-apply configuration (strictness, global, join/table hints, source lock).</param>
+    /// <returns>A builder over the flat 7-slot projection; no nested projection is produced.</returns>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> CrossApply<T7>(Expression<Func<Projection<T1, T2, T3, T4, T5, T6>, EntityBuilder<T7>>> source, Action<JoinOptions>? options = null)
+        => ApplyCorrelatedJoin<JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7>, Projection<T1, T2, T3, T4, T5, T6, T7>, T7>(source, JoinType.CrossApply, options, static (dataProvider, _) => new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7>(dataProvider));
+    /// <summary>Applies a correlated <c>OUTER APPLY</c> source per left-hand row, keeping unmatched left rows of this 6-source join, adding it as one more flat slot.</summary>
+    /// <typeparam name="T7">The element type yielded by the applied source.</typeparam>
+    /// <param name="source">Builds the applied source from the flattened left-hand row; it may reference every preceding slot.</param>
+    /// <param name="options">Optional per-apply configuration (strictness, global, join/table hints, source lock).</param>
+    /// <returns>A builder over the flat 7-slot projection; no nested projection is produced.</returns>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> OuterApply<T7>(Expression<Func<Projection<T1, T2, T3, T4, T5, T6>, EntityBuilder<T7>>> source, Action<JoinOptions>? options = null)
+        => ApplyCorrelatedJoin<JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7>, Projection<T1, T2, T3, T4, T5, T6, T7>, T7>(source, JoinType.OuterApply, options, static (dataProvider, _) => new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7>(dataProvider));
+    /// <summary>Applies a correlated <c>CROSS APPLY</c> derived query per left-hand row of this 6-source join, adding it as one more flat slot.</summary>
+    /// <typeparam name="T7">The element type yielded by the applied source.</typeparam>
+    /// <param name="source">Builds the applied source from the flattened left-hand row; it may reference every preceding slot.</param>
+    /// <param name="options">Optional per-apply configuration (strictness, global, join/table hints, source lock).</param>
+    /// <returns>A builder over the flat 7-slot projection; no nested projection is produced.</returns>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> CrossApply<T7>(Expression<Func<Projection<T1, T2, T3, T4, T5, T6>, QueryCommand<T7>>> source, Action<JoinOptions>? options = null)
+        => ApplyCorrelatedJoin<JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7>, Projection<T1, T2, T3, T4, T5, T6, T7>, T7>(source, JoinType.CrossApply, options, static (dataProvider, _) => new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7>(dataProvider));
+    /// <summary>Applies a correlated <c>OUTER APPLY</c> derived query per left-hand row of this 6-source join, adding it as one more flat slot.</summary>
+    /// <typeparam name="T7">The element type yielded by the applied source.</typeparam>
+    /// <param name="source">Builds the applied source from the flattened left-hand row; it may reference every preceding slot.</param>
+    /// <param name="options">Optional per-apply configuration (strictness, global, join/table hints, source lock).</param>
+    /// <returns>A builder over the flat 7-slot projection; no nested projection is produced.</returns>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> OuterApply<T7>(Expression<Func<Projection<T1, T2, T3, T4, T5, T6>, QueryCommand<T7>>> source, Action<JoinOptions>? options = null)
+        => ApplyCorrelatedJoin<JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7>, Projection<T1, T2, T3, T4, T5, T6, T7>, T7>(source, JoinType.OuterApply, options, static (dataProvider, _) => new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7>(dataProvider));
     // #159 direct Cte<T> continuation overloads (receiver arity 6).
     /// <summary>Adds a inner join over the typed CTE <paramref name="cte"/>.</summary>
     /// <typeparam name="T7">The CTE's projection type.</typeparam>
@@ -1555,6 +1695,34 @@ public class JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> : EntityBuilder<Pro
     /// <returns>A builder over the projection extended with <typeparamref name="T8"/>.</returns>
     public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> OuterApply<T8>(EntityBuilder<T8> _, Action<JoinOptions>? options = null)
         => JoinCore(_, JoinType.OuterApply, null, options);
+    /// <summary>Applies a correlated <c>CROSS APPLY</c> source per left-hand row of this 7-source join, adding it as one more flat slot.</summary>
+    /// <typeparam name="T8">The element type yielded by the applied source.</typeparam>
+    /// <param name="source">Builds the applied source from the flattened left-hand row; it may reference every preceding slot.</param>
+    /// <param name="options">Optional per-apply configuration (strictness, global, join/table hints, source lock).</param>
+    /// <returns>A builder over the flat 8-slot projection; no nested projection is produced.</returns>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> CrossApply<T8>(Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7>, EntityBuilder<T8>>> source, Action<JoinOptions>? options = null)
+        => ApplyCorrelatedJoin<JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8>, Projection<T1, T2, T3, T4, T5, T6, T7, T8>, T8>(source, JoinType.CrossApply, options, static (dataProvider, _) => new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8>(dataProvider));
+    /// <summary>Applies a correlated <c>OUTER APPLY</c> source per left-hand row, keeping unmatched left rows of this 7-source join, adding it as one more flat slot.</summary>
+    /// <typeparam name="T8">The element type yielded by the applied source.</typeparam>
+    /// <param name="source">Builds the applied source from the flattened left-hand row; it may reference every preceding slot.</param>
+    /// <param name="options">Optional per-apply configuration (strictness, global, join/table hints, source lock).</param>
+    /// <returns>A builder over the flat 8-slot projection; no nested projection is produced.</returns>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> OuterApply<T8>(Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7>, EntityBuilder<T8>>> source, Action<JoinOptions>? options = null)
+        => ApplyCorrelatedJoin<JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8>, Projection<T1, T2, T3, T4, T5, T6, T7, T8>, T8>(source, JoinType.OuterApply, options, static (dataProvider, _) => new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8>(dataProvider));
+    /// <summary>Applies a correlated <c>CROSS APPLY</c> derived query per left-hand row of this 7-source join, adding it as one more flat slot.</summary>
+    /// <typeparam name="T8">The element type yielded by the applied source.</typeparam>
+    /// <param name="source">Builds the applied source from the flattened left-hand row; it may reference every preceding slot.</param>
+    /// <param name="options">Optional per-apply configuration (strictness, global, join/table hints, source lock).</param>
+    /// <returns>A builder over the flat 8-slot projection; no nested projection is produced.</returns>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> CrossApply<T8>(Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7>, QueryCommand<T8>>> source, Action<JoinOptions>? options = null)
+        => ApplyCorrelatedJoin<JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8>, Projection<T1, T2, T3, T4, T5, T6, T7, T8>, T8>(source, JoinType.CrossApply, options, static (dataProvider, _) => new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8>(dataProvider));
+    /// <summary>Applies a correlated <c>OUTER APPLY</c> derived query per left-hand row of this 7-source join, adding it as one more flat slot.</summary>
+    /// <typeparam name="T8">The element type yielded by the applied source.</typeparam>
+    /// <param name="source">Builds the applied source from the flattened left-hand row; it may reference every preceding slot.</param>
+    /// <param name="options">Optional per-apply configuration (strictness, global, join/table hints, source lock).</param>
+    /// <returns>A builder over the flat 8-slot projection; no nested projection is produced.</returns>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> OuterApply<T8>(Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7>, QueryCommand<T8>>> source, Action<JoinOptions>? options = null)
+        => ApplyCorrelatedJoin<JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8>, Projection<T1, T2, T3, T4, T5, T6, T7, T8>, T8>(source, JoinType.OuterApply, options, static (dataProvider, _) => new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8>(dataProvider));
     // #159 direct Cte<T> continuation overloads (receiver arity 7).
     /// <summary>Adds a inner join over the typed CTE <paramref name="cte"/>.</summary>
     /// <typeparam name="T8">The CTE's projection type.</typeparam>

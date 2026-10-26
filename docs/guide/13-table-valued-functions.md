@@ -201,7 +201,7 @@ var rows = dataContext
 select t1.id, t2.value
  from simple_entity as [t1]
  cross apply all_rows() as [t2]
--- PostgreSQL / MySQL / MariaDB
+-- PostgreSQL / MySQL 8.0.14+
 select t1.id, t2.value
  from simple_entity as "t1"
  cross join lateral all_rows() as "t2"
@@ -232,8 +232,8 @@ select t1.id, t3.value
 ```
 
 `OuterApply` is the left-preserving twin: it keeps left-hand rows for which the function returns no
-rows, projecting `null`s. Applying any source needs a lateral-capable provider — SQLite, ClickHouse
-and the in-memory provider reject it ([`SupportsApply`](xref:NextORM.Core.ISqlDialect.SupportsApply)).
+rows, projecting `null`s. Applying any source needs a lateral-capable provider — SQLite, ClickHouse,
+MariaDB 11.4 and the in-memory provider reject it ([`SupportsApply`](xref:NextORM.Core.ISqlDialect.SupportsApply)).
 
 Filtering, sorting and grouping behave as usual:
 

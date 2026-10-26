@@ -201,7 +201,7 @@ var rows = dataContext
 select t1.id, t2.value
  from simple_entity as [t1]
  cross apply all_rows() as [t2]
--- PostgreSQL / MySQL / MariaDB
+-- PostgreSQL / MySQL 8.0.14+
 select t1.id, t2.value
  from simple_entity as "t1"
  cross join lateral all_rows() as "t2"
@@ -233,7 +233,7 @@ select t1.id, t3.value
 
 `OuterApply` — близнец, сохраняющий левые строки: он оставляет строки, для которых функция не вернула
 ни одной строки, проецируя `null`. Применение любого источника требует провайдера с lateral-источником —
-SQLite, ClickHouse и in-memory провайдер отклоняют его ([`SupportsApply`](xref:NextORM.Core.ISqlDialect.SupportsApply)).
+SQLite, ClickHouse, MariaDB 11.4 и in-memory провайдер отклоняют его ([`SupportsApply`](xref:NextORM.Core.ISqlDialect.SupportsApply)).
 
 Фильтрация, сортировка и группировка работают как обычно:
 

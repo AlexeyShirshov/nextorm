@@ -820,16 +820,17 @@ public class SqlGenerationTests
     }
 
     [Fact]
-    public void CrossApply_OnJoinedProjection_ShouldThrowClearNotSupported()
+    public void CrossApply_OnJoinedProjection_ShouldRenderFlatCorrelatedApply()
     {
         using var ctx = SqlServerTestContext.Create();
         var joined = ctx.From<ISimpleEntity>().Join(ctx.From<IComplexEntity>(), (a, b) => a.Id == b.Id);
 
-        var act = () => joined
+        var sql = SqlOf(ctx, joined
             .CrossApply(p => ctx.From<IComplexEntity>().Where(c => c.Id == p.Item1.Id).Select(c => new { c.Id }))
-            .Select(q => new { q.Item1.Item1.Id });
+            .Select(q => new { LeftId = q.Item1.Id, AppliedId = q.Item3.Id }));
 
-        act.Should().Throw<NotSupportedException>().WithMessage("*join projection*");
+        sql.Should().Contain("cross apply");
+        sql.Should().Contain("cast(t1.id as bigint)");
     }
 
     [Fact]

@@ -2257,25 +2257,44 @@ public partial class QueryCommand
                         // left-hand row in scope, so its column references become outer references of
                         // this command; the built command is installed as the join source and rendered
                         // like any other derived table by the apply clause.
-                        var applyVisitor = new CorrelatedQueryExpressionVisitor(cmd._dataContext!, cmd, cancellationToken, cmd._dataContext!.Logger);
-                        using var outerScope = applyVisitor.PushOuter(applySource.Parameters[0]);
-
-                        if (XmlNodesExpression.TryCreate(applySource, applyVisitor, out var xmlNodes))
+                        //
+                        // #324: the addressable left row is this command's FROM plus exactly the joins
+                        // that precede this one — never the applied source and never a later join. The
+                        // slots are rebuilt for every preparation from the actual prefix; the binding
+                        // side table is per-preparation metadata and never a plan-key input.
+                        QueryCommand.ApplyLeftOwnerScope? applyOwnerScope = null;
+                        if (join.ApplyLeftSlots is { Count: > 0 })
                         {
-                            // The xml.nodes() rowset is not a derived query: its source is the
-                            // outer row's XML column. Register the row-shape metadata (as
-                            // FromTableFunction does for its row type) and install the special
-                            // FROM source; the apply clause renders it as <col>.nodes(...) as [alias]([col]).
-                            cmd._dataContext!.From<SqlFunctions.IXmlNodesRow>();
-                            join.SetFrom(new FromExpression(xmlNodes!));
+                            join.ApplyLeftSlots = JoinExpression.CreateApplyLeftSlots(applySource.Parameters[0], idx + 1);
+                            applyOwnerScope = cmd.PushApplyLeftOwner(applySource.Parameters[0], idx + 1);
                         }
-                        else
+
+                        try
                         {
-                            var applyCommand = applyVisitor.BuildQueryCommand(applySource.Body);
-                            if (!applyCommand.IsPrepared)
-                                applyCommand.PrepareCommand(noHash, cancellationToken);
-                            TransferNestedFilterSkips(applyCommand, cmd);
-                            join.SetFrom(new FromExpression(applyCommand));
+                            var applyVisitor = new CorrelatedQueryExpressionVisitor(cmd._dataContext!, cmd, cancellationToken, cmd._dataContext!.Logger);
+                            using var outerScope = applyVisitor.PushOuter(applySource.Parameters[0]);
+
+                            if (XmlNodesExpression.TryCreate(applySource, applyVisitor, out var xmlNodes))
+                            {
+                                // The xml.nodes() rowset is not a derived query: its source is the
+                                // outer row's XML column. Register the row-shape metadata (as
+                                // FromTableFunction does for its row type) and install the special
+                                // FROM source; the apply clause renders it as <col>.nodes(...) as [alias]([col]).
+                                cmd._dataContext!.From<SqlFunctions.IXmlNodesRow>();
+                                join.SetFrom(new FromExpression(xmlNodes!));
+                            }
+                            else
+                            {
+                                var applyCommand = applyVisitor.BuildQueryCommand(applySource.Body);
+                                if (!applyCommand.IsPrepared)
+                                    applyCommand.PrepareCommand(noHash, cancellationToken);
+                                TransferNestedFilterSkips(applyCommand, cmd);
+                                join.SetFrom(new FromExpression(applyCommand));
+                            }
+                        }
+                        finally
+                        {
+                            applyOwnerScope?.Dispose();
                         }
                     }
                     else

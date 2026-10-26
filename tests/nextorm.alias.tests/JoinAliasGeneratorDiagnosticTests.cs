@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Reflection;
 using System.Text;
+using System.Text.RegularExpressions;
 using FluentAssertions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -70,6 +71,62 @@ public class JoinAliasGeneratorDiagnosticTests
 
         var diagnostic = AssertSingleDiagnostic(harness, "NORMGEN004", "Alias.A8");
         diagnostic.GetMessage().Should().Contain("9");
+    }
+
+    [Fact]
+    public void Correlated_apply_ninth_slot_reports_NORMGEN004_with_the_exact_message()
+    {
+        // #324: a correlated APPLY consumes one slot like any other join step, so a full eight-slot alias
+        // projection plus one applied alias must be refused with the existing arity diagnostic - never
+        // nested, and never widened beyond Projection<T1..T8>.
+        var harness = RunDiagnosticCase(
+            "var q = orders" +
+            ".Join<Person>(people, (a, b) => true, Alias.A1)" +
+            ".Join<Person>(people, (a, b) => true, Alias.A2)" +
+            ".Join<Person>(people, (a, b) => true, Alias.A3)" +
+            ".Join<Person>(people, (a, b) => true, Alias.A4)" +
+            ".Join<Person>(people, (a, b) => true, Alias.A5)" +
+            ".Join<Person>(people, (a, b) => true, Alias.A6)" +
+            ".Join<Person>(people, (a, b) => true, Alias.A7)" +
+            ".CrossApply(p => people, Alias.A8);");
+
+        var diagnostic = AssertSingleDiagnostic(harness, "NORMGEN004", "Alias.A8");
+        diagnostic.GetMessage().Should().Be(
+            "The alias projection would have 9 slots; the maximum supported by Projection<T1..T8> is 8");
+
+        var generated = string.Concat(harness.Run.GeneratedTrees.Select(tree => tree.ToString()));
+        generated.Should().NotContain("Projection<T1, T2, T3, T4, T5, T6, T7, T8, T9>");
+    }
+
+    [Fact]
+    public void Correlated_apply_alias_extension_takes_the_marker_last_and_no_options()
+    {
+        // #324: both correlated APPLY operators are emitted as marker extensions for an after-join alias
+        // receiver. The marker is the last parameter (after the lambda source) and the form carries no
+        // Action<JoinOptions>, exactly like every other source-explicit alias extension.
+        var harness = RunDiagnosticCase(
+            "var q = orders.Join<Person>(people, (a, b) => true, Alias.Buyer)" +
+            ".CrossApply(p => people, Alias.Approver)" +
+            ".OuterApply(p => people, Alias.Manager);");
+
+        harness.Run.Diagnostics.Should().BeEmpty();
+        var generated = NormalizedGeneratedSource(harness.Run);
+
+        foreach (var operation in new[] { "CrossApply", "OuterApply" })
+        {
+            var signatures = Regex.Matches(
+                generated,
+                "public static [^\\n]* " + operation + "<[^\\n]*\\n" +
+                "\\s+this [^\\n]* self,\\n" +
+                "\\s+global::System\\.Linq\\.Expressions\\.Expression<[^\\n]*> source,\\n" +
+                "\\s+[^\\n]*Marker marker\\)");
+
+            signatures.Should().HaveCount(
+                2, "the generated " + operation + " alias extension must cover both lambda return forms");
+        }
+
+        generated.Should().Contain("global::NextORM.Core.EntityBuilder<TJoin>>> source,");
+        generated.Should().Contain("global::NextORM.Core.QueryCommand<TJoin>>> source,");
     }
 
     [Fact]
