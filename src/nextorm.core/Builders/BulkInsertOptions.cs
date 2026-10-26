@@ -4,10 +4,30 @@ namespace NextORM.Core;
 /// Options for a bulk insert started with <c>CreateBulkInsertBuilder</c>.
 /// Immutable and safe to reuse; build one with <see cref="BulkInsertOptionsBuilder"/> or set the properties
 /// directly. Providers that cannot express a requested option reject it with
-/// <see cref="NotSupportedException"/> when the write runs.
+/// <see cref="NotSupportedException"/> when the write runs, and invalid values are rejected as soon as the
+/// options are attached to a builder.
 /// </summary>
 public sealed record BulkInsertOptions
 {
+    private bool _keepIdentity;
+    private bool _keepIdentitySpecified;
+    private bool _ignoreDuplicates;
+    private bool _ignoreDuplicatesSpecified;
+
+    /// <summary>
+    /// The requested execution path. <see cref="BulkInsertMode.Auto"/> is the default: the provider prefers
+    /// its native path when every request is compatible and otherwise uses the portable path only when that
+    /// path honours every request.
+    /// </summary>
+    public BulkInsertMode Mode { get; init; } = BulkInsertMode.Auto;
+
+    /// <summary>
+    /// The kind of destination table. <see cref="BulkInsertTargetKind.Regular"/> is the default; a local
+    /// temporary target uses the context's existing connection and session and never creates or drops the
+    /// table.
+    /// </summary>
+    public BulkInsertTargetKind TargetKind { get; init; } = BulkInsertTargetKind.Regular;
+
     /// <summary>
     /// The maximum rows per statement on the portable path; the native path treats it as a batch hint
     /// (SQL Server <c>SqlBulkCopy.BatchSize</c>) or ignores it (PostgreSQL <c>COPY</c> streams). Defaults
@@ -28,14 +48,30 @@ public sealed record BulkInsertOptions
     /// never surfaces SQL Server error 8106 on a non-identity table and does not force the portable path
     /// there. Defaults to <see langword="false"/>.
     /// </summary>
-    public bool KeepIdentity { get; init; }
+    public bool KeepIdentity
+    {
+        get => _keepIdentity;
+        init
+        {
+            _keepIdentity = value;
+            _keepIdentitySpecified = true;
+        }
+    }
 
     /// <summary>
     /// Whether rows that violate a unique constraint are skipped instead of failing the whole write.
     /// Forces the portable path and uses the provider's ignore form (<c>ON CONFLICT DO NOTHING</c>,
     /// <c>INSERT OR IGNORE</c>, <c>INSERT IGNORE</c>). Defaults to <see langword="false"/>.
     /// </summary>
-    public bool IgnoreDuplicates { get; init; }
+    public bool IgnoreDuplicates
+    {
+        get => _ignoreDuplicates;
+        init
+        {
+            _ignoreDuplicates = value;
+            _ignoreDuplicatesSpecified = true;
+        }
+    }
 
     /// <summary>
     /// Whether CHECK and FOREIGN KEY constraints are checked by the destination while the rows are
@@ -80,16 +116,53 @@ public sealed record BulkInsertOptions
 
     /// <summary>
     /// The schema (or database) that qualifies <see cref="TableName"/>, or <see langword="null"/> for an
-    /// unqualified target. Only meaningful together with <see cref="TableName"/>.
+    /// unqualified target. Only meaningful together with <see cref="TableName"/>. Kept for compatibility;
+    /// the independent destination part is <see cref="SchemaName"/>.
     /// </summary>
     public string? TableSchema { get; init; }
 
     /// <summary>
-    /// The command timeout in seconds. Only SQL Server's native <c>SqlBulkCopy</c> path honours it; the
-    /// PostgreSQL <c>COPY</c> path and the portable path reject it with a clear
-    /// <see cref="NotSupportedException"/>. Defaults to <see langword="null"/> (the provider default).
+    /// The schema part of an independently qualified destination, or <see langword="null"/> to take it from
+    /// the mapping/context. Unlike <see cref="TableSchema"/> it does not require <see cref="TableName"/>:
+    /// schema-only targeting keeps the mapped table and overrides only its schema.
     /// </summary>
-    public int? TimeoutSeconds { get; init; }
+    public string? SchemaName { get; init; }
+
+    /// <summary>
+    /// The database part of an independently qualified destination, or <see langword="null"/> to take it
+    /// from the mapping/context. Provider support is validated when the target provider is known; not every
+    /// provider can address another database.
+    /// </summary>
+    public string? DatabaseName { get; init; }
+
+    /// <summary>
+    /// The server part of an independently qualified destination, or <see langword="null"/>. This is an
+    /// identifier qualification only where the provider/path supports it, never connection rerouting; an
+    /// unsupported server qualification is rejected when the target provider is known.
+    /// </summary>
+    public string? ServerName { get; init; }
+
+    /// <summary>
+    /// The whole-invocation timeout budget, measured from the moment the bulk operation starts, or
+    /// <see langword="null"/> for no additional nextorm deadline. Spans connection acquisition, setup,
+    /// asynchronous enumeration, batching, driver work and progress work, and never resets per batch.
+    /// <see cref="TimeSpan.Zero"/> and negative values are rejected.
+    /// </summary>
+    public TimeSpan? Timeout { get; init; }
+
+    /// <summary>
+    /// SQL Server-specific native <c>SqlBulkCopy</c> options, or <see langword="null"/> (nothing requested).
+    /// A group with every value unset creates no request; a supplied value on another provider is rejected
+    /// when the target provider is known.
+    /// </summary>
+    public SqlServerBulkInsertOptions? SqlServer { get; init; }
+
+    /// <summary>
+    /// ClickHouse-specific native <c>InsertBinaryAsync</c> options, or <see langword="null"/> (nothing
+    /// requested). A group with every value unset creates no request; a supplied value on another provider
+    /// is rejected when the target provider is known.
+    /// </summary>
+    public ClickHouseBulkInsertOptions? ClickHouse { get; init; }
 
     /// <summary>
     /// Called with the cumulative written-row count every <see cref="NotifyEvery"/> rows, or
@@ -115,15 +188,48 @@ public sealed record BulkInsertOptions
     /// <summary>The progress reporting interval in rows. Defaults to <c>1</c>.</summary>
     public int NotifyEvery { get; init; } = 1;
 
-    /// <summary>Validates the option values, throwing for a non-positive bound, an empty table target or an invalid interval.</summary>
-    /// <exception cref="ArgumentOutOfRangeException">A size, timeout or interval is not positive.</exception>
-    /// <exception cref="ArgumentException">A table target is empty, or a schema was given without a table.</exception>
+    /// <summary>
+    /// Whether <see cref="KeepIdentity"/> was explicitly supplied, including an explicit
+    /// <see langword="false"/>. Presence is tracked separately from the value because the public member
+    /// keeps its non-nullable <see cref="bool"/> shape.
+    /// </summary>
+    internal bool KeepIdentitySpecified => _keepIdentitySpecified;
+
+    /// <summary>
+    /// Whether <see cref="IgnoreDuplicates"/> was explicitly supplied, including an explicit
+    /// <see langword="false"/>.
+    /// </summary>
+    internal bool IgnoreDuplicatesSpecified => _ignoreDuplicatesSpecified;
+
+    /// <summary>Whether <see cref="CheckConstraints"/> was explicitly supplied (a nullable flag is present when it has a value).</summary>
+    internal bool CheckConstraintsSpecified => CheckConstraints is not null;
+
+    /// <summary>Whether <see cref="TableLock"/> was explicitly supplied (a nullable flag is present when it has a value).</summary>
+    internal bool TableLockSpecified => TableLock is not null;
+
+    /// <summary>Whether <see cref="KeepNulls"/> was explicitly supplied (a nullable flag is present when it has a value).</summary>
+    internal bool KeepNullsSpecified => KeepNulls is not null;
+
+    /// <summary>Whether <see cref="FireTriggers"/> was explicitly supplied (a nullable flag is present when it has a value).</summary>
+    internal bool FireTriggersSpecified => FireTriggers is not null;
+
+    /// <summary>Validates the option values, throwing for a non-positive bound or timeout, an invalid enum value, an empty target part or an invalid interval.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">A size, timeout or interval is not positive, or an enum value is undefined.</exception>
+    /// <exception cref="ArgumentException">A table or destination part is empty, or a schema was given without a table.</exception>
     internal void Validate()
     {
         ThrowIfNonPositive(MaxBatchSize, nameof(MaxBatchSize));
         ThrowIfNonPositive(MaxParameters, nameof(MaxParameters));
         ThrowIfNonPositive(MaxSqlLength, nameof(MaxSqlLength));
-        ThrowIfNonPositive(TimeoutSeconds, nameof(TimeoutSeconds));
+
+        if (Timeout is { } timeout && timeout <= TimeSpan.Zero)
+            throw new ArgumentOutOfRangeException(nameof(Timeout), Timeout, "Timeout must be positive.");
+
+        if (!Enum.IsDefined(Mode))
+            throw new ArgumentOutOfRangeException(nameof(Mode), Mode, "Mode must be a defined BulkInsertMode value.");
+
+        if (!Enum.IsDefined(TargetKind))
+            throw new ArgumentOutOfRangeException(nameof(TargetKind), TargetKind, "TargetKind must be a defined BulkInsertTargetKind value.");
 
         if (NotifyEvery <= 0)
             throw new ArgumentOutOfRangeException(nameof(NotifyEvery), NotifyEvery, "NotifyEvery must be positive.");
@@ -136,6 +242,33 @@ public sealed record BulkInsertOptions
 
         if (TableSchema is not null && TableName is null)
             throw new ArgumentException("TableSchema requires TableName to be set.", nameof(TableSchema));
+
+        if (SchemaName is not null && string.IsNullOrWhiteSpace(SchemaName))
+            throw new ArgumentException("SchemaName must not be empty.", nameof(SchemaName));
+
+        if (DatabaseName is not null && string.IsNullOrWhiteSpace(DatabaseName))
+            throw new ArgumentException("DatabaseName must not be empty.", nameof(DatabaseName));
+
+        if (ServerName is not null && string.IsNullOrWhiteSpace(ServerName))
+            throw new ArgumentException("ServerName must not be empty.", nameof(ServerName));
+    }
+
+    /// <summary>
+    /// Validates the provider-scoped option groups against the provider whose bulk path is about to run. A
+    /// group that explicitly requests a value is meaningful only on its own provider, including an explicit
+    /// <see langword="false"/>; an empty group requests nothing and is accepted everywhere.
+    /// </summary>
+    /// <param name="provider">The provider identity resolved for the write.</param>
+    /// <exception cref="NotSupportedException">A provider group was supplied for a different provider.</exception>
+    internal void ValidateForProvider(BulkInsertProvider provider)
+    {
+        if (SqlServer is { RequestsAny: true } && provider != BulkInsertProvider.SqlServer)
+            throw new NotSupportedException(
+                "SqlServerBulkInsertOptions are only supported by the SQL Server native SqlBulkCopy path; the resolved provider cannot express them.");
+
+        if (ClickHouse is { RequestsAny: true } && provider != BulkInsertProvider.ClickHouse)
+            throw new NotSupportedException(
+                "ClickHouseBulkInsertOptions are only supported by the ClickHouse native InsertBinaryAsync path; the resolved provider cannot express them.");
     }
 
     private static void ThrowIfNonPositive(int? value, string name)
@@ -146,26 +279,86 @@ public sealed record BulkInsertOptions
 }
 
 /// <summary>
+/// Identifies the provider whose bulk path is about to run, so provider-scoped option groups can be
+/// validated only after the target provider is known.
+/// </summary>
+internal enum BulkInsertProvider
+{
+    /// <summary>SQL Server native <c>SqlBulkCopy</c>.</summary>
+    SqlServer,
+
+    /// <summary>PostgreSQL native <c>COPY</c>.</summary>
+    Postgres,
+
+    /// <summary>MySQL native <c>MySqlBulkCopy</c>.</summary>
+    MySql,
+
+    /// <summary>MariaDB through the shared MySQL implementation.</summary>
+    MariaDb,
+
+    /// <summary>ClickHouse native <c>InsertBinaryAsync</c>.</summary>
+    ClickHouse,
+
+    /// <summary>SQLite portable path.</summary>
+    Sqlite,
+}
+
+/// <summary>
 /// Fluent builder for <see cref="BulkInsertOptions"/>. Every setter validates immediately and returns the
 /// builder, so an invalid option fails at the call site rather than at execution.
 /// </summary>
 public sealed class BulkInsertOptionsBuilder
 {
+    private BulkInsertMode _mode = BulkInsertMode.Auto;
+    private BulkInsertTargetKind _targetKind = BulkInsertTargetKind.Regular;
     private int? _maxBatchSize;
     private int? _maxParameters;
     private int? _maxSqlLength;
     private bool _keepIdentity;
+    private bool _keepIdentitySpecified;
     private bool _ignoreDuplicates;
+    private bool _ignoreDuplicatesSpecified;
     private bool? _checkConstraints;
     private bool? _tableLock;
     private bool? _keepNulls;
     private bool? _fireTriggers;
     private string? _tableName;
     private string? _tableSchema;
-    private int? _timeoutSeconds;
+    private string? _schemaName;
+    private string? _databaseName;
+    private string? _serverName;
+    private TimeSpan? _timeout;
+    private SqlServerBulkInsertOptions? _sqlServer;
+    private ClickHouseBulkInsertOptions? _clickHouse;
     private Action<int, CancellationToken>? _progress;
     private int _notifyEvery = 1;
     private CancellationTokenSource? _progressCancellationTokenSource;
+
+    /// <summary>Selects the execution path.</summary>
+    /// <param name="mode">The requested mode; must be a defined <see cref="BulkInsertMode"/> value.</param>
+    /// <returns>This builder, for chaining.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode"/> is undefined.</exception>
+    public BulkInsertOptionsBuilder Mode(BulkInsertMode mode)
+    {
+        if (!Enum.IsDefined(mode))
+            throw new ArgumentOutOfRangeException(nameof(mode), mode, "mode must be a defined BulkInsertMode value.");
+
+        _mode = mode;
+        return this;
+    }
+
+    /// <summary>Selects the kind of destination table.</summary>
+    /// <param name="kind">The requested target kind; must be a defined <see cref="BulkInsertTargetKind"/> value.</param>
+    /// <returns>This builder, for chaining.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="kind"/> is undefined.</exception>
+    public BulkInsertOptionsBuilder TargetKind(BulkInsertTargetKind kind)
+    {
+        if (!Enum.IsDefined(kind))
+            throw new ArgumentOutOfRangeException(nameof(kind), kind, "kind must be a defined BulkInsertTargetKind value.");
+
+        _targetKind = kind;
+        return this;
+    }
 
     /// <summary>Limits the rows written per statement (the portable path chunks; the native path treats it as a batch hint or ignores it).</summary>
     /// <param name="rows">The maximum rows per statement; must be positive.</param>
@@ -206,6 +399,7 @@ public sealed class BulkInsertOptionsBuilder
     public BulkInsertOptionsBuilder KeepIdentity(bool value = true)
     {
         _keepIdentity = value;
+        _keepIdentitySpecified = true;
         return this;
     }
 
@@ -215,6 +409,7 @@ public sealed class BulkInsertOptionsBuilder
     public BulkInsertOptionsBuilder IgnoreDuplicates(bool value = true)
     {
         _ignoreDuplicates = value;
+        _ignoreDuplicatesSpecified = true;
         return this;
     }
 
@@ -283,14 +478,71 @@ public sealed class BulkInsertOptionsBuilder
         return this;
     }
 
-    /// <summary>Sets the command timeout in seconds (only SQL Server's native path honours it).</summary>
-    /// <param name="seconds">The timeout in seconds; must be positive.</param>
+    /// <summary>Overrides the schema part of the destination, keeping the mapped or explicit table.</summary>
+    /// <param name="schema">The schema name; must not be empty.</param>
     /// <returns>This builder, for chaining.</returns>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="seconds"/> is not positive.</exception>
-    public BulkInsertOptionsBuilder Timeout(int seconds)
+    /// <exception cref="ArgumentException"><paramref name="schema"/> is <see langword="null"/> or empty.</exception>
+    public BulkInsertOptionsBuilder Schema(string schema)
     {
-        ThrowIfNonPositive(seconds, nameof(seconds));
-        _timeoutSeconds = seconds;
+        ArgumentException.ThrowIfNullOrEmpty(schema);
+        _schemaName = schema;
+        return this;
+    }
+
+    /// <summary>Overrides the database part of the destination.</summary>
+    /// <param name="database">The database name; must not be empty.</param>
+    /// <returns>This builder, for chaining.</returns>
+    /// <exception cref="ArgumentException"><paramref name="database"/> is <see langword="null"/> or empty.</exception>
+    public BulkInsertOptionsBuilder Database(string database)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(database);
+        _databaseName = database;
+        return this;
+    }
+
+    /// <summary>Overrides the server part of the destination where the provider/path supports server qualification.</summary>
+    /// <param name="server">The server name; must not be empty.</param>
+    /// <returns>This builder, for chaining.</returns>
+    /// <exception cref="ArgumentException"><paramref name="server"/> is <see langword="null"/> or empty.</exception>
+    public BulkInsertOptionsBuilder Server(string server)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(server);
+        _serverName = server;
+        return this;
+    }
+
+    /// <summary>Sets the whole-invocation timeout budget (all paths), measured from execution entry.</summary>
+    /// <param name="timeout">The budget; must be positive.</param>
+    /// <returns>This builder, for chaining.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="timeout"/> is zero or negative.</exception>
+    public BulkInsertOptionsBuilder Timeout(TimeSpan timeout)
+    {
+        if (timeout <= TimeSpan.Zero)
+            throw new ArgumentOutOfRangeException(nameof(timeout), timeout, "timeout must be positive.");
+
+        _timeout = timeout;
+        return this;
+    }
+
+    /// <summary>Supplies the SQL Server native options group.</summary>
+    /// <param name="options">The SQL Server options; must not be <see langword="null"/>.</param>
+    /// <returns>This builder, for chaining.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="options"/> is <see langword="null"/>.</exception>
+    public BulkInsertOptionsBuilder SqlServer(SqlServerBulkInsertOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        _sqlServer = options;
+        return this;
+    }
+
+    /// <summary>Supplies the ClickHouse native options group.</summary>
+    /// <param name="options">The ClickHouse options; must not be <see langword="null"/>.</param>
+    /// <returns>This builder, for chaining.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="options"/> is <see langword="null"/>.</exception>
+    public BulkInsertOptionsBuilder ClickHouse(ClickHouseBulkInsertOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        _clickHouse = options;
         return this;
     }
 
@@ -326,24 +578,42 @@ public sealed class BulkInsertOptionsBuilder
 
     /// <summary>Builds the immutable options.</summary>
     /// <returns>The configured options.</returns>
-    public BulkInsertOptions Build() => new()
+    public BulkInsertOptions Build()
     {
-        MaxBatchSize = _maxBatchSize,
-        MaxParameters = _maxParameters,
-        MaxSqlLength = _maxSqlLength,
-        KeepIdentity = _keepIdentity,
-        IgnoreDuplicates = _ignoreDuplicates,
-        CheckConstraints = _checkConstraints,
-        TableLock = _tableLock,
-        KeepNulls = _keepNulls,
-        FireTriggers = _fireTriggers,
-        TableName = _tableName,
-        TableSchema = _tableSchema,
-        TimeoutSeconds = _timeoutSeconds,
-        Progress = _progress,
-        NotifyEvery = _notifyEvery,
-        ProgressCancellationTokenSource = _progressCancellationTokenSource,
-    };
+        var options = new BulkInsertOptions
+        {
+            Mode = _mode,
+            TargetKind = _targetKind,
+            MaxBatchSize = _maxBatchSize,
+            MaxParameters = _maxParameters,
+            MaxSqlLength = _maxSqlLength,
+            CheckConstraints = _checkConstraints,
+            TableLock = _tableLock,
+            KeepNulls = _keepNulls,
+            FireTriggers = _fireTriggers,
+            TableName = _tableName,
+            TableSchema = _tableSchema,
+            SchemaName = _schemaName,
+            DatabaseName = _databaseName,
+            ServerName = _serverName,
+            Timeout = _timeout,
+            SqlServer = _sqlServer,
+            ClickHouse = _clickHouse,
+            Progress = _progress,
+            NotifyEvery = _notifyEvery,
+            ProgressCancellationTokenSource = _progressCancellationTokenSource,
+        };
+
+        // A non-nullable flag records presence only through its init accessor, so an unset builder flag
+        // must not be assigned at all; an explicit false is assigned and therefore becomes present.
+        if (_keepIdentitySpecified)
+            options = options with { KeepIdentity = _keepIdentity };
+
+        if (_ignoreDuplicatesSpecified)
+            options = options with { IgnoreDuplicates = _ignoreDuplicates };
+
+        return options;
+    }
 
     private static void ThrowIfNonPositive(int value, string name)
     {

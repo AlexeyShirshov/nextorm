@@ -171,6 +171,261 @@ public class BulkInsertBuilderTests
         new BulkCopyFlags(CheckConstraints: true, TableLock: false, KeepNulls: false, FireTriggers: false).IsAny.Should().BeTrue();
     }
 
+    [Fact]
+    public void Options_Defaults_ShouldBeAutoRegularAndUnset()
+    {
+        var options = new BulkInsertOptions();
+
+        options.Mode.Should().Be(BulkInsertMode.Auto);
+        options.TargetKind.Should().Be(BulkInsertTargetKind.Regular);
+        options.SqlServer.Should().BeNull();
+        options.ClickHouse.Should().BeNull();
+        options.Timeout.Should().BeNull();
+        options.SchemaName.Should().BeNull();
+        options.DatabaseName.Should().BeNull();
+        options.ServerName.Should().BeNull();
+    }
+
+    [Fact]
+    public void OptionsBuilder_ShouldPropagateModeTargetKindDestinationGroupsAndTimeout()
+    {
+        var sqlServer = new SqlServerBulkInsertOptions { UseInternalTransaction = false };
+        var clickHouse = new ClickHouseBulkInsertOptions { MaxDegreeOfParallelism = 2, UseSession = true };
+
+        var options = new BulkInsertOptionsBuilder()
+            .Mode(BulkInsertMode.Portable)
+            .TargetKind(BulkInsertTargetKind.LocalTemporary)
+            .Schema("staging")
+            .Database("app")
+            .Server("primary")
+            .SqlServer(sqlServer)
+            .ClickHouse(clickHouse)
+            .Timeout(TimeSpan.FromSeconds(5))
+            .Build();
+
+        options.Mode.Should().Be(BulkInsertMode.Portable);
+        options.TargetKind.Should().Be(BulkInsertTargetKind.LocalTemporary);
+        options.SchemaName.Should().Be("staging");
+        options.DatabaseName.Should().Be("app");
+        options.ServerName.Should().Be("primary");
+        options.SqlServer.Should().BeSameAs(sqlServer);
+        options.ClickHouse.Should().BeSameAs(clickHouse);
+        options.Timeout.Should().Be(TimeSpan.FromSeconds(5));
+    }
+
+    [Fact]
+    public void KeepIdentity_ExplicitFalse_ShouldBeDistinguishableFromAbsent()
+    {
+        var absent = new BulkInsertOptions();
+        var explicitFalse = new BulkInsertOptions { KeepIdentity = false };
+
+        absent.KeepIdentitySpecified.Should().BeFalse();
+        explicitFalse.KeepIdentitySpecified.Should().BeTrue();
+        explicitFalse.KeepIdentity.Should().BeFalse();
+    }
+
+    [Fact]
+    public void IgnoreDuplicates_ExplicitFalse_ShouldBeDistinguishableFromAbsent()
+    {
+        var absent = new BulkInsertOptions();
+        var explicitFalse = new BulkInsertOptions { IgnoreDuplicates = false };
+
+        absent.IgnoreDuplicatesSpecified.Should().BeFalse();
+        explicitFalse.IgnoreDuplicatesSpecified.Should().BeTrue();
+        explicitFalse.IgnoreDuplicates.Should().BeFalse();
+    }
+
+    [Fact]
+    public void NullableFlags_ExplicitFalse_ShouldBeDistinguishableFromAbsent()
+    {
+        var absent = new BulkInsertOptions();
+        var explicitFalse = new BulkInsertOptions
+        {
+            CheckConstraints = false,
+            TableLock = false,
+            KeepNulls = false,
+            FireTriggers = false,
+        };
+
+        absent.CheckConstraintsSpecified.Should().BeFalse();
+        absent.TableLockSpecified.Should().BeFalse();
+        absent.KeepNullsSpecified.Should().BeFalse();
+        absent.FireTriggersSpecified.Should().BeFalse();
+
+        explicitFalse.CheckConstraintsSpecified.Should().BeTrue();
+        explicitFalse.TableLockSpecified.Should().BeTrue();
+        explicitFalse.KeepNullsSpecified.Should().BeTrue();
+        explicitFalse.FireTriggersSpecified.Should().BeTrue();
+        explicitFalse.CheckConstraints.Should().BeFalse();
+    }
+
+    [Fact]
+    public void OptionsBuilder_UnsetFlags_ShouldCarryNoPresence()
+    {
+        var options = new BulkInsertOptionsBuilder().Build();
+
+        options.KeepIdentitySpecified.Should().BeFalse();
+        options.IgnoreDuplicatesSpecified.Should().BeFalse();
+        options.CheckConstraintsSpecified.Should().BeFalse();
+        options.TableLockSpecified.Should().BeFalse();
+        options.KeepNullsSpecified.Should().BeFalse();
+        options.FireTriggersSpecified.Should().BeFalse();
+    }
+
+    [Fact]
+    public void OptionsBuilder_ExplicitFalseFlags_ShouldCarryPresence()
+    {
+        var options = new BulkInsertOptionsBuilder()
+            .KeepIdentity(false)
+            .IgnoreDuplicates(false)
+            .CheckConstraints(false)
+            .TableLock(false)
+            .KeepNulls(false)
+            .FireTriggers(false)
+            .Build();
+
+        options.KeepIdentity.Should().BeFalse();
+        options.KeepIdentitySpecified.Should().BeTrue();
+        options.IgnoreDuplicatesSpecified.Should().BeTrue();
+        options.CheckConstraintsSpecified.Should().BeTrue();
+        options.TableLockSpecified.Should().BeTrue();
+        options.KeepNullsSpecified.Should().BeTrue();
+        options.FireTriggersSpecified.Should().BeTrue();
+    }
+
+    [Fact]
+    public void EmptyTypedGroups_ShouldCreateNoRequest()
+    {
+        var options = new BulkInsertOptionsBuilder()
+            .SqlServer(new SqlServerBulkInsertOptions())
+            .ClickHouse(new ClickHouseBulkInsertOptions())
+            .Build();
+
+        options.SqlServer!.RequestsAny.Should().BeFalse();
+        options.ClickHouse!.RequestsAny.Should().BeFalse();
+
+        var act = () => options.ValidateForProvider(BulkInsertProvider.Postgres);
+
+        act.Should().NotThrow();
+    }
+
+    [Fact]
+    public void ForeignSqlServerGroup_ExplicitFalse_ShouldThrow()
+    {
+        var options = new BulkInsertOptions
+        {
+            SqlServer = new SqlServerBulkInsertOptions { UseInternalTransaction = false },
+        };
+
+        var act = () => options.ValidateForProvider(BulkInsertProvider.Postgres);
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*SqlServer*");
+    }
+
+    [Fact]
+    public void OwnSqlServerGroup_ShouldBeAccepted()
+    {
+        var options = new BulkInsertOptions
+        {
+            SqlServer = new SqlServerBulkInsertOptions { UseInternalTransaction = false },
+        };
+
+        var act = () => options.ValidateForProvider(BulkInsertProvider.SqlServer);
+
+        act.Should().NotThrow();
+    }
+
+    [Fact]
+    public void ForeignClickHouseGroup_ExplicitFalse_ShouldThrow()
+    {
+        var options = new BulkInsertOptions
+        {
+            ClickHouse = new ClickHouseBulkInsertOptions { UseSession = false },
+        };
+
+        var act = () => options.ValidateForProvider(BulkInsertProvider.Postgres);
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*ClickHouse*");
+    }
+
+    [Fact]
+    public void Timeout_TimeSpanOverload_ShouldDriveTheValue()
+    {
+        var options = new BulkInsertOptionsBuilder().Timeout(TimeSpan.FromMilliseconds(2500)).Build();
+
+        options.Timeout.Should().Be(TimeSpan.FromMilliseconds(2500));
+    }
+
+    [Fact]
+    public void Timeout_IntOverload_ShouldBeRemoved()
+    {
+        var intOverloads = typeof(BulkInsertOptionsBuilder)
+            .GetMethods()
+            .Where(m => m.Name == "Timeout"
+                && m.GetParameters() is [{ ParameterType: var parameterType }]
+                && parameterType == typeof(int));
+
+        intOverloads.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Options_NonPositiveTimeout_ShouldThrow()
+    {
+        using var ctx = new InMemoryDataContext();
+
+        var direct = () => ctx.CreateBulkInsertBuilder<BulkEntity>(new BulkInsertOptions { Timeout = TimeSpan.Zero });
+        var built = () => ctx.CreateBulkInsertBuilder<BulkEntity>((BulkInsertOptionsBuilder o) => o.Timeout(TimeSpan.FromSeconds(-1)));
+
+        direct.Should().Throw<ArgumentOutOfRangeException>();
+        built.Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    [Fact]
+    public void Options_NonPositiveMaxBatchSizeParametersOrSqlLength_ShouldThrow()
+    {
+        using var ctx = new InMemoryDataContext();
+
+        var maxBatchSize = () => ctx.CreateBulkInsertBuilder<BulkEntity>(new BulkInsertOptions { MaxBatchSize = 0 });
+        var maxParameters = () => ctx.CreateBulkInsertBuilder<BulkEntity>(new BulkInsertOptions { MaxParameters = 0 });
+        var maxSqlLength = () => ctx.CreateBulkInsertBuilder<BulkEntity>(new BulkInsertOptions { MaxSqlLength = -1 });
+        var builderMaxBatchSize = () => new BulkInsertOptionsBuilder().MaxBatchSize(0);
+
+        maxBatchSize.Should().Throw<ArgumentOutOfRangeException>();
+        maxParameters.Should().Throw<ArgumentOutOfRangeException>();
+        maxSqlLength.Should().Throw<ArgumentOutOfRangeException>();
+        builderMaxBatchSize.Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    [Fact]
+    public void Options_UndefinedModeOrTargetKind_ShouldThrow()
+    {
+        using var ctx = new InMemoryDataContext();
+
+        var mode = () => ctx.CreateBulkInsertBuilder<BulkEntity>(new BulkInsertOptions { Mode = (BulkInsertMode)42 });
+        var targetKind = () => ctx.CreateBulkInsertBuilder<BulkEntity>(new BulkInsertOptions { TargetKind = (BulkInsertTargetKind)42 });
+        var builderMode = () => ctx.CreateBulkInsertBuilder<BulkEntity>((BulkInsertOptionsBuilder o) => o.Mode((BulkInsertMode)42));
+        var builderTargetKind = () => ctx.CreateBulkInsertBuilder<BulkEntity>((BulkInsertOptionsBuilder o) => o.TargetKind((BulkInsertTargetKind)42));
+
+        mode.Should().Throw<ArgumentException>();
+        targetKind.Should().Throw<ArgumentException>();
+        builderMode.Should().Throw<ArgumentException>();
+        builderTargetKind.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void Options_EmptyDestinationPart_ShouldThrow()
+    {
+        using var ctx = new InMemoryDataContext();
+
+        var schema = () => ctx.CreateBulkInsertBuilder<BulkEntity>(new BulkInsertOptions { TableName = "bulk_target", SchemaName = " " });
+        var database = () => ctx.CreateBulkInsertBuilder<BulkEntity>(new BulkInsertOptions { TableName = "bulk_target", DatabaseName = string.Empty });
+        var server = () => ctx.CreateBulkInsertBuilder<BulkEntity>(new BulkInsertOptions { TableName = "bulk_target", ServerName = "\t" });
+
+        schema.Should().Throw<ArgumentException>();
+        database.Should().Throw<ArgumentException>();
+        server.Should().Throw<ArgumentException>();
+    }
+
     private static async IAsyncEnumerable<BulkEntity> EmptyAsync()
     {
         await Task.CompletedTask;

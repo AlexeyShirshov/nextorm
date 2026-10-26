@@ -49,7 +49,7 @@ internal sealed class BulkInsertCommand
     /// <param name="batch">The batch-size limits, or <see langword="null"/> for one statement.</param>
     /// <param name="progress">Called with the cumulative written-row count while the write proceeds, or <see langword="null"/>.</param>
     /// <param name="notifyEvery">The reporting interval in rows; the native path uses it to set its own progress cadence.</param>
-    /// <param name="timeoutSeconds">The command timeout in seconds, or <see langword="null"/> for the provider default.</param>
+    /// <param name="options">The original option request, including explicit-presence information.</param>
     /// <param name="tableSchema">The schema (or database) that qualifies <paramref name="tableName"/>, or <see langword="null"/>.</param>
     /// <param name="bulkCopy">The SQL Server-only bulk-copy flags, or <see cref="BulkCopyFlags.None"/>.</param>
     public BulkInsertCommand(
@@ -64,7 +64,7 @@ internal sealed class BulkInsertCommand
         BulkBatchOptions? batch,
         Action<int>? progress,
         int notifyEvery,
-        int? timeoutSeconds,
+        BulkInsertOptions options,
         string? tableSchema = null,
         BulkCopyFlags bulkCopy = default)
     {
@@ -79,7 +79,7 @@ internal sealed class BulkInsertCommand
         Batch = batch;
         Progress = progress;
         NotifyEvery = notifyEvery;
-        TimeoutSeconds = timeoutSeconds;
+        Options = options;
         TableSchema = tableSchema;
         BulkCopy = bulkCopy;
     }
@@ -125,8 +125,56 @@ internal sealed class BulkInsertCommand
     /// <summary>The reporting interval in rows; the native path uses it to drive its progress cadence.</summary>
     public int NotifyEvery { get; }
 
-    /// <summary>The command timeout in seconds, or <see langword="null"/> for the provider default.</summary>
-    public int? TimeoutSeconds { get; }
+    /// <summary>The original option request, including explicit-presence information for the provider-scoped options.</summary>
+    public BulkInsertOptions Options { get; }
+
+    /// <summary>The requested execution path.</summary>
+    public BulkInsertMode Mode => Options.Mode;
+
+    /// <summary>The requested destination kind.</summary>
+    public BulkInsertTargetKind TargetKind => Options.TargetKind;
+
+    /// <summary>The schema part of the independently qualified destination, or <see langword="null"/>.</summary>
+    public string? SchemaName => Options.SchemaName;
+
+    /// <summary>The database part of the independently qualified destination, or <see langword="null"/>.</summary>
+    public string? DatabaseName => Options.DatabaseName;
+
+    /// <summary>The server part of the independently qualified destination, or <see langword="null"/>.</summary>
+    public string? ServerName => Options.ServerName;
+
+    /// <summary>The SQL Server-specific options group, or <see langword="null"/>.</summary>
+    public SqlServerBulkInsertOptions? SqlServer => Options.SqlServer;
+
+    /// <summary>The ClickHouse-specific options group, or <see langword="null"/>.</summary>
+    public ClickHouseBulkInsertOptions? ClickHouse => Options.ClickHouse;
+
+    /// <summary>The whole-invocation timeout budget, or <see langword="null"/> for no additional nextorm deadline.</summary>
+    public TimeSpan? Timeout => Options.Timeout;
+
+    /// <summary>Whether <see cref="KeepIdentity"/> was explicitly requested, including an explicit <see langword="false"/>.</summary>
+    public bool KeepIdentitySpecified => Options.KeepIdentitySpecified;
+
+    /// <summary>Whether <see cref="IgnoreConflicts"/> was explicitly requested, including an explicit <see langword="false"/>.</summary>
+    public bool IgnoreDuplicatesSpecified => Options.IgnoreDuplicatesSpecified;
+
+    /// <summary>Whether <c>CheckConstraints</c> was explicitly requested, including an explicit <see langword="false"/>.</summary>
+    public bool CheckConstraintsSpecified => Options.CheckConstraintsSpecified;
+
+    /// <summary>Whether <c>TableLock</c> was explicitly requested, including an explicit <see langword="false"/>.</summary>
+    public bool TableLockSpecified => Options.TableLockSpecified;
+
+    /// <summary>Whether <c>KeepNulls</c> was explicitly requested, including an explicit <see langword="false"/>.</summary>
+    public bool KeepNullsSpecified => Options.KeepNullsSpecified;
+
+    /// <summary>Whether <c>FireTriggers</c> was explicitly requested, including an explicit <see langword="false"/>.</summary>
+    public bool FireTriggersSpecified => Options.FireTriggersSpecified;
+
+    /// <summary>
+    /// The whole-invocation timeout expressed in whole seconds, rounded up, for the provider hooks that still
+    /// consume a seconds-shaped value; the full <see cref="TimeSpan"/> budget is authoritative.
+    /// </summary>
+    public int? TimeoutSeconds => Timeout is { } timeout ? (int?)Math.Ceiling(timeout.TotalSeconds) : null;
 
     /// <summary>The SQL Server-only bulk-copy flags, or <see cref="BulkCopyFlags.None"/>.</summary>
     public BulkCopyFlags BulkCopy { get; }

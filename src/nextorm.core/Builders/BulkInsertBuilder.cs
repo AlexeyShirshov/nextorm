@@ -407,7 +407,7 @@ public sealed class BulkInsertBuilder<TEntity>
             batch,
             CreateProgressCallback(),
             _options.NotifyEvery,
-            _options.TimeoutSeconds,
+            _options,
             _options.TableSchema,
             bulkCopy);
     }
