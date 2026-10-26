@@ -365,15 +365,40 @@ public class JoinIntoRejectionTests
         act.Should().Throw<NotSupportedException>().WithMessage("*at most 7 child collections*");
     }
 
+    // Own metadata identities for the join-combination rejections below. They must NOT reuse the
+    // top-level StitchParent/StitchChild/StitchNote fixtures: ResolveMetadata returns an existing
+    // non-empty entry and never re-runs a later configEntity, so registering StitchParent here with
+    // only the Children mapping permanently poisons the stitching regression tests (which need both
+    // Children and Notes). The parent still declares Notes but maps only Children, which is exactly
+    // the partial-mapping shape these rejection tests need.
+    public sealed class RejectionStitchParent
+    {
+        public int Id { get; set; }
+        public ICollection<RejectionStitchChild> Children { get; set; } = new List<RejectionStitchChild>();
+        public ICollection<RejectionStitchNote> Notes { get; set; } = new List<RejectionStitchNote>();
+    }
+
+    public sealed class RejectionStitchChild
+    {
+        public int Id { get; set; }
+        public int ParentId { get; set; }
+    }
+
+    public sealed class RejectionStitchNote
+    {
+        public int Id { get; set; }
+        public int ParentId { get; set; }
+    }
+
     [Fact]
     public void SemiJoinThenJoinInto_ShouldBeRejectedAtBuildTime()
     {
         using var ctx = new InMemoryDataContext();
-        ctx.From<StitchParent>(b => b.HasMany(p => p.Children, c => c.ParentId));
+        ctx.From<RejectionStitchParent>(b => b.HasMany(p => p.Children, c => c.ParentId));
 
-        Action act = () => ctx.From<StitchParent>()
-            .SemiJoin(ctx.From<StitchNote>(), (p, n) => p.Id == n.ParentId)
-            .JoinInto(ctx.From<StitchChild>(), (p, c) => p.Id == c.ParentId, p => p.Children);
+        Action act = () => ctx.From<RejectionStitchParent>()
+            .SemiJoin(ctx.From<RejectionStitchNote>(), (p, n) => p.Id == n.ParentId)
+            .JoinInto(ctx.From<RejectionStitchChild>(), (p, c) => p.Id == c.ParentId, p => p.Children);
 
         act.Should().Throw<NotSupportedException>().WithMessage("*cannot be combined with other joins*");
     }
@@ -382,11 +407,11 @@ public class JoinIntoRejectionTests
     public void JoinIntoThenAntiJoin_ShouldBeRejectedAtBuildTime()
     {
         using var ctx = new InMemoryDataContext();
-        ctx.From<StitchParent>(b => b.HasMany(p => p.Children, c => c.ParentId));
+        ctx.From<RejectionStitchParent>(b => b.HasMany(p => p.Children, c => c.ParentId));
 
-        Action act = () => ctx.From<StitchParent>()
-            .JoinInto(ctx.From<StitchChild>(), (p, c) => p.Id == c.ParentId, p => p.Children)
-            .AntiJoin(ctx.From<StitchNote>(), (p, n) => p.Id == n.ParentId);
+        Action act = () => ctx.From<RejectionStitchParent>()
+            .JoinInto(ctx.From<RejectionStitchChild>(), (p, c) => p.Id == c.ParentId, p => p.Children)
+            .AntiJoin(ctx.From<RejectionStitchNote>(), (p, n) => p.Id == n.ParentId);
 
         act.Should().Throw<NotSupportedException>().WithMessage("*cannot be combined with other joins*");
     }
@@ -395,11 +420,11 @@ public class JoinIntoRejectionTests
     public void JoinIntoThenJoin_ShouldBeRejectedAtBuildTime()
     {
         using var ctx = new InMemoryDataContext();
-        ctx.From<StitchParent>(b => b.HasMany(p => p.Children, c => c.ParentId));
+        ctx.From<RejectionStitchParent>(b => b.HasMany(p => p.Children, c => c.ParentId));
 
-        Action act = () => ctx.From<StitchParent>()
-            .JoinInto(ctx.From<StitchChild>(), (p, c) => p.Id == c.ParentId, p => p.Children)
-            .Join(ctx.From<StitchNote>(), (p, n) => p.Id == n.ParentId);
+        Action act = () => ctx.From<RejectionStitchParent>()
+            .JoinInto(ctx.From<RejectionStitchChild>(), (p, c) => p.Id == c.ParentId, p => p.Children)
+            .Join(ctx.From<RejectionStitchNote>(), (p, n) => p.Id == n.ParentId);
 
         act.Should().Throw<NotSupportedException>().WithMessage("*cannot be combined with other joins*");
     }
