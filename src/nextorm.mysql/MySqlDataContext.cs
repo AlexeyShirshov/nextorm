@@ -17,7 +17,7 @@ namespace NextORM.MySql;
 /// the native <c>MySqlBulkCopy</c> prerequisites are checked read-only before a row is read, and
 /// MariaDB (its derived context) can add its scoped session controls.
 /// </remarks>
-public class MySqlDataContext : DataContext, IBulkInsertExecutor
+public class MySqlDataContext : DataContext, IBulkInsertExecutor, IBulkInsertNativeOptions, IBulkInsertPortableScope
 {
     /// <summary>
     /// Creates a MySQL context that owns a connection built lazily from
@@ -189,6 +189,35 @@ public class MySqlDataContext : DataContext, IBulkInsertExecutor
     private const string ZeroIdentitySqlMode = "NO_AUTO_VALUE_ON_ZERO";
 
     private const string ServerLocalInfileQuery = "select @@global.local_infile";
+
+    /// <summary>
+    /// The native <c>MySqlBulkCopy</c> load writes explicit identity columns (with the zero-mode guard) and
+    /// maps <c>IgnoreDuplicates</c> to <c>MySqlBulkLoaderConflictOption.Ignore</c>, so both options stay on
+    /// the native path; the selection itself is made once in the builder.
+    /// </summary>
+    bool IBulkInsertNativeOptions.SupportsNativeKeepIdentity => true;
+
+    /// <inheritdoc cref="IBulkInsertNativeOptions.SupportsNativeIgnoreDuplicates"/>
+    bool IBulkInsertNativeOptions.SupportsNativeIgnoreDuplicates => true;
+
+    /// <summary>
+    /// Runs the provider-scoped contract on the portable path: the same <c>KeepNulls=false</c> shape guard
+    /// as the native load, the identity zero-mode for explicit identity values, and (on MariaDB) the
+    /// scoped constraint controls. The scope is entered before the first row is read and restores every
+    /// session control on disposal, including the error path.
+    /// </summary>
+    /// <param name="command">The bulk-insert command.</param>
+    /// <returns>The scope to dispose after the write.</returns>
+    IDisposable IBulkInsertPortableScope.BeginPortableBulkInsertScope(BulkInsertCommand command)
+    {
+        EnsureKeepNullsIsDefaultEquivalent(command);
+
+        var scopedConstraintChecks = SupportsScopedConstraintChecks && command.Options.CheckConstraints is false;
+        if (!command.KeepIdentity && !scopedConstraintChecks)
+            return NoSessionScope.Instance;
+
+        return MySqlSessionScope.Apply(command, RequireMySqlConnection(), ResolveTransaction(), scopedConstraintChecks);
+    }
 
     int IBulkInsertExecutor.BulkInsert(BulkInsertCommand command)
     {
@@ -581,6 +610,23 @@ public class MySqlDataContext : DataContext, IBulkInsertExecutor
             _ => throw new NotSupportedException(
                 $"The native MySqlBulkCopy path requires a MySqlConnector transaction; the current transaction is {transaction.GetType().Name}."),
         };
+    }
+
+    /// <summary>
+    /// The scope returned when a portable write requests neither explicit identity values nor scoped
+    /// constraint checks: nothing to snapshot or restore, and deliberately no connection is opened.
+    /// </summary>
+    private sealed class NoSessionScope : IDisposable
+    {
+        internal static readonly NoSessionScope Instance = new();
+
+        private NoSessionScope()
+        {
+        }
+
+        public void Dispose()
+        {
+        }
     }
 
     /// <summary>

@@ -198,3 +198,33 @@ internal interface IBulkInsertExecutor
     /// <returns>A task producing the number of rows written.</returns>
     Task<int> BulkInsertAsync(BulkInsertCommand command, CancellationToken cancellationToken);
 }
+
+/// <summary>
+/// States which option semantics a provider's native bulk path can honour. The path decision itself stays
+/// central in <see cref="BulkInsertBuilder{TEntity}"/>: a provider only declares its capability, so the
+/// selection logic is never duplicated per provider. A provider that does not implement this interface
+/// declares neither capability, and its native path is not selected for a request that needs one.
+/// </summary>
+internal interface IBulkInsertNativeOptions
+{
+    /// <summary>Whether the native path can write explicit values to identity columns.</summary>
+    bool SupportsNativeKeepIdentity { get; }
+
+    /// <summary>Whether the native path can skip rows that violate a unique constraint.</summary>
+    bool SupportsNativeIgnoreDuplicates { get; }
+}
+
+/// <summary>
+/// Provider-scoped session controls and shape guards for the portable <c>INSERT ... VALUES</c> path, so
+/// <see cref="BulkInsertMode.Portable"/> runs the same contract as the native path instead of bypassing it:
+/// the scope is entered before the first row is read and disposing restores every session control even
+/// when the write fails. A provider with no such state does not implement it.
+/// </summary>
+internal interface IBulkInsertPortableScope
+{
+    /// <summary>Applies the provider's scoped session controls and shape guards for one portable write.</summary>
+    /// <param name="command">The bulk-insert command.</param>
+    /// <returns>A scope that restores the session state when disposed.</returns>
+    /// <exception cref="NotSupportedException">The requested shape cannot be honoured by this provider.</exception>
+    IDisposable BeginPortableBulkInsertScope(BulkInsertCommand command);
+}

@@ -159,6 +159,86 @@ public class BulkInsertSqlGenerationTests
         source.Enumerated.Should().Be(0);
     }
 
+    // ---------------------------------------------------------------- D4b native compatibility (rows 3/5)
+
+    [Fact]
+    public async Task BulkInsert_Auto_KeepIdentity_WithClientLocalInfile_ShouldEnterTheNativePathBeforeReading()
+    {
+        using var ctx = new MySqlDataContext(LocalInfileEnabledConnectionString, new DataContextBuilder());
+        var source = new CountingAsyncSource([Row("a", 1)]);
+
+        Func<Task> act = async () => await ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.KeepIdentity())
+            .Values(source)
+            .BulkInsertAsync();
+
+        // Row 3: the native load can write explicit identity columns, so Auto keeps the native path; only
+        // the unreachable server stops the call, and not a single row was read.
+        await act.Should().ThrowAsync<MySqlException>();
+        source.Enumerated.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task BulkInsert_Auto_IgnoreDuplicates_WithClientLocalInfile_ShouldEnterTheNativePathBeforeReading()
+    {
+        using var ctx = new MySqlDataContext(LocalInfileEnabledConnectionString, new DataContextBuilder());
+        var source = new CountingAsyncSource([Row("a", 1)]);
+
+        Func<Task> act = async () => await ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.IgnoreDuplicates())
+            .Values(source)
+            .BulkInsertAsync();
+
+        // Row 5: ConflictOption.Ignore expresses the request natively, so Auto does not degrade to portable.
+        await act.Should().ThrowAsync<MySqlException>();
+        source.Enumerated.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task BulkInsert_ModeNative_KeepIdentity_WithoutClientLocalInfile_ShouldRefuseByName()
+    {
+        using var ctx = new MySqlDataContext(LocalInfileDisabledConnectionString, new DataContextBuilder());
+        var source = new CountingAsyncSource([Row("a", 1)]);
+
+        Func<Task> act = async () => await ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.Mode(BulkInsertMode.Native).KeepIdentity())
+            .Values(source)
+            .BulkInsertAsync();
+
+        // The identity request is native-eligible now; the refusal is the read-only LOCAL prerequisite,
+        // not the option.
+        await act.Should().ThrowAsync<NotSupportedException>().WithMessage("*AllowLoadLocalInfile*");
+        source.Enumerated.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task BulkInsert_Portable_KeepIdentity_ShouldApplyTheIdentitySessionScope()
+    {
+        using var ctx = new MySqlDataContext(LocalInfileDisabledConnectionString, new DataContextBuilder());
+        var source = new CountingAsyncSource([Row("a", 1)]);
+
+        Func<Task> act = async () => await ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.Mode(BulkInsertMode.Portable).KeepIdentity())
+            .Values(source)
+            .BulkInsertAsync();
+
+        // Mode.Portable runs the provider-scoped contract too: the identity zero-mode is applied before the
+        // first row is read, so the connection (not the row source) is what fails here.
+        await act.Should().ThrowAsync<MySqlException>();
+        source.Enumerated.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task BulkInsert_Portable_KeepNullsFalse_NonDefaultEquivalentShape_ShouldRefuseByName()
+    {
+        using var ctx = new MySqlDataContext(LocalInfileDisabledConnectionString, new DataContextBuilder());
+        var source = new CountingAsyncSource([Row("a", 1)]);
+
+        Func<Task> act = async () => await ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.Mode(BulkInsertMode.Portable).KeepNulls(false))
+            .Values(source)
+            .BulkInsertAsync();
+
+        // Row 8: the shape guard belongs to the provider seam, so the portable path refuses it too.
+        await act.Should().ThrowAsync<NotSupportedException>().WithMessage("*KeepNulls=false*age*");
+        source.Enumerated.Should().Be(0);
+    }
+
     // ---------------------------------------------------------------- D4 G4/G5 option semantics
 
     [Fact]

@@ -25,6 +25,9 @@ internal sealed class PortableBulkInsertExecutor(IMutationExecutor mutation) : I
 
         var dialect = ResolveDialect(command);
         using var deadline = BulkInsertDeadline.Start(command.Timeout, CancellationToken.None);
+        // The provider-scoped session controls and shape guards run on this path too: Mode.Portable must
+        // not bypass the contract the native path would apply.
+        using var scope = BeginProviderScope(command);
 
         var rowLimit = RowLimit(command);
         var total = 0;
@@ -53,6 +56,9 @@ internal sealed class PortableBulkInsertExecutor(IMutationExecutor mutation) : I
         var rows = command.AsyncRows ?? new SyncToAsyncEnumerable<object?[]>(command.SyncRows!);
         var dialect = ResolveDialect(command);
         using var deadline = BulkInsertDeadline.Start(command.Timeout, cancellationToken);
+        // Mirror of the synchronous entry: the provider-scoped contract is entered before the first row
+        // is pulled and restored on disposal, including the error/cancellation paths.
+        using var scope = BeginProviderScope(command);
 
         var rowLimit = RowLimit(command);
         var total = 0;
@@ -106,8 +112,8 @@ internal sealed class PortableBulkInsertExecutor(IMutationExecutor mutation) : I
     }
 
     /// <summary>
-    /// Resolves the active dialect for destination validation and reporting, and refuses a qualification the
-    /// dialect cannot express before any row is read.
+    /// Resolves the active dialect for destination validation and reporting, and refuses a qualification or
+    /// a conflict form the dialect cannot express before any row is read.
     /// </summary>
     /// <param name="command">The bulk-insert command.</param>
     /// <returns>The active dialect, or <see langword="null"/> when the executor is not attached to a context.</returns>
@@ -115,10 +121,30 @@ internal sealed class PortableBulkInsertExecutor(IMutationExecutor mutation) : I
     {
         var dialect = (mutation as DataContext)?.Dialect;
         if (dialect is not null)
+        {
             _ = BulkInsertDestination.From(command.Options).ResolveQualification(dialect);
+
+            // MySQL/MariaDB and SQLite/PostgreSQL/ClickHouse express the skip through their own ignore or
+            // conflict form; a dialect with neither (SQL Server) cannot skip a conflicting row on this path,
+            // so the request is refused by name before the source is pulled.
+            if (command.IgnoreConflicts && !dialect.SupportsInsertIgnore && !dialect.SupportsOnConflictDoNothing)
+                throw new NotSupportedException(
+                    "BulkInsertOptions.IgnoreDuplicates=true cannot be honoured by the portable INSERT ... VALUES path on "
+                    + dialect.GetType().Name
+                    + ": it has neither an INSERT IGNORE/INSERT OR IGNORE head nor an ON CONFLICT DO NOTHING clause, so a conflicting row would fail the whole write.");
+        }
 
         return dialect;
     }
+
+    /// <summary>
+    /// Enters the provider-scoped session controls and shape guards that <see cref="BulkInsertMode.Portable"/>
+    /// must run exactly like the native path. A provider without such state contributes nothing.
+    /// </summary>
+    /// <param name="command">The bulk-insert command.</param>
+    /// <returns>The scope to dispose once the write is finished, or <see langword="null"/> when the provider has none.</returns>
+    private IDisposable? BeginProviderScope(BulkInsertCommand command)
+        => (mutation as IBulkInsertPortableScope)?.BeginPortableBulkInsertScope(command);
 
     // Writes every batch in the buffer, splitting it further when a batch exceeds the rendered-SQL limit.
     // Progress is reported only after a batch has been written; nothing is rolled back on failure.

@@ -45,6 +45,50 @@ public class BulkInsertSqlGenerationTests
     }
 
     [Fact]
+    public void BulkInsert_ModeNative_KeepIdentity_ShouldWriteTheExplicitIdentityColumnThroughCopy()
+    {
+        using var ctx = new RecordingPostgresContext();
+
+        // Row 3: binary COPY carries the explicit identity column in its column list, so the native path
+        // honours KeepIdentity; OVERRIDING SYSTEM VALUE remains the portable form's job.
+        var written = ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.Mode(BulkInsertMode.Native).KeepIdentity())
+            .Values([Row("a", 1)])
+            .BulkInsert();
+
+        written.Should().Be(1);
+        ctx.Sessions.Single().CopyCommand.Should().Be("COPY insert_entity (\"id\", \"name\", \"age\") FROM STDIN (FORMAT BINARY)");
+    }
+
+    [Fact]
+    public void BulkInsert_ModeNative_IgnoreDuplicates_ShouldThrowNamingTheOption()
+    {
+        using var ctx = new RecordingPostgresContext();
+
+        // Row 5: COPY has no ON CONFLICT form, so an explicit Native request is refused by name.
+        var act = () => ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.Mode(BulkInsertMode.Native).IgnoreDuplicates())
+            .Values([Row("a", 1)])
+            .BulkInsert();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*PostgreSQL*IgnoreDuplicates=true*");
+        ctx.Sessions.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void BulkInsert_ModeAuto_IgnoreDuplicates_ShouldStayOnThePortablePath()
+    {
+        using var ctx = new RecordingPostgresContext();
+
+        // Auto falls back to the portable statement (the ON CONFLICT DO NOTHING form asserted above)
+        // instead of refusing the request, and never enters the native COPY path.
+        var act = () => ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.IgnoreDuplicates())
+            .Values([Row("a", 1)])
+            .ValidateTarget();
+
+        act.Should().NotThrow();
+        ctx.Sessions.Should().BeEmpty();
+    }
+
+    [Fact]
     public void BulkInsert_IgnoreDuplicates_ShouldUseOnConflictDoNothing()
     {
         using var ctx = PostgresTestContext.Create();

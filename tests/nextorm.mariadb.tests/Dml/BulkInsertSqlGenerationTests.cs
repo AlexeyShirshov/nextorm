@@ -53,6 +53,22 @@ public class BulkInsertSqlGenerationTests
             }
         }
     }
+
+    /// <summary>The async mirror for the identity-bearing entity.</summary>
+    private sealed class CountingNullableAsyncSource(IEnumerable<INullableEntity> items) : IAsyncEnumerable<INullableEntity>
+    {
+        public int Enumerated { get; private set; }
+
+        public async IAsyncEnumerator<INullableEntity> GetAsyncEnumerator(CancellationToken cancellationToken = default)
+        {
+            foreach (var item in items)
+            {
+                Enumerated++;
+                yield return item;
+                await Task.Yield();
+            }
+        }
+    }
     [Fact]
     public void BulkInsert_ShouldRenderExplicitValues()
     {
@@ -130,6 +146,98 @@ public class BulkInsertSqlGenerationTests
             .BulkInsertAsync();
 
         await act.Should().ThrowAsync<MySqlException>();
+        source.Enumerated.Should().Be(0);
+    }
+
+    // ---------------------------------------------------------------- D4b native compatibility (rows 3/5/6/8)
+
+    [Fact]
+    public async Task BulkInsert_Auto_KeepIdentity_WithClientLocalInfile_ShouldEnterTheNativePathBeforeReading()
+    {
+        using var ctx = new MariaDbDataContext(LocalInfileEnabledConnectionString, new DataContextBuilder());
+        var source = new CountingNullableAsyncSource([new NullableEntity { Id = 7, Name = "a" }]);
+
+        Func<Task> act = async () => await ctx.CreateBulkInsertBuilder<INullableEntity>(o => o.KeepIdentity())
+            .Values(source)
+            .BulkInsertAsync();
+
+        // Row 3: the native load writes the explicit identity column (with the zero-mode guard), so Auto
+        // keeps the native path; only the unreachable server stops the call, before any row is read.
+        await act.Should().ThrowAsync<MySqlException>();
+        source.Enumerated.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task BulkInsert_Auto_IgnoreDuplicates_WithClientLocalInfile_ShouldEnterTheNativePathBeforeReading()
+    {
+        using var ctx = new MariaDbDataContext(LocalInfileEnabledConnectionString, new DataContextBuilder());
+        var source = new CountingAsyncSource([new SimpleEntity { Id = 7 }]);
+
+        Func<Task> act = async () => await ctx.CreateBulkInsertBuilder<ISimpleEntity>(o => o.IgnoreDuplicates())
+            .Values(source)
+            .BulkInsertAsync();
+
+        // Row 5: ConflictOption.Ignore expresses the request natively.
+        await act.Should().ThrowAsync<MySqlException>();
+        source.Enumerated.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task BulkInsert_ModeNative_KeepIdentity_WithoutClientLocalInfile_ShouldRefuseByName()
+    {
+        using var ctx = new MariaDbDataContext(LocalInfileDisabledConnectionString, new DataContextBuilder());
+        var source = new CountingNullableAsyncSource([new NullableEntity { Id = 7, Name = "a" }]);
+
+        Func<Task> act = async () => await ctx.CreateBulkInsertBuilder<INullableEntity>(o => o.Mode(BulkInsertMode.Native).KeepIdentity())
+            .Values(source)
+            .BulkInsertAsync();
+
+        await act.Should().ThrowAsync<NotSupportedException>().WithMessage("*AllowLoadLocalInfile*");
+        source.Enumerated.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task BulkInsert_Portable_CheckConstraintsFalse_ShouldApplyTheScopedSessionContract()
+    {
+        using var ctx = new MariaDbDataContext(LocalInfileDisabledConnectionString, new DataContextBuilder());
+        var source = new CountingAsyncSource([new SimpleEntity { Id = 7 }]);
+
+        Func<Task> act = async () => await ctx.CreateBulkInsertBuilder<ISimpleEntity>(o => o.Mode(BulkInsertMode.Portable).CheckConstraints(false))
+            .Values(source)
+            .BulkInsertAsync();
+
+        // Row 6: Mode.Portable does not bypass the scoped session controls, so the disabling statements run
+        // on the session before the first row is read (the unreachable server is what fails here).
+        await act.Should().ThrowAsync<MySqlException>();
+        source.Enumerated.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task BulkInsert_Portable_KeepIdentity_ShouldApplyTheIdentitySessionScope()
+    {
+        using var ctx = new MariaDbDataContext(LocalInfileDisabledConnectionString, new DataContextBuilder());
+        var source = new CountingNullableAsyncSource([new NullableEntity { Id = 7, Name = "a" }]);
+
+        Func<Task> act = async () => await ctx.CreateBulkInsertBuilder<INullableEntity>(o => o.Mode(BulkInsertMode.Portable).KeepIdentity())
+            .Values(source)
+            .BulkInsertAsync();
+
+        await act.Should().ThrowAsync<MySqlException>();
+        source.Enumerated.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task BulkInsert_Portable_KeepNullsFalse_NonDefaultEquivalentShape_ShouldRefuseByName()
+    {
+        using var ctx = new MariaDbDataContext(LocalInfileDisabledConnectionString, new DataContextBuilder());
+        var source = new CountingAsyncSource([new SimpleEntity { Id = 7 }]);
+
+        Func<Task> act = async () => await ctx.CreateBulkInsertBuilder<ISimpleEntity>(o => o.Mode(BulkInsertMode.Portable).KeepNulls(false))
+            .Values(source)
+            .BulkInsertAsync();
+
+        // Row 8: the shape guard runs on the portable path too.
+        await act.Should().ThrowAsync<NotSupportedException>().WithMessage("*KeepNulls=false*id*");
         source.Enumerated.Should().Be(0);
     }
 

@@ -482,22 +482,26 @@ public sealed class BulkInsertBuilder<TEntity>
     private bool UseNative(DataContext? db)
     {
         // Capability plus option compatibility, decided once here for every provider: a provider supplies
-        // only its capability flag, so the selection logic is never duplicated per provider.
+        // only its capability flags (SupportsBulkCopy on the dialect, IBulkInsertNativeOptions on the
+        // context), so the selection logic is never duplicated per provider. A request is native-eligible
+        // when the provider's native path can honour every supplied option; any other request takes the
+        // portable path in Auto and is refused by name in Native.
+        var provider = BulkInsertProviders.From(db?.Dialect);
         var capable = db is not null && db.Dialect.SupportsBulkCopy;
-        var compatible = !_options.IgnoreDuplicates && !_keepIdentity;
+        var incompatible = NativeIncompatibleOptions(db);
 
         if (_options.Mode == BulkInsertMode.Native)
         {
             if (!capable)
                 throw new NotSupportedException(
-                    $"Bulk insert Mode.Native was requested, but {BulkInsertProviders.Describe(BulkInsertProviders.From(db?.Dialect))} has no native bulk path. "
+                    $"Bulk insert Mode.Native was requested, but {BulkInsertProviders.Describe(provider)} has no native bulk path. "
                     + "Use Mode.Auto to let nextorm pick a compatible path, or Mode.Portable to request the parameterised INSERT path.");
 
-            if (!compatible)
+            if (incompatible.Count > 0)
                 throw new NotSupportedException(
-                    "Bulk insert Mode.Native was requested, but the request needs the portable path: "
-                    + DescribePortableOnlyOptions()
-                    + ". Use Mode.Auto to let nextorm pick a compatible path, or Mode.Portable.");
+                    $"Bulk insert Mode.Native was requested, but the native bulk path on {BulkInsertProviders.Describe(provider)} cannot express the option(s) "
+                    + string.Join(", ", incompatible)
+                    + ". Use Mode.Auto to let nextorm select the portable INSERT ... VALUES path, or Mode.Portable to request it explicitly.");
 
             return true;
         }
@@ -505,16 +509,30 @@ public sealed class BulkInsertBuilder<TEntity>
         if (_options.Mode == BulkInsertMode.Portable)
             return false;
 
-        // Auto: prefer the native path only when it is fully compatible, otherwise the portable path.
-        return capable && compatible;
+        // Auto: prefer the native path only when it can honour every supplied option, otherwise the
+        // portable path (which either honours the option or refuses it by name before any row is read).
+        return capable && incompatible.Count == 0;
     }
 
-    private string DescribePortableOnlyOptions()
+    /// <summary>
+    /// Lists the supplied options the resolved provider's native path cannot honour. The capability comes
+    /// from the provider context (<see cref="IBulkInsertNativeOptions"/>), never from this builder's
+    /// knowledge of a specific provider.
+    /// </summary>
+    /// <param name="db">The database context the write runs on, or <see langword="null"/> for a non-SQL context.</param>
+    /// <returns>The option names, empty when the native path can honour the whole request.</returns>
+    private List<string> NativeIncompatibleOptions(DataContext? db)
     {
-        var options = new List<string>(2);
-        if (_options.IgnoreDuplicates) options.Add("IgnoreDuplicates=true");
-        if (_keepIdentity) options.Add("KeepIdentity=true");
-        return string.Join(", ", options);
+        var native = db as IBulkInsertNativeOptions;
+        var incompatible = new List<string>(2);
+
+        if (_keepIdentity && native?.SupportsNativeKeepIdentity != true)
+            incompatible.Add("KeepIdentity=true");
+
+        if (_options.IgnoreDuplicates && native?.SupportsNativeIgnoreDuplicates != true)
+            incompatible.Add("IgnoreDuplicates=true");
+
+        return incompatible;
     }
 
     private static bool HasIdentityColumn(IEntityMetadata metadata)

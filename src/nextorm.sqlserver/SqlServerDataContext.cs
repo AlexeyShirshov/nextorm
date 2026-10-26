@@ -13,7 +13,7 @@ namespace NextORM.SqlServer;
 /// Data context for Microsoft SQL Server. Wraps the <c>Microsoft.Data.SqlClient</c> driver for
 /// connections and parameters and renders SQL through <c>SqlServerDialect</c>.
 /// </summary>
-public class SqlServerDataContext : DataContext, IBulkInsertExecutor
+public class SqlServerDataContext : DataContext, IBulkInsertExecutor, IBulkInsertNativeOptions
 {
     private static readonly MethodInfo GetValueMethod = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetValue))!;
     private static readonly MethodInfo IsDBNullMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.IsDBNull))!;
@@ -642,6 +642,17 @@ public class SqlServerDataContext : DataContext, IBulkInsertExecutor
         || type == typeof(double) || type == typeof(decimal);
 
     /// <summary>
+    /// <c>SqlBulkCopy</c> writes explicit identity values through <c>SqlBulkCopyOptions.KeepIdentity</c> (no
+    /// manual <c>SET IDENTITY_INSERT</c> is needed on this path, unlike the portable insert), and has no form
+    /// that skips a conflicting row: an <c>IgnoreDuplicates</c> request therefore falls back to the portable
+    /// path in Auto and is refused by name in Native. The selection itself is made once in the builder.
+    /// </summary>
+    bool IBulkInsertNativeOptions.SupportsNativeKeepIdentity => true;
+
+    /// <inheritdoc cref="IBulkInsertNativeOptions.SupportsNativeIgnoreDuplicates"/>
+    bool IBulkInsertNativeOptions.SupportsNativeIgnoreDuplicates => false;
+
+    /// <summary>
     /// Writes the rows of a bulk-insert command through <c>SqlBulkCopy</c>. The base hook signature cannot carry the
     /// whole-invocation <see cref="TimeSpan"/> budget or the SQL Server option group, so the provider
     /// re-implements the internal bulk executor and keeps the protected hooks as a compatibility fallback.
@@ -669,7 +680,8 @@ public class SqlServerDataContext : DataContext, IBulkInsertExecutor
             command.Progress,
             command.NotifyEvery,
             command.BulkCopy,
-            useInternalTransaction);
+            useInternalTransaction,
+            command.KeepIdentity);
     }
 
     /// <summary>Asynchronously writes the rows of a bulk-insert command through <c>SqlBulkCopy</c>.</summary>
@@ -693,7 +705,8 @@ public class SqlServerDataContext : DataContext, IBulkInsertExecutor
             command.Progress,
             command.NotifyEvery,
             command.BulkCopy,
-            useInternalTransaction).ConfigureAwait(false);
+            useInternalTransaction,
+            command.KeepIdentity).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -715,7 +728,7 @@ public class SqlServerDataContext : DataContext, IBulkInsertExecutor
     protected override int BulkInsertRows(string tableName, IReadOnlyList<string> columnNames, IReadOnlyList<IPropertyMetadata> columns, IEnumerable<object?[]> rows, int? commandTimeoutSeconds, int? maxBatchSize, Action<int>? progress, int notifyEvery, BulkCopyFlags bulkCopy)
     {
         using var deadline = BulkInsertDeadline.Start(commandTimeoutSeconds is { } seconds ? TimeSpan.FromSeconds(seconds) : null, CancellationToken.None);
-        return WriteRows(tableName, columnNames, columns, rows, deadline, commandTimeoutSeconds, maxBatchSize, progress, notifyEvery, bulkCopy, useInternalTransaction: false);
+        return WriteRows(tableName, columnNames, columns, rows, deadline, commandTimeoutSeconds, maxBatchSize, progress, notifyEvery, bulkCopy, useInternalTransaction: false, keepIdentity: columns.Any(property => property.IsIdentity));
     }
 
     /// <summary>Asynchronously writes <paramref name="rows"/> through <c>SqlBulkCopy</c>.</summary>
@@ -733,10 +746,10 @@ public class SqlServerDataContext : DataContext, IBulkInsertExecutor
     protected override async Task<int> BulkInsertRowsAsync(string tableName, IReadOnlyList<string> columnNames, IReadOnlyList<IPropertyMetadata> columns, IAsyncEnumerable<object?[]> rows, int? commandTimeoutSeconds, int? maxBatchSize, Action<int>? progress, int notifyEvery, BulkCopyFlags bulkCopy, CancellationToken cancellationToken)
     {
         using var deadline = BulkInsertDeadline.Start(commandTimeoutSeconds is { } seconds ? TimeSpan.FromSeconds(seconds) : null, cancellationToken);
-        return await WriteRowsAsync(tableName, columnNames, columns, rows, deadline, commandTimeoutSeconds, maxBatchSize, progress, notifyEvery, bulkCopy, useInternalTransaction: false).ConfigureAwait(false);
+        return await WriteRowsAsync(tableName, columnNames, columns, rows, deadline, commandTimeoutSeconds, maxBatchSize, progress, notifyEvery, bulkCopy, useInternalTransaction: false, keepIdentity: columns.Any(property => property.IsIdentity)).ConfigureAwait(false);
     }
 
-    private int WriteRows(string tableName, IReadOnlyList<string> columnNames, IReadOnlyList<IPropertyMetadata> columns, IEnumerable<object?[]> rows, BulkInsertDeadline deadline, int? commandTimeoutSeconds, int? maxBatchSize, Action<int>? progress, int notifyEvery, BulkCopyFlags bulkCopy, bool useInternalTransaction)
+    private int WriteRows(string tableName, IReadOnlyList<string> columnNames, IReadOnlyList<IPropertyMetadata> columns, IEnumerable<object?[]> rows, BulkInsertDeadline deadline, int? commandTimeoutSeconds, int? maxBatchSize, Action<int>? progress, int notifyEvery, BulkCopyFlags bulkCopy, bool useInternalTransaction, bool keepIdentity)
     {
         EnsureConnectionOpen();
         var table = BuildTable(columnNames, columns);
@@ -759,7 +772,8 @@ public class SqlServerDataContext : DataContext, IBulkInsertExecutor
                 progress,
                 notifyEvery,
                 bulkCopy,
-                useInternalTransaction);
+                useInternalTransaction,
+                keepIdentity);
 
             try
             {
@@ -779,7 +793,7 @@ public class SqlServerDataContext : DataContext, IBulkInsertExecutor
         return count;
     }
 
-    private async Task<int> WriteRowsAsync(string tableName, IReadOnlyList<string> columnNames, IReadOnlyList<IPropertyMetadata> columns, IAsyncEnumerable<object?[]> rows, BulkInsertDeadline deadline, int? commandTimeoutSeconds, int? maxBatchSize, Action<int>? progress, int notifyEvery, BulkCopyFlags bulkCopy, bool useInternalTransaction)
+    private async Task<int> WriteRowsAsync(string tableName, IReadOnlyList<string> columnNames, IReadOnlyList<IPropertyMetadata> columns, IAsyncEnumerable<object?[]> rows, BulkInsertDeadline deadline, int? commandTimeoutSeconds, int? maxBatchSize, Action<int>? progress, int notifyEvery, BulkCopyFlags bulkCopy, bool useInternalTransaction, bool keepIdentity)
     {
         var table = BuildTable(columnNames, columns);
         var count = 0;
@@ -805,7 +819,8 @@ public class SqlServerDataContext : DataContext, IBulkInsertExecutor
                     progress,
                     notifyEvery,
                     bulkCopy,
-                    useInternalTransaction);
+                    useInternalTransaction,
+                    keepIdentity);
 
                 await bulk.WriteToServerAsync(table, deadline.Token).ConfigureAwait(false);
             }
@@ -893,12 +908,12 @@ public class SqlServerDataContext : DataContext, IBulkInsertExecutor
         return names;
     }
 
-    private SqlBulkCopy CreateBulkCopy(string tableName, IReadOnlyList<string> columnNames, int bulkCopyTimeoutSeconds, int batchSize, Action<int>? progress, int notifyEvery, BulkCopyFlags bulkCopy, bool useInternalTransaction)
+    private SqlBulkCopy CreateBulkCopy(string tableName, IReadOnlyList<string> columnNames, int bulkCopyTimeoutSeconds, int batchSize, Action<int>? progress, int notifyEvery, BulkCopyFlags bulkCopy, bool useInternalTransaction, bool keepIdentity)
     {
         var connection = (SqlConnection)GetConnection();
         var transaction = (this as ITransactionManager)?.CurrentTransaction as SqlTransaction;
 
-        return CreateBulkCopy(connection, transaction, tableName, columnNames, bulkCopyTimeoutSeconds, batchSize, progress, notifyEvery, bulkCopy, useInternalTransaction);
+        return CreateBulkCopy(connection, transaction, tableName, columnNames, bulkCopyTimeoutSeconds, batchSize, progress, notifyEvery, bulkCopy, useInternalTransaction, keepIdentity);
     }
 
     /// <summary>
@@ -915,10 +930,11 @@ public class SqlServerDataContext : DataContext, IBulkInsertExecutor
     /// <param name="notifyEvery">The progress reporting interval in rows.</param>
     /// <param name="bulkCopy">The bulk-copy flags requested by the caller.</param>
     /// <param name="useInternalTransaction">Whether the driver runs its own internal transaction.</param>
+    /// <param name="keepIdentity">Whether explicit identity values are written (<c>SqlBulkCopyOptions.KeepIdentity</c>).</param>
     /// <returns>The configured <c>SqlBulkCopy</c>.</returns>
-    internal static SqlBulkCopy CreateBulkCopy(SqlConnection connection, SqlTransaction? transaction, string tableName, IReadOnlyList<string> columnNames, int bulkCopyTimeoutSeconds, int batchSize, Action<int>? progress, int notifyEvery, BulkCopyFlags bulkCopy, bool useInternalTransaction)
+    internal static SqlBulkCopy CreateBulkCopy(SqlConnection connection, SqlTransaction? transaction, string tableName, IReadOnlyList<string> columnNames, int bulkCopyTimeoutSeconds, int batchSize, Action<int>? progress, int notifyEvery, BulkCopyFlags bulkCopy, bool useInternalTransaction, bool keepIdentity = false)
     {
-        var bulk = new SqlBulkCopy(connection, MapBulkCopyOptions(bulkCopy.CheckConstraints, bulkCopy.TableLock, bulkCopy.KeepNulls, bulkCopy.FireTriggers, useInternalTransaction), transaction)
+        var bulk = new SqlBulkCopy(connection, MapBulkCopyOptions(bulkCopy.CheckConstraints, bulkCopy.TableLock, bulkCopy.KeepNulls, bulkCopy.FireTriggers, useInternalTransaction, keepIdentity), transaction)
         {
             DestinationTableName = tableName,
             BulkCopyTimeout = bulkCopyTimeoutSeconds,
@@ -937,7 +953,7 @@ public class SqlServerDataContext : DataContext, IBulkInsertExecutor
         return bulk;
     }
 
-    internal static SqlBulkCopyOptions MapBulkCopyOptions(bool checkConstraints, bool tableLock, bool keepNulls, bool fireTriggers, bool useInternalTransaction = false)
+    internal static SqlBulkCopyOptions MapBulkCopyOptions(bool checkConstraints, bool tableLock, bool keepNulls, bool fireTriggers, bool useInternalTransaction = false, bool keepIdentity = false)
     {
         var options = SqlBulkCopyOptions.Default;
         if (checkConstraints)
@@ -950,6 +966,8 @@ public class SqlServerDataContext : DataContext, IBulkInsertExecutor
             options |= SqlBulkCopyOptions.FireTriggers;
         if (useInternalTransaction)
             options |= SqlBulkCopyOptions.UseInternalTransaction;
+        if (keepIdentity)
+            options |= SqlBulkCopyOptions.KeepIdentity;
 
         return options;
     }

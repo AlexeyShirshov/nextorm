@@ -1,8 +1,10 @@
-using FluentAssertions;
-using NextORM.Core;
 using System.Collections;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using System.Data.Common;
 using System.Text;
+using FluentAssertions;
+using NextORM.Core;
 
 namespace NextORM.Core.Tests;
 
@@ -937,6 +939,134 @@ public partial class BulkInsertBuilderTests
         act.Should().Throw<NotSupportedException>().WithMessage("*ClickHouseBulkInsertOptions*");
     }
 
+    // ---------------------------------------------------------------- D4b native compatibility + portable provider scope
+
+    [Fact]
+    public void ModeAuto_KeepIdentity_WhenNativeSupportsIt_ShouldPreferTheNativePath()
+    {
+        using var ctx = new NativeCapableContext(supportsKeepIdentity: true);
+
+        var count = ctx.CreateBulkInsertBuilder<BulkIdentityEntity>(o => o.KeepIdentity())
+            .Values([new BulkIdentityEntity { Id = 7, Name = "a" }])
+            .BulkInsert();
+
+        // Row 3 of the provider matrix: explicit identity values stay on the native path when the provider
+        // declares it can honour them, instead of being forced onto the portable statement.
+        count.Should().Be(1);
+        ctx.NativeCalls.Should().Be(1);
+        ctx.PortableScopeEntries.Should().Be(0);
+    }
+
+    [Fact]
+    public void ModeAuto_KeepIdentity_WhenNativeCannotHonourIt_ShouldFallBackToPortable()
+    {
+        using var ctx = new NativeCapableContext();
+        var source = new BulkIdentityCountingSource(new BulkIdentityEntity { Id = 7, Name = "a" });
+
+        var act = () => ctx.CreateBulkInsertBuilder<BulkIdentityEntity>(o => o.KeepIdentity())
+            .Values(source)
+            .BulkInsert();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*t305-fake-connection*");
+        ctx.NativeCalls.Should().Be(0);
+        source.Enumerated.Should().Be(1);
+    }
+
+    [Fact]
+    public void ModeNative_KeepIdentity_WhenNativeCannotHonourIt_ShouldThrowByNameBeforeReading()
+    {
+        using var ctx = new NativeCapableContext();
+        var source = new BulkIdentityCountingSource(new BulkIdentityEntity { Id = 7, Name = "a" });
+
+        var act = () => ctx.CreateBulkInsertBuilder<BulkIdentityEntity>(o => o.Mode(BulkInsertMode.Native).KeepIdentity())
+            .Values(source)
+            .BulkInsert();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*KeepIdentity=true*");
+        ctx.NativeCalls.Should().Be(0);
+        source.Enumerated.Should().Be(0);
+    }
+
+    [Fact]
+    public void ModeAuto_IgnoreDuplicates_WhenNativeSupportsIt_ShouldPreferTheNativePath()
+    {
+        using var ctx = new NativeCapableContext(supportsIgnoreDuplicates: true);
+
+        var count = ctx.CreateBulkInsertBuilder<BulkEntity>(o => o.IgnoreDuplicates())
+            .Values([new BulkEntity { Id = 1, Name = "a" }])
+            .BulkInsert();
+
+        count.Should().Be(1);
+        ctx.NativeCalls.Should().Be(1);
+    }
+
+    [Fact]
+    public void ModeAuto_IgnoreDuplicates_WhenNativeCannotHonourIt_ShouldUseThePortablePath()
+    {
+        using var ctx = new NativeCapableContext();
+
+        var act = () => ctx.CreateBulkInsertBuilder<BulkEntity>(o => o.IgnoreDuplicates())
+            .Values([new BulkEntity { Id = 1, Name = "a" }])
+            .BulkInsert();
+
+        // The portable path is selected, and this dialect has neither ignore form, so the request is
+        // refused by name there instead of silently failing the whole write.
+        act.Should().Throw<NotSupportedException>().WithMessage("*IgnoreDuplicates=true*");
+        ctx.NativeCalls.Should().Be(0);
+    }
+
+    [Fact]
+    public void ModeNative_IgnoreDuplicates_WhenNativeCannotHonourIt_ShouldThrowByNameBeforeReading()
+    {
+        using var ctx = new NativeCapableContext();
+        var source = new CountingSource(new BulkEntity { Id = 1, Name = "a" });
+
+        var act = () => ctx.CreateBulkInsertBuilder<BulkEntity>(o => o.Mode(BulkInsertMode.Native).IgnoreDuplicates())
+            .Values(source)
+            .BulkInsert();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*IgnoreDuplicates=true*");
+        source.Enumerated.Should().Be(0);
+    }
+
+    [Fact]
+    public void ModePortable_ShouldStillRunTheProviderScope()
+    {
+        using var ctx = new NativeCapableContext(supportsKeepIdentity: true, supportsIgnoreDuplicates: true);
+        var source = new CountingSource(new BulkEntity { Id = 1, Name = "a" });
+
+        var act = () => ctx.CreateBulkInsertBuilder<BulkEntity>(o => o.Mode(BulkInsertMode.Portable))
+            .Values(source)
+            .BulkInsert();
+
+        // Mode.Portable never bypasses the provider-scoped contract: the scope is entered (and the source
+        // is read on this path) before the portable write reaches the fake connection.
+        act.Should().Throw<NotSupportedException>().WithMessage("*t305-fake-connection*");
+        ctx.NativeCalls.Should().Be(0);
+        ctx.PortableScopeEntries.Should().Be(1);
+        ctx.PortableScopeDisposals.Should().Be(1);
+        source.Enumerated.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task PortableProviderScope_ShouldBeEnteredBeforeTheSourceAndRestoredOnError()
+    {
+        using var ctx = new NativeCapableContext();
+        var source = new CountingAsyncSource(new BulkEntity { Id = 1, Name = "a" });
+        ctx.OnPortableScopeEntered = () => source.Enumerated;
+
+        var act = () => ctx.CreateBulkInsertBuilder<BulkEntity>(o => o.Mode(BulkInsertMode.Portable))
+            .Values(source)
+            .BulkInsertAsync();
+
+        // The streaming source is not pulled until the scope is active, and the scope is restored on the
+        // error path, exactly like the native path does.
+        await act.Should().ThrowAsync<NotSupportedException>().WithMessage("*t305-fake-connection*");
+        ctx.EnumeratedAtScopeEntry.Should().Be(0);
+        ctx.PortableScopeEntries.Should().Be(1);
+        ctx.PortableScopeDisposals.Should().Be(1);
+    }
+
     private sealed class NativeCapableDialect : SqlDialectBase
     {
         internal static readonly NativeCapableDialect Instance = new();
@@ -961,13 +1091,43 @@ public partial class BulkInsertBuilderTests
         }
     }
 
-    private sealed class NativeCapableContext : DataContext
+    private sealed class NativeCapableContext : DataContext, IBulkInsertNativeOptions, IBulkInsertPortableScope
     {
-        public NativeCapableContext() : base(new DataContextBuilder())
+        private readonly bool _supportsKeepIdentity;
+        private readonly bool _supportsIgnoreDuplicates;
+
+        public NativeCapableContext(bool supportsKeepIdentity = false, bool supportsIgnoreDuplicates = false)
+            : base(new DataContextBuilder())
         {
+            _supportsKeepIdentity = supportsKeepIdentity;
+            _supportsIgnoreDuplicates = supportsIgnoreDuplicates;
         }
 
         public int NativeCalls { get; private set; }
+
+        public int PortableScopeEntries { get; private set; }
+
+        public int PortableScopeDisposals { get; private set; }
+
+        public int EnumeratedAtScopeEntry { get; private set; }
+
+        public Func<int>? OnPortableScopeEntered { get; set; }
+
+        bool IBulkInsertNativeOptions.SupportsNativeKeepIdentity => _supportsKeepIdentity;
+
+        bool IBulkInsertNativeOptions.SupportsNativeIgnoreDuplicates => _supportsIgnoreDuplicates;
+
+        IDisposable IBulkInsertPortableScope.BeginPortableBulkInsertScope(BulkInsertCommand command)
+        {
+            PortableScopeEntries++;
+            EnumeratedAtScopeEntry = OnPortableScopeEntered?.Invoke() ?? 0;
+            return new RecordingScope(this);
+        }
+
+        private sealed class RecordingScope(NativeCapableContext owner) : IDisposable
+        {
+            public void Dispose() => owner.PortableScopeDisposals++;
+        }
 
         public override ISqlDialect Dialect => NativeCapableDialect.Instance;
 
@@ -1029,6 +1189,37 @@ public partial class BulkInsertBuilderTests
         protected override DbConnection CreateDbConnection(string? connectionString) => throw new NotSupportedException("t305-fake-connection");
     }
 
+    private sealed class CountingAsyncSource(params BulkEntity[] rows) : IAsyncEnumerable<BulkEntity>
+    {
+        public int Enumerated { get; private set; }
+
+        public async IAsyncEnumerator<BulkEntity> GetAsyncEnumerator(CancellationToken cancellationToken = default)
+        {
+            foreach (var row in rows)
+            {
+                Enumerated++;
+                yield return row;
+                await Task.Yield();
+            }
+        }
+    }
+
+    private sealed class BulkIdentityCountingSource(params BulkIdentityEntity[] rows) : IEnumerable<BulkIdentityEntity>
+    {
+        public int Enumerated { get; private set; }
+
+        public IEnumerator<BulkIdentityEntity> GetEnumerator()
+        {
+            foreach (var row in rows)
+            {
+                Enumerated++;
+                yield return row;
+            }
+        }
+
+        IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
     private sealed class CountingSource(params BulkEntity[] rows) : IEnumerable<BulkEntity>
     {
         public int Enumerated { get; private set; }
@@ -1061,5 +1252,26 @@ public interface IBulkEntity
 public class BulkEntity : IBulkEntity
 {
     public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+}
+
+/// <summary>An entity with an identity key, so <c>KeepIdentity</c> is actually requested.</summary>
+[SqlTable("bulk_identity_entity")]
+public interface IBulkIdentityEntity
+{
+    [Key]
+    [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+    [Column("id")]
+    int Id { get; set; }
+
+    [Column("name")]
+    string Name { get; set; }
+}
+
+/// <summary>The concrete entity for <see cref="IBulkIdentityEntity"/>.</summary>
+public sealed class BulkIdentityEntity : IBulkIdentityEntity
+{
+    public int Id { get; set; }
+
     public string Name { get; set; } = string.Empty;
 }

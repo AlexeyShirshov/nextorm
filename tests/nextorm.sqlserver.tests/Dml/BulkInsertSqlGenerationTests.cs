@@ -254,15 +254,69 @@ public class BulkInsertSqlGenerationTests
     }
 
     [Fact]
-    public void BulkInsert_KeepIdentity_WithBulkCopyFlag_ShouldThrow()
+    public void BulkInsert_KeepIdentity_WithBulkCopyFlag_ShouldStayOnTheNativePath()
     {
         using var ctx = SqlServerTestContext.Create();
 
-        var act = () => ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.KeepIdentity().FireTriggers())
+        // Rows 3/9: the native path honours KeepIdentity (SqlBulkCopyOptions.KeepIdentity) and FireTriggers
+        // (SqlBulkCopyOptions.FireTriggers), so the combination is not a portable-only contradiction any
+        // more. Validation only, so no server is contacted.
+        var act = () => ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.Mode(BulkInsertMode.Native).KeepIdentity().FireTriggers())
+            .Values([Row("a", 1)])
+            .ValidateTarget();
+
+        act.Should().NotThrow();
+    }
+
+    [Fact]
+    public void BulkInsert_KeepIdentity_ShouldSetTheKeepIdentityBulkCopyFlag()
+    {
+        var options = SqlServerDataContext.MapBulkCopyOptions(
+            checkConstraints: false,
+            tableLock: false,
+            keepNulls: false,
+            fireTriggers: false,
+            keepIdentity: true);
+
+        options.Should().HaveFlag(SqlBulkCopyOptions.KeepIdentity);
+    }
+
+    [Fact]
+    public void BulkInsert_ModeNative_KeepIdentity_ShouldSelectTheNativePath()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var act = () => ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.Mode(BulkInsertMode.Native).KeepIdentity())
+            .Values([Row("a", 1)])
+            .ValidateTarget();
+
+        act.Should().NotThrow();
+    }
+
+    [Fact]
+    public void BulkInsert_ModeNative_IgnoreDuplicates_ShouldThrowNamingTheOption()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var act = () => ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.Mode(BulkInsertMode.Native).IgnoreDuplicates())
+            .Values([Row("a", 1)])
+            .ValidateTarget();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*SQL Server*IgnoreDuplicates=true*");
+    }
+
+    [Fact]
+    public void BulkInsert_ModeAuto_IgnoreDuplicates_ShouldFallBackToThePortablePath()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        // Row 5: SqlBulkCopy has no conflict-skipping form, so Auto selects the portable statement, which
+        // refuses the request by name because this provider has neither ignore form.
+        var act = () => ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.IgnoreDuplicates())
             .Values([Row("a", 1)])
             .BulkInsert();
 
-        act.Should().Throw<NotSupportedException>().WithMessage("*FireTriggers*");
+        act.Should().Throw<NotSupportedException>().WithMessage("*IgnoreDuplicates=true*");
     }
 }
 

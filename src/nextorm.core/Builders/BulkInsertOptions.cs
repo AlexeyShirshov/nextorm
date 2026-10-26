@@ -42,11 +42,14 @@ public sealed record BulkInsertOptions
     public int? MaxSqlLength { get; init; }
 
     /// <summary>
-    /// Whether explicit values are written to identity columns. Forces the portable path: SQL Server wraps
-    /// the insert with <c>SET IDENTITY_INSERT</c> and PostgreSQL adds <c>OVERRIDING SYSTEM VALUE</c>.
-    /// Silently ignored when the entity's mapping declares no identity column (matching linq2db), so it
-    /// never surfaces SQL Server error 8106 on a non-identity table and does not force the portable path
-    /// there. Defaults to <see langword="false"/>.
+    /// Whether explicit values are written to identity columns. The path decision stays capability based:
+    /// the native path writes the explicit values where the provider can (MySQL/MariaDB through their
+    /// explicit-column load, SQL Server through <c>SqlBulkCopyOptions.KeepIdentity</c>, PostgreSQL through
+    /// the explicit <c>COPY</c> column list), and the portable path renders the provider's overriding form
+    /// (SQL Server wraps the insert with <c>SET IDENTITY_INSERT</c>, PostgreSQL adds
+    /// <c>OVERRIDING SYSTEM VALUE</c>). Silently ignored when the entity's mapping declares no identity
+    /// column (matching linq2db), so it never surfaces SQL Server error 8106 on a non-identity table and
+    /// does not change the selected path there. Defaults to <see langword="false"/>.
     /// </summary>
     public bool KeepIdentity
     {
@@ -59,9 +62,12 @@ public sealed record BulkInsertOptions
     }
 
     /// <summary>
-    /// Whether rows that violate a unique constraint are skipped instead of failing the whole write.
-    /// Forces the portable path and uses the provider's ignore form (<c>ON CONFLICT DO NOTHING</c>,
-    /// <c>INSERT OR IGNORE</c>, <c>INSERT IGNORE</c>). Defaults to <see langword="false"/>.
+    /// Whether rows that violate a unique constraint are skipped instead of failing the whole write. Uses
+    /// the provider's ignore form on whichever path can express it: the native MySQL/MariaDB load
+    /// (<c>ConflictOption.Ignore</c>) or the portable statement (<c>ON CONFLICT DO NOTHING</c>,
+    /// <c>INSERT OR IGNORE</c>, <c>INSERT IGNORE</c>). A provider where neither path can express it (for
+    /// example SQL Server) refuses the request with <see cref="NotSupportedException"/> before any row is
+    /// read. Defaults to <see langword="false"/>.
     /// </summary>
     public bool IgnoreDuplicates
     {

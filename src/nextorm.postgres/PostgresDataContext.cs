@@ -16,7 +16,7 @@ namespace NextORM.Postgres;
 /// Data context for PostgreSQL. Wraps the <c>Npgsql</c> driver for connections and parameters and
 /// renders SQL through <c>PostgresDialect</c>.
 /// </summary>
-public class PostgresDataContext : DataContext, IBulkInsertExecutor
+public class PostgresDataContext : DataContext, IBulkInsertExecutor, IBulkInsertNativeOptions
 {
     private static readonly MethodInfo GetFieldValueMI = typeof(DbDataReader).GetMethod(nameof(DbDataReader.GetFieldValue))!;
     private static readonly MethodInfo GetTimeSpanMI = GetFieldValueMI.MakeGenericMethod(typeof(TimeSpan));
@@ -418,6 +418,17 @@ public class PostgresDataContext : DataContext, IBulkInsertExecutor
         /// <returns>A task producing the number of rows imported by this importer.</returns>
         Task<long> CompleteAsync(CancellationToken cancellationToken);
     }
+
+    /// <summary>
+    /// Binary <c>COPY</c> writes the explicit identity column values through the written column list, and
+    /// has no form that skips a conflicting row (<c>ON CONFLICT DO NOTHING</c> is only on the portable
+    /// insert): an <c>IgnoreDuplicates</c> request therefore falls back to the portable path in Auto and is
+    /// refused by name in Native. The selection itself is made once in the builder.
+    /// </summary>
+    bool IBulkInsertNativeOptions.SupportsNativeKeepIdentity => true;
+
+    /// <inheritdoc cref="IBulkInsertNativeOptions.SupportsNativeIgnoreDuplicates"/>
+    bool IBulkInsertNativeOptions.SupportsNativeIgnoreDuplicates => false;
 
     /// <summary>
     /// Writes the rows of a bulk-insert command through the native binary <c>COPY</c> path. The base hook signature
