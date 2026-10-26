@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using FluentAssertions;
+using Xunit.v3;
 
 namespace NextORM.Core.Tests;
 
@@ -82,9 +83,11 @@ public class CacheIsolationRegressionTests
 
     /// <summary>
     /// E12 (T342) fixture control: inserting one sentinel into each of the five process-wide caches and
-    /// arming a non-default window, then running the assembly fixture's start and finish callbacks
-    /// directly (the bodies the runner invokes) must remove every sentinel and restore the window the
-    /// fixture captured when it was constructed.
+    /// arming a non-default window, then invoking the assembly fixture's test-finish notification through
+    /// the <see cref="INotifyTestLifecycle"/> interface member (with the running test's identity, exactly
+    /// as the runner does) must remove every sentinel and restore the window the fixture captured when it
+    /// was constructed; the start body is invoked directly, since the control only asserts the finish
+    /// contract.
     /// <para>
     /// The fixture is constructed while <c>1234 ms</c> is armed and the window is moved to
     /// <c>4321 ms</c> before the sentinels are seeded, so all three repair sites are individually
@@ -127,8 +130,11 @@ public class CacheIsolationRegressionTests
             DataContextCache.ExpressionsCache.ContainsKey(expressionKey).Should().BeTrue("the control seeds the expression cache");
             DataContextCache.InValuesCache.ContainsKey(inValuesKey).Should().BeTrue("the control seeds the in-values cache");
 
+            var currentTest = TestContext.Current.Test as IXunitTest;
+            currentTest.Should().NotBeNull(
+                "the running test is the IXunitTest identity the runner hands to the lifecycle callback");
             fixture.Start(nameof(T342_FixtureTeardown_Should_RestoreWindowAndRemoveSentinels));
-            fixture.Finish(nameof(T342_FixtureTeardown_Should_RestoreWindowAndRemoveSentinels));
+            ((INotifyTestLifecycle)fixture).OnTestFinished(currentTest!);
 
             DataContextCache.Metadata.ContainsKey(sentinelType).Should().BeFalse("the fixture teardown clears the metadata cache");
             DataContextCache.TvpMetadata.ContainsKey(sentinelType).Should().BeFalse("the fixture teardown clears the TVP metadata cache");
