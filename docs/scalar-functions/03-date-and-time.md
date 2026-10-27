@@ -142,6 +142,43 @@ PostgreSQL only):
 | `SqlFunctions.Postgres.current_date()` / `current_time()` / `localtime()` / `localtimestamp()` | the same key words |
 | `SqlFunctions.Postgres.pg_typeof(x)` | `cast(pg_typeof(x) as text)` |
 
+The residual date/time family of #281 sits on the same surface, one member per server overload, each
+name gated **individually** by
+[`IScalarFunctions.Supports`](xref:NextORM.Core.IScalarFunctions.Supports(System.String)) rather than by
+the family flag:
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.Postgres.date_subtract(value, interval)` | `date_subtract(value, interval)` → `timestamptz` |
+| `SqlFunctions.Postgres.date_subtract(value, interval, zone)` | `date_subtract(value, interval, zone)` → `timestamptz` |
+| `SqlFunctions.Postgres.justify_interval(interval)` | `justify_interval(interval)` → `interval` |
+| `SqlFunctions.Postgres.make_timestamptz(y, mo, d, h, mi, sec)` | `make_timestamptz(y, mo, d, h, mi, sec)` → `timestamptz` |
+| `SqlFunctions.Postgres.make_timestamptz(y, mo, d, h, mi, sec, zone)` | `make_timestamptz(..., zone)` → `timestamptz` |
+| `SqlFunctions.Postgres.clock_timestamp()` | `clock_timestamp()` → `timestamptz` |
+| `SqlFunctions.Postgres.statement_timestamp()` | `statement_timestamp()` → `timestamptz` |
+| `SqlFunctions.Postgres.transaction_timestamp()` | `transaction_timestamp()` → `timestamptz` |
+| `SqlFunctions.Postgres.timeofday()` | `timeofday()` → `text` |
+| `SqlFunctions.Postgres.isfinite(value)` (`DateOnly?`) | `isfinite(value)` → `boolean` (the `date` form) |
+| `SqlFunctions.Postgres.isfinite(value)` (`DateTime?`) | `isfinite(value)` → `boolean` (the `timestamp` form) |
+| `SqlFunctions.Postgres.isfinite(value)` (`TimeSpan?`) | `isfinite(value)` → `boolean` (the `interval` form) |
+
+`clock_timestamp()` is evaluated per row and advances inside a statement, while `statement_timestamp()`
+is fixed at the start of the statement and `transaction_timestamp()` at the start of the transaction.
+Both `date_subtract` forms return `timestamp with time zone` (the shipped signatures return
+`DateTime?`, not `interval`), and `justify_interval` returns an `interval`, so it is mapped through the
+provider's interval handling: a returned interval carrying a non-zero month component is rejected with
+`InvalidCastException` on the mapped-column path. A NULL argument yields NULL, and every name is gated
+individually, so a provider without `IScalarFunctions` fails closed with `NotSupportedException`.
+
+Three members are refused while the query is prepared, because each returns `void` and the expression
+model has no `void`-typed projection, so no faithful CLR result exists and no SQL is emitted:
+
+| Refused member | Tested reason |
+|---|---|
+| `SqlFunctions.Postgres.pg_sleep(seconds)` | `pg_sleep` returns `void`; a fabricated value is never returned. |
+| `SqlFunctions.Postgres.pg_sleep_for(interval)` | `pg_sleep_for` returns `void`; a fabricated value is never returned. |
+| `SqlFunctions.Postgres.pg_sleep_until(timestamptz)` | `pg_sleep_until` returns `void`; a fabricated value is never returned. |
+
 Date construction and arithmetic otherwise use the portable surface: `date_from_parts` (which renders
 PostgreSQL `make_date`), `date_add`, `date_diff`, `date_trunc` and the `DateTime` members (see
 [Date arithmetic](#date-arithmetic) below).

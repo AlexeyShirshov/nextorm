@@ -208,7 +208,8 @@ by `SupportsExtendedScalarFunctions`.
 The residual string catalogue of #281 sits on the same `Postgres` surface, one member per server
 overload: `btrim` (one-argument, character-set and `bytea` forms), the two-argument and `bytea` forms
 of `ltrim`/`rtrim`, `starts_with`, `parse_ident`, the `text` overloads of
-`quote_ident`/`quote_literal`/`quote_nullable`, `to_ascii(value, encoding)`,
+`quote_ident`/`quote_literal`/`quote_nullable`, `to_ascii(value, encoding)` (encoding named as text or
+as its PostgreSQL code),
 `to_hex`/`to_oct`/`to_bin` (integer and `bigint`), `convert_from`/`convert_to`, `encode`/`decode`,
 `normalize`, `unistr`, `regexp_match` (two- and three-argument) and the set-returning
 `string_to_table`. Each of these names is gated **individually** by
@@ -220,6 +221,30 @@ grammar keyword (`NFC`/`NFD`/`NFKC`/`NFKD`), `regexp_match` returns NULL when no
 the pinned PostgreSQL 17.11 — `casefold`, the one-argument `to_ascii` and the `anyelement` `quote_*`
 overloads — are refused while the query is prepared; the tested reasons are in the refusal table of
 [String functions](../../scalar-functions/01-string-functions.md#tested-refusals).
+
+The residual date/time family of #281 follows the same rule: `date_subtract` (the two-argument
+`interval` form and the zoned three-argument form, both returning `timestamp with time zone`),
+`justify_interval`, `make_timestamptz` (with and without a zone), the clocks
+`clock_timestamp`/`statement_timestamp`/`transaction_timestamp`, `timeofday` and `isfinite` over
+`date`, `timestamp` and `interval`. `clock_timestamp` is evaluated per row while
+`statement_timestamp`/`transaction_timestamp` stay fixed for the statement/transaction, and
+`justify_interval` returns an `interval`, so it follows the provider's interval handling described
+below. Each name is gated **individually** by `IScalarFunctions.Supports` and fails closed with
+`NotSupportedException` on a provider without the interface; `pg_sleep`/`pg_sleep_for`/`pg_sleep_until`
+are refused because each returns `void` and no faithful expression result exists — the refusal rows are
+in [Date and time functions](../../scalar-functions/03-date-and-time.md#postgresql-extended-date-and-time).
+
+UUID extraction is PostgreSQL-only as well: `uuid_extract_timestamp` yields a `timestamptz` (NULL for a
+version-4 UUID or the nil UUID) and `uuid_extract_version` yields a `smallint` (NULL for the nil UUID),
+both gated per name by `IScalarFunctions.Supports` with the same fail-closed refusal — see
+[Sequences and UUID generators](../../scalar-functions/10-sequences.md#uuid-generators).
+
+Next to `encode`/`decode`, the binary-string family adds `get_bit`/`set_bit` (bit indexes counted from
+the least significant bit of the first byte), `get_byte`/`set_byte` (zero-based byte indexes) and
+`bit_count` (set bits as `bigint`), each gated individually by `IScalarFunctions.Supports` and failing
+closed the same way. The `bit`-typed spellings have no CLR mapping and are refused, and
+`crc32`/`crc32c` are PostgreSQL 18 functions refused on the pinned 17.11; both reasons are in the
+refusal table of [String functions](../../scalar-functions/01-string-functions.md#tested-refusals).
 
 On the mapped-column path the duration rule follows the **returned** interval, never the function name:
 `make_interval`, a `justify_*` normalization and `age` all reject a result carrying a non-zero month

@@ -377,6 +377,7 @@ provider that does not implement the interface rejects the call with `NotSupport
 | `SqlFunctions.Postgres.quote_literal(value)` | `quote_literal(value)` |
 | `SqlFunctions.Postgres.quote_nullable(value)` | `quote_nullable(value)` |
 | `SqlFunctions.Postgres.to_ascii(value, encoding)` | `to_ascii(value, encoding)` (`text`, `name`) |
+| `SqlFunctions.Postgres.to_ascii(value, encodingCode)` (`int`) | `to_ascii(value, encodingCode)` (`text`, `integer`) — a PostgreSQL encoding **code**: `8` = `LATIN1`, `9` = `LATIN2`, `16` = `LATIN9`, `29` = `WIN1250` |
 | `SqlFunctions.Postgres.to_hex(value)` (`int?`) | `to_hex(value)` |
 | `SqlFunctions.Postgres.to_hex(value)` (`long?`) | `to_hex(value)` (`bigint`) |
 | `SqlFunctions.Postgres.to_oct(value)` (`int?`) | `to_oct(value)` |
@@ -387,6 +388,11 @@ provider that does not implement the interface rejects the call with `NotSupport
 | `SqlFunctions.Postgres.convert_to(value, encoding)` | `convert_to(value, encoding)` → `bytea` |
 | `SqlFunctions.Postgres.encode(bytes, format)` | `encode(bytes, format)` |
 | `SqlFunctions.Postgres.decode(value, format)` | `decode(value, format)` → `bytea` |
+| `SqlFunctions.Postgres.get_bit(bytes, index)` | `get_bit(bytes, index)` → `int` (`0` or `1`) |
+| `SqlFunctions.Postgres.set_bit(bytes, index, value)` | `set_bit(bytes, index, value)` → `bytea` |
+| `SqlFunctions.Postgres.get_byte(bytes, index)` | `get_byte(bytes, index)` → `int` |
+| `SqlFunctions.Postgres.set_byte(bytes, index, value)` | `set_byte(bytes, index, value)` → `bytea` |
+| `SqlFunctions.Postgres.bit_count(bytes)` | `bit_count(bytes)` → `bigint` |
 | `SqlFunctions.Postgres.normalize(value, form)` | `normalize(value, form)` |
 | `SqlFunctions.Postgres.unistr(value)` | `unistr(value)` |
 | `SqlFunctions.Postgres.string_to_table(value, delimiter)` | `string_to_table(value, delimiter)` → one row per fragment |
@@ -404,13 +410,18 @@ A NULL argument yields NULL for every one of them. The non-obvious semantics are
   overloads are the `bigint` forms for `to_hex`/`to_oct`/`to_bin`.
 * `encode`/`decode` take `(data, format)` with `base64`, `hex` or `escape`; a malformed `decode`
   input raises on the server instead of being repaired.
+* `get_bit`/`set_bit` index bits from the least significant bit of the first byte, `get_byte`/
+  `set_byte` index bytes from zero, and `bit_count` returns the number of set bits as `bigint`
+  (`0xA1` has bit 0 set, byte 0 = `161` and three set bits).
 * The two-argument `btrim`/`ltrim`/`rtrim` take a **character set** (every listed character is
   trimmed), not a substring; the `byte[]` overloads are the `bytea` forms.
 * `parse_ident` returns the dot-separated parts as `text[]`, and `strict` decides whether an invalid
   identifier raises or is truncated after the first error.
 * `string_to_table` is the one set-returning member of the family: one row per fragment, and the
   third argument turns a fragment equal to it into a NULL row.
-* `to_ascii` is the `(text, name)` overload; the one-argument form is refused (see below).
+* `to_ascii` is exposed with the encoding named as text (`to_ascii(value, 'LATIN1')`) and with the
+  encoding as its PostgreSQL **code** (`to_ascii(value, 8)`); the one-argument form is refused (see
+  below).
 
 ### Tested refusals
 
@@ -420,12 +431,17 @@ prepared — `NotSupportedException`, before any command reaches the server:
 | Family | Refused member | Tested reason |
 |---|---|---|
 | string | `casefold(text)` | PostgreSQL 18 function, absent from 17.11 `pg_proc`; the name fails with `42883`. |
-| string | `to_ascii(text)` (one argument) | 17.11 raises `0A000` ("encoding conversion from UTF8 to ASCII not supported") because the one-argument form takes the source encoding from the database and is defined only for a LATIN1/LATIN2/WIN1250 source — use `to_ascii(value, encoding)`. |
+| string | `to_ascii(text)` (one argument) | PostgreSQL 17 supports the conversion only from LATIN1, LATIN2, LATIN9 and WIN1250, and the pinned fixture database is UTF8, so the form raises `0A000`; use `to_ascii(value, encoding)` — the shipped message is `The one-argument to_ascii function is refused: PostgreSQL 17 supports the conversion only from LATIN1, LATIN2, LATIN9 and WIN1250, and the pinned fixture database is UTF8, so the form raises 0A000; use to_ascii(value, encoding).` |
+| string | `crc32(bytea)` / `crc32c(bytea)` | PostgreSQL 18 functions, absent from the 17.11 `pg_proc`; the name fails with `42883`. |
 | string | `quote_literal(anyelement)` | only the `text` overload is exposed; a typed overload over every CLR type would force conversions the expression paths do not support. |
 | string | `quote_nullable(anyelement)` | the same `anyelement` limitation; the `text` overload is exposed. |
 
-`unistr(text)` is delivered — 17.11 has it. The undocumented `to_ascii(text, integer)` form is not
-exposed at all: 17.11 validates the number as an encoding code and returns `42704` for `1252`.
+`unistr(text)` is delivered — 17.11 has it. Both `to_ascii` overloads are exposed: the `(text,
+integer)` form takes a PostgreSQL encoding code, so `to_ascii(value, 8)` is the `LATIN1` conversion
+(`SELECT pg_encoding_to_char(8)` → `LATIN1`), while a Windows codepage number such as `1252` is not an
+encoding code and the emitted statement fails on the server with `42704`. The `bit`-typed spellings of
+the binary helpers (`get_bit`/`set_bit`/`bit_count` over `bit`) have no CLR mapping, so no member is
+offered for them and the call is refused instead of being translated.
 
 ## SQL Server string, hashing and compression functions
 

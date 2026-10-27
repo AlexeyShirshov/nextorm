@@ -383,6 +383,7 @@ var rows = dataContext.From<IComplexEntity>()
 | `SqlFunctions.Postgres.quote_literal(value)` | `quote_literal(value)` |
 | `SqlFunctions.Postgres.quote_nullable(value)` | `quote_nullable(value)` |
 | `SqlFunctions.Postgres.to_ascii(value, encoding)` | `to_ascii(value, encoding)` (`text`, `name`) |
+| `SqlFunctions.Postgres.to_ascii(value, encodingCode)` (`int`) | `to_ascii(value, encodingCode)` (`text`, `integer`) — **код** кодировки PostgreSQL: `8` = `LATIN1`, `9` = `LATIN2`, `16` = `LATIN9`, `29` = `WIN1250` |
 | `SqlFunctions.Postgres.to_hex(value)` (`int?`) | `to_hex(value)` |
 | `SqlFunctions.Postgres.to_hex(value)` (`long?`) | `to_hex(value)` (`bigint`) |
 | `SqlFunctions.Postgres.to_oct(value)` (`int?`) | `to_oct(value)` |
@@ -393,6 +394,11 @@ var rows = dataContext.From<IComplexEntity>()
 | `SqlFunctions.Postgres.convert_to(value, encoding)` | `convert_to(value, encoding)` → `bytea` |
 | `SqlFunctions.Postgres.encode(bytes, format)` | `encode(bytes, format)` |
 | `SqlFunctions.Postgres.decode(value, format)` | `decode(value, format)` → `bytea` |
+| `SqlFunctions.Postgres.get_bit(bytes, index)` | `get_bit(bytes, index)` → `int` (`0` или `1`) |
+| `SqlFunctions.Postgres.set_bit(bytes, index, value)` | `set_bit(bytes, index, value)` → `bytea` |
+| `SqlFunctions.Postgres.get_byte(bytes, index)` | `get_byte(bytes, index)` → `int` |
+| `SqlFunctions.Postgres.set_byte(bytes, index, value)` | `set_byte(bytes, index, value)` → `bytea` |
+| `SqlFunctions.Postgres.bit_count(bytes)` | `bit_count(bytes)` → `bigint` |
 | `SqlFunctions.Postgres.normalize(value, form)` | `normalize(value, form)` |
 | `SqlFunctions.Postgres.unistr(value)` | `unistr(value)` |
 | `SqlFunctions.Postgres.string_to_table(value, delimiter)` | `string_to_table(value, delimiter)` → одна строка на фрагмент |
@@ -410,13 +416,17 @@ NULL-аргумент даёт NULL для каждого из них. Неоч�
   перегрузки с `long` — это формы `to_hex`/`to_oct`/`to_bin` для `bigint`.
 * `encode`/`decode` принимают `(data, format)` с `base64`, `hex` или `escape`; некорректный вход
   `decode` вызывает ошибку на сервере, а не «ремонтируется».
+* `get_bit`/`set_bit` нумеруют биты от младшего бита первого байта, `get_byte`/`set_byte` — байты
+  с нуля, а `bit_count` возвращает число установленных бит как `bigint` (`0xA1`: бит 0 установлен,
+  байт 0 = `161`, установлено три бита).
 * Двухаргументные `btrim`/`ltrim`/`rtrim` принимают **набор символов** (срезается каждый
   перечисленный символ), а не подстроку; перегрузки с `byte[]` — это формы для `bytea`.
 * `parse_ident` возвращает части через точку как `text[]`, а `strict` решает, бросить ли ошибку на
   невалидном идентификаторе или обрезать его после первой ошибки.
 * `string_to_table` — единственный член семейства, возвращающий набор строк: одна строка на фрагмент,
   а третий аргумент превращает совпавший с ним фрагмент в NULL-строку.
-* `to_ascii` — это перегрузка `(text, name)`; одноаргументная форма отклонена (см. ниже).
+* `to_ascii` доступна с кодировкой, заданной текстом (`to_ascii(value, 'LATIN1')`), и с кодировкой,
+  заданной её **кодом** PostgreSQL (`to_ascii(value, 8)`); одноаргументная форма отклонена (см. ниже).
 
 ### Проверенные отказы
 
@@ -426,12 +436,17 @@ NULL-аргумент даёт NULL для каждого из них. Неоч�
 | Семейство | Отклонённый член | Проверенная причина |
 |---|---|---|
 | string | `casefold(text)` | Функция PostgreSQL 18, отсутствует в `pg_proc` версии 17.11; имя падает с `42883`. |
-| string | `to_ascii(text)` (один аргумент) | 17.11 выдаёт `0A000` («encoding conversion from UTF8 to ASCII not supported»), потому что одноаргументная форма берёт исходную кодировку из кодировки базы и определена только для источника LATIN1/LATIN2/WIN1250 — используйте `to_ascii(value, encoding)`. |
+| string | `to_ascii(text)` (один аргумент) | PostgreSQL 17 поддерживает конверсию только из LATIN1, LATIN2, LATIN9 и WIN1250, а закреплённая база-фикстура — UTF8, поэтому форма выдаёт `0A000`; используйте `to_ascii(value, encoding)` — поставляемое сообщение: `The one-argument to_ascii function is refused: PostgreSQL 17 supports the conversion only from LATIN1, LATIN2, LATIN9 and WIN1250, and the pinned fixture database is UTF8, so the form raises 0A000; use to_ascii(value, encoding).` |
+| string | `crc32(bytea)` / `crc32c(bytea)` | Функции PostgreSQL 18, отсутствуют в `pg_proc` версии 17.11; имя падает с `42883`. |
 | string | `quote_literal(anyelement)` | доступна только перегрузка `text`; типизированная перегрузка над каждым CLR-типом вынудила бы преобразования, которых пути выражений не поддерживают. |
 | string | `quote_nullable(anyelement)` | то же ограничение `anyelement`; перегрузка `text` доступна. |
 
-`unistr(text)` поставлена — в 17.11 она есть. Недокументированная форма `to_ascii(text, integer)` не
-выставлена вовсе: 17.11 проверяет число как код кодировки и возвращает `42704` для `1252`.
+`unistr(text)` поставлена — в 17.11 она есть. Выставлены обе перегрузки `to_ascii`: форма
+`(text, integer)` принимает код кодировки PostgreSQL, поэтому `to_ascii(value, 8)` — это конверсия
+`LATIN1` (`SELECT pg_encoding_to_char(8)` → `LATIN1`), а номер Windows-кодовой страницы вроде `1252`
+кодом кодировки не является, и отправленная команда падает на сервере с `42704`. У `bit`-форм
+бинарных помощников (`get_bit`/`set_bit`/`bit_count` над `bit`) нет CLR-отображения, поэтому для них
+не выставлено ни одного члена, и вызов отклоняется, а не транслируется.
 
 ## Строковые функции, хэширование и сжатие SQL Server
 

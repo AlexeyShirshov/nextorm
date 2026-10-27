@@ -109,3 +109,11 @@ var rows = dataContext.From<IOrderEntity>()
 заменой не является. SQL Server дополнительно открывает `newsequentialid()`
 (`SqlFunctions.SqlServer.newsequentialid()`), допустимый только как `DEFAULT` колонки, но не в
 обычном `SELECT`.
+
+PostgreSQL также читает данные из сохранённого UUID — на `SqlFunctions.Postgres`, с гейтом по имени
+через [`IScalarFunctions.Supports`](xref:NextORM.Core.IScalarFunctions.Supports(System.String)):
+
+| C# | SQL | Возвращает |
+|---|---|---|
+| `SqlFunctions.Postgres.uuid_extract_timestamp(value)` | `uuid_extract_timestamp(value)` | `timestamptz` (`DateTime?`) — NULL для UUID версии 4 или nil-UUID |
+| `SqlFunctions.Postgres.uuid_extract_version(value)` | `uuid_extract_version(value)` | `smallint` (`short?`) — встроенная версия, NULL для nil-UUID |

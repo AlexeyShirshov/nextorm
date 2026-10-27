@@ -210,7 +210,8 @@ Native-поверхность реализована только в PostgreSQL;
 Остаточный строковый каталог #281 живёт на той же поверхности `Postgres`, один член на серверную
 перегрузку: `btrim` (одноаргументная, с набором символов и формы `bytea`), двухаргументные и
 `bytea`-формы `ltrim`/`rtrim`, `starts_with`, `parse_ident`, перегрузки `text` у
-`quote_ident`/`quote_literal`/`quote_nullable`, `to_ascii(value, encoding)`,
+`quote_ident`/`quote_literal`/`quote_nullable`, `to_ascii(value, encoding)` (кодировка текстом или её
+кодом PostgreSQL),
 `to_hex`/`to_oct`/`to_bin` (целые и `bigint`), `convert_from`/`convert_to`, `encode`/`decode`,
 `normalize`, `unistr`, `regexp_match` (два и три аргумента) и возвращающая набор строк
 `string_to_table`. Каждое из этих имён гейтится **отдельно** через
@@ -222,6 +223,31 @@ SQL PostgreSQL до него не доходит. `normalize` принимает
 на закреплённом PostgreSQL 17.11 — `casefold`, одноаргументная `to_ascii` и перегрузки `quote_*` с
 `anyelement`, — отклоняются во время подготовки запроса; проверенные причины собраны в таблице
 отказов в статье [Строковые функции](../../scalar-functions/01-string-functions.md#проверенные-отказы).
+
+Остаточное семейство даты/времени #281 подчиняется тому же правилу: `date_subtract` (двухаргументная
+форма с `interval` и зонированная трёхаргументная форма, обе возвращают `timestamp with time zone`),
+`justify_interval`, `make_timestamptz` (с зоной и без), часы
+`clock_timestamp`/`statement_timestamp`/`transaction_timestamp`, `timeofday` и `isfinite` над
+`date`, `timestamp` и `interval`. `clock_timestamp` вычисляется на каждую строку,
+`statement_timestamp`/`transaction_timestamp` фиксируются на запрос/транзакцию, а `justify_interval`
+возвращает `interval` и потому следует описанной ниже обработке interval провайдера. Каждое имя
+гейтится **отдельно** через `IScalarFunctions.Supports` и закрывается отказом `NotSupportedException`
+на провайдере без этого интерфейса; `pg_sleep`/`pg_sleep_for`/`pg_sleep_until` отклонены, потому что
+каждый возвращает `void` и достоверного результата выражения не существует, — строки отказов в статье
+[Дата и время](../../scalar-functions/03-date-and-time.md#расширенные-дата-и-время-postgresql).
+
+Извлечение данных из UUID тоже есть только в PostgreSQL: `uuid_extract_timestamp` даёт `timestamptz`
+(NULL для UUID версии 4 или nil-UUID), а `uuid_extract_version` — `smallint` (NULL для nil-UUID); оба
+гейтятся по имени через `IScalarFunctions.Supports` с тем же отказом при отсутствии интерфейса — см.
+[Последовательности и генераторы UUID](../../scalar-functions/10-sequences.md#генераторы-uuid).
+
+Рядом с `encode`/`decode` бинарно-строковое семейство добавляет `get_bit`/`set_bit` (номера бит
+считаются от младшего бита первого байта), `get_byte`/`set_byte` (нумерация байт с нуля) и
+`bit_count` (установленные биты как `bigint`); каждое имя гейтится отдельно через
+`IScalarFunctions.Supports` и так же закрывается отказом. Формы над типом `bit` не имеют
+CLR-отображения и отклоняются, а `crc32`/`crc32c` — функции PostgreSQL 18, отклонённые на
+закреплённом 17.11; обе причины собраны в таблице отказов статьи
+[Строковые функции](../../scalar-functions/01-string-functions.md#проверенные-отказы).
 
 На пути смэппированных колонок правило длительности определяется **возвращённым** interval, а не именем
 функции: `make_interval`, нормализация `justify_*` и `age` одинаково отклоняют результат с ненулевой
