@@ -1055,6 +1055,88 @@ namespace NextORM.Core;
         /// <summary>The type name of <paramref name="value"/> (<c>pg_typeof</c>).</summary>
         public string? pg_typeof(object? value) => default!;
 
+        /// <summary>
+        /// The names of the schemas on the search path (<c>current_schemas(include_implicit)</c>), most
+        /// significant first; with <paramref name="includeImplicit"/> true the implicit system schemas are
+        /// included. The result is a <c>name[]</c>, read as a <see cref="string"/> array. Gated per name
+        /// by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string?[] current_schemas(bool? includeImplicit) => default!;
+
+        /// <summary>
+        /// The time the postmaster started (<c>pg_postmaster_start_time()</c>), as
+        /// <c>timestamp with time zone</c>. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public DateTime? pg_postmaster_start_time() => default!;
+
+        /// <summary>
+        /// The path of the current log file for the default (stderr) log format
+        /// (<c>pg_current_logfile()</c>), or NULL when the server does not collect logs. Gated per name
+        /// by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_current_logfile() => default!;
+
+        /// <summary>
+        /// The path of the current log file for the log format named <paramref name="format"/>
+        /// (<c>pg_current_logfile(format)</c>): <c>stderr</c>, <c>csvlog</c> or <c>jsonlog</c>; any other
+        /// format raises an error and an uncollected format yields NULL. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_current_logfile(string? format) => default!;
+
+        /// <summary>
+        /// The time the configuration files were last loaded (<c>pg_conf_load_time()</c>). Gated per name
+        /// by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public DateTime? pg_conf_load_time() => default!;
+
+        /// <summary>
+        /// Whether JIT compilation is available in this server process (<c>pg_jit_available()</c>).
+        /// Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public bool? pg_jit_available() => default!;
+
+        /// <summary>
+        /// The OID of this session's temporary schema, or <c>0</c> when none was created
+        /// (<c>pg_my_temp_schema()</c>); the OID is read as its text form. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_my_temp_schema() => default!;
+
+        /// <summary>
+        /// Whether the temporary schema identified by <paramref name="schemaOid"/> belongs to another
+        /// session (<c>pg_is_other_temp_schema(oid)</c>). Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public bool? pg_is_other_temp_schema(string? schemaOid) => default!;
+
+        /// <summary>
+        /// The fraction of the asynchronous notification queue currently in use, between 0 and 1
+        /// (<c>pg_notification_queue_usage()</c>). Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public double? pg_notification_queue_usage() => default!;
+
+        /// <summary>
+        /// The process IDs of the sessions holding a lock that blocks the session
+        /// <paramref name="pid"/> (<c>pg_blocking_pids(pid)</c>); an empty array when nothing blocks it.
+        /// Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public int?[] pg_blocking_pids(int? pid) => default!;
+
+        /// <summary>
+        /// The process IDs of the sessions holding a safe-snapshot conflict that blocks the session
+        /// <paramref name="pid"/> (<c>pg_safe_snapshot_blocking_pids(pid)</c>). Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public int?[] pg_safe_snapshot_blocking_pids(int? pid) => default!;
+
+        /// <summary>
+        /// The current nesting depth of trigger execution (<c>pg_trigger_depth()</c>), zero outside a
+        /// trigger. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public int? pg_trigger_depth() => default!;
+
         /// <summary>The current value of the run-time setting <paramref name="name"/> (<c>current_setting</c>).</summary>
         public string? current_setting(string? name) => default!;
 

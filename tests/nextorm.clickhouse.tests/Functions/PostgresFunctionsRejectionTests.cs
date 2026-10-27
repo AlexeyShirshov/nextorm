@@ -173,7 +173,11 @@ public class PostgresFunctionsRejectionTests
             // bit_count is not listed: ClickHouse has it natively (bitCount), so it is advertised.
             "date_subtract", "justify_interval", "make_timestamptz", "clock_timestamp", "statement_timestamp",
             "transaction_timestamp", "timeofday", "isfinite", "uuid_extract_timestamp",
-            "uuid_extract_version", "get_bit", "set_bit", "get_byte", "set_byte"
+            "uuid_extract_version", "get_bit", "set_bit", "get_byte", "set_byte",
+            "current_schemas", "pg_postmaster_start_time", "pg_current_logfile",
+            "pg_conf_load_time", "pg_jit_available", "pg_my_temp_schema",
+            "pg_is_other_temp_schema", "pg_notification_queue_usage", "pg_blocking_pids",
+            "pg_safe_snapshot_blocking_pids", "pg_trigger_depth"
         })
         {
             scalars.Supports(name).Should().BeFalse($"'{name}' is PostgreSQL-only");
@@ -209,5 +213,35 @@ public class PostgresFunctionsRejectionTests
             "'bit_count' is a ClickHouse native, not a PostgreSQL-only name");
         ClickHouseDialect.Instance.ScalarFunctions.Supports("get_bit").Should().BeFalse(
             "'get_bit' remains PostgreSQL-only");
+    }
+    /// <summary>
+    /// The PostgreSQL system-information members of #281 (session identity, log and temp-schema
+    /// helpers, the blocking-pid arrays and the trigger depth) are PostgreSQL-only: each enrolled
+    /// name is refused during preparation with a message naming it.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void SystemInfoFamily_ShouldThrowBecauseNotSupported()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var cases = new (string Name, Action Act)[]
+        {
+            ("current_schemas", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.current_schemas(true) }))),
+            ("pg_postmaster_start_time", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_postmaster_start_time() }))),
+            ("pg_current_logfile", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_current_logfile("stderr") }))),
+            ("pg_conf_load_time", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_conf_load_time() }))),
+            ("pg_jit_available", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_jit_available() }))),
+            ("pg_my_temp_schema", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_my_temp_schema() }))),
+            ("pg_is_other_temp_schema", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_is_other_temp_schema("0") }))),
+            ("pg_notification_queue_usage", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_notification_queue_usage() }))),
+            ("pg_blocking_pids", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_blocking_pids(x.Int) }))),
+            ("pg_safe_snapshot_blocking_pids", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_safe_snapshot_blocking_pids(x.Int) }))),
+            ("pg_trigger_depth", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_trigger_depth() })))
+        };
+
+        foreach (var (name, act) in cases)
+            act.Should().Throw<NotSupportedException>().WithMessage($"*{name}*not supported*");
     }
 }

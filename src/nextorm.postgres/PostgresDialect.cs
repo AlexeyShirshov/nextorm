@@ -944,7 +944,11 @@ internal sealed class PostgresScalarFunctions : IScalarFunctions
         "clock_timestamp" or "statement_timestamp" or "transaction_timestamp" or "timeofday" or
         "isfinite" or
         "uuid_extract_timestamp" or "uuid_extract_version" or
-        "get_bit" or "set_bit" or "get_byte" or "set_byte" or "bit_count";
+        "get_bit" or "set_bit" or "get_byte" or "set_byte" or "bit_count" or
+        "current_schemas" or "pg_postmaster_start_time" or "pg_current_logfile" or
+        "pg_conf_load_time" or "pg_jit_available" or "pg_my_temp_schema" or
+        "pg_is_other_temp_schema" or "pg_notification_queue_usage" or
+        "pg_blocking_pids" or "pg_safe_snapshot_blocking_pids" or "pg_trigger_depth";
 
     /// <inheritdoc/>
     public string Render(string name, IReadOnlyList<string> args) => name switch
@@ -969,6 +973,9 @@ internal sealed class PostgresScalarFunctions : IScalarFunctions
         "scale" => $"scale({args[0]})",
         "min_scale" => $"min_scale({args[0]})",
         "trim_scale" => $"trim_scale({args[0]})",
+        // pg_my_temp_schema returns oid, which the driver cannot read as a string; cast to text as
+        // pg_typeof does (see ExtendedScalarFunctionTranslator.EmitPgTypeOf).
+        "pg_my_temp_schema" => "cast(pg_my_temp_schema() as text)",
         "btrim" or "ltrim" or "rtrim" or "starts_with" or "parse_ident" or "quote_ident" or
             "quote_literal" or "quote_nullable" or "to_ascii" or "to_hex" or "to_oct" or "to_bin" or
             "convert_from" or "convert_to" or "encode" or "decode" or "normalize" or "unistr" or
@@ -977,7 +984,11 @@ internal sealed class PostgresScalarFunctions : IScalarFunctions
             "date_subtract" or "justify_interval" or "make_timestamptz" or
             "clock_timestamp" or "statement_timestamp" or "transaction_timestamp" or "timeofday" or
             "isfinite" or "uuid_extract_timestamp" or "uuid_extract_version" or
-            "get_bit" or "set_bit" or "get_byte" or "set_byte" or "bit_count"
+            "get_bit" or "set_bit" or "get_byte" or "set_byte" or "bit_count" or
+            "current_schemas" or "pg_postmaster_start_time" or "pg_current_logfile" or
+            "pg_conf_load_time" or "pg_jit_available" or "pg_is_other_temp_schema" or
+            "pg_notification_queue_usage" or "pg_blocking_pids" or
+            "pg_safe_snapshot_blocking_pids" or "pg_trigger_depth"
             => $"{name}({string.Join(", ", args)})",
         _ => throw new NotSupportedException($"The {name} function is not supported by PostgreSQL.")
     };

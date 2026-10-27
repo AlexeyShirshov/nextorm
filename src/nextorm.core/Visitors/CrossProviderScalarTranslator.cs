@@ -45,7 +45,15 @@ internal static class CrossProviderScalarTranslator
         nameof(PostgresFunctions.uuid_extract_timestamp), nameof(PostgresFunctions.uuid_extract_version),
         nameof(PostgresFunctions.get_bit), nameof(PostgresFunctions.set_bit),
         nameof(PostgresFunctions.get_byte), nameof(PostgresFunctions.set_byte),
-        nameof(PostgresFunctions.bit_count)
+        nameof(PostgresFunctions.bit_count),
+        nameof(PostgresFunctions.current_schemas), nameof(PostgresFunctions.pg_postmaster_start_time),
+        nameof(PostgresFunctions.pg_current_logfile), nameof(PostgresFunctions.pg_conf_load_time),
+        nameof(PostgresFunctions.pg_jit_available), nameof(PostgresFunctions.pg_my_temp_schema),
+        nameof(PostgresFunctions.pg_is_other_temp_schema),
+        nameof(PostgresFunctions.pg_notification_queue_usage),
+        nameof(PostgresFunctions.pg_blocking_pids),
+        nameof(PostgresFunctions.pg_safe_snapshot_blocking_pids),
+        nameof(PostgresFunctions.pg_trigger_depth)
     };
 
     /// <summary>

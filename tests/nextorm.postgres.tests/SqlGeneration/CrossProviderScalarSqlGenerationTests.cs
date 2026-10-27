@@ -412,6 +412,59 @@ public class CrossProviderScalarSqlGenerationTests
 
     [Fact]
     [Trait("Issue", "281")]
+    public void PostgreSQLSystemInfoFamily_ShouldEmitNativeSpellings()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            Cs = SqlFunctions.Postgres.current_schemas(false),
+            Pst = SqlFunctions.Postgres.pg_postmaster_start_time(),
+            Cl = SqlFunctions.Postgres.pg_current_logfile(),
+            Clf = SqlFunctions.Postgres.pg_current_logfile("stderr"),
+            Cfg = SqlFunctions.Postgres.pg_conf_load_time(),
+            Jit = SqlFunctions.Postgres.pg_jit_available(),
+            Mts = SqlFunctions.Postgres.pg_my_temp_schema(),
+            Iots = SqlFunctions.Postgres.pg_is_other_temp_schema("0"),
+            Nqu = SqlFunctions.Postgres.pg_notification_queue_usage(),
+            Bp = SqlFunctions.Postgres.pg_blocking_pids(x.Int),
+            Sbp = SqlFunctions.Postgres.pg_safe_snapshot_blocking_pids(x.Int),
+            Td = SqlFunctions.Postgres.pg_trigger_depth()
+        }));
+
+        foreach (var name in new[]
+        {
+            "current_schemas", "pg_postmaster_start_time", "pg_current_logfile", "pg_conf_load_time",
+            "pg_jit_available", "pg_my_temp_schema", "pg_is_other_temp_schema",
+            "pg_notification_queue_usage", "pg_blocking_pids", "pg_safe_snapshot_blocking_pids",
+            "pg_trigger_depth"
+        })
+        {
+            PostgresDialect.Instance.ScalarFunctions.Supports(name).Should().BeTrue($"'{name}' is delivered on PostgreSQL");
+        }
+
+        sql.Should().Contain("current_schemas(false)");
+        sql.Should().Contain("pg_postmaster_start_time()");
+        sql.Should().Contain("pg_current_logfile()");
+        sql.Should().Contain("pg_current_logfile(E'stderr')");
+        sql.Should().Contain("pg_conf_load_time()");
+        sql.Should().Contain("pg_jit_available()");
+        // oid result: cast to text, as pg_typeof does, because the driver cannot read oid as a string.
+        sql.Should().Contain("cast(pg_my_temp_schema() as text)");
+        sql.Should().Contain("pg_is_other_temp_schema(E'0')");
+        sql.Should().Contain("pg_notification_queue_usage()");
+        sql.Should().Contain("pg_blocking_pids(nullableint)");
+        sql.Should().Contain("pg_safe_snapshot_blocking_pids(nullableint)");
+        sql.Should().Contain("pg_trigger_depth()");
+
+        // Positive control: the neighbouring system-information member still renders on the same shape.
+        SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_typeof(x.Int) }))
+            .Should().Contain("cast(pg_typeof(nullableint) as text)");
+    }
+
+    [Fact]
+    [Trait("Issue", "281")]
     public void RefusedFunctions_ShouldFailBeforeAnySqlIsEmitted()
     {
         using var ctx = PostgresTestContext.Create();

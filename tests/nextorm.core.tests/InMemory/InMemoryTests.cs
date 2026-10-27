@@ -1141,7 +1141,19 @@ public class InMemoryTests
             ("set_byte", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.set_byte(bytes, 0, 255) }).ToList()),
             ("bit_count", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.bit_count(bytes) }).ToList()),
             ("crc32", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.crc32(bytes) }).ToList()),
-            ("crc32c", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.crc32c(bytes) }).ToList())
+            ("crc32c", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.crc32c(bytes) }).ToList()),
+            ("current_schemas", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.current_schemas(true) }).ToList()),
+            ("pg_postmaster_start_time", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_postmaster_start_time() }).ToList()),
+            ("pg_current_logfile", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_current_logfile() }).ToList()),
+            ("pg_current_logfile", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_current_logfile("stderr") }).ToList()),
+            ("pg_conf_load_time", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_conf_load_time() }).ToList()),
+            ("pg_jit_available", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_jit_available() }).ToList()),
+            ("pg_my_temp_schema", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_my_temp_schema() }).ToList()),
+            ("pg_is_other_temp_schema", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_is_other_temp_schema("0") }).ToList()),
+            ("pg_notification_queue_usage", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_notification_queue_usage() }).ToList()),
+            ("pg_blocking_pids", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_blocking_pids(nullInt) }).ToList()),
+            ("pg_safe_snapshot_blocking_pids", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_safe_snapshot_blocking_pids(nullInt) }).ToList()),
+            ("pg_trigger_depth", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_trigger_depth() }).ToList())
         };
 
         foreach (var (name, act) in cases)

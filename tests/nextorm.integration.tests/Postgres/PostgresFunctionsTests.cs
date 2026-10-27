@@ -1495,6 +1495,84 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
             .Which.SqlState.Should().Be("42704", "1252 is a Windows codepage, not a PostgreSQL encoding code");
     }
 
+    /// <summary>
+    /// The session/system-information members of #281 against the live server: live values, the NULL
+    /// cases (no log collector; strict functions on a NULL argument), the server-side validation of the
+    /// log format and the exact CLR types.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void SystemInfoSessionFamily_ShouldComputeValuesNullsAndClrTypes()
+    {
+        var r = _sut.ComplexEntity.Where(x => x.Id == 2)
+            .Select(x => new
+            {
+                CsFalse = SqlFunctions.Postgres.current_schemas(false),
+                CsTrue = SqlFunctions.Postgres.current_schemas(true),
+                Pst = SqlFunctions.Postgres.pg_postmaster_start_time(),
+                Cl = SqlFunctions.Postgres.pg_current_logfile(),
+                ClFmt = SqlFunctions.Postgres.pg_current_logfile("stderr"),
+                Cfg = SqlFunctions.Postgres.pg_conf_load_time(),
+                Jit = SqlFunctions.Postgres.pg_jit_available(),
+                Mts = SqlFunctions.Postgres.pg_my_temp_schema(),
+                Iots = SqlFunctions.Postgres.pg_is_other_temp_schema("0"),
+                Nqu = SqlFunctions.Postgres.pg_notification_queue_usage(),
+                Bp = SqlFunctions.Postgres.pg_blocking_pids(x.Int),
+                Sbp = SqlFunctions.Postgres.pg_safe_snapshot_blocking_pids(x.Int),
+                Td = SqlFunctions.Postgres.pg_trigger_depth()
+            })
+            .First();
+
+        var now = DateTime.UtcNow;
+        r.CsFalse.Should().Contain("public").And.NotContain("pg_catalog");
+        r.CsTrue.Should().Contain("pg_catalog");
+        r.Pst.Should().NotBeNull().And.BeBefore(now);
+        // No log collector is configured for the fixture server, so both log-file forms yield NULL.
+        r.Cl.Should().BeNull();
+        r.ClFmt.Should().BeNull();
+        r.Cfg.Should().NotBeNull().And.BeBefore(now);
+        r.Jit.Should().NotBeNull();
+        r.Mts.Should().Be("0", "no temporary schema has been created by this session");
+        r.Iots.Should().BeFalse();
+        r.Nqu.Should().Be(0.0);
+        r.Nqu!.Value.Should().BeInRange(0.0, 1.0);
+        // pid 1 is not a waiting session, so neither blocking list has an entry.
+        r.Bp.Should().BeEmpty();
+        r.Sbp.Should().BeEmpty();
+        r.Td.Should().Be(0, "the projection runs outside any trigger");
+
+        // Exact CLR types.
+        ((object)r.CsFalse!).Should().BeOfType<string[]>();
+        ((object)r.CsTrue!).Should().BeOfType<string[]>();
+        ((object)r.Pst!).Should().BeOfType<DateTime>();
+        ((object)r.Cfg!).Should().BeOfType<DateTime>();
+        ((object)r.Jit!).Should().BeOfType<bool>();
+        ((object)r.Mts!).Should().BeOfType<string>();
+        ((object)r.Iots!).Should().BeOfType<bool>();
+        ((object)r.Nqu!).Should().BeOfType<double>();
+        ((object)r.Bp!).Should().BeOfType<int[]>();
+        ((object)r.Sbp!).Should().BeOfType<int[]>();
+        ((object)r.Td!).Should().BeOfType<int>();
+
+        // NULL argument: row 1 has a NULL nullableint, and the blocking-pid functions are strict.
+        var nulls = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Bp = SqlFunctions.Postgres.pg_blocking_pids(x.Int),
+                Sbp = SqlFunctions.Postgres.pg_safe_snapshot_blocking_pids(x.Int)
+            })
+            .First();
+        nulls.Bp.Should().BeNull();
+        nulls.Sbp.Should().BeNull();
+
+        // The log-format argument is validated by the server, not by nextorm.
+        var badFormat = () => _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new { V = SqlFunctions.Postgres.pg_current_logfile("text") })
+            .First();
+        badFormat.Should().Throw<PostgresException>()
+            .Which.Message.Should().Contain("log format");
+    }
+
     [Fact]
     [Trait("Issue", "281")]
     public void NumericFamily_ShouldComputeValuesNullsAndClrTypes()
