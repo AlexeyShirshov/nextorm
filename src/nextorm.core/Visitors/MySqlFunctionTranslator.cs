@@ -12,9 +12,28 @@ namespace NextORM.Core;
 /// </summary>
 internal static class MySqlFunctionTranslator
 {
-    private static readonly HashSet<string> VariadicNames = new(StringComparer.Ordinal)
+    private static readonly Dictionary<string, int> VariadicLeads = new(StringComparer.Ordinal)
     {
-        nameof(MySqlFunctions.field), nameof(MySqlFunctions.elt), nameof(MySqlFunctions.make_set)
+        [nameof(MySqlFunctions.field)] = 1,
+        [nameof(MySqlFunctions.elt)] = 1,
+        [nameof(MySqlFunctions.make_set)] = 1,
+        [nameof(MySqlFunctions.json_array)] = 0,
+        [nameof(MySqlFunctions.json_object)] = 0,
+        [nameof(MySqlFunctions.json_merge)] = 2,
+        [nameof(MySqlFunctions.json_contains_path)] = 2,
+        [nameof(MySqlFunctions.json_search)] = 4
+    };
+
+    /// <summary>
+    /// The declared shape refusals: names whose surface member exists only to carry the precise message
+    /// and whose translation fails before any argument visit or SQL emission.
+    /// </summary>
+    private static readonly Dictionary<string, string> Refused = new(StringComparer.Ordinal)
+    {
+        [nameof(MySqlFunctions.json_table)] =
+            "MySQL JSON_TABLE is a table-producing construct that requires a FROM/join position and a " +
+            "COLUMNS definition list; it is not a scalar function and cannot be expressed on " +
+            "SqlFunctions.MySql."
     };
 
     /// <summary>
@@ -37,8 +56,14 @@ internal static class MySqlFunctionTranslator
 
         var name = node.Method.Name;
 
+        if (Refused.TryGetValue(name, out var refusal))
+            throw new NotSupportedException(refusal);
+
         if (visitor.Dialect.MySqlFunctions is not { } mySql || !mySql.Supports(name))
             throw new NotSupportedException($"The {name} function is not supported by this provider.");
+
+        if (name is nameof(MySqlFunctions.json_arrow) or nameof(MySqlFunctions.json_arrow_text))
+            return TranslateJsonArrow(visitor, node, mySql);
 
         if (name == nameof(MySqlFunctions.get_format))
         {
@@ -59,12 +84,16 @@ internal static class MySqlFunctionTranslator
             return true;
         }
 
-        var args = VariadicNames.Contains(name)
-            ? ArgumentFlattener.Flatten(node.Arguments, 1)
+        var args = VariadicLeads.TryGetValue(name, out var leading)
+            ? ArgumentFlattener.Flatten(node.Arguments, leading)
             : (IReadOnlyList<Expression>)node.Arguments;
 
-        if (VariadicNames.Contains(name) && args.Count < 2)
-            throw new NotSupportedException($"The {name} function requires at least one value argument.");
+        if (MinimumArgumentCount(name) is var minimum && args.Count < minimum)
+            throw new NotSupportedException(name == nameof(MySqlFunctions.json_contains_path)
+                ? "The json_contains_path function requires at least one path argument."
+                : $"The {name} function requires at least one value argument.");
+
+        ValidateJsonGrammarArguments(name, args);
 
         var hasWeightStringModifiers =
             name == nameof(MySqlFunctions.weight_string) && args.Count == 3;
@@ -107,10 +136,32 @@ internal static class MySqlFunctionTranslator
             // grammar token: the sequence name is an identifier the dialect unquotes, not a data
             // value, so it keeps the historic plain quoted token (the value policy emitted
             // `_utf8mb4 X'…'` for it and `next value for` received the hex literal).
-            rendered[i] = i == 0 && SequenceNameFunctions.Contains(name)
-                && TypeFacts.UnwrapConvert(args[i]) is ConstantExpression { Value: string sequence }
-                    ? visitor.RenderStringLiteral(sequence, SqlStringLiteralRole.GrammarToken, SqlStringGrammar.Keyword)
-                    : visitor.VisitToString(args[i]);
+            if (i == 0 && SequenceNameFunctions.Contains(name)
+                && TypeFacts.UnwrapConvert(args[i]) is ConstantExpression { Value: string sequence })
+            {
+                rendered[i] = visitor.RenderStringLiteral(
+                    sequence, SqlStringLiteralRole.GrammarToken, SqlStringGrammar.Keyword);
+                continue;
+            }
+
+            // grammar token: the `->` path, `MEMBER OF` array, `one_or_all` keyword, `JSON_SEARCH`
+            // escape and every JSON path must be inline literals — a parameter or the value policy's
+            // `_utf8mb4 X'…'` binary expression is invalid in those grammar positions.
+            if (IsGrammarArgument(name, i))
+            {
+                rendered[i] = TypeFacts.UnwrapConvert(args[i]) switch
+                {
+                    ConstantExpression { Value: string grammar } =>
+                        visitor.RenderStringLiteral(
+                            grammar, SqlStringLiteralRole.GrammarToken, SqlStringGrammar.Keyword),
+                    ConstantExpression { Value: null } => "null",
+                    _ => visitor.VisitToString(args[i])
+                };
+                continue;
+            }
+
+            rendered[i] = visitor.VisitToString(args[i]);
+
         }
 
         visitor.Builder!.Append(mySql.Render(name, rendered));
@@ -197,5 +248,144 @@ internal static class MySqlFunctionTranslator
                 cast = default;
                 return false;
         }
+    }
+
+    private const string JsonObjectArgumentCountError =
+        "MySQL JSON_OBJECT() requires an even number of key/value arguments.";
+
+    private const string MemberOfArrayError =
+        "MySQL MEMBER OF requires argument 1 to be a compile-time JSON-array string literal.";
+
+    /// <summary>
+    /// The minimum number of (flattened) arguments each guarded name accepts; <c>0</c> means "as the
+    /// signature allows" and lets the arity stay a compile-time concern.
+    /// </summary>
+    private static int MinimumArgumentCount(string name) => name switch
+    {
+        nameof(MySqlFunctions.field) or nameof(MySqlFunctions.elt)
+            or nameof(MySqlFunctions.make_set) => 2,
+        nameof(MySqlFunctions.json_merge) => 2,
+        nameof(MySqlFunctions.json_contains_path) or nameof(MySqlFunctions.json_search) => 3,
+        nameof(MySqlFunctions.json_array) or nameof(MySqlFunctions.json_object) => 0,
+        _ => 0
+    };
+
+    /// <summary>
+    /// True for the argument positions MySQL reads as grammar literals rather than as value expressions:
+    /// <c>JSON_CONTAINS_PATH</c>'s <c>one_or_all</c> and paths, <c>JSON_SEARCH</c>'s <c>one_or_all</c>,
+    /// escape and paths, and <c>MEMBER OF</c>'s JSON array. Those are inlined as quoted tokens; a
+    /// parameter or the value policy's <c>_utf8mb4 X'…'</c> spelling is invalid there.
+    /// </summary>
+    private static bool IsGrammarArgument(string name, int index) => name switch
+    {
+        nameof(MySqlFunctions.json_contains_path) => index >= 1,
+        nameof(MySqlFunctions.json_search) => index is 1 or 3 || index >= 4,
+        nameof(MySqlFunctions.member_of) => index == 1,
+        _ => false
+    };
+
+    /// <summary>
+    /// Validates the compile-time literals of the JSON family before any argument is visited or any SQL
+    /// is emitted, so a wrong shape fails with a precise message instead of invalid SQL.
+    /// </summary>
+    private static void ValidateJsonGrammarArguments(string name, IReadOnlyList<Expression> args)
+    {
+        switch (name)
+        {
+            case nameof(MySqlFunctions.json_object) when args.Count % 2 != 0:
+                throw new NotSupportedException(JsonObjectArgumentCountError);
+
+            case nameof(MySqlFunctions.json_object):
+                return;
+
+            case nameof(MySqlFunctions.json_contains_path):
+                RequireOneOrAll(args[1], "JSON_CONTAINS_PATH");
+                RequireStringLiteralRange(args, 2, "JSON_CONTAINS_PATH", "path");
+                return;
+
+            case nameof(MySqlFunctions.json_search):
+                RequireOneOrAll(args[1], "JSON_SEARCH");
+                if (args.Count > 3)
+                    RequireEscape(args[3]);
+                RequireStringLiteralRange(args, 4, "JSON_SEARCH", "path");
+                return;
+
+            case nameof(MySqlFunctions.member_of):
+                if (!IsCompileTimeString(args[1], allowNull: false))
+                    throw new NotSupportedException(MemberOfArrayError);
+                return;
+        }
+    }
+
+    private static void RequireOneOrAll(Expression expression, string function)
+    {
+        var value = TypeFacts.UnwrapConvert(expression) is ConstantExpression { Value: string literal }
+            ? literal
+            : null;
+        if (value is not ("one" or "all"))
+            throw new NotSupportedException(
+                $"MySQL {function}() requires one_or_all to be the compile-time literal 'one' or 'all'.");
+    }
+
+    private static void RequireEscape(Expression expression)
+    {
+        var unwrapped = TypeFacts.UnwrapConvert(expression);
+        if (unwrapped is ConstantExpression { Value: null })
+            return;
+        if (unwrapped is not ConstantExpression { Value: string { Length: 1 } })
+            throw new NotSupportedException(
+                "MySQL JSON_SEARCH() requires escape_char to be a compile-time single-character literal.");
+    }
+
+    private static void RequireStringLiteralRange(
+        IReadOnlyList<Expression> args, int start, string function, string role)
+    {
+        for (var i = start; i < args.Count; i++)
+            if (!IsCompileTimeString(args[i], allowNull: true))
+                throw new NotSupportedException(
+                    $"MySQL {function}() requires every {role} argument to be a compile-time string literal.");
+    }
+
+    private static bool IsCompileTimeString(Expression expression, bool allowNull) =>
+        TypeFacts.UnwrapConvert(expression) switch
+        {
+            ConstantExpression { Value: string } => true,
+            ConstantExpression { Value: null } => allowNull,
+            _ => false
+        };
+
+    /// <summary>
+    /// Renders <c>column -&gt; 'path'</c> / <c>column -&gt;&gt; 'path'</c>: MySQL requires a column
+    /// identifier on the left and a string literal on the right, so both are validated and the path is
+    /// inlined as a grammar token before any SQL is emitted.
+    /// </summary>
+    private static bool TranslateJsonArrow(
+        BaseExpressionVisitor visitor, MethodCallExpression node, IMySqlFunctions mySql)
+    {
+        var name = node.Method.Name;
+        var op = name == nameof(MySqlFunctions.json_arrow) ? "->" : "->>";
+        var args = node.Arguments;
+
+        if (args.Count != 2 || TypeFacts.UnwrapConvert(args[0]) is not MemberExpression)
+            throw new NotSupportedException(
+                $"MySQL operator '{op}' requires argument 0 to be a column reference.");
+
+        if (TypeFacts.UnwrapConvert(args[1]) is not ConstantExpression { Value: string path })
+            throw new NotSupportedException(
+                $"MySQL operator '{op}' requires argument 1 to be a compile-time string literal.");
+
+        if (visitor.IsParamMode)
+        {
+            visitor.Visit(args[0]);
+            visitor.Visit(args[1]);
+            return true;
+        }
+
+        visitor.NeedAliasForColumn = true;
+        var column = visitor.VisitToString(args[0]);
+        var literal = visitor.RenderStringLiteral(
+            path, SqlStringLiteralRole.GrammarToken, SqlStringGrammar.Keyword);
+        visitor.Builder!.Append(mySql.Render(name, [column, literal]));
+        return true;
     }
 }

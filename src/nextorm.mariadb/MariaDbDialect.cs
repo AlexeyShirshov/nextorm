@@ -207,6 +207,11 @@ internal sealed class MariaDbNativeFunctions : IMySqlFunctions
         IsVersionGated(name) ||
         (IsMariaDbOnly(name) ||
             (name is not ("uuid_to_bin" or "bin_to_uuid" or "json_storage_free" or
+                "json_array" or "json_arrayagg" or "json_arrow" or "json_arrow_text" or
+                "json_contains" or "json_contains_path" or "json_merge" or "json_object" or
+                "json_objectagg" or "json_overlaps" or "json_pretty" or "json_quote" or
+                "json_schema_valid" or "json_schema_validation_report" or "json_search" or
+                "json_storage_size" or "member_of" or
                 "bin" or "export_set" or "hex" or "make_set" or "oct" or "ord" or "quote" or
                 "soundex" or "strcmp" or "to_base64" or "from_base64" or "unhex" or "weight_string" or
                 "conv" or "crc32" or "log2" or "rand" or "truncate" or

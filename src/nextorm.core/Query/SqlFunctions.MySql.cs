@@ -8,6 +8,8 @@ namespace NextORM.Core;
 /// <c>nvl</c>/<c>nvl2</c>, the Oracle-compatible date/number conversions, <c>kdf</c>, <c>xxh3</c>/
 /// <c>xxh32</c>, <c>json_detailed</c>/<c>json_compact</c>, the JSON canonicalisation pair
 /// <c>json_equals</c>/<c>json_normalize</c> and sequence access). It also carries the MySQL 8.4
+/// JSON constructor/query catalogue and the <c>-&gt;</c>/<c>-&gt;&gt;</c>/<c>MEMBER OF</c> operators
+/// (with the <c>JSON_TABLE</c> shape refusal), the
 /// string, numeric and bit catalogue: <c>bin</c>, <c>export_set</c>, <c>hex</c>, <c>make_set</c>,
 /// <c>oct</c>, <c>ord</c>, <c>quote</c>, <c>soundex</c>, <c>strcmp</c>, the Base64/hex codecs,
 /// <c>weight_string</c>, <c>conv</c>, <c>crc32</c>, <c>log2</c>, <c>rand</c>, <c>truncate</c>,
@@ -103,23 +105,17 @@ public class MySqlFunctions : CommonFunctions
     /// </summary>
     public string? inet_ntoa(long? value) => default!;
 
-    /// <summary><c>json_set(json, path, value)</c>: inserts or updates the value at <paramref name="path"/>.</summary>
-    public string? json_set(string? json, string? path, string? value) => default!;
+    /// <summary>
+    /// <c>json_array(values...)</c>: a JSON array of the arguments (each argument is a SQL value, so
+    /// strings become JSON strings). MySQL-only; MariaDB rejects the call.
+    /// </summary>
+    public string? json_array(params object?[] values) => default!;
 
-    /// <summary><c>json_insert(json, path, value)</c>: inserts the value at <paramref name="path"/>, keeping any existing value.</summary>
-    public string? json_insert(string? json, string? path, string? value) => default!;
-
-    /// <summary><c>json_replace(json, path, value)</c>: replaces an existing value at <paramref name="path"/>.</summary>
-    public string? json_replace(string? json, string? path, string? value) => default!;
-
-    /// <summary><c>json_remove(json, path)</c>: removes the value at <paramref name="path"/>.</summary>
-    public string? json_remove(string? json, string? path) => default!;
-
-    /// <summary><c>json_merge_patch(json, other)</c>: merges two JSON documents using the RFC 7396 merge-patch algorithm.</summary>
-    public string? json_merge_patch(string? json, string? other) => default!;
-
-    /// <summary><c>json_merge_preserve(json, other)</c>: merges two JSON documents, preserving duplicate keys.</summary>
-    public string? json_merge_preserve(string? json, string? other) => default!;
+    /// <summary>
+    /// <c>json_arrayagg(value)</c>: aggregates the group's values into a single JSON array. MySQL-only;
+    /// MariaDB rejects the call.
+    /// </summary>
+    public string? json_arrayagg(object? value) => default!;
 
     /// <summary><c>json_array_append(json, path, value)</c>: appends the value to the array at <paramref name="path"/>.</summary>
     public string? json_array_append(string? json, string? path, string? value) => default!;
@@ -127,8 +123,49 @@ public class MySqlFunctions : CommonFunctions
     /// <summary><c>json_array_insert(json, path, value)</c>: inserts the value into the array at <paramref name="path"/> without replacing an existing element.</summary>
     public string? json_array_insert(string? json, string? path, string? value) => default!;
 
+    /// <summary>
+    /// <c>column -&gt; path</c>: the value at the JSON <paramref name="path"/> of the
+    /// <paramref name="column"/>. MySQL requires a column identifier on the left and a string literal
+    /// on the right, so <paramref name="column"/> must be a mapped column and <paramref name="path"/> a
+    /// compile-time string; any other shape is refused before SQL is emitted. MySQL-only; MariaDB
+    /// rejects the call.
+    /// </summary>
+    public string? json_arrow(string? column, string path) => default!;
+
+    /// <summary>
+    /// <c>column -&gt;&gt; path</c>: the unquoted value at the JSON <paramref name="path"/> of the
+    /// <paramref name="column"/> (equivalent to <c>JSON_UNQUOTE(JSON_EXTRACT(column, path))</c>). The
+    /// same column/literal restrictions as <see cref="json_arrow"/> apply. MySQL-only; MariaDB rejects
+    /// the call.
+    /// </summary>
+    public string? json_arrow_text(string? column, string path) => default!;
+
+    /// <summary>
+    /// <c>json_contains(target, candidate)</c>: <c>1</c> when <paramref name="candidate"/> is contained
+    /// in <paramref name="target"/>, otherwise <c>0</c>. MySQL-only; MariaDB rejects the call.
+    /// </summary>
+    public long? json_contains(string? target, string? candidate) => default!;
+
+    /// <summary>
+    /// <c>json_contains(target, candidate, path)</c>: <c>1</c> when <paramref name="candidate"/> is
+    /// contained in the value at <paramref name="path"/> of <paramref name="target"/>, otherwise
+    /// <c>0</c>. MySQL-only; MariaDB rejects the call.
+    /// </summary>
+    public long? json_contains(string? target, string? candidate, string? path) => default!;
+
+    /// <summary>
+    /// <c>json_contains_path(json, one_or_all, paths...)</c>: <c>1</c> when the document contains the
+    /// paths, otherwise <c>0</c>. <paramref name="oneOrAll"/> must be the compile-time literal
+    /// <c>"one"</c> or <c>"all"</c> and every path a compile-time string literal; any other shape is
+    /// refused before SQL is emitted. MySQL-only; MariaDB rejects the call.
+    /// </summary>
+    public long? json_contains_path(string? json, string oneOrAll, params string?[] paths) => default!;
+
     /// <summary><c>json_depth(json)</c>: the maximum nesting depth of the JSON document.</summary>
     public int? json_depth(string? json) => default!;
+
+    /// <summary><c>json_insert(json, path, value)</c>: inserts the value at <paramref name="path"/>, keeping any existing value.</summary>
+    public string? json_insert(string? json, string? path, string? value) => default!;
 
     /// <summary><c>json_keys(json)</c>: the top-level keys of the JSON object as a JSON array.</summary>
     public string? json_keys(string? json) => default!;
@@ -136,8 +173,94 @@ public class MySqlFunctions : CommonFunctions
     /// <summary><c>json_length(json)</c>: the number of elements in the top-level JSON array or object.</summary>
     public int? json_length(string? json) => default!;
 
-    /// <summary><c>json_type(json)</c>: the type name of the top-level JSON value.</summary>
-    public string? json_type(string? json) => default!;
+    /// <summary>
+    /// <c>json_merge(first, second, rest...)</c>: merges the JSON documents, preserving duplicate keys.
+    /// MySQL deprecates <c>JSON_MERGE()</c> in favour of <c>JSON_MERGE_PATCH()</c> and
+    /// <c>JSON_MERGE_PRESERVE()</c>. MySQL-only; MariaDB rejects the call.
+    /// </summary>
+    public string? json_merge(string? first, string? second, params string?[] rest) => default!;
+
+    /// <summary><c>json_merge_patch(json, other)</c>: merges two JSON documents using the RFC 7396 merge-patch algorithm.</summary>
+    public string? json_merge_patch(string? json, string? other) => default!;
+
+    /// <summary><c>json_merge_preserve(json, other)</c>: merges two JSON documents, preserving duplicate keys.</summary>
+    public string? json_merge_preserve(string? json, string? other) => default!;
+
+    /// <summary>
+    /// <c>json_object(keyValues...)</c>: a JSON object built from the alternating key/value arguments;
+    /// the key positions must be strings and the argument count even, which is validated before any SQL
+    /// is emitted. MySQL-only; MariaDB rejects the call.
+    /// </summary>
+    public string? json_object(params object?[] keyValues) => default!;
+
+    /// <summary>
+    /// <c>json_objectagg(key, value)</c>: aggregates the group's key/value pairs into a single JSON
+    /// object. MySQL-only; MariaDB rejects the call.
+    /// </summary>
+    public string? json_objectagg(string? key, object? value) => default!;
+
+    /// <summary>
+    /// <c>json_overlaps(left, right)</c>: <c>1</c> when the two JSON documents have at least one value
+    /// in common, otherwise <c>0</c>. MySQL-only; MariaDB rejects the call.
+    /// </summary>
+    public long? json_overlaps(string? left, string? right) => default!;
+
+    /// <summary>
+    /// <c>json_pretty(json)</c>: the JSON document re-indented for readability. MySQL-only; MariaDB
+    /// rejects the call.
+    /// </summary>
+    public string? json_pretty(string? json) => default!;
+
+    /// <summary>
+    /// <c>json_quote(value)</c>: the argument as a JSON string literal. MySQL-only; MariaDB rejects the
+    /// call.
+    /// </summary>
+    public string? json_quote(string? value) => default!;
+
+    /// <summary><c>json_remove(json, path)</c>: removes the value at <paramref name="path"/>.</summary>
+    public string? json_remove(string? json, string? path) => default!;
+
+    /// <summary><c>json_replace(json, path, value)</c>: replaces an existing value at <paramref name="path"/>.</summary>
+    public string? json_replace(string? json, string? path, string? value) => default!;
+
+    /// <summary>
+    /// <c>json_schema_valid(schema, document)</c>: <c>1</c> when <paramref name="document"/> validates
+    /// against the JSON <paramref name="schema"/>, otherwise <c>0</c>. MySQL-only; MariaDB rejects the
+    /// call.
+    /// </summary>
+    public long? json_schema_valid(string? schema, string? document) => default!;
+
+    /// <summary>
+    /// <c>json_schema_validation_report(schema, document)</c>: a JSON report of the validation of
+    /// <paramref name="document"/> against the JSON <paramref name="schema"/>. MySQL-only; MariaDB
+    /// rejects the call.
+    /// </summary>
+    public string? json_schema_validation_report(string? schema, string? document) => default!;
+
+    /// <summary>
+    /// <c>json_search(json, one_or_all, search)</c>: the path or paths whose string value contains
+    /// <paramref name="search"/>, or <c>null</c> when none does. MySQL-only; MariaDB rejects the call.
+    /// </summary>
+    public string? json_search(string? json, string oneOrAll, string? search) => default!;
+
+    /// <summary>
+    /// <c>json_search(json, one_or_all, search, escape)</c>: as
+    /// <see cref="json_search(string?, string, string?)"/> with the escape character; the escape must be
+    /// a compile-time single-character literal. MySQL-only; MariaDB rejects the call.
+    /// </summary>
+    public string? json_search(string? json, string oneOrAll, string? search, string? escape) => default!;
+
+    /// <summary>
+    /// <c>json_search(json, one_or_all, search, escape, paths...)</c>: as above restricted to the given
+    /// paths. <paramref name="oneOrAll"/> must be the compile-time literal <c>"one"</c> or <c>"all"</c>
+    /// and every path a compile-time string literal; any other shape is refused before SQL is emitted.
+    /// MySQL-only; MariaDB rejects the call.
+    /// </summary>
+    public string? json_search(
+        string? json, string oneOrAll, string? search, string? escape, params string?[] paths) => default!;
+
+    /// <summary><c>json_set(json, path, value)</c>: inserts or updates the value at <paramref name="path"/>.</summary>
+    public string? json_set(string? json, string? path, string? value) => default!;
 
     /// <summary>
     /// <c>json_storage_free(json)</c>: the bytes freed in the binary representation of a MySQL
@@ -149,6 +272,31 @@ public class MySqlFunctions : CommonFunctions
     /// the call with <see cref="NotSupportedException"/>.
     /// </summary>
     public long? json_storage_free(string? json) => default!;
+
+    /// <summary>
+    /// <c>json_storage_size(json)</c>: the bytes used to store the JSON document (the length of its
+    /// binary representation for a column). MySQL-only; MariaDB rejects the call.
+    /// </summary>
+    public long? json_storage_size(string? json) => default!;
+
+    /// <summary><c>json_type(json)</c>: the type name of the top-level JSON value.</summary>
+    public string? json_type(string? json) => default!;
+
+    /// <summary>
+    /// <c>JSON_TABLE(...)</c> is a table-producing construct, not a scalar function: it requires a
+    /// <c>FROM</c>/join position and a <c>COLUMNS</c> definition list, so no scalar expression can
+    /// reference it. The member exists only to carry the refusal; calling it throws
+    /// <see cref="NotSupportedException"/> when the expression is translated.
+    /// </summary>
+    public static object? json_table() => default!;
+
+    /// <summary>
+    /// <c>value MEMBER OF (jsonArray)</c>: <c>1</c> when <paramref name="value"/> is an element of the
+    /// JSON array literal <paramref name="jsonArray"/>, otherwise <c>0</c>. <paramref name="jsonArray"/>
+    /// must be a compile-time string literal; any other shape is refused before SQL is emitted.
+    /// MySQL-only; MariaDB rejects the call.
+    /// </summary>
+    public long? member_of(object? value, string jsonArray) => default!;
 
     /// <summary>
     /// <c>uuid_to_bin(uuid)</c>: converts the textual UUID to its 16-byte binary representation.
@@ -619,10 +767,8 @@ public class MySqlFunctions : CommonFunctions
     public string? time_format(TimeSpan? time, string? format) => default!;
 
     /// <summary>
-    /// <c>time_to_sec(time)</c>: the duration converted to whole seconds.
-    /// For a parameterized <see cref="TimeSpan"/> argument, the current parameter binding truncates any
-    /// non-zero sub-second component before <c>TIME_TO_SEC</c> executes. MySQL 8.4 returns a
-    /// <c>BIGINT</c>, so sub-second precision is discarded even when the value reaches the server. The
+    /// <c>time_to_sec(time)</c>: the duration converted to whole seconds. MySQL 8.4 returns an integer
+    /// number of seconds, so any sub-second component of the argument is discarded by the server. The
     /// argument is the duration to convert; a SQL NULL argument yields SQL NULL. MySQL-only; MariaDB
     /// rejects the call.
     /// </summary>

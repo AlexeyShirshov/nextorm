@@ -833,6 +833,11 @@ internal class MySqlNativeFunctions : IMySqlFunctions
         "json_merge_patch" or "json_merge_preserve" or "json_array_append" or "json_array_insert" or
         "json_depth" or "json_keys" or "json_length" or "json_type" or
         "json_storage_free" or
+        "json_array" or "json_arrayagg" or "json_arrow" or "json_arrow_text" or
+        "json_contains" or "json_contains_path" or "json_merge" or "json_object" or
+        "json_objectagg" or "json_overlaps" or "json_pretty" or "json_quote" or
+        "json_schema_valid" or "json_schema_validation_report" or "json_search" or
+        "json_storage_size" or "member_of" or
         "uuid_to_bin" or "bin_to_uuid" or
         "bin" or "export_set" or "hex" or "make_set" or "oct" or "ord" or "quote" or
         "soundex" or "strcmp" or "to_base64" or "from_base64" or "unhex" or "weight_string" or
@@ -873,6 +878,23 @@ internal class MySqlNativeFunctions : IMySqlFunctions
         "json_length" => $"json_length({args[0]})",
         "json_type" => $"json_type({args[0]})",
         "json_storage_free" => $"json_storage_free({args[0]})",
+        "json_array" => $"json_array({string.Join(", ", args)})",
+        "json_arrayagg" => $"json_arrayagg({args[0]})",
+        "json_arrow" => $"{args[0]} -> {args[1]}",
+        "json_arrow_text" => $"{args[0]} ->> {args[1]}",
+        "json_contains" => $"json_contains({string.Join(", ", args)})",
+        "json_contains_path" => $"json_contains_path({string.Join(", ", args)})",
+        "json_merge" => $"json_merge({string.Join(", ", args)})",
+        "json_object" => $"json_object({string.Join(", ", args)})",
+        "json_objectagg" => $"json_objectagg({args[0]}, {args[1]})",
+        "json_overlaps" => $"json_overlaps({args[0]}, {args[1]})",
+        "json_pretty" => $"json_pretty({args[0]})",
+        "json_quote" => $"json_quote({args[0]})",
+        "json_schema_valid" => $"json_schema_valid({args[0]}, {args[1]})",
+        "json_schema_validation_report" => $"json_schema_validation_report({args[0]}, {args[1]})",
+        "json_search" => $"json_search({string.Join(", ", args)})",
+        "json_storage_size" => $"json_storage_size({args[0]})",
+        "member_of" => $"{args[0]} MEMBER OF ({args[1]})",
         "uuid_to_bin" => $"uuid_to_bin({args[0]})",
         "bin_to_uuid" => $"bin_to_uuid({args[0]})",
         "bin" => $"bin({args[0]})",
