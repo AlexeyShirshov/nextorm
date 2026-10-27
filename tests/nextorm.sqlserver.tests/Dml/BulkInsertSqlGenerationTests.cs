@@ -271,6 +271,35 @@ public class BulkInsertSqlGenerationTests
     }
 
     [Fact]
+    public void BulkInsert_FireTriggersTrue_OnThePortablePath_ShouldBeRefusedNamingTheOption()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        // Row 9 (SQL Server "N flag on/off; P true/R"): only the native SqlBulkCopy path can express the
+        // trigger flag, so an explicit Mode.Portable request is refused by name before any row is read.
+        var act = () => ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.Mode(BulkInsertMode.Portable).FireTriggers())
+            .Values([Row("a", 1)])
+            .ValidateTarget();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*FireTriggers=true*");
+    }
+
+    [Fact]
+    public void BulkInsert_FireTriggersFalse_OnThePortablePath_ShouldNotChangeTheRenderedSql()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        InsertEntity[] rows = [Row("a", 1)];
+        var plain = ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.Mode(BulkInsertMode.Portable)).Values(rows).ToSql();
+
+        // An explicit false is honoured by absence: it is not a request, so it neither throws nor changes
+        // the portable statement.
+        ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.Mode(BulkInsertMode.Portable).FireTriggers(false))
+            .Values(rows)
+            .ToSql()
+            .Should().Be(plain);
+    }
+
+    [Fact]
     public void BulkInsert_KeepIdentity_ShouldSetTheKeepIdentityBulkCopyFlag()
     {
         var options = SqlServerDataContext.MapBulkCopyOptions(

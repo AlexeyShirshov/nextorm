@@ -294,6 +294,51 @@ public class BulkInsertSqlGenerationTests
     }
 
     [Fact]
+    public void BulkInsert_FireTriggersTrue_OnNativeAndPortablePaths_ShouldBeRefusedByName()
+    {
+        using var ctx = MySqlTestContext.Create();
+
+        // Row 9 (MySQL "N/P true/R"): neither the MySqlBulkCopy path nor the parameterised INSERT can
+        // express a trigger flag, so both explicit forms name the option in the refusal.
+        var native = () => ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.Mode(BulkInsertMode.Native).FireTriggers())
+            .Values([Row("a", 1)])
+            .ValidateTarget();
+        var portable = () => ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.Mode(BulkInsertMode.Portable).FireTriggers())
+            .Values([Row("a", 1)])
+            .ValidateTarget();
+
+        native.Should().Throw<NotSupportedException>().WithMessage("*FireTriggers=true*");
+        portable.Should().Throw<NotSupportedException>().WithMessage("*FireTriggers=true*");
+    }
+
+    [Fact]
+    public void BulkInsert_FireTriggersFalse_OnTheNativePath_ShouldNotBeTreatedAsARequest()
+    {
+        using var ctx = new MySqlDataContext(LocalInfileDisabledConnectionString, new DataContextBuilder());
+
+        Action act = () => ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.Mode(BulkInsertMode.Native).FireTriggers(false))
+            .Values([Row("a", 1)])
+            .BulkInsert();
+
+        // An explicit false is honoured by absence: the request stays native-eligible and the only refusal
+        // left is the documented read-only LOCAL prerequisite, never the trigger flag.
+        act.Should().Throw<NotSupportedException>().WithMessage("*AllowLoadLocalInfile*");
+    }
+
+    [Fact]
+    public void BulkInsert_FireTriggersFalse_OnThePortablePath_ShouldNotChangeTheRenderedSql()
+    {
+        using var ctx = MySqlTestContext.Create();
+        InsertEntity[] rows = [Row("a", 1)];
+        var plain = ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.Mode(BulkInsertMode.Portable)).Values(rows).ToSql();
+
+        ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.Mode(BulkInsertMode.Portable).FireTriggers(false))
+            .Values(rows)
+            .ToSql()
+            .Should().Be(plain);
+    }
+
+    [Fact]
     public void BulkInsert_CheckConstraintsFalse_ShouldBeRefusedOnMySql()
     {
         using var ctx = MySqlTestContext.Create();

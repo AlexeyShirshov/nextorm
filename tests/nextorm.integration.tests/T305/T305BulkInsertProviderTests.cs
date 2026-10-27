@@ -176,6 +176,27 @@ public sealed class T305SqlServerBulkInsertTests : ProviderTestSuite
     }
 
     [Fact]
+    public void FireTriggersTrueOnThePortablePath_ShouldBeRefusedAndFalseShouldWriteTheRows()
+    {
+        T305Sql.Recreate(Context, "t305_bulk_dest", "create table dbo.t305_bulk_dest (id int not null primary key, name nvarchar(100) null)");
+
+        // Row 9 (SQL Server "N flag on/off; P true/R"): the portable path cannot express the driver flag,
+        // so true is refused by name and false is honoured by absence (the plain INSERT writes the rows).
+        var source = T305Sql.Counting(T305Sql.DestRows(1, 1));
+        var refused = () => Context.CreateBulkInsertBuilder<IT305BulkDest>(o => o.Mode(BulkInsertMode.Portable).FireTriggers())
+            .Values(source)
+            .BulkInsert();
+        refused.Should().Throw<NotSupportedException>().WithMessage("*FireTriggers=true*");
+        source.Enumerated.Should().Be(0, "the refusal happens before the source is read: no write is attempted");
+
+        Context.CreateBulkInsertBuilder<IT305BulkDest>(o => o.Mode(BulkInsertMode.Portable).FireTriggers(false))
+            .Values(T305Sql.DestRows(11, 2))
+            .BulkInsert()
+            .Should().Be(2, "an explicit false is honoured by absence: the portable INSERT writes the rows");
+        Context.From<IT305BulkDest>().Select(x => new { x.Id }).ToList().Should().HaveCount(2);
+    }
+
+    [Fact]
     public void KeepNullsTrue_ShouldWriteNullAndFalseShouldApplyTheColumnDefault()
     {
         T305Sql.Recreate(
@@ -554,6 +575,65 @@ public sealed class T305MySqlBulkInsertTests : ProviderTestSuite
     }
 
     [Fact]
+    public void FireTriggers_ShouldBeRefusedOnBothPathsAndFalseShouldBeHonouredByAbsence()
+    {
+        var marker = T305Sql.Marker("mysql_firetriggers");
+        var nativeMarker = T305Sql.Marker("mysql_firetriggers_native");
+
+        try
+        {
+            // Row 9 (MySQL "N/P true/R"): neither path can express the trigger flag, so both explicit
+            // forms refuse by name before the write.
+            var portableSource = T305Sql.Counting(T305Sql.InsertRows(marker, 1));
+            var portable = () => Context.CreateBulkInsertBuilder<IInsertEntity>(o => o.Mode(BulkInsertMode.Portable).FireTriggers())
+                .Values(portableSource)
+                .BulkInsert();
+            portable.Should().Throw<NotSupportedException>().WithMessage("*FireTriggers=true*");
+            portableSource.Enumerated.Should().Be(0, "the refusal happens before the source is read: no INSERT is attempted");
+
+            var native = () => Context.CreateBulkInsertBuilder<IInsertEntity>(o => o.Mode(BulkInsertMode.Native).FireTriggers())
+                .Values(T305Sql.InsertRows(marker, 1))
+                .BulkInsert();
+            native.Should().Throw<NotSupportedException>().WithMessage("*FireTriggers=true*");
+
+            // False is honoured by absence on both paths: the portable path writes the rows, and the
+            // native path stays eligible (its only remaining gate is the documented read-only LOCAL
+            // prerequisite, asserted as whichever outcome the live server selects).
+            Context.CreateBulkInsertBuilder<IInsertEntity>(o => o.Mode(BulkInsertMode.Portable).FireTriggers(false))
+                .Values(T305Sql.InsertRows(marker, 3))
+                .BulkInsert()
+                .Should().Be(3, "an explicit false is not a request, so the portable INSERT writes the rows");
+            Context.From<IInsertEntity>().Where(x => x.Name == marker).Select(x => new { x.Age }).ToList().Should().HaveCount(3);
+
+            var connectionString = MySqlContainer.ConnectionString + ";AllowLoadLocalInfile=true";
+            using var nativeContext = new NextORM.MySql.MySqlDataContext(connectionString, new DataContextBuilder());
+            var serverAllows = T305Sql.Scalar<int>(Context, "select cast(@@GLOBAL.local_infile as signed) as v") == 1;
+            if (serverAllows)
+            {
+                nativeContext.CreateBulkInsertBuilder<IInsertEntity>(o => o.Mode(BulkInsertMode.Native).FireTriggers(false))
+                    .Values(T305Sql.InsertRows(nativeMarker, 2))
+                    .BulkInsert()
+                    .Should().Be(2, "the false flag is not a request, so the native LOAD runs");
+                nativeContext.From<IInsertEntity>().Where(x => x.Name == nativeMarker).Select(x => new { x.Age }).ToList()
+                    .Should().HaveCount(2);
+            }
+            else
+            {
+                var nativeSource = T305Sql.Counting(T305Sql.InsertRows(nativeMarker, 2));
+                var nativeRefused = () => nativeContext.CreateBulkInsertBuilder<IInsertEntity>(o => o.Mode(BulkInsertMode.Native).FireTriggers(false))
+                    .Values(nativeSource)
+                    .BulkInsert();
+                nativeRefused.Should().Throw<NotSupportedException>().WithMessage("*local_infile*");
+                nativeSource.Enumerated.Should().Be(nativeSource.RowCount);
+            }
+        }
+        finally
+        {
+            Context.CreateDeleteBuilder<IInsertEntity>().Where(x => x.Name == marker || x.Name == nativeMarker).Delete();
+        }
+    }
+
+    [Fact]
     public void KeepIdentityTrue_ShouldWriteTheZeroIdentityValueUnderTheSessionMode()
     {
         var marker = T305Sql.Marker("mysql_zero_identity");
@@ -880,6 +960,33 @@ public sealed class T305SqliteBulkInsertTests : ProviderTestSuite
         finally
         {
             Context.CreateDeleteBuilder<IDeleteEntity>().Where(x => ids.Contains(x.Id)).Delete();
+        }
+    }
+
+    [Fact]
+    public void FireTriggersTrue_ShouldBeRefusedAndFalseShouldWriteTheRows()
+    {
+        var marker = T305Sql.Marker("sqlite_firetriggers");
+
+        try
+        {
+            // Row 9 (SQLite "P true/R"): SQLite has no trigger flag, so true is refused by name before the
+            // write and false is honoured by absence (the portable INSERT writes the rows).
+            var source = T305Sql.Counting(T305Sql.InsertRows(marker, 1));
+            var refused = () => Context.CreateBulkInsertBuilder<IInsertEntity>(o => o.FireTriggers())
+                .Values(source)
+                .BulkInsert();
+            refused.Should().Throw<NotSupportedException>().WithMessage("*FireTriggers=true*");
+
+            Context.CreateBulkInsertBuilder<IInsertEntity>(o => o.FireTriggers(false))
+                .Values(T305Sql.InsertRows(marker, 2))
+                .BulkInsert()
+                .Should().Be(2, "an explicit false is not a request, so the portable INSERT writes the rows");
+            Context.From<IInsertEntity>().Where(x => x.Name == marker).Select(x => new { x.Age }).ToList().Should().HaveCount(2);
+        }
+        finally
+        {
+            Context.CreateDeleteBuilder<IInsertEntity>().Where(x => x.Name == marker).Delete();
         }
     }
 

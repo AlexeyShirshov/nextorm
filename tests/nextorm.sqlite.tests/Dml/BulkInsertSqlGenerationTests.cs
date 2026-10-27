@@ -210,6 +210,31 @@ public class BulkInsertSqlGenerationTests
     }
 
     [Fact]
+    public void BulkInsert_FireTriggersTrue_ShouldBeRefusedByName()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        // Row 9 (SQLite "P true/R"): SQLite has no trigger flag at all, so the request is refused by name
+        // before any row is written.
+        var act = () => ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.FireTriggers())
+            .Values([Row("a", 1, "d")])
+            .ValidateTarget();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*FireTriggers=true*");
+    }
+
+    [Fact]
+    public void BulkInsert_FireTriggersFalse_ShouldNotChangeTheRenderedSql()
+    {
+        using var ctx = SqliteTestContext.Create();
+        IInsertEntity[] rows = [Row("a", 1, "d")];
+        var plain = ctx.CreateBulkInsertBuilder<IInsertEntity>().Values(rows).ToSql();
+
+        // An explicit false is honoured by absence: no request, no refusal, no change to the statement.
+        ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.FireTriggers(false)).Values(rows).ToSql().Should().Be(plain);
+    }
+
+    [Fact]
     public void BulkInsert_EqualAliases_ShouldCollapseToTheMainDatabase()
     {
         using var ctx = SqliteTestContext.Create();
