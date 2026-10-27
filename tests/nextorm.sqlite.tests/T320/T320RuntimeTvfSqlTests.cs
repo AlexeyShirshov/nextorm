@@ -41,6 +41,24 @@ internal static class T320ProbeTvf
     public static TvfEntityBuilder<ISimpleEntity> EquivalentOne(int id) => new("equivalent_tvf", "dbo");
 
     public static TvfEntityBuilder<ISimpleEntity> EquivalentTwo(int id) => new("equivalent_tvf", "dbo");
+
+    public static TvfEntityBuilder<ISimpleEntity> LeadingResultSchema(int id) => new(
+        "t320_leading",
+        null,
+        null,
+        null,
+        Array.Empty<int>(),
+        TableFunctionSchema.LeadingArgument);
+
+    public static TvfEntityBuilder<ISimpleEntity> AliasResultSchema(int id) => new(
+        "t320_alias",
+        null,
+        null,
+        null,
+        Array.Empty<int>(),
+        TableFunctionSchema.AliasColumnList);
+
+    public static TvfEntityBuilder<ISimpleEntity> CustomGenerateSeries(long start, long stop) => new("generate_series");
 }
 
 /// <summary>
@@ -467,5 +485,147 @@ public class T320RuntimeTvfSqlTests(ITestOutputHelper output)
                 .Select(p => p.Item1.Id));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*CrossApply join is not supported*");
+    }
+
+    // ---- MX-SQ: the remaining matrix cells (N/X/S/U/R/F) ------------------------------------------
+
+    [Fact]
+    public void RuntimeTvf_N_NullArgument_ShouldRenderNullWithoutAParameter()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        var prepared = Prepare(ctx, ctx.From(() => T320ProbeTvf.ProbeTvfText(null)).Select(r => r.Id), false);
+        var sql = Normalize(prepared.DbCommand.CommandText);
+        var parameters = ParametersOf(prepared);
+        output.WriteLine($"null: sql=<<{sql}>>; parameters=[{string.Join(", ", parameters)}]");
+
+        sql.Should().Contain("from probe_tvf_text(null)", "a null argument stays the SQL NULL literal");
+        parameters.Should().BeEmpty("a null literal is not replaced by a metadata-evaluation default");
+    }
+
+    [Fact]
+    public void RuntimeTvf_X_NestedSqlFunctionArgument_ShouldKeepTheNestedCallAndTheParameter()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var id = 42;
+
+        var prepared = Prepare(
+            ctx,
+            ctx.From(() => T320ProbeTvf.ProbeTvf(SqlFunctions.Sql.nullif(id, 0))).Select(r => r.Id),
+            false);
+        var sql = Normalize(prepared.DbCommand.CommandText);
+        var parameters = ParametersOf(prepared);
+        output.WriteLine($"nested: sql=<<{sql}>>; parameters=[{string.Join(", ", parameters)}]");
+
+        sql.Should().Contain("probe_tvf(nullif($id, 0))", "the nested SQL function is the argument, not its value");
+        sql.Should().NotContain("probe_tvf(42)", "the nested expression is never evaluated into a constant");
+        parameters.Should().Equal(new[] { "id=42" }, "the capture inside the nested call is a bound parameter");
+    }
+
+    [Fact]
+    public void RuntimeTvf_S_TypeChangingSelect_ShouldKeepTheSourceAndItsArgument()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var id = 42;
+
+        // The composed projection changes the builder row type from the factory row type ISimpleEntity
+        // to an anonymous shape: the source and its argument must survive that difference.
+        var prepared = Prepare(
+            ctx,
+            ctx.From(() => T320ProbeTvf.ProbeTvf(id)).Select(r => new { r.Id, Doubled = r.Id * 2 }),
+            false);
+        var sql = Normalize(prepared.DbCommand.CommandText);
+        var parameters = ParametersOf(prepared);
+        output.WriteLine($"projection: sql=<<{sql}>>; parameters=[{string.Join(", ", parameters)}]");
+
+        sql.Should().Contain("from probe_tvf($id)", "the factory call and its argument survive the type-changing projection");
+        sql.Should().Contain("* 2", "the type-changing projection stays on the same statement");
+        parameters.Should().Equal(new[] { "id=42" });
+    }
+
+    [Fact]
+    public void RuntimeTvf_U_CloneUpcastAndReuse_ShouldKeepTheSourceAndItsArgument()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var id = 7;
+
+        // Upcast: the descriptor is usable through the EntityBuilder<T> static type.
+        TvfEntityBuilder<ISimpleEntity> descriptor = T320ProbeTvf.ProbeTvf(id);
+        EntityBuilder<ISimpleEntity> upcast = descriptor;
+        var clone = upcast.Clone();
+
+        clone.Should().BeAssignableTo<EntityBuilder<ISimpleEntity>>();
+        clone.Should().BeOfType<TvfEntityBuilder<ISimpleEntity>>("the clone keeps the runtime descriptor type");
+        clone.Should().NotBeSameAs(upcast, "the clone is a copy, not the same builder");
+        var cloned = (TvfEntityBuilder<ISimpleEntity>)clone;
+        cloned.Name.Should().Be("probe_tvf");
+        cloned.Schema.Should().BeNull();
+        cloned.ResultSchema.Should().Be(TableFunctionSchema.None);
+        cloned.VerbatimArguments.Should().BeEmpty();
+
+        // Reuse: two independent consumers of the same source shape render the same statement.
+        var first = Prepare(ctx, ctx.From(() => T320ProbeTvf.ProbeTvf(id)).Select(r => r.Id), false);
+        var second = Prepare(ctx, ctx.From(() => T320ProbeTvf.ProbeTvf(id)).Select(r => r.Id), false);
+        var firstSql = Normalize(first.DbCommand.CommandText);
+        var secondSql = Normalize(second.DbCommand.CommandText);
+        output.WriteLine($"reuse: first=<<{firstSql}>>; second=<<{secondSql}>>; parameters=[{string.Join(", ", ParametersOf(second))}]");
+
+        secondSql.Should().Be(firstSql, "reusing the same factory/descriptor shape renders the same statement");
+        ParametersOf(second).Should().Equal(ParametersOf(first));
+        ParametersOf(second).Should().Equal(new[] { "id=7" });
+    }
+
+    [Fact]
+    public void RuntimeTvf_R_ResultPlacements_ShouldRenderNoneAndRefuseBothPlacements()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        // None: the function supplies its own result shape, so the call is bare — no leading argument and
+        // no alias column-definition list.
+        var none = Prepare(ctx, ctx.From(() => T320ProbeTvf.ProbeTvf(42)).Select(r => r.Id), false);
+        var noneSql = Normalize(none.DbCommand.CommandText);
+        output.WriteLine($"placement none: sql=<<{noneSql}>>");
+        noneSql.Should().Contain("from probe_tvf(42)", "None renders the call itself");
+        noneSql.Should().NotContain(" with (", "None appends no WITH clause");
+
+        // SQLite expresses neither a leading column-definition argument nor an alias column list, so both
+        // placements are named capability refusals, not silently dropped.
+        Action leading = () => Prepare(ctx, ctx.From(() => T320ProbeTvf.LeadingResultSchema(42)).Select(r => r.Id), false);
+        leading.Should().Throw<NotSupportedException>()
+            .WithMessage("*'t320_leading'*'LeadingArgument' form*not supported by this provider*");
+
+        Action alias = () => Prepare(ctx, ctx.From(() => T320ProbeTvf.AliasResultSchema(42)).Select(r => r.Id), false);
+        alias.Should().Throw<NotSupportedException>()
+            .WithMessage("*'t320_alias'*'AliasColumnList' form*not supported by this provider*");
+    }
+
+    [Fact]
+    public void RuntimeTvf_F_BuiltInJsonEachVersusCustomFactory_ShouldStayDistinct()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var json = "[1,2,3]";
+
+        // Built-in: json_each is in the SQLite built-in table-function capability list and renders through
+        // the built-in path with the captured document bound as a parameter.
+        var builtIn = Prepare(ctx, ctx.From(() => SqlFunctions.Sqlite.json_each(json)).Select(r => r.Value), false);
+        var builtInSql = Normalize(builtIn.DbCommand.CommandText);
+        output.WriteLine($"built-in json_each: sql=<<{builtInSql}>>; parameters=[{string.Join(", ", ParametersOf(builtIn))}]");
+        builtInSql.Should().Contain("from json_each($json)", "the built-in table function renders its native call");
+        ParametersOf(builtIn).Should().Equal(new[] { "json=[1,2,3]" });
+
+        // Custom: the same SQL name through a runtime factory is a user-defined function, emitted verbatim
+        // even when the name is not in the built-in capability list (generate_series on SQLite).
+        var custom = Prepare(ctx, ctx.From(() => T320ProbeTvf.CustomGenerateSeries(1, 3)).Select(r => r.Id), false);
+        var customSql = Normalize(custom.DbCommand.CommandText);
+        output.WriteLine($"custom generate_series: sql=<<{customSql}>>");
+        customSql.Should().Contain("from generate_series(1, 3)", "a custom runtime factory is rendered verbatim");
+
+        // The built-in surface stays gated: SQLite has no generate_series table function.
+        Action builtInGate = () => Prepare(
+            ctx,
+            ctx.From(() => SqlFunctions.Postgres.generate_series(1, 3)).Select(r => r.Value),
+            false);
+        builtInGate.Should().Throw<NotSupportedException>()
+            .WithMessage("*'generate_series'*not supported by this provider*");
     }
 }
