@@ -123,13 +123,17 @@ public object? Payload { get; set; }
 диалектом:
 
 - `JsonColumnStorage.Auto` (по умолчанию) — нативное представление JSON, где оно есть у провайдера
-  (PostgreSQL `jsonb`, ClickHouse `JSON` с корнем-объектом), иначе текстовая колонка;
+  (PostgreSQL `jsonb`, ClickHouse `JSON` с корнем-объектом, `json` в SQL Server для контекста,
+  построенного с явным `Version(17, 0)` или выше), иначе текстовая колонка;
 - `JsonColumnStorage.Native` — требует именно нативного **представления**, а не просто JSON-колонки на
   сервере, и бросает `NotSupportedException` с именем диалекта там, где представления нет (MySQL,
-  MariaDB, SQL Server, SQLite);
+  MariaDB, SQLite) или где объявленная версия до него не дотягивается (SQL Server ниже 2025, включая
+  конструктор по умолчанию без версии);
 - `JsonColumnStorage.Text` — принудительно текстовая колонка.
 
-Нативное представление провайдера — `JsonElement` в PostgreSQL и `JsonObject` в ClickHouse. Нативный
+Нативное представление провайдера — `JsonElement` в PostgreSQL, `JsonObject` в ClickHouse и обычная
+CLR-строка `string` в SQL Server 2025+ (там колонки `json` перевозятся как текст: параметры остаются
+`nvarchar`, DOM-значение не привязывается, дважды ничего не сериализуется). Нативный
 `JSON` в ClickHouse имеет корень-объект, поэтому модель, не сериализующаяся в JSON-объект, бросает
 `NotSupportedException` — для корней-массивов/скаляров используйте `Text`. Легаси-алиас ClickHouse
 `Object('json')` в этой интеграции не поддерживается; см.
@@ -140,8 +144,12 @@ public object? Payload { get; set; }
 привязывать параметры `JsonElement`/`JsonDocument`/`JsonNode` (`MySqlDbType.JSON` принимает только
 строки) и всегда читает колонку `json` как `string`. Поэтому оба движка поддерживаются через
 **текстовое** хранение — `Auto` и `Text` дают JSON-текст, который разбирает сервер, — а `Native`
-отклоняется до выполнения любой команды. В SQL Server JSON живёт в `nvarchar` и нативного типа нет
-вовсе, поэтому действует тот же отказ.
+отклоняется до выполнения любой команды. SQL Server — зеркальный случай: в 2016–2022 нативного типа нет
+и JSON живёт в `nvarchar`, а в 2025+ есть отдельный тип `json` — он доступен, только когда контекст
+объявляет `Version(17, 0)` или выше, и перевозится как текст через тот же конвертер, поэтому `Auto`,
+`Text` и `Native` сохраняют идентичные байты. Нативная колонка `json` принимает только документы-объекты
+и массивы; скалярные корни и документ JSON `null` отклоняет сервер (ошибка 13609), и для них нужно
+хранение `Text`.
 
 ```csharp
 public sealed class Address
@@ -267,7 +275,7 @@ select id, address
 | Провайдер | Нативный JSON | Текст | enum-as-string |
 |---|---|---|---|
 | PostgreSQL | `jsonb` (чтение/запись через `JsonElement`) | `text` | `text` |
-| SQL Server | — (`nvarchar(max)`) | `nvarchar(max)` | `nvarchar` |
+| SQL Server | `json` в 2025+ с явным `Version(17, 0)`+ (перевозится как `string`; только корни-объекты и массивы), иначе `—` | `nvarchar(max)` | `nvarchar` |
 | MySQL / MariaDB | — (настоящая колонка `json` в MySQL 8 / `JSON` = `LONGTEXT` + `json_valid()` в MariaDB, обе через текст) | `longtext` | `longtext` |
 | SQLite | — (`TEXT`) | `TEXT` | `TEXT` |
 | ClickHouse | `JSON` (чтение/запись через `JsonObject`, корень-объект) | `String` | `String` |

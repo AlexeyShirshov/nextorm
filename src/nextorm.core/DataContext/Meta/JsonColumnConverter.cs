@@ -13,7 +13,8 @@ public enum JsonColumnStorage
     /// Resolve per dialect: a native JSON type where the provider supports it
     /// (<see cref="ISqlDialect.SupportsJson"/>), otherwise a text column. The native representation is
     /// <see cref="ISqlDialect.NativeJsonProviderType"/> (<c>JsonElement</c> on PostgreSQL,
-    /// <c>JsonObject</c> on ClickHouse).
+    /// <c>JsonObject</c> on ClickHouse, <c>string</c> on SQL Server, whose native <c>json</c> column is
+    /// transported as text).
     /// </summary>
     Auto,
     /// <summary>A provider-native JSON type; requires <see cref="ISqlDialect.SupportsJson"/>.</summary>
@@ -219,9 +220,14 @@ internal sealed class JsonColumnAutoConverter<TModel> : IPropertyValueConverter,
     // The dialect advertises which CLR type its native JSON representation materializes as. PostgreSQL
     // uses JsonElement (Npgsql) and ClickHouse uses JsonObject (the driver's object-root DOM), so the
     // resolved native converter is selected from NativeJsonProviderType rather than fixed at construction.
+    // SQL Server declares string: its native `json` column is transported as text through the driver's
+    // ordinary string binding, so the native form resolves to the very same text converter — one
+    // serializer, no DOM parameter and no second representation to keep in sync.
     private IPropertyValueConverter ResolveNative(ISqlDialect dialect)
     {
         var providerType = dialect.NativeJsonProviderType;
+        if (providerType == typeof(string))
+            return _text;
         if (providerType == typeof(JsonObject))
             return _nativeObject ??= new JsonColumnConverter<TModel, JsonObject>(_options);
         if (providerType == typeof(JsonElement))
@@ -229,6 +235,6 @@ internal sealed class JsonColumnAutoConverter<TModel> : IPropertyValueConverter,
 
         throw new NotSupportedException(
             $"{dialect.GetType().Name} advertises native JSON storage with provider type {providerType}, "
-            + $"but the supported native representations are {typeof(JsonElement)} and {typeof(JsonObject)}.");
+            + $"but the supported native representations are {typeof(string)}, {typeof(JsonElement)} and {typeof(JsonObject)}.");
     }
 }

@@ -68,6 +68,37 @@ public class JsonColumnStorageSelectionTests
         typeof(SqlDialectBase).GetProperty("UseNativeJsonStorageByDefault").Should().BeNull();
     }
 
+    [Fact]
+    public void NativeAndAuto_ShouldResolveTheTextConverter_WhenTheNativeProviderTypeIsString()
+    {
+        // T326 (#326): SQL Server 2025+ has a native `json` column but transports it as text, so the
+        // dialect declares string as its native provider type. Both storage forms must then resolve to
+        // the existing text converter: one serializer, no DOM parameter, no second representation.
+        var auto = JsonColumnConverterFactory.Create(typeof(JsonColumnSelectionPoco), JsonColumnStorage.Auto);
+        var native = JsonColumnConverterFactory.Create(typeof(JsonColumnSelectionPoco), JsonColumnStorage.Native);
+        var text = JsonColumnConverterFactory.Create(typeof(JsonColumnSelectionPoco), JsonColumnStorage.Text);
+
+        var resolvedAuto = ((IJsonColumnConverter)auto).Resolve(StringNativeDialect.Instance);
+        var resolvedNative = ((IJsonColumnConverter)native).Resolve(StringNativeDialect.Instance);
+        var resolvedText = ((IJsonColumnConverter)text).Resolve(StringNativeDialect.Instance);
+
+        resolvedAuto.Should().BeOfType<JsonColumnConverter<JsonColumnSelectionPoco, string>>();
+        resolvedNative.Should().BeOfType<JsonColumnConverter<JsonColumnSelectionPoco, string>>();
+        resolvedText.Should().BeOfType<JsonColumnConverter<JsonColumnSelectionPoco, string>>();
+
+        resolvedAuto.ProviderType.Should().Be(typeof(string));
+        resolvedNative.ProviderType.Should().Be(typeof(string));
+
+        // No DOM parameter appears: the value the provider receives is the JSON document text.
+        var model = new JsonColumnSelectionPoco { Name = "value" };
+        resolvedAuto.ConvertToProvider(model).Should().BeOfType<string>();
+        resolvedNative.ConvertToProvider(model).Should().BeOfType<string>();
+        resolvedNative.ConvertToProvider(model).Should().Be(resolvedText.ConvertToProvider(model));
+
+        // The Auto wrapper itself is stable: every resolve of the same instance returns the same converter.
+        ((IJsonColumnConverter)auto).Resolve(StringNativeDialect.Instance).Should().BeSameAs(resolvedAuto);
+    }
+
     public sealed class JsonColumnSelectionPoco
     {
         public string? Name { get; set; }
@@ -91,6 +122,25 @@ public class JsonColumnStorageSelectionTests
         internal static readonly NativeDialect Instance = new();
 
         public override bool SupportsJson => true;
+
+        public override string MakeParam(string name) => "@" + name;
+
+        public override void MakePage(Paging paging, StringBuilder sqlBuilder, KeywordCase keywordCase = KeywordCase.Lower)
+        {
+        }
+    }
+
+    /// <summary>
+    /// A dialect with a native JSON column that is transported as text (SQL Server 2025+/Azure SQL):
+    /// the capability is on, but the provider representation is the plain CLR <c>string</c>.
+    /// </summary>
+    private sealed class StringNativeDialect : SqlDialectBase
+    {
+        internal static readonly StringNativeDialect Instance = new();
+
+        public override bool SupportsJson => true;
+
+        public override Type NativeJsonProviderType => typeof(string);
 
         public override string MakeParam(string name) => "@" + name;
 

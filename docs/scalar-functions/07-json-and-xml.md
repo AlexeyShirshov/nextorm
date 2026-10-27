@@ -94,7 +94,10 @@ typing rule.
 
 ## JSON as text (SQL Server, MySQL/MariaDB)
 
-SQL Server stores JSON in an ordinary `nvarchar` column and offers a text-oriented function subset
+SQL Server stores JSON in an ordinary `nvarchar` column — or, on 2025+ with a context built from an
+explicit `Version(17, 0)`, in its opt-in native `json` type ([`SupportsJson`](xref:NextORM.Core.ISqlDialect.SupportsJson);
+object/array roots only, see [JSON support](../guide/16-json.md#native-json-on-sql-server-2025)) — and
+offers a text-oriented function subset
 ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)); MySQL/MariaDB expose the same
 surface over the `JSON_EXTRACT`/`JSON_SET` family. The path is a JSONPath string (`'$.name'`), and `json_value` returns
 a scalar while `json_query` returns an object/array fragment:
