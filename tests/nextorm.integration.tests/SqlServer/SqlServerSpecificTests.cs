@@ -1198,8 +1198,10 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
             // Both captures and both reads bind a closure member with the SAME logical name ('min') and a
             // different value: idA (capture 1), idB (capture 2), idC (read 1), idC (read 2). The batch
             // gives every step its own @b{i}_ prefix, so the four bindings stay four distinct values.
-            // Every predicate is bounded by this test's own window top (idC): a row above the window is
-            // neither captured into @t/@u nor mutated by the captures (#346).
+            // Each CAPTURE is bounded by this test's own window top (idC): a row above the window is
+            // neither captured into @t/@u nor mutated by the captures (#346). That capture bound is the
+            // causal fix, so the reads stay open above: they filter @t/@u by their own value only, which
+            // keeps them from masking an over-capture that the capture bound is supposed to prevent.
             void CaptureWithin(IDataContext database, BatchBuilder batch, string variable, int value, string newName)
             {
                 var min = value;
@@ -1216,7 +1218,7 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
             {
                 var min = value;
                 batch.AddQuery(batch.FromOutput<T266CapturedRow>(variable)
-                    .Where(r => r.Id >= min && r.Id <= idC)
+                    .Where(r => r.Id >= min)
                     .OrderBy(r => r.Id)
                     .Select(r => new T266CapturedRow { Id = r.Id, Name = r.Name }));
             }
