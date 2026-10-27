@@ -359,11 +359,43 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         return SelectCore(exp);
     }
     /// <summary>
+    /// Projects each row with <paramref name="projection"/> and groups the result by the keys inferred
+    /// from that projection, so <c>GROUP BY</c> does not have to be repeated in a separate
+    /// <c>GroupBy</c> call.
+    /// </summary>
+    /// <remarks>
+    /// The grouping keys are inferred from the projection's scalar outputs (constructor arguments,
+    /// member-init bindings or the lambda body) at preparation time: each maximal row-dependent,
+    /// aggregate-free subexpression becomes one key, in first-appearance order, and an aggregate call's
+    /// arguments never become keys. <see cref="GroupBy"/> and the rollup/cube/grouping-sets/with-totals
+    /// modifiers cannot be combined with this form. <see cref="Having"/> and an expression
+    /// <c>OrderBy</c> must reference either an inferred key or an aggregate, otherwise preparation fails
+    /// with <see cref="QueryPreparationException"/>.
+    /// </remarks>
+    /// <typeparam name="TResult">The projection type; its scalar outputs also define the grouping keys.</typeparam>
+    /// <param name="projection">The projection expression.</param>
+    /// <returns>The command that produces one row per distinct key combination.</returns>
+    /// <exception cref="QueryPreparationException">The query also carries an explicit grouping.</exception>
+    public QueryCommand<TResult> SelectGroup<TResult>(Expression<Func<TEntity, TResult>> projection)
+    {
+        EnsureNoJoinIntos(nameof(SelectGroup));
+        EnsureNoEagerLoadState(nameof(SelectGroup));
+
+        if (_group is not null || GroupingType != NextORM.Core.GroupingType.None || GroupingSets is { Count: > 0 } || GroupByWithTotals)
+            throw new QueryPreparationException(
+                "SelectGroup cannot be combined with explicit grouping: " +
+                (_group is not null ? "GroupBy" : GroupingType != NextORM.Core.GroupingType.None ? GroupingType.ToString() : GroupByWithTotals ? "GroupByWithTotals" : "GroupingSets") + ".");
+
+        ArgumentNullException.ThrowIfNull(projection);
+
+        return SelectCore(projection, selectGroup: true);
+    }
+    /// <summary>
     /// Builds the projection command without the public composition guards. Used by <see cref="Select"/>
     /// (after the guards) and by the scalar terminal helpers (<c>Count</c>/<c>Any</c>), which project
     /// the parent and deliberately ignore any eager-load state.
     /// </summary>
-    private QueryCommand<TResult> SelectCore<TResult>(Expression<Func<TEntity, TResult>> exp)
+    private QueryCommand<TResult> SelectCore<TResult>(Expression<Func<TEntity, TResult>> exp, bool selectGroup = false)
     {
         var cmd = RequireContext.CreateCommand<TResult>(new QueryDefinition
         {
@@ -376,6 +408,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
             Sorting = _sorting?.ToArray(),
             Group = _group,
             Having = _having,
+            IsSelectGroup = selectGroup,
             Logger = Logger,
             IsDistinct = IsDistinct,
             Final = IsFinal,

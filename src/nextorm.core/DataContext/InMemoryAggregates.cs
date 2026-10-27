@@ -67,6 +67,18 @@ internal static class InMemoryAggregates
 
     public static bool IsAggregate(string name) => AggregateNames.Contains(name);
 
+    /// <summary>
+    /// True when the call carries an aggregate FILTER: a trailing argument declared as
+    /// <c>Expression&lt;Func&lt;bool&gt;&gt;</c>. The compiler wraps such a lambda in an
+    /// <see cref="ExpressionType.Quote"/> node, so the declaring parameter type is the reliable signal
+    /// (a <c>Parameters.Count == 0</c> test on the argument alone never matches a compiler-built tree).
+    /// Scoped deliberately to the <c>SelectGroup</c> guard: the legacy grouped fold keeps its historical
+    /// narrow test, so pre-existing in-memory grouped queries keep ignoring a FILTER as they always did.
+    /// </summary>
+    public static bool HasAggregateFilter(MethodCallExpression node)
+        => node.Arguments.Count > 0
+            && node.Method.GetParameters()[^1].ParameterType == typeof(Expression<Func<bool>>);
+
     /// <summary>Compiles the value selector as <c>Func&lt;TEntity, TValue&gt;</c> (unboxed fold).</summary>
     public static Delegate CompileSelector<TEntity>(Expression body, ParameterExpression parameter, Type valueType)
     {

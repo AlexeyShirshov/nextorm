@@ -88,6 +88,15 @@ public partial class QueryCommand
         dst.GroupingType = GroupingType;
         dst.GroupingSets = GroupingSets;
         dst.GroupByWithTotals = GroupByWithTotals;
+        dst.IsSelectGroup = IsSelectGroup;
+        // The inferred SelectGroup state is derived at preparation, but `_isPrepared` travels with the
+        // clone, so the planner never re-derives it (`if (!IsPrepared) PrepareCommand(...)`). The mode
+        // is read by the renderer (DISTINCT for a constant projection, the global HAVING arm), the
+        // grouping list carries the inferred keys, and the raw keys/outputs are what a reset would
+        // re-derive from — all of them must therefore travel like the grouping list itself.
+        dst.SelectGroupMode = SelectGroupMode;
+        dst.SelectGroupKeys = SelectGroupKeys;
+        dst.SelectGroupOutputs = SelectGroupOutputs;
         dst.LimitBy = LimitBy;
         dst._limitByColumns = _limitByColumns;
         dst.DistinctOn = DistinctOn;

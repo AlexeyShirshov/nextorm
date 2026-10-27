@@ -75,6 +75,8 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
 
         if (x.GroupByWithTotals != y.GroupByWithTotals) return false;
 
+        if (x.IsSelectGroup != y.IsSelectGroup) return false;
+
         var xLimitBy = x.LimitBy;
         var yLimitBy = y.LimitBy;
         if (xLimitBy is not null || yLimitBy is not null)
@@ -411,6 +413,8 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
             hash.Add(obj.IsDistinct);
 
             hash.Add(obj.GroupByWithTotals);
+
+            hash.Add(obj.IsSelectGroup);
 
             if (obj.GroupingType != GroupingType.None)
                 hash.Add(obj.GroupingType);

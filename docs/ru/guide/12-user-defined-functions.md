@@ -18,6 +18,7 @@ public sealed class SqlFunctionAttribute : Attribute
     public SqlFunctionAttribute(string name);
     public string? Name { get; set; }     // defaults to the CLR method name
     public string? Schema { get; set; }   // optional schema/owner prefix
+    public bool IsAggregate { get; set; } // defaults to false: a scalar function
 }
 ```
 
@@ -121,6 +122,34 @@ var value = dataContext.From<IComplexEntity>()
 select Lower(somestring) as 'V'
  from complex_entity
 ```
+
+## Пометка сопоставленной функции как агрегата
+
+`IsAggregate` объявляет, что сопоставленная функция сворачивает строки группы, а не возвращает
+скалярное значение. По умолчанию свойство равно `false`:
+
+```csharp
+[SqlFunction("my_sum", IsAggregate = true)]
+public static decimal MySum(decimal value) => throw new NotSupportedException();
+```
+
+`IsAggregate = true` делает вызов непрозрачной агрегатной границей для `SelectGroup`: его
+аргументы, его `DISTINCT`-вход и его `FILTER`-предикат никогда не становятся ключами группировки, а
+проекция без зависящих от строки членов становится глобальной агрегацией. Скалярная функция — без
+атрибута или с `IsAggregate = false` — может, наоборот, быть выведена как целый ключ группировки.
+
+Эффективная аннотация — это **либо** собственный атрибут метода, **либо**, когда у метода его нет,
+атрибут объявляющего типа, и никогда их слияние. Поэтому атрибут метода заменяет атрибут типа
+целиком: `[SqlFunction("f")]` на методе типа, помеченного `[SqlFunction(IsAggregate = true)]`,
+делает этот метод скалярным, и ни `Name`, ни `Schema` из типа не наследуются.
+
+Распознавание идёт по методу и объявляющему типу, а не по имени CLR: пользовательская функция с
+именем `sum` рендерится под своим объявленным SQL-именем и никогда не считается встроенным
+агрегатом, а тот же метод с `IsAggregate = true` является границей пользовательского агрегата.
+
+Аннотация только классифицирует вызов. Она не обещает, что функция существует в целевой базе
+данных, что диалект поддерживает `FILTER` или что провайдер in-memory умеет её вычислять:
+неподдерживаемые функции отклоняются там явно, а не выполняются из-за совпадения имени со встроенной.
 
 ## Захваченный аргумент становится параметром
 

@@ -96,6 +96,19 @@ public partial class QueryCommand
             PrepareFrom(from, dontCalculateHash, cancellationToken, cmd);
             from = AttachPrimarySourceLock(cmd, from);
             var joinPlanHash = PrepareJoin(cmd, dontCalculateHash, cancellationToken);
+            // #323 D1: a SelectGroup command infers its grouping keys from the raw projection before
+            // the columns are prepared. The analysis also rejects unsupported shapes and validates
+            // HAVING/ORDER BY against the inferred keys, so an invalid shape never reaches SQL building.
+            if (cmd.IsSelectGroup)
+            {
+                var projection = cmd._exp ?? throw new QueryPreparationException("SelectGroup requires a projection.");
+                var (selectGroupKeys, selectGroupOutputs, selectGroupMode) = SelectGroupExpressionAnalyzer.Analyze(
+                    projection, cmd._having, cmd._sorting, cancellationToken);
+                cmd.SelectGroupKeys = selectGroupKeys;
+                cmd.SelectGroupOutputs = selectGroupOutputs;
+                cmd.SelectGroupMode = selectGroupMode;
+            }
+
             var (selectList, columnsPlanHash) = PrepareColumns(cmd, dontCalculateHash, srcType, cancellationToken);
             // #148-B D5/A7: reject an unlifted non-nullable value scalar read through a reference
             // navigation, naming the path and result type instead of materializing a silent default.
@@ -3806,19 +3819,49 @@ public partial class QueryCommand
             {
                 var columns = BuildKeyColumns(cmd._groupExp, "GROUP BY", cancellationToken);
                 groupingList = columns;
-
-                for (var idx = 0; idx < columns.Length; idx++)
+                groupingPlanHash = ApplyKeyColumnPlanHashes(cmd, columns, noHash, groupingPlanHash, cancellationToken);
+            }
+            else if (cmd.IsSelectGroup && groupingList is null)
+            {
+                switch (cmd.SelectGroupMode)
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
-
-                    var selExp = columns[idx];
-                    if (!noHash)
-                        selExp.PlanHashCode = cmd.GetSelectExpressionPlanEqualityComparer().GetHashCode(selExp);
-
-                    if (!cmd._dontCache && !noHash) unchecked
+                    case SelectGroupMode.Keyed:
+                        var keys = cmd.SelectGroupKeys
+                            ?? throw new QueryPreparationException("SelectGroup projection analysis is missing.");
+                        var columns = new SelectExpression[keys.Count];
+                        for (var idx = 0; idx < columns.Length; idx++)
                         {
-                            groupingPlanHash = groupingPlanHash * 13 + selExp.PlanHashCode;
+                            cancellationToken.ThrowIfCancellationRequested();
+
+                            var key = keys[idx];
+                            columns[idx] = new SelectExpression(key.Type)
+                            {
+                                Index = idx,
+                                PropertyName = $"sg_key_{idx}",
+                                Expression = key,
+                            };
                         }
+
+                        groupingList = columns;
+                        groupingPlanHash = ApplyKeyColumnPlanHashes(cmd, columns, noHash, groupingPlanHash, cancellationToken);
+                        break;
+
+                    case SelectGroupMode.GlobalAggregate:
+                        // No keys: the whole source is one group, so the statement carries no GROUP BY
+                        // list and a HAVING renders as a global filter over the aggregate projection
+                        // (DataContext/SqlBuilder.cs). There are no keys to validate the predicate
+                        // against, so the analyzer already refused every row-dependent HAVING shape;
+                        // only aggregate calls and row-independent expressions reach the renderer.
+                        break;
+
+                    case SelectGroupMode.ConstantProjection:
+                        // No keys and no aggregates: the projection references no row, the statement
+                        // renders `select distinct ...` and a validated row-independent HAVING is a
+                        // pre-group filter, rendered in the WHERE position (DataContext/SqlBuilder.cs).
+                        break;
+
+                    default:
+                        throw new QueryPreparationException("SelectGroup projection analysis is missing.");
                 }
             }
 
@@ -3841,6 +3884,35 @@ public partial class QueryCommand
             }
 
             return (groupingList, groupingPlanHash);
+        }
+
+        /// <summary>
+        /// Computes each key column's plan hash and folds it into the grouping hash with the shared
+        /// <c>* 13 + PlanHashCode</c> math. Used by the explicit <c>GROUP BY</c> branch and the
+        /// <c>SelectGroup</c> keyed branch so the two cannot drift.
+        /// </summary>
+        private static int ApplyKeyColumnPlanHashes(
+            QueryCommand cmd,
+            SelectExpression[] columns,
+            bool noHash,
+            int groupingPlanHash,
+            CancellationToken cancellationToken)
+        {
+            for (var idx = 0; idx < columns.Length; idx++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var selExp = columns[idx];
+                if (!noHash)
+                    selExp.PlanHashCode = cmd.GetSelectExpressionPlanEqualityComparer().GetHashCode(selExp);
+
+                if (!cmd._dontCache && !noHash) unchecked
+                    {
+                        groupingPlanHash = groupingPlanHash * 13 + selExp.PlanHashCode;
+                    }
+            }
+
+            return groupingPlanHash;
         }
 
         /// <summary>

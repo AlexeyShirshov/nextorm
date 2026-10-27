@@ -288,6 +288,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         _sorting = definition.Sorting;
         _groupExp = definition.Group;
         _having = definition.Having;
+        IsSelectGroup = definition.IsSelectGroup;
         Logger = definition.Logger;
         IsDistinct = definition.IsDistinct;
         GroupByWithTotals = definition.GroupByWithTotals;
@@ -339,6 +340,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         _sorting = source._sorting;
         _groupExp = forCache ? null : source._groupExp;
         _having = source._having;
+        IsSelectGroup = source.IsSelectGroup;
         Logger = source.Logger;
         IsDistinct = source.IsDistinct;
         GroupByWithTotals = source.GroupByWithTotals;
@@ -430,6 +432,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
             Sorting = _sorting,
             Group = group,
             Having = _having,
+            IsSelectGroup = IsSelectGroup,
             Logger = Logger,
             IsDistinct = IsDistinct,
             GroupByWithTotals = GroupByWithTotals,
@@ -521,6 +524,22 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     public SelectExpression[]? SelectList => _selectList;
     /// <summary>The prepared <c>GROUP BY</c> columns, or <c>null</c> when the query has no grouping.</summary>
     public SelectExpression[]? GroupingList => _groupingList;
+    /// <summary>
+    /// The grouping keys inferred from a <c>SelectGroup</c> projection during preparation, or
+    /// <c>null</c> before preparation (and for every command that is not a <c>SelectGroup</c> command).
+    /// </summary>
+    internal IReadOnlyList<Expression>? SelectGroupKeys { get; set; }
+    /// <summary>
+    /// The ordered raw scalar-output expressions of the <c>SelectGroup</c> projection, as derived during
+    /// preparation (the expressions the grouping keys and the mode were inferred from), or <c>null</c>
+    /// before preparation (and for every command that is not a <c>SelectGroup</c> command).
+    /// </summary>
+    internal IReadOnlyList<Expression>? SelectGroupOutputs { get; set; }
+    /// <summary>
+    /// The execution mode the <c>SelectGroup</c> projection analysis resolved during preparation
+    /// (<see cref="NextORM.Core.SelectGroupMode.None"/> for a command that is not a <c>SelectGroup</c>).
+    /// </summary>
+    internal SelectGroupMode SelectGroupMode { get; set; }
     /// <summary>The entity type the command reads from, or <c>null</c> for a command without a source type.</summary>
     public Type? EntityType => _srcType;
     /// <summary>Whether the command has been prepared and its cached plan hashes are current.</summary>
@@ -618,6 +637,12 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// the property on the generic command type.
     /// </summary>
     public bool IsDistinct { get; internal set; }
+    /// <summary>
+    /// Whether the projection was declared through <c>SelectGroup</c>: the grouping keys are inferred
+    /// from the projection's scalar outputs instead of a <see cref="GroupBy"/> lambda. Part of the plan
+    /// key, so a <c>SelectGroup</c> plan never shares an entry with an equivalent explicit form.
+    /// </summary>
+    internal bool IsSelectGroup { get; set; }
     /// <summary>
     /// Whether the grouping carries the <c>WITH TOTALS</c> modifier (ClickHouse). Only meaningful when
     /// the command has a grouping list; a dialect that does not support it rejects the command when its
@@ -1090,6 +1115,9 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         _isPrepared = false;
         _selectList = null;
         _groupingList = null;
+        SelectGroupKeys = null;
+        SelectGroupOutputs = null;
+        SelectGroupMode = NextORM.Core.SelectGroupMode.None;
         _limitByColumns = null;
         _distinctOnColumns = null;
         _extremeRowColumns = null;
