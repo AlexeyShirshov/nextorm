@@ -1137,6 +1137,90 @@ namespace NextORM.Core;
         /// </summary>
         public int? pg_trigger_depth() => default!;
 
+        /// <summary>
+        /// Whether the collation with the given <paramref name="oid"/> is visible in the current search
+        /// path (<c>pg_collation_is_visible(oid)</c>); NULL when the OID names no such object. The OID is passed in its
+        /// text form. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public bool? pg_collation_is_visible(string? oid) => default!;
+
+        /// <summary>
+        /// Whether the encoding conversion with the given <paramref name="oid"/> is visible in the current search
+        /// path (<c>pg_conversion_is_visible(oid)</c>); NULL when the OID names no such object. The OID is passed in its
+        /// text form. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public bool? pg_conversion_is_visible(string? oid) => default!;
+
+        /// <summary>
+        /// Whether the function or procedure with the given <paramref name="oid"/> is visible in the current search
+        /// path (<c>pg_function_is_visible(oid)</c>); NULL when the OID names no such object. The OID is passed in its
+        /// text form. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public bool? pg_function_is_visible(string? oid) => default!;
+
+        /// <summary>
+        /// Whether the operator class with the given <paramref name="oid"/> is visible in the current search
+        /// path (<c>pg_opclass_is_visible(oid)</c>); NULL when the OID names no such object. The OID is passed in its
+        /// text form. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public bool? pg_opclass_is_visible(string? oid) => default!;
+
+        /// <summary>
+        /// Whether the operator with the given <paramref name="oid"/> is visible in the current search
+        /// path (<c>pg_operator_is_visible(oid)</c>); NULL when the OID names no such object. The OID is passed in its
+        /// text form. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public bool? pg_operator_is_visible(string? oid) => default!;
+
+        /// <summary>
+        /// Whether the operator family with the given <paramref name="oid"/> is visible in the current search
+        /// path (<c>pg_opfamily_is_visible(oid)</c>); NULL when the OID names no such object. The OID is passed in its
+        /// text form. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public bool? pg_opfamily_is_visible(string? oid) => default!;
+
+        /// <summary>
+        /// Whether the extended statistics object with the given <paramref name="oid"/> is visible in the current search
+        /// path (<c>pg_statistics_obj_is_visible(oid)</c>); NULL when the OID names no such object. The OID is passed in its
+        /// text form. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public bool? pg_statistics_obj_is_visible(string? oid) => default!;
+
+        /// <summary>
+        /// Whether the table, view or other relation with the given <paramref name="oid"/> is visible in the current search
+        /// path (<c>pg_table_is_visible(oid)</c>); NULL when the OID names no such object. The OID is passed in its
+        /// text form. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public bool? pg_table_is_visible(string? oid) => default!;
+
+        /// <summary>
+        /// Whether the text-search configuration with the given <paramref name="oid"/> is visible in the current search
+        /// path (<c>pg_ts_config_is_visible(oid)</c>); NULL when the OID names no such object. The OID is passed in its
+        /// text form. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public bool? pg_ts_config_is_visible(string? oid) => default!;
+
+        /// <summary>
+        /// Whether the text-search dictionary with the given <paramref name="oid"/> is visible in the current search
+        /// path (<c>pg_ts_dict_is_visible(oid)</c>); NULL when the OID names no such object. The OID is passed in its
+        /// text form. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public bool? pg_ts_dict_is_visible(string? oid) => default!;
+
+        /// <summary>
+        /// Whether the text-search parser with the given <paramref name="oid"/> is visible in the current search
+        /// path (<c>pg_ts_parser_is_visible(oid)</c>); NULL when the OID names no such object. The OID is passed in its
+        /// text form. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public bool? pg_ts_parser_is_visible(string? oid) => default!;
+
+        /// <summary>
+        /// Whether the text-search template with the given <paramref name="oid"/> is visible in the current search
+        /// path (<c>pg_ts_template_is_visible(oid)</c>); NULL when the OID names no such object. The OID is passed in its
+        /// text form. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public bool? pg_ts_template_is_visible(string? oid) => default!;
+
         /// <summary>The current value of the run-time setting <paramref name="name"/> (<c>current_setting</c>).</summary>
         public string? current_setting(string? name) => default!;
 

@@ -173,7 +173,19 @@ public class PostgresFunctionsRejectionTests
             "current_schemas", "pg_postmaster_start_time", "pg_current_logfile",
             "pg_conf_load_time", "pg_jit_available", "pg_my_temp_schema",
             "pg_is_other_temp_schema", "pg_notification_queue_usage", "pg_blocking_pids",
-            "pg_safe_snapshot_blocking_pids", "pg_trigger_depth"
+            "pg_safe_snapshot_blocking_pids", "pg_trigger_depth",
+            "pg_collation_is_visible",
+            "pg_conversion_is_visible",
+            "pg_function_is_visible",
+            "pg_opclass_is_visible",
+            "pg_operator_is_visible",
+            "pg_opfamily_is_visible",
+            "pg_statistics_obj_is_visible",
+            "pg_table_is_visible",
+            "pg_ts_config_is_visible",
+            "pg_ts_dict_is_visible",
+            "pg_ts_parser_is_visible",
+            "pg_ts_template_is_visible"
         })
         {
             scalars.Supports(name).Should().BeFalse($"'{name}' is PostgreSQL-only");
@@ -204,6 +216,38 @@ public class PostgresFunctionsRejectionTests
             ("pg_blocking_pids", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_blocking_pids(x.Int) }))),
             ("pg_safe_snapshot_blocking_pids", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_safe_snapshot_blocking_pids(x.Int) }))),
             ("pg_trigger_depth", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_trigger_depth() })))
+        };
+
+        foreach (var (name, act) in cases)
+            act.Should().Throw<NotSupportedException>().WithMessage($"*{name}*not supported*");
+    }
+
+    /// <summary>
+    /// The PostgreSQL catalog-visibility helpers of #281 are PostgreSQL-only on this provider as well:
+    /// each enrolled name is refused during preparation with a message naming it, never rendered as
+    /// PostgreSQL SQL.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void CatalogVisibilityFamily_ShouldThrowBecauseNotSupported()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var cases = new (string Name, Action Act)[]
+        {
+            ("pg_collation_is_visible", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_collation_is_visible("0") }))),
+            ("pg_conversion_is_visible", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_conversion_is_visible("0") }))),
+            ("pg_function_is_visible", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_function_is_visible("0") }))),
+            ("pg_opclass_is_visible", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_opclass_is_visible("0") }))),
+            ("pg_operator_is_visible", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_operator_is_visible("0") }))),
+            ("pg_opfamily_is_visible", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_opfamily_is_visible("0") }))),
+            ("pg_statistics_obj_is_visible", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_statistics_obj_is_visible("0") }))),
+            ("pg_table_is_visible", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_table_is_visible("0") }))),
+            ("pg_ts_config_is_visible", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_ts_config_is_visible("0") }))),
+            ("pg_ts_dict_is_visible", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_ts_dict_is_visible("0") }))),
+            ("pg_ts_parser_is_visible", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_ts_parser_is_visible("0") }))),
+            ("pg_ts_template_is_visible", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_ts_template_is_visible("0") }))),
         };
 
         foreach (var (name, act) in cases)

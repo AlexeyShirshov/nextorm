@@ -53,7 +53,13 @@ internal static class CrossProviderScalarTranslator
         nameof(PostgresFunctions.pg_notification_queue_usage),
         nameof(PostgresFunctions.pg_blocking_pids),
         nameof(PostgresFunctions.pg_safe_snapshot_blocking_pids),
-        nameof(PostgresFunctions.pg_trigger_depth)
+        nameof(PostgresFunctions.pg_trigger_depth),
+        nameof(PostgresFunctions.pg_collation_is_visible), nameof(PostgresFunctions.pg_conversion_is_visible),
+        nameof(PostgresFunctions.pg_function_is_visible), nameof(PostgresFunctions.pg_opclass_is_visible),
+        nameof(PostgresFunctions.pg_operator_is_visible), nameof(PostgresFunctions.pg_opfamily_is_visible),
+        nameof(PostgresFunctions.pg_statistics_obj_is_visible), nameof(PostgresFunctions.pg_table_is_visible),
+        nameof(PostgresFunctions.pg_ts_config_is_visible), nameof(PostgresFunctions.pg_ts_dict_is_visible),
+        nameof(PostgresFunctions.pg_ts_parser_is_visible), nameof(PostgresFunctions.pg_ts_template_is_visible)
     };
 
     /// <summary>

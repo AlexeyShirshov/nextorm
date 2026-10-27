@@ -1154,6 +1154,19 @@ public class InMemoryTests
             ("pg_blocking_pids", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_blocking_pids(nullInt) }).ToList()),
             ("pg_safe_snapshot_blocking_pids", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_safe_snapshot_blocking_pids(nullInt) }).ToList()),
             ("pg_trigger_depth", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_trigger_depth() }).ToList())
+,
+            ("pg_collation_is_visible", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_collation_is_visible("0") }).ToList()),
+            ("pg_conversion_is_visible", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_conversion_is_visible("0") }).ToList()),
+            ("pg_function_is_visible", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_function_is_visible("0") }).ToList()),
+            ("pg_opclass_is_visible", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_opclass_is_visible("0") }).ToList()),
+            ("pg_operator_is_visible", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_operator_is_visible("0") }).ToList()),
+            ("pg_opfamily_is_visible", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_opfamily_is_visible("0") }).ToList()),
+            ("pg_statistics_obj_is_visible", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_statistics_obj_is_visible("0") }).ToList()),
+            ("pg_table_is_visible", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_table_is_visible("0") }).ToList()),
+            ("pg_ts_config_is_visible", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_ts_config_is_visible("0") }).ToList()),
+            ("pg_ts_dict_is_visible", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_ts_dict_is_visible("0") }).ToList()),
+            ("pg_ts_parser_is_visible", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_ts_parser_is_visible("0") }).ToList()),
+            ("pg_ts_template_is_visible", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_ts_template_is_visible("0") }).ToList())
         };
 
         foreach (var (name, act) in cases)

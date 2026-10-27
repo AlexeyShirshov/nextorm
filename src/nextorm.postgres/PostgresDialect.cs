@@ -948,7 +948,11 @@ internal sealed class PostgresScalarFunctions : IScalarFunctions
         "current_schemas" or "pg_postmaster_start_time" or "pg_current_logfile" or
         "pg_conf_load_time" or "pg_jit_available" or "pg_my_temp_schema" or
         "pg_is_other_temp_schema" or "pg_notification_queue_usage" or
-        "pg_blocking_pids" or "pg_safe_snapshot_blocking_pids" or "pg_trigger_depth";
+        "pg_blocking_pids" or "pg_safe_snapshot_blocking_pids" or "pg_trigger_depth" or
+        "pg_collation_is_visible" or "pg_conversion_is_visible" or "pg_function_is_visible" or
+        "pg_opclass_is_visible" or "pg_operator_is_visible" or "pg_opfamily_is_visible" or
+        "pg_statistics_obj_is_visible" or "pg_table_is_visible" or "pg_ts_config_is_visible" or
+        "pg_ts_dict_is_visible" or "pg_ts_parser_is_visible" or "pg_ts_template_is_visible";
 
     /// <inheritdoc/>
     public string Render(string name, IReadOnlyList<string> args) => name switch
@@ -986,10 +990,19 @@ internal sealed class PostgresScalarFunctions : IScalarFunctions
             "isfinite" or "uuid_extract_timestamp" or "uuid_extract_version" or
             "get_bit" or "set_bit" or "get_byte" or "set_byte" or "bit_count" or
             "current_schemas" or "pg_postmaster_start_time" or "pg_current_logfile" or
-            "pg_conf_load_time" or "pg_jit_available" or "pg_is_other_temp_schema" or
+            "pg_conf_load_time" or "pg_jit_available" or
             "pg_notification_queue_usage" or "pg_blocking_pids" or
             "pg_safe_snapshot_blocking_pids" or "pg_trigger_depth"
             => $"{name}({string.Join(", ", args)})",
+        // oid-typed arguments: a text parameter does not resolve to the oid overload (measured:
+        // "function pg_table_is_visible(text) does not exist"), so the argument is cast, like the
+        // regclass argument of nextval/currval.
+        "pg_is_other_temp_schema" or "pg_collation_is_visible" or "pg_conversion_is_visible" or
+            "pg_function_is_visible" or "pg_opclass_is_visible" or "pg_operator_is_visible" or
+            "pg_opfamily_is_visible" or "pg_statistics_obj_is_visible" or "pg_table_is_visible" or
+            "pg_ts_config_is_visible" or "pg_ts_dict_is_visible" or "pg_ts_parser_is_visible" or
+            "pg_ts_template_is_visible"
+            => $"{name}(cast({args[0]} as oid))",
         _ => throw new NotSupportedException($"The {name} function is not supported by PostgreSQL.")
     };
 

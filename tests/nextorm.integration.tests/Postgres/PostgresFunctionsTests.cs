@@ -1573,6 +1573,74 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
             .Which.Message.Should().Contain("log format");
     }
 
+    /// <summary>
+    /// The catalog-visibility helpers of #281 against the live server. The OIDs are resolved with raw
+    /// SQL first and bound as parameters, which also proves that the renderer's <c>cast(.. as oid)</c>
+    /// is load-bearing: PostgreSQL has no <c>pg_*_is_visible(text)</c> overload. An OID that names no
+    /// object yields NULL, not false, and a NULL argument is NULL (the functions are strict).
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void CatalogVisibilityFamily_ShouldReportVisibilityNullsAndClrTypes()
+    {
+        var ctx = (DataContext)_sut.DataProvider;
+        var oid0 = Scalar(ctx, "select oid from pg_collation where collname = 'default'");
+        var oid1 = "0";
+        var oid2 = Scalar(ctx, "select oid from pg_proc where proname = 'pg_sleep' and pronargs = 1");
+        var oid3 = "0";
+        var oid4 = Scalar(ctx, "select oid from pg_operator where oprname = '+' and oprleft = 'int4'::regtype and oprright = 'int4'::regtype and oprnamespace = 'pg_catalog'::regnamespace");
+        var oid5 = "0";
+        var oid6 = "0";
+        var oid7 = "1259";
+        var oid8 = Scalar(ctx, "select oid from pg_ts_config where cfgname = 'english'");
+        var oid9 = Scalar(ctx, "select oid from pg_ts_dict where dictname = 'simple' and dictnamespace = 'pg_catalog'::regnamespace");
+        var oid10 = Scalar(ctx, "select oid from pg_ts_parser where prsname = 'default'");
+        var oid11 = Scalar(ctx, "select oid from pg_ts_template where tmplname = 'simple'");
+
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                C0 = SqlFunctions.Postgres.pg_collation_is_visible(oid0),
+                C1 = SqlFunctions.Postgres.pg_conversion_is_visible(oid1),
+                C2 = SqlFunctions.Postgres.pg_function_is_visible(oid2),
+                C3 = SqlFunctions.Postgres.pg_opclass_is_visible(oid3),
+                C4 = SqlFunctions.Postgres.pg_operator_is_visible(oid4),
+                C5 = SqlFunctions.Postgres.pg_opfamily_is_visible(oid5),
+                C6 = SqlFunctions.Postgres.pg_statistics_obj_is_visible(oid6),
+                C7 = SqlFunctions.Postgres.pg_table_is_visible(oid7),
+                C8 = SqlFunctions.Postgres.pg_ts_config_is_visible(oid8),
+                C9 = SqlFunctions.Postgres.pg_ts_dict_is_visible(oid9),
+                C10 = SqlFunctions.Postgres.pg_ts_parser_is_visible(oid10),
+                C11 = SqlFunctions.Postgres.pg_ts_template_is_visible(oid11),
+                Missing = SqlFunctions.Postgres.pg_collation_is_visible("0"),
+                NullArg = SqlFunctions.Postgres.pg_collation_is_visible(null)
+            })
+            .First();
+
+        // A real, visible catalog object of each kind: collation, function, operator, table, text search.
+        r.C0.Should().BeTrue("the default collation is visible");
+        r.C2.Should().BeTrue("a pg_catalog function is visible");
+        r.C4.Should().BeTrue("the int4 + operator is visible");
+        r.C7.Should().BeTrue("pg_class is visible");
+        r.C8.Should().BeTrue("the english text-search configuration is visible");
+        r.C9.Should().BeTrue("the simple text-search dictionary is visible");
+        r.C10.Should().BeTrue("the default text-search parser is visible");
+        r.C11.Should().BeTrue("the simple text-search template is visible");
+
+        // OID 0 names no object: the helpers return NULL (not false) for it.
+        r.C1.Should().BeNull();
+        r.C3.Should().BeNull();
+        r.C5.Should().BeNull();
+        r.C6.Should().BeNull();
+        r.Missing.Should().BeNull();
+        r.NullArg.Should().BeNull();
+
+        // Exact CLR type: nullable boolean, the same for every name.
+        ((object)r.C0!).Should().BeOfType<bool>();
+        ((object)r.C7!).Should().BeOfType<bool>();
+
+    }
+
     [Fact]
     [Trait("Issue", "281")]
     public void NumericFamily_ShouldComputeValuesNullsAndClrTypes()
@@ -1872,6 +1940,13 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
         _sut.ComplexEntity.Where(x => x.Id == 1)
             .Select(x => new { V = SqlFunctions.Postgres.to_ascii(x.String, "LATIN1") })
             .First().V.Should().Be("dadfasd");
+    }
+
+    private static string Scalar(DataContext ctx, string sql)
+    {
+        ctx.EnsureConnectionOpen();
+        using var cmd = ctx.CreateCommand(sql);
+        return Convert.ToString(cmd.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture)!;
     }
 
     private static void Execute(IDataContext ctx, string sql)

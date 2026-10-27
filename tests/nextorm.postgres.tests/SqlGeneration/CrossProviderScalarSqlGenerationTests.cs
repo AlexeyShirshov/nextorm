@@ -452,7 +452,8 @@ public class CrossProviderScalarSqlGenerationTests
         sql.Should().Contain("pg_jit_available()");
         // oid result: cast to text, as pg_typeof does, because the driver cannot read oid as a string.
         sql.Should().Contain("cast(pg_my_temp_schema() as text)");
-        sql.Should().Contain("pg_is_other_temp_schema(E'0')");
+        // oid argument: cast so a text parameter resolves to the oid overload.
+        sql.Should().Contain("pg_is_other_temp_schema(cast(E'0' as oid))");
         sql.Should().Contain("pg_notification_queue_usage()");
         sql.Should().Contain("pg_blocking_pids(nullableint)");
         sql.Should().Contain("pg_safe_snapshot_blocking_pids(nullableint)");
@@ -461,6 +462,63 @@ public class CrossProviderScalarSqlGenerationTests
         // Positive control: the neighbouring system-information member still renders on the same shape.
         SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_typeof(x.Int) }))
             .Should().Contain("cast(pg_typeof(nullableint) as text)");
+    }
+
+    /// <summary>
+    /// The catalog-visibility helpers of #281 take a catalog OID in its text form; the renderer casts
+    /// the argument, because a <c>text</c> parameter does not resolve to the <c>oid</c> overload.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void PostgreSQLCatalogVisibilityFamily_ShouldEmitNativeSpellings()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            C0 = SqlFunctions.Postgres.pg_collation_is_visible(SqlFunctions.Parameter<string>(0)),
+            C1 = SqlFunctions.Postgres.pg_conversion_is_visible(SqlFunctions.Parameter<string>(0)),
+            C2 = SqlFunctions.Postgres.pg_function_is_visible(SqlFunctions.Parameter<string>(0)),
+            C3 = SqlFunctions.Postgres.pg_opclass_is_visible(SqlFunctions.Parameter<string>(0)),
+            C4 = SqlFunctions.Postgres.pg_operator_is_visible(SqlFunctions.Parameter<string>(0)),
+            C5 = SqlFunctions.Postgres.pg_opfamily_is_visible(SqlFunctions.Parameter<string>(0)),
+            C6 = SqlFunctions.Postgres.pg_statistics_obj_is_visible(SqlFunctions.Parameter<string>(0)),
+            C7 = SqlFunctions.Postgres.pg_table_is_visible(SqlFunctions.Parameter<string>(0)),
+            C8 = SqlFunctions.Postgres.pg_ts_config_is_visible(SqlFunctions.Parameter<string>(0)),
+            C9 = SqlFunctions.Postgres.pg_ts_dict_is_visible(SqlFunctions.Parameter<string>(0)),
+            C10 = SqlFunctions.Postgres.pg_ts_parser_is_visible(SqlFunctions.Parameter<string>(0)),
+            C11 = SqlFunctions.Postgres.pg_ts_template_is_visible(SqlFunctions.Parameter<string>(0)),
+        }));
+
+        foreach (var name in new[]
+        {
+            "pg_collation_is_visible", "pg_conversion_is_visible", "pg_function_is_visible",
+            "pg_opclass_is_visible", "pg_operator_is_visible", "pg_opfamily_is_visible",
+            "pg_statistics_obj_is_visible", "pg_table_is_visible", "pg_ts_config_is_visible",
+            "pg_ts_dict_is_visible", "pg_ts_parser_is_visible", "pg_ts_template_is_visible"
+        })
+        {
+            sql.Should().Contain($"{name}(");
+            PostgresDialect.Instance.ScalarFunctions.Supports(name).Should().BeTrue($"'{name}' is delivered on PostgreSQL");
+        }
+
+        sql.Should().Contain("pg_collation_is_visible(cast(@norm_p0 as oid))");
+        sql.Should().Contain("pg_conversion_is_visible(cast(@norm_p0 as oid))");
+        sql.Should().Contain("pg_function_is_visible(cast(@norm_p0 as oid))");
+        sql.Should().Contain("pg_opclass_is_visible(cast(@norm_p0 as oid))");
+        sql.Should().Contain("pg_operator_is_visible(cast(@norm_p0 as oid))");
+        sql.Should().Contain("pg_opfamily_is_visible(cast(@norm_p0 as oid))");
+        sql.Should().Contain("pg_statistics_obj_is_visible(cast(@norm_p0 as oid))");
+        sql.Should().Contain("pg_table_is_visible(cast(@norm_p0 as oid))");
+        sql.Should().Contain("pg_ts_config_is_visible(cast(@norm_p0 as oid))");
+        sql.Should().Contain("pg_ts_dict_is_visible(cast(@norm_p0 as oid))");
+        sql.Should().Contain("pg_ts_parser_is_visible(cast(@norm_p0 as oid))");
+        sql.Should().Contain("pg_ts_template_is_visible(cast(@norm_p0 as oid))");
+
+        // Positive control: the neighbouring session-information member still renders on the same shape.
+        SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_trigger_depth() }))
+            .Should().Contain("pg_trigger_depth()");
     }
 
     [Fact]
