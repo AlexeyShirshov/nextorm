@@ -1187,37 +1187,34 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
     public void T266_ParametersAndTwoCaptures_DoNotCollide()
     {
         var ctx = _sut.DataProvider;
-        var idA = T266Key();
-        var idB = idA + 1;
-        var idC = idA + 2;
         var firstName = "t266-param-one-" + Guid.NewGuid().ToString("N");
         var secondName = "t266-param-two-" + Guid.NewGuid().ToString("N");
         var seedName = "t266-param-seed-" + Guid.NewGuid().ToString("N");
-
-        ctx.CreateInsertBuilder<IMergeEntity>().Values([
-            new MergeEntity { Id = idA, Name = seedName, Age = 1 },
-            new MergeEntity { Id = idB, Name = seedName, Age = 2 },
-            new MergeEntity { Id = idC, Name = seedName, Age = 3 },
-        ]).Insert().Should().Be(3);
+        var sentinelName = "t346-sentinel-" + Guid.NewGuid().ToString("N");
+        var (idA, idB, idC, sentinelId) = T346SeedOwnedRows(ctx, seedName, sentinelName);
 
         try
         {
             // Both captures and both reads bind a closure member with the SAME logical name ('min') and a
             // different value: idA (capture 1), idB (capture 2), idC (read 1), idC (read 2). The batch
             // gives every step its own @b{i}_ prefix, so the four bindings stay four distinct values.
-            static void CaptureAtLeast(IDataContext database, BatchBuilder batch, string variable, int value, string newName)
+            // Each CAPTURE is bounded by this test's own window top (idC): a row above the window is
+            // neither captured into @t/@u nor mutated by the captures (#346). That capture bound is the
+            // causal fix, so the reads stay open above: they filter @t/@u by their own value only, which
+            // keeps them from masking an over-capture that the capture bound is supposed to prevent.
+            void CaptureWithin(IDataContext database, BatchBuilder batch, string variable, int value, string newName)
             {
                 var min = value;
                 batch.OutputIntoTableVariable(
                     database.CreateUpdateBuilder<IMergeEntity>()
                         .Set(x => x.Name, newName)
-                        .Where(x => x.Id >= min)
+                        .Where(x => x.Id >= min && x.Id <= idC)
                         .Returning(x => new T266CapturedRow { Id = x.Id, Name = x.Name }),
                     variable,
                     "id int, name nvarchar(100)");
             }
 
-            static void ReadAtLeast(BatchBuilder batch, string variable, int value)
+            void ReadWithin(BatchBuilder batch, string variable, int value)
             {
                 var min = value;
                 batch.AddQuery(batch.FromOutput<T266CapturedRow>(variable)
@@ -1227,10 +1224,10 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
             }
 
             var batch = ctx.CreateBatchBuilder();
-            CaptureAtLeast(ctx, batch, "@t", idA, firstName);
-            CaptureAtLeast(ctx, batch, "@u", idB, secondName);
-            ReadAtLeast(batch, "@t", idC);
-            ReadAtLeast(batch, "@u", idC);
+            CaptureWithin(ctx, batch, "@t", idA, firstName);
+            CaptureWithin(ctx, batch, "@u", idB, secondName);
+            ReadWithin(batch, "@t", idC);
+            ReadWithin(batch, "@u", idC);
 
             var sql = batch.ToSql();
             foreach (var prefix in new[] { "@b0_min", "@b1_min", "@b2_min", "@b3_min" })
@@ -1258,10 +1255,512 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
                 .Select(x => x.Name)
                 .ToList();
             state.Should().Equal(firstName, secondName, secondName);
+
+            // One owned sentinel strictly above the window: the bounded captures cannot reach it, so it
+            // survives with its own name instead of being renamed by a capture (#346).
+            T346AssertSentinelUntouched(ctx, sentinelId, sentinelName);
         }
         finally
         {
-            Execute(ctx, $"delete from merge_entity where id >= {idA} and id <= {idC}");
+            T346CleanupOwnedRows(ctx, idA, idB, idC, sentinelId);
+        }
+    }
+
+    /// <summary>
+    /// A T346-local key: the scenario needs three consecutive ids plus a sentinel 5 000 above them, so the
+    /// upper bound keeps that headroom instead of <c>T266Key</c>'s <see cref="int.MaxValue"/> - 64.
+    /// </summary>
+    private static int T346Key() => Random.Shared.Next(1_000_000, 2_000_000_000);
+
+    /// <summary>
+    /// Seeds the rows one T346 scenario owns — three consecutive ids inside the captured window plus one
+    /// sentinel strictly above it — after clearing residue in the same ids, and returns their ids.
+    /// </summary>
+    private static (int IdA, int IdB, int IdC, int SentinelId) T346SeedOwnedRows(
+        IDataContext ctx, string seedName, string sentinelName)
+    {
+        var idA = T346Key();
+        var idB = idA + 1;
+        var idC = idA + 2;
+        var sentinelId = idC + 5_000;
+
+        Execute(ctx, $"delete from merge_entity where id in ({idA}, {idB}, {idC}, {sentinelId})");
+        ctx.CreateInsertBuilder<IMergeEntity>().Values([
+            new MergeEntity { Id = idA, Name = seedName, Age = 1 },
+            new MergeEntity { Id = idB, Name = seedName, Age = 2 },
+            new MergeEntity { Id = idC, Name = seedName, Age = 3 },
+            new MergeEntity { Id = sentinelId, Name = sentinelName, Age = 4 },
+        ]).Insert().Should().Be(4);
+
+        return (idA, idB, idC, sentinelId);
+    }
+
+    /// <summary>
+    /// Asserts the out-of-range sentinel is still present under the name it was seeded with: a capture
+    /// bounded by the scenario's own window cannot reach it, so nothing renames it.
+    /// </summary>
+    private static void T346AssertSentinelUntouched(IDataContext ctx, int sentinelId, string sentinelName)
+    {
+        var rows = ctx.From<IMergeEntity>()
+            .Where(x => x.Id == sentinelId)
+            .Select(x => new T266CapturedRow { Id = x.Id, Name = x.Name })
+            .ToList();
+
+        rows.Should().HaveCount(1, "the out-of-range sentinel row is still there");
+        rows[0].Name.Should().Be(sentinelName, "the bounded captures never reach above the scenario's window");
+    }
+
+    /// <summary>Removes every row the scenario owns (sentinel included) and fails if any is left.</summary>
+    private static void T346CleanupOwnedRows(IDataContext ctx, int idA, int idB, int idC, int sentinelId)
+    {
+        Execute(ctx, $"delete from merge_entity where id in ({idA}, {idB}, {idC}, {sentinelId})");
+
+        var windowLeft = ctx.From<IMergeEntity>()
+            .Where(x => x.Id >= idA && x.Id <= idC)
+            .Select(x => x.Id)
+            .ToList();
+        var sentinelLeft = ctx.From<IMergeEntity>()
+            .Where(x => x.Id == sentinelId)
+            .Select(x => x.Id)
+            .ToList();
+
+        windowLeft.Should().BeEmpty("the scenario's own window rows are removed");
+        sentinelLeft.Should().BeEmpty("the scenario's own sentinel row is removed");
+    }
+
+    private static BatchPlan T346RenderPlan(IDataContext ctx, BatchBuilder batch)
+        => ((IBatchExecutor)ctx).RenderBatch((IReadOnlyList<BatchStepSpec>)typeof(BatchBuilder)
+            .GetField("_steps", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+            .GetValue(batch)!);
+
+    private static long T346BoundValue(BatchStatement statement, string parameterName)
+    {
+        var parameter = statement.Parameters.SingleOrDefault(p => p.Name == parameterName);
+        parameter.Should().NotBeNull("the rendered SQL binds '@{0}'", parameterName);
+        return Convert.ToInt64(parameter!.Value);
+    }
+
+    private static void T346Dump(string message)
+        => TestContext.Current.TestOutputHelper?.WriteLine(message);
+
+    // ---- T346 (#346) ownership-bounded capture/read matrix ---------------------------------------
+    //
+    // Every scenario owns exactly four merge_entity rows: three consecutive ids inside the captured
+    // window (idA, idB, idC) and one sentinel strictly above it. Every predicate — capture and read — is
+    // bounded by the window's own top (idC), so a foreign row in the table can neither enter a captured
+    // table variable nor be mutated by a capture, and the sentinel proves it. The binding question stays
+    // observable: a read that leaked the previous capture's value sees 3 rows instead of 1 (idA) or 2
+    // instead of 1 (idB), because the window holds exactly those rows.
+
+    /// <summary>
+    /// #346 matrix 2 (control): the same two-capture/two-read topology with DISTINCT closure names, so the
+    /// per-step prefixes differ by construction. Correct bindings must still give one row per read.
+    /// </summary>
+    [Fact]
+    public void T346_TwoCapturesTwoReads_DifferentClosureNames_DoNotCollide()
+    {
+        var ctx = _sut.DataProvider;
+        var firstName = "t346-param-one-" + Guid.NewGuid().ToString("N");
+        var secondName = "t346-param-two-" + Guid.NewGuid().ToString("N");
+        var seedName = "t346-param-seed-" + Guid.NewGuid().ToString("N");
+        var sentinelName = "t346-sentinel-" + Guid.NewGuid().ToString("N");
+        var (idA, idB, idC, sentinelId) = T346SeedOwnedRows(ctx, seedName, sentinelName);
+
+        try
+        {
+            var minA = idA;
+            var minB = idB;
+            var readMin1 = idC;
+            var readMin2 = idC;
+
+            var batch = ctx.CreateBatchBuilder();
+            batch.OutputIntoTableVariable(
+                ctx.CreateUpdateBuilder<IMergeEntity>()
+                    .Set(x => x.Name, firstName)
+                    .Where(x => x.Id >= minA && x.Id <= idC)
+                    .Returning(x => new T266CapturedRow { Id = x.Id, Name = x.Name }),
+                "@t",
+                "id int, name nvarchar(100)");
+            batch.OutputIntoTableVariable(
+                ctx.CreateUpdateBuilder<IMergeEntity>()
+                    .Set(x => x.Name, secondName)
+                    .Where(x => x.Id >= minB && x.Id <= idC)
+                    .Returning(x => new T266CapturedRow { Id = x.Id, Name = x.Name }),
+                "@u",
+                "id int, name nvarchar(100)");
+            batch.AddQuery(batch.FromOutput<T266CapturedRow>("@t")
+                .Where(r => r.Id >= readMin1 && r.Id <= idC)
+                .OrderBy(r => r.Id)
+                .Select(r => new T266CapturedRow { Id = r.Id, Name = r.Name }));
+            batch.AddQuery(batch.FromOutput<T266CapturedRow>("@u")
+                .Where(r => r.Id >= readMin2 && r.Id <= idC)
+                .OrderBy(r => r.Id)
+                .Select(r => new T266CapturedRow { Id = r.Id, Name = r.Name }));
+
+            var sql = batch.ToSql();
+            foreach (var prefix in new[] { "@b0_minA", "@b1_minB", "@b2_readMin1", "@b3_readMin2" })
+                sql.Should().Contain(prefix);
+
+            var result = batch.Execute();
+            result.ResultSetCount.Should().Be(2);
+
+            var fromFirst = result.Read<T266CapturedRow>();
+            fromFirst.Select(r => r.Id).Should().Equal(idC);
+            fromFirst[0].Name.Should().Be(firstName);
+
+            var fromSecond = result.Read<T266CapturedRow>();
+            fromSecond.Select(r => r.Id).Should().Equal(idC);
+            fromSecond[0].Name.Should().Be(secondName);
+
+            var state = ctx.From<IMergeEntity>()
+                .Where(x => x.Id >= idA && x.Id <= idC)
+                .OrderBy(x => x.Id)
+                .Select(x => x.Name)
+                .ToList();
+            state.Should().Equal(firstName, secondName, secondName);
+
+            T346AssertSentinelUntouched(ctx, sentinelId, sentinelName);
+        }
+        finally
+        {
+            T346CleanupOwnedRows(ctx, idA, idB, idC, sentinelId);
+        }
+    }
+
+    /// <summary>
+    /// #346 matrix 3: three captures and three reads, all with the SAME closure name and three distinct
+    /// thresholds. Each read must see exactly the rows its own capture kept, with that capture's name.
+    /// </summary>
+    [Fact]
+    public void T346_ThreeCapturesThreeReads_DoNotCollide()
+    {
+        var ctx = _sut.DataProvider;
+        var firstName = "t346-param-one-" + Guid.NewGuid().ToString("N");
+        var secondName = "t346-param-two-" + Guid.NewGuid().ToString("N");
+        var thirdName = "t346-param-three-" + Guid.NewGuid().ToString("N");
+        var seedName = "t346-param-seed-" + Guid.NewGuid().ToString("N");
+        var sentinelName = "t346-sentinel-" + Guid.NewGuid().ToString("N");
+        var (idA, idB, idC, sentinelId) = T346SeedOwnedRows(ctx, seedName, sentinelName);
+
+        try
+        {
+            void CaptureWithin(IDataContext database, BatchBuilder batch, string variable, int value, string newName)
+            {
+                var min = value;
+                batch.OutputIntoTableVariable(
+                    database.CreateUpdateBuilder<IMergeEntity>()
+                        .Set(x => x.Name, newName)
+                        .Where(x => x.Id >= min && x.Id <= idC)
+                        .Returning(x => new T266CapturedRow { Id = x.Id, Name = x.Name }),
+                    variable,
+                    "id int, name nvarchar(100)");
+            }
+
+            void ReadWithin(BatchBuilder batch, string variable, int value)
+            {
+                var min = value;
+                batch.AddQuery(batch.FromOutput<T266CapturedRow>(variable)
+                    .Where(r => r.Id >= min && r.Id <= idC)
+                    .OrderBy(r => r.Id)
+                    .Select(r => new T266CapturedRow { Id = r.Id, Name = r.Name }));
+            }
+
+            var batch = ctx.CreateBatchBuilder();
+            CaptureWithin(ctx, batch, "@t", idA, firstName);
+            CaptureWithin(ctx, batch, "@u", idB, secondName);
+            CaptureWithin(ctx, batch, "@v", idC, thirdName);
+            ReadWithin(batch, "@t", idA);
+            ReadWithin(batch, "@u", idB);
+            ReadWithin(batch, "@v", idC);
+
+            var sql = batch.ToSql();
+            foreach (var prefix in new[] { "@b0_min", "@b1_min", "@b2_min", "@b3_min", "@b4_min", "@b5_min" })
+                sql.Should().Contain(prefix);
+
+            var result = batch.Execute();
+            result.ResultSetCount.Should().Be(3);
+
+            // @t holds the rows capture 1 renamed — all three, all with firstName.
+            var fromT = result.Read<T266CapturedRow>();
+            fromT.Select(r => r.Id).Should().Equal(idA, idB, idC);
+            fromT.Select(r => r.Name).Should().Equal(firstName, firstName, firstName);
+
+            // @u holds the rows capture 2 renamed — idB and idC, with secondName.
+            var fromU = result.Read<T266CapturedRow>();
+            fromU.Select(r => r.Id).Should().Equal(idB, idC);
+            fromU.Select(r => r.Name).Should().Equal(secondName, secondName);
+
+            // @v holds exactly one row: idC, with thirdName.
+            var fromV = result.Read<T266CapturedRow>();
+            fromV.Select(r => r.Id).Should().Equal(idC);
+            fromV.Select(r => r.Name).Should().Equal(thirdName);
+
+            T346AssertSentinelUntouched(ctx, sentinelId, sentinelName);
+        }
+        finally
+        {
+            T346CleanupOwnedRows(ctx, idA, idB, idC, sentinelId);
+        }
+    }
+
+    /// <summary>
+    /// #346 matrix 4: one capture with one captured value and one read whose predicate uses TWO distinct
+    /// captured values. Both read parameters must carry their own value and appear exactly once.
+    /// </summary>
+    [Fact]
+    public void T346_ReadWithTwoParameters_AndCaptureWithOne()
+    {
+        var ctx = _sut.DataProvider;
+        var firstName = "t346-param-one-" + Guid.NewGuid().ToString("N");
+        var seedName = "t346-param-seed-" + Guid.NewGuid().ToString("N");
+        var sentinelName = "t346-sentinel-" + Guid.NewGuid().ToString("N");
+        var (idA, idB, idC, sentinelId) = T346SeedOwnedRows(ctx, seedName, sentinelName);
+
+        try
+        {
+            var min = idA;
+            var lo = idB;
+            var hi = idC;
+
+            var batch = ctx.CreateBatchBuilder();
+            batch.OutputIntoTableVariable(
+                ctx.CreateUpdateBuilder<IMergeEntity>()
+                    .Set(x => x.Name, firstName)
+                    .Where(x => x.Id >= min && x.Id <= idC)
+                    .Returning(x => new T266CapturedRow { Id = x.Id, Name = x.Name }),
+                "@t",
+                "id int, name nvarchar(100)");
+            batch.AddQuery(batch.FromOutput<T266CapturedRow>("@t")
+                .Where(r => r.Id >= lo && r.Id <= hi)
+                .OrderBy(r => r.Id)
+                .Select(r => new T266CapturedRow { Id = r.Id, Name = r.Name }));
+
+            var sql = batch.ToSql();
+            foreach (var prefix in new[] { "@b0_min", "@b1_lo", "@b1_hi" })
+                sql.Should().Contain(prefix);
+
+            var plan = T346RenderPlan(ctx, batch);
+            plan.Statements.Should().HaveCount(2);
+            var readParameters = plan.Statements[1].Parameters;
+            readParameters.Count(p => p.Name == "b1_lo").Should().Be(1, "the read binds 'lo' once");
+            readParameters.Count(p => p.Name == "b1_hi").Should().Be(1, "the read binds 'hi' once");
+            T346BoundValue(plan.Statements[1], "b1_lo").Should().Be((long)idB);
+            T346BoundValue(plan.Statements[1], "b1_hi").Should().Be((long)idC);
+
+            var result = batch.Execute();
+            result.ResultSetCount.Should().Be(1);
+
+            var rows = result.Read<T266CapturedRow>();
+            rows.Select(r => r.Id).Should().Equal(idB, idC);
+            rows.Select(r => r.Name).Should().Equal(firstName, firstName);
+
+            T346AssertSentinelUntouched(ctx, sentinelId, sentinelName);
+        }
+        finally
+        {
+            T346CleanupOwnedRows(ctx, idA, idB, idC, sentinelId);
+        }
+    }
+
+    /// <summary>
+    /// #346 matrix 5: the reads run in the opposite order to their captures. The association must follow
+    /// each read's own value and table variable, not its position: result set 1 is <c>@u</c>'s two rows
+    /// (secondName), result set 2 is <c>@t</c>'s single row (firstName).
+    /// </summary>
+    [Fact]
+    public void T346_ReadsInReverseOrder_DoNotCollide()
+    {
+        var ctx = _sut.DataProvider;
+        var firstName = "t346-param-one-" + Guid.NewGuid().ToString("N");
+        var secondName = "t346-param-two-" + Guid.NewGuid().ToString("N");
+        var seedName = "t346-param-seed-" + Guid.NewGuid().ToString("N");
+        var sentinelName = "t346-sentinel-" + Guid.NewGuid().ToString("N");
+        var (idA, idB, idC, sentinelId) = T346SeedOwnedRows(ctx, seedName, sentinelName);
+
+        try
+        {
+            void CaptureWithin(IDataContext database, BatchBuilder batch, string variable, int value, string newName)
+            {
+                var min = value;
+                batch.OutputIntoTableVariable(
+                    database.CreateUpdateBuilder<IMergeEntity>()
+                        .Set(x => x.Name, newName)
+                        .Where(x => x.Id >= min && x.Id <= idC)
+                        .Returning(x => new T266CapturedRow { Id = x.Id, Name = x.Name }),
+                    variable,
+                    "id int, name nvarchar(100)");
+            }
+
+            void ReadWithin(BatchBuilder batch, string variable, int value)
+            {
+                var min = value;
+                batch.AddQuery(batch.FromOutput<T266CapturedRow>(variable)
+                    .Where(r => r.Id >= min && r.Id <= idC)
+                    .OrderBy(r => r.Id)
+                    .Select(r => new T266CapturedRow { Id = r.Id, Name = r.Name }));
+            }
+
+            var batch = ctx.CreateBatchBuilder();
+            CaptureWithin(ctx, batch, "@t", idA, firstName);
+            CaptureWithin(ctx, batch, "@u", idB, secondName);
+            ReadWithin(batch, "@u", idB);
+            ReadWithin(batch, "@t", idC);
+
+            var sql = batch.ToSql();
+            foreach (var prefix in new[] { "@b0_min", "@b1_min", "@b2_min", "@b3_min" })
+                sql.Should().Contain(prefix);
+
+            var result = batch.Execute();
+            result.ResultSetCount.Should().Be(2);
+
+            // Result set 1 is the read of @u with its own idB: two rows captured with secondName.
+            var fromU = result.Read<T266CapturedRow>();
+            fromU.Select(r => r.Id).Should().Equal(idB, idC);
+            fromU.Select(r => r.Name).Should().Equal(secondName, secondName);
+
+            // Result set 2 is the read of @t with idC: exactly the last window row, captured by capture 1.
+            var fromT = result.Read<T266CapturedRow>();
+            fromT.Select(r => r.Id).Should().Equal(idC);
+            fromT.Select(r => r.Name).Should().Equal(firstName);
+
+            T346AssertSentinelUntouched(ctx, sentinelId, sentinelName);
+        }
+        finally
+        {
+            T346CleanupOwnedRows(ctx, idA, idB, idC, sentinelId);
+        }
+    }
+
+    /// <summary>
+    /// #346 matrix 6: one capture read twice with two different thresholds. The two reads of the same
+    /// table variable must keep their own bindings (3 rows at idA, 2 rows at idB).
+    /// </summary>
+    [Fact]
+    public void T346_OneCaptureTwoReads_DoNotCollide()
+    {
+        var ctx = _sut.DataProvider;
+        var firstName = "t346-param-one-" + Guid.NewGuid().ToString("N");
+        var seedName = "t346-param-seed-" + Guid.NewGuid().ToString("N");
+        var sentinelName = "t346-sentinel-" + Guid.NewGuid().ToString("N");
+        var (idA, idB, idC, sentinelId) = T346SeedOwnedRows(ctx, seedName, sentinelName);
+
+        try
+        {
+            void CaptureWithin(IDataContext database, BatchBuilder batch, string variable, int value, string newName)
+            {
+                var min = value;
+                batch.OutputIntoTableVariable(
+                    database.CreateUpdateBuilder<IMergeEntity>()
+                        .Set(x => x.Name, newName)
+                        .Where(x => x.Id >= min && x.Id <= idC)
+                        .Returning(x => new T266CapturedRow { Id = x.Id, Name = x.Name }),
+                    variable,
+                    "id int, name nvarchar(100)");
+            }
+
+            var batch = ctx.CreateBatchBuilder();
+            CaptureWithin(ctx, batch, "@t", idA, firstName);
+
+            var firstMin = idA;
+            var secondMin = idB;
+            batch.AddQuery(batch.FromOutput<T266CapturedRow>("@t")
+                .Where(r => r.Id >= firstMin && r.Id <= idC)
+                .OrderBy(r => r.Id)
+                .Select(r => new T266CapturedRow { Id = r.Id, Name = r.Name }));
+            batch.AddQuery(batch.FromOutput<T266CapturedRow>("@t")
+                .Where(r => r.Id >= secondMin && r.Id <= idC)
+                .OrderBy(r => r.Id)
+                .Select(r => new T266CapturedRow { Id = r.Id, Name = r.Name }));
+
+            var sql = batch.ToSql();
+            foreach (var prefix in new[] { "@b0_min", "@b1_firstMin", "@b2_secondMin" })
+                sql.Should().Contain(prefix);
+
+            var result = batch.Execute();
+            result.ResultSetCount.Should().Be(2);
+
+            // Read 1 at idA sees all three captured rows; read 2 at idB sees the last two.
+            var fromFirst = result.Read<T266CapturedRow>();
+            fromFirst.Select(r => r.Id).Should().Equal(idA, idB, idC);
+            fromFirst.Select(r => r.Name).Should().Equal(firstName, firstName, firstName);
+
+            var fromSecond = result.Read<T266CapturedRow>();
+            fromSecond.Select(r => r.Id).Should().Equal(idB, idC);
+            fromSecond.Select(r => r.Name).Should().Equal(firstName, firstName);
+
+            T346AssertSentinelUntouched(ctx, sentinelId, sentinelName);
+        }
+        finally
+        {
+            T346CleanupOwnedRows(ctx, idA, idB, idC, sentinelId);
+        }
+    }
+
+    /// <summary>
+    /// #346 matrix 7: two captures and ONE read. The read must see <c>@t</c>'s rows through its own idC
+    /// binding, and both capture mutations must land on their own ranges in the final entity state.
+    /// </summary>
+    [Fact]
+    public void T346_TwoCapturesOneRead_DoNotCollide()
+    {
+        var ctx = _sut.DataProvider;
+        var firstName = "t346-param-one-" + Guid.NewGuid().ToString("N");
+        var secondName = "t346-param-two-" + Guid.NewGuid().ToString("N");
+        var seedName = "t346-param-seed-" + Guid.NewGuid().ToString("N");
+        var sentinelName = "t346-sentinel-" + Guid.NewGuid().ToString("N");
+        var (idA, idB, idC, sentinelId) = T346SeedOwnedRows(ctx, seedName, sentinelName);
+
+        try
+        {
+            void CaptureWithin(IDataContext database, BatchBuilder batch, string variable, int value, string newName)
+            {
+                var min = value;
+                batch.OutputIntoTableVariable(
+                    database.CreateUpdateBuilder<IMergeEntity>()
+                        .Set(x => x.Name, newName)
+                        .Where(x => x.Id >= min && x.Id <= idC)
+                        .Returning(x => new T266CapturedRow { Id = x.Id, Name = x.Name }),
+                    variable,
+                    "id int, name nvarchar(100)");
+            }
+
+            void ReadWithin(BatchBuilder batch, string variable, int value)
+            {
+                var min = value;
+                batch.AddQuery(batch.FromOutput<T266CapturedRow>(variable)
+                    .Where(r => r.Id >= min && r.Id <= idC)
+                    .OrderBy(r => r.Id)
+                    .Select(r => new T266CapturedRow { Id = r.Id, Name = r.Name }));
+            }
+
+            var batch = ctx.CreateBatchBuilder();
+            CaptureWithin(ctx, batch, "@t", idA, firstName);
+            CaptureWithin(ctx, batch, "@u", idB, secondName);
+            ReadWithin(batch, "@t", idC);
+
+            var sql = batch.ToSql();
+            foreach (var prefix in new[] { "@b0_min", "@b1_min", "@b2_min" })
+                sql.Should().Contain(prefix);
+
+            var result = batch.Execute();
+            result.ResultSetCount.Should().Be(1);
+
+            var rows = result.Read<T266CapturedRow>();
+            rows.Select(r => r.Id).Should().Equal(idC);
+            rows.Select(r => r.Name).Should().Equal(firstName);
+
+            var state = ctx.From<IMergeEntity>()
+                .Where(x => x.Id >= idA && x.Id <= idC)
+                .OrderBy(x => x.Id)
+                .Select(x => x.Name)
+                .ToList();
+            state.Should().Equal(firstName, secondName, secondName);
+
+            T346AssertSentinelUntouched(ctx, sentinelId, sentinelName);
+        }
+        finally
+        {
+            T346CleanupOwnedRows(ctx, idA, idB, idC, sentinelId);
         }
     }
 
