@@ -119,9 +119,11 @@ cast error on first execution instead of at mapping-build time.
 
 `[JsonColumn]` stores any serializable CLR object as JSON. The **storage** is chosen by the dialect:
 
-- `JsonColumnStorage.Auto` (default) uses the provider's native JSON type where it has one
-  (PostgreSQL `jsonb`, ClickHouse object-rooted `JSON`) and a text column otherwise;
-- `JsonColumnStorage.Native` forces the native type (PostgreSQL `jsonb` or ClickHouse `JSON`);
+- `JsonColumnStorage.Auto` (default) uses the provider's native JSON representation where the provider
+  has one (PostgreSQL `jsonb`, ClickHouse object-rooted `JSON`) and a text column otherwise;
+- `JsonColumnStorage.Native` requires that native **representation** — not merely a server-side JSON
+  column — and throws a dialect-named `NotSupportedException` where the provider has none (MySQL,
+  MariaDB, SQL Server, SQLite);
 - `JsonColumnStorage.Text` forces a text column.
 
 The native provider representation is `JsonElement` on PostgreSQL and `JsonObject` on ClickHouse.
@@ -129,6 +131,14 @@ ClickHouse's native `JSON` is object-rooted, so a model that does not serialize 
 `NotSupportedException` — use `Text` for array/scalar roots. The legacy ClickHouse `Object('json')`
 alias is not supported by this integration; see
 [JSON support](../guide/16-json.md#map-a-clr-object-to-a-native-json-column).
+
+**A JSON column type is not a native representation.** MySQL 8 has a real `json` column and MariaDB's
+`JSON` is a `LONGTEXT` alias with a `json_valid()` CHECK, but `MySqlConnector` cannot bind
+`JsonElement`/`JsonDocument`/`JsonNode` parameters (`MySqlDbType.JSON` accepts strings only) and always
+reads a `json` column back as `string`. Both engines are therefore supported through the **text**
+storage — `Auto` and `Text` both produce the JSON text the server parses — and `Native` is refused
+before any command runs. SQL Server keeps JSON in `nvarchar` and has no native type at all, so the same
+refusal applies.
 
 ```csharp
 public sealed class Address
@@ -256,7 +266,7 @@ must be readable and bindable.
 |---|---|---|---|
 | PostgreSQL | `jsonb` (read/written as `JsonElement`) | `text` | `text` |
 | SQL Server | — (`nvarchar(max)`) | `nvarchar(max)` | `nvarchar` |
-| MySQL / MariaDB | — (`longtext`) | `longtext` | `longtext` |
+| MySQL / MariaDB | — (real `json` column on MySQL 8 / `JSON` = `LONGTEXT` + `json_valid()` on MariaDB, both reached through text) | `longtext` | `longtext` |
 | SQLite | — (`TEXT`) | `TEXT` | `TEXT` |
 | ClickHouse | `JSON` (read/written as `JsonObject`, object-rooted) | `String` | `String` |
 | In-memory | CLR value | CLR value | CLR value |

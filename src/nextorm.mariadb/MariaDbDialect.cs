@@ -64,6 +64,19 @@ public sealed class MariaDbDialect : MySqlDialect
     public override string MakeRegexReplace(string value, string pattern, string replacement, bool ignoreCase) =>
         $"regexp_replace({value}, {QuoteStringLiteral((ignoreCase ? "(?i)" : "(?-i)") + pattern, escapeBackslash: true)}, {QuoteStringLiteral(replacement, escapeBackslash: true)})";
 
+    /// <summary>
+    /// MariaDB has <b>no</b> native JSON storage type, so this is overridden to stay <c>false</c> on
+    /// purpose. Its <c>JSON</c> type is an alias for <c>LONGTEXT CHARACTER SET utf8mb4 COLLATE
+    /// utf8mb4_bin</c> plus a column-level <c>CHECK (json_valid(col))</c>;
+    /// <c>information_schema.COLUMNS.DATA_TYPE</c> reports <c>longtext</c> and the server stores the
+    /// caller's text verbatim (no normalisation, no binary document type). Exposing that as native
+    /// storage would misrepresent the storage and change the binding contract, so <c>Auto</c> stays text,
+    /// an explicit <see cref="JsonColumnStorage.Text"/> stays text, and an explicit
+    /// <see cref="JsonColumnStorage.Native"/> is refused with the named
+    /// <see cref="NotSupportedException"/> before any SQL runs.
+    /// </summary>
+    public override bool SupportsJson => false;
+
     /// <summary>MariaDB has no native bulk path enabled: <c>MySqlBulkCopy</c> requires a server-side
     /// <c>local_infile</c> setting that is commonly disabled, so the portable
     /// <c>INSERT ... VALUES</c> path is used instead (it also returns keys on request).
