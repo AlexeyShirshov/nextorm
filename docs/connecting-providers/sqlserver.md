@@ -305,6 +305,31 @@ The returned stream owns the reader and the per-call command until it is dispose
 
 SQL Server also supports the multi-column `ToDataReader`/`ToDataReaderAsync` terminal: it hands the same sequential-access command over as a caller-owned `DbDataReader`, so the caller can read every column and row (or several LOB columns in order) without materialising the result. SQLite supports it too, but via a buffered, locator-free reader (no `rowid`, no `SequentialAccess`, so no chunked LOB); MySQL/MariaDB, ClickHouse and the in-memory provider have no sequential-access support and reject it.
 
+## Bulk insert
+
+`CreateBulkInsertBuilder` writes through the native `SqlBulkCopy` path when `Mode` is `Auto` (the default) and
+every requested option is compatible; `Native` refuses by name instead of falling back, and `Portable` writes
+`INSERT ... VALUES` (the only path for `Returning*`).
+
+- `MaxBatchSize` maps to `SqlBulkCopy.BatchSize`; unset stays the driver default (`0`, one batch).
+- `KeepIdentity` maps to `SqlBulkCopyOptions.KeepIdentity`; the portable statement is wrapped with
+  `SET IDENTITY_INSERT ... ON/OFF` instead.
+- `CheckConstraints`/`TableLock`/`KeepNulls`/`FireTriggers` map to the matching `SqlBulkCopyOptions` flags;
+  `false` is honoured by not requesting the flag, and `KeepNulls=false` is accepted only for a
+  default-equivalent shape.
+- The typed group carries the internal transaction:
+  `SqlServer(new SqlServerBulkInsertOptions { UseInternalTransaction = true })` sets
+  `SqlBulkCopyOptions.UseInternalTransaction` for the driver batch. It cannot be combined with an external
+  context transaction, covers only the current driver batch when several are used, and is refused on the
+  portable path.
+- `Timeout` is one whole-invocation budget: the remaining time becomes `BulkCopyTimeout` (minimum 1 s), and an
+  expired budget surfaces as `TimeoutException`; the caller's cancellation always wins.
+- `DatabaseName` renders as part of the multipart name; `ServerName` is refused (a bulk insert never reroutes
+  to another server).
+
+The set is buffered in a `DataTable` before the copy, because `SqlBulkCopy` needs column type metadata; a chunk
+limit splits driver batches but not that buffer. See [Bulk insert](../guide/22-bulk-insert.md).
+
 ## Provider differences
 
 | Aspect | SQL Server |
@@ -334,7 +359,7 @@ SQL Server also supports the multi-column `ToDataReader`/`ToDataReaderAsync` ter
 | Regular expressions | `regexp_like(value, pattern, 'c'/'i')` / `regexp_replace(value, pattern, replacement, 1, 0, 'c'/'i')` (SQL Server 2025+; `regexp_like` additionally needs database compatibility level 170) |
 | Locking table hints | `with (hint, ...)` after the source, after its alias when aliased ([`WithTableHint`](xref:NextORM.Core.FromOptions.WithTableHint(System.String[]))) |
 | Row locking | `ForUpdate`/`ForShare` render `with (updlock)`/`with (holdlock)` on **every** physical `FROM`/`JOIN` source (behavior change: previously the primary source only); [`FromOptions.ForUpdate`](xref:NextORM.Core.FromOptions.ForUpdate)/[`JoinOptions.ForUpdate`](xref:NextORM.Core.JoinOptions.ForUpdate) target one source ([`Lock`](xref:NextORM.Core.ISqlDialect.Lock), [`ILockRenderer.UsesTableHints`](xref:NextORM.Core.ILockRenderer.UsesTableHints)); a [`LockWaitMode`](xref:NextORM.Core.LockWaitMode) adds `nowait`/`readpast` (`with (updlock, nowait)`/`with (updlock, readpast)`) |
-| Native bulk copy | `SqlBulkCopy`; [`BulkInsertOptions`](xref:NextORM.Core.BulkInsertOptions) `CheckConstraints`/`TableLock`/`KeepNulls`/`FireTriggers` map to `SqlBulkCopyOptions` (see [Bulk insert](../guide/22-bulk-insert.md#sql-server-bulk-copy-options)) |
+| Native bulk copy | `SqlBulkCopy`; [`BulkInsertOptions`](xref:NextORM.Core.BulkInsertOptions) `CheckConstraints`/`TableLock`/`KeepNulls`/`FireTriggers` map to `SqlBulkCopyOptions`, and [`SqlServerBulkInsertOptions.UseInternalTransaction`](xref:NextORM.Core.SqlServerBulkInsertOptions.UseInternalTransaction) sets the internal-transaction flag (see [Bulk insert](../guide/22-bulk-insert.md#sql-server-bulk-copy-options)) |
 | Session/info functions | `current_user`, `session_user`, `schema_name()`, `db_name()`, `@@version` |
 | T-SQL clock/offset/`*FROMPARTS` | `sysdatetime` / `sysdatetimeoffset` / `sysutcdatetime` / `switchoffset` / `todatetimeoffset` / `timefromparts` / `smalldatetimefromparts` / `datetimefromparts` / `datetime2fromparts` / `datetimeoffsetfromparts` (per-name gated) |
 | T-SQL binary/checksum/other | `checksum` / `binary_checksum` / `compress` / `decompress` / `rand` / `stuff` / `str` / `isdate` / `isnumeric` / `formatmessage` (per-name gated) |

@@ -103,6 +103,28 @@ select id
  from simple_entity
 ```
 
+## Bulk insert
+
+MariaDB shares the MySQL implementation, so the native path is `MySqlBulkCopy` (a `LOAD DATA LOCAL INFILE`
+load) and it needs `AllowLoadLocalInfile=true` on the connection string plus the server variable
+`@@GLOBAL.local_infile=1`, read with a read-only preflight. nextorm never enables either one; without them
+`Auto` falls back only when the portable path honours the whole request and `Native` refuses by name.
+
+- Identity and duplicates follow MySQL: `KeepIdentity` writes the explicit identity column under a scoped
+  `NO_AUTO_VALUE_ON_ZERO` guard, and `IgnoreDuplicates` is `ConflictOption.Ignore` on the native load or
+  `INSERT IGNORE` on the portable statement.
+- `CheckConstraints=false` is honoured through scoped session controls, snapshotted and restored on the same
+  session even when the load fails; `TableLock` and `FireTriggers` stay refused.
+- `KeepNulls=false` needs a default-equivalent shape.
+- **`Returning*` is refused by name on the bulk path.** MariaDB's version-gated `RETURNING` (explicitly
+  configured 13.0+) covers a single-table `UPDATE`, not `INSERT`; the `≥ 13` bulk arm is deferred and
+  untested (no MariaDB server ≥ 13 is available in the certified matrix, `mariadb:11.4` is the newest). Read
+  keys with `CreateInsertBuilder`.
+- `DatabaseName` renders `db.table`; `ServerName` is refused (no rerouting). `Timeout` is one
+  whole-invocation budget; an expired budget is a `TimeoutException` and cancellation wins.
+
+See [Bulk insert](../guide/22-bulk-insert.md).
+
 ## Provider differences
 
 MariaDB differs from [MySQL](mysql.md) in the set-operation capability, the window percentiles, the version-gated `UPDATE ... RETURNING` and the arbitrary-value aggregate:

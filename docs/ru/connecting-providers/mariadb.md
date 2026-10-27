@@ -104,6 +104,29 @@ select id
  from simple_entity
 ```
 
+## Массовая вставка
+
+MariaDB использует общую реализацию MySQL, поэтому нативный путь — `MySqlBulkCopy` (загрузка через
+`LOAD DATA LOCAL INFILE`), и ему нужны `AllowLoadLocalInfile=true` в строке подключения и серверная
+переменная `@@GLOBAL.local_infile=1`, читаемая read-only preflight-запросом. nextorm не включает ни одно из
+них; без них `Auto` откатывается, только если портируемый путь выполняет весь запрос, а `Native` отклоняет по
+имени.
+
+- Identity и дубликаты — как в MySQL: `KeepIdentity` пишет явную identity-колонку под scoped-guard
+  `NO_AUTO_VALUE_ON_ZERO`, а `IgnoreDuplicates` — это `ConflictOption.Ignore` на нативной загрузке или
+  `INSERT IGNORE` в портируемом утверждении.
+- `CheckConstraints=false` выполняется через scoped-контроль сессии, который снимается и восстанавливается на
+  той же сессии даже при ошибке загрузки; `TableLock` и `FireTriggers` остаются отклонёнными.
+- `KeepNulls=false` требует default-equivalent формы.
+- **`Returning*` на bulk-пути отклоняется по имени.** Версионно-зависимый `RETURNING` MariaDB (явно
+  настроенный 13.0+) относится к однотабличному `UPDATE`, а не к `INSERT`; ветка `≥ 13` для bulk отложена и
+  не тестировалась (в сертифицированной матрице нет сервера MariaDB ≥ 13, `mariadb:11.4` — самый новый).
+  Ключи читайте через `CreateInsertBuilder`.
+- `DatabaseName` рендерит `db.table`; `ServerName` отклоняется (перенаправления нет). `Timeout` — один бюджет
+  на весь вызов; истёкший бюджет даёт `TimeoutException`, а отмена побеждает.
+
+См. [Массовая вставка](../guide/22-bulk-insert.md).
+
 ## Различия провайдера
 
 MariaDB отличается от [MySQL](mysql.md) возможностью операций над множествами, оконными квантилями, версионным гейтом `UPDATE ... RETURNING` и агрегатом произвольного значения:

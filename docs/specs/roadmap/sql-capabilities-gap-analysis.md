@@ -42,7 +42,7 @@ in [`sql-function-coverage-gap.md`](sql-function-coverage-gap.md).
 > | 25 | Extended scalar + session/info functions (`make_interval`, `justify_*`, `to_*`, `timezone`, `gen_random_uuid`/`uuidv7`, `pg_typeof`; `current_user`/`session_user`/`current_schema`/`current_database`/`version`) | Extended scalar + `pg_typeof`: **<span style="color:green">Done</span> on PostgreSQL** (`SupportsExtendedScalarFunctions`). Session/info: **<span style="color:green">Done</span>** cross-provider — all five on PostgreSQL/SQL Server/MySQL/MariaDB, `current_user`/`current_database`/`version` on ClickHouse and `version` on SQLite (`SessionInfoFunctions` + per-name `SessionInfoFunctions`). Session/server identity ([#219](https://github.com/AlexeyShirshov/nextorm/issues/219)): **<span style="color:green">Done</span>** — SQL Server `@@SERVERNAME`/`host_id()`/`host_name()`/`app_name()`/`suser_name()`/`original_login()` (gated by `ISqlServerFunctions.SupportsSessionIdentity`), PostgreSQL `pg_backend_pid()`/`inet_server_addr()`/`inet_server_port()`/`inet_client_addr()`/`inet_client_port()` (PG `inet` returned as text, SQL NULL on unix sockets), shared `connection_id()` (unsigned, MySQL/MariaDB and ClickHouse) and MySQL/MariaDB `user()`, ClickHouse `host_name()`/`tcp_port()`; every unsupported function/provider throws `NotSupportedException` at translation, and `host`/`app` values are client-supplied and untrusted. UUID generators: **<span style="color:green">Done</span>** cross-provider — `gen_random_uuid`/`uuidv7` on PostgreSQL/MariaDB/ClickHouse, `gen_random_uuid` (`newid()`) also on SQL Server, gated off on MySQL (v1 only) and SQLite (`UuidGenerators` + per-name `UuidGenerators`) |
 > | 26 | Correlated scalar subqueries (and correlated `EXISTS`/`IN`/`ANY`/`ALL` in `SELECT`/`WHERE`/`ORDER BY`/`HAVING`) | **<span style="color:green">Done</span> on SQL providers** (any nesting depth; join-projection outer references included) and on the in-memory provider for depth-one scalar/aggregate/`EXISTS`/`IN` (deeper forms throw `NotSupportedException`) |
 > | 27 | Materialize a query into a table (CTAS: `ToTable`/`ToTempTable`) | **<span style="color:green">Done</span>** on PostgreSQL, SQLite, MySQL, MariaDB, SQL Server (via `SELECT ... INTO`) and ClickHouse (persistent, `ENGINE = MergeTree`); the temporary `ToTempTable` form is on PostgreSQL/SQLite/MySQL/MariaDB only |
-> | 28 | Bulk insert / bulk copy (native `COPY`/`SqlBulkCopy` + chunked `VALUES`; `BulkInsertOptions`/`BulkInsertOptionsBuilder`) | **<span style="color:green">Done</span>** |
+> | 28 | Bulk insert / bulk copy (`BulkInsertMode` `Auto`/`Native`/`Portable`, chunked `VALUES`; `BulkInsertOptions`/`BulkInsertOptionsBuilder`) | **<span style="color:green">Done</span>** — native `COPY` (PostgreSQL), `SqlBulkCopy` (SQL Server), `MySqlBulkCopy`/`LOAD DATA LOCAL INFILE` (MySQL, MariaDB) and `InsertBinaryAsync` (ClickHouse), with the portable `INSERT ... VALUES` path everywhere; SQLite is portable-only (`Mode.Native` refused) |
 > | 29 | Row values (`System.Tuple`/`ValueTuple`) cross-provider (`ROW`/`tupleElement`, comparisons) | **<span style="color:green">Done</span>** on PostgreSQL and ClickHouse; **flat `(a, b)` constructor on MySQL/MariaDB/SQLite** as a direct `==`/`!=` predicate operand (inline `.ItemN` folds; projection/ordering/grouping/function arguments and server-side `.ItemN` rejected). Raw row materialisation shipped on PostgreSQL ([#194](https://github.com/AlexeyShirshov/nextorm/issues/194)); tuple `IN`/`Contains` ([#193](https://github.com/AlexeyShirshov/nextorm/issues/193)) over a flat value list (arity 1..7) shipped on PostgreSQL/ClickHouse/MySQL/MariaDB/SQLite, while SQL Server rejects it; a tuple-typed `QueryCommand` RHS and `Rest`/nested tuples remain deferred |
 > | 30 | EF Core integration (`nextorm.entityframeworkcore`): shared connection/transaction + `IModel` mapping | **P1+P2+P3 shipped; P4 <span style="color:orange">out of scope</span>** ([EF Core integration](../../advanced/integration-efcore.md)) — `CreateNextOrmContext`/`UseNextOrm` reuse the EF connection/current transaction and map entities from `IModel`; `ToNextOrm` translates a bounded `IQueryable` subset; the opt-in DML bridge (`SaveChanges`) is explicitly out of scope; shared-transaction tests on PostgreSQL/SQL Server/MySQL deferred to [#106](https://github.com/AlexeyShirshov/nextorm/issues/106) |
 > | 31 | Transactions (`ITransactionManager`): nextorm-owned and enlisted (EF Core/Dapper/ADO.NET) transaction | **<span style="color:green">Done</span>** on SQLite/PostgreSQL/SQL Server/MySQL/MariaDB; ClickHouse and in-memory reject |
@@ -702,15 +702,28 @@ to the ledger on 2026-09-29; item 49 (eager loading) moved on 2026-10-17; item 5
     constructors) is gated by `ISqlDialect.SupportsRanges`; the in-memory provider evaluates the
     predicates with PostgreSQL semantics. Docs:
     [PostgreSQL-specific SQL](../../guide/provider-specific-sql/postgresql.md#range-types) (EN+RU).
-52. **SQL Server bulk-copy flags — <span style="color:green">Done</span> (`1.0-b.1`).** `BulkInsertOptions`/`BulkInsertOptionsBuilder` gained
-    `CheckConstraints`/`TableLock`/`KeepNulls`/`FireTriggers` (`bool?`, off by default), mapped to
-    `SqlBulkCopyOptions` on the SQL Server native `SqlBulkCopy` path; the PostgreSQL `COPY` path and the
-    portable `INSERT ... VALUES` path (including SQL Server `Returning*`/`KeepIdentity`) reject a requested
-    flag with `NotSupportedException` instead of silently ignoring it. ClickHouse
-    `MaxDegreeOfParallelism`/`WithoutSession` are deferred (`ClickHouseBulkCopy` is obsolete, the driver
-    exposes no `WithoutSession`, and the native path is not wired) and `UseInternalTransaction` is never set
-    (nextorm opens no implicit transaction). Docs:
-    [Bulk insert](../../guide/22-bulk-insert.md#sql-server-bulk-copy-options).
+52. **Bulk insert: modes, typed option groups, destination parts, whole-invocation timeout — <span style="color:green">Done</span> (`1.0.9-rc4`, #305).** The seven residual linq2db `BulkCopyOptions` items are closed.
+    `BulkCopyType` became `BulkInsertMode { Auto, Native, Portable }` (`Auto` by default; `Native` never falls
+    back; `Portable` never becomes native implicitly). `UseInternalTransaction` is the typed
+    `SqlServerBulkInsertOptions.UseInternalTransaction` group member, mapped to `SqlBulkCopyOptions` for the
+    driver batch only and refused on other paths and with an external transaction.
+    `DatabaseName` is implemented and dialect-scoped (PostgreSQL: the current database only); `ServerName` is a
+    named refusal everywhere — a bulk insert never reroutes to another server. The schema-only override is
+    `SchemaName`/`Schema(...)`. `TableOptions` became `BulkInsertTargetKind { Regular, LocalTemporary }` over
+    the existing temp mechanism; DDL flags remain out of scope. `BulkCopyTimeout` became one monotonic
+    `TimeSpan? Timeout` for the whole invocation on every path (`TimeoutSeconds`/`Timeout(int)` removed without
+    shims; `≤0` is an argument error, a deadline is a `TimeoutException`, caller cancellation wins), which also
+    removes the earlier PostgreSQL timeout restriction. ClickHouse `MaxDegreeOfParallelism`/`WithoutSession`
+    are implemented through the driver's `InsertBinaryAsync` as `ClickHouseBulkInsertOptions`
+    (`MaxDegreeOfParallelism`/`UseSession`) — note that `ClickHouseBulkCopy` in `ClickHouse.Driver` 1.4.0 is
+    **not** obsolete (only its `InitAsync` is), so the class was never the blocker. The bulk-copy flags keep
+    their semantic matrix: `TableLock`/`FireTriggers` are native-SQL-Server-only, `CheckConstraints=false` is
+    scoped on SQL Server/MariaDB/SQLite, `KeepNulls=false` needs a default-equivalent shape, and every other
+    request is a named refusal. One arm stays deferred with an explicit trigger: MariaDB bulk `Returning*` is a
+    named refusal today because no certified server is ≥ 13 (`mariadb:11.4` is the newest), so
+    `MariaDbDialect.SupportsReturning` must be re-evaluated (and a live oracle added) only when such a server
+    exists — the `≥ 13` parity is not claimed. Docs:
+    [Bulk insert](../../guide/22-bulk-insert.md#sql-server-bulk-copy-options) (EN+RU).
 
 53. **Query tag (`WithTag`) — <span style="color:green">shipped</span>.** `EntityBuilder<T>.WithTag(string?)` and
     `QueryCommand<T>.WithTag(string?)` render a free-form `/* tag */` block comment immediately after

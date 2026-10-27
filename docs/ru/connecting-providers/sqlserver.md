@@ -314,6 +314,31 @@ using var reader = ctx.From<Document>()
 
 SQL Server также поддерживает многоколоночный терминал `ToDataReader`/`ToDataReaderAsync`: он отдаёт ту же sequential-access команду как принадлежащий вызывающему `DbDataReader`, поэтому вызывающий может прочитать все колонки и строки (или несколько LOB-колонок по порядку), не материализуя результат. SQLite тоже его поддерживает, но через буферизованный reader без локатора (без `rowid`, без `SequentialAccess`, то есть без чанкового LOB); MySQL/MariaDB, ClickHouse и провайдер in-memory не имеют поддержки sequential access и отклоняют его.
 
+## Массовая вставка
+
+`CreateBulkInsertBuilder` пишет нативным путём `SqlBulkCopy`, когда `Mode` — `Auto` (по умолчанию) и все
+запрошенные опции совместимы; `Native` отклоняет по имени вместо откатa, а `Portable` пишет
+`INSERT ... VALUES` (единственный путь для `Returning*`).
+
+- `MaxBatchSize` отображается в `SqlBulkCopy.BatchSize`; незаданное значение остаётся дефолтом драйвера
+  (`0`, один батч).
+- `KeepIdentity` отображается в `SqlBulkCopyOptions.KeepIdentity`; портируемое утверждение вместо этого
+  оборачивается в `SET IDENTITY_INSERT ... ON/OFF`.
+- `CheckConstraints`/`TableLock`/`KeepNulls`/`FireTriggers` отображаются в соответствующие флаги
+  `SqlBulkCopyOptions`; `false` учитывается отсутствием запроса флага, а `KeepNulls=false` принимается
+  только для default-equivalent формы.
+- Типизированная группа задаёт внутреннюю транзакцию:
+  `SqlServer(new SqlServerBulkInsertOptions { UseInternalTransaction = true })` выставляет
+  `SqlBulkCopyOptions.UseInternalTransaction` для батча драйвера. Комбинация с внешней транзакцией контекста
+  недопустима, при нескольких батчах покрыт только текущий, а на портируемом пути запрос отклоняется.
+- `Timeout` — один бюджет на весь вызов: оставшееся время становится `BulkCopyTimeout` (минимум 1 с), а
+  истёкший бюджет даёт `TimeoutException`; отмена вызывающего всегда побеждает.
+- `DatabaseName` рендерится как часть многочастного имени; `ServerName` отклоняется (bulk-вставка никогда не
+  перенаправляется на другой сервер).
+
+Набор буферизуется в `DataTable` до копирования, потому что `SqlBulkCopy` нужны метаданные типов колонок;
+лимит чанка делит батчи драйвера, но не этот буфер. См. [Массовая вставка](../guide/22-bulk-insert.md).
+
 ## Различия провайдеров
 
 | Аспект | SQL Server |
@@ -349,7 +374,7 @@ SQL Server также поддерживает многоколоночный т
 | Регулярные выражения | `regexp_like(value, pattern, 'c'/'i')` / `regexp_replace(value, pattern, replacement, 1, 0, 'c'/'i')` (SQL Server 2025+; для `regexp_like` дополнительно нужен уровень совместимости БД 170) |
 | Блокирующие табличные хинты | `with (hint, ...)` после источника, после его псевдонима, если он есть ([`WithTableHint`](xref:NextORM.Core.FromOptions.WithTableHint(System.String[]))) |
 | Блокировка строк | `ForUpdate`/`ForShare` рендерят `with (updlock)`/`with (holdlock)` на **каждом** физическом источнике `FROM`/`JOIN` (изменение поведения: раньше — только основной источник); [`FromOptions.ForUpdate`](xref:NextORM.Core.FromOptions.ForUpdate)/[`JoinOptions.ForUpdate`](xref:NextORM.Core.JoinOptions.ForUpdate) нацелены на один источник ([`Lock`](xref:NextORM.Core.ISqlDialect.Lock), [`ILockRenderer.UsesTableHints`](xref:NextORM.Core.ILockRenderer.UsesTableHints)); [`LockWaitMode`](xref:NextORM.Core.LockWaitMode) добавляет `nowait`/`readpast` (`with (updlock, nowait)`/`with (updlock, readpast)`) |
-| Нативный bulk copy | `SqlBulkCopy`; [`BulkInsertOptions`](xref:NextORM.Core.BulkInsertOptions) `CheckConstraints`/`TableLock`/`KeepNulls`/`FireTriggers` отображаются в `SqlBulkCopyOptions` (см. [Массовая вставка](../guide/22-bulk-insert.md#опции-bulk-copy-в-sql-server)) |
+| Нативный bulk copy | `SqlBulkCopy`; [`BulkInsertOptions`](xref:NextORM.Core.BulkInsertOptions) `CheckConstraints`/`TableLock`/`KeepNulls`/`FireTriggers` отображаются в `SqlBulkCopyOptions`, а [`SqlServerBulkInsertOptions.UseInternalTransaction`](xref:NextORM.Core.SqlServerBulkInsertOptions.UseInternalTransaction) выставляет флаг внутренней транзакции (см. [Массовая вставка](../guide/22-bulk-insert.md#опции-bulk-copy-в-sql-server)) |
 | JSON-вывод | весь набор одним JSON-документом, терминальные `for json path` / `for json auto` ([`ForJson`](xref:NextORM.Core.QueryCommand`1.ForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean,System.Object[]))) |
 | XML-вывод | весь набор одним XML-документом, терминальные `for xml raw/auto/explicit/path` ([`ForXml`](xref:NextORM.Core.QueryCommand`1.ForXml(NextORM.Core.ForXmlMode,System.String,System.String,System.Boolean,System.Object[]))) |
 | Методы типа XML | `xml.value('xpath', 'type')` / `xml.query('xpath')` / `xml.exist('xpath')` / `xml.nodes('xpath') as [alias]([value])` ([`XmlFunctions`](xref:NextORM.Core.ISqlDialect.XmlFunctions)) |

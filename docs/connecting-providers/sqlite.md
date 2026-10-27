@@ -301,6 +301,26 @@ The multi-column `ToDataReader`/`ToDataReaderAsync` terminal **is** supported on
 
 SQLite's own FTS3/FTS4/FTS5 query surface is available (see [Full-text search](#full-text-search-fts3fts4fts5)), as is the SQLite-only FTS5 maintenance command builder (`CreateSqliteFts5CommandBuilder`); only the cross-provider `SqlFunctions.Sql.contains`/`freetext` predicates (gated by [`SupportsFullText`](xref:NextORM.Core.ISqlDialect.SupportsFullText), `false` on SQLite) stay outside it. The maintenance surface is rejected on every non-SQLite provider with `NotSupportedException`, and `Rebuild` is unavailable for contentless FTS5 tables.
 
+## Bulk insert
+
+SQLite has no native bulk API, so every bulk write takes the portable `INSERT ... VALUES` path:
+`Mode.Native` is refused by name before the source is enumerated, `Auto` always resolves to the portable
+path, and `Portable` is the explicit form of the same thing. The certified configuration is a **file
+database** (no cross-process server is involved).
+
+- The batch is chunked by `MaxBatchSize`/`MaxParameters`/`MaxSqlLength`; each chunk is one statement.
+- `KeepIdentity` writes the explicit identity column; `IgnoreDuplicates` uses `INSERT OR IGNORE`, and
+  `Returning*` uses `RETURNING` (SQLite 3.35+).
+- `CheckConstraints=false` is honoured by scoping `PRAGMA foreign_keys` around the write and is refused inside
+  an active transaction (the pragma is a no-op there); `KeepNulls=false` needs a default-equivalent shape, and
+  `TableLock`/`FireTriggers` are refused.
+- `DatabaseName` renders an attached/main/temp database qualifier where the dialect can express it; `ServerName`
+  is refused (no rerouting).
+- `Timeout` is one whole-invocation budget around the writes; an expired budget is a `TimeoutException` and a
+  caller cancellation always wins.
+
+See [Bulk insert](../guide/22-bulk-insert.md).
+
 ## Provider differences
 
 | Aspect | SQLite |
