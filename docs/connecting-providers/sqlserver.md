@@ -368,9 +368,10 @@ using var dataContext = new SqlServerDataContext(new Version(17, 0), connectionS
 ```
 
 `(Version, DbConnection)` is the second overload, for a caller-owned connection. A context type owns one
-immutable version — the plan cache is keyed by the context type — so constructing the *same* type with two
-different versions (or unversioned and then versioned) throws `InvalidOperationException` before any
-command runs; derive a distinct `SqlServerDataContext` subclass per version.
+immutable `(version, engine edition)` declaration — the plan cache is keyed by the context type — so
+constructing the *same* type with a conflicting declaration of either component (a different version, a
+different engine edition, or unversioned and then declared) throws `InvalidOperationException` before any
+command runs; derive a distinct `SqlServerDataContext` subclass per declaration.
 
 ### Transport and limits
 

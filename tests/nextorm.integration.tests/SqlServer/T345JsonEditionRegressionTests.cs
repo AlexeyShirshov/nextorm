@@ -68,8 +68,9 @@ internal sealed class T345UnversionedLiveContext(string connectionString)
 /// <summary>
 /// T345 (#345) — the live regression for the edition-derived native <c>json</c> capability. One class runs
 /// on both containers (SQL Server 2022, actual major 16, and SQL Server 2025, actual major 17): the
-/// declaration-derived capability is asserted on both, the <c>json</c>-column halves are skipped where the
-/// server cannot store the type, and the text transport is asserted unchanged everywhere. Every line
+/// declaration-derived capability is asserted on both, the <c>json</c>-column halves return an evidence line
+/// on the server that cannot store the type, and the text transport is asserted unchanged everywhere. Every
+/// line
 /// records the actual server facts, the declared pair, the emitted SQL, the bound parameter metadata, the
 /// physical column type, the row result and the executed-command count; nothing here is presented as live
 /// Azure/Fabric proof.
@@ -178,9 +179,14 @@ public sealed class T345JsonEditionRegressionTests : IDisposable
     [Fact]
     public void OnMajorSeventeen_JsonColumn_ShouldRoundTripThroughTheDeclaredAzureNativeMapping()
     {
-        Assert.SkipWhen(
-            _major < 17,
-            $"SQL Server major {_major} has no native json type; the json-column half needs 17 (2025+).");
+        if (_major < 17)
+        {
+            Report(
+                $"{_tag}-JSON-ROUNDTRIP-NOT-APPLICABLE actual_major={_major} actual_engine_edition={_engineEdition} "
+                + "declared=[version: 12.0, engine edition: SqlDatabase (5)] "
+                + $"reason=no_native_json_type_below_major_17 needs_major=17 outcome=not_applicable");
+            return;
+        }
 
         using var context = new T345DeclaredAzureLiveContext(SqlServerContainer.ConnectionString);
         var tap = new CommandTap();
@@ -214,9 +220,14 @@ public sealed class T345JsonEditionRegressionTests : IDisposable
     [Fact]
     public void OnMajorSixteen_TheServer_ShouldRejectAJsonColumn()
     {
-        Assert.SkipWhen(
-            _major >= 17,
-            $"SQL Server major {_major} has the native json type; this is the major-16 half.");
+        if (_major >= 17)
+        {
+            Report(
+                $"{_tag}-JSON-REJECTED-NOT-APPLICABLE actual_major={_major} actual_engine_edition={_engineEdition} "
+                + "declared=[version: 12.0, engine edition: SqlDatabase (5)] "
+                + $"reason=native_json_type_present_from_major_17 needs_major=16 outcome=not_applicable");
+            return;
+        }
 
         using var context = new T345DeclaredAzureLiveContext(SqlServerContainer.ConnectionString);
         Execute(context, $"drop table if exists {NativeTable}");
