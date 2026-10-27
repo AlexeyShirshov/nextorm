@@ -1368,7 +1368,9 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
             var syncRows = syncResult.Read<T266CapturedRow>().ToList();
             Clean();
 
-            var asyncResult = await Capture().ExecuteAsync(TestContext.Current.CancellationToken);
+            var asyncBatch = Capture();
+            asyncBatch.AddQuery(Read(asyncBatch));
+            var asyncResult = await asyncBatch.ExecuteAsync(TestContext.Current.CancellationToken);
             var asyncRows = asyncResult.Read<T266CapturedRow>().ToList();
             Clean();
 
@@ -1486,9 +1488,11 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
             FluentActions.Invoking(() => clean.FromOutputTable("@nope"))
                 .Should().Throw<InvalidOperationException>().WithMessage("*batch output source*");
 
-            // Cross-batch: a source of this batch cannot be composed into another batch.
+            // Cross-batch: a source of this batch cannot be composed into another batch. The source is
+            // batch-owned by name, so the receiving batch must not own '@t' for the foreign '@t' read to
+            // be refused (a same-named capture of the receiving batch resolves to that batch's own rows).
             var foreign = ctx.CreateBatchBuilder();
-            foreign.OutputIntoTableVariable(Mutation(), "@t", "id int, name nvarchar(100)");
+            foreign.OutputIntoTableVariable(Mutation(), "@u", "id int, name nvarchar(100)");
             FluentActions.Invoking(() => foreign.Query(alias))
                 .Should().Throw<InvalidOperationException>().WithMessage("*batch output source*");
 
