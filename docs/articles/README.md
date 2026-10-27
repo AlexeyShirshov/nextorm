@@ -1,6 +1,7 @@
 # Articles — рабочие материалы
 
-- [01. Постановка проблемы — тезисы](01-problem-statement.md)
+- **[01. Первая статья — полный структурированный план](01-article-plan.md)**
+- [01. Постановка проблемы — исходные тезисы](01-problem-statement.md)
 - [Карта преемственности WORM и Nextorm по коду](worm-nextorm-code-comparison.md)
 - [Сравнение API по примерам из тестов WORM](worm-nextorm-api-examples.md)
 - [Исторический бриф WORM](oml-history-brief.md)
