@@ -686,7 +686,7 @@ public class ClickHouseDataContext : DataContext, IBulkInsertExecutor, IBulkInse
     // must be nullable. The SQL-default half is certified against the live schema by the integration
     // suite; a non-nullable input column is refused here, before any row is read. The whole row is still
     // written, so no partial-column trick fakes the DEFAULT.
-    private static void EnsureKeepNullsIsDefaultEquivalent(BulkInsertCommand command)
+    private void EnsureKeepNullsIsDefaultEquivalent(BulkInsertCommand command)
     {
         if (command.Options.KeepNulls is not false)
             return;
@@ -699,15 +699,74 @@ public class ClickHouseDataContext : DataContext, IBulkInsertExecutor, IBulkInse
                 nonNullable.Add(column.ColumnName);
         }
 
-        if (nonNullable.Count == 0)
+        if (nonNullable.Count > 0)
+        {
+            throw new NotSupportedException(
+                "BulkInsertOptions.KeepNulls=false cannot be honoured by the ClickHouse bulk paths: the write always sends the supplied value, and only an omitted column "
+                + "lets the destination DEFAULT apply. The request is accepted only for a default-equivalent shape, where every written column is nullable; "
+                + $"the non-nullable input column(s) {string.Join(", ", nonNullable.Select(name => $"'{name}'"))} break that shape. "
+                + "Use KeepNulls=true, or write the DEFAULT explicitly.");
+        }
+
+        // A nullable input alone is not enough: a non-NULL SQL default would be silently skipped, so the
+        // option would be accepted and inert. Only the catalog answers that half of the equivalence.
+        var destination = BulkInsertDestination.From(command.Options);
+        var written = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var column in command.Columns)
+            written.Add(SqlMutationBuilder.ResolveColumnName(column, NamingConvention));
+
+        var defaulted = ReadColumnsWithSqlDefault(
+                SqlMutationBuilder.ResolveTableName(command.TableName, command.IsTableNameAuto, command.EntityType, NamingConvention),
+                destination.Schema ?? destination.Database)
+            .Where(written.Contains)
+            .ToList();
+
+        if (defaulted.Count == 0)
             return;
 
         throw new NotSupportedException(
             "BulkInsertOptions.KeepNulls=false cannot be honoured by the ClickHouse bulk paths: the write always sends the supplied value, and only an omitted column "
-            + "lets the destination DEFAULT apply. The request is accepted only for a default-equivalent shape, where every written column is nullable; "
-            + $"the non-nullable input column(s) {string.Join(", ", nonNullable.Select(name => $"'{name}'"))} break that shape. "
-            + "Use KeepNulls=true, or write the DEFAULT explicitly.");
+            + $"lets the destination DEFAULT apply. The written column(s) {string.Join(", ", defaulted.Select(name => $"'{name}'"))} declare a SQL default, "
+            + "so a NULL input would be written as NULL instead of the default. Use KeepNulls=true, or write the DEFAULT explicitly.");
     }
+
+    /// <summary>
+    /// Reads the columns of <paramref name="table"/> whose live SQL default is non-empty. This is the half of
+    /// the <c>KeepNulls=false</c> equivalence that exists only in the schema, so it is read from
+    /// <c>system.columns</c>. Internal and virtual so the SQL-generation tests, which talk to a recording
+    /// transport instead of a server, can supply the schema facts.
+    /// </summary>
+    /// <param name="table">The physical table name.</param>
+    /// <param name="database">The destination database, or <see langword="null"/> for the current one.</param>
+    /// <returns>The column names that declare a SQL default.</returns>
+    internal virtual IReadOnlyList<string> ReadColumnsWithSqlDefault(string table, string? database)
+    {
+        EnsureConnectionOpen();
+
+        var databasePredicate = database is null
+            ? "database = currentDatabase()"
+            : $"database = '{EscapeSqlLiteral(database)}'";
+
+        var defaulted = new List<string>();
+        using var select = CreateCommand(
+            "select name from system.columns where table = '" + EscapeSqlLiteral(table) + "' and "
+            + databasePredicate
+            + " and startsWith(type, 'Nullable') and default_expression <> ''");
+
+        using var reader = select.ExecuteReader();
+        while (reader.Read())
+        {
+            if (!reader.IsDBNull(0))
+                defaulted.Add(reader.GetString(0));
+        }
+
+        return defaulted;
+    }
+
+    // ClickHouse string literals escape the quote and the backslash; the table/database names come from the
+    // mapped metadata and the destination options, never from SQL text.
+    private static string EscapeSqlLiteral(string value)
+        => value.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("'", "\\'", StringComparison.Ordinal);
 
     /// <inheritdoc/>
     protected override void Dispose(bool disposing)

@@ -35,7 +35,10 @@ public sealed class T305ClickHouseSettingsTests : ProviderTestSuite
             .BulkInsert();
 
         act.Should().Throw<NotSupportedException>().WithMessage("*UseSession=true*session id*");
-        source.Enumerated.Should().Be(0, "a flag without an id is never silently downgraded to sessionless");
+        source.Enumerated.Should().Be(
+            source.RowCount,
+            "a flag without an id is never silently downgraded to sessionless: the request is refused before the "
+            + "write, after the synchronous terminal buffered the source for validation");
     }
 
     [Fact]
@@ -111,7 +114,10 @@ public sealed class T305ClickHouseSettingsTests : ProviderTestSuite
             .BulkInsert();
 
         act.Should().Throw<NotSupportedException>().WithMessage("*MaxDegreeOfParallelism=2*session*");
-        source.Enumerated.Should().Be(0);
+        source.Enumerated.Should().Be(
+            source.RowCount,
+            "parallelism above one cannot run inside a session: the request is refused before the write, after the "
+            + "synchronous terminal buffered the source for validation");
     }
 
     [Fact]

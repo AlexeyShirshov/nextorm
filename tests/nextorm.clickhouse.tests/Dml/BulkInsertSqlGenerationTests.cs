@@ -448,7 +448,7 @@ public class BulkInsertSqlGenerationTests
     public void BulkInsert_KeepNullsFalse_OnAnAllNullableShape_ShouldBeAcceptedWithoutAPartialColumnList()
     {
         var handler = new RecordingClickHouseHandler(NullableBulkEntitySchema);
-        using var ctx = ClientContext(SessionlessSettings(handler));
+        using var ctx = SchemaFactContext(SessionlessSettings(handler));
 
         var written = ctx.CreateBulkInsertBuilder<INullableBulkEntity>(o => o.KeepNulls(false))
             .Values([new NullableBulkEntity { Id = 1, Note = null }])
@@ -802,6 +802,22 @@ public class BulkInsertSqlGenerationTests
 
     private static ClickHouseDataContext ClientContext(ClickHouseClientSettings settings)
         => new(new ClickHouseClient(settings), new DataContextBuilder());
+
+    private static ClickHouseDataContext SchemaFactContext(ClickHouseClientSettings settings)
+        => new RecordingClickHouseContext(settings);
+}
+
+/// <summary>
+/// A ClickHouse context whose schema facts are supplied in memory. The SQL-generation tests talk to a
+/// recording transport instead of a server, so the live catalog read behind the <c>KeepNulls=false</c>
+/// guard is replaced by "no column declares a default"; the real read is exercised by the integration
+/// suite.
+/// </summary>
+internal sealed class RecordingClickHouseContext(ClickHouseClientSettings settings)
+    : ClickHouseDataContext(new ClickHouseClient(settings), new DataContextBuilder())
+{
+    /// <inheritdoc/>
+    internal override IReadOnlyList<string> ReadColumnsWithSqlDefault(string table, string? database) => [];
 }
 
 /// <summary>An entity whose every written column is nullable, so <c>KeepNulls=false</c> stays default-equivalent.</summary>

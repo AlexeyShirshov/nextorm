@@ -25,6 +25,15 @@ public sealed class T305MariaDbLiveTests : IDisposable
             + (MariaDbContainer.Failure ?? "unavailable without a reported reason"));
 
         _ctx = new MariaDbDataContext(MariaDbContainer.ConnectionString, new DataContextBuilder());
+
+        // MariaDB is not an ITestProvider, so the suite's EnsureSeeded never runs against this server:
+        // the two shared fixtures this class writes through are created here, idempotently.
+        Execute(
+            "create table if not exists insert_entity "
+            + "(id bigint not null auto_increment primary key, name varchar(100) null, age int null)");
+        Execute(
+            "create table if not exists delete_entity "
+            + "(id int not null primary key, name varchar(100) null, age int null)");
     }
 
     public void Dispose() => _ctx.Dispose();
@@ -49,7 +58,10 @@ public sealed class T305MariaDbLiveTests : IDisposable
                 .Values(source)
                 .BulkInsert();
             clientMissing.Should().Throw<NotSupportedException>().WithMessage("*AllowLoadLocalInfile*");
-            source.Enumerated.Should().Be(0);
+            source.Enumerated.Should().Be(
+                source.RowCount,
+                "the refusal happens before the write: the synchronous terminal buffered the source for whole-set "
+                + "validation first, no LOAD is attempted, and the source is never replayed");
         }
         finally
         {
@@ -74,7 +86,10 @@ public sealed class T305MariaDbLiveTests : IDisposable
                 .Values(source)
                 .BulkInsert();
             serverMissing.Should().Throw<NotSupportedException>().WithMessage("*local_infile*");
-            source.Enumerated.Should().Be(0, "the read-only server preflight refuses before any row is read");
+            source.Enumerated.Should().Be(
+                source.RowCount,
+                "the read-only server preflight refuses before the write; the synchronous terminal buffered the source "
+                + "for whole-set validation first, and it is never replayed");
         }
 
         // Auto never loses rows: it uses the native path only when fully compatible, otherwise portable.
@@ -157,7 +172,10 @@ public sealed class T305MariaDbLiveTests : IDisposable
             var source = T305Sql.Counting(T305Sql.InsertRows(marker, 2));
             var act = () => _ctx.CreateBulkInsertBuilder<IInsertEntity>().Values(source).ReturningKey<long>().ToList();
             act.Should().Throw<NotSupportedException>().WithMessage("*returning*");
-            source.Enumerated.Should().Be(0, "the refusal happens before the source is read");
+            source.Enumerated.Should().Be(
+                source.RowCount,
+                "the refusal happens before the write: the synchronous terminal buffered the source for whole-set "
+                + "validation first, and it is never replayed");
             return;
         }
 
@@ -205,28 +223,34 @@ public sealed class T305MariaDbLiveTests : IDisposable
     [Fact]
     public void KeepNullsFalse_ShouldAcceptTheDefaultEquivalentShapeAndRefuseAColumnDefault()
     {
+        // The default-equivalent shape (row 8, "E"): every written column carries a NULL input and has a
+        // NULL/absent SQL default. The defaulted variant carries a non-NULL default, which the write would
+        // silently skip, so it is refused by name.
         T305Sql.Recreate(
             _ctx,
-            "t305_bulk_defaults",
-            "create table t305_bulk_defaults (id int not null primary key, note varchar(100) null, label varchar(100) null)");
+            "t305_bulk_all_nullable",
+            "create table t305_bulk_all_nullable (id int null, note varchar(100) null)");
         T305Sql.Recreate(
             _ctx,
-            "t305_bulk_defaulted",
-            "create table t305_bulk_defaulted (id int not null primary key, note varchar(100) null, label varchar(100) null default 'dflt')");
+            "t305_bulk_defaulted_all_nullable",
+            "create table t305_bulk_defaulted_all_nullable (id int null, label varchar(100) null default 'dflt')");
 
-        _ctx.CreateBulkInsertBuilder<T305BulkDefaults>(o => o.KeepNulls(false))
-            .Values([new T305BulkDefaults { Id = 1, Note = null, Label = null }])
+        _ctx.CreateBulkInsertBuilder<T305NullableRow>(o => o.KeepNulls(false))
+            .Values([new T305NullableRow { Id = 1, Note = null }])
             .BulkInsert()
             .Should().Be(1);
-        _ctx.From<T305BulkDefaults>().Where(x => x.Id == 1).Select(x => new { x.Note }).ToList()
+        _ctx.From<T305NullableRow>().Where(x => x.Id == 1).Select(x => new { x.Note }).ToList()
             .Should().ContainSingle().Which.Note.Should().BeNull("NULL is indistinguishable from the absent DEFAULT");
 
-        var source = T305Sql.Counting([new T305BulkDefaulted { Id = 2, Note = null, Label = null }]);
-        var refused = () => _ctx.CreateBulkInsertBuilder<T305BulkDefaulted>(o => o.KeepNulls(false))
+        var source = T305Sql.Counting([new T305DefaultedNullableRow { Id = 2, Label = null }]);
+        var refused = () => _ctx.CreateBulkInsertBuilder<T305DefaultedNullableRow>(o => o.KeepNulls(false))
             .Values(source)
             .BulkInsert();
         refused.Should().Throw<NotSupportedException>().WithMessage("*KeepNulls=false*label*");
-        source.Enumerated.Should().Be(0, "a column DEFAULT cannot be applied per row, so the request is refused before input");
+        source.Enumerated.Should().Be(
+            source.RowCount,
+            "the write always sends the supplied value, so a column DEFAULT cannot be applied per row: the request "
+            + "is refused before the write, after the synchronous terminal buffered the source for validation");
     }
 
     [Fact]

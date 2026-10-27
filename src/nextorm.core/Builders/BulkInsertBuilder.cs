@@ -169,8 +169,13 @@ public sealed class BulkInsertBuilder<TEntity>
     {
         EnsureSyncSource();
         ValidateTarget();
+
+        // One monotonic budget from execution entry (A06): the whole-set validation of a synchronous source
+        // runs inside it, so a slow source cannot buy the write a fresh budget.
+        using var budget = BulkInsertDeadline.Start(_options.Timeout, CancellationToken.None);
         var rows = ValidateAndMaterializeSync();
         var command = BuildCommand(ProjectSync(rows), null);
+        command.EffectiveTimeout = RemainingBudget(budget);
         return Execute(command);
     }
 
@@ -192,9 +197,32 @@ public sealed class BulkInsertBuilder<TEntity>
             return ExecuteAsync(streamed, cancellationToken);
         }
 
-        var rows = ValidateAndMaterializeSync();
-        var command = BuildCommand(ProjectSync(rows), null);
+        // Mirror of the synchronous terminal: the buffering of the supplied enumeration is charged to the
+        // same budget the executor receives the remainder of.
+        BulkInsertCommand command;
+        var budget = BulkInsertDeadline.Start(_options.Timeout, cancellationToken);
+        try
+        {
+            var rows = ValidateAndMaterializeSync();
+            command = BuildCommand(ProjectSync(rows), null);
+            command.EffectiveTimeout = RemainingBudget(budget);
+        }
+        finally
+        {
+            budget.Dispose();
+        }
+
         return ExecuteAsync(command, cancellationToken);
+    }
+
+    // The budget the executor may still spend: what is left of the deadline started at terminal entry. An
+    // exhausted budget is a timeout before the first write, never a partial run with a fresh allowance.
+    private static TimeSpan? RemainingBudget(BulkInsertDeadline budget)
+    {
+        if (budget.Remaining is not { } remaining)
+            return null;
+
+        return remaining <= TimeSpan.Zero ? throw budget.TimedOut() : remaining;
     }
 
     // The synchronous source is buffered so the whole set can be validated before any SQL is sent. An

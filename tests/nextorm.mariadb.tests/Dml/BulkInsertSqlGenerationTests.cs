@@ -260,7 +260,7 @@ public class BulkInsertSqlGenerationTests
     [Fact]
     public void BulkInsert_KeepNullsFalse_DefaultEquivalentShape_ShouldReachTheNativePrerequisite()
     {
-        using var ctx = new MariaDbDataContext(LocalInfileDisabledConnectionString, new DataContextBuilder());
+        using var ctx = new RecordingMariaDbContext(LocalInfileDisabledConnectionString);
 
         Action act = () => ctx.CreateBulkInsertBuilder<INullableEntity>(o => o.Mode(BulkInsertMode.Native).KeepNulls(false))
             .Values([new NullableEntity { Name = "a" }])
@@ -434,4 +434,16 @@ public class BulkInsertSqlGenerationTests
         act.Should().Throw<MySqlException>();
         source.Enumerated.Should().Be(1);
     }
+}
+
+/// <summary>
+/// A MariaDB context whose schema facts are supplied in memory. The SQL-generation tests own no server,
+/// so the live catalog read behind the <c>KeepNulls=false</c> guard is replaced by "no column declares a
+/// default"; the real read is exercised by the integration suite.
+/// </summary>
+internal sealed class RecordingMariaDbContext(string connectionString)
+    : MariaDbDataContext(connectionString, new DataContextBuilder())
+{
+    /// <inheritdoc/>
+    internal override IReadOnlyList<string> ReadColumnsWithSqlDefault(string table, string? database) => [];
 }

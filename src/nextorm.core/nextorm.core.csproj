@@ -84,6 +84,10 @@
          and its portable fallback without a new public member (the same seam SQL Server/PostgreSQL use). -->
     <InternalsVisibleTo Include="nextorm.mysql" />
     <InternalsVisibleTo Include="nextorm.mariadb" />
+    <!-- The SQLite provider implements the internal IBulkInsertPortableScope seam so
+         CheckConstraints=false is scoped through PRAGMA foreign_keys outside a transaction and refused
+         by name inside one, exactly like the MySQL/MariaDB provider contract (row 6 of the matrix). -->
+    <InternalsVisibleTo Include="nextorm.sqlite" />
     <!-- The EF Core bridge stages its whole import and publishes it under the shared metadata
          registration gate, so a concurrent auto/configured registration or junction publication
          cannot clobber a bridged entry (and vice versa). -->

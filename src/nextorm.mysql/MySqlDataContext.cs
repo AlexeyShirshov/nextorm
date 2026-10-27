@@ -370,7 +370,7 @@ public class MySqlDataContext : DataContext, IBulkInsertExecutor, IBulkInsertNat
     // NULL is indistinguishable from letting the destination DEFAULT apply: every written column must be
     // nullable with a NULL/absent SQL default. The SQL-default half is certified against the live schema
     // by the integration suite; a non-nullable input column is refused here, before any row is read.
-    private static void EnsureKeepNullsIsDefaultEquivalent(BulkInsertCommand command)
+    private void EnsureKeepNullsIsDefaultEquivalent(BulkInsertCommand command)
     {
         if (command.Options.KeepNulls is not false)
             return;
@@ -383,13 +383,74 @@ public class MySqlDataContext : DataContext, IBulkInsertExecutor, IBulkInsertNat
                 nonNullable.Add(column.ColumnName);
         }
 
-        if (nonNullable.Count == 0)
+        if (nonNullable.Count > 0)
+        {
+            throw new NotSupportedException(
+                "BulkInsertOptions.KeepNulls=false cannot be honoured by the MySQL/MariaDB bulk paths: the write always sends the supplied value and a column DEFAULT applies only when the column is omitted. "
+                + "The request is accepted only for a default-equivalent shape, where every written column is nullable with a NULL/absent SQL default; "
+                + $"the non-nullable input column(s) {string.Join(", ", nonNullable.Select(name => $"'{name}'"))} break that shape. Use KeepNulls=true, or write the DEFAULT explicitly.");
+        }
+
+        // A nullable input alone is not enough: a non-NULL SQL default would be silently skipped, so the
+        // option would be accepted and inert. Only the catalog can answer that half of the equivalence.
+        var destination = BulkInsertDestination.From(command.Options);
+        var written = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var column in command.Columns)
+            written.Add(SqlMutationBuilder.ResolveColumnName(column, NamingConvention));
+
+        var defaulted = ReadColumnsWithSqlDefault(
+                SqlMutationBuilder.ResolveTableName(command.TableName, command.IsTableNameAuto, command.EntityType, NamingConvention),
+                destination.Database ?? destination.Schema)
+            .Where(written.Contains)
+            .ToList();
+
+        if (defaulted.Count == 0)
             return;
 
         throw new NotSupportedException(
             "BulkInsertOptions.KeepNulls=false cannot be honoured by the MySQL/MariaDB bulk paths: the write always sends the supplied value and a column DEFAULT applies only when the column is omitted. "
-            + "The request is accepted only for a default-equivalent shape, where every written column is nullable with a NULL/absent SQL default; "
-            + $"the non-nullable input column(s) {string.Join(", ", nonNullable.Select(name => $"'{name}'"))} break that shape. Use KeepNulls=true, or write the DEFAULT explicitly.");
+            + $"The written column(s) {string.Join(", ", defaulted.Select(name => $"'{name}'"))} declare a non-NULL SQL default, so a NULL input would be written as NULL instead of the default. "
+            + "Use KeepNulls=true, or write the DEFAULT explicitly.");
+    }
+
+    /// <summary>
+    /// Reads the columns of <paramref name="table"/> whose live SQL default is non-NULL. This is the half of
+    /// the <c>KeepNulls=false</c> equivalence that exists only in the schema, so it is read from
+    /// <c>information_schema</c>. Internal and virtual so the SQL-generation tests, which own no server, can
+    /// supply the schema facts instead of opening a connection.
+    /// </summary>
+    /// <param name="table">The physical table name.</param>
+    /// <param name="database">The destination database, or <see langword="null"/> for the current one.</param>
+    /// <returns>The column names that declare a non-NULL SQL default.</returns>
+    internal virtual IReadOnlyList<string> ReadColumnsWithSqlDefault(string table, string? database)
+    {
+        var connection = RequireMySqlConnection();
+
+        var defaulted = new List<string>();
+        using var select = connection.CreateCommand();
+        select.CommandText =
+            "select column_name from information_schema.columns "
+            + "where table_name = @bulk_table and table_schema = coalesce(@bulk_schema, database()) "
+            + "and is_nullable = 'YES' and column_default is not null and column_default <> 'NULL'";
+        AddTextParameter(select, "bulk_table", table);
+        AddTextParameter(select, "bulk_schema", database);
+
+        using var reader = select.ExecuteReader();
+        while (reader.Read())
+        {
+            if (!reader.IsDBNull(0))
+                defaulted.Add(reader.GetString(0));
+        }
+
+        return defaulted;
+    }
+
+    private static void AddTextParameter(DbCommand command, string name, string? value)
+    {
+        var parameter = command.CreateParameter();
+        parameter.ParameterName = name;
+        parameter.Value = value is null ? DBNull.Value : value;
+        command.Parameters.Add(parameter);
     }
 
     private int WriteNativeRows(BulkInsertCommand command, IEnumerable<object?[]> rows, BulkInsertDeadline deadline)

@@ -87,7 +87,11 @@ public sealed class T305SqlServerBulkInsertTests : ProviderTestSuite
             .BulkInsert();
 
         act.Should().Throw<NotSupportedException>().WithMessage("*UseInternalTransaction=true*external transaction*");
-        source.Enumerated.Should().Be(0);
+        source.Enumerated.Should().Be(
+            source.RowCount,
+            "the synchronous terminal buffers the whole source for validation before it renders any SQL, so the "
+            + "observable contract here is 'refused before the write, source read exactly once': no driver batch is "
+            + "started and the source is not replayed");
         transaction.Rollback();
     }
 
@@ -274,32 +278,64 @@ public sealed class T305PostgresBulkInsertTests : ProviderTestSuite
     [Fact]
     public void KeepNullsFalse_OnTheDefaultEquivalentShape_ShouldPreserveNull()
     {
-        T305Sql.Recreate(Context, "t305_bulk_defaults", "create table t305_bulk_defaults (id int not null primary key, note varchar(100) null, label varchar(100) null)");
+        // The default-equivalent shape (row 8, "E"): every written column carries a NULL input and has a
+        // NULL/absent SQL default, so writing NULL is indistinguishable from omitting the column.
+        T305Sql.Recreate(Context, "t305_bulk_all_nullable", "create table t305_bulk_all_nullable (id int null, note varchar(100) null)");
 
-        var written = Context.CreateBulkInsertBuilder<T305BulkDefaults>(o => o.KeepNulls(false))
-            .Values([new T305BulkDefaults { Id = 1, Note = null, Label = null }])
+        var written = Context.CreateBulkInsertBuilder<T305NullableRow>(o => o.KeepNulls(false))
+            .Values([new T305NullableRow { Id = 1, Note = null }])
             .BulkInsert();
 
         written.Should().Be(1);
-        Context.From<T305BulkDefaults>().Where(x => x.Id == 1).Select(x => new { x.Note, x.Label }).ToList()
-            .Should().ContainSingle().Which.Should().BeEquivalentTo(new { Note = (string?)null, Label = (string?)null });
+        Context.From<T305NullableRow>().Where(x => x.Id == 1).Select(x => new { x.Note }).ToList()
+            .Should().ContainSingle().Which.Note.Should().BeNull();
     }
 
     [Fact]
     public void KeepNullsFalse_WithAColumnDefault_ShouldBeRefusedBeforeTheSource()
     {
+        // A non-NULL SQL default is not default-equivalent: COPY would write the caller's NULL instead of
+        // the default, so the option would be accepted and inert. It is refused by name before the source.
         T305Sql.Recreate(
             Context,
-            "t305_bulk_defaulted",
-            "create table t305_bulk_defaulted (id int not null primary key, note varchar(100) null, label varchar(100) null default 'dflt')");
-        var source = T305Sql.Counting([new T305BulkDefaulted { Id = 1, Note = null, Label = null }]);
+            "t305_bulk_defaulted_all_nullable",
+            "create table t305_bulk_defaulted_all_nullable (id int null, label varchar(100) null default 'dflt')");
+        var source = T305Sql.Counting([new T305DefaultedNullableRow { Id = 1, Label = null }]);
 
-        var act = () => Context.CreateBulkInsertBuilder<T305BulkDefaulted>(o => o.KeepNulls(false))
+        var act = () => Context.CreateBulkInsertBuilder<T305DefaultedNullableRow>(o => o.KeepNulls(false))
             .Values(source)
             .BulkInsert();
 
         act.Should().Throw<NotSupportedException>().WithMessage("*KeepNulls=false*label*");
-        source.Enumerated.Should().Be(0, "COPY cannot apply a per-row DEFAULT, so the request is refused before input");
+        source.Enumerated.Should().Be(
+            source.RowCount,
+            "COPY cannot apply a per-row DEFAULT, so the request is refused before the write: the synchronous "
+            + "terminal buffered the source for validation and no batch was sent");
+    }
+
+    [Fact]
+    public void KeepNullsFalse_OnThePortablePath_ShouldApplyTheSameShapeGuard()
+    {
+        // Row 8 "P" half: the parameterised INSERT ... VALUES path always sends the supplied value too, so
+        // the default-equivalent guard has to hold there exactly as it does on binary COPY.
+        T305Sql.Recreate(Context, "t305_bulk_all_nullable", "create table t305_bulk_all_nullable (id int null, note varchar(100) null)");
+        T305Sql.Recreate(
+            Context,
+            "t305_bulk_defaulted_all_nullable",
+            "create table t305_bulk_defaulted_all_nullable (id int null, label varchar(100) null default 'dflt')");
+
+        Context.CreateBulkInsertBuilder<T305NullableRow>(o => o.Mode(BulkInsertMode.Portable).KeepNulls(false))
+            .Values([new T305NullableRow { Id = 1, Note = null }])
+            .BulkInsert()
+            .Should().Be(1);
+
+        var source = T305Sql.Counting([new T305DefaultedNullableRow { Id = 2, Label = null }]);
+        var refused = () => Context.CreateBulkInsertBuilder<T305DefaultedNullableRow>(o => o.Mode(BulkInsertMode.Portable).KeepNulls(false))
+            .Values(source)
+            .BulkInsert();
+        refused.Should().Throw<NotSupportedException>().WithMessage("*KeepNulls=false*label*");
+        Context.From<T305NullableRow>().Where(x => x.Id == 1).Select(x => new { x.Note }).ToList()
+            .Should().ContainSingle().Which.Note.Should().BeNull();
     }
 
     [Fact]
@@ -361,7 +397,10 @@ public sealed class T305PostgresBulkInsertTests : ProviderTestSuite
             .Values(source)
             .BulkInsert();
         other.Should().Throw<NotSupportedException>().WithMessage("*DatabaseName*");
-        source.Enumerated.Should().Be(0);
+        source.Enumerated.Should().Be(
+            source.RowCount,
+            "the synchronous terminal buffers the whole source for validation before it renders any SQL, so the "
+            + "observable contract is 'refused before the write, source read exactly once': COPY never starts");
     }
 
     [Fact]
@@ -438,7 +477,10 @@ public sealed class T305MySqlBulkInsertTests : ProviderTestSuite
             .BulkInsert();
 
         native.Should().Throw<NotSupportedException>().WithMessage("*AllowLoadLocalInfile*");
-        source.Enumerated.Should().Be(0, "the refusal happens before the source is read; no LOAD is attempted");
+        source.Enumerated.Should().Be(
+            source.RowCount,
+            "the synchronous terminal buffers the whole source for validation before it renders any SQL, so the "
+            + "observable contract is 'refused before the write, source read exactly once': no LOAD is attempted");
 
         Context.CreateBulkInsertBuilder<IInsertEntity>(o => o.Mode(BulkInsertMode.Auto))
             .Values(T305Sql.InsertRows(marker, 3))
@@ -472,7 +514,10 @@ public sealed class T305MySqlBulkInsertTests : ProviderTestSuite
                 .Values(source)
                 .BulkInsert();
             act.Should().Throw<NotSupportedException>().WithMessage("*local_infile*");
-            source.Enumerated.Should().Be(0, "the read-only server preflight refuses before a row is read");
+            source.Enumerated.Should().Be(
+                source.RowCount,
+                "the read-only server preflight refuses before the write; the synchronous terminal buffered the source "
+                + "for whole-set validation first, and the source is never replayed");
         }
     }
 
@@ -553,28 +598,30 @@ public sealed class T305MySqlBulkInsertTests : ProviderTestSuite
     [Fact]
     public void KeepNullsFalse_ShouldAcceptTheDefaultEquivalentShapeAndRefuseAColumnDefault()
     {
+        // The default-equivalent shape (row 8, "E"): every written column carries a NULL input and has a
+        // NULL/absent SQL default, so writing NULL is indistinguishable from omitting the column.
+        T305Sql.Recreate(Context, "t305_bulk_all_nullable", "create table t305_bulk_all_nullable (id int null, note varchar(100) null)");
         T305Sql.Recreate(
             Context,
-            "t305_bulk_defaults",
-            "create table t305_bulk_defaults (id int not null primary key, note varchar(100) null, label varchar(100) null)");
-        T305Sql.Recreate(
-            Context,
-            "t305_bulk_defaulted",
-            "create table t305_bulk_defaulted (id int not null primary key, note varchar(100) null, label varchar(100) null default 'dflt')");
+            "t305_bulk_defaulted_all_nullable",
+            "create table t305_bulk_defaulted_all_nullable (id int null, label varchar(100) null default 'dflt')");
 
-        Context.CreateBulkInsertBuilder<T305BulkDefaults>(o => o.KeepNulls(false))
-            .Values([new T305BulkDefaults { Id = 1, Note = null, Label = null }])
+        Context.CreateBulkInsertBuilder<T305NullableRow>(o => o.KeepNulls(false))
+            .Values([new T305NullableRow { Id = 1, Note = null }])
             .BulkInsert()
             .Should().Be(1);
-        Context.From<T305BulkDefaults>().Where(x => x.Id == 1).Select(x => new { x.Note }).ToList()
+        Context.From<T305NullableRow>().Where(x => x.Id == 1).Select(x => new { x.Note }).ToList()
             .Should().ContainSingle().Which.Note.Should().BeNull();
 
-        var source = T305Sql.Counting([new T305BulkDefaulted { Id = 2, Note = null, Label = null }]);
-        var refused = () => Context.CreateBulkInsertBuilder<T305BulkDefaulted>(o => o.KeepNulls(false))
+        var source = T305Sql.Counting([new T305DefaultedNullableRow { Id = 2, Label = null }]);
+        var refused = () => Context.CreateBulkInsertBuilder<T305DefaultedNullableRow>(o => o.KeepNulls(false))
             .Values(source)
             .BulkInsert();
         refused.Should().Throw<NotSupportedException>().WithMessage("*KeepNulls=false*label*");
-        source.Enumerated.Should().Be(0);
+        source.Enumerated.Should().Be(
+            source.RowCount,
+            "the write always sends the supplied value, so a non-NULL SQL default would be silently skipped: the "
+            + "request is refused before the write (the synchronous terminal buffered the source for validation)");
     }
 
     [Fact]
@@ -715,8 +762,40 @@ public sealed class T305SqliteBulkInsertTests : ProviderTestSuite
             .BulkInsert();
 
         act.Should().Throw<NotSupportedException>().WithMessage("*CheckConstraints=false*");
-        source.Enumerated.Should().Be(0);
+        source.Enumerated.Should().Be(
+            source.RowCount,
+            "the synchronous terminal buffers the whole source for validation before it renders any SQL, so the "
+            + "observable contract here is 'refused before the write, source read exactly once': the provider never "
+            + "received a statement and the source is not replayed");
         transaction.Rollback();
+    }
+
+    [Fact]
+    public void KeepNullsFalse_ShouldAcceptTheDefaultEquivalentShapeAndRefuseAColumnDefault()
+    {
+        // Row 8 "P/E": SQLite has only the parameterised path, and it always sends the supplied value, so
+        // KeepNulls=false is honoured only for a default-equivalent shape and refused otherwise.
+        T305Sql.Recreate(Context, "t305_bulk_all_nullable", "create table t305_bulk_all_nullable (id integer null, note text null)");
+        T305Sql.Recreate(
+            Context,
+            "t305_bulk_defaulted_all_nullable",
+            "create table t305_bulk_defaulted_all_nullable (id integer null, label text null default 'dflt')");
+
+        Context.CreateBulkInsertBuilder<T305NullableRow>(o => o.KeepNulls(false))
+            .Values([new T305NullableRow { Id = 1, Note = null }])
+            .BulkInsert()
+            .Should().Be(1);
+        Context.From<T305NullableRow>().Where(x => x.Id == 1).Select(x => new { x.Note }).ToList()
+            .Should().ContainSingle().Which.Note.Should().BeNull();
+
+        var source = T305Sql.Counting([new T305DefaultedNullableRow { Id = 2, Label = null }]);
+        var refused = () => Context.CreateBulkInsertBuilder<T305DefaultedNullableRow>(o => o.KeepNulls(false))
+            .Values(source)
+            .BulkInsert();
+        refused.Should().Throw<NotSupportedException>().WithMessage("*KeepNulls=false*label*");
+        source.Enumerated.Should().Be(
+            source.RowCount,
+            "the request is refused before the write; the synchronous terminal buffered the source for validation first");
     }
 
     [Fact]
@@ -795,7 +874,10 @@ public sealed class T305ClickHouseBulkInsertTests : ProviderTestSuite
             .BulkInsert();
 
         act.Should().Throw<NotSupportedException>().WithMessage("*IgnoreDuplicates=true*");
-        source.Enumerated.Should().Be(0, "ClickHouse has no unique constraint and no ignore form");
+        source.Enumerated.Should().Be(
+            source.RowCount,
+            "ClickHouse has no unique constraint and no ignore form: the request is refused before the write, after the "
+            + "synchronous terminal buffered the source for whole-set validation");
     }
 
     [Fact]
@@ -850,7 +932,10 @@ public sealed class T305ClickHouseBulkInsertTests : ProviderTestSuite
             .BulkInsert();
 
         act.Should().Throw<NotSupportedException>().WithMessage("*KeepNulls=false*label*");
-        source.Enumerated.Should().Be(0);
+        source.Enumerated.Should().Be(
+            source.RowCount,
+            "writing an explicit NULL is not equivalent to the destination DEFAULT, so the request is refused before "
+            + "the write, after the synchronous terminal buffered the source for validation");
     }
 
     [Fact]
@@ -881,7 +966,10 @@ public sealed class T305ClickHouseBulkInsertTests : ProviderTestSuite
             .BulkInsert();
 
         act.Should().Throw<NotSupportedException>().WithMessage("*LocalTemporary*");
-        source.Enumerated.Should().Be(0);
+        source.Enumerated.Should().Be(
+            source.RowCount,
+            "a sessionless write cannot see a session-local temporary table: the request is refused before the write, "
+            + "after the synchronous terminal buffered the source for validation");
     }
 }
 
@@ -921,11 +1009,16 @@ internal static class T305Sql
 
     public sealed class CountingSource<T>(IEnumerable<T> rows) : IEnumerable<T>
     {
+        private readonly IReadOnlyList<T> _rows = rows as IReadOnlyList<T> ?? rows.ToList();
+
         public int Enumerated { get; private set; }
+
+        /// <summary>The number of rows the source holds, so a test can tell "read once" from "never read".</summary>
+        public int RowCount => _rows.Count;
 
         public IEnumerator<T> GetEnumerator()
         {
-            foreach (var row in rows)
+            foreach (var row in _rows)
             {
                 Enumerated++;
                 yield return row;

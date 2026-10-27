@@ -515,6 +515,16 @@ internal sealed class RecordingPostgresContext : PostgresDataContext
         _sessions.Add(session);
         return Task.FromResult<IBinaryCopySession>(session);
     }
+
+    /// <summary>
+    /// The recording seam owns no server: keep the schema to "no column declares a default", which is what
+    /// the placeholder tables these tests describe look like. The live catalog read is exercised by the
+    /// integration suite.
+    /// </summary>
+    /// <param name="table">The physical table name.</param>
+    /// <param name="schema">The destination schema.</param>
+    /// <returns>Always empty: no column declares a non-NULL SQL default.</returns>
+    internal override IReadOnlyList<string> ReadColumnsWithSqlDefault(string table, string? schema) => [];
 }
 
 /// <summary>An in-memory <c>NpgsqlBinaryImporter</c> stand-in that records what the COPY path did.</summary>

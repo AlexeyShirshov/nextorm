@@ -149,8 +149,15 @@ internal sealed class BulkInsertCommand
     /// <summary>The ClickHouse-specific options group, or <see langword="null"/>.</summary>
     public ClickHouseBulkInsertOptions? ClickHouse => Options.ClickHouse;
 
+    /// <summary>
+    /// The budget handed to the executor: the terminal starts one monotonic deadline at execution entry and
+    /// this carries what is left of it, so a synchronous source that had to be buffered for whole-set
+    /// validation is charged to the same budget instead of the executor starting a fresh one.
+    /// </summary>
+    internal TimeSpan? EffectiveTimeout { get; set; }
+
     /// <summary>The whole-invocation timeout budget, or <see langword="null"/> for no additional nextorm deadline.</summary>
-    public TimeSpan? Timeout => Options.Timeout;
+    public TimeSpan? Timeout => EffectiveTimeout ?? Options.Timeout;
 
     /// <summary>Whether <see cref="KeepIdentity"/> was explicitly requested, including an explicit <see langword="false"/>.</summary>
     public bool KeepIdentitySpecified => Options.KeepIdentitySpecified;

@@ -16,7 +16,7 @@ namespace NextORM.Postgres;
 /// Data context for PostgreSQL. Wraps the <c>Npgsql</c> driver for connections and parameters and
 /// renders SQL through <c>PostgresDialect</c>.
 /// </summary>
-public class PostgresDataContext : DataContext, IBulkInsertExecutor, IBulkInsertNativeOptions
+public class PostgresDataContext : DataContext, IBulkInsertExecutor, IBulkInsertNativeOptions, IBulkInsertPortableScope
 {
     private static readonly MethodInfo GetFieldValueMI = typeof(DbDataReader).GetMethod(nameof(DbDataReader.GetFieldValue))!;
     private static readonly MethodInfo GetTimeSpanMI = GetFieldValueMI.MakeGenericMethod(typeof(TimeSpan));
@@ -724,11 +724,39 @@ public class PostgresDataContext : DataContext, IBulkInsertExecutor, IBulkInsert
         return BuildCopyCommand(command);
     }
 
+    /// <summary>
+    /// Applies the <c>KeepNulls=false</c> shape guard on the portable <c>INSERT ... VALUES</c> path too.
+    /// The portable write has the same limitation as binary COPY: it always sends the supplied value, so a
+    /// NULL is never replaced by the column DEFAULT. PostgreSQL owns no session control to snapshot here,
+    /// so the scope restores nothing.
+    /// </summary>
+    /// <param name="command">The bulk-insert command.</param>
+    /// <returns>A scope that restores nothing.</returns>
+    /// <exception cref="NotSupportedException">The requested shape is not default-equivalent.</exception>
+    IDisposable IBulkInsertPortableScope.BeginPortableBulkInsertScope(BulkInsertCommand command)
+    {
+        EnsureKeepNullsIsDefaultEquivalent(command);
+        return NoPortableScope.Instance;
+    }
+
+    private sealed class NoPortableScope : IDisposable
+    {
+        internal static readonly NoPortableScope Instance = new();
+
+        private NoPortableScope()
+        {
+        }
+
+        public void Dispose()
+        {
+        }
+    }
+
     // Binary COPY always writes the supplied value, so KeepNulls=false can only be honoured when writing
-    // NULL is indistinguishable from letting the destination DEFAULT apply: every written column must be
-    // nullable and have a NULL/absent SQL default. The SQL-default half is certified against the live
-    // schema by the integration suite; a non-nullable input column is refused here, before any row is read.
-    private static void EnsureKeepNullsIsDefaultEquivalent(BulkInsertCommand command)
+    // NULL is indistinguishable from letting the destination DEFAULT apply: every written column must carry
+    // a NULL input and have a NULL/absent SQL default. The metadata half is judged from the CLR nullability,
+    // the SQL-default half from the catalog, because that fact exists only in the live schema.
+    private void EnsureKeepNullsIsDefaultEquivalent(BulkInsertCommand command)
     {
         if (command.Options.KeepNulls is not false)
             return;
@@ -741,13 +769,85 @@ public class PostgresDataContext : DataContext, IBulkInsertExecutor, IBulkInsert
                 nonNullable.Add(column.ColumnName);
         }
 
-        if (nonNullable.Count == 0)
+        if (nonNullable.Count > 0)
+        {
+            throw new NotSupportedException(
+                "BulkInsertOptions.KeepNulls=false cannot be honoured by the PostgreSQL binary COPY path: COPY always writes the supplied value and applies a column DEFAULT only when the column is omitted. "
+                + "The request is accepted only for a default-equivalent shape, where every written column is nullable with a NULL/absent SQL default; "
+                + $"the non-nullable input column(s) {string.Join(", ", nonNullable.Select(name => $"'{name}'"))} break that shape. Use KeepNulls=true, or write the DEFAULT explicitly.");
+        }
+
+        // A nullable input alone is not enough: a non-NULL SQL default would be silently skipped, so the
+        // option would be accepted and inert. Only the catalog can answer that half of the equivalence.
+        var defaulted = WrittenColumnsWithSqlDefault(command);
+        if (defaulted.Count == 0)
             return;
 
         throw new NotSupportedException(
             "BulkInsertOptions.KeepNulls=false cannot be honoured by the PostgreSQL binary COPY path: COPY always writes the supplied value and applies a column DEFAULT only when the column is omitted. "
-            + "The request is accepted only for a default-equivalent shape, where every written column is nullable with a NULL/absent SQL default; "
-            + $"the non-nullable input column(s) {string.Join(", ", nonNullable.Select(name => $"'{name}'"))} break that shape. Use KeepNulls=true, or write the DEFAULT explicitly.");
+            + $"The written column(s) {string.Join(", ", defaulted.Select(name => $"'{name}'"))} declare a non-NULL SQL default, so a NULL input would be written as NULL instead of the default. "
+            + "Use KeepNulls=true, or write the DEFAULT explicitly.");
+    }
+
+    // The written columns whose live SQL default is non-NULL: writing NULL there is not equivalent to
+    // omitting the column, so KeepNulls=false cannot be honoured for them.
+    private List<string> WrittenColumnsWithSqlDefault(BulkInsertCommand command)
+    {
+        var destination = BulkInsertDestination.From(command.Options);
+        var written = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var column in command.Columns)
+            written.Add(SqlMutationBuilder.ResolveColumnName(column, NamingConvention));
+
+        var defaulted = new List<string>();
+        foreach (var name in ReadColumnsWithSqlDefault(
+                     SqlMutationBuilder.ResolveTableName(command.TableName, command.IsTableNameAuto, command.EntityType, NamingConvention),
+                     destination.Schema))
+        {
+            if (written.Contains(name))
+                defaulted.Add(name);
+        }
+
+        return defaulted;
+    }
+
+    /// <summary>
+    /// Reads the columns of <paramref name="table"/> whose live SQL default is non-NULL. This is the half of
+    /// the <c>KeepNulls=false</c> equivalence that exists only in the schema, so it is read from
+    /// <c>information_schema</c>. Internal and virtual for the same reason as
+    /// <see cref="BeginBinaryCopy"/>: the SQL-generation tests drive the COPY lifecycle without a server,
+    /// so they supply the schema facts instead of opening a connection.
+    /// </summary>
+    /// <param name="table">The physical table name.</param>
+    /// <param name="schema">The destination schema, or <see langword="null"/> for the current schema.</param>
+    /// <returns>The column names that declare a non-NULL SQL default.</returns>
+    internal virtual IReadOnlyList<string> ReadColumnsWithSqlDefault(string table, string? schema)
+    {
+        EnsureConnectionOpen();
+
+        var defaulted = new List<string>();
+        using var select = CreateCommand(
+            "select column_name from information_schema.columns "
+            + "where table_name = @bulk_table and table_schema = coalesce(@bulk_schema, current_schema()) "
+            + "and is_nullable = 'YES' and column_default is not null");
+        AddTextParameter(select, "bulk_table", table);
+        AddTextParameter(select, "bulk_schema", schema);
+
+        using var reader = select.ExecuteReader();
+        while (reader.Read())
+        {
+            if (!reader.IsDBNull(0))
+                defaulted.Add(reader.GetString(0));
+        }
+
+        return defaulted;
+    }
+
+    private static void AddTextParameter(DbCommand command, string name, string? value)
+    {
+        var parameter = command.CreateParameter();
+        parameter.ParameterName = name;
+        parameter.Value = value is null ? DBNull.Value : value;
+        command.Parameters.Add(parameter);
     }
 
     private string BuildCopyCommand(BulkInsertCommand command)

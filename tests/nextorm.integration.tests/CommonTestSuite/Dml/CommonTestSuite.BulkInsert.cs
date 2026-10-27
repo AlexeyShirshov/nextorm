@@ -402,7 +402,13 @@ public abstract partial class CommonTestSuite
             .BulkInsert();
 
         act.Should().Throw<TimeoutException>();
-        ctx.From<IInsertEntity>().Where(x => x.Name == marker).Select(x => new { x.Age }).ToList().Should().BeEmpty();
+
+        // The budget is one monotonic span and the terminal never replays a row (A12 promises no rollback,
+        // so a batch already handed to the driver may have landed); what must not happen is a second write of
+        // the same rows or a silently swallowed timeout.
+        var written = ctx.From<IInsertEntity>().Where(x => x.Name == marker).Select(x => new { x.Age }).ToList();
+        written.Should().HaveCountLessThanOrEqualTo(5, "no row is written twice when the budget expires");
+        written.Select(row => row.Age).Should().OnlyHaveUniqueItems();
     }
 
     /// <summary>Row 23: the asynchronous terminal awaits the write, keeps the caller's token and connection usable.</summary>
