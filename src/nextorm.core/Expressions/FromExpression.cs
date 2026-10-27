@@ -152,6 +152,12 @@ public sealed class FromExpression
      /// </summary>
      internal readonly XmlNodesExpression? XmlNodes;
      /// <summary>
+     /// Whether <see cref="Table"/> names a same-batch table variable (a batch <c>OUTPUT ... INTO</c>
+     /// capture source). A table variable is addressed by its bare <c>@name</c> and must never be
+     /// identifier-quoted, unlike every other physical table source.
+     /// </summary>
+     internal bool IsTableVariableSource { get; init; }
+     /// <summary>
      /// Optional provider-specific hint attached to this derived-table source, or <c>null</c> when it has
      /// none. Set through <c>FromOptions.WithSubQueryHint</c>. Only dialects with an inline hint
      /// comment (PostgreSQL <c>pg_hint_plan</c>, MySQL/MariaDB optimizer hints) can express it; SQL Server
@@ -231,6 +237,7 @@ public sealed class FromExpression
           SourceLock = source.SourceLock;
           SourceBinding = sourceBinding ?? source.SourceBinding;
           RecursiveOwner = source.RecursiveOwner;
+          IsTableVariableSource = source.IsTableVariableSource;
      }
 
      /// <summary>

@@ -55,7 +55,7 @@ in [`sql-function-coverage-gap.md`](sql-function-coverage-gap.md).
 >
 > The workstreams above are closed; the remaining gaps are itemized in
 > [Remaining gaps](#4-remaining-gaps-in-order-of-significance): relationship metadata (#249, #251),
-> SQL Server composable DML `OUTPUT` (#266), NULLS placement (#287)
+> the residual SQL Server `OUTPUT` forms (#266), NULLS placement (#287)
 > and savepoints (#289), plus the ClickHouse `AggregateFunction` driver blocker (#62) and the
 > dynamic-schema tail (item 11).
 >
@@ -212,12 +212,20 @@ to the ledger on 2026-09-29; item 49 (eager loading) moved on 2026-10-17; item 5
     table functions and PostgreSQL `json_populate_record(set)`, both recorded in
     [Limitations](../../advanced/limitations.md).
     Shipped: [Dynamic result schema](../../guide/13-table-valued-functions.md#dynamic-result-schema).
-59. **SQL Server composable DML `OUTPUT` (issue [#266](https://github.com/AlexeyShirshov/nextorm/issues/266)).**
+59. **SQL Server composable DML `OUTPUT` (issue [#266](https://github.com/AlexeyShirshov/nextorm/issues/266)) — batch capture shipped, other forms open.**
     PostgreSQL can read a mutation's returned rows as an ordinary queryable source
     (`With("ins", insert.Returning(...)).From("ins")`, a data-modifying CTE). T-SQL cannot put `OUTPUT`
     inside a CTE, so on SQL Server the rows are consumed by the mutation itself (`Returning`,
-    `OutputInto`, `OutputIntoThenOutput`) and cannot feed a second statement of the same query. #266
-    tracks making `OUTPUT` a composable source.
+    `OutputInto`, `OutputIntoThenOutput`). **#266 shipped (rc4):** a batch-scoped capture —
+    `BatchBuilder.OutputIntoTableVariable(...)` for `INSERT`/`UPDATE`/`DELETE`/`MERGE`, read back inside
+    the same batch through `FromOutput<TResult>`/`FromOutputTable` and composed with
+    `Query`/`AddQuery`: one round trip, table-variable lifetime, `$action` first for MERGE, typed
+    refusals outside the owning batch (see
+    [Writing into a table variable](../../guide/17-insert-statement.md#batch-scoped-capture-batchbuilderoutputintotablevariable)
+    and [Capturing the merged rows](../../guide/21-merge-statement.md#capturing-the-merged-rows-batch-only)).
+    **Still absent:** a fluent MERGE `OutputInto`/`OutputIntoThenOutput`, real-table capture-source
+    helpers, join-mutation capture, and any capture outside SQL Server —
+    todo: [`todo_output_into.md`](todo_output_into.md).
 56. **`ORDER BY ... NULLS FIRST/LAST` (issue [#287](https://github.com/AlexeyShirshov/nextorm/issues/287)).**
     There is no null-placement overload, so NULLs sort the way the provider sorts them — and the default
     differs: PostgreSQL is `NULLS LAST` ascending / `FIRST` descending, SQL Server/MySQL/MariaDB/SQLite
@@ -428,7 +436,12 @@ to the ledger on 2026-09-29; item 49 (eager loading) moved on 2026-10-17; item 5
     `OUTPUT ... INTO` (`Returning(...).OutputInto(target)` writes the modified rows into an existing table;
     `OutputIntoThenOutput(target)` also returns them) and key-upsert `Returning()`
     (`ON CONFLICT ... RETURNING` on PostgreSQL/SQLite, `MERGE ... OUTPUT` on SQL Server; MySQL/MariaDB
-    reject it). Phase 2 (several result sets from one command) is now **implemented** (2026-09-26) by phase 4
+    reject it). #266 adds the **batch-scoped capture**: `BatchBuilder.OutputIntoTableVariable(...)` for
+    `INSERT`/`UPDATE`/`DELETE`/`MERGE` plus `FromOutput<TResult>`/`FromOutputTable` read-back in the same
+    batch (one round trip; MERGE leads with `$action`; see
+    [Writing into a table variable](../../guide/17-insert-statement.md#batch-scoped-capture-batchbuilderoutputintotablevariable)).
+    The remaining `OUTPUT` forms — fluent MERGE `OutputInto`, real-table capture sources and
+    join-mutation capture — are listed in [`todo_output_into.md`](todo_output_into.md). Phase 2 (several result sets from one command) is now **implemented** (2026-09-26) by phase 4
     of `todo_stored_procedures.md` (#70, including #25): the batch surface
     exposes `BatchBuilder.AddQuery<TResult>` + `Execute`/`ExecuteAsync` → `BatchResult.Read<TResult>()`,
     carrying several result sets in a single round trip (gated by `ISqlDialect.SupportsBatch`).

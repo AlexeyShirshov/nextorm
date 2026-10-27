@@ -138,6 +138,23 @@ and PostgreSQL 17+ `RETURNING target.<col>`. MySQL/MariaDB have no row-returning
 `.Returning()` there throws `NotSupportedException`; SQLite and ClickHouse still reject the full
 `MERGE` (and the server must be PostgreSQL 15+ for the general `MERGE` statement itself).
 
+### Capturing the merged rows (batch only)
+
+There is **no fluent `OutputInto`/`OutputIntoThenOutput` on the MERGE builder**. The only capture form is
+the batch one: `BatchBuilder.OutputIntoTableVariable(mergeTerminal, "@t", definitions)` emits
+`DECLARE @t TABLE (...); MERGE ... OUTPUT ... INTO @t (...)` as one statement, and a later step of the
+same batch reads the captured rows with `FromOutput<TResult>`/`FromOutputTable`. See
+[Batch-scoped capture](17-insert-statement.md#batch-scoped-capture-batchbuilderoutputintotablevariable).
+
+`$action` is the **first** captured column: the capture always renders `OUTPUT $action, inserted.<col>...`,
+and the caller's first `columnDefinitions` column receives it — whatever that column is called (`action`,
+`verb`, …); the returned columns fill the remaining declared columns in projection order.
+
+The remaining SQL Server restrictions of the form are unchanged: the full `MERGE` needs SQL Server (or
+PostgreSQL 15+, which has no capture); `THEN DO NOTHING` does not exist on SQL Server; a
+`WHEN NOT MATCHED BY SOURCE` condition may reference only the target row; a matched branch may not rewrite
+the match key; and a database-generated column cannot be an assignment target.
+
 ## Column assignments (expressions)
 
 Both forms accept an explicit assignment set instead of the default "every non-key column, from the same-named source column" rule. A selector must be an anonymous initializer or a typed initializer assignable to the entity; a bare member, an empty initializer or a non-initializer body is rejected with `ArgumentException` (parameter `assignments`) before any SQL is built.
@@ -250,7 +267,7 @@ insert into simple_entity (id, name) values (@p0, @p1) on conflict (id) do updat
 
 | Provider | Key upsert | Full `MERGE` | Assignments | `RETURNING`/`OUTPUT` | Notes |
 |---|---|---|---|---|---|
-| SQL Server | `MERGE ... USING (VALUES ...)` | yes | target + source (no proposed row) | `OUTPUT inserted.<col>` (key upsert and full) | every branch, including `WHEN NOT MATCHED BY SOURCE` |
+| SQL Server | `MERGE ... USING (VALUES ...)` | yes | target + source (no proposed row) | `OUTPUT inserted.<col>` (key upsert and full); the batch capture writes `$action` plus the returning columns into a table variable | every branch, including `WHEN NOT MATCHED BY SOURCE` |
 | PostgreSQL | `ON CONFLICT ... DO UPDATE` | yes (server 15+) | target + source + `excluded` | `RETURNING` (key upsert 9.5+, full 17+) | `DO NOTHING`; no `BY SOURCE` |
 | SQLite | `ON CONFLICT ... DO UPDATE` | — | target + source + `excluded` | `RETURNING` (key upsert, 3.35+) | key upsert only |
 | MySQL | `ON DUPLICATE KEY UPDATE` | — | target + source + `VALUES(<col>)` | — | key upsert only; no `RETURNING` |

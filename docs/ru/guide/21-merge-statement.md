@@ -138,6 +138,23 @@ merge into dest as target using (values (@p0, @p1)) as source (id, name) on targ
 поэтому `.Returning()` там бросает `NotSupportedException`; SQLite и ClickHouse по-прежнему отклоняют
 полный `MERGE` (а для самой инструкции общего `MERGE` сервер должен быть PostgreSQL 15+).
 
+### Захват слитых строк (только в батче)
+
+Fluent `OutputInto`/`OutputIntoThenOutput` на билдере `MERGE` **нет**. Единственная форма захвата —
+батчевая: `BatchBuilder.OutputIntoTableVariable(mergeTerminal, "@t", definitions)` рендерит
+`DECLARE @t TABLE (...); MERGE ... OUTPUT ... INTO @t (...)` одной инструкцией, а следующая инструкция
+того же батча читает захваченные строки через `FromOutput<TResult>`/`FromOutputTable`. См.
+[Захват в рамках батча](17-insert-statement.md#захват-в-рамках-батча-batchbuilderoutputintotablevariable).
+
+`$action` — **первая** захваченная колонка: захват всегда рендерит `OUTPUT $action, inserted.<col>...`,
+и её получает первая колонка из `columnDefinitions` вызывающего — как бы она ни называлась (`action`,
+`verb`, …); возвращённые колонки заполняют остальные объявленные колонки в порядке проекции.
+
+Остальные ограничения формы на SQL Server не меняются: полный `MERGE` требует SQL Server (или
+PostgreSQL 15+, где захвата нет); `THEN DO NOTHING` в SQL Server отсутствует; условие
+`WHEN NOT MATCHED BY SOURCE` может ссылаться только на строку target; matched-ветка не может
+переписать ключ совпадения; генерируемая базой колонка не может быть целью присваивания.
+
 ## Присваивания колонок (выражения)
 
 Обе формы принимают явный набор присваиваний вместо правила по умолчанию «каждая не-ключевая колонка — из одноимённой колонки источника». Селектор обязан быть анонимным инициализатором или типизированным инициализатором, присваиваемым сущности; голый член, пустой инициализатор или тело, не являющееся инициализатором, отклоняются с `ArgumentException` (параметр `assignments`) до построения любого SQL.
@@ -250,7 +267,7 @@ insert into simple_entity (id, name) values (@p0, @p1) on conflict (id) do updat
 
 | Провайдер | Key upsert | Полный `MERGE` | Присваивания | `RETURNING`/`OUTPUT` | Примечание |
 |---|---|---|---|---|---|
-| SQL Server | `MERGE ... USING (VALUES ...)` | да | target + source (предлагаемой строки нет) | `OUTPUT inserted.<col>` (key upsert и полный) | все ветки, включая `WHEN NOT MATCHED BY SOURCE` |
+| SQL Server | `MERGE ... USING (VALUES ...)` | да | target + source (предлагаемой строки нет) | `OUTPUT inserted.<col>` (key upsert и полный); батчевый захват пишет `$action` и returning-колонки в табличную переменную | все ветки, включая `WHEN NOT MATCHED BY SOURCE` |
 | PostgreSQL | `ON CONFLICT ... DO UPDATE` | да (сервер 15+) | target + source + `excluded` | `RETURNING` (key upsert 9.5+, полный 17+) | `DO NOTHING`; без `BY SOURCE` |
 | SQLite | `ON CONFLICT ... DO UPDATE` | — | target + source + `excluded` | `RETURNING` (key upsert, 3.35+) | только key upsert |
 | MySQL | `ON DUPLICATE KEY UPDATE` | — | target + source + `VALUES(<col>)` | — | только key upsert; нет `RETURNING` |

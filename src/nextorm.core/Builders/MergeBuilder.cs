@@ -595,7 +595,7 @@ public sealed partial class MergeBuilder<TEntity>
         var parameter = Expression.Parameter(typeof(TEntity), "x");
         var identity = Expression.Lambda<Func<TEntity, TEntity>>(parameter, parameter);
         var (columns, selectList, oneColumn) = ReturningProjection.Parse(identity, _metadata.Properties, FindMapped);
-        return new MergeReturningBuilder<TEntity, TEntity>(this, columns, selectList, oneColumn);
+        return new MergeReturningBuilder<TEntity, TEntity>(this, columns, selectList, oneColumn, projection: identity);
     }
 
     /// <summary>
@@ -611,7 +611,7 @@ public sealed partial class MergeBuilder<TEntity>
     {
         ArgumentNullException.ThrowIfNull(projection);
         var (columns, selectList, oneColumn) = ReturningProjection.Parse(projection, _metadata.Properties, FindMapped);
-        return new MergeReturningBuilder<TEntity, TResult>(this, columns, selectList, oneColumn);
+        return new MergeReturningBuilder<TEntity, TResult>(this, columns, selectList, oneColumn, projection);
     }
 
     /// <summary>Adds an update branch over <paramref name="columns"/> (or every non-key column when <see langword="null"/>).</summary>

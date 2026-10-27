@@ -1,6 +1,3 @@
-using System.Linq.Expressions;
-using System.Reflection;
-
 namespace NextORM.Core;
 
 /// <summary>
@@ -80,7 +77,7 @@ public sealed class MutationCteQuery<TResult>
     internal static MutationCteQuery<TResult> Create<TEntity>(IDataContext dataContext, string name, InsertReturningBuilder<TEntity, TResult> insert, IReadOnlyList<CteDefinition>? preceding = null)
     {
         EnsureSupported(dataContext);
-        var cte = new CteDefinition(name, BuildShape(dataContext, insert), new CteMutation(insert.BuildMutationCommand()));
+        var cte = new CteDefinition(name, MutationReadShape.BuildShape(dataContext, insert), new CteMutation(insert.BuildMutationCommand()));
         return Wrap(dataContext, name, cte, preceding);
     }
 
@@ -91,7 +88,7 @@ public sealed class MutationCteQuery<TResult>
     {
         EnsureSupported(dataContext);
         var projection = update.Projection ?? throw MissingProjection("update");
-        var cte = new CteDefinition(name, BuildShape<TResult>(dataContext, projection, typeof(TEntity)), new CteMutation(update.BuildMutationCommand()));
+        var cte = new CteDefinition(name, MutationReadShape.BuildShape<TResult>(dataContext, projection, typeof(TEntity)), new CteMutation(update.BuildMutationCommand()));
         return Wrap(dataContext, name, cte, preceding);
     }
 
@@ -102,7 +99,7 @@ public sealed class MutationCteQuery<TResult>
     {
         EnsureSupported(dataContext);
         var projection = delete.Projection ?? throw MissingProjection("delete");
-        var cte = new CteDefinition(name, BuildShape<TResult>(dataContext, projection, typeof(TEntity)), new CteMutation(delete.BuildMutationCommand()));
+        var cte = new CteDefinition(name, MutationReadShape.BuildShape<TResult>(dataContext, projection, typeof(TEntity)), new CteMutation(delete.BuildMutationCommand()));
         return Wrap(dataContext, name, cte, preceding);
     }
 
@@ -114,7 +111,7 @@ public sealed class MutationCteQuery<TResult>
         EnsureSupported(dataContext);
         var command = update.BuildMutationCommand();
         var source = JoinShapeSource(command);
-        var cte = new CteDefinition(name, BuildShape<TResult>(dataContext, update.Projection, typeof(TProjection), source), new CteMutation(command));
+        var cte = new CteDefinition(name, MutationReadShape.BuildShape<TResult>(dataContext, update.Projection, typeof(TProjection), source), new CteMutation(command));
         return Wrap(dataContext, name, cte, preceding);
     }
 
@@ -126,7 +123,7 @@ public sealed class MutationCteQuery<TResult>
         EnsureSupported(dataContext);
         var command = delete.BuildMutationCommand();
         var source = JoinShapeSource(command);
-        var cte = new CteDefinition(name, BuildShape<TResult>(dataContext, delete.Projection, typeof(TProjection), source), new CteMutation(command));
+        var cte = new CteDefinition(name, MutationReadShape.BuildShape<TResult>(dataContext, delete.Projection, typeof(TProjection), source), new CteMutation(command));
         return Wrap(dataContext, name, cte, preceding);
     }
 
@@ -168,57 +165,6 @@ public sealed class MutationCteQuery<TResult>
         ctes.Add(cte);
 
         return new MutationCteQuery<TResult>(dataContext, ctes, name);
-    }
-
-    /// <summary>
-    /// Builds the prepared column-shape command a data-modifying CTE read uses: a projection over the
-    /// mutated entity that mirrors the <c>RETURNING</c> selector, so member access resolves to the
-    /// returned columns.
-    /// </summary>
-    internal static QueryCommand BuildShape<TEntity, TReturn>(IDataContext dataContext, InsertReturningBuilder<TEntity, TReturn> insert)
-    {
-        var projection = insert.Projection ?? BuildKeyProjection<TEntity, TReturn>(insert);
-        return BuildShape<TReturn>(dataContext, projection, typeof(TEntity));
-    }
-
-    private static QueryCommand BuildShape<TShape>(IDataContext dataContext, LambdaExpression projection, Type sourceType, QueryCommand? joinedSource = null)
-    {
-        // An identity projection has no column-producing body for the normal
-        // projector path, so the shape is built as a bare projection over TShape and expanded by
-        // TryBuildProjectionSelectList into slot-tagged item columns (mirroring the mutation's
-        // RETURNING list). Non-identity shapes keep their selector.
-        var isIdentity = TypeFacts.UnwrapConvert(projection.Body) is ParameterExpression;
-        var shape = dataContext.CreateCommand<TShape>(new QueryDefinition
-        {
-            Exp = isIdentity ? null : projection,
-            SrcType = isIdentity ? typeof(TShape) : sourceType,
-            Joins = joinedSource?.Joins,
-        });
-        // Mark the identity shape BEFORE preparation so TryBuildProjectionSelectList tags every item
-        // column with its deterministic, collision-free per-slot alias before the column plan hash is
-        // finalized. Assigning it afterwards (after PrepareCommand) would leave PlanHashCode and the
-        // command's ColumnsPlanHash describing a shape without the alias.
-        if (isIdentity)
-            shape.IdentitySlotAliases = true;
-        if (joinedSource?.From is { } from)
-            shape.From = from;
-        shape.PrepareCommand(false, CancellationToken.None);
-
-        return shape;
-    }
-
-    // ReturningKey<TKey>() carries no selector; reconstruct the single key member access so the read
-    // can still be typed (the key type was validated against TKey when the returning builder was built).
-    private static LambdaExpression BuildKeyProjection<TEntity, TReturn>(InsertReturningBuilder<TEntity, TReturn> insert)
-    {
-        var columns = insert.ReturningColumns;
-        if (columns.Count == 0)
-            throw new NotSupportedException(
-                "A data-modifying CTE requires RETURNING columns: ReturningIdentity<TKey>() names no column. Project the returned columns instead, e.g. Return(x => new { x.Id }).");
-
-        PropertyInfo property = columns[0].PropertyInfo;
-        var parameter = Expression.Parameter(typeof(TEntity), "x");
-        return Expression.Lambda(Expression.MakeMemberAccess(parameter, property), parameter);
     }
 
     private CteDefinition FindCte(string name)

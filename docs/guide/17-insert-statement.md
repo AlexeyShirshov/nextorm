@@ -597,6 +597,83 @@ The three forms differ in where the modified rows go and what reaches the client
 SQL Server `OUTPUT`/`OUTPUT INTO` support is tracked in issue
 [#15](https://github.com/AlexeyShirshov/nextorm/issues/15) (closed).
 
+### Batch-scoped capture (`BatchBuilder.OutputIntoTableVariable`)
+
+The fluent form above owns the mutation: it declares the variable, writes the modified rows into it and
+appends an automatic `SELECT` read-back that its terminals then discard. When the captured rows are
+needed by a **later statement of the same batch** — to filter, join, aggregate or return them — register
+the capture on the batch instead and compose an ordinary query over it:
+
+```csharp
+public sealed class CapturedRow
+{
+    public long Id { get; set; }
+    public string? Name { get; set; }
+}
+
+var batch = ctx.CreateBatchBuilder();
+
+batch.OutputIntoTableVariable(
+    ctx.CreateInsertBuilder<ISimpleEntity>()
+        .Value(x => x.Name, name)
+        .Returning(x => new CapturedRow { Id = x.Id, Name = x.Name }),
+    "@t",
+    "id bigint, name nvarchar(100)");
+
+var rows = batch
+    .Query(batch.FromOutput<CapturedRow>("@t")
+        .Where(r => r.Id > minId)
+        .OrderBy(r => r.Name)
+        .Select(r => new CapturedRow { Id = r.Id, Name = r.Name }))
+    .ToList();
+```
+
+```sql
+-- SQL Server (one batch, one round trip)
+declare @t table (id bigint, name nvarchar(100)); insert into simple_entity (name) output inserted.id, inserted.name into @t (id, name) values (@p0); select id, name
+ from @t as [t1]
+ where (t1.id > @b1_minId)
+ order by t1.name
+```
+
+* **One capture overload per mutation kind.** `BatchBuilder.OutputIntoTableVariable(...)` accepts an
+  `InsertReturningBuilder<TEntity, TResult>`, an `UpdateReturningBuilder<TEntity, TResult>`, a
+  `DeleteReturningBuilder<TEntity, TResult>` or a `MergeReturningBuilder<TEntity, TResult>`; the captured
+  row shape is the mutation's `Returning(...)` projection (`Returning()` captures the whole mapped
+  entity). A `DELETE` reads the removed rows through the `deleted` alias.
+* **Batch-only visibility.** The table variable exists only inside the batch that declares it.
+  `FromOutput<TResult>(name)` and `FromOutputTable(name)` are accepted only by that batch's
+  `Query`/`AddQuery`, and only for a capture registered *earlier* on the same builder. Reading the source
+  outside its owning batch is refused with `NotSupportedException` (`batch output source`) before a
+  command is allocated; a name never captured on this batch, a duplicate capture name, or a mutation bound
+  to another context is rejected with `InvalidOperationException`/`ArgumentException` while the batch is
+  composed.
+* **Two source forms.** `FromOutput<TResult>("@t")` is a typed source: `TResult` must be exactly the
+  capture's projection type (use a named class or record, not an anonymous type), and the ordinary
+  operators — `Where`, `OrderBy`, `Join`, `GroupBy`, `Limit` — apply. `FromOutputTable("@t")` is a
+  [`TableAlias`](xref:NextORM.Core.TableAlias)-based source (`t["id"].AsInt`), which is the practical
+  choice for an anonymous projection, a join or an aggregate.
+* **No automatic read-back, no extra result set.** The capture step emits only
+  `DECLARE @t TABLE (...); <mutation> OUTPUT ... INTO @t (...)`; the composed query **is** the read-back.
+  The whole batch — capture plus every composed query — is a single server round trip (the naive shape,
+  capture into a real table and then `SELECT` it, needs two).
+* **Per-step parameter isolation.** Every step's captured variables carry a per-step `b{i}_` prefix
+  (`@b0_min`, `@b1_min`, …), so the same closure member name in two steps never collapses into one
+  placeholder; a mutation's own bound values continue a single batch-wide `@p0…` sequence.
+* **Order is explicit.** The table variable has no order of its own: a composed query returns rows in
+  whatever order the engine produces unless you add `OrderBy(...)`.
+* **The definitions are trusted SQL.** `columnDefinitions` is embedded verbatim in the
+  `DECLARE @t TABLE (...)` text and is never parameterised or validated; the caller's declaration names
+  are reused as the `INTO` column list, positionally against the mutation's projection order. The
+  declaration must match the returning projection **by position and count** (a name and a compatible type
+  per column) — a mismatch is a database error, not a client-side diagnostic. Never pass user input there.
+* **Provider and form gates.** Only SQL Server implements `ISqlDialect.SupportsOutputInto`; every other
+  provider refuses the capture with `NotSupportedException`, and a mutation whose projection yields no
+  output column (the parameterless `ReturningIdentity<TKey>()`) is refused the same way. PostgreSQL keeps
+  its own [data-modifying CTE](#data-modifying-cte-postgresql) route for reading modified rows, and this
+  API refuses it. There is no fluent `OutputInto` for a `MERGE` — the batch capture is its only form (see
+  [Capturing the merged rows](21-merge-statement.md#capturing-the-merged-rows-batch-only)).
+
 ## Bulk insert
 
 Writing a whole set — native bulk paths, chunking, `Returning`, `IgnoreDuplicates` and `KeepIdentity` —
@@ -636,8 +713,10 @@ var sql = ctx.CreateInsertBuilder<ISimpleEntity>().Value(x => x.Name, "a").ToSql
 `INSERT ... VALUES` itself is cross-provider and ungated: the same `CreateInsertBuilder<T>()` API works on every
 SQL provider. Only the generated-key form differs, and a provider that cannot express it rejects
 `ReturningIdentity`/`ReturningKey` with `NotSupportedException` instead of emitting invalid SQL.
-SQL Server additionally writes the modified rows into an existing table with `OUTPUT INTO`; see
-[Writing the modified rows into a table](#writing-the-modified-rows-into-a-table-output-into).
+SQL Server additionally writes the modified rows into an existing table with `OUTPUT INTO`, and into a
+same-batch table variable for a later statement of the same batch; see
+[Writing the modified rows into a table](#writing-the-modified-rows-into-a-table-output-into) and
+[Batch-scoped capture](#batch-scoped-capture-batchbuilderoutputintotablevariable).
 
 ## Notes and limitations
 
