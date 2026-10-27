@@ -432,3 +432,125 @@ public static class T323CollisionAggregateUdf
     [SqlFunction("t323_my_scalar", IsAggregate = true)]
     public static decimal sum(decimal value) => value;
 }
+
+/// <summary>
+/// T323 (#323) D3b: the two key-less <c>SelectGroup</c> modes. A global aggregate renders one row for
+/// the whole source and its <c>HAVING</c> is a filter on that row (no <c>GROUP BY</c>); a constant
+/// projection renders <c>select distinct ...</c> and its row-independent <c>HAVING</c> is a pre-group
+/// <c>WHERE</c> filter. The legacy ungrouped <c>HAVING</c> and the explicit grouped <c>HAVING</c> are
+/// pinned as controls so the renderer change cannot move them. Only preparation runs: the context
+/// carries a placeholder connection, so no database is opened.
+/// </summary>
+public class T323SelectGroupDegenerateModesTests
+{
+    private static string Normalize(string sql) => sql.Replace("\r\n", "\n");
+
+    private static DbPreparedQueryCommand<T> Prepare<T>(IDataContext ctx, QueryCommand<T> cmd)
+    {
+        return (DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(cmd, false, false, CancellationToken.None);
+    }
+
+    private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd) => Normalize(Prepare(ctx, cmd).DbCommand.CommandText);
+
+    [Fact]
+    public void GlobalAggregateHaving_ShouldEmitHaving()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<T323LegacyEntity>()
+            .Having(x => SqlFunctions.Sql.sum(x.Amount) > 0)
+            .SelectGroup(x => new { S = SqlFunctions.Sql.sum(x.Amount) }));
+
+        sql.Should().Contain(" having ", "a global aggregate has one row to filter");
+        sql.Should().Contain("sum(", "the aggregate projection is unchanged");
+        sql.Should().NotContain("group by", "a global aggregate has no grouping key");
+    }
+
+    [Fact]
+    public void GlobalAggregateHaving_ShouldBindCapturedThreshold()
+    {
+        decimal threshold = 13m;
+        using var ctx = PostgresTestContext.Create();
+
+        var prepared = Prepare(ctx, ctx.From<T323LegacyEntity>()
+            .Having(x => SqlFunctions.Sql.sum(x.Amount) > threshold)
+            .SelectGroup(x => new { S = SqlFunctions.Sql.sum(x.Amount) }));
+        var sql = Normalize(prepared.DbCommand.CommandText);
+
+        sql.Should().Contain(" having ");
+        sql.Should().Contain("@", "the captured threshold is bound as a parameter");
+        sql.Should().NotContain("13", "the captured value is never spliced into the statement");
+    }
+
+    [Fact]
+    public void GlobalAggregateHaving_OrderByAggregate_ShouldRender()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<T323LegacyEntity>()
+            .Having(x => SqlFunctions.Sql.sum(x.Amount) > 0)
+            .OrderBy(x => SqlFunctions.Sql.sum(x.Amount))
+            .SelectGroup(x => new { S = SqlFunctions.Sql.sum(x.Amount) }));
+
+        var havingIndex = sql.IndexOf(" having ", StringComparison.Ordinal);
+        var orderByIndex = sql.IndexOf(" order by ", StringComparison.Ordinal);
+
+        havingIndex.Should().BeGreaterThanOrEqualTo(0);
+        orderByIndex.Should().BeGreaterThan(havingIndex, "HAVING belongs to the group filter, ORDER BY to the output");
+    }
+
+    [Fact]
+    public void ConstantProjection_ShouldRenderDistinct()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var grouped = SqlOf(ctx, ctx.From<T323LegacyEntity>().SelectGroup(x => new { V = 1 }));
+
+        grouped.TrimStart().StartsWith("select distinct", StringComparison.OrdinalIgnoreCase)
+            .Should().BeTrue($"a key-less constant projection must collapse to one row, got: {grouped}");
+        grouped.Should().NotContain("group by");
+
+        var legacy = SqlOf(ctx, ctx.From<T323LegacyEntity>().Select(x => new { V = 1 }));
+        legacy.Should().NotContain("distinct", "the DISTINCT rendering is gated on the SelectGroup mode");
+    }
+
+    [Fact]
+    public void ConstantProjection_ConstantHaving_ShouldBeWhereFilter()
+    {
+        int min = 0;
+        using var ctx = PostgresTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<T323LegacyEntity>()
+            .Having(x => 1 > min)
+            .SelectGroup(x => new { V = 1 }));
+
+        sql.Should().Contain(" where ", "a row-independent HAVING has no group and filters rows instead");
+        sql.Should().NotContain(" having ", "the predicate must not be rendered as a group filter");
+        sql.Should().NotContain("group by");
+    }
+
+    [Fact]
+    public void LegacyUngroupedHaving_ShouldStillBeDropped()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<T323LegacyEntity>()
+            .Having(x => x.Id > 1)
+            .Select(x => new { x.Id }));
+
+        sql.Should().NotContain("having", "an ungrouped legacy HAVING keeps its historical behaviour");
+    }
+
+    [Fact]
+    public void ExplicitGroupedHaving_ShouldStillRender()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<T323LegacyEntity>()
+            .GroupBy(x => x.Id)
+            .Having(x => SqlFunctions.Sql.sum(x.Amount) > 0)
+            .Select(x => new { x.Id }));
+
+        sql.Should().Contain(" having ", "the explicit grouped HAVING path is untouched");
+    }
+}

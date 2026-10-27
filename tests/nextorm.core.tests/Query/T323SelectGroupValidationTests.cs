@@ -379,4 +379,24 @@ public class T323SelectGroupValidationTests
         SqlOf(ctx, joined.Select(p => new { p.Item1 }))
             .Should().NotBeNullOrWhiteSpace("the ordinary projection path still renders a whole joined entity");
     }
+
+    [Fact]
+    public void GlobalAggregate_HavingUncoveredRow_ShouldReject()
+    {
+        using var ctx = CreateContext();
+        var e = ctx.From<T323LegacyEntity>();
+
+        // A global aggregate infers no key, so a HAVING that reaches a row member has nothing to be
+        // covered by and must fail at preparation instead of rendering a predicate over a column that
+        // the statement does not group by.
+        AssertRejected(
+            () => SqlOf(ctx, e
+                .Having(x => x.Group2 > 1)
+                .SelectGroup(x => new { S = SqlFunctions.Sql.sum(x.Amount) })),
+            "not covered by inferred keys");
+
+        // The equivalent legacy form is untouched: an ungrouped HAVING there is still silently dropped.
+        SqlOf(ctx, e.Having(x => x.Group2 > 1).Select(x => new { S = SqlFunctions.Sql.sum(x.Amount) }))
+            .Should().NotContain("having");
+    }
 }

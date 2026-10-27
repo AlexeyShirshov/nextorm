@@ -3845,20 +3845,22 @@ public partial class QueryCommand
                         groupingPlanHash = ApplyKeyColumnPlanHashes(cmd, columns, noHash, groupingPlanHash, cancellationToken);
                         break;
 
-                    case SelectGroupMode.None:
-                        throw new QueryPreparationException("SelectGroup projection analysis is missing.");
+                    case SelectGroupMode.GlobalAggregate:
+                        // No keys: the whole source is one group, so the statement carries no GROUP BY
+                        // list and a HAVING renders as a global filter over the aggregate projection
+                        // (DataContext/SqlBuilder.cs). There are no keys to validate the predicate
+                        // against, so the analyzer already refused every row-dependent HAVING shape;
+                        // only aggregate calls and row-independent expressions reach the renderer.
+                        break;
+
+                    case SelectGroupMode.ConstantProjection:
+                        // No keys and no aggregates: the projection references no row, the statement
+                        // renders `select distinct ...` and a validated row-independent HAVING is a
+                        // pre-group filter, rendered in the WHERE position (DataContext/SqlBuilder.cs).
+                        break;
 
                     default:
-                        // GlobalAggregate/ConstantProjection render without a GROUP BY list. A HAVING
-                        // over such a projection has no keys to validate against and is not rendered
-                        // by this slice; fail closed instead of silently dropping the predicate.
-                        if (cmd._having is not null)
-                        {
-                            throw new QueryPreparationException(
-                                "SelectGroup HAVING over a projection without inferred keys is not supported yet.");
-                        }
-
-                        break;
+                        throw new QueryPreparationException("SelectGroup projection analysis is missing.");
                 }
             }
 

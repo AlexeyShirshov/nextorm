@@ -252,10 +252,31 @@ internal readonly struct SqlBuilder
                     if (!_ctx.ParamMode) sqlBuilder!.Append(SqlText.NewLine).Append(Kw(" prewhere "));
                     SqlSourceRenderer.MakeWhere(in _ctx, sqlBuilder, entityType, cmd.PreparedPreWhere, 0, dontNeedAlias, root);
                 }
+
+                // A key-less constant projection has no group, so a validated row-independent HAVING is a
+                // pre-group filter and belongs in the WHERE position of that statement. Every other mode
+                // (including the legacy ungrouped HAVING, which stays dropped) keeps its WHERE rendering.
+                var preGroupHaving = IsConstantProjection(cmd) ? cmd.PreparedHaving ?? cmd.Having : null;
+
                 if (cmd.PreparedCondition is not null)
                 {
                     if (!_ctx.ParamMode) sqlBuilder!.Append(SqlText.NewLine).Append(Kw(" where "));
-                    SqlSourceRenderer.MakeWhere(in _ctx, sqlBuilder, entityType, cmd.PreparedCondition, 0, dontNeedAlias, root);
+
+                    if (preGroupHaving is null)
+                    {
+                        SqlSourceRenderer.MakeWhere(in _ctx, sqlBuilder, entityType, cmd.PreparedCondition, 0, dontNeedAlias, root);
+                    }
+                    else
+                    {
+                        AppendParenthesisedCondition(sqlBuilder, entityType, cmd.PreparedCondition, dontNeedAlias, root);
+                        if (!_ctx.ParamMode) sqlBuilder!.Append(Kw(" and "));
+                        AppendParenthesisedCondition(sqlBuilder, entityType, preGroupHaving, dontNeedAlias, root);
+                    }
+                }
+                else if (preGroupHaving is not null)
+                {
+                    if (!_ctx.ParamMode) sqlBuilder!.Append(SqlText.NewLine).Append(Kw(" where "));
+                    AppendParenthesisedCondition(sqlBuilder, entityType, preGroupHaving, dontNeedAlias, root);
                 }
 
                 var grouping = cmd.GroupingList;
@@ -340,6 +361,17 @@ internal readonly struct SqlBuilder
                         if (!_ctx.ParamMode) sqlBuilder!.Append(SqlText.NewLine).Append(Kw(" having "));
                         SqlSourceRenderer.MakeWhere(in _ctx, sqlBuilder, entityType, having, 0, dontNeedAlias, root);
                     }
+                }
+                else if (cmd.IsSelectGroup
+                    && cmd.SelectGroupMode == SelectGroupMode.GlobalAggregate
+                    && (cmd.PreparedHaving ?? cmd.Having) is { } globalHaving)
+                {
+                    // A global aggregate groups the whole source: there is no GROUP BY list, and HAVING
+                    // filters the single aggregate row (`select sum(amount) from t having sum(amount) > @p`).
+                    // The branch is gated on IsSelectGroup, so a legacy ungrouped HAVING keeps its
+                    // historical behaviour of not being rendered at all.
+                    if (!_ctx.ParamMode) sqlBuilder!.Append(SqlText.NewLine).Append(Kw(" having "));
+                    SqlSourceRenderer.MakeWhere(in _ctx, sqlBuilder, entityType, globalHaving, 0, dontNeedAlias, root);
                 }
 
                 var windows = cmd.Windows;
@@ -562,7 +594,9 @@ internal readonly struct SqlBuilder
                 }
                 // SQL Server renders the limit as TOP(n); DISTINCT has to precede it
                 // ("select distinct top(n) ..."), so the flag is emitted before the select-list branch.
-                else if (cmd.IsDistinct)
+                // A key-less constant projection is rendered through DISTINCT without mutating the
+                // command's own IsDistinct (which is source state and part of the plan key).
+                else if (cmd.IsDistinct || IsConstantProjection(cmd))
                     selectBuilder.Append(Kw("distinct "));
             }
             if (cmd.IgnoreColumns || selectList is null)
@@ -1768,6 +1802,32 @@ internal readonly struct SqlBuilder
             && (TypeFacts.UnwrapConvert(body) is ParameterExpression
                 || body is NewExpression { Arguments.Count: 0 }
                 || body is MemberInitExpression { Bindings.Count: 0 });
+
+    /// <summary>
+    /// Whether the command is a key-less constant projection: no inferred grouping key and no aggregate,
+    /// so every output is row-independent and the statement renders as <c>select distinct ...</c>.
+    /// </summary>
+    private static bool IsConstantProjection(QueryCommand cmd)
+        => cmd.IsSelectGroup && cmd.SelectGroupMode == SelectGroupMode.ConstantProjection;
+
+    /// <summary>
+    /// Renders one predicate of a composed <c>WHERE</c> clause inside parentheses. Used only by the
+    /// key-less constant-projection path, where the projection's own filter and a pre-group <c>HAVING</c>
+    /// share the one <c>WHERE</c>: the wrapping stops a top-level <c>OR</c> in either predicate from
+    /// changing the composed meaning, and the parenthesised rendering walks the parameters in the same
+    /// order as the SQL pass (nothing is emitted in parameter mode).
+    /// </summary>
+    private void AppendParenthesisedCondition(
+        StringBuilder? target,
+        Type entityType,
+        Expression condition,
+        bool dontNeedAlias,
+        SqlParameterTemplateRecorder? recorder)
+    {
+        if (!_ctx.ParamMode) target!.Append('(');
+        SqlSourceRenderer.MakeWhere(in _ctx, target, entityType, condition, 0, dontNeedAlias, recorder);
+        if (!_ctx.ParamMode) target!.Append(')');
+    }
 
     /// <summary>
     /// Renders a query tag as a single-line block comment. Line breaks are folded to spaces and both
