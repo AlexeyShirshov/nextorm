@@ -3889,6 +3889,9 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         }
         else
         {
+            // A composed table-valued-function body (a factory call followed by builder operations) is
+            // refused by name here, before the conversion below can only report a type-coercion failure.
+            SourceExpressionLowerer.EnsureSupportedCorrelatedApplyBody(source, "a single-entity receiver");
             var body = source.Body.Type == typeof(QueryCommand) ? source.Body : Expression.Convert(source.Body, typeof(QueryCommand));
             applySource = Expression.Lambda(body, source.Parameters);
         }
@@ -3969,6 +3972,9 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         }
         else
         {
+            // A composed table-valued-function body (a factory call followed by builder operations) is
+            // refused by name here, before the conversion below can only report a type-coercion failure.
+            SourceExpressionLowerer.EnsureSupportedCorrelatedApplyBody(source, "a joined receiver");
             var body = source.Body.Type == typeof(QueryCommand) ? source.Body : Expression.Convert(source.Body, typeof(QueryCommand));
             applySource = Expression.Lambda(body, source.Parameters);
         }

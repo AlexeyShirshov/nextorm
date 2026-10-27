@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.ExceptionServices;
+using System.Text;
 
 namespace NextORM.Core;
 
@@ -49,15 +50,8 @@ internal static class SourceExpressionLowerer
         // Walk the composition spine from the outermost call inward. Every step is a builder operation
         // over the previous builder; the innermost receiver must be the originating factory call. The
         // outermost Where/OrderBy/... is therefore never mistaken for the factory.
-        var operations = new List<MethodCallExpression>();
-        var current = StripConvert(source.Body);
-        while (current is MethodCallExpression { Object: not null } operation && IsSupportedBuilderOperation(operation))
-        {
-            operations.Add(operation);
-            current = StripConvert(operation.Object!);
-        }
-
-        if (current is not MethodCallExpression call)
+        var call = CollectCompositionSpine(source.Body, out var operations);
+        if (call is null)
             throw new NotSupportedException(NotADirectFactoryCallMessage);
 
         var rowType = GetFactoryRowType(call);
@@ -108,9 +102,33 @@ internal static class SourceExpressionLowerer
         }
     }
 
+    /// <summary>
+    /// Walks the builder-operation composition spine of a source expression from the outermost call
+    /// inward: every step is a supported builder operation over the previous builder, and the call the
+    /// walk stops at is the originating call (the runtime factory for a table-valued-function source).
+    /// This is the single recognition used by <see cref="LowerTvfSource{T}"/> and by the correlated
+    /// APPLY refusal, so both read the same spine and never mistake an outermost <c>Where</c> for a factory.
+    /// </summary>
+    /// <param name="body">The lambda body to inspect.</param>
+    /// <param name="operations">The composed operations, outermost first; empty for a bare call.</param>
+    /// <returns>The innermost call, or <see langword="null"/> when the spine does not end in a call.</returns>
+    private static MethodCallExpression? CollectCompositionSpine(
+        Expression body,
+        out List<MethodCallExpression> operations)
+    {
+        operations = [];
+        var current = StripConvert(body);
+        while (current is MethodCallExpression { Object: not null } operation && IsSupportedBuilderOperation(operation))
+        {
+            operations.Add(operation);
+            current = StripConvert(operation.Object!);
+        }
+
+        return current as MethodCallExpression;
+    }
+
     private static readonly MethodInfo LowerComposedMI = typeof(SourceExpressionLowerer)
         .GetMethod(nameof(LowerComposed), BindingFlags.NonPublic | BindingFlags.Static)!;
-
     /// <summary>
     /// Binds the table-function source for <typeparamref name="TRow"/> and re-applies the collected
     /// builder operations in their original order. The operations are invoked with the <b>original</b>
@@ -246,6 +264,45 @@ internal static class SourceExpressionLowerer
 
     private static readonly MethodInfo BuildCorrelatedApplyFromOuterMI = typeof(SourceExpressionLowerer)
         .GetMethod(nameof(BuildCorrelatedApplyFromOuter), BindingFlags.NonPublic | BindingFlags.Static)!;
+
+    /// <summary>
+    /// Refuses a <b>composed</b> correlated table-valued-function body
+    /// (<c>builder.CrossApply(row =&gt; Db.MyTvf(row.Id).Where(...))</c>) at composition time: the body is
+    /// recognised by walking the same builder-operation spine <see cref="LowerTvfSource{T}"/> walks and
+    /// finding a runtime factory call under at least one builder operation.
+    /// <para>
+    /// The refusal must happen here, before the body reaches <see cref="Expression.Convert(Expression, Type)"/>: a composed
+    /// body is an <see cref="EntityBuilder{T}"/> chain, not the <see cref="QueryCommand"/> an APPLY source
+    /// needs, so converting it would surface a type-coercion failure with no information about the shape.
+    /// No user factory is executed and no argument value is read: the spine is recognised from method
+    /// metadata only.
+    /// </para>
+    /// </summary>
+    /// <param name="source">The correlated APPLY lambda supplied to the builder.</param>
+    /// <param name="receiver">The receiver whose APPLY member was called, named in the message.</param>
+    /// <exception cref="NotSupportedException">
+    /// The body composes builder operations over a runtime factory call; the message names the composition
+    /// and the supported forms.
+    /// </exception>
+    internal static void EnsureSupportedCorrelatedApplyBody(LambdaExpression source, string receiver)
+    {
+        var call = CollectCompositionSpine(source.Body, out var operations);
+        if (call is null || operations.Count == 0 || GetFactoryRowType(call) is null)
+            return;
+
+        throw new NotSupportedException(
+            $"A correlated CROSS/OUTER APPLY source on {receiver} accepts either a bare runtime table-valued-function factory call (row => Db.MyTvf(row.Id)) or a derived query (row => ctx.From<T>().Where(row => ...).Select(row => new {{ ... }})); the body '{DescribeComposition(call, operations)}' is a factory call followed by builder operations and cannot be lowered in an APPLY position.");
+    }
+
+    /// <summary>Names a recognised composition spine in its original order: the factory, then each operation.</summary>
+    private static string DescribeComposition(MethodCallExpression factory, List<MethodCallExpression> operations)
+    {
+        var description = new StringBuilder($"{factory.Method.DeclaringType?.Name}.{factory.Method.Name}");
+        for (var i = operations.Count - 1; i >= 0; i--)
+            description.Append(" followed by ").Append(operations[i].Method.Name);
+
+        return description.ToString();
+    }
 
     /// <summary>
     /// Recognises the correlated <c>CROSS/OUTER APPLY</c> form

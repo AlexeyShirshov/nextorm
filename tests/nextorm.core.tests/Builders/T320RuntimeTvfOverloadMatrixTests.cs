@@ -18,6 +18,12 @@ public sealed class T320MatrixRow
 internal static class T320MatrixTvf
 {
     public static TvfEntityBuilder<T320MatrixRow> Echo(int id) => new("echo_rows", "dbo");
+
+    /// <summary>
+    /// Two-argument variant used by the #343 joined-apply cache cell: the first argument is the correlated
+    /// column, the second a captured value, so a stale plan shows up as the wrong bound parameter.
+    /// </summary>
+    public static TvfEntityBuilder<T320MatrixRow> EchoPair(int id, int capture) => new("echo_rows_pair", "dbo");
 }
 
 /// <summary>
@@ -462,6 +468,64 @@ public class T320RuntimeTvfOverloadMatrixTests
         factorySql.Should().NotMatchRegex(@"echo_rows\([^)]*t2\.Id",
             "slot 2 is the joined occurrence and is not the addressed left row");
         factorySql.Should().Contain("t4.Id", "the applied source is the next flat slot, never nested inside Item1");
+    }
+
+    // ---- #343 (T343): composed correlated TVF bodies are refused by name ---------------------------
+
+    /// <summary>
+    /// The frozen refusal a <b>joined</b> receiver reports for a composed correlated table-valued-function
+    /// body: the composition, the receiver and both supported forms are named.
+    /// </summary>
+    private const string ComposedBodyRefusedOnJoinedReceiver =
+        "A correlated CROSS/OUTER APPLY source on a joined receiver accepts either a bare runtime table-valued-function factory call (row => Db.MyTvf(row.Id)) or a derived query (row => ctx.From<T>().Where(row => ...).Select(row => new { ... })); the body 'T320MatrixTvf.Echo followed by Where' is a factory call followed by builder operations and cannot be lowered in an APPLY position.";
+
+    /// <summary>
+    /// The same refusal on the legacy <b>single-entity</b> receiver: C3 is not path-scoped, so the composed
+    /// shape is named on both APPLY surfaces instead of leaking the internal conversion failure.
+    /// </summary>
+    private const string ComposedBodyRefusedOnSingleEntityReceiver =
+        "A correlated CROSS/OUTER APPLY source on a single-entity receiver accepts either a bare runtime table-valued-function factory call (row => Db.MyTvf(row.Id)) or a derived query (row => ctx.From<T>().Where(row => ...).Select(row => new { ... })); the body 'T320MatrixTvf.Echo followed by Where' is a factory call followed by builder operations and cannot be lowered in an APPLY position.";
+
+    /// <summary>
+    /// T343 / #343 (C3): a composed correlated body — a factory call followed by builder operations — is
+    /// refused while the builder composes, before the body is converted into a command and before any
+    /// command exists. The refusal names the composition and the two supported forms instead of surfacing
+    /// the internal <see cref="InvalidOperationException"/> from <see cref="Expression.Convert"/>.
+    /// </summary>
+    [Fact]
+    public void JoinedReceiver_ComposedCorrelatedTvfBody_ShouldBeRefusedWhileComposing()
+    {
+        using var ctx = new SqlServerDataContext(T324ApplyFixture.SqlServerConnectionString, new DataContextBuilder());
+
+        var arity2 = ctx.From<T320MatrixRow>().Join(ctx.From<T320MatrixRow>(), (first, second) => first.Id == second.Id);
+        var joinsBefore = arity2.Joins!.Count;
+
+        // Only the composition call is inside the delegate: the throw must happen there, so nothing after
+        // it (preparation, SQL rendering, execution) can have happened.
+        Action act = () => arity2.CrossApply(projection => T320MatrixTvf.Echo(projection.Item1.Id).Where(row => row.Id > 0));
+
+        var message = act.Should().Throw<NotSupportedException>().Which.Message;
+        message.Should().Be(ComposedBodyRefusedOnJoinedReceiver, "the refusal text is frozen by the contract");
+
+        arity2.Joins!.Should().HaveCount(joinsBefore, "the refusal happens before the applied source becomes a join");
+        arity2.Joins!.Should().OnlyContain(join => join.ApplySource == null, "no APPLY source was recorded on the receiver");
+    }
+
+    /// <summary>
+    /// T343 / #343 (C3, not path-scoped): the same composed shape on the legacy single-entity receiver is
+    /// refused the same way, so the named refusal does not depend on which APPLY surface is used.
+    /// </summary>
+    [Fact]
+    public void SingleEntityReceiver_ComposedCorrelatedTvfBody_ShouldBeRefusedWhileComposing()
+    {
+        using var ctx = new SqlServerDataContext(T324ApplyFixture.SqlServerConnectionString, new DataContextBuilder());
+
+        var receiver = ctx.From<T320MatrixRow>();
+
+        Action act = () => receiver.CrossApply(row => T320MatrixTvf.Echo(row.Id).Where(entity => entity.Id > 0));
+
+        var message = act.Should().Throw<NotSupportedException>().Which.Message;
+        message.Should().Be(ComposedBodyRefusedOnSingleEntityReceiver, "the same typed refusal, naming the single-entity receiver");
     }
 
     /// <summary>A null lambda source stays an <see cref="ArgumentNullException"/> on the joined and named receivers.</summary>
