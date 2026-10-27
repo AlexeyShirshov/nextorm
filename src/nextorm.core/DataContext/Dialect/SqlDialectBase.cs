@@ -962,6 +962,23 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual bool SupportsReturning => false;
     /// <summary>Defaults to <see cref="SupportsReturning"/>; MariaDB gates <c>UPDATE ... RETURNING</c> on server version 13.0+.</summary>
     public virtual bool SupportsUpdateReturning => SupportsReturning;
+    /// <summary>
+    /// Whether the portable bulk <c>INSERT ... VALUES</c> path can append <c>RETURNING</c> for a
+    /// <c>Returning*</c> terminal. Defaults to <see cref="SupportsReturning"/>; MariaDB gates that one
+    /// terminal on server version 13.0+ while single-row insert/delete <c>RETURNING</c> stays refused.
+    /// Internal on purpose: it is a capability of the bulk executor, not of the public dialect surface.
+    /// </summary>
+    internal virtual bool SupportsBulkInsertReturning => SupportsReturning;
+
+    /// <summary>
+    /// Reads <see cref="SupportsBulkInsertReturning"/> through a reference typed as the public
+    /// <see cref="ISqlDialect"/>. A dialect that does not derive from this base has no bulk-only gate and
+    /// answers <see cref="ISqlDialect.SupportsReturning"/>'s <c>false</c>.
+    /// </summary>
+    /// <param name="dialect">The active dialect.</param>
+    /// <returns>Whether the portable bulk path may render <c>RETURNING</c>.</returns>
+    internal static bool BulkInsertReturningSupported(ISqlDialect dialect) =>
+        dialect is SqlDialectBase dialectBase && dialectBase.SupportsBulkInsertReturning;
     /// <summary>Defaults to <c>false</c>; SQL Server opts into the <c>OUTPUT</c> clause.</summary>
     public virtual bool SupportsOutput => false;
     /// <summary>Defaults to <c>false</c>; MySQL/MariaDB opt into <c>LAST_INSERT_ID()</c>.</summary>

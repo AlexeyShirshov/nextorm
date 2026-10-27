@@ -15,6 +15,12 @@
     <PackageReference Include="Npgsql" />
   </ItemGroup>
 
+  <!-- The unit tests drive the native COPY importer lifecycle (bounded chunks, Complete, disposal)
+       through the provider's internal seam, mirroring the SQL Server provider's test exposure. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="nextorm.postgres.tests" />
+  </ItemGroup>
+
   <ItemGroup>
     <None Include="readme.md" Pack="true" PackagePath="\" />
   </ItemGroup>

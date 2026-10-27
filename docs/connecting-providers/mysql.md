@@ -131,6 +131,27 @@ select group_concat(`String` separator ',')
  from complex_entity
 ```
 
+## Bulk insert
+
+The native path is `MySqlBulkCopy`, a `LOAD DATA LOCAL INFILE` load, and it needs **both** prerequisites:
+`AllowLoadLocalInfile=true` on the connection string (client side) and `local_infile=1` as the server variable
+`@@GLOBAL.local_infile`. The server value is read with a read-only preflight (`select @@global.local_infile`),
+and nextorm never enables either one. Without them `Auto` falls back only when the portable path honours the
+whole request and `Native` refuses by name; a runtime `LOAD` failure is never replayed through the SQL path.
+
+- The source is read in bounded chunks (`MaxBatchSize`, default 10 000 rows); each chunk is one load.
+- `KeepIdentity` writes the explicit identity column under a scoped `NO_AUTO_VALUE_ON_ZERO` guard, so an
+  explicit `0` is not replaced by a generated value.
+- `IgnoreDuplicates` maps to `ConflictOption.Ignore` on the native load and `INSERT IGNORE` on the portable
+  statement.
+- `KeepNulls=false` needs a default-equivalent shape; `CheckConstraints=false`, `TableLock` and `FireTriggers`
+  are refused (MySQL always checks constraints), and `Returning*` is refused — read keys with
+  `CreateInsertBuilder`.
+- `DatabaseName` renders `db.table`; `ServerName` is refused (no rerouting). `Timeout` is one
+  whole-invocation budget; an expired budget is a `TimeoutException` and cancellation wins.
+
+See [Bulk insert](../guide/22-bulk-insert.md).
+
 ## Provider differences
 
 | Aspect | MySQL |

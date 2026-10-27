@@ -353,7 +353,7 @@ The **expression INSERT** form (`WhenNotMatchedInsert(assignments)` and the full
 
 `INSERT … SELECT` and a query-sourced `MERGE` are pre-checked with a separate existence query over the source (looking for a row the target filter rejects). This is a **TOCTOU** guard, not a transactional one: between the check and the write a concurrent writer can still change the rows, and validation does **not** make the write atomic. Put both in the same transaction when the race matters.
 
-A multi-row or bulk write is not atomic either. A synchronous bulk source is validated in full before the first batch is sent; an **asynchronous** bulk source is validated row by row as it streams, so a later violation can leave earlier rows already written.
+A multi-row or bulk write is not atomic either. A synchronous bulk source is validated in full before the first batch is sent; an **asynchronous** bulk source is validated row by row as it streams, so a later violation can leave earlier rows already written. The order is the same for every [bulk-insert mode](../guide/22-bulk-insert.md#execution-modes) and every path (native load or `INSERT ... VALUES`): validation always runs before that path's first write.
 
 `IgnoreFilters` on the [`InsertBuilder<T>`](xref:NextORM.Core.InsertBuilder`1), [`BulkInsertBuilder<T>`](xref:NextORM.Core.BulkInsertBuilder`1) and [`MergeBuilder<T>`](xref:NextORM.Core.MergeBuilder`1) disables the corresponding filters from validation too, with the same four overloads and semantics as the read builder:
 

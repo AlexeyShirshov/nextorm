@@ -390,6 +390,26 @@ select t1.value, t2.somestring as "String"
  join complex_entity as "t2" on t1.id = t2.id
 ```
 
+## Bulk insert
+
+The native path is binary `COPY ... FROM STDIN (FORMAT BINARY)` through `NpgsqlBinaryImporter` on the
+context's own connection; `Auto` selects it for a compatible request, `Native` refuses by name instead of
+falling back, and `Portable` writes `INSERT ... VALUES` (the only path for `Returning*`).
+
+- Rows stream into one importer; a finite `MaxBatchSize` starts one importer per bounded chunk, `Complete`d on
+  success and disposed on error or cancellation.
+- `KeepIdentity` keeps the explicit identity column in the `COPY` column list; the portable statement adds
+  `OVERRIDING SYSTEM VALUE`.
+- `IgnoreDuplicates` is portable-only (`ON CONFLICT DO NOTHING`). `TableLock`, `FireTriggers` and
+  `CheckConstraints=false` are refused by name; `KeepNulls=false` needs a default-equivalent shape (every
+  written column nullable with a NULL/absent SQL default).
+- `DatabaseName` addresses only the connection's current database — naming it is a no-op, another database is
+  refused by name; `ServerName` is refused (no rerouting).
+- `Timeout` is one whole-invocation budget feeding the importer timeout and the linked token; an expired budget
+  is a `TimeoutException`, and a caller cancellation always wins.
+
+See [Bulk insert](../guide/22-bulk-insert.md).
+
 ## Provider differences
 
 | Aspect | PostgreSQL |

@@ -48,11 +48,13 @@ using IDataContext ctx = new MariaDbDataContext(
 
 ## Версия сервера
 
-Диалект можно привязать к версии сервера, которая гейтит `UPDATE ... RETURNING`. Настройка **явная** —
-nextorm никогда не опрашивает живой сервер. Передайте версию через параметр `Version` конструктора
-контекста. В отличие от PostgreSQL, **незаданная** версия **не** включает возможность: без явной 13.0+
-терминал `Returning()` у `UPDATE` бросает `NotSupportedException`. `RETURNING` у insert и delete не
-меняется (MariaDB отклоняет их как и раньше), как и гейт `ANY_VALUE` (`any_agg`, ориентир — 13.2).
+Диалект можно привязать к версии сервера, которая гейтит `UPDATE ... RETURNING` и терминалы bulk
+`Returning*`. Настройка **явная** — nextorm никогда не опрашивает живой сервер. Передайте версию через
+параметр `Version` конструктора контекста. В отличие от PostgreSQL, **незаданная** версия **не** включает
+возможность: без явной 13.0+ терминал `Returning()` у `UPDATE` и вызов bulk `Returning*` бросают
+`NotSupportedException`. `RETURNING` у одно-row insert и delete не меняется (MariaDB отклоняет их как и
+раньше), как и гейт `ANY_VALUE` (`any_agg`, ориентир — 13.2). Bulk `Returning*` поддерживается начиная с
+13.0+, а ниже отклоняется; живая сертификация идёт на `mariadb:11.4`, то есть покрывает ветку отказа.
 
 ```csharp
 // Явная 13.0+: UPDATE ... RETURNING включён.
@@ -103,6 +105,30 @@ select id
 select id
  from simple_entity
 ```
+
+## Массовая вставка
+
+MariaDB использует общую реализацию MySQL, поэтому нативный путь — `MySqlBulkCopy` (загрузка через
+`LOAD DATA LOCAL INFILE`), и ему нужны `AllowLoadLocalInfile=true` в строке подключения и серверная
+переменная `@@GLOBAL.local_infile=1`, читаемая read-only preflight-запросом. nextorm не включает ни одно из
+них; без них `Auto` откатывается, только если портируемый путь выполняет весь запрос, а `Native` отклоняет по
+имени.
+
+- Identity и дубликаты — как в MySQL: `KeepIdentity` пишет явную identity-колонку под scoped-guard
+  `NO_AUTO_VALUE_ON_ZERO`, а `IgnoreDuplicates` — это `ConflictOption.Ignore` на нативной загрузке или
+  `INSERT IGNORE` в портируемом утверждении.
+- `CheckConstraints=false` выполняется через scoped-контроль сессии, который снимается и восстанавливается на
+  той же сессии даже при ошибке загрузки; `TableLock` и `FireTriggers` остаются отклонёнными.
+- `KeepNulls=false` требует default-equivalent формы.
+- **`Returning*` на bulk-пути гейтится версией.** MariaDB выполняет его при явно настроенной 13.0+, а ниже
+  (незаданная или более старая версия) отклоняет именованным `NotSupportedException`; `RETURNING` у
+  одно-row insert и delete отклоняется на любой версии, поэтому ключи там читаются через
+  `CreateInsertBuilder`. Живая сертификация идёт на `mariadb:11.4`, то есть покрывает ветку отказа; ветка
+  13.0+ сертифицирована офлайн только по рендерингу SQL `INSERT ... RETURNING`.
+- `DatabaseName` рендерит `db.table`; `ServerName` отклоняется (перенаправления нет). `Timeout` — один бюджет
+  на весь вызов; истёкший бюджет даёт `TimeoutException`, а отмена побеждает.
+
+См. [Массовая вставка](../guide/22-bulk-insert.md).
 
 ## Различия провайдера
 

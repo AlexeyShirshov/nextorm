@@ -305,6 +305,26 @@ await ctx.From<ISimpleEntity>()
 
 Собственная поверхность полнотекстового поиска SQLite (`FTS3/FTS4/FTS5`) доступна (см. [Полнотекстовый поиск](#полнотекстовый-поиск-fts3fts4fts5)), как и специфичный для SQLite command builder обслуживания FTS5 (`CreateSqliteFts5CommandBuilder`); за её пределами остаются только кросс-провайдерные предикаты `SqlFunctions.Sql.contains`/`freetext` (гейт [`SupportsFullText`](xref:NextORM.Core.ISqlDialect.SupportsFullText), на SQLite `false`). Поверхность обслуживания отклоняется на любом не-SQLite провайдере через `NotSupportedException`, а `Rebuild` недоступна для contentless-таблиц FTS5.
 
+## Массовая вставка
+
+В SQLite нет нативного bulk API, поэтому каждая массовая вставка идёт портируемым путём
+`INSERT ... VALUES`: `Mode.Native` отклоняется по имени до перечисления источника, `Auto` всегда
+разрешается в портируемый путь, а `Portable` — его явная форма. Сертифицированная конфигурация — **файловая
+база** (межпроцессного сервера нет).
+
+- Батч делится по `MaxBatchSize`/`MaxParameters`/`MaxSqlLength`; каждый чанк — одно утверждение.
+- `KeepIdentity` пишет явную identity-колонку; `IgnoreDuplicates` использует `INSERT OR IGNORE`, а
+  `Returning*` — `RETURNING` (SQLite 3.35+).
+- `CheckConstraints=false` выполняется scoped-прагмой `PRAGMA foreign_keys` вокруг записи и отклоняется внутри
+  активной транзакции (там прагма — no-op); `KeepNulls=false` требует default-equivalent формы, а
+  `TableLock`/`FireTriggers` отклоняются.
+- `DatabaseName` рендерит квалификатор attached/main/temp базы там, где диалект это умеет; `ServerName`
+  отклоняется (перенаправления нет).
+- `Timeout` — один бюджет на весь вызов вокруг записей; истёкший бюджет даёт `TimeoutException`, а отмена
+  вызывающего всегда побеждает.
+
+См. [Массовая вставка](../guide/22-bulk-insert.md).
+
 ## Различия провайдеров
 
 | Аспект | SQLite |

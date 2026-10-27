@@ -115,7 +115,7 @@ internal static class SqlMutationBuilder
         if (emitConflictDoNothing)
             writer.Append(dialect.MakeOnConflictDoNothing(keywordCase));
 
-        if (returningColumns is not null && dialect.SupportsReturning)
+        if (returningColumns is not null && SupportsReturning(dialect, command))
             writer.Append(dialect.MakeReturning(returningColumns, keywordCase));
 
         if (sourceParameters.Count > 0)
@@ -141,7 +141,7 @@ internal static class SqlMutationBuilder
 
         writer.Append(dialect.MakeDefaultValues(keywordCase));
 
-        if (returningColumns is not null && dialect.SupportsReturning)
+        if (returningColumns is not null && SupportsReturning(dialect, command))
             writer.Append(dialect.MakeReturning(returningColumns, keywordCase));
     }
 
@@ -181,7 +181,7 @@ internal static class SqlMutationBuilder
         if (emitConflictDoNothing)
             writer.Append(dialect.MakeOnConflictDoNothing(keywordCase));
 
-        if (returningColumns is not null && dialect.SupportsReturning)
+        if (returningColumns is not null && SupportsReturning(dialect, command))
             writer.Append(dialect.MakeReturning(returningColumns, keywordCase));
     }
 
@@ -1500,6 +1500,26 @@ internal static class SqlMutationBuilder
             : tableName;
 
     /// <summary>
+    /// Renders the target reference of a bulk-insert command, applying the destination qualification
+    /// (schema/database) carried by its options to the convention-resolved table name. With no destination
+    /// option set this is byte-identical to <see cref="RenderTableReference(ISqlDialect, bool, string, string?, bool, Type, INamingConvention?)"/>.
+    /// </summary>
+    /// <param name="dialect">The active SQL dialect.</param>
+    /// <param name="quoteIdentifiers">Whether physical identifiers must be quoted.</param>
+    /// <param name="command">The bulk-insert command.</param>
+    /// <param name="namingConvention">Convention applied to auto-derived table names, or <see langword="null"/>.</param>
+    /// <returns>The rendered target reference.</returns>
+    internal static string RenderBulkTarget(
+        ISqlDialect dialect,
+        bool quoteIdentifiers,
+        BulkInsertCommand command,
+        INamingConvention? namingConvention)
+    {
+        var name = ResolveTableName(command.TableName, command.IsTableNameAuto, command.EntityType, namingConvention);
+        return BulkInsertDestination.From(command.Options).Render(dialect, quoteIdentifiers, name);
+    }
+
+    /// <summary>
     /// Renders a (possibly schema-qualified) target table reference, applying the naming convention to an
     /// auto-derived name and quoting the name and the schema as separate identifiers. Used by the insert and
     /// the native bulk-insert paths so an explicit target (<see cref="BulkInsertOptions.TableName"/> /
@@ -1528,9 +1548,16 @@ internal static class SqlMutationBuilder
         if (string.IsNullOrEmpty(schema))
             return renderedName;
 
-        var renderedSchema = quoteIdentifiers ? dialect.QuoteIdentifier(schema) : schema;
+        // A destination qualification may carry more than one part (database.schema). Each part is quoted
+        // on its own, so a qualified target never collapses into one identifier containing dots.
+        var renderedSchema = quoteIdentifiers ? BulkInsertDestination.QuoteParts(dialect, schema) : schema;
         return renderedSchema + "." + renderedName;
     }
+
+    // The RETURNING clause is emitted for a dialect-wide RETURNING form, or for the portable bulk path's own
+    // capability when the command came from a Returning* bulk terminal (MariaDB 13.0+).
+    private static bool SupportsReturning(ISqlDialect dialect, InsertCommand command) =>
+        dialect.SupportsReturning || (command.IsBulkReturning && SqlDialectBase.BulkInsertReturningSupported(dialect));
 
     private static IReadOnlyList<string>? RenderReturningColumns(ISqlDialect dialect, bool quoteIdentifiers, INamingConvention? namingConvention, InsertCommand command)
     {

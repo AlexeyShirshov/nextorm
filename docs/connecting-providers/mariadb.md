@@ -47,12 +47,14 @@ using IDataContext ctx = new MariaDbDataContext(
 
 ## Server version
 
-The dialect can be pinned to the server version, which gates `UPDATE ... RETURNING`. Configuration is
-**explicit** — nextorm never probes the live server. Pass the version with the context constructor's
-`Version` parameter. Unlike PostgreSQL, an **unset** version does **not** enable the feature: without an
-explicit 13.0+ the `Returning()` terminal of an `UPDATE` rejects with `NotSupportedException`. Insert and
-delete `RETURNING` are unchanged (MariaDB rejects them as before), and the `ANY_VALUE` gate (`any_agg`,
-targeted for 13.2) is also unchanged.
+The dialect can be pinned to the server version, which gates `UPDATE ... RETURNING` and the bulk
+`Returning*` terminals. Configuration is **explicit** — nextorm never probes the live server. Pass the
+version with the context constructor's `Version` parameter. Unlike PostgreSQL, an **unset** version does
+**not** enable the feature: without an explicit 13.0+ the `Returning()` terminal of an `UPDATE` and a bulk
+`Returning*` call reject with `NotSupportedException`. Single-row insert and delete `RETURNING` are
+unchanged (MariaDB rejects them as before), and the `ANY_VALUE` gate (`any_agg`, targeted for 13.2) is also
+unchanged. Bulk `Returning*` is supported on 13.0+ and refused below; the live certification runs on
+`mariadb:11.4`, so it covers the refusal arm.
 
 ```csharp
 // Explicit 13.0+: `UPDATE ... RETURNING` is enabled.
@@ -102,6 +104,29 @@ select id
 select id
  from simple_entity
 ```
+
+## Bulk insert
+
+MariaDB shares the MySQL implementation, so the native path is `MySqlBulkCopy` (a `LOAD DATA LOCAL INFILE`
+load) and it needs `AllowLoadLocalInfile=true` on the connection string plus the server variable
+`@@GLOBAL.local_infile=1`, read with a read-only preflight. nextorm never enables either one; without them
+`Auto` falls back only when the portable path honours the whole request and `Native` refuses by name.
+
+- Identity and duplicates follow MySQL: `KeepIdentity` writes the explicit identity column under a scoped
+  `NO_AUTO_VALUE_ON_ZERO` guard, and `IgnoreDuplicates` is `ConflictOption.Ignore` on the native load or
+  `INSERT IGNORE` on the portable statement.
+- `CheckConstraints=false` is honoured through scoped session controls, snapshotted and restored on the same
+  session even when the load fails; `TableLock` and `FireTriggers` stay refused.
+- `KeepNulls=false` needs a default-equivalent shape.
+- **`Returning*` on the bulk path is version-gated.** MariaDB honours it at an explicitly configured 13.0+
+  and refuses it below (unset or older) with a named `NotSupportedException`; single-row insert and delete
+  `RETURNING` stay refused at every version, so read keys with `CreateInsertBuilder` there. The live
+  certification runs on `mariadb:11.4`, so it exercises the refusal arm; the 13.0+ arm is certified offline
+  for the rendered `INSERT ... RETURNING` SQL only.
+- `DatabaseName` renders `db.table`; `ServerName` is refused (no rerouting). `Timeout` is one
+  whole-invocation budget; an expired budget is a `TimeoutException` and cancellation wins.
+
+See [Bulk insert](../guide/22-bulk-insert.md).
 
 ## Provider differences
 

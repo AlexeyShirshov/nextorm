@@ -10,8 +10,9 @@ namespace NextORM.MariaDb;
 /// </summary>
 public sealed class MariaDbDialect : MySqlDialect
 {
-    // MariaDB 13.0 introduced UPDATE ... RETURNING (INSERT/DELETE RETURNING remain unsupported).
-    private static readonly Version UpdateReturningMinVersion = new(13, 0);
+    // MariaDB 13.0 introduced UPDATE ... RETURNING and the bulk INSERT ... RETURNING arm; the single-row
+    // INSERT/DELETE ... RETURNING forms remain unsupported.
+    private static readonly Version ReturningMinVersion = new(13, 0);
 
     /// <summary>Gets the shared MariaDB dialect instance.</summary>
     public static new readonly MariaDbDialect Instance = new();
@@ -49,9 +50,17 @@ public sealed class MariaDbDialect : MySqlDialect
 
     /// <summary>
     /// MariaDB 13.0+ appends <c>RETURNING</c> to a single-table <c>UPDATE</c>. INSERT/DELETE
-    /// <c>RETURNING</c> stays unsupported.
+    /// <c>RETURNING</c> stays unsupported outside the bulk path.
     /// </summary>
-    public override bool SupportsUpdateReturning => _version is not null && _version >= UpdateReturningMinVersion;
+    public override bool SupportsUpdateReturning => _version is not null && _version >= ReturningMinVersion;
+
+    /// <summary>
+    /// MariaDB 13.0+ honours <c>RETURNING</c> on the portable bulk <c>INSERT ... VALUES</c> path, so a
+    /// <c>Returning*</c> bulk terminal is enabled from that version on and refused before it. This is the
+    /// bulk-only gate: single-row insert/delete <c>RETURNING</c> stays refused at every version, which is why
+    /// <see cref="ISqlDialect.SupportsReturning"/> keeps reporting <c>false</c>.
+    /// </summary>
+    internal override bool SupportsBulkInsertReturning => _version is not null && _version >= ReturningMinVersion;
 
     /// <summary>MariaDB has no <c>REGEXP_LIKE</c>; it matches with the <c>REGEXP</c> operator and replaces with <c>REGEXP_REPLACE</c>.</summary>
     public override bool SupportsRegex => true;
@@ -77,11 +86,15 @@ public sealed class MariaDbDialect : MySqlDialect
     /// </summary>
     public override bool SupportsJson => false;
 
-    /// <summary>MariaDB has no native bulk path enabled: <c>MySqlBulkCopy</c> requires a server-side
-    /// <c>local_infile</c> setting that is commonly disabled, so the portable
-    /// <c>INSERT ... VALUES</c> path is used instead (it also returns keys on request).
+    /// <summary>
+    /// MariaDB has a native bulk path: <c>MySqlBulkCopy</c> loads through <c>LOAD DATA LOCAL INFILE</c>,
+    /// which requires <c>AllowLoadLocalInfile=true</c> on the connection and <c>local_infile</c> enabled
+    /// on the server. Both are read-only preflight checks: a missing permission is never changed by
+    /// nextorm, the portable path is used in <see cref="BulkInsertMode.Auto"/>, and
+    /// <see cref="BulkInsertMode.Native"/> refuses by name. MariaDB additionally honours
+    /// <c>CheckConstraints=false</c> through scoped session controls that are restored after the write.
     /// </summary>
-    public override bool SupportsBulkCopy => false;
+    public override bool SupportsBulkCopy => true;
 
     /// <summary>
     /// MariaDB has no lateral/APPLY source: 11.4 rejects the generated <c>cross join lateral (…)</c> and

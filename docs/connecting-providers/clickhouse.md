@@ -211,6 +211,32 @@ public sealed class TvpRow
 
 The `format(JSONEachRow, ...)`, `values()` and `input()` forms are **not** used for a bound parameter — `format`/`values` require a literal structure and `input` is valid only in `INSERT ... SELECT`, so the array form is the supported emulation. ClickHouse has **no stored procedures** ([`SupportsStoredProcedures`](xref:NextORM.Core.ISqlDialect.SupportsStoredProcedures) is `false`, and `ExecuteProcedure` throws `NotSupportedException`), so the parameter is consumed by `ExecuteRaw`/`ExecuteRawAsync` SQL that calls `arrayJoin` itself. `TypeName` is SQL Server only and is rejected with `ArgumentException`. An empty set binds an empty array, and null elements, nullable columns and empty sets are covered by the provider tests. Only CLR types with a ClickHouse mapping are supported — the scalar column set (the integer types, `float`/`double`, `decimal` as the declared `Decimal(p, s)` or `Decimal(38, 10)`, `bool`, `string`/`char`, `Guid`, `DateTime`/`DateTimeOffset`/`DateOnly`, an enum as its underlying number; `TimeOnly` as `String` formatted invariantly as `HH:mm:ss.fffffff`, `TimeSpan` as `Int64` in its mapped duration unit (ticks by default), and `byte[]` as `String`); any other column type throws `NotSupportedException`. A `byte[]` column is bound as `String`, so the row reader returns a `string`, not a `byte[]` — do not rely on a `byte[]` round-trip. The set is sent as one array parameter, not streamed or copied, so use the driver's binary insert API for very large sets. See [Raw SQL: table-valued parameters](../guide/14-raw-sql.md#table-valued-parameters).
 
+## Bulk insert
+
+The native path is `ClickHouseClient.InsertBinaryAsync` through the context's own client, so it needs a
+`ClickHouse.Driver` client (`ClickHouseClient`/`ClickHouseDataSource` — the `UseClickHouse` overloads). Client
+settings are copied for the insert; the caller's settings object and the connection's settings are never
+mutated.
+
+- `ClickHouse(new ClickHouseBulkInsertOptions { ... })` carries `MaxDegreeOfParallelism` and `UseSession`:
+  `null` preserves the configured value/session, `true` requires an actual session id, and `false` explicitly
+  requests a sessionless non-temporary insert. A parallelism above one cannot be combined with a session
+  (ClickHouse allows one concurrent query per session) and is refused by name; a non-positive parallelism is an
+  argument error.
+- The adapter reads the source in bounded chunks (`MaxBatchSize`, default 10 000 rows), awaits every driver
+  call before pulling the next chunk, and reports progress only after a chunk completes.
+- Only ordinary and `DEFAULT` columns are writable: a mapped ALIAS or MATERIALIZED column is refused by name
+  (the catalog is read once per target). `KeepIdentity` writes the explicit value.
+- `IgnoreDuplicates`, `Returning*`, `TableLock`, `FireTriggers` and `CheckConstraints=false` are refused;
+  `KeepNulls=false` needs a default-equivalent shape.
+- `DatabaseName` renders `db.table`; `ServerName` is refused (no rerouting). `Timeout` is one
+  whole-invocation budget with a linked cancellation; an expired budget is a `TimeoutException` and
+  cancellation wins.
+
+`ClickHouse.Driver` 1.4.0's `ClickHouseBulkCopy` class is **not** obsolete — only its `InitAsync` method is —
+so the class is not why nextorm uses `InsertBinaryAsync`: the binary insert API is what carries the
+per-insert settings copy and the session/parallelism contract. See [Bulk insert](../guide/22-bulk-insert.md).
+
 ## Provider differences
 
 | Aspect | ClickHouse |
@@ -271,8 +297,10 @@ select `Id` as `Id`
 - `GROUP BY ... WITH TOTALS` renders correctly, but the official `ClickHouse.Driver` returns the totals
   row in a separate response block it does not expose through `IDataReader`, so only the group rows are
   materialised. Use it if your driver surfaces totals; nextorm itself only emits the modifier.
-- ClickHouse parameters are sent as HTTP query parameters. Bulk inserts should use the driver's binary
-  insert API rather than parameterized `INSERT` statements, which is outside the query builder.
+- ClickHouse parameters are sent as HTTP query parameters. A bulk insert should use the provider's native
+  binary path (see [Bulk insert](#bulk-insert)), which the query builder exposes through
+  `CreateBulkInsertBuilder`; an `INSERT ... VALUES` statement remains the portable fallback
+  (`Mode.Portable`).
 - Null parameter values cannot have their ClickHouse type inferred from the CLR value alone. When a
   query binds a `null` parameter, set an explicit parameter type at the driver level (for example with
   a custom resolver) or cast the placeholder in SQL.

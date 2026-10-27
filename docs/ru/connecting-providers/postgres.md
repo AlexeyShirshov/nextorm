@@ -396,6 +396,26 @@ select t1.value, t2.somestring as "String"
  join complex_entity as "t2" on t1.id = t2.id
 ```
 
+## Массовая вставка
+
+Нативный путь — бинарный `COPY ... FROM STDIN (FORMAT BINARY)` через `NpgsqlBinaryImporter` на собственном
+соединении контекста; `Auto` выбирает его для совместимого запроса, `Native` отклоняет по имени вместо
+откатa, а `Portable` пишет `INSERT ... VALUES` (единственный путь для `Returning*`).
+
+- Строки идут в один importer; конечный `MaxBatchSize` запускает по одному importer на ограниченный чанк,
+  который завершается (`Complete`) при успехе и освобождается при ошибке или отмене.
+- `KeepIdentity` сохраняет явную identity-колонку в списке колонок `COPY`; портируемое утверждение добавляет
+  `OVERRIDING SYSTEM VALUE`.
+- `IgnoreDuplicates` есть только на портируемом пути (`ON CONFLICT DO NOTHING`). `TableLock`, `FireTriggers` и
+  `CheckConstraints=false` отклоняются по имени; `KeepNulls=false` требует default-equivalent формы (каждая
+  записываемая колонка nullable, её SQL-default NULL или отсутствует).
+- `DatabaseName` адресует только текущую базу соединения: её именование — no-op, другая база отклоняется по
+  имени; `ServerName` отклоняется (перенаправления нет).
+- `Timeout` — один бюджет на весь вызов, питающий таймаут importer и связанный токен; истёкший бюджет даёт
+  `TimeoutException`, а отмена вызывающего всегда побеждает.
+
+См. [Массовая вставка](../guide/22-bulk-insert.md).
+
 ## Различия провайдеров
 
 | Аспект | PostgreSQL |

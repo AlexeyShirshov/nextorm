@@ -15,6 +15,14 @@
     <PackageReference Include="MySqlConnector" />
   </ItemGroup>
 
+  <!-- The provider's SQL-generation tests drive the bulk-insert shape guard without a server, so they
+       supply the catalog facts through the internal seam instead of opening a connection (the same
+       mechanism nextorm.postgres exposes to its own test project). -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="nextorm.mysql.tests" />
+    <InternalsVisibleTo Include="nextorm.mariadb.tests" />
+  </ItemGroup>
+
   <ItemGroup>
     <None Include="readme.md" Pack="true" PackagePath="\" />
   </ItemGroup>

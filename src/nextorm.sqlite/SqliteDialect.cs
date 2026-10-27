@@ -36,6 +36,9 @@ public sealed class SqliteDialect : SqlDialectBase
     public override string RenderOrderBy(string expressionSql, OrderDirection direction, NullsPosition nullsPosition)
         => NullsOrderingRenderer.RenderNative(expressionSql, direction, nullsPosition);
 
+    /// <summary>SQLite has no native bulk-copy API: every bulk insert takes the portable <c>INSERT ... VALUES</c> path, so a <c>Mode.Native</c> request is refused instead of silently falling back.</summary>
+    public override bool SupportsBulkCopy => false;
+
     // SQLite 3.35.0+ supports the ANSI INSERT ... RETURNING clause; last_insert_rowid() stays
     // available as a fallback but RETURNING is preferred because it is scoped to the statement.
     /// <inheritdoc/>

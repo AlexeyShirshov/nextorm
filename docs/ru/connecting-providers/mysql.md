@@ -132,6 +132,29 @@ select group_concat(`String` separator ',')
  from complex_entity
 ```
 
+## Массовая вставка
+
+Нативный путь — `MySqlBulkCopy`, загрузка через `LOAD DATA LOCAL INFILE`, и ему нужны **оба** условия:
+`AllowLoadLocalInfile=true` в строке подключения (клиент) и `local_infile=1` как серверная переменная
+`@@GLOBAL.local_infile`. Серверное значение читается read-only preflight-запросом
+(`select @@global.local_infile`), и nextorm не включает ни одно из них. Без них `Auto` откатывается, только
+если портируемый путь выполняет весь запрос, а `Native` отклоняет по имени; ошибка `LOAD` во время
+выполнения никогда не переигрывается через SQL-путь.
+
+- Источник читается ограниченными чанками (`MaxBatchSize`, по умолчанию 10 000 строк); каждый чанк — одна
+  загрузка.
+- `KeepIdentity` пишет явную identity-колонку под scoped-guard `NO_AUTO_VALUE_ON_ZERO`, поэтому явный `0` не
+  заменяется сгенерированным значением.
+- `IgnoreDuplicates` отображается в `ConflictOption.Ignore` на нативной загрузке и в `INSERT IGNORE` в
+  портируемом утверждении.
+- `KeepNulls=false` требует default-equivalent формы; `CheckConstraints=false`, `TableLock` и `FireTriggers`
+  отклоняются (MySQL всегда проверяет ограничения), а `Returning*` отклоняется — ключи читайте через
+  `CreateInsertBuilder`.
+- `DatabaseName` рендерит `db.table`; `ServerName` отклоняется (перенаправления нет). `Timeout` — один бюджет
+  на весь вызов; истёкший бюджет даёт `TimeoutException`, а отмена побеждает.
+
+См. [Массовая вставка](../guide/22-bulk-insert.md).
+
 ## Различия провайдера
 
 | Аспект | MySQL |
