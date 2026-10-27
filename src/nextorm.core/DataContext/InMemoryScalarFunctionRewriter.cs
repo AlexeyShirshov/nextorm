@@ -155,12 +155,13 @@ internal sealed class InMemoryScalarFunctionRewriter : ExpressionVisitor
     };
 
     /// <summary>
-    /// The PostgreSQL-only scalar members of the string and numeric families (and the PostgreSQL
-    /// numeric-scale members <c>scale</c>/<c>min_scale</c>/<c>trim_scale</c>) are SQL-only. Rejecting
-    /// them explicitly keeps the failure a <see cref="NotSupportedException"/> instead of a compiled
-    /// call on the null <see cref="SqlFunctions.Postgres"/> marker surface. The refusals
-    /// (<c>casefold</c>, <c>gamma</c>, <c>tgamma</c>, <c>lgamma</c>) are listed for the same reason: their
-    /// member bodies throw, but the call is compiled against the null surface first.
+    /// The PostgreSQL-only scalar members of the string, numeric, date/time, UUID and binary-string
+    /// families (and the PostgreSQL numeric-scale members <c>scale</c>/<c>min_scale</c>/<c>trim_scale</c>)
+    /// are SQL-only. Rejecting them explicitly keeps the failure a <see cref="NotSupportedException"/>
+    /// instead of a compiled call on the null <see cref="SqlFunctions.Postgres"/> marker surface. The
+    /// refusals (<c>casefold</c>, <c>gamma</c>/<c>tgamma</c>/<c>lgamma</c>, <c>pg_sleep*</c>,
+    /// <c>crc32</c>/<c>crc32c</c>) are listed for the same reason: their member bodies throw, but the
+    /// call is compiled against the null surface first.
     /// </summary>
     private static readonly HashSet<string> PostgresSqlOnlyScalarFunctionNames = new(StringComparer.Ordinal)
     {
@@ -180,7 +181,17 @@ internal sealed class InMemoryScalarFunctionRewriter : ExpressionVisitor
         nameof(PostgresFunctions.atan2d), nameof(PostgresFunctions.cosd), nameof(PostgresFunctions.cotd),
         nameof(PostgresFunctions.sind), nameof(PostgresFunctions.tand),
         nameof(PostgresFunctions.casefold), nameof(PostgresFunctions.gamma),
-        nameof(PostgresFunctions.tgamma), nameof(PostgresFunctions.lgamma)
+        nameof(PostgresFunctions.tgamma), nameof(PostgresFunctions.lgamma),
+        nameof(PostgresFunctions.date_subtract), nameof(PostgresFunctions.justify_interval),
+        nameof(PostgresFunctions.make_timestamptz), nameof(PostgresFunctions.clock_timestamp),
+        nameof(PostgresFunctions.statement_timestamp), nameof(PostgresFunctions.transaction_timestamp),
+        nameof(PostgresFunctions.timeofday), nameof(PostgresFunctions.isfinite),
+        nameof(PostgresFunctions.pg_sleep), nameof(PostgresFunctions.pg_sleep_for),
+        nameof(PostgresFunctions.pg_sleep_until),
+        nameof(PostgresFunctions.uuid_extract_timestamp), nameof(PostgresFunctions.uuid_extract_version),
+        nameof(PostgresFunctions.get_bit), nameof(PostgresFunctions.set_bit),
+        nameof(PostgresFunctions.get_byte), nameof(PostgresFunctions.set_byte),
+        nameof(PostgresFunctions.bit_count), nameof(PostgresFunctions.crc32), nameof(PostgresFunctions.crc32c)
     };
 
     internal static Expression Rewrite(Expression expression) => new InMemoryScalarFunctionRewriter().Visit(expression)!;

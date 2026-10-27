@@ -217,6 +217,101 @@ public abstract partial class CommonTestSuite
     }
 
     /// <summary>
+    /// The residual PostgreSQL date/time, UUID and binary-string names of #281 follow the same
+    /// enrolment: PostgreSQL executes and maps each one, every other provider refuses it during
+    /// preparation with a message naming the function. The PostgreSQL 18 <c>crc32</c>/<c>crc32c</c>
+    /// refusals keep their technical reason on every provider.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void CrossProviderScalarFunctions_PostgresDateTimeUuidAndBinaryFamilies_ShouldMatchProviderSupport()
+    {
+        var date = new DateOnly(2024, 1, 1);
+        var day = TimeSpan.FromDays(1);
+        var v1 = Guid.Parse("a0eebc99-9c0b-11d1-9c9b-00c04fd430c8");
+
+        var delivered = new (string Name, Func<object?> Run, Type Expected)[]
+        {
+            ("date_subtract", () => Row(e => new { V = SqlFunctions.Postgres.date_subtract(e.Datetime, day) }).V, typeof(DateTime)),
+            ("date_subtract", () => Row(e => new { V = SqlFunctions.Postgres.date_subtract(e.Datetime, day, "UTC") }).V, typeof(DateTime)),
+            ("justify_interval", () => Row(e => new { V = SqlFunctions.Postgres.justify_interval(TimeSpan.FromHours(25)) }).V, typeof(TimeSpan)),
+            ("make_timestamptz", () => Row(e => new { V = SqlFunctions.Postgres.make_timestamptz(2024, 1, 2, 3, 4, 5.5) }).V, typeof(DateTime)),
+            ("make_timestamptz", () => Row(e => new { V = SqlFunctions.Postgres.make_timestamptz(2024, 1, 2, 3, 4, 5.5, "UTC") }).V, typeof(DateTime)),
+            ("clock_timestamp", () => Row(e => new { V = SqlFunctions.Postgres.clock_timestamp() }).V, typeof(DateTime)),
+            ("statement_timestamp", () => Row(e => new { V = SqlFunctions.Postgres.statement_timestamp() }).V, typeof(DateTime)),
+            ("transaction_timestamp", () => Row(e => new { V = SqlFunctions.Postgres.transaction_timestamp() }).V, typeof(DateTime)),
+            ("timeofday", () => Row(e => new { V = SqlFunctions.Postgres.timeofday() }).V, typeof(string)),
+            ("isfinite", () => Row(e => new { V = SqlFunctions.Postgres.isfinite(date) }).V, typeof(bool)),
+            ("isfinite", () => Row(e => new { V = SqlFunctions.Postgres.isfinite(e.Datetime) }).V, typeof(bool)),
+            ("isfinite", () => Row(e => new { V = SqlFunctions.Postgres.isfinite(day) }).V, typeof(bool)),
+            ("uuid_extract_timestamp", () => Row(e => new { V = SqlFunctions.Postgres.uuid_extract_timestamp(v1) }).V, typeof(DateTime)),
+            ("uuid_extract_version", () => Row(e => new { V = SqlFunctions.Postgres.uuid_extract_version(v1) }).V, typeof(short)),
+            ("get_bit", () => Row(e => new
+            {
+                V = SqlFunctions.Postgres.get_bit(SqlFunctions.Postgres.decode("a1", "hex"), 0L)
+            }).V, typeof(int)),
+            ("set_bit", () => Row(e => new
+            {
+                V = SqlFunctions.Postgres.set_bit(SqlFunctions.Postgres.decode("a1", "hex"), 0L, 0)
+            }).V, typeof(byte[])),
+            ("get_byte", () => Row(e => new
+            {
+                V = SqlFunctions.Postgres.get_byte(SqlFunctions.Postgres.decode("a1", "hex"), 0)
+            }).V, typeof(int)),
+            ("set_byte", () => Row(e => new
+            {
+                V = SqlFunctions.Postgres.set_byte(SqlFunctions.Postgres.decode("a1", "hex"), 0, 255)
+            }).V, typeof(byte[])),
+            ("bit_count", () => Row(e => new
+            {
+                V = SqlFunctions.Postgres.bit_count(SqlFunctions.Postgres.decode("a1", "hex"))
+            }).V, typeof(long))
+        };
+
+        var refused = new (string Name, Func<object?> Run)[]
+        {
+            ("crc32", () => Row(e => new
+            {
+                V = SqlFunctions.Postgres.crc32(SqlFunctions.Postgres.decode("a1", "hex"))
+            }).V),
+            ("crc32c", () => Row(e => new
+            {
+                V = SqlFunctions.Postgres.crc32c(SqlFunctions.Postgres.decode("a1", "hex"))
+            }).V)
+        };
+
+        if (Provider.Name == "postgres")
+        {
+            foreach (var (name, run, expected) in delivered)
+            {
+                var value = run();
+                value.Should().NotBeNull($"'{name}' is delivered on PostgreSQL");
+                value.Should().BeOfType(expected, $"'{name}' maps to {expected.Name}");
+            }
+
+            foreach (var (name, run) in refused)
+            {
+                var act = () => { _ = run(); };
+                act.Should().Throw<NotSupportedException>($"'{name}' is a refused member");
+            }
+
+            return;
+        }
+
+        foreach (var (name, run, _) in delivered)
+        {
+            var act = () => { _ = run(); };
+            act.Should().Throw<NotSupportedException>().WithMessage($"*{name}*not supported*");
+        }
+
+        foreach (var (name, run) in refused)
+        {
+            var act = () => { _ = run(); };
+            act.Should().Throw<NotSupportedException>().WithMessage("*refused*", $"'{name}' carries its reason on every provider");
+        }
+    }
+
+    /// <summary>
     /// <c>string_to_table</c> is the one set-returning name of the D2a family: PostgreSQL returns one row
     /// per fragment, every other provider refuses the table function by name.
     /// </summary>

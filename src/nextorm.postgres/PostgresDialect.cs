@@ -917,9 +917,12 @@ internal sealed class PostgresStringFormats : IStringFormatFunctions
 /// (<c>btrim</c>/<c>ltrim</c>/<c>rtrim</c> with a character set, <c>starts_with</c>, <c>parse_ident</c>,
 /// <c>quote_ident</c>/<c>quote_literal</c>/<c>quote_nullable</c>, <c>to_ascii</c>, <c>to_hex</c>/
 /// <c>to_oct</c>/<c>to_bin</c>, <c>convert_from</c>/<c>convert_to</c>, <c>encode</c>/<c>decode</c>,
-/// <c>normalize</c>, <c>unistr</c>, <c>regexp_match</c>) and the residual numeric family (<c>div</c>,
-/// <c>erf</c>/<c>erfc</c>, <c>random_normal</c> and the degree-based trigonometry), each advertised by
-/// its own name.
+/// <c>normalize</c>, <c>unistr</c>, <c>regexp_match</c>), the residual numeric family (<c>div</c>,
+/// <c>erf</c>/<c>erfc</c>, <c>random_normal</c> and the degree-based trigonometry), the residual
+/// date/time family (<c>date_subtract</c>, <c>justify_interval</c>, <c>make_timestamptz</c>, the
+/// transaction clock functions, <c>timeofday</c>, <c>isfinite</c>), the UUID extraction functions and
+/// the binary-string family (<c>get_bit</c>/<c>set_bit</c>, <c>get_byte</c>/<c>set_byte</c>,
+/// <c>bit_count</c>), each advertised by its own name.
 /// </summary>
 internal sealed class PostgresScalarFunctions : IScalarFunctions
 {
@@ -936,7 +939,12 @@ internal sealed class PostgresScalarFunctions : IScalarFunctions
         "convert_from" or "convert_to" or "encode" or "decode" or "normalize" or "unistr" or
         "regexp_match" or
         "div" or "erf" or "erfc" or "random_normal" or
-        "acosd" or "asind" or "atand" or "atan2d" or "cosd" or "cotd" or "sind" or "tand";
+        "acosd" or "asind" or "atand" or "atan2d" or "cosd" or "cotd" or "sind" or "tand" or
+        "date_subtract" or "justify_interval" or "make_timestamptz" or
+        "clock_timestamp" or "statement_timestamp" or "transaction_timestamp" or "timeofday" or
+        "isfinite" or
+        "uuid_extract_timestamp" or "uuid_extract_version" or
+        "get_bit" or "set_bit" or "get_byte" or "set_byte" or "bit_count";
 
     /// <inheritdoc/>
     public string Render(string name, IReadOnlyList<string> args) => name switch
@@ -965,7 +973,11 @@ internal sealed class PostgresScalarFunctions : IScalarFunctions
             "quote_literal" or "quote_nullable" or "to_ascii" or "to_hex" or "to_oct" or "to_bin" or
             "convert_from" or "convert_to" or "encode" or "decode" or "normalize" or "unistr" or
             "regexp_match" or "div" or "erf" or "erfc" or "random_normal" or
-            "acosd" or "asind" or "atand" or "atan2d" or "cosd" or "cotd" or "sind" or "tand"
+            "acosd" or "asind" or "atand" or "atan2d" or "cosd" or "cotd" or "sind" or "tand" or
+            "date_subtract" or "justify_interval" or "make_timestamptz" or
+            "clock_timestamp" or "statement_timestamp" or "transaction_timestamp" or "timeofday" or
+            "isfinite" or "uuid_extract_timestamp" or "uuid_extract_version" or
+            "get_bit" or "set_bit" or "get_byte" or "set_byte" or "bit_count"
             => $"{name}({string.Join(", ", args)})",
         _ => throw new NotSupportedException($"The {name} function is not supported by PostgreSQL.")
     };

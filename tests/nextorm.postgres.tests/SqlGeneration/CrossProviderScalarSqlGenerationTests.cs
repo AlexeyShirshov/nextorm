@@ -201,6 +201,7 @@ public class CrossProviderScalarSqlGenerationTests
             Ql = SqlFunctions.Postgres.quote_literal(x.String),
             Qn = SqlFunctions.Postgres.quote_nullable(x.String),
             Ta3 = SqlFunctions.Postgres.to_ascii(x.String, "LATIN1"),
+            TaCode = SqlFunctions.Postgres.to_ascii(x.String, 8),
             ThInt = SqlFunctions.Postgres.to_hex(x.Int),
             ThLong = SqlFunctions.Postgres.to_hex(255L),
             ToInt = SqlFunctions.Postgres.to_oct(x.Int),
@@ -237,6 +238,7 @@ public class CrossProviderScalarSqlGenerationTests
         sql.Should().Contain("parse_ident(E'a.b', false)");
         sql.Should().Contain("quote_ident(E'a b')");
         sql.Should().Contain("to_ascii(somestring, E'LATIN1')");
+        sql.Should().Contain("to_ascii(somestring, 8)");
         sql.Should().Contain("to_hex(nullableint)");
         sql.Should().Contain("to_hex(255)");
         sql.Should().Contain("to_oct(nullableint)");
@@ -299,6 +301,117 @@ public class CrossProviderScalarSqlGenerationTests
 
     [Fact]
     [Trait("Issue", "281")]
+    public void PostgreSQLDateTimeFamily_ShouldEmitNativeSpellings()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            Ds1 = SqlFunctions.Postgres.date_subtract(x.Datetime, SqlFunctions.Parameter<TimeSpan>(0)),
+            Ds3 = SqlFunctions.Postgres.date_subtract(x.Datetime, SqlFunctions.Parameter<TimeSpan>(1), "UTC"),
+            Ji = SqlFunctions.Postgres.justify_interval(SqlFunctions.Parameter<TimeSpan>(2)),
+            Mt6 = SqlFunctions.Postgres.make_timestamptz(2024, 1, 2, 3, 4, 5.5),
+            Mt7 = SqlFunctions.Postgres.make_timestamptz(2024, 1, 2, 3, 4, 5.5, "UTC"),
+            Ct = SqlFunctions.Postgres.clock_timestamp(),
+            St = SqlFunctions.Postgres.statement_timestamp(),
+            Tt = SqlFunctions.Postgres.transaction_timestamp(),
+            Tod = SqlFunctions.Postgres.timeofday(),
+            IsfD = SqlFunctions.Postgres.isfinite(SqlFunctions.Parameter<DateOnly>(3)),
+            IsfTs = SqlFunctions.Postgres.isfinite(x.Datetime),
+            IsfI = SqlFunctions.Postgres.isfinite(SqlFunctions.Parameter<TimeSpan>(4))
+        }));
+
+        foreach (var name in new[]
+        {
+            "date_subtract", "justify_interval", "make_timestamptz", "clock_timestamp",
+            "statement_timestamp", "transaction_timestamp", "timeofday", "isfinite"
+        })
+        {
+            sql.Should().Contain($"{name}(");
+            PostgresDialect.Instance.ScalarFunctions.Supports(name).Should().BeTrue($"'{name}' is delivered on PostgreSQL");
+        }
+
+        sql.Should().Contain("date_subtract(dt, @norm_p0)");
+        sql.Should().Contain("date_subtract(dt, @norm_p1, E'UTC')");
+        sql.Should().Contain("justify_interval(@norm_p2)");
+        sql.Should().Contain("make_timestamptz(2024, 1, 2, 3, 4, 5.5)");
+        sql.Should().Contain("make_timestamptz(2024, 1, 2, 3, 4, 5.5, E'UTC')");
+        sql.Should().Contain("clock_timestamp()");
+        sql.Should().Contain("statement_timestamp()");
+        sql.Should().Contain("transaction_timestamp()");
+        sql.Should().Contain("timeofday()");
+        sql.Should().Contain("isfinite(@norm_p3)");
+        sql.Should().Contain("isfinite(dt)");
+        sql.Should().Contain("isfinite(@norm_p4)");
+
+        // Positive control: a sibling of the same family on the same query shape still renders.
+        SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.btrim(x.String) }))
+            .Should().Contain("btrim(somestring)");
+    }
+
+    [Fact]
+    [Trait("Issue", "281")]
+    public void PostgreSQLUuidFamily_ShouldEmitNativeSpellings()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            Ts = SqlFunctions.Postgres.uuid_extract_timestamp(SqlFunctions.Parameter<Guid>(0)),
+            Ver = SqlFunctions.Postgres.uuid_extract_version(SqlFunctions.Parameter<Guid>(1))
+        }));
+
+        foreach (var name in new[] { "uuid_extract_timestamp", "uuid_extract_version" })
+        {
+            sql.Should().Contain($"{name}(");
+            PostgresDialect.Instance.ScalarFunctions.Supports(name).Should().BeTrue($"'{name}' is delivered on PostgreSQL");
+        }
+
+        sql.Should().Contain("uuid_extract_timestamp(@norm_p0)");
+        sql.Should().Contain("uuid_extract_version(@norm_p1)");
+
+        // Positive control: the neighbour UUID generator still renders on the same surface.
+        SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Sql.gen_random_uuid() }))
+            .Should().Contain("gen_random_uuid()");
+    }
+
+    [Fact]
+    [Trait("Issue", "281")]
+    public void PostgreSQLBinaryStringFamily_ShouldEmitNativeSpellings()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            Gb = SqlFunctions.Postgres.get_bit(SqlFunctions.Parameter<byte[]>(0), 0L),
+            Sb = SqlFunctions.Postgres.set_bit(SqlFunctions.Parameter<byte[]>(1), 0L, 1),
+            Gbyte = SqlFunctions.Postgres.get_byte(SqlFunctions.Parameter<byte[]>(2), 0),
+            Sbyte = SqlFunctions.Postgres.set_byte(SqlFunctions.Parameter<byte[]>(3), 0, 255),
+            Bc = SqlFunctions.Postgres.bit_count(SqlFunctions.Parameter<byte[]>(4))
+        }));
+
+        foreach (var name in new[] { "get_bit", "set_bit", "get_byte", "set_byte", "bit_count" })
+        {
+            sql.Should().Contain($"{name}(");
+            PostgresDialect.Instance.ScalarFunctions.Supports(name).Should().BeTrue($"'{name}' is delivered on PostgreSQL");
+        }
+
+        sql.Should().Contain("get_bit(@norm_p0, 0)");
+        sql.Should().Contain("set_bit(@norm_p1, 0, 1)");
+        sql.Should().Contain("get_byte(@norm_p2, 0)");
+        sql.Should().Contain("set_byte(@norm_p3, 0, 255)");
+        sql.Should().Contain("bit_count(@norm_p4)");
+
+        // Positive control: the sibling binary encode/decode still renders.
+        SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.decode(x.String, "hex") }))
+            .Should().Contain("decode(somestring, E'hex')");
+    }
+
+    [Fact]
+    [Trait("Issue", "281")]
     public void RefusedFunctions_ShouldFailBeforeAnySqlIsEmitted()
     {
         using var ctx = PostgresTestContext.Create();
@@ -309,13 +422,29 @@ public class CrossProviderScalarSqlGenerationTests
         var tgamma = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.tgamma(1.5) }));
         var lgamma = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.lgamma(1.5) }));
         var toAsciiOneArg = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.to_ascii(x.String) }));
+        var crc32 = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.crc32(SqlFunctions.Parameter<byte[]>(8)) }));
+        var crc32c = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.crc32c(SqlFunctions.Parameter<byte[]>(9)) }));
 
         casefold.Should().Throw<NotSupportedException>().WithMessage("The casefold function is refused:*PostgreSQL 18*");
         gamma.Should().Throw<NotSupportedException>().WithMessage("The gamma function is refused:*17.11*");
         tgamma.Should().Throw<NotSupportedException>().WithMessage("The tgamma function is refused:*17.11*");
         lgamma.Should().Throw<NotSupportedException>().WithMessage("The lgamma function is refused:*17.11*");
         toAsciiOneArg.Should().Throw<NotSupportedException>()
-            .WithMessage("The one-argument to_ascii function is refused:*0A000*LATIN1/LATIN2/WIN1250*to_ascii(value, encoding)*");
+            .WithMessage("The one-argument to_ascii function is refused:*LATIN1, LATIN2, LATIN9 and WIN1250*0A000*to_ascii(value, encoding)*");
+        crc32.Should().Throw<NotSupportedException>().WithMessage("The crc32 function is refused:*PostgreSQL 18*");
+        crc32c.Should().Throw<NotSupportedException>().WithMessage("The crc32c function is refused:*PostgreSQL 18*");
+
+        // The pg_sleep family returns void, so no void call can appear in a projection; the refusal is
+        // asserted at the member itself (its body throws before any SQL could be emitted).
+        FluentActions.Invoking(() => SqlFunctions.Postgres.pg_sleep(0.0))
+            .Should().Throw<NotSupportedException>().WithMessage("The pg_sleep function is refused:*void*");
+        FluentActions.Invoking(() => SqlFunctions.Postgres.pg_sleep_for(TimeSpan.Zero))
+            .Should().Throw<NotSupportedException>().WithMessage("The pg_sleep_for function is refused:*void*");
+        FluentActions.Invoking(() => SqlFunctions.Postgres.pg_sleep_until(DateTime.UnixEpoch))
+            .Should().Throw<NotSupportedException>().WithMessage("The pg_sleep_until function is refused:*void*");
+
+        foreach (var name in new[] { "crc32", "crc32c", "pg_sleep", "pg_sleep_for", "pg_sleep_until" })
+            PostgresDialect.Instance.ScalarFunctions.Supports(name).Should().BeFalse($"'{name}' is refused on every provider");
 
         // Positive control: a sibling of the same family on the same query shape still renders, so the
         // refusals above are per name/shape and not a blanket failure of the translator.

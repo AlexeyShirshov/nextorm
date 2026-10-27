@@ -1072,6 +1072,9 @@ public class InMemoryTests
     public void PostgresResidualFamilies_ShouldThrow()
     {
         int? nullInt = null;
+        Guid uuid = Guid.Empty;
+        byte[] bytes = [0xA1];
+        TimeSpan interval = TimeSpan.FromHours(25);
 
         var cases = new (string Name, Action Act)[]
         {
@@ -1084,6 +1087,7 @@ public class InMemoryTests
             ("quote_literal", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.quote_literal("a") }).ToList()),
             ("quote_nullable", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.quote_nullable("a") }).ToList()),
             ("to_ascii", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.to_ascii("abc", "LATIN1") }).ToList()),
+            ("to_ascii#2", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.to_ascii("abc", 8) }).ToList()),
             ("to_hex", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.to_hex(nullInt) }).ToList()),
             ("to_oct", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.to_oct(nullInt) }).ToList()),
             ("to_bin", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.to_bin(nullInt) }).ToList()),
@@ -1116,11 +1120,35 @@ public class InMemoryTests
             ("gamma", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.gamma(1.5) }).ToList()),
             ("tgamma", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.tgamma(1.5) }).ToList()),
             ("lgamma", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.lgamma(1.5) }).ToList()),
-            ("to_ascii#1", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.to_ascii("abc") }).ToList())
+            ("to_ascii#1", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.to_ascii("abc") }).ToList()),
+            ("date_subtract", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.date_subtract(DateTime.UtcNow, interval) }).ToList()),
+            ("date_subtract", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.date_subtract(DateTime.UtcNow, interval, "UTC") }).ToList()),
+            ("justify_interval", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.justify_interval(interval) }).ToList()),
+            ("make_timestamptz", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.make_timestamptz(2024, 1, 2, 3, 4, 5.5) }).ToList()),
+            ("make_timestamptz", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.make_timestamptz(2024, 1, 2, 3, 4, 5.5, "UTC") }).ToList()),
+            ("clock_timestamp", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.clock_timestamp() }).ToList()),
+            ("statement_timestamp", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.statement_timestamp() }).ToList()),
+            ("transaction_timestamp", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.transaction_timestamp() }).ToList()),
+            ("timeofday", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.timeofday() }).ToList()),
+            ("isfinite", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.isfinite(new DateOnly(2024, 1, 1)) }).ToList()),
+            ("isfinite", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.isfinite(DateTime.UtcNow) }).ToList()),
+            ("isfinite", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.isfinite(interval) }).ToList()),
+            ("uuid_extract_timestamp", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.uuid_extract_timestamp(uuid) }).ToList()),
+            ("uuid_extract_version", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.uuid_extract_version(uuid) }).ToList()),
+            ("get_bit", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.get_bit(bytes, 0L) }).ToList()),
+            ("set_bit", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.set_bit(bytes, 0L, 1) }).ToList()),
+            ("get_byte", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.get_byte(bytes, 0) }).ToList()),
+            ("set_byte", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.set_byte(bytes, 0, 255) }).ToList()),
+            ("bit_count", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.bit_count(bytes) }).ToList()),
+            ("crc32", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.crc32(bytes) }).ToList()),
+            ("crc32c", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.crc32c(bytes) }).ToList())
         };
 
         foreach (var (name, act) in cases)
-            act.Should().Throw<NotSupportedException>().WithMessage($"*{(name == "to_ascii#1" ? "to_ascii" : name)}*not supported*");
+        {
+            var expected = name.Split('#')[0];
+            act.Should().Throw<NotSupportedException>().WithMessage($"*{expected}*not supported*");
+        }
     }
 }
 

@@ -1309,6 +1309,7 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
                 QuoteNullable = SqlFunctions.Postgres.quote_nullable(x.String),
                 ToAscii = SqlFunctions.Postgres.to_ascii("abc", "LATIN1"),
                 ToAscii2 = SqlFunctions.Postgres.to_ascii("abc", "LATIN2"),
+                ToAsciiInt = SqlFunctions.Postgres.to_ascii("abc", 8),
                 HexNeg = SqlFunctions.Postgres.to_hex(-1),
                 HexLong = SqlFunctions.Postgres.to_hex(255L),
                 Oct = SqlFunctions.Postgres.to_oct(8),
@@ -1346,6 +1347,7 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
         r.QuoteNullable.Should().Be("'dadfasd'");
         r.ToAscii.Should().Be("abc");
         r.ToAscii2.Should().Be("abc");
+        r.ToAsciiInt.Should().Be("abc");
         r.HexNeg.Should().Be("ffffffff");
         r.HexLong.Should().Be("ff");
         r.Oct.Should().Be("10");
@@ -1371,6 +1373,7 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
         ((object)r.ParseIdent!).Should().BeOfType<string[]>();
         ((object)r.QuoteIdent!).Should().BeOfType<string>();
         ((object)r.ToAscii!).Should().BeOfType<string>();
+        ((object)r.ToAsciiInt!).Should().BeOfType<string>();
         ((object)r.HexNeg!).Should().BeOfType<string>();
         ((object)r.ConvertTo!).Should().BeOfType<byte[]>();
         ((object)r.Decode!).Should().BeOfType<byte[]>();
@@ -1469,6 +1472,29 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
         withNullString[2].Should().Be("c");
     }
 
+    /// <summary>
+    /// The documented <c>to_ascii(text, integer)</c> form takes a PostgreSQL encoding <em>code</em>
+    /// (<c>8</c> = <c>LATIN1</c>, verified live with <c>pg_encoding_to_char</c>). The code is validated by
+    /// the server, not by nextorm: a Windows codepage number such as <c>1252</c> is not an encoding code,
+    /// so the emitted statement reaches PostgreSQL and fails there with <c>42704</c>.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void ToAsciiIntegerCode_ShouldReachTheServerAndValidateTheCode()
+    {
+        var valid = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new { V = SqlFunctions.Postgres.to_ascii("abc", 8) })
+            .First();
+        valid.V.Should().Be("abc");
+
+        var invalid = () => _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new { V = SqlFunctions.Postgres.to_ascii("abc", 1252) })
+            .First();
+
+        invalid.Should().Throw<PostgresException>()
+            .Which.SqlState.Should().Be("42704", "1252 is a Windows codepage, not a PostgreSQL encoding code");
+    }
+
     [Fact]
     [Trait("Issue", "281")]
     public void NumericFamily_ShouldComputeValuesNullsAndClrTypes()
@@ -1551,6 +1577,176 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
 
     [Fact]
     [Trait("Issue", "281")]
+    public void DateTimeFamily_ShouldComputeValuesNullsAndClrTypes()
+    {
+        var date = new DateOnly(2024, 1, 1);
+        var day = TimeSpan.FromDays(1);
+
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Ds = SqlFunctions.Postgres.date_subtract(x.Datetime, day),
+                Ds3 = SqlFunctions.Postgres.date_subtract(x.Datetime, day, "UTC"),
+                Ji = SqlFunctions.Postgres.justify_interval(TimeSpan.FromHours(25)),
+                Mt = SqlFunctions.Postgres.make_timestamptz(2024, 1, 2, 3, 4, 5.5),
+                Mt3 = SqlFunctions.Postgres.make_timestamptz(2024, 1, 2, 3, 4, 5.5, "UTC"),
+                Ct = SqlFunctions.Postgres.clock_timestamp(),
+                St = SqlFunctions.Postgres.statement_timestamp(),
+                Tt = SqlFunctions.Postgres.transaction_timestamp(),
+                Tod = SqlFunctions.Postgres.timeofday(),
+                IsfDate = SqlFunctions.Postgres.isfinite(date),
+                IsfTs = SqlFunctions.Postgres.isfinite(x.Datetime),
+                IsfInterval = SqlFunctions.Postgres.isfinite(day)
+            })
+            .First();
+
+        // dt of row 1 is 2023-01-01 10:00:00; the interval form subtracts one day.
+        r.Ds.Should().Be(new DateTime(2022, 12, 31, 10, 0, 0));
+        r.Ds3.Should().Be(new DateTime(2022, 12, 31, 10, 0, 0));
+        r.Ji.Should().Be(TimeSpan.FromDays(1) + TimeSpan.FromHours(1));
+        r.Mt.Should().Be(new DateTime(2024, 1, 2, 3, 4, 5).AddMilliseconds(500));
+        r.Mt3.Should().Be(new DateTime(2024, 1, 2, 3, 4, 5).AddMilliseconds(500));
+        r.Ct.Should().NotBeNull();
+        r.St.Should().NotBeNull();
+        r.Tt.Should().NotBeNull();
+        r.St.Should().Be(r.Tt, "both report the transaction start time");
+        r.Ct.Should().BeCloseTo(r.St!.Value, TimeSpan.FromMinutes(5));
+        r.Tod.Should().Contain("UTC");
+        r.IsfDate.Should().BeTrue();
+        r.IsfTs.Should().BeTrue();
+        r.IsfInterval.Should().BeTrue();
+
+        // Exact CLR types.
+        ((object)r.Ds!).Should().BeOfType<DateTime>();
+        ((object)r.Ds3!).Should().BeOfType<DateTime>();
+        ((object)r.Ji!).Should().BeOfType<TimeSpan>();
+        ((object)r.Mt!).Should().BeOfType<DateTime>();
+        ((object)r.Ct!).Should().BeOfType<DateTime>();
+        ((object)r.St!).Should().BeOfType<DateTime>();
+        ((object)r.Tt!).Should().BeOfType<DateTime>();
+        ((object)r.Tod!).Should().BeOfType<string>();
+        ((object)r.IsfDate!).Should().BeOfType<bool>();
+        ((object)r.IsfTs!).Should().BeOfType<bool>();
+        ((object)r.IsfInterval!).Should().BeOfType<bool>();
+
+        // NULL row: row 3 has a NULL string, and the CASE guard turns every projection into NULL. This
+        // is the only way to obtain a NULL from the no-argument, non-strict-by-nature timestamp
+        // functions; the strict members are checked through the same row.
+        var nulls = _sut.ComplexEntity.Where(x => x.Id == 3)
+            .Select(x => new
+            {
+                Ds = x.String == null ? null : SqlFunctions.Postgres.date_subtract(x.Datetime, day),
+                Ds3 = x.String == null ? null : SqlFunctions.Postgres.date_subtract(x.Datetime, day, "UTC"),
+                Ji = x.String == null ? null : SqlFunctions.Postgres.justify_interval(TimeSpan.FromHours(25)),
+                Mt = x.String == null ? null : SqlFunctions.Postgres.make_timestamptz(2024, 1, 2, 3, 4, 5.5),
+                Mt3 = x.String == null ? null : SqlFunctions.Postgres.make_timestamptz(2024, 1, 2, 3, 4, 5.5, "UTC"),
+                Ct = x.String == null ? null : SqlFunctions.Postgres.clock_timestamp(),
+                St = x.String == null ? null : SqlFunctions.Postgres.statement_timestamp(),
+                Tt = x.String == null ? null : SqlFunctions.Postgres.transaction_timestamp(),
+                Tod = x.String == null ? null : SqlFunctions.Postgres.timeofday(),
+                IsfDate = x.String == null ? null : SqlFunctions.Postgres.isfinite(date),
+                IsfTs = x.String == null ? null : SqlFunctions.Postgres.isfinite(x.Datetime),
+                IsfInterval = x.String == null ? null : SqlFunctions.Postgres.isfinite(day)
+            })
+            .First();
+
+        nulls.Ds.Should().BeNull();
+        nulls.Ds3.Should().BeNull();
+        nulls.Ji.Should().BeNull();
+        nulls.Mt.Should().BeNull();
+        nulls.Mt3.Should().BeNull();
+        nulls.Ct.Should().BeNull();
+        nulls.St.Should().BeNull();
+        nulls.Tt.Should().BeNull();
+        nulls.Tod.Should().BeNull();
+        nulls.IsfDate.Should().BeNull();
+        nulls.IsfTs.Should().BeNull();
+        nulls.IsfInterval.Should().BeNull();
+    }
+
+    [Fact]
+    [Trait("Issue", "281")]
+    public void UuidFamily_ShouldComputeValuesNullsAndClrTypes()
+    {
+        var v1 = Guid.Parse("a0eebc99-9c0b-11d1-9c9b-00c04fd430c8");
+        var v4 = Guid.Parse("3f2504e0-4f89-41d3-9a0c-0305e82c3301");
+        var nil = Guid.Empty;
+
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                V1Version = SqlFunctions.Postgres.uuid_extract_version(v1),
+                V1Timestamp = SqlFunctions.Postgres.uuid_extract_timestamp(v1),
+                V4Version = SqlFunctions.Postgres.uuid_extract_version(v4),
+                V4Timestamp = SqlFunctions.Postgres.uuid_extract_timestamp(v4),
+                NilVersion = SqlFunctions.Postgres.uuid_extract_version(nil),
+                NilTimestamp = SqlFunctions.Postgres.uuid_extract_timestamp(nil)
+            })
+            .First();
+
+        r.V1Version.Should().Be((short)1);
+        r.V1Timestamp.Should().Be(new DateTime(1998, 2, 2, 20, 23, 12, 902).AddTicks(8_760));
+        r.V4Version.Should().Be((short)4);
+        r.V4Timestamp.Should().BeNull("a version 4 UUID carries no timestamp");
+        r.NilVersion.Should().BeNull("the nil UUID has no version");
+        r.NilTimestamp.Should().BeNull("the nil UUID has no timestamp");
+
+        // Exact CLR types.
+        ((object)r.V1Version!).Should().BeOfType<short>();
+        ((object)r.V4Version!).Should().BeOfType<short>();
+        ((object)r.V1Timestamp!).Should().BeOfType<DateTime>();
+    }
+
+    [Fact]
+    [Trait("Issue", "281")]
+    public void BinaryStringFamily_ShouldComputeValuesNullsAndClrTypes()
+    {
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Bit = SqlFunctions.Postgres.get_bit(SqlFunctions.Postgres.decode("a1", "hex"), 0L),
+                BitSet = SqlFunctions.Postgres.set_bit(SqlFunctions.Postgres.decode("a1", "hex"), 0L, 0),
+                Byte = SqlFunctions.Postgres.get_byte(SqlFunctions.Postgres.decode("a1", "hex"), 0),
+                ByteSet = SqlFunctions.Postgres.set_byte(SqlFunctions.Postgres.decode("a1", "hex"), 0, 255),
+                Count = SqlFunctions.Postgres.bit_count(SqlFunctions.Postgres.decode("a1", "hex"))
+            })
+            .First();
+
+        // 0xA1 = 1010 0001: bit 0 is 1, the byte is 161, three bits are set.
+        r.Bit.Should().Be(1);
+        r.BitSet.Should().Equal(new byte[] { 0xA0 });
+        r.Byte.Should().Be(161);
+        r.ByteSet.Should().Equal(new byte[] { 0xFF });
+        r.Count.Should().Be(3L);
+
+        // Exact CLR types.
+        ((object)r.Bit!).Should().BeOfType<int>();
+        ((object)r.BitSet!).Should().BeOfType<byte[]>();
+        ((object)r.Byte!).Should().BeOfType<int>();
+        ((object)r.ByteSet!).Should().BeOfType<byte[]>();
+        ((object)r.Count!).Should().BeOfType<long>();
+
+        // NULL row: the binary entity's row 2 carries a NULL bytea column.
+        var nulls = _sut.BinaryEntity.Where(x => x.Id == 2)
+            .Select(x => new
+            {
+                Bit = SqlFunctions.Postgres.get_bit(x.Data, 0L),
+                BitSet = SqlFunctions.Postgres.set_bit(x.Data, 0L, 0),
+                Byte = SqlFunctions.Postgres.get_byte(x.Data, 0),
+                ByteSet = SqlFunctions.Postgres.set_byte(x.Data, 0, 255),
+                Count = SqlFunctions.Postgres.bit_count(x.Data)
+            })
+            .First();
+
+        nulls.Bit.Should().BeNull();
+        nulls.BitSet.Should().BeNull();
+        nulls.Byte.Should().BeNull();
+        nulls.ByteSet.Should().BeNull();
+        nulls.Count.Should().BeNull();
+    }
+
+    [Fact]
+    [Trait("Issue", "281")]
     public void RefusedMembers_ShouldFailDuringPreparation()
     {
         var casefold = () => _sut.ComplexEntity.Where(x => x.Id == 1)
@@ -1563,13 +1759,28 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
             .Select(x => new { V = SqlFunctions.Postgres.lgamma(1.5) }).First();
         var toAsciiOneArg = () => _sut.ComplexEntity.Where(x => x.Id == 1)
             .Select(x => new { V = SqlFunctions.Postgres.to_ascii(x.String) }).First();
+        var crc32 = () => _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new { V = SqlFunctions.Postgres.crc32(SqlFunctions.Postgres.decode(x.String, "hex")) }).First();
+        var crc32c = () => _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new { V = SqlFunctions.Postgres.crc32c(SqlFunctions.Postgres.decode(x.String, "hex")) }).First();
 
         casefold.Should().Throw<NotSupportedException>().WithMessage("The casefold function is refused:*PostgreSQL 18*");
         gamma.Should().Throw<NotSupportedException>().WithMessage("The gamma function is refused:*17.11*");
         tgamma.Should().Throw<NotSupportedException>().WithMessage("The tgamma function is refused:*17.11*");
         lgamma.Should().Throw<NotSupportedException>().WithMessage("The lgamma function is refused:*17.11*");
         toAsciiOneArg.Should().Throw<NotSupportedException>()
-            .WithMessage("The one-argument to_ascii function is refused:*0A000*to_ascii(value, encoding)*");
+            .WithMessage("The one-argument to_ascii function is refused:*LATIN1, LATIN2, LATIN9 and WIN1250*0A000*to_ascii(value, encoding)*");
+        crc32.Should().Throw<NotSupportedException>().WithMessage("The crc32 function is refused:*PostgreSQL 18*");
+        crc32c.Should().Throw<NotSupportedException>().WithMessage("The crc32c function is refused:*PostgreSQL 18*");
+
+        // pg_sleep* returns void, so it cannot appear in a projection; the refusal is a member-level
+        // throw (no SQL, no wait). pg_sleep_until gets a past target so nothing would ever sleep.
+        FluentActions.Invoking(() => SqlFunctions.Postgres.pg_sleep(0.0))
+            .Should().Throw<NotSupportedException>().WithMessage("The pg_sleep function is refused:*void*");
+        FluentActions.Invoking(() => SqlFunctions.Postgres.pg_sleep_for(TimeSpan.Zero))
+            .Should().Throw<NotSupportedException>().WithMessage("The pg_sleep_for function is refused:*void*");
+        FluentActions.Invoking(() => SqlFunctions.Postgres.pg_sleep_until(DateTime.UnixEpoch))
+            .Should().Throw<NotSupportedException>().WithMessage("The pg_sleep_until function is refused:*void*");
 
         // Positive control: the delivered sibling shapes render and execute.
         _sut.ComplexEntity.Where(x => x.Id == 1)

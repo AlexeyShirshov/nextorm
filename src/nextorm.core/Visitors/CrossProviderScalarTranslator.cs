@@ -4,8 +4,9 @@ namespace NextORM.Core;
 
 /// <summary>
 /// Translates the cross-provider scalar functions of <see cref="CommonFunctions"/> (the members that
-/// render natively on several providers) and the three PostgreSQL numeric-scale members
-/// (<c>scale</c>/<c>min_scale</c>/<c>trim_scale</c>) through the dialect's
+/// render natively on several providers), the three PostgreSQL numeric-scale members
+/// (<c>scale</c>/<c>min_scale</c>/<c>trim_scale</c>) and the PostgreSQL-only date/time, UUID and
+/// binary-string scalar families of #281 through the dialect's
 /// <see cref="ISqlDialect.ScalarFunctions"/>. Split out of <see cref="BuiltinFunctionTranslator"/> for
 /// cohesion; the supported set and emitted SQL are unchanged. Only the enumerated names are enrolled,
 /// so a same-named provider-only member that is not listed falls through to
@@ -36,7 +37,15 @@ internal static class CrossProviderScalarTranslator
         nameof(PostgresFunctions.random_normal),
         nameof(PostgresFunctions.acosd), nameof(PostgresFunctions.asind), nameof(PostgresFunctions.atand),
         nameof(PostgresFunctions.atan2d), nameof(PostgresFunctions.cosd), nameof(PostgresFunctions.cotd),
-        nameof(PostgresFunctions.sind), nameof(PostgresFunctions.tand)
+        nameof(PostgresFunctions.sind), nameof(PostgresFunctions.tand),
+        nameof(PostgresFunctions.date_subtract), nameof(PostgresFunctions.justify_interval),
+        nameof(PostgresFunctions.make_timestamptz), nameof(PostgresFunctions.clock_timestamp),
+        nameof(PostgresFunctions.statement_timestamp), nameof(PostgresFunctions.transaction_timestamp),
+        nameof(PostgresFunctions.timeofday), nameof(PostgresFunctions.isfinite),
+        nameof(PostgresFunctions.uuid_extract_timestamp), nameof(PostgresFunctions.uuid_extract_version),
+        nameof(PostgresFunctions.get_bit), nameof(PostgresFunctions.set_bit),
+        nameof(PostgresFunctions.get_byte), nameof(PostgresFunctions.set_byte),
+        nameof(PostgresFunctions.bit_count)
     };
 
     /// <summary>
