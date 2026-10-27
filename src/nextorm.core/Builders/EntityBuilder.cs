@@ -3958,8 +3958,20 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         var opts = new JoinOptions();
         options?.Invoke(opts);
 
-        var body = source.Body.Type == typeof(QueryCommand) ? source.Body : Expression.Convert(source.Body, typeof(QueryCommand));
-        var applySource = Expression.Lambda(body, source.Parameters);
+        // A runtime table-valued-function body (row => Db.MyTvf(row.Id)) is not a derived query: it is
+        // lowered to the shared table-function source, keeping the outer row in the expression so the
+        // correlated argument renders as a column reference. Derived-query bodies keep the old path.
+        // This mirrors JoinApply, so the flat joined-receiver transition accepts the same sources.
+        LambdaExpression applySource;
+        if (SourceExpressionLowerer.TryCreateCorrelatedTvfApply<TAppliedEntity>(source, RequireContext, out var tvfApplySource))
+        {
+            applySource = tvfApplySource;
+        }
+        else
+        {
+            var body = source.Body.Type == typeof(QueryCommand) ? source.Body : Expression.Convert(source.Body, typeof(QueryCommand));
+            applySource = Expression.Lambda(body, source.Parameters);
+        }
 
         var join = new JoinExpression(null, joinType)
         {
