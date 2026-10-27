@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Data;
 using System.Data.Common;
 using System.Globalization;
@@ -15,6 +16,14 @@ namespace NextORM.SqlServer;
 /// </summary>
 public class SqlServerDataContext : DataContext, IBulkInsertExecutor, IBulkInsertNativeOptions, IBulkInsertPortableScope
 {
+    // One immutable server version per concrete context type, so two instances of the same type can
+    // never render different SQL and silently reuse each other's cached plans (the plan-cache key is the
+    // context type). Unset is a sentinel distinct from every Version.
+    private static readonly object UnsetServerVersion = new();
+    private static readonly ConcurrentDictionary<Type, object> ServerVersionsByContextType = new();
+
+    private readonly ISqlDialect _dialect;
+
     private static readonly MethodInfo GetValueMethod = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetValue))!;
     private static readonly MethodInfo IsDBNullMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.IsDBNull))!;
     private static readonly MethodInfo GetFieldTypeMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetFieldType))!;
@@ -33,25 +42,92 @@ public class SqlServerDataContext : DataContext, IBulkInsertExecutor, IBulkInser
 
     /// <summary>
     /// Creates a SQL Server context that owns a connection built lazily from
-    /// <paramref name="connectionString"/>.
+    /// <paramref name="connectionString"/>. The context is unversioned: every version-dependent
+    /// capability keeps its historical value.
     /// </summary>
     /// <param name="connectionString">The connection string used to create the <c>SqlConnection</c>.</param>
     /// <param name="optionsBuilder">The options collected from <c>DataContextBuilder</c>.</param>
     public SqlServerDataContext(string connectionString, DataContextBuilder optionsBuilder)
-        : base(connectionString, null, optionsBuilder)
+        : this(connectionString, null, optionsBuilder, null)
     {
     }
 
     /// <summary>
     /// Creates a SQL Server context over a caller-supplied connection, which the context does not
-    /// dispose.
+    /// dispose. The context is unversioned: every version-dependent capability keeps its historical
+    /// value.
     /// </summary>
     /// <param name="connection">An already-created <c>DbConnection</c> owned by the caller.</param>
     /// <param name="optionsBuilder">The options collected from <c>DataContextBuilder</c>.</param>
     public SqlServerDataContext(DbConnection connection, DataContextBuilder optionsBuilder)
-        : base(null, connection, optionsBuilder)
+        : this(null, connection, optionsBuilder, null)
     {
     }
+
+    /// <summary>
+    /// Creates a SQL Server context bound to an explicitly declared server version that owns a
+    /// connection built lazily from <paramref name="connectionString"/>. The declared version decides
+    /// the version-gated capabilities (for example native <c>json</c> storage, which needs major 17);
+    /// the server itself is never queried for it.
+    /// </summary>
+    /// <param name="serverVersion">The SQL Server version this context declares.</param>
+    /// <param name="connectionString">The connection string used to create the <c>SqlConnection</c>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="serverVersion"/> is <see langword="null"/>; use the unversioned constructor instead.</exception>
+    /// <exception cref="InvalidOperationException">A different server version was already registered for this context type.</exception>
+    public SqlServerDataContext(Version serverVersion, string connectionString)
+        : this(connectionString, null, new DataContextBuilder(), ValidateServerVersion(serverVersion))
+    {
+    }
+
+    /// <summary>
+    /// Creates a SQL Server context bound to an explicitly declared server version over a
+    /// caller-supplied connection, which the context does not dispose.
+    /// </summary>
+    /// <param name="serverVersion">The SQL Server version this context declares.</param>
+    /// <param name="connection">An already-created <c>DbConnection</c> owned by the caller.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="serverVersion"/> is <see langword="null"/>; use the unversioned constructor instead.</exception>
+    /// <exception cref="InvalidOperationException">A different server version was already registered for this context type.</exception>
+    public SqlServerDataContext(Version serverVersion, DbConnection connection)
+        : this(null, connection, new DataContextBuilder(), ValidateServerVersion(serverVersion))
+    {
+    }
+
+    private SqlServerDataContext(string? connectionString, DbConnection? connection, DataContextBuilder optionsBuilder, Version? serverVersion)
+        : base(connectionString, connection, optionsBuilder, serverVersion)
+    {
+        RegisterServerVersion(GetType(), ServerVersion);
+        _dialect = ServerVersion is null ? SqlServerDialect.Instance : new SqlServerDialect(ServerVersion);
+    }
+
+    private static Version ValidateServerVersion(Version serverVersion)
+    {
+        ArgumentNullException.ThrowIfNull(serverVersion);
+        return serverVersion;
+    }
+
+    // A context type owns one immutable server version: the plan cache is keyed by the context type, so
+    // two versions would silently share cached SQL. A second, conflicting version is a configuration
+    // error that names the remedy: derive a distinct context subclass. SQL Server keeps its own registry
+    // (the shared cache key is unchanged) and, like PostgreSQL, treats "unset" as a value of its own, so
+    // a mixing of the unversioned and a version-aware construction is refused as well.
+    private static void RegisterServerVersion(Type contextType, Version? serverVersion)
+    {
+        var candidate = (object?)serverVersion ?? UnsetServerVersion;
+        var registered = ServerVersionsByContextType.GetOrAdd(contextType, candidate);
+
+        if (ReferenceEquals(registered, candidate))
+            return;
+        if (registered is Version registeredVersion && candidate is Version candidateVersion && registeredVersion.Equals(candidateVersion))
+            return;
+
+        throw new InvalidOperationException(
+            $"The SQL Server context type '{contextType.Name}' is already bound to server version {DescribeServerVersion(registered)}, " +
+            $"so it cannot also be used with {DescribeServerVersion(candidate)}. A context type has one immutable server version because the " +
+            "plan cache is keyed by the context type; derive a distinct DataContext subclass for each version.");
+    }
+
+    private static string DescribeServerVersion(object discriminator)
+        => discriminator is Version version ? version.ToString() : "unset (null)";
 
     /// <summary>Creates a new <c>SqlConnection</c> for <paramref name="connectionString"/>.</summary>
     /// <param name="connectionString">The SQL Server connection string.</param>
@@ -60,7 +136,7 @@ public class SqlServerDataContext : DataContext, IBulkInsertExecutor, IBulkInser
         => new SqlConnection(connectionString);
 
     /// <inheritdoc/>
-    public override ISqlDialect Dialect => SqlServerDialect.Instance;
+    public override ISqlDialect Dialect => _dialect;
 
     /// <summary>
     /// SQL Server <c>time</c> is a true time of day and SqlClient surfaces it as

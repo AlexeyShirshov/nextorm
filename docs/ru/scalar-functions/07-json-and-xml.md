@@ -94,7 +94,8 @@ JSON-выражение выводятся без приведения (`doc -> 
 
 ## JSON как текст (SQL Server, MySQL/MariaDB)
 
-SQL Server хранит JSON в обычной колонке `nvarchar` и предоставляет текстовое подмножество функций
+SQL Server хранит JSON в обычной колонке `nvarchar` — а в 2025+ с контекстом, построенным из явного `Version(17, 0)`, — в своём опциональном нативном типе `json` ([`SupportsJson`](xref:NextORM.Core.ISqlDialect.SupportsJson);
+только корни-объекты и массивы, см. [Поддержка JSON](../guide/16-json.md#нативный-json-в-sql-server-2025)) — и предоставляет текстовое подмножество функций
 ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)); MySQL/MariaDB предоставляют ту же
 поверхность через семейство `JSON_EXTRACT`/`JSON_SET`. Путь — это строка JSONPath (`'$.name'`); `json_value` возвращает
 скаляр, а `json_query` — фрагмент-объект/массив:

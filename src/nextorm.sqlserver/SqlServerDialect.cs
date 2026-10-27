@@ -19,9 +19,28 @@ public sealed class SqlServerDialect : SqlDialectBase
     public override bool SupportsSavepoints => true;
 
     private readonly IPivotRenderer _pivot;
+    private readonly int? _serverMajorVersion;
 
-    /// <summary>Creates the dialect and its capability renderers.</summary>
+    /// <summary>
+    /// Creates the version-agnostic dialect and its capability renderers. Every version-dependent
+    /// capability stays at its historical value, so SQL declared by this dialect keeps working on every
+    /// supported server.
+    /// </summary>
     public SqlServerDialect() => _pivot = new SqlServerPivotRenderer(this);
+
+    /// <summary>
+    /// Creates a dialect bound to an explicitly declared server version. The version is the only input:
+    /// neither the connection nor <c>sys.databases.compatibility_level</c> is inspected, so the emitted
+    /// SQL is a function of the caller's declaration alone.
+    /// </summary>
+    /// <param name="serverVersion">The SQL Server version the context declared.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="serverVersion"/> is <see langword="null"/>.</exception>
+    internal SqlServerDialect(Version serverVersion)
+    {
+        ArgumentNullException.ThrowIfNull(serverVersion);
+        _serverMajorVersion = serverVersion.Major;
+        _pivot = new SqlServerPivotRenderer(this);
+    }
 
     /// <summary>Renders a positional parameter as <c>@name</c>.</summary>
     public override string MakeParam(string name) => $"@{name}";
@@ -234,6 +253,23 @@ public sealed class SqlServerDialect : SqlDialectBase
 
     /// <summary>SQL Server 2016+ renders the JSON-as-text functions (<c>json_value</c>, ...) over nvarchar.</summary>
     public override bool SupportsTextJson => true;
+
+    /// <summary>
+    /// True only for a context constructed with an explicit server version whose major is 17 or higher
+    /// (SQL Server 2025 and the Azure SQL engines built on it): those servers have a native <c>json</c>
+    /// type. The unversioned dialect and every older version keep <c>false</c>, so an existing
+    /// <c>nvarchar</c>-backed <c>[JsonColumn]</c> mapping is never retargeted by Auto. The decision is
+    /// taken from the declared version alone — the database compatibility level is not probed.
+    /// </summary>
+    public override bool SupportsJson => _serverMajorVersion >= 17;
+
+    /// <summary>
+    /// The native <c>json</c> column is transported as the plain CLR <see cref="string"/>: SqlClient has
+    /// no DOM representation that binds and reads both a <c>json</c> and an <c>nvarchar(max)</c> column,
+    /// so the native storage resolves to the existing text converter with an inferred
+    /// <c>nvarchar</c> parameter (no <c>SqlDbType.Json</c>, no double serialization).
+    /// </summary>
+    public override Type NativeJsonProviderType => typeof(string);
 
     /// <summary>T-SQL <c>isjson</c> returns an <c>int</c>: <c>1</c>/<c>0</c>, so a value context casts it to <c>bit</c>.</summary>
     public override string MakeIsJson(string value, bool asPredicate) =>

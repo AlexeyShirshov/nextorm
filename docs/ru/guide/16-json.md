@@ -11,7 +11,9 @@
 
 * **SQL Server** имеет две независимые поверхности. [`ForJson`](xref:NextORM.Core.QueryCommand`1.ForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean,System.Object[])) выполняет запрос и
   возвращает весь набор строк одним JSON-документом (`FOR JSON PATH`/`FOR JSON AUTO`), а [`SqlServer`](xref:NextORM.Core.SqlFunctions.SqlServer) предоставляет текстовые JSON-функции
-  (`json_value`, `json_query`, `json_modify`, `isjson`) и табличную функцию `openjson`.
+  (`json_value`, `json_query`, `json_modify`, `isjson`) и табличную функцию `openjson`. Кроме того, в
+  SQL Server 2025 (17.x) есть отдельный нативный тип колонки `json`, доступный для `[JsonColumn]` только
+  через явный гейт версии — см. [Нативный `json` в SQL Server 2025+](#нативный-json-в-sql-server-2025).
 * **PostgreSQL** имеет нативные типы `json`/`jsonb` и единственную поверхность функций/операторов
   `json`/`jsonb` (`SqlFunctions.Postgres`): конструирование, агрегация, доступ, вложенность и
   JSONPath.
@@ -65,7 +67,7 @@
 
 | Провайдер | Вывод `ForJson` | Нативные `json`/`jsonb` | Текстовые JSON-функции | `openjson` как `FROM` |
 |---|---|---|---|---|
-| SQL Server | Поддерживается ([`SupportsForJson`](xref:NextORM.Core.ISqlDialect.SupportsForJson)) | Нет — JSON хранится в `nvarchar` | Поддерживаются ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)) | Поддерживается |
+| SQL Server | Поддерживается ([`SupportsForJson`](xref:NextORM.Core.ISqlDialect.SupportsForJson)) | `json` в 2025+ ([`SupportsJson`](xref:NextORM.Core.ISqlDialect.SupportsJson)), включается явным `Version(17, 0)`; только корни-объекты и массивы. Иначе JSON хранится в `nvarchar` | Поддерживаются ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)) | Поддерживается |
 | PostgreSQL | Нет | Поддерживаются ([`SupportsJson`](xref:NextORM.Core.ISqlDialect.SupportsJson)) | Нет | Нет |
 | SQLite | Нет | Нет | Нет (JSON1 через `SqlFunctions.Sqlite`) | Нет |
 | MySQL / MariaDB | Нет | Настоящая колонка `json` (MySQL) / `JSON` = псевдоним `LONGTEXT` + CHECK `json_valid()` (MariaDB); обе — через **текстовое** хранение, `Native` отклоняется | Поддерживаются ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)) | Нет |
@@ -125,12 +127,13 @@ NULL для пустого результата `FOR JSON`). Тот же сер�
 
 ### Читать JSON, хранящийся в текстовой колонке
 
-Ни в SQL Server, ни в MySQL/MariaDB нет нативного типа JSON: JSON хранится в обычной текстовой колонке
-и обрабатывается текстовыми функциями
+До SQL Server 2025, а также в MySQL/MariaDB нет привязываемого нативного *представления* JSON: JSON хранится
+в обычной текстовой колонке и обрабатывается текстовыми функциями
 ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)). Путь — это строка JSONPath
 (`'$.name'`); `json_value` возвращает скаляр, `json_query` — фрагмент объекта/массива, а `json_modify`
 — изменённую копию. В MySQL/MariaDB те же выражения рендерятся как `json_unquote(json_extract(...))`,
-`json_extract(...)` и `json_set(...)`:
+`json_extract(...)` и `json_set(...)`. В SQL Server 2025 эти же функции работают и поверх колонки
+`nvarchar`, и поверх нативного типа `json` (см. [Нативный `json` в SQL Server 2025+](#нативный-json-в-sql-server-2025)):
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
@@ -163,6 +166,37 @@ var rows = dataContext.From<IComplexEntity>()
 select id
  from complex_entity where (isjson(somestring)) = 1
 ```
+
+### Нативный `json` в SQL Server 2025+
+
+В SQL Server 2025 (17.x) есть **отдельный встроенный тип `json`** — не псевдоним `nvarchar` — и он же есть
+в движках Azure SQL, построенных на этом релизе. nextorm достигает его тем же отображением `[JsonColumn]`,
+но гейт — это **объявленная** версия сервера: возможность объявляет только контекст, построенный с явным
+`Version(17, 0)` или выше ([`SupportsJson`](xref:NextORM.Core.ISqlDialect.SupportsJson)), а конструктор по
+умолчанию (без версии) остаётся текстовым, поэтому уже существующее отображение на `nvarchar` не меняется
+незаметно для вас:
+
+```csharp
+// Конструктор «версия первой»: объявленная major-версия открывает возможности, зависящие от версии.
+using var dataContext = new SqlServerDataContext(new Version(17, 0), connectionString);
+
+[JsonColumn(Storage = JsonColumnStorage.Native)]   // Auto и Text здесь столь же допустимы
+public Address Address { get; set; } = new();
+```
+
+Представление остаётся обычной CLR-строкой `string`: параметры выводятся как `nvarchar`, DOM-параметра нет,
+`SqlDbType.Json` не выставляется, двойной сериализации нет. В контексте с открытым гейтом `Auto`, `Text` и
+`Native` разрешаются в один и тот же текстовый конвертер, поэтому сохраняемые байты идентичны текстовому
+хранению — различается тип колонки, а не конвертер. Нативная колонка добавляет ограничение **сервера**: она
+хранит только документы-объекты и массивы, а скалярные корни (строка, число, булево) и документ JSON `null`
+отклоняет ошибкой сервера **13609** — для таких полезных нагрузок используйте текстовое хранение. Это
+отклонение сервера, возникающее при выполнении; собственных клиентских правил nextorm не добавляет.
+
+Ещё два факта: nextorm не генерирует DDL колонок, поэтому перевод существующей колонки в `json` — решение
+по развёртыванию/миграции; а Azure SQL Database, Managed Instance и Fabric **нельзя включить через этот
+гейт** (они сообщают major-версию 12, и аргумент версии не отличает их от обычного SQL Server — см.
+[ограничения](../advanced/limitations.md) и задачу
+[#345](https://github.com/AlexeyShirshov/nextorm/issues/345)).
 
 ### Развернуть JSON в строки через `openjson`
 
@@ -243,7 +277,8 @@ public sealed class Customer
 ```
 
 Отображение покрывает свойство, а не схему: nextorm не генерирует DDL колонки, поэтому колонка `jsonb`
-уже должна существовать в таблице. Fluent-форма `JsonColumn(o => ...)` и настройки сериализатора —
+уже должна существовать в таблице (то же верно для нативной колонки `json` в SQL Server — см.
+[Нативный `json` в SQL Server 2025+](#нативный-json-в-sql-server-2025)). Fluent-форма `JsonColumn(o => ...)` и настройки сериализатора —
 в разделе [Конвертеры значений](../infrastructure/03-value-converters.md#json-колонки).
 
 В **MySQL и MariaDB** тот же атрибут сохраняет **текстовое** хранение: у этих провайдеров есть JSON
@@ -491,8 +526,12 @@ select json_value(jsonb_build_object('a', 1), cast('$.a' as jsonpath)) as "Value
   и запись (insert, update и `RETURNING`), а параметр `JsonDocument`/`JsonElement`/`JsonNode`
   привязывается как `jsonb`. ClickHouse отображает `[JsonColumn]` `Auto`/`Native` и «голые»
   `JsonObject`/`JsonDocument`/`JsonElement` с корнем-объектом на нативную колонку `JSON` с корнем-объектом.
-  JSON в SQL Server всегда текст; JSON-колонки MySQL/MariaDB достигаются текстовым транспортом на обоих
-  движках (`Auto`/`Text`), а `Native` отклоняется с `NotSupportedException`, называющим диалект.
+  SQL Server отображает `[JsonColumn]` `Auto`/`Native` на нативный тип `json` **только в контексте,
+  построенном с явным `Version(17, 0)` или выше**, и только для документов-объектов/массивов — скалярный
+  корень и документ JSON `null` отклоняет сервер с ошибкой 13609, поэтому таким полезным нагрузкам нужен
+  `Text`. В контексте без версии или до 2025 JSON в SQL Server всегда текст; JSON-колонки MySQL/MariaDB
+  достигаются текстовым транспортом на обоих движках (`Auto`/`Text`), а `Native` отклоняется с
+  `NotSupportedException`, называющим диалект.
 
 ## См. также
 
