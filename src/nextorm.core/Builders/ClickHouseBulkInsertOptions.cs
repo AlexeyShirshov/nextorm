@@ -10,14 +10,17 @@ public sealed record ClickHouseBulkInsertOptions
     /// <summary>
     /// The maximum degree of parallelism the native insert requests, or <see langword="null"/> to preserve
     /// the configured default. Values above one combined with an active session are contradictory and are
-    /// rejected by the native path.
+    /// rejected by the native path; the portable <c>INSERT ... VALUES</c> path writes a single stream, so it
+    /// accepts <see langword="null"/> and <c>1</c> as the same result and refuses a value above one by name.
     /// </summary>
     public int? MaxDegreeOfParallelism { get; init; }
 
     /// <summary>
     /// Whether the native insert uses the configured session: <see langword="null"/> preserves it,
     /// <see langword="true"/> requires an actual session id, and <see langword="false"/> explicitly requests
-    /// a sessionless non-temporary insert. Defaults to <see langword="null"/>.
+    /// a sessionless non-temporary insert. Defaults to <see langword="null"/>. On the portable path the
+    /// request is honoured only when the context connection already carries that session, and is refused by
+    /// name otherwise.
     /// </summary>
     public bool? UseSession { get; init; }
 

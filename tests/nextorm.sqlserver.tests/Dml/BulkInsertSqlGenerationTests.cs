@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using System.Data;
 using System.Data.Common;
 using FluentAssertions;
@@ -392,6 +394,57 @@ public class BulkInsertSqlGenerationTests
 
         act.Should().NotThrow("row 1: Auto prefers the native path for a request with no incompatible option");
     }
+    [Fact]
+    public void BulkInsert_ModePortable_KeepNullsFalse_OnANonNullableShape_ShouldThrowByName()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        // Row 8 "P true/E": the portable statement always sends the supplied value, so KeepNulls=false is
+        // accepted only for a default-equivalent (all-nullable, no-default) shape. IInsertEntity writes the
+        // non-nullable id/age columns, so the request is refused before the source is read.
+        var act = () => ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.Mode(BulkInsertMode.Portable).KeepNulls(false))
+            .Values([Row("a", 1)])
+            .BulkInsert();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*KeepNulls=false*");
+    }
+
+    [Fact]
+    public void BulkInsert_ModePortable_KeepNullsFalse_OnAColumnDefault_ShouldThrowByName()
+    {
+        // The metadata half passes (every written column is nullable); the catalog half does not, because
+        // `note` declares a SQL default that writing NULL would silently skip.
+        using var ctx = new DefaultedSqlServerContext(PlaceholderConnectionString, new DataContextBuilder());
+
+        var act = () => ctx.CreateBulkInsertBuilder<SqlNullableRow>(o => o.Mode(BulkInsertMode.Portable).KeepNulls(false))
+            .Values([new SqlNullableRow { Id = 1, Note = null }])
+            .BulkInsert();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*KeepNulls=false*note*");
+    }
+}
+
+/// <summary>
+/// A SQL Server context whose destination declares a SQL default on <c>note</c>: the catalog half of the
+/// <c>KeepNulls=false</c> equivalence is then not satisfied, and no connection is opened to learn it.
+/// </summary>
+internal sealed class DefaultedSqlServerContext(string connectionString, DataContextBuilder builder)
+    : SqlServerDataContext(connectionString, builder)
+{
+    /// <inheritdoc/>
+    internal override IReadOnlyList<string> ReadColumnsWithSqlDefault(string table, string? schema) => ["note"];
+}
+
+/// <summary>An entity whose every written column is nullable, so the metadata half of the guard passes.</summary>
+[SqlTable("t305_bulk_all_nullable")]
+public sealed class SqlNullableRow
+{
+    [Key]
+    [Column("id")]
+    public int? Id { get; set; }
+
+    [Column("note")]
+    public string? Note { get; set; }
 }
 
 /// <summary>A caller-owned transaction stand-in, so the internal-transaction conflict is testable offline.</summary>

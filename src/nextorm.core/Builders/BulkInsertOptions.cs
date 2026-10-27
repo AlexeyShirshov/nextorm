@@ -244,6 +244,16 @@ public sealed record BulkInsertOptions
         if (NotifyEvery <= 0)
             throw new ArgumentOutOfRangeException(nameof(NotifyEvery), NotifyEvery, "NotifyEvery must be positive.");
 
+        // A non-positive parallelism has no meaning on either path, so it is an argument error wherever the
+        // group is supplied, not a path-dependent refusal.
+        if (ClickHouse is { MaxDegreeOfParallelism: <= 0 } parallel)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(ClickHouseBulkInsertOptions.MaxDegreeOfParallelism),
+                parallel.MaxDegreeOfParallelism,
+                "ClickHouseBulkInsertOptions.MaxDegreeOfParallelism must be positive.");
+        }
+
         if (TableName is not null && string.IsNullOrWhiteSpace(TableName))
             throw new ArgumentException("TableName must not be empty.", nameof(TableName));
 
@@ -318,8 +328,10 @@ public sealed record BulkInsertOptions
 
     /// <summary>
     /// Validates options that only the provider's native path can express against the resolved path, so a
-    /// native-only request on the portable path is refused instead of silently ignored (the documented
-    /// contract of <see cref="BulkInsertMode.Portable"/>).
+    /// request the portable statement cannot honour is refused instead of silently ignored (the documented
+    /// contract of <see cref="BulkInsertMode.Portable"/>). A request whose portable form is equivalent to
+    /// the native one is accepted here and validated by the provider scope, which alone knows the
+    /// connection's session.
     /// </summary>
     /// <param name="useNative">Whether the write takes the provider's native bulk path.</param>
     /// <exception cref="NotSupportedException">A native-only option was requested on the portable path.</exception>
@@ -328,20 +340,23 @@ public sealed record BulkInsertOptions
         if (useNative)
             return;
 
-        var requested = new List<string>(2);
+        // ClickHouse: the portable INSERT ... VALUES path is a single stream over the context connection,
+        // so a parallelism above one has no portable form. Null and 1 are the same single-stream result and
+        // are accepted as equivalent; the session semantics (UseSession null/true/false) are decided by the
+        // provider scope, because only it can read the connection's actual session id and visibility.
+        if (ClickHouse is { MaxDegreeOfParallelism: > 1 } parallel)
+        {
+            throw new NotSupportedException(
+                $"ClickHouseBulkInsertOptions.MaxDegreeOfParallelism={parallel.MaxDegreeOfParallelism} cannot be honoured by the portable INSERT ... VALUES path: "
+                + "it writes a single stream. Use MaxDegreeOfParallelism=null or 1, or run the write with Mode.Auto or Mode.Native on a ClickHouse client.");
+        }
 
         if (SqlServer is { UseInternalTransaction: true })
-            requested.Add("SqlServerBulkInsertOptions.UseInternalTransaction=true");
-
-        if (ClickHouse is { RequestsAny: true })
-            requested.Add("ClickHouseBulkInsertOptions (MaxDegreeOfParallelism/UseSession)");
-
-        if (requested.Count == 0)
-            return;
-
-        throw new NotSupportedException(
-            $"The bulk-insert option(s) {string.Join(", ", requested)} are only supported by the provider's native bulk path; "
-            + "the portable INSERT ... VALUES path cannot express them. Use Mode.Auto or Mode.Native.");
+        {
+            throw new NotSupportedException(
+                "The bulk-insert option SqlServerBulkInsertOptions.UseInternalTransaction=true is only supported by the provider's native bulk path; "
+                + "the portable INSERT ... VALUES path cannot express it. Use Mode.Auto or Mode.Native.");
+        }
     }
 
     /// <summary>

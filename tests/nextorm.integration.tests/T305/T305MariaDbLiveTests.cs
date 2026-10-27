@@ -316,6 +316,39 @@ public sealed class T305MariaDbLiveTests : IDisposable
     }
 
     [Fact]
+    public void ModePortable_KeepIdentityTrue_ShouldWriteTheZeroIdentityValueUnderTheScopedMode()
+    {
+        // Row 3 "P" on MariaDB: the portable path runs the same session-scoped zero-mode as the native load,
+        // and restores `sql_mode` afterwards.
+        var zeroMarker = T305Sql.Marker("maria_portable_zero");
+        var generatedMarker = T305Sql.Marker("maria_portable_generated");
+
+        try
+        {
+            _ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.Mode(BulkInsertMode.Portable).KeepIdentity())
+                .Values([new InsertEntity { Id = 0, Name = zeroMarker, Age = 1 }])
+                .BulkInsert()
+                .Should().Be(1);
+            _ctx.From<IInsertEntity>().Where(x => x.Name == zeroMarker).Select(x => new { x.Id }).ToList()
+                .Should().ContainSingle().Which.Id.Should().Be(0, "NO_AUTO_VALUE_ON_ZERO keeps the explicit zero");
+            Scalar<string>(_ctx, "select @@session.sql_mode")
+                .Should().NotContain("NO_AUTO_VALUE_ON_ZERO", "the scoped mode is restored after the write");
+
+            // Negative arm: without the request the zero-mode is not applied, so the identity is generated.
+            _ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.Mode(BulkInsertMode.Portable).KeepIdentity(false))
+                .Values([new InsertEntity { Id = 0, Name = generatedMarker, Age = 2 }])
+                .BulkInsert()
+                .Should().Be(1);
+            _ctx.From<IInsertEntity>().Where(x => x.Name == generatedMarker).Select(x => new { x.Id }).ToList()
+                .Should().ContainSingle().Which.Id.Should().BePositive("the zero-mode is scoped to a KeepIdentity request only");
+        }
+        finally
+        {
+            _ctx.CreateDeleteBuilder<IInsertEntity>().Where(x => x.Name == zeroMarker || x.Name == generatedMarker).Delete();
+        }
+    }
+
+    [Fact]
     public void BoundedBatches_ShouldWriteEveryRowOfAHundredRowSource()
     {
         // Row 10/23 live arm: the bounded batching never drops a row on MariaDB either.

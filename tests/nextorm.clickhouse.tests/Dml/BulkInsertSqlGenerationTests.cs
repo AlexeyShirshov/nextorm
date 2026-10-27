@@ -762,6 +762,297 @@ public class BulkInsertSqlGenerationTests
         sql.Should().Be("insert into insert_entity (id, name, age) values (@p0, @p1, @p2)");
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // r3: the portable INSERT ... VALUES path with a ClickHouse option group. Core accepts the equivalent
+    // single-stream request (an empty group, parallelism null/1) and leaves the session decision to the
+    // provider scope, which alone can read the connection's actual session id; anything the portable
+    // statement cannot express is refused by name before the source is read.
+    // ---------------------------------------------------------------------------------------------
+
+    [Fact]
+    public void ModePortable_WithParallelismOne_ShouldWriteOnePlainStatement()
+    {
+        var handler = new RecordingClickHouseHandler(InsertEntitySchema);
+        using var ctx = ClientContext(SessionlessSettings(handler));
+
+        ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o
+                .Mode(BulkInsertMode.Portable)
+                .ClickHouse(new ClickHouseBulkInsertOptions { MaxDegreeOfParallelism = 1 }))
+            .Values([Row("a", 1), Row("b", 2)])
+            .BulkInsert();
+
+        // Row 21 "P 1 only when equivalent": one stream, expressed as the ordinary INSERT ... VALUES
+        // statement, never a parallel or binary insert.
+        var insert = handler.InsertRequests.Should().ContainSingle().Subject;
+        insert.Body.Should().Contain("insert into insert_entity");
+        insert.Body.Should().Contain("values");
+    }
+
+    [Fact]
+    public async Task ModePortable_WithParallelismAboveOne_ShouldThrowByNameBeforeTheSource()
+    {
+        var handler = new RecordingClickHouseHandler(InsertEntitySchema);
+        using var ctx = ClientContext(SessionlessSettings(handler));
+        var pulled = 0;
+
+        var act = () => ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o
+                .Mode(BulkInsertMode.Portable)
+                .ClickHouse(new ClickHouseBulkInsertOptions { MaxDegreeOfParallelism = 2 }))
+            .Values(CountingSource(() => pulled++))
+            .BulkInsertAsync(TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<NotSupportedException>().WithMessage("*MaxDegreeOfParallelism=2*single stream*");
+        pulled.Should().Be(0);
+        handler.Requests.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ModePortable_WithAnEmptyGroup_ShouldRequestNothing()
+    {
+        var handler = new RecordingClickHouseHandler(InsertEntitySchema);
+        using var ctx = ClientContext(SessionlessSettings(handler));
+
+        ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o
+                .Mode(BulkInsertMode.Portable)
+                .ClickHouse(new ClickHouseBulkInsertOptions()))
+            .Values([Row("a", 1)])
+            .BulkInsert();
+
+        handler.InsertRequests.Should().ContainSingle()
+            .Which.Url.Should().NotContain("session_id");
+    }
+
+    [Fact]
+    public void ModePortable_WithUseSessionNull_ShouldPreserveTheConnectionSession()
+    {
+        var handler = new RecordingClickHouseHandler(InsertEntitySchema);
+        using var ctx = ClientContext(SessionSettings(handler, "sess-portable-null"));
+
+        ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o
+                .Mode(BulkInsertMode.Portable)
+                .ClickHouse(new ClickHouseBulkInsertOptions { UseSession = null }))
+            .Values([Row("a", 1)])
+            .BulkInsert();
+
+        handler.InsertRequests.Should().ContainSingle()
+            .Which.Url.Should().Contain("session_id=sess-portable-null");
+    }
+
+    [Fact]
+    public void ModePortable_WithUseSessionTrue_ShouldRunInTheRequiredSession()
+    {
+        var handler = new RecordingClickHouseHandler(InsertEntitySchema);
+        using var ctx = ClientContext(SessionSettings(handler, "sess-portable-true"));
+
+        ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o
+                .Mode(BulkInsertMode.Portable)
+                .ClickHouse(new ClickHouseBulkInsertOptions { UseSession = true }))
+            .Values([Row("a", 1)])
+            .BulkInsert();
+
+        // Row 22: the portable statement runs on the context connection, which carries the required id.
+        handler.InsertRequests.Should().ContainSingle()
+            .Which.Url.Should().Contain("session_id=sess-portable-true");
+    }
+
+    [Fact]
+    public async Task ModePortable_WithUseSessionTrueWithoutAnId_ShouldThrowByNameBeforeTheSource()
+    {
+        var handler = new RecordingClickHouseHandler(InsertEntitySchema);
+        using var ctx = ClientContext(SessionlessSettings(handler));
+        var pulled = 0;
+
+        var act = () => ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o
+                .Mode(BulkInsertMode.Portable)
+                .ClickHouse(new ClickHouseBulkInsertOptions { UseSession = true }))
+            .Values(CountingSource(() => pulled++))
+            .BulkInsertAsync(TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<NotSupportedException>().WithMessage("*UseSession=true*session id*");
+        pulled.Should().Be(0);
+        handler.Requests.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ModePortable_WithUseSessionFalseOnASessionConnection_ShouldThrowByName()
+    {
+        var handler = new RecordingClickHouseHandler(InsertEntitySchema);
+        using var ctx = ClientContext(SessionSettings(handler, "sess-portable-off"));
+        var pulled = 0;
+
+        var act = () => ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o
+                .Mode(BulkInsertMode.Portable)
+                .ClickHouse(new ClickHouseBulkInsertOptions { UseSession = false }))
+            .Values(CountingSource(() => pulled++))
+            .BulkInsertAsync(TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<NotSupportedException>().WithMessage("*UseSession=false*");
+        pulled.Should().Be(0);
+        handler.Requests.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ModePortable_WithUseSessionFalseOnASessionlessConnection_ShouldWrite()
+    {
+        var handler = new RecordingClickHouseHandler(InsertEntitySchema);
+        using var ctx = ClientContext(SessionlessSettings(handler));
+
+        // Row 22: an explicit sessionless non-temporary request is the same request the connection makes.
+        ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o
+                .Mode(BulkInsertMode.Portable)
+                .ClickHouse(new ClickHouseBulkInsertOptions { UseSession = false }))
+            .Values([Row("a", 1)])
+            .BulkInsert();
+
+        handler.InsertRequests.Should().ContainSingle()
+            .Which.Url.Should().NotContain("session_id");
+    }
+
+    [Fact]
+    public void ModePortable_WithLocalTemporary_ShouldAddressTheSameSessionWithoutAnyDdl()
+    {
+        var handler = new RecordingClickHouseHandler(InsertEntitySchema);
+        using var ctx = ClientContext(SessionSettings(handler, "sess-portable-temp"));
+
+        ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o
+                .Mode(BulkInsertMode.Portable)
+                .TargetKind(BulkInsertTargetKind.LocalTemporary))
+            .Values([Row("a", 1)])
+            .BulkInsert();
+
+        // Row 17: the portable statement is the caller's pre-existing temporary table in the same session.
+        var insert = handler.InsertRequests.Should().ContainSingle().Subject;
+        insert.Url.Should().Contain("session_id=sess-portable-temp");
+        handler.Requests.Should().NotContain(request =>
+            request.Body.Contains("CREATE", StringComparison.OrdinalIgnoreCase)
+            || request.Body.Contains("DROP", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task ModePortable_WithParallelismAboveOneOnATemporaryTarget_ShouldThrowByName()
+    {
+        var handler = new RecordingClickHouseHandler(InsertEntitySchema);
+        using var ctx = ClientContext(SessionSettings(handler, "sess-portable-temp-parallel"));
+        var pulled = 0;
+
+        var act = () => ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o
+                .Mode(BulkInsertMode.Portable)
+                .TargetKind(BulkInsertTargetKind.LocalTemporary)
+                .ClickHouse(new ClickHouseBulkInsertOptions { MaxDegreeOfParallelism = 2 }))
+            .Values(CountingSource(() => pulled++))
+            .BulkInsertAsync(TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<NotSupportedException>().WithMessage("*LocalTemporary*MaxDegreeOfParallelism=2*");
+        pulled.Should().Be(0);
+        handler.Requests.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ModePortable_WithKeepNullsFalseOnTheEquivalentShape_ShouldWriteTheWholeRow()
+    {
+        var handler = new RecordingClickHouseHandler(NullableBulkEntitySchema);
+        using var ctx = SchemaFactContext(SessionlessSettings(handler));
+
+        ctx.CreateBulkInsertBuilder<INullableBulkEntity>(o => o.Mode(BulkInsertMode.Portable).KeepNulls(false))
+            .Values([new NullableBulkEntity { Id = 1, Note = null }])
+            .BulkInsert();
+
+        // Row 8 "P": the portable scope applies the same equivalence guard and still writes the whole row.
+        var insert = handler.InsertRequests.Should().ContainSingle().Subject;
+        insert.Body.Should().Contain("insert into nullable_bulk_entity");
+    }
+
+    [Fact]
+    public async Task ModePortable_WithKeepNullsFalseOnAColumnDefault_ShouldThrowByNameBeforeTheSource()
+    {
+        var handler = new RecordingClickHouseHandler(NullableBulkEntitySchema);
+        using var ctx = new DefaultedClickHouseContext(SessionlessSettings(handler));
+        var pulled = 0;
+
+        var act = () => ctx.CreateBulkInsertBuilder<INullableBulkEntity>(o => o.Mode(BulkInsertMode.Portable).KeepNulls(false))
+            .Values(CountNullable(() => pulled++))
+            .BulkInsertAsync(TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<NotSupportedException>().WithMessage("*KeepNulls=false*note*");
+        pulled.Should().Be(0);
+        handler.Requests.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ModePortable_WithProgressAndMaxBatchSize_ShouldReportOnlyCompletedBatches()
+    {
+        var handler = new RecordingClickHouseHandler(InsertEntitySchema);
+        using var ctx = ClientContext(SessionlessSettings(handler));
+        var reported = new List<int>();
+
+        ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o
+                .Mode(BulkInsertMode.Portable)
+                .MaxBatchSize(2)
+                .NotifyAfter(2, (total, _) => reported.Add(total)))
+            .Values([Row("a", 1), Row("b", 2), Row("c", 3), Row("d", 4), Row("e", 5)])
+            .BulkInsert();
+
+        // Row 23 "P": one portable statement per completed batch, and the callback is driven only by a write
+        // that reported rows, so the recording transport (which reports none) invents no progress. The
+        // cumulative-count contract itself is the core one (Progress_ShouldReportCumulativeCountsOnlyAfter-
+        // CompletedBatches) and is live-certified by the per-provider row 23 arm.
+        handler.InsertRequests.Should().HaveCount(3);
+        reported.Should().BeEmpty("progress is reported only for rows a completed write actually reported");
+
+        // The caller-owned client is never adopted or disposed by the context, even on the portable path.
+        ctx.OwnedClient.Should().BeNull();
+        ctx.OwnedClientDisposalCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task NativePath_WithAnAliasOrMaterializedColumn_ShouldThrowByNameBeforeTheSource()
+    {
+        var handler = new RecordingClickHouseHandler(AliasEntitySchema);
+        using var ctx = new AliasClickHouseContext(SessionlessSettings(handler));
+        var pulled = 0;
+
+        var act = () => ctx.CreateBulkInsertBuilder<IAliasBulkEntity>()
+            .Values(CountAlias(() => pulled++))
+            .BulkInsertAsync(TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<NotSupportedException>().WithMessage("*'alias_name'*ALIAS*");
+        pulled.Should().Be(0);
+        handler.Requests.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ModePortable_WithAnAliasOrMaterializedColumn_ShouldThrowByNameBeforeTheSource()
+    {
+        var handler = new RecordingClickHouseHandler(AliasEntitySchema);
+        using var ctx = new AliasClickHouseContext(SessionlessSettings(handler));
+        var pulled = 0;
+
+        var act = () => ctx.CreateBulkInsertBuilder<IAliasBulkEntity>(o => o.Mode(BulkInsertMode.Portable))
+            .Values(CountAlias(() => pulled++))
+            .BulkInsertAsync(TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<NotSupportedException>().WithMessage("*'alias_name'*ALIAS*");
+        pulled.Should().Be(0);
+        handler.Requests.Should().BeEmpty();
+    }
+
+    private static readonly (string Name, string Type)[] AliasEntitySchema =
+        [("id", "Int64"), ("name", "String"), ("alias_name", "String")];
+
+    private static async IAsyncEnumerable<IAliasBulkEntity> CountAlias(Action onPull)
+    {
+        onPull();
+        await Task.Yield();
+        yield return new AliasBulkEntity { Id = 1, Name = "a" };
+    }
+
+    private static async IAsyncEnumerable<INullableBulkEntity> CountNullable(Action onPull)
+    {
+        onPull();
+        await Task.Yield();
+        yield return new NullableBulkEntity { Id = 1, Note = null };
+    }
+
     private static async IAsyncEnumerable<object?[]> Rows(int count)
     {
         for (var i = 0; i < count; i++)
@@ -820,6 +1111,53 @@ internal sealed class RecordingClickHouseContext(ClickHouseClientSettings settin
     internal override IReadOnlyList<string> ReadColumnsWithSqlDefault(string table, string? database) => [];
 }
 
+/// <summary>
+/// A ClickHouse context whose destination declares a SQL default on <c>note</c>: the second half of the
+/// <c>KeepNulls=false</c> equivalence is then not satisfied, so the request must be refused by name.
+/// </summary>
+internal sealed class DefaultedClickHouseContext(ClickHouseClientSettings settings)
+    : ClickHouseDataContext(new ClickHouseClient(settings), new DataContextBuilder())
+{
+    /// <inheritdoc/>
+    internal override IReadOnlyList<string> ReadColumnsWithSqlDefault(string table, string? database) => ["note"];
+}
+
+/// <summary>
+/// A ClickHouse context whose destination reports <c>alias_name</c> as an ALIAS column: the writable-column
+/// preflight must refuse a mapping that writes it, on both the native and the portable path.
+/// </summary>
+internal sealed class AliasClickHouseContext(ClickHouseClientSettings settings)
+    : ClickHouseDataContext(new ClickHouseClient(settings), new DataContextBuilder())
+{
+    /// <inheritdoc/>
+    internal override IReadOnlyList<string> ReadNonWritableColumns(string table, string? database) => ["alias_name"];
+}
+
+/// <summary>An entity that maps a ClickHouse-computed (ALIAS/MATERIALIZED) column, which must be refused.</summary>
+[SqlTable("insert_entity")]
+public interface IAliasBulkEntity
+{
+    [Key]
+    [Column("id")]
+    long Id { get; set; }
+
+    [Column("name")]
+    string? Name { get; set; }
+
+    [Column("alias_name")]
+    string? AliasName { get; set; }
+}
+
+/// <summary>Concrete <see cref="IAliasBulkEntity"/>.</summary>
+public sealed class AliasBulkEntity : IAliasBulkEntity
+{
+    public long Id { get; set; }
+
+    public string? Name { get; set; }
+
+    public string? AliasName { get; set; }
+}
+
 /// <summary>An entity whose every written column is nullable, so <c>KeepNulls=false</c> stays default-equivalent.</summary>
 [SqlTable("nullable_bulk_entity")]
 public interface INullableBulkEntity
@@ -872,7 +1210,7 @@ public sealed class RecordingClickHouseHandler(params (string Name, string Type)
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         var body = request.Content is null ? string.Empty : await request.Content.ReadAsStringAsync(cancellationToken);
-        var isSchemaQuery = body.StartsWith("SELECT", StringComparison.Ordinal);
+        var isSchemaQuery = IsStatement(request, body);
         _requests.Add(new RecordedClickHouseRequest(isSchemaQuery, request.RequestUri!.ToString(), body));
 
         if (!isSchemaQuery)
@@ -881,6 +1219,25 @@ public sealed class RecordingClickHouseHandler(params (string Name, string Type)
         var content = new ByteArrayContent(Schema());
         content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
         return new HttpResponseMessage(HttpStatusCode.OK) { Content = content };
+    }
+
+    /// <summary>
+    /// Whether the request is a statement whose answer is a <c>RowBinaryWithNamesAndTypes</c> header rather
+    /// than an insert. An ADO query may carry its SQL in the POST body or in the <c>query</c> URL parameter,
+    /// so both are inspected: a metadata read (<c>select … from system.columns</c>) must be answered like the
+    /// driver's own destination-schema query, never counted as an insert.
+    /// </summary>
+    private static bool IsStatement(HttpRequestMessage request, string body)
+    {
+        if (body.StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        var query = request.RequestUri is null ? string.Empty : Uri.UnescapeDataString(request.RequestUri.Query);
+        var index = query.IndexOf("query=", StringComparison.OrdinalIgnoreCase);
+        if (index < 0)
+            return false;
+
+        return query[(index + "query=".Length)..].TrimStart('+', ' ').StartsWith("select", StringComparison.OrdinalIgnoreCase);
     }
 
     // RowBinaryWithNamesAndTypes: the column count, then every name, then every type, then zero rows.

@@ -43,6 +43,11 @@ public class ClickHouseDataContext : DataContext, IBulkInsertExecutor, IBulkInse
     private ClickHouseClient? _ownedClient;
     private int _ownedClientDisposalCount;
 
+    // The ALIAS/MATERIALIZED columns of a destination, cached per (database, table): the column kind lives
+    // only in the catalog, and a bulk insert must not pay a catalog round trip per call. Metadata is read
+    // once per target for the lifetime of the context.
+    private readonly Dictionary<string, IReadOnlyList<string>> _nonWritableColumns = new(StringComparer.Ordinal);
+
     /// <summary>
     /// Creates a ClickHouse context that owns a connection built lazily from
     /// <paramref name="connectionString"/>.
@@ -501,15 +506,19 @@ public class ClickHouseDataContext : DataContext, IBulkInsertExecutor, IBulkInse
     bool IBulkInsertNativeOptions.SupportsNativeIgnoreDuplicates => false;
 
     /// <summary>
-    /// Applies the provider-scoped shape guard on the portable path, so <see cref="BulkInsertMode.Portable"/>
-    /// runs the same <c>KeepNulls=false</c> contract as the native path. ClickHouse has no session control
-    /// to snapshot or restore, so the scope itself owns no state.
+    /// Applies the provider-scoped contract on the portable path, so <see cref="BulkInsertMode.Portable"/>
+    /// runs the same option and shape contract as the native path: the session/parallelism request is
+    /// resolved against the connection's actual session (the only place that knows it), the
+    /// <c>KeepNulls=false</c> equivalence guard runs, and ALIAS/MATERIALIZED columns are refused. ClickHouse
+    /// has no session control to snapshot or restore, so the scope itself owns no state.
     /// </summary>
     /// <param name="command">The bulk-insert command.</param>
     /// <returns>The scope to dispose after the write.</returns>
     IDisposable IBulkInsertPortableScope.BeginPortableBulkInsertScope(BulkInsertCommand command)
     {
+        ValidatePortableFallback(command);
         EnsureKeepNullsIsDefaultEquivalent(command);
+        EnsureColumnsAreWritable(command);
         return NoBulkInsertScope.Instance;
     }
 
@@ -645,6 +654,11 @@ public class ClickHouseDataContext : DataContext, IBulkInsertExecutor, IBulkInse
         EnsureLocalTemporarySession(command, request);
 
         var tableName = SqlMutationBuilder.RenderBulkTarget(Dialect, QuoteIdentifiers, command, NamingConvention);
+
+        // Row 3 is checked after the destination is validated (so a qualification the dialect cannot express
+        // is refused without touching the server) and before the first row is read.
+        EnsureColumnsAreWritable(command, tableName);
+
         var columnNames = new List<string>(command.Columns.Count);
         foreach (var column in command.Columns)
             columnNames.Add(SqlMutationBuilder.ResolveColumnName(column, NamingConvention));
@@ -761,6 +775,91 @@ public class ClickHouseDataContext : DataContext, IBulkInsertExecutor, IBulkInse
         }
 
         return defaulted;
+    }
+
+    /// <summary>
+    /// Row 3: ClickHouse computes ALIAS and MATERIALIZED columns from other columns, so they accept no
+    /// inserted value. A mapping that writes one is refused by name before the source is read instead of
+    /// failing inside the insert with a server error. The catalog facts are cached per target, so a context
+    /// pays one metadata read per destination, not one per insert.
+    /// </summary>
+    /// <param name="command">The bulk-insert command.</param>
+    /// <param name="renderedTable">The already-validated table reference, or <see langword="null"/> when it was not rendered yet.</param>
+    /// <exception cref="NotSupportedException">A written column is ALIAS or MATERIALIZED.</exception>
+    private void EnsureColumnsAreWritable(BulkInsertCommand command, string? renderedTable = null)
+    {
+        var destination = BulkInsertDestination.From(command.Options);
+        var table = SqlMutationBuilder.ResolveTableName(command.TableName, command.IsTableNameAuto, command.EntityType, NamingConvention);
+        var database = destination.Schema ?? destination.Database;
+
+        var nonWritable = ReadNonWritableColumns(table, database);
+        if (nonWritable.Count == 0)
+            return;
+
+        var refused = new List<string>(nonWritable.Count);
+        foreach (var column in command.Columns)
+        {
+            var name = SqlMutationBuilder.ResolveColumnName(column, NamingConvention);
+            if (nonWritable.Contains(name, StringComparer.OrdinalIgnoreCase))
+                refused.Add(name);
+        }
+
+        if (refused.Count == 0)
+            return;
+
+        throw new NotSupportedException(
+            "ClickHouse writes only ordinary/DEFAULT columns: an ALIAS or MATERIALIZED column is computed by the server and accepts no inserted value. "
+            + $"The written column(s) {string.Join(", ", refused.Select(name => $"'{name}'"))} are ALIAS or MATERIALIZED on '{renderedTable ?? table}'. "
+            + "Remove them from the mapping, or write to a regular column.");
+    }
+
+    /// <summary>
+    /// Reads the ALIAS/MATERIALIZED columns of <paramref name="table"/>, caching the answer per
+    /// (database, table). The column kind exists only in the schema, so it is read from <c>system.columns</c>
+    /// once per target. Internal and virtual so the SQL-generation tests, which talk to a recording
+    /// transport instead of a server, can supply the schema facts.
+    /// </summary>
+    /// <param name="table">The physical table name.</param>
+    /// <param name="database">The destination database, or <see langword="null"/> for the current one.</param>
+    /// <returns>The column names that are ALIAS or MATERIALIZED.</returns>
+    internal virtual IReadOnlyList<string> ReadNonWritableColumns(string table, string? database)
+    {
+        var key = (database ?? string.Empty) + "\u0000" + table;
+        if (_nonWritableColumns.TryGetValue(key, out var cached))
+            return cached;
+
+        var connection = GetConnection();
+        var wasOpen = connection.State == ConnectionState.Open;
+        EnsureConnectionOpen();
+
+        var databasePredicate = database is null
+            ? "database = currentDatabase()"
+            : $"database = '{EscapeSqlLiteral(database)}'";
+
+        var nonWritable = new List<string>();
+        try
+        {
+            using var select = CreateCommand(
+                "select name from system.columns where table = '" + EscapeSqlLiteral(table) + "' and "
+                + databasePredicate
+                + " and default_kind in ('ALIAS', 'MATERIALIZED')");
+
+            using var reader = select.ExecuteReader();
+            while (reader.Read())
+            {
+                if (!reader.IsDBNull(0))
+                    nonWritable.Add(reader.GetString(0));
+            }
+        }
+        finally
+        {
+            // The metadata probe is not the caller's work: a connection that was closed before it stays closed.
+            if (!wasOpen && connection.State == ConnectionState.Open)
+                connection.Close();
+        }
+
+        _nonWritableColumns[key] = nonWritable;
+        return nonWritable;
     }
 
     // ClickHouse string literals escape the quote and the backslash; the table/database names come from the

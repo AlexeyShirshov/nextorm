@@ -13,7 +13,7 @@ namespace NextORM.SqlServer;
 /// Data context for Microsoft SQL Server. Wraps the <c>Microsoft.Data.SqlClient</c> driver for
 /// connections and parameters and renders SQL through <c>SqlServerDialect</c>.
 /// </summary>
-public class SqlServerDataContext : DataContext, IBulkInsertExecutor, IBulkInsertNativeOptions
+public class SqlServerDataContext : DataContext, IBulkInsertExecutor, IBulkInsertNativeOptions, IBulkInsertPortableScope
 {
     private static readonly MethodInfo GetValueMethod = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetValue))!;
     private static readonly MethodInfo IsDBNullMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.IsDBNull))!;
@@ -651,6 +651,125 @@ public class SqlServerDataContext : DataContext, IBulkInsertExecutor, IBulkInser
 
     /// <inheritdoc cref="IBulkInsertNativeOptions.SupportsNativeIgnoreDuplicates"/>
     bool IBulkInsertNativeOptions.SupportsNativeIgnoreDuplicates => false;
+
+    /// <summary>
+    /// Runs the provider-scoped contract on the portable path, so an explicit
+    /// <see cref="BulkInsertMode.Portable"/> honours the same <c>KeepNulls=false</c> equivalence as the
+    /// native flag: the option is accepted only where writing the supplied value is indistinguishable from
+    /// letting the destination DEFAULT apply, and refused by name otherwise. The scope owns no server state.
+    /// </summary>
+    /// <param name="command">The bulk-insert command.</param>
+    /// <returns>The scope to dispose after the write.</returns>
+    IDisposable IBulkInsertPortableScope.BeginPortableBulkInsertScope(BulkInsertCommand command)
+    {
+        EnsureKeepNullsIsDefaultEquivalent(command);
+        return NoBulkInsertScope.Instance;
+    }
+
+    /// <summary>
+    /// The portable INSERT ... VALUES statement always sends the supplied value, so <c>KeepNulls=false</c>
+    /// is honoured only for a default-equivalent shape: every written column must be nullable and must not
+    /// declare a SQL default. Both halves are checked before any row is read.
+    /// </summary>
+    /// <param name="command">The bulk-insert command.</param>
+    /// <exception cref="NotSupportedException">The written shape is not default-equivalent.</exception>
+    private void EnsureKeepNullsIsDefaultEquivalent(BulkInsertCommand command)
+    {
+        if (command.Options.KeepNulls is not false)
+            return;
+
+        var nullability = new NullabilityInfoContext();
+        var nonNullable = new List<string>(command.Columns.Count);
+        foreach (var column in command.Columns)
+        {
+            if (nullability.Create(column.PropertyInfo).WriteState != NullabilityState.Nullable)
+                nonNullable.Add(column.ColumnName);
+        }
+
+        if (nonNullable.Count > 0)
+        {
+            throw new NotSupportedException(
+                "BulkInsertOptions.KeepNulls=false cannot be honoured by the SQL Server bulk paths: the write always sends the supplied value, and only an omitted column "
+                + "lets the destination DEFAULT apply. The request is accepted only for a default-equivalent shape, where every written column is nullable; "
+                + $"the non-nullable input column(s) {string.Join(", ", nonNullable.Select(name => $"'{name}'"))} break that shape. "
+                + "Use KeepNulls=true, or write the DEFAULT explicitly.");
+        }
+
+        // A nullable input alone is not enough: a non-NULL SQL default would be silently skipped, so the
+        // option would be accepted and inert. Only the catalog answers that half of the equivalence.
+        var destination = BulkInsertDestination.From(command.Options);
+        var written = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var column in command.Columns)
+            written.Add(SqlMutationBuilder.ResolveColumnName(column, NamingConvention));
+
+        var defaulted = ReadColumnsWithSqlDefault(
+                SqlMutationBuilder.ResolveTableName(command.TableName, command.IsTableNameAuto, command.EntityType, NamingConvention),
+                destination.Schema ?? destination.Database)
+            .Where(written.Contains)
+            .ToList();
+
+        if (defaulted.Count == 0)
+            return;
+
+        throw new NotSupportedException(
+            "BulkInsertOptions.KeepNulls=false cannot be honoured by the SQL Server bulk paths: the write always sends the supplied value, and only an omitted column "
+            + $"lets the destination DEFAULT apply. The written column(s) {string.Join(", ", defaulted.Select(name => $"'{name}'"))} declare a SQL default, "
+            + "so a NULL input would be written as NULL instead of the default. Use KeepNulls=true, or write the DEFAULT explicitly.");
+    }
+
+    /// <summary>
+    /// Reads the nullable columns of <paramref name="table"/> that declare a SQL default constraint. This is
+    /// the half of the <c>KeepNulls=false</c> equivalence that exists only in the schema, so it is read from
+    /// the catalog. Internal and virtual so the SQL-generation tests, which own no server, can supply the
+    /// schema facts instead of opening a connection.
+    /// </summary>
+    /// <param name="table">The physical table name.</param>
+    /// <param name="schema">The destination schema, or <see langword="null"/> for the caller's default schema.</param>
+    /// <returns>The column names that declare a SQL default.</returns>
+    internal virtual IReadOnlyList<string> ReadColumnsWithSqlDefault(string table, string? schema)
+    {
+        EnsureConnectionOpen();
+
+        var escapedTable = EscapeSqlLiteral(table);
+        var schemaPredicate = schema is null
+            ? "s.name = schema_name()"
+            : $"s.name = '{EscapeSqlLiteral(schema)}'";
+
+        var defaulted = new List<string>();
+        using var select = CreateCommand(
+            "select c.name from sys.columns c "
+            + "join sys.tables t on t.object_id = c.object_id "
+            + "join sys.schemas s on s.schema_id = t.schema_id "
+            + $"where t.name = '{escapedTable}' and {schemaPredicate} "
+            + "and c.is_nullable = 1 and c.default_object_id <> 0");
+
+        using var reader = select.ExecuteReader();
+        while (reader.Read())
+        {
+            if (!reader.IsDBNull(0))
+                defaulted.Add(reader.GetString(0));
+        }
+
+        return defaulted;
+    }
+
+    // Identifiers come from the mapped metadata and the destination options, never from user SQL text; the
+    // quote is escaped so a name can never terminate the literal.
+    private static string EscapeSqlLiteral(string value) => value.Replace("'", "''", StringComparison.Ordinal);
+
+    /// <summary>The scope returned when the portable path needs no provider state.</summary>
+    private sealed class NoBulkInsertScope : IDisposable
+    {
+        internal static readonly NoBulkInsertScope Instance = new();
+
+        private NoBulkInsertScope()
+        {
+        }
+
+        public void Dispose()
+        {
+        }
+    }
 
     /// <summary>
     /// Writes the rows of a bulk-insert command through <c>SqlBulkCopy</c>. The base hook signature cannot carry the

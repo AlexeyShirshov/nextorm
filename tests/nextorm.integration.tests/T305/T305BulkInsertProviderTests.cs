@@ -199,6 +199,38 @@ public sealed class T305SqlServerBulkInsertTests : ProviderTestSuite
     }
 
     [Fact]
+    public void ModePortable_KeepNullsFalse_ShouldAcceptTheDefaultEquivalentShapeAndRefuseAColumnDefault()
+    {
+        // Row 8 "P true/E": the portable INSERT ... VALUES statement always sends the supplied value, so
+        // KeepNulls=false is honoured only where writing NULL is indistinguishable from the DEFAULT.
+        T305Sql.Recreate(
+            Context,
+            "t305_bulk_all_nullable",
+            "create table dbo.t305_bulk_all_nullable (id int null, note nvarchar(100) null)");
+        T305Sql.Recreate(
+            Context,
+            "t305_bulk_defaulted_all_nullable",
+            "create table dbo.t305_bulk_defaulted_all_nullable (id int null, label nvarchar(100) null default 'dflt')");
+
+        Context.CreateBulkInsertBuilder<T305NullableRow>(o => o.Mode(BulkInsertMode.Portable).KeepNulls(false))
+            .Values([new T305NullableRow { Id = 1, Note = null }])
+            .BulkInsert()
+            .Should().Be(1);
+        Context.From<T305NullableRow>().Where(x => x.Id == 1).Select(x => new { x.Note }).ToList()
+            .Should().ContainSingle().Which.Note.Should().BeNull("NULL is indistinguishable from the absent DEFAULT");
+
+        var source = T305Sql.Counting([new T305DefaultedNullableRow { Id = 2, Label = null }]);
+        var refused = () => Context.CreateBulkInsertBuilder<T305DefaultedNullableRow>(o => o.Mode(BulkInsertMode.Portable).KeepNulls(false))
+            .Values(source)
+            .BulkInsert();
+        refused.Should().Throw<NotSupportedException>().WithMessage("*KeepNulls=false*label*");
+        source.Enumerated.Should().Be(
+            source.RowCount,
+            "the portable statement also always sends the supplied value, so a non-NULL SQL default would be "
+            + "silently skipped: the request is refused before the write");
+    }
+
+    [Fact]
     public void Destination_CurrentDatabaseSchemaAndEqualAliases_ShouldWrite()
     {
         T305Sql.Recreate(Context, "t305_bulk_dest", "create table dbo.t305_bulk_dest (id int not null primary key, name nvarchar(100) null)");
@@ -663,6 +695,129 @@ public sealed class T305MySqlBulkInsertTests : ProviderTestSuite
             T305Sql.Execute(Context, $"drop temporary table if exists {name}");
         }
     }
+
+    // ---------------------------------------------------------------- r3: rows 3/8/10 on the portable and bounded paths
+
+    [Fact]
+    public void ModePortable_KeepIdentityTrue_ShouldWriteTheZeroIdentityValueUnderTheScopedMode()
+    {
+        // Row 3 "P": the portable INSERT ... VALUES path runs the same session-scoped zero-mode as the native
+        // path, and restores `sql_mode` once the write is finished.
+        var marker = T305Sql.Marker("mysql_portable_zero");
+
+        try
+        {
+            Context.CreateBulkInsertBuilder<IInsertEntity>(o => o.Mode(BulkInsertMode.Portable).KeepIdentity())
+                .Values([new InsertEntity { Id = 0, Name = marker, Age = 7 }])
+                .BulkInsert()
+                .Should().Be(1);
+
+            Context.From<IInsertEntity>().Where(x => x.Name == marker).Select(x => new { x.Id }).ToList()
+                .Should().ContainSingle().Which.Id.Should().Be(0, "NO_AUTO_VALUE_ON_ZERO keeps an explicit zero identity on the portable path");
+
+            T305Sql.Scalar<string>(Context, "select @@session.sql_mode")
+                .Should().NotContain("NO_AUTO_VALUE_ON_ZERO", "the scoped mode is restored after the write");
+
+            // Negative arm: without the request no zero-mode is applied, so the identity is generated.
+            var generatedMarker = T305Sql.Marker("mysql_portable_generated");
+            try
+            {
+                Context.CreateBulkInsertBuilder<IInsertEntity>(o => o.Mode(BulkInsertMode.Portable).KeepIdentity(false))
+                    .Values([new InsertEntity { Id = 0, Name = generatedMarker, Age = 8 }])
+                    .BulkInsert()
+                    .Should().Be(1);
+
+                Context.From<IInsertEntity>().Where(x => x.Name == generatedMarker).Select(x => new { x.Id }).ToList()
+                    .Should().ContainSingle().Which.Id.Should().BePositive("the zero-mode is scoped to a KeepIdentity request only");
+            }
+            finally
+            {
+                Context.CreateDeleteBuilder<IInsertEntity>().Where(x => x.Name == generatedMarker).Delete();
+            }
+        }
+        finally
+        {
+            Context.CreateDeleteBuilder<IInsertEntity>().Where(x => x.Name == marker).Delete();
+        }
+    }
+
+    [Fact]
+    public void ModePortable_KeepNullsFalse_ShouldAcceptTheDefaultEquivalentShapeAndRefuseAColumnDefault()
+    {
+        // Row 8 "P": the portable scope applies the same equivalence guard as the native load.
+        T305Sql.Recreate(Context, "t305_bulk_all_nullable", "create table t305_bulk_all_nullable (id int null, note varchar(100) null)");
+        T305Sql.Recreate(
+            Context,
+            "t305_bulk_defaulted_all_nullable",
+            "create table t305_bulk_defaulted_all_nullable (id int null, label varchar(100) null default 'dflt')");
+
+        Context.CreateBulkInsertBuilder<T305NullableRow>(o => o.Mode(BulkInsertMode.Portable).KeepNulls(false))
+            .Values([new T305NullableRow { Id = 1, Note = null }])
+            .BulkInsert()
+            .Should().Be(1);
+        Context.From<T305NullableRow>().Where(x => x.Id == 1).Select(x => new { x.Note }).ToList()
+            .Should().ContainSingle().Which.Note.Should().BeNull();
+
+        var source = T305Sql.Counting([new T305DefaultedNullableRow { Id = 2, Label = null }]);
+        var refused = () => Context.CreateBulkInsertBuilder<T305DefaultedNullableRow>(o => o.Mode(BulkInsertMode.Portable).KeepNulls(false))
+            .Values(source)
+            .BulkInsert();
+        refused.Should().Throw<NotSupportedException>().WithMessage("*KeepNulls=false*label*");
+        source.Enumerated.Should().Be(
+            source.RowCount,
+            "the portable statement also always sends the supplied value, so a non-NULL SQL default would be "
+            + "silently skipped: the request is refused before the write");
+    }
+
+    [Fact]
+    public async Task NativeBoundedCalls_ShouldSplitTheSourceAtMaxBatchSize()
+    {
+        // Row 10 "N": the native MySqlBulkCopy path really issues bounded calls. The source throws on the
+        // fourth row, so the first bounded call (MaxBatchSize=3) must already be committed: a whole-source
+        // buffer would leave the table empty.
+        var serverAllows = T305Sql.Scalar<int>(Context, "select cast(@@GLOBAL.local_infile as signed) as v") == 1;
+        var enabledHere = false;
+        if (!serverAllows)
+        {
+            // The container's server value is part of the fixture, restored below; nextorm itself never
+            // changes a client or server setting (A08).
+            T305Sql.Execute(Context, "set global local_infile = 1");
+            enabledHere = true;
+        }
+
+        var marker = T305Sql.Marker("mysql_bounded");
+        try
+        {
+            var connectionString = MySqlContainer.ConnectionString + ";AllowLoadLocalInfile=true";
+            using var ctx = new NextORM.MySql.MySqlDataContext(connectionString, new DataContextBuilder());
+
+            var act = () => ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.Mode(BulkInsertMode.Native).MaxBatchSize(3))
+                .Values(FailingAfter(marker, 3))
+                .BulkInsertAsync(TestContext.Current.CancellationToken);
+
+            await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*t305 bounded source failure*");
+
+            Context.From<IInsertEntity>().Where(x => x.Name == marker).Select(x => new { x.Age }).ToList()
+                .Should().HaveCount(3, "the first bounded native call wrote exactly MaxBatchSize=3 rows before the source failed");
+        }
+        finally
+        {
+            Context.CreateDeleteBuilder<IInsertEntity>().Where(x => x.Name == marker).Delete();
+            if (enabledHere)
+                T305Sql.Execute(Context, "set global local_infile = 0");
+        }
+    }
+
+    private static async IAsyncEnumerable<InsertEntity> FailingAfter(string marker, int okRows)
+    {
+        for (var i = 0; i < okRows; i++)
+        {
+            await Task.Yield();
+            yield return new InsertEntity { Name = marker, Age = i };
+        }
+
+        throw new InvalidOperationException("t305 bounded source failure");
+    }
 }
 
 /// <summary>
@@ -971,6 +1126,36 @@ public sealed class T305ClickHouseBulkInsertTests : ProviderTestSuite
             "a sessionless write cannot see a session-local temporary table: the request is refused before the write, "
             + "after the synchronous terminal buffered the source for validation");
     }
+
+    [Fact]
+    public void AliasOrMaterializedColumn_ShouldBeRefusedByNameOnBothPaths()
+    {
+        // Row 3 "N/P writable columns, else R": ClickHouse computes ALIAS/MATERIALIZED columns, so a mapping
+        // that writes one is refused by name before any row is read, instead of failing inside the insert.
+        T305Sql.Recreate(
+            Context,
+            "t305_bulk_alias",
+            "create table t305_bulk_alias (id Int32, name Nullable(String), alias_name String ALIAS lower(name)) "
+            + "engine = MergeTree order by id");
+
+        var nativeSource = T305Sql.Counting([new T305AliasRow { Id = 1, Name = "a" }]);
+        var native = () => Context.CreateBulkInsertBuilder<T305AliasRow>()
+            .Values(nativeSource)
+            .BulkInsert();
+        native.Should().Throw<NotSupportedException>().WithMessage("*'alias_name'*ALIAS*");
+        nativeSource.Enumerated.Should().Be(
+            nativeSource.RowCount,
+            "the refusal names the computed column before the write, after the synchronous terminal buffered the source");
+
+        var portableSource = T305Sql.Counting([new T305AliasRow { Id = 2, Name = "b" }]);
+        var portable = () => Context.CreateBulkInsertBuilder<T305AliasRow>(o => o.Mode(BulkInsertMode.Portable))
+            .Values(portableSource)
+            .BulkInsert();
+        portable.Should().Throw<NotSupportedException>().WithMessage("*'alias_name'*ALIAS*");
+        portableSource.Enumerated.Should().Be(portableSource.RowCount);
+
+        Context.From<T305AliasRow>().Select(x => new { x.Id }).ToList().Should().BeEmpty("a refused write writes nothing");
+    }
 }
 
 /// <summary>DDL/scalar helpers shared by the T305 provider classes.</summary>
@@ -1106,6 +1291,21 @@ public sealed class T305BulkForeignKey
 
     [Column("parent_id")]
     public int ParentId { get; set; }
+}
+
+/// <summary>An entity that maps a ClickHouse-computed (ALIAS/MATERIALIZED) column, which must be refused.</summary>
+[SqlTable("t305_bulk_alias")]
+public sealed class T305AliasRow
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("name")]
+    public string? Name { get; set; }
+
+    [Column("alias_name")]
+    public string? AliasName { get; set; }
 }
 
 [SqlTable("t305_bulk_all_nullable")]

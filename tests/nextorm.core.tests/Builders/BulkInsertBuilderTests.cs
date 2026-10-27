@@ -930,13 +930,150 @@ public partial class BulkInsertBuilderTests
     }
 
     [Fact]
-    public void ClickHouseGroup_OnPortablePath_ShouldThrow()
+    public void ClickHouseGroup_OnTheNativePath_ShouldNotBeRefused()
     {
         var options = new BulkInsertOptions { ClickHouse = new ClickHouseBulkInsertOptions { MaxDegreeOfParallelism = 1 } };
 
-        var act = () => options.ValidateNativeOnlyOptions(useNative: false);
+        var act = () => options.ValidateNativeOnlyOptions(useNative: true);
 
-        act.Should().Throw<NotSupportedException>().WithMessage("*ClickHouseBulkInsertOptions*");
+        act.Should().NotThrow();
+    }
+
+    // ---------------------------------------------------------------- r3: ClickHouse portable validation
+
+    [Fact]
+    public void ClickHousePortable_WithParallelismOne_ShouldReachTheProviderPortableScope()
+    {
+        using var ctx = new ClickHousePortableContext();
+
+        var act = () => ctx.CreateBulkInsertBuilder<BulkPortableRow>(o => o
+                .Mode(BulkInsertMode.Portable)
+                .ClickHouse(new ClickHouseBulkInsertOptions { MaxDegreeOfParallelism = 1 }))
+            .Values([new BulkPortableRow { Code = "a", Quantity = 1 }])
+            .BulkInsert();
+
+        // Row 21 "P 1 only when equivalent": one is the same single-stream result as an unset parallelism,
+        // so the request passes core validation and reaches the provider scope instead of being refused
+        // upstream. Only the context's (fake) connection stops it.
+        act.Should().Throw<NotSupportedException>().WithMessage("*t305-ch-portable-fake-connection*");
+        ctx.PortableScopeEntries.Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData(2)]
+    [InlineData(7)]
+    public void ClickHousePortable_WithParallelismAboveOne_ShouldThrowByNameBeforeTheSource(int parallelism)
+    {
+        using var ctx = new ClickHousePortableContext();
+        var pulled = false;
+
+        var act = () => ctx.CreateBulkInsertBuilder<BulkPortableRow>(o => o
+                .Mode(BulkInsertMode.Portable)
+                .ClickHouse(new ClickHouseBulkInsertOptions { MaxDegreeOfParallelism = parallelism }))
+            .Values(TrackingPortableRows(() => pulled = true))
+            .BulkInsert();
+
+        act.Should().Throw<NotSupportedException>()
+            .WithMessage($"*MaxDegreeOfParallelism={parallelism}*single stream*");
+        pulled.Should().BeFalse("the request is refused before the source is enumerated");
+        ctx.PortableScopeEntries.Should().Be(0);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-3)]
+    public void ClickHousePortable_WithNonPositiveParallelism_ShouldBeAnArgumentError(int parallelism)
+    {
+        using var ctx = new ClickHousePortableContext();
+
+        var act = () => ctx.CreateBulkInsertBuilder<BulkPortableRow>(o => o
+            .Mode(BulkInsertMode.Portable)
+            .ClickHouse(new ClickHouseBulkInsertOptions { MaxDegreeOfParallelism = parallelism }));
+
+        act.Should().Throw<ArgumentOutOfRangeException>().WithMessage("*MaxDegreeOfParallelism*");
+        ctx.PortableScopeEntries.Should().Be(0);
+    }
+
+    [Fact]
+    public void ClickHousePortable_WithAnEmptyGroup_ShouldRequestNothingAndReachTheProviderScope()
+    {
+        using var ctx = new ClickHousePortableContext();
+
+        var act = () => ctx.CreateBulkInsertBuilder<BulkPortableRow>(o => o
+                .Mode(BulkInsertMode.Portable)
+                .ClickHouse(new ClickHouseBulkInsertOptions()))
+            .Values([new BulkPortableRow { Code = "a", Quantity = 1 }])
+            .BulkInsert();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*t305-ch-portable-fake-connection*");
+        ctx.PortableScopeEntries.Should().Be(1);
+    }
+
+    [Fact]
+    public void ClickHousePortable_WithUseSessionNull_ShouldReachTheProviderScopeThatOwnsTheSessionDecision()
+    {
+        using var ctx = new ClickHousePortableContext();
+
+        var act = () => ctx.CreateBulkInsertBuilder<BulkPortableRow>(o => o
+                .Mode(BulkInsertMode.Portable)
+                .ClickHouse(new ClickHouseBulkInsertOptions { UseSession = null }))
+            .Values([new BulkPortableRow { Code = "a", Quantity = 1 }])
+            .BulkInsert();
+
+        // null preserves the configured session; whether one exists is a property of the connection, so the
+        // decision belongs to the provider scope, not to the option model.
+        act.Should().Throw<NotSupportedException>().WithMessage("*t305-ch-portable-fake-connection*");
+        ctx.PortableScopeEntries.Should().Be(1);
+    }
+
+    [Fact]
+    public void ClickHousePortable_WithUseSessionTrue_ShouldReachTheProviderScopeThatValidatesTheSessionId()
+    {
+        using var ctx = new ClickHousePortableContext();
+
+        var act = () => ctx.CreateBulkInsertBuilder<BulkPortableRow>(o => o
+                .Mode(BulkInsertMode.Portable)
+                .ClickHouse(new ClickHouseBulkInsertOptions { UseSession = true }))
+            .Values([new BulkPortableRow { Code = "a", Quantity = 1 }])
+            .BulkInsert();
+
+        // The required session id and the visibility it implies exist only on the connection, so core does
+        // not guess: the request reaches the provider scope, which refuses by name when it cannot honour it.
+        act.Should().Throw<NotSupportedException>().WithMessage("*t305-ch-portable-fake-connection*");
+        ctx.PortableScopeEntries.Should().Be(1);
+    }
+
+    [Fact]
+    public void ClickHousePortable_WithUseSessionFalse_ShouldReachTheProviderScopeForNonTemporaryWork()
+    {
+        using var ctx = new ClickHousePortableContext();
+
+        var act = () => ctx.CreateBulkInsertBuilder<BulkPortableRow>(o => o
+                .Mode(BulkInsertMode.Portable)
+                .ClickHouse(new ClickHouseBulkInsertOptions { UseSession = false }))
+            .Values([new BulkPortableRow { Code = "a", Quantity = 1 }])
+            .BulkInsert();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*t305-ch-portable-fake-connection*");
+        ctx.PortableScopeEntries.Should().Be(1);
+    }
+
+    [Fact]
+    public void ClickHousePortable_WithSessionlessTemporary_ShouldThrowByNameBeforeTheSource()
+    {
+        using var ctx = new ClickHousePortableContext();
+        var pulled = false;
+
+        var act = () => ctx.CreateBulkInsertBuilder<BulkPortableRow>(o => o
+                .Mode(BulkInsertMode.Portable)
+                .TargetKind(BulkInsertTargetKind.LocalTemporary)
+                .ClickHouse(new ClickHouseBulkInsertOptions { UseSession = false }))
+            .Values(TrackingPortableRows(() => pulled = true))
+            .BulkInsert();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*LocalTemporary*UseSession=false*");
+        pulled.Should().BeFalse("a sessionless insert cannot see a session-local temporary table");
+        ctx.PortableScopeEntries.Should().Be(0);
     }
 
     // ---------------------------------------------------------------- D4b native compatibility + portable provider scope
@@ -1251,6 +1388,45 @@ public partial class BulkInsertBuilderTests
         public override DbParameter CreateParam(string name, object? value) => throw new NotSupportedException("t305-fake-param");
 
         protected override DbConnection CreateDbConnection(string? connectionString) => throw new NotSupportedException("t305-fake-connection");
+    }
+
+    private static IEnumerable<BulkPortableRow> TrackingPortableRows(Action onPulled)
+    {
+        onPulled();
+        yield return new BulkPortableRow { Code = "a", Quantity = 1 };
+    }
+
+    /// <summary>
+    /// A context whose dialect resolves to the built-in ClickHouse provider but whose connection factory
+    /// refuses: a request that passes core validation is observed reaching the provider portable scope and
+    /// only then fails on the absent database.
+    /// </summary>
+    private sealed class ClickHousePortableContext : DataContext, IBulkInsertPortableScope
+    {
+        public ClickHousePortableContext() : base(new DataContextBuilder())
+        {
+        }
+
+        public int PortableScopeEntries { get; private set; }
+
+        public override ISqlDialect Dialect => NextORM.ClickHouse.ClickHouseDialect.Instance;
+
+        public override DbParameter CreateParam(string name, object? value) => throw new NotSupportedException("t305-ch-portable-fake-param");
+
+        protected override DbConnection CreateDbConnection(string? connectionString) => throw new NotSupportedException("t305-ch-portable-fake-connection");
+
+        IDisposable IBulkInsertPortableScope.BeginPortableBulkInsertScope(BulkInsertCommand command)
+        {
+            PortableScopeEntries++;
+            return new NoopScope();
+        }
+
+        private sealed class NoopScope : IDisposable
+        {
+            public void Dispose()
+            {
+            }
+        }
     }
 
     private sealed class CountingAsyncSource(params BulkEntity[] rows) : IAsyncEnumerable<BulkEntity>
