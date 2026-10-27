@@ -37,6 +37,24 @@ public interface IT320ChildRow
 }
 
 /// <summary>
+/// The child table itself (<c>t320_child</c>) as an addressable FROM source for the #343 joined-receiver
+/// cell. The keys are non-nullable here on purpose: the correlated TVF argument must be the plain
+/// <c>int</c> column, not a nullable unwrap that could hide a wrong-slot reference behind a conversion.
+/// </summary>
+[SqlTable("t320_child")]
+public interface IT343Child
+{
+    [Column("child_id")]
+    int ChildId { get; set; }
+
+    [Column("parent_id")]
+    int ParentId { get; set; }
+
+    [Column("label")]
+    string Label { get; set; }
+}
+
+/// <summary>
 /// The runtime TVF factory under test: metadata only, so the descriptor is independent of the argument
 /// value and the call expression keeps the argument (a captured value or a correlated outer column).
 /// </summary>
@@ -157,6 +175,66 @@ public sealed class T320RuntimeTvfPostgresTests(ITestOutputHelper output) : Prov
         several.Should().OnlyContain(r => r.Name == "three");
         several.Select(r => r.ChildId).Should().BeEquivalentTo(new int?[] { 31, 32, 33 });
         several.Select(r => r.Label).Should().BeEquivalentTo(new[] { "c31", "c32", "c33" });
+    }
+
+    /// <summary>
+    /// #343 (C2) live discriminator: an arity-2 <b>joined receiver</b> whose applied body is the runtime
+    /// factory, correlated to the FROM slot. The join keys deliberately differ, so a wrong-slot binding is
+    /// observable as different rows, not only as different SQL.
+    /// </summary>
+    /// <remarks>
+    /// Arithmetic over the fixture (<c>t320_parent</c> 1,2,3; <c>t320_child</c> c21-&gt;2, c31/c32/c33-&gt;3):
+    /// the <c>!=</c> join keeps 8 pairs — (21,1) (21,3) (31,1) (31,2) (32,1) (32,2) (33,1) (33,2).
+    /// Binding slot 1 (<c>t1.parent_id</c>, the FROM child) applies children(2) = 1 row and children(3) = 3
+    /// rows: 2 + 6 x 3 = 20 rows, and every applied row belongs to the FROM child's own parent.
+    /// Binding slot 2 (<c>t2.id</c>, the joined parent) would apply children(1) = 0 (4 pairs),
+    /// children(2) = 1 (3 pairs) and children(3) = 3 (1 pair): 6 rows, and pair (21,3) would carry the
+    /// applied 31/32/33 instead of 21. The per-pair composition below is what separates the two bindings.
+    /// </remarks>
+    [Fact]
+    public void JoinedReceiver_CorrelatedRuntimeTvf_ShouldBindTheFromSlotAndComposeRowsPerPair()
+    {
+        var version = EnsureFixture();
+        output.WriteLine($"postgres version: {version}");
+
+        var command = Context.From<IT343Child>()
+            .Join(Context.From<IT320Parent>(), (child, parent) => child.ParentId != parent.Id)
+            .CrossApply(q => T320PgTvf.Children(q.Item1.ParentId))
+            .Select(q => new { From = q.Item1.ChildId, Joined = q.Item2.Id, Applied = q.Item3.ChildId, q.Item3.Label });
+
+        var sql = Normalize(Prepare(Context, command, storeInCache: false).DbCommand.CommandText);
+        output.WriteLine($"joined apply sql: <<{sql}>>");
+
+        sql.Should().Contain("cross join lateral", "the correlated APPLY on a joined receiver is a lateral join");
+        sql.Should().Contain("t320_children(t1.parent_id)",
+            "the correlated argument is the FROM slot's own key, never the joined occurrence");
+        sql.Should().NotContain("t320_children(t2.id)",
+            "slot 2 is the joined parent and would bind the wrong column");
+
+        var rows = command.ToList();
+
+        var composition = rows
+            .GroupBy(r => (r.From, r.Joined))
+            .ToDictionary(g => g.Key, g => g.Select(r => r.Applied).OrderBy(x => x).ToArray());
+
+        string[] pairs = [.. composition.Keys.OrderBy(k => k.From).ThenBy(k => k.Joined).Select(k => $"{k.From}/{k.Joined}")];
+        pairs.Should().Equal(
+            new[] { "21/1", "21/3", "31/1", "31/2", "32/1", "32/2", "33/1", "33/2" },
+            "the deliberately non-matching join keeps exactly the eight differing-key pairs");
+
+        foreach (var (pair, applied) in composition)
+        {
+            // A slot-2 binding would make (21,3) carry 31/32/33: every applied row must belong to the
+            // FROM child's own parent (2 for c21, 3 for c31/c32/c33).
+            var expected = pair.From == 21 ? new int?[] { 21 } : new int?[] { 31, 32, 33 };
+            applied.Should().Equal(expected, $"the applied rows of pair {pair.From}/{pair.Joined} come from the FROM slot's key");
+        }
+
+        rows.Should().HaveCount(20,
+            "2 pairs x 1 child + 6 pairs x 3 children; a slot-2 binding yields 6 rows and is rejected by the composition above");
+        rows.Should().OnlyContain(r => r.Applied != null, "the applied source matched for every surviving pair");
+        rows.Single(r => r.From == 21 && r.Joined == 3).Label.Should().Be("c21",
+            "the applied row is child 21 (parent 2), not a child of the joined parent 3");
     }
 
     /// <summary>
