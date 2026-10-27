@@ -20,6 +20,7 @@ public sealed class SqlServerDialect : SqlDialectBase
 
     private readonly IPivotRenderer _pivot;
     private readonly int? _serverMajorVersion;
+    private readonly SqlServerEngineEdition? _engineEdition;
 
     /// <summary>
     /// Creates the version-agnostic dialect and its capability renderers. Every version-dependent
@@ -36,10 +37,39 @@ public sealed class SqlServerDialect : SqlDialectBase
     /// <param name="serverVersion">The SQL Server version the context declared.</param>
     /// <exception cref="ArgumentNullException"><paramref name="serverVersion"/> is <see langword="null"/>.</exception>
     internal SqlServerDialect(Version serverVersion)
+        : this(ValidateServerVersion(serverVersion), engineEdition: null)
+    {
+    }
+
+    /// <summary>
+    /// Creates a dialect from the immutable declaration its context was built with: an optional server
+    /// version and an optional engine edition. Both are caller declarations — neither the connection nor
+    /// any server property is read, so the emitted SQL is a function of the declaration alone.
+    /// </summary>
+    /// <param name="serverVersion">The declared server version, or <see langword="null"/> when unset.</param>
+    /// <param name="engineEdition">The declared engine edition, or <see langword="null"/> when unset.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="engineEdition"/> is not a defined <see cref="SqlServerEngineEdition"/> value.</exception>
+    internal SqlServerDialect(Version? serverVersion, SqlServerEngineEdition? engineEdition)
+    {
+        ValidateEngineEdition(engineEdition);
+        _serverMajorVersion = serverVersion?.Major;
+        _engineEdition = engineEdition;
+        _pivot = new SqlServerPivotRenderer(this);
+    }
+
+    private static Version ValidateServerVersion(Version serverVersion)
     {
         ArgumentNullException.ThrowIfNull(serverVersion);
-        _serverMajorVersion = serverVersion.Major;
-        _pivot = new SqlServerPivotRenderer(this);
+        return serverVersion;
+    }
+
+    private static void ValidateEngineEdition(SqlServerEngineEdition? engineEdition)
+    {
+        if (engineEdition is { } edition && !Enum.IsDefined(edition))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(engineEdition), edition, "Undefined SqlServerEngineEdition value.");
+        }
     }
 
     /// <summary>Renders a positional parameter as <c>@name</c>.</summary>
@@ -255,13 +285,23 @@ public sealed class SqlServerDialect : SqlDialectBase
     public override bool SupportsTextJson => true;
 
     /// <summary>
-    /// True only for a context constructed with an explicit server version whose major is 17 or higher
-    /// (SQL Server 2025 and the Azure SQL engines built on it): those servers have a native <c>json</c>
-    /// type. The unversioned dialect and every older version keep <c>false</c>, so an existing
-    /// <c>nvarchar</c>-backed <c>[JsonColumn]</c> mapping is never retargeted by Auto. The decision is
-    /// taken from the declared version alone — the database compatibility level is not probed.
+    /// True when the declared state says the server has a native <c>json</c> type: the declared major
+    /// version is 17 or higher, or the declared engine edition is one of the products that has the type
+    /// while reporting a lower version — <see cref="SqlServerEngineEdition.SqlDatabase"/> (5),
+    /// <see cref="SqlServerEngineEdition.AzureSqlManagedInstance"/> (8) or
+    /// <see cref="SqlServerEngineEdition.MicrosoftFabricSqlDatabase"/> (12). Edition 11
+    /// (<see cref="SqlServerEngineEdition.AzureSynapseServerlessSqlPoolOrMicrosoftFabric"/>) is deliberately
+    /// excluded: its serverless pool has no <c>json</c> column type. The decision is a pure function of the
+    /// declared state — the connection, the database compatibility level and
+    /// <c>SERVERPROPERTY('EngineEdition')</c> are never probed, and the version-only gate is unchanged.
+    /// The unversioned, edition-less dialect keeps <c>false</c>, so an existing <c>nvarchar</c>-backed
+    /// <c>[JsonColumn]</c> mapping is never retargeted by Auto.
     /// </summary>
-    public override bool SupportsJson => _serverMajorVersion >= 17;
+    public override bool SupportsJson =>
+        _serverMajorVersion >= 17
+        || _engineEdition is SqlServerEngineEdition.SqlDatabase
+            or SqlServerEngineEdition.AzureSqlManagedInstance
+            or SqlServerEngineEdition.MicrosoftFabricSqlDatabase;
 
     /// <summary>
     /// The native <c>json</c> column is transported as the plain CLR <see cref="string"/>: SqlClient has

@@ -345,15 +345,22 @@ limit splits driver batches but not that buffer. See [Bulk insert](../guide/22-b
 SQL Server 2025 (17.x) introduced a **distinct built-in `json` type**: the server reports it as `json`
 in the column metadata, it is not an alias of `nvarchar`, and it works under every database
 compatibility level. nextorm does not detect it — the capability is a pure function of the server
-version you declare, so SQL generation never depends on the connection, the compatibility level or a
-metadata round-trip.
+version and engine edition you declare, so SQL generation never depends on the connection, the
+compatibility level or a metadata round-trip.
 
 | Context construction | `SupportsJson` | `[JsonColumn]` storage on a `json` column |
 |---|---|---|
 | `new SqlServerDataContext(connectionString, builder)` — default, unversioned | `false` | text only: `Auto`/`Text` write `nvarchar`, `Native` throws `NotSupportedException` |
 | `new SqlServerDataContext(new Version(16, 0), connectionString)` — SQL Server 2016–2022 | `false` | same as the unversioned context: text only, `Native` refused before any command runs |
 | `new SqlServerDataContext(new Version(17, 0), connectionString)` — SQL Server 2025+ | `true` | `json`: `Auto`/`Text`/`Native` all resolve to the same text converter |
-| Azure SQL Database / Managed Instance / Fabric | not activatable today | they report major version 12, so the version argument cannot identify them — see [#345](https://github.com/AlexeyShirshov/nextorm/issues/345) |
+| `new SqlServerDataContext(SqlServerEngineEdition.SqlDatabase, connectionString)` — Azure SQL Database | `true` | edition-derived: the engine reports major version 12, so the edition must be declared (`Auto`/`Text`/`Native` resolve to the same text converter). Unit-only: no live Azure instance was available |
+| `…AzureSqlManagedInstance` / `…MicrosoftFabricSqlDatabase` — Azure SQL Managed Instance / Fabric SQL database | `true` | same as above; Fabric **SQL database** is edition 12 — edition 11 ("Azure Synapse serverless SQL pool, or Microsoft Fabric") does **not** enable it. Unit-only |
+
+The edition is a **caller declaration**: nextorm never reads `SERVERPROPERTY('EngineEdition')`, so SQL
+generation stays a pure function of the declared state. A concrete context type owns one immutable
+`(version, edition)` declaration — the plan cache is keyed by the context type — and a conflicting
+declaration throws `InvalidOperationException` before any command runs. Declaring the capability does
+not migrate an `nvarchar` column to `json`, and `Auto` keeps the text transport.
 
 ```csharp
 // Version-first constructor: the declared version opens the version-gated capabilities.
@@ -361,16 +368,19 @@ using var dataContext = new SqlServerDataContext(new Version(17, 0), connectionS
 ```
 
 `(Version, DbConnection)` is the second overload, for a caller-owned connection. A context type owns one
-immutable version — the plan cache is keyed by the context type — so constructing the *same* type with two
-different versions (or unversioned and then versioned) throws `InvalidOperationException` before any
-command runs; derive a distinct `SqlServerDataContext` subclass per version.
+immutable `(version, engine edition)` declaration — the plan cache is keyed by the context type — so
+constructing the *same* type with a conflicting declaration of either component (a different version, a
+different engine edition, or unversioned and then declared) throws `InvalidOperationException` before any
+command runs; derive a distinct `SqlServerDataContext` subclass per declaration.
 
 ### Transport and limits
 
 * The representation is the ordinary CLR `string`: parameters are inferred as `nvarchar`, there is no
   DOM parameter, no `SqlDbType.Json` and no double serialisation.
-* On a gate-open context `Auto`, `Text` and `Native` resolve to the same converter, so an existing
-  `nvarchar`-backed `[JsonColumn]` stays byte-for-byte identical when the version argument is added.
+* On a context whose gate is open — by declared major version 17+, or by a declared Azure/Fabric SQL
+  database edition — `Auto`, `Text` and `Native` resolve to the same converter, so an existing
+  `nvarchar`-backed `[JsonColumn]` stays byte-for-byte identical when the version or the edition
+  argument is added.
 * A native `json` column stores **object and array documents only**. Scalar roots (string, number,
   boolean) and the JSON `null` document are rejected by the **server** with error **13609** — use
   `Text` storage for those payloads. This is a server limitation, not a library refusal, and nextorm
@@ -383,7 +393,8 @@ command runs; derive a distinct `SqlServerDataContext` subclass per version.
 nextorm does not generate column DDL, so switching a column from `nvarchar(max)` to `json` is a schema
 change you make in the database — for example `alter table t alter column payload json` in a release
 step. The library side keeps working either way: the same `[JsonColumn]` mapping writes the same text
-to either column type, and `Auto` never retargets an existing mapping on its own.
+to either column type, and `Auto` never retargets an existing mapping on its own. Declaring an engine
+edition is equally a library-side declaration: it never alters a column.
 
 ## Provider differences
 
