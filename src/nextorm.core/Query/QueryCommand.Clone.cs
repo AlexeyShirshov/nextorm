@@ -88,6 +88,7 @@ public partial class QueryCommand
         dst.GroupingType = GroupingType;
         dst.GroupingSets = GroupingSets;
         dst.GroupByWithTotals = GroupByWithTotals;
+        dst.IsSelectGroup = IsSelectGroup;
         dst.LimitBy = LimitBy;
         dst._limitByColumns = _limitByColumns;
         dst.DistinctOn = DistinctOn;

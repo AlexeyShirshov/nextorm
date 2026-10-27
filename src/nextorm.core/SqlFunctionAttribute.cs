@@ -39,4 +39,12 @@ public sealed class SqlFunctionAttribute : Attribute
 
     /// <summary>Optional schema/owner prefix, rendered as <c>schema.name</c>.</summary>
     public string? Schema { get; set; }
+
+    /// <summary>
+    /// Whether the mapped function is an aggregate (it folds the rows of a group into one value).
+    /// <c>SelectGroup</c> uses this to keep an aggregate call opaque when it infers the grouping keys:
+    /// the aggregate's arguments never become keys, and a group-less projection that contains one is
+    /// rendered as a global aggregate. Defaults to <see langword="false"/> (a scalar function).
+    /// </summary>
+    public bool IsAggregate { get; set; }
 }
