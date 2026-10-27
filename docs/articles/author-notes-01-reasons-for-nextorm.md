@@ -59,6 +59,8 @@
   - сравнивать расходы по конкретным сценариям: не заявлять, что tracking всегда медленнее.
 - **Уточнение по EF Core из официальной документации (проверено 27.10.2026):**
   - [EF Core 7](https://learn.microsoft.com/en-us/ef/core/what-is-new/ef-core-7.0/whatsnew) добавил `ExecuteUpdate` и `ExecuteDelete`: операции над множеством строк без загрузки объектов и без change tracking.
+  - **Точная дата:** [8 ноября 2022 года — официальный анонс EF Core 7](https://devblogs.microsoft.com/dotnet/announcing-ef7/). Это более чем через 15 лет после [раннего зафиксированного коммита WORM от 23 мая 2007 года](https://github.com/AlexeyShirshov/oml/commit/2371f4bab9ce746717ae21d0054bc51e7c0ff93b).
+  - **Историческая граница:** до EF Core 7 прямой `UPDATE`/`DELETE` можно было выполнять через сырой SQL; новыми стали именно LINQ-методы `ExecuteUpdate`/`ExecuteDelete`, позволяющие обойти загрузку сущностей и change tracking.
   - [Документация о сохранении данных](https://learn.microsoft.com/en-us/ef/core/saving/) отдельно сравнивает эти операции с `SaveChanges` и описывает выигрыш для массовых изменений.
   - **Уточнение авторского воспоминания:** публично документированного симметричного `ExecuteInsert` в стандартном API EF Core 10 нет; [вставка](https://learn.microsoft.com/en-us/ef/core/saving/basic) обычно выполняется через `Add`/`SaveChanges`, а прямой SQL доступен через [`ExecuteSql`](https://learn.microsoft.com/en-us/ef/core/performance/efficient-updating).
   - Наличие `ExecuteUpdate`/`ExecuteDelete` показывает востребованность явного DML в EF Core, но **само по себе не доказывает** заимствование идей из WORM/Nextorm.
