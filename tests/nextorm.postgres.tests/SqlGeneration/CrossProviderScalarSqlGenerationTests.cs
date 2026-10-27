@@ -200,8 +200,6 @@ public class CrossProviderScalarSqlGenerationTests
             Qi = SqlFunctions.Postgres.quote_ident("a b"),
             Ql = SqlFunctions.Postgres.quote_literal(x.String),
             Qn = SqlFunctions.Postgres.quote_nullable(x.String),
-            Ta1 = SqlFunctions.Postgres.to_ascii(x.String),
-            Ta2 = SqlFunctions.Postgres.to_ascii(x.String, 1252),
             Ta3 = SqlFunctions.Postgres.to_ascii(x.String, "LATIN1"),
             ThInt = SqlFunctions.Postgres.to_hex(x.Int),
             ThLong = SqlFunctions.Postgres.to_hex(255L),
@@ -238,7 +236,6 @@ public class CrossProviderScalarSqlGenerationTests
         sql.Should().Contain("starts_with(somestring, E'dad')");
         sql.Should().Contain("parse_ident(E'a.b', false)");
         sql.Should().Contain("quote_ident(E'a b')");
-        sql.Should().Contain("to_ascii(somestring, 1252)");
         sql.Should().Contain("to_ascii(somestring, E'LATIN1')");
         sql.Should().Contain("to_hex(nullableint)");
         sql.Should().Contain("to_hex(255)");
@@ -311,16 +308,21 @@ public class CrossProviderScalarSqlGenerationTests
         var gamma = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.gamma(1.5) }));
         var tgamma = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.tgamma(1.5) }));
         var lgamma = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.lgamma(1.5) }));
+        var toAsciiOneArg = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.to_ascii(x.String) }));
 
         casefold.Should().Throw<NotSupportedException>().WithMessage("The casefold function is refused:*PostgreSQL 18*");
         gamma.Should().Throw<NotSupportedException>().WithMessage("The gamma function is refused:*17.11*");
         tgamma.Should().Throw<NotSupportedException>().WithMessage("The tgamma function is refused:*17.11*");
         lgamma.Should().Throw<NotSupportedException>().WithMessage("The lgamma function is refused:*17.11*");
+        toAsciiOneArg.Should().Throw<NotSupportedException>()
+            .WithMessage("The one-argument to_ascii function is refused:*0A000*LATIN1/LATIN2/WIN1250*to_ascii(value, encoding)*");
 
         // Positive control: a sibling of the same family on the same query shape still renders, so the
-        // refusals above are per name and not a blanket failure of the translator.
+        // refusals above are per name/shape and not a blanket failure of the translator.
         SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.btrim(x.String) }))
             .Should().Contain("btrim(somestring)");
+        SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.to_ascii(x.String, "LATIN1") }))
+            .Should().Contain("to_ascii(somestring, E'LATIN1')");
         SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.erf(0.5) }))
             .Should().Contain("erf(0.5)");
     }

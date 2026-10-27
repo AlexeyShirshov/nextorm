@@ -21,30 +21,36 @@ namespace NextORM.Core;
 internal static class ExtendedScalarFunctionTranslator
 {
     /// <summary>
-    /// Members refused for a demonstrated server-version limitation. The refusal is raised before the
-    /// dialect gate, so every provider gets the precise technical reason instead of SQL the pinned
-    /// PostgreSQL server would reject. <c>casefold</c> arrived in PostgreSQL 18; <c>gamma</c>,
-    /// <c>tgamma</c> and <c>lgamma</c> exist in no PostgreSQL release — all four are absent from
-    /// <c>pg_proc</c> on 17.11 and fail with <c>42883</c>.
+    /// Members refused for a demonstrated server limitation. The refusal is raised before the dialect
+    /// gate, so every provider gets the precise technical reason instead of SQL the pinned PostgreSQL
+    /// server would reject. <c>casefold</c> arrived in PostgreSQL 18; <c>gamma</c>, <c>tgamma</c> and
+    /// <c>lgamma</c> exist in no PostgreSQL release — all four are absent from <c>pg_proc</c> on 17.11
+    /// and fail with <c>42883</c>. The one-argument <c>to_ascii</c> exists but raises <c>0A000</c> from
+    /// a UTF8 database, so only the two-argument (explicit-encoding) form is delivered. The key is the
+    /// member name together with its arity, because <c>to_ascii</c> is refused for one shape only.
     /// </summary>
-    private static readonly Dictionary<string, string> Refused = new(StringComparer.Ordinal)
+    private static readonly Dictionary<(string Name, int Arity), string> Refused = new()
     {
-        [nameof(PostgresFunctions.casefold)] =
+        [(nameof(PostgresFunctions.casefold), 1)] =
             "The casefold function is refused: it was introduced in PostgreSQL 18 and does not exist on the " +
             "pinned 17.11 server (absent from pg_proc; the name fails with 42883), so no SQL that executes " +
             "on the target server can be emitted.",
-        [nameof(PostgresFunctions.gamma)] =
+        [(nameof(PostgresFunctions.gamma), 1)] =
             "The gamma function is refused: it does not exist on the pinned PostgreSQL 17.11 server (absent " +
             "from pg_proc and from the PG17 mathematical-functions table; the name fails with 42883), so no " +
             "SQL that executes on the target server can be emitted.",
-        [nameof(PostgresFunctions.tgamma)] =
+        [(nameof(PostgresFunctions.tgamma), 1)] =
             "The tgamma function is refused: it does not exist on the pinned PostgreSQL 17.11 server (absent " +
             "from pg_proc and from the PG17 mathematical-functions table; the name fails with 42883), so no " +
             "SQL that executes on the target server can be emitted.",
-        [nameof(PostgresFunctions.lgamma)] =
+        [(nameof(PostgresFunctions.lgamma), 1)] =
             "The lgamma function is refused: it does not exist on the pinned PostgreSQL 17.11 server (absent " +
             "from pg_proc and from the PG17 mathematical-functions table; the name fails with 42883), so no " +
-            "SQL that executes on the target server can be emitted."
+            "SQL that executes on the target server can be emitted.",
+        [(nameof(PostgresFunctions.to_ascii), 1)] =
+            "The one-argument to_ascii function is refused: PostgreSQL 17 raises 0A000 when the source " +
+            "encoding is UTF8 (the one-argument form needs a LATIN1/LATIN2/WIN1250 source); use the " +
+            "to_ascii(value, encoding) overload."
     };
 
     private static readonly HashSet<string> MathFunctions = new(StringComparer.Ordinal)
@@ -98,8 +104,7 @@ internal static class ExtendedScalarFunctionTranslator
     {
         var name = node.Method.Name;
 
-        if (node.Method.DeclaringType == typeof(PostgresFunctions) && Refused.TryGetValue(name, out var refusal))
-            throw new NotSupportedException(refusal);
+        ThrowIfRefused(node);
 
         if (MathFunctions.Contains(name))
         {
@@ -369,6 +374,18 @@ internal static class ExtendedScalarFunctionTranslator
             sqlArgs[i] = visitor.VisitToString(args[i]);
 
         visitor.Builder!.Append(visitor.Dialect.MakeMathFunction(name, sqlArgs));
+    }
+
+    /// <summary>
+    /// Raises the recorded refusal for a <see cref="PostgresFunctions"/> member whose name and arity are
+    /// listed in <see cref="Refused"/>. Called by every translator that can reach such a member, so the
+    /// failure happens while the query is prepared and no SQL is emitted.
+    /// </summary>
+    internal static void ThrowIfRefused(MethodCallExpression node)
+    {
+        if (node.Method.DeclaringType == typeof(PostgresFunctions)
+            && Refused.TryGetValue((node.Method.Name, node.Arguments.Count), out var refusal))
+            throw new NotSupportedException(refusal);
     }
 
     private static void RequireExtended(BaseExpressionVisitor visitor)

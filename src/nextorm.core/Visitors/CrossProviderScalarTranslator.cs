@@ -69,6 +69,8 @@ internal static class CrossProviderScalarTranslator
     {
         var name = node.Method.Name;
 
+        ExtendedScalarFunctionTranslator.ThrowIfRefused(node);
+
         if (visitor.Dialect.ScalarFunctions is not { } scalars || !scalars.Supports(name))
             throw new NotSupportedException($"The {name} function is not supported by this provider.");
 

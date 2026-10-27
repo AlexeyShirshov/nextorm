@@ -651,19 +651,17 @@ namespace NextORM.Core;
         public string? quote_nullable(string? value) => default!;
 
         /// <summary>
-        /// Translates <paramref name="value"/> to ASCII, replacing every non-ASCII character with a
-        /// closest-ASCII approximation (<c>to_ascii</c>, one-argument form; usually
-        /// <c>LATIN1</c>/<c>WIN1250</c>). The conversion is not reversible. A NULL argument yields NULL.
-        /// Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// The one-argument <c>to_ascii(text)</c> is refused: PostgreSQL 17 raises <c>0A000</c> from a UTF8
+        /// database because that form takes the source encoding from the database encoding, and the
+        /// conversion it performs is defined only for a LATIN1/LATIN2/WIN1250 database. Use
+        /// <see cref="to_ascii(string?, string?)"/> with an explicit encoding instead.
         /// </summary>
-        public string? to_ascii(string? value) => default!;
-
-        /// <summary>
-        /// <c>to_ascii(value, encoding)</c>: translates <paramref name="value"/> from the named encoding
-        /// to ASCII. A NULL argument yields NULL. Gated per name by
-        /// <see cref="IScalarFunctions.Supports"/>.
-        /// </summary>
-        public string? to_ascii(string? value, int? encoding) => default!;
+        /// <returns>Never returns; the call is refused when the query is translated.</returns>
+        public string? to_ascii(string? value) =>
+            throw new NotSupportedException(
+                "The one-argument to_ascii function is refused: PostgreSQL 17 raises 0A000 when the source " +
+                "encoding is UTF8 (the one-argument form needs a LATIN1/LATIN2/WIN1250 source); use the " +
+                "to_ascii(value, encoding) overload.");
 
         /// <summary>
         /// <c>to_ascii(value, encoding)</c> with the encoding named as text (for example
