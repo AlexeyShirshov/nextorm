@@ -163,9 +163,14 @@ internal static class SelectGroupExpressionAnalyzer
 
     /// <summary>
     /// Classifies an expression as an aggregate call: an effective <see cref="SqlFunctionAttribute"/>
-    /// whose <see cref="SqlFunctionAttribute.IsAggregate"/> is set, or a built-in
-    /// <see cref="CommonFunctions"/> aggregate. Window members are excluded, and every
-    /// provider-advanced family that is not part of the built-in set classifies as a scalar.
+    /// whose <see cref="SqlFunctionAttribute.IsAggregate"/> is set, a provider-advanced aggregate
+    /// family the renderer translates
+    /// (<see cref="AdvancedAggregateTranslator.IsAdvancedAggregateMethod"/>) or a built-in
+    /// <see cref="CommonFunctions"/> aggregate. A window member is excluded by the same name map the
+    /// renderer's window guard uses, and only after the attribute and the provider families: an
+    /// explicit annotation always wins, and a provider aggregate that shares a window member's name
+    /// (<c>PostgresFunctions.percentile_cont</c>, <c>ClickHouseFunctions.first_value</c>) is the form
+    /// the renderer emits as an aggregate, so it stays one here.
     /// </summary>
     /// <param name="expression">The expression to classify.</param>
     /// <returns><see langword="true"/> when the expression is an aggregate call.</returns>
@@ -174,6 +179,9 @@ internal static class SelectGroupExpressionAnalyzer
         if (expression is not MethodCallExpression call)
             return false;
 
+        // (1) An explicit annotation wins over every name-based rule. A method attribute replaces the
+        // declaring-type attribute entirely (ScalarFunctionTranslator resolves exactly one of them),
+        // so an unset IsAggregate on the method never inherits the class value.
         if (ScalarFunctionTranslator.ResolveSqlFunctionAttribute(call.Method)?.IsAggregate == true)
             return true;
 
@@ -181,10 +189,21 @@ internal static class SelectGroupExpressionAnalyzer
         if (declaringType is null || !declaringType.IsAssignableTo(typeof(CommonFunctions)))
             return false;
 
+        // (2) The provider-advanced families the engine translates (PostgreSQL boolean/bitwise/
+        // regression/range/ordered-set aggregates, the ClickHouse catalogue and quantile/topK/array/
+        // sequence aggregates). Checked before the window names because a provider surface member can
+        // carry the same name as a window member while being the aggregate form.
+        if (AdvancedAggregateTranslator.IsAdvancedAggregateMethod(call))
+            return true;
+
+        // (3) A name WindowSql maps to a window function is a window member, not an aggregate: the
+        // renderer refuses the bare call as an incomplete window (sum_over, exponential_time_decayed_sum).
+        // Where such a name is also an aggregate family, the family check above already claimed it.
         var name = call.Method.Name;
         if (WindowSql.MapWindowFunctionName(name) is not null)
             return false;
 
+        // (4) The built-in aggregate surface, including the *_distinct spellings.
         return AggregateNameSet.Contains(name);
     }
 

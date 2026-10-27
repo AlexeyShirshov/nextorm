@@ -45,6 +45,13 @@ public sealed class SqlFunctionAttribute : Attribute
     /// <c>SelectGroup</c> uses this to keep an aggregate call opaque when it infers the grouping keys:
     /// the aggregate's arguments never become keys, and a group-less projection that contains one is
     /// rendered as a global aggregate. Defaults to <see langword="false"/> (a scalar function).
+    /// <para>
+    /// The effective annotation is either the method's own attribute or, when the method carries none,
+    /// the declaring type's attribute — never a merge of the two. A method attribute therefore replaces
+    /// the type attribute entirely: when it leaves <see cref="IsAggregate"/> unset, the function is a
+    /// scalar even if the declaring type is marked as an aggregate, and
+    /// <see cref="Name"/>/<see cref="Schema"/> do not inherit either.
+    /// </para>
     /// </summary>
     public bool IsAggregate { get; set; }
 }

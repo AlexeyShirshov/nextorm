@@ -27,167 +27,317 @@ internal static class AdvancedAggregateTranslator
     /// <summary>Translates an advanced aggregate call; returns <c>false</c> when it is not one of them.</summary>
     internal static bool TryTranslate(BaseExpressionVisitor visitor, MethodCallExpression node)
     {
-        // The ClickHouse-only aggregate catalogue (T286b F16) is probed first: its members live on
-        // ClickHouseFunctions, and the state-returning members must be refused on every provider with
-        // their precise technical reason before the provider capability gate.
-        if (node.Method.DeclaringType == typeof(ClickHouseFunctions))
+        switch (Classify(node))
         {
-            if (ClickHouseAggregateRefusals.TryGetValue(node.Method.Name, out var refusal))
-                throw new NotSupportedException(refusal);
+            case AdvancedAggregateKind.None:
+                return false;
 
-            if (TryTranslateClickHouseAggregate(visitor, node))
-                return true;
-        }
+            // The ClickHouse-only aggregate catalogue is probed before the per-member cases: its
+            // members live on ClickHouseFunctions, and the state-returning members must be refused on
+            // every provider with their precise technical reason before the provider capability gate.
+            case AdvancedAggregateKind.ClickHouseRefused:
+                throw new NotSupportedException(ClickHouseAggregateRefusals[node.Method.Name]);
 
-        switch (node.Method.Name)
-        {
-            case nameof(PostgresFunctions.bool_and) when node.Arguments.Count == 1:
+            case AdvancedAggregateKind.ClickHouseCatalogue:
+                return TryTranslateClickHouseAggregate(visitor, node);
+
+            case AdvancedAggregateKind.BoolAnd:
                 EmitSimple(visitor, node, "bool_and", () => visitor.Dialect.SupportsBooleanAggregates, "bool_and/bool_or/every");
                 return true;
-            case nameof(PostgresFunctions.bool_or) when node.Arguments.Count == 1:
+            case AdvancedAggregateKind.BoolOr:
                 EmitSimple(visitor, node, "bool_or", () => visitor.Dialect.SupportsBooleanAggregates, "bool_and/bool_or/every");
                 return true;
-            case nameof(PostgresFunctions.every) when node.Arguments.Count == 1:
+            case AdvancedAggregateKind.Every:
                 EmitSimple(visitor, node, "every", () => visitor.Dialect.SupportsBooleanAggregates, "bool_and/bool_or/every");
                 return true;
 
-            case nameof(PostgresFunctions.range_agg) when node.Arguments.Count == 1:
+            case AdvancedAggregateKind.RangeAgg:
                 EmitSimple(visitor, node, "range_agg", () => visitor.Dialect.SupportsRanges, "range_agg/range_intersect_agg");
                 return true;
-            case nameof(PostgresFunctions.range_intersect_agg) when node.Arguments.Count == 1:
+            case AdvancedAggregateKind.RangeIntersectAgg:
                 EmitSimple(visitor, node, "range_intersect_agg", () => visitor.Dialect.SupportsRanges, "range_agg/range_intersect_agg");
                 return true;
 
-            case nameof(PostgresFunctions.bit_and) when node.Arguments.Count == 1:
+            case AdvancedAggregateKind.BitAnd:
                 EmitSimple(visitor, node, "bit_and", () => visitor.Dialect.SupportsBitAggregates, "bit_and/bit_or/bit_xor");
                 return true;
-            case nameof(PostgresFunctions.bit_or) when node.Arguments.Count == 1:
+            case AdvancedAggregateKind.BitOr:
                 EmitSimple(visitor, node, "bit_or", () => visitor.Dialect.SupportsBitAggregates, "bit_and/bit_or/bit_xor");
                 return true;
-            case nameof(PostgresFunctions.bit_xor) when node.Arguments.Count == 1:
+            case AdvancedAggregateKind.BitXor:
                 EmitSimple(visitor, node, "bit_xor", () => visitor.Dialect.SupportsBitAggregates, "bit_and/bit_or/bit_xor");
                 return true;
 
-            case nameof(CommonFunctions.corr) when node.Arguments.Count == 2:
+            case AdvancedAggregateKind.Corr:
                 EmitBinary(visitor, node, "corr", () => visitor.Dialect.SupportsStatisticalAggregates, "statistical (corr/covar)");
                 return true;
-            case nameof(CommonFunctions.covar_pop) when node.Arguments.Count == 2:
+            case AdvancedAggregateKind.CovarPop:
                 EmitBinary(visitor, node, "covar_pop", () => visitor.Dialect.SupportsStatisticalAggregates, "statistical (corr/covar)");
                 return true;
-            case nameof(CommonFunctions.covar_samp) when node.Arguments.Count == 2:
+            case AdvancedAggregateKind.CovarSamp:
                 EmitBinary(visitor, node, "covar_samp", () => visitor.Dialect.SupportsStatisticalAggregates, "statistical (corr/covar)");
                 return true;
-            case nameof(PostgresFunctions.regr_slope) when node.Arguments.Count == 2:
+            case AdvancedAggregateKind.RegrSlope:
                 EmitBinary(visitor, node, "regr_slope", () => visitor.Dialect.SupportsRegressionAggregates, "regr_*");
                 return true;
-            case nameof(PostgresFunctions.regr_intercept) when node.Arguments.Count == 2:
+            case AdvancedAggregateKind.RegrIntercept:
                 EmitBinary(visitor, node, "regr_intercept", () => visitor.Dialect.SupportsRegressionAggregates, "regr_*");
                 return true;
-            case nameof(PostgresFunctions.regr_r2) when node.Arguments.Count == 2:
+            case AdvancedAggregateKind.RegrR2:
                 EmitBinary(visitor, node, "regr_r2", () => visitor.Dialect.SupportsRegressionAggregates, "regr_*");
                 return true;
-            case nameof(PostgresFunctions.regr_count) when node.Arguments.Count == 2:
+            case AdvancedAggregateKind.RegrCount:
                 EmitBinary(visitor, node, "regr_count", () => visitor.Dialect.SupportsRegressionAggregates, "regr_*");
                 return true;
-            case nameof(PostgresFunctions.regr_avgx) when node.Arguments.Count == 2:
+            case AdvancedAggregateKind.RegrAvgx:
                 EmitBinary(visitor, node, "regr_avgx", () => visitor.Dialect.SupportsRegressionAggregates, "regr_*");
                 return true;
-            case nameof(PostgresFunctions.regr_avgy) when node.Arguments.Count == 2:
+            case AdvancedAggregateKind.RegrAvgy:
                 EmitBinary(visitor, node, "regr_avgy", () => visitor.Dialect.SupportsRegressionAggregates, "regr_*");
                 return true;
 
-            case nameof(ClickHouseFunctions.arg_min) when node.Arguments.Count == 2:
+            case AdvancedAggregateKind.ArgMin:
                 EmitBinary(visitor, node, "arg_min", () => visitor.Dialect.SupportsArgMinMax, "argMin/argMax");
                 return true;
-            case nameof(ClickHouseFunctions.arg_max) when node.Arguments.Count == 2:
+            case AdvancedAggregateKind.ArgMax:
                 EmitBinary(visitor, node, "arg_max", () => visitor.Dialect.SupportsArgMinMax, "argMin/argMax");
                 return true;
 
-            case nameof(PostgresFunctions.percentile_cont) when node.Arguments.Count == 2
-                && node.Method.DeclaringType == typeof(PostgresFunctions):
+            case AdvancedAggregateKind.PercentileCont:
+            case AdvancedAggregateKind.PercentileDisc:
                 EmitOrdered(visitor, node, hasFraction: true);
                 return true;
-            case nameof(PostgresFunctions.percentile_disc) when node.Arguments.Count == 2
-                && node.Method.DeclaringType == typeof(PostgresFunctions):
-                EmitOrdered(visitor, node, hasFraction: true);
-                return true;
-            case nameof(PostgresFunctions.median) when node.Arguments.Count == 1
-                && node.Method.DeclaringType == typeof(PostgresFunctions):
+            case AdvancedAggregateKind.PostgresMedian:
                 EmitOrderedMedian(visitor, node);
                 return true;
-            case nameof(PostgresFunctions.percentile) when node.Arguments.Count == 2
-                && node.Method.DeclaringType == typeof(PostgresFunctions):
-                throw new NotSupportedException("The percentile function is not supported by PostgreSQL.");
-            case nameof(SqlServerFunctions.percentile) when node.Arguments.Count == 2
-                && node.Method.DeclaringType == typeof(SqlServerFunctions):
-                throw new NotSupportedException("The percentile function is not supported by SQL Server.");
-            case nameof(PostgresFunctions.mode) when node.Arguments.Count == 1:
+            case AdvancedAggregateKind.PostgresMode:
                 EmitOrdered(visitor, node, hasFraction: false);
                 return true;
+            case AdvancedAggregateKind.PostgresPercentile:
+                throw new NotSupportedException("The percentile function is not supported by PostgreSQL.");
+            case AdvancedAggregateKind.SqlServerPercentile:
+                throw new NotSupportedException("The percentile function is not supported by SQL Server.");
 
-            case nameof(ClickHouseFunctions.uniq) when node.Arguments.Count == 1:
+            case AdvancedAggregateKind.Uniq:
                 EmitUniq(visitor, node, "uniq");
                 return true;
-            case nameof(ClickHouseFunctions.uniq_exact) when node.Arguments.Count == 1:
+            case AdvancedAggregateKind.UniqExact:
                 EmitUniq(visitor, node, "uniq_exact");
                 return true;
-            case nameof(ClickHouseFunctions.uniq_combined) when node.Arguments.Count == 1:
+            case AdvancedAggregateKind.UniqCombined:
                 EmitUniq(visitor, node, "uniq_combined");
                 return true;
-            case nameof(ClickHouseFunctions.uniq_hll12) when node.Arguments.Count == 1:
+            case AdvancedAggregateKind.UniqHll12:
                 EmitUniq(visitor, node, "uniq_hll12");
                 return true;
 
-            case nameof(CommonFunctions.any_agg) when node.Arguments.Count == 1:
+            case AdvancedAggregateKind.AnyAgg:
                 EmitSimple(visitor, node, "any_agg", () => visitor.Dialect.SupportsAnyValueAggregate, "ANY_VALUE/any");
                 return true;
-            case nameof(ClickHouseFunctions.any_last) when node.Arguments.Count == 1:
+            case AdvancedAggregateKind.AnyLast:
                 EmitSimple(visitor, node, "any_last", () => visitor.Dialect.SupportsAnyAggregates, "anyLast");
                 return true;
 
-            case nameof(ClickHouseFunctions.window_funnel) when node.Arguments.Count == 3:
+            case AdvancedAggregateKind.WindowFunnel:
                 EmitSequenceAggregate(visitor, "window_funnel", node.Method.ReturnType, [node.Arguments[0]], node.Arguments[1], node.Arguments[2]);
                 return true;
-            case nameof(ClickHouseFunctions.sequence_match) when node.Arguments.Count == 3:
+            case AdvancedAggregateKind.SequenceMatch:
                 EmitSequenceAggregate(visitor, "sequence_match", node.Method.ReturnType, [node.Arguments[0]], node.Arguments[1], node.Arguments[2]);
                 return true;
-            case nameof(ClickHouseFunctions.retention) when node.Arguments.Count == 1:
+            case AdvancedAggregateKind.Retention:
                 EmitSequenceAggregate(visitor, "retention", node.Method.ReturnType, [], timestamp: null, node.Arguments[0]);
                 return true;
 
-            case nameof(ClickHouseFunctions.group_array) when node.Arguments.Count == 1:
+            case AdvancedAggregateKind.GroupArray:
                 EmitSimple(visitor, node, "group_array", () => visitor.Dialect.SupportsArrayFunctions, "groupArray/groupUniqArray");
                 return true;
-            case nameof(ClickHouseFunctions.group_uniq_array) when node.Arguments.Count == 1:
+            case AdvancedAggregateKind.GroupUniqArray:
                 EmitSimple(visitor, node, "group_uniq_array", () => visitor.Dialect.SupportsArrayFunctions, "groupArray/groupUniqArray");
                 return true;
 
-            case nameof(ClickHouseFunctions.quantile) when node.Arguments.Count == 2:
+            case AdvancedAggregateKind.Quantile:
                 EmitQuantile(visitor, node, "quantile");
                 return true;
-            case nameof(ClickHouseFunctions.quantile_exact) when node.Arguments.Count == 2:
+            case AdvancedAggregateKind.QuantileExact:
                 EmitQuantile(visitor, node, "quantile_exact");
                 return true;
-            case nameof(ClickHouseFunctions.quantile_timing) when node.Arguments.Count == 2:
+            case AdvancedAggregateKind.QuantileTiming:
                 EmitQuantile(visitor, node, "quantile_timing");
                 return true;
-            case nameof(ClickHouseFunctions.quantiles) when node.Arguments.Count == 2:
+            case AdvancedAggregateKind.Quantiles:
                 EmitQuantiles(visitor, node, "quantiles");
                 return true;
-            case nameof(ClickHouseFunctions.top_k) when node.Arguments.Count == 2:
+            case AdvancedAggregateKind.TopK:
                 EmitTopK(visitor, node, "top_k", weighted: false);
                 return true;
-            case nameof(ClickHouseFunctions.top_k_weighted) when node.Arguments.Count == 3:
+            case AdvancedAggregateKind.TopKWeighted:
                 EmitTopK(visitor, node, "top_k_weighted", weighted: true);
                 return true;
-            case nameof(ClickHouseFunctions.median) when node.Arguments.Count == 1
-                && node.Method.DeclaringType == typeof(ClickHouseFunctions):
+            case AdvancedAggregateKind.ClickHouseMedian:
                 EmitMedian(visitor, node);
                 return true;
 
             default:
                 return false;
         }
+    }
+
+    /// <summary>
+    /// The aggregate families <see cref="TryTranslate"/> renders, one member per emitted shape.
+    /// </summary>
+    private enum AdvancedAggregateKind
+    {
+        None = 0,
+        ClickHouseRefused,
+        ClickHouseCatalogue,
+        BoolAnd,
+        BoolOr,
+        Every,
+        RangeAgg,
+        RangeIntersectAgg,
+        BitAnd,
+        BitOr,
+        BitXor,
+        Corr,
+        CovarPop,
+        CovarSamp,
+        RegrSlope,
+        RegrIntercept,
+        RegrR2,
+        RegrCount,
+        RegrAvgx,
+        RegrAvgy,
+        ArgMin,
+        ArgMax,
+        PercentileCont,
+        PercentileDisc,
+        PostgresMedian,
+        PostgresMode,
+        PostgresPercentile,
+        SqlServerPercentile,
+        Uniq,
+        UniqExact,
+        UniqCombined,
+        UniqHll12,
+        AnyAgg,
+        AnyLast,
+        WindowFunnel,
+        SequenceMatch,
+        Retention,
+        GroupArray,
+        GroupUniqArray,
+        Quantile,
+        QuantileExact,
+        QuantileTiming,
+        Quantiles,
+        TopK,
+        TopKWeighted,
+        ClickHouseMedian,
+    }
+
+    /// <summary>
+    /// True when <paramref name="node"/> is one of the provider-advanced aggregate families of this
+    /// translator (the boolean/bitwise/statistical/regression/ordered-set aggregates, the ClickHouse
+    /// quantile/topK/array/sequence aggregates and the ClickHouse-only aggregate catalogue). Used by
+    /// <c>SelectGroup</c> key inference, so it must agree with what is actually rendered here.
+    /// <para>
+    /// The declaring type must belong to the <see cref="CommonFunctions"/> surface: the renderer only
+    /// dispatches into this translator for that surface, so a user CLR method that happens to share an
+    /// aggregate's name is never classified as one.
+    /// </para>
+    /// </summary>
+    internal static bool IsAdvancedAggregateMethod(MethodCallExpression node) =>
+        node.Method.DeclaringType is { } declaringType
+        && declaringType.IsAssignableTo(typeof(CommonFunctions))
+        && Classify(node) != AdvancedAggregateKind.None;
+
+    /// <summary>
+    /// Classifies the call as one of the aggregate families above: the single source of names for both
+    /// <see cref="TryTranslate"/> and <see cref="IsAdvancedAggregateMethod"/>, so the classifier behind
+    /// <c>SelectGroup</c> key inference cannot drift from the families that are rendered. The
+    /// <c>when</c> clauses are part of the classification: a member called with the wrong argument
+    /// count is not rendered by this translator, so it is not an aggregate of this family either.
+    /// </summary>
+    private static AdvancedAggregateKind Classify(MethodCallExpression node)
+    {
+        // The ClickHouse-only aggregate catalogue (T286b F16) is a name set, so it is referenced
+        // rather than re-listed; the state-returning members are recognised first because they are
+        // refused before the capability gate.
+        if (node.Method.DeclaringType == typeof(ClickHouseFunctions))
+        {
+            if (ClickHouseAggregateRefusals.ContainsKey(node.Method.Name))
+                return AdvancedAggregateKind.ClickHouseRefused;
+
+            if (ClickHouseAggregateNames.Contains(node.Method.Name))
+                return AdvancedAggregateKind.ClickHouseCatalogue;
+        }
+
+        return node.Method.Name switch
+        {
+            nameof(PostgresFunctions.bool_and) when node.Arguments.Count == 1 => AdvancedAggregateKind.BoolAnd,
+            nameof(PostgresFunctions.bool_or) when node.Arguments.Count == 1 => AdvancedAggregateKind.BoolOr,
+            nameof(PostgresFunctions.every) when node.Arguments.Count == 1 => AdvancedAggregateKind.Every,
+
+            nameof(PostgresFunctions.range_agg) when node.Arguments.Count == 1 => AdvancedAggregateKind.RangeAgg,
+            nameof(PostgresFunctions.range_intersect_agg) when node.Arguments.Count == 1 => AdvancedAggregateKind.RangeIntersectAgg,
+
+            nameof(PostgresFunctions.bit_and) when node.Arguments.Count == 1 => AdvancedAggregateKind.BitAnd,
+            nameof(PostgresFunctions.bit_or) when node.Arguments.Count == 1 => AdvancedAggregateKind.BitOr,
+            nameof(PostgresFunctions.bit_xor) when node.Arguments.Count == 1 => AdvancedAggregateKind.BitXor,
+
+            nameof(CommonFunctions.corr) when node.Arguments.Count == 2 => AdvancedAggregateKind.Corr,
+            nameof(CommonFunctions.covar_pop) when node.Arguments.Count == 2 => AdvancedAggregateKind.CovarPop,
+            nameof(CommonFunctions.covar_samp) when node.Arguments.Count == 2 => AdvancedAggregateKind.CovarSamp,
+            nameof(PostgresFunctions.regr_slope) when node.Arguments.Count == 2 => AdvancedAggregateKind.RegrSlope,
+            nameof(PostgresFunctions.regr_intercept) when node.Arguments.Count == 2 => AdvancedAggregateKind.RegrIntercept,
+            nameof(PostgresFunctions.regr_r2) when node.Arguments.Count == 2 => AdvancedAggregateKind.RegrR2,
+            nameof(PostgresFunctions.regr_count) when node.Arguments.Count == 2 => AdvancedAggregateKind.RegrCount,
+            nameof(PostgresFunctions.regr_avgx) when node.Arguments.Count == 2 => AdvancedAggregateKind.RegrAvgx,
+            nameof(PostgresFunctions.regr_avgy) when node.Arguments.Count == 2 => AdvancedAggregateKind.RegrAvgy,
+
+            nameof(ClickHouseFunctions.arg_min) when node.Arguments.Count == 2 => AdvancedAggregateKind.ArgMin,
+            nameof(ClickHouseFunctions.arg_max) when node.Arguments.Count == 2 => AdvancedAggregateKind.ArgMax,
+
+            // percentile_cont/percentile_disc also name a CommonFunctions window member: only the
+            // provider surface member is the ordered-set aggregate the renderer accepts.
+            nameof(PostgresFunctions.percentile_cont) when node.Arguments.Count == 2
+                && node.Method.DeclaringType == typeof(PostgresFunctions) => AdvancedAggregateKind.PercentileCont,
+            nameof(PostgresFunctions.percentile_disc) when node.Arguments.Count == 2
+                && node.Method.DeclaringType == typeof(PostgresFunctions) => AdvancedAggregateKind.PercentileDisc,
+            nameof(PostgresFunctions.median) when node.Arguments.Count == 1
+                && node.Method.DeclaringType == typeof(PostgresFunctions) => AdvancedAggregateKind.PostgresMedian,
+            nameof(PostgresFunctions.percentile) when node.Arguments.Count == 2
+                && node.Method.DeclaringType == typeof(PostgresFunctions) => AdvancedAggregateKind.PostgresPercentile,
+            nameof(SqlServerFunctions.percentile) when node.Arguments.Count == 2
+                && node.Method.DeclaringType == typeof(SqlServerFunctions) => AdvancedAggregateKind.SqlServerPercentile,
+            nameof(PostgresFunctions.mode) when node.Arguments.Count == 1 => AdvancedAggregateKind.PostgresMode,
+
+            nameof(ClickHouseFunctions.uniq) when node.Arguments.Count == 1 => AdvancedAggregateKind.Uniq,
+            nameof(ClickHouseFunctions.uniq_exact) when node.Arguments.Count == 1 => AdvancedAggregateKind.UniqExact,
+            nameof(ClickHouseFunctions.uniq_combined) when node.Arguments.Count == 1 => AdvancedAggregateKind.UniqCombined,
+            nameof(ClickHouseFunctions.uniq_hll12) when node.Arguments.Count == 1 => AdvancedAggregateKind.UniqHll12,
+
+            nameof(CommonFunctions.any_agg) when node.Arguments.Count == 1 => AdvancedAggregateKind.AnyAgg,
+            nameof(ClickHouseFunctions.any_last) when node.Arguments.Count == 1 => AdvancedAggregateKind.AnyLast,
+
+            nameof(ClickHouseFunctions.window_funnel) when node.Arguments.Count == 3 => AdvancedAggregateKind.WindowFunnel,
+            nameof(ClickHouseFunctions.sequence_match) when node.Arguments.Count == 3 => AdvancedAggregateKind.SequenceMatch,
+            nameof(ClickHouseFunctions.retention) when node.Arguments.Count == 1 => AdvancedAggregateKind.Retention,
+
+            nameof(ClickHouseFunctions.group_array) when node.Arguments.Count == 1 => AdvancedAggregateKind.GroupArray,
+            nameof(ClickHouseFunctions.group_uniq_array) when node.Arguments.Count == 1 => AdvancedAggregateKind.GroupUniqArray,
+
+            nameof(ClickHouseFunctions.quantile) when node.Arguments.Count == 2 => AdvancedAggregateKind.Quantile,
+            nameof(ClickHouseFunctions.quantile_exact) when node.Arguments.Count == 2 => AdvancedAggregateKind.QuantileExact,
+            nameof(ClickHouseFunctions.quantile_timing) when node.Arguments.Count == 2 => AdvancedAggregateKind.QuantileTiming,
+            nameof(ClickHouseFunctions.quantiles) when node.Arguments.Count == 2 => AdvancedAggregateKind.Quantiles,
+            nameof(ClickHouseFunctions.top_k) when node.Arguments.Count == 2 => AdvancedAggregateKind.TopK,
+            nameof(ClickHouseFunctions.top_k_weighted) when node.Arguments.Count == 3 => AdvancedAggregateKind.TopKWeighted,
+            nameof(ClickHouseFunctions.median) when node.Arguments.Count == 1
+                && node.Method.DeclaringType == typeof(ClickHouseFunctions) => AdvancedAggregateKind.ClickHouseMedian,
+
+            _ => AdvancedAggregateKind.None,
+        };
     }
 
     /// <summary>Renders a single-argument aggregate gated by a dialect capability flag.</summary>
