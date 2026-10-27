@@ -274,10 +274,11 @@ internal sealed class T345ProbingUnversionedContext(DbConnection connection)
 #endregion
 
 /// <summary>
-/// T345 (#345) — the declared-state capability matrix. The production rule and the oracle below are
-/// written separately: the oracle is the plan's rule in the test, the observation comes from the dialect
-/// the context would actually build. Both dimensions are exercised through the real constructor
-/// (version, edition) and the real converter resolution, so no server is involved and none is contacted.
+/// T345 (#345) — the declared-state capability matrix. The expectation is a literal table transcribed
+/// from the frozen contract and the observation comes from the dialect the context would actually build,
+/// so a wrong production rule fails the matrix instead of agreeing with itself. Both dimensions are
+/// exercised through the real constructor (version, edition) and the real converter resolution, so no
+/// server is involved and none is contacted.
 /// <para>
 /// Declared major <c>{absent,12,16,17}</c> × edition <c>{unset,1,2,3,4,5,6,8,9,11,12}</c> is the 44-pair
 /// capability matrix; adding the three storage forms yields the 132-row converter matrix. Every row is
@@ -286,21 +287,33 @@ internal sealed class T345ProbingUnversionedContext(DbConnection connection)
 /// </summary>
 public class T345CapabilityMatrixTests
 {
-    private static readonly int?[] MajorVersions = [null, 12, 16, 17];
-
-    private static readonly SqlServerEngineEdition?[] Editions =
+    /// <summary>
+    /// Independent expectation table, transcribed by hand from the frozen contract (major ≥ 17, or edition
+    /// 5/8/12) — deliberately NOT expressed with the same expression as <see cref="SqlServerDialect.SupportsJson"/>,
+    /// so a wrong rule fails the matrix.
+    /// </summary>
+    private static readonly (int? Major, SqlServerEngineEdition? Edition, bool Supports)[] Expected =
     [
-        null,
-        SqlServerEngineEdition.PersonalOrDesktop,
-        SqlServerEngineEdition.Standard,
-        SqlServerEngineEdition.Enterprise,
-        SqlServerEngineEdition.Express,
-        SqlServerEngineEdition.SqlDatabase,
-        SqlServerEngineEdition.AzureSynapseAnalytics,
-        SqlServerEngineEdition.AzureSqlManagedInstance,
-        SqlServerEngineEdition.AzureSqlEdge,
-        SqlServerEngineEdition.AzureSynapseServerlessSqlPoolOrMicrosoftFabric,
-        SqlServerEngineEdition.MicrosoftFabricSqlDatabase,
+        (null, null, false), (null, SqlServerEngineEdition.PersonalOrDesktop, false), (null, SqlServerEngineEdition.Standard, false),
+        (null, SqlServerEngineEdition.Enterprise, false), (null, SqlServerEngineEdition.Express, false), (null, SqlServerEngineEdition.SqlDatabase, true),
+        (null, SqlServerEngineEdition.AzureSynapseAnalytics, false), (null, SqlServerEngineEdition.AzureSqlManagedInstance, true),
+        (null, SqlServerEngineEdition.AzureSqlEdge, false), (null, SqlServerEngineEdition.AzureSynapseServerlessSqlPoolOrMicrosoftFabric, false),
+        (null, SqlServerEngineEdition.MicrosoftFabricSqlDatabase, true),
+        (12, null, false), (12, SqlServerEngineEdition.PersonalOrDesktop, false), (12, SqlServerEngineEdition.Standard, false),
+        (12, SqlServerEngineEdition.Enterprise, false), (12, SqlServerEngineEdition.Express, false), (12, SqlServerEngineEdition.SqlDatabase, true),
+        (12, SqlServerEngineEdition.AzureSynapseAnalytics, false), (12, SqlServerEngineEdition.AzureSqlManagedInstance, true),
+        (12, SqlServerEngineEdition.AzureSqlEdge, false), (12, SqlServerEngineEdition.AzureSynapseServerlessSqlPoolOrMicrosoftFabric, false),
+        (12, SqlServerEngineEdition.MicrosoftFabricSqlDatabase, true),
+        (16, null, false), (16, SqlServerEngineEdition.PersonalOrDesktop, false), (16, SqlServerEngineEdition.Standard, false),
+        (16, SqlServerEngineEdition.Enterprise, false), (16, SqlServerEngineEdition.Express, false), (16, SqlServerEngineEdition.SqlDatabase, true),
+        (16, SqlServerEngineEdition.AzureSynapseAnalytics, false), (16, SqlServerEngineEdition.AzureSqlManagedInstance, true),
+        (16, SqlServerEngineEdition.AzureSqlEdge, false), (16, SqlServerEngineEdition.AzureSynapseServerlessSqlPoolOrMicrosoftFabric, false),
+        (16, SqlServerEngineEdition.MicrosoftFabricSqlDatabase, true),
+        (17, null, true), (17, SqlServerEngineEdition.PersonalOrDesktop, true), (17, SqlServerEngineEdition.Standard, true),
+        (17, SqlServerEngineEdition.Enterprise, true), (17, SqlServerEngineEdition.Express, true), (17, SqlServerEngineEdition.SqlDatabase, true),
+        (17, SqlServerEngineEdition.AzureSynapseAnalytics, true), (17, SqlServerEngineEdition.AzureSqlManagedInstance, true),
+        (17, SqlServerEngineEdition.AzureSqlEdge, true), (17, SqlServerEngineEdition.AzureSynapseServerlessSqlPoolOrMicrosoftFabric, true),
+        (17, SqlServerEngineEdition.MicrosoftFabricSqlDatabase, true),
     ];
 
     private static readonly JsonColumnStorage[] Storages =
@@ -310,28 +323,15 @@ public class T345CapabilityMatrixTests
         JsonColumnStorage.Native,
     ];
 
-    /// <summary>The 44 declared (major, edition) pairs.</summary>
-    public static TheoryData<int?, SqlServerEngineEdition?> DeclaredPairs()
+    /// <summary>The 44 declared (major, edition) pairs, each carrying its own expected capability.</summary>
+    public static TheoryData<int?, SqlServerEngineEdition?, bool> DeclaredPairs()
     {
-        var data = new TheoryData<int?, SqlServerEngineEdition?>();
-        foreach (var major in MajorVersions)
-        {
-            foreach (var edition in Editions)
-                data.Add(major, edition);
-        }
+        var data = new TheoryData<int?, SqlServerEngineEdition?, bool>();
+        foreach (var row in Expected)
+            data.Add(row.Major, row.Edition, row.Supports);
 
         return data;
     }
-
-    /// <summary>
-    /// The independent oracle: the declared major is at least 17, or the declared edition is SQL Database
-    /// (5), Azure SQL Managed Instance (8) or Microsoft Fabric SQL database (12). Edition 11 is excluded.
-    /// </summary>
-    private static bool OracleSupportsJson(int? major, SqlServerEngineEdition? edition)
-        => major >= 17
-            || edition is SqlServerEngineEdition.SqlDatabase
-                or SqlServerEngineEdition.AzureSqlManagedInstance
-                or SqlServerEngineEdition.MicrosoftFabricSqlDatabase;
 
     private static Version? VersionOf(int? major) => major is { } value ? new Version(value, 0) : null;
 
@@ -343,14 +343,31 @@ public class T345CapabilityMatrixTests
         return $"M-{majorText}-E{editionText}-{storage}";
     }
 
+    [Fact]
+    public void ExpectationTable_ShouldCoverTheWholeDeclaredMatrix()
+    {
+        Expected.Should().HaveCount(44, "4 declared majors × 11 engine editions");
+        Expected.Select(row => row.Major).Distinct().Should().HaveCount(4, "the table declares 4 majors");
+        Expected
+            .GroupBy(row => row.Major)
+            .Should().OnlyContain(
+                group => group.Count() == 11,
+                "every declared major is paired with all 11 engine editions");
+        Expected
+            .Select(row => (row.Major, row.Edition))
+            .Distinct()
+            .Should().HaveCount(44, "no declared pair may be repeated or dropped");
+    }
+
     [Theory]
     [MemberData(nameof(DeclaredPairs))]
-    public void SupportsJson_ShouldFollowTheDeclaredVersionAndEdition(int? major, SqlServerEngineEdition? edition)
+    public void SupportsJson_ShouldFollowTheDeclaredVersionAndEdition(
+        int? major, SqlServerEngineEdition? edition, bool expected)
     {
         var dialect = new SqlServerDialect(VersionOf(major), edition);
 
         dialect.SupportsJson.Should().Be(
-            OracleSupportsJson(major, edition),
+            expected,
             "the capability is a function of the declared state only");
         dialect.NativeJsonProviderType.Should().Be(
             typeof(string),
@@ -358,47 +375,60 @@ public class T345CapabilityMatrixTests
     }
 
     /// <summary>
+    /// Negative control proving the matrix can fail: on major 12 the Enterprise cell (text only) and the
+    /// SQL Database cell (native) disagree. A rule of <c>major &gt;= 17</c> alone reports <c>false</c> for
+    /// both, so this is exactly the cell the pre-change rule got wrong — the table distinguishes the two rules.
+    /// </summary>
+    [Fact]
+    public void NegativeControl_EnterpriseAndSqlDatabaseOnMajorTwelve_ShouldDisagree()
+    {
+        var enterprise = new SqlServerDialect(new Version(12, 0), SqlServerEngineEdition.Enterprise);
+        var sqlDatabase = new SqlServerDialect(new Version(12, 0), SqlServerEngineEdition.SqlDatabase);
+
+        enterprise.SupportsJson.Should().BeFalse(
+            "major 12 with the Enterprise edition has no native json type");
+        sqlDatabase.SupportsJson.Should().BeTrue(
+            "the declared Azure SQL Database edition has the native json type even on major 12, "
+            + "which the pre-change version-only rule could not tell apart from Enterprise");
+    }
+
+    /// <summary>
     /// All 132 declared-state rows through the real converter factory: the resolved converter's provider
-    /// type (or the named refusal) must match the oracle for every (major, edition, storage) cell.
+    /// type (or the named refusal) must match the literal expectation for every (major, edition, storage) cell.
     /// </summary>
     [Fact]
     public void DeclaredStorageRows_ShouldResolveThroughTheConverterFactory()
     {
         var rows = 0;
 
-        foreach (var major in MajorVersions)
+        foreach (var row in Expected)
         {
-            var version = VersionOf(major);
+            var dialect = new SqlServerDialect(VersionOf(row.Major), row.Edition);
+            var supports = row.Supports;
+            dialect.SupportsJson.Should().Be(supports);
 
-            foreach (var edition in Editions)
+            foreach (var storage in Storages)
             {
-                var dialect = new SqlServerDialect(version, edition);
-                var supports = OracleSupportsJson(major, edition);
-                dialect.SupportsJson.Should().Be(supports);
+                rows++;
+                var id = CellId(row.Major, row.Edition, storage);
+                var converter = JsonColumnConverterFactory.Create(typeof(T345JsonDoc), storage);
 
-                foreach (var storage in Storages)
+                if (storage == JsonColumnStorage.Native && !supports)
                 {
-                    rows++;
-                    var id = CellId(major, edition, storage);
-                    var converter = JsonColumnConverterFactory.Create(typeof(T345JsonDoc), storage);
+                    var act = () => ((IJsonColumnConverter)converter).Resolve(dialect);
+                    act.Should().Throw<NotSupportedException>()
+                        .Which.Message.Should().Contain("SqlServerDialect").And.Contain("native JSON column");
 
-                    if (storage == JsonColumnStorage.Native && !supports)
-                    {
-                        var act = () => ((IJsonColumnConverter)converter).Resolve(dialect);
-                        act.Should().Throw<NotSupportedException>()
-                            .Which.Message.Should().Contain("SqlServerDialect").And.Contain("native JSON column");
-
-                        T345Evidence.Write($"{id} | supports=false | storage=exception");
-                        continue;
-                    }
-
-                    var resolved = ((IJsonColumnConverter)converter).Resolve(dialect);
-                    resolved.ProviderType.Should().Be(
-                        typeof(string),
-                        $"{id}: SQL Server transports a JSON column as a string in every configuration");
-
-                    T345Evidence.Write($"{id} | supports={supports.ToString().ToLowerInvariant()} | storage=resolved");
+                    T345Evidence.Write($"{id} | supports=false | storage=exception");
+                    continue;
                 }
+
+                var resolved = ((IJsonColumnConverter)converter).Resolve(dialect);
+                resolved.ProviderType.Should().Be(
+                    typeof(string),
+                    $"{id}: SQL Server transports a JSON column as a string in every configuration");
+
+                T345Evidence.Write($"{id} | supports={supports.ToString().ToLowerInvariant()} | storage=resolved");
             }
         }
 
