@@ -79,6 +79,7 @@ public sealed class T345JsonEditionRegressionTests : IDisposable
 {
     internal const string TextTable = "t345_json_text";
     internal const string NativeTable = "t345_json_native";
+    internal const string EvidenceVariable = "NEXTORM_T345_LIVE_EVIDENCE";
 
     private readonly int _major;
     private readonly int _engineEdition;
@@ -309,7 +310,19 @@ public sealed class T345JsonEditionRegressionTests : IDisposable
     private static string Describe(CapturedParameter parameter)
         => $"{parameter.Name}:clr={parameter.ClrType}:dbtype={parameter.DbType}:sqltype={parameter.SqlDbType}:size={parameter.Size}:value={parameter.Payload}";
 
-    private static void Report(string message) => Console.WriteLine(message);
+    /// <summary>
+    /// Writes an evidence line to the console and, when the run provides a path through
+    /// <see cref="EvidenceVariable"/>, to that file as well, so the matrix survives a passing run whose
+    /// console output is not echoed by the test platform (the same reason <c>T326Evidence</c> exists).
+    /// </summary>
+    private static void Report(string message)
+    {
+        Console.WriteLine(message);
+
+        var path = Environment.GetEnvironmentVariable(EvidenceVariable);
+        if (!string.IsNullOrEmpty(path))
+            File.AppendAllText(path, message + Environment.NewLine);
+    }
 
     private sealed record CapturedParameter(
         string Name,
