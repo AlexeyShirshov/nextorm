@@ -116,4 +116,62 @@ public class T323SelectGroupPlanCacheTests
         upperParameters[0].Value.Should().Be(10m);
         lowerSql.Should().NotContain("= 1", "the threshold is bound, never inlined");
     }
+
+    /// <summary>
+    /// The inferred form is a terminal on an ordinary builder: it must not leave any state behind, so
+    /// the same builder still renders the plain projection with no grouping.
+    /// </summary>
+    [Fact]
+    public void Builder_ShouldNotBeMutatedBySelectGroup()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var builder = ctx.From<T323LegacyEntity>();
+
+        SqlOf(ctx, builder.SelectGroup(x => new { x.Id, C = SqlFunctions.Sql.count() }))
+            .Should().Contain("group by", "the SelectGroup call itself groups");
+
+        var plain = SqlOf(ctx, builder.Select(x => new { x.Id }));
+
+        plain.Should().NotContain("group by",
+            "SelectGroup must not leave the opt-in state on the builder it was called on");
+        plain.Should().Be(
+            SqlOf(ctx, ctx.From<T323LegacyEntity>().Select(x => new { x.Id })),
+            "the reused builder renders the identical plain statement a fresh builder does");
+    }
+
+    /// <summary>
+    /// The opt-in flag is a plan-key term, so the hash-based comparer must never merge the inferred
+    /// form with the explicit form whose SQL is identical. Only equality is asserted: a hash collision
+    /// between two unequal plans is allowed by the comparer contract (equal plans must hash equally,
+    /// unequal plans may collide), so a distinct-hash assertion would pin an implementation detail.
+    /// The cache-key half proves the flag survives <see cref="QueryCommand.CloneForCache"/>, which is
+    /// exactly how the flag reaches the stored key.
+    /// </summary>
+    [Fact]
+    public void SelectGroup_ShouldKeepDistinctPlanIdentityFromExplicit()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var selectGroup = ctx.From<T323LegacyEntity>()
+            .SelectGroup(x => new { x.Id, C = SqlFunctions.Sql.count() });
+        var explicitForm = ctx.From<T323LegacyEntity>()
+            .GroupBy(x => x.Id)
+            .Select(x => new { x.Id, C = SqlFunctions.Sql.count() });
+
+        PreparePlan(selectGroup);
+        PreparePlan(explicitForm);
+
+        var comparer = selectGroup.GetQueryPlanEqualityComparer();
+        comparer.Equals(selectGroup, explicitForm).Should().BeFalse(
+            "the rendered SQL is equal but the plan identity is not");
+
+        var selectGroupKey = selectGroup.CloneForCache();
+        var explicitKey = explicitForm.CloneForCache();
+
+        selectGroupKey.IsSelectGroup.Should().BeTrue("the stored plan key must carry the opt-in flag");
+        explicitKey.IsSelectGroup.Should().BeFalse("the explicit form's key must not acquire the flag");
+        comparer.Equals(selectGroupKey, explicitKey).Should().BeFalse(
+            "the two cache keys must not merge: their SQL is equal, their plan identity is not");
+    }
 }
