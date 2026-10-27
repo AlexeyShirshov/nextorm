@@ -443,6 +443,25 @@ public class T320RuntimeTvfOverloadMatrixTests
         sql.Should().Contain("where t3.Id = t1.Id", "slot 1 is this command's FROM source");
         sql.Should().NotContain("where t3.Id = t2.Id", "slot 2 is the joined occurrence and is not the addressed left row");
         sql.Should().Contain("t4.Id", "the applied source is the next flat slot, never nested inside Item1");
+
+        // T343 / #343: the same arity-2 joined receiver, now applied to a runtime-factory TVF body. This is
+        // the exact shape the flat transition refused before the fix: the TVF is the applied source, the
+        // correlated argument addresses this command's FROM slot (t1) — never the joined occurrence (t2) —
+        // and the applied row is the next flat slot (t4), never nested inside Item1.
+        var factoryJoined = ctx.From<T320MatrixRow>()
+            .Join(ctx.From<T320MatrixRow>(), (first, second) => first.Id == second.Id)
+            .CrossApply(projection => T320MatrixTvf.Echo(projection.Item1.Id))
+            .Select(p => new { From = p.Item1.Id, Joined = p.Item2.Id, Applied = p.Item3.Id });
+
+        var factorySql = T324ApplyFixture.SqlOf(ctx, factoryJoined);
+
+        factorySql.Should().Contain("cross apply ", "a runtime factory is applied through the flat transition");
+        factorySql.Should().Contain("echo_rows(", "the factory call stays the applied source");
+        factorySql.Should().MatchRegex(@"echo_rows\([^)]*t1\.Id",
+            "the correlated argument addresses slot 1, this command's FROM source");
+        factorySql.Should().NotMatchRegex(@"echo_rows\([^)]*t2\.Id",
+            "slot 2 is the joined occurrence and is not the addressed left row");
+        factorySql.Should().Contain("t4.Id", "the applied source is the next flat slot, never nested inside Item1");
     }
 
     /// <summary>A null lambda source stays an <see cref="ArgumentNullException"/> on the joined and named receivers.</summary>
