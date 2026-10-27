@@ -1122,14 +1122,14 @@ namespace NextORM.Core;
         /// <paramref name="pid"/> (<c>pg_blocking_pids(pid)</c>); an empty array when nothing blocks it.
         /// Gated per name by <see cref="IScalarFunctions.Supports"/>.
         /// </summary>
-        public int?[] pg_blocking_pids(int? pid) => default!;
+        public int[]? pg_blocking_pids(int? pid) => default!;
 
         /// <summary>
         /// The process IDs of the sessions holding a safe-snapshot conflict that blocks the session
         /// <paramref name="pid"/> (<c>pg_safe_snapshot_blocking_pids(pid)</c>). Gated per name by
         /// <see cref="IScalarFunctions.Supports"/>.
         /// </summary>
-        public int?[] pg_safe_snapshot_blocking_pids(int? pid) => default!;
+        public int[]? pg_safe_snapshot_blocking_pids(int? pid) => default!;
 
         /// <summary>
         /// The current nesting depth of trigger execution (<c>pg_trigger_depth()</c>), zero outside a
