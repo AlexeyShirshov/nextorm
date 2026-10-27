@@ -13,6 +13,16 @@
 - **Важно:** не утверждать без проверки, что исходники буквально перенесены или API сохранился один к одному.
 - **Редакционное следствие:** прежний тезис «Nextorm не попытка повторить WORM, а полное переосмысление ответственности ORM» **слишком категоричен**. Правильнее показать преемственность ядра идей и точечные, но существенные архитектурные упрощения.
 
+## Центральная преемственность: объект-команда запроса (устное уточнение 27.10.2026)
+
+- Автор вспомнил, что **основой WORM уже был объект со всеми аспектами запроса** (SELECT, WHERE, ORDER BY, GROUP BY и др.). Точное имя в коде — [`QueryCmd`](https://github.com/AlexeyShirshov/oml/blob/Worm2010/obm/QueryCmd/QueryCmd.vb#L18-L25); свойства [`FromClause` и `SelectClause`](https://github.com/AlexeyShirshov/oml/blob/Worm2010/obm/QueryCmd/QueryCmd.vb#L2570-L2589).
+- **LINQ-провайдер добавлен к этой уже существовавшей системе:** он переводил `System.Linq.Expressions` в внутренний `QueryCmd`/фильтры; SQL затем строился по внутренней модели ([`WormLinqProvider`](https://github.com/AlexeyShirshov/oml/blob/Worm2010/net3.5/linqprovider/Provider.vb#L69-L75), [`QueryVisitor.VisitMethodCall`](https://github.com/AlexeyShirshov/oml/blob/Worm2010/net3.5/linqprovider/Provider.vb#L1017-L1060)).
+- **В Nextorm центральный объект сохранился как концепция, здесь уже буквально называется `QueryCommand`:** содержит условия, группировку, сортировку, проекции и другие части запроса как лямбды/другие объекты ([`QueryCommand.cs`](https://github.com/AlexeyShirshov/nextorm/blob/main/src/nextorm.core/Query/QueryCommand.cs#L65-L86), [`EntityBuilder.SelectCore`](https://github.com/AlexeyShirshov/nextorm/blob/main/src/nextorm.core/Builders/EntityBuilder.cs#L343-L371)).
+- **Архитектурная эволюция:** в Nextorm `Expression<Func<...>>` являются нативным описанием частей `QueryCommand`, а не только входом отдельного LINQ-провайдера; поддержка `IQueryable`/обычного LINQ-провайдера — другая ответственность, её **не приписывать Nextorm** только по факту работы с деревьями выражений.
+- **Мотивация автора:** сохранённый объектный граф запроса + нативная обработка и компиляция выражений позволили сделать высокопроизводительную реализацию. Это воспоминание об архитектурной мотивации, **не доказательство**, что вся трансляция SQL реализована через `Expression.Compile()`.
+- **Уточнение по фактическому коду:** SQL всё ещё строится обходом деревьев (`BaseExpressionVisitor`, `PredicateTranslator`, `SqlBuilder`); [`RowMapperFactory`](https://github.com/AlexeyShirshov/nextorm/blob/main/src/nextorm.core/DataContext/RowMapperFactory.cs#L339-L366) компилирует отдельное выражение `IDataRecord → TResult` для быстрого отображения строки. Не смешивать **трансляцию Expression в SQL** с **компиляцией Expression в исполняемый делегат**.
+- **Редакционный вывод:** не описывать Nextorm как отказ от промежуточного `QueryCommand`. Ключевая сквозная идея — **структурный объект-команда между пользовательским API и SQL**; отличается способ наполнения объекта и обработки его выражений.
+
 ## Производительность — преемственная цель (уточнение автора, 27.10.2026)
 
 - **Авторская мотивация:** высокая производительность была одной из целей ещё при разработке WORM; именно стремление к скорости побуждало к широкому кэшированию.
