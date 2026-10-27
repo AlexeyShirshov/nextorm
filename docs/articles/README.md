@@ -1,6 +1,9 @@
 # Articles — рабочие материалы
 
 - [01. Постановка проблемы — тезисы](01-problem-statement.md)
+- [Карта преемственности WORM и Nextorm по коду](worm-nextorm-code-comparison.md)
+- [Исторический бриф WORM](oml-history-brief.md)
+- [Авторские тезисы: зачем переписан WORM](author-notes-01-reasons-for-nextorm.md)
 - [Источники и навигация по истории](sources.md)
 
 ## Формат
