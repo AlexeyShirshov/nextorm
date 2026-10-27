@@ -57,12 +57,135 @@ ClickHouse рендерит `dateTrunc('part', x)`, `addDays`/`addMonths`/.../`a
 ## Функции только для MySQL
 
 Имена из [`SqlFunctions.MySql`](../guide/provider-specific-sql/mysql.md) рендерятся только провайдером
-MySQL; MariaDB, PostgreSQL, SQL Server, SQLite, ClickHouse и in-memory-провайдер отклоняют их с
-`NotSupportedException`.
+MySQL; PostgreSQL, SQL Server, SQLite, ClickHouse и in-memory-провайдер отклоняют их с
+`NotSupportedException`. Каждое имя ниже **проверено только на MySQL 8.4**: MariaDB отклоняет имена,
+добавленные в этом срезе, до собственной проверки ([#284](https://github.com/AlexeyShirshov/nextorm/issues/284)),
+а имена только для MariaDB остаются в отдельном разделе ниже.
 
-| Член | SQL | Результат | Доступность |
+Каталог содержит 86 новых членов и два имени, которые уже были покрыты (`json_storage_free`, поставлен
+в предыдущем срезе, и кросс-провайдерный `connection_id`); три отклонённых имени перечислены в разделе
+[Отказы MySQL](#отказы-mysql).
+
+| Семейство | Член | SQL MySQL | Примечания |
 |---|---|---|---|
-| `json_storage_free(json)` | `json_storage_free(...)` | `long?` — байты, освобождённые в бинарном значении `JSON`-колонки при частичном `JSON_SET`/`JSON_REPLACE`/`JSON_REMOVE`; `0`, если ничего не освободилось, `null` для SQL NULL | [только MySQL](../guide/provider-specific-sql/mysql.md#native-functions); MariaDB отклоняет |
+| Строковые | `bin(value)` | `BIN(value)` | двоичная форма беззнакового 64-битного значения, без префикса `0b` |
+| Строковые | `export_set(bits, on, off[, separator[, count]])` | `EXPORT_SET(...)` | битовая строка от младшего бита; константный `count` вне `[0, 64]` отклоняется |
+| Строковые | `hex(value)` | `HEX(value)` | шестнадцатеричная форма бинарных данных, байтов строки или 64-битного целого |
+| Строковые | `make_set(bits, values...)` | `MAKE_SET(...)` | значения через запятую, чья позиция с 1 соответствует установленному биту |
+| Строковые | `oct(value)` | `OCT(value)` | восьмеричная форма беззнакового 64-битного значения |
+| Строковые | `ord(value)` | `ORD(value)` | код самого левого символа, `0` для пустой строки |
+| Строковые | `quote(value)` | `QUOTE(value)` | SQL-литерал в одинарных кавычках с экранированием кавычек и обратных слэшей; слово `NULL` для SQL NULL |
+| Строковые | `soundex(value)` | `SOUNDEX(value)` | четырёхсимвольный код Soundex, пустая строка, если в значении нет букв |
+| Строковые | `strcmp(left, right)` | `STRCMP(...)` | `-1`/`0`/`1` по порядку сопоставления, `null` при SQL NULL любого аргумента |
+| Строковые | `to_base64(value)` | `TO_BASE64(...)` | Base64 бинарных данных с переносом строк каждые 76 символов |
+| Строковые | `from_base64(text)` | `FROM_BASE64(...)` | `null`, если текст не является корректным Base64 |
+| Строковые | `unhex(text)` | `UNHEX(...)` | `null` при нечётной длине или не шестнадцатеричном символе |
+| Строковые | `weight_string(value[, cast, length])` | `WEIGHT_STRING(...)` | только модификаторы `AS CHAR(N)`/`AS BINARY(N)`, оба — константы времени компиляции |
+| Числовые | `conv(value, fromBase, toBase)` | `CONV(...)` | целевые основания `2`–`36`, `-1` для знаковой интерпретации |
+| Числовые | `crc32(value)` | `CRC32(...)` | беззнаковая 32-битная контрольная сумма CRC-32, расширенная до `long` |
+| Числовые | `log2(value)` | `LOG2(...)` | логарифм по основанию 2 |
+| Числовые | `rand([seed])` | `RAND([seed])` | `double` в `[0, 1)`; с seed последовательность повторяется |
+| Числовые | `truncate(value, places)` | `TRUNCATE(...)` | усечение к нулю; при отрицательном счётчике целая часть обнуляется |
+| Бит | `bit_count(value)` | `BIT_COUNT(...)` | число установленных битов в 64-битном представлении значения |
+| Дата/время | `adddate(date, days)` | `ADDDATE(...)` | только форма с числом дней; форма с `INTERVAL` не моделируется |
+| Дата/время | `addtime(datetime, time)` | `ADDTIME(...)` | прибавляет длительность |
+| Дата/время | `convert_tz(datetime, from, to)` | `CONVERT_TZ(...)` | зоны IANA; `null`, если сервер не знает зону |
+| Дата/время | `dayname(date)` | `DAYNAME(...)` | название дня недели, например `Wednesday` |
+| Дата/время | `from_days(days)` | `FROM_DAYS(...)` | дата по номеру дня, считая от года 0 |
+| Дата/время | `get_format(kind, format)` | `GET_FORMAT(...)` | типизированный `MySqlFormatKind` плюс литеральное имя формата (`USA`, `JIS`, `ISO`, `EUR`, `INTERNAL`) |
+| Дата/время | `makedate(year, dayOfYear)` | `MAKEDATE(...)` | `null`, если день выходит за пределы года |
+| Дата/время | `maketime(hour, minute, second)` | `MAKETIME(...)` | `null`, если какая-либо часть вне диапазона |
+| Дата/время | `microsecond(datetime)` | `MICROSECOND(...)` | микросекундная часть, `0`–`999999` |
+| Дата/время | `monthname(date)` | `MONTHNAME(...)` | название месяца, например `May` |
+| Дата/время | `period_add(period, months)` | `PERIOD_ADD(...)` | период `YYMM`/`YYYYMM`, сдвинутый на число месяцев |
+| Дата/время | `period_diff(period1, period2)` | `PERIOD_DIFF(...)` | число месяцев между двумя периодами `YYMM`/`YYYYMM` |
+| Дата/время | `sec_to_time(seconds)` | `SEC_TO_TIME(...)` | длительность; дробный вход сохраняет дробную часть |
+| Дата/время | `subdate(date, days)` | `SUBDATE(...)` | только форма с числом дней |
+| Дата/время | `subtime(datetime, time)` | `SUBTIME(...)` | вычитает длительность |
+| Дата/время | `time(datetime)` | `TIME(...)` | часть времени суток |
+| Дата/время | `time_format(time, format)` | `TIME_FORMAT(...)` | форматирование длительности по `%`-шаблону |
+| Дата/время | `time_to_sec(time)` | `TIME_TO_SEC(...)` | целые секунды: MySQL 8.4 отбрасывает дробную часть аргумента |
+| Дата/время | `timediff(datetime1, datetime2)` | `TIMEDIFF(...)` | длительность между двумя значениями |
+| Дата/время | `timestamp(datetime)` | `TIMESTAMP(...)` | значение как `DATETIME` |
+| Дата/время | `to_days(date)` | `TO_DAYS(...)` | номер дня, считая от года 0 |
+| Дата/время | `to_seconds(date)` | `TO_SECONDS(...)` | номер секунды, считая от года 0 |
+| Дата/время | `yearweek(date[, mode])` | `YEARWEEK(...)` | год и неделя по режиму по умолчанию или по явно заданному режиму |
+| JSON | `json_array(values...)` | `JSON_ARRAY(...)` | каждый аргумент — SQL-значение, поэтому строки становятся JSON-строками |
+| JSON | `json_arrayagg(value)` | `JSON_ARRAYAGG(...)` | собирает значения группы в один JSON-массив |
+| JSON | `json_arrow(column, path)` | `column -> 'path'` | требует JSON-колонку слева и литерал пути времени компиляции справа |
+| JSON | `json_arrow_text(column, path)` | `column ->> 'path'` | некавыченная форма `->`; те же ограничения на колонку и литерал |
+| JSON | `json_contains(target, candidate[, path])` | `JSON_CONTAINS(...)` | `1`, если кандидат содержится в цели |
+| JSON | `json_contains_path(json, oneOrAll, paths...)` | `JSON_CONTAINS_PATH(...)` | режим должен быть литералом `'one'` или `'all'`, а каждый путь — литералом |
+| JSON | `json_merge(first, second[, rest...])` | `JSON_MERGE(...)` | слияние с сохранением дублей; MySQL считает его устаревшим в пользу пары patch/preserve |
+| JSON | `json_object(keyValues...)` | `JSON_OBJECT(...)` | чередующиеся ключи и значения; число аргументов должно быть чётным, ключи — строками |
+| JSON | `json_objectagg(key, value)` | `JSON_OBJECTAGG(...)` | собирает пары ключ/значение группы в один JSON-объект |
+| JSON | `json_overlaps(left, right)` | `JSON_OVERLAPS(...)` | `1`, если у документов есть хотя бы одно общее значение |
+| JSON | `json_pretty(json)` | `JSON_PRETTY(...)` | переформатирует документ для читаемости |
+| JSON | `json_quote(value)` | `JSON_QUOTE(...)` | значение как JSON-строковый литерал |
+| JSON | `json_schema_valid(schema, document)` | `JSON_SCHEMA_VALID(...)` | `1`, если документ проходит проверку по схеме |
+| JSON | `json_schema_validation_report(schema, document)` | `JSON_SCHEMA_VALIDATION_REPORT(...)` | JSON-отчёт о проверке |
+| JSON | `json_search(json, oneOrAll, search[, escape[, paths...]])` | `JSON_SEARCH(...)` | режим должен быть `'one'` или `'all'`; escape — один символ |
+| JSON | `json_storage_size(json)` | `JSON_STORAGE_SIZE(...)` | байты, занятые хранимым представлением |
+| JSON | `json_storage_free(json)` | `JSON_STORAGE_FREE(...)` | поставлен в предыдущем срезе: байты, освобождённые в бинарном значении `JSON`-колонки при частичном обновлении на месте, `0`, если ничего не освободилось, `null` для SQL NULL — см. [руководство по MySQL](../guide/provider-specific-sql/mysql.md#нативные-функции) |
+| JSON | `member_of(value, jsonArray)` | `value MEMBER OF (jsonArray)` | аргумент-массив должен быть литералом JSON-массива времени компиляции |
+| Агрегатные | `bit_and(value)` | `BIT_AND(value)` | побитовое AND всех не-null значений группы, `null` для пустой группы |
+| Агрегатные | `bit_or(value)` | `BIT_OR(value)` | побитовое OR всех не-null значений группы |
+| Агрегатные | `bit_xor(value)` | `BIT_XOR(value)` | побитовое XOR всех не-null значений группы |
+| Шифрование/сжатие/хеш | `aes_encrypt(data, key[, iv, kdf, salt, iterations])` | `AES_ENCRYPT(...)` | MySQL 8.4 по умолчанию использует `aes-128-ecb` |
+| Шифрование/сжатие/хеш | `aes_decrypt(data, key[, iv, kdf, salt, iterations])` | `AES_DECRYPT(...)` | `null` при некорректном входе или дополнении |
+| Шифрование/сжатие/хеш | `compress(value)` | `COMPRESS(...)` | zlib с префиксом длины несжатых данных |
+| Шифрование/сжатие/хеш | `uncompress(value)` | `UNCOMPRESS(...)` | `null`, если вход не является сжатым значением |
+| Шифрование/сжатие/хеш | `uncompressed_length(value)` | `UNCOMPRESSED_LENGTH(...)` | длина из заголовка `COMPRESS` |
+| Шифрование/сжатие/хеш | `random_bytes(length)` | `RANDOM_BYTES(...)` | криптографически случайные байты |
+| Шифрование/сжатие/хеш | `validate_password_strength(password)` | `VALIDATE_PASSWORD_STRENGTH(...)` | оценка зависит от конфигурации проверки паролей на сервере |
+| Шифрование/сжатие/хеш | `statement_digest(statement)` | `STATEMENT_DIGEST(...)` | SHA-256-дайджест нормализованного текста инструкции |
+| Шифрование/сжатие/хеш | `statement_digest_text(statement)` | `STATEMENT_DIGEST_TEXT(...)` | нормализованная форма текста инструкции |
+| Информация | `connection_id()` | — | уже покрыто кросс-провайдерным `CommonFunctions.connection_id()`, рендерится как `CAST(CONNECTION_ID() AS UNSIGNED)`; см. [Информация о сессии и сервере](09-system-functions.md#информация-о-сессии-и-сервере-кросс-провайдерная) |
+| Информация | `found_rows()` | `FOUND_ROWS()` | число строк, которое вернул бы последний `SELECT` без своего `LIMIT` |
+| Информация | `last_insert_id([value])` | `LAST_INSERT_ID(...)` | первое автоматически сгенерированное значение последней вставки в этом соединении |
+| Информация | `row_count()` | `ROW_COUNT()` | число строк, затронутых последней инструкцией в этом соединении |
+| Информация | `current_role()` | `CURRENT_ROLE()` | активные роли, `NONE`, если роль не активна |
+| Информация | `charset(expression)` | `CHARSET(...)` | набор символов выражения |
+| Информация | `collation(expression)` | `COLLATION(...)` | сопоставление выражения |
+| Информация | `coercibility(expression)` | `COERCIBILITY(...)` | значение coercibility, используемое для разрешения конфликтов сопоставления |
+| Информация | `benchmark(count, expression)` | `BENCHMARK(...)` | вычисляет выражение `count` раз ради побочных эффектов и возвращает `0` |
+| Информация | `icu_version()` | `ICU_VERSION()` | версия ICU, с которой собран сервер; пустая строка, если ICU нет |
+| Прочее | `uuid_short()` | `UUID_SHORT()` | 64-битный идентификатор, уникальный для экземпляра сервера |
+| Прочее | `is_uuid(value)` | `IS_UUID(...)` | `1` для синтаксически корректного строкового UUID, `null` для SQL NULL |
+| Прочее | `sleep(seconds)` | `SLEEP(...)` | приостанавливает инструкцию, возвращает `0` или `1`, если сон прерван |
+| Прочее | `grouping(expressions...)` | `GROUPING(...)` | битовая карта rollup; каждый аргумент должен совпадать с выражением `GROUP BY` — это обязанность вызывающего кода |
+| Прочее | `name_const(name, value)` | `NAME_CONST(...)` | возвращает значение под меткой колонки, заданной литералом времени компиляции |
+| Прочее | `column_default(column)` | `DEFAULT(column)` | значение по умолчанию именованной колонки; аргумент обязан быть ссылкой на колонку |
+
+### Ограничения поведения MySQL
+
+Эти формы проверяются до эмиссии любого SQL; несоответствующий вызов отклоняется с
+`NotSupportedException`, а не рендерится с другой семантикой:
+
+* `column_default` требует ссылку на отображаемую колонку — константы, параметры, приведения и
+  вычисляемые выражения отклоняются.
+* `->` и `->>` требуют JSON-колонку слева и литерал пути времени компиляции справа.
+* `json_object` требует чётного числа аргументов со строковыми ключами.
+* `json_contains_path` и `json_search` требуют литерал `'one'` или `'all'` и литеральные пути.
+* `json_search` принимает escape из одного символа.
+* `get_format` принимает типизированный вид (`MySqlFormatKind`) и литеральное имя формата.
+* `weight_string` поддерживает только модификаторы `AS CHAR(N)`/`AS BINARY(N)`, оба — константы
+  времени компиляции.
+* `time_to_sec` возвращает целые секунды: MySQL 8.4 отбрасывает дробную часть аргумента.
+* `name_const` требует литеральное имя времени компиляции; `member_of` требует литеральный JSON-массив.
+
+### Отказы MySQL
+
+Три имени вендора отклоняются намеренно: член существует только чтобы нести отказ, бросает
+`NotSupportedException` до эмиссии любого SQL и покрыт тестом с положительным контролем на том же
+провайдере. Точные сообщения перечислены в
+[руководстве по MySQL](../guide/provider-specific-sql/mysql.md#ограничения-и-отказы).
+
+| Отклонённое имя | Причина | Куда обращаться |
+|---|---|---|
+| `uuid` | `UUID()` генерирует значение версии 1; контракт UUID в этом API — v4 (`gen_random_uuid`) или v7 (`uuidv7`), и значение v1 никогда не подставляется вместо него | `uuidv7()` или `UUID()` в сыром SQL, если v1 действительно нужен |
+| `values` | у `VALUES(column)` нет контракта скалярного выражения — имя ссылается на новую строку только внутри построителя upsert — и оно устарело в MySQL 8.4 | API upsert построителя мутаций |
+| `json_table` | конструирует таблицу: нужна позиция `FROM`/join и список определений `COLUMNS`, поэтому это не скалярная функция | сырой SQL или обёртка `[SqlFunction]` |
 
 ## Функции JSON только для MariaDB
 

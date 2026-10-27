@@ -57,12 +57,134 @@ ClickHouse renders `dateTrunc('part', x)`, `addDays`/`addMonths`/.../`addSeconds
 ## MySQL-specific functions
 
 The names on [`SqlFunctions.MySql`](../guide/provider-specific-sql/mysql.md) render only on the MySQL
-provider; MariaDB, PostgreSQL, SQL Server, SQLite, ClickHouse and the in-memory provider reject them
-with `NotSupportedException`.
+provider; PostgreSQL, SQL Server, SQLite, ClickHouse and the in-memory provider reject them with
+`NotSupportedException`. Every name below is **verified against MySQL 8.4 only**: MariaDB refuses the
+names added by this slice until its own verification ([#284](https://github.com/AlexeyShirshov/nextorm/issues/284)),
+while the MariaDB-only names keep their separate section below.
 
-| Member | SQL | Result | Availability |
+The catalogue holds 86 newly delivered members plus the two names that were already covered
+(`json_storage_free`, delivered in an earlier slice, and the cross-provider `connection_id`); the three
+refused names are listed in [MySQL refusals](#mysql-refusals).
+
+| Family | Member | MySQL SQL | Notes |
 |---|---|---|---|
-| `json_storage_free(json)` | `json_storage_free(...)` | `long?` — bytes freed in the binary `JSON` column value by a partial `JSON_SET`/`JSON_REPLACE`/`JSON_REMOVE`; `0` when nothing was freed, `null` for SQL NULL | [MySQL only](../guide/provider-specific-sql/mysql.md#native-functions); MariaDB rejects it |
+| String | `bin(value)` | `BIN(value)` | binary form of an unsigned 64-bit value, without a `0b` prefix |
+| String | `export_set(bits, on, off[, separator[, count]])` | `EXPORT_SET(...)` | bit string read from the least significant bit; a constant `count` outside `[0, 64]` is refused |
+| String | `hex(value)` | `HEX(value)` | hexadecimal form of binary data, a string's bytes or a 64-bit integer |
+| String | `make_set(bits, values...)` | `MAKE_SET(...)` | comma-separated values whose 1-based position matches a set bit |
+| String | `oct(value)` | `OCT(value)` | octal form of an unsigned 64-bit value |
+| String | `ord(value)` | `ORD(value)` | code of the leftmost character, `0` for an empty string |
+| String | `quote(value)` | `QUOTE(value)` | single-quoted SQL literal with quotes and backslashes escaped; the bare word `NULL` for SQL NULL |
+| String | `soundex(value)` | `SOUNDEX(value)` | four-character Soundex code, empty when the value has no letters |
+| String | `strcmp(left, right)` | `STRCMP(...)` | `-1`/`0`/`1` by collation order, `null` when an argument is SQL NULL |
+| String | `to_base64(value)` | `TO_BASE64(...)` | Base64 of binary data, wrapped at 76 characters per line |
+| String | `from_base64(text)` | `FROM_BASE64(...)` | `null` when the text is not valid Base64 |
+| String | `unhex(text)` | `UNHEX(...)` | `null` for an odd length or a non-hexadecimal character |
+| String | `weight_string(value[, cast, length])` | `WEIGHT_STRING(...)` | only the `AS CHAR(N)`/`AS BINARY(N)` modifiers, both compile-time constants |
+| Numeric | `conv(value, fromBase, toBase)` | `CONV(...)` | target bases `2`–`36`, `-1` for a signed interpretation |
+| Numeric | `crc32(value)` | `CRC32(...)` | unsigned 32-bit CRC-32 checksum widened to `long` |
+| Numeric | `log2(value)` | `LOG2(...)` | base-2 logarithm |
+| Numeric | `rand([seed])` | `RAND([seed])` | `double` in `[0, 1)`; a seed repeats the sequence |
+| Numeric | `truncate(value, places)` | `TRUNCATE(...)` | truncation toward zero; a negative count zeroes the integer part |
+| Bit | `bit_count(value)` | `BIT_COUNT(...)` | set bits in the 64-bit representation of the value |
+| Date/time | `adddate(date, days)` | `ADDDATE(...)` | numeric-days form only; the `INTERVAL` unit form is not modelled |
+| Date/time | `addtime(datetime, time)` | `ADDTIME(...)` | adds a duration |
+| Date/time | `convert_tz(datetime, from, to)` | `CONVERT_TZ(...)` | IANA zones; `null` when the server does not know a zone |
+| Date/time | `dayname(date)` | `DAYNAME(...)` | weekday name, for example `Wednesday` |
+| Date/time | `from_days(days)` | `FROM_DAYS(...)` | date of a day number counted from year 0 |
+| Date/time | `get_format(kind, format)` | `GET_FORMAT(...)` | typed `MySqlFormatKind` plus a literal format name (`USA`, `JIS`, `ISO`, `EUR`, `INTERNAL`) |
+| Date/time | `makedate(year, dayOfYear)` | `MAKEDATE(...)` | `null` when the day falls outside the year |
+| Date/time | `maketime(hour, minute, second)` | `MAKETIME(...)` | `null` when a part is out of range |
+| Date/time | `microsecond(datetime)` | `MICROSECOND(...)` | microseconds part, `0`–`999999` |
+| Date/time | `monthname(date)` | `MONTHNAME(...)` | month name, for example `May` |
+| Date/time | `period_add(period, months)` | `PERIOD_ADD(...)` | `YYMM`/`YYYYMM` period shifted by a month count |
+| Date/time | `period_diff(period1, period2)` | `PERIOD_DIFF(...)` | months between two `YYMM`/`YYYYMM` periods |
+| Date/time | `sec_to_time(seconds)` | `SEC_TO_TIME(...)` | duration; a fractional input keeps its fraction |
+| Date/time | `subdate(date, days)` | `SUBDATE(...)` | numeric-days form only |
+| Date/time | `subtime(datetime, time)` | `SUBTIME(...)` | subtracts a duration |
+| Date/time | `time(datetime)` | `TIME(...)` | time-of-day part |
+| Date/time | `time_format(time, format)` | `TIME_FORMAT(...)` | `%`-templated duration formatting |
+| Date/time | `time_to_sec(time)` | `TIME_TO_SEC(...)` | whole seconds: MySQL 8.4 discards any sub-second component |
+| Date/time | `timediff(datetime1, datetime2)` | `TIMEDIFF(...)` | duration between two values |
+| Date/time | `timestamp(datetime)` | `TIMESTAMP(...)` | the value as `DATETIME` |
+| Date/time | `to_days(date)` | `TO_DAYS(...)` | day number counted from year 0 |
+| Date/time | `to_seconds(date)` | `TO_SECONDS(...)` | second number counted from year 0 |
+| Date/time | `yearweek(date[, mode])` | `YEARWEEK(...)` | year and week under the default or an explicit week mode |
+| JSON | `json_array(values...)` | `JSON_ARRAY(...)` | each argument is a SQL value, so strings become JSON strings |
+| JSON | `json_arrayagg(value)` | `JSON_ARRAYAGG(...)` | aggregates the group's values into one JSON array |
+| JSON | `json_arrow(column, path)` | `column -> 'path'` | requires a mapped JSON column and a compile-time path literal |
+| JSON | `json_arrow_text(column, path)` | `column ->> 'path'` | unquoted form of `->`; same column and literal restriction |
+| JSON | `json_contains(target, candidate[, path])` | `JSON_CONTAINS(...)` | `1` when the candidate is contained in the target |
+| JSON | `json_contains_path(json, oneOrAll, paths...)` | `JSON_CONTAINS_PATH(...)` | the mode must be the literal `'one'` or `'all'` and every path a literal |
+| JSON | `json_merge(first, second[, rest...])` | `JSON_MERGE(...)` | duplicate-preserving merge, deprecated by MySQL in favour of the patch/preserve pair |
+| JSON | `json_object(keyValues...)` | `JSON_OBJECT(...)` | alternating key/value arguments; the count must be even and the keys strings |
+| JSON | `json_objectagg(key, value)` | `JSON_OBJECTAGG(...)` | aggregates key/value pairs into one JSON object |
+| JSON | `json_overlaps(left, right)` | `JSON_OVERLAPS(...)` | `1` when the documents share at least one value |
+| JSON | `json_pretty(json)` | `JSON_PRETTY(...)` | re-indents the document for readability |
+| JSON | `json_quote(value)` | `JSON_QUOTE(...)` | the value as a JSON string literal |
+| JSON | `json_schema_valid(schema, document)` | `JSON_SCHEMA_VALID(...)` | `1` when the document validates against the schema |
+| JSON | `json_schema_validation_report(schema, document)` | `JSON_SCHEMA_VALIDATION_REPORT(...)` | JSON report of the validation |
+| JSON | `json_search(json, oneOrAll, search[, escape[, paths...]])` | `JSON_SEARCH(...)` | the mode must be `'one'` or `'all'`; the escape must be a single character |
+| JSON | `json_storage_size(json)` | `JSON_STORAGE_SIZE(...)` | bytes used by the stored representation |
+| JSON | `json_storage_free(json)` | `JSON_STORAGE_FREE(...)` | already delivered in an earlier slice: bytes freed in a binary `JSON` column value by a partial in-place update, `0` when nothing was freed, `null` for SQL NULL — see the [MySQL guide](../guide/provider-specific-sql/mysql.md#native-functions) |
+| JSON | `member_of(value, jsonArray)` | `value MEMBER OF (jsonArray)` | the array argument must be a compile-time JSON array literal |
+| Aggregate | `bit_and(value)` | `BIT_AND(value)` | bitwise AND of every non-null value in the group, `null` for an empty group |
+| Aggregate | `bit_or(value)` | `BIT_OR(value)` | bitwise OR of every non-null value in the group |
+| Aggregate | `bit_xor(value)` | `BIT_XOR(value)` | bitwise XOR of every non-null value in the group |
+| Encryption/compression/hash | `aes_encrypt(data, key[, iv, kdf, salt, iterations])` | `AES_ENCRYPT(...)` | MySQL 8.4 defaults to `aes-128-ecb` |
+| Encryption/compression/hash | `aes_decrypt(data, key[, iv, kdf, salt, iterations])` | `AES_DECRYPT(...)` | `null` for invalid input or padding |
+| Encryption/compression/hash | `compress(value)` | `COMPRESS(...)` | zlib with an uncompressed-length prefix |
+| Encryption/compression/hash | `uncompress(value)` | `UNCOMPRESS(...)` | `null` when the input is not a compressed value |
+| Encryption/compression/hash | `uncompressed_length(value)` | `UNCOMPRESSED_LENGTH(...)` | length recorded in the `COMPRESS` header |
+| Encryption/compression/hash | `random_bytes(length)` | `RANDOM_BYTES(...)` | cryptographically random bytes |
+| Encryption/compression/hash | `validate_password_strength(password)` | `VALIDATE_PASSWORD_STRENGTH(...)` | grade depends on the server's password-validation configuration |
+| Encryption/compression/hash | `statement_digest(statement)` | `STATEMENT_DIGEST(...)` | SHA-256 digest of the normalised statement text |
+| Encryption/compression/hash | `statement_digest_text(statement)` | `STATEMENT_DIGEST_TEXT(...)` | normalised form of the statement text |
+| Information | `connection_id()` | — | already covered by the cross-provider `CommonFunctions.connection_id()`, rendered as `CAST(CONNECTION_ID() AS UNSIGNED)`; see [Session and server information](09-system-functions.md#session-and-server-information-cross-provider) |
+| Information | `found_rows()` | `FOUND_ROWS()` | row count the last `SELECT` would have returned without its `LIMIT` |
+| Information | `last_insert_id([value])` | `LAST_INSERT_ID(...)` | first automatically generated value of the last insert on this connection |
+| Information | `row_count()` | `ROW_COUNT()` | rows affected by the last statement on this connection |
+| Information | `current_role()` | `CURRENT_ROLE()` | active roles, `NONE` when no role is active |
+| Information | `charset(expression)` | `CHARSET(...)` | character set of the expression |
+| Information | `collation(expression)` | `COLLATION(...)` | collation of the expression |
+| Information | `coercibility(expression)` | `COERCIBILITY(...)` | coercibility value used to resolve collation conflicts |
+| Information | `benchmark(count, expression)` | `BENCHMARK(...)` | evaluates the expression `count` times for its side effects and returns `0` |
+| Information | `icu_version()` | `ICU_VERSION()` | ICU version the server was built with, empty when built without ICU |
+| Miscellaneous | `uuid_short()` | `UUID_SHORT()` | 64-bit identifier unique to the server instance |
+| Miscellaneous | `is_uuid(value)` | `IS_UUID(...)` | `1` for a syntactically valid string UUID, `null` for SQL NULL |
+| Miscellaneous | `sleep(seconds)` | `SLEEP(...)` | pauses the statement, returns `0`, or `1` when interrupted |
+| Miscellaneous | `grouping(expressions...)` | `GROUPING(...)` | rollup bitmap; every argument must match a `GROUP BY` expression, which is a caller obligation |
+| Miscellaneous | `name_const(name, value)` | `NAME_CONST(...)` | returns the value under a column label given as a compile-time literal |
+| Miscellaneous | `column_default(column)` | `DEFAULT(column)` | default value of a named column; the argument must be a column reference |
+
+### MySQL behaviour limits
+
+These shapes are validated before any SQL is emitted; a call that does not match is refused with
+`NotSupportedException` rather than rendered with different semantics:
+
+* `column_default` requires a mappable column reference — constants, parameters, casts and computed
+  expressions are refused.
+* `->` and `->>` require a JSON column on the left and a compile-time path literal on the right.
+* `json_object` requires an even argument count with string keys.
+* `json_contains_path` and `json_search` require the literal `'one'` or `'all'` and literal paths.
+* `json_search` takes a single-character escape.
+* `get_format` takes a typed kind (`MySqlFormatKind`) plus a literal format name.
+* `weight_string` supports only the `AS CHAR(N)`/`AS BINARY(N)` modifiers, both compile-time constants.
+* `time_to_sec` returns whole seconds: MySQL 8.4 discards the argument's sub-second precision.
+* `name_const` requires a compile-time literal name; `member_of` requires a literal JSON array.
+
+### MySQL refusals
+
+Three vendor names are deliberately refused: the member exists only to carry the refusal, throws
+`NotSupportedException` before any SQL is emitted, and is covered by a test with a positive sibling
+control on the same provider. The exact messages are listed in the
+[MySQL guide](../guide/provider-specific-sql/mysql.md#guards-and-refusals).
+
+| Refused name | Reason | Reachable through |
+|---|---|---|
+| `uuid` | `UUID()` generates a version 1 value; this API's UUID contract is v4 (`gen_random_uuid`) or v7 (`uuidv7`), and a v1 value is never substituted | `uuidv7()`, or `UUID()` in raw SQL when v1 is genuinely intended |
+| `values` | `VALUES(column)` has no scalar-expression contract — it names the new row only inside the upsert mutation builder — and is deprecated in MySQL 8.4 | the mutation builder's upsert API |
+| `json_table` | a table-producing construct: needs a `FROM`/join position and a `COLUMNS` definition list, so it is not a scalar function | raw SQL, or a `[SqlFunction]` wrapper |
 
 ## MariaDB-only JSON functions
 
