@@ -161,7 +161,7 @@ public sealed class T345JsonEditionRegressionTests : IDisposable
             parameter => parameter.ClrType == typeof(JsonElement).FullName,
             "the JSON column is transported as a string, never as a DOM parameter");
 
-        var rows = context.From<IT345NativeTextStorageRow>().ToList();
+        var rows = context.From<T345NativeTextStorageRow>().ToList();
         rows.Should().HaveCount(1);
         JsonNode.DeepEquals(JsonNode.Parse(rows[0].Data!.Value.GetRawText()), JsonNode.Parse(document))
             .Should().BeTrue("the text transport round-trips the document unchanged");
@@ -202,7 +202,7 @@ public sealed class T345JsonEditionRegressionTests : IDisposable
             .Insert();
 
         var insert = tap.Executions[^1];
-        var rows = context.From<IT345NativeJsonStorageRow>().ToList();
+        var rows = context.From<T345NativeJsonStorageRow>().ToList();
         rows.Should().HaveCount(1);
         JsonNode.DeepEquals(JsonNode.Parse(rows[0].Data!.Value.GetRawText()), JsonNode.Parse(document))
             .Should().BeTrue("the declared native mapping round-trips the document on a server that has the type");
