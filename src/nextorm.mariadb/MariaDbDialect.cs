@@ -86,7 +86,10 @@ public sealed class MariaDbDialect : MySqlDialect
     /// <summary>
     /// MariaDB has no lateral/APPLY source: 11.4 rejects the generated <c>cross join lateral (…)</c> and
     /// <c>left join lateral (…) on true</c> derived-table spelling, so APPLY is refused by the capability
-    /// gate before any SQL is produced. MySQL 8.0.14+ does support it.
+    /// gate before any SQL is produced. The one expressible shape is the inherited
+    /// <see cref="MySqlDialect.SupportsDirectApplyTableFunction"/> form: an eligible correlated
+    /// <c>JSON_TABLE</c> correlates implicitly in <c>FROM</c> and needs no <c>LATERAL</c>. MySQL 8.0.14+
+    /// supports the lateral spelling as well.
     /// </summary>
     public override bool SupportsApply => false;
 

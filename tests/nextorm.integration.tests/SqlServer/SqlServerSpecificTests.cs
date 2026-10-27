@@ -117,7 +117,7 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
         var separator = ",";
 
         var values = _sut.DataProvider
-            .FromTableFunction(() => SqlFunctions.SqlServer.string_split(csv, separator))
+            .From(() => SqlFunctions.SqlServer.string_split(csv, separator))
             .Select(r => new { r.Value })
             .ToList()
             .Select(r => r.Value)
@@ -133,7 +133,7 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
         var json = """{"a":1,"b":2}""";
 
         var keys = _sut.DataProvider
-            .FromTableFunction(() => SqlFunctions.SqlServer.openjson(json))
+            .From(() => SqlFunctions.SqlServer.openjson(json))
             .Select(r => new { r.Key })
             .ToList()
             .Select(r => r.Key)
@@ -153,8 +153,7 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
 
     private static class OpenJsonTvf
     {
-        [SqlTableFunction("openjson", WithClause = "name nvarchar(50) '$.name', age int '$.age'")]
-        public static IQueryable<IOpenJsonTypedRow> Typed(string json) => throw new NotSupportedException();
+        public static TvfEntityBuilder<IOpenJsonTypedRow> Typed(string json) => new("openjson", null, "name nvarchar(50) '$.name', age int '$.age'", null, Array.Empty<int>(), TableFunctionSchema.None);
     }
 
     [Fact]
@@ -163,7 +162,7 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
         var json = """{"name":"Ada","age":36}""";
 
         var row = _sut.DataProvider
-            .FromTableFunction(() => OpenJsonTvf.Typed(json))
+            .From(() => OpenJsonTvf.Typed(json))
             .Select(r => new { r.Name, r.Age })
             .First();
 

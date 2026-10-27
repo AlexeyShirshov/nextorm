@@ -63,6 +63,14 @@ public interface ISqlDialect
     /// </summary>
     bool SupportsApplyOnPlainTable => false;
     /// <summary>
+    /// True when the provider accepts a table-valued function directly as the <c>FROM</c> source of an
+    /// implicitly correlated join, so a bounded correlated APPLY over such a function can render the
+    /// function itself instead of a derived wrapper (which would need a lateral keyword to correlate).
+    /// MySQL and MariaDB correlate a function in <c>FROM</c> with the tables that precede it implicitly;
+    /// every other dialect keeps its own APPLY spelling. The safe default is <see langword="false"/>.
+    /// </summary>
+    bool SupportsDirectApplyTableFunction => false;
+    /// <summary>
     /// True when the provider understands the join strictness/kind modifiers in
     /// <see cref="JoinStrictness"/> (<c>ANY</c>/<c>ALL</c>/<c>ASOF</c>). The safe default is
     /// <c>false</c>; only ClickHouse opts in.
@@ -1336,8 +1344,8 @@ public interface ISqlDialect
     /// <paramref name="name"/> declared in <see cref="CommonFunctions"/> (for example
     /// <c>generate_series</c>, <c>unnest</c>, <c>string_split</c>, <c>openjson</c>,
     /// <c>numbers</c>/<c>numbers_mt</c>, <c>zeros</c>/<c>zeros_mt</c>). User-defined
-    /// <see cref="SqlTableFunctionAttribute"/> functions are not gated by this and are emitted
-    /// verbatim on every provider.
+    /// table-function factories (returning <see cref="TvfEntityBuilder{T}"/>) are not gated by this
+    /// and are emitted verbatim on every provider.
     /// </summary>
     bool SupportsTableFunction(string name);
     /// <summary>

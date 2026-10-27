@@ -1728,23 +1728,23 @@ public class SqlGenerationTests
         var source = "a,b";
         var pattern = ",";
 
-        var arrayElements = () => SqlOf(ctx, ctx.FromTableFunction(() => SqlFunctions.Postgres.jsonb_array_elements(json))
+        var arrayElements = () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.jsonb_array_elements(json))
             .Select(r => new { r.Value }));
         arrayElements.Should().Throw<NotSupportedException>().WithMessage("*jsonb_array_elements*");
 
-        var each = () => SqlOf(ctx, ctx.FromTableFunction(() => SqlFunctions.Postgres.jsonb_each(json))
+        var each = () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.jsonb_each(json))
             .Select(r => new { r.Key }));
         each.Should().Throw<NotSupportedException>().WithMessage("*jsonb_each*");
 
-        var split = () => SqlOf(ctx, ctx.FromTableFunction(() => SqlFunctions.Postgres.regexp_split_to_table(source, pattern))
+        var split = () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.regexp_split_to_table(source, pattern))
             .Select(r => new { r.Value }));
         split.Should().Throw<NotSupportedException>().WithMessage("*regexp_split_to_table*");
 
-        var record = () => SqlOf(ctx, ctx.FromTableFunction(() => SqlFunctions.Postgres.jsonb_to_record<int>(json))
+        var record = () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.jsonb_to_record<int>(json))
             .Select(r => new { V = r }));
         record.Should().Throw<NotSupportedException>().WithMessage("*jsonb_to_record*");
 
-        var values = () => SqlOf(ctx, ctx.FromTableFunction(() => SqlFunctions.ClickHouse.values<int>("(1)"))
+        var values = () => SqlOf(ctx, ctx.From(() => SqlFunctions.ClickHouse.values<int>("(1)"))
             .Select(r => new { V = r }));
         values.Should().Throw<NotSupportedException>().WithMessage("*values*");
     }
@@ -2599,14 +2599,11 @@ public class SqlGenerationTests
 
     private static class Tvf
     {
-        [SqlTableFunction("all_rows")]
-        public static IQueryable<ITvfRow> AllRows() => throw new NotSupportedException();
+        public static TvfEntityBuilder<ITvfRow> AllRows() => new("all_rows");
 
-        [SqlTableFunction("rows_by_id")]
-        public static IQueryable<ITvfRow> ById(long id) => throw new NotSupportedException();
+        public static TvfEntityBuilder<ITvfRow> ById(long id) => new("rows_by_id");
 
-        [SqlTableFunction("rows_between", Schema = "app")]
-        public static IQueryable<ITvfRow> Between(long lo, long hi) => throw new NotSupportedException();
+        public static TvfEntityBuilder<ITvfRow> Between(long lo, long hi) => new("rows_between", "app");
     }
 
     [Fact]
@@ -2614,7 +2611,7 @@ public class SqlGenerationTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        SqlOf(ctx, ctx.FromTableFunction(() => Tvf.AllRows()).Select(r => new { r.Id }))
+        SqlOf(ctx, ctx.From(() => Tvf.AllRows()).Select(r => new { r.Id }))
             .Should().Be("select id\n from all_rows()");
     }
 
@@ -2625,7 +2622,7 @@ public class SqlGenerationTests
         var start = 1L;
         var stop = 5L;
 
-        var act = () => SqlOf(ctx, ctx.FromTableFunction(() => SqlFunctions.Postgres.generate_series(start, stop))
+        var act = () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.generate_series(start, stop))
             .Select(r => new { r.Value }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*generate_series*");
@@ -2637,7 +2634,7 @@ public class SqlGenerationTests
         using var ctx = SqliteTestContext.Create();
         var id = 5L;
 
-        var command = Prepare(ctx, ctx.FromTableFunction(() => Tvf.ById(id)).Select(r => new { r.Id }));
+        var command = Prepare(ctx, ctx.From(() => Tvf.ById(id)).Select(r => new { r.Id }));
 
         Normalize(command.DbCommand.CommandText).Should().Be("select id\n from rows_by_id($id)");
         command.DbCommandParams.Cast<DbParameter>().Should().ContainSingle()
@@ -2651,7 +2648,7 @@ public class SqlGenerationTests
         var lo = 1L;
         var hi = 3L;
 
-        var command = Prepare(ctx, ctx.FromTableFunction(() => Tvf.Between(lo, hi)).Select(r => new { r.Id }));
+        var command = Prepare(ctx, ctx.From(() => Tvf.Between(lo, hi)).Select(r => new { r.Id }));
 
         Normalize(command.DbCommand.CommandText).Should().Be("select id\n from app.rows_between($lo, $hi)");
         command.DbCommandParams.Cast<DbParameter>().Select(p => p.ParameterName)
@@ -2665,7 +2662,7 @@ public class SqlGenerationTests
         var complex = ctx.From<IComplexEntity>();
 
         var sql = SqlOf(ctx, ctx
-            .FromTableFunction(() => Tvf.AllRows())
+            .From(() => Tvf.AllRows())
             .Join(complex, (r, c) => r.Id == c.Id)
             .Select(p => new { p.Item1.Value, p.Item2.String }));
 
@@ -2679,7 +2676,7 @@ public class SqlGenerationTests
         var simple = ctx.From<ISimpleEntity>();
 
         var sql = SqlOf(ctx, simple
-            .Join(ctx.FromTableFunction(() => Tvf.AllRows()), (s, r) => r.Id == s.Id)
+            .Join(ctx.From(() => Tvf.AllRows()), (s, r) => r.Id == s.Id)
             .Select(p => new { p.Item1.Id, p.Item2.Value }));
 
         sql.Should().Be("select t1.id, t2.value\n from simple_entity as 't1'\n join all_rows() as 't2' on t2.id = cast(t1.id as bigint)");

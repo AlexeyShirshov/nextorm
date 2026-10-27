@@ -116,7 +116,7 @@ select t2.value.value('(.)[1]/@id', 'int') as [Id]
 ## Табличные функции
 
 `string_split(...)` и `openjson(...)` доступны через
-[`FromTableFunction`](xref:NextORM.Core.DataContextExtensions.FromTableFunction``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{``0}}})). См.
+[`From`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{NextORM.Core.EntityBuilder{``0}}})) с вызовом runtime-фабрики. См.
 [Табличные функции](../13-table-valued-functions.md) и
 [Поддержка JSON в разных провайдерах](../16-json.md).
 
@@ -313,7 +313,7 @@ nullable; неверное имя или несовместимый тип яч�
 
 **Варианты и границы.** Типизированные операторы покрывают те же внутренние источники, что и
 нетипизированные — обычную таблицу/сущность, **табличную функцию** или производный запрос, поэтому
-`ctx.FromTableFunction(() => Db.MyTvf()).Pivot(...)` разворачивает вызов функции так же, как таблицу.
+`ctx.From(() => Db.MyTvf()).Pivot(...)` разворачивает вызов функции так же, как таблицу.
 Строки значений остаются **рантайм-идентификаторами** (сырыми именами, всегда безопасно квотируемыми, как выше): опечатка или отсутствующее значение не
 проверяются на этапе компиляции, поэтому её колонка всё равно рендерится, а ячейка, которой не
 соответствует ни одна строка источника, даёт SQL `NULL` (объявляйте ячейку nullable). По-настоящему

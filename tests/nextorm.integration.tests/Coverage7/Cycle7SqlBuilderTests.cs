@@ -237,20 +237,20 @@ public sealed class Cycle7SqlBuilderTests : ProviderTestSuite
 
     /// <summary>
     /// Distinguishing arm: a built-in <c>json_each</c> source read bare, and a caller-declared
-    /// <c>[SqlTableFunction]</c> joined to a physical table. The join forces the function alias branch
+    /// <see cref="TvfEntityBuilder{T}"/> factory joined to a physical table. The join forces the function alias branch
     /// of <c>MakeTableFunction</c>, and the join condition filters the generated rows live.
     /// </summary>
     [Fact]
     public void TableFunction_JsonEachBareAndJoined_ShouldReturnTheGeneratedRows()
     {
-        var plain = Context.FromTableFunction(() => SqlFunctions.Sqlite.json_each("[4,5,6]"))
+        var plain = Context.From(() => SqlFunctions.Sqlite.json_each("[4,5,6]"))
             .Select(r => r.Value)
             .ToList();
 
         plain.Should().BeEquivalentTo(new[] { "4", "5", "6" },
             "the built-in function exposes the array elements as text");
 
-        var joined = Context.FromTableFunction(() => Sq7Json.JsonEach("[1,3]"))
+        var joined = Context.From(() => Sq7Json.JsonEach("[1,3]"))
             .Join(Context.From<Sq7Marker>(), (j, m) => j.Value == m.Id)
             .OrderBy(p => p.Item2.Id)
             .Select(p => new { p.Item2.Id, p.Item2.Code })
@@ -453,8 +453,7 @@ public sealed class Cycle7SqlBuilderTests : ProviderTestSuite
 
     private static class Sq7Json
     {
-        [SqlTableFunction("json_each")]
-        public static IQueryable<ISq7JsonRow> JsonEach(string json) => throw new NotSupportedException();
+        public static TvfEntityBuilder<ISq7JsonRow> JsonEach(string json) => new("json_each");
     }
 
     [SqlTable("sq7_marker")]

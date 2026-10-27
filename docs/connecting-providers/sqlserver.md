@@ -133,7 +133,7 @@ SQL Server 2017+ opts into `SqlFunctions.Sql.string_agg` →
 ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)): `SqlFunctions.SqlServer.json_value`, `SqlFunctions.SqlServer.json_query`, `SqlFunctions.SqlServer.json_modify` and
 `SqlFunctions.SqlServer.isjson` render their T-SQL names over a text column, using a JSONPath string (`'$.name'`);
 the PostgreSQL `json`/`jsonb` surface still throws. A typed `OPENJSON ... WITH (...)` rowset is declared with a
-`[SqlTableFunction("openjson", WithClause = "...")]` wrapper (see the table-valued-functions guide). The full-text predicates `SqlFunctions.Sql.contains` and
+`TvfEntityBuilder<T>` factory whose `withClause` carries the clause body (see the table-valued-functions guide). The full-text predicates `SqlFunctions.Sql.contains` and
 `SqlFunctions.Sql.freetext` ([`SupportsFullText`](xref:NextORM.Core.ISqlDialect.SupportsFullText)) render as T-SQL `contains(...)`/`freetext(...)` and require a
 full-text index on the column. `SqlFunctions.Sql.iif(condition, whenTrue, whenFalse)` renders `iif(...)`
 ([`Iif`](xref:NextORM.Core.ISqlDialect.Iif), spelled through [`IIifRenderer.Render`](xref:NextORM.Core.IIifRenderer.Render(System.String,System.String,System.String))) and

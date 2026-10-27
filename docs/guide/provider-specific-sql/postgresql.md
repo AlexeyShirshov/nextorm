@@ -270,7 +270,7 @@ See [Distinct](../09-distinct.md).
 ## Set-returning functions
 
 PostgreSQL's set-returning functions are exposed as table-valued functions through
-[`FromTableFunction`](xref:NextORM.Core.DataContextExtensions.FromTableFunction``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{``0}}})):
+[`From`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{NextORM.Core.EntityBuilder{``0}}})) with a runtime-factory call:
 
 | `SqlFunctions.Postgres.*` | SQL output columns | Row shape |
 | --- | --- | --- |
@@ -433,7 +433,7 @@ functions. Schema-less scenarios are covered by the existing paths instead:
   `FieldCount`/`ColumnNames` without materialisation, and [`ToDataReader`](../28-large-objects.md)
   streams them as a `DbDataReader`;
 * `jsonb_each` / `jsonb_each_text` / `jsonb_object_keys` expand a JSON object into key/value rows —
-  see [Dynamic result schema](../13-table-valued-functions.md#dynamic-result-schema).
+  see [Result schema and provider restrictions](../13-tvf-result-schemas.md#dynamic-result-schema).
 
 The `json_populate_record(set)` variants (which populate a caller-supplied base record instead of a
 free-form column list) remain out of scope. See

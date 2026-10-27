@@ -109,6 +109,14 @@ public class MySqlDialect : SqlDialectBase
     /// <inheritdoc/>
     public override bool SupportsApply => true;
 
+    /// <summary>
+    /// MySQL and MariaDB correlate a table function in <c>FROM</c> with the tables that precede it
+    /// implicitly, so a bounded correlated <c>JSON_TABLE</c> APPLY renders the function itself as the join
+    /// source. The derived wrapper cannot be used: MySQL rejects an outer reference inside a table function
+    /// under <c>LATERAL</c> and MariaDB has no <c>LATERAL</c> keyword at all.
+    /// </summary>
+    public override bool SupportsDirectApplyTableFunction => true;
+
     /// <summary>MySQL/MariaDB support a raw SQL derived table (<c>FROM (&lt;sql&gt;) AS alias</c>).</summary>
     public override bool SupportsRawSqlSource => true;
 

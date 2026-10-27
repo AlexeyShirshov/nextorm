@@ -115,7 +115,7 @@ The provider fails loudly instead of returning wrong results:
 
   ```csharp
   var act = () => ctx
-      .FromTableFunction(() => Tvf.SimpleTvf())
+      .From(() => Tvf.SimpleTvf())
       .Select(it => new { it.Id })
       .ToList();
   // NotSupportedException: "... not supported by the in-memory provider."

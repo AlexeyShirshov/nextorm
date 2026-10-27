@@ -115,7 +115,7 @@ See [Scalar functions](../../scalar-functions/07-json-and-xml.md#xml-data-type-m
 ## Table-valued functions
 
 `string_split(...)` and `openjson(...)` are exposed through
-[`FromTableFunction`](xref:NextORM.Core.DataContextExtensions.FromTableFunction``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{``0}}})). See
+[`From`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{NextORM.Core.EntityBuilder{``0}}})) with a runtime-factory call. See
 [Table-valued functions](../13-table-valued-functions.md) and
 [JSON support across providers](../16-json.md).
 
@@ -309,7 +309,7 @@ whole) instead of emitting wrong SQL.
 
 **Variants and boundaries.** The typed operators cover the same inner sources as the untyped ones — a
 plain table/entity, a **table-valued function** or a derived query, so
-`ctx.FromTableFunction(() => Db.MyTvf()).Pivot(...)` reshapes the function call exactly like a table.
+`ctx.From(() => Db.MyTvf()).Pivot(...)` reshapes the function call exactly like a table.
 The declared value strings stay **runtime identifiers** (raw names, always safely quoted as above): a
 typo or an absent value is not validated at
 compile time, so its column is still rendered and a cell that no source row matches materializes as SQL

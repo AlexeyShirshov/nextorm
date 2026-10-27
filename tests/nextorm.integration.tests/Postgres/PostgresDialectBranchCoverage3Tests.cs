@@ -140,7 +140,7 @@ public sealed class PostgresDialectBranchCoverage3Tests : ProviderTestSuite
         try
         {
             var fragments = _sut.DataProvider
-                .FromTableFunction(() => SqlFunctions.Postgres.regexp_split_to_table("a,b,c", ","))
+                .From(() => SqlFunctions.Postgres.regexp_split_to_table("a,b,c", ","))
                 .Select(r => r.Value)
                 .ToList();
 

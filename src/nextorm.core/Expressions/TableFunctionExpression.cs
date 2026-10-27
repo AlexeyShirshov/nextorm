@@ -1,12 +1,11 @@
 using System.Linq.Expressions;
-using System.Reflection;
 
 namespace NextORM.Core;
 
 /// <summary>
-/// A table-valued function call used as a FROM source. The SQL name/schema are resolved once from
-/// <see cref="SqlTableFunctionAttribute"/> (on the method or its declaring type); the arguments are
-/// kept as expressions and rendered/parameterised by <c>SqlBuilder</c>.
+/// A table-valued function call used as a FROM source. The SQL name/schema and the other metadata are
+/// snapshotted from the <see cref="TvfEntityBuilder{T}"/> descriptor the factory returned; the arguments
+/// are kept as expressions and rendered/parameterised by <c>SqlBuilder</c>.
 /// </summary>
 public sealed class TableFunctionExpression
 {
@@ -40,43 +39,43 @@ public sealed class TableFunctionExpression
         ResultSchema = resultSchema;
     }
 
-    /// <summary>SQL function name (after applying <see cref="SqlTableFunctionAttribute.Name"/>).</summary>
+    /// <summary>SQL function name of the runtime descriptor (<see cref="TvfEntityBuilder{T}.Name"/>).</summary>
     public string Name { get; }
 
     /// <summary>Optional schema/owner prefix, rendered as <c>schema.name</c>.</summary>
     public string? Schema { get; }
 
     /// <summary>
-    /// Optional trailing <c>WITH (...)</c> clause body (from
-    /// <see cref="SqlTableFunctionAttribute.WithClause"/>), appended verbatim after the call.
+    /// Optional trailing <c>WITH (...)</c> clause body (the runtime descriptor's
+    /// <see cref="TvfEntityBuilder{T}.WithClause"/>), appended verbatim after the call.
     /// </summary>
     public string? WithClause { get; }
 
     /// <summary>
-    /// Optional verbatim SQL appended inside the call parentheses after the arguments (from
-    /// <see cref="SqlTableFunctionAttribute.CallClause"/>).
+    /// Optional verbatim SQL appended inside the call parentheses after the arguments (the runtime
+    /// descriptor's <see cref="TvfEntityBuilder{T}.CallClause"/>).
     /// </summary>
     public string? CallClause { get; }
 
     /// <summary>
-    /// Indices of the arguments emitted verbatim as SQL identifiers (from
-    /// <see cref="SqlTableFunctionAttribute.VerbatimArguments"/>); <c>null</c> when every argument is a value.
+    /// Indices of the arguments emitted verbatim as SQL identifiers (the runtime descriptor's
+    /// <see cref="TvfEntityBuilder{T}.VerbatimArguments"/>); <c>null</c> when every argument is a value.
     /// </summary>
     public IReadOnlyList<int>? VerbatimArguments { get; }
 
-    /// <summary>The CLR method call the FROM source was created from; its arguments are the TVF arguments.</summary>
+    /// <summary>The SQL method call the FROM source was created from; its arguments are the TVF arguments.</summary>
     public MethodCallExpression Call { get; }
 
     /// <summary>
-    /// The mapped row type (the <c>T</c> of the placeholder method's <c>IQueryable&lt;T&gt;</c> return
-    /// type) whose metadata supplies the result schema when
-    /// <see cref="ResultSchema"/> is not <see cref="TableFunctionSchema.None"/>.
+    /// The mapped row type supplied by the runtime descriptor whose metadata renders the result schema
+    /// when <see cref="ResultSchema"/> is not <see cref="TableFunctionSchema.None"/>.
     /// </summary>
     public Type? ResultType { get; }
 
     /// <summary>
     /// Where the caller-declared result schema is rendered, or <see cref="TableFunctionSchema.None"/>
-    /// when the function supplies its own result shape. See <see cref="SqlTableFunctionAttribute.ResultSchema"/>.
+    /// when the function supplies its own result shape. See
+    /// <see cref="TvfEntityBuilder{T}.ResultSchema"/>.
     /// </summary>
     public TableFunctionSchema ResultSchema { get; }
 
@@ -84,35 +83,18 @@ public sealed class TableFunctionExpression
     public IReadOnlyList<Expression> Arguments => Call.Arguments;
 
     /// <summary>
-    /// Resolves <paramref name="call"/> into a table function, throwing when the method (or its
-    /// declaring type) is not annotated with <see cref="SqlTableFunctionAttribute"/>.
+    /// Builds a source node from runtime metadata of a <see cref="TvfEntityBuilder{T}"/> descriptor: the
+    /// row type and the result placement come from the descriptor and the arguments stay in
+    /// <paramref name="call"/> untouched.
     /// </summary>
-    public static TableFunctionExpression Create(MethodCallExpression call)
-    {
-        ArgumentNullException.ThrowIfNull(call);
-
-        var method = call.Method;
-        var attribute = method.GetCustomAttribute<SqlTableFunctionAttribute>(inherit: false)
-            ?? method.DeclaringType?.GetCustomAttribute<SqlTableFunctionAttribute>(inherit: false)
-            ?? throw new NotSupportedException(
-                $"Method '{method.DeclaringType?.Name}.{method.Name}' is not mapped as a table-valued function. Apply [SqlTableFunction] to the method or its declaring type.");
-
-        var name = string.IsNullOrEmpty(attribute.Name) ? method.Name : attribute.Name;
-        var resultType = attribute.ResultSchema == TableFunctionSchema.None ? null : ResolveResultType(method);
-
-        return new TableFunctionExpression(name, attribute.Schema, attribute.WithClause, attribute.CallClause, attribute.VerbatimArguments, call, resultType, attribute.ResultSchema);
-    }
-
-    // The row type is the sole generic argument of the IQueryable<T> return type. A closed generic
-    // method call and a plain IQueryable<T> return both expose it; anything else is a programming
-    // error in the placeholder declaration.
-    private static Type ResolveResultType(MethodInfo method)
-    {
-        var returnType = method.ReturnType;
-        if (returnType.IsGenericType && returnType.GetGenericTypeDefinition() == typeof(IQueryable<>))
-            return returnType.GetGenericArguments()[0];
-
-        throw new NotSupportedException(
-            $"The table function '{method.DeclaringType?.Name}.{method.Name}' declares a result schema but does not return IQueryable<T>.");
-    }
+    internal static TableFunctionExpression CreateRuntime(
+        string name,
+        string? schema,
+        string? withClause,
+        string? callClause,
+        IReadOnlyList<int>? verbatimArguments,
+        MethodCallExpression call,
+        Type resultType,
+        TableFunctionSchema resultSchema)
+        => new(name, schema, withClause, callClause, verbatimArguments, call, resultType, resultSchema);
 }

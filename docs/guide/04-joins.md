@@ -363,8 +363,8 @@ The root source occupies slot 1, so it can be named with a chained `.WithAlias(A
 the plain source builder before any join. The alias names the existing slot 1 — it adds no source and
 no slot — and it works for every root-source family: `From<T>` (a mapped entity), `From("table")` and
 `CreateQueryBuilder("table")` (a [`TableAlias`](xref:NextORM.Core.TableAlias) source), `FromSql`, a
-typed [`Cte<T>`](xref:NextORM.Core.Cte`1), a lazy temp table, `FromTableFunction<T>`,
-`From(QueryCommand<T>)` and the `CreateQueryBuilder*` forwarders. The physical source is preserved: a
+typed [`Cte<T>`](xref:NextORM.Core.Cte`1), a lazy temp table, the runtime table-function source
+`From(() => ...)`, `From(QueryCommand<T>)` and the `CreateQueryBuilder*` forwarders. The physical source is preserved: a
 derived root (`FromSql`, `From(query)`, `From(builder)`) stays a derived table aliased to `t1`, and a
 mapped entity keeps reading its physical table. `Where`, `OrderBy`, `GroupBy`, `Having` and paging
 applied before `.WithAlias` are carried onto the root projection.
@@ -698,12 +698,35 @@ evaluated — instead of nesting the projection. Project the accumulated join in
 
 ### APPLY over a table-valued function
 
-The applied source can be a table-valued function (see [Table-valued functions](13-table-valued-functions.md)):
-[`FromTableFunction`](xref:NextORM.Core.DataContextExtensions.FromTableFunction``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{``0}}})) returns an `EntityBuilder<T>`, so it is passed exactly like an entity. An uncorrelated function is applied directly:
+The applied source can be a runtime table-valued-function factory (see
+[Table-valued functions](13-table-valued-functions.md)): the correlated lambda body is the factory call, so
+the function's arguments keep their expressions and an outer-row member stays a column reference.
 
 ```csharp
 var rows = dataContext.From<ISimpleEntity>()
-    .CrossApply(dataContext.FromTableFunction(() => Tvf.AllRows()))
+    .CrossApply(s => Tvf.ById(s.Id))
+    .Select(p => new { p.Item1.Id, p.Item2.Value })
+    .ToList();
+```
+
+```sql
+-- SQL Server
+select t1.id, t3.value
+ from simple_entity as [t1]
+ cross apply (select t2.id, t2.value
+ from rows_by_id(cast(t1.id as bigint)) as [t2]) as [t3]
+-- PostgreSQL / MySQL 8.0.14+
+select t1.id, t3.value
+ from simple_entity as "t1"
+ cross join lateral (select t2.id, t2.value
+ from rows_by_id(cast(t1.id as bigint)) as "t2") as "t3"
+```
+
+An uncorrelated function is passed with an empty parameter list and applied once:
+
+```csharp
+var rows = dataContext.From<ISimpleEntity>()
+    .CrossApply(() => Tvf.AllRows())
     .Select(p => new { p.Item1.Id, p.Item2.Value })
     .ToList();
 ```
@@ -719,27 +742,10 @@ select t1.id, t2.value
  cross join lateral all_rows() as t2
 ```
 
-Correlating the function with the left-hand row passes that row's column as a function argument; the call is then wrapped in a lateral derived table:
-
-```csharp
-var rows = dataContext.From<ISimpleEntity>()
-    .CrossApply(s => dataContext.FromTableFunction(() => Tvf.ById(s.Id)))
-    .Select(p => new { p.Item1.Id, p.Item2.Value })
-    .ToList();
-```
-
-```sql
--- SQL Server
-select t1.id, t3.value
- from simple_entity as [t1]
- cross apply (select t2.id, t2.value
- from rows_by_id(cast(t1.id as bigint)) as [t2]) as [t3]
--- PostgreSQL / MySQL 8.0.14+
-select t1.id, t3.value
- from simple_entity as t1
- cross join lateral (select t2.id, t2.value
- from rows_by_id(cast(t1.id as bigint)) as t2) as t3
-```
+A correlated `JSON_TABLE` on MySQL/MariaDB is rendered as the join source itself — no derived wrapper and
+no `LATERAL` keyword (MariaDB has none, and MySQL rejects an outer reference inside a table function under
+`LATERAL`): `join json_table(t1.children_json, '$[*]' columns(...)) as jt`, or
+`left join json_table(...) as jt on true` for `OuterApply`.
 
 Like every correlated apply, the correlated function form needs a lateral source and is rejected with
 `NotSupportedException` on SQLite, ClickHouse, MariaDB 11.4 and in the in-memory provider; the uncorrelated
@@ -851,7 +857,7 @@ var mixed = dataContext
 
 A raw-table (`TableAlias`) join now honours an explicit source on the joined builder. When the joined
 side is a raw SQL source (`FromSql`), a table override (`b => b.Table("...")` / `WithTableName`), a
-derived query (`From(query)`), a table-valued function (`FromTableFunction`), or a typed CTE
+derived query (`From(query)`), a table-valued function (`From(() => ...)`), or a typed CTE
 (`Cte<T>`), that source is used as the join's `FROM` instead of the entity metadata. A plain mapped
 entity with no explicit source keeps the metadata fallback. `SemiJoin`/`AntiJoin` are unaffected: the
 joined type still resolves through its entity metadata.

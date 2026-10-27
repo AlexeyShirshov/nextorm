@@ -396,10 +396,48 @@ internal static class SqlSourceRenderer
     /// </summary>
     private static string? MakeApplyJoin(in SqlBuildContext ctx, JoinExpression join, LockClause? globalLock)
     {
-        if (!ctx.Dialect.SupportsApply)
+        // A dialect with no lateral/APPLY source can still express one shape: the function-in-FROM
+        // rendering of an eligible correlated table function, which the dialect correlates implicitly.
+        // The capability is therefore consulted per source: MariaDB, which has no LATERAL keyword at
+        // all, admits the direct function form below and keeps refusing every lateral spelling.
+        var isDirectApplyFunction = false;
+        FromExpression? directFunction = null;
+        if (ctx.Dialect.SupportsDirectApplyTableFunction && TryGetDirectApplyTableFunction(join, out var directCandidate))
+        {
+            directFunction = directCandidate;
+            isDirectApplyFunction = true;
+        }
+
+        if (!ctx.Dialect.SupportsApply && !isDirectApplyFunction)
             throw new NotSupportedException($"The {join.JoinType} join is not supported by this SQL dialect");
 
+        // Slot registration is a side effect on the active render frame, and it must precede every
+        // render path below: the derived source resolves its outer references through the slot map,
+        // and the direct-apply path renders the function inline in this very frame, where the same
+        // map is the only exact occurrence binding it has. Registering before the early return also
+        // makes it impossible to render an APPLY source with unregistered left-row slots.
         RegisterApplyLeftSlots(in ctx, join);
+
+        // On a dialect whose function-in-FROM form correlates implicitly (MySQL/MariaDB) an eligible
+        // JSON_TABLE source is rendered as the join's own FROM source: the derived wrapper and its
+        // alias disappear, the function keeps its own alias, and the downstream projected-column
+        // references resolve to that alias through the row type registered by MakeTableFunction.
+        // The capability is consulted first: a dialect that does not declare the implicit-correlation
+        // form must never receive the rewrite, even for a structurally eligible source.
+        if (isDirectApplyFunction && directFunction is not null)
+        {
+            var functionSql = MakeFrom(in ctx, directFunction, new FromRenderOptions(true, join.EntityType ?? directFunction.SourceType, false, GlobalLock: globalLock));
+
+            if (ctx.ParamMode)
+                return null;
+
+            return join.JoinType switch
+            {
+                JoinType.CrossApply => SqlKeywords.Of(ctx.KeywordCase, " join ") + functionSql,
+                JoinType.OuterApply => SqlKeywords.Of(ctx.KeywordCase, " left join ") + functionSql + SqlKeywords.Of(ctx.KeywordCase, " on true"),
+                _ => throw new ArgumentOutOfRangeException(nameof(join), join.JoinType, "Not an APPLY join type")
+            };
+        }
 
         var source = MakeFrom(in ctx, join.From, new FromRenderOptions(true, join.EntityType ?? join.From.SourceType, false, GlobalLock: globalLock));
 
@@ -448,6 +486,140 @@ internal static class SqlSourceRenderer
         JoinType.OuterApply => SqlKeywords.Of(ctx.KeywordCase, " left join ") + source + SqlKeywords.Of(ctx.KeywordCase, " on true"),
         _ => throw new ArgumentOutOfRangeException(nameof(applyType), applyType, "Not an APPLY join type")
     };
+
+    // The function name the direct-apply rewrite is declared for. Only a JSON_TABLE call is bounded by
+    // the capability today: on MySQL/MariaDB it reads the outer row in its first argument and needs no
+    // LATERAL keyword when it sits directly in the join.
+    private const string DirectApplyFunctionName = "json_table";
+
+    /// <summary>
+    /// Recognises an APPLY source a dialect with <see cref="ISqlDialect.SupportsDirectApplyTableFunction"/>
+    /// can render without its derived wrapper: a correlated <c>JSON_TABLE</c> call whose derived query is
+    /// nothing but the transparent column projection of the function's own row type. The derived alias
+    /// then carries no information — every projected column is the function column of the same name — so
+    /// it is safe to drop it and let the downstream references resolve to the function's alias instead.
+    /// <para>
+    /// Everything else keeps the derived rendering: an uncorrelated call, another function, and a query
+    /// that filters, groups, orders, pages, combines or renames/computes its columns.
+    /// </para>
+    /// </summary>
+    private static bool TryGetDirectApplyTableFunction(JoinExpression join, out FromExpression function)
+    {
+        function = null!;
+
+        if (join.From.SubQuery is not { } applied || applied.From is not { TableFunction: { } call } functionFrom)
+            return false;
+
+        if (!string.Equals(call.Name, DirectApplyFunctionName, StringComparison.OrdinalIgnoreCase)
+            || !string.IsNullOrEmpty(call.Schema))
+            return false;
+
+        if (!IsCorrelatedApplyFunction(call) || !IsBareColumnProjection(applied) || !IsTransparentColumnProjection(applied, call))
+            return false;
+
+        // A lock or hint declared on the derived source cannot be expressed on the function itself, so
+        // such a source keeps the wrapper instead of silently losing the modifier.
+        if (join.From.SourceLock is not null || join.From.SubQueryHint is not null)
+            return false;
+
+        function = functionFrom;
+        return true;
+    }
+
+    /// <summary>
+    /// True when at least one function argument reads the outer row. A correlated APPLY argument keeps
+    /// the outer reference as an <c>OuterRefMarker</c> node (or, for a shape the marker rewrite does not
+    /// cover, as the free outer parameter itself); a constant/captured argument carries neither.
+    /// </summary>
+    private static bool IsCorrelatedApplyFunction(TableFunctionExpression function)
+    {
+        var detector = new ApplyOuterReferenceDetector();
+        for (var (i, cnt) = (0, function.Arguments.Count); i < cnt; i++)
+        {
+            detector.Visit(function.Arguments[i]);
+            if (detector.Found)
+                return true;
+        }
+
+        return false;
+    }
+
+    // An APPLY source is rewritten only when its body is the projection and nothing else: no join, CTE,
+    // filter, grouping, ordering, paging, set operation, array join, prewhere or extreme-row lowering,
+    // all of which would be dropped with the wrapper.
+    private static bool IsBareColumnProjection(QueryCommand cmd)
+        => cmd.SelectList is { Length: > 0 }
+            && cmd.Joins is not { Length: > 0 }
+            && cmd.Ctes is not { Count: > 0 }
+            && cmd.PreparedCondition is null
+            && cmd.PreparedHaving is null
+            && cmd.GroupBy is null
+            && cmd.Sorting is not { Length: > 0 }
+            && !cmd.IsDistinct
+            && cmd.DistinctOnColumns is not { Length: > 0 }
+            && cmd.UnionQuery is null
+            && cmd.LimitByColumns is not { Length: > 0 }
+            && cmd.ExtremeRow is null
+            && cmd.ArrayJoinExpressions is not { Count: > 0 }
+            && cmd.PreWhere is null
+            && cmd.Paging.IsEmpty;
+
+    /// <summary>
+    /// True when every projected column is a bare member read of the function's row type, named after
+    /// that member. Such a projection changes neither the column set nor the column names, so the
+    /// downstream references (which resolve through the row type) address the same function columns.
+    /// </summary>
+    private static bool IsTransparentColumnProjection(QueryCommand cmd, TableFunctionExpression function)
+    {
+        var selectList = cmd.SelectList!;
+
+        for (var (i, cnt) = (0, selectList.Length); i < cnt; i++)
+        {
+            var column = selectList[i];
+
+            if (column.Expression is not { } expression)
+                return false;
+
+            if (expression is LambdaExpression lambda)
+                expression = lambda.Body;
+
+            if (TypeFacts.UnwrapConvert(expression) is not MemberExpression { Member: PropertyInfo member })
+                return false;
+
+            if (!string.Equals(column.PropertyName, member.Name, StringComparison.Ordinal))
+                return false;
+
+            if (function.ResultType is { } rowType && member.DeclaringType is { } declaring
+                && !declaring.IsAssignableFrom(rowType) && !rowType.IsAssignableFrom(declaring))
+                return false;
+        }
+
+        return true;
+    }
+
+    // Detects the outer-row reference inside a function argument: the prepared marker node, or any free
+    // parameter that still denotes an enclosing scope.
+    private sealed class ApplyOuterReferenceDetector : ExpressionVisitor
+    {
+        public bool Found { get; private set; }
+
+        protected override Expression VisitNew(NewExpression node)
+        {
+            if (node.Type.IsGenericType && node.Type.GetGenericTypeDefinition() == typeof(OuterRefMarker<>))
+            {
+                Found = true;
+                return node;
+            }
+
+            return base.VisitNew(node);
+        }
+
+        protected override Expression VisitParameter(ParameterExpression node)
+        {
+            Found = true;
+            return node;
+        }
+    }
 
 
     internal static string MakeFrom(in SqlBuildContext ctx, FromExpression from, FromRenderOptions options)
@@ -787,8 +959,8 @@ internal static class SqlSourceRenderer
         var function = from.TableFunction!;
         var arguments = function.Arguments;
 
-        // The built-in SqlFunctions.Sql table functions are provider-specific; user-defined [SqlTableFunction]
-        // functions are emitted verbatim and are the caller's responsibility.
+        // The built-in SqlFunctions.Sql table functions are provider-specific; user-defined runtime
+        // table-function factories are emitted verbatim and are the caller's responsibility.
         var isBuiltIn = typeof(CommonFunctions).IsAssignableFrom(function.Call.Method.DeclaringType);
         if (isBuiltIn && !ctx.Dialect.SupportsTableFunction(function.Name))
             throw new NotSupportedException($"The table function '{function.Name}' is not supported by this provider.");

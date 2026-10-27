@@ -123,10 +123,9 @@ namespace NextORM.Core;
         /// data-type methods (see <see cref="IXmlFunctions.Supports"/>; SQL Server).
         /// </summary>
         /// <remarks>
-        /// Unlike the <c>[SqlTableFunction]</c> sources (<c>string_split</c>/<c>openjson</c>) this is a
+        /// Unlike the runtime table-function factories (<c>string_split</c>/<c>openjson</c>) this is a
         /// correlated source over the left-hand row's column, not a standalone table function, so it is
-        /// expressed through <c>CrossApply</c>/<c>OuterApply</c> rather than
-        /// <c>FromTableFunction</c>.
+        /// expressed through <c>CrossApply</c>/<c>OuterApply</c> rather than <c>ctx.From(...)</c>.
         /// </remarks>
         public QueryCommand<SqlFunctions.IXmlNodesRow> xml_nodes(string? xml, string? xpath) =>
             throw new NotSupportedException("xml_nodes can only be used as a CROSS/OUTER APPLY source.");
@@ -134,44 +133,40 @@ namespace NextORM.Core;
         /// <summary>
         /// <c>string_split(value, separator)</c> as a FROM source (SQL Server 2016+); select
         /// <see cref="SqlFunctions.IStringSplitRow.Value"/>. Use through
-        /// <see cref="DataContextExtensions.FromTableFunction{T}(IDataContext, Expression{Func{IQueryable{T}}})"/>.
+        /// <c>ctx.From(() =&gt; ...)</c>.
         /// The fragments are not guaranteed to be ordered; add an <c>order by</c> on the caller side if
         /// the input order matters.
         /// </summary>
-        [SqlTableFunction("string_split")]
-        public IQueryable<SqlFunctions.IStringSplitRow> string_split(string? value, string? separator) => throw new NotSupportedException();
+        public TvfEntityBuilder<SqlFunctions.IStringSplitRow> string_split(string? value, string? separator) => new("string_split");
 
         /// <summary>
         /// <c>openjson(json)</c> as a FROM source (SQL Server 2016+); select
         /// <see cref="SqlFunctions.IOpenJsonRow.Key"/>/<see cref="SqlFunctions.IOpenJsonRow.Value"/>/
         /// <see cref="SqlFunctions.IOpenJsonRow.Type"/>. Use through
-        /// <see cref="DataContextExtensions.FromTableFunction{T}(IDataContext, Expression{Func{IQueryable{T}}})"/>.
+        /// <c>ctx.From(() =&gt; ...)</c>.
         /// The default schema yields the properties of a JSON object or the elements of a JSON array;
-        /// for a typed projection declare a <c>[SqlTableFunction("openjson")]</c> wrapper whose row
-        /// shape matches the <see cref="SqlTableFunctionAttribute.WithClause"/> schema (for example
+        /// for a typed projection declare a runtime factory whose row shape matches the
+        /// <see cref="TvfEntityBuilder{T}.WithClause"/> schema (for example
         /// <c>WithClause = "name nvarchar(50) '$.name'"</c>).
         /// </summary>
-        [SqlTableFunction("openjson")]
-        public IQueryable<SqlFunctions.IOpenJsonRow> openjson(string? json) => throw new NotSupportedException();
+        public TvfEntityBuilder<SqlFunctions.IOpenJsonRow> openjson(string? json) => new("openjson");
 
         /// <summary>
         /// <c>CONTAINSTABLE(table, column, search)</c> as a FROM source (SQL Server full-text search with
         /// ranking). Join it back to the full-text-indexed table on
         /// <see cref="SqlFunctions.IKeyRankRow{TKey}.Key"/> and project
         /// <see cref="SqlFunctions.IKeyRankRow{TKey}.Rank"/>:
-        /// <c>ctx.From&lt;IDocument&gt;().Join(ctx.FromTableFunction(() =&gt; SqlFunctions.SqlServer.containstable&lt;int&gt;("documents", "title", search)), (d, k) =&gt; d.Id == k.Key).OrderByDescending(p =&gt; p.Item2.Rank)</c>.
+        /// <c>ctx.From&lt;IDocument&gt;().Join(ctx.From(() =&gt; SqlFunctions.SqlServer.containstable&lt;int&gt;("documents", "title", search)), (d, k) =&gt; d.Id == k.Key).OrderByDescending(p =&gt; p.Item2.Rank)</c>.
         /// <paramref name="table"/> and <paramref name="column"/> are emitted verbatim as identifiers
         /// (the table name or its alias exactly as it appears in the query); only pass trusted values.
         /// </summary>
-        [SqlTableFunction("containstable", VerbatimArguments = new[] { 0, 1 })]
-        public IQueryable<SqlFunctions.IKeyRankRow<TKey>> containstable<TKey>(string table, string column, string search) => throw new NotSupportedException();
+        public TvfEntityBuilder<SqlFunctions.IKeyRankRow<TKey>> containstable<TKey>(string table, string column, string search) => new("containstable", null, null, null, [0, 1], TableFunctionSchema.None);
 
         /// <summary>
         /// <c>FREETEXTTABLE(table, column, search)</c> as a FROM source; the natural-language counterpart
         /// of <see cref="containstable{TKey}(string, string, string)"/> (same <c>KEY</c>/<c>RANK</c> columns).
         /// </summary>
-        [SqlTableFunction("freetexttable", VerbatimArguments = new[] { 0, 1 })]
-        public IQueryable<SqlFunctions.IKeyRankRow<TKey>> freetexttable<TKey>(string table, string column, string search) => throw new NotSupportedException();
+        public TvfEntityBuilder<SqlFunctions.IKeyRankRow<TKey>> freetexttable<TKey>(string table, string column, string search) => new("freetexttable", null, null, null, [0, 1], TableFunctionSchema.None);
 
         /// <summary>
         /// <c>choose(index, value, ...)</c>: the 1-based <paramref name="index"/>-th value (NULL when out

@@ -615,7 +615,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
         var flags = "g";
 
         var groups = _sut.DataProvider
-            .FromTableFunction(() => SqlFunctions.Postgres.regexp_matches(source, pattern, flags))
+            .From(() => SqlFunctions.Postgres.regexp_matches(source, pattern, flags))
             .Select(r => new { r.Matches })
             .ToList();
 
@@ -630,7 +630,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
         var pattern = ",";
 
         var fragments = _sut.DataProvider
-            .FromTableFunction(() => SqlFunctions.Postgres.regexp_split_to_table(source, pattern))
+            .From(() => SqlFunctions.Postgres.regexp_split_to_table(source, pattern))
             .Select(r => r.Value)
             .ToList();
 
@@ -643,7 +643,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
         using var json = JsonDocument.Parse("[1,2,3]");
 
         var values = _sut.DataProvider
-            .FromTableFunction(() => SqlFunctions.Postgres.jsonb_array_elements_text(json))
+            .From(() => SqlFunctions.Postgres.jsonb_array_elements_text(json))
             .Select(r => r.Value)
             .ToList();
 
@@ -656,7 +656,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
         using var json = JsonDocument.Parse("""{"a":1,"b":2}""");
 
         var rows = _sut.DataProvider
-            .FromTableFunction(() => SqlFunctions.Postgres.jsonb_each_text(json))
+            .From(() => SqlFunctions.Postgres.jsonb_each_text(json))
             .OrderBy(r => r.Key)
             .Select(r => new { r.Key, r.Value })
             .ToList();
@@ -670,7 +670,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
         using var json = JsonDocument.Parse("""{"a":1,"b":"x"}""");
 
         var row = _sut.DataProvider
-            .FromTableFunction(() => SqlFunctions.Postgres.jsonb_to_record<IDynamicRecordRow>(json))
+            .From(() => SqlFunctions.Postgres.jsonb_to_record<IDynamicRecordRow>(json))
             .Select(r => new { r.A, r.B })
             .First();
 
@@ -683,7 +683,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
         using var json = JsonDocument.Parse("""[{"a":1,"b":"x"},{"a":2,"b":"y"}]""");
 
         var rows = _sut.DataProvider
-            .FromTableFunction(() => SqlFunctions.Postgres.jsonb_to_recordset<IDynamicRecordRow>(json))
+            .From(() => SqlFunctions.Postgres.jsonb_to_recordset<IDynamicRecordRow>(json))
             .OrderBy(r => r.A)
             .Select(r => new { r.A, r.B })
             .ToList();
@@ -697,7 +697,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
         using var json = JsonDocument.Parse("""{"a":1,"b":2}""");
 
         var keys = _sut.DataProvider
-            .FromTableFunction(() => SqlFunctions.Postgres.jsonb_object_keys(json))
+            .From(() => SqlFunctions.Postgres.jsonb_object_keys(json))
             .OrderBy(r => r.Key)
             .Select(r => r.Key)
             .ToList();
@@ -712,7 +712,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
         var path = "$.a[*]";
 
         var values = _sut.DataProvider
-            .FromTableFunction(() => SqlFunctions.Postgres.jsonb_path_query(json, SqlFunctions.Postgres.jsonpath(path)))
+            .From(() => SqlFunctions.Postgres.jsonb_path_query(json, SqlFunctions.Postgres.jsonpath(path)))
             .Select(r => r.Value)
             .ToList();
 
@@ -725,7 +725,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
         var query = "select to_tsvector('cat dog cat')";
 
         var stats = _sut.DataProvider
-            .FromTableFunction(() => SqlFunctions.Postgres.ts_stat(query))
+            .From(() => SqlFunctions.Postgres.ts_stat(query))
             .OrderBy(r => r.Word)
             .Select(r => new { r.Word, r.Ndoc, r.Nentry })
             .ToList();

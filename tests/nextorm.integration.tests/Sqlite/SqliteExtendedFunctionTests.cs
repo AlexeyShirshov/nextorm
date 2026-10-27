@@ -1334,31 +1334,31 @@ public sealed class SqliteExtendedFunctionTests : ProviderTestSuite
     [Trait("Issue", "285")]
     public void TotalAggregate_ShouldUseNativeSemantics()
     {
-        _sut.DataProvider.FromTableFunction(() => SqlFunctions.Sqlite.json_each("[2, 2, -1, 0]"))
+        _sut.DataProvider.From(() => SqlFunctions.Sqlite.json_each("[2, 2, -1, 0]"))
             .Select(x => SqlFunctions.Sqlite.total(x.Value)).First()
             .Should().Be(3.0);
 
-        _sut.DataProvider.FromTableFunction(() => SqlFunctions.Sqlite.json_each("[0.5, 0.25]"))
+        _sut.DataProvider.From(() => SqlFunctions.Sqlite.json_each("[0.5, 0.25]"))
             .Select(x => SqlFunctions.Sqlite.total(x.Value)).First()
             .Should().Be(0.75);
 
-        _sut.DataProvider.FromTableFunction(() => SqlFunctions.Sqlite.json_each("[1, null, 3]"))
+        _sut.DataProvider.From(() => SqlFunctions.Sqlite.json_each("[1, null, 3]"))
             .Select(x => SqlFunctions.Sqlite.total(x.Value)).First()
             .Should().Be(4.0, "null values are ignored, not treated as zero-sum rows");
 
-        _sut.DataProvider.FromTableFunction(() => SqlFunctions.Sqlite.json_each("[null, null]"))
+        _sut.DataProvider.From(() => SqlFunctions.Sqlite.json_each("[null, null]"))
             .Select(x => SqlFunctions.Sqlite.total(x.Value)).First()
             .Should().Be(0.0, "an all-null group yields 0.0, never null");
 
-        _sut.DataProvider.FromTableFunction(() => SqlFunctions.Sqlite.json_each("[]"))
+        _sut.DataProvider.From(() => SqlFunctions.Sqlite.json_each("[]"))
             .Select(x => SqlFunctions.Sqlite.total(x.Value)).First()
             .Should().Be(0.0, "an empty set still returns one aggregate row");
 
-        _sut.DataProvider.FromTableFunction(() => SqlFunctions.Sqlite.json_each("[\"1\", \"2\", \"3.5\", \"x\"]"))
+        _sut.DataProvider.From(() => SqlFunctions.Sqlite.json_each("[\"1\", \"2\", \"3.5\", \"x\"]"))
             .Select(x => SqlFunctions.Sqlite.total(x.Value)).First()
             .Should().Be(6.5, "numeric text is coerced natively and non-numeric text contributes 0.0");
 
-        _sut.DataProvider.FromTableFunction(() => SqlFunctions.Sqlite.json_each("[9223372036854775807, 9223372036854775807]"))
+        _sut.DataProvider.From(() => SqlFunctions.Sqlite.json_each("[9223372036854775807, 9223372036854775807]"))
             .Select(x => SqlFunctions.Sqlite.total(x.Value)).First()
             .Should().BeGreaterThan(long.MaxValue, "total sums in floating point instead of overflowing like sum");
 

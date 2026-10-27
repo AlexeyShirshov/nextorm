@@ -123,12 +123,13 @@ var rows = dataContext.From<IComplexEntity>()
 ## Табличные функции `json_each` / `json_tree`
 
 `json_each` обходит непосредственных детей JSON-значения, `json_tree` — рекурсивно. Используйте их
-через [`FromTableFunction`](../13-table-valued-functions.md) и проецируйте форму строки вызова;
-колонки — `key`, `value`, `type`, `fullkey` и `path` (плюс `id`/`parent` у `json_tree`).
+через источник-runtime-фабрику [`From(() => ...)`](../13-table-valued-functions.md) и проецируйте форму
+строки, возвращаемую вызовом; колонки — `key`, `value`, `type`, `fullkey` и `path` (плюс
+`id`/`parent` у `json_tree`).
 
 ```csharp
 var values = dataContext
-    .FromTableFunction(() => SqlFunctions.Sqlite.json_each("[\"a\",\"b\",\"c\"]"))
+    .From(() => SqlFunctions.Sqlite.json_each("[\"a\",\"b\",\"c\"]"))
     .Select(r => r.Value)
     .ToList();
 ```
@@ -268,7 +269,7 @@ var weighted = dataContext.From<Article>()
 
 ```csharp
 var rows = dataContext
-    .FromTableFunction(() => SqlFunctions.Sqlite.MatchTable<Article>("article_fts", query))
+    .From(() => SqlFunctions.Sqlite.MatchTable<Article>("article_fts", query))
     .Where(x => x.RowId > 0)
     .OrderBy(x => x.RowId)
     .Select(x => new { x.RowId, x.Title })

@@ -675,81 +675,68 @@ namespace NextORM.Core;
         /// <summary>
         /// <c>generate_series(start, stop)</c> as a FROM source; select
         /// <see cref="SqlFunctions.IGenerateSeriesRow.Value"/>. Use through
-        /// <see cref="DataContextExtensions.FromTableFunction{T}(IDataContext, Expression{Func{IQueryable{T}}})"/>.
+        /// <c>ctx.From(() =&gt; ...)</c>.
         /// </summary>
-        [SqlTableFunction("generate_series")]
-        public IQueryable<SqlFunctions.IGenerateSeriesRow> generate_series(long start, long stop) => throw new NotSupportedException();
+        public TvfEntityBuilder<SqlFunctions.IGenerateSeriesRow> generate_series(long start, long stop) => new("generate_series");
 
         /// <summary><c>generate_series(start, stop, step)</c> as a FROM source.</summary>
-        [SqlTableFunction("generate_series")]
-        public IQueryable<SqlFunctions.IGenerateSeriesRow> generate_series(long start, long stop, long step) => throw new NotSupportedException();
+        public TvfEntityBuilder<SqlFunctions.IGenerateSeriesRow> generate_series(long start, long stop, long step) => new("generate_series");
 
         /// <summary>
         /// <c>unnest(array)</c> as a FROM source; select <see cref="SqlFunctions.IUnnestRow{T}.Value"/>. The
         /// array is normally supplied through <c>SqlFunctions.Parameter&lt;T[]&gt;(idx)</c>.
         /// </summary>
-        [SqlTableFunction("unnest")]
-        public IQueryable<SqlFunctions.IUnnestRow<T>> unnest<T>(T[] array) => throw new NotSupportedException();
+        public TvfEntityBuilder<SqlFunctions.IUnnestRow<T>> unnest<T>(T[] array) => new("unnest");
 
         /// <summary>
         /// <c>regexp_matches(source, pattern)</c> as a FROM source: one row per match, the
         /// <c>regexp_matches</c> column is the <c>text[]</c> array of captured groups (see
         /// <see cref="SqlFunctions.IRegexpMatchesRow"/>).
         /// </summary>
-        [SqlTableFunction("regexp_matches")]
-        public IQueryable<SqlFunctions.IRegexpMatchesRow> regexp_matches(string? source, string? pattern) => throw new NotSupportedException();
+        public TvfEntityBuilder<SqlFunctions.IRegexpMatchesRow> regexp_matches(string? source, string? pattern) => new("regexp_matches");
 
         /// <summary><c>regexp_matches(source, pattern, flags)</c> as a FROM source, with the <c>g</c>/<c>i</c>/... flags.</summary>
-        [SqlTableFunction("regexp_matches")]
-        public IQueryable<SqlFunctions.IRegexpMatchesRow> regexp_matches(string? source, string? pattern, string? flags) => throw new NotSupportedException();
+        public TvfEntityBuilder<SqlFunctions.IRegexpMatchesRow> regexp_matches(string? source, string? pattern, string? flags) => new("regexp_matches");
 
         /// <summary>
         /// <c>regexp_split_to_table(source, pattern)</c> as a FROM source: one row per fragment (see
         /// <see cref="SqlFunctions.IRegexpSplitToTableRow"/>).
         /// </summary>
-        [SqlTableFunction("regexp_split_to_table")]
-        public IQueryable<SqlFunctions.IRegexpSplitToTableRow> regexp_split_to_table(string? source, string? pattern) => throw new NotSupportedException();
+        public TvfEntityBuilder<SqlFunctions.IRegexpSplitToTableRow> regexp_split_to_table(string? source, string? pattern) => new("regexp_split_to_table");
 
         /// <summary><c>regexp_split_to_table(source, pattern, flags)</c> as a FROM source.</summary>
-        [SqlTableFunction("regexp_split_to_table")]
-        public IQueryable<SqlFunctions.IRegexpSplitToTableRow> regexp_split_to_table(string? source, string? pattern, string? flags) => throw new NotSupportedException();
+        public TvfEntityBuilder<SqlFunctions.IRegexpSplitToTableRow> regexp_split_to_table(string? source, string? pattern, string? flags) => new("regexp_split_to_table");
 
         /// <summary>
         /// <c>jsonb_array_elements(json)</c> as a FROM source: one row per array element, the
         /// <c>value</c> column is the element as a jsonb document (see
         /// <see cref="SqlFunctions.IJsonArrayElementsRow"/>).
         /// </summary>
-        [SqlTableFunction("jsonb_array_elements")]
-        public IQueryable<SqlFunctions.IJsonArrayElementsRow> jsonb_array_elements(object? json) => throw new NotSupportedException();
+        public TvfEntityBuilder<SqlFunctions.IJsonArrayElementsRow> jsonb_array_elements(object? json) => new("jsonb_array_elements");
 
         /// <summary><c>jsonb_array_elements_text(json)</c> as a FROM source: one row per array element, the <c>value</c> column is text.</summary>
-        [SqlTableFunction("jsonb_array_elements_text")]
-        public IQueryable<SqlFunctions.IJsonArrayElementsRow> jsonb_array_elements_text(object? json) => throw new NotSupportedException();
+        public TvfEntityBuilder<SqlFunctions.IJsonArrayElementsRow> jsonb_array_elements_text(object? json) => new("jsonb_array_elements_text");
 
         /// <summary>
         /// <c>jsonb_each(json)</c> as a FROM source: one row per top-level object property, the
         /// <c>key</c>/<c>value</c> columns are text/jsonb (see <see cref="SqlFunctions.IJsonbEachRow"/>).
         /// </summary>
-        [SqlTableFunction("jsonb_each")]
-        public IQueryable<SqlFunctions.IJsonbEachRow> jsonb_each(object? json) => throw new NotSupportedException();
+        public TvfEntityBuilder<SqlFunctions.IJsonbEachRow> jsonb_each(object? json) => new("jsonb_each");
 
         /// <summary><c>jsonb_each_text(json)</c> as a FROM source: one row per property, <c>key</c>/<c>value</c> are text.</summary>
-        [SqlTableFunction("jsonb_each_text")]
-        public IQueryable<SqlFunctions.IJsonbEachRow> jsonb_each_text(object? json) => throw new NotSupportedException();
+        public TvfEntityBuilder<SqlFunctions.IJsonbEachRow> jsonb_each_text(object? json) => new("jsonb_each_text");
 
         /// <summary>
         /// <c>jsonb_object_keys(json)</c> as a FROM source: one row per top-level object key (see
         /// <see cref="SqlFunctions.IJsonObjectKeysRow"/>).
         /// </summary>
-        [SqlTableFunction("jsonb_object_keys")]
-        public IQueryable<SqlFunctions.IJsonObjectKeysRow> jsonb_object_keys(object? json) => throw new NotSupportedException();
+        public TvfEntityBuilder<SqlFunctions.IJsonObjectKeysRow> jsonb_object_keys(object? json) => new("jsonb_object_keys");
 
         /// <summary>
         /// <c>jsonb_path_query(json, path)</c> as a FROM source: one row per JSONPath match. Cast a text
         /// path with <see cref="jsonpath(string?)"/> (<see cref="SqlFunctions.IJsonPathQueryRow"/>).
         /// </summary>
-        [SqlTableFunction("jsonb_path_query")]
-        public IQueryable<SqlFunctions.IJsonPathQueryRow> jsonb_path_query(object? json, string? path) => throw new NotSupportedException();
+        public TvfEntityBuilder<SqlFunctions.IJsonPathQueryRow> jsonb_path_query(object? json, string? path) => new("jsonb_path_query");
 
         /// <summary>
         /// <c>jsonb_to_record(json) AS x(col type, ...)</c> as a FROM source: one row from a single JSON
@@ -757,12 +744,11 @@ namespace NextORM.Core;
         /// and rendered as the alias column-definition list. Requires a provider that supports a typed
         /// result schema (see <see cref="ISqlDialect.SupportsResultSchema(TableFunctionSchema)"/>; PostgreSQL). Use
         /// through
-        /// <see cref="DataContextExtensions.FromTableFunction{T}(IDataContext, System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{T}}})"/>.
+        /// <c>ctx.From(() =&gt; ...)</c>.
         /// </summary>
         /// <typeparam name="TRow">The caller-declared row shape; its <c>[Column]</c> names/types form the column list.</typeparam>
         /// <param name="json">The JSON object to expand.</param>
-        [SqlTableFunction("jsonb_to_record", ResultSchema = TableFunctionSchema.AliasColumnList)]
-        public IQueryable<TRow> jsonb_to_record<TRow>(object? json) => throw new NotSupportedException();
+        public TvfEntityBuilder<TRow> jsonb_to_record<TRow>(object? json) => new("jsonb_to_record", null, null, null, [], TableFunctionSchema.AliasColumnList);
 
         /// <summary>
         /// <c>jsonb_to_recordset(json) AS x(col type, ...)</c> as a FROM source: one row per element of a
@@ -773,15 +759,13 @@ namespace NextORM.Core;
         /// </summary>
         /// <typeparam name="TRow">The caller-declared row shape; its <c>[Column]</c> names/types form the column list.</typeparam>
         /// <param name="json">The JSON array to expand.</param>
-        [SqlTableFunction("jsonb_to_recordset", ResultSchema = TableFunctionSchema.AliasColumnList)]
-        public IQueryable<TRow> jsonb_to_recordset<TRow>(object? json) => throw new NotSupportedException();
+        public TvfEntityBuilder<TRow> jsonb_to_recordset<TRow>(object? json) => new("jsonb_to_recordset", null, null, null, [], TableFunctionSchema.AliasColumnList);
 
         /// <summary>
         /// <c>ts_stat(query)</c> as a FROM source: one row per lexeme of a <c>tsvector</c> query, the
         /// <c>word</c>/<c>ndoc</c>/<c>nentry</c> columns (see <see cref="SqlFunctions.ITsStatRow"/>).
         /// </summary>
-        [SqlTableFunction("ts_stat")]
-        public IQueryable<SqlFunctions.ITsStatRow> ts_stat(string? query) => throw new NotSupportedException();
+        public TvfEntityBuilder<SqlFunctions.ITsStatRow> ts_stat(string? query) => new("ts_stat");
 
         /// <summary><c>a &amp;&amp; b</c>: true when the two ranges overlap (share at least one point).</summary>
         /// <typeparam name="T">The bound type of the ranges.</typeparam>

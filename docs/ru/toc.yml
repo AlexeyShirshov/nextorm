@@ -60,6 +60,8 @@
       href: guide/12-user-defined-functions.md
     - name: Табличные функции
       href: guide/13-table-valued-functions.md
+    - name: Схемы результата табличных функций
+      href: guide/13-tvf-result-schemas.md
     - name: Сырой SQL
       href: guide/14-raw-sql.md
     - name: Хинты запросов

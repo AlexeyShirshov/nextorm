@@ -270,12 +270,12 @@ See [Scalar functions](../../scalar-functions/index.md) and [JSON support](../16
 ## Table functions
 
 `numbers`/`numbers_mt` and the row-count generators `zeros`/`zeros_mt` are available through
-[`FromTableFunction`](xref:NextORM.Core.DataContextExtensions.FromTableFunction``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{``0}}})). The `numbers` `UInt64` column is cast to
+[`From`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{NextORM.Core.EntityBuilder{``0}}})) with a runtime-factory call. The `numbers` `UInt64` column is cast to
 `Int64` inside a wrapping subquery so it materialises as a CLR `long`; `zeros` materialises directly as
 `byte`:
 
 ```csharp
-var rows = dataContext.FromTableFunction(() => SqlFunctions.ClickHouse.zeros(3))
+var rows = dataContext.From(() => SqlFunctions.ClickHouse.zeros(3))
     .Select(r => new { r.Value })
     .ToList();
 ```

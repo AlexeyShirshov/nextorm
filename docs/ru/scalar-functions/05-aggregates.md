@@ -67,17 +67,17 @@ select nullableint, count(*) filter (where (id > 10)) as "Big", sum(id) filter (
 
 ## Функции, возвращающие наборы (PostgreSQL)
 
-`SqlFunctions.Postgres.generate_series` и `SqlFunctions.Postgres.unnest` — это предобъявленные источники
-[`[SqlTableFunction]`](../guide/13-table-valued-functions.md), поэтому отдельная обёртка не нужна:
+`SqlFunctions.Postgres.generate_series` и `SqlFunctions.Postgres.unnest` — это предобъявленные
+runtime-фабрики [`TvfEntityBuilder<T>`](../guide/13-table-valued-functions.md), поэтому собственная фабрика не нужна:
 
 ```csharp
 var numbers = dataContext
-    .FromTableFunction(() => SqlFunctions.Postgres.generate_series(1L, 3L))
+    .From(() => SqlFunctions.Postgres.generate_series(1L, 3L))
     .Select(r => r.Value)
     .ToList();
 
 var elements = dataContext
-    .FromTableFunction(() => SqlFunctions.Postgres.unnest(SqlFunctions.Parameter<long[]>(0)))
+    .From(() => SqlFunctions.Postgres.unnest(SqlFunctions.Parameter<long[]>(0)))
     .Select(r => r.Value)
     .ToList(new long[] { 1, 2, 3 });
 ```

@@ -190,7 +190,7 @@ public class InMemorySqliteFunctionsTests
     public void Fts5MatchTable_ShouldThrow()
     {
         var act = () => _sut.DataProvider
-            .FromTableFunction(() => SqlFunctions.Sqlite.MatchTable<SimpleEntity>("docs_fts", "foo"))
+            .From(() => SqlFunctions.Sqlite.MatchTable<SimpleEntity>("docs_fts", "foo"))
             .Select(r => new { r.Id })
             .ToList();
 

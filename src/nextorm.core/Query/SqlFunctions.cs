@@ -31,7 +31,7 @@ public static partial class SqlFunctions
     /// member requires <see cref="ISqlDialect.SupportsArrays"/> or the matching capability flag;
     /// other providers reject it with a clear message.
     /// </summary>
-    public static PostgresFunctions Postgres => default!;
+    public static PostgresFunctions Postgres { get; } = new();
 
     /// <summary>
     /// Surface of the text-JSON functions (SQL Server and MySQL/MariaDB), the SQL Server-only
@@ -40,7 +40,7 @@ public static partial class SqlFunctions
     /// <see cref="ISqlDialect.SupportsTextJson"/>, <see cref="ISqlDialect.SupportsChoose"/> or
     /// <see cref="ISqlDialect.SupportsTableFunction"/>; other providers reject it with a clear message.
     /// </summary>
-    public static SqlServerFunctions SqlServer => default!;
+    public static SqlServerFunctions SqlServer { get; } = new();
 
     /// <summary>
     /// Surface of the ClickHouse-only functions (the <c>argMin</c>/<c>argMax</c>, <c>uniq*</c>,
@@ -60,7 +60,7 @@ public static partial class SqlFunctions
     /// (<see cref="ISqlDialect.SupportsArgMinMax"/>, <see cref="ISqlDialect.AggregateFilterStyle"/>, …);
     /// other providers reject it with a clear message.
     /// </summary>
-    public static ClickHouseFunctions ClickHouse => default!;
+    public static ClickHouseFunctions ClickHouse { get; } = new();
 
     /// <summary>
     /// Surface of the MySQL/MariaDB-only functions (the native string/conditional idioms, the

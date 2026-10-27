@@ -1663,7 +1663,7 @@ public class SqlGenerationTests
         var stop = 3L;
 
         var command = Prepare(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.Postgres.generate_series(start, stop))
+            .From(() => SqlFunctions.Postgres.generate_series(start, stop))
             .Select(r => new { r.Value }));
 
         Normalize(command.DbCommand.CommandText)
@@ -1676,7 +1676,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
 
         var command = Prepare(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.Postgres.unnest(SqlFunctions.Parameter<long[]>(0)))
+            .From(() => SqlFunctions.Postgres.unnest(SqlFunctions.Parameter<long[]>(0)))
             .Select(r => new { r.Value }));
 
         Normalize(command.DbCommand.CommandText)
@@ -1691,7 +1691,7 @@ public class SqlGenerationTests
         var pattern = "\\d";
 
         var command = Prepare(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.Postgres.regexp_matches(source, pattern))
+            .From(() => SqlFunctions.Postgres.regexp_matches(source, pattern))
             .Select(r => new { r.Matches }));
 
         Normalize(command.DbCommand.CommandText)
@@ -1706,7 +1706,7 @@ public class SqlGenerationTests
         var pattern = ",";
 
         var command = Prepare(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.Postgres.regexp_split_to_table(source, pattern))
+            .From(() => SqlFunctions.Postgres.regexp_split_to_table(source, pattern))
             .Select(r => new { r.Value }));
 
         Normalize(command.DbCommand.CommandText)
@@ -1719,7 +1719,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
 
         var command = Prepare(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.Postgres.jsonb_array_elements(SqlFunctions.Parameter<JsonDocument>(0)))
+            .From(() => SqlFunctions.Postgres.jsonb_array_elements(SqlFunctions.Parameter<JsonDocument>(0)))
             .Select(r => new { r.Value }));
 
         Normalize(command.DbCommand.CommandText)
@@ -1732,7 +1732,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
 
         var command = Prepare(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.Postgres.jsonb_array_elements_text(SqlFunctions.Parameter<JsonDocument>(0)))
+            .From(() => SqlFunctions.Postgres.jsonb_array_elements_text(SqlFunctions.Parameter<JsonDocument>(0)))
             .Select(r => new { r.Value }));
 
         Normalize(command.DbCommand.CommandText)
@@ -1745,7 +1745,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
 
         var command = Prepare(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.Postgres.jsonb_each(SqlFunctions.Parameter<JsonDocument>(0)))
+            .From(() => SqlFunctions.Postgres.jsonb_each(SqlFunctions.Parameter<JsonDocument>(0)))
             .Select(r => new { r.Key, r.Value }));
 
         Normalize(command.DbCommand.CommandText)
@@ -1758,7 +1758,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
 
         var command = Prepare(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.Postgres.jsonb_each_text(SqlFunctions.Parameter<JsonDocument>(0)))
+            .From(() => SqlFunctions.Postgres.jsonb_each_text(SqlFunctions.Parameter<JsonDocument>(0)))
             .Select(r => new { r.Key, r.Value }));
 
         Normalize(command.DbCommand.CommandText)
@@ -1771,7 +1771,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
 
         var command = Prepare(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.Postgres.jsonb_to_record<IDynamicRecordRow>(SqlFunctions.Parameter<JsonDocument>(0)))
+            .From(() => SqlFunctions.Postgres.jsonb_to_record<IDynamicRecordRow>(SqlFunctions.Parameter<JsonDocument>(0)))
             .Select(r => new { r.A, r.B }));
 
         Normalize(command.DbCommand.CommandText)
@@ -1784,7 +1784,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
 
         var command = Prepare(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.Postgres.jsonb_to_recordset<IDynamicRecordRow>(SqlFunctions.Parameter<JsonDocument>(0)))
+            .From(() => SqlFunctions.Postgres.jsonb_to_recordset<IDynamicRecordRow>(SqlFunctions.Parameter<JsonDocument>(0)))
             .Select(r => new { r.A, r.B }));
 
         Normalize(command.DbCommand.CommandText)
@@ -1797,7 +1797,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
 
         var act = () => SqlOf(ctx, ctx
-            .FromTableFunction(() => MismatchedTvf.Values("a integer", "(1)"))
+            .From(() => MismatchedTvf.Values("a integer", "(1)"))
             .Select(r => new { r.A }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*LeadingArgument*");
@@ -1809,7 +1809,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
 
         var act = () => SqlOf(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.ClickHouse.values<IDynamicRecordRow>("(1, 'x')"))
+            .From(() => SqlFunctions.ClickHouse.values<IDynamicRecordRow>("(1, 'x')"))
             .Select(r => new { r.A }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*values*");
@@ -1821,7 +1821,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
 
         var command = Prepare(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.Postgres.jsonb_object_keys(SqlFunctions.Parameter<JsonDocument>(0)))
+            .From(() => SqlFunctions.Postgres.jsonb_object_keys(SqlFunctions.Parameter<JsonDocument>(0)))
             .Select(r => new { r.Key }));
 
         Normalize(command.DbCommand.CommandText)
@@ -1835,7 +1835,7 @@ public class SqlGenerationTests
         var path = "$.a";
 
         var command = Prepare(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.Postgres.jsonb_path_query(
+            .From(() => SqlFunctions.Postgres.jsonb_path_query(
                 SqlFunctions.Parameter<JsonDocument>(0),
                 SqlFunctions.Postgres.jsonpath(path)))
             .Select(r => new { r.Value }));
@@ -1851,7 +1851,7 @@ public class SqlGenerationTests
         var query = "select to_tsvector('a b')";
 
         var command = Prepare(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.Postgres.ts_stat(query))
+            .From(() => SqlFunctions.Postgres.ts_stat(query))
             .Select(r => new { r.Word, r.Ndoc, r.Nentry }));
 
         Normalize(command.DbCommand.CommandText)
@@ -1864,7 +1864,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var csv = "a,b";
 
-        var act = () => SqlOf(ctx, ctx.FromTableFunction(() => SqlFunctions.SqlServer.string_split(csv, ","))
+        var act = () => SqlOf(ctx, ctx.From(() => SqlFunctions.SqlServer.string_split(csv, ","))
             .Select(r => new { r.Value }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*string_split*");
@@ -1876,7 +1876,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
 
         var act = () => SqlOf(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.SqlServer.containstable<int>("docs", "body", "cat"))
+            .From(() => SqlFunctions.SqlServer.containstable<int>("docs", "body", "cat"))
             .Select(r => new { r.Key }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*containstable*");
@@ -1903,13 +1903,13 @@ public class SqlGenerationTests
 
         var source = name switch
         {
-            "url" => ctx.FromTableFunction(() => SqlFunctions.ClickHouse.url<ISimpleEntity>(location, format, structure)),
-            "s3" => ctx.FromTableFunction(() => SqlFunctions.ClickHouse.s3<ISimpleEntity>(location, format, structure)),
-            "file" => ctx.FromTableFunction(() => SqlFunctions.ClickHouse.file<ISimpleEntity>(location, format, structure)),
-            "remote" => ctx.FromTableFunction(() => SqlFunctions.ClickHouse.remote<ISimpleEntity>(addresses, database, table)),
-            "remoteSecure" => ctx.FromTableFunction(() => SqlFunctions.ClickHouse.remote_secure<ISimpleEntity>(addresses, database, table)),
-            "cluster" => ctx.FromTableFunction(() => SqlFunctions.ClickHouse.cluster<ISimpleEntity>(cluster, database, table)),
-            "clusterAllReplicas" => ctx.FromTableFunction(() => SqlFunctions.ClickHouse.cluster_all_replicas<ISimpleEntity>(cluster, database, table)),
+            "url" => ctx.From(() => SqlFunctions.ClickHouse.url<ISimpleEntity>(location, format, structure)),
+            "s3" => ctx.From(() => SqlFunctions.ClickHouse.s3<ISimpleEntity>(location, format, structure)),
+            "file" => ctx.From(() => SqlFunctions.ClickHouse.file<ISimpleEntity>(location, format, structure)),
+            "remote" => ctx.From(() => SqlFunctions.ClickHouse.remote<ISimpleEntity>(addresses, database, table)),
+            "remoteSecure" => ctx.From(() => SqlFunctions.ClickHouse.remote_secure<ISimpleEntity>(addresses, database, table)),
+            "cluster" => ctx.From(() => SqlFunctions.ClickHouse.cluster<ISimpleEntity>(cluster, database, table)),
+            "clusterAllReplicas" => ctx.From(() => SqlFunctions.ClickHouse.cluster_all_replicas<ISimpleEntity>(cluster, database, table)),
             _ => throw new ArgumentOutOfRangeException(nameof(name), name, "Unknown ClickHouse server table function.")
         };
 
@@ -2414,7 +2414,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var count = 3L;
 
-        var act = () => SqlOf(ctx, ctx.FromTableFunction(() => SqlFunctions.ClickHouse.numbers(count))
+        var act = () => SqlOf(ctx, ctx.From(() => SqlFunctions.ClickHouse.numbers(count))
             .Select(r => new { r.Value }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*numbers*");
@@ -2426,7 +2426,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var count = 3L;
 
-        var act = () => SqlOf(ctx, ctx.FromTableFunction(() => SqlFunctions.ClickHouse.zeros(count))
+        var act = () => SqlOf(ctx, ctx.From(() => SqlFunctions.ClickHouse.zeros(count))
             .Select(r => new { r.Value }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*zeros*");
@@ -2437,7 +2437,7 @@ public class SqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        var act = () => SqlOf(ctx, ctx.FromTableFunction(() => SqlFunctions.ClickHouse.generate_random())
+        var act = () => SqlOf(ctx, ctx.From(() => SqlFunctions.ClickHouse.generate_random())
             .Select(r => new { r.Id }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*generateRandom*");
@@ -2971,20 +2971,16 @@ public class SqlGenerationTests
 
     private static class Tvf
     {
-        [SqlTableFunction("all_rows")]
-        public static IQueryable<ITvfRow> AllRows() => throw new NotSupportedException();
+        public static TvfEntityBuilder<ITvfRow> AllRows() => new("all_rows");
 
-        [SqlTableFunction("rows_by_id")]
-        public static IQueryable<ITvfRow> ById(long id) => throw new NotSupportedException();
+        public static TvfEntityBuilder<ITvfRow> ById(long id) => new("rows_by_id");
 
-        [SqlTableFunction("rows_between", Schema = "app")]
-        public static IQueryable<ITvfRow> Between(long lo, long hi) => throw new NotSupportedException();
+        public static TvfEntityBuilder<ITvfRow> Between(long lo, long hi) => new("rows_between", "app");
     }
 
     private static class MismatchedTvf
     {
-        [SqlTableFunction("user_values", ResultSchema = TableFunctionSchema.LeadingArgument)]
-        public static IQueryable<IDynamicRecordRow> Values(string structure, string tuples) => throw new NotSupportedException();
+        public static TvfEntityBuilder<IDynamicRecordRow> Values(string structure, string tuples) => new("user_values", null, null, null, Array.Empty<int>(), TableFunctionSchema.LeadingArgument);
     }
 
     [Fact]
@@ -2992,7 +2988,7 @@ public class SqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        SqlOf(ctx, ctx.FromTableFunction(() => Tvf.AllRows()).Select(r => new { r.Id }))
+        SqlOf(ctx, ctx.From(() => Tvf.AllRows()).Select(r => new { r.Id }))
             .Should().Be("select id\n from all_rows() as \"t1\"");
     }
 
@@ -3002,7 +2998,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var id = 5L;
 
-        var command = Prepare(ctx, ctx.FromTableFunction(() => Tvf.ById(id)).Select(r => new { r.Id }));
+        var command = Prepare(ctx, ctx.From(() => Tvf.ById(id)).Select(r => new { r.Id }));
 
         Normalize(command.DbCommand.CommandText).Should().Be("select id\n from rows_by_id(@id) as \"t1\"");
         command.DbCommandParams.Cast<DbParameter>().Should().ContainSingle()
@@ -3016,7 +3012,7 @@ public class SqlGenerationTests
         var lo = 1L;
         var hi = 3L;
 
-        var command = Prepare(ctx, ctx.FromTableFunction(() => Tvf.Between(lo, hi)).Select(r => new { r.Id }));
+        var command = Prepare(ctx, ctx.From(() => Tvf.Between(lo, hi)).Select(r => new { r.Id }));
 
         Normalize(command.DbCommand.CommandText).Should().Be("select id\n from app.rows_between(@lo, @hi) as \"t1\"");
         command.DbCommandParams.Cast<DbParameter>().Select(p => p.ParameterName)
@@ -3030,7 +3026,7 @@ public class SqlGenerationTests
         var complex = ctx.From<IComplexEntity>();
 
         var sql = SqlOf(ctx, ctx
-            .FromTableFunction(() => Tvf.AllRows())
+            .From(() => Tvf.AllRows())
             .Join(complex, (r, c) => r.Id == c.Id)
             .Select(p => new { p.Item1.Value, p.Item2.String }));
 
@@ -3044,7 +3040,7 @@ public class SqlGenerationTests
         var simple = ctx.From<ISimpleEntity>();
 
         var sql = SqlOf(ctx, simple
-            .Join(ctx.FromTableFunction(() => Tvf.AllRows()), (s, r) => r.Id == s.Id)
+            .Join(ctx.From(() => Tvf.AllRows()), (s, r) => r.Id == s.Id)
             .Select(p => new { p.Item1.Id, p.Item2.Value }));
 
         sql.Should().Be("select t1.id, t2.value\n from simple_entity as \"t1\"\n join all_rows() as \"t2\" on t2.id = cast(t1.id as bigint)");
@@ -3057,7 +3053,7 @@ public class SqlGenerationTests
         var simple = ctx.From<ISimpleEntity>();
 
         var sql = SqlOf(ctx, simple
-            .CrossApply(ctx.FromTableFunction(() => Tvf.AllRows()))
+            .CrossApply(ctx.From(() => Tvf.AllRows()))
             .Select(p => new { p.Item1.Id, p.Item2.Value }));
 
         sql.Should().Be("select t1.id, t2.value\n from simple_entity as \"t1\"\n cross join lateral all_rows() as \"t2\"");
@@ -3070,7 +3066,7 @@ public class SqlGenerationTests
         var simple = ctx.From<ISimpleEntity>();
 
         var sql = SqlOf(ctx, simple
-            .CrossApply(s => ctx.FromTableFunction(() => Tvf.ById(s.Id)))
+            .CrossApply(s => ctx.From(() => Tvf.ById(s.Id)))
             .Select(p => new { p.Item1.Id, p.Item2.Value }));
 
         sql.Should().Be("select t1.id, t3.value\n from simple_entity as \"t1\"\n cross join lateral (select t2.id, t2.value\n from rows_by_id(cast(t1.id as bigint)) as \"t2\") as \"t3\"");

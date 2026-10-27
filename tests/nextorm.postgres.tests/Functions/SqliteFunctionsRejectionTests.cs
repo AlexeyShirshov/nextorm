@@ -184,7 +184,7 @@ public class SqliteFunctionsRejectionTests
         using var ctx = PostgresTestContext.Create();
 
         var act = () => SqlOf(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.Sqlite.MatchTable<ISimpleEntity>("docs_fts", "foo"))
+            .From(() => SqlFunctions.Sqlite.MatchTable<ISimpleEntity>("docs_fts", "foo"))
             .Select(r => r.Id));
         act.Should().Throw<NotSupportedException>();
     }

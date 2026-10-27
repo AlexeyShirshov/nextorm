@@ -12,7 +12,7 @@ A query begins with a source, and [`From`](xref:NextORM.Core.DataContextExtensio
 | Raw SQL fragment | [`FromSql`](xref:NextORM.Core.DataContextExtensions.FromSql(NextORM.Core.IDataContext,System.String,System.Object)) — [Raw SQL](14-raw-sql.md#compositing-raw-sql-as-a-from-source) |
 | Typed CTE | [`From(Cte<TResult>)`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,NextORM.Core.Cte{``0})), [`From(CteReference<TResult>)`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,NextORM.Core.CteReference{``0})), declared with [`With`](xref:NextORM.Core.DataContextExtensions.With(NextORM.Core.IDataContext,System.String,NextORM.Core.QueryCommand)) / [`WithRecursive`](xref:NextORM.Core.DataContextExtensions.WithRecursive(NextORM.Core.IDataContext,System.String,NextORM.Core.QueryCommand,System.Nullable{System.Int32})) — [CTEs](10-cte.md) |
 | Lazy temporary table | [`From(TempTableSource<TResult>)`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,NextORM.Core.TempTableSource{``0})) — [`AsTempTable`](20-create-table-as.md) |
-| Table-valued function | [`FromTableFunction<T>`](xref:NextORM.Core.DataContextExtensions.FromTableFunction``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{``0}}})) — [Table-valued functions](13-table-valued-functions.md) |
+| Table-valued function (runtime factory) | [`From(() => ...)`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{NextORM.Core.EntityBuilder{``0}}})) — [Table-valued functions](13-table-valued-functions.md) |
 
 Every source also accepts a `FromOptions` callback ([`FromOptions`](xref:NextORM.Core.FromOptions)) for per-source modifiers such as `TABLESAMPLE`/`SAMPLE` and table/index hints (see [Table sampling](#table-sampling-tablesample) below). The additive `CreateQueryBuilder*` forwarders mirror these overloads one-to-one (see the [API reference](../advanced/api-reference.md)). Overrides that change the rendered source of an already-chosen entity are described in [Per-query source overrides](#per-query-source-overrides).
 
@@ -91,13 +91,15 @@ Output: `6`, `12`.
 
 ## Table function as source
 
-`dataContext.FromTableFunction(() => ...)` uses a table-valued function as the `FROM` source. The
-built-in helpers cover the common set-returning functions; `SqlFunctions.Postgres.unnest` flattens a
-PostgreSQL array into one row per element:
+`dataContext.From(() => ...)` uses a runtime table-valued-function factory as the `FROM` source: the
+lambda carries the factory call and its arguments (see
+[Table-valued functions](13-table-valued-functions.md)). The built-in helpers cover the common
+set-returning functions; `SqlFunctions.Postgres.unnest` flattens a PostgreSQL array into one row per
+element:
 
 ```csharp
 var elements = dataContext
-    .FromTableFunction(() => SqlFunctions.Postgres.unnest(SqlFunctions.Parameter<long[]>(0)))
+    .From(() => SqlFunctions.Postgres.unnest(SqlFunctions.Parameter<long[]>(0)))
     .Select(r => r.Value)
     .ToList(new long[] { 1, 2, 3 });
 ```
@@ -114,14 +116,14 @@ If the fully qualified `SqlFunctions.*` names feel too verbose, import the surfa
 using static NextORM.Core.SqlFunctions;
 
 var elements = dataContext
-    .FromTableFunction(() => Postgres.unnest(Parameter<long[]>(0)))
+    .From(() => Postgres.unnest(Parameter<long[]>(0)))
     .Select(r => r.Value)
     .ToList(new long[] { 1, 2, 3 });
 ```
 
 `SqlFunctions.Postgres.generate_series(start, stop)` generates a numeric series the same way. The
 built-ins are gated by the provider ([`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect.SupportsTableFunction(System.String))),
-and a user-defined function is declared with `[SqlTableFunction]`; see
+and a custom function is declared as a `TvfEntityBuilder<T>` factory; see
 [Table-valued functions](13-table-valued-functions.md).
 
 ## Table sampling (`TABLESAMPLE`)

@@ -67,16 +67,16 @@ On ClickHouse the same query renders `toInt32(countIf((id > 10)))` and `sumIf(id
 ## Set-returning helpers (PostgreSQL)
 
 `SqlFunctions.Postgres.generate_series` and `SqlFunctions.Postgres.unnest` are pre-declared
-[`[SqlTableFunction]`](../guide/13-table-valued-functions.md) sources, so no user-defined wrapper is needed:
+[`TvfEntityBuilder<T>`](../guide/13-table-valued-functions.md) runtime factories, so no custom factory is needed:
 
 ```csharp
 var numbers = dataContext
-    .FromTableFunction(() => SqlFunctions.Postgres.generate_series(1L, 3L))
+    .From(() => SqlFunctions.Postgres.generate_series(1L, 3L))
     .Select(r => r.Value)
     .ToList();
 
 var elements = dataContext
-    .FromTableFunction(() => SqlFunctions.Postgres.unnest(SqlFunctions.Parameter<long[]>(0)))
+    .From(() => SqlFunctions.Postgres.unnest(SqlFunctions.Parameter<long[]>(0)))
     .Select(r => r.Value)
     .ToList(new long[] { 1, 2, 3 });
 ```

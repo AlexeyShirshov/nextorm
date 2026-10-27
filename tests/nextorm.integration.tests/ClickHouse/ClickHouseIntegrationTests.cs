@@ -301,7 +301,7 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
     public void NumbersTableFunction_ShouldReturnThreeRows()
     {
         var rows = _sut.DataProvider
-            .FromTableFunction(() => SqlFunctions.ClickHouse.numbers(3))
+            .From(() => SqlFunctions.ClickHouse.numbers(3))
             .Select(r => new { r.Value })
             .ToList();
 
@@ -313,7 +313,7 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
     public void ZerosTableFunction_ShouldReturnThreeRows()
     {
         var rows = _sut.DataProvider
-            .FromTableFunction(() => SqlFunctions.ClickHouse.zeros(3))
+            .From(() => SqlFunctions.ClickHouse.zeros(3))
             .Select(r => new { r.Value })
             .ToList();
 
@@ -325,7 +325,7 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
     public void GenerateRandomTableFunction_ShouldReturnRequestedRows()
     {
         var rows = _sut.DataProvider
-            .FromTableFunction(() => SqlFunctions.ClickHouse.generate_random())
+            .From(() => SqlFunctions.ClickHouse.generate_random())
             .Page(3, 0)
             .Select(r => new { r.Id, r.Value, r.Name })
             .ToList();
@@ -2000,7 +2000,7 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
     public void Values_WithDeclaredSchema_ShouldReturnRows()
     {
         var rows = _sut.DataProvider
-            .FromTableFunction(() => SqlFunctions.ClickHouse.values<IDynamicValuesRow>("(1, 'x'), (2, 'y')"))
+            .From(() => SqlFunctions.ClickHouse.values<IDynamicValuesRow>("(1, 'x'), (2, 'y')"))
             .OrderBy(r => r.A)
             .Select(r => new { r.A, r.B })
             .ToList();

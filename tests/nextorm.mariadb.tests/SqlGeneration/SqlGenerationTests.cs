@@ -334,23 +334,23 @@ public class SqlGenerationTests
         var source = "a,b";
         var pattern = ",";
 
-        var arrayElements = () => SqlOf(ctx, ctx.FromTableFunction(() => SqlFunctions.Postgres.jsonb_array_elements(json))
+        var arrayElements = () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.jsonb_array_elements(json))
             .Select(r => new { r.Value }));
         arrayElements.Should().Throw<NotSupportedException>().WithMessage("*jsonb_array_elements*");
 
-        var each = () => SqlOf(ctx, ctx.FromTableFunction(() => SqlFunctions.Postgres.jsonb_each(json))
+        var each = () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.jsonb_each(json))
             .Select(r => new { r.Key }));
         each.Should().Throw<NotSupportedException>().WithMessage("*jsonb_each*");
 
-        var split = () => SqlOf(ctx, ctx.FromTableFunction(() => SqlFunctions.Postgres.regexp_split_to_table(source, pattern))
+        var split = () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.regexp_split_to_table(source, pattern))
             .Select(r => new { r.Value }));
         split.Should().Throw<NotSupportedException>().WithMessage("*regexp_split_to_table*");
 
-        var record = () => SqlOf(ctx, ctx.FromTableFunction(() => SqlFunctions.Postgres.jsonb_to_record<int>(json))
+        var record = () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.jsonb_to_record<int>(json))
             .Select(r => new { V = r }));
         record.Should().Throw<NotSupportedException>().WithMessage("*jsonb_to_record*");
 
-        var values = () => SqlOf(ctx, ctx.FromTableFunction(() => SqlFunctions.ClickHouse.values<int>("(1)"))
+        var values = () => SqlOf(ctx, ctx.From(() => SqlFunctions.ClickHouse.values<int>("(1)"))
             .Select(r => new { V = r }));
         values.Should().Throw<NotSupportedException>().WithMessage("*values*");
     }

@@ -116,7 +116,7 @@ static async IAsyncEnumerable<SimpleEntity> GetRows()
 
   ```csharp
   var act = () => ctx
-      .FromTableFunction(() => Tvf.SimpleTvf())
+      .From(() => Tvf.SimpleTvf())
       .Select(it => new { it.Id })
       .ToList();
   // NotSupportedException: "... not supported by the in-memory provider."

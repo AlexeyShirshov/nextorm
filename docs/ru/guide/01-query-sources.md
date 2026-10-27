@@ -12,7 +12,7 @@
 | Сырой фрагмент SQL | [`FromSql`](xref:NextORM.Core.DataContextExtensions.FromSql(NextORM.Core.IDataContext,System.String,System.Object)) — [Сырой SQL](14-raw-sql.md) |
 | Типизированный CTE | [`From(Cte<TResult>)`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,NextORM.Core.Cte{``0})), [`From(CteReference<TResult>)`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,NextORM.Core.CteReference{``0})), объявленный через [`With`](xref:NextORM.Core.DataContextExtensions.With(NextORM.Core.IDataContext,System.String,NextORM.Core.QueryCommand)) / [`WithRecursive`](xref:NextORM.Core.DataContextExtensions.WithRecursive(NextORM.Core.IDataContext,System.String,NextORM.Core.QueryCommand,System.Nullable{System.Int32})) — [CTE](10-cte.md) |
 | Ленивая временная таблица | [`From(TempTableSource<TResult>)`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,NextORM.Core.TempTableSource{``0})) — [`AsTempTable`](20-create-table-as.md) |
-| Табличная функция | [`FromTableFunction<T>`](xref:NextORM.Core.DataContextExtensions.FromTableFunction``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{``0}}})) — [Табличные функции](13-table-valued-functions.md) |
+| Табличная функция (runtime-фабрика) | [`From(() => ...)`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{NextORM.Core.EntityBuilder{``0}}})) — [Табличные функции](13-table-valued-functions.md) |
 
 Каждый источник также принимает колбэк `FromOptions` ([`FromOptions`](xref:NextORM.Core.FromOptions)) для модификаторов уровня источника, таких как `TABLESAMPLE`/`SAMPLE` и хинты таблиц/индексов (см. [Сэмплирование таблицы](#сэмплирование-таблицы-tablesample) ниже). Аддитивные форвардеры `CreateQueryBuilder*` зеркалят эти перегрузки один-к-одному (см. [Справочник API](../advanced/api-reference.md)). Переопределения, меняющие рендер источника уже выбранной сущности, описаны в [Переопределении источника для запроса](#переопределение-источника-для-запроса).
 
@@ -93,13 +93,14 @@ select (c0 * 3)
 
 ## Табличная функция в качестве источника
 
-`dataContext.FromTableFunction(() => ...)` использует табличную функцию как источник `FROM`. Встроенные
+`dataContext.From(() => ...)` использует runtime-фабрику табличной функции как источник `FROM`: lambda несёт
+вызов фабрики и её аргументы (см. [Табличные функции](13-table-valued-functions.md)). Встроенные
 помощники покрывают распространённые функции, возвращающие набор; `SqlFunctions.Postgres.unnest`
 разворачивает массив PostgreSQL в одну строку на элемент:
 
 ```csharp
 var elements = dataContext
-    .FromTableFunction(() => SqlFunctions.Postgres.unnest(SqlFunctions.Parameter<long[]>(0)))
+    .From(() => SqlFunctions.Postgres.unnest(SqlFunctions.Parameter<long[]>(0)))
     .Select(r => r.Value)
     .ToList(new long[] { 1, 2, 3 });
 ```
@@ -116,14 +117,14 @@ select unnest as "Value"
 using static NextORM.Core.SqlFunctions;
 
 var elements = dataContext
-    .FromTableFunction(() => Postgres.unnest(Parameter<long[]>(0)))
+    .From(() => Postgres.unnest(Parameter<long[]>(0)))
     .Select(r => r.Value)
     .ToList(new long[] { 1, 2, 3 });
 ```
 
 `SqlFunctions.Postgres.generate_series(start, stop)` аналогично генерирует числовую последовательность.
 Встроенные помощники включаются провайдером ([`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect.SupportsTableFunction(System.String))), а
-пользовательская функция объявляется через `[SqlTableFunction]`; см.
+пользовательская функция объявляется как фабрика `TvfEntityBuilder<T>`; см.
 [Табличные функции](13-table-valued-functions.md).
 
 ## Сэмплирование таблицы (`TABLESAMPLE`)
