@@ -20,6 +20,33 @@ namespace NextORM.Core;
 /// </summary>
 internal static class ExtendedScalarFunctionTranslator
 {
+    /// <summary>
+    /// Members refused for a demonstrated server-version limitation. The refusal is raised before the
+    /// dialect gate, so every provider gets the precise technical reason instead of SQL the pinned
+    /// PostgreSQL server would reject. <c>casefold</c> arrived in PostgreSQL 18; <c>gamma</c>,
+    /// <c>tgamma</c> and <c>lgamma</c> exist in no PostgreSQL release — all four are absent from
+    /// <c>pg_proc</c> on 17.11 and fail with <c>42883</c>.
+    /// </summary>
+    private static readonly Dictionary<string, string> Refused = new(StringComparer.Ordinal)
+    {
+        [nameof(PostgresFunctions.casefold)] =
+            "The casefold function is refused: it was introduced in PostgreSQL 18 and does not exist on the " +
+            "pinned 17.11 server (absent from pg_proc; the name fails with 42883), so no SQL that executes " +
+            "on the target server can be emitted.",
+        [nameof(PostgresFunctions.gamma)] =
+            "The gamma function is refused: it does not exist on the pinned PostgreSQL 17.11 server (absent " +
+            "from pg_proc and from the PG17 mathematical-functions table; the name fails with 42883), so no " +
+            "SQL that executes on the target server can be emitted.",
+        [nameof(PostgresFunctions.tgamma)] =
+            "The tgamma function is refused: it does not exist on the pinned PostgreSQL 17.11 server (absent " +
+            "from pg_proc and from the PG17 mathematical-functions table; the name fails with 42883), so no " +
+            "SQL that executes on the target server can be emitted.",
+        [nameof(PostgresFunctions.lgamma)] =
+            "The lgamma function is refused: it does not exist on the pinned PostgreSQL 17.11 server (absent " +
+            "from pg_proc and from the PG17 mathematical-functions table; the name fails with 42883), so no " +
+            "SQL that executes on the target server can be emitted."
+    };
+
     private static readonly HashSet<string> MathFunctions = new(StringComparer.Ordinal)
     {
         nameof(PostgresFunctions.asin), nameof(PostgresFunctions.acos), nameof(PostgresFunctions.atan),
@@ -70,6 +97,9 @@ internal static class ExtendedScalarFunctionTranslator
     internal static bool TryTranslate(BaseExpressionVisitor visitor, MethodCallExpression node)
     {
         var name = node.Method.Name;
+
+        if (node.Method.DeclaringType == typeof(PostgresFunctions) && Refused.TryGetValue(name, out var refusal))
+            throw new NotSupportedException(refusal);
 
         if (MathFunctions.Contains(name))
         {

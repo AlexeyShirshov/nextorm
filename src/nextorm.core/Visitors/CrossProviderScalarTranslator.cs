@@ -22,7 +22,31 @@ internal static class CrossProviderScalarTranslator
         nameof(CommonFunctions.bit_length), nameof(CommonFunctions.octet_length),
         nameof(CommonFunctions.cot), nameof(CommonFunctions.degrees), nameof(CommonFunctions.radians),
         nameof(CommonFunctions.pi),
-        nameof(PostgresFunctions.scale), nameof(PostgresFunctions.min_scale), nameof(PostgresFunctions.trim_scale)
+        nameof(PostgresFunctions.scale), nameof(PostgresFunctions.min_scale), nameof(PostgresFunctions.trim_scale),
+        nameof(PostgresFunctions.btrim), nameof(PostgresFunctions.ltrim), nameof(PostgresFunctions.rtrim),
+        nameof(PostgresFunctions.starts_with), nameof(PostgresFunctions.parse_ident),
+        nameof(PostgresFunctions.quote_ident), nameof(PostgresFunctions.quote_literal),
+        nameof(PostgresFunctions.quote_nullable), nameof(PostgresFunctions.to_ascii),
+        nameof(PostgresFunctions.to_hex), nameof(PostgresFunctions.to_oct), nameof(PostgresFunctions.to_bin),
+        nameof(PostgresFunctions.convert_from), nameof(PostgresFunctions.convert_to),
+        nameof(PostgresFunctions.encode), nameof(PostgresFunctions.decode),
+        nameof(PostgresFunctions.normalize), nameof(PostgresFunctions.unistr),
+        nameof(PostgresFunctions.regexp_match),
+        nameof(PostgresFunctions.div), nameof(PostgresFunctions.erf), nameof(PostgresFunctions.erfc),
+        nameof(PostgresFunctions.random_normal),
+        nameof(PostgresFunctions.acosd), nameof(PostgresFunctions.asind), nameof(PostgresFunctions.atand),
+        nameof(PostgresFunctions.atan2d), nameof(PostgresFunctions.cosd), nameof(PostgresFunctions.cotd),
+        nameof(PostgresFunctions.sind), nameof(PostgresFunctions.tand)
+    };
+
+    /// <summary>
+    /// The Unicode normalization forms accepted by <c>normalize</c>. The form is a grammar keyword in
+    /// PostgreSQL (<c>normalize(value, NFD)</c>; <c>normalize(value, 'NFD')</c> is a syntax error), so it
+    /// must be a constant and is rendered unquoted.
+    /// </summary>
+    private static readonly HashSet<string> UnicodeNormalizationForms = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "NFC", "NFD", "NFKC", "NFKD"
     };
 
     /// <summary>Translates a cross-provider scalar call; returns <c>false</c> when it is not one.</summary>
@@ -60,11 +84,33 @@ internal static class CrossProviderScalarTranslator
             return;
         }
 
+        // normalize(value, form): the form is a grammar keyword, so it is rendered unquoted from the
+        // constant instead of going through the ordinary argument emission.
+        var normalizationForm = name == nameof(PostgresFunctions.normalize) && args.Count == 2
+            ? RenderNormalizationForm(args[1])
+            : null;
+
         visitor.NeedAliasForColumn = true;
         var rendered = new string[args.Count];
         for (var (i, cnt) = (0, args.Count); i < cnt; i++)
-            rendered[i] = visitor.VisitToString(args[i]);
+            rendered[i] = i == 1 && normalizationForm is not null
+                ? normalizationForm
+                : visitor.VisitToString(args[i]);
 
         visitor.Builder!.Append(scalars.Render(name, rendered));
+    }
+
+    /// <summary>
+    /// Validates and renders the <c>normalize</c> form keyword. PostgreSQL's grammar accepts only the
+    /// bare tokens <c>NFC</c>/<c>NFD</c>/<c>NFKC</c>/<c>NFKD</c> in this position, so a non-constant
+    /// value is refused instead of being emitted as a quoted literal or a parameter.
+    /// </summary>
+    private static string RenderNormalizationForm(Expression argument)
+    {
+        if (!SqlLiteral.TryGetConstantString(argument, out var form) || !UnicodeNormalizationForms.Contains(form))
+            throw new NotSupportedException(
+                "The normalize form must be a constant string among NFC, NFD, NFKC and NFKD: PostgreSQL takes the " +
+                "normalization form as a grammar keyword, not as a string value, so it cannot be a parameter or an expression.");
+        return form.ToUpperInvariant();
     }
 }

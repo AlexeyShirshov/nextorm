@@ -345,7 +345,7 @@ public class PostgresDialect : SqlDialectBase
     /// <inheritdoc/>
     public override bool SupportsTableFunction(string name) =>
         name is "generate_series" or "unnest"
-            or "regexp_matches" or "regexp_split_to_table"
+            or "regexp_matches" or "regexp_split_to_table" or "string_to_table"
             or "jsonb_array_elements" or "jsonb_array_elements_text"
             or "jsonb_each" or "jsonb_each_text" or "jsonb_object_keys"
             or "jsonb_path_query" or "ts_stat"
@@ -373,7 +373,7 @@ public class PostgresDialect : SqlDialectBase
     /// their names and are emitted unchanged.
     /// </summary>
     public override string WrapTableFunction(string name, string call) =>
-        name is "generate_series" or "unnest" or "regexp_matches" or "regexp_split_to_table"
+        name is "generate_series" or "unnest" or "regexp_matches" or "regexp_split_to_table" or "string_to_table"
             or "jsonb_object_keys" or "jsonb_path_query"
             ? $"(select {name}\n from {call})"
             : call;
@@ -913,7 +913,13 @@ internal sealed class PostgresStringFormats : IStringFormatFunctions
 /// every name has a native spelling (<c>left</c>/<c>right</c>, <c>lpad</c>/<c>rpad</c>, <c>repeat</c>/
 /// <c>reverse</c>, <c>concat_ws</c>, <c>translate</c>, <c>ascii</c>, <c>chr</c>). <c>space</c> has no
 /// native function and is rendered as <c>repeat(' ', n)</c>. Also renders the PostgreSQL numeric-scale
-/// members <c>scale</c>/<c>min_scale</c>/<c>trim_scale</c>, each advertised by its own name.
+/// members <c>scale</c>/<c>min_scale</c>/<c>trim_scale</c>, the residual string family
+/// (<c>btrim</c>/<c>ltrim</c>/<c>rtrim</c> with a character set, <c>starts_with</c>, <c>parse_ident</c>,
+/// <c>quote_ident</c>/<c>quote_literal</c>/<c>quote_nullable</c>, <c>to_ascii</c>, <c>to_hex</c>/
+/// <c>to_oct</c>/<c>to_bin</c>, <c>convert_from</c>/<c>convert_to</c>, <c>encode</c>/<c>decode</c>,
+/// <c>normalize</c>, <c>unistr</c>, <c>regexp_match</c>) and the residual numeric family (<c>div</c>,
+/// <c>erf</c>/<c>erfc</c>, <c>random_normal</c> and the degree-based trigonometry), each advertised by
+/// its own name.
 /// </summary>
 internal sealed class PostgresScalarFunctions : IScalarFunctions
 {
@@ -924,7 +930,13 @@ internal sealed class PostgresScalarFunctions : IScalarFunctions
         "left" or "right" or "lpad" or "rpad" or "repeat" or "reverse" or "space" or
         "concat_ws" or "translate" or "ascii" or "char" or
         "bit_length" or "octet_length" or "cot" or "degrees" or "radians" or "pi" or
-        "scale" or "min_scale" or "trim_scale";
+        "scale" or "min_scale" or "trim_scale" or
+        "btrim" or "ltrim" or "rtrim" or "starts_with" or "parse_ident" or "quote_ident" or
+        "quote_literal" or "quote_nullable" or "to_ascii" or "to_hex" or "to_oct" or "to_bin" or
+        "convert_from" or "convert_to" or "encode" or "decode" or "normalize" or "unistr" or
+        "regexp_match" or
+        "div" or "erf" or "erfc" or "random_normal" or
+        "acosd" or "asind" or "atand" or "atan2d" or "cosd" or "cotd" or "sind" or "tand";
 
     /// <inheritdoc/>
     public string Render(string name, IReadOnlyList<string> args) => name switch
@@ -949,6 +961,12 @@ internal sealed class PostgresScalarFunctions : IScalarFunctions
         "scale" => $"scale({args[0]})",
         "min_scale" => $"min_scale({args[0]})",
         "trim_scale" => $"trim_scale({args[0]})",
+        "btrim" or "ltrim" or "rtrim" or "starts_with" or "parse_ident" or "quote_ident" or
+            "quote_literal" or "quote_nullable" or "to_ascii" or "to_hex" or "to_oct" or "to_bin" or
+            "convert_from" or "convert_to" or "encode" or "decode" or "normalize" or "unistr" or
+            "regexp_match" or "div" or "erf" or "erfc" or "random_normal" or
+            "acosd" or "asind" or "atand" or "atan2d" or "cosd" or "cotd" or "sind" or "tand"
+            => $"{name}({string.Join(", ", args)})",
         _ => throw new NotSupportedException($"The {name} function is not supported by PostgreSQL.")
     };
 

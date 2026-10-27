@@ -147,6 +147,17 @@ public static partial class SqlFunctions
     }
 
     /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.string_to_table(string?, string?)"/>: the
+    /// single <c>string_to_table</c> column holds one fragment.
+    /// </summary>
+    public interface IStringToTableRow
+    {
+        /// <summary>One fragment produced by the split; NULL when it matched the <c>null_string</c> argument.</summary>
+        [Column("string_to_table")]
+        string? Value { get; set; }
+    }
+
+    /// <summary>
     /// Row shape produced by <see cref="PostgresFunctions.jsonb_array_elements(object?)"/> and
     /// <see cref="PostgresFunctions.jsonb_array_elements_text(object?)"/>: the single <c>value</c> column
     /// holds one array element (a jsonb document rendered as text, or plain text).

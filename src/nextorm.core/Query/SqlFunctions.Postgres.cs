@@ -349,6 +349,88 @@ namespace NextORM.Core;
         public int width_bucket(double? operand, double? low, double? high, int count) => default!;
 
         /// <summary>
+        /// Integer division truncating toward zero (<c>div(y, x)</c>) on <c>numeric</c> operands, so
+        /// <c>div(7, 2)</c> is <c>3</c> and <c>div(-7, 2)</c> is <c>-3</c>. Division by zero raises on
+        /// the server. A NULL argument yields NULL. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public decimal? div(decimal? y, decimal? x) => default!;
+
+        /// <summary>
+        /// The error function <c>erf(x)</c> of <paramref name="x"/>, in the range -1..1. A NULL argument
+        /// yields NULL. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public double? erf(double? x) => default!;
+
+        /// <summary>
+        /// The complementary error function <c>erfc(x)</c> = 1 - <c>erf(x)</c>, in the range 0..2. A
+        /// NULL argument yields NULL. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public double? erfc(double? x) => default!;
+
+        /// <summary>
+        /// A normally distributed random value with the given <paramref name="mean"/> and
+        /// <paramref name="stddev"/> (<c>random_normal</c>); the result is volatile, so the same query
+        /// returns a different value on every execution. A NULL argument yields NULL. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public double? random_normal(double? mean, double? stddev) => default!;
+
+        /// <summary>Arccosine in degrees (<c>acosd</c>). A NULL argument yields NULL. Gated per name by <see cref="IScalarFunctions.Supports"/>.</summary>
+        public double? acosd(double? x) => default!;
+
+        /// <summary>Arcsine in degrees (<c>asind</c>). A NULL argument yields NULL. Gated per name by <see cref="IScalarFunctions.Supports"/>.</summary>
+        public double? asind(double? x) => default!;
+
+        /// <summary>Arctangent in degrees (<c>atand</c>). A NULL argument yields NULL. Gated per name by <see cref="IScalarFunctions.Supports"/>.</summary>
+        public double? atand(double? x) => default!;
+
+        /// <summary>Arctangent of <paramref name="y"/>/<paramref name="x"/> in degrees, using the signs of both arguments (<c>atan2d</c>). A NULL argument yields NULL.</summary>
+        public double? atan2d(double? y, double? x) => default!;
+
+        /// <summary>Cosine in degrees (<c>cosd</c>). A NULL argument yields NULL. Gated per name by <see cref="IScalarFunctions.Supports"/>.</summary>
+        public double? cosd(double? x) => default!;
+
+        /// <summary>Cotangent in degrees (<c>cotd</c>). A NULL argument yields NULL. Gated per name by <see cref="IScalarFunctions.Supports"/>.</summary>
+        public double? cotd(double? x) => default!;
+
+        /// <summary>Sine in degrees (<c>sind</c>). A NULL argument yields NULL. Gated per name by <see cref="IScalarFunctions.Supports"/>.</summary>
+        public double? sind(double? x) => default!;
+
+        /// <summary>Tangent in degrees (<c>tand</c>). A NULL argument yields NULL. Gated per name by <see cref="IScalarFunctions.Supports"/>.</summary>
+        public double? tand(double? x) => default!;
+
+        /// <summary>
+        /// <c>gamma(x)</c> is refused: it does not exist on the pinned PostgreSQL 17.11 server (absent
+        /// from <c>pg_proc</c>, absent from the PG17 mathematical-functions table, and the name fails
+        /// with <c>42883</c>), so any SQL emitted for it would be rejected by the target server.
+        /// </summary>
+        /// <returns>Never returns; the call is refused when the query is translated.</returns>
+        public double? gamma(double? x) =>
+            throw new NotSupportedException(
+                "The gamma function is refused: it does not exist on the pinned PostgreSQL 17.11 server.");
+
+        /// <summary>
+        /// <c>tgamma(x)</c> is refused: it does not exist on the pinned PostgreSQL 17.11 server (absent
+        /// from <c>pg_proc</c> and the name fails with <c>42883</c>), so any SQL emitted for it would be
+        /// rejected by the target server.
+        /// </summary>
+        /// <returns>Never returns; the call is refused when the query is translated.</returns>
+        public double? tgamma(double? x) =>
+            throw new NotSupportedException(
+                "The tgamma function is refused: it does not exist on the pinned PostgreSQL 17.11 server.");
+
+        /// <summary>
+        /// <c>lgamma(x)</c> is refused: it does not exist on the pinned PostgreSQL 17.11 server (absent
+        /// from <c>pg_proc</c> and the name fails with <c>42883</c>), so any SQL emitted for it would be
+        /// rejected by the target server.
+        /// </summary>
+        /// <returns>Never returns; the call is refused when the query is translated.</returns>
+        public double? lgamma(double? x) =>
+            throw new NotSupportedException(
+                "The lgamma function is refused: it does not exist on the pinned PostgreSQL 17.11 server.");
+
+        /// <summary>
         /// The number of decimal digits in the fractional part of <paramref name="value"/>
         /// (<c>scale</c>, PostgreSQL). Trailing zeroes count, so <c>12.3400</c> has scale 4. A NULL
         /// argument yields NULL. Gated per name by <see cref="IScalarFunctions.Supports"/>.
@@ -460,6 +542,228 @@ namespace NextORM.Core;
 
         /// <summary>The substring matched by the first POSIX regular expression match in <paramref name="value"/> with <paramref name="flags"/>.</summary>
         public string? regexp_substr(string? value, string? pattern, string? flags) => default!;
+
+        /// <summary>
+        /// The first POSIX regular-expression match of <paramref name="pattern"/> in
+        /// <paramref name="value"/> as a <c>text[]</c> of its captured groups — the whole match when the
+        /// pattern has no groups. A pattern with no match returns <see langword="null"/> (not an empty
+        /// array), and a NULL argument yields NULL. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string?[] regexp_match(string? value, string? pattern) => default!;
+
+        /// <summary>
+        /// <c>regexp_match(value, pattern, flags)</c>: the first match with the given
+        /// <c>g</c>/<c>i</c>/<c>n</c>/<c>p</c>/<c>w</c>/<c>x</c> flags. A pattern with no match returns
+        /// <see langword="null"/>, and a NULL argument yields NULL. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string?[] regexp_match(string? value, string? pattern, string? flags) => default!;
+
+        /// <summary>
+        /// Removes the longest string containing only whitespace from both ends of
+        /// <paramref name="value"/> (<c>btrim</c>, the one-argument form). A NULL argument yields NULL.
+        /// Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? btrim(string? value) => default!;
+
+        /// <summary>
+        /// Removes the longest string containing only the characters of <paramref name="characters"/>
+        /// from both ends of <paramref name="value"/> (<c>btrim</c>, two-argument form). The second
+        /// argument is a character set, not a substring. A NULL argument yields NULL. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? btrim(string? value, string? characters) => default!;
+
+        /// <summary>
+        /// The <c>bytea</c> form of <see cref="btrim(string?, string?)"/>: removes the leading and
+        /// trailing bytes that occur in <paramref name="bytesToTrim"/>. A NULL argument yields NULL.
+        /// Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public byte[]? btrim(byte[]? value, byte[]? bytesToTrim) => default!;
+
+        /// <summary>
+        /// Removes the longest string containing only the characters of <paramref name="characters"/>
+        /// from the start of <paramref name="value"/> (<c>ltrim</c>, two-argument form). The
+        /// one-argument form is the built-in <see cref="string.TrimStart()"/> translation. A NULL
+        /// argument yields NULL. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? ltrim(string? value, string? characters) => default!;
+
+        /// <summary>
+        /// The <c>bytea</c> form of <see cref="ltrim(string?, string?)"/>: removes the leading bytes
+        /// that occur in <paramref name="bytesToTrim"/>. A NULL argument yields NULL. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public byte[]? ltrim(byte[]? value, byte[]? bytesToTrim) => default!;
+
+        /// <summary>
+        /// Removes the longest string containing only the characters of <paramref name="characters"/>
+        /// from the end of <paramref name="value"/> (<c>rtrim</c>, two-argument form). The
+        /// one-argument form is the built-in <see cref="string.TrimEnd()"/> translation. A NULL
+        /// argument yields NULL. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? rtrim(string? value, string? characters) => default!;
+
+        /// <summary>
+        /// The <c>bytea</c> form of <see cref="rtrim(string?, string?)"/>: removes the trailing bytes
+        /// that occur in <paramref name="bytesToTrim"/>. A NULL argument yields NULL. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public byte[]? rtrim(byte[]? value, byte[]? bytesToTrim) => default!;
+
+        /// <summary>
+        /// True when <paramref name="value"/> begins with <paramref name="prefix"/> (<c>starts_with</c>,
+        /// collation-aware, case-sensitive unless the collation says otherwise). A NULL argument yields
+        /// NULL. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public bool? starts_with(string? value, string? prefix) => default!;
+
+        /// <summary>
+        /// Splits a qualified identifier into its dot-separated parts (<c>parse_ident</c>), removing the
+        /// quoting of each part. With <paramref name="strict"/> true an invalid identifier raises
+        /// instead of being truncated after the first error. Returns <c>text[]</c>; a NULL argument
+        /// yields NULL. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string?[] parse_ident(string? value, bool? strict) => default!;
+
+        /// <summary>
+        /// Quotes <paramref name="value"/> as an SQL identifier, adding double quotes only when required
+        /// (<c>quote_ident</c>): <c>a b</c> becomes <c>"a b"</c>, <c>test</c> stays unquoted. A NULL
+        /// argument yields NULL. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? quote_ident(string? value) => default!;
+
+        /// <summary>
+        /// Quotes <paramref name="value"/> as an SQL string literal, doubling embedded single quotes and
+        /// prefixing a backslash-containing value with <c>E</c> (<c>quote_literal</c>, the <c>text</c>
+        /// overload). A NULL argument yields NULL — use
+        /// <see cref="quote_nullable(string?)"/> to obtain the <c>NULL</c> keyword. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? quote_literal(string? value) => default!;
+
+        /// <summary>
+        /// Like <see cref="quote_literal(string?)"/>, but a NULL argument yields the four-character text
+        /// <c>NULL</c> instead of NULL (<c>quote_nullable</c>, the <c>text</c> overload). Gated per name
+        /// by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? quote_nullable(string? value) => default!;
+
+        /// <summary>
+        /// Translates <paramref name="value"/> to ASCII, replacing every non-ASCII character with a
+        /// closest-ASCII approximation (<c>to_ascii</c>, one-argument form; usually
+        /// <c>LATIN1</c>/<c>WIN1250</c>). The conversion is not reversible. A NULL argument yields NULL.
+        /// Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? to_ascii(string? value) => default!;
+
+        /// <summary>
+        /// <c>to_ascii(value, encoding)</c>: translates <paramref name="value"/> from the named encoding
+        /// to ASCII. A NULL argument yields NULL. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? to_ascii(string? value, int? encoding) => default!;
+
+        /// <summary>
+        /// <c>to_ascii(value, encoding)</c> with the encoding named as text (for example
+        /// <c>LATIN1</c>). A NULL argument yields NULL. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? to_ascii(string? value, string? encoding) => default!;
+
+        /// <summary>
+        /// The hexadecimal representation of <paramref name="value"/> (<c>to_hex</c>); negative values
+        /// keep the two's-complement sign, so <c>-1</c> is <c>ffffffff</c>. A NULL argument yields NULL.
+        /// Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? to_hex(int? value) => default!;
+
+        /// <summary>The hexadecimal representation of the 64-bit <paramref name="value"/> (<c>to_hex</c>). A NULL argument yields NULL.</summary>
+        public string? to_hex(long? value) => default!;
+
+        /// <summary>The octal representation of <paramref name="value"/> (<c>to_oct</c>). A NULL argument yields NULL.</summary>
+        public string? to_oct(int? value) => default!;
+
+        /// <summary>The octal representation of the 64-bit <paramref name="value"/> (<c>to_oct</c>). A NULL argument yields NULL.</summary>
+        public string? to_oct(long? value) => default!;
+
+        /// <summary>The binary representation of <paramref name="value"/> (<c>to_bin</c>). A NULL argument yields NULL.</summary>
+        public string? to_bin(int? value) => default!;
+
+        /// <summary>The binary representation of the 64-bit <paramref name="value"/> (<c>to_bin</c>). A NULL argument yields NULL.</summary>
+        public string? to_bin(long? value) => default!;
+
+        /// <summary>
+        /// Converts <paramref name="bytes"/> from the named encoding into the database encoding
+        /// (<c>convert_from</c>). A value that is not valid in that encoding raises on the server rather
+        /// than being replaced. A NULL argument yields NULL. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? convert_from(byte[]? bytes, string? encoding) => default!;
+
+        /// <summary>
+        /// Converts <paramref name="value"/> from the database encoding into the named encoding
+        /// (<c>convert_to</c>), returning <c>bytea</c>. A NULL argument yields NULL. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public byte[]? convert_to(string? value, string? encoding) => default!;
+
+        /// <summary>
+        /// Encodes <paramref name="bytes"/> into a textual form named by <paramref name="format"/>
+        /// (<c>encode</c>): <c>base64</c>, <c>hex</c> or <c>escape</c>. A NULL argument yields NULL.
+        /// Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? encode(byte[]? bytes, string? format) => default!;
+
+        /// <summary>
+        /// Decodes the textual <paramref name="value"/> written in <paramref name="format"/>
+        /// (<c>decode</c>: <c>base64</c>, <c>hex</c> or <c>escape</c>) back into <c>bytea</c>. Malformed
+        /// input raises on the server. A NULL argument yields NULL. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public byte[]? decode(string? value, string? format) => default!;
+
+        /// <summary>
+        /// The Unicode normalization of <paramref name="value"/> in the form named by
+        /// <paramref name="form"/> (<c>normalize</c>): <c>NFC</c>, <c>NFD</c>, <c>NFKC</c> or
+        /// <c>NFKD</c>. The form is a grammar keyword in PostgreSQL, not a string value, so it must be a
+        /// constant and is rendered unquoted. A NULL argument yields NULL. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? normalize(string? value, string? form) => default!;
+
+        /// <summary>
+        /// Interprets backslash escapes (<c>\XXXX</c>, <c>\+XXXXXX</c>, <c>\uXXXX</c>,
+        /// <c>\UXXXXXXXX</c>) and doubled backslashes in <paramref name="value"/> as Unicode code
+        /// points (<c>unistr</c>). A NULL argument yields NULL. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? unistr(string? value) => default!;
+
+        /// <summary>
+        /// Splits <paramref name="value"/> on the <paramref name="delimiter"/> string and returns one
+        /// row per fragment (<c>string_to_table</c>), select
+        /// <see cref="SqlFunctions.IStringToTableRow.Value"/>. Use through <c>ctx.From(() =&gt; ...)</c>.
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.IStringToTableRow> string_to_table(string? value, string? delimiter) => new("string_to_table");
+
+        /// <summary>
+        /// <c>string_to_table(value, delimiter, null_string)</c>: fragments equal to
+        /// <paramref name="nullString"/> become NULL rows; the other fragments are unchanged. Use through
+        /// <c>ctx.From(() =&gt; ...)</c>.
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.IStringToTableRow> string_to_table(string? value, string? delimiter, string? nullString) => new("string_to_table");
+
+        /// <summary>
+        /// <c>casefold(text)</c> is refused: it was introduced in PostgreSQL 18 and does not exist on
+        /// the pinned 17.11 server (absent from <c>pg_proc</c>; the name fails with <c>42883</c>), so
+        /// any SQL emitted for it would be rejected by the target server.
+        /// </summary>
+        /// <returns>Never returns; the call is refused when the query is translated.</returns>
+        public string? casefold(string? value) =>
+            throw new NotSupportedException(
+                "The casefold function is refused: it was introduced in PostgreSQL 18 and does not exist on the pinned 17.11 server.");
 
         /// <summary>
         /// Builds an interval from its parts. A mapped <see cref="TimeSpan"/> result is supported only

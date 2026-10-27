@@ -155,13 +155,32 @@ internal sealed class InMemoryScalarFunctionRewriter : ExpressionVisitor
     };
 
     /// <summary>
-    /// The PostgreSQL numeric-scale members <c>scale</c>/<c>min_scale</c>/<c>trim_scale</c> are
-    /// SQL-only. Rejecting them explicitly keeps the failure a <see cref="NotSupportedException"/>
-    /// instead of a compiled call on the null <see cref="SqlFunctions.Postgres"/> marker surface.
+    /// The PostgreSQL-only scalar members of the string and numeric families (and the PostgreSQL
+    /// numeric-scale members <c>scale</c>/<c>min_scale</c>/<c>trim_scale</c>) are SQL-only. Rejecting
+    /// them explicitly keeps the failure a <see cref="NotSupportedException"/> instead of a compiled
+    /// call on the null <see cref="SqlFunctions.Postgres"/> marker surface. The refusals
+    /// (<c>casefold</c>, <c>gamma</c>, <c>tgamma</c>, <c>lgamma</c>) are listed for the same reason: their
+    /// member bodies throw, but the call is compiled against the null surface first.
     /// </summary>
-    private static readonly HashSet<string> PostgresNumericScaleFunctionNames = new(StringComparer.Ordinal)
+    private static readonly HashSet<string> PostgresSqlOnlyScalarFunctionNames = new(StringComparer.Ordinal)
     {
-        nameof(PostgresFunctions.scale), nameof(PostgresFunctions.min_scale), nameof(PostgresFunctions.trim_scale)
+        nameof(PostgresFunctions.scale), nameof(PostgresFunctions.min_scale), nameof(PostgresFunctions.trim_scale),
+        nameof(PostgresFunctions.btrim), nameof(PostgresFunctions.ltrim), nameof(PostgresFunctions.rtrim),
+        nameof(PostgresFunctions.starts_with), nameof(PostgresFunctions.parse_ident),
+        nameof(PostgresFunctions.quote_ident), nameof(PostgresFunctions.quote_literal),
+        nameof(PostgresFunctions.quote_nullable), nameof(PostgresFunctions.to_ascii),
+        nameof(PostgresFunctions.to_hex), nameof(PostgresFunctions.to_oct), nameof(PostgresFunctions.to_bin),
+        nameof(PostgresFunctions.convert_from), nameof(PostgresFunctions.convert_to),
+        nameof(PostgresFunctions.encode), nameof(PostgresFunctions.decode),
+        nameof(PostgresFunctions.normalize), nameof(PostgresFunctions.unistr),
+        nameof(PostgresFunctions.regexp_match),
+        nameof(PostgresFunctions.div), nameof(PostgresFunctions.erf), nameof(PostgresFunctions.erfc),
+        nameof(PostgresFunctions.random_normal),
+        nameof(PostgresFunctions.acosd), nameof(PostgresFunctions.asind), nameof(PostgresFunctions.atand),
+        nameof(PostgresFunctions.atan2d), nameof(PostgresFunctions.cosd), nameof(PostgresFunctions.cotd),
+        nameof(PostgresFunctions.sind), nameof(PostgresFunctions.tand),
+        nameof(PostgresFunctions.casefold), nameof(PostgresFunctions.gamma),
+        nameof(PostgresFunctions.tgamma), nameof(PostgresFunctions.lgamma)
     };
 
     internal static Expression Rewrite(Expression expression) => new InMemoryScalarFunctionRewriter().Visit(expression)!;
@@ -225,7 +244,7 @@ internal sealed class InMemoryScalarFunctionRewriter : ExpressionVisitor
         }
         else if (node.Method.DeclaringType == typeof(PostgresFunctions))
         {
-            if (PostgresNumericScaleFunctionNames.Contains(node.Method.Name))
+            if (PostgresSqlOnlyScalarFunctionNames.Contains(node.Method.Name))
                 throw new NotSupportedException($"The {node.Method.Name} function is not supported by the in-memory provider.");
 
             if (HasRangeArrayParameter(node))
