@@ -1187,50 +1187,45 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
     public void T266_ParametersAndTwoCaptures_DoNotCollide()
     {
         var ctx = _sut.DataProvider;
-        var idA = T266Key();
-        var idB = idA + 1;
-        var idC = idA + 2;
         var firstName = "t266-param-one-" + Guid.NewGuid().ToString("N");
         var secondName = "t266-param-two-" + Guid.NewGuid().ToString("N");
         var seedName = "t266-param-seed-" + Guid.NewGuid().ToString("N");
-
-        ctx.CreateInsertBuilder<IMergeEntity>().Values([
-            new MergeEntity { Id = idA, Name = seedName, Age = 1 },
-            new MergeEntity { Id = idB, Name = seedName, Age = 2 },
-            new MergeEntity { Id = idC, Name = seedName, Age = 3 },
-        ]).Insert().Should().Be(3);
+        var sentinelName = "t346-sentinel-" + Guid.NewGuid().ToString("N");
+        var (idA, idB, idC, sentinelId) = T346SeedOwnedRows(ctx, seedName, sentinelName);
 
         try
         {
             // Both captures and both reads bind a closure member with the SAME logical name ('min') and a
             // different value: idA (capture 1), idB (capture 2), idC (read 1), idC (read 2). The batch
             // gives every step its own @b{i}_ prefix, so the four bindings stay four distinct values.
-            static void CaptureAtLeast(IDataContext database, BatchBuilder batch, string variable, int value, string newName)
+            // Every predicate is bounded by this test's own window top (idC): a row above the window is
+            // neither captured into @t/@u nor mutated by the captures (#346).
+            void CaptureWithin(IDataContext database, BatchBuilder batch, string variable, int value, string newName)
             {
                 var min = value;
                 batch.OutputIntoTableVariable(
                     database.CreateUpdateBuilder<IMergeEntity>()
                         .Set(x => x.Name, newName)
-                        .Where(x => x.Id >= min)
+                        .Where(x => x.Id >= min && x.Id <= idC)
                         .Returning(x => new T266CapturedRow { Id = x.Id, Name = x.Name }),
                     variable,
                     "id int, name nvarchar(100)");
             }
 
-            static void ReadAtLeast(BatchBuilder batch, string variable, int value)
+            void ReadWithin(BatchBuilder batch, string variable, int value)
             {
                 var min = value;
                 batch.AddQuery(batch.FromOutput<T266CapturedRow>(variable)
-                    .Where(r => r.Id >= min)
+                    .Where(r => r.Id >= min && r.Id <= idC)
                     .OrderBy(r => r.Id)
                     .Select(r => new T266CapturedRow { Id = r.Id, Name = r.Name }));
             }
 
             var batch = ctx.CreateBatchBuilder();
-            CaptureAtLeast(ctx, batch, "@t", idA, firstName);
-            CaptureAtLeast(ctx, batch, "@u", idB, secondName);
-            ReadAtLeast(batch, "@t", idC);
-            ReadAtLeast(batch, "@u", idC);
+            CaptureWithin(ctx, batch, "@t", idA, firstName);
+            CaptureWithin(ctx, batch, "@u", idB, secondName);
+            ReadWithin(batch, "@t", idC);
+            ReadWithin(batch, "@u", idC);
 
             var sql = batch.ToSql();
             foreach (var prefix in new[] { "@b0_min", "@b1_min", "@b2_min", "@b3_min" })
@@ -1258,11 +1253,77 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
                 .Select(x => x.Name)
                 .ToList();
             state.Should().Equal(firstName, secondName, secondName);
+
+            // One owned sentinel strictly above the window: the bounded captures cannot reach it, so it
+            // survives with its own name instead of being renamed by a capture (#346).
+            T346AssertSentinelUntouched(ctx, sentinelId, sentinelName);
         }
         finally
         {
-            Execute(ctx, $"delete from merge_entity where id >= {idA} and id <= {idC}");
+            T346CleanupOwnedRows(ctx, idA, idB, idC, sentinelId);
         }
+    }
+
+    /// <summary>
+    /// A T346-local key: the scenario needs three consecutive ids plus a sentinel 5 000 above them, so the
+    /// upper bound keeps that headroom instead of <c>T266Key</c>'s <see cref="int.MaxValue"/> - 64.
+    /// </summary>
+    private static int T346Key() => Random.Shared.Next(1_000_000, 2_000_000_000);
+
+    /// <summary>
+    /// Seeds the rows one T346 scenario owns — three consecutive ids inside the captured window plus one
+    /// sentinel strictly above it — after clearing residue in the same ids, and returns their ids.
+    /// </summary>
+    private static (int IdA, int IdB, int IdC, int SentinelId) T346SeedOwnedRows(
+        IDataContext ctx, string seedName, string sentinelName)
+    {
+        var idA = T346Key();
+        var idB = idA + 1;
+        var idC = idA + 2;
+        var sentinelId = idC + 5_000;
+
+        Execute(ctx, $"delete from merge_entity where id in ({idA}, {idB}, {idC}, {sentinelId})");
+        ctx.CreateInsertBuilder<IMergeEntity>().Values([
+            new MergeEntity { Id = idA, Name = seedName, Age = 1 },
+            new MergeEntity { Id = idB, Name = seedName, Age = 2 },
+            new MergeEntity { Id = idC, Name = seedName, Age = 3 },
+            new MergeEntity { Id = sentinelId, Name = sentinelName, Age = 4 },
+        ]).Insert().Should().Be(4);
+
+        return (idA, idB, idC, sentinelId);
+    }
+
+    /// <summary>
+    /// Asserts the out-of-range sentinel is still present under the name it was seeded with: a capture
+    /// bounded by the scenario's own window cannot reach it, so nothing renames it.
+    /// </summary>
+    private static void T346AssertSentinelUntouched(IDataContext ctx, int sentinelId, string sentinelName)
+    {
+        var rows = ctx.From<IMergeEntity>()
+            .Where(x => x.Id == sentinelId)
+            .Select(x => new T266CapturedRow { Id = x.Id, Name = x.Name })
+            .ToList();
+
+        rows.Should().HaveCount(1, "the out-of-range sentinel row is still there");
+        rows[0].Name.Should().Be(sentinelName, "the bounded captures never reach above the scenario's window");
+    }
+
+    /// <summary>Removes every row the scenario owns (sentinel included) and fails if any is left.</summary>
+    private static void T346CleanupOwnedRows(IDataContext ctx, int idA, int idB, int idC, int sentinelId)
+    {
+        Execute(ctx, $"delete from merge_entity where id in ({idA}, {idB}, {idC}, {sentinelId})");
+
+        var windowLeft = ctx.From<IMergeEntity>()
+            .Where(x => x.Id >= idA && x.Id <= idC)
+            .Select(x => x.Id)
+            .ToList();
+        var sentinelLeft = ctx.From<IMergeEntity>()
+            .Where(x => x.Id == sentinelId)
+            .Select(x => x.Id)
+            .ToList();
+
+        windowLeft.Should().BeEmpty("the scenario's own window rows are removed");
+        sentinelLeft.Should().BeEmpty("the scenario's own sentinel row is removed");
     }
 
     [Fact]
