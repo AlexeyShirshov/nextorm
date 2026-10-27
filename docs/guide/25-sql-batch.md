@@ -151,11 +151,46 @@ select id, status
 
 * `CreateTempTable(name, source, options?)` and `CreateTable(name, source, options?)` add materialisations, in order, any number. Options can be passed as `CreateTableOptions` or as a `CreateTableOptionsBuilder` callback (`o => o.DropExisting()`); a persistent `CreateTable` with `DropExisting` prepends a `DROP TABLE IF EXISTS` so the step replaces an existing table.
 * `Insert(insert)`, `Update(update)`, `Delete(delete)` and `Truncate(truncate)` add a side-effecting DML statement, in order, any number. They take the same builders as `ctx.CreateInsertBuilder<T>()`, `ctx.CreateUpdateBuilder<T>()`, `ctx.CreateDeleteBuilder<T>()` and `ctx.CreateTruncateBuilder<T>()`; the builder's terminal (`Insert()`, `Update()`, …) is never called — the batch runs it.
+* `OutputIntoTableVariable(mutation, "@t", definitions)` adds a **capture** step: one statement that declares a table variable and writes the mutation's returned rows into it (`DECLARE @t TABLE (...); <DML> OUTPUT ... INTO @t (...)`). Unlike the fluent `Returning(...).OutputIntoTableVariable(...)` on the mutation itself, this form appends no automatic read-back and produces no result set of its own: the captured rows are read by the batch's own queries through `FromOutput<TResult>`/`FromOutputTable`, so they can be filtered, joined or aggregated before the batch returns them. SQL Server only; a name that is unknown or captured twice on the batch is refused when the batch is composed.
 * `Raw(sql)` adds a verbatim, side-effecting SQL step, in order, any number: the text is emitted unchanged and no parameters are bound. It follows the same ordering rule as the other side-effecting steps — it must precede `Query`/`AddQuery` (see [Raw steps](#raw-steps)).
 * `Query<TResult>(query)` adds the single result-bearing query and returns the terminal; it must be the last statement. A second `Query`, or any statement after `Query`, throws `InvalidOperationException`. To carry several result sets use `AddQuery<TResult>` and `Execute`/`ExecuteAsync` instead (see [Multiple result sets](#multiple-result-sets)).
 * Every statement must be built from the batch's own context; a statement bound to a different `IDataContext` is rejected with `ArgumentException`.
 
 Parameters are numbered across the whole batch, and a captured variable used by more than one statement gets a per-statement prefix (`b0_`, `b1_`, …), so placeholder names never collide — including in the `;`-joined form. A captured variable referenced twice within the same statement keeps a single parameter entry.
+
+A capture step plus a composed query is the batch-native way to turn a mutation's `OUTPUT` into a query in the same round trip (SQL Server only — see [Batch-scoped capture](17-insert-statement.md#batch-scoped-capture-batchbuilderoutputintotablevariable)):
+
+```csharp
+public sealed class CapturedOrder
+{
+    public long Id { get; set; }
+    public string? Status { get; set; }
+}
+
+var batch = ctx.CreateBatchBuilder();
+batch.OutputIntoTableVariable(
+    ctx.CreateUpdateBuilder<IOrder>()
+        .Set(x => x.Status, "shipped")
+        .Where(x => x.Id == id)
+        .Returning(x => new CapturedOrder { Id = x.Id, Status = x.Status }),
+    "@t",
+    "id bigint, status nvarchar(50)");
+
+var shipped = batch
+    .Query(batch.FromOutput<CapturedOrder>("@t")
+        .OrderBy(r => r.Id)
+        .Select(r => new CapturedOrder { Id = r.Id, Status = r.Status }))
+    .ToList();
+```
+
+```sql
+-- SQL Server
+declare @t table (id bigint, status nvarchar(50)); update orders set status = @p0 output inserted.id, inserted.status into @t (id, status) where (id = @b0_id); select id, status
+ from @t as [t1]
+ order by t1.id
+```
+
+The capture emits no automatic read-back and adds no result set: the declaration travels with the mutation, and the composed query is an ordinary batch query step, so the whole operation is still one round trip.
 
 The SQL blocks above are the PostgreSQL rendering. By default `ToSql()` prints the statements on one line separated by `; `; enable `DataContextBuilder.UseMultilineBatchSql()` to render each statement on its own line, as shown here. `UseMultilineBatchSql()` controls only the **separation between statements** — it is not a clause-layout switch: the newline before `FROM`/`JOIN` inside each statement is emitted unconditionally by the statement writer (see [Limitations](../advanced/limitations.md)). SQL Server renders the same pair differently — there is no `CREATE TEMPORARY TABLE ... AS SELECT` and `CreateTempTable` throws `NotSupportedException`, so a temporary target is created with `CreateTable` and a `#`-prefixed name:
 
@@ -257,7 +292,7 @@ The capability is [`ISqlDialect.SupportsBatch`](xref:NextORM.Core.ISqlDialect.Su
 
 * A batch ends with one or more result-bearing queries — one added with the `Query<TResult>` terminal, several with `AddQuery<TResult>` and `Execute`/`ExecuteAsync` — and they are the last statements. The statements before them are side-effecting — materialisations, DML (`INSERT`/`UPDATE`/`DELETE`/`TRUNCATE`) and raw SQL steps — which return no columns.
 * Multi-result execution is **sequential and eager**: `BatchResult` yields its sets in the order the queries were added (through enumeration or `Read<TResult>()`), each set may be read once, and every set is fully buffered in memory before `Execute()`/`ExecuteAsync()` returns — there is no streaming and no random access. Only the single-result `BatchQuery<TResult>` terminal streams, through `ToAsyncEnumerable`.
-* A mutation added to a batch may not request returned rows: `Returning()`/`ReturningIdentity()` terminals produce a different builder type and are not accepted. Multi-table `CreateUpdateJoinBuilder`/`DeleteJoin` and `Merge` are not batch steps. Raw SQL/DDL is expressible as a verbatim step through `Raw(sql)` — see [Raw steps](#raw-steps).
+* A mutation added to a batch may not **return** rows to the client: `Returning()`/`ReturningIdentity()` terminals produce a different builder type and are not accepted by `Insert`/`Update`/`Delete`, which take only the non-returning builders. A returning builder is accepted only by the batch-scoped capture `OutputIntoTableVariable(...)`, which writes its rows into a table variable for the batch's own queries instead of returning them. Multi-table `CreateUpdateJoinBuilder`/`DeleteJoin` and the plain `Merge` terminal are not batch steps; a `MERGE` joins a batch through the same capture. Raw SQL/DDL is expressible as a verbatim step through `Raw(sql)` — see [Raw steps](#raw-steps).
 * `ToSql()` shows the `;`-joined text without executing: on the single-result `BatchQuery<TResult>` terminal and on `BatchBuilder` for the multi-result `AddQuery`/`Execute` form (`BatchBuilder.ToSql()` renders the whole batch and requires at least one result step). On a `DbBatch` provider the statements are still sent as separate commands of one batch when the batch executes.
 * Batch execution is **not** routed through the query interceptors: their events carry a `DbCommand`, while a `DbBatch` command is a `DbBatchCommand`.
 * `SqlFunctions.Parameter` runtime placeholders cannot be used in a batched query; capture the value in a local variable instead (as in any query rendered as a source). Captured variables become parameters automatically.
