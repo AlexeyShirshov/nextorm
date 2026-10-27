@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "source": "src/nextorm.core/DataContext/Dialect/NullsOrderingRenderer.cs",
+  "source_sha256": "051c66a92a60e390fcd34c63391147c3a7ad7a367a6f3ecb6ec9640d88a886b0",
+  "test_project": "tests/nextorm.postgres.tests/nextorm.postgres.tests.csproj",
+  "test_assembly": "nextorm.postgres.tests.dll",
+  "test_filter": "FullyQualifiedName~NextORM.Postgres.Tests.T287NullOrderingTests",
+  "test_class": "NextORM.Postgres.Tests.T287NullOrderingTests",
+  "configuration": "Debug",
+  "expected_tests": [
+    "NextORM.Postgres.Tests.T287NullOrderingTests.T287NullOrdering_DefaultPlacement_ShouldKeepTheBaselineSqlBytes",
+    "NextORM.Postgres.Tests.T287NullOrderingTests.T287NullOrdering_DistinctOnWithNativePlacement_ShouldNotBeGuarded",
+    "NextORM.Postgres.Tests.T287NullOrderingTests.T287NullOrdering_DistinctWithNativePlacement_ShouldBeAllowed",
+    "NextORM.Postgres.Tests.T287NullOrderingTests.T287NullOrdering_ExtremeRowOuter_ShouldCarryThePlacement",
+    "NextORM.Postgres.Tests.T287NullOrderingTests.T287NullOrdering_IndexOverload_ShouldResolveTheRealKey",
+    "NextORM.Postgres.Tests.T287NullOrderingTests.T287NullOrdering_InvalidPlacement_ShouldFailBeforeAnySqlIsBuilt",
+    "NextORM.Postgres.Tests.T287NullOrderingTests.T287NullOrdering_NativeDialect_ShouldRenderTheNullsModifierForAllFourCells",
+    "NextORM.Postgres.Tests.T287NullOrderingTests.T287NullOrdering_Paging_ShouldKeepThePlacementAndThePage",
+    "NextORM.Postgres.Tests.T287NullOrderingTests.T287NullOrdering_ParameterizedKey_ShouldBindTheSingleNativeOccurrence",
+    "NextORM.Postgres.Tests.T287NullOrderingTests.T287NullOrdering_PerParentRank_ShouldCarryThePlacementIntoTheWindow",
+    "NextORM.Postgres.Tests.T287NullOrderingTests.T287NullOrdering_SupportsNullsOrdering_ShouldBeTrue",
+    "NextORM.Postgres.Tests.T287NullOrderingTests.T287NullOrdering_ThenByWithMixedPlacements_ShouldRenderBothKeys"
+  ],
+  "bounds": {
+    "max_mutants": 2,
+    "max_tests": 12
+  },
+  "mutations": [
+    {
+      "id": "M1-native-nulls-first",
+      "role": "positive-control",
+      "line": 68,
+      "column": 36,
+      "find": "\" NULLS FIRST\"",
+      "replace": "\" NULLS LAST\"",
+      "rationale": "P3 positive control: the native NULLS FIRST arm of RenderNative. Stryker mutant id 10263 ('String mutation' -> '') reports exactly this span, 68:36-68:50, and the hand-applied P3 edit measured 8 failed / 4 passed of the 12 scoped tests, then restored 12/12. 1-based column 36 is the opening quote, so the byte-anchored find carries the quotes; the literal value is ' NULLS FIRST'. Expected: KILLED (the flipped cell is asserted at T287NullOrderingTests.cs:97 and the same fragment reaches the native, parameterized, index, then-by, paging, distinct, distinct-on, per-parent-rank and extreme-row tests)."
+    },
+    {
+      "id": "M2-emulated-case-template",
+      "role": "escape-control",
+      "line": 52,
+      "column": 18,
+      "find": "CASE WHEN ",
+      "replace": "CASE x WHEN ",
+      "rationale": "Escape control in the only non-native render path: the CASE-emulation template of NullsOrderingRenderer.Render (line 52). Every NULL placement is emitted through _ctx.Dialect.RenderOrderBy (SqlBuilder.cs:883 rank window, :902 occurrences, :1609), and PostgreSQL overrides that member with RenderNative + SupportsNullsOrdering => true (PostgresDialect.cs:92,96); the base/interface implementations (SqlDialectBase.cs:137, ISqlDialect.cs:404) that reach Render are therefore unreachable for a Postgres context. All 12 scoped tests build their SQL from PostgresTestContext.Create(), and three of them assert the emitted SQL does NOT contain 'CASE' (T287NullOrderingTests.cs:106,308,346) - a guard that only holds while the emulation is bypassed. Replacing the emulation keyword with a visibly different token is hence unobservable by the cohort. Expected: ESCAPED (this is what proves the harness does not kill mutations the scoped tests cannot reach)."
+    }
+  ]
+}
