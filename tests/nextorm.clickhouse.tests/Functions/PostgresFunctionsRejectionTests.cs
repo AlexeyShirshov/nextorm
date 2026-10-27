@@ -96,12 +96,66 @@ public class PostgresFunctionsRejectionTests
         var tgamma = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.tgamma(1.5) }));
         var lgamma = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.lgamma(1.5) }));
         var toAsciiOneArg = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.to_ascii(x.String) }));
+        var crc32 = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.crc32(SqlFunctions.Parameter<byte[]>(8)) }));
+        var crc32c = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.crc32c(SqlFunctions.Parameter<byte[]>(9)) }));
 
         casefold.Should().Throw<NotSupportedException>().WithMessage("*casefold*refused*");
         gamma.Should().Throw<NotSupportedException>().WithMessage("*gamma*refused*");
         tgamma.Should().Throw<NotSupportedException>().WithMessage("*tgamma*refused*");
         lgamma.Should().Throw<NotSupportedException>().WithMessage("*lgamma*refused*");
         toAsciiOneArg.Should().Throw<NotSupportedException>().WithMessage("*to_ascii*refused*0A000*");
+        crc32.Should().Throw<NotSupportedException>().WithMessage("The crc32 function is refused:*PostgreSQL 18*");
+        crc32c.Should().Throw<NotSupportedException>().WithMessage("The crc32c function is refused:*PostgreSQL 18*");
+
+        // The pg_sleep family returns void, so no void call can appear in a projection; the refusal is a
+        // member-level throw (its body throws before any SQL could be emitted) and is provider-independent.
+        FluentActions.Invoking(() => SqlFunctions.Postgres.pg_sleep(0.0))
+            .Should().Throw<NotSupportedException>().WithMessage("The pg_sleep function is refused:*void*");
+        FluentActions.Invoking(() => SqlFunctions.Postgres.pg_sleep_for(TimeSpan.Zero))
+            .Should().Throw<NotSupportedException>().WithMessage("The pg_sleep_for function is refused:*void*");
+        FluentActions.Invoking(() => SqlFunctions.Postgres.pg_sleep_until(DateTime.UnixEpoch))
+            .Should().Throw<NotSupportedException>().WithMessage("The pg_sleep_until function is refused:*void*");
+    }
+
+    /// <summary>
+    /// The residual PostgreSQL date/time, UUID and binary-string families of #281 are PostgreSQL-only
+    /// on this provider as well: each enrolled name must be refused during preparation with a message
+    /// naming it, never rendered as PostgreSQL SQL.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void DateTimeUuidAndBinaryFamilies_ShouldThrowBecauseNotSupported()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var cases = new (string Name, Action Act)[]
+        {
+            ("date_subtract", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.date_subtract(x.Datetime, TimeSpan.FromDays(1)) }))),
+            ("date_subtract", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.date_subtract(x.Datetime, TimeSpan.FromDays(1), "UTC") }))),
+            ("justify_interval", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.justify_interval(TimeSpan.FromHours(25)) }))),
+            ("make_timestamptz", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.make_timestamptz(2024, 1, 2, 3, 4, 5.5) }))),
+            ("make_timestamptz", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.make_timestamptz(2024, 1, 2, 3, 4, 5.5, "UTC") }))),
+            ("clock_timestamp", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.clock_timestamp() }))),
+            ("statement_timestamp", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.statement_timestamp() }))),
+            ("transaction_timestamp", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.transaction_timestamp() }))),
+            ("timeofday", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.timeofday() }))),
+            ("isfinite", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.isfinite(x.Datetime) }))),
+            ("isfinite", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.isfinite(TimeSpan.FromDays(1)) }))),
+            ("uuid_extract_timestamp", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.uuid_extract_timestamp(Guid.Empty) }))),
+            ("uuid_extract_version", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.uuid_extract_version(Guid.Empty) }))),
+            ("get_bit", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.get_bit(SqlFunctions.Parameter<byte[]>(0), 0L) }))),
+            ("set_bit", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.set_bit(SqlFunctions.Parameter<byte[]>(1), 0L, 1) }))),
+            ("get_byte", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.get_byte(SqlFunctions.Parameter<byte[]>(2), 0) }))),
+            ("set_byte", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.set_byte(SqlFunctions.Parameter<byte[]>(3), 0, 255) })))
+        };
+
+        // bit_count is deliberately absent from this list, unlike every other provider: ClickHouse already
+        // has the name natively (bitCount, which accepts String/FixedString as well as integers), so the
+        // dialect advertises it and the shared scalar path renders it instead of refusing it. The native
+        // rendering is asserted separately below.
+        foreach (var (name, act) in cases)
+            act.Should().Throw<NotSupportedException>().WithMessage($"*{name}*not supported*");
     }
 
     [Fact]
@@ -115,7 +169,11 @@ public class PostgresFunctionsRejectionTests
             "btrim", "ltrim", "rtrim", "starts_with", "parse_ident", "quote_ident", "quote_literal",
             "quote_nullable", "to_ascii", "to_hex", "to_oct", "to_bin", "convert_from", "convert_to",
             "encode", "decode", "normalize", "unistr", "regexp_match",
-            "div", "random_normal", "acosd", "asind", "atand", "atan2d", "cosd", "cotd", "sind", "tand"
+            "div", "random_normal", "acosd", "asind", "atand", "atan2d", "cosd", "cotd", "sind", "tand",
+            // bit_count is not listed: ClickHouse has it natively (bitCount), so it is advertised.
+            "date_subtract", "justify_interval", "make_timestamptz", "clock_timestamp", "statement_timestamp",
+            "transaction_timestamp", "timeofday", "isfinite", "uuid_extract_timestamp",
+            "uuid_extract_version", "get_bit", "set_bit", "get_byte", "set_byte"
         })
         {
             scalars.Supports(name).Should().BeFalse($"'{name}' is PostgreSQL-only");
@@ -131,5 +189,25 @@ public class PostgresFunctionsRejectionTests
 
         SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.erf(0.5) })).Should().Contain("erf(");
         SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.erfc(0.5) })).Should().Contain("erfc(");
+    }
+
+    /// <summary>
+    /// <c>bit_count</c> is the one D2b name this provider does not reject: ClickHouse has it natively as
+    /// <c>bitCount</c>, which accepts String/FixedString as well as the integer widths, so the byte[]
+    /// projection keeps the bit-count semantics. The PostgreSQL-only siblings stay rejected.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void BitCount_ShouldRenderBecauseClickHouseHasItNatively()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.bit_count(SqlFunctions.Parameter<byte[]>(4)) }))
+            .Should().Contain("bitCount(");
+        ClickHouseDialect.Instance.ScalarFunctions.Supports("bit_count").Should().BeTrue(
+            "'bit_count' is a ClickHouse native, not a PostgreSQL-only name");
+        ClickHouseDialect.Instance.ScalarFunctions.Supports("get_bit").Should().BeFalse(
+            "'get_bit' remains PostgreSQL-only");
     }
 }

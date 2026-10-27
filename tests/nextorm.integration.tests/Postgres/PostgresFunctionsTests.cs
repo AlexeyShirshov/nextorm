@@ -1609,7 +1609,12 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
         r.Ct.Should().NotBeNull();
         r.St.Should().NotBeNull();
         r.Tt.Should().NotBeNull();
-        r.St.Should().Be(r.Tt, "both report the transaction start time");
+        // transaction_timestamp() is the transaction-start clock and statement_timestamp() the
+        // statement-start clock; in an implicit (autocommit) transaction the server sets them at
+        // slightly different instants, so only their proximity is guaranteed — an exact equality
+        // holds inside a single explicit transaction block, not here.
+        r.St.Should().BeCloseTo(r.Tt!.Value, TimeSpan.FromSeconds(5),
+            "the statement and transaction clocks are both taken at the start of this statement");
         r.Ct.Should().BeCloseTo(r.St!.Value, TimeSpan.FromMinutes(5));
         r.Tod.Should().Contain("UTC");
         r.IsfDate.Should().BeTrue();
