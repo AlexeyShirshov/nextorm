@@ -195,6 +195,79 @@ Output:
 Note that `NULL` ordering differs between providers (PostgreSQL sorts `NULL`s first on a descending
 sort, SQLite last), which is why the sort example excludes the `NULL` group.
 
+## Grouping inferred from the projection: SelectGroup
+
+`SelectGroup` takes the same projection lambda as `Select`, but instead of requiring an explicit
+`GroupBy` it infers the grouping keys from that projection. Every row-dependent expression that
+contains no aggregate becomes a key; the aggregate calls fold each group. The projection keeps its
+exact shape - there is no client-side grouping, no dynamic type and no reflection-emit merging of a
+flat result type. This is the issue's quarterly example:
+
+```csharp
+ctx.From<Product>()
+   .SelectGroup(p => new
+   {
+       ProductID        = p.Item1.ProductId,
+       ProductName      = p.Item3.Name,
+       SalesQuarter     = SqlFunctions.Sql.date_trunc("quarter", p.Item2.OrderDate),
+       QuarterlyRevenue = SqlFunctions.Sql.sum(p.Item1.LineTotal),
+       QuarterlyQty     = SqlFunctions.Sql.sum(p.Item1.OrderQty),
+   });
+```
+
+`ProductID`, `ProductName` and the whole `date_trunc('quarter', OrderDate)` call become `GROUP BY`
+keys, while the two `sum` calls stay aggregates. Results and SQL are equivalent to the explicit
+`GroupBy(...).Select(...)` form with the same keys.
+
+Inference rules:
+
+* **Maximal row-dependent subexpressions.** The analyzer collects the largest aggregate-free
+  subexpression of each output that depends on the current row, instead of descending to individual
+  columns.
+* **First-appearance order.** Keys are emitted in the order their expressions first appear in the
+  projection, which makes the rendered `GROUP BY` deterministic.
+* **Constants and captured values are not keys.** A literal or a captured local neither groups nor
+  shifts the key order.
+* **Duplicates collapse structurally.** Two structurally equal key expressions produce one key.
+* **A whole scalar function stays one key.** `date_trunc('quarter', OrderDate)` is the key; the raw
+  `OrderDate` is not added beside it.
+* **Subexpression granularity is preserved.** `sum(Amount) + Adjustment` infers `Adjustment`;
+  `sum(Amount) + Price * Qty` infers `Price * Qty`, not `Price` and `Qty` separately.
+* **Aggregate calls are opaque.** The arguments of an aggregate, its `DISTINCT` input and its
+  `FILTER` predicate never leak into the grouping keys.
+* **The projection is preserved.** The original projection is rendered as written; no key is
+  rewritten, no value is folded on the client and the result shape is unchanged.
+
+Degenerate projections resolve without inventing a grouping:
+
+* **Keys without aggregates** return the unique key combinations through `GROUP BY`; it is not a
+  row-by-row select.
+* **Aggregates without keys** is a global aggregation: no `GROUP BY`, exactly one row, and the
+  provider's existing empty-input behaviour for `count`, `sum` and `NULL` is preserved.
+* **A row-independent projection without aggregates** is DISTINCT-like: each distinct value is
+  returned once and an empty source returns zero rows instead of an invalid empty `GROUP BY`.
+
+`Having` and an expression `OrderBy` are validated against the inferred keys: every row expression
+they mention must be covered by an inferred key, be an aggregate, or be a captured/constant value.
+An uncovered row member throws `QueryPreparationException` before the command reaches the database -
+the grouping is never widened silently and functional dependencies are not inferred. A captured
+threshold is therefore valid, a bare outer-row column is not. An `OrderBy` by ordinal keeps its
+existing bounds validation and adds no keys. `Where` stays a pre-group filter and takes no part in
+inference.
+
+The following combinations throw `QueryPreparationException`:
+
+* an existing explicit `GroupBy`, `GroupByRollup`, `GroupByCube`, `GroupByGroupingSets` or
+  `WithTotals` - the two grouping mechanisms are never merged or overridden;
+* window functions in the projection, `Having` or an expression `OrderBy`;
+* scalar or correlated subqueries in those expressions, including inside aggregate arguments and
+  inside a `FILTER` predicate. That rejection is unconditional and independent of key inference; a
+  subquery in `Where` remains supported.
+
+The in-memory provider executes the inferred grouping within its existing aggregate surface: the
+supported aggregates behave as they do for an explicit `GroupBy`, while provider-surface scalar
+functions and custom functions are rejected explicitly instead of being evaluated in process.
+
 ## ROLLUP and CUBE
 
 `GroupByRollup(...)` and `GroupByCube(...)` attach the ANSI super-aggregate modifiers. `ROLLUP` adds
