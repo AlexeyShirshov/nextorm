@@ -13,11 +13,17 @@ feature:
 * **SQL Server** has two independent surfaces. [`ForJson`](xref:NextORM.Core.QueryCommand`1.ForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean,System.Object[])) executes the query and returns the
   whole result set as one JSON document (`FOR JSON PATH`/`FOR JSON AUTO`), and [`SqlServer`](xref:NextORM.Core.SqlFunctions.SqlServer) provides the JSON-as-text scalar functions
   (`json_value`, `json_query`, `json_modify`, `isjson`) plus the `openjson` table function.
-* **PostgreSQL** has native `json`/`jsonb` types (the only provider with them) and a function/operator
-  surface on `SqlFunctions.Postgres`: construction, aggregation, access, containment and JSONPath.
-* **MySQL and MariaDB** store JSON in text columns and expose the same JSON-as-text surface as SQL
-  Server ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)) over the
-  `JSON_EXTRACT`/`JSON_UNQUOTE`/`JSON_SET` family.
+* **PostgreSQL** has native `json`/`jsonb` types and exposes the only `json`/`jsonb` function/operator
+  surface (`SqlFunctions.Postgres`): construction, aggregation, access, containment and JSONPath.
+* **MySQL and MariaDB** expose the same JSON-as-text surface as SQL Server
+  ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)) over the
+  `JSON_EXTRACT`/`JSON_UNQUOTE`/`JSON_SET` family. Their JSON *columns* are not the same thing: MySQL 8
+  has a real `json` type (the server validates, normalises and reports it as `json`), while MariaDB's
+  `JSON` is an alias for `LONGTEXT` plus a `json_valid()` CHECK (reported as `longtext`). Both are used
+  through the **text transport** — a `[JsonColumn]` property serializes to text that the server parses —
+  because neither provider has a bindable native JSON representation, so
+  `JsonColumnStorage.Native` is refused there (see
+  [Map a CLR object to a native JSON column](#map-a-clr-object-to-a-native-json-column)).
 * **ClickHouse** maps its string-JSON extractors (`JSONExtractString`, `JSONExtractInt`,
   `JSONExtractFloat`, `JSONExtractBool`, `JSONExtractRaw`, `JSONHas`, `JSONLength`, `JSONType`) — plus
   the array-returning `JSONExtractKeys`/`JSONExtractArrayRaw` (projecting as `string[]`) and
@@ -62,7 +68,7 @@ section for your provider; the [provider matrix](#provider-matrix) and
 | SQL Server | Supported ([`SupportsForJson`](xref:NextORM.Core.ISqlDialect.SupportsForJson)) | No - JSON lives in `nvarchar` | Supported ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)) | Supported |
 | PostgreSQL | No | Supported ([`SupportsJson`](xref:NextORM.Core.ISqlDialect.SupportsJson)) | No | No |
 | SQLite | No | No | No (JSON1 via `SqlFunctions.Sqlite`) | No |
-| MySQL / MariaDB | No | Not exposed | Supported ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)) | No |
+| MySQL / MariaDB | No | Real `json` column (MySQL) / `JSON` = `LONGTEXT` + `json_valid()` CHECK alias (MariaDB), both used through **text** storage; `Native` refused | Supported ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)) | No |
 | ClickHouse | No | Native `JSON` ([`SupportsJson`](xref:NextORM.Core.ISqlDialect.SupportsJson); object-rooted, via `[JsonColumn]`/`JsonObject`/`JsonDocument`/`JsonElement`) | String JSON + JSONPath scalars + native-JSON functions (`JSONAllPaths`/`JSONAllPathsWithTypes`/`toJSONString`; [`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract)) | No |
 | In-memory | Not applicable (no SQL) | Not applicable | Not applicable | Not applicable |
 
@@ -237,6 +243,17 @@ The mapping covers the property, not the schema: nextorm does not generate the c
 must already have the `jsonb` column. See
 [Value converters](../infrastructure/03-value-converters.md#json-columns) for the fluent
 `JsonColumn(o => ...)` form and serializer options.
+
+On **MySQL and MariaDB** the same attribute keeps the **text** storage, because those providers have a
+JSON *column* but no bindable native JSON *representation* (`MySqlConnector` rejects `JsonElement`,
+`JsonDocument` and `JsonNode` parameters, `MySqlDbType.JSON` accepts strings only, and a `json` column
+always reads back as `string`). This is fully supported storage, not a refusal of JSON columns: a
+MySQL 8 table may declare the column as `json` — the server validates and normalises the document — and a
+MariaDB table may declare it as `JSON`, which the server reports as `longtext` with a `json_valid()`
+CHECK. An explicit `JsonColumnStorage.Native` on either engine fails closed with a
+`NotSupportedException` naming the dialect (`MySqlDialect`/`MariaDbDialect`) before any command runs;
+use `Auto` (text) or `Text`. Note also that MySQL compares a `json` document as a typed value — a string
+operand does not equal it — and nextorm promises no equality translation for that column.
 
 Bare CLR JSON values are handled at the boundary, differently from a mapped column:
 
@@ -464,8 +481,9 @@ The construction and aggregation functions return `string?`; deserialize with
 * PostgreSQL maps a `[JsonColumn]` property to a native `jsonb` column (`Auto` storage) on read and
   write (insert, update and `RETURNING`), and a `JsonDocument`/`JsonElement`/`JsonNode` parameter binds
   as `jsonb`. ClickHouse maps `[JsonColumn]` `Auto`/`Native` and bare object-root
-  `JsonObject`/`JsonDocument`/`JsonElement` to its native object-rooted `JSON` column. SQL Server and
-  MySQL/MariaDB JSON is always text.
+  `JsonObject`/`JsonDocument`/`JsonElement` to its native object-rooted `JSON` column. SQL Server JSON
+  is always text; MySQL/MariaDB JSON columns are reached through the text transport on both engines
+  (`Auto`/`Text`), and `Native` is refused with the dialect-named `NotSupportedException`.
 
 ## See also
 

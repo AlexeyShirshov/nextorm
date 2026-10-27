@@ -12,12 +12,18 @@
 * **SQL Server** имеет две независимые поверхности. [`ForJson`](xref:NextORM.Core.QueryCommand`1.ForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean,System.Object[])) выполняет запрос и
   возвращает весь набор строк одним JSON-документом (`FOR JSON PATH`/`FOR JSON AUTO`), а [`SqlServer`](xref:NextORM.Core.SqlFunctions.SqlServer) предоставляет текстовые JSON-функции
   (`json_value`, `json_query`, `json_modify`, `isjson`) и табличную функцию `openjson`.
-* **PostgreSQL** имеет нативные типы `json`/`jsonb` (единственный провайдер с ними) и поверхность
-  функций/операторов на `SqlFunctions.Postgres`: конструирование, агрегация, доступ, вложенность и
+* **PostgreSQL** имеет нативные типы `json`/`jsonb` и единственную поверхность функций/операторов
+  `json`/`jsonb` (`SqlFunctions.Postgres`): конструирование, агрегация, доступ, вложенность и
   JSONPath.
-* **MySQL и MariaDB** хранят JSON в текстовых колонках и предоставляют ту же поверхность текстовых
-  JSON-функций, что и SQL Server ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)),
-  через семейство `JSON_EXTRACT`/`JSON_UNQUOTE`/`JSON_SET`.
+* **MySQL и MariaDB** предоставляют ту же поверхность текстовых JSON-функций, что и SQL Server
+  ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)), через семейство
+  `JSON_EXTRACT`/`JSON_UNQUOTE`/`JSON_SET`. Их JSON-*колонки* — не одно и то же: в MySQL 8 есть
+  настоящий тип `json` (сервер валидирует, нормализует и сообщает его как `json`), а `JSON` в MariaDB —
+  это псевдоним `LONGTEXT` плюс CHECK `json_valid()` (сообщается как `longtext`). Обе используются через
+  **текстовый транспорт** — свойство `[JsonColumn]` сериализуется в текст, который разбирает сервер, —
+  потому что ни у одного из провайдеров нет привязываемого нативного представления JSON, и
+  `JsonColumnStorage.Native` для них отклоняется (см.
+  [Отобразить CLR-объект на нативную JSON-колонку](#отобразить-clr-объект-на-нативную-json-колонку)).
 * **ClickHouse** отображает извлекающие функции строкового JSON (`JSONExtractString`, `JSONExtractInt`,
   `JSONExtractFloat`, `JSONExtractBool`, `JSONExtractRaw`, `JSONHas`, `JSONLength`, `JSONType`) — плюс
   возвращающие массивы `JSONExtractKeys`/`JSONExtractArrayRaw` (проецируются как `string[]`) и
@@ -62,7 +68,7 @@
 | SQL Server | Поддерживается ([`SupportsForJson`](xref:NextORM.Core.ISqlDialect.SupportsForJson)) | Нет — JSON хранится в `nvarchar` | Поддерживаются ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)) | Поддерживается |
 | PostgreSQL | Нет | Поддерживаются ([`SupportsJson`](xref:NextORM.Core.ISqlDialect.SupportsJson)) | Нет | Нет |
 | SQLite | Нет | Нет | Нет (JSON1 через `SqlFunctions.Sqlite`) | Нет |
-| MySQL / MariaDB | Нет | Не отображаются | Поддерживаются ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)) | Нет |
+| MySQL / MariaDB | Нет | Настоящая колонка `json` (MySQL) / `JSON` = псевдоним `LONGTEXT` + CHECK `json_valid()` (MariaDB); обе — через **текстовое** хранение, `Native` отклоняется | Поддерживаются ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)) | Нет |
 | ClickHouse | Нет | Нативный `JSON` ([`SupportsJson`](xref:NextORM.Core.ISqlDialect.SupportsJson); корень-объект, через `[JsonColumn]`/`JsonObject`/`JsonDocument`/`JsonElement`) | Строковый JSON + JSONPath-скаляры + функции нативного JSON (`JSONAllPaths`/`JSONAllPathsWithTypes`/`toJSONString`; [`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract)) | Нет |
 | In-memory | Не применимо (нет SQL) | Не применимо | Не применимо | Не применимо |
 
@@ -238,6 +244,17 @@ public sealed class Customer
 Отображение покрывает свойство, а не схему: nextorm не генерирует DDL колонки, поэтому колонка `jsonb`
 уже должна существовать в таблице. Fluent-форма `JsonColumn(o => ...)` и настройки сериализатора —
 в разделе [Конвертеры значений](../infrastructure/03-value-converters.md#json-колонки).
+
+В **MySQL и MariaDB** тот же атрибут сохраняет **текстовое** хранение: у этих провайдеров есть JSON
+*колонка*, но нет привязываемого нативного *представления* JSON (`MySqlConnector` отклоняет параметры
+`JsonElement`, `JsonDocument` и `JsonNode`, `MySqlDbType.JSON` принимает только строки, а колонка `json`
+всегда читается как `string`). Это полноценное поддерживаемое хранение, а не отказ от JSON-колонок:
+таблица MySQL 8 может объявить колонку как `json` — сервер валидирует и нормализует документ, — а
+таблица MariaDB может объявить её как `JSON`, что сервер сообщает как `longtext` с CHECK `json_valid()`.
+Явный `JsonColumnStorage.Native` на обоих движках завершается отказом с `NotSupportedException`,
+называющим диалект (`MySqlDialect`/`MariaDbDialect`), до выполнения любой команды; используйте `Auto`
+(текст) или `Text`. Учтите также, что MySQL сравнивает документ `json` как типизированное значение —
+строковый операнд ему не равен, — и nextorm не обещает трансляцию сравнения для такой колонки.
 
 «Голые» CLR-типы JSON обрабатываются на границе иначе, чем отображённая колонка:
 
@@ -473,7 +490,8 @@ select json_value(jsonb_build_object('a', 1), cast('$.a' as jsonpath)) as "Value
   и запись (insert, update и `RETURNING`), а параметр `JsonDocument`/`JsonElement`/`JsonNode`
   привязывается как `jsonb`. ClickHouse отображает `[JsonColumn]` `Auto`/`Native` и «голые»
   `JsonObject`/`JsonDocument`/`JsonElement` с корнем-объектом на нативную колонку `JSON` с корнем-объектом.
-  JSON в SQL Server и MySQL/MariaDB всегда текст.
+  JSON в SQL Server всегда текст; JSON-колонки MySQL/MariaDB достигаются текстовым транспортом на обоих
+  движках (`Auto`/`Text`), а `Native` отклоняется с `NotSupportedException`, называющим диалект.
 
 ## См. также
 

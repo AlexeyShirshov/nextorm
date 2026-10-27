@@ -133,7 +133,7 @@
 | [`IPropertyValueConverter`](xref:NextORM.Core.IPropertyValueConverter) | Преобразует свойство между CLR-моделью и представлением провайдера (`ProviderType`, `ConvertToProvider`, `ConvertFromProvider`, `ConvertsNulls`). |
 | [`ValueConverter<TModel,TProvider>`](xref:NextORM.Core.ValueConverter`2) | Строго типизированная база: переопределите типизированные преобразования, движок использует кэшированный инвокер, чтобы value-типы не упаковывались на каждую строку. |
 | [`EnumToStringConverter<TEnum>`](xref:NextORM.Core.EnumToStringConverter`1) | Встроенный конвертер: хранит перечисление как его имя в текстовой колонке и разбирает обратно (`Enum.Parse<TEnum>`); работает и для nullable-перечислений. |
-| [`JsonColumnStorage`](xref:NextORM.Core.JsonColumnStorage) | Форма хранения JSON-колонки: `Auto` (нативная, где провайдер поддерживает, иначе текст), `Native` (`jsonb`) или `Text`. |
+| [`JsonColumnStorage`](xref:NextORM.Core.JsonColumnStorage) | Форма хранения JSON-колонки: `Auto` (нативное **представление** провайдера, где оно есть — PostgreSQL `jsonb`, ClickHouse `JSON`, — иначе текст), `Native` (требует такого представления; иначе отказ с `NotSupportedException` и именем диалекта, например MySQL/MariaDB/SQL Server/SQLite) или `Text`. |
 | [`JsonColumnOptions`](xref:NextORM.Core.JsonColumnOptions) | Fluent-конфигурация JSON-колонки (`Storage`, `Options`) для [`EntityPropertyBuilder<T>.JsonColumn`](xref:NextORM.Core.EntityPropertyBuilder`1.JsonColumn(System.Action{NextORM.Core.JsonColumnOptions})). |
 | [`JsonColumnConverter<TModel,TProvider>`](xref:NextORM.Core.JsonColumnConverter`2) | Конвертер `System.Text.Json` поверх `string` (текстовая колонка) или `JsonElement` (нативная JSON-колонка). |
 

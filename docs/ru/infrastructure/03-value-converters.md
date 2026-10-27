@@ -122,9 +122,11 @@ public object? Payload { get; set; }
 `[JsonColumn]` хранит любой сериализуемый CLR-объект как JSON. **Форма хранения** выбирается
 диалектом:
 
-- `JsonColumnStorage.Auto` (по умолчанию) — нативный JSON-тип, где он есть (PostgreSQL `jsonb`,
-  ClickHouse `JSON` с корнем-объектом), иначе текстовая колонка;
-- `JsonColumnStorage.Native` — принудительно нативный тип (PostgreSQL `jsonb` или ClickHouse `JSON`);
+- `JsonColumnStorage.Auto` (по умолчанию) — нативное представление JSON, где оно есть у провайдера
+  (PostgreSQL `jsonb`, ClickHouse `JSON` с корнем-объектом), иначе текстовая колонка;
+- `JsonColumnStorage.Native` — требует именно нативного **представления**, а не просто JSON-колонки на
+  сервере, и бросает `NotSupportedException` с именем диалекта там, где представления нет (MySQL,
+  MariaDB, SQL Server, SQLite);
 - `JsonColumnStorage.Text` — принудительно текстовая колонка.
 
 Нативное представление провайдера — `JsonElement` в PostgreSQL и `JsonObject` в ClickHouse. Нативный
@@ -132,6 +134,14 @@ public object? Payload { get; set; }
 `NotSupportedException` — для корней-массивов/скаляров используйте `Text`. Легаси-алиас ClickHouse
 `Object('json')` в этой интеграции не поддерживается; см.
 [Поддержка JSON](../guide/16-json.md#отобразить-clr-объект-на-нативную-json-колонку).
+
+**Тип JSON-колонки — ещё не нативное представление.** В MySQL 8 есть настоящая колонка `json`, а
+`JSON` в MariaDB — псевдоним `LONGTEXT` с CHECK `json_valid()`, но `MySqlConnector` не умеет
+привязывать параметры `JsonElement`/`JsonDocument`/`JsonNode` (`MySqlDbType.JSON` принимает только
+строки) и всегда читает колонку `json` как `string`. Поэтому оба движка поддерживаются через
+**текстовое** хранение — `Auto` и `Text` дают JSON-текст, который разбирает сервер, — а `Native`
+отклоняется до выполнения любой команды. В SQL Server JSON живёт в `nvarchar` и нативного типа нет
+вовсе, поэтому действует тот же отказ.
 
 ```csharp
 public sealed class Address
@@ -258,7 +268,7 @@ select id, address
 |---|---|---|---|
 | PostgreSQL | `jsonb` (чтение/запись через `JsonElement`) | `text` | `text` |
 | SQL Server | — (`nvarchar(max)`) | `nvarchar(max)` | `nvarchar` |
-| MySQL / MariaDB | — (`longtext`) | `longtext` | `longtext` |
+| MySQL / MariaDB | — (настоящая колонка `json` в MySQL 8 / `JSON` = `LONGTEXT` + `json_valid()` в MariaDB, обе через текст) | `longtext` | `longtext` |
 | SQLite | — (`TEXT`) | `TEXT` | `TEXT` |
 | ClickHouse | `JSON` (чтение/запись через `JsonObject`, корень-объект) | `String` | `String` |
 | In-memory | CLR-значение | CLR-значение | CLR-значение |
