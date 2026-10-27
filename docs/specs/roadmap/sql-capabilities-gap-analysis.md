@@ -719,10 +719,12 @@ to the ledger on 2026-09-29; item 49 (eager loading) moved on 2026-10-17; item 5
     **not** obsolete (only its `InitAsync` is), so the class was never the blocker. The bulk-copy flags keep
     their semantic matrix: `TableLock`/`FireTriggers` are native-SQL-Server-only, `CheckConstraints=false` is
     scoped on SQL Server/MariaDB/SQLite, `KeepNulls=false` needs a default-equivalent shape, and every other
-    request is a named refusal. One arm stays deferred with an explicit trigger: MariaDB bulk `Returning*` is a
-    named refusal today because no certified server is ≥ 13 (`mariadb:11.4` is the newest), so
-    `MariaDbDialect.SupportsReturning` must be re-evaluated (and a live oracle added) only when such a server
-    exists — the `≥ 13` parity is not claimed. Docs:
+    request is a named refusal. MariaDB bulk `Returning*` carries its own version gate rather than a flat
+    refusal: the portable path renders `INSERT ... RETURNING` and returns the keys at an explicitly configured
+    13.0+ (a bulk-only capability on `MariaDbDialect`, so single-row insert/delete `RETURNING` stays refused and
+    `MariaDbDialect.SupportsReturning` stays `false`), and refuses by name below that. The certified live server
+    is `mariadb:11.4`, so the live run covers the refusal arm only; the 13.0+ arm is certified offline for the
+    rendered SQL, and a live oracle for it needs a server ≥ 13. Docs:
     [Bulk insert](../../guide/22-bulk-insert.md#sql-server-bulk-copy-options) (EN+RU).
 
 53. **Query tag (`WithTag`) — <span style="color:green">shipped</span>.** `EntityBuilder<T>.WithTag(string?)` and

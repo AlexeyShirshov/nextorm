@@ -112,7 +112,7 @@ internal static class SqlMutationBuilder
         if (emitConflictDoNothing)
             writer.Append(dialect.MakeOnConflictDoNothing(keywordCase));
 
-        if (returningColumns is not null && dialect.SupportsReturning)
+        if (returningColumns is not null && SupportsReturning(dialect, command))
             writer.Append(dialect.MakeReturning(returningColumns, keywordCase));
 
         if (sourceParameters.Count > 0)
@@ -137,7 +137,7 @@ internal static class SqlMutationBuilder
 
         writer.Append(dialect.MakeDefaultValues(keywordCase));
 
-        if (returningColumns is not null && dialect.SupportsReturning)
+        if (returningColumns is not null && SupportsReturning(dialect, command))
             writer.Append(dialect.MakeReturning(returningColumns, keywordCase));
     }
 
@@ -176,7 +176,7 @@ internal static class SqlMutationBuilder
         if (emitConflictDoNothing)
             writer.Append(dialect.MakeOnConflictDoNothing(keywordCase));
 
-        if (returningColumns is not null && dialect.SupportsReturning)
+        if (returningColumns is not null && SupportsReturning(dialect, command))
             writer.Append(dialect.MakeReturning(returningColumns, keywordCase));
     }
 
@@ -1362,6 +1362,11 @@ internal static class SqlMutationBuilder
         var renderedSchema = quoteIdentifiers ? BulkInsertDestination.QuoteParts(dialect, schema) : schema;
         return renderedSchema + "." + renderedName;
     }
+
+    // The RETURNING clause is emitted for a dialect-wide RETURNING form, or for the portable bulk path's own
+    // capability when the command came from a Returning* bulk terminal (MariaDB 13.0+).
+    private static bool SupportsReturning(ISqlDialect dialect, InsertCommand command) =>
+        dialect.SupportsReturning || (command.IsBulkReturning && SqlDialectBase.BulkInsertReturningSupported(dialect));
 
     private static IReadOnlyList<string>? RenderReturningColumns(ISqlDialect dialect, bool quoteIdentifiers, INamingConvention? namingConvention, InsertCommand command)
     {

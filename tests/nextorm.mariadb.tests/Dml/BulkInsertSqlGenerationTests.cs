@@ -317,6 +317,73 @@ public class BulkInsertSqlGenerationTests
             .ReturningKey<int>()
             .ToSql();
 
+        act.Should().Throw<NotSupportedException>().WithMessage("*Returning*");
+    }
+
+    // ------------------------------------------- row 5 `Returning`, MariaDB `P >= 13 else R`
+
+    [Fact]
+    public void BulkInsert_ReturningKey_BeforeVersion13_ShouldBeRefusedByName()
+    {
+        using var ctx = MariaDbTestContext.Create(new Version(12, 1));
+
+        Action act = () => ctx.CreateBulkInsertBuilder<ISimpleEntity>()
+            .Values([new SimpleEntity { Id = 7 }])
+            .ReturningKey<int>()
+            .ToSql();
+
+        act.Should().Throw<NotSupportedException>()
+            .WithMessage("*Returning*")
+            .WithMessage("*cannot return written rows*");
+    }
+
+    [Fact]
+    public void BulkInsert_ReturningKey_Version13_ShouldRenderReturning()
+    {
+        using var ctx = MariaDbTestContext.Create(new Version(13, 0));
+
+        ctx.CreateBulkInsertBuilder<ISimpleEntity>()
+            .Values([new SimpleEntity { Id = 7 }])
+            .ReturningKey<int>()
+            .ToSql()
+            .Should().Be("insert into simple_entity (id) values (@p0) returning id");
+    }
+
+    [Fact]
+    public void BulkInsert_ReturningProjection_Version13_ShouldRenderTheReturnedColumns()
+    {
+        using var ctx = MariaDbTestContext.Create(new Version(13, 0));
+
+        ctx.CreateBulkInsertBuilder<INullableEntity>()
+            .Values([new NullableEntity { Name = "a" }])
+            .Returning(x => new { x.Id, x.Name })
+            .ToSql()
+            .Should().EndWith(" returning id, name");
+    }
+
+    [Fact]
+    public void BulkInsert_ReturningKey_Version13Patch_ShouldRenderReturning()
+    {
+        using var ctx = MariaDbTestContext.Create(new Version(13, 0, 2));
+
+        ctx.CreateBulkInsertBuilder<ISimpleEntity>()
+            .Values([new SimpleEntity { Id = 7 }])
+            .ReturningKey<int>()
+            .ToSql()
+            .Should().EndWith(" returning id");
+    }
+
+    [Fact]
+    public void SingleRowInsertReturning_Version13_ShouldStayRefused()
+    {
+        // The gate is bulk-only: the single-row insert terminal keeps its named refusal at every version.
+        using var ctx = MariaDbTestContext.Create(new Version(13, 0));
+
+        Action act = () => ctx.CreateInsertBuilder<ISimpleEntity>()
+            .Value(x => x.Id, 7)
+            .Returning()
+            .ToSql();
+
         act.Should().Throw<NotSupportedException>();
     }
 

@@ -247,11 +247,12 @@ var idByCustomer = ctx.CreateBulkInsertBuilder<IOrder>()
 var orderIdForCustomer2 = idByCustomer[2];
 ```
 
-`Returning*` требует провайдер с `RETURNING`/`OUTPUT`: PostgreSQL и SQLite 3.35+ (через `RETURNING`)
-и SQL Server (через `OUTPUT`). MySQL, MariaDB и ClickHouse отклоняют его на bulk-пути явным
-`NotSupportedException` — там ключи читаются обычным `CreateInsertBuilder`. Версионно-зависимый
-`RETURNING` MariaDB (явно настроенный 13.0+) относится к однотабличному `UPDATE`, а не к bulk-`INSERT`;
-bulk `Returning*` там остаётся отклонённым.
+`Returning*` требует провайдер с `RETURNING`/`OUTPUT`: PostgreSQL и SQLite 3.35+ (через `RETURNING`),
+SQL Server (через `OUTPUT`) и MariaDB (через `RETURNING`, когда диалект привязан к версии сервера 13.0+).
+MySQL и ClickHouse отклоняют его на bulk-пути явным `NotSupportedException` — там ключи читаются обычным
+`CreateInsertBuilder`. В MariaDB bulk `Returning*` поддерживается начиная с 13.0+, а ниже (незаданная или
+более старая версия) отклоняется по имени; живая сертификация идёт на `mariadb:11.4`, то есть покрывает
+ветку отказа, а ветка 13.0+ сертифицирована офлайн только по рендерингу SQL `INSERT ... RETURNING`.
 
 ## Ограничение батча и прогресс
 

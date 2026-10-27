@@ -241,10 +241,11 @@ var orderIdForCustomer2 = idByCustomer[2];
 ```
 
 `Returning*` requires a provider with `RETURNING`/`OUTPUT`: PostgreSQL and SQLite 3.35+ (via
-`RETURNING`) and SQL Server (via `OUTPUT`). MySQL, MariaDB and ClickHouse reject it on the bulk path with a
-clear `NotSupportedException` — read the keys with a plain `CreateInsertBuilder` there. MariaDB's
-version-gated `RETURNING` (explicitly configured 13.0+) applies to a single-table `UPDATE`, not to the bulk
-`INSERT`; a bulk `Returning*` stays refused there.
+`RETURNING`), SQL Server (via `OUTPUT`) and MariaDB (via `RETURNING` when the dialect is pinned to server
+version 13.0+). MySQL and ClickHouse reject it on the bulk path with a clear `NotSupportedException` — read
+the keys with a plain `CreateInsertBuilder` there. On MariaDB bulk `Returning*` is supported at 13.0+ and
+refused below (unset or older) by name; the live certification runs on `mariadb:11.4`, so it exercises the
+refusal arm and the 13.0+ arm is certified offline for the rendered `INSERT ... RETURNING` SQL only.
 
 ## Bounding the batch and reporting progress
 

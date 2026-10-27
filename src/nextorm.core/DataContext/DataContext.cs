@@ -1569,12 +1569,15 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     private void EnsureReturningSupported(MutationCommand command)
     {
         // A single-table UPDATE may have its own RETURNING gate (MariaDB 13.0+) distinct from the
-        // INSERT/DELETE form, so the command shape participates in the capability check.
+        // INSERT/DELETE form, so the command shape participates in the capability check. The portable bulk
+        // INSERT carries its own gate too: MariaDB honours bulk RETURNING at 13.0+ while its single-row
+        // insert/delete form stays refused at every version.
         var supported = Dialect.SupportsReturning || Dialect.SupportsOutput
-            || (command is UpdateCommand && Dialect.SupportsUpdateReturning);
+            || (command is UpdateCommand && Dialect.SupportsUpdateReturning)
+            || (command is InsertCommand { IsBulkReturning: true } && SqlDialectBase.BulkInsertReturningSupported(Dialect));
         if (!supported)
             throw new NotSupportedException(
-                $"{GetType().Name} cannot return written rows: the provider has no RETURNING or OUTPUT form.");
+                $"{GetType().Name} cannot return written rows: the provider has no RETURNING or OUTPUT form for a Returning() request.");
     }
 
     // An interface/abstract TResult cannot be materialized as a whole (no constructor). Reject it with a

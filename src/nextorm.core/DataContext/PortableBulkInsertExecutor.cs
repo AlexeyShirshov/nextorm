@@ -330,6 +330,9 @@ internal sealed class PortableBulkInsertExecutor(IMutationExecutor mutation) : I
             sourceColumns: null,
             ignoreConflicts: command.IgnoreConflicts,
             keepIdentity: command.KeepIdentity,
-            tableSchema: qualification);
+            tableSchema: qualification,
+            // Only the bulk path sets a returning set, and its capability is the bulk-only one: a provider may
+            // honour bulk RETURNING on a server version that its dialect-wide insert form still refuses.
+            isBulkReturning: returningColumns is not null);
     }
 }
