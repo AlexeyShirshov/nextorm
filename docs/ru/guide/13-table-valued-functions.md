@@ -581,7 +581,7 @@ select id, name
 `SqlFunctions.Sqlite.json_each`/`json_tree` — табличные функции JSON в SQLite, возвращающие
 [`SqlFunctions.IJsonEachRow`](xref:NextORM.Core.SqlFunctions.IJsonEachRow)/[`SqlFunctions.IJsonTreeRow`](xref:NextORM.Core.SqlFunctions.IJsonTreeRow) (`key`, `value`, `type`, `fullkey`, `path`,
 плюс `id`/`parent` для `json_tree`); источник поиска FTS5 — `SqlFunctions.Sqlite.MatchTable<TEntity>`.
-См. [SQLite](provider-specific-sql/sqlite.md#json_each--json_tree-table-functions).
+См. [SQLite](provider-specific-sql/sqlite.md#табличные-функции-json_each--json_tree).
 
 `SqlFunctions.ClickHouse.numbers`/`numbers_mt` — табличные функции ClickHouse, возвращающие
 [`SqlFunctions.INumbersRow`](xref:NextORM.Core.SqlFunctions.INumbersRow) (единственная колонка `number`). `numbers(count)` даёт
@@ -723,7 +723,7 @@ SQLite включает `json_each`/`json_tree`/`fts5`, а любой друго
 
 ## См. также
 
-* [Соединения](04-joins.md) — соединение TVF с таблицей или другой TVF и её применение через `CrossApply`/`OuterApply` ([APPLY и LATERAL](04-joins.md#apply-and-lateral)).
+* [Соединения](04-joins.md) — соединение TVF с таблицей или другой TVF и её применение через `CrossApply`/`OuterApply` ([APPLY и LATERAL](04-joins.md#apply-и-lateral)).
 * [Схемы результата и ограничения провайдеров](13-tvf-result-schemas.md) — объявленные вызывающим выходные колонки и формы по провайдерам.
 * [Пользовательские функции](12-user-defined-functions.md) — скалярный эквивалент.
 * [Инструкция INSERT](17-insert-statement.md) — TVF (`unnest`, `generate_series`) как источник `INSERT ... SELECT`.

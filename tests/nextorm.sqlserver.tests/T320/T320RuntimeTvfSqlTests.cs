@@ -65,6 +65,21 @@ internal static class T320SsTvf
 /// open a database connection: the connection string is a placeholder, so they run on every build. The
 /// live counterpart is <c>T320SqlServerTvfTests</c> in the integration project.
 /// </summary>
+/// <remarks>
+/// The class runs in the serialized "T320 runtime TVF plan identity" collection
+/// (<see cref="CollectionDefinitionAttribute.DisableParallelization"/>): its H/I facts assert
+/// prepared-command <em>identity</em> across a capture change, while a concurrent
+/// <c>PurgeQueryCache()</c> (or <see cref="DataContextCache.Clear"/>) anywhere in the process bumps the
+/// process-wide plan-store generation and evicts every thread's thread-local plan dictionary. The next
+/// "cache hit" then legitimately re-prepares and returns a different <c>DbPreparedQueryCommand</c> —
+/// correct product behaviour, but not the identity these regression tests are about, so the class must
+/// not overlap another collection. Same mechanism and same remedy as DEF-08 (#327), T296b and the
+/// sibling instances tracked on #339.
+/// </remarks>
+[CollectionDefinition("T320 runtime TVF plan identity", DisableParallelization = true)]
+public sealed class T320RuntimeTvfPlanIdentityCollection;
+
+[Collection("T320 runtime TVF plan identity")]
 [Trait("Category", "T320")]
 public class T320RuntimeTvfSqlTests(ITestOutputHelper output)
 {
