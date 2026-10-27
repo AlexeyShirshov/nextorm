@@ -1,0 +1,55 @@
+# 01. Постановка проблемы — тезисы
+
+> Рабочие заметки. Не черновик статьи.
+
+## Исходная проблема
+
+- Доступ к реляционным данным: написание SQL + преобразование результата в объекты/значения.
+- Две независимые оси выбора:
+  - SQL: вручную / генерируется библиотекой.
+  - Маппинг результата: вручную / автоматически.
+- Три подхода из [первоначальной «Постановки задачи» (05.01.2024)](https://github.com/AlexeyShirshov/nextorm/blob/5e6e6e8b06bbebc274d7da4970cbe249dfe9e7fc/nextorm.core/docs/ru/motivation.md):
+  1. Ручной SQL + ручной маппинг.
+  2. Ручной SQL + автоматический маппинг.
+  3. Автоматический SQL + автоматический маппинг.
+- Для каждого подхода: контроль SQL; шаблонный код; типобезопасность; сложность сопровождения; затраты CPU/памяти.
+- Не принимать исторические оценки производительности за универсальные факты; уточнить сценарии и измерения.
+
+## Замысел Nextorm — исторические тезисы
+
+- Исключить ручное написание SQL без отказа от возможностей C#: IntelliSense, проверка типов, выражения C# — [README, 20.09.2023](https://github.com/AlexeyShirshov/nextorm/blob/7ee4651280ed2f902297e14bf562d89cea281a30/readme.md).
+- Поддерживать запросы без обязательного объявления классов сущностей и метаданных — [README, 20.09.2023](https://github.com/AlexeyShirshov/nextorm/blob/7ee4651280ed2f902297e14bf562d89cea281a30/readme.md).
+- Отказ от change tracking как осознанное упрощение — [README, 09.12.2023](https://github.com/AlexeyShirshov/nextorm/blob/40c792cb09ffb6713da60d3c19f01384d76b2de2/readme.md).
+- Компиляция запросов и параметризация — [README, 09.12.2023](https://github.com/AlexeyShirshov/nextorm/blob/40c792cb09ffb6713da60d3c19f01384d76b2de2/readme.md).
+- Две основные функции: генерация SQL и маппинг реляционного результата — [«Введение», 05.01.2024](https://github.com/AlexeyShirshov/nextorm/blob/5e6e6e8b06bbebc274d7da4970cbe249dfe9e7fc/nextorm.core/docs/ru/overview.md).
+- Комбинация удобства автоматического SQL/маппинга с целевой низкой стоимостью выполнения — [«Постановка задачи», 05.01.2024](https://github.com/AlexeyShirshov/nextorm/blob/5e6e6e8b06bbebc274d7da4970cbe249dfe9e7fc/nextorm.core/docs/ru/motivation.md).
+
+## Эволюция формулировки цели
+
+- **20.09.2023:** акцент на отказе от ручного SQL; достижение скорости Dapper не объявлено целью — [источник](https://github.com/AlexeyShirshov/nextorm/blob/7ee4651280ed2f902297e14bf562d89cea281a30/readme.md).
+- **09.12.2023:** цель сформулирована как скорость уровня Dapper **и** отказ от ручного SQL — [источник](https://github.com/AlexeyShirshov/nextorm/blob/40c792cb09ffb6713da60d3c19f01384d76b2de2/readme.md).
+- Для статьи: разделить **первоначальную мотивацию**, **целевой уровень производительности** и **фактические результаты измерений**.
+
+## Примеры для подбора
+
+- Типизированный запрос по модели — [README, 09.12.2023](https://github.com/AlexeyShirshov/nextorm/blob/40c792cb09ffb6713da60d3c19f01384d76b2de2/readme.md).
+- Запрос без сущности и атрибутов — [там же](https://github.com/AlexeyShirshov/nextorm/blob/40c792cb09ffb6713da60d3c19f01384d76b2de2/readme.md).
+- Типизированный подзапрос — [там же](https://github.com/AlexeyShirshov/nextorm/blob/40c792cb09ffb6713da60d3c19f01384d76b2de2/readme.md).
+- Актуальные примеры API вместо устаревших фрагментов — [текущий README](https://github.com/AlexeyShirshov/nextorm/blob/main/readme.md).
+
+## Вопросы для авторской проработки
+
+- Какие конкретные задачи и ограничения привели к созданию библиотеки?
+- Какие компромиссы Dapper / EF Core были принципиальными на момент старта?
+- Почему генерация SQL важнее простого сокращения объёма кода?
+- Какие свойства типизированного API принципиальны, какие вторичны?
+- Почему не нужен change tracking?
+- Что подтверждено актуальными замерами, а что остаётся целью?
+- Какие изменения исходной концепции произошли с 2023 года?
+
+## Материалы для актуализации перед публикацией
+
+- [Текущая документация: постановка задачи](https://github.com/AlexeyShirshov/nextorm/blob/main/docs/ru/motivation.md).
+- [Текущие сравнения и бенчмарки](https://github.com/AlexeyShirshov/nextorm/blob/main/docs/ru/comparisons/benchmarks.md).
+- [Текущие ограничения](https://github.com/AlexeyShirshov/nextorm/blob/main/docs/ru/advanced/limitations.md).
+- [Карта источников и версий](sources.md).
