@@ -18,3 +18,20 @@ public enum MySqlWeightStringCast
     /// <summary>Pad or truncate with <c>0x00</c> bytes: <c>AS BINARY(N)</c>.</summary>
     Binary
 }
+
+/// <summary>
+/// The format family of MySQL's <c>GET_FORMAT</c> function, used as the first argument of
+/// <c>get_format</c>. The value is rendered as the bare keyword (<c>DATE</c>, <c>TIME</c>,
+/// <c>DATETIME</c>) and must be a compile-time constant.
+/// </summary>
+public enum MySqlFormatKind
+{
+    /// <summary>The date formats: <c>GET_FORMAT(DATE, 'EUR')</c>.</summary>
+    Date,
+
+    /// <summary>The time formats: <c>GET_FORMAT(TIME, 'EUR')</c>.</summary>
+    Time,
+
+    /// <summary>The date-time formats: <c>GET_FORMAT(DATETIME, 'EUR')</c>.</summary>
+    DateTime
+}

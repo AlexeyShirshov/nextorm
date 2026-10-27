@@ -40,6 +40,25 @@ internal static class MySqlFunctionTranslator
         if (visitor.Dialect.MySqlFunctions is not { } mySql || !mySql.Supports(name))
             throw new NotSupportedException($"The {name} function is not supported by this provider.");
 
+        if (name == nameof(MySqlFunctions.get_format))
+        {
+            // GET_FORMAT(DATE, 'EUR') is grammar: the first argument is a bare keyword and the second a
+            // plain quoted literal, so neither may go through the generic value renderer.
+            var (kind, format) = ReadGetFormat(visitor, node.Arguments);
+
+            if (visitor.IsParamMode)
+            {
+                for (var (i, cnt) = (0, node.Arguments.Count); i < cnt; i++)
+                    visitor.Visit(node.Arguments[i]);
+
+                return true;
+            }
+
+            visitor.NeedAliasForColumn = true;
+            visitor.Builder!.Append(mySql.Render(name, [kind, format]));
+            return true;
+        }
+
         var args = VariadicNames.Contains(name)
             ? ArgumentFlattener.Flatten(node.Arguments, 1)
             : (IReadOnlyList<Expression>)node.Arguments;
@@ -97,6 +116,54 @@ internal static class MySqlFunctionTranslator
         visitor.Builder!.Append(mySql.Render(name, rendered));
         return true;
     }
+
+    private const string GetFormatError =
+        "MySQL GET_FORMAT() requires a compile-time IANA format kind and format literal.";
+
+    /// <summary>
+    /// Reads the two grammar constants of <c>get_format</c>: the family keyword is emitted bare and the
+    /// platform format as a plain quoted literal. Both must be compile-time constants; anything else is
+    /// refused before any SQL (or argument evaluation) is emitted.
+    /// </summary>
+    private static (string Kind, string Format) ReadGetFormat(
+        BaseExpressionVisitor visitor, IReadOnlyList<Expression> args)
+    {
+        if (args.Count != 2
+            || !TryReadGetFormatKind(args[0], out var kind)
+            || TypeFacts.UnwrapConvert(args[1]) is not ConstantExpression { Value: string format }
+            || !IsKnownGetFormat(format))
+            throw new NotSupportedException(GetFormatError);
+
+        var keyword = kind switch
+        {
+            MySqlFormatKind.Date => "DATE",
+            MySqlFormatKind.Time => "TIME",
+            _ => "DATETIME"
+        };
+
+        return (keyword, visitor.RenderStringLiteral(
+            format, SqlStringLiteralRole.GrammarToken, SqlStringGrammar.Keyword));
+    }
+
+    private static bool TryReadGetFormatKind(Expression expression, out MySqlFormatKind kind)
+    {
+        switch (TypeFacts.UnwrapConvert(expression))
+        {
+            case ConstantExpression { Value: MySqlFormatKind value } when Enum.IsDefined(value):
+                kind = value;
+                return true;
+            case ConstantExpression { Value: int raw } when Enum.IsDefined(typeof(MySqlFormatKind), raw):
+                kind = (MySqlFormatKind)raw;
+                return true;
+            default:
+                kind = default;
+                return false;
+        }
+    }
+
+    /// <summary>The platform format names MySQL 8.4 documents for every <c>GET_FORMAT</c> family.</summary>
+    private static bool IsKnownGetFormat(string format) =>
+        format is "USA" or "JIS" or "ISO" or "EUR" or "INTERNAL";
 
     private static (MySqlWeightStringCast Cast, int Length) ReadWeightStringModifiers(
         Expression castExpression, Expression lengthExpression)

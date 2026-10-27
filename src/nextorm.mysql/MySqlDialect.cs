@@ -837,7 +837,11 @@ internal class MySqlNativeFunctions : IMySqlFunctions
         "bin" or "export_set" or "hex" or "make_set" or "oct" or "ord" or "quote" or
         "soundex" or "strcmp" or "to_base64" or "from_base64" or "unhex" or "weight_string" or
         "conv" or "crc32" or "log2" or "rand" or "truncate" or
-        "bit_count" or "bit_and" or "bit_or" or "bit_xor";
+        "bit_count" or "bit_and" or "bit_or" or "bit_xor" or
+        "adddate" or "addtime" or "convert_tz" or "dayname" or "from_days" or "get_format" or
+        "makedate" or "maketime" or "microsecond" or "monthname" or "period_add" or "period_diff" or
+        "sec_to_time" or "subdate" or "subtime" or "time" or "time_format" or "time_to_sec" or
+        "timediff" or "timestamp" or "to_days" or "to_seconds" or "yearweek";
 
     /// <inheritdoc/>
     public string Render(string name, IReadOnlyList<string> args) => name switch
@@ -897,6 +901,35 @@ internal class MySqlNativeFunctions : IMySqlFunctions
         "bit_and" => $"bit_and({args[0]})",
         "bit_or" => $"bit_or({args[0]})",
         "bit_xor" => $"bit_xor({args[0]})",
+        "adddate" => $"adddate({args[0]}, {args[1]})",
+        "addtime" => $"addtime({args[0]}, {args[1]})",
+        "convert_tz" => $"convert_tz({args[0]}, {args[1]}, {args[2]})",
+        "dayname" => $"dayname({args[0]})",
+        "from_days" => $"from_days({args[0]})",
+        // The family keyword and the quoted format literal are supplied by the translator from
+        // validated constants; neither reaches the generic value renderer.
+        "get_format" => $"get_format({args[0]}, {args[1]})",
+        "makedate" => $"makedate({args[0]}, {args[1]})",
+        "maketime" => $"maketime({args[0]}, {args[1]}, {args[2]})",
+        "microsecond" => $"microsecond({args[0]})",
+        "monthname" => $"monthname({args[0]})",
+        "period_add" => $"period_add({args[0]}, {args[1]})",
+        "period_diff" => $"period_diff({args[0]}, {args[1]})",
+        "sec_to_time" => $"sec_to_time({args[0]})",
+        "subdate" => $"subdate({args[0]}, {args[1]})",
+        "subtime" => $"subtime({args[0]}, {args[1]})",
+        "time" => $"time({args[0]})",
+        "time_format" => $"time_format({args[0]}, {args[1]})",
+        "time_to_sec" => $"time_to_sec({args[0]})",
+        "timediff" => $"timediff({args[0]}, {args[1]})",
+        "timestamp" => args.Count == 2
+            ? $"timestamp({args[0]}, {args[1]})"
+            : $"timestamp({args[0]})",
+        "to_days" => $"to_days({args[0]})",
+        "to_seconds" => $"to_seconds({args[0]})",
+        "yearweek" => args.Count == 2
+            ? $"yearweek({args[0]}, {args[1]})"
+            : $"yearweek({args[0]})",
         _ => throw new NotSupportedException($"The {name} function is not supported by MySQL/MariaDB.")
     };
 }

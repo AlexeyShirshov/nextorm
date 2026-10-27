@@ -210,7 +210,12 @@ internal sealed class MariaDbNativeFunctions : IMySqlFunctions
                 "bin" or "export_set" or "hex" or "make_set" or "oct" or "ord" or "quote" or
                 "soundex" or "strcmp" or "to_base64" or "from_base64" or "unhex" or "weight_string" or
                 "conv" or "crc32" or "log2" or "rand" or "truncate" or
-                "bit_count" or "bit_and" or "bit_or" or "bit_xor") && Inner.Supports(name)));
+                "bit_count" or "bit_and" or "bit_or" or "bit_xor" or
+                "adddate" or "addtime" or "convert_tz" or "dayname" or "from_days" or "get_format" or
+                "makedate" or "maketime" or "microsecond" or "monthname" or "period_add" or
+                "period_diff" or "sec_to_time" or "subdate" or "subtime" or "time" or
+                "time_format" or "time_to_sec" or "timediff" or "timestamp" or "to_days" or
+                "to_seconds" or "yearweek") && Inner.Supports(name)));
 
     /// <inheritdoc/>
     public string Render(string name, IReadOnlyList<string> args) => name switch

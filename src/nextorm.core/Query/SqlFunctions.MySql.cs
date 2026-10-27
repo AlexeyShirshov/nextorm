@@ -11,7 +11,9 @@ namespace NextORM.Core;
 /// string, numeric and bit catalogue: <c>bin</c>, <c>export_set</c>, <c>hex</c>, <c>make_set</c>,
 /// <c>oct</c>, <c>ord</c>, <c>quote</c>, <c>soundex</c>, <c>strcmp</c>, the Base64/hex codecs,
 /// <c>weight_string</c>, <c>conv</c>, <c>crc32</c>, <c>log2</c>, <c>rand</c>, <c>truncate</c>,
-/// <c>bit_count</c> and the <c>bit_and</c>/<c>bit_or</c>/<c>bit_xor</c> aggregates.
+/// <c>bit_count</c> and the <c>bit_and</c>/<c>bit_or</c>/<c>bit_xor</c> aggregates, and the
+/// <c>date</c>/<c>time</c> catalogue (<c>adddate</c>/<c>subdate</c>, <c>addtime</c>/<c>subtime</c>,
+/// <c>convert_tz</c>, <c>get_format</c>, <c>time_to_sec</c> and the remaining temporal accessors).
 /// <para>
 /// Exposed through <see cref="SqlFunctions.MySql"/>; every member is gated per name by the dialect's
 /// <see cref="IMySqlFunctions"/> capability object and rejected by providers that do not opt in.
@@ -478,6 +480,201 @@ public class MySqlFunctions : CommonFunctions
 
     /// <summary><c>bit_xor(value)</c>: the bitwise XOR of every binary value in the group. MySQL-only.</summary>
     public byte[]? bit_xor(byte[]? value) => default!;
+
+    /// <summary>
+    /// <c>adddate(date, days)</c>: <paramref name="date"/> plus <paramref name="days"/> calendar days.
+    /// This is the numeric-days form only; the <c>INTERVAL</c> unit form is not modelled. MySQL-only;
+    /// MariaDB rejects the call.
+    /// </summary>
+    public DateTime? adddate(DateTime? date, int? days) => default!;
+
+    /// <summary>
+    /// <c>addtime(datetime, time)</c>: <paramref name="datetime"/> plus the duration
+    /// <paramref name="time"/>. MySQL-only; MariaDB rejects the call.
+    /// </summary>
+    public DateTime? addtime(DateTime? datetime, TimeSpan? time) => default!;
+
+    /// <summary>
+    /// <c>addtime(time1, time2)</c>: the sum of two durations. MySQL-only; MariaDB rejects the call.
+    /// </summary>
+    public TimeSpan? addtime(TimeSpan? time1, TimeSpan? time2) => default!;
+
+    /// <summary>
+    /// <c>convert_tz(datetime, fromTimeZone, toTimeZone)</c>: <paramref name="datetime"/> converted from
+    /// the <paramref name="fromTimeZone"/> to the <paramref name="toTimeZone"/> IANA zone, or
+    /// <c>null</c> when either zone is unknown to the server. MySQL-only; MariaDB rejects the call.
+    /// </summary>
+    public DateTime? convert_tz(DateTime? datetime, string? fromTimeZone, string? toTimeZone) => default!;
+
+    /// <summary>
+    /// <c>dayname(date)</c>: the weekday name of <paramref name="date"/> (for example
+    /// <c>Wednesday</c>). MySQL-only; MariaDB rejects the call.
+    /// </summary>
+    public string? dayname(DateTime? date) => default!;
+
+    /// <summary>
+    /// <c>from_days(days)</c>: the date corresponding to the day number
+    /// <paramref name="days"/> (days since year 0). MySQL-only; MariaDB rejects the call.
+    /// </summary>
+    public DateTime? from_days(long? days) => default!;
+
+    /// <summary>
+    /// <c>get_format(kind, format)</c>: the MySQL <c>%</c>-style format string for the platform format
+    /// named <paramref name="format"/> (<c>USA</c>, <c>JIS</c>, <c>ISO</c>, <c>EUR</c> or
+    /// <c>INTERNAL</c>) of the <paramref name="kind"/> family. Both arguments must be compile-time
+    /// constants; an invalid pair is refused before SQL is generated. MySQL-only; MariaDB rejects the
+    /// call.
+    /// </summary>
+    /// <param name="kind">The format family: <see cref="MySqlFormatKind.Date"/>,
+    /// <see cref="MySqlFormatKind.Time"/> or <see cref="MySqlFormatKind.DateTime"/>.</param>
+    /// <param name="format">The platform format name, as a compile-time literal.</param>
+    public string? get_format(MySqlFormatKind kind, string? format) => default!;
+
+    /// <summary>
+    /// <c>makedate(year, dayOfYear)</c>: the date built from <paramref name="year"/> and the 1-based
+    /// <paramref name="dayOfYear"/>, or <c>null</c> when the day is outside the year. MySQL-only;
+    /// MariaDB rejects the call.
+    /// </summary>
+    public DateTime? makedate(int? year, int? dayOfYear) => default!;
+
+    /// <summary>
+    /// <c>maketime(hour, minute, second)</c>: the duration built from the parts, or <c>null</c> when a
+    /// part is out of range. MySQL-only; MariaDB rejects the call.
+    /// </summary>
+    public TimeSpan? maketime(int? hour, int? minute, decimal? second) => default!;
+
+    /// <summary>
+    /// <c>microsecond(datetime)</c>: the microseconds part of <paramref name="datetime"/>
+    /// (<c>0</c>–<c>999999</c>). MySQL-only; MariaDB rejects the call.
+    /// </summary>
+    public long? microsecond(DateTime? datetime) => default!;
+
+    /// <summary>
+    /// <c>microsecond(time)</c>: the microseconds part of the duration. MySQL-only; MariaDB rejects
+    /// the call.
+    /// </summary>
+    public long? microsecond(TimeSpan? time) => default!;
+
+    /// <summary>
+    /// <c>monthname(date)</c>: the month name of <paramref name="date"/> (for example <c>May</c>).
+    /// MySQL-only; MariaDB rejects the call.
+    /// </summary>
+    public string? monthname(DateTime? date) => default!;
+
+    /// <summary>
+    /// <c>period_add(period, months)</c>: the <c>YYMM</c>/<c>YYYYMM</c> period
+    /// <paramref name="period"/> shifted by <paramref name="months"/>. MySQL-only; MariaDB rejects the
+    /// call.
+    /// </summary>
+    public long? period_add(long? period, long? months) => default!;
+
+    /// <summary>
+    /// <c>period_diff(period1, period2)</c>: the number of months from <paramref name="period2"/> to
+    /// <paramref name="period1"/>, both in <c>YYMM</c>/<c>YYYYMM</c> form. MySQL-only; MariaDB rejects
+    /// the call.
+    /// </summary>
+    public long? period_diff(long? period1, long? period2) => default!;
+
+    /// <summary>
+    /// <c>sec_to_time(seconds)</c>: the duration represented by <paramref name="seconds"/>, with a
+    /// fractional part when the input has one. MySQL-only; MariaDB rejects the call.
+    /// </summary>
+    public TimeSpan? sec_to_time(decimal? seconds) => default!;
+
+    /// <summary>
+    /// <c>subdate(date, days)</c>: <paramref name="date"/> minus <paramref name="days"/> calendar days.
+    /// This is the numeric-days form only; the <c>INTERVAL</c> unit form is not modelled. MySQL-only;
+    /// MariaDB rejects the call.
+    /// </summary>
+    public DateTime? subdate(DateTime? date, int? days) => default!;
+
+    /// <summary>
+    /// <c>subtime(datetime, time)</c>: <paramref name="datetime"/> minus the duration
+    /// <paramref name="time"/>. MySQL-only; MariaDB rejects the call.
+    /// </summary>
+    public DateTime? subtime(DateTime? datetime, TimeSpan? time) => default!;
+
+    /// <summary>
+    /// <c>subtime(time1, time2)</c>: the difference of two durations. MySQL-only; MariaDB rejects the
+    /// call.
+    /// </summary>
+    public TimeSpan? subtime(TimeSpan? time1, TimeSpan? time2) => default!;
+
+    /// <summary>
+    /// <c>time(datetime)</c>: the time-of-day part of <paramref name="datetime"/>. MySQL-only; MariaDB
+    /// rejects the call.
+    /// </summary>
+    public TimeSpan? time(DateTime? datetime) => default!;
+
+    /// <summary>
+    /// <c>time(time)</c>: the duration unchanged, rounded to whole seconds. MySQL-only; MariaDB rejects
+    /// the call.
+    /// </summary>
+    public TimeSpan? time(TimeSpan? time) => default!;
+
+    /// <summary>
+    /// <c>time_format(time, format)</c>: the duration formatted with a MySQL <c>%</c>-style
+    /// <paramref name="format"/> string. MySQL-only; MariaDB rejects the call.
+    /// </summary>
+    public string? time_format(TimeSpan? time, string? format) => default!;
+
+    /// <summary>
+    /// <c>time_to_sec(time)</c>: the duration converted to whole seconds.
+    /// For a parameterized <see cref="TimeSpan"/> argument, the current parameter binding truncates any
+    /// non-zero sub-second component before <c>TIME_TO_SEC</c> executes. MySQL 8.4 returns a
+    /// <c>BIGINT</c>, so sub-second precision is discarded even when the value reaches the server. The
+    /// argument is the duration to convert; a SQL NULL argument yields SQL NULL. MySQL-only; MariaDB
+    /// rejects the call.
+    /// </summary>
+    public long? time_to_sec(TimeSpan? time) => default!;
+
+    /// <summary>
+    /// <c>timediff(datetime1, datetime2)</c>: the duration from <paramref name="datetime2"/> to
+    /// <paramref name="datetime1"/>. MySQL-only; MariaDB rejects the call.
+    /// </summary>
+    public TimeSpan? timediff(DateTime? datetime1, DateTime? datetime2) => default!;
+
+    /// <summary>
+    /// <c>timediff(time1, time2)</c>: the duration from <paramref name="time2"/> to
+    /// <paramref name="time1"/>. MySQL-only; MariaDB rejects the call.
+    /// </summary>
+    public TimeSpan? timediff(TimeSpan? time1, TimeSpan? time2) => default!;
+
+    /// <summary>
+    /// <c>timestamp(datetime)</c>: <paramref name="datetime"/> as a <c>DATETIME</c>. MySQL-only;
+    /// MariaDB rejects the call.
+    /// </summary>
+    public DateTime? timestamp(DateTime? datetime) => default!;
+
+    /// <summary>
+    /// <c>timestamp(datetime, time)</c>: <paramref name="datetime"/> plus the duration
+    /// <paramref name="time"/>. MySQL-only; MariaDB rejects the call.
+    /// </summary>
+    public DateTime? timestamp(DateTime? datetime, TimeSpan? time) => default!;
+
+    /// <summary>
+    /// <c>to_days(date)</c>: the day number of <paramref name="date"/> (days since year 0). MySQL-only;
+    /// MariaDB rejects the call.
+    /// </summary>
+    public long? to_days(DateTime? date) => default!;
+
+    /// <summary>
+    /// <c>to_seconds(date)</c>: the second number of <paramref name="date"/> (seconds since year 0).
+    /// MySQL-only; MariaDB rejects the call.
+    /// </summary>
+    public long? to_seconds(DateTime? date) => default!;
+
+    /// <summary>
+    /// <c>yearweek(date)</c>: the year and week of <paramref name="date"/> under the default week
+    /// mode. MySQL-only; MariaDB rejects the call.
+    /// </summary>
+    public long? yearweek(DateTime? date) => default!;
+
+    /// <summary>
+    /// <c>yearweek(date, mode)</c>: the year and week of <paramref name="date"/> under the given
+    /// week <paramref name="mode"/>. MySQL-only; MariaDB rejects the call.
+    /// </summary>
+    public long? yearweek(DateTime? date, int? mode) => default!;
 
     /// <summary>
     /// <c>percentile_cont(0.5) within group (order by value) over (...)</c>: the median as the native
