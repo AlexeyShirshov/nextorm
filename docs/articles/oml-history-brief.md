@@ -14,7 +14,8 @@
 
 ## Опорная хронология
 
-- **23.05.2007:** [ранний коммит OML](https://github.com/AlexeyShirshov/oml/commit/2371f4bab9ce746717ae21d0054bc51e7c0ff93b) уже содержит [состояния и регистрацию модификаций](https://github.com/AlexeyShirshov/oml/blob/2371f4bab9ce746717ae21d0054bc51e7c0ff93b/obm/OrmBase.vb#L270-L355), [кэш и механизм инвалидирования](https://github.com/AlexeyShirshov/oml/blob/2371f4bab9ce746717ae21d0054bc51e7c0ff93b/obm/OrmCache.vb#L45-L78).
+- **Задолго до 23.05.2007 (по воспоминаниям автора, точный год неизвестен):** WORM уже разрабатывался; первоначальная мотивация — создавать и статически описывать структуру запросов без непрозрачных SQL-строк. Старые источники не найдены. Возможное размещение на CodePlex **не проверено**.
+- **23.05.2007:** [первый сохранённый корневой коммит OML](https://github.com/AlexeyShirshov/oml/commit/2371f4bab9ce746717ae21d0054bc51e7c0ff93b) уже содержит **целое решение**: [`Worm.sln`](https://github.com/AlexeyShirshov/oml/blob/2371f4bab9ce746717ae21d0054bc51e7c0ff93b/Worm.sln), проекты `obm`, `OrmCodeGen`, `OrmCodeGenLib` и тесты; также [состояния и регистрацию модификаций](https://github.com/AlexeyShirshov/oml/blob/2371f4bab9ce746717ae21d0054bc51e7c0ff93b/obm/OrmBase.vb#L270-L355), [кэш и механизм инвалидирования](https://github.com/AlexeyShirshov/oml/blob/2371f4bab9ce746717ae21d0054bc51e7c0ff93b/obm/OrmCache.vb#L45-L78).
 - **27.07.2009:** [срез OML](https://github.com/AlexeyShirshov/oml/commit/9df4b11d666ec5bfe1319774988c3be543cf89ef) уже содержит [LINQ-провайдер](https://github.com/AlexeyShirshov/oml/blob/9df4b11d666ec5bfe1319774988c3be543cf89ef/net3.5/linqprovider/Provider.vb), [тесты кэша](https://github.com/AlexeyShirshov/oml/blob/9df4b11d666ec5bfe1319774988c3be543cf89ef/TestProject1/Query/Cache.vb).
 - **06.12.2015:** [cross joins and save graph dependency](https://github.com/AlexeyShirshov/oml/commit/a8a2a5281d7583dfefe7307ecbe25559ac3952b4): работа с SQL и зависимостями сохранения.
 - **15.05.2020:** [Relation refactoring](https://github.com/AlexeyShirshov/oml/commit/886f29cda495ae08b3e66c922d68f6e0a54bb8e3): поздний срез для анализа.
@@ -23,7 +24,11 @@
 - **05.01.2024:** [«Постановка задачи»](https://github.com/AlexeyShirshov/nextorm/blob/5e6e6e8b06bbebc274d7da4970cbe249dfe9e7fc/nextorm.core/docs/ru/motivation.md): три подхода к SQL и маппингу.
 - **2026:** [современный pipeline Nextorm](https://github.com/AlexeyShirshov/nextorm/blob/main/docs/ru/engine/index.md): кэш планов, Prepare, материализация; без change tracking.
 
-**Оговорка:** GitHub-репозиторий OML создан в 2017 году, но сохранённая история коммитов уходит в 2007-й. Даты срезов — не обязательно даты первого появления функций.
+**Исправленная датировка:** GitHub-репозиторий OML создан **29.04.2017**, импортированная история начинается **23.05.2007** с коммита **без родителей**, но уже готовой многопроектной системой (~37 тыс. добавленных строк; 165 элементов в дереве). **Проект WORM старше самого раннего доступного коммита — со слов автора**; точную дату старта не установить по имеющемуся Git. Даты срезов не равны датам первого появления функций.
+
+**CodePlex:** автор предполагает, что WORM какое-то время находился на CodePlex; прямого подтверждения пока нет. [CodePlex запущен в 2006-м и закрыт 15.12.2017](https://devblogs.microsoft.com/bharry/shutting-down-codeplex/). Нельзя приписывать исходное создание WORM этой площадке без дополнительных свидетельств.
+
+**Конкурирующие решения:** первоначальное восприятие автора — не было **подходящего ему** ORM без строкового описания запросов, в частности не устраивал NHibernate/HQL. Абсолютное «в .NET не было никаких ORM» противоречит [истории LLBLGen Pro (2003)](https://www.llblgen.com/blog/post.aspx?Id=14); Dapper вышел только [в 2011-м](https://www.infoq.com/news/2011/04/dapper-released/) и не мог быть исходной альтернативой.
 
 ## Архитектурные линии и свидетельства
 
