@@ -71,13 +71,122 @@ var updated = dataContext.From<IComplexEntity>()
 представление, а не длину текста JSON. Для литералов, captured-значений и колонок, где обновление
 ничего не освободило, результат `0`; при SQL NULL — `null` (никогда не `0`). Реализует её только MySQL.
 
+### Строковые
+
+Тринадцать строковых и бинарных членов: `bin`, `oct`, `hex`, `make_set`, `export_set`, `ord`, `quote`,
+`soundex`, `strcmp`, пара Base64 `to_base64`/`from_base64`, `unhex` и `weight_string`. `hex` принимает
+бинарные данные, текст и 64-битное целое; `weight_string` поддерживает только модификаторы
+`AS CHAR(N)` / `AS BINARY(N)`, и оба должны быть константами времени компиляции; `export_set`
+отклоняет константный `count` вне `[0, 64]`.
+
+### Числовые
+
+Пять числовых членов: `conv` (основания 2–36, `-1` для знаковой интерпретации), `crc32` (расширяется
+до `long`), `log2`, `rand` (`double` в `[0, 1)`, seed повторяет последовательность) и `truncate`
+(усечение к нулю, при отрицательном счётчике целая часть обнуляется).
+
+### Бит
+
+Один битовый член: `bit_count(value)` считает установленные биты в 64-битном представлении бинарного
+значения. Три битовых агрегата находятся в разделе [Агрегатные](#агрегатные).
+
+### Дата и время
+
+Двадцать три временных члена: `adddate`/`subdate` (только форма с числом дней), `addtime`/`subtime`,
+`convert_tz` (зоны IANA), `dayname`/`monthname`, `from_days`/`to_days`/`to_seconds`, `get_format`,
+`makedate`/`maketime`, `microsecond`, `period_add`/`period_diff`, `sec_to_time`, `time`, `time_format`,
+`time_to_sec`, `timediff`, `timestamp` и `yearweek`. `get_format` принимает типизированный
+`MySqlFormatKind` и литеральное имя формата (`USA`, `JIS`, `ISO`, `EUR`, `INTERNAL`); `time_to_sec`
+возвращает целые секунды, потому что MySQL 8.4 отбрасывает дробную часть аргумента.
+
+### JSON
+
+Семнадцать JSON-членов и два оператора пути: `json_array`, `json_arrayagg`, `json_contains`,
+`json_contains_path`, `json_merge`, `json_object`, `json_objectagg`, `json_overlaps`, `json_pretty`,
+`json_quote`, `json_schema_valid`, `json_schema_validation_report`, `json_search`, `json_storage_size`,
+`member_of`, `json_arrow` (`column -> 'path'`) и `json_arrow_text` (`column ->> 'path'`). Операторам
+нужна отображаемая JSON-колонка слева и литерал пути времени компиляции справа; `json_object` требует
+чётного числа аргументов со строковыми ключами; `json_contains_path` и `json_search` требуют литерал
+`'one'` или `'all'` и литеральные пути, а escape в `json_search` — один символ; `member_of` требует
+литеральный JSON-массив. `json_storage_free` описан выше, а [`JSON_TABLE`](#ограничения-и-отказы)
+отклоняется.
+
+### Агрегатные
+
+Три агрегата по группе: `bit_and`, `bit_or` и `bit_xor`; каждый возвращает `null` для пустой группы и
+игнорирует входные SQL NULL.
+
+### Шифрование, сжатие и хеширование
+
+Девять членов: `aes_encrypt`/`aes_decrypt` (в MySQL 8.4 по умолчанию `aes-128-ecb`), пара `compress`
+`compress`/`uncompress` плюс `uncompressed_length`, `random_bytes`, `validate_password_strength`,
+`statement_digest` и `statement_digest_text`. `validate_password_strength` даёт осмысленную оценку
+только при настроенном на сервере компоненте `validate_password`.
+
+### Информация
+
+Девять членов информации о сессии: `found_rows`, `last_insert_id`, `row_count`, `current_role`,
+`charset`, `collation`, `coercibility`, `benchmark` и `icu_version`. Идентификатор соединения здесь
+**не** дублируется: это по-прежнему кросс-провайдерный `CommonFunctions.connection_id()`, рендерящийся
+как `CAST(CONNECTION_ID() AS UNSIGNED)` — см.
+[Информация о сессии и сервере](../../scalar-functions/09-system-functions.md#информация-о-сессии-и-сервере-кросс-провайдерная).
+
+### Прочее
+
+Шесть членов: `uuid_short`, `is_uuid`, `sleep`, `grouping`, `name_const` и `column_default`.
+`grouping` возвращает битовую карту rollup, и каждый аргумент должен совпадать с выражением
+`GROUP BY` — это обязанность вызывающего кода, которую транслятор проверить не может; `name_const`
+требует литеральную метку времени компиляции; `column_default` требует ссылку на колонку, поэтому
+константы, параметры, приведения и вычисляемые выражения отклоняются.
+
+Каждый член, его SQL-написание и форма результата перечислены в
+[таблице соответствия провайдеров](../../scalar-functions/08-reference.md#функции-только-для-mysql).
+
+## Ограничения и отказы
+
+Каждое ограничение и каждый отказ возникают при подготовке, **до эмиссии любого SQL**, и каждый
+покрыт тестом с положительным контролем на том же провайдере (после отказа соседние имена
+продолжают рендериться). Ограничения:
+
+* `column_default` требует ссылку на колонку; константы, параметры, приведения и вычисляемые
+  выражения отклоняются.
+* `->` и `->>` требуют JSON-колонку слева и литерал пути времени компиляции справа.
+* `json_object` требует чётного числа аргументов со строковыми ключами.
+* `json_contains_path` и `json_search` требуют литерал `'one'` или `'all'` и литеральные пути.
+* `json_search` принимает escape из одного символа.
+* `get_format` принимает типизированный вид и литеральное имя формата; `weight_string` — только
+  модификаторы `AS CHAR(N)`/`AS BINARY(N)`; `name_const` — литеральное имя; `member_of` — литеральный
+  JSON-массив.
+* Константный `count` у `export_set` вне `[0, 64]` отклоняется.
+* `time_to_sec` возвращает целые секунды — MySQL 8.4 отбрасывает дробную часть.
+
+Три имени вендора отклоняются полностью; каждый член существует только чтобы нести отказ, и бросает
+`NotSupportedException` ровно с таким текстом:
+
+* `json_table()` — `MySQL JSON_TABLE is a table-producing construct that requires a FROM/join position and a COLUMNS definition list; it is not a scalar function and cannot be expressed on SqlFunctions.MySql.`
+* `uuid()` — `uuid is refused: MySQL UUID() generates UUID version 1; this API's UUID contract is v4 (gen_random_uuid) or v7 (uuidv7), and a v1 value is never substituted for it. Use uuidv7() to generate an identifier, or UUID() through raw SQL when v1 is genuinely intended.`
+* `values(column)` — `MySQL VALUES(column) cannot be translated as a scalar query function; use the mutation builder's upsert API.`
+
+`JSON_TABLE` — таблице-образующая конструкция, а не скаляр: ей нужна позиция `FROM`/join и список
+определений `COLUMNS`, поэтому она достижима только через сырой SQL или обёртку `[SqlFunction]`. То же
+верно для всей нативной поверхности MySQL: отказы — это детерминированные исходы транслятора, а не
+пробелы, оставленные на будущее.
+
 ## MariaDB
 
 `nextorm.mariadb` наследует `MariaDbDialect` от `MySqlDialect`, поэтому получает всю поверхность выше.
-Исключения — `uuid_to_bin`/`bin_to_uuid` и `json_storage_free`: в MariaDB таких функций нет
-(`uuid_to_bin`/`bin_to_uuid` преобразуют через `CAST(... AS BINARY(16))`/`CAST(... AS UUID)`, а учёта
-освобождённого места в бинарном JSON MariaDB не реализует), поэтому `MariaDbDialect.MySqlFunctions`
-сообщает их как неподдерживаемые, и запрос отклоняется с `NotSupportedException`.
+Три имени, которые он никогда не поддерживал, остаются исключёнными: `uuid_to_bin`/`bin_to_uuid` и
+`json_storage_free`. В MariaDB таких функций нет (`uuid_to_bin`/`bin_to_uuid` преобразуют через
+`CAST(... AS BINARY(16))`/`CAST(... AS UUID)`, а учёта освобождённого места в бинарном JSON MariaDB не
+реализует), поэтому `MariaDbDialect.MySqlFunctions` сообщает их как неподдерживаемые, и запрос
+отклоняется с `NotSupportedException`.
+
+Имена, добавленные в этом срезе, поставлены против **только MySQL 8.4**. `MariaDbNativeFunctions`
+держит каждое из них в своём списке исключений, поэтому MariaDB отклоняет каждое имя явно, вместо
+того чтобы эмитить SQL, поведение которого этот срез не может подтвердить. Проверку на MariaDB ведёт
+[#284](https://github.com/AlexeyShirshov/nextorm/issues/284), которая будет снимать исключения по
+одному имени; три исключения выше и все ветки только для MariaDB/с версионными ограничениями ниже не
+меняются.
 
 Поверх наследуемого набора MariaDB добавляет собственные имена через тот же вход `SqlFunctions.MySql`.
 Диалект MySQL их не сообщает, поэтому запрос MySQL с таким именем отклоняется с `NotSupportedException`:

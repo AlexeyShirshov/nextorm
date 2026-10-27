@@ -206,7 +206,28 @@ internal sealed class MariaDbNativeFunctions : IMySqlFunctions
     public bool Supports(string name) =>
         IsVersionGated(name) ||
         (IsMariaDbOnly(name) ||
-            (name is not ("uuid_to_bin" or "bin_to_uuid" or "json_storage_free") && Inner.Supports(name)));
+            (name is not ("uuid_to_bin" or "bin_to_uuid" or "json_storage_free" or
+                "json_array" or "json_arrayagg" or "json_arrow" or "json_arrow_text" or
+                "json_contains" or "json_contains_path" or "json_merge" or "json_object" or
+                "json_objectagg" or "json_overlaps" or "json_pretty" or "json_quote" or
+                "json_schema_valid" or "json_schema_validation_report" or "json_search" or
+                "json_storage_size" or "member_of" or
+                "bin" or "export_set" or "hex" or "make_set" or "oct" or "ord" or "quote" or
+                "soundex" or "strcmp" or "to_base64" or "from_base64" or "unhex" or "weight_string" or
+                "conv" or "crc32" or "log2" or "rand" or "truncate" or
+                "bit_count" or "bit_and" or "bit_or" or "bit_xor" or
+                "adddate" or "addtime" or "convert_tz" or "dayname" or "from_days" or "get_format" or
+                "makedate" or "maketime" or "microsecond" or "monthname" or "period_add" or
+                "period_diff" or "sec_to_time" or "subdate" or "subtime" or "time" or
+                "time_format" or "time_to_sec" or "timediff" or "timestamp" or "to_days" or
+                "to_seconds" or "yearweek" or
+                "aes_encrypt" or "aes_decrypt" or "compress" or "uncompress" or
+                "uncompressed_length" or "random_bytes" or "validate_password_strength" or
+                "statement_digest" or "statement_digest_text" or
+                "found_rows" or "last_insert_id" or "row_count" or "current_role" or
+                "charset" or "collation" or "coercibility" or "benchmark" or "icu_version" or
+                "uuid_short" or "is_uuid" or "sleep" or "grouping" or "name_const" or
+                "column_default") && Inner.Supports(name)));
 
     /// <inheritdoc/>
     public string Render(string name, IReadOnlyList<string> args) => name switch
