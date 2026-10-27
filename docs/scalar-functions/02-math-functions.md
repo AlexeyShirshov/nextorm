@@ -147,6 +147,42 @@ The remaining math functions are part of the extended scalar library
 PostgreSQL function returns `void`, so a projected value is always `null` and the call is made for its
 side effect (subsequent `random()` calls in the session become reproducible).
 
+### Delivered math and degree-trigonometric helpers (#281)
+
+The remainder of the PostgreSQL math catalogue is exposed on the same surface, one member per server
+overload. Every name is gated **individually** by
+[`IScalarFunctions.Supports`](xref:NextORM.Core.IScalarFunctions.Supports(System.String)), so a
+provider that does not implement the interface rejects the call with `NotSupportedException`:
+
+| C# | SQL | Result |
+|---|---|---|
+| `SqlFunctions.Postgres.div(y, x)` | `div(y, x)` | `decimal?` — `numeric` division truncated toward zero |
+| `SqlFunctions.Postgres.erf(x)` | `erf(x)` | `double?` — the error function, in `-1..1` |
+| `SqlFunctions.Postgres.erfc(x)` | `erfc(x)` | `double?` — `1 - erf(x)`, in `0..2` |
+| `SqlFunctions.Postgres.random_normal(mean, stddev)` | `random_normal(mean, stddev)` | `double?` — volatile, a new value per execution |
+| `SqlFunctions.Postgres.acosd(x)` | `acosd(x)` | `double?` — arccosine in degrees |
+| `SqlFunctions.Postgres.asind(x)` | `asind(x)` | `double?` — arcsine in degrees |
+| `SqlFunctions.Postgres.atand(x)` | `atand(x)` | `double?` — arctangent in degrees |
+| `SqlFunctions.Postgres.atan2d(y, x)` | `atan2d(y, x)` | `double?` — arctangent of `y`/`x` in degrees, using the signs of both |
+| `SqlFunctions.Postgres.cosd(x)` | `cosd(x)` | `double?` — cosine of an angle in degrees |
+| `SqlFunctions.Postgres.cotd(x)` | `cotd(x)` | `double?` — cotangent of an angle in degrees |
+| `SqlFunctions.Postgres.sind(x)` | `sind(x)` | `double?` — sine of an angle in degrees |
+| `SqlFunctions.Postgres.tand(x)` | `tand(x)` | `double?` — tangent of an angle in degrees |
+
+`div` is truncating `numeric` division, not a rounding one: `div(7, 2)` is `3` and `div(-7, 2)` is
+`-3`; division by zero raises on the server. The `*d` family takes its argument **in degrees** and
+returns degrees, so `cosd(60)` is `0.5`; its radian counterparts are the
+`asin`/`acos`/`atan`/`atan2` rows above. Only the two-argument `random_normal(mean, stddev)` is
+exposed; the server's zero- and one-argument forms are not. A NULL argument yields NULL.
+
+A name the pinned server cannot run is refused while the query is prepared:
+
+| Family | Refused member | Tested reason |
+|---|---|---|
+| numeric | `gamma(x)` | absent on the pinned PostgreSQL 17.11 — missing from `pg_proc` and from the PG17 mathematical-functions table, and a live call fails with `42883`; the name does not exist in any release, so there is no rename story. |
+| numeric | `tgamma(x)` | the same absence on 17.11 (`42883`). |
+| numeric | `lgamma(x)` | the same absence on 17.11 (`42883`). |
+
 ## PostgreSQL numeric scale
 
 Three PostgreSQL-only functions describe the scale of a `numeric` value. They are gated **per name**

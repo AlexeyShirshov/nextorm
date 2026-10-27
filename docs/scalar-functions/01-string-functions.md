@@ -355,6 +355,78 @@ var rows = dataContext.From<IComplexEntity>()
     .ToList();
 ```
 
+### Residual string, encoding and regexp helpers (#281)
+
+The rest of the PostgreSQL string catalogue is exposed on the same surface, one member per server
+overload. Every name is gated **individually** by
+[`IScalarFunctions.Supports`](xref:NextORM.Core.IScalarFunctions.Supports(System.String)), and a
+provider that does not implement the interface rejects the call with `NotSupportedException`:
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.Postgres.btrim(value)` | `btrim(value)` |
+| `SqlFunctions.Postgres.btrim(value, characters)` | `btrim(value, characters)` |
+| `SqlFunctions.Postgres.btrim(bytes, bytesToTrim)` | `btrim(bytes, bytesToTrim)` → `bytea` |
+| `SqlFunctions.Postgres.ltrim(value, characters)` | `ltrim(value, characters)` |
+| `SqlFunctions.Postgres.ltrim(bytes, bytesToTrim)` | `ltrim(bytes, bytesToTrim)` → `bytea` |
+| `SqlFunctions.Postgres.rtrim(value, characters)` | `rtrim(value, characters)` |
+| `SqlFunctions.Postgres.rtrim(bytes, bytesToTrim)` | `rtrim(bytes, bytesToTrim)` → `bytea` |
+| `SqlFunctions.Postgres.starts_with(value, prefix)` | `starts_with(value, prefix)` |
+| `SqlFunctions.Postgres.parse_ident(value, strict)` | `parse_ident(value, strict)` → `text[]` |
+| `SqlFunctions.Postgres.quote_ident(value)` | `quote_ident(value)` |
+| `SqlFunctions.Postgres.quote_literal(value)` | `quote_literal(value)` |
+| `SqlFunctions.Postgres.quote_nullable(value)` | `quote_nullable(value)` |
+| `SqlFunctions.Postgres.to_ascii(value, encoding)` | `to_ascii(value, encoding)` (`text`, `name`) |
+| `SqlFunctions.Postgres.to_hex(value)` (`int?`) | `to_hex(value)` |
+| `SqlFunctions.Postgres.to_hex(value)` (`long?`) | `to_hex(value)` (`bigint`) |
+| `SqlFunctions.Postgres.to_oct(value)` (`int?`) | `to_oct(value)` |
+| `SqlFunctions.Postgres.to_oct(value)` (`long?`) | `to_oct(value)` (`bigint`) |
+| `SqlFunctions.Postgres.to_bin(value)` (`int?`) | `to_bin(value)` |
+| `SqlFunctions.Postgres.to_bin(value)` (`long?`) | `to_bin(value)` (`bigint`) |
+| `SqlFunctions.Postgres.convert_from(bytes, encoding)` | `convert_from(bytes, encoding)` |
+| `SqlFunctions.Postgres.convert_to(value, encoding)` | `convert_to(value, encoding)` → `bytea` |
+| `SqlFunctions.Postgres.encode(bytes, format)` | `encode(bytes, format)` |
+| `SqlFunctions.Postgres.decode(value, format)` | `decode(value, format)` → `bytea` |
+| `SqlFunctions.Postgres.normalize(value, form)` | `normalize(value, form)` |
+| `SqlFunctions.Postgres.unistr(value)` | `unistr(value)` |
+| `SqlFunctions.Postgres.string_to_table(value, delimiter)` | `string_to_table(value, delimiter)` → one row per fragment |
+| `SqlFunctions.Postgres.string_to_table(value, delimiter, nullString)` | `string_to_table(value, delimiter, nullString)` |
+| `SqlFunctions.Postgres.regexp_match(value, pattern)` | `regexp_match(value, pattern)` → `text[]` |
+| `SqlFunctions.Postgres.regexp_match(value, pattern, flags)` | `regexp_match(value, pattern, flags)` → `text[]` |
+
+A NULL argument yields NULL for every one of them. The non-obvious semantics are:
+
+* `regexp_match` returns NULL when the pattern does not match — not an empty array — and a
+  one-element array holding the whole match when the pattern has no capturing group.
+* `normalize` takes a bare grammar keyword (`NFC`, `NFD`, `NFKC` or `NFKD`), not a string literal:
+  the form must be a constant and is rendered unquoted (`normalize(value, NFD)`).
+* `to_hex` on a negative `int` yields the two's-complement spelling (`-1` → `ffffffff`); the `long`
+  overloads are the `bigint` forms for `to_hex`/`to_oct`/`to_bin`.
+* `encode`/`decode` take `(data, format)` with `base64`, `hex` or `escape`; a malformed `decode`
+  input raises on the server instead of being repaired.
+* The two-argument `btrim`/`ltrim`/`rtrim` take a **character set** (every listed character is
+  trimmed), not a substring; the `byte[]` overloads are the `bytea` forms.
+* `parse_ident` returns the dot-separated parts as `text[]`, and `strict` decides whether an invalid
+  identifier raises or is truncated after the first error.
+* `string_to_table` is the one set-returning member of the family: one row per fragment, and the
+  third argument turns a fragment equal to it into a NULL row.
+* `to_ascii` is the `(text, name)` overload; the one-argument form is refused (see below).
+
+### Tested refusals
+
+The pinned server is PostgreSQL 17.11. A member that cannot run on it is refused while the query is
+prepared — `NotSupportedException`, before any command reaches the server:
+
+| Family | Refused member | Tested reason |
+|---|---|---|
+| string | `casefold(text)` | PostgreSQL 18 function, absent from 17.11 `pg_proc`; the name fails with `42883`. |
+| string | `to_ascii(text)` (one argument) | 17.11 raises `0A000` ("encoding conversion from UTF8 to ASCII not supported") because the one-argument form takes the source encoding from the database and is defined only for a LATIN1/LATIN2/WIN1250 source — use `to_ascii(value, encoding)`. |
+| string | `quote_literal(anyelement)` | only the `text` overload is exposed; a typed overload over every CLR type would force conversions the expression paths do not support. |
+| string | `quote_nullable(anyelement)` | the same `anyelement` limitation; the `text` overload is exposed. |
+
+`unistr(text)` is delivered — 17.11 has it. The undocumented `to_ascii(text, integer)` form is not
+exposed at all: 17.11 validates the number as an encoding code and returns `42704` for `1252`.
+
 ## SQL Server string, hashing and compression functions
 
 The remaining T-SQL-only string, hashing and compression scalars live on `SqlFunctions.SqlServer` and

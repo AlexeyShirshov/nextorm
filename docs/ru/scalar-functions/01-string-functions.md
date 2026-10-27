@@ -361,6 +361,78 @@ var rows = dataContext.From<IComplexEntity>()
     .ToList();
 ```
 
+### Остаточные строковые, кодировочные и regexp-помощники (#281)
+
+Оставшаяся часть строкового каталога PostgreSQL доступна на той же поверхности, один член на
+серверную перегрузку. Каждое имя гейтится **отдельно** через
+[`IScalarFunctions.Supports`](xref:NextORM.Core.IScalarFunctions.Supports(System.String)), а
+провайдер, не реализующий интерфейс, отклоняет вызов `NotSupportedException`:
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.Postgres.btrim(value)` | `btrim(value)` |
+| `SqlFunctions.Postgres.btrim(value, characters)` | `btrim(value, characters)` |
+| `SqlFunctions.Postgres.btrim(bytes, bytesToTrim)` | `btrim(bytes, bytesToTrim)` → `bytea` |
+| `SqlFunctions.Postgres.ltrim(value, characters)` | `ltrim(value, characters)` |
+| `SqlFunctions.Postgres.ltrim(bytes, bytesToTrim)` | `ltrim(bytes, bytesToTrim)` → `bytea` |
+| `SqlFunctions.Postgres.rtrim(value, characters)` | `rtrim(value, characters)` |
+| `SqlFunctions.Postgres.rtrim(bytes, bytesToTrim)` | `rtrim(bytes, bytesToTrim)` → `bytea` |
+| `SqlFunctions.Postgres.starts_with(value, prefix)` | `starts_with(value, prefix)` |
+| `SqlFunctions.Postgres.parse_ident(value, strict)` | `parse_ident(value, strict)` → `text[]` |
+| `SqlFunctions.Postgres.quote_ident(value)` | `quote_ident(value)` |
+| `SqlFunctions.Postgres.quote_literal(value)` | `quote_literal(value)` |
+| `SqlFunctions.Postgres.quote_nullable(value)` | `quote_nullable(value)` |
+| `SqlFunctions.Postgres.to_ascii(value, encoding)` | `to_ascii(value, encoding)` (`text`, `name`) |
+| `SqlFunctions.Postgres.to_hex(value)` (`int?`) | `to_hex(value)` |
+| `SqlFunctions.Postgres.to_hex(value)` (`long?`) | `to_hex(value)` (`bigint`) |
+| `SqlFunctions.Postgres.to_oct(value)` (`int?`) | `to_oct(value)` |
+| `SqlFunctions.Postgres.to_oct(value)` (`long?`) | `to_oct(value)` (`bigint`) |
+| `SqlFunctions.Postgres.to_bin(value)` (`int?`) | `to_bin(value)` |
+| `SqlFunctions.Postgres.to_bin(value)` (`long?`) | `to_bin(value)` (`bigint`) |
+| `SqlFunctions.Postgres.convert_from(bytes, encoding)` | `convert_from(bytes, encoding)` |
+| `SqlFunctions.Postgres.convert_to(value, encoding)` | `convert_to(value, encoding)` → `bytea` |
+| `SqlFunctions.Postgres.encode(bytes, format)` | `encode(bytes, format)` |
+| `SqlFunctions.Postgres.decode(value, format)` | `decode(value, format)` → `bytea` |
+| `SqlFunctions.Postgres.normalize(value, form)` | `normalize(value, form)` |
+| `SqlFunctions.Postgres.unistr(value)` | `unistr(value)` |
+| `SqlFunctions.Postgres.string_to_table(value, delimiter)` | `string_to_table(value, delimiter)` → одна строка на фрагмент |
+| `SqlFunctions.Postgres.string_to_table(value, delimiter, nullString)` | `string_to_table(value, delimiter, nullString)` |
+| `SqlFunctions.Postgres.regexp_match(value, pattern)` | `regexp_match(value, pattern)` → `text[]` |
+| `SqlFunctions.Postgres.regexp_match(value, pattern, flags)` | `regexp_match(value, pattern, flags)` → `text[]` |
+
+NULL-аргумент даёт NULL для каждого из них. Неочевидная семантика:
+
+* `regexp_match` возвращает NULL, когда шаблон не совпал, — а не пустой массив, — и массив из одного
+  элемента с полным совпадением, когда в шаблоне нет захватывающих групп.
+* `normalize` принимает голое ключевое слово грамматики (`NFC`, `NFD`, `NFKC` или `NFKD`), а не
+  строковый литерал: форма обязана быть константой и рендерится без кавычек (`normalize(value, NFD)`).
+* `to_hex` для отрицательного `int` даёт запись в дополнительном коде (`-1` → `ffffffff`);
+  перегрузки с `long` — это формы `to_hex`/`to_oct`/`to_bin` для `bigint`.
+* `encode`/`decode` принимают `(data, format)` с `base64`, `hex` или `escape`; некорректный вход
+  `decode` вызывает ошибку на сервере, а не «ремонтируется».
+* Двухаргументные `btrim`/`ltrim`/`rtrim` принимают **набор символов** (срезается каждый
+  перечисленный символ), а не подстроку; перегрузки с `byte[]` — это формы для `bytea`.
+* `parse_ident` возвращает части через точку как `text[]`, а `strict` решает, бросить ли ошибку на
+  невалидном идентификаторе или обрезать его после первой ошибки.
+* `string_to_table` — единственный член семейства, возвращающий набор строк: одна строка на фрагмент,
+  а третий аргумент превращает совпавший с ним фрагмент в NULL-строку.
+* `to_ascii` — это перегрузка `(text, name)`; одноаргументная форма отклонена (см. ниже).
+
+### Проверенные отказы
+
+Закреплённый сервер — PostgreSQL 17.11. Член, который на нём не исполняется, отклоняется во время
+подготовки запроса — `NotSupportedException`, до того как на сервер уйдёт команда:
+
+| Семейство | Отклонённый член | Проверенная причина |
+|---|---|---|
+| string | `casefold(text)` | Функция PostgreSQL 18, отсутствует в `pg_proc` версии 17.11; имя падает с `42883`. |
+| string | `to_ascii(text)` (один аргумент) | 17.11 выдаёт `0A000` («encoding conversion from UTF8 to ASCII not supported»), потому что одноаргументная форма берёт исходную кодировку из кодировки базы и определена только для источника LATIN1/LATIN2/WIN1250 — используйте `to_ascii(value, encoding)`. |
+| string | `quote_literal(anyelement)` | доступна только перегрузка `text`; типизированная перегрузка над каждым CLR-типом вынудила бы преобразования, которых пути выражений не поддерживают. |
+| string | `quote_nullable(anyelement)` | то же ограничение `anyelement`; перегрузка `text` доступна. |
+
+`unistr(text)` поставлена — в 17.11 она есть. Недокументированная форма `to_ascii(text, integer)` не
+выставлена вовсе: 17.11 проверяет число как код кодировки и возвращает `42704` для `1252`.
+
 ## Строковые функции, хэширование и сжатие SQL Server
 
 Остальные строковые функции и функции хэширования/сжатия, специфичные для T-SQL, живут на

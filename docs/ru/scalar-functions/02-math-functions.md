@@ -146,6 +146,42 @@ var rows = dataContext.From<IComplexEntity>()
 PostgreSQL возвращает `void`, поэтому проецируемое значение всегда `null`, а вызов делается ради
 побочного эффекта (последующие `random()` в сессии становятся воспроизводимыми).
 
+### Поставленные математические и градусные тригонометрические помощники (#281)
+
+Оставшаяся часть математического каталога PostgreSQL доступна на той же поверхности, один член на
+серверную перегрузку. Каждое имя гейтится **отдельно** через
+[`IScalarFunctions.Supports`](xref:NextORM.Core.IScalarFunctions.Supports(System.String)), поэтому
+провайдер, не реализующий интерфейс, отклоняет вызов `NotSupportedException`:
+
+| C# | SQL | Результат |
+|---|---|---|
+| `SqlFunctions.Postgres.div(y, x)` | `div(y, x)` | `decimal?` — деление `numeric` с усечением к нулю |
+| `SqlFunctions.Postgres.erf(x)` | `erf(x)` | `double?` — функция ошибок, в `-1..1` |
+| `SqlFunctions.Postgres.erfc(x)` | `erfc(x)` | `double?` — `1 - erf(x)`, в `0..2` |
+| `SqlFunctions.Postgres.random_normal(mean, stddev)` | `random_normal(mean, stddev)` | `double?` — volatile, новое значение на каждый запуск |
+| `SqlFunctions.Postgres.acosd(x)` | `acosd(x)` | `double?` — арккосинус в градусах |
+| `SqlFunctions.Postgres.asind(x)` | `asind(x)` | `double?` — арксинус в градусах |
+| `SqlFunctions.Postgres.atand(x)` | `atand(x)` | `double?` — арктангенс в градусах |
+| `SqlFunctions.Postgres.atan2d(y, x)` | `atan2d(y, x)` | `double?` — арктангенс `y`/`x` в градусах с учётом знаков обоих |
+| `SqlFunctions.Postgres.cosd(x)` | `cosd(x)` | `double?` — косинус угла в градусах |
+| `SqlFunctions.Postgres.cotd(x)` | `cotd(x)` | `double?` — котангенс угла в градусах |
+| `SqlFunctions.Postgres.sind(x)` | `sind(x)` | `double?` — синус угла в градусах |
+| `SqlFunctions.Postgres.tand(x)` | `tand(x)` | `double?` — тангенс угла в градусах |
+
+`div` — это деление `numeric` с усечением, а не с округлением: `div(7, 2)` равно `3`, а
+`div(-7, 2)` равно `-3`; деление на ноль вызывает ошибку на сервере. Семейство `*d` принимает
+аргумент **в градусах** и возвращает градусы, поэтому `cosd(60)` равно `0.5`; его радианные
+аналоги — строки `asin`/`acos`/`atan`/`atan2` выше. Выставлена только двухаргументная
+`random_normal(mean, stddev)`; нуль- и одноаргументная формы сервера — нет. NULL-аргумент даёт NULL.
+
+Имя, которое закреплённый сервер не может исполнить, отклоняется во время подготовки запроса:
+
+| Семейство | Отклонённый член | Проверенная причина |
+|---|---|---|
+| numeric | `gamma(x)` | отсутствует в закреплённом PostgreSQL 17.11 — нет ни в `pg_proc`, ни в таблице математических функций PG17, а живой вызов падает с `42883`; имени нет ни в одном релизе, поэтому истории переименования тоже нет. |
+| numeric | `tgamma(x)` | то же отсутствие в 17.11 (`42883`). |
+| numeric | `lgamma(x)` | то же отсутствие в 17.11 (`42883`). |
+
 ## Числовой масштаб PostgreSQL
 
 Три функции только для PostgreSQL описывают масштаб значения `numeric`. Они гейтятся **по имени**

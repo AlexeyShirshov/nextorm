@@ -207,6 +207,22 @@ Native-поверхность реализована только в PostgreSQL;
 (`to_char`/`to_date`/`to_number`/`to_timestamp`/`timezone`/`make_interval`/`justify_*`) и
 конструкторы массивов, всё гейтится `SupportsExtendedScalarFunctions`.
 
+Остаточный строковый каталог #281 живёт на той же поверхности `Postgres`, один член на серверную
+перегрузку: `btrim` (одноаргументная, с набором символов и формы `bytea`), двухаргументные и
+`bytea`-формы `ltrim`/`rtrim`, `starts_with`, `parse_ident`, перегрузки `text` у
+`quote_ident`/`quote_literal`/`quote_nullable`, `to_ascii(value, encoding)`,
+`to_hex`/`to_oct`/`to_bin` (целые и `bigint`), `convert_from`/`convert_to`, `encode`/`decode`,
+`normalize`, `unistr`, `regexp_match` (два и три аргумента) и возвращающая набор строк
+`string_to_table`. Каждое из этих имён гейтится **отдельно** через
+[`IScalarFunctions.Supports`](xref:NextORM.Core.IScalarFunctions.Supports(System.String)), а не общим
+флагом семейства: провайдер, не реализующий интерфейс, закрывается отказом `NotSupportedException`, и
+SQL PostgreSQL до него не доходит. `normalize` принимает форму как голое ключевое слово грамматики
+(`NFC`/`NFD`/`NFKC`/`NFKD`), `regexp_match` возвращает NULL, когда совпадения нет, а `to_hex` пишет
+отрицательный `int` в дополнительном коде (`-1` → `ffffffff`). Члены, которые не могут исполниться
+на закреплённом PostgreSQL 17.11 — `casefold`, одноаргументная `to_ascii` и перегрузки `quote_*` с
+`anyelement`, — отклоняются во время подготовки запроса; проверенные причины собраны в таблице
+отказов в статье [Строковые функции](../../scalar-functions/01-string-functions.md#проверенные-отказы).
+
 На пути смэппированных колонок правило длительности определяется **возвращённым** interval, а не именем
 функции: `make_interval`, нормализация `justify_*` и `age` одинаково отклоняют результат с ненулевой
 месячной составляющей (любого знака) через `InvalidCastException` с указанием календарных месяцев, а
@@ -244,6 +260,16 @@ var rows = dataContext.From<IComplexEntity>()
     })
     .ToList();
 ```
+
+Рядом с помощниками масштаба `SqlFunctions.Postgres` выставляет остаточное числовое семейство: `div`
+(деление `numeric` с усечением, поэтому `div(7, 2)` равно `3`, а `div(-7, 2)` равно `-3`),
+`erf`/`erfc`, двухаргументную `random_normal(mean, stddev)` и градусную тригонометрию
+`acosd`/`asind`/`atand`/`atan2d`/`cosd`/`cotd`/`sind`/`tand`, которая принимает и возвращает
+градусы. Каждое из этих имён — как и три помощника масштаба — гейтится отдельно через
+`IScalarFunctions.Supports`, поэтому любой другой провайдер отклоняет вызов `NotSupportedException`.
+`gamma`/`tgamma`/`lgamma` отклонены, потому что их нет в закреплённом PostgreSQL 17.11; проверенные
+причины этого и отклонённых строковых членов перечислены в таблицах отказов статей о скалярных
+функциях.
 
 См. [Математические функции](../../scalar-functions/02-math-functions.md#числовой-масштаб-postgresql).
 
