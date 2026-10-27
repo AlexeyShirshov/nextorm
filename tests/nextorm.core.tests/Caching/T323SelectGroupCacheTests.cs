@@ -93,6 +93,40 @@ public class T323SelectGroupCacheTests
     }
 
     [Fact]
+    public void GlobalAggregatePlan_ShouldNotMergeWithPlainSelectOfTheSameShape()
+    {
+        using var ctx = CreateContext();
+
+        // The key-less global aggregate is the one SelectGroup shape whose SQL is byte-identical to the
+        // plain projection: no GROUP BY, no HAVING, the same aggregate column. Every other compared
+        // field (grouping list, condition, select list, result type) therefore matches too, so the
+        // opt-in flag is the only thing that can keep the two plans apart.
+        var globalSql = SqlOf(ctx, ctx.From<T323LegacyEntity>()
+            .SelectGroup(x => new { S = SqlFunctions.Sql.sum(x.Amount) }));
+        var plainSql = SqlOf(ctx, ctx.From<T323LegacyEntity>()
+            .Select(x => new { S = SqlFunctions.Sql.sum(x.Amount) }));
+        globalSql.Should().Be(plainSql, "a global aggregate renders the plain projection's SQL");
+        globalSql.Should().NotContain("group by", "a global aggregate has no grouping key");
+
+        // Plan identity is asserted on commands prepared exactly once (see the note in the first fact).
+        var globalPlan = ctx.From<T323LegacyEntity>()
+            .SelectGroup(x => new { S = SqlFunctions.Sql.sum(x.Amount) });
+        var plainPlan = ctx.From<T323LegacyEntity>()
+            .Select(x => new { S = SqlFunctions.Sql.sum(x.Amount) });
+        PreparePlan(globalPlan);
+        PreparePlan(plainPlan);
+
+        globalPlan.IsSelectGroup.Should().BeTrue("the opt-in form is flagged");
+        plainPlan.IsSelectGroup.Should().BeFalse("the plain projection is not flagged");
+        globalPlan.SelectGroupMode.Should().Be(SelectGroupMode.GlobalAggregate);
+        plainPlan.SelectGroupMode.Should().Be(SelectGroupMode.None);
+
+        var comparer = globalPlan.GetQueryPlanEqualityComparer();
+        comparer.Equals(globalPlan, plainPlan).Should().BeFalse(
+            "two commands that differ only by the SelectGroup opt-in must not share a cached plan");
+    }
+
+    [Fact]
     public void ResetPreparation_ShouldReprepareTheSameGrouping()
     {
         using var ctx = CreateContext();
