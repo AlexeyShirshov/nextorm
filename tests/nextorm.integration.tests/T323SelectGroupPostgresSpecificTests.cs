@@ -89,10 +89,18 @@ public sealed class T323SelectGroupPostgresSpecificTests : ProviderTestSuite
         })
         .ToList();
 
+    // The oracle groups by exactly the keys the inferred form derives from its projection — the
+    // product id, the product name and the quarter expression — so the two forms are comparable and
+    // the statement is valid SQL (PostgreSQL rejects a projected column that is not in GROUP BY).
     private List<QuarterlyRow> ExplicitQuarterlyRows() => _sut.DataProvider
         .From<T323SgLine>()
         .Join(_sut.DataProvider.From<T323SgProduct>(), (line, product) => line.ProductId == product.Id)
-        .GroupBy(p => SqlFunctions.Sql.date_trunc("quarter", p.Item1.OrderedAt))
+        .GroupBy(p => new
+        {
+            p.Item1.ProductId,
+            p.Item2.Name,
+            Quarter = SqlFunctions.Sql.date_trunc("quarter", p.Item1.OrderedAt),
+        })
         .Select(p => new QuarterlyRow
         {
             ProductID = p.Item1.ProductId,
