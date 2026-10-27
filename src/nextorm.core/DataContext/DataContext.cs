@@ -347,6 +347,8 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
 
     private IPreparedQueryCommand<TResult> GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, bool streamingRows, CancellationToken cancellationToken)
     {
+        RequireNoBatchOutputSource(queryCommand);
+
         // The check is allocation-free and false for every ordinary query, so the common preparation
         // path only pays a few branches.
         if (queryCommand.HasTemporaryTableSource())
@@ -358,6 +360,37 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
 
         return _planner.GetPreparedQueryCommand(queryCommand, createEnumerator, storeInCache && QueryCacheEnabled, false, streamingRows, cancellationToken);
     }
+
+    /// <summary>
+    /// A batch capture source is a table variable that only exists inside the batch that declared and
+    /// populated it (<c>DECLARE @t TABLE (...); DML OUTPUT ... INTO @t</c>). Rendering or executing a
+    /// command that reads it on its own would emit a <c>select ... from @t</c> with no declaration, so
+    /// the standalone path refuses it before any SQL is produced. The same command is legal when it is
+    /// composed into its owning batch through <see cref="BatchBuilder.Query{TResult}"/> or
+    /// <see cref="BatchBuilder.AddQuery{TResult}"/>, which render it with the declaring statements.
+    /// </summary>
+    /// <param name="queryCommand">The command about to be prepared on its own.</param>
+    /// <exception cref="NotSupportedException">The command reads a batch output source.</exception>
+    private static void RequireNoBatchOutputSource(QueryCommand queryCommand)
+    {
+        if (ReadsBatchOutputSource(queryCommand.From))
+            ThrowStandaloneBatchOutputSource();
+
+        if (queryCommand.Joins is { Length: > 0 } joins)
+        {
+            for (var i = 0; i < joins.Length; i++)
+            {
+                if (ReadsBatchOutputSource(joins[i].From))
+                    ThrowStandaloneBatchOutputSource();
+            }
+        }
+    }
+
+    private static bool ReadsBatchOutputSource(FromExpression? from) => from is { IsTableVariableSource: true };
+
+    private static void ThrowStandaloneBatchOutputSource()
+        => throw new NotSupportedException(
+            "A batch output source is a table variable captured by OUTPUT ... INTO inside its owning batch; it cannot be read by a standalone query. Compose it into the same batch with BatchBuilder.Query(...) or AddQuery(...) (batch output source).");
 
     /// <summary>
     /// Streams a query's projected rows as JSON to a caller-owned stream, without a row mapper. The

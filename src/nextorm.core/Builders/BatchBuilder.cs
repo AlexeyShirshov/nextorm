@@ -232,11 +232,11 @@ public sealed class BatchBuilder
     /// <returns>This builder, for chaining.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="mutation"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="variableName"/> is not a bare table-variable identifier, or <paramref name="columnDefinitions"/> is null, empty or whitespace.</exception>
-    /// <exception cref="InvalidOperationException">The capture is duplicated on this batch, the projection has no output columns, or a result-bearing query was already added.</exception>
-    /// <exception cref="NotSupportedException">The provider has no <c>OUTPUT INTO</c> form (only SQL Server supports the capture).</exception>
+    /// <exception cref="InvalidOperationException">The capture is duplicated on this batch, or a result-bearing query was already added.</exception>
+    /// <exception cref="NotSupportedException">The provider has no <c>OUTPUT INTO</c> form (only SQL Server supports the capture), or the projection yields no output columns.</exception>
     public BatchBuilder OutputIntoTableVariable<TEntity, TResult>(InsertReturningBuilder<TEntity, TResult> mutation, string variableName, string columnDefinitions)
     {
-        ArgumentNullException.ThrowIfNull(mutation);
+        RequireCaptureMutation(mutation);
         var name = RequireCaptureSlot(variableName, columnDefinitions, mutation.ReturningColumns, ((IOutputIntoMutation)mutation).DataContext);
         var shape = MutationReadShape.BuildShape<TEntity, TResult>(_context, mutation);
         return RegisterCapture(name, typeof(TResult), shape, mutation.BuildMutationCommand(), columnDefinitions);
@@ -254,11 +254,11 @@ public sealed class BatchBuilder
     /// <returns>This builder, for chaining.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="mutation"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="variableName"/> is not a bare table-variable identifier, or <paramref name="columnDefinitions"/> is null, empty or whitespace.</exception>
-    /// <exception cref="InvalidOperationException">The capture is duplicated on this batch, the projection has no output columns, or a result-bearing query was already added.</exception>
-    /// <exception cref="NotSupportedException">The provider has no <c>OUTPUT INTO</c> form (only SQL Server supports the capture).</exception>
+    /// <exception cref="InvalidOperationException">The capture is duplicated on this batch, or a result-bearing query was already added.</exception>
+    /// <exception cref="NotSupportedException">The provider has no <c>OUTPUT INTO</c> form (only SQL Server supports the capture), or the projection yields no output columns.</exception>
     public BatchBuilder OutputIntoTableVariable<TEntity, TResult>(UpdateReturningBuilder<TEntity, TResult> mutation, string variableName, string columnDefinitions)
     {
-        ArgumentNullException.ThrowIfNull(mutation);
+        RequireCaptureMutation(mutation);
         var name = RequireCaptureSlot(variableName, columnDefinitions, mutation.ReturningColumns, mutation.DataContext);
         var shape = BuildTypedCaptureShape<TResult>(mutation.Projection, typeof(TEntity), "update");
         return RegisterCapture(name, typeof(TResult), shape, mutation.BuildMutationCommand(), columnDefinitions);
@@ -277,11 +277,11 @@ public sealed class BatchBuilder
     /// <returns>This builder, for chaining.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="mutation"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="variableName"/> is not a bare table-variable identifier, or <paramref name="columnDefinitions"/> is null, empty or whitespace.</exception>
-    /// <exception cref="InvalidOperationException">The capture is duplicated on this batch, the projection has no output columns, or a result-bearing query was already added.</exception>
-    /// <exception cref="NotSupportedException">The provider has no <c>OUTPUT INTO</c> form (only SQL Server supports the capture).</exception>
+    /// <exception cref="InvalidOperationException">The capture is duplicated on this batch, or a result-bearing query was already added.</exception>
+    /// <exception cref="NotSupportedException">The provider has no <c>OUTPUT INTO</c> form (only SQL Server supports the capture), or the projection yields no output columns.</exception>
     public BatchBuilder OutputIntoTableVariable<TEntity, TResult>(DeleteReturningBuilder<TEntity, TResult> mutation, string variableName, string columnDefinitions)
     {
-        ArgumentNullException.ThrowIfNull(mutation);
+        RequireCaptureMutation(mutation);
         var name = RequireCaptureSlot(variableName, columnDefinitions, mutation.ReturningColumns, mutation.DataContext);
         var shape = BuildTypedCaptureShape<TResult>(mutation.Projection, typeof(TEntity), "delete");
         return RegisterCapture(name, typeof(TResult), shape, mutation.BuildMutationCommand(), columnDefinitions);
@@ -302,11 +302,11 @@ public sealed class BatchBuilder
     /// <returns>This builder, for chaining.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="mutation"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="variableName"/> is not a bare table-variable identifier, or <paramref name="columnDefinitions"/> is null, empty or whitespace.</exception>
-    /// <exception cref="InvalidOperationException">The capture is duplicated on this batch, the projection has no output columns, or a result-bearing query was already added.</exception>
-    /// <exception cref="NotSupportedException">The provider has no <c>OUTPUT INTO</c> form (only SQL Server supports the capture).</exception>
+    /// <exception cref="InvalidOperationException">The capture is duplicated on this batch, or a result-bearing query was already added.</exception>
+    /// <exception cref="NotSupportedException">The provider has no <c>OUTPUT INTO</c> form (only SQL Server supports the capture), or the projection yields no output columns.</exception>
     public BatchBuilder OutputIntoTableVariable<TEntity, TResult>(MergeReturningBuilder<TEntity, TResult> mutation, string variableName, string columnDefinitions)
     {
-        ArgumentNullException.ThrowIfNull(mutation);
+        RequireCaptureMutation(mutation);
         var name = RequireCaptureSlot(variableName, columnDefinitions, mutation.ReturningColumns, mutation.DataContext);
         var shape = BuildTypedCaptureShape<TResult>(mutation.Projection, typeof(TEntity), "merge");
         return RegisterCapture(name, typeof(TResult), shape, mutation.BuildMutationCommand(), columnDefinitions);
@@ -502,24 +502,37 @@ public sealed class BatchBuilder
 
     // The capture API is batch-owned: a name may be registered at most once per BatchBuilder instance,
     // so another batch never sees this source and a duplicate is refused before any SQL is produced.
+    // Every capture refusal carries the stable text `batch output source`, so a caller can tell an
+    // ownership/shape problem apart from an unrelated mutation or batch error.
+    private static void RequireCaptureMutation(object? mutation)
+    {
+        if (mutation is null)
+            throw new ArgumentNullException(nameof(mutation), "A batch output source needs a mutation builder whose returned rows are captured (batch output source).");
+    }
+
     private string RequireCaptureSlot(string variableName, string columnDefinitions, IReadOnlyList<IPropertyMetadata>? columns, IDataContext context)
     {
         var name = NormalizeCaptureVariableName(variableName, nameof(variableName));
-        ArgumentException.ThrowIfNullOrWhiteSpace(columnDefinitions);
+        if (string.IsNullOrWhiteSpace(columnDefinitions))
+            throw new ArgumentException(
+                "A batch output source needs the trusted column definitions of its DECLARE <variable> TABLE (...) declaration (batch output source).",
+                nameof(columnDefinitions));
 
         if (_context is not DataContext { Dialect.SupportsOutputInto: true })
             throw new NotSupportedException(
                 $"{_context.GetType().Name} cannot capture modified rows into a table variable: the provider has no OUTPUT INTO form (SQL Server only). Read the rows with the mutation's own returning terminal and query them separately instead.");
 
         if (columns is not { Count: > 0 })
-            throw new InvalidOperationException(
+            throw new NotSupportedException(
                 "A batch output source needs at least one output column; use Returning()/Returning(projection) on the mutation builder instead of the identity-function form (batch output source).");
 
         if (_hasResult)
             throw new InvalidOperationException("A result-bearing query has already been added; add captures before Query()/AddQuery().");
 
         if (!ReferenceEquals(context, _context))
-            throw new ArgumentException("A batch statement is bound to a different data context; build every statement from the batch's context.", nameof(variableName));
+            throw new ArgumentException(
+                "The mutation of a batch output source is bound to a different data context; build the mutation from the batch's own context (batch output source).",
+                nameof(variableName));
 
         if (_captures.ContainsKey(name))
             throw new InvalidOperationException(
