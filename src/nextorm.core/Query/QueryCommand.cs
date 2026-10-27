@@ -530,6 +530,12 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// </summary>
     internal IReadOnlyList<Expression>? SelectGroupKeys { get; set; }
     /// <summary>
+    /// The ordered raw scalar-output expressions of the <c>SelectGroup</c> projection, as derived during
+    /// preparation (the expressions the grouping keys and the mode were inferred from), or <c>null</c>
+    /// before preparation (and for every command that is not a <c>SelectGroup</c> command).
+    /// </summary>
+    internal IReadOnlyList<Expression>? SelectGroupOutputs { get; set; }
+    /// <summary>
     /// The execution mode the <c>SelectGroup</c> projection analysis resolved during preparation
     /// (<see cref="NextORM.Core.SelectGroupMode.None"/> for a command that is not a <c>SelectGroup</c>).
     /// </summary>
@@ -1110,6 +1116,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         _selectList = null;
         _groupingList = null;
         SelectGroupKeys = null;
+        SelectGroupOutputs = null;
         SelectGroupMode = NextORM.Core.SelectGroupMode.None;
         _limitByColumns = null;
         _distinctOnColumns = null;

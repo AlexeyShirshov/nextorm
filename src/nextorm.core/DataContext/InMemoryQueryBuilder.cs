@@ -334,6 +334,11 @@ internal static class InMemoryQueryBuilder
             if (queryCommand.JunctionChildFilter is { } junctionChildFilter)
                 data = ApplyJunctionChildFilter(context, data!, junctionChildFilter);
 
+            // IsSelectGroup comes first: its modes do not populate GroupBy, and the grouped evaluator
+            // would reject a key-less mode or replay a keyed one through the wrong shape.
+            if (queryCommand.IsSelectGroup)
+                return InMemoryGrouping.CreateSelectGroupEnumerator<TResult, TEntity>(context, queryCommand, cacheEntry, data!, @params);
+
             if (queryCommand.GroupBy is not null)
                 return InMemoryGrouping.CreateGroupedEnumerator<TResult, TEntity>(context, queryCommand, cacheEntry, data!, @params);
 

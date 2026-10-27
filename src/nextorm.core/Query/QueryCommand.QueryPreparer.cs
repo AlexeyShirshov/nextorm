@@ -102,9 +102,10 @@ public partial class QueryCommand
             if (cmd.IsSelectGroup)
             {
                 var projection = cmd._exp ?? throw new QueryPreparationException("SelectGroup requires a projection.");
-                var (selectGroupKeys, selectGroupMode) = SelectGroupExpressionAnalyzer.Analyze(
+                var (selectGroupKeys, selectGroupOutputs, selectGroupMode) = SelectGroupExpressionAnalyzer.Analyze(
                     projection, cmd._having, cmd._sorting, cancellationToken);
                 cmd.SelectGroupKeys = selectGroupKeys;
+                cmd.SelectGroupOutputs = selectGroupOutputs;
                 cmd.SelectGroupMode = selectGroupMode;
             }
 

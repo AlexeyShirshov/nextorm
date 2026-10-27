@@ -71,20 +71,20 @@ internal static class SelectGroupExpressionAnalyzer
     }
 
     /// <summary>
-    /// Analyzes a <c>SelectGroup</c> projection and returns the inferred keys in first-appearance order
-    /// together with the execution mode.
+    /// Analyzes a <c>SelectGroup</c> projection and returns the inferred keys in first-appearance order,
+    /// the ordered raw scalar outputs the keys and mode were derived from, and the execution mode.
     /// </summary>
     /// <param name="projection">The raw projection lambda.</param>
     /// <param name="having">The raw <c>HAVING</c> lambda, or <c>null</c>.</param>
     /// <param name="sorting">The raw sort keys, or <c>null</c>; ordinal-only keys are skipped.</param>
     /// <param name="cancellationToken">Cancellation token observed at every collection step.</param>
-    /// <returns>The inferred keys and the resolved mode.</returns>
+    /// <returns>The inferred keys, the raw scalar outputs and the resolved mode.</returns>
     /// <exception cref="QueryPreparationException">
     /// The projection is an identity projection, contains an unsupported window/subquery expression, a
     /// key is not a selectable scalar, or <c>HAVING</c>/<c>ORDER BY</c> references an uncovered row
     /// expression.
     /// </exception>
-    internal static (IReadOnlyList<Expression> Keys, SelectGroupMode Mode) Analyze(
+    internal static (IReadOnlyList<Expression> Keys, IReadOnlyList<Expression> Outputs, SelectGroupMode Mode) Analyze(
         LambdaExpression projection,
         LambdaExpression? having,
         Sorting[]? sorting,
@@ -145,7 +145,7 @@ internal static class SelectGroupExpressionAnalyzer
 
         // 5. Mode.
         if (keys.Count > 0)
-            return (keys, SelectGroupMode.Keyed);
+            return (keys, outputs, SelectGroupMode.Keyed);
 
         var hasAggregate = ContainsAggregate(projection.Body)
             || (having is not null && ContainsAggregate(having.Body));
@@ -158,7 +158,7 @@ internal static class SelectGroupExpressionAnalyzer
             }
         }
 
-        return ([], hasAggregate ? SelectGroupMode.GlobalAggregate : SelectGroupMode.ConstantProjection);
+        return ([], outputs, hasAggregate ? SelectGroupMode.GlobalAggregate : SelectGroupMode.ConstantProjection);
     }
 
     /// <summary>
