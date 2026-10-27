@@ -16,11 +16,10 @@ namespace NextORM.SqlServer;
 /// </summary>
 public class SqlServerDataContext : DataContext, IBulkInsertExecutor, IBulkInsertNativeOptions, IBulkInsertPortableScope
 {
-    // One immutable server version per concrete context type, so two instances of the same type can
-    // never render different SQL and silently reuse each other's cached plans (the plan-cache key is the
-    // context type). Unset is a sentinel distinct from every Version.
-    private static readonly object UnsetServerVersion = new();
-    private static readonly ConcurrentDictionary<Type, object> ServerVersionsByContextType = new();
+    // One immutable (server version, engine edition) declaration per concrete context type, so two
+    // instances of the same type can never render different SQL and silently reuse each other's cached
+    // plans (the plan-cache key is the context type). Both components default to null ("unset").
+    private static readonly ConcurrentDictionary<Type, CapabilityDeclaration> CapabilitiesByContextType = new();
 
     private readonly ISqlDialect _dialect;
 
@@ -48,7 +47,7 @@ public class SqlServerDataContext : DataContext, IBulkInsertExecutor, IBulkInser
     /// <param name="connectionString">The connection string used to create the <c>SqlConnection</c>.</param>
     /// <param name="optionsBuilder">The options collected from <c>DataContextBuilder</c>.</param>
     public SqlServerDataContext(string connectionString, DataContextBuilder optionsBuilder)
-        : this(connectionString, null, optionsBuilder, null)
+        : this(connectionString, null, optionsBuilder, null, null)
     {
     }
 
@@ -60,7 +59,7 @@ public class SqlServerDataContext : DataContext, IBulkInsertExecutor, IBulkInser
     /// <param name="connection">An already-created <c>DbConnection</c> owned by the caller.</param>
     /// <param name="optionsBuilder">The options collected from <c>DataContextBuilder</c>.</param>
     public SqlServerDataContext(DbConnection connection, DataContextBuilder optionsBuilder)
-        : this(null, connection, optionsBuilder, null)
+        : this(null, connection, optionsBuilder, null, null)
     {
     }
 
@@ -75,7 +74,7 @@ public class SqlServerDataContext : DataContext, IBulkInsertExecutor, IBulkInser
     /// <exception cref="ArgumentNullException"><paramref name="serverVersion"/> is <see langword="null"/>; use the unversioned constructor instead.</exception>
     /// <exception cref="InvalidOperationException">A different server version was already registered for this context type.</exception>
     public SqlServerDataContext(Version serverVersion, string connectionString)
-        : this(connectionString, null, new DataContextBuilder(), ValidateServerVersion(serverVersion))
+        : this(connectionString, null, new DataContextBuilder(), ValidateServerVersion(serverVersion), null)
     {
     }
 
@@ -88,15 +87,83 @@ public class SqlServerDataContext : DataContext, IBulkInsertExecutor, IBulkInser
     /// <exception cref="ArgumentNullException"><paramref name="serverVersion"/> is <see langword="null"/>; use the unversioned constructor instead.</exception>
     /// <exception cref="InvalidOperationException">A different server version was already registered for this context type.</exception>
     public SqlServerDataContext(Version serverVersion, DbConnection connection)
-        : this(null, connection, new DataContextBuilder(), ValidateServerVersion(serverVersion))
+        : this(null, connection, new DataContextBuilder(), ValidateServerVersion(serverVersion), null)
     {
     }
 
-    private SqlServerDataContext(string? connectionString, DbConnection? connection, DataContextBuilder optionsBuilder, Version? serverVersion)
+    /// <summary>
+    /// Creates a SQL Server context that declares its engine edition and owns a connection built lazily
+    /// from <paramref name="connectionString"/>. The declaration is the only input to the edition-derived
+    /// capabilities — for example an Azure SQL Database or Managed Instance deployment, which reports
+    /// <c>ProductMajorVersion</c> 12 while its engine has the native <c>json</c> type. No server property is
+    /// read, so the emitted SQL is fixed by the declaration.
+    /// </summary>
+    /// <param name="engineEdition">The engine edition this context declares.</param>
+    /// <param name="connectionString">The connection string used to create the <c>SqlConnection</c>.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="engineEdition"/> is not a defined <see cref="SqlServerEngineEdition"/> value.</exception>
+    /// <exception cref="InvalidOperationException">A different capability declaration was already registered for this context type.</exception>
+    public SqlServerDataContext(SqlServerEngineEdition engineEdition, string connectionString)
+        : this(connectionString, null, new DataContextBuilder(), null, ValidateEngineEdition(engineEdition))
+    {
+    }
+
+    /// <summary>
+    /// Creates a SQL Server context that declares its engine edition over a caller-supplied connection,
+    /// which the context does not dispose. The declaration is the only input to the edition-derived
+    /// capabilities; nothing is probed.
+    /// </summary>
+    /// <param name="engineEdition">The engine edition this context declares.</param>
+    /// <param name="connection">An already-created <c>DbConnection</c> owned by the caller.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="engineEdition"/> is not a defined <see cref="SqlServerEngineEdition"/> value.</exception>
+    /// <exception cref="InvalidOperationException">A different capability declaration was already registered for this context type.</exception>
+    public SqlServerDataContext(SqlServerEngineEdition engineEdition, DbConnection connection)
+        : this(null, connection, new DataContextBuilder(), null, ValidateEngineEdition(engineEdition))
+    {
+    }
+
+    /// <summary>
+    /// Creates a SQL Server context bound to an explicitly declared server version and engine edition that
+    /// owns a connection built lazily from <paramref name="connectionString"/>. Both values are caller
+    /// declarations; the version gate and the edition allowlist are evaluated over them alone.
+    /// </summary>
+    /// <param name="serverVersion">The SQL Server version this context declares.</param>
+    /// <param name="engineEdition">The engine edition this context declares.</param>
+    /// <param name="connectionString">The connection string used to create the <c>SqlConnection</c>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="serverVersion"/> is <see langword="null"/>; use the edition-only constructor instead.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="engineEdition"/> is not a defined <see cref="SqlServerEngineEdition"/> value.</exception>
+    /// <exception cref="InvalidOperationException">A different capability declaration was already registered for this context type.</exception>
+    public SqlServerDataContext(Version serverVersion, SqlServerEngineEdition engineEdition, string connectionString)
+        : this(connectionString, null, new DataContextBuilder(), ValidateServerVersion(serverVersion), ValidateEngineEdition(engineEdition))
+    {
+    }
+
+    /// <summary>
+    /// Creates a SQL Server context bound to an explicitly declared server version and engine edition over a
+    /// caller-supplied connection, which the context does not dispose.
+    /// </summary>
+    /// <param name="serverVersion">The SQL Server version this context declares.</param>
+    /// <param name="engineEdition">The engine edition this context declares.</param>
+    /// <param name="connection">An already-created <c>DbConnection</c> owned by the caller.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="serverVersion"/> is <see langword="null"/>; use the edition-only constructor instead.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="engineEdition"/> is not a defined <see cref="SqlServerEngineEdition"/> value.</exception>
+    /// <exception cref="InvalidOperationException">A different capability declaration was already registered for this context type.</exception>
+    public SqlServerDataContext(Version serverVersion, SqlServerEngineEdition engineEdition, DbConnection connection)
+        : this(null, connection, new DataContextBuilder(), ValidateServerVersion(serverVersion), ValidateEngineEdition(engineEdition))
+    {
+    }
+
+    private SqlServerDataContext(
+        string? connectionString,
+        DbConnection? connection,
+        DataContextBuilder optionsBuilder,
+        Version? serverVersion,
+        SqlServerEngineEdition? engineEdition)
         : base(connectionString, connection, optionsBuilder, serverVersion)
     {
-        RegisterServerVersion(GetType(), ServerVersion);
-        _dialect = ServerVersion is null ? SqlServerDialect.Instance : new SqlServerDialect(ServerVersion);
+        RegisterCapabilityDeclaration(GetType(), ServerVersion, engineEdition);
+        _dialect = ServerVersion is null && engineEdition is null
+            ? SqlServerDialect.Instance
+            : new SqlServerDialect(ServerVersion, engineEdition);
     }
 
     private static Version ValidateServerVersion(Version serverVersion)
@@ -105,29 +172,62 @@ public class SqlServerDataContext : DataContext, IBulkInsertExecutor, IBulkInser
         return serverVersion;
     }
 
-    // A context type owns one immutable server version: the plan cache is keyed by the context type, so
-    // two versions would silently share cached SQL. A second, conflicting version is a configuration
-    // error that names the remedy: derive a distinct context subclass. SQL Server keeps its own registry
-    // (the shared cache key is unchanged) and, like PostgreSQL, treats "unset" as a value of its own, so
-    // a mixing of the unversioned and a version-aware construction is refused as well.
-    private static void RegisterServerVersion(Type contextType, Version? serverVersion)
+    private static SqlServerEngineEdition ValidateEngineEdition(SqlServerEngineEdition engineEdition)
     {
-        var candidate = (object?)serverVersion ?? UnsetServerVersion;
-        var registered = ServerVersionsByContextType.GetOrAdd(contextType, candidate);
+        if (!Enum.IsDefined(engineEdition))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(engineEdition), engineEdition, "Undefined SqlServerEngineEdition value.");
+        }
 
-        if (ReferenceEquals(registered, candidate))
-            return;
-        if (registered is Version registeredVersion && candidate is Version candidateVersion && registeredVersion.Equals(candidateVersion))
-            return;
-
-        throw new InvalidOperationException(
-            $"The SQL Server context type '{contextType.Name}' is already bound to server version {DescribeServerVersion(registered)}, " +
-            $"so it cannot also be used with {DescribeServerVersion(candidate)}. A context type has one immutable server version because the " +
-            "plan cache is keyed by the context type; derive a distinct DataContext subclass for each version.");
+        return engineEdition;
     }
 
-    private static string DescribeServerVersion(object discriminator)
-        => discriminator is Version version ? version.ToString() : "unset (null)";
+    // A context type owns one immutable capability declaration: the plan cache is keyed by the context
+    // type, so two declarations would silently share cached SQL. A second, conflicting declaration is a
+    // configuration error that names the remedy: derive a distinct context subclass. A conflict between two
+    // version-only declarations keeps the historical message verbatim; a declaration that involves an engine
+    // edition reports both declarations component-wise. Validation runs before the registry is touched.
+    private static void RegisterCapabilityDeclaration(
+        Type contextType,
+        Version? serverVersion,
+        SqlServerEngineEdition? engineEdition)
+    {
+        var candidate = new CapabilityDeclaration(serverVersion, engineEdition);
+        var registered = CapabilitiesByContextType.GetOrAdd(contextType, candidate);
+
+        if (registered.Equals(candidate))
+            return;
+
+        throw new InvalidOperationException(DescribeDeclarationConflict(contextType, registered, candidate));
+    }
+
+    private static string DescribeDeclarationConflict(
+        Type contextType,
+        CapabilityDeclaration existing,
+        CapabilityDeclaration requested)
+    {
+        if (existing.Edition is null && requested.Edition is null)
+        {
+            return $"The SQL Server context type '{contextType.Name}' is already bound to server version {DescribeServerVersion(existing.Version)}, " +
+                $"so it cannot also be used with {DescribeServerVersion(requested.Version)}. A context type has one immutable server version because the " +
+                "plan cache is keyed by the context type; derive a distinct DataContext subclass for each version.";
+        }
+
+        return $"SQL Server capability declaration conflict for context type '{contextType.FullName}': " +
+            $"existing declaration [version: {DescribeServerVersion(existing.Version)}, engine edition: {DescribeEngineEdition(existing.Edition)}]; " +
+            $"requested declaration [version: {DescribeServerVersion(requested.Version)}, engine edition: {DescribeEngineEdition(requested.Edition)}]. " +
+            "Use matching declarations or derive a distinct DataContext subclass.";
+    }
+
+    private static string DescribeServerVersion(Version? serverVersion)
+        => serverVersion is null ? "unset (null)" : serverVersion.ToString();
+
+    private static string DescribeEngineEdition(SqlServerEngineEdition? engineEdition)
+        => engineEdition is { } edition ? $"{edition} ({(int)edition})" : "unset (null)";
+
+    /// <summary>An immutable capability declaration: the caller's server version and engine edition, either unset.</summary>
+    private readonly record struct CapabilityDeclaration(Version? Version, SqlServerEngineEdition? Edition);
 
     /// <summary>Creates a new <c>SqlConnection</c> for <paramref name="connectionString"/>.</summary>
     /// <param name="connectionString">The SQL Server connection string.</param>
