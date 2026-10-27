@@ -157,8 +157,12 @@ public class MySqlFunctionsSqlGenerationTests
         // T285b declares the residual percentile family on the surface as *named refusals*: MySQL has
         // neither a median aggregate nor the WITHIN GROUP grammar, so the member exists to carry the
         // precise message. It is therefore expected to be unsupported here, not supported. T349 adds
-        // the JSON_TABLE shape refusal (a table-producing construct, never a scalar expression).
-        string[] declaredRefusals = ["median", "percentile_cont", "percentile_disc", "percentile", "json_table"];
+        // the JSON_TABLE shape refusal (a table-producing construct, never a scalar expression) and the
+        // UUID/VALUES refusals (a v1 UUID and a statement-position-only name this scalar API rejects).
+        string[] declaredRefusals =
+        [
+            "median", "percentile_cont", "percentile_disc", "percentile", "json_table", "uuid", "values"
+        ];
         var unsupportedByDesign = mariaDbOnly.Concat(declaredRefusals).ToArray();
 
         declared.Should().NotBeEmpty();

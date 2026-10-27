@@ -846,7 +846,12 @@ internal class MySqlNativeFunctions : IMySqlFunctions
         "adddate" or "addtime" or "convert_tz" or "dayname" or "from_days" or "get_format" or
         "makedate" or "maketime" or "microsecond" or "monthname" or "period_add" or "period_diff" or
         "sec_to_time" or "subdate" or "subtime" or "time" or "time_format" or "time_to_sec" or
-        "timediff" or "timestamp" or "to_days" or "to_seconds" or "yearweek";
+        "timediff" or "timestamp" or "to_days" or "to_seconds" or "yearweek" or
+        "aes_encrypt" or "aes_decrypt" or "compress" or "uncompress" or "uncompressed_length" or
+        "random_bytes" or "validate_password_strength" or "statement_digest" or "statement_digest_text" or
+        "found_rows" or "last_insert_id" or "row_count" or "current_role" or "charset" or "collation" or
+        "coercibility" or "benchmark" or "icu_version" or
+        "uuid_short" or "is_uuid" or "sleep" or "grouping" or "name_const" or "column_default";
 
     /// <inheritdoc/>
     public string Render(string name, IReadOnlyList<string> args) => name switch
@@ -952,6 +957,30 @@ internal class MySqlNativeFunctions : IMySqlFunctions
         "yearweek" => args.Count == 2
             ? $"yearweek({args[0]}, {args[1]})"
             : $"yearweek({args[0]})",
+        "aes_encrypt" => $"aes_encrypt({string.Join(", ", args)})",
+        "aes_decrypt" => $"aes_decrypt({string.Join(", ", args)})",
+        "compress" => $"compress({args[0]})",
+        "uncompress" => $"uncompress({args[0]})",
+        "uncompressed_length" => $"uncompressed_length({args[0]})",
+        "random_bytes" => $"random_bytes({args[0]})",
+        "validate_password_strength" => $"validate_password_strength({args[0]})",
+        "statement_digest" => $"statement_digest({args[0]})",
+        "statement_digest_text" => $"statement_digest_text({args[0]})",
+        "found_rows" => "found_rows()",
+        "last_insert_id" => args.Count == 0 ? "last_insert_id()" : $"last_insert_id({args[0]})",
+        "row_count" => "row_count()",
+        "current_role" => "current_role()",
+        "charset" => $"charset({args[0]})",
+        "collation" => $"collation({args[0]})",
+        "coercibility" => $"coercibility({args[0]})",
+        "benchmark" => $"benchmark({args[0]}, {args[1]})",
+        "icu_version" => "icu_version()",
+        "uuid_short" => "uuid_short()",
+        "is_uuid" => $"is_uuid({args[0]})",
+        "sleep" => $"sleep({args[0]})",
+        "grouping" => $"grouping({string.Join(", ", args)})",
+        "name_const" => $"name_const({args[0]}, {args[1]})",
+        "column_default" => $"default({args[0]})",
         _ => throw new NotSupportedException($"The {name} function is not supported by MySQL/MariaDB.")
     };
 }

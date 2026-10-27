@@ -286,9 +286,10 @@ public class MySqlFunctions : CommonFunctions
     /// <c>JSON_TABLE(...)</c> is a table-producing construct, not a scalar function: it requires a
     /// <c>FROM</c>/join position and a <c>COLUMNS</c> definition list, so no scalar expression can
     /// reference it. The member exists only to carry the refusal; calling it throws
-    /// <see cref="NotSupportedException"/> when the expression is translated.
+    /// <see cref="NotSupportedException"/> in the body as well as when the expression is translated,
+    /// so a projection the planner folds client-side cannot silently evaluate to <c>null</c>.
     /// </summary>
-    public static object? json_table() => default!;
+    public static object? json_table() => throw new NotSupportedException(JsonTableRefusal);
 
     /// <summary>
     /// <c>value MEMBER OF (jsonArray)</c>: <c>1</c> when <paramref name="value"/> is an element of the
@@ -850,4 +851,350 @@ public class MySqlFunctions : CommonFunctions
     /// <param name="value">The value to take the percentile of.</param>
     /// <returns>Never returns; the call is refused when the query is translated.</returns>
     public WindowFunction<double?> percentile<T>(double fraction, T? value) => default!;
+
+    /// <summary>
+    /// <c>aes_encrypt(data, key)</c>: <paramref name="data"/> encrypted with the AES algorithm and
+    /// <paramref name="key"/>. MySQL 8.4 uses <c>aes-128-ecb</c> (ECB) with a 128-bit key by default.
+    /// Returns <c>null</c> when either argument is SQL NULL. MySQL-only; MariaDB rejects the call.
+    /// </summary>
+    /// <param name="data">The data to encrypt.</param>
+    /// <param name="key">The encryption key.</param>
+    public byte[]? aes_encrypt(byte[]? data, byte[]? key) => default!;
+
+    /// <summary>
+    /// <c>aes_encrypt(data, key, iv)</c>: as the two-argument form, with <paramref name="iv"/> selecting
+    /// the CBC mode prescribed by the vendor manual for the three-argument form. MySQL-only.
+    /// </summary>
+    /// <param name="data">The data to encrypt.</param>
+    /// <param name="key">The encryption key.</param>
+    /// <param name="iv">The initialisation vector.</param>
+    public byte[]? aes_encrypt(byte[]? data, byte[]? key, byte[]? iv) => default!;
+
+    /// <summary>
+    /// <c>aes_encrypt(data, key, iv, kdf)</c>: as the three-argument form, with
+    /// <paramref name="kdf"/> choosing the key-derivation function. Which names the server accepts is
+    /// validated by the server; this surface only forwards the literal. MySQL-only.
+    /// </summary>
+    /// <param name="data">The data to encrypt.</param>
+    /// <param name="key">The encryption key.</param>
+    /// <param name="iv">The initialisation vector.</param>
+    /// <param name="kdf">The key-derivation function name.</param>
+    public byte[]? aes_encrypt(byte[]? data, byte[]? key, byte[]? iv, string? kdf) => default!;
+
+    /// <summary>
+    /// <c>aes_encrypt(data, key, iv, kdf, salt)</c>: as the four-argument form, adding the
+    /// <paramref name="salt"/> the derived-key forms require. Which KDF names are valid is validated by
+    /// the server. MySQL-only.
+    /// </summary>
+    /// <param name="data">The data to encrypt.</param>
+    /// <param name="key">The encryption key.</param>
+    /// <param name="iv">The initialisation vector.</param>
+    /// <param name="kdf">The key-derivation function name.</param>
+    /// <param name="salt">The salt for the derived-key forms.</param>
+    public byte[]? aes_encrypt(byte[]? data, byte[]? key, byte[]? iv, string? kdf, byte[]? salt) => default!;
+
+    /// <summary>
+    /// <c>aes_encrypt(data, key, iv, kdf, salt, info)</c>: the derived-key form with the
+    /// <paramref name="info"/> context value. Which KDF names are valid is validated by the server.
+    /// MySQL-only.
+    /// </summary>
+    /// <param name="data">The data to encrypt.</param>
+    /// <param name="key">The encryption key.</param>
+    /// <param name="iv">The initialisation vector.</param>
+    /// <param name="kdf">The key-derivation function name.</param>
+    /// <param name="salt">The salt for the derived-key form.</param>
+    /// <param name="info">The context info for the derived-key form.</param>
+    public byte[]? aes_encrypt(byte[]? data, byte[]? key, byte[]? iv, string? kdf, byte[]? salt, string? info) => default!;
+
+    /// <summary>
+    /// <c>aes_encrypt(data, key, iv, kdf, salt, iterations)</c>: the derived-key form with the
+    /// <paramref name="iterations"/> count. Which KDF names are valid is validated by the server.
+    /// MySQL-only.
+    /// </summary>
+    /// <param name="data">The data to encrypt.</param>
+    /// <param name="key">The encryption key.</param>
+    /// <param name="iv">The initialisation vector.</param>
+    /// <param name="kdf">The key-derivation function name.</param>
+    /// <param name="salt">The salt for the derived-key form.</param>
+    /// <param name="iterations">The iteration count for the derived-key form.</param>
+    public byte[]? aes_encrypt(byte[]? data, byte[]? key, byte[]? iv, string? kdf, byte[]? salt, int? iterations) => default!;
+
+    /// <summary>
+    /// <c>aes_decrypt(data, key)</c>: <paramref name="data"/> decrypted with the AES algorithm and
+    /// <paramref name="key"/>. MySQL 8.4 uses <c>aes-128-ecb</c> (ECB) with a 128-bit key by default.
+    /// Returns <c>null</c> when either argument is SQL NULL, or when the input is invalid or padded
+    /// incorrectly. MySQL-only; MariaDB rejects the call.
+    /// </summary>
+    /// <param name="data">The data to decrypt.</param>
+    /// <param name="key">The encryption key.</param>
+    public byte[]? aes_decrypt(byte[]? data, byte[]? key) => default!;
+
+    /// <summary>
+    /// <c>aes_decrypt(data, key, iv)</c>: as the two-argument form, with <paramref name="iv"/> selecting
+    /// the CBC mode prescribed by the vendor manual for the three-argument form. MySQL-only.
+    /// </summary>
+    /// <param name="data">The data to decrypt.</param>
+    /// <param name="key">The encryption key.</param>
+    /// <param name="iv">The initialisation vector.</param>
+    public byte[]? aes_decrypt(byte[]? data, byte[]? key, byte[]? iv) => default!;
+
+    /// <summary>
+    /// <c>aes_decrypt(data, key, iv, kdf)</c>: as the three-argument form, with
+    /// <paramref name="kdf"/> choosing the key-derivation function. Which names the server accepts is
+    /// validated by the server; this surface only forwards the literal. MySQL-only.
+    /// </summary>
+    /// <param name="data">The data to decrypt.</param>
+    /// <param name="key">The encryption key.</param>
+    /// <param name="iv">The initialisation vector.</param>
+    /// <param name="kdf">The key-derivation function name.</param>
+    public byte[]? aes_decrypt(byte[]? data, byte[]? key, byte[]? iv, string? kdf) => default!;
+
+    /// <summary>
+    /// <c>aes_decrypt(data, key, iv, kdf, salt)</c>: as the four-argument form, adding the
+    /// <paramref name="salt"/> the derived-key forms require. Which KDF names are valid is validated by
+    /// the server. MySQL-only.
+    /// </summary>
+    /// <param name="data">The data to decrypt.</param>
+    /// <param name="key">The encryption key.</param>
+    /// <param name="iv">The initialisation vector.</param>
+    /// <param name="kdf">The key-derivation function name.</param>
+    /// <param name="salt">The salt for the derived-key forms.</param>
+    public byte[]? aes_decrypt(byte[]? data, byte[]? key, byte[]? iv, string? kdf, byte[]? salt) => default!;
+
+    /// <summary>
+    /// <c>aes_decrypt(data, key, iv, kdf, salt, info)</c>: the derived-key form with the
+    /// <paramref name="info"/> context value. Which KDF names are valid is validated by the server.
+    /// MySQL-only.
+    /// </summary>
+    /// <param name="data">The data to decrypt.</param>
+    /// <param name="key">The encryption key.</param>
+    /// <param name="iv">The initialisation vector.</param>
+    /// <param name="kdf">The key-derivation function name.</param>
+    /// <param name="salt">The salt for the derived-key form.</param>
+    /// <param name="info">The context info for the derived-key form.</param>
+    public byte[]? aes_decrypt(byte[]? data, byte[]? key, byte[]? iv, string? kdf, byte[]? salt, string? info) => default!;
+
+    /// <summary>
+    /// <c>aes_decrypt(data, key, iv, kdf, salt, iterations)</c>: the derived-key form with the
+    /// <paramref name="iterations"/> count. Which KDF names are valid is validated by the server.
+    /// MySQL-only.
+    /// </summary>
+    /// <param name="data">The data to decrypt.</param>
+    /// <param name="key">The encryption key.</param>
+    /// <param name="iv">The initialisation vector.</param>
+    /// <param name="kdf">The key-derivation function name.</param>
+    /// <param name="salt">The salt for the derived-key form.</param>
+    /// <param name="iterations">The iteration count for the derived-key form.</param>
+    public byte[]? aes_decrypt(byte[]? data, byte[]? key, byte[]? iv, string? kdf, byte[]? salt, int? iterations) => default!;
+
+    /// <summary>
+    /// <c>compress(value)</c>: <paramref name="value"/> compressed with the zlib algorithm, prefixed by
+    /// its uncompressed length, or <c>null</c> when the argument is SQL NULL. MySQL-only; MariaDB
+    /// rejects the call.
+    /// </summary>
+    /// <param name="value">The value to compress.</param>
+    public byte[]? compress(byte[]? value) => default!;
+
+    /// <summary>
+    /// <c>uncompress(value)</c>: the value decompressed from the <c>COMPRESS</c> format, or <c>null</c>
+    /// when the argument is SQL NULL or is not a compressed value. MySQL-only; MariaDB rejects the call.
+    /// </summary>
+    /// <param name="value">The compressed value.</param>
+    public byte[]? uncompress(byte[]? value) => default!;
+
+    /// <summary>
+    /// <c>uncompressed_length(value)</c>: the uncompressed length recorded in the <c>COMPRESS</c> header,
+    /// or <c>null</c> when the argument is SQL NULL or is not a compressed value. MySQL-only; MariaDB
+    /// rejects the call.
+    /// </summary>
+    /// <param name="value">The compressed value.</param>
+    public long? uncompressed_length(byte[]? value) => default!;
+
+    /// <summary>
+    /// <c>random_bytes(length)</c>: <paramref name="length"/> cryptographically random bytes, or
+    /// <c>null</c> when the argument is SQL NULL. MySQL-only; MariaDB rejects the call.
+    /// </summary>
+    /// <param name="length">The number of bytes to generate.</param>
+    public byte[]? random_bytes(int? length) => default!;
+
+    /// <summary>
+    /// <c>validate_password_strength(password)</c>: the server's password-strength grade for
+    /// <paramref name="password"/>. Meaningful grading depends on the server's password-validation
+    /// configuration: on a server without the <c>validate_password</c> component the call still
+    /// executes, but <c>VALIDATE_PASSWORD_STRENGTH('abc')</c> evaluates to <c>0</c> and the value
+    /// carries no active policy. MySQL-only; MariaDB rejects the call.
+    /// </summary>
+    /// <param name="password">The password to grade.</param>
+    public long? validate_password_strength(string? password) => default!;
+
+    /// <summary>
+    /// <c>statement_digest(statement)</c>: the SHA-256 digest of the normalised statement text, or
+    /// <c>null</c> when the argument is SQL NULL. MySQL-only; MariaDB rejects the call.
+    /// </summary>
+    /// <param name="statement">The SQL statement text.</param>
+    public string? statement_digest(string? statement) => default!;
+
+    /// <summary>
+    /// <c>statement_digest_text(statement)</c>: the normalised form of the statement text, or
+    /// <c>null</c> when the argument is SQL NULL. MySQL-only; MariaDB rejects the call.
+    /// </summary>
+    /// <param name="statement">The SQL statement text.</param>
+    public string? statement_digest_text(string? statement) => default!;
+
+    /// <summary>
+    /// <c>found_rows()</c>: the row count the last <c>SELECT</c> would have returned without its
+    /// <c>LIMIT</c>. The value depends on the session that ran that statement. MySQL-only; MariaDB
+    /// rejects the call.
+    /// </summary>
+    public long? found_rows() => default!;
+
+    /// <summary>
+    /// <c>last_insert_id()</c>: the first automatically generated value produced by the last statement
+    /// that inserted into an <c>AUTO_INCREMENT</c> column on this connection. MySQL-only; MariaDB rejects
+    /// the call.
+    /// </summary>
+    public ulong? last_insert_id() => default!;
+
+    /// <summary>
+    /// <c>last_insert_id(value)</c>: sets the session's last-insert identifier to
+    /// <paramref name="value"/> and returns it. MySQL-only; MariaDB rejects the call.
+    /// </summary>
+    /// <param name="value">The identifier to record for the session.</param>
+    public ulong? last_insert_id(ulong? value) => default!;
+
+    /// <summary>
+    /// <c>row_count()</c>: the number of rows affected by the last statement on this connection.
+    /// MySQL-only; MariaDB rejects the call.
+    /// </summary>
+    public long? row_count() => default!;
+
+    /// <summary>
+    /// <c>current_role()</c>: the active roles of the current session, or <c>NONE</c> when no role is
+    /// active. MySQL-only; MariaDB rejects the call.
+    /// </summary>
+    public string? current_role() => default!;
+
+    /// <summary>
+    /// <c>charset(expression)</c>: the character set of <paramref name="expression"/>. MySQL-only;
+    /// MariaDB rejects the call.
+    /// </summary>
+    /// <param name="expression">The expression whose character set is reported.</param>
+    public string? charset(object? expression) => default!;
+
+    /// <summary>
+    /// <c>collation(expression)</c>: the collation of <paramref name="expression"/>. MySQL-only;
+    /// MariaDB rejects the call.
+    /// </summary>
+    /// <param name="expression">The expression whose collation is reported.</param>
+    public string? collation(object? expression) => default!;
+
+    /// <summary>
+    /// <c>coercibility(expression)</c>: the coercibility value MySQL uses to resolve collation conflicts
+    /// for <paramref name="expression"/>. MySQL-only; MariaDB rejects the call.
+    /// </summary>
+    /// <param name="expression">The expression whose coercibility is reported.</param>
+    public long? coercibility(object? expression) => default!;
+
+    /// <summary>
+    /// <c>benchmark(count, expression)</c>: evaluates <paramref name="expression"/>
+    /// <paramref name="count"/> times and returns <c>0</c>. The server executes the expression for its
+    /// side effects only, so this is a timing probe, not a value function. MySQL-only; MariaDB rejects
+    /// the call.
+    /// </summary>
+    /// <param name="count">The number of evaluations.</param>
+    /// <param name="expression">The expression to evaluate.</param>
+    public long? benchmark(long? count, object? expression) => default!;
+
+    /// <summary>
+    /// <c>icu_version()</c>: the ICU library version the server was built with, or an empty string when
+    /// it was built without ICU. MySQL-only; MariaDB rejects the call.
+    /// </summary>
+    public string? icu_version() => default!;
+
+    /// <summary>
+    /// <c>uuid_short()</c>: a 64-bit unsigned identifier unique to this server instance, derived from
+    /// the server start time and a monotonic counter. MySQL-only; MariaDB rejects the call.
+    /// </summary>
+    public ulong? uuid_short() => default!;
+
+    /// <summary>
+    /// <c>is_uuid(value)</c>: <c>1</c> when <paramref name="value"/> is a syntactically valid string
+    /// UUID, otherwise <c>0</c> (and <c>null</c> when the argument is SQL NULL). MySQL-only; MariaDB
+    /// rejects the call.
+    /// </summary>
+    /// <param name="value">The string to validate as a UUID.</param>
+    public long? is_uuid(string? value) => default!;
+
+    /// <summary>
+    /// <c>sleep(seconds)</c>: pauses the statement for <paramref name="seconds"/> and returns <c>0</c>,
+    /// or <c>1</c> when the sleep was interrupted. MySQL-only; MariaDB rejects the call.
+    /// </summary>
+    /// <param name="seconds">The number of seconds to pause, possibly fractional.</param>
+    public long? sleep(double? seconds) => default!;
+
+    /// <summary>
+    /// <c>grouping(expressions...)</c>: the rollup grouping bitmap for the given expressions, for use
+    /// with <c>GROUP BY ... WITH ROLLUP</c>. Every argument must exactly match an expression of the
+    /// <c>GROUP BY</c> clause; that rule is a caller obligation the expression translator cannot check
+    /// because it never sees the grouping list. MySQL-only; MariaDB rejects the call.
+    /// </summary>
+    /// <param name="expressions">The grouped expressions, in the <c>GROUP BY</c> order.</param>
+    public long? grouping(params object?[] expressions) => default!;
+
+    /// <summary>
+    /// <c>name_const(name, value)</c>: returns <paramref name="value"/> under the column label
+    /// <paramref name="name"/>. The name must be a compile-time string literal; a non-constant or null
+    /// name is refused before SQL is emitted. MySQL-only; MariaDB rejects the call.
+    /// </summary>
+    /// <typeparam name="TValue">The value expression's type.</typeparam>
+    /// <param name="name">The column label, as a compile-time literal.</param>
+    /// <param name="value">The value to return.</param>
+    public TValue name_const<TValue>(string? name, TValue value) => default!;
+
+    /// <summary>
+    /// <c>default(column)</c>: the default value of the named column. The argument must be a column
+    /// reference; constants, parameters, casts and computed expressions are refused before SQL is
+    /// emitted. MySQL-only; MariaDB rejects the call.
+    /// </summary>
+    /// <typeparam name="TValue">The column's value type.</typeparam>
+    /// <param name="column">The column whose default is returned.</param>
+    public TValue column_default<TValue>(TValue column) => default!;
+
+    /// <summary>
+    /// <c>uuid()</c> is refused: MySQL generates UUID version 1, while this API's UUID contract is v4
+    /// (<see cref="CommonFunctions.gen_random_uuid"/>) or v7 (<see cref="CommonFunctions.uuidv7"/>), and
+    /// a v1 value is never substituted for it. Referencing this member throws
+    /// <see cref="NotSupportedException"/> at translation time. Use <c>uuidv7()</c> to generate an
+    /// identifier, or <c>UUID()</c> through raw SQL when v1 is genuinely intended.
+    /// </summary>
+    /// <returns>Never returns; the call is refused when the query is translated.</returns>
+    public Guid? uuid() => throw new NotSupportedException(UuidRefusal);
+
+    /// <summary>
+    /// <c>values(column)</c> is refused: the name is deprecated in MySQL 8.4 and has no
+    /// scalar-expression contract — it refers to the new row only inside the upsert mutation builder.
+    /// Referencing this member throws <see cref="NotSupportedException"/> at translation time; use the
+    /// mutation builder's upsert API instead.
+    /// </summary>
+    /// <typeparam name="TValue">The column's value type.</typeparam>
+    /// <param name="column">The column to refer to; never read.</param>
+    /// <returns>Never returns; the call is refused when the query is translated.</returns>
+    public TValue values<TValue>(TValue column) => throw new NotSupportedException(ValuesRefusal);
+
+    /// <summary>The exact refusal text for <c>json_table()</c>, shared by the member body and the translator.</summary>
+    internal const string JsonTableRefusal =
+        "MySQL JSON_TABLE is a table-producing construct that requires a FROM/join position and a " +
+        "COLUMNS definition list; it is not a scalar function and cannot be expressed on " +
+        "SqlFunctions.MySql.";
+
+    /// <summary>The exact refusal text for <c>uuid()</c>, shared by the member body and the translator.</summary>
+    internal const string UuidRefusal =
+        "uuid is refused: MySQL UUID() generates UUID version 1; this API's UUID contract is v4 " +
+        "(gen_random_uuid) or v7 (uuidv7), and a v1 value is never substituted for it. Use uuidv7() " +
+        "to generate an identifier, or UUID() through raw SQL when v1 is genuinely intended.";
+
+    /// <summary>The exact refusal text for <c>values(column)</c>, shared by the member body and the translator.</summary>
+    internal const string ValuesRefusal =
+        "MySQL VALUES(column) cannot be translated as a scalar query function; use the mutation " +
+        "builder's upsert API.";
 }

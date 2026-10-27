@@ -220,7 +220,14 @@ internal sealed class MariaDbNativeFunctions : IMySqlFunctions
                 "makedate" or "maketime" or "microsecond" or "monthname" or "period_add" or
                 "period_diff" or "sec_to_time" or "subdate" or "subtime" or "time" or
                 "time_format" or "time_to_sec" or "timediff" or "timestamp" or "to_days" or
-                "to_seconds" or "yearweek") && Inner.Supports(name)));
+                "to_seconds" or "yearweek" or
+                "aes_encrypt" or "aes_decrypt" or "compress" or "uncompress" or
+                "uncompressed_length" or "random_bytes" or "validate_password_strength" or
+                "statement_digest" or "statement_digest_text" or
+                "found_rows" or "last_insert_id" or "row_count" or "current_role" or
+                "charset" or "collation" or "coercibility" or "benchmark" or "icu_version" or
+                "uuid_short" or "is_uuid" or "sleep" or "grouping" or "name_const" or
+                "column_default") && Inner.Supports(name)));
 
     /// <inheritdoc/>
     public string Render(string name, IReadOnlyList<string> args) => name switch

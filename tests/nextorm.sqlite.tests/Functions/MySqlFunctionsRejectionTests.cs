@@ -42,6 +42,27 @@ public class MySqlFunctionsRejectionTests
         act.Should().Throw<NotSupportedException>().WithMessage("*uuid_to_bin*not supported*");
     }
 
+    /// <summary>
+    /// T349 provider isolation: the newly enabled crypto/information/miscellaneous names are rejected
+    /// here too. The two case-rejected names keep their precise refusal ahead of the capability gate.
+    /// </summary>
+    [Fact]
+    public void T349Functions_ShouldThrowOnUnsupportedProvider()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var encrypt = () => SqlOf(ctx, e.Select(x => SqlFunctions.MySql.aes_encrypt(
+            SqlFunctions.MySql.unhex(x.String), SqlFunctions.Parameter<byte[]>(0))));
+        encrypt.Should().Throw<NotSupportedException>().WithMessage("*aes_encrypt*not supported*");
+
+        var columnDefault = () => SqlOf(ctx, e.Select(x => SqlFunctions.MySql.column_default(x.Id)));
+        columnDefault.Should().Throw<NotSupportedException>().WithMessage("*column_default*not supported*");
+
+        var uuid = () => SqlOf(ctx, e.Select(x => new { x.Id, V = SqlFunctions.MySql.uuid() }));
+        uuid.Should().Throw<NotSupportedException>().WithMessage("*uuid*UUID version 1*");
+    }
+
     [Fact]
     public void T284_JsonFunctions_ShouldThrowOnUnsupportedProvider()
     {

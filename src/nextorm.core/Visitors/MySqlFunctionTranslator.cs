@@ -21,7 +21,8 @@ internal static class MySqlFunctionTranslator
         [nameof(MySqlFunctions.json_object)] = 0,
         [nameof(MySqlFunctions.json_merge)] = 2,
         [nameof(MySqlFunctions.json_contains_path)] = 2,
-        [nameof(MySqlFunctions.json_search)] = 4
+        [nameof(MySqlFunctions.json_search)] = 4,
+        [nameof(MySqlFunctions.grouping)] = 0
     };
 
     /// <summary>
@@ -30,10 +31,9 @@ internal static class MySqlFunctionTranslator
     /// </summary>
     private static readonly Dictionary<string, string> Refused = new(StringComparer.Ordinal)
     {
-        [nameof(MySqlFunctions.json_table)] =
-            "MySQL JSON_TABLE is a table-producing construct that requires a FROM/join position and a " +
-            "COLUMNS definition list; it is not a scalar function and cannot be expressed on " +
-            "SqlFunctions.MySql."
+        [nameof(MySqlFunctions.json_table)] = MySqlFunctions.JsonTableRefusal,
+        [nameof(MySqlFunctions.uuid)] = MySqlFunctions.UuidRefusal,
+        [nameof(MySqlFunctions.values)] = MySqlFunctions.ValuesRefusal
     };
 
     /// <summary>
@@ -81,6 +81,27 @@ internal static class MySqlFunctionTranslator
 
             visitor.NeedAliasForColumn = true;
             visitor.Builder!.Append(mySql.Render(name, [kind, format]));
+            return true;
+        }
+
+        if (name == nameof(MySqlFunctions.name_const))
+            return TranslateNameConst(visitor, node, mySql);
+
+        if (name == nameof(MySqlFunctions.column_default))
+        {
+            // DEFAULT(column) is grammar over a column identifier: the server resolves the column's
+            // default, so a constant, parameter, cast or computed expression has no meaning there.
+            if (node.Arguments.Count != 1 || node.Arguments[0] is not MemberExpression)
+                throw new NotSupportedException(ColumnDefaultError);
+
+            if (visitor.IsParamMode)
+            {
+                visitor.Visit(node.Arguments[0]);
+                return true;
+            }
+
+            visitor.NeedAliasForColumn = true;
+            visitor.Builder!.Append(mySql.Render(name, [visitor.VisitToString(node.Arguments[0])]));
             return true;
         }
 
@@ -215,6 +236,48 @@ internal static class MySqlFunctionTranslator
     /// <summary>The platform format names MySQL 8.4 documents for every <c>GET_FORMAT</c> family.</summary>
     private static bool IsKnownGetFormat(string format) =>
         format is "USA" or "JIS" or "ISO" or "EUR" or "INTERNAL";
+
+    private const string ColumnDefaultError =
+        "MySQL DEFAULT() requires a column reference; constants, parameters, casts, and computed " +
+        "expressions are not supported.";
+
+    private const string NameConstLiteralError =
+        "MySQL NAME_CONST() requires argument 0 to be a compile-time string literal.";
+
+    private const string NameConstNullError = "MySQL NAME_CONST() requires a non-null name literal.";
+
+    /// <summary>
+    /// Renders <c>name_const('label', value)</c>: the label MySQL accepts only as a compile-time string
+    /// literal is inlined as a quoted grammar token, so neither a parameter nor the value policy's
+    /// <c>_utf8mb4 X'…'</c> binary expression can reach that position. A null or non-constant name is
+    /// refused before any SQL is emitted.
+    /// </summary>
+    private static bool TranslateNameConst(
+        BaseExpressionVisitor visitor, MethodCallExpression node, IMySqlFunctions mySql)
+    {
+        if (node.Arguments.Count != 2)
+            throw new NotSupportedException(NameConstLiteralError);
+
+        var name = TypeFacts.UnwrapConvert(node.Arguments[0]) switch
+        {
+            ConstantExpression { Value: string literal } => literal,
+            ConstantExpression { Value: null } => throw new NotSupportedException(NameConstNullError),
+            _ => throw new NotSupportedException(NameConstLiteralError)
+        };
+
+        if (visitor.IsParamMode)
+        {
+            visitor.Visit(node.Arguments[0]);
+            visitor.Visit(node.Arguments[1]);
+            return true;
+        }
+
+        visitor.NeedAliasForColumn = true;
+        var label = visitor.RenderStringLiteral(
+            name, SqlStringLiteralRole.GrammarToken, SqlStringGrammar.Keyword);
+        visitor.Builder!.Append(mySql.Render(node.Method.Name, [label, visitor.VisitToString(node.Arguments[1])]));
+        return true;
+    }
 
     private static (MySqlWeightStringCast Cast, int Length) ReadWeightStringModifiers(
         Expression castExpression, Expression lengthExpression)
