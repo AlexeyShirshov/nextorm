@@ -570,7 +570,12 @@ public sealed class BulkInsertOptionsBuilder
         return this;
     }
 
-    /// <summary>Writes explicit values to identity columns. Forces the portable path.</summary>
+    /// <summary>
+    /// Writes explicit values to identity columns. The path stays capability based: <see cref="BulkInsertMode.Auto"/>
+    /// uses the native path where it can honour the option and the portable path otherwise,
+    /// <see cref="BulkInsertMode.Native"/> refuses the request by name instead of dropping the option, and
+    /// <see cref="BulkInsertMode.Portable"/> selects the portable path explicitly.
+    /// </summary>
     /// <param name="value">Whether to write identity values; defaults to <see langword="true"/>.</param>
     /// <returns>This builder, for chaining.</returns>
     public BulkInsertOptionsBuilder KeepIdentity(bool value = true)
@@ -580,7 +585,12 @@ public sealed class BulkInsertOptionsBuilder
         return this;
     }
 
-    /// <summary>Skips rows that violate a unique constraint. Forces the portable path.</summary>
+    /// <summary>
+    /// Skips rows that violate a unique constraint. Honoured where either path can express it (the native
+    /// provider load or the portable statement); a provider where neither can refuses the request by name
+    /// instead of writing the rows as a plain insert, and an explicit <see cref="BulkInsertMode.Native"/>
+    /// refuses it rather than silently dropping the option.
+    /// </summary>
     /// <param name="value">Whether to skip conflicting rows; defaults to <see langword="true"/>.</param>
     /// <returns>This builder, for chaining.</returns>
     public BulkInsertOptionsBuilder IgnoreDuplicates(bool value = true)
