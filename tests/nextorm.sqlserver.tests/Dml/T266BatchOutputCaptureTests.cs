@@ -238,6 +238,63 @@ public class T266BatchOutputCaptureTests
     }
 
     [Fact]
+    public void T266_TwoCapturesTwoReads_BindTheirOwnValues()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var batch = ctx.CreateBatchBuilder();
+        CaptureThreshold(ctx, batch, 5, "@t");
+        CaptureThreshold(ctx, batch, 9, "@u");
+        ComposeThreshold(batch, 7, "@t");
+        ComposeThreshold(batch, 8, "@u");
+
+        var sql = batch.ToSql();
+        foreach (var prefix in new[] { "@b0_", "@b1_", "@b2_", "@b3_" })
+        {
+            sql.Should().Contain(prefix);
+            Occurrences(sql, prefix).Should().Be(1);
+        }
+
+        // The live regression T266_ParametersAndTwoCaptures_DoNotCollide renders exactly this shape:
+        // two captures and two reads, every closure named 'min', one distinct value per step. The
+        // binding must already be correct before any server executes the batch.
+        var plan = RenderPlan(ctx, batch);
+        plan.Statements.Should().HaveCount(4);
+
+        var values = new[]
+        {
+            BoundValue(plan.Statements[0], "b0_min"),
+            BoundValue(plan.Statements[1], "b1_min"),
+            BoundValue(plan.Statements[2], "b2_min"),
+            BoundValue(plan.Statements[3], "b3_min"),
+        };
+
+        DumpSteps(plan);
+        values.Should().Equal(5L, 9L, 7L, 8L);
+    }
+
+    [Fact]
+    public void T266_TwoCapturesTwoReads_SameValue_KeepDistinctBindings()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var batch = ctx.CreateBatchBuilder();
+        CaptureThreshold(ctx, batch, 5, "@t");
+        CaptureThreshold(ctx, batch, 9, "@u");
+        ComposeThreshold(batch, 7, "@t");
+        ComposeThreshold(batch, 7, "@u");
+
+        // The reported case: both reads carry the SAME value, so a read-to-read leak would be invisible
+        // in the row set of a two-read batch; only the four independent bindings expose it.
+        var plan = RenderPlan(ctx, batch);
+        plan.Statements.Should().HaveCount(4);
+
+        DumpSteps(plan);
+        BoundValue(plan.Statements[0], "b0_min").Should().Be(5L);
+        BoundValue(plan.Statements[1], "b1_min").Should().Be(9L);
+        BoundValue(plan.Statements[2], "b2_min").Should().Be(7L);
+        BoundValue(plan.Statements[3], "b3_min").Should().Be(7L);
+    }
+
+    [Fact]
     public void T266_EmptyProjection_IsRefused()
     {
         using var ctx = SqlServerTestContext.Create();
@@ -516,6 +573,31 @@ public class T266BatchOutputCaptureTests
             batch.FromOutput<T266CapturedRow>("@t")
                 .Where(r => r.Id > min)
                 .Select(r => new T266CapturedRow { Id = r.Id }));
+    }
+
+    private static void ComposeThreshold(BatchBuilder batch, int value, string name)
+    {
+        var min = value;
+        batch.AddQuery(
+            batch.FromOutput<T266CapturedRow>(name)
+                .Where(r => r.Id > min)
+                .Select(r => new T266CapturedRow { Id = r.Id }));
+    }
+
+    // Records each rendered step's parameters and SQL in the test output (-showLiveOutput), so the
+    // binding values are evidence in the run log and not only inside an assertion expression.
+    private static void DumpSteps(BatchPlan plan)
+    {
+        var output = TestContext.Current.TestOutputHelper;
+        if (output is null)
+            return;
+
+        for (var i = 0; i < plan.Statements.Count; i++)
+        {
+            var statement = plan.Statements[i];
+            var parameters = string.Join(", ", statement.Parameters.Select(p => $"{p.Name}={p.Value}"));
+            output.WriteLine($"step{i}: [{parameters}] {statement.Sql}");
+        }
     }
 
     private static BatchBuilder CaptureInsert(IDataContext ctx, string name)
