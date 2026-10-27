@@ -20,6 +20,7 @@ namespace NextORM.MariaDb.Tests.SqlGeneration;
 /// hold for <see cref="MariaDbDataContext"/> as well.
 /// </para>
 /// </summary>
+[Collection("DataContextCache clear")] // purges the process-wide plan store; see the definition in RawSourceBindingSqlGenerationTests
 public class PreparedTextLoweringTests
 {
     private static string Normalize(string sql) => sql.Replace("\r\n", "\n");

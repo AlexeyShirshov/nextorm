@@ -91,6 +91,7 @@ internal static class T320MaJsonTableTvf
 /// live counterpart is <c>T320MariaDbTvfTests</c> in the integration project, which runs against a real
 /// <c>mariadb:11.4</c> server (never the MySQL container).
 /// </summary>
+[Collection("DataContextCache clear")] // purges the process-wide plan store; see the definition in RawSourceBindingSqlGenerationTests
 [Trait("Category", "T320")]
 public class T320RuntimeTvfSqlTests(ITestOutputHelper output)
 {

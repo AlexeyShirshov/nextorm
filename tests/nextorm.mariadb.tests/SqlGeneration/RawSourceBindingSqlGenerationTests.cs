@@ -383,8 +383,10 @@ public class RawSourceBindingColdRegistrationTests
 }
 
 /// <summary>
-/// Serializes the tests that clear the process-wide <see cref="DataContextCache"/> with the rest of
-/// the suite.
+/// Serializes the tests that clear process-wide state — <see cref="DataContextCache"/> and the query
+/// plan store (<c>PurgeQueryCache</c>, whose generation counter wipes every thread’s plan dictionary)
+/// — with the rest of the suite. Without this, a purge in one collection silently empties another
+/// collection’s store between two prepares and its plan-identity assertions fail intermittently.
 /// </summary>
 [CollectionDefinition("DataContextCache clear", DisableParallelization = true)]
 public sealed class RawSourceBindingCacheClearCollection;
