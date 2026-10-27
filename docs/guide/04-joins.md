@@ -691,6 +691,34 @@ var rows = await dataContext.From<Order>(b => b.Table("orders"))
     .ToListAsync();
 ```
 
+The applied source can also be a runtime table-valued-function body, with the same slot addressing: the
+factory call is the applied source, an outer member in its argument stays a column reference to the slot it
+names (`p.Item1` is this command's `FROM`), and the applied row becomes the next flat slot:
+
+```csharp
+var rows = await dataContext.From<Order>(b => b.Table("orders"))
+    .Join(dataContext.From<Person>(b => b.Table("person")), (o, buyer) => o.BuyerId == buyer.Id)
+    .CrossApply((Projection<Order, Person> p) => Tvf.ById(p.Item1.Id))
+    .Select(p => new { OrderId = p.Item1.Id, Buyer = p.Item2.Name, Line = p.Item3.Id })
+    .ToListAsync();
+// SQL Server: cross apply (select t3.id from rows_by_id(t1.id) as [t3]) as [t4]
+```
+
+A **composed** function body — the factory call followed by builder operators such as `.Where(...)` — is
+not supported as an applied source: it is refused with `NotSupportedException` while the query is built,
+before anything is compiled or executed, and the message names the composition and both supported forms. Use
+a derived query for that shape:
+
+```csharp
+// refused: the applied source would be a composed function chain
+joined.CrossApply((Projection<Order, Person> p) => Tvf.ById(p.Item1.Id).Where(r => r.Id > 0));
+
+// supported: a derived query carrying the correlation and the extra operators
+joined.CrossApply((Projection<Order, Person> p) => dataContext.From<OrderLine>(b => b.Table("order_lines"))
+    .Where(l => l.OrderId == p.Item1.Id && l.Total > 0)
+    .Select(l => new { l.Id, l.Total }));
+```
+
 The flat chain is capped at the usual **eight total sources** (`Projection<T1..T8>`). A ninth correlated
 source is refused with `NotSupportedException` while the query is prepared — before the applied source is
 evaluated — instead of nesting the projection. Project the accumulated join into a named type with `As`

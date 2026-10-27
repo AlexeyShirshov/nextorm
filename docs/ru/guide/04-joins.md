@@ -706,6 +706,35 @@ var rows = await dataContext.From<Order>(b => b.Table("orders"))
     .ToListAsync();
 ```
 
+Применяемый источник может быть и телом runtime-фабрики табличной функции, с той же адресацией слотов:
+вызов фабрики — это применяемый источник, член внешней строки в его аргументе остаётся ссылкой на колонку
+того слота, который он называет (`p.Item1` — это `FROM` данной команды), а применённая строка становится
+следующим плоским слотом:
+
+```csharp
+var rows = await dataContext.From<Order>(b => b.Table("orders"))
+    .Join(dataContext.From<Person>(b => b.Table("person")), (o, buyer) => o.BuyerId == buyer.Id)
+    .CrossApply((Projection<Order, Person> p) => Tvf.ById(p.Item1.Id))
+    .Select(p => new { OrderId = p.Item1.Id, Buyer = p.Item2.Name, Line = p.Item3.Id })
+    .ToListAsync();
+// SQL Server: cross apply (select t3.id from rows_by_id(t1.id) as [t3]) as [t4]
+```
+
+**Составное** тело функции — вызов фабрики, за которым идут операторы builder'а, например `.Where(...)`, —
+как применяемый источник не поддерживается: оно отклоняется с `NotSupportedException` при построении
+запроса, до компиляции и исполнения, а сообщение называет композицию и обе поддерживаемые формы. Для такой
+формы используйте производный запрос:
+
+```csharp
+// отклоняется: применяемый источник — составная цепочка функции
+joined.CrossApply((Projection<Order, Person> p) => Tvf.ById(p.Item1.Id).Where(r => r.Id > 0));
+
+// поддерживается: производный запрос с корреляцией и дополнительными операторами
+joined.CrossApply((Projection<Order, Person> p) => dataContext.From<OrderLine>(b => b.Table("order_lines"))
+    .Where(l => l.OrderId == p.Item1.Id && l.Total > 0)
+    .Select(l => new { l.Id, l.Total }));
+```
+
 Плоская цепочка ограничена обычными **восемью источниками всего** (`Projection<T1..T8>`). Девятый
 коррелированный источник отклоняется с `NotSupportedException` во время подготовки запроса — до
 вычисления применяемого источника — вместо вложения проекции. Спроецируйте накопленное соединение в
