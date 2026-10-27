@@ -2,6 +2,7 @@
 
 - **[01. Первая статья — полный структурированный план](01-article-plan.md)**
 - **[02. Вторая статья — исследование производительности ORM](02-article-plan.md)**
+- **[03. Третья статья — архитектура Nextorm](03-article-plan.md)**
 - [01. Постановка проблемы — исходные тезисы](01-problem-statement.md)
 - [Карта преемственности WORM и Nextorm по коду](worm-nextorm-code-comparison.md)
 - [Сравнение API по примерам из тестов WORM](worm-nextorm-api-examples.md)
