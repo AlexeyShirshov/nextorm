@@ -651,17 +651,19 @@ namespace NextORM.Core;
         public string? quote_nullable(string? value) => default!;
 
         /// <summary>
-        /// The one-argument <c>to_ascii(text)</c> is refused: PostgreSQL 17 raises <c>0A000</c> from a UTF8
-        /// database because that form takes the source encoding from the database encoding, and the
-        /// conversion it performs is defined only for a LATIN1/LATIN2/WIN1250 database. Use
-        /// <see cref="to_ascii(string?, string?)"/> with an explicit encoding instead.
+        /// The one-argument <c>to_ascii(text)</c> is refused: it takes the source encoding from the
+        /// database encoding, and PostgreSQL 17 supports the conversion only from <c>LATIN1</c>,
+        /// <c>LATIN2</c>, <c>LATIN9</c> and <c>WIN1250</c>. The pinned fixture database is UTF8, so the
+        /// form raises <c>0A000</c> even for ASCII-only input. Use
+        /// <see cref="to_ascii(string?, string?)"/> or <see cref="to_ascii(string?, int)"/> with an
+        /// explicit encoding instead.
         /// </summary>
         /// <returns>Never returns; the call is refused when the query is translated.</returns>
         public string? to_ascii(string? value) =>
             throw new NotSupportedException(
-                "The one-argument to_ascii function is refused: PostgreSQL 17 raises 0A000 when the source " +
-                "encoding is UTF8 (the one-argument form needs a LATIN1/LATIN2/WIN1250 source); use the " +
-                "to_ascii(value, encoding) overload.");
+                "The one-argument to_ascii function is refused: PostgreSQL 17 supports the conversion only " +
+                "from LATIN1, LATIN2, LATIN9 and WIN1250, and the pinned fixture database is UTF8, so the " +
+                "form raises 0A000; use to_ascii(value, encoding).");
 
         /// <summary>
         /// <c>to_ascii(value, encoding)</c> with the encoding named as text (for example
@@ -669,6 +671,17 @@ namespace NextORM.Core;
         /// <see cref="IScalarFunctions.Supports"/>.
         /// </summary>
         public string? to_ascii(string? value, string? encoding) => default!;
+
+        /// <summary>
+        /// <c>to_ascii(value, encoding)</c> with the encoding given as its numeric code — the
+        /// identifier reported by <c>pg_encoding_to_char</c> (<c>8</c> = <c>LATIN1</c>, <c>9</c> =
+        /// <c>LATIN2</c>, <c>16</c> = <c>LATIN9</c>, <c>29</c> = <c>WIN1250</c>). This is the documented
+        /// <c>to_ascii(text, integer)</c> overload. The code is validated by the server when the command
+        /// runs, so an unknown code raises <c>42704</c> instead of being refused while the query is
+        /// prepared. A NULL argument yields NULL. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? to_ascii(string? value, int encoding) => default!;
 
         /// <summary>
         /// The hexadecimal representation of <paramref name="value"/> (<c>to_hex</c>); negative values
@@ -721,6 +734,66 @@ namespace NextORM.Core;
         /// <see cref="IScalarFunctions.Supports"/>.
         /// </summary>
         public byte[]? decode(string? value, string? format) => default!;
+
+        /// <summary>
+        /// The <paramref name="index"/>-th bit of the <c>bytea</c> <paramref name="bytes"/> (0 = least
+        /// significant bit of the first byte), as 0 or 1 (<c>get_bit(bytea, bigint)</c>). A NULL or
+        /// out-of-range argument raises on the server. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public int? get_bit(byte[]? bytes, long? index) => default!;
+
+        /// <summary>
+        /// <paramref name="bytes"/> with its <paramref name="index"/>-th bit set to
+        /// <paramref name="value"/> (0 or 1), returning <c>bytea</c>
+        /// (<c>set_bit(bytea, bigint, integer)</c>). Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public byte[]? set_bit(byte[]? bytes, long? index, int? value) => default!;
+
+        /// <summary>
+        /// The <paramref name="index"/>-th byte of <paramref name="bytes"/> (0-based), as an integer
+        /// (<c>get_byte(bytea, integer)</c>). A NULL or out-of-range argument raises on the server. Gated
+        /// per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public int? get_byte(byte[]? bytes, int? index) => default!;
+
+        /// <summary>
+        /// <paramref name="bytes"/> with its <paramref name="index"/>-th byte replaced by
+        /// <paramref name="value"/>, returning <c>bytea</c> (<c>set_byte(bytea, integer, integer)</c>).
+        /// Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public byte[]? set_byte(byte[]? bytes, int? index, int? value) => default!;
+
+        /// <summary>
+        /// The number of set bits in <paramref name="bytes"/> (<c>bit_count(bytea)</c>), as a
+        /// <c>bigint</c>. A NULL argument yields NULL. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public long? bit_count(byte[]? bytes) => default!;
+
+        /// <summary>
+        /// <c>crc32(bytea)</c> is refused: it was introduced in PostgreSQL 18 and does not exist on the
+        /// pinned 17.11 server (absent from <c>pg_proc</c>; the name fails with <c>42883</c>), so no SQL
+        /// that executes on the target server can be emitted.
+        /// </summary>
+        /// <returns>Never returns; the call is refused when the query is translated.</returns>
+        public int? crc32(byte[]? bytes) =>
+            throw new NotSupportedException(
+                "The crc32 function is refused: it was introduced in PostgreSQL 18 and does not exist on " +
+                "the pinned 17.11 server (absent from pg_proc; the name fails with 42883), so no SQL that " +
+                "executes on the target server can be emitted.");
+
+        /// <summary>
+        /// <c>crc32c(bytea)</c> is refused for the same reason as <see cref="crc32(byte[])"/>: it is a
+        /// PostgreSQL 18 function absent from the pinned 17.11 server.
+        /// </summary>
+        /// <returns>Never returns; the call is refused when the query is translated.</returns>
+        public int? crc32c(byte[]? bytes) =>
+            throw new NotSupportedException(
+                "The crc32c function is refused: it was introduced in PostgreSQL 18 and does not exist on " +
+                "the pinned 17.11 server (absent from pg_proc; the name fails with 42883), so no SQL that " +
+                "executes on the target server can be emitted.");
 
         /// <summary>
         /// The Unicode normalization of <paramref name="value"/> in the form named by
@@ -810,6 +883,141 @@ namespace NextORM.Core;
         /// <c>"15 minutes"</c>; it is cast to <c>interval</c> in SQL.
         /// </summary>
         public DateTime? date_bin(string? stride, DateTime? source, DateTime? origin) => default!;
+
+        /// <summary>
+        /// Subtracts <paramref name="interval"/> from <paramref name="value"/> (<c>date_subtract</c> with
+        /// <c>timestamp with time zone</c>). The result is a <c>timestamp with time zone</c>; a NULL
+        /// argument yields NULL. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public DateTime? date_subtract(DateTime? value, TimeSpan? interval) => default!;
+
+        /// <summary>
+        /// Subtracts <paramref name="interval"/> from <paramref name="value"/> in the named
+        /// <paramref name="zone"/> (<c>date_subtract(timestamp with time zone, interval, text)</c>). A
+        /// NULL argument yields NULL. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public DateTime? date_subtract(DateTime? value, TimeSpan? interval, string? zone) => default!;
+
+        /// <summary>
+        /// Adjusts an interval so that 24-hour units are represented as days and 30-day units as months
+        /// (<c>justify_interval</c>). The returned interval can therefore carry a month component: an
+        /// interval with a non-zero month component (either sign) is rejected through
+        /// <see cref="InvalidCastException"/> when materialised as a <see cref="TimeSpan"/>, and a
+        /// zero-month value converts exactly. A NULL argument yields NULL. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public TimeSpan? justify_interval(TimeSpan? interval) => default!;
+
+        /// <summary>
+        /// Builds a <c>timestamp with time zone</c> from its parts in the session time zone
+        /// (<c>make_timestamptz</c>). A NULL argument yields NULL. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public DateTime? make_timestamptz(int? year, int? month, int? day, int? hour, int? minute, double? second) => default!;
+
+        /// <summary>
+        /// Builds a <c>timestamp with time zone</c> from its parts in the named
+        /// <paramref name="zone"/> (<c>make_timestamptz(..., timezone text)</c>). A NULL argument yields
+        /// NULL. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public DateTime? make_timestamptz(int? year, int? month, int? day, int? hour, int? minute, double? second, string? zone) => default!;
+
+        /// <summary>
+        /// The actual current time at the instant of the call (<c>clock_timestamp</c>), as a
+        /// <c>timestamp with time zone</c>. Unlike <c>statement_timestamp</c> and
+        /// <c>transaction_timestamp</c> it advances within a statement. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public DateTime? clock_timestamp() => default!;
+
+        /// <summary>
+        /// The time at which the current statement started (<c>statement_timestamp</c>), as a
+        /// <c>timestamp with time zone</c>. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public DateTime? statement_timestamp() => default!;
+
+        /// <summary>
+        /// The time at which the current transaction started (<c>transaction_timestamp</c>), as a
+        /// <c>timestamp with time zone</c>. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public DateTime? transaction_timestamp() => default!;
+
+        /// <summary>
+        /// The current date and time as text, including the time zone abbreviation
+        /// (<c>timeofday</c>, for example <c>Tue Oct 27 22:21:04.335170 2026 UTC</c>). Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? timeofday() => default!;
+
+        /// <summary>
+        /// True when the <c>date</c> <paramref name="value"/> is finite — that is, not
+        /// <c>infinity</c>/<c>-infinity</c> (<c>isfinite(date)</c>). A NULL argument yields NULL. Gated
+        /// per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public bool? isfinite(DateOnly? value) => default!;
+
+        /// <summary>
+        /// True when the <c>timestamp</c> <paramref name="value"/> is finite — that is, not
+        /// <c>infinity</c>/<c>-infinity</c> (<c>isfinite(timestamp)</c>). A NULL argument yields NULL.
+        /// Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public bool? isfinite(DateTime? value) => default!;
+
+        /// <summary>
+        /// True when the <c>interval</c> <paramref name="value"/> is finite (<c>isfinite(interval)</c>).
+        /// A NULL argument yields NULL. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public bool? isfinite(TimeSpan? value) => default!;
+
+        /// <summary>
+        /// <c>pg_sleep(seconds)</c> is refused: it returns <c>void</c>, and the expression model has no
+        /// void-typed projection, so no faithful result type exists. Declaring any CLR result would
+        /// return a value the server never sends; the call is refused while the query is translated and
+        /// no SQL is emitted.
+        /// </summary>
+        /// <returns>Never returns; the call is refused when the query is translated.</returns>
+        public void pg_sleep(double? seconds) =>
+            throw new NotSupportedException(
+                "The pg_sleep function is refused: it returns void, and the expression model has no " +
+                "void-typed projection, so no faithful CLR result exists; a fabricated value is never " +
+                "returned.");
+
+        /// <summary>
+        /// <c>pg_sleep_for(interval)</c> is refused for the same reason as <see cref="pg_sleep(double?)"/>:
+        /// it returns <c>void</c>, so there is no faithful expression result.
+        /// </summary>
+        /// <returns>Never returns; the call is refused when the query is translated.</returns>
+        public void pg_sleep_for(TimeSpan? interval) =>
+            throw new NotSupportedException(
+                "The pg_sleep_for function is refused: it returns void, and the expression model has no " +
+                "void-typed projection, so no faithful CLR result exists; a fabricated value is never " +
+                "returned.");
+
+        /// <summary>
+        /// <c>pg_sleep_until(timestamp with time zone)</c> is refused for the same reason as
+        /// <see cref="pg_sleep(double?)"/>: it returns <c>void</c>, so there is no faithful expression
+        /// result.
+        /// </summary>
+        /// <returns>Never returns; the call is refused when the query is translated.</returns>
+        public void pg_sleep_until(DateTime? target) =>
+            throw new NotSupportedException(
+                "The pg_sleep_until function is refused: it returns void, and the expression model has no " +
+                "void-typed projection, so no faithful CLR result exists; a fabricated value is never " +
+                "returned.");
+
+        /// <summary>
+        /// Extracts the <c>timestamp with time zone</c> embedded in a version 1 (or version 7) UUID
+        /// (<c>uuid_extract_timestamp</c>); UUIDs of other versions and the nil UUID yield NULL. Gated
+        /// per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public DateTime? uuid_extract_timestamp(Guid? value) => default!;
+
+        /// <summary>
+        /// The version number embedded in <paramref name="value"/> (<c>uuid_extract_version</c>), for
+        /// example <c>1</c> or <c>4</c>; the nil UUID yields NULL. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public short? uuid_extract_version(Guid? value) => default!;
 
         /// <summary>Formats a timestamp with a template.</summary>
         public string? to_char(DateTime? value, string? formatString) => default!;

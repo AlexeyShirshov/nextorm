@@ -26,8 +26,11 @@ internal static class ExtendedScalarFunctionTranslator
     /// server would reject. <c>casefold</c> arrived in PostgreSQL 18; <c>gamma</c>, <c>tgamma</c> and
     /// <c>lgamma</c> exist in no PostgreSQL release — all four are absent from <c>pg_proc</c> on 17.11
     /// and fail with <c>42883</c>. The one-argument <c>to_ascii</c> exists but raises <c>0A000</c> from
-    /// a UTF8 database, so only the two-argument (explicit-encoding) form is delivered. The key is the
-    /// member name together with its arity, because <c>to_ascii</c> is refused for one shape only.
+    /// a UTF8 database, so only the two-argument (explicit-encoding) forms are delivered. <c>crc32</c>
+    /// and <c>crc32c</c> are PostgreSQL 18 functions, absent from 17.11; <c>pg_sleep</c>,
+    /// <c>pg_sleep_for</c> and <c>pg_sleep_until</c> return <c>void</c>, for which the expression model
+    /// has no faithful projection. The key is the member name together with its arity, because
+    /// <c>to_ascii</c> is refused for one shape only.
     /// </summary>
     private static readonly Dictionary<(string Name, int Arity), string> Refused = new()
     {
@@ -48,9 +51,29 @@ internal static class ExtendedScalarFunctionTranslator
             "from pg_proc and from the PG17 mathematical-functions table; the name fails with 42883), so no " +
             "SQL that executes on the target server can be emitted.",
         [(nameof(PostgresFunctions.to_ascii), 1)] =
-            "The one-argument to_ascii function is refused: PostgreSQL 17 raises 0A000 when the source " +
-            "encoding is UTF8 (the one-argument form needs a LATIN1/LATIN2/WIN1250 source); use the " +
-            "to_ascii(value, encoding) overload."
+            "The one-argument to_ascii function is refused: PostgreSQL 17 supports the conversion only " +
+            "from LATIN1, LATIN2, LATIN9 and WIN1250, and the pinned fixture database is UTF8, so the " +
+            "form raises 0A000; use to_ascii(value, encoding).",
+        [(nameof(PostgresFunctions.crc32), 1)] =
+            "The crc32 function is refused: it was introduced in PostgreSQL 18 and does not exist on " +
+            "the pinned 17.11 server (absent from pg_proc; the name fails with 42883), so no SQL that " +
+            "executes on the target server can be emitted.",
+        [(nameof(PostgresFunctions.crc32c), 1)] =
+            "The crc32c function is refused: it was introduced in PostgreSQL 18 and does not exist on " +
+            "the pinned 17.11 server (absent from pg_proc; the name fails with 42883), so no SQL that " +
+            "executes on the target server can be emitted.",
+        [(nameof(PostgresFunctions.pg_sleep), 1)] =
+            "The pg_sleep function is refused: it returns void, and the expression model has no " +
+            "void-typed projection, so no faithful CLR result exists; a fabricated value is never " +
+            "returned.",
+        [(nameof(PostgresFunctions.pg_sleep_for), 1)] =
+            "The pg_sleep_for function is refused: it returns void, and the expression model has no " +
+            "void-typed projection, so no faithful CLR result exists; a fabricated value is never " +
+            "returned.",
+        [(nameof(PostgresFunctions.pg_sleep_until), 1)] =
+            "The pg_sleep_until function is refused: it returns void, and the expression model has no " +
+            "void-typed projection, so no faithful CLR result exists; a fabricated value is never " +
+            "returned."
     };
 
     private static readonly HashSet<string> MathFunctions = new(StringComparer.Ordinal)

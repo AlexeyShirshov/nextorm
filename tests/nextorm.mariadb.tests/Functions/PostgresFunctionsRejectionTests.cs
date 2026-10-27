@@ -63,6 +63,7 @@ public class PostgresFunctionsRejectionTests
             ("quote_literal", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.quote_literal(x.String) }))),
             ("quote_nullable", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.quote_nullable(x.String) }))),
             ("to_ascii", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.to_ascii(x.String, "LATIN1") }))),
+            ("to_ascii", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.to_ascii(x.String, 8) }))),
             ("to_hex", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.to_hex(x.Int) }))),
             ("to_oct", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.to_oct(x.Int) }))),
             ("to_bin", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.to_bin(x.Int) }))),
