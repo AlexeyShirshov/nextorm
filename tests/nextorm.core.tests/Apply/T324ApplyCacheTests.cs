@@ -1,3 +1,4 @@
+using System.Data.Common;
 using System.Linq.Expressions;
 using FluentAssertions;
 using NextORM.Core;
@@ -253,6 +254,60 @@ public class T324ApplyCacheTests
     private static IPreparedQueryCommand<int> PrepareCachedLater(IDataContext ctx, QueryCommand<int> command)
         => ctx.GetPreparedQueryCommand(command, createEnumerator: false, storeInCache: true, CancellationToken.None);
 
+    // ---------------------------------------------------------------------------------------------
+    // #343 (T343) C5 — a joined runtime-factory TVF apply keeps the flat-path cache semantics.
+    // ---------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// A joined receiver applied to a runtime table-valued-function factory (#343). The factory's first
+    /// argument is the correlated column of slot 1, the second a captured value, so a stale plan shows up
+    /// as the wrong bound parameter.
+    /// </summary>
+    private static QueryCommand<T324FlatRow> JoinWithRuntimeTvfApply(IDataContext ctx, int capture)
+        => ctx.From<T320MatrixRow>()
+            .Join(ctx.From<T320MatrixRow>(), (first, second) => first.Id == second.Id)
+            .CrossApply((Projection<T320MatrixRow, T320MatrixRow> p) => T320MatrixTvf.EchoPair(p.Item1.Id, capture))
+            .Select(q => new T324FlatRow { S1 = q.Item1.Id, S2 = q.Item2.Id, S3 = q.Item3.Id });
+
+    private static DbPreparedQueryCommand<T324FlatRow> PrepareTvfCached(IDataContext ctx, QueryCommand<T324FlatRow> command)
+        => (DbPreparedQueryCommand<T324FlatRow>)PrepareCached(ctx, command);
+
+    private static List<string> ParametersOf<T>(DbPreparedQueryCommand<T> prepared)
+        => [.. prepared.DbCommandParams.Cast<DbParameter>().Select(p => $"{p.ParameterName}={p.Value ?? "null"}")];
+
+    [Fact]
+    public void A_joined_runtime_factory_apply_shares_one_plan_and_refreshes_a_changed_capture()
+    {
+        using var ctx = CreateContext();
+        ctx.PurgeQueryCache();
+        CacheEntryCount().Should().Be(0, "the purge must leave a clean plan cache for the counting assertions");
+
+        const int capture = 3;
+
+        // Two structurally equal builds: every call evaluates its own lambda literal, so both the APPLY
+        // outer parameter and the closure are fresh instances.
+        var firstPrepared = PrepareTvfCached(ctx, JoinWithRuntimeTvfApply(ctx, capture));
+        CacheEntryCount().Should().Be(1, "the first preparation stores exactly one plan for the shape");
+        ParametersOf(firstPrepared).Should().Equal(new[] { "capture=3" }, "the capture travels as one bound parameter");
+
+        var secondPrepared = PrepareTvfCached(ctx, JoinWithRuntimeTvfApply(ctx, capture));
+        CacheEntryCount().Should().Be(1, "an equal joined + runtime-TVF apply structure must reuse the stored plan");
+        secondPrepared.Should().BeSameAs(firstPrepared, "structurally equal joined+TVF apply commands share the prepared command");
+
+        var sql = T324ApplyFixture.Normalize(secondPrepared.DbCommand.CommandText);
+        sql.Should().Contain("cross apply ", "the runtime factory is applied through the flat transition");
+        sql.Should().Contain("echo_rows_pair", "the factory call stays the applied source");
+        sql.Should().MatchRegex(@"echo_rows_pair\([^)]*t1\.Id", "the correlated argument addresses slot 1, this command's FROM source");
+        sql.Should().NotMatchRegex(@"echo_rows_pair\([^)]*t2\.Id", "slot 2 is the joined occurrence and is not the addressed left row");
+
+        // A changed captured argument keeps the same shape (so the same plan) but must bind the new value:
+        // returning the previous one would be the stale correlation the regression is about.
+        var changedPrepared = PrepareTvfCached(ctx, JoinWithRuntimeTvfApply(ctx, 11));
+        changedPrepared.Should().BeSameAs(firstPrepared, "the capture is a parameter, so the shape still shares one plan");
+        CacheEntryCount().Should().Be(1, "a capture change must not add a plan entry");
+        ParametersOf(changedPrepared).Should().Equal(new[] { "capture=11" }, "the cache hit binds the new capture, never the previous 3");
+        T324ApplyFixture.Normalize(changedPrepared.DbCommand.CommandText).Should().Be(sql, "a capture change must not re-render the statement");
+    }
     // ---------------------------------------------------------------------------------------------
     // Builders — every call evaluates a fresh lambda literal, so every parameter instance is fresh.
     // ---------------------------------------------------------------------------------------------

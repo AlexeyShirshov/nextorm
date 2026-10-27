@@ -412,7 +412,9 @@ public class T320RuntimeTvfOverloadMatrixTests
     /// refused: the joined receiver is a supported flat transition whose addressable left row is "this
     /// command's FROM plus exactly the joins preceding this one", so the applied source becomes the next
     /// flat slot and the correlation must address the exact occurrence it names. The in-memory refusal —
-    /// which under #324 is the first check for every correlated APPLY — is the only remaining negative.
+    /// which under #324 is the first check for every correlated APPLY — stays the negative of this cell;
+    /// a <em>composed</em> table-valued-function body is a separate named refusal (#343), covered by the
+    /// neighbouring tests.
     /// </summary>
     [Fact]
     public void JoinedReceiver_CorrelatedApplyOnAJoinProjection_ShouldBuildTheFlatTransitionAndBindSlotOne()
@@ -431,9 +433,8 @@ public class T320RuntimeTvfOverloadMatrixTests
 
         // The supported side: a SQL provider renders the applied source as flat slot 3 (never nested in
         // Item1) and qualifies the correlated argument with the FROM occurrence rather than the join.
-        // A runtime-factory body is not used here: the flat transition does not lower one yet (the same
-        // call on this receiver throws InvalidOperationException), which is tracked as a separate defect;
-        // this cell asserts the flat-transition property #324 exists to protect.
+        // #343 makes a runtime-factory body a supported source here too (see the second arm below), so the
+        // cell covers the derived-query arm and the runtime-factory arm on the same receiver.
         using var ctx = new SqlServerDataContext(T324ApplyFixture.SqlServerConnectionString, new DataContextBuilder());
 
         var joined = ctx.From<T320MatrixRow>()
