@@ -628,4 +628,227 @@ public class T320RuntimeTvfSqlTests(ITestOutputHelper output)
         builtInGate.Should().Throw<NotSupportedException>()
             .WithMessage("*'generate_series'*not supported by this provider*");
     }
+
+    // ---- MX-CHAIN / AC05: the argument survives every supported copy path -------------------------
+
+    /// <summary>
+    /// A byte-for-byte identical parameter list for the same captured value: a null value is kept as a
+    /// parameter slot with a <c>DBNull</c> value (unlike a *literal* null, which is an inline SQL NULL).
+    /// </summary>
+    private static List<string> ParameterValues<T>(DbPreparedQueryCommand<T> prepared)
+        => [.. prepared.DbCommandParams.Cast<DbParameter>()
+            .Select(p => p.Value is null or DBNull ? $"{p.ParameterName}=<null>" : $"{p.ParameterName}={p.Value}")];
+
+    /// <summary>
+    /// MX-CHAIN (AC05): SQLite expresses no lateral source, so the only correlation a runtime TVF argument
+    /// can carry is a captured value bound to a parameter slot. That slot must survive every supported copy
+    /// path — the composed <c>Where</c>, the composed ordering, a type-changing <c>Select</c>, a clone of the
+    /// lowered builder and an upcast of it — with the same statement and the same bound value.
+    /// </summary>
+    [Fact]
+    public void RuntimeTvf_Chain_CorrelatedCapture_ShouldSurviveEverySupportedCopyPath()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var id = 42;
+
+        var where = Prepare(ctx, ctx.From(() => T320ProbeTvf.ProbeTvf(id).Where(r => r.Id > 10)).Select(r => r.Id), false);
+        var order = Prepare(ctx, ctx.From(() => T320ProbeTvf.ProbeTvf(id).OrderBy(r => r.Id)).Select(r => r.Id), false);
+        var projection = Prepare(ctx, ctx.From(() => T320ProbeTvf.ProbeTvf(id)).Select(r => new { r.Id, Doubled = r.Id * 2 }), false);
+
+        var lowered = ctx.From(() => T320ProbeTvf.ProbeTvf(id));
+        var clone = (EntityBuilder<ISimpleEntity>)lowered.Clone();
+        clone.SourceFrom.Should().NotBeSameAs(null, "the clone carries the lowered table-function source");
+        var cloned = Prepare(ctx, clone.Select(r => r.Id), false);
+
+        EntityBuilder<ISimpleEntity> upcast = ctx.From(() => T320ProbeTvf.ProbeTvf(id));
+        var upcasted = Prepare(ctx, upcast.Select(r => new { r.Id, Doubled = r.Id * 2 }), false);
+
+        var paths = new (string Name, string Sql, List<string> Parameters)[]
+        {
+            ("where", Normalize(where.DbCommand.CommandText), ParametersOf(where)),
+            ("ordering", Normalize(order.DbCommand.CommandText), ParametersOf(order)),
+            ("type-changing select", Normalize(projection.DbCommand.CommandText), ParametersOf(projection)),
+            ("clone", Normalize(cloned.DbCommand.CommandText), ParametersOf(cloned)),
+            ("upcast", Normalize(upcasted.DbCommand.CommandText), ParametersOf(upcasted)),
+        };
+
+        foreach (var (name, sql, parameters) in paths)
+            output.WriteLine($"copy path {name}: sql=<<{sql}>>; parameters=[{string.Join(", ", parameters)}]");
+
+        foreach (var (name, sql, parameters) in paths)
+        {
+            sql.Should().Contain("from probe_tvf($id)", $"the '{name}' path keeps the originating call and its argument; {sql}");
+            sql.Should().NotContain("probe_tvf(42)", $"the '{name}' path must never evaluate the capture into the statement; {sql}");
+            parameters.Should().Equal(new[] { "id=42" }, $"the '{name}' path binds the same captured value to the same slot");
+        }
+
+        paths.Select(p => p.Sql).Where(sql => !sql.Contains("* 2")).Should().OnlyHaveUniqueItems(
+            "each copy path renders its own composed statement");
+        paths[2].Sql.Should().Be(paths[4].Sql, "the upcast renders the same projection statement the direct consumer does");
+        paths.Select(p => string.Join("|", p.Parameters)).Should().OnlyContain(text => text == "id=42");
+    }
+
+    /// <summary>
+    /// MX-CHAIN (AC05): two consumers on two different contexts each keep their own captured value — no
+    /// cross-consumer or cross-context leak — including the consumer that renders through a clone of its own
+    /// lowered builder, and the shared <c>AnyCommand.Cache</c> stays untouched on both contexts.
+    /// </summary>
+    [Fact]
+    public void RuntimeTvf_Chain_TwoConsumersOnTwoContexts_ShouldKeepTheirOwnCaptureAndLeaveAnyCommandCacheable()
+    {
+        using var ctxA = SqliteTestContext.CreateSqlite();
+        using var ctxB = SqliteTestContext.CreateSqlite();
+        ctxA.PurgeQueryCache();
+
+        var anyA = EntityBuilderExtensions.GetAnyCommand(ctxA, ctxA.From<SimpleEntity>().ToCommand());
+        var anyB = EntityBuilderExtensions.GetAnyCommand(ctxB, ctxB.From<SimpleEntity>().ToCommand());
+        anyA.Cache.Should().BeTrue("the shared Any command starts cacheable");
+        anyB.Cache.Should().BeTrue("the shared Any command starts cacheable");
+
+        var aId = 11;
+        var bId = 22;
+
+        var consumerA = Prepare(ctxA, ctxA.From(() => T320ProbeTvf.ProbeTvf(aId)).Select(r => r.Id), true);
+        var consumerB = Prepare(ctxB, ctxB.From(() => T320ProbeTvf.ProbeTvf(bId)).Select(r => r.Id), true);
+
+        var cloneA = (EntityBuilder<ISimpleEntity>)ctxA.From(() => T320ProbeTvf.ProbeTvf(aId)).Clone();
+        var clonedA = Prepare(ctxA, cloneA.Select(r => r.Id), true);
+
+        var parametersA = ParametersOf(consumerA);
+        var parametersB = ParametersOf(consumerB);
+        var parametersClonedA = ParametersOf(clonedA);
+        output.WriteLine(
+            $"two consumers: A=[{string.Join(", ", parametersA)}] sql=<<{Normalize(consumerA.DbCommand.CommandText)}>>; "
+            + $"B=[{string.Join(", ", parametersB)}] sql=<<{Normalize(consumerB.DbCommand.CommandText)}>>; "
+            + $"A-clone=[{string.Join(", ", parametersClonedA)}] sql=<<{Normalize(clonedA.DbCommand.CommandText)}>>; "
+            + $"ctxA.AnyCommand.Cache={ctxA.AnyCommand!.Value.Cache}; ctxB.AnyCommand.Cache={ctxB.AnyCommand!.Value.Cache}");
+
+        parametersA.Should().Equal(new[] { "aId=11" }, "each consumer binds its own captured value");
+        parametersB.Should().Equal(new[] { "bId=22" }, "the second context's consumer keeps its own value, never the first one's");
+        parametersClonedA.Should().Equal(new[] { "aId=11" }, "a consumer rendering through a clone keeps its own capture");
+
+        Normalize(consumerA.DbCommand.CommandText).Should().Contain("probe_tvf($aId)");
+        Normalize(consumerB.DbCommand.CommandText).Should().Contain("probe_tvf($bId)");
+        Normalize(clonedA.DbCommand.CommandText).Should().Be(
+            Normalize(consumerA.DbCommand.CommandText),
+            "the clone renders the same statement as the direct consumer on the same context");
+
+        ctxA.AnyCommand!.Value.Cache.Should().BeTrue(
+            "TVF preparation must not set the sticky QueryCommand.Cache=false flag on the shared Any command");
+        ctxB.AnyCommand!.Value.Cache.Should().BeTrue(
+            "TVF preparation must not set the sticky QueryCommand.Cache=false flag on the shared Any command");
+    }
+
+    // ---- MX-CACHE: FromOptions variants and null transitions -------------------------------------
+
+    /// <summary>
+    /// MX-CACHE: <c>FromOptions</c> applied to a runtime TVF source is either SQL-identity-neutral or a named
+    /// refusal — it must never silently share an incompatible plan. A derived-table hint and a table sample
+    /// have no place on a function source, so they are dropped and the source keeps the one plan entry it
+    /// would have without them; a source-level row lock is refused by name.
+    /// </summary>
+    [Fact]
+    public void RuntimeTvf_Cache_FromOptionsVariants_ShouldBeSqlIdentityNeutralOrFailClosed()
+    {
+        using var ctx = SqliteTestContext.Create();
+        ctx.PurgeQueryCache();
+        var id = 42;
+
+        var plain = Prepare(ctx, ctx.From(() => T320ProbeTvf.ProbeTvf(id)).Select(r => r.Id), true);
+        var plainSql = Normalize(plain.DbCommand.CommandText);
+        var plansAfterPlain = QueryPlanStore.Values.Count();
+        plansAfterPlain.Should().Be(1, "the plain source stores one plan entry");
+
+        // WithSubQueryHint: a derived-table hint describes a subquery; a table-function source is not one,
+        // so the hint is not rendered and the plan identity is unchanged (recorded as neutral, with reason).
+        var hinted = Prepare(
+            ctx,
+            ctx.From(() => T320ProbeTvf.ProbeTvf(id), options => options.WithSubQueryHint("NestLoop(t1)")).Select(r => r.Id),
+            true);
+        var hintedSql = Normalize(hinted.DbCommand.CommandText);
+        output.WriteLine($"FromOptions hint: sql=<<{hintedSql}>>; parameters=[{string.Join(", ", ParametersOf(hinted))}]");
+
+        // TableSample: a table sample applies to a physical table, not to a function source, so it is
+        // dropped for the same reason and stays plan-neutral.
+        var sampled = Prepare(
+            ctx,
+            ctx.From(() => T320ProbeTvf.ProbeTvf(id), options => options.TableSample(50)).Select(r => r.Id),
+            true);
+        var sampledSql = Normalize(sampled.DbCommand.CommandText);
+        output.WriteLine($"FromOptions sample: sql=<<{sampledSql}>>; parameters=[{string.Join(", ", ParametersOf(sampled))}]");
+
+        hintedSql.Should().Be(plainSql, "a derived-table hint is SQL-identity-neutral on a function source");
+        sampledSql.Should().Be(plainSql, "a table sample is SQL-identity-neutral on a function source");
+        hintedSql.Should().NotContain("NestLoop", "the hint must not leak into the statement text");
+        ReferenceEquals(hinted, plain).Should().BeTrue("a neutral option must reuse the same plan instance, not fork the identity");
+        ReferenceEquals(sampled, plain).Should().BeTrue("a neutral option must reuse the same plan instance, not fork the identity");
+        QueryPlanStore.Values.Count().Should().Be(plansAfterPlain, "no neutral option may add a plan entry");
+        ParametersOf(hinted).Should().Equal(new[] { "id=42" });
+        ParametersOf(sampled).Should().Equal(new[] { "id=42" });
+
+        // A source-level lock is not neutral: SQLite cannot express it on any source, so it fails closed
+        // instead of silently sharing the unlocked plan.
+        Action locked = () => Prepare(
+            ctx,
+            ctx.From(() => T320ProbeTvf.ProbeTvf(id), options => options.ForUpdate()).Select(r => r.Id),
+            true);
+        locked.Should().Throw<NotSupportedException>()
+            .WithMessage("*can only target a physical table source*");
+        QueryPlanStore.Values.Count().Should().Be(plansAfterPlain, "a refused option must not have registered a plan");
+    }
+
+    /// <summary>
+    /// MX-CACHE: a captured argument that transitions <c>null</c> → value → <c>null</c> → value keeps the same
+    /// plan instance and replaces the parameter value each time — no stale slot, no re-rendered statement and
+    /// no sticky <c>QueryCommand.Cache</c> mutation.
+    /// </summary>
+    [Fact]
+    public void RuntimeTvf_Cache_NullTransitions_ShouldRefreshTheParameterAndReuseThePlan()
+    {
+        using var ctx = SqliteTestContext.CreateSqlite();
+        ctx.PurgeQueryCache();
+        EntityBuilderExtensions.GetAnyCommand(ctx, ctx.From<SimpleEntity>().ToCommand()).Cache
+            .Should().BeTrue("the shared Any command starts cacheable");
+
+        string? text = null;
+
+        QueryCommand<int> Build() => ctx.From(() => T320ProbeTvf.ProbeTvfText(text)).Select(r => r.Id);
+
+        var first = Prepare(ctx, Build(), true);
+        var firstSql = Normalize(first.DbCommand.CommandText);
+        ParameterValues(first).Should().Equal(new[] { "text=<null>" }, "a captured null is a bound slot with a DBNull value");
+
+        text = "abc";
+        var second = Prepare(ctx, Build(), true);
+        ParameterValues(second).Should().Equal(new[] { "text=abc" }, "the value transition replaces the parameter value");
+
+        text = null;
+        var third = Prepare(ctx, Build(), true);
+        ParameterValues(third).Should().Equal(
+            new[] { "text=<null>" },
+            "the return transition must clear the slot again, never keep the stale 'abc'");
+
+        text = "xyz";
+        var fourth = Prepare(ctx, Build(), true);
+        ParameterValues(fourth).Should().Equal(new[] { "text=xyz" }, "a later transition replaces the slot again");
+
+        output.WriteLine(
+            $"null transitions: sql=<<{firstSql}>>; run1=[{string.Join(", ", ParameterValues(first))}]; "
+            + $"run2=[{string.Join(", ", ParameterValues(second))}]; run3=[{string.Join(", ", ParameterValues(third))}]; "
+            + $"run4=[{string.Join(", ", ParameterValues(fourth))}]; "
+            + $"refEq12={ReferenceEquals(first, second)}; refEq13={ReferenceEquals(first, third)}; "
+            + $"refEq14={ReferenceEquals(first, fourth)}; planStore={QueryPlanStore.Values.Count()}; "
+            + $"anyCache={ctx.AnyCommand!.Value.Cache}");
+
+        ReferenceEquals(first, second).Should().BeTrue("the same SQL identity must reuse the cached plan");
+        ReferenceEquals(first, third).Should().BeTrue("a null transition must not fork the plan identity");
+        ReferenceEquals(first, fourth).Should().BeTrue("a fourth transition must stay on the same plan instance");
+        Normalize(second.DbCommand.CommandText).Should().Be(firstSql, "no transition may re-render the statement");
+        Normalize(third.DbCommand.CommandText).Should().Be(firstSql, "no transition may re-render the statement");
+        Normalize(fourth.DbCommand.CommandText).Should().Be(firstSql, "no transition may re-render the statement");
+        first.DbCommandParams.Cast<DbParameter>().Should().HaveCount(1, "the parameter slot count never changes");
+        QueryPlanStore.Values.Count().Should().Be(1, "the four transitions leave exactly one plan entry");
+        ctx.AnyCommand!.Value.Cache.Should().BeTrue(
+            "TVF preparation must not set the sticky QueryCommand.Cache=false flag on the shared Any command");
+    }
 }

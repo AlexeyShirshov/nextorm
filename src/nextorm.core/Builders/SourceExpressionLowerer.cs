@@ -34,7 +34,8 @@ internal static class SourceExpressionLowerer
     /// <exception cref="NotSupportedException">
     /// The body is not a direct factory call or a supported builder-operation chain over one, the factory
     /// does not return <see cref="TvfEntityBuilder{T}"/> for the factory row type, the factory returned no
-    /// descriptor, or a declared verbatim index does not address an existing argument.
+    /// descriptor, a declared verbatim index does not address an existing argument, or a factory argument
+    /// references a free outer parameter (a non-lateral source has no outer row to bind it to).
     /// </exception>
     /// <exception cref="ArgumentException">A declared verbatim argument index is out of range.</exception>
     internal static EntityBuilder<T> LowerTvfSource<T>(
@@ -74,6 +75,16 @@ internal static class SourceExpressionLowerer
             throw new NotSupportedException(
                 $"The method '{call.Method.DeclaringType?.Name}.{call.Method.Name}' does not return TvfEntityBuilder<T>, so it is not a runtime table-valued-function factory.");
         }
+
+        // A non-lateral source has no outer-parameter binding context, so a factory argument that
+        // references a parameter declared by an enclosing lambda (the row of the surrounding query, in
+        // practice) has no scope here and cannot become a column reference. Rendering it anyway emits
+        // the bare parameter name as a column (`join dbo.echo_rows(Id) as [t2]`), so the shape is
+        // rejected by name instead. The correlated CROSS/OUTER APPLY path is exempt by construction: it
+        // keeps the outer row as a free variable only inside an inspected quote and re-enters this
+        // lowering at preparation time, after the outer member reads were replaced by outer-reference
+        // markers, so no free parameter reaches this check.
+        RejectUnboundFactoryArguments(call);
 
         if (operations.Count == 0 && rowType != typeof(T))
         {
@@ -353,6 +364,70 @@ internal static class SourceExpressionLowerer
                 throw new ArgumentException(
                     $"The verbatim argument index {index} is out of range: the factory call has {argumentCount} argument(s).");
             }
+        }
+    }
+
+    /// <summary>
+    /// Rejects a factory call whose argument references a free <see cref="ParameterExpression"/>: in a
+    /// non-lateral source such a parameter is declared by an enclosing lambda, has no scope inside the
+    /// source and cannot be reduced to a column or a captured value, so rendering it would emit the
+    /// parameter name as a column reference.
+    /// </summary>
+    /// <exception cref="NotSupportedException">An argument of <paramref name="call"/> references a free parameter.</exception>
+    private static void RejectUnboundFactoryArguments(MethodCallExpression call)
+    {
+        for (var i = 0; i < call.Arguments.Count; i++)
+        {
+            if (FreeParameterFinder.Find(call.Arguments[i]) is not { } free)
+                continue;
+
+            throw new NotSupportedException(
+                $"The table-valued-function factory '{call.Method.DeclaringType?.Name}.{call.Method.Name}' is given an argument that references the free parameter '{free.Name ?? "<unnamed>"}', which is declared outside the source lambda. "
+                + "This is not an APPLY (lateral) source, so no outer row is bound and the correlated column reference cannot be rendered: use CrossApply/OuterApply for a correlated table-function source, or pass only constants, captured values or null.");
+        }
+    }
+
+    /// <summary>
+    /// Finds the first parameter an expression references without declaring it. Parameters declared by a
+    /// lambda inside the expression (a factory argument that is itself a lambda, for example) are bound and
+    /// therefore not free; captured values and constants are not parameters at all.
+    /// </summary>
+    private sealed class FreeParameterFinder : ExpressionVisitor
+    {
+        private readonly HashSet<ParameterExpression> _bound = [];
+        private ParameterExpression? _free;
+
+        /// <summary>Returns the first free parameter of <paramref name="expression"/>, or <see langword="null"/>.</summary>
+        internal static ParameterExpression? Find(Expression expression)
+        {
+            var finder = new FreeParameterFinder();
+            finder.Visit(expression);
+            return finder._free;
+        }
+
+        protected override Expression VisitLambda<TDelegate>(Expression<TDelegate> node)
+        {
+            var declared = new List<ParameterExpression>(node.Parameters.Count);
+            foreach (var parameter in node.Parameters)
+            {
+                if (_bound.Add(parameter))
+                    declared.Add(parameter);
+            }
+
+            Visit(node.Body);
+
+            foreach (var parameter in declared)
+                _bound.Remove(parameter);
+
+            return node;
+        }
+
+        protected override Expression VisitParameter(ParameterExpression node)
+        {
+            if (_free is null && !_bound.Contains(node))
+                _free = node;
+
+            return node;
         }
     }
 

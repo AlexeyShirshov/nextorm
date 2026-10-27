@@ -17,6 +17,12 @@ public sealed class T320OtherRow
     public int Id { get; set; }
 }
 
+/// <summary>Row type of the AC03 mixed-source CTE only: keeps its own mapping, no shared metadata.</summary>
+public sealed class T320MixRow
+{
+    public int Id { get; set; }
+}
+
 internal static class T320TvfDb
 {
     public static TvfEntityBuilder<T320TvfRow> Echo(int id) => new("echo_rows", "dbo");
@@ -797,6 +803,139 @@ public class T320RuntimeTvfTests
 
         act.Should().Throw<NotSupportedException>()
             .Which.Message.Should().Contain("does not match the source row type");
+    }
+
+    // ---- AC03: the mixed-source matrix and the non-lateral correlation negative ------------------
+
+    private static string RenderSql(IDataContext ctx, QueryCommand<int> query)
+    {
+        var prepared = (DbPreparedQueryCommand<int>)ctx.GetPreparedQueryCommand(query, false, false, CancellationToken.None);
+
+        return prepared.DbCommand.CommandText.Replace("\r\n", "\n");
+    }
+
+    /// <summary>
+    /// AC03: the new lambda source is the <b>joined</b> side of every existing primary-source form — a
+    /// physical table, a typed CTE, a raw-SQL derived table, an existing (already lowered) builder and a
+    /// <see cref="QueryCommand{T}"/> source. Each form must carry the runtime source and keep a join
+    /// predicate that references the left source; the last form does not (see the pinning below), which is
+    /// recorded rather than relaxed.
+    /// </summary>
+    [Fact]
+    public void MixedSourceMatrix_ShouldCarryTheLambdaJoinSourceOnEveryPrimarySourceForm()
+    {
+        using var ctx = new SqlServerDataContext(
+            "Server=localhost,1433;Database=nextorm;User Id=sa;Password=nextorm!Passw0rd;TrustServerCertificate=True",
+            new DataContextBuilder());
+        var joinId = 5;
+
+        // (a) physical table (named-table receiver, so no entity mapping is involved).
+        var tableQuery = ctx.From("t320_mix_table")
+            .Join(() => T320TvfDb.Echo(joinId), (alias, right) => alias["id"].AsInt == right.Id)
+            .Select(p => p.Item2.Id);
+        var tableSql = RenderSql(ctx, tableQuery);
+        tableSql.Should().Contain("from t320_mix_table as [t1]", "the physical table stays the primary source");
+        tableSql.Should().Contain("join dbo.echo_rows(@joinId) as [t2]", "the runtime TVF is the joined side");
+        tableSql.Should().Contain("on t1.id = t2.Id", "the join predicate references both sides");
+
+        // (b) typed CTE.
+        var cte = ctx.From<T320MixRow>().Select(row => new T320MixRow { Id = row.Id }).AsCte("t320_mix_cte");
+        var cteQuery = ctx.From(cte)
+            .Join(() => T320TvfDb.Echo(joinId), (left, right) => left.Id == right.Id)
+            .Select(p => p.Item2.Id);
+        var cteSql = RenderSql(ctx, cteQuery);
+        cteSql.Should().Contain("with t320_mix_cte as (", "the typed CTE is materialised as a WITH clause");
+        cteSql.Should().Contain("from t320_mix_cte as [t1]", "the CTE stays the primary source");
+        cteSql.Should().Contain("join dbo.echo_rows(@joinId) as [t2]", "the runtime TVF is the joined side");
+        cteSql.Should().Contain("on t1.[Id] = t2.Id", "the join predicate references both sides");
+
+        // (c) raw SQL derived table.
+        var rawQuery = ctx.FromSql("select 1 as id")
+            .Join(() => T320TvfDb.Echo(joinId), (alias, right) => alias["id"].AsInt == right.Id)
+            .Select(p => p.Item2.Id);
+        var rawSql = RenderSql(ctx, rawQuery);
+        rawSql.Should().Contain("from (select 1 as id) as [t1]", "the raw SQL stays the primary source");
+        rawSql.Should().Contain("join dbo.echo_rows(@joinId) as [t2]", "the runtime TVF is the joined side");
+        rawSql.Should().Contain("on t1.id = t2.Id", "the join predicate references both sides");
+
+        // (d) an existing (already lowered) builder wrapped as a derived source.
+        var lowered = ctx.From(() => T320TvfDb.Echo(9));
+        var builderQuery = ctx.From(lowered)
+            .Join(() => T320TvfDb.Echo(joinId), (left, right) => left.Id == right.Id)
+            .Select(p => p.Item2.Id);
+        var builderSql = RenderSql(ctx, builderQuery);
+        builderSql.Should().Contain("from (select Id\n from dbo.echo_rows(9) as [t1]) as [t2]", "the existing builder stays the primary source");
+        builderSql.Should().Contain("join dbo.echo_rows(@joinId) as [t3]", "the runtime TVF is the joined side");
+        builderSql.Should().Contain("on t2.Id = t3.Id", "the join predicate references both sides");
+
+        // (e) a QueryCommand source. The join predicate references the left source by its alias, exactly like
+        // the plain-table control above (`on t1.Id = t2.Id`); the assertion is deliberately kept at the full
+        // predicate, not relaxed to "some predicate exists".
+        var command = ctx.From<T320MixRow>().ToCommand();
+        var commandQuery = ctx.From(command)
+            .Join(() => T320TvfDb.Echo(joinId), (left, right) => left.Id == right.Id)
+            .Select(p => p.Item2.Id);
+        var commandSql = RenderSql(ctx, commandQuery);
+        commandSql.Should().Contain("from (select Id\n from T320MixRow) as [t1]", "the QueryCommand stays the primary source");
+        commandSql.Should().Contain("join dbo.echo_rows(@joinId) as [t2]", "the runtime TVF is the joined side");
+        commandSql.Should().Contain("on t1.Id = t2.Id", "the join predicate references both sides");
+    }
+
+    /// <summary>
+    /// AC03 negative: a <b>non-lateral</b> lambda join source that still carries a free outer
+    /// <see cref="ParameterExpression"/> would render an unresolvable column reference (the free parameter has
+    /// no declaring scope), so it must be rejected by name and never rendered. Observed instead: the free
+    /// member access is lowered straight into the call text — `dbo.echo_rows(Id)` — by
+    /// <c>SourceExpressionLowerer.LowerTvfSource</c> (`src/nextorm.core/Builders/SourceExpressionLowerer.cs:32-96`),
+    /// which preserves the argument expression without checking that its parameters are bound.
+    /// </summary>
+    [Fact]
+    public void NonLateralCorrelatedSource_ShouldBeRejectedAndNeverRendered()
+    {
+        using var ctx = new SqlServerDataContext(
+            "Server=localhost,1433;Database=nextorm;User Id=sa;Password=nextorm!Passw0rd;TrustServerCertificate=True",
+            new DataContextBuilder());
+
+        // Deliberate construction: keep the body of a correlated source lambda and re-lambda it without its
+        // parameter, so the outer row stays a free ParameterExpression inside the ordinary (non-lateral) source.
+        Expression<Func<T320TvfRow, EntityBuilder<T320TvfRow>>> correlated = row => T320TvfDb.Echo(row.Id);
+        var freeSource = Expression.Lambda<Func<EntityBuilder<T320TvfRow>>>(correlated.Body);
+
+        Exception? failure = null;
+        string? renderedSql = null;
+        try
+        {
+            renderedSql = RenderSql(
+                ctx,
+                ctx.From("t320_free_left")
+                    .Join(freeSource, (alias, right) => alias["id"].AsInt == right.Id)
+                    .Select(p => p.Item2.Id));
+        }
+        catch (Exception exception)
+        {
+            failure = exception;
+        }
+
+        failure.Should().BeOfType<NotSupportedException>(
+            "a non-lateral lambda source that still carries the outer row must be rejected by name, never rendered; "
+            + $"observed statement: <<{renderedSql ?? "(rejected)"}>>");
+
+        // The same guard is required of the FROM form (`ctx.From(freeSource)`), which is why the missing check
+        // belongs in the lowering rather than in one builder entry point.
+        Exception? fromFailure = null;
+        string? fromSql = null;
+        try
+        {
+            fromSql = RenderSql(ctx, ctx.From(freeSource).Select(row => row.Id));
+        }
+        catch (Exception exception)
+        {
+            fromFailure = exception;
+        }
+
+        fromFailure.Should().BeOfType<NotSupportedException>(
+            "the FROM entry point shares the lowering, so it must reject the free outer parameter too; "
+            + $"observed statement: <<{fromSql ?? "(rejected)"}>>");
     }
 
     private static MethodCallExpression FindFactoryCall(Expression expression, MethodInfo factory)
