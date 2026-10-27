@@ -1278,6 +1278,308 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
         }
     }
 
+    [Fact]
+    [Trait("Issue", "281")]
+    public void StringFamily_ShouldComputeValuesNullsAndClrTypes()
+    {
+        string? nullText = null;
+        byte[]? nullBytes = null;
+
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Btrim1 = SqlFunctions.Postgres.btrim("  ab  "),
+                Btrim2 = SqlFunctions.Postgres.btrim("xxabyy", "xy"),
+                BtrimBytes = SqlFunctions.Postgres.btrim(
+                    SqlFunctions.Postgres.convert_to("xxabxx", "UTF8"),
+                    SqlFunctions.Postgres.convert_to("x", "UTF8")),
+                Ltrim2 = SqlFunctions.Postgres.ltrim("xxab", "x"),
+                LtrimBytes = SqlFunctions.Postgres.ltrim(
+                    SqlFunctions.Postgres.convert_to("xxab", "UTF8"),
+                    SqlFunctions.Postgres.convert_to("x", "UTF8")),
+                Rtrim2 = SqlFunctions.Postgres.rtrim("abxx", "x"),
+                RtrimBytes = SqlFunctions.Postgres.rtrim(
+                    SqlFunctions.Postgres.convert_to("abxx", "UTF8"),
+                    SqlFunctions.Postgres.convert_to("x", "UTF8")),
+                StartsWith = SqlFunctions.Postgres.starts_with("dadfasd", "dad"),
+                ParseIdent = SqlFunctions.Postgres.parse_ident("a.b", false),
+                QuoteIdent = SqlFunctions.Postgres.quote_ident("a b"),
+                QuoteIdentPlain = SqlFunctions.Postgres.quote_ident("test"),
+                QuoteLiteral = SqlFunctions.Postgres.quote_literal(x.String),
+                QuoteNullable = SqlFunctions.Postgres.quote_nullable(x.String),
+                ToAscii = SqlFunctions.Postgres.to_ascii("abc", "LATIN1"),
+                ToAscii2 = SqlFunctions.Postgres.to_ascii("abc", "LATIN2"),
+                HexNeg = SqlFunctions.Postgres.to_hex(-1),
+                HexLong = SqlFunctions.Postgres.to_hex(255L),
+                Oct = SqlFunctions.Postgres.to_oct(8),
+                OctLong = SqlFunctions.Postgres.to_oct(8L),
+                Bin = SqlFunctions.Postgres.to_bin(5),
+                BinLong = SqlFunctions.Postgres.to_bin(5L),
+                ConvertFrom = SqlFunctions.Postgres.convert_from(
+                    SqlFunctions.Postgres.convert_to("abc", "UTF8"), "UTF8"),
+                ConvertTo = SqlFunctions.Postgres.convert_to("abc", "UTF8"),
+                Encode = SqlFunctions.Postgres.encode(
+                    SqlFunctions.Postgres.convert_to("abc", "UTF8"), "hex"),
+                Decode = SqlFunctions.Postgres.decode("616263", "hex"),
+                NormalizeNfc = SqlFunctions.Postgres.normalize("abc", "NFC"),
+                NormalizeNfd = SqlFunctions.Postgres.normalize("\u00E9", "NFD"),
+                Unistr = SqlFunctions.Postgres.unistr("a\\0441"),
+                Match = SqlFunctions.Postgres.regexp_match("dadfasd", "(d)(a)"),
+                MatchFlags = SqlFunctions.Postgres.regexp_match("DADFASD", "(d)(a)", "i"),
+                NoMatch = SqlFunctions.Postgres.regexp_match("dadfasd", "zzz"),
+                NoGroup = SqlFunctions.Postgres.regexp_match("dadfasd", "da")
+            })
+            .First();
+
+        r.Btrim1.Should().Be("ab");
+        r.Btrim2.Should().Be("ab");
+        r.BtrimBytes.Should().Equal("ab"u8.ToArray());
+        r.Ltrim2.Should().Be("ab");
+        r.LtrimBytes.Should().Equal("ab"u8.ToArray());
+        r.Rtrim2.Should().Be("ab");
+        r.RtrimBytes.Should().Equal("ab"u8.ToArray());
+        r.StartsWith.Should().BeTrue();
+        r.ParseIdent.Should().Equal("a", "b");
+        r.QuoteIdent.Should().Be("\"a b\"");
+        r.QuoteIdentPlain.Should().Be("test");
+        r.QuoteLiteral.Should().Be("'dadfasd'");
+        r.QuoteNullable.Should().Be("'dadfasd'");
+        r.ToAscii.Should().Be("abc");
+        r.ToAscii2.Should().Be("abc");
+        r.HexNeg.Should().Be("ffffffff");
+        r.HexLong.Should().Be("ff");
+        r.Oct.Should().Be("10");
+        r.OctLong.Should().Be("10");
+        r.Bin.Should().Be("101");
+        r.BinLong.Should().Be("101");
+        r.ConvertFrom.Should().Be("abc");
+        r.ConvertTo.Should().Equal("abc"u8.ToArray());
+        r.Encode.Should().Be("616263");
+        r.Decode.Should().Equal("abc"u8.ToArray());
+        r.NormalizeNfc.Should().Be("abc");
+        r.NormalizeNfd.Should().Be("e\u0301");
+        r.Unistr.Should().Be("a\u0441");
+        r.Match.Should().Equal("d", "a");
+        r.MatchFlags.Should().Equal("D", "A");
+        r.NoMatch.Should().BeNull();
+        r.NoGroup.Should().Equal("da");
+
+        // Exact CLR types: the mapped result type is part of the contract, not just the value.
+        ((object)r.Btrim1!).Should().BeOfType<string>();
+        ((object)r.BtrimBytes!).Should().BeOfType<byte[]>();
+        ((object)r.StartsWith!).Should().BeOfType<bool>();
+        ((object)r.ParseIdent!).Should().BeOfType<string[]>();
+        ((object)r.QuoteIdent!).Should().BeOfType<string>();
+        ((object)r.ToAscii!).Should().BeOfType<string>();
+        ((object)r.HexNeg!).Should().BeOfType<string>();
+        ((object)r.ConvertTo!).Should().BeOfType<byte[]>();
+        ((object)r.Decode!).Should().BeOfType<byte[]>();
+        ((object)r.NormalizeNfd!).Should().BeOfType<string>();
+        ((object)r.Unistr!).Should().BeOfType<string>();
+        ((object)r.Match!).Should().BeOfType<string[]>();
+
+        // NULL cases: the string column of row 3 and the bytea column of row 2 are NULL.
+        var strings = _sut.ComplexEntity.Where(x => x.Id == 3)
+            .Select(x => new
+            {
+                Btrim1 = SqlFunctions.Postgres.btrim(x.String),
+                Btrim2 = SqlFunctions.Postgres.btrim(x.String, "xy"),
+                Ltrim2 = SqlFunctions.Postgres.ltrim(x.String, "xy"),
+                Rtrim2 = SqlFunctions.Postgres.rtrim(x.String, "xy"),
+                StartsWith = SqlFunctions.Postgres.starts_with(x.String, "dad"),
+                ParseIdent = SqlFunctions.Postgres.parse_ident(x.String, false),
+                QuoteIdent = SqlFunctions.Postgres.quote_ident(x.String),
+                QuoteLiteral = SqlFunctions.Postgres.quote_literal(x.String),
+                ToAscii = SqlFunctions.Postgres.to_ascii(x.String, "LATIN1"),
+                Encode = SqlFunctions.Postgres.encode(nullBytes, "hex"),
+                ConvertFromNull = SqlFunctions.Postgres.convert_from(nullBytes, "UTF8"),
+                ConvertToNull = SqlFunctions.Postgres.convert_to(nullText, "UTF8"),
+                DecodeNull = SqlFunctions.Postgres.decode(nullText, "hex"),
+                Normalize = SqlFunctions.Postgres.normalize(x.String, "NFD"),
+                Unistr = SqlFunctions.Postgres.unistr(x.String),
+                Match = SqlFunctions.Postgres.regexp_match(x.String, "(d)(a)"),
+                MatchFlags = SqlFunctions.Postgres.regexp_match(x.String, "(d)(a)", "i"),
+                QuoteNullable = SqlFunctions.Postgres.quote_nullable(x.String)
+            })
+            .First();
+
+        strings.Btrim1.Should().BeNull();
+        strings.Btrim2.Should().BeNull();
+        strings.Ltrim2.Should().BeNull();
+        strings.Rtrim2.Should().BeNull();
+        strings.StartsWith.Should().BeNull();
+        strings.ParseIdent.Should().BeNull();
+        strings.QuoteIdent.Should().BeNull();
+        strings.QuoteLiteral.Should().BeNull();
+        strings.ToAscii.Should().BeNull();
+        strings.Encode.Should().BeNull();
+        strings.ConvertFromNull.Should().BeNull();
+        strings.ConvertToNull.Should().BeNull();
+        strings.DecodeNull.Should().BeNull();
+        strings.Normalize.Should().BeNull();
+        strings.Unistr.Should().BeNull();
+        strings.Match.Should().BeNull();
+        strings.MatchFlags.Should().BeNull();
+        // Non-strict by definition: quote_nullable(NULL) is the literal text NULL, not a NULL value.
+        strings.QuoteNullable.Should().Be("NULL");
+
+        // The to_hex/to_oct/to_bin NULL argument must be typed: a bare NULL literal is ambiguous
+        // between the integer and bigint overloads, so the column of row 1 (NULL) carries the type.
+        var intNulls = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                ToHex = SqlFunctions.Postgres.to_hex(x.Int),
+                ToOct = SqlFunctions.Postgres.to_oct(x.Int),
+                ToBin = SqlFunctions.Postgres.to_bin(x.Int)
+            })
+            .First();
+        intNulls.ToHex.Should().BeNull();
+        intNulls.ToOct.Should().BeNull();
+        intNulls.ToBin.Should().BeNull();
+
+        var bytes = _sut.BinaryEntity.Where(x => x.Id == 2)
+            .Select(x => new
+            {
+                Btrim = SqlFunctions.Postgres.btrim(x.Data, x.Data),
+                Ltrim = SqlFunctions.Postgres.ltrim(x.Data, x.Data),
+                Rtrim = SqlFunctions.Postgres.rtrim(x.Data, x.Data),
+                ConvertFrom = SqlFunctions.Postgres.convert_from(x.Data, "UTF8")
+            })
+            .First();
+
+        bytes.Btrim.Should().BeNull();
+        bytes.Ltrim.Should().BeNull();
+        bytes.Rtrim.Should().BeNull();
+        bytes.ConvertFrom.Should().BeNull();
+
+        // string_to_table is a set-returning function: one row per fragment.
+        var fragments = _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.string_to_table("a,b,c", ","))
+            .Select(row => row.Value)
+            .ToList();
+        fragments.Should().Equal("a", "b", "c");
+
+        var withNullString = _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.string_to_table("a,,c", ",", ""))
+            .Select(row => row.Value)
+            .ToList();
+        withNullString.Should().HaveCount(3);
+        withNullString[0].Should().Be("a");
+        withNullString[1].Should().BeNull();
+        withNullString[2].Should().Be("c");
+    }
+
+    [Fact]
+    [Trait("Issue", "281")]
+    public void NumericFamily_ShouldComputeValuesNullsAndClrTypes()
+    {
+        double? nullDouble = null;
+        decimal? nullDecimal = null;
+
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Div = SqlFunctions.Postgres.div(7m, 2m),
+                DivNegative = SqlFunctions.Postgres.div(-7m, 2m),
+                Erf = SqlFunctions.Postgres.erf(0.0),
+                Erfc = SqlFunctions.Postgres.erfc(0.0),
+                RandomNormal = SqlFunctions.Postgres.random_normal(0.0, 0.0),
+                Acosd = SqlFunctions.Postgres.acosd(1.0),
+                Asind = SqlFunctions.Postgres.asind(1.0),
+                Atand = SqlFunctions.Postgres.atand(1.0),
+                Atan2d = SqlFunctions.Postgres.atan2d(1.0, 1.0),
+                Cosd = SqlFunctions.Postgres.cosd(60.0),
+                Cotd = SqlFunctions.Postgres.cotd(45.0),
+                Sind = SqlFunctions.Postgres.sind(30.0),
+                Tand = SqlFunctions.Postgres.tand(45.0),
+                DivNull = SqlFunctions.Postgres.div(nullDecimal, 2m),
+                ErfNull = SqlFunctions.Postgres.erf(nullDouble),
+                ErfcNull = SqlFunctions.Postgres.erfc(nullDouble),
+                RandomNormalNull = SqlFunctions.Postgres.random_normal(nullDouble, 1.0),
+                AcosdNull = SqlFunctions.Postgres.acosd(nullDouble),
+                AsindNull = SqlFunctions.Postgres.asind(nullDouble),
+                AtandNull = SqlFunctions.Postgres.atand(nullDouble),
+                Atan2dNull = SqlFunctions.Postgres.atan2d(nullDouble, 1.0),
+                CosdNull = SqlFunctions.Postgres.cosd(nullDouble),
+                CotdNull = SqlFunctions.Postgres.cotd(nullDouble),
+                SindNull = SqlFunctions.Postgres.sind(nullDouble),
+                TandNull = SqlFunctions.Postgres.tand(nullDouble)
+            })
+            .First();
+
+        r.Div.Should().Be(3m);
+        ((object)r.Div!).Should().BeOfType<decimal>();
+        r.DivNegative.Should().Be(-3m);
+        r.Erf.Should().Be(0.0);
+        r.Erfc.Should().Be(1.0);
+        // A zero standard deviation makes the volatile function deterministic: it returns the mean.
+        r.RandomNormal.Should().Be(0.0);
+        r.Acosd.Should().Be(0.0);
+        r.Asind.Should().Be(90.0);
+        r.Atand.Should().Be(45.0);
+        r.Atan2d.Should().Be(45.0);
+        r.Cosd.Should().Be(0.5);
+        r.Cotd.Should().Be(1.0);
+        r.Sind.Should().Be(0.5);
+        r.Tand.Should().Be(1.0);
+
+        ((object)r.Erf!).Should().BeOfType<double>();
+        ((object)r.Erfc!).Should().BeOfType<double>();
+        ((object)r.RandomNormal!).Should().BeOfType<double>();
+        ((object)r.Acosd!).Should().BeOfType<double>();
+        ((object)r.Asind!).Should().BeOfType<double>();
+        ((object)r.Atand!).Should().BeOfType<double>();
+        ((object)r.Atan2d!).Should().BeOfType<double>();
+        ((object)r.Cosd!).Should().BeOfType<double>();
+        ((object)r.Cotd!).Should().BeOfType<double>();
+        ((object)r.Sind!).Should().BeOfType<double>();
+        ((object)r.Tand!).Should().BeOfType<double>();
+
+        r.DivNull.Should().BeNull();
+        r.ErfNull.Should().BeNull();
+        r.ErfcNull.Should().BeNull();
+        r.RandomNormalNull.Should().BeNull();
+        r.AcosdNull.Should().BeNull();
+        r.AsindNull.Should().BeNull();
+        r.AtandNull.Should().BeNull();
+        r.Atan2dNull.Should().BeNull();
+        r.CosdNull.Should().BeNull();
+        r.CotdNull.Should().BeNull();
+        r.SindNull.Should().BeNull();
+        r.TandNull.Should().BeNull();
+    }
+
+    [Fact]
+    [Trait("Issue", "281")]
+    public void RefusedMembers_ShouldFailDuringPreparation()
+    {
+        var casefold = () => _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new { V = SqlFunctions.Postgres.casefold(x.String) }).First();
+        var gamma = () => _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new { V = SqlFunctions.Postgres.gamma(1.5) }).First();
+        var tgamma = () => _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new { V = SqlFunctions.Postgres.tgamma(1.5) }).First();
+        var lgamma = () => _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new { V = SqlFunctions.Postgres.lgamma(1.5) }).First();
+        var toAsciiOneArg = () => _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new { V = SqlFunctions.Postgres.to_ascii(x.String) }).First();
+
+        casefold.Should().Throw<NotSupportedException>().WithMessage("The casefold function is refused:*PostgreSQL 18*");
+        gamma.Should().Throw<NotSupportedException>().WithMessage("The gamma function is refused:*17.11*");
+        tgamma.Should().Throw<NotSupportedException>().WithMessage("The tgamma function is refused:*17.11*");
+        lgamma.Should().Throw<NotSupportedException>().WithMessage("The lgamma function is refused:*17.11*");
+        toAsciiOneArg.Should().Throw<NotSupportedException>()
+            .WithMessage("The one-argument to_ascii function is refused:*0A000*to_ascii(value, encoding)*");
+
+        // Positive control: the delivered sibling shapes render and execute.
+        _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new { V = SqlFunctions.Postgres.erfc(0.0) })
+            .First().V.Should().Be(1.0);
+        _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new { V = SqlFunctions.Postgres.to_ascii(x.String, "LATIN1") })
+            .First().V.Should().Be("dadfasd");
+    }
+
     private static void Execute(IDataContext ctx, string sql)
     {
         ((DataContext)ctx).EnsureConnectionOpen();

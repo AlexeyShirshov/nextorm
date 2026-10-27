@@ -1061,6 +1061,67 @@ public class InMemoryTests
         trimScale.Should().Throw<NotSupportedException>().WithMessage("*trim_scale*not supported*");
         nullArgument.Should().Throw<NotSupportedException>().WithMessage("*trim_scale*not supported*");
     }
+
+    /// <summary>
+    /// The residual PostgreSQL string and numeric families of #281 are SQL-only: the in-memory provider
+    /// must refuse every name explicitly (a <see cref="NotSupportedException"/> naming the function, not
+    /// a compiled call on the null <see cref="SqlFunctions.Postgres"/> marker surface).
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void PostgresResidualFamilies_ShouldThrow()
+    {
+        int? nullInt = null;
+
+        var cases = new (string Name, Action Act)[]
+        {
+            ("btrim", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.btrim("  ab  ") }).ToList()),
+            ("ltrim", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.ltrim("xxab", "x") }).ToList()),
+            ("rtrim", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.rtrim("abxx", "x") }).ToList()),
+            ("starts_with", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.starts_with("ab", "a") }).ToList()),
+            ("parse_ident", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.parse_ident("a.b", false) }).ToList()),
+            ("quote_ident", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.quote_ident("a b") }).ToList()),
+            ("quote_literal", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.quote_literal("a") }).ToList()),
+            ("quote_nullable", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.quote_nullable("a") }).ToList()),
+            ("to_ascii", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.to_ascii("abc", "LATIN1") }).ToList()),
+            ("to_hex", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.to_hex(nullInt) }).ToList()),
+            ("to_oct", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.to_oct(nullInt) }).ToList()),
+            ("to_bin", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.to_bin(nullInt) }).ToList()),
+            ("convert_from", () => _sut.SimpleEntity.Select(it => new
+            {
+                V = SqlFunctions.Postgres.convert_from(SqlFunctions.Postgres.convert_to("abc", "UTF8"), "UTF8")
+            }).ToList()),
+            ("convert_to", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.convert_to("abc", "UTF8") }).ToList()),
+            ("encode", () => _sut.SimpleEntity.Select(it => new
+            {
+                V = SqlFunctions.Postgres.encode(SqlFunctions.Postgres.convert_to("abc", "UTF8"), "hex")
+            }).ToList()),
+            ("decode", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.decode("616263", "hex") }).ToList()),
+            ("normalize", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.normalize("abc", "NFC") }).ToList()),
+            ("unistr", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.unistr("a\\0441") }).ToList()),
+            ("regexp_match", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.regexp_match("ab", "a") }).ToList()),
+            ("div", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.div(7m, 2m) }).ToList()),
+            ("erf", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.erf(0.5) }).ToList()),
+            ("erfc", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.erfc(0.5) }).ToList()),
+            ("random_normal", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.random_normal(0.0, 1.0) }).ToList()),
+            ("acosd", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.acosd(0.5) }).ToList()),
+            ("asind", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.asind(0.5) }).ToList()),
+            ("atand", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.atand(0.5) }).ToList()),
+            ("atan2d", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.atan2d(1.0, 1.0) }).ToList()),
+            ("cosd", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.cosd(60.0) }).ToList()),
+            ("cotd", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.cotd(45.0) }).ToList()),
+            ("sind", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.sind(30.0) }).ToList()),
+            ("tand", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.tand(45.0) }).ToList()),
+            ("casefold", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.casefold("A") }).ToList()),
+            ("gamma", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.gamma(1.5) }).ToList()),
+            ("tgamma", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.tgamma(1.5) }).ToList()),
+            ("lgamma", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.lgamma(1.5) }).ToList()),
+            ("to_ascii#1", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.to_ascii("abc") }).ToList())
+        };
+
+        foreach (var (name, act) in cases)
+            act.Should().Throw<NotSupportedException>().WithMessage($"*{(name == "to_ascii#1" ? "to_ascii" : name)}*not supported*");
+    }
 }
 
 // D178 T12 fixtures: an enum member for the in-memory fail-closed checks.
