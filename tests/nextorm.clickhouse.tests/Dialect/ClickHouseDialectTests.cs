@@ -223,6 +223,49 @@ public class ClickHouseDialectTests
     }
 
     [Fact]
+    public void MakeArrayResult_ShouldCastOnlyTheTargetedFacades()
+    {
+        // The seven targeted facades normalise their result to the closed declared CLR array type.
+        Dialect.MakeArrayResult("top_k", "topK(3)(x)", typeof(int[]))
+            .Should().Be("cast(topK(3)(x) as Array(Int32))");
+        Dialect.MakeArrayResult("top_k_weighted", "topKWeighted(2)(x, w)", typeof(int[]))
+            .Should().Be("cast(topKWeighted(2)(x, w) as Array(Int32))");
+        Dialect.MakeArrayResult("group_array", "groupArray(nullableint)", typeof(int?[]))
+            .Should().Be("cast(groupArray(nullableint) as Array(Nullable(Int32)))");
+        Dialect.MakeArrayResult("group_uniq_array", "groupUniqArray(id)", typeof(long[]))
+            .Should().Be("cast(groupUniqArray(id) as Array(Int64))");
+        Dialect.MakeArrayResult("retention", "retention((id <= 2), (id <= 5))", typeof(int[]))
+            .Should().Be("cast(retention((id <= 2), (id <= 5)) as Array(Int32))");
+        Dialect.MakeArrayResult("array_map", "arrayMap(v -> (v * 2), nums)", typeof(int[]))
+            .Should().Be("cast(arrayMap(v -> (v * 2), nums) as Array(Int32))");
+        Dialect.MakeArrayResult("range", "range(3)", typeof(long[]))
+            .Should().Be("cast(range(3) as Array(Int64))");
+
+        // A reference element is declared Nullable(...) unconditionally and a nested one-dimensional
+        // array recurses. The CLR nullable annotation is erased at runtime, so string[] and string?[]
+        // emit identical text: no NRT distinction is ever consulted.
+        Dialect.MakeArrayResult("group_array", "groupArray(s)", typeof(string[]))
+            .Should().Be("cast(groupArray(s) as Array(Nullable(String)))");
+        Dialect.MakeArrayResult("group_array", "groupArray(s)", typeof(string?[]))
+            .Should().Be("cast(groupArray(s) as Array(Nullable(String)))");
+        Dialect.MakeArrayResult("group_array", "groupArray(tags)", typeof(string[][]))
+            .Should().Be("cast(groupArray(tags) as Array(Array(Nullable(String))))");
+
+        // Value-type elements keep their declaration unchanged: byte stays UInt8, decimal keeps its
+        // provider default precision/scale, and neither becomes Nullable(...).
+        Dialect.MakeArrayResult("group_array", "groupArray(bytes)", typeof(byte[]))
+            .Should().Be("cast(groupArray(bytes) as Array(UInt8))");
+        Dialect.MakeArrayResult("group_array", "groupArray(amount)", typeof(decimal[]))
+            .Should().Be("cast(groupArray(amount) as Array(Decimal(38, 10)))");
+
+        // Every other facade result is the identity, without inspecting the result type.
+        Dialect.MakeArrayResult("array_sort", "arraySort(nums)", typeof(long[]))
+            .Should().Be("arraySort(nums)");
+        Dialect.MakeArrayResult("array_filter", "arrayFilter(v -> (v > 1), nums)", typeof(long[]))
+            .Should().Be("arrayFilter(v -> (v > 1), nums)");
+    }
+
+    [Fact]
     public void MakeJsonExtract_ShouldMapNamesAndCastLength()
     {
         Dialect.MakeJsonExtract("json_extract_string", ["json", "'s'"]).Should().Be("JSONExtractString(json, 's')");
@@ -350,8 +393,8 @@ public class ClickHouseDialectTests
         Dialect.MakeDateTrunc("month", "dt").Should().Be("dateTrunc('month', dt)");
         Dialect.MakeDateTrunc("milliseconds", "dt").Should().Be("dateTrunc('millisecond', dt)");
         Dialect.MakeDateAdd("day", "2", "dt").Should().Be("addDays(dt, 2)");
-        Dialect.MakeDateAdd("decade", "2", "dt").Should().Be("addYears(dt, (2) * 10)");
-        Dialect.MakeDateDiff("milliseconds", "a", "b").Should().Be("dateDiff('millisecond', a, b)");
+        Dialect.MakeDateAdd("decade", "2", "dt").Should().Be("addYears(toDateTime64(dt, 6), (2) * 10)");
+        Dialect.MakeDateDiff("milliseconds", "a", "b").Should().Be("toInt32(dateDiff('millisecond', a, b))");
         Dialect.MakeDateDiffBig("milliseconds", "a", "b").Should().Be("dateDiff('millisecond', a, b)");
         Dialect.PromoteDateOperand("day", "dt").Should().Be("dt");
         Dialect.PromoteDateOperand("second", "dt").Should().Be("toDateTime(dt)");
@@ -367,6 +410,50 @@ public class ClickHouseDialectTests
         Dialect.MakeDatePart("doy", "dt").Should().Be("toInt32(toDayOfYear(dt))");
         Dialect.MakeStringAgg("somestring", "','").Should().Be("arrayStringConcat(groupArray(somestring), ',')");
         Dialect.MakeFilteredStringAgg("somestring", "','", "(id > 0)").Should().Be("arrayStringConcat(groupArrayIf(somestring, (id > 0)), ',')");
+    }
+
+    /// <summary>
+    /// The narrow <c>date_diff</c> renderer casts ClickHouse's native <c>Int64</c> down to the declared
+    /// <c>int?</c> result, while <c>date_diff_big</c> keeps the native width and must never inherit the
+    /// narrowing (issue #255).
+    /// </summary>
+    [Theory]
+    [InlineData("microseconds", "microsecond")]
+    [InlineData("milliseconds", "millisecond")]
+    [InlineData("second", "second")]
+    [InlineData("minute", "minute")]
+    [InlineData("hour", "hour")]
+    [InlineData("day", "day")]
+    [InlineData("week", "week")]
+    [InlineData("month", "month")]
+    [InlineData("quarter", "quarter")]
+    [InlineData("year", "year")]
+    public void MakeDateDiff_ShouldNarrowOnlyTheThirtyTwoBitForm(string field, string unit)
+    {
+        Dialect.MakeDateDiff(field, "a", "b").Should().Be($"toInt32(dateDiff('{unit}', a, b))");
+        Dialect.MakeDateDiffBig(field, "a", "b").Should().Be($"dateDiff('{unit}', a, b)");
+        Dialect.MakeDateDiffBig(field, "a", "b").Should().NotContain("toInt32");
+    }
+
+    [Fact]
+    public void MakeDateDiff_ShouldPreserveArgumentRendering()
+    {
+        // Zero span, a positive span and a negative span share the same renderer: both operands are
+        // spliced verbatim, so nulls, composed expressions and signed spans are untouched by the cast.
+        Dialect.MakeDateDiff("second", "dt", "dt").Should().Be("toInt32(dateDiff('second', dt, dt))");
+        Dialect.MakeDateDiff("second", "null", "dt").Should().Be("toInt32(dateDiff('second', null, dt))");
+        Dialect.MakeDateDiffBig("second", "null", "dt").Should().Be("dateDiff('second', null, dt)");
+        Dialect.MakeDateDiffBig("second", "dt", "null").Should().Be("dateDiff('second', dt, null)");
+    }
+
+    [Theory]
+    [InlineData("decade")]
+    [InlineData("century")]
+    [InlineData("millennium")]
+    public void DateDiff_WithUnsupportedField_ShouldBeRejectedByTheCapabilityGuard(string field)
+    {
+        Dialect.SupportsDateDiffField(field).Should().BeFalse();
+        Dialect.SupportsDateDiffField("day").Should().BeTrue();
     }
 
     [Fact]

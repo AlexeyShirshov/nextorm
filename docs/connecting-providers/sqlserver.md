@@ -159,7 +159,13 @@ ANSI key words and `current_schema()`/`current_database()`/`version()` as `schem
 SQL Server renders the window percentiles `SqlFunctions.Sql.percentile_cont(fraction, property).Over()` and
 `percentile_disc(...)` as `percentile_cont(fraction) within group (order by property) over (...)`
 ([`SupportsPercentileWindow`](xref:NextORM.Core.ISqlDialect.SupportsPercentileWindow)); it has no exact ordered-set
-aggregate form. The arbitrary-value aggregate `any_agg` (`ANY_VALUE`) is **not** enabled: T-SQL exposes
+aggregate form. The median is the same native composition:
+`SqlFunctions.SqlServer.median(value).Over(...)` renders
+`percentile_cont(0.5) within group (order by value) over (...)`, one row per input row (not one row per
+group); only a partition-only `OVER` is supported, so a window `ORDER BY` or a frame is refused, and the
+call must be completed with `Over(...)`. The generic `SqlFunctions.SqlServer.percentile` has no distinct
+native spelling and throws `NotSupportedException`. Fractions are `double` values in `[0, 1]`, not
+percentages, and are validated before rendering. The arbitrary-value aggregate `any_agg` (`ANY_VALUE`) is **not** enabled: T-SQL exposes
 `ANY_VALUE` only on SQL Server 2025 / Fabric, which the version-agnostic dialect cannot assume.
 The XML data-type methods `SqlFunctions.SqlServer.xml_value(xml, xpath, sqlType)`,
 `xml_query(xml, xpath)` and `xml_exist(xml, xpath)`
@@ -190,11 +196,15 @@ by every other provider:
 - **String/conversion:** `stuff` and `str`; `isdate`/`isnumeric` return the native T-SQL `int` (1/0),
   not `bit`; `formatmessage` accepts a format string or a `sys.messages` id and at most 20 arguments.
 
-Seven names that report live, mutable connection-, session- or statement-scope state are intentionally
-not exposed: `CURRENT_REQUEST_ID`, `CURRENT_TRANSACTION_ID`, `XACT_STATE`, `IDENT_CURRENT`,
-`MIN_ACTIVE_ROWVERSION`, `ROWCOUNT_BIG` and `SCOPE_IDENTITY`. Stable configuration and identity constants
-of the same scope (`CURRENT_TIMEZONE`/`CURRENT_TIMEZONE_ID`, `SERVER_NAME`, `HOST_ID`, `HOST_NAME`,
-`APP_NAME`, `SUSER_NAME`, `ORIGINAL_LOGIN`) are shipped. See the
+The seven names that report live, mutable connection-, session- or statement-scope state are exposed
+as-is: `CURRENT_REQUEST_ID`, `CURRENT_TRANSACTION_ID`, `XACT_STATE`, `IDENT_CURRENT`,
+`MIN_ACTIVE_ROWVERSION`, `ROWCOUNT_BIG` and `SCOPE_IDENTITY`. Live mutable state is **not** an exclusion
+criterion: the native SQL Server semantics are shipped with their caveats, and nextorm promises no
+per-row stability, no connection continuity between queries and no identity-retrieval guarantee — a
+separate `SCOPE_IDENTITY`/`IDENT_CURRENT` call is not a last-insert API, use `ReturningIdentity<TKey>()`
+instead. Stable configuration and identity constants of the same scope (`CURRENT_TIMEZONE`/
+`CURRENT_TIMEZONE_ID`, `SERVER_NAME`, `HOST_ID`, `HOST_NAME`, `APP_NAME`, `SUSER_NAME`, `ORIGINAL_LOGIN`)
+stay on the same surface. See the
 [T-SQL scalar functions guide](../guide/provider-specific-sql/sqlserver.md#t-sql-scalar-functions).
 
 ## Recursive CTEs and `maxRecursion`
@@ -410,6 +420,8 @@ to either column type, and `Auto` never retargets an existing mapping on its own
 | T-SQL binary/checksum/other | `checksum` / `binary_checksum` / `compress` / `decompress` / `rand` / `stuff` / `str` / `isdate` / `isnumeric` / `formatmessage` (per-name gated) |
 | T-SQL metadata | `col_length` / `col_name` / `object_id` / `object_name` / `db_id` / `db_name` / `schema_id` / `schema_name` / `type_id` / `type_name` / `file_id` / `file_name` / `current_timezone` / `parsename` / `stats_date` and the rest of the A-D families (per-name gated) |
 | Window percentiles | `percentile_cont`/`percentile_disc` as `... within group (order by x) over (...)` (SQL Server 2012+) |
+| Median (analytic) | `SqlFunctions.SqlServer.median(v).Over(...)` → `percentile_cont(0.5) within group (order by v) over (...)`: one row per input row; partition-only `OVER` (`ORDER BY`/frame refused) |
+| Generic percentile | not supported: `SqlFunctions.SqlServer.percentile` throws `NotSupportedException` |
 | Arbitrary-value aggregate | not supported (`ANY_VALUE` is SQL Server 2025 / Fabric only) |
 | JSON output | whole result set as one JSON document, terminal `for json path` / `for json auto` ([`ForJson`](xref:NextORM.Core.QueryCommand`1.ForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean,System.Object[]))) |
 | XML output | whole result set as one XML document, terminal `for xml raw/auto/explicit/path` ([`ForXml`](xref:NextORM.Core.QueryCommand`1.ForXml(NextORM.Core.ForXmlMode,System.String,System.String,System.Boolean,System.Object[]))) |

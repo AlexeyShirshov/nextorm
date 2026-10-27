@@ -240,14 +240,17 @@ PostgreSQL, SQL Server, ClickHouse, MySQL/MariaDB and SQLite opt in). The field 
 string; the provider validates which parts it accepts ([`SupportsDateAddField`](xref:NextORM.Core.ISqlDialect.SupportsDateAddField(System.String)) and friends).
 SQL Server renders `dateadd(field, amount, value)` and `eomonth(value)`, folding
 `decade`/`century`/`millennium` onto a scaled `year` add; PostgreSQL renders interval arithmetic;
-ClickHouse renders the dedicated `addDays`/`addMonths`/…/`addSeconds` functions (folding the three
-large parts onto a scaled `addYears`) and `toLastDayOfMonth(value)`; MySQL/MariaDB render
+ClickHouse renders the dedicated `addDays`/`addMonths`/…/`addSeconds` functions (folding `decade` and
+`century` onto a scaled `addYears`) and `toLastDayOfMonth(value)`; MySQL/MariaDB render
 `date_add(value, interval n unit)` and `last_day(value)`; SQLite adjusts through a `datetime`/`strftime`
 modifier string. `SqlFunctions.Sql.date_diff(field, start, end)` returns the number of `<field>` boundaries
-between two timestamps (SQL Server `datediff`, ClickHouse `dateDiff`, MySQL/MariaDB `timestampdiff`);
-the PostgreSQL and SQLite fallbacks count date parts as boundaries and time parts as whole units.
-`SqlFunctions.Sql.date_diff_big(field, start, end)` is the 64-bit variant (SQL Server `datediff_big`; the
-others widen the result) for a `millisecond`/`microsecond` span that would overflow the 32-bit `date_diff`.
+between two timestamps as a 32-bit count (`int?`; SQL Server `datediff`, ClickHouse `dateDiff`,
+MySQL/MariaDB `timestampdiff`); the PostgreSQL and SQLite fallbacks count date parts as boundaries and time
+parts as whole units. The 32-bit width limits the usable range: a span whose boundary count does not fit
+Int32 is outside the contract of the narrow function — use `date_diff_big` for it.
+`SqlFunctions.Sql.date_diff_big(field, start, end)` is the 64-bit variant (`long?`; SQL Server
+`datediff_big`, the others widen the result) and preserves signed spans whose count exceeds Int32, such as
+a long `millisecond`/`microsecond` span.
 A sub-day `date_add`/`DateTime.Add*` promotes a `date`-only operand to a fractional timestamp (SQL Server
 `datetime2`, ClickHouse `DateTime`/`DateTime64`) so the time of day is not lost.
 `SqlFunctions.Sql.date_from_parts(year, month, day)` builds a date. `DateTime.AddDays`/`AddMonths`/… inside a
@@ -281,10 +284,16 @@ select datetime(dt, (1) || ' days') as 'NextDay', date(dt, 'start of month', '+1
  from complex_entity
 ```
 
+ClickHouse `year`, `decade` and `century` addition uses `DateTime64(6)`: the operand is promoted
+with `toDateTime64(x, 6)` before the scaled `addYears`. The SQL result type for those three units is
+`DateTime64(6)`, while the CLR API is unchanged. `millennium` is unsupported and throws before
+execution. On pinned ClickHouse 25.8, supported results are within 1900–2299; arithmetic outside that
+range is unsupported. Inputs are normalized to microseconds, discarding finer precision.
+
 | C# | SQL Server | PostgreSQL | ClickHouse | MySQL/MariaDB | SQLite |
 |---|---|---|---|---|---|
 | `SqlFunctions.Sql.date_add("day", n, x)` | `dateadd(day, n, x)` | `x + (n * interval '1 day')` | `addDays(x, n)` | `date_add(x, interval n day)` | `datetime(x, (n) \|\| ' days')` |
-| `SqlFunctions.Sql.date_add("decade", n, x)` | `dateadd(year, (n) * 10, x)` | `x + (n * interval '10 years')` | `addYears(x, (n) * 10)` | `date_add(x, interval (n) * 10 year)` | `datetime(x, ((n) * 10) \|\| ' years')` |
+| `SqlFunctions.Sql.date_add("decade", n, x)` | `dateadd(year, (n) * 10, x)` | `x + (n * interval '10 years')` | `addYears(toDateTime64(x, 6), (n) * 10)` | `date_add(x, interval (n) * 10 year)` | `datetime(x, ((n) * 10) \|\| ' years')` |
 | `SqlFunctions.Sql.end_of_month(x)` | `eomonth(x)` | `date_trunc('month', x) + interval '1 month - 1 day'` | `toLastDayOfMonth(x)` | `last_day(x)` | `date(x, 'start of month', '+1 month', '-1 day')` |
 | `SqlFunctions.Sql.date_diff("day", a, b)` | `datediff(day, a, b)` | `cast(b as date) - cast(a as date)` | `dateDiff('day', a, b)` | `timestampdiff(day, a, b)` | `(strftime('%s', b) - strftime('%s', a)) / 86400` |
 | `SqlFunctions.Sql.date_diff_big("milliseconds", a, b)` | `datediff_big(millisecond, a, b)` | `cast(trunc(extract(epoch from (b - a)) * 1000) as bigint)` | `dateDiff('millisecond', a, b)` | `cast((timestampdiff(microsecond, a, b) / 1000) as signed)` | `((strftime('%s', b) - strftime('%s', a)) * 1000)` |
@@ -392,3 +401,34 @@ var rows = dataContext.From<IComplexEntity>()
 select toInt32(toYear(dt)) as `Year`, toStartOfMonth(dt) as `MonthStart`
  from complex_entity
 ```
+
+### Delivered date/time functions (#286, T286b)
+
+The remaining ClickHouse date/time catalogue is typed on `ClickHouseFunctions`. Results are explicit:
+`make_date`/`make_date32`/`to_modified_julian_day`/`to_time` return integers, `make_date_time` returns
+`DateTime`, `server_timezone`/`timezone_of`/`date_name` return `string`, the `timezone_offset` family
+returns `int`, and `now64`/`time_slot`/`from_unix_timestamp*` keep the vendor's `DateTime64` precision.
+
+| Function | SQL |
+|---|---|
+| `SqlFunctions.ClickHouse.make_date(y, m, d)` / `make_date32(y, m, d)` | `makeDate` / `makeDate32` |
+| `SqlFunctions.ClickHouse.make_date_time(y, m, d, h, mi, s)` | `makeDateTime(...)` |
+| `SqlFunctions.ClickHouse.now64([scale[, timezone]])` | `now64(...)` |
+| `SqlFunctions.ClickHouse.now_in_block([scale[, timezone]])` | `nowInBlock(...)` |
+| `SqlFunctions.ClickHouse.time_slot(ts)` / `time_slots(start, duration)` | `timeSlot` / `timeSlots` |
+| `SqlFunctions.ClickHouse.to_start_of_five_minutes(ts)` / `_ten` / `_fifteen` | `toStartOfFiveMinutes` / `Ten` / `FifteenMinutes` |
+| `SqlFunctions.ClickHouse.to_start_of_interval(ts, seconds[, origin])` | `toStartOfInterval(ts, INTERVAL ...)` |
+| `SqlFunctions.ClickHouse.to_iso_year(ts)` / `to_week` / `to_year_week` / `to_last_day_of_week` | `toISOYear` / `toWeek` / `toYearWeek` / `toLastDayOfWeek` |
+| `SqlFunctions.ClickHouse.to_days_in_month(ts)` | `toDaysInMonth(ts)` |
+| `SqlFunctions.ClickHouse.to_modified_julian_day(ts)` | `toModifiedJulianDay(ts)` |
+| `SqlFunctions.ClickHouse.age(ts1, ts2)` | `age(ts1, ts2)` |
+| `SqlFunctions.ClickHouse.date_name(part, ts)` | `dateName(part, ts)` |
+| `SqlFunctions.ClickHouse.server_timezone()` / `timezone_of(ts)` / `timezone_offset(ts)` | `serverTimezone` / `timezoneOf` / `timezoneOffset` |
+| `SqlFunctions.ClickHouse.to_time(ts)` | `toTime(ts)` |
+| `SqlFunctions.ClickHouse.timestamp(ts)` | `timestamp(ts)` |
+| `SqlFunctions.ClickHouse.from_unix_timestamp(ts[, tz])` / `_64_milli` / `_64_micro` | `fromUnixTimestamp` / `fromUnixTimestamp64Milli` / `Micro` |
+
+Three members stay refused with a tested reason: `from_utc_timestamp` (the wall-clock/zone pair is not
+representable in `System.DateTime`), `to_time64` (`Time64(scale)` has no CLR carrier) and
+`from_unix_timestamp64_nano` (`DateTime64(9)` exceeds `DateTime`'s 100 ns tick resolution). See
+[ClickHouse-specific SQL › Not yet supported](../guide/provider-specific-sql/clickhouse.md#not-yet-supported).

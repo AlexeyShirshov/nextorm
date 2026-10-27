@@ -276,7 +276,8 @@ public class SqlGenerationTests
 
         var act = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Sql.percentile_cont(0.5, x.Id).Over() }));
 
-        act.Should().Throw<NotSupportedException>().WithMessage("*percentile*");
+        act.Should().Throw<NotSupportedException>()
+            .WithMessage("The percentile_cont function is not supported by MySQL.");
     }
 
     [Fact]

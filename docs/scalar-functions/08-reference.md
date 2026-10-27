@@ -37,6 +37,8 @@
 | Extended scalar library (`asin`, `split_part`, `regexp_*`, `to_char`, ...) | `NotSupportedException` | `NotSupportedException` | supported |
 | Boolean/bitwise/statistical aggregates | `NotSupportedException` | `NotSupportedException` | supported |
 | Ordered-set aggregates (`percentile_cont`, ...) | `NotSupportedException` | window `percentile_cont(f) within group (order by x) over (...)` | `within group (order by ...)` |
+| Median | `NotSupportedException` | `percentile_cont(0.5) within group (order by x) over (...)` (analytic: one row per input row, partition-only `OVER`) | `percentile_cont(0.5) within group (order by x)` (aggregate: one row per group; floating-point sort only) |
+| Generic `percentile(fraction, value)` | `NotSupportedException` | `NotSupportedException` | `NotSupportedException` (never an alias of the continuous form) |
 | JSONPath (`jsonb_path_*`) | `NotSupportedException` | `NotSupportedException` | `cast(path as jsonpath)` |
 | Built-in table functions | `NotSupportedException` | `string_split(...)`, `openjson(...)` | `generate_series(...)`, `unnest(...)` |
 
@@ -45,7 +47,8 @@ rows, so the .NET method itself runs. The SQL matrix above applies to the SQLite
 PostgreSQL providers.
 
 ClickHouse renders `dateTrunc('part', x)`, `addDays`/`addMonths`/.../`addSeconds` (and a scaled
-`addYears` for `decade`/`century`/`millennium`), `toLastDayOfMonth(x)`,
+`addYears` over a `DateTime64(6)` operand for `year`/`decade`/`century`, whose SQL result type is
+`DateTime64(6)` while the CLR API is unchanged; `millennium` throws), `toLastDayOfMonth(x)`,
 `arrayStringConcat(groupArray(x), delimiter)`, `groupBitAnd`/`groupBitOr`/`groupBitXor`,
 `covarPop`/`covarSamp`, `argMin`/`argMax`, the `-If` combinators and `multiIf`. It rejects the ANSI
 `filter (where ...)` clause and the `regr_*`/boolean aggregates with `NotSupportedException`; see the

@@ -178,6 +178,12 @@ internal sealed class InMemoryScalarFunctionRewriter : ExpressionVisitor
         if (node.Method.DeclaringType == typeof(SqlServerFunctions))
             throw new NotSupportedException($"The {node.Method.Name} function is not supported by the in-memory provider.");
 
+        // The ClickHouse-only math functions (log2/cbrt/exp2/exp10) have no in-memory equivalent and no
+        // cross-provider spelling; reject both overloads before the shared CommonFunctions branch.
+        if (node.Method.DeclaringType == typeof(ClickHouseFunctions)
+            && node.Method.Name is "log2" or "cbrt" or "exp2" or "exp10")
+            throw new NotSupportedException($"The {node.Method.Name} function is not supported by the in-memory provider.");
+
         // The shared server/connection identity functions have no in-memory equivalent either: reject them
         // explicitly instead of compiling the marker call against the null sentinel surface (which would
         // fault with a NullReferenceException).

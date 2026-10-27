@@ -33,8 +33,12 @@ and returns [`Instance`](xref:NextORM.ClickHouse.ClickHouseDialect.Instance) fro
 - `stdev`/`stdevp`/`var`/`varp` as `stddevSamp`/`stddevPop`/`varSamp`/`varPop`;
 - `date_trunc(field, x)` as `dateTrunc('field', x)` (the plural ANSI sub-second parts are singularised;
   `decade`/`century`/`millennium` throw), and `date_add`/`DateTime.Add*` as the dedicated
-  `addYears`/`addQuarters`/…/`addSeconds` functions (`decade`/`century`/`millennium` fold onto a scaled
-  `addYears`), `end_of_month` as `toLastDayOfMonth(x)`;
+  `addYears`/`addQuarters`/…/`addSeconds` functions (`year`/`decade`/`century` promote the operand to
+  `DateTime64(6)` and scale `addYears`, so the SQL result type of those units is `DateTime64(6)` while
+  the CLR API is unchanged; `millennium` throws before execution — on pinned ClickHouse 25.8 the
+  supported year-family results stay within 1900–2299, arithmetic outside that range is unsupported,
+  and inputs are normalized to microseconds, discarding finer precision),
+  `end_of_month` as `toLastDayOfMonth(x)`;
 - the date conversion/part surface `SqlFunctions.ClickHouse.to_*` (gated by
   [`DateConversion`](xref:NextORM.Core.ISqlDialect.DateConversion)):
   `to_date`/`to_date_time`/`to_date32` as `toDate`/`toDateTime`/`toDate32`, the `to_year`/`to_quarter`/
@@ -57,12 +61,16 @@ and returns [`Instance`](xref:NextORM.ClickHouse.ClickHouseDialect.Instance) fro
   the same way — to `toInt32(...)` for the `int`-returning variants and `toInt64(...)` for the 64-bit
   ones; the
   parameterised quantile aggregates `quantile(level)(value)`/`quantileExact`/`quantileTiming` and
-  `median` wrapped in `toFloat64(...)` (so every variant materialises as a CLR `double`); the
+  `median` wrapped in `toFloat64(...)` (so every variant materialises as a CLR `double`); `median` is a
+  plain aggregate (one row per group), and the generic `SqlFunctions.ClickHouse.percentile` has no native
+  spelling and throws `NotSupportedException` rather than aliasing `quantile`/`median`; the
   arbitrary-value aggregate `any_agg` as `any` (cross-provider: `ANY_VALUE(x)` on MySQL) and the
   last-row aggregate `any_last` as `anyLast`; the array-returning aggregates `group_array`/`group_uniq_array`
   as `groupArray`/`groupUniqArray` (materialised as a CLR `T[]`); the sequence/funnel aggregates
   `window_funnel`/`sequence_match`/`retention` as `windowFunnel`/`sequenceMatch`/`retention`
-  (`windowFunnel`/`sequenceMatch` are wrapped in `toInt32(...)`; `retention` returns `Array(UInt8)` as `byte[]`);
+  (`windowFunnel`/`sequenceMatch` are wrapped in `toInt32(...)`; `retention` is normalised server-side to the
+  declared `int[]`, and `top_k`, `top_k_weighted`, `group_array`, `group_uniq_array`, `array_map` and all
+  three `range` overloads likewise return their declared CLR array type);
 - the string-JSON extractors `json_extract_string`/`json_extract_int`/`json_extract_float`/
   `json_extract_bool`/`json_extract_raw`/`json_has`/`json_type` as `JSONExtractString`/`JSONExtractInt`/
   `JSONExtractFloat`/`JSONExtractBool`/`JSONExtractRaw`/`JSONHas`/`JSONType`, `json_length` as
@@ -260,7 +268,7 @@ per-insert settings copy and the session/parallelism contract. See [Bulk insert]
 | Boolean aggregates | not supported (`bool_and`/`bool_or`/`every` are PostgreSQL-only) |
 | Filtered aggregate | the `-If` combinator `countIf`/`sumIf`/`avgIf`/`minIf`/`maxIf`, emitted from the shared filter API (no ANSI `filter (where ...)`) |
 | ArgMin / ArgMax | `argMin`/`argMax` |
-| quantile / median | `quantile(0.5)(x)`, `quantileExact(0.9)(x)`, `quantileTiming(0.5)(x)`, `median(x)` (as `toFloat64(...)`) |
+| quantile / median | `quantile(0.5)(x)`, `quantileExact(0.9)(x)`, `quantileTiming(0.5)(x)`, `median(x)` (as `toFloat64(...)`, aggregate: one row per group); generic `percentile` and the window `percentile_cont`/`percentile_disc` throw `NotSupportedException` |
 | any_agg (arbitrary value) | `any(x)` (cross-provider; `ANY_VALUE(x)` on MySQL) |
 | any_last (last row) | `anyLast(x)` |
 | Conditional function | `iif(cond, a, b)` → `if(cond, a, b)`; `multi_if(when(c1, v1), ..., otherwise(v))` → `multiIf(c1, v1, ..., v)` |
@@ -294,6 +302,9 @@ select `Id` as `Id`
 
 ## Notes and limitations
 
+- The native `arrayExcept` exists only from ClickHouse 25.9. `SqlFunctions.ClickHouse.array_except`
+  stays in the public API but is refused with `NotSupportedException` at translation time on the
+  pinned 25.8 baseline; the other array set operations are unaffected.
 - `GROUP BY ... WITH TOTALS` renders correctly, but the official `ClickHouse.Driver` returns the totals
   row in a separate response block it does not expose through `IDataReader`, so only the group rows are
   materialised. Use it if your driver surfaces totals; nextorm itself only emits the modifier.

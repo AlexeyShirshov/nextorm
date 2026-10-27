@@ -657,6 +657,32 @@ namespace NextORM.Core;
         /// <summary><c>percentile_disc(fraction) within group (order by key)</c>: the first value whose position reaches the fraction (ordered-set aggregate; the window form is <c>CommonFunctions.percentile_disc</c>).</summary>
         public T? percentile_disc<T>(double fraction, Expression<Func<T>> orderBy) => default!;
 
+        /// <summary>
+        /// <c>percentile_cont(0.5) within group (order by key)</c>: the median as the native ordered-set
+        /// aggregate (PostgreSQL has no <c>median</c> function of its own). Requires the ordered-set
+        /// percentile capability (see <see cref="ISqlDialect.SupportsOrderedPercentiles"/>; PostgreSQL) and
+        /// a floating-point <paramref name="orderBy"/> expression, because the continuous percentile
+        /// interpolates and returns <c>double precision</c>. This is an aggregate: it produces one row per
+        /// group, not one value per input row.
+        /// </summary>
+        /// <typeparam name="T">The sort expression's type; <see cref="double"/> or <see cref="float"/>.</typeparam>
+        /// <param name="orderBy">The ordering key, written as a lambda closing over the query parameter.</param>
+        /// <returns>The interpolated median, or SQL NULL when the group has no non-null values.</returns>
+        public double? median<T>(Expression<Func<T>> orderBy) => default!;
+
+        /// <summary>
+        /// <c>percentile</c>: not supported by PostgreSQL. Its native spellings are the typed
+        /// <see cref="percentile_cont{T}(double, Expression{Func{T}})"/> and
+        /// <see cref="percentile_disc{T}(double, Expression{Func{T}})"/> ordered-set aggregates, which
+        /// differ in whether the result is interpolated or an input value; a generic alias would hide that
+        /// difference. Referencing this member throws <see cref="NotSupportedException"/> at translation time.
+        /// </summary>
+        /// <typeparam name="T">The sort expression's type.</typeparam>
+        /// <param name="fraction">The percentile fraction, in <c>[0, 1]</c>.</param>
+        /// <param name="orderBy">The ordering key, written as a lambda closing over the query parameter.</param>
+        /// <returns>Never returns; the call is refused when the query is translated.</returns>
+        public double? percentile<T>(double fraction, Expression<Func<T>> orderBy) => default!;
+
         /// <summary><c>mode() within group (order by key)</c>: the most frequent value.</summary>
         public T? mode<T>(Expression<Func<T>> orderBy) => default!;
 

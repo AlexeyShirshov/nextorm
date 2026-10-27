@@ -140,13 +140,84 @@ select cardinality(@norm_p1) as "N"
 | `SqlFunctions.ClickHouse.array_last(f, a)` | `arrayLast(f, a)` |
 | `SqlFunctions.ClickHouse.array_last_index(f, a)` | `arrayLastIndex(f, a)` |
 
+### Поставленные функции массивов, кортежей и Map (#286, T286b)
+
+Члены ниже дополняют каталог массивов на закреплённом сервере 25.8.33.6. Формы результатов объявлены
+явно: поэлементные предикаты возвращают `bool`, агрегаты — объявленный скалярный/массивный CLR-тип, а
+семейства sort/split/fill — `T[]`.
+
+| Функция | SQL |
+|---|---|
+| `SqlFunctions.ClickHouse.array_element(a, i)` | `arrayElement(a, i)` |
+| `SqlFunctions.ClickHouse.array_enumerate_dense(a)` | `arrayEnumerateDense(a)` |
+| `SqlFunctions.ClickHouse.array_zip(a, b)` | `arrayZip(a, b)` |
+| `SqlFunctions.ClickHouse.array_difference(a)` | `arrayDifference(a)` |
+| `SqlFunctions.ClickHouse.array_avg(a)` | `arrayAvg(a)` |
+| `SqlFunctions.ClickHouse.array_sum(a)` | `arraySum(a)` |
+| `SqlFunctions.ClickHouse.array_min(a)` | `arrayMin(a)` |
+| `SqlFunctions.ClickHouse.array_max(a)` | `arrayMax(a)` |
+| `SqlFunctions.ClickHouse.array_product(a)` | `arrayProduct(a)` |
+| `SqlFunctions.ClickHouse.array_top_k(a, k)` | `arrayTopK(a, k)` (версия: 26.6) |
+| `SqlFunctions.ClickHouse.array_bottom_k(a, k)` | `arrayBottomK(a, k)` (версия: 26.6) |
+| `SqlFunctions.ClickHouse.array_random_sample(a, n)` | `arrayRandomSample(a, n)` |
+| `SqlFunctions.ClickHouse.array_compact(a)` | `arrayCompact(a)` |
+| `SqlFunctions.ClickHouse.array_pop_back(a)` | `arrayPopBack(a)` |
+| `SqlFunctions.ClickHouse.array_pop_front(a)` | `arrayPopFront(a)` |
+| `SqlFunctions.ClickHouse.array_push_front(a, element)` | `arrayPushFront(a, element)` |
+| `SqlFunctions.ClickHouse.array_resize(a, size[, extender])` | `arrayResize(a, size[, extender])` |
+| `SqlFunctions.ClickHouse.array_remove(a, f)` | `arrayRemove(a, f)` (версия: 25.11) |
+| `SqlFunctions.ClickHouse.array_rotate_left(a, n)` / `array_rotate_right(a, n)` | `arrayRotateLeft` / `arrayRotateRight` |
+| `SqlFunctions.ClickHouse.array_shift_left(a, n)` / `array_shift_right(a, n)` | `arrayShiftLeft` / `arrayShiftRight` |
+| `SqlFunctions.ClickHouse.array_fold(f, a, init)` | `arrayFold(f, a, init)` |
+| `SqlFunctions.ClickHouse.array_fill(f, a)` / `array_reverse_fill(f, a)` | `arrayFill` / `arrayReverseFill` |
+| `SqlFunctions.ClickHouse.array_split(f, a)` / `array_reverse_split(f, a)` | `arraySplit` / `arrayReverseSplit` |
+| `SqlFunctions.ClickHouse.array_reverse_sort(a)` / `array_partial_sort(a, k)` | `arrayReverseSort` / `arrayPartialSort` |
+| `SqlFunctions.ClickHouse.array_sort(a)` | `arraySort(a)` |
+| `SqlFunctions.ClickHouse.array_shingles(a, n)` | `arrayShingles(a, n)` |
+| `SqlFunctions.ClickHouse.array_transpose(a)` | `arrayTranspose(a)` (версия: 26.4) |
+| `SqlFunctions.ClickHouse.array_cum_sum_non_negative(a)` | `arrayCumSumNonNegative(a)` |
+| `SqlFunctions.ClickHouse.count_equal(a, b)` | `countEqual(a, b)` |
+| `SqlFunctions.ClickHouse.array_with_constant(n, value)` | `arrayWithConstant(n, value)` |
+| `SqlFunctions.ClickHouse.array_jaccard_index(a, b)` / `array_similarity(a, b)` | `arrayJaccardIndex` / `arraySimilarity` |
+| `SqlFunctions.ClickHouse.tuple_concat(a, b)` | `tupleConcat(a, b)` |
+| `SqlFunctions.ClickHouse.tuple_names(t)` | `tupleNames(t)` |
+| `SqlFunctions.ClickHouse.flatten_tuple(t)` | `flattenTuple(t)` |
+| `SqlFunctions.ClickHouse.tuple_to_name_value_pairs(t)` | `tupleToNameValuePairs(t)` |
+| `SqlFunctions.ClickHouse.tuple_plus` / `tuple_minus` / `tuple_multiply` / `tuple_divide` | `tuplePlus` / `tupleMinus` / `tupleMultiply` / `tupleDivide` |
+| `SqlFunctions.ClickHouse.tuple_hamming_distance(a, b)` | `tupleHammingDistance(a, b)` |
+| `SqlFunctions.ClickHouse.dot_product(a, b)` | `dotProduct(a, b)` |
+| `SqlFunctions.ClickHouse.map_subtract(a, b)` | `mapSubtract(a, b)` |
+| `SqlFunctions.ClickHouse.map_update(a, b)` | `mapUpdate(a, b)` |
+| `SqlFunctions.ClickHouse.map_reverse_sort(m[, f])` / `map_partial_sort(m, k[, f])` | `mapReverseSort` / `mapPartialSort` |
+| `SqlFunctions.ClickHouse.map_from_arrays(keys, values)` | `mapFromArrays(keys, values)` |
+| `SqlFunctions.ClickHouse.map_populate_series(m, start, end[, step])` | `mapPopulateSeries(...)` |
+| `SqlFunctions.ClickHouse.extract_key_value_pairs(s)` | `extractKeyValuePairs(s)` |
+
+`arrayReduce`/`arrayReduceInRanges` остаются отклонёнными: агрегат задаётся строкой SQL во время
+выполнения, поэтому типизированный контракт невозможен (см.
+[ClickHouse-specific SQL › Пока не поддерживается](../guide/provider-specific-sql/clickhouse.md#пока-не-поддерживается)).
+`untuple` отклонён по той же структурной причине: одно выражение проекции отображается ровно в одну
+колонку результата.
+
 > `length`/`indexOf` нативно возвращают `UInt64`, поэтому диалект оборачивает их в `toInt64(...)`.
 > Функции, возвращающие массив (`split_by_char`, `array_sort`, `array_reverse`, `array_distinct`,
 > `range`, `array_enumerate`, `array_cum_sum`, `array_slice`, `array_push_back`, `group_array`,
 > `group_uniq_array`), можно проецировать напрямую — row reader материализует результат `Array(T)`
 > как CLR `T[]` — либо использовать как операнд другой array-функции (например, `length(...)` или
-> `array_string_concat(...)`). Тот же reader материализует нативную колонку `Tuple(...)` (или
+> `array_string_concat(...)`). Функции, у которых объявленный CLR-тип массива может отличаться от типа
+> элемента, выводимого ClickHouse (`top_k`, `top_k_weighted`, `group_array`, `group_uniq_array`,
+> `retention`, `array_map` и три перегрузки `range`), нормализуются **на сервере**: диалект оборачивает
+> готовый вызов ровно в один `cast(... as Array(...))`, построенный из закрытого объявленного CLR-типа
+> (`int[]` → `Array(Int32)`, `int?[]` → `Array(Nullable(Int32))`, `long[]` → `Array(Int64)`,
+> `string[]`/`string?[]` → `Array(Nullable(String))`). Элемент ссылочного типа объявляется `Nullable(...)`
+> всегда, потому что его nullable-аннотация CLR стирается в рантайме, поэтому приведение на стороне
+> вызывающего кода не требуется, а
+> `retention` материализуется как `int[]`, а не `byte[]`. Тот же reader материализует нативную колонку `Tuple(...)` (или
 > выражение типа `Tuple(...)`) как `System.Tuple<...>` арности 1–7.
+
+> `SqlFunctions.ClickHouse.array_except` остаётся для совместимости API, но **не поддерживается**
+> на закреплённой базовой версии 25.8: нативная `arrayExcept` существует только с ClickHouse 25.9,
+> поэтому вызов отклоняется с `NotSupportedException` на этапе трансляции и SQL не генерируется.
 
 > Предикаты отношения массивов возвращают `bool`: `starts_with(array, prefix)`/`ends_with(array, suffix)`
 > проверяют префикс/суффикс, а `has_substr(array, other)` — что `other` входит в `array` непрерывно и
@@ -219,8 +290,36 @@ select cardinality(@norm_p1) as "N"
 > поддерживающий higher-order array-функции (см.
 > [`SupportsHigherOrderArrayFunctions`](xref:NextORM.Core.ISqlDialect.SupportsHigherOrderArrayFunctions);
 > ClickHouse). ClickHouse повышает тип арифметического результата независимо от C# (элемент `Int32`,
-> умноженный на целочисленный литерал, даёт `Array(Int64)`), поэтому приводите тип внутри лямбды
-> (`v => (long)v * 2`), если тип элемента должен совпадать с проецируемым `T[]`.
+> умноженный на целочисленный литерал, даёт `Array(Int64)`); диалект нормализует готовый результат
+> `arrayMap` к закрытому объявленному CLR-типу элемента, поэтому операнд лямбды остаётся ровно таким,
+> как написан, и приведение вида `(long)v` внутри лямбды не требуется (`arrayFilter` и так возвращает
+> тип элемента входного массива).
+
+> **Nullable-элементы в связанном параметре-массиве:** CLR-массив ранга 1, чей **объявленный** тип элемента
+> nullable (`Nullable<T>` или `string`), связывается как `Array(Nullable(T))`, выведенный из этого
+> объявленного CLR-типа (`int?[]` → `Array(Nullable(Int32))`, `double?[]` → `Array(Nullable(Float64))`,
+> `DateTime?[]` → `Array(Nullable(DateTime))`, `decimal?[]` → `Array(Nullable(Decimal(38,10)))`, `string?[]` →
+> `Array(Nullable(String))`), поэтому `null`-элементы и их позиции доходят до сервера —
+> `array_map(v => v, new int?[] { 1, null, 3 })` даёт `{ 1, null, 3 }`. Пустые массивы и массивы из одних
+> `null` несут тот же типизированный элемент, а массив вызывающего не мутируется. Массивы с
+> non-nullable-элементом (`int[]`, `double[]`, `DateTime[]`, `decimal[]`, `byte[]`) не меняются;
+> nested/jagged и многомерные массивы, а также `null`-объект массива **не поддерживаются** и сохраняют
+> прежнее (выведенное драйвером) поведение. Массивы-**результаты** подчиняются тому же правилу
+> элемента: результат с элементом **ссылочного типа** объявляется `Nullable(...)` безусловно
+> (результат `string[]`/`string?[]` рендерится как
+> `Array(Nullable(String))`, jagged — как `Array(Array(Nullable(String)))`) и по-прежнему материализуется
+> как CLR `string[]` — меняется только текст генерируемого SQL, но не данные, не CLR-тип и не публичный
+> API, а элементы значимых типов (`int[]`, `int?[]`, `byte[]`) не затронуты. Decimal-массивы
+> **результата** материализуются в обеих формах с [#337](https://github.com/AlexeyShirshov/nextorm/issues/337):
+> `Array(Nullable(Decimal(38,10)))` → `decimal?[]` и `Array(Decimal(38,10))` → `decimal[]` — через
+> прямые, member-bound, многоколоночные и raw-маршруты чтения, причём каждое представимое значение
+> сохраняется точно (без округления, усечения и culture-преобразования). Элемент `Decimal(38,10)`,
+> мантисса которого при масштабе 10 превышает 96 бит (например `1e19`: мантисса `1e29` при пределе
+> CLR `decimal` `2^96 − 1`), в CLR `decimal` **не** представим: материализация падает fail-closed
+> с ошибкой драйвера `OverflowException` (`Value cannot be represented as System.Decimal`), а поскольку
+> закреплённый драйвер не отбрасывает хвостовые нули, математически меньшая запись не подставляется.
+> Оставшиеся ограничения массивов перечислены в
+> [Ограничениях](../advanced/limitations.md#ограничения).
 
 CLR-метод `string.Split` рендерится как `splitByChar(separator, value)` (гейт
 [`StringSplit`](xref:NextORM.Core.ISqlDialect.StringSplit)); поддерживается только

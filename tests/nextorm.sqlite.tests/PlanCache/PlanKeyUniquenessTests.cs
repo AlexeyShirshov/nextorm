@@ -693,5 +693,13 @@ public class PlanKeyUniquenessTests
         public void ResetConnection(DbConnection conn, IDataContext dbContext)
         {
         }
+
+        public void EvictConnection(DbConnection conn)
+        {
+        }
+
+        public void OnCommandDisposed()
+        {
+        }
     }
 }

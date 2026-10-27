@@ -52,11 +52,17 @@ internal static class SqlServerScalarFunctionTranslator
         nameof(SqlServerFunctions.type_name), nameof(SqlServerFunctions.filegroup_id),
         nameof(SqlServerFunctions.filegroup_name), nameof(SqlServerFunctions.file_id),
         nameof(SqlServerFunctions.file_idex), nameof(SqlServerFunctions.file_name),
+        nameof(SqlServerFunctions.current_request_id),
         nameof(SqlServerFunctions.current_timezone), nameof(SqlServerFunctions.current_timezone_id),
+        nameof(SqlServerFunctions.current_transaction_id),
         nameof(SqlServerFunctions.formatmessage), nameof(SqlServerFunctions.getansinull),
+        nameof(SqlServerFunctions.ident_current),
         nameof(SqlServerFunctions.isdate), nameof(SqlServerFunctions.isnumeric),
+        nameof(SqlServerFunctions.min_active_rowversion),
         nameof(SqlServerFunctions.parsename), nameof(SqlServerFunctions.publishingservername),
-        nameof(SqlServerFunctions.str), nameof(SqlServerFunctions.parse), nameof(SqlServerFunctions.try_parse),
+        nameof(SqlServerFunctions.parse), nameof(SqlServerFunctions.rowcount_big),
+        nameof(SqlServerFunctions.scope_identity), nameof(SqlServerFunctions.str),
+        nameof(SqlServerFunctions.try_parse), nameof(SqlServerFunctions.xact_state),
         nameof(SqlServerFunctions.next_value_for), nameof(SqlServerFunctions.nextval)
     };
 

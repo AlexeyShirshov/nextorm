@@ -3146,12 +3146,12 @@ public class SqlGenerationTests
 
         var sql = SqlOf(ctx, e.Select(x => new
         {
-            A = SqlFunctions.Postgres.percentile_cont(0.5, () => x.Id),
+            A = SqlFunctions.Postgres.percentile_cont(0.5, () => (double)x.Id),
             B = SqlFunctions.Postgres.percentile_disc(0.5, () => x.Id),
             C = SqlFunctions.Postgres.mode(() => x.String)
         }));
 
-        sql.Should().Contain("percentile_cont(0.5) within group (order by id)");
+        sql.Should().Contain("percentile_cont(0.5) within group (order by cast(id as double precision))");
         sql.Should().Contain("percentile_disc(0.5) within group (order by id)");
         sql.Should().Contain("mode() within group (order by somestring)");
     }

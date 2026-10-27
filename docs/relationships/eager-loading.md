@@ -6,7 +6,7 @@
 
 ## Overview
 
-nextorm does not infer relationships, so a graph is not loaded from a mapper convention. `LoadWith` declares one edge of eager loading explicitly: a parent collection member, a factory that builds the child query, and the two key selectors that pair children with parents — it does not consume relationship metadata. The child query is an ordinary `EntityBuilder<TChild>` and can carry its own `LoadWith`, so the declarations form a finite graph, level 2 and deeper included. The association lives on the query, not in the entity metadata; for the declared-metadata, single-round-trip alternative see [`JoinInto`](relationships.md).
+nextorm does not infer relationships, so a graph is not loaded from a mapper convention. `LoadWith` declares one edge of eager loading either with explicit key selectors — a parent collection member, a factory that builds the child query, and the two key selectors that pair children with parents — or, when the relationship is already declared, from that declared metadata (see [Declared-metadata form](#declared-metadata-form)). A relationship is never guessed from a naming convention. The child query is an ordinary `EntityBuilder<TChild>` and can carry its own `LoadWith`, so the declarations form a finite graph, level 2 and deeper included. The association lives on the query, not in the entity metadata; for the declared-metadata, single-round-trip alternative see [`JoinInto`](relationships.md).
 
 This is the nextorm equivalent of linq2db `LoadWith` and EF Core `Include`. Split-query is the default; the opt-in `EagerLoadMode.SingleQuery` mode issues one denormalized round trip instead, and a nested graph is supported in both modes where the provider can express it (see [Nested graphs](#nested-graphs-level-2-and-deeper)).
 
@@ -39,6 +39,73 @@ var orders = ctx.From<Order>()
 ```
 
 Like every builder modifier, `LoadWith` needs the generic key type to be known at the call site; when a selector is implicitly convertible, spell the key type out or make both selector bodies produce the same type.
+
+### Declared-metadata form
+
+When the relationship is already declared, `LoadWith` reads it instead of taking key selectors. Four overloads cover both navigation shapes, each with and without a child query:
+
+```csharp
+public EntityBuilder<TEntity> LoadWith<TChild>(
+    Expression<Func<TEntity, ICollection<TChild>>> collection,
+    EagerLoadMode mode = EagerLoadMode.Default);
+
+public EntityBuilder<TEntity> LoadWith<TChild>(
+    Expression<Func<TEntity, ICollection<TChild>>> collection,
+    Func<IDataContext, EntityBuilder<TChild>> childQuery,
+    EagerLoadMode mode = EagerLoadMode.Default);
+
+public EntityBuilder<TEntity> LoadWith<TChild>(
+    Expression<Func<TEntity, TChild?>> reference,
+    EagerLoadMode mode = EagerLoadMode.Default) where TChild : class;
+
+public EntityBuilder<TEntity> LoadWith<TChild>(
+    Expression<Func<TEntity, TChild?>> reference,
+    Func<IDataContext, EntityBuilder<TChild>> childQuery,
+    EagerLoadMode mode = EagerLoadMode.Default) where TChild : class;
+```
+
+```csharp
+var orders = ctx.From<Order>()
+    .Where(o => o.CustomerId == customerId)
+    .LoadWith(o => o.Items)                                   // declared one-to-many
+    .LoadWith(o => o.Customer, c => c.From<Customer>())       // declared many-to-one
+    .ToList();
+```
+
+- **Declared relationships only.** The navigation must be declared with `HasMany`, `HasOne`, `HasOneToOne`, `HasManyThrough` or `[Relationship]` (see [Relationships](relationships.md)). nextorm does not infer a relationship from a naming convention, does not match key columns by name and never falls back to the first component of a composite key.
+- **The route is fixed by the navigation shape.** The collection overloads load the collection cardinalities (one-to-many and many-to-many) and the reference overloads load the reference cardinalities (many-to-one and one-to-one). A collection navigation can never be loaded through the reference route: a cardinality/route mismatch throws [`NotSupportedException`](xref:System.NotSupportedException) at the call, and the same happens for the reverse.
+- **Ordered components, paired positionally.** A composite key is the relationship's ordered component lists: the parent component at position `i` pairs with the child component at position `i`, in declaration order (or, for a default principal key, in entity-metadata order).
+- **The bare form uses the context's normal source.** Without `childQuery` the child query is the context's ordinary `From<TChild>()` source, so the related type's own mapping and global filters apply and no ad-hoc source is introduced. The `childQuery` overload lets the child carry its own `Where`, `OrderBy` or per-parent page.
+- **Everything else is shared.** Modes, split chunking, single-query folding, the assignment rule, ordering, nested graphs and the terminal boundary are the ones documented on this page for the explicit-key form. Both forms also share one plan identity, so a declaration that selects exactly a declared one-to-many relationship keys the same cached plan from either form.
+
+Declaring the same navigation twice on one builder throws [`InvalidOperationException`](xref:System.InvalidOperationException) for both forms, and the cycle and nested-mode guards apply unchanged.
+
+### Declared relationships: cardinality, keys and limits
+
+| Declared cardinality | Declared with | `LoadWith` route |
+|---|---|---|
+| one-to-many | `HasMany` / `[Relationship]` on the collection side | collection |
+| many-to-many | `HasManyThrough` with an explicit junction | collection |
+| many-to-one | `HasOne` / `[Relationship]` on the reference side | reference |
+| one-to-one | `HasOneToOne` | reference |
+
+**Child queries, batching and paging.** The child command correlates on every declared component — one `IN` predicate per component, component `i` on the parent side against component `i` on the child side — and is chunked so a chunk stays parameter-bounded: at most 1000 keys and at most 2000 key parameters per chunk, so a one-component key chunks at 1000 keys and a composite key chunks more finely. The parent command runs once and the number of child commands depends on the size of the key set, never on the number of parents, so there is no N+1. `SingleQuery` folds the same correlation into one `LEFT JOIN` command. A per-parent `Limit`/`Offset`/`Page` on the child is honoured on a collection navigation with a single-component key — through the ranked child source in split mode and the embedded ranked source in single-query mode — and, in single-query mode, only when that child declares no further `LoadWith`.
+
+**Reference cardinality.** A reference navigation assigns at most one related row per parent: no match assigns `null`, one distinct full identity is assigned, and **more than one distinct identity matching the same parent** throws [`InvalidOperationException`](xref:System.InvalidOperationException) before any parent is mutated — repeated physical rows that share one identity are tolerated (the first one is assigned). A read-only navigation is loaded only when its current value already is the resolved row; otherwise it fails closed.
+
+**Many-to-many occurrences.** The link table is read as its own child command (split) or its own derived link join (single-query), so one element is materialised per valid link: repeated links stay distinct, and a link whose parent-side or child-side component is `null` produces no occurrence. Two collections over the same link table keep independent groupings.
+
+**Terminals.** The metadata form is honoured by the same four stitching terminals (`ToList`, `ToListAsync`, `ToArray`, `ToArrayAsync`); `Any`/`Count` stay scalar and every other terminal evaluates the parent only. A nested graph declared by the child query follows the [Nested graphs](#nested-graphs-level-2-and-deeper) contract unchanged.
+
+Each of these is rejected with [`NotSupportedException`](xref:System.NotSupportedException) before any SQL is generated and before a plan-cache entry is inserted, rather than dropped silently:
+
+- a per-parent `Limit`/`Offset`/`Page` on the child of a **composite-key** relationship: the per-parent partition needs a single key component;
+- a per-parent page on a **reference** child or on a **many-to-many** child: a top-N needs a direct parent partition, which neither a single related row nor a link table provides;
+- a nested graph below a **reference** or **many-to-many** navigation in `SingleQuery` mode (split supports it): the reference result or the link row already occupies the projection item a nested graph would need;
+- a child shape `SingleQuery` cannot fold — anything beyond the child's own `Where`, `OrderBy` and a single-component page (see [Single-query mode](#single-query-mode-eagerloadmodesinglequery));
+- more child collections than the projection arity cap;
+- the **in-memory** provider: the declared-metadata form is SQL-only and is rejected while the parent command is constructed, before any SQL and before any plan-cache entry (the explicit-key form keeps its in-memory support);
+- a duplicate declaration of one navigation, and a cyclic graph.
 
 ## Mode selection
 
@@ -156,7 +223,7 @@ select t1.id, t1.name, t2.id, t2.order_id, t2.name
 
 - **One round trip, no key chunking.** The parent source and each declared child are joined in a single `LEFT JOIN` command. There is no `IN` list and no chunk size, so any number of parents — including more than 1000 distinct keys — is fetched by the same command, and there is no silent fallback to split.
 - **Only the child query's own `Where` is folded in.** A child condition, for example `c => c.From<OrderItem>().Where(i => i.Active)`, is merged into the join `ON` predicate, so it filters the children without dropping childless parents.
-- **Paging is folded into a ranked source; other child-query shapes are rejected.** A child query carrying `Limit`/`Offset`/`Page` (with or without its own `OrderBy`) is folded into a partitioned `row_number()` derived source and paged per parent (see [Per-parent paging in eager loading](eager-loading-per-parent-paging.md)). A **bare** child `OrderBy` that is not accompanied by paging is still a per-parent output modifier the single denormalized join cannot express, and a single denormalized join cannot apply joins or table-level clauses either, so a child query carrying a bare `OrderBy`, `Distinct`, `GroupBy`, `Having`, `DistinctOn`, `LimitBy`, a join (`Join`/`LeftJoin`/`SemiJoin`/`AntiJoin`/…), `Final`, `PreWhere`, `ArrayJoin`, `TableSample`, `Sample`, `ForSystemTime`, `ForUpdate`/`ForShare`, `Window`, `Settings`, a CTE, a table/index hint or a derived (`As`) source throws [`NotSupportedException`](xref:System.NotSupportedException) as soon as the single-query command is materialized. Split mode honors every one of them; use split (omit `EagerLoadMode.SingleQuery` or pass `EagerLoadMode.SplitQuery`) when the child query needs a shape beyond `Where`. The ClickHouse-only shapes in that list (`LimitBy`, `Final`, `PreWhere`, `ArrayJoin`, `Sample`, `Settings`) are extension methods from `NextORM.ClickHouse` (`using NextORM.ClickHouse;`).
+- **Paging is folded into a ranked source; other child-query shapes are rejected.** A child query carrying `Limit`/`Offset`/`Page` (with or without its own `OrderBy`) is folded into a partitioned `row_number()` derived source and paged per parent (see [Per-parent paging in eager loading](eager-loading-per-parent-paging.md)). A **bare** child `OrderBy` that is not accompanied by paging is still a per-parent output modifier the single denormalized join cannot express, and a single denormalized join cannot apply joins or table-level clauses either, so a child query carrying a bare `OrderBy`, `Distinct`, `GroupBy`, `Having`, `DistinctOn`, `LimitBy`, a join (`Join`/`LeftJoin`/`SemiJoin`/`AntiJoin`/…), `Final`, `PreWhere`, `ArrayJoin`, `TableSample`, `Sample`, `ForSystemTime`, `ForUpdate`/`ForShare`, `Window`, `Settings`, a CTE, a table/index hint or a derived (`As`) source throws [`NotSupportedException`](xref:System.NotSupportedException) as soon as the single-query command is materialized. The declared-metadata form ([Declared-metadata form](#declared-metadata-form)) is the exception for ordering only: it accepts the child's own `OrderBy` and carries it as the child ordering of the folded command, while every other shape in this list stays rejected. Split mode honors every one of them; use split (omit `EagerLoadMode.SingleQuery` or pass `EagerLoadMode.SplitQuery`) when the child query needs a shape beyond `Where`. The ClickHouse-only shapes in that list (`LimitBy`, `Final`, `PreWhere`, `ArrayJoin`, `Sample`, `Settings`) are extension methods from `NextORM.ClickHouse` (`using NextORM.ClickHouse;`).
 - **Parent and child filter scopes combine by union, identically in split and single-query mode.** The child's effective scope is always the union of its own `IgnoreFilters` scope and the parent's. A parent `IgnoreFilters()` disables the declared children's filters too (the all-or-nothing scope absorbs the child's own scope), and a selective parent `IgnoreFilters(...)` reaches the children as well. Conversely, an `IgnoreFilters(...)` applied inside the child query disables only that child's filters while the parent's still apply. The same rule holds whether you load with the default split shape or with `EagerLoadMode.SingleQuery`.
 - **The parent type must declare a mapped key.** Denormalized rows are deduplicated by that key, so a keyless parent type throws [`NotSupportedException`](xref:System.NotSupportedException) with guidance to configure a key or use split mode, which does not require one. Rows that share the same mapped key collapse into one parent; split mode keeps them separate.
 - **The key type must support value equality.** The join predicate is built with the equality operator, so a key type without one — for example a struct with no `==` overload, or a reference type whose `==` would degrade to reference equality — throws [`NotSupportedException`](xref:System.NotSupportedException). Split mode compares keys with the default equality comparer and works for such types.
@@ -239,6 +306,7 @@ Every unexpressible nested graph is rejected before any SQL is generated and bef
 - **nested mode conflict**: a child requesting an explicit mode different from the graph-wide mode throws `NotSupportedException` (`... mixes modes ...`);
 - **cycles**: a declaration whose ancestor-composite identity repeats — a self-referential entity, or a child factory that recursively returns itself — throws `NotSupportedException` deterministically: a finite acyclic graph is required, not a depth limit.
 - **in-memory paged eager child**: the existing #211 fail-closed rejection (no SQL window) is unchanged; unpaged nested loading works there.
+- **declared-metadata form on the in-memory provider**: the metadata-driven `LoadWith` overloads are SQL-only and are rejected while the parent command is constructed — before any command, SQL or plan-cache entry, and without touching the context's cache flag; the explicit-key form keeps its in-memory support described above.
 
 ## Assignment rule
 

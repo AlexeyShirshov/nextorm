@@ -25,6 +25,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The F18 region container mounts these before start: ClickHouse loads the embedded geobase
+         configuration only at startup, so the files must be in the container image filesystem first. -->
+    <None Update="ClickHouse\Fixtures\**\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\nextorm.core\nextorm.core.csproj" />
     <ProjectReference Include="..\..\src\nextorm.sqlite\nextorm.sqlite.csproj" />
     <ProjectReference Include="..\..\src\nextorm.postgres\nextorm.postgres.csproj" />

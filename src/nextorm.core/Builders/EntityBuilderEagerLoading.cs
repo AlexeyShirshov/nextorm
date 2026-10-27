@@ -1,3 +1,5 @@
+using System.Collections;
+using System.Globalization;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
@@ -18,6 +20,15 @@ internal interface IEagerLoadNodeSpec
     /// declarations with the same fingerprint are the same graph node.
     /// </summary>
     string ShapeKey { get; }
+
+    /// <summary>
+    /// The plan-cache identity this declaration contributes to the command's
+    /// <see cref="QueryCommand.EagerLoadShape"/>. It defaults to <see cref="ShapeKey"/>, so the legacy
+    /// explicit-key shape is unchanged; a declaration whose explicit keys select a declared relationship
+    /// returns the canonical metadata relationship identity instead, so the explicit-key and the
+    /// inferred-metadata form of the same 1:N declaration key the very same plan entry.
+    /// </summary>
+    string PlanShapeKey => ShapeKey;
 
     /// <summary>
     /// The parent-side collection member this declaration targets, or <c>null</c> when the collection
@@ -213,6 +224,531 @@ internal sealed class EagerLoadSingleQueryPlan<TEntity>
 }
 
 /// <summary>
+/// Builds the portable per-component membership predicate the split loader uses to fetch the candidate
+/// children of one key chunk: <c>x.C1 in (..) AND x.C2 in (..) AND ...</c>. Each component takes part in
+/// the declaration order and is rendered as its own typed <c>List&lt;T&gt;.Contains</c>, never a boxed
+/// list, so the provider sees a plain <c>IN</c> per component and the parameter count is the sum over the
+/// components. The predicate may over-select when the components are correlated: the in-memory
+/// stitching matches the full ordered key tuple and drops every row whose pair was not requested.
+/// </summary>
+internal static class EagerLoadInPredicate
+{
+    /// <summary>Builds the typed predicate over <typeparamref name="T"/> for the supplied components.</summary>
+    /// <typeparam name="T">The entity type the components are read from.</typeparam>
+    /// <param name="properties">The component members, in declaration order.</param>
+    /// <param name="componentValues">One value list per component, aligned with <paramref name="properties"/>.</param>
+    /// <returns>The membership predicate.</returns>
+    internal static Expression<Func<T, bool>> Build<T>(
+        IReadOnlyList<PropertyInfo> properties,
+        IReadOnlyList<IReadOnlyList<object?>> componentValues)
+        => (Expression<Func<T, bool>>)Build(typeof(T), properties, componentValues);
+
+    /// <summary>Builds the typed predicate over the runtime <paramref name="entityType"/>.</summary>
+    /// <param name="entityType">The entity type the components are read from.</param>
+    /// <param name="properties">The component members, in declaration order.</param>
+    /// <param name="componentValues">One value list per component, aligned with <paramref name="properties"/>.</param>
+    /// <returns>The membership predicate.</returns>
+    internal static LambdaExpression Build(
+        Type entityType,
+        IReadOnlyList<PropertyInfo> properties,
+        IReadOnlyList<IReadOnlyList<object?>> componentValues)
+    {
+        ArgumentNullException.ThrowIfNull(entityType);
+        ArgumentNullException.ThrowIfNull(properties);
+        ArgumentNullException.ThrowIfNull(componentValues);
+        if (properties.Count == 0)
+            throw new ArgumentException("A membership predicate needs at least one component.", nameof(properties));
+        if (properties.Count != componentValues.Count)
+            throw new ArgumentException("Every component needs one value list.", nameof(componentValues));
+
+        var parameter = Expression.Parameter(entityType, "x");
+        Expression? body = null;
+        for (var i = 0; i < properties.Count; i++)
+        {
+            var property = properties[i];
+            var list = CreateValueList(property.PropertyType, componentValues[i]);
+            var listType = list.GetType();
+            var contains = listType.GetMethod(nameof(List<object>.Contains), [property.PropertyType])
+                ?? throw new InvalidOperationException(
+                    $"The typed value list for '{property.Name}' exposes no Contains member.");
+            var call = Expression.Call(
+                Expression.Constant(list, listType),
+                contains,
+                Expression.Property(parameter, property));
+            body = body is null ? call : Expression.AndAlso(body, call);
+        }
+
+        return Expression.Lambda(
+            typeof(Func<,>).MakeGenericType(entityType, typeof(bool)),
+            body!,
+            parameter);
+    }
+
+    /// <summary>
+    /// Creates the strongly typed list for one component. A parent and a child component may differ in
+    /// nullability only; the value is unboxed to the underlying type and the list itself carries the
+    /// member's exact CLR type, so the SQL translator binds the same parameter shape as a typed
+    /// <c>Contains</c>.
+    /// </summary>
+    private static IList CreateValueList(Type propertyType, IReadOnlyList<object?> values)
+    {
+        var list = (IList)Activator.CreateInstance(typeof(List<>).MakeGenericType(propertyType))!;
+        for (var i = 0; i < values.Count; i++)
+            list.Add(ConvertValue(values[i], propertyType));
+
+        return list;
+    }
+
+    private static object? ConvertValue(object? value, Type propertyType)
+    {
+        if (value is null || propertyType.IsInstanceOfType(value))
+            return value;
+
+        var target = Nullable.GetUnderlyingType(propertyType) ?? propertyType;
+        if (target.IsInstanceOfType(value))
+            return value;
+
+        if (target.IsEnum)
+            return Enum.ToObject(target, value);
+
+        return Convert.ChangeType(value, target, CultureInfo.InvariantCulture);
+    }
+}
+
+/// <summary>
+/// The split-execution key plan of one metadata-driven eager-load declaration: the ordered parent/child
+/// component getters, the chunking policy and the child acquisition commands. Component <c>i</c> pairs with
+/// component <c>i</c> within each side; nothing here matches by member name, and no component is ever
+/// dropped. The two legs may have different arities (a many-to-many parent key mapped onto a single-child
+/// key through the junction), so each side is carried and chunked on its own.
+/// </summary>
+/// <typeparam name="TEntity">The parent entity type.</typeparam>
+/// <typeparam name="TChild">The related entity type.</typeparam>
+internal sealed class MetadataEagerLoadKeyPlan<TEntity, TChild>
+{
+    /// <summary>The key-chunk cap shared with the explicit-key loader.</summary>
+    internal const int KeyChunkSize = 1000;
+
+    /// <summary>
+    /// The parameter budget one child command may spend. SQL Server caps a command at 2100 parameters;
+    /// 2000 leaves headroom for the child query's own parameters. The effective chunk size is
+    /// <c>min(KeyChunkSize, ParameterLimit / max(parentComponents, childComponents))</c>, so a chunk never
+    /// binds more than <see cref="ParameterLimit"/> key parameters in total (1000 for one component, 1000
+    /// for two, 666 for three).
+    /// </summary>
+    internal const int ParameterLimit = 2000;
+
+    private readonly Func<TEntity, object?>[] _parentGetters;
+    private readonly Func<TChild, object?>[] _childGetters;
+    private readonly Func<TEntity, object> _parentKey;
+    private readonly Func<TChild, object> _childKey;
+
+    /// <summary>Initializes the plan from the validated ordered key legs.</summary>
+    /// <param name="parentProperties">The ordered parent-side key components.</param>
+    /// <param name="childProperties">The ordered child-side key components.</param>
+    public MetadataEagerLoadKeyPlan(
+        IReadOnlyList<PropertyInfo> parentProperties,
+        IReadOnlyList<PropertyInfo> childProperties)
+    {
+        ArgumentNullException.ThrowIfNull(parentProperties);
+        ArgumentNullException.ThrowIfNull(childProperties);
+        if (parentProperties.Count == 0 || childProperties.Count == 0)
+            throw new ArgumentException(
+                "A key plan needs at least one component on each side.", nameof(parentProperties));
+
+        var widest = Math.Max(parentProperties.Count, childProperties.Count);
+        ChunkSize = Math.Max(1, Math.Min(KeyChunkSize, ParameterLimit / widest));
+
+        _parentGetters = new Func<TEntity, object?>[parentProperties.Count];
+        _childGetters = new Func<TChild, object?>[childProperties.Count];
+        for (var i = 0; i < parentProperties.Count; i++)
+            _parentGetters[i] = CompileGetter<TEntity>(parentProperties[i]);
+        for (var i = 0; i < childProperties.Count; i++)
+            _childGetters[i] = CompileGetter<TChild>(childProperties[i]);
+
+        ParentProperties = parentProperties;
+        ChildProperties = childProperties;
+        ParentKeyExpression = JoinIntoSpecHelpers.BuildKeySelector<TEntity>(parentProperties);
+        ChildKeyExpression = JoinIntoSpecHelpers.BuildKeySelector<TChild>(childProperties);
+        _parentKey = ParentKeyExpression.Compile();
+        _childKey = ChildKeyExpression.Compile();
+    }
+
+    /// <summary>The boxed structural parent-key selector (a single value or a <see cref="JoinIntoKey"/>).</summary>
+    public Expression<Func<TEntity, object>> ParentKeyExpression { get; }
+
+    /// <summary>The boxed structural child-key selector (a single value or a <see cref="JoinIntoKey"/>).</summary>
+    public Expression<Func<TChild, object>> ChildKeyExpression { get; }
+
+    /// <summary>The parent-side components, in declaration order.</summary>
+    public IReadOnlyList<PropertyInfo> ParentProperties { get; }
+
+    /// <summary>The child-side components, in declaration order.</summary>
+    public IReadOnlyList<PropertyInfo> ChildProperties { get; }
+
+    /// <summary>The maximum number of distinct parent keys one child command may request.</summary>
+    public int ChunkSize { get; }
+
+    /// <summary>The boxed structural parent key (a single value or a <see cref="JoinIntoKey"/>).</summary>
+    public Func<TEntity, object> ParentKey => _parentKey;
+
+    /// <summary>The boxed structural child key (a single value or a <see cref="JoinIntoKey"/>).</summary>
+    public Func<TChild, object> ChildKey => _childKey;
+
+    /// <summary>
+    /// Whether every parent component value is non-null. A parent with any null key component matches
+    /// nothing: a null is not a value, so no child can carry it.
+    /// </summary>
+    /// <param name="parent">The parent row.</param>
+    /// <returns><see langword="true"/> when the parent key is complete.</returns>
+    public bool IsMatchable(TEntity parent)
+    {
+        for (var i = 0; i < _parentGetters.Length; i++)
+        {
+            if (_parentGetters[i](parent) is null)
+                return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>Whether every child key component value is non-null, so the child is matchable.</summary>
+    /// <param name="child">The child row.</param>
+    /// <returns><see langword="true"/> when the child key is complete.</returns>
+    public bool IsMatchableChild(TChild child)
+    {
+        for (var i = 0; i < _childGetters.Length; i++)
+        {
+            if (_childGetters[i](child) is null)
+                return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>The per-component parent values of <paramref name="chunk"/>, aligned with the components.</summary>
+    /// <param name="chunk">One chunk of distinct matchable parents.</param>
+    /// <returns>One value list per component.</returns>
+    public IReadOnlyList<IReadOnlyList<object?>> ParentValues(IReadOnlyList<TEntity> chunk)
+    {
+        var values = new List<object?>[_parentGetters.Length];
+        for (var i = 0; i < values.Length; i++)
+            values[i] = new List<object?>(chunk.Count);
+
+        for (var i = 0; i < chunk.Count; i++)
+        {
+            var parent = chunk[i];
+            for (var component = 0; component < values.Length; component++)
+                values[component].Add(_parentGetters[component](parent));
+        }
+
+        return values;
+    }
+
+    /// <summary>
+    /// Enumerates the distinct, key-complete parents in chunks of <see cref="ChunkSize"/>, preserving the
+    /// parent order. Duplicate parent keys are requested once; an incomplete key is never requested.
+    /// </summary>
+    /// <param name="parents">The materialized parents.</param>
+    /// <returns>The key chunks.</returns>
+    public IEnumerable<List<TEntity>> Chunks(IReadOnlyList<TEntity> parents)
+    {
+        var seen = new HashSet<object>();
+        var chunk = new List<TEntity>();
+        for (var i = 0; i < parents.Count; i++)
+        {
+            var parent = parents[i];
+            if (!IsMatchable(parent) || !seen.Add(_parentKey(parent)))
+                continue;
+
+            chunk.Add(parent);
+            if (chunk.Count == ChunkSize)
+            {
+                yield return chunk;
+                chunk = [];
+            }
+        }
+
+        if (chunk.Count > 0)
+            yield return chunk;
+    }
+
+    /// <summary>Builds the child predicate for one chunk: every component <c>IN</c> its parent values.</summary>
+    /// <param name="chunk">One chunk of distinct matchable parents.</param>
+    /// <returns>The child predicate.</returns>
+    public Expression<Func<TChild, bool>> BuildPredicate(IReadOnlyList<TEntity> chunk)
+        => EagerLoadInPredicate.Build<TChild>(ChildProperties, ParentValues(chunk));
+
+    /// <summary>
+    /// Builds the child command for one chunk. Per-parent top-N stays on the existing ranked lowering: the
+    /// child command is marked for per-parent paging and its typed key member becomes the window
+    /// partition. A composite key cannot be a single partition expression, so that combination fails
+    /// closed rather than silently applying the page globally.
+    /// </summary>
+    /// <param name="child">The scoped child builder.</param>
+    /// <param name="chunk">One chunk of distinct matchable parents.</param>
+    /// <returns>The child command.</returns>
+    public QueryCommand<TChild> BuildChildCommand(EntityBuilder<TChild> child, IReadOnlyList<TEntity> chunk)
+    {
+        var command = child.Where(BuildPredicate(chunk)).ToCommand();
+
+        if (EntityBuilderEagerLoading.HasPerParentTopN(child))
+        {
+            if (!child.DataProvider.NeedMapping)
+                throw EntityBuilderEagerLoading.PerParentTopNNotSupported();
+
+            EntityBuilderEagerLoading.ValidatePerParentPagingChild(child);
+
+            if (_parentGetters.Length > 1)
+                throw new NotSupportedException(
+                    "LoadWith cannot apply Limit/Offset/Page to a child query of a composite-key relationship: " +
+                    "the per-parent partition needs a single key component. Remove the child paging or use an " +
+                    "explicit join.");
+
+            command.PerParentPaging = true;
+            command.PerParentPartition = BuildPartitionLambda();
+        }
+
+        return command;
+    }
+
+    /// <summary>
+    /// Runs one child command per key chunk and returns the children grouped by their boxed full key,
+    /// keeping the order the child query returned them in. A child with any null key component is not
+    /// matchable and is skipped.
+    /// </summary>
+    /// <param name="child">The scoped child builder.</param>
+    /// <param name="parents">The materialized parents.</param>
+    /// <param name="loaded">Receives every loaded child, so the caller can recurse into nested declarations.</param>
+    /// <returns>The children grouped by their full key.</returns>
+    public Dictionary<object, List<TChild>> Load(EntityBuilder<TChild> child, IReadOnlyList<TEntity> parents, List<TChild>? loaded)
+    {
+        var grouped = new Dictionary<object, List<TChild>>();
+        foreach (var chunk in Chunks(parents))
+        {
+            var children = BuildChildCommand(child, chunk).ToList();
+            loaded?.AddRange(children);
+            AddChildren(grouped, children);
+        }
+
+        return grouped;
+    }
+
+    /// <summary>Asynchronous counterpart of <see cref="Load"/>.</summary>
+    /// <param name="child">The scoped child builder.</param>
+    /// <param name="parents">The materialized parents.</param>
+    /// <param name="loaded">Receives every loaded child.</param>
+    /// <param name="cancellationToken">A token used to cancel the operation.</param>
+    /// <returns>The children grouped by their full key.</returns>
+    public async Task<Dictionary<object, List<TChild>>> LoadAsync(
+        EntityBuilder<TChild> child,
+        IReadOnlyList<TEntity> parents,
+        List<TChild>? loaded,
+        CancellationToken cancellationToken)
+    {
+        var grouped = new Dictionary<object, List<TChild>>();
+        foreach (var chunk in Chunks(parents))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var children = await BuildChildCommand(child, chunk).ToListAsync(cancellationToken).ConfigureAwait(false);
+            loaded?.AddRange(children);
+            AddChildren(grouped, children);
+        }
+
+        return grouped;
+    }
+
+    /// <summary>Adds the matchable children to their full-key group, preserving child-query order.</summary>
+    /// <param name="grouped">The grouping being built.</param>
+    /// <param name="children">The children of one chunk.</param>
+    public void AddChildren(Dictionary<object, List<TChild>> grouped, List<TChild> children)
+    {
+        for (var i = 0; i < children.Count; i++)
+        {
+            var child = children[i];
+            if (!IsMatchableChild(child))
+                continue;
+
+            var key = _childKey(child);
+            if (!grouped.TryGetValue(key, out var items))
+                grouped[key] = items = [];
+
+            items.Add(child);
+        }
+    }
+
+    /// <summary>
+    /// Builds the typed partition selector of a single-component key, used by the metadata-driven
+    /// single-query per-parent paging source. A composite key is rejected by the caller before this runs.
+    /// </summary>
+    internal LambdaExpression BuildPartitionLambda()
+    {
+        var property = ChildProperties[0];
+        var parameter = Expression.Parameter(typeof(TChild), "x");
+        return Expression.Lambda(
+            typeof(Func<,>).MakeGenericType(typeof(TChild), property.PropertyType),
+            Expression.Property(parameter, property),
+            parameter);
+    }
+
+    private static Func<T, object?> CompileGetter<T>(PropertyInfo property)
+    {
+        var parameter = Expression.Parameter(typeof(T), "x");
+        return Expression.Lambda<Func<T, object?>>(
+            Expression.Convert(Expression.Property(parameter, property), typeof(object)),
+            parameter).Compile();
+    }
+}
+
+/// <summary>
+/// Order-preserving occurrence grouping for a split many-to-many load. Each valid link is one element:
+/// a repeated link repeats its child, a dangling link contributes nothing, and two collections over the
+/// same link table never share state because every declaration builds its own grouping. Children keep the
+/// order the child query returned; a parent key never appears with a child it was not linked to.
+/// </summary>
+internal static class MetadataManyToManyAssignment
+{
+    /// <summary>Groups the linked children by parent key, preserving the declared occurrence count.</summary>
+    /// <typeparam name="TChild">The related entity type.</typeparam>
+    /// <param name="links">The valid <c>(parentKey, childKey)</c> links, one entry per physical link row.</param>
+    /// <param name="children">The children materialized by the child query, in child-query order.</param>
+    /// <param name="childKey">The boxed full child key, or <see langword="null"/> when the child is unmatchable.</param>
+    /// <returns>The children of every linked parent.</returns>
+    public static Dictionary<object, List<TChild>> Group<TChild>(
+        IReadOnlyList<(object ParentKey, object ChildKey)> links,
+        IReadOnlyList<TChild> children,
+        Func<TChild, object?> childKey)
+    {
+        ArgumentNullException.ThrowIfNull(links);
+        ArgumentNullException.ThrowIfNull(children);
+        ArgumentNullException.ThrowIfNull(childKey);
+
+        // A child key maps to every parent that links it, repeated once per physical link row.
+        var parentsByChild = new Dictionary<object, List<object>>();
+        for (var i = 0; i < links.Count; i++)
+        {
+            var (parentKey, linkChildKey) = links[i];
+            if (!parentsByChild.TryGetValue(linkChildKey, out var parentKeys))
+                parentsByChild[linkChildKey] = parentKeys = [];
+
+            parentKeys.Add(parentKey);
+        }
+
+        var grouped = new Dictionary<object, List<TChild>>();
+        for (var i = 0; i < children.Count; i++)
+        {
+            var child = children[i];
+            var key = childKey(child);
+            if (key is null || !parentsByChild.TryGetValue(key, out var parentKeys))
+                continue;
+
+            for (var link = 0; link < parentKeys.Count; link++)
+            {
+                var parentKey = parentKeys[link];
+                if (!grouped.TryGetValue(parentKey, out var items))
+                    grouped[parentKey] = items = [];
+
+                items.Add(child);
+            }
+        }
+
+        return grouped;
+    }
+}
+
+/// <summary>
+/// Buffered reference resolution and assignment for the split loader. A reference navigation resolves to
+/// exactly zero or one <b>full identity</b>: repeated physical rows of the same identity collapse, while
+/// two distinct identities are rejected before any parent is mutated. The error therefore never escapes
+/// after a partial assignment.
+/// </summary>
+internal static class MetadataReferenceAssignment
+{
+    /// <summary>
+    /// Resolves the single related row of one parent. A candidate list with no entry yields
+    /// <see langword="null"/>; every other entry must carry the first entry's full identity.
+    /// </summary>
+    /// <typeparam name="TChild">The related entity type.</typeparam>
+    /// <param name="candidates">The rows the child query matched for this parent, in child-query order.</param>
+    /// <param name="identity">The full-identity selector, or <see langword="null"/> for a keyless child (reference identity).</param>
+    /// <param name="errorMessage">The deterministic rejection used when two distinct identities match.</param>
+    /// <returns>The single related row, or <see langword="null"/>.</returns>
+    /// <exception cref="InvalidOperationException">More than one distinct full identity matched.</exception>
+    public static TChild? Resolve<TChild>(
+        IReadOnlyList<TChild> candidates,
+        Func<TChild, object?>? identity,
+        string errorMessage)
+    {
+        ArgumentNullException.ThrowIfNull(candidates);
+        if (candidates.Count == 0)
+            return default!;
+
+        var first = candidates[0];
+        if (identity is null)
+            return first;
+
+        var firstIdentity = identity(first);
+        for (var i = 1; i < candidates.Count; i++)
+        {
+            var currentIdentity = identity(candidates[i]);
+            if (!Equals(firstIdentity, currentIdentity))
+                throw new InvalidOperationException(errorMessage);
+        }
+
+        return first;
+    }
+
+    /// <summary>
+    /// Assigns the resolved reference to every parent. A read-only navigation can only be left untouched:
+    /// when the resolved value already is the current one the assignment is a no-op, otherwise it fails
+    /// closed before any parent is mutated. Every target is validated first.
+    /// </summary>
+    /// <typeparam name="TEntity">The parent entity type.</typeparam>
+    /// <typeparam name="TChild">The related entity type.</typeparam>
+    /// <param name="parents">The parents, in parent-query order.</param>
+    /// <param name="resolved">The resolved child per parent (parallel to <paramref name="parents"/>).</param>
+    /// <param name="getter">Reads the current navigation value.</param>
+    /// <param name="setter">Writes the navigation value, or <see langword="null"/> when the member is read-only.</param>
+    /// <param name="ownerName">The parent type name used in the rejection.</param>
+    /// <param name="navigationName">The navigation member name used in the rejection.</param>
+    /// <exception cref="NotSupportedException">A read-only navigation would have to be written.</exception>
+    public static void Assign<TEntity, TChild>(
+        IReadOnlyList<TEntity> parents,
+        IReadOnlyList<TChild?> resolved,
+        Func<TEntity, TChild?> getter,
+        Action<TEntity, TChild?>? setter,
+        string ownerName,
+        string navigationName)
+    {
+        ArgumentNullException.ThrowIfNull(parents);
+        ArgumentNullException.ThrowIfNull(resolved);
+        ArgumentNullException.ThrowIfNull(getter);
+
+        if (setter is null)
+        {
+            for (var i = 0; i < parents.Count; i++)
+            {
+                var current = getter(parents[i]);
+                var next = resolved[i];
+                if (next is null ? current is null : ReferenceEquals(current, next))
+                    continue;
+
+                throw new NotSupportedException(
+                    $"Cannot load the reference navigation '{navigationName}' on '{ownerName}': " +
+                    "the member is not settable, so the related row cannot be assigned. Expose it as a " +
+                    "settable property or initialize it with the expected value.");
+            }
+        }
+
+        if (setter is null)
+            return;
+
+        for (var i = 0; i < parents.Count; i++)
+            setter(parents[i], resolved[i]);
+    }
+}
+
+/// <summary>
 /// The default <see cref="IEagerLoadSpec{TEntity}"/>: materializes the children of one parent type in
 /// key chunks and stitches them onto the parents in memory. Created by the builder's
 /// <c>LoadWith</c> modifier.
@@ -235,6 +771,8 @@ internal sealed class EagerLoadSpec<TEntity, TChild, TKey> : IEagerLoadSpec<TEnt
     private readonly Expression<Func<TChild, TKey>> _childKeyExpression;
     private readonly MethodInfo _containsMethod;
     private readonly MemberInfo? _member;
+    private readonly MetadataEagerLoadKeyPlan<TEntity, TChild>? _metadataKey;
+    private readonly string? _planShapeKey;
 
     // The child query is built at most once per data context: preparation asks for it to detect a
     // per-parent top-N and execution reuses the same builder (a test-only counter on the user's child
@@ -253,12 +791,24 @@ internal sealed class EagerLoadSpec<TEntity, TChild, TKey> : IEagerLoadSpec<TEnt
     /// <param name="parentKey">The parent-side key selector.</param>
     /// <param name="childKey">The child-side key selector.</param>
     /// <param name="requestedMode">The <c>LoadWith</c> strategy argument; <see cref="EagerLoadMode.Default"/> means inherit.</param>
+    /// <param name="metadataKey">
+    /// The metadata-driven split key plan. When present, child acquisition uses the portable per-component
+    /// predicate and the chunk policy that accounts for every key component; when absent, the legacy
+    /// typed single-key behaviour is used unchanged.
+    /// </param>
+    /// <param name="planShapeKey">
+    /// The canonical metadata plan identity when these explicit keys select exactly a declared 1:N
+    /// relationship, or <see langword="null"/> to keep the legacy explicit-key plan identity. It affects
+    /// only the plan key, never the generated SQL or the execution path.
+    /// </param>
     public EagerLoadSpec(
         Expression<Func<TEntity, ICollection<TChild>>> collection,
         Func<IDataContext, EntityBuilder<TChild>> childQuery,
         Expression<Func<TEntity, TKey>> parentKey,
         Expression<Func<TChild, TKey>> childKey,
-        EagerLoadMode requestedMode = EagerLoadMode.Default)
+        EagerLoadMode requestedMode = EagerLoadMode.Default,
+        MetadataEagerLoadKeyPlan<TEntity, TChild>? metadataKey = null,
+        string? planShapeKey = null)
     {
         ArgumentNullException.ThrowIfNull(collection);
         ArgumentNullException.ThrowIfNull(childQuery);
@@ -266,6 +816,8 @@ internal sealed class EagerLoadSpec<TEntity, TChild, TKey> : IEagerLoadSpec<TEnt
         ArgumentNullException.ThrowIfNull(childKey);
 
         RequestedMode = requestedMode;
+        _metadataKey = metadataKey;
+        _planShapeKey = planShapeKey;
         _collectionGetter = collection.Compile();
         _childQuery = childQuery;
         _parentKey = parentKey.Compile();
@@ -307,6 +859,9 @@ internal sealed class EagerLoadSpec<TEntity, TChild, TKey> : IEagerLoadSpec<TEnt
         ";K=" + typeof(TKey).FullName +
         ";PK=" + (JoinIntoSpecHelpers.TryResolveMemberName(_parentKeyExpression) ?? _parentKeyExpression.ToString()) +
         ";CK=" + (JoinIntoSpecHelpers.TryResolveMemberName(_childKeyExpression) ?? _childKeyExpression.ToString());
+
+    /// <inheritdoc/>
+    public string PlanShapeKey => _planShapeKey ?? ShapeKey;
 
     /// <inheritdoc/>
     IEagerLoadNodeSource IEagerLoadNodeSpec.ResolveChildNodeSource(IDataContext context)
@@ -701,6 +1256,9 @@ internal sealed class EagerLoadSpec<TEntity, TChild, TKey> : IEagerLoadSpec<TEnt
     /// </summary>
     private Dictionary<TKey, List<TChild>> Load(EntityBuilder<TChild> child, IReadOnlyList<TEntity> parents, List<TChild>? loaded)
     {
+        if (_metadataKey is not null)
+            return ToTyped(_metadataKey.Load(child, parents, loaded));
+
         var grouped = new Dictionary<TKey, List<TChild>>();
         foreach (var chunk in KeyChunks(parents))
         {
@@ -715,6 +1273,9 @@ internal sealed class EagerLoadSpec<TEntity, TChild, TKey> : IEagerLoadSpec<TEnt
     /// <summary>Asynchronously runs one child query per key chunk and groups the children by their key.</summary>
     private async Task<Dictionary<TKey, List<TChild>>> LoadAsync(EntityBuilder<TChild> child, IReadOnlyList<TEntity> parents, List<TChild>? loaded, CancellationToken cancellationToken)
     {
+        if (_metadataKey is not null)
+            return ToTyped(await _metadataKey.LoadAsync(child, parents, loaded, cancellationToken).ConfigureAwait(false));
+
         var grouped = new Dictionary<TKey, List<TChild>>();
         foreach (var chunk in KeyChunks(parents))
         {
@@ -723,6 +1284,20 @@ internal sealed class EagerLoadSpec<TEntity, TChild, TKey> : IEagerLoadSpec<TEnt
             loaded?.AddRange(children);
             AddChildren(grouped, children);
         }
+
+        return grouped;
+    }
+
+    /// <summary>
+    /// Re-keys the metadata plan's boxed grouping as the specification's key type. The metadata plan is
+    /// only installed with <c>TKey = object</c>, so the cast is exact and the legacy typed path never
+    /// passes through this conversion.
+    /// </summary>
+    private static Dictionary<TKey, List<TChild>> ToTyped(Dictionary<object, List<TChild>> source)
+    {
+        var grouped = new Dictionary<TKey, List<TChild>>(source.Count);
+        foreach (var pair in source)
+            grouped[(TKey)pair.Key] = pair.Value;
 
         return grouped;
     }
@@ -760,6 +1335,9 @@ internal sealed class EagerLoadSpec<TEntity, TChild, TKey> : IEagerLoadSpec<TEnt
     {
         foreach (var child in children)
         {
+            if (_metadataKey is not null && !_metadataKey.IsMatchableChild(child))
+                continue;
+
             var key = _childKey(child);
             if (key is null)
                 continue;
@@ -799,7 +1377,12 @@ internal sealed class EagerLoadSpec<TEntity, TChild, TKey> : IEagerLoadSpec<TEnt
 
         foreach (var parent in parents)
         {
-            var key = _parentKey(parent);
+            TKey key;
+            if (_metadataKey is not null && !_metadataKey.IsMatchable(parent))
+                key = default!;
+            else
+                key = _parentKey(parent);
+
             List<TChild>? children = null;
             if (key is not null)
                 grouped.TryGetValue(key, out children);
@@ -863,8 +1446,13 @@ internal static class EntityBuilderEagerLoading
     /// <typeparam name="TEntity">The parent entity type.</typeparam>
     /// <param name="spec">The declaration's join specification.</param>
     /// <param name="childSource">The resolved child source.</param>
+    /// <param name="eagerOrdering">
+    /// The child query's own ordering for a metadata-driven single-query join that carries an ordered
+    /// child without an embedded per-parent page, or <see langword="null"/>. An embedded ranked source
+    /// always wins: its order is the window's own.
+    /// </param>
     /// <returns>The join clause.</returns>
-    internal static JoinExpression BuildSingleQueryJoin<TEntity>(IJoinIntoSpec<TEntity> spec, FromExpression childSource)
+    internal static JoinExpression BuildSingleQueryJoin<TEntity>(IJoinIntoSpec<TEntity> spec, FromExpression childSource, List<Sorting>? eagerOrdering = null)
     {
         ArgumentNullException.ThrowIfNull(spec);
         ArgumentNullException.ThrowIfNull(childSource);
@@ -879,10 +1467,11 @@ internal static class EntityBuilderEagerLoading
             FilterScope = spec.ChildFilterScope.IsEmpty ? null : spec.ChildFilterScope,
             // A per-parent paging child is rendered as an embedded ranked derived source that cannot carry
             // its own ORDER BY; its ordered keys are appended to the pair command so the stitched children
-            // keep the child query's order (resolved against this join alias).
+            // keep the child query's order (resolved against this join alias). A metadata-driven join with
+            // an ordered (unpaged) child carries the same rendering metadata.
             EagerPerParentOrdering = childSource.SubQuery is { PerParentPagingEmbedded: true } embeddedChild
                 ? embeddedChild.Sorting
-                : null,
+                : eagerOrdering is { Count: > 0 } ? [.. eagerOrdering] : null,
         };
     }
 
@@ -983,6 +1572,59 @@ internal static class EntityBuilderEagerLoading
         new("LoadWith cannot apply Limit/Offset/Page to a child query: a per-parent top-N requires " +
             "correlated execution, which is not supported. Remove the child paging or use an explicit " +
             "child query per parent.");
+
+    /// <summary>
+    /// Whether any eager-load declaration carried by the builder is the additive metadata-driven
+    /// <c>LoadWith</c> form (as opposed to the legacy explicit-key specification). The in-memory provider
+    /// has no SQL pipeline for the additive form, so construction rejects it by capability.
+    /// </summary>
+    /// <param name="specs">The builder's declarations, or <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when at least one declaration is metadata-driven.</returns>
+    internal static bool HasMetadataEagerLoadSpec<TEntity>(IReadOnlyList<IEagerLoadSpec<TEntity>>? specs)
+    {
+        if (specs is null)
+            return false;
+
+        for (var i = 0; i < specs.Count; i++)
+        {
+            if (specs[i] is IMetadataEagerLoadSpec)
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Rejects the additive metadata-driven <c>LoadWith</c> on a provider without a SQL pipeline. Called
+    /// while the parent command is constructed, so the declaration fails before a command is returned,
+    /// before any SQL is built and before a plan can be inserted; the legacy explicit-key form and the
+    /// in-memory provider keep their existing behavior.
+    /// </summary>
+    /// <typeparam name="TEntity">The entity the builder queries.</typeparam>
+    /// <param name="dataProvider">The provider that will execute the query.</param>
+    /// <param name="specs">The builder's eager-load declarations, or <see langword="null"/>.</param>
+    /// <exception cref="NotSupportedException">A metadata declaration is used on a non-SQL provider.</exception>
+    internal static void EnsureMetadataEagerLoadSupported<TEntity>(
+        IDataContext dataProvider,
+        IReadOnlyList<IEagerLoadSpec<TEntity>>? specs)
+    {
+        if (dataProvider.NeedMapping == false && HasMetadataEagerLoadSpec(specs))
+            throw MetadataEagerLoadNotSupported();
+    }
+
+    /// <summary>
+    /// The rejection for the additive metadata-driven <c>LoadWith</c> on the in-memory provider: the form
+    /// resolves a declared relationship into a SQL navigation, and the in-memory provider has no SQL
+    /// pipeline. It is a capability rejection raised while the parent command is constructed — before any
+    /// command exists and before any SQL is built or a plan is inserted — never a silent reinterpretation
+    /// and never a mutation of the sticky <see cref="QueryCommand.Cache"/> flag.
+    /// </summary>
+    /// <returns>The SQL-only rejection.</returns>
+    internal static NotSupportedException MetadataEagerLoadNotSupported() =>
+        new("LoadWith(navigation) is SQL-only: the metadata-driven eager load resolves a declared " +
+            "relationship into a SQL navigation, and the in-memory provider has no SQL pipeline for it. " +
+            "Use the explicit-key LoadWith(collection, childQuery, parentKey, childKey) overload with the " +
+            "in-memory provider, or run the query against a SQL provider.");
 
     /// <summary>
     /// Validates that <paramref name="child"/>, when it requests a per-parent top-N, can be lowered by

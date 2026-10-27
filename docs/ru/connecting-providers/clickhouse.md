@@ -34,8 +34,12 @@ ADO.NET-провайдер `ClickHouse.Driver`. Он создаёт `ClickHouseC
 - `stdev`/`stdevp`/`var`/`varp` как `stddevSamp`/`stddevPop`/`varSamp`/`varPop`;
 - `date_trunc(field, x)` как `dateTrunc('field', x)` (множественные ANSI-части субсекунд сворачиваются
   в единственные; `decade`/`century`/`millennium` бросают исключение), а `date_add`/`DateTime.Add*` —
-  как выделенные функции `addYears`/`addQuarters`/…/`addSeconds` (`decade`/`century`/`millennium`
-  сворачиваются в масштабированный `addYears`), `end_of_month` — как `toLastDayOfMonth(x)`;
+  как выделенные функции `addYears`/`addQuarters`/…/`addSeconds` (`year`/`decade`/`century` продвигают
+  операнд к `DateTime64(6)` и масштабируют `addYears`, поэтому тип SQL-результата этих единиц —
+  `DateTime64(6)`, а CLR-API не меняется; `millennium` бросает исключение до выполнения — на
+  закреплённом ClickHouse 25.8 поддерживаемые результаты годового семейства остаются в диапазоне
+  1900–2299, арифметика за его пределами не поддерживается, входные значения нормализуются до
+  микросекунд с отбрасыванием более тонкой точности), `end_of_month` — как `toLastDayOfMonth(x)`;
 - поверхность приведения/частей даты `SqlFunctions.ClickHouse.to_*` (гейт
   [`DateConversion`](xref:NextORM.Core.ISqlDialect.DateConversion)):
   `to_date`/`to_date_time`/`to_date32` — как `toDate`/`toDateTime`/`toDate32`; аксессоры `to_year`/
@@ -58,12 +62,16 @@ ADO.NET-провайдер `ClickHouse.Driver`. Он создаёт `ClickHouseC
   `count_big`/`count_big_distinct`) приводятся так же — в `toInt32(...)` для возвращающих `int`
   вариантов и `toInt64(...)` для 64-битных; параметрические агрегаты квантилей `quantile(level)(value)`/`quantileExact`/
   `quantileTiming` и `median`, обёрнутые в `toFloat64(...)` (чтобы любой вариант материализовался как
-  `double`); агрегат произвольного значения `any_agg` — как `any` (кросс-провайдерно: `ANY_VALUE(x)` в
+  `double`); `median` — обычный агрегат (одна строка на группу), а у общего
+  `SqlFunctions.ClickHouse.percentile` нет нативного написания: вызов бросает `NotSupportedException`,
+  а не становится псевдонимом `quantile`/`median`; агрегат произвольного значения `any_agg` — как `any` (кросс-провайдерно: `ANY_VALUE(x)` в
   MySQL), а агрегат последней строки `any_last` — как `anyLast`; возвращающие массивы агрегаты
   `group_array`/`group_uniq_array` — как `groupArray`/`groupUniqArray` (материализуются как CLR `T[]`);
   агрегаты последовательностей/воронки
   `window_funnel`/`sequence_match`/`retention` — как `windowFunnel`/`sequenceMatch`/`retention`
-  (`windowFunnel`/`sequenceMatch` обёрнуты в `toInt32(...)`; `retention` возвращает `Array(UInt8)` как `byte[]`); извлекающие функции
+  (`windowFunnel`/`sequenceMatch` обёрнуты в `toInt32(...)`; `retention` нормализуется на сервере к
+  объявленному `int[]`, а `top_k`, `top_k_weighted`, `group_array`, `group_uniq_array`, `array_map` и все
+  три перегрузки `range` так же возвращают объявленный CLR-тип массива); извлекающие функции
   строкового JSON `json_extract_string`/`json_extract_int`/`json_extract_float`/`json_extract_bool`/
   `json_extract_raw`/`json_has`/`json_type` — как `JSONExtractString`/`JSONExtractInt`/`JSONExtractFloat`/
   `JSONExtractBool`/`JSONExtractRaw`/`JSONHas`/`JSONType`, `json_length` — как
@@ -262,7 +270,7 @@ public sealed class TvpRow
 | Логические агрегаты | не поддерживаются (`bool_and`/`bool_or`/`every` — только PostgreSQL) |
 | Фильтрованный агрегат | комбинатор `-If` `countIf`/`sumIf`/`avgIf`/`minIf`/`maxIf`, генерируемый из общего API фильтрации (без ANSI `filter (where ...)`) |
 | ArgMin / ArgMax | `argMin`/`argMax` |
-| quantile / median | `quantile(0.5)(x)`, `quantileExact(0.9)(x)`, `quantileTiming(0.5)(x)`, `median(x)` (как `toFloat64(...)`) |
+| quantile / median | `quantile(0.5)(x)`, `quantileExact(0.9)(x)`, `quantileTiming(0.5)(x)`, `median(x)` (как `toFloat64(...)`, агрегат: одна строка на группу); общий `percentile` и оконные `percentile_cont`/`percentile_disc` бросают `NotSupportedException` |
 | any_agg (произвольное значение) | `any(x)` (кросс-провайдерно; `ANY_VALUE(x)` в MySQL) |
 | any_last (последняя строка) | `anyLast(x)` |
 | Условная функция | `iif(cond, a, b)` → `if(cond, a, b)`; `multi_if(when(c1, v1), ..., otherwise(v))` → `multiIf(c1, v1, ..., v)` |
@@ -296,6 +304,9 @@ select `Id` as `Id`
 
 ## Замечания и ограничения
 
+- Нативная `arrayExcept` существует только с ClickHouse 25.9. `SqlFunctions.ClickHouse.array_except`
+  остаётся в публичном API, но на закреплённой базовой версии 25.8 отклоняется с
+  `NotSupportedException` на этапе трансляции; остальные операции над множествами массивов не затронуты.
 - `GROUP BY ... WITH TOTALS` рендерится корректно, но официальный `ClickHouse.Driver` возвращает строку
   итогов отдельным блоком ответа, который не отдаётся через `IDataReader`, поэтому материализуются
   только строки групп. Используйте, если ваш драйвер отдаёт итоги; сам nextorm только эмитит модификатор.

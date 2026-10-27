@@ -22,12 +22,30 @@ public class PreparedTextLoweringTests
     private static DbPreparedQueryCommand<T> Prepare<T>(IDataContext ctx, QueryCommand<T> command, bool cache)
         => (DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(command, false, cache, CancellationToken.None);
 
-    private static DbCommand Checkout<T>(DbPreparedQueryCommand<T> prepared)
-        => prepared.GetDbCommand(
+    /// <summary>
+    /// Runs the checkout a real execution performs and returns the command that execution would use. The
+    /// plan's <see cref="DbPreparedQueryCommand{TResult}.DbCommand"/> is the connection-free diagnostic view:
+    /// text-binding specialization happens on the per-connection command, so asserting on the plan command
+    /// would assert nothing.
+    /// </summary>
+    private static DbCommand Checkout<T>(DbPreparedQueryCommand<T> prepared, DbConnection connection)
+    {
+        var lease = prepared.Acquire(
+            connection,
+            static (command, name, value) =>
+            {
+                var parameter = command.CreateParameter();
+                parameter.ParameterName = name;
+                parameter.Value = value ?? DBNull.Value;
+                return parameter;
+            },
             ReadOnlySpan<object?>.Empty,
-            NoRuntimeParameter,
-            prepared.DbCommand.Connection ?? throw new InvalidOperationException("The prepared command has no connection."),
-            null);
+            transaction: null,
+            onCommandCreated: null);
+        lease.Dispose();
+        return prepared.PeekCommand(connection)
+            ?? throw new InvalidOperationException("The prepared command has no per-connection command.");
+    }
 
     private static DbParameter NoRuntimeParameter(string name, object? value)
         => throw new InvalidOperationException($"Unexpected runtime parameter '{name}'.");
@@ -61,7 +79,7 @@ public class PreparedTextLoweringTests
         var prepared = Prepare(ctx, TextEquals(ctx.From<IComplexEntity>(), captured), cache: true);
         prepared.ParameterTemplate.Should().NotBeNull("an ORM-rendered statement carries its occurrence template");
 
-        var command = Checkout(prepared);
+        var command = Checkout(prepared, connection);
 
         Normalize(command.CommandText).Should()
             .Contain("_utf8mb4 X'69742773'", "the final string value is transported as UTF-8 hex")
@@ -79,17 +97,17 @@ public class PreparedTextLoweringTests
         var e = ctx.From<IComplexEntity>();
 
         var first = Prepare(ctx, TextEquals(e, "alpha"), cache: true);
-        Checkout(first);
-        Normalize(first.DbCommand.CommandText).Should().Contain("_utf8mb4 X'616c706861'");
+        var firstCommand = Checkout(first, connection);
+        Normalize(firstCommand.CommandText).Should().Contain("_utf8mb4 X'616c706861'");
 
         var second = Prepare(ctx, TextEquals(e, "beta"), cache: true);
         ReferenceEquals(first, second).Should().BeTrue("the captured value is not part of the plan key");
 
-        Checkout(second);
-        Normalize(second.DbCommand.CommandText).Should()
+        var secondCommand = Checkout(second, connection);
+        Normalize(secondCommand.CommandText).Should()
             .Contain("_utf8mb4 X'62657461'", "the second execution re-renders the current closure value")
             .And.NotContain("_utf8mb4 X'616c706861'", "the previous execution's literal is never reused");
-        second.DbCommand.Parameters.Count.Should().Be(0);
+        secondCommand.Parameters.Count.Should().Be(0);
     }
 
     [Fact]
@@ -102,12 +120,12 @@ public class PreparedTextLoweringTests
 
         string? value = "alpha";
         var first = Prepare(ctx, TextEquals(e, value), cache: true);
-        Checkout(first);
-        Normalize(first.DbCommand.CommandText).Should().Contain("_utf8mb4 X'616c706861'");
+        var firstCommand = Checkout(first, connection);
+        Normalize(firstCommand.CommandText).Should().Contain("_utf8mb4 X'616c706861'");
 
         value = null;
         var second = Prepare(ctx, TextEquals(e, value), cache: true);
-        var nullCommand = Checkout(second);
+        var nullCommand = Checkout(second, connection);
         Normalize(nullCommand.CommandText).Should()
             .Contain("@value", "a null value stays a bound database null")
             .And.NotContain("_utf8mb4 X'");
@@ -116,7 +134,7 @@ public class PreparedTextLoweringTests
 
         value = "gamma";
         var third = Prepare(ctx, TextEquals(e, value), cache: true);
-        var thirdCommand = Checkout(third);
+        var thirdCommand = Checkout(third, connection);
         Normalize(thirdCommand.CommandText).Should()
             .Contain("_utf8mb4 X'67616d6d61'")
             .And.NotContain("@value");
@@ -133,7 +151,7 @@ public class PreparedTextLoweringTests
 
         var value = "abc";
         var prepared = Prepare(ctx, TextEqualsTwice(ctx.From<IComplexEntity>(), value), cache: true);
-        var command = Checkout(prepared);
+        var command = Checkout(prepared, connection);
 
         var sql = Normalize(command.CommandText);
         sql.Should().Contain("_utf8mb4 X'616263'");
@@ -166,15 +184,15 @@ public class PreparedTextLoweringTests
         var expected = canonical.Where(p => !ReferenceEquals(p, textParameter)).ToArray();
         var expectedValues = expected.Select(p => p.Value).ToArray();
 
-        var command = Checkout(prepared);
+        var command = Checkout(prepared, connection);
 
         Normalize(command.CommandText).Should()
             .Contain("_utf8mb4 X'616263'")
             .And.NotContain("@text");
-        command.Parameters.Cast<DbParameter>().Should().Equal(
-            expected,
-            "every other binding keeps its canonical order, name and type");
-        Values(command).Should().Equal(expectedValues);
+        Names(command).Should().Equal(
+            expected.Select(parameter => parameter.ParameterName),
+            "every other binding keeps its canonical order and name");
+        Values(command).Should().Equal(expectedValues, "and its canonical value");
     }
 
     [Fact]
@@ -216,7 +234,7 @@ public class PreparedTextLoweringTests
 
         prepared.ParameterTemplate.Should().BeNull("caller-owned text has no planner-owned emission");
 
-        var command = Checkout(prepared);
+        var command = Checkout(prepared, connection);
 
         Normalize(command.CommandText).Should().Be(
             "select id from complex_entity where somestring = @value",
@@ -234,12 +252,12 @@ public class PreparedTextLoweringTests
         var e = ctx.From<IComplexEntity>();
 
         var first = Prepare(ctx, TextAndThreshold(e, "a", 1), cache: true);
-        Checkout(first);
+        Checkout(first, connection);
 
         var second = Prepare(ctx, TextAndThreshold(e, "b", 2), cache: true);
         ReferenceEquals(first, second).Should().BeTrue("the same shape reuses the cached plan");
 
-        var command = Checkout(second);
+        var command = Checkout(second, connection);
         Normalize(command.CommandText).Should().Contain("_utf8mb4 X'62'");
         Values(command).Should().Equal(new object?[] { 2 }, "the fast recipe refreshes the int binding before specialization");
         Names(command).Should().Equal("threshold");
@@ -255,12 +273,12 @@ public class PreparedTextLoweringTests
 
         var first = Prepare(ctx, TextAndThreshold(e, "a", 1), cache: true);
         first.SetParamRecipe(null);
-        Checkout(first);
+        Checkout(first, connection);
 
         var second = Prepare(ctx, TextAndThreshold(e, "c", 3), cache: true);
         ReferenceEquals(first, second).Should().BeTrue();
 
-        var command = Checkout(second);
+        var command = Checkout(second, connection);
         Normalize(command.CommandText).Should().Contain("_utf8mb4 X'63'");
         Values(command).Should().Equal(new object?[] { 3 }, "the fallback extraction writes the canonical bindings before specialization");
         Names(command).Should().Equal("threshold");

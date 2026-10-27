@@ -112,6 +112,22 @@ public class SqlServerFunctionsRejectionTests
         AssertUnsupported(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.try_parse(x.String) }), "try_parse");
     }
 
+    [Fact]
+    [Trait("Issue", "248")]
+    public void LiveStateFunctions_ShouldThrowBecauseNotSupported()
+    {
+        using var ctx = MySqlTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        AssertUnsupported(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.current_request_id() }), "current_request_id");
+        AssertUnsupported(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.current_transaction_id() }), "current_transaction_id");
+        AssertUnsupported(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.xact_state() }), "xact_state");
+        AssertUnsupported(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.ident_current("t") }), "ident_current");
+        AssertUnsupported(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.min_active_rowversion() }), "min_active_rowversion");
+        AssertUnsupported(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.rowcount_big() }), "rowcount_big");
+        AssertUnsupported(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.scope_identity() }), "scope_identity");
+    }
+
     private static void AssertUnsupported<T>(IDataContext ctx, QueryCommand<T> cmd, string name)
     {
         var act = () => SqlOf(ctx, cmd);

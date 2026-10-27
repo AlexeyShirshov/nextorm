@@ -445,7 +445,12 @@ select patindex('%a%', somestring) as [Pos],
 * **Date/time:** `datename(datepart, date)` (the part is a constant), `date_bucket(datepart, width, date[, origin])` (SQL Server 2022+), the server clocks `sysdatetime`/`sysdatetimeoffset`/`sysutcdatetime`, the offset functions `switchoffset(value, offset)`/`todatetimeoffset(value, offset)` (a string such as `"+02:00"` or signed minutes) and the construction family `timefromparts`/`smalldatetimefromparts`/`datetimefromparts`/`datetime2fromparts`/`datetimeoffsetfromparts`. The trailing `*FROMPARTS` precision must be a constant `0..7` (a non-constant, `null` or out-of-range value throws before any SQL is emitted).
 * **Binary/system:** `hashbytes(algorithm, data)` (the algorithm is a constant such as `SHA2_256`), `newsequentialid()` (valid only as a column `DEFAULT`, not in an ordinary `SELECT`), `checksum(values...)`/`binary_checksum(values...)` (at least one value; the `checksum(*)` wildcard is not exposed) and `compress(value)`/`decompress(value)` (GZIP over `varbinary(max)`).
 * **Metadata:** `col_length`, `col_name`, `ident_incr`/`ident_seed`, `index_col`, `object_definition`/`object_id`/`object_name`/`object_schema_name`, `stats_date`, `db_id`/`db_name`/`original_db_name`, `schema_id`/`schema_name`, `type_id`/`type_name`, `filegroup_id`/`filegroup_name`/`file_id`/`file_idex`/`file_name`, `current_timezone`/`current_timezone_id`, `getansinull`, `parsename` and `publishingservername`. A missing object/column/index/statistic yields `null`, like the native function.
-* **Conversion/logical:** `isdate(value)`/`isnumeric(value)` return the native T-SQL `int` (1/0), not a `bit`, so they stay integer values rather than materialised predicates, `formatmessage(messageOrId, args...)` accepts at most 20 formatting arguments, and `parse(value)`/`try_parse(value)` parse a `decimal(38,18)` with the fixed `en-US` culture (no culture argument; `parse` raises the server error for invalid text, `try_parse` returns NULL).
+* **Live state:** `current_request_id()` (`short?`, NULL outside a request), `current_transaction_id()`
+  (`long?`, NULL outside a transaction), `xact_state()` (native `smallint` 0/1/-1), `ident_current(table)`
+  (`decimal?`, the last identity of the table in **any** session — racy, not a last-insert API),
+  `min_active_rowversion()` (native `binary(8)`, not a counter), `rowcount_big()` (the previous command on
+  the same connection) and `scope_identity()` (`decimal?`, only in the same batch as the `INSERT`).
+* **Conversion/logical:** `isdate(value)`/`isnumeric(value)` return the native T-SQL `int` (1/0), not a `bit`, so they stay integer values rather than materialised predicates, and `formatmessage(messageOrId, args...)` accepts at most 20 formatting arguments.
 
 The portable BASE64 and crypto members are SQL Server 2025-only on this provider: `SqlFunctions.Sql.base64_encode` renders `BASE64_ENCODE(value)` over `varbinary` and `base64_decode` renders `BASE64_DECODE(value)` over `varchar` (cast an `nvarchar` column), while `crypt_gen_random` renders the typed `CASE WHEN length IS NULL THEN CAST(NULL AS varbinary(8000)) ELSE CRYPT_GEN_RANDOM(length) END` wrapper so a NULL length stays a typed NULL. No compatibility level or preview flag is required.
 * **JSON:** `json_array(value, ...)` and `json_object(key, value, ...)` (SQL Server 2022+),
@@ -453,12 +458,13 @@ The portable BASE64 and crypto members are SQL Server 2025-only on this provider
   `json_path_exists(json, path)` (SQL Server 2022+) and `json_contains(json, searchValue, path)`
   (SQL Server 2025+). The two predicates are materialised as `bit` values, mirroring `isjson`.
 
-Seven names that report live, mutable connection-, session- or statement-scope state are intentionally
-**not** exposed: `CURRENT_REQUEST_ID`, `CURRENT_TRANSACTION_ID`, `XACT_STATE`, `IDENT_CURRENT`,
-`MIN_ACTIVE_ROWVERSION`, `ROWCOUNT_BIG` and `SCOPE_IDENTITY`; the stable configuration/identity constants
-of the same scope (`CURRENT_TIMEZONE`/`CURRENT_TIMEZONE_ID`, `SERVER_NAME`, `HOST_ID`, `HOST_NAME`,
-`APP_NAME`, `SUSER_NAME`, `ORIGINAL_LOGIN`) are shipped. Use raw SQL or a `[SqlFunction]` wrapper when a
-concrete per-row use appears.
+Live mutable state is **not** an exclusion criterion: the seven names that report live connection-,
+transaction-, session- or statement-scope state are exposed as-is, with the native SQL Server semantics
+and the caveats above. nextorm promises no per-row stability, no connection continuity between queries
+and no identity-retrieval guarantee — a separate `SCOPE_IDENTITY`/`IDENT_CURRENT` call is not a
+last-insert API, so use `ReturningIdentity<TKey>()` for the key. The stable configuration/identity
+constants of the same scope (`CURRENT_TIMEZONE`/`CURRENT_TIMEZONE_ID`, `SERVER_NAME`, `HOST_ID`,
+`HOST_NAME`, `APP_NAME`, `SUSER_NAME`, `ORIGINAL_LOGIN`) stay on the same surface.
 
 ## Null-safe comparison
 

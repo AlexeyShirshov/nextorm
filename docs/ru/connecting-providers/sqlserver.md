@@ -149,7 +149,13 @@ SQL Server 2017+ включает
 SQL Server отрисовывает оконные квантили `SqlFunctions.Sql.percentile_cont(fraction, property).Over()` и
 `percentile_disc(...)` как `percentile_cont(fraction) within group (order by property) over (...)`
 ([`SupportsPercentileWindow`](xref:NextORM.Core.ISqlDialect.SupportsPercentileWindow)); точной
-упорядоченно-агрегатной формы у него нет. Агрегат произвольного значения `any_agg` (`ANY_VALUE`)
+упорядоченно-агрегатной формы у него нет. Медиана — та же нативная композиция:
+`SqlFunctions.SqlServer.median(value).Over(...)` рендерит
+`percentile_cont(0.5) within group (order by value) over (...)`, одна строка на входную строку (не на
+группу); поддерживается только окно с `partition by`, поэтому оконный `ORDER BY` или рамка отклоняются,
+а вызов обязан быть завершён `Over(...)`. У общего `SqlFunctions.SqlServer.percentile` нет отдельного
+нативного написания — вызов бросает `NotSupportedException`. Дроби — это `double` в `[0, 1]`, а не
+проценты, и проверяются до рендеринга. Агрегат произвольного значения `any_agg` (`ANY_VALUE`)
 **не** включён: T-SQL даёт `ANY_VALUE` только в SQL Server 2025 / Fabric, чего версионно-агностичный
 диалект предположить не может.
 Методы типа XML `SqlFunctions.SqlServer.xml_value(xml, xpath, sqlType)`,
@@ -199,11 +205,15 @@ XQuery — строковым литералом).
   (1/0), а не `bit`; `formatmessage` принимает строку формата или id из `sys.messages` и не более 20
   аргументов.
 
-Семь имён, сообщающих живое изменяемое состояние соединения, сессии или инструкции, намеренно не
-открыты: `CURRENT_REQUEST_ID`, `CURRENT_TRANSACTION_ID`, `XACT_STATE`, `IDENT_CURRENT`,
-`MIN_ACTIVE_ROWVERSION`, `ROWCOUNT_BIG` и `SCOPE_IDENTITY`. Стабильные конфигурационные константы и
-константы идентичности той же области (`CURRENT_TIMEZONE`/`CURRENT_TIMEZONE_ID`, `SERVER_NAME`,
-`HOST_ID`, `HOST_NAME`, `APP_NAME`, `SUSER_NAME`, `ORIGINAL_LOGIN`) открыты. См.
+Семь имён, сообщающих живое изменяемое состояние соединения, сессии или инструкции, открыты как есть:
+`CURRENT_REQUEST_ID`, `CURRENT_TRANSACTION_ID`, `XACT_STATE`, `IDENT_CURRENT`, `MIN_ACTIVE_ROWVERSION`,
+`ROWCOUNT_BIG` и `SCOPE_IDENTITY`. Живое изменяемое состояние **не** является критерием исключения:
+нативная семантика SQL Server поставляется вместе с оговорками, и nextorm не гарантирует построчную
+стабильность, непрерывность соединения между запросами и получение identity — отдельный вызов
+`SCOPE_IDENTITY`/`IDENT_CURRENT` не является API последней вставки, используйте
+`ReturningIdentity<TKey>()`. Стабильные конфигурационные константы и константы идентичности той же
+области (`CURRENT_TIMEZONE`/`CURRENT_TIMEZONE_ID`, `SERVER_NAME`, `HOST_ID`, `HOST_NAME`, `APP_NAME`,
+`SUSER_NAME`, `ORIGINAL_LOGIN`) остаются на той же поверхности. См.
 [гайд по скалярам T-SQL](../guide/provider-specific-sql/sqlserver.md#скаляры-t-sql).
 
 ## Рекурсивные CTE и `maxRecursion`
@@ -414,6 +424,8 @@ nextorm не генерирует DDL колонок, поэтому перев�
 | Бинарные/checksum/прочие T-SQL | `checksum` / `binary_checksum` / `compress` / `decompress` / `rand` / `stuff` / `str` / `isdate` / `isnumeric` / `formatmessage` (гейт по имени) |
 | Метаданные T-SQL | `col_length` / `col_name` / `object_id` / `object_name` / `db_id` / `db_name` / `schema_id` / `schema_name` / `type_id` / `type_name` / `file_id` / `file_name` / `current_timezone` / `parsename` / `stats_date` и остальные семейства A-D (гейт по имени) |
 | Оконные квантили | `percentile_cont`/`percentile_disc` как `... within group (order by x) over (...)` (SQL Server 2012+) |
+| Медиана (аналитическая) | `SqlFunctions.SqlServer.median(v).Over(...)` → `percentile_cont(0.5) within group (order by v) over (...)`: одна строка на входную строку; окно только с `partition by` (`ORDER BY`/рамка отклоняются) |
+| Общий квантиль | не поддерживается: `SqlFunctions.SqlServer.percentile` бросает `NotSupportedException` |
 | Агрегат произвольного значения | не поддерживается (`ANY_VALUE` только в SQL Server 2025 / Fabric) |
 | Условные функции | `iif(...)` (переносимая, [`Iif`](xref:NextORM.Core.ISqlDialect.Iif)) / `choose(...)` ([`SupportsChoose`](xref:NextORM.Core.ISqlDialect.SupportsChoose)) |
 | Предикаты полнотекстового поиска | `contains(...)` / `freetext(...)` (колонка должна быть полнотекстово проиндексирована) |

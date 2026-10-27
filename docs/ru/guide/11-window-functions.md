@@ -34,6 +34,7 @@
 | Накопленное распределение | `cume_dist()` | `cume_dist()` |
 | Интерполированный квантиль | `percentile_cont(fraction, property)` | `percentile_cont(f) within group (order by expr) over (...)` |
 | Дискретный квантиль | `percentile_disc(fraction, property)` | `percentile_disc(f) within group (order by expr) over (...)` |
+| Медиана (аналитическая) | `SqlFunctions.SqlServer.median(property)` / `SqlFunctions.MySql.median(property)` | `percentile_cont(0.5) within group (order by expr) over (...)` |
 | Сегменты (бакеты) | `ntile(buckets)` | `ntile(n)` |
 | Предыдущее значение | `lag(property[, offset[, defaultValue]])` | `lag(expr, offset[, default])` |
 | Следующее значение | `lead(property[, offset[, defaultValue]])` | `lead(expr, offset[, default])` |
@@ -364,6 +365,19 @@ MariaDB, ClickHouse и SQLite ([`SupportsNamedWindows`](xref:NextORM.Core.ISqlDi
 квантили упорядоченным **агрегатом**
 ([`SqlFunctions.Postgres.percentile_cont`](xref:NextORM.Core.PostgresFunctions.percentile_cont``1(System.Double,System.Linq.Expressions.Expression{System.Func{``0}}))), а
 MySQL, SQLite и ClickHouse отклоняют оконную форму через `NotSupportedException`.
+
+У медианы нет собственного написания ни в SQL Server, ни в MariaDB: `SqlFunctions.SqlServer.median(value)` и
+`SqlFunctions.MySql.median(value)` — та же аналитическая композиция с фиксированной дробью `0.5`
+(`percentile_cont(0.5) within group (order by value) over (...)`), поэтому вызов обязательно завершается
+[`Over`](xref:NextORM.Core.WindowFunction`1.Over(NextORM.Core.WindowOrder,NextORM.Core.WindowFrame)), как и оконные квантили.
+Это **аналитические**, а не агрегатные формы: они сохраняют одну строку на входную строку, тогда как агрегат
+сворачивает каждую группу в одну строку. Поддерживается только окно с одним `partition by` (`.Over(partitionBy: ...)`
+или пустое `over ()`); оконный `ORDER BY` или рамка отклоняются, потому что порядок берётся из аргумента-значения.
+Дробь `percentile_cont`/`percentile_disc` — это `double` в `[0, 1]`, а не проценты; она должна быть конечной и
+не зависящей от строки (литерал или захваченная переменная), а зависящая от строки дробь отклоняется при
+генерации SQL. Упорядоченные агрегаты PostgreSQL никогда не принимают `OVER`, а общий член
+`percentile(fraction, value)` отклоняется всеми провайдерами — он никогда не является псевдонимом
+непрерывной формы.
 
 | Провайдер | Поведение |
 |---|---|

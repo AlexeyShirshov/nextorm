@@ -1013,8 +1013,9 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
     [Fact]
     public void ArrayScalarFunctions_ShouldReturnValues()
     {
-        // The five functions return arrays, which the row reader cannot materialise yet, so each is
-        // wrapped in a scalar-returning array function (length/arrayStringConcat) inside the query.
+        // The untargeted array functions still return element types the row reader cannot
+        // materialise as the declared array (arrayCumSum/arraySlice/arrayPushBack/arrayEnumerate),
+        // so each is wrapped in a scalar-returning array function (length/arrayStringConcat).
         // array_entity id = 1 has nums = [3, 1, 2].
         var r = _sut.ArrayEntity
             .Where(x => x.Id == 1)

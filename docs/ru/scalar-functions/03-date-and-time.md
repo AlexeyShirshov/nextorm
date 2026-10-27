@@ -243,15 +243,18 @@ select dateTrunc('month', dt) as `Month`
 SQL Server отрисовывает `dateadd(field, amount, value)` и `eomonth(value)`, сворачивая
 `decade`/`century`/`millennium` в масштабированное прибавление `year`; PostgreSQL отрисовывает
 интервальную арифметику; ClickHouse отрисовывает выделенные функции
-`addDays`/`addMonths`/…/`addSeconds` (сворачивая три крупные части в масштабированный `addYears`) и
+`addDays`/`addMonths`/…/`addSeconds` (сворачивая `decade` и `century` в масштабированный `addYears`) и
 `toLastDayOfMonth(value)`; MySQL/MariaDB отрисовывают `date_add(value, interval n unit)` и
 `last_day(value)`; SQLite настраивает дату через строку-модификатор `datetime`/`strftime`.
 `SqlFunctions.Sql.date_diff(field, start, end)` возвращает число границ `<field>` между двумя отметками
-времени (SQL Server `datediff`, ClickHouse `dateDiff`, MySQL/MariaDB `timestampdiff`); резервные
-реализации PostgreSQL и SQLite считают части даты границами, а части времени — целыми единицами.
-`SqlFunctions.Sql.date_diff_big(field, start, end)` — 64-битный вариант (SQL Server `datediff_big`;
-остальные расширяют результат) для промежутка в `millisecond`/`microsecond`, который переполнил бы
-32-битный `date_diff`. Sub-day `date_add`/`DateTime.Add*` продвигает `date`-операнд к дробному
+времени 32-битным счётчиком (`int?`; SQL Server `datediff`, ClickHouse `dateDiff`, MySQL/MariaDB
+`timestampdiff`); резервные реализации PostgreSQL и SQLite считают части даты границами, а части
+времени — целыми единицами. Ширина 32 бита ограничивает диапазон: промежуток, число границ в котором не
+укладывается в Int32, выходит за контракт узкой функции — для него используйте `date_diff_big`.
+`SqlFunctions.Sql.date_diff_big(field, start, end)` — 64-битный вариант (`long?`; SQL Server
+`datediff_big`, остальные расширяют результат), он сохраняет знаковые промежутки, счётчик которых
+превышает Int32, например длинный промежуток в `millisecond`/`microsecond`.
+Sub-day `date_add`/`DateTime.Add*` продвигает `date`-операнд к дробному
 timestamp (SQL Server `datetime2`, ClickHouse `DateTime`/`DateTime64`), чтобы время суток не терялось.
 `SqlFunctions.Sql.date_from_parts(year, month, day)` строит дату. `DateTime.AddDays`/`AddMonths`/… внутри
 проекции или предиката идут через тот же хук:
@@ -284,10 +287,17 @@ select datetime(dt, (1) || ' days') as 'NextDay', date(dt, 'start of month', '+1
  from complex_entity
 ```
 
+В ClickHouse сложение `year`, `decade` и `century` использует `DateTime64(6)`: операнд продвигается
+через `toDateTime64(x, 6)` перед масштабированным `addYears`. Тип SQL-результата для этих трёх
+единиц — `DateTime64(6)`, при этом CLR-API не меняется. `millennium` не поддерживается и бросает
+исключение до выполнения. На закреплённом ClickHouse 25.8 поддерживаемые результаты лежат в
+диапазоне 1900–2299; арифметика за его пределами не поддерживается. Входные значения нормализуются
+до микросекунд, более тонкая точность отбрасывается.
+
 | C# | SQL Server | PostgreSQL | ClickHouse | MySQL/MariaDB | SQLite |
 |---|---|---|---|---|---|
 | `SqlFunctions.Sql.date_add("day", n, x)` | `dateadd(day, n, x)` | `x + (n * interval '1 day')` | `addDays(x, n)` | `date_add(x, interval n day)` | `datetime(x, (n) \|\| ' days')` |
-| `SqlFunctions.Sql.date_add("decade", n, x)` | `dateadd(year, (n) * 10, x)` | `x + (n * interval '10 years')` | `addYears(x, (n) * 10)` | `date_add(x, interval (n) * 10 year)` | `datetime(x, ((n) * 10) \|\| ' years')` |
+| `SqlFunctions.Sql.date_add("decade", n, x)` | `dateadd(year, (n) * 10, x)` | `x + (n * interval '10 years')` | `addYears(toDateTime64(x, 6), (n) * 10)` | `date_add(x, interval (n) * 10 year)` | `datetime(x, ((n) * 10) \|\| ' years')` |
 | `SqlFunctions.Sql.end_of_month(x)` | `eomonth(x)` | `date_trunc('month', x) + interval '1 month - 1 day'` | `toLastDayOfMonth(x)` | `last_day(x)` | `date(x, 'start of month', '+1 month', '-1 day')` |
 | `SqlFunctions.Sql.date_diff("day", a, b)` | `datediff(day, a, b)` | `cast(b as date) - cast(a as date)` | `dateDiff('day', a, b)` | `timestampdiff(day, a, b)` | `(strftime('%s', b) - strftime('%s', a)) / 86400` |
 | `SqlFunctions.Sql.date_diff_big("milliseconds", a, b)` | `datediff_big(millisecond, a, b)` | `cast(trunc(extract(epoch from (b - a)) * 1000) as bigint)` | `dateDiff('millisecond', a, b)` | `cast((timestampdiff(microsecond, a, b) / 1000) as signed)` | `((strftime('%s', b) - strftime('%s', a)) * 1000)` |
@@ -397,3 +407,35 @@ var rows = dataContext.From<IComplexEntity>()
 select toInt32(toYear(dt)) as `Year`, toStartOfMonth(dt) as `MonthStart`
  from complex_entity
 ```
+
+### Поставленные функции даты и времени (#286, T286b)
+
+Остальной каталог даты/времени ClickHouse типизирован на `ClickHouseFunctions`. Результаты объявлены
+явно: `make_date`/`make_date32`/`to_modified_julian_day`/`to_time` возвращают целые,
+`make_date_time` — `DateTime`, `server_timezone`/`timezone_of`/`date_name` — `string`, семейство
+`timezone_offset` — `int`, а `now64`/`time_slot`/`from_unix_timestamp*` сохраняют точность
+`DateTime64` вендора.
+
+| Функция | SQL |
+|---|---|
+| `SqlFunctions.ClickHouse.make_date(y, m, d)` / `make_date32(y, m, d)` | `makeDate` / `makeDate32` |
+| `SqlFunctions.ClickHouse.make_date_time(y, m, d, h, mi, s)` | `makeDateTime(...)` |
+| `SqlFunctions.ClickHouse.now64([scale[, timezone]])` | `now64(...)` |
+| `SqlFunctions.ClickHouse.now_in_block([scale[, timezone]])` | `nowInBlock(...)` |
+| `SqlFunctions.ClickHouse.time_slot(ts)` / `time_slots(start, duration)` | `timeSlot` / `timeSlots` |
+| `SqlFunctions.ClickHouse.to_start_of_five_minutes(ts)` / `_ten` / `_fifteen` | `toStartOfFiveMinutes` / `Ten` / `FifteenMinutes` |
+| `SqlFunctions.ClickHouse.to_start_of_interval(ts, seconds[, origin])` | `toStartOfInterval(ts, INTERVAL ...)` |
+| `SqlFunctions.ClickHouse.to_iso_year(ts)` / `to_week` / `to_year_week` / `to_last_day_of_week` | `toISOYear` / `toWeek` / `toYearWeek` / `toLastDayOfWeek` |
+| `SqlFunctions.ClickHouse.to_days_in_month(ts)` | `toDaysInMonth(ts)` |
+| `SqlFunctions.ClickHouse.to_modified_julian_day(ts)` | `toModifiedJulianDay(ts)` |
+| `SqlFunctions.ClickHouse.age(ts1, ts2)` | `age(ts1, ts2)` |
+| `SqlFunctions.ClickHouse.date_name(part, ts)` | `dateName(part, ts)` |
+| `SqlFunctions.ClickHouse.server_timezone()` / `timezone_of(ts)` / `timezone_offset(ts)` | `serverTimezone` / `timezoneOf` / `timezoneOffset` |
+| `SqlFunctions.ClickHouse.to_time(ts)` | `toTime(ts)` |
+| `SqlFunctions.ClickHouse.timestamp(ts)` | `timestamp(ts)` |
+| `SqlFunctions.ClickHouse.from_unix_timestamp(ts[, tz])` / `_64_milli` / `_64_micro` | `fromUnixTimestamp` / `fromUnixTimestamp64Milli` / `Micro` |
+
+Три члена остаются отклонёнными с проверенной причиной: `from_utc_timestamp` (пара «настенное время,
+зона» непредставима в `System.DateTime`), `to_time64` (`Time64(scale)` не имеет CLR-носителя) и
+`from_unix_timestamp64_nano` (`DateTime64(9)` превышает разрешение `DateTime` в 100 нс). См.
+[ClickHouse-specific SQL › Пока не поддерживается](../guide/provider-specific-sql/clickhouse.md#пока-не-поддерживается).

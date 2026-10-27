@@ -113,7 +113,7 @@ public class InMemoryScalarFunctionsTests
     [Fact]
     public void SqlServerOnlyFunctions182_ShouldThrowBecauseNotSupported()
     {
-        // Every one of the 49 SQL Server-only functions covered by the list must fail in memory with a
+        // Every one of the 56 SQL Server-only functions added for #182/#248/#282 must fail in memory with a
         // clear NotSupportedException rather than fabricating a value.
         var cases = new (string Name, Action Act)[]
         {
@@ -167,23 +167,30 @@ public class InMemoryScalarFunctionsTests
             ("file_idex", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.file_idex("f") }).ToList()),
             ("file_name", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.file_name(1) }).ToList()),
 
-            // Metadata D (9)
+            // Metadata D (16)
+            ("current_request_id", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.current_request_id() }).ToList()),
             ("current_timezone", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.current_timezone() }).ToList()),
             ("current_timezone_id", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.current_timezone_id() }).ToList()),
+            ("current_transaction_id", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.current_transaction_id() }).ToList()),
             ("formatmessage", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.formatmessage("m") }).ToList()),
             ("getansinull", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.getansinull() }).ToList()),
+            ("ident_current", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.ident_current("t") }).ToList()),
             ("isdate", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.isdate("x") }).ToList()),
             ("isnumeric", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.isnumeric("x") }).ToList()),
+            ("min_active_rowversion", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.min_active_rowversion() }).ToList()),
             ("parsename", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.parsename("a.b", 1) }).ToList()),
             ("publishingservername", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.publishingservername() }).ToList()),
+            ("rowcount_big", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.rowcount_big() }).ToList()),
+            ("scope_identity", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.scope_identity() }).ToList()),
             ("str", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.str(1.5) }).ToList()),
+            ("xact_state", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.xact_state() }).ToList()),
 
             // Parsing (2) — T282 (#282)
             ("parse", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.parse("1234.50") }).ToList()),
             ("try_parse", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.try_parse("1234.50") }).ToList())
         };
 
-        cases.Should().HaveCount(49);
+        cases.Should().HaveCount(56);
         foreach (var (name, act) in cases)
             act.Should().Throw<NotSupportedException>().WithMessage($"*{name}*not supported*");
     }

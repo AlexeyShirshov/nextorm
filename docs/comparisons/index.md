@@ -78,8 +78,13 @@ boundaries:
   [EF Core integration](../advanced/integration-efcore.md)).
 - **Eager loading and relationships**: `LoadWith` eager loading covers finite nested graphs (level 2+,
   with a single graph-wide mode and per-level ordering/top-N) in split and expressible single-query;
-  `JoinInto` still rejects composite keys, composite many-to-many junction selectors and many-to-many
-  under a single query.
+  `JoinInto` joins and groups on every declared key component, composite foreign, principal and junction
+  keys included, while loading a many-to-many graph in a single eager-loading query remains out of scope.
+- **Deeper query forms**: `SelectMany`/`GroupJoin` are not translated on the SQL providers, `APPLY`/`LATERAL`
+  cannot take a join projection, and in-memory correlation stops at depth one.
+- **Dynamic SQL assembly**: building SQL at runtime stays outside the builder surface.
+- **Provider-gated native types**: native range/multirange, native JSON columns and arrays are not available
+  on every provider; the others fall back to the pair/text mappings or reject them.
 - **Provider breadth**: fewer providers than linq2db and EF Core (no Oracle, Firebird, DB2, SAP HANA,
   Informix, Sybase or SQL CE).
 

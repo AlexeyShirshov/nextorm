@@ -18,4 +18,10 @@ public readonly record struct PreparedCommandOptions(
 {
     /// <summary>Whether the reader must be opened with <see cref="System.Data.CommandBehavior.SequentialAccess"/> for streaming LOB columns.</summary>
     public bool SequentialAccess { get; init; }
+
+    /// <summary>
+    /// The command-reuse policy this prepared command was built with. It is carried as preparation input
+    /// only and is never read back from a shared query command.
+    /// </summary>
+    public PreparedCommandCache Cache { get; init; }
 }

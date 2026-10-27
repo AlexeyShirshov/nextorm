@@ -139,7 +139,7 @@ public class EagerTerminalGuardTests : IDisposable
             case "Max": builder.Max(p => p.Id); break;
             case "Sum": builder.Sum(p => p.Id); break;
             case "Avg": builder.Avg(p => p.Id); break;
-            case "Prepare": builder.Prepare(cancellationToken: CancellationToken.None); break;
+            case "Prepare": builder.Prepare(default, CancellationToken.None); break;
             case "FirstProjection": builder.FirstOrFirstOrDefaultCommand(p => p.Id); break;
             case "SingleProjection": builder.SingleOrSingleOrDefaultCommand(p => p.Id); break;
             case "WriteCsv": builder.WriteCsv(new MemoryStream()); break;

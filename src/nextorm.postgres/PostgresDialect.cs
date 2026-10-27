@@ -558,6 +558,8 @@ public class PostgresDialect : SqlDialectBase
     public override bool SupportsRegressionAggregates => true;
     /// <inheritdoc/>
     public override bool SupportsOrderedAggregates => true;
+    /// <inheritdoc/>
+    public override bool SupportsOrderedPercentiles => true;
 
     /// <inheritdoc/>
     public override string MakeAggregate(string name) => name switch

@@ -37,7 +37,7 @@ in [`sql-function-coverage-gap.md`](sql-function-coverage-gap.md).
 > | 20 | `GREATEST` / `LEAST` | **<span style="color:green">Done</span>** on SQL Server, PostgreSQL, MySQL/MariaDB, SQLite and ClickHouse; NULL semantics differ per provider |
 > | 21 | `STRING_AGG` / `ARRAY_AGG` (incl. `WITHIN GROUP`, `FILTER`) | **<span style="color:green">Done</span>** — `string_agg` on SQL Server, PostgreSQL, MySQL/MariaDB, SQLite and ClickHouse; `array_agg` on PostgreSQL (`MakeStringAgg`/`MakeArrayAgg`) |
 > | 22 | `ROLLUP` / `CUBE` / `GROUPING SETS` | **<span style="color:green">Done</span>** — `ROLLUP` on SQL Server, PostgreSQL, MySQL/MariaDB, SQLite and ClickHouse; `CUBE`/`GROUPING SETS` on SQL Server, PostgreSQL, SQLite and ClickHouse (`GroupByRollup`/`GroupByCube`/`GroupByGroupingSets`) |
-> | 23 | Date arithmetic (`date_add`/`date_diff`/`date_trunc`/`end_of_month`/`date_from_parts`, `DateTime.Add*`) | **<span style="color:green">Done</span>** across SQL Server, PostgreSQL, MySQL/MariaDB, SQLite and ClickHouse; the accepted fields differ per provider and are validated by `SupportsDateTruncField`/`SupportsDateAddField`/`SupportsDateDiffField`. The ClickHouse-native conversion/part surface (`toDate`/`toDateTime`/`toDate32`, `toYear`/..., `toStartOf*`, `toMonday`, `toYYYYMM`/`toYYYYMMDD`, `toUnixTimestamp`) is exposed through `SqlFunctions.ClickHouse` under `DateConversion` |
+> | 23 | Date arithmetic (`date_add`/`date_diff`/`date_trunc`/`end_of_month`/`date_from_parts`, `DateTime.Add*`) | **<span style="color:green">Done</span>** across SQL Server, PostgreSQL, MySQL/MariaDB, SQLite and ClickHouse; the accepted fields differ per provider and are validated by `SupportsDateTruncField`/`SupportsDateAddField`/`SupportsDateDiffField`. The ClickHouse-native conversion/part surface (`toDate`/`toDateTime`/`toDate32`, `toYear`/..., `toStartOf*`, `toMonday`, `toYYYYMM`/`toYYYYMMDD`, `toUnixTimestamp`) is exposed through `SqlFunctions.ClickHouse` under `DateConversion`; ClickHouse `date_add` promotes the `year`/`decade`/`century` operand to `DateTime64(6)` (the SQL result type of those three units, with the CLR API unchanged and supported results on pinned 25.8 within 1900–2299) and rejects `millennium` before execution ([#256](https://github.com/AlexeyShirshov/nextorm/issues/256)) |
 > | 24 | Locking table hints + row locking + index hints | **<span style="color:green">Done</span>** (locking table hints — `WithTableHint` on SQL Server only; row locking — `ForUpdate`/`ForShare` on PostgreSQL/MySQL/MariaDB and SQL Server; `WithIndex`/`WithoutIndex` on MySQL/MariaDB/SQLite/SQL Server; PostgreSQL/ClickHouse throw on table/index hints) |
 > | 25 | Extended scalar + session/info functions (`make_interval`, `justify_*`, `to_*`, `timezone`, `gen_random_uuid`/`uuidv7`, `pg_typeof`; `current_user`/`session_user`/`current_schema`/`current_database`/`version`) | Extended scalar + `pg_typeof`: **<span style="color:green">Done</span> on PostgreSQL** (`SupportsExtendedScalarFunctions`). Session/info: **<span style="color:green">Done</span>** cross-provider — all five on PostgreSQL/SQL Server/MySQL/MariaDB, `current_user`/`current_database`/`version` on ClickHouse and `version` on SQLite (`SessionInfoFunctions` + per-name `SessionInfoFunctions`). Session/server identity ([#219](https://github.com/AlexeyShirshov/nextorm/issues/219)): **<span style="color:green">Done</span>** — SQL Server `@@SERVERNAME`/`host_id()`/`host_name()`/`app_name()`/`suser_name()`/`original_login()` (gated by `ISqlServerFunctions.SupportsSessionIdentity`), PostgreSQL `pg_backend_pid()`/`inet_server_addr()`/`inet_server_port()`/`inet_client_addr()`/`inet_client_port()` (PG `inet` returned as text, SQL NULL on unix sockets), shared `connection_id()` (unsigned, MySQL/MariaDB and ClickHouse) and MySQL/MariaDB `user()`, ClickHouse `host_name()`/`tcp_port()`; every unsupported function/provider throws `NotSupportedException` at translation, and `host`/`app` values are client-supplied and untrusted. UUID generators: **<span style="color:green">Done</span>** cross-provider — `gen_random_uuid`/`uuidv7` on PostgreSQL/MariaDB/ClickHouse, `gen_random_uuid` (`newid()`) also on SQL Server, gated off on MySQL (v1 only) and SQLite (`UuidGenerators` + per-name `UuidGenerators`) |
 > | 26 | Correlated scalar subqueries (and correlated `EXISTS`/`IN`/`ANY`/`ALL` in `SELECT`/`WHERE`/`ORDER BY`/`HAVING`) | **<span style="color:green">Done</span> on SQL providers** (any nesting depth; join-projection outer references included) and on the in-memory provider for depth-one scalar/aggregate/`EXISTS`/`IN` (deeper forms throw `NotSupportedException`) |
@@ -385,7 +385,9 @@ to the ledger on 2026-09-29; item 49 (eager loading) moved on 2026-10-17; item 5
     translated (`docs/getting-started/03-entities-and-metadata.md`, "Naming conventions").
 15. **Provider field/feature differences are decided and documented.** The accepted
     `date_add`/`date_trunc`/`date_diff` fields differ per provider (e.g. SQLite folds
-    `millisecond`/`quarter`, SQL Server rejects `decade`/`century`/`millennium` for `date_trunc`),
+    `millisecond`/`quarter`, SQL Server rejects `decade`/`century`/`millennium` for `date_trunc`,
+    ClickHouse rejects `millennium` for `date_add` — the year family is promoted to `DateTime64(6)`
+    there, which also sets the SQL result type of those units),
     `CUBE`/`GROUPING SETS` and `FULL JOIN` are missing on MySQL/MariaDB, `GREATEST`/`LEAST` has
     provider-specific NULL semantics, and several features (`FOR JSON`/`FOR XML`) exist on a subset of
     providers. Each divergence now carries an explicit **unify / gate / document** decision in
@@ -596,9 +598,11 @@ to the ledger on 2026-09-29; item 49 (eager loading) moved on 2026-10-17; item 5
     `NEWSEQUENTIALID`, `UNICODE`/`NCHAR`, `SQUARE`, the trigonometric functions and the SQL Server JSON
     constructors/aggregates `JSON_ARRAY`/`JSON_OBJECT`/`JSON_ARRAYAGG`/`JSON_OBJECTAGG`/`JSON_CONTAINS`/
     `JSON_PATH_EXISTS`) is joined by the linq2db-v6.5.0 reconciliation ([#182](https://github.com/AlexeyShirshov/nextorm/issues/182)):
-    61 pinned T-SQL scalars = **51 covered + 10 excluded** (live mutable connection/session/statement-scope
-    state; #219 later opened three, leaving the seven tracked in
-    [#248](https://github.com/AlexeyShirshov/nextorm/issues/248)). The 47
+    61 pinned T-SQL scalars = **61 covered + 0 excluded** (live mutable connection/session/statement-scope
+    state is not an exclusion criterion: the #182 manifest pinned 51 covered + 10 excluded,
+    [#219](https://github.com/AlexeyShirshov/nextorm/issues/219) opened three of them and
+    [#248](https://github.com/AlexeyShirshov/nextorm/issues/248) the remaining seven, as-is with their
+    native semantics and caveats). The 47
     additions are the clock/offset/`*FROMPARTS` date family (`SYSDATETIME`/`SYSDATETIMEOFFSET`/
     `SYSUTCDATETIME`/`SWITCHOFFSET`/`TODATETIMEOFFSET`/`TIMEFROMPARTS`/`SMALLDATETIMEFROMPARTS`/
     `DATETIMEFROMPARTS`/`DATETIME2FROMPARTS`/`DATETIMEOFFSETFROMPARTS`; FROMPARTS 6 total/5 new, date 13
@@ -644,12 +648,15 @@ to the ledger on 2026-09-29; item 49 (eager loading) moved on 2026-10-17; item 5
     preparation throws `NotSupportedException` before any SQL
     ([#278](https://github.com/AlexeyShirshov/nextorm/issues/278)).
     Docs: [SQLite-specific SQL](../../guide/provider-specific-sql/sqlite.md) (EN+RU).
-42. **ClickHouse built-in function gaps — <span style="color:green">done</span>.** `lowerUTF8`/`upperUTF8`, `trim*`, `replaceRegexp*`,
+42. **ClickHouse built-in function gaps — <span style="color:orange">in progress</span>.** The shipped slices cover `lowerUTF8`/`upperUTF8`, `trim*`, `replaceRegexp*`,
     `match`/`extract`, `splitByString`, `formatDateTime`/`parseDateTime`, `now`/`today`/`yesterday`, the
-    `map*` family, `arrayConcat`/`arrayFlatten`/`arrayUniq`/`arrayIntersect`, the `groupBitmap`/`sumMap`
-    aggregates, the hash family and `generateULID` are now on `SqlFunctions.ClickHouse` (gated by the
-    ClickHouse-only capability flags). Docs:
-    [ClickHouse-specific SQL](../../guide/provider-specific-sql/clickhouse.md) (EN+RU, #78).
+    `map*` family (including the higher-order `map_filter`/`map_apply`/`map_sort`), `arrayConcat`/`arrayFlatten`/`arrayUniq`/`arrayIntersect`,
+    the `groupBitmap`/`sumMap` aggregates, the hash family, `generateULID`, and — added by #286 — the math
+    functions `log2`/`cbrt`/`exp2`/`exp10` (typed `double`/`double?`, ClickHouse-only). This does **not**
+    close the catalog: the residual numeric/string/rounding/date/array/tuple/map/JSON/hash/encoding/URL/bit
+    names stay open in #286 and remain tracked in
+    [the function-coverage gap](sql-function-coverage-gap.md) §3 umbrella row. Docs:
+    [ClickHouse-specific SQL](../../guide/provider-specific-sql/clickhouse.md) (EN+RU, #78, #286).
 43. **Captured-local parameter binding (repeated references) — <span style="color:green">Done</span> (`1.0-b.1`).** A captured local
     reachable from the final SQL is now registered exactly once — repeated occurrences reuse the same
     `@pN`, and a local living only inside a joined derived subquery binds too. Previously the command

@@ -113,6 +113,60 @@ internal static class JoinIntoCompositeJunctionFixtures
         return (first, second);
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // T251 declared surface: the same composite junction seeded and queried through the public fluent
+    // HasManyThrough overloads instead of injected relationship metadata. The parent CLR type is
+    // distinct so the two registrations cannot shadow each other.
+    // ---------------------------------------------------------------------------------------------
+
+    internal static void RegisterDeclared(IDataContext ctx)
+    {
+        ctx.From<JiCompositeJunctionChild>();
+        ctx.From<JiCompositeJunctionLink>();
+        ctx.From<T251DeclaredJunctionParent>((EntityMetadataBuilder<T251DeclaredJunctionParent> b) => b.HasManyThrough<JiCompositeJunctionChild, JiCompositeJunctionLink>(
+            p => p.Children,
+            p => new { p.Tenant, p.LinkId },
+            l => new { l.ParentTenant, l.ParentLinkId },
+            c => new { c.Id },
+            l => new { l.ChildId }));
+    }
+
+    /// <summary>
+    /// Seeds the declared composite-junction rows: two parents sharing the first principal component,
+    /// one child per parent, a repeated occurrence of the first pair and a dangling child foreign key.
+    /// </summary>
+    internal static (int First, int Second) SeedDeclared(IDataContext ctx)
+    {
+        RegisterDeclared(ctx);
+
+        var first = NextBase();
+        var second = first + 1;
+        var tenant = first;
+        var link1 = first + 1;
+        var link2 = first + 2;
+
+        ctx.CreateInsertBuilder<T251DeclaredJunctionParent>().Values([
+            new T251DeclaredJunctionParent { RowId = first, Tenant = tenant, LinkId = link1, Name = "p1" },
+            new T251DeclaredJunctionParent { RowId = second, Tenant = tenant, LinkId = link2, Name = "p2" },
+        ]).Insert();
+
+        ctx.CreateInsertBuilder<JiCompositeJunctionChild>().Values([
+            new JiCompositeJunctionChild { Id = first + 100, Name = "c1" },
+            new JiCompositeJunctionChild { Id = first + 101, Name = "c2" },
+        ]).Insert();
+
+        ctx.CreateInsertBuilder<JiCompositeJunctionLink>().Values([
+            new JiCompositeJunctionLink { ParentTenant = tenant, ParentLinkId = link1, ChildId = first + 100 },
+            new JiCompositeJunctionLink { ParentTenant = tenant, ParentLinkId = link2, ChildId = first + 101 },
+            // Repeated occurrence of the (parent, child) pair: a distinct element, not a duplicate.
+            new JiCompositeJunctionLink { ParentTenant = tenant, ParentLinkId = link1, ChildId = first + 100 },
+            // Dangling child foreign key: contributes no element.
+            new JiCompositeJunctionLink { ParentTenant = tenant, ParentLinkId = link1, ChildId = first + 999 },
+        ]).Insert();
+
+        return (first, second);
+    }
+
     private sealed class InjectedManyToMany : IRelationshipMetadata
     {
         private readonly RelationshipJunctionMetadata _junction;
@@ -213,6 +267,29 @@ internal sealed class JiCompositeJunctionLink
 
     [Column("child_id")]
     public int ChildId { get; set; }
+}
+
+/// <summary>
+/// T251 declared-surface composite-junction parent mapped to <c>eager_cj_parent</c>; the principal key
+/// <c>(tenant, link_id)</c> and the junction legs are declared through the fluent overloads.
+/// </summary>
+[SqlTable("eager_cj_parent")]
+internal sealed class T251DeclaredJunctionParent
+{
+    [Key]
+    [Column("row_id")]
+    public int RowId { get; set; }
+
+    [Column("tenant")]
+    public int Tenant { get; set; }
+
+    [Column("link_id")]
+    public int LinkId { get; set; }
+
+    [Column("name")]
+    public string? Name { get; set; }
+
+    public ICollection<JiCompositeJunctionChild> Children { get; set; } = new List<JiCompositeJunctionChild>();
 }
 
 /// <summary>Query-counting interceptor shared by the composite-junction integration fixtures.</summary>

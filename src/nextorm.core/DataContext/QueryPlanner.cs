@@ -26,11 +26,10 @@ internal sealed class QueryPlanner : IQueryPlanner
     private readonly Type _contextType;
     private readonly Func<SelectExpression, Expression, Expression> _mapColumn;
     private readonly Func<DbCommand, string, object?, DbParameter> _createParam;
-    private readonly Func<string, DbCommand> _createCommand;
+    private readonly Func<string, object?, DbParameter> _createParamSimple;
     private readonly ILogger? _resultSetEnumeratorLogger;
     private readonly ILogger? _queryFilterLogger;
     private readonly bool _logSensitiveData;
-    private readonly InterceptorHooks _interceptors;
     private readonly Func<CteMutation, SqlBuildContext, string> _renderMutationBody;
 
     // Cached-path diagnostic counter for the plans that must fall back to the original extraction path
@@ -76,8 +75,7 @@ internal sealed class QueryPlanner : IQueryPlanner
         Func<ISqlDialect> dialect,
         Type contextType,
         ProviderHooks hooks,
-        LoggingOptions logging,
-        InterceptorHooks interceptors)
+        LoggingOptions logging)
     {
         _context = context;
         _dialect = dialect;
@@ -85,11 +83,10 @@ internal sealed class QueryPlanner : IQueryPlanner
         _contextType = contextType;
         _mapColumn = hooks.MapColumn;
         _createParam = hooks.CreateParam;
-        _createCommand = hooks.CreateCommand;
+        _createParamSimple = hooks.CreateParamSimple;
         _resultSetEnumeratorLogger = logging.ResultSetEnumeratorLogger;
         _queryFilterLogger = logging.QueryFilterLogger;
         _logSensitiveData = logging.LogSensitiveData;
-        _interceptors = interceptors;
         _renderMutationBody = RenderMutationBody;
     }
 
@@ -107,23 +104,6 @@ internal sealed class QueryPlanner : IQueryPlanner
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsRuntimeParam(string name) => NormParam.IsName(name);
 
-    /// <summary>
-    /// Applies the expression-derived provider type recorded on a captured parameter (see
-    /// <see cref="ParameterTypeInfo"/>), so a cold captured <c>NULL</c> and every later value bind
-    /// with the compared column's type instead of the provider's <see cref="DBNull"/> inference. A
-    /// parameter without the metadata keeps the provider's value-based inference (previous behaviour).
-    /// </summary>
-    private static void ApplyParameterType(DbParameter dbParameter, Parameter parameter)
-    {
-        if (parameter.DbType is { } dbType)
-            dbParameter.DbType = dbType;
-
-        if (parameter.Precision is { } precision)
-            dbParameter.Precision = precision;
-
-        if (parameter.Scale is { } scale)
-            dbParameter.Scale = scale;
-    }
     // Renders a standalone SELECT (the source of an INSERT ... SELECT) to SQL plus its parameters, and
     // hoists any CTE the source declares out of the SELECT. A data-modifying CTE must sit at the top
     // level of the statement, so the caller places WithSql before "insert into"; a plain read CTE is
@@ -708,16 +688,25 @@ internal sealed class QueryPlanner : IQueryPlanner
     }
 
     public IPreparedQueryCommand<TResult> GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, CancellationToken cancellationToken)
-        => GetPreparedQueryCommand(queryCommand, createEnumerator, storeInCache, false, false, cancellationToken);
+        => GetPreparedQueryCommand(queryCommand, createEnumerator, storeInCache, PreparedCommandCache.Connection, false, false, cancellationToken);
 
-    internal IPreparedQueryCommand<TResult> GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, bool sequentialAccess, CancellationToken cancellationToken)
-        => GetPreparedQueryCommand(queryCommand, createEnumerator, storeInCache, sequentialAccess, false, cancellationToken);
+    internal IPreparedQueryCommand<TResult> GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, PreparedCommandCache cache, CancellationToken cancellationToken)
+        => GetPreparedQueryCommand(queryCommand, createEnumerator, storeInCache, cache, false, false, cancellationToken);
 
-    internal IPreparedQueryCommand<TResult> GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, bool sequentialAccess, bool streamingRowsRequested, CancellationToken cancellationToken)
-        => GetPreparedQueryCommand(queryCommand, createEnumerator, storeInCache, sequentialAccess, streamingRowsRequested, suppressLobLocator: false, cancellationToken);
+    internal IPreparedQueryCommand<TResult> GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, PreparedCommandCache cache, bool sequentialAccess, CancellationToken cancellationToken)
+        => GetPreparedQueryCommand(queryCommand, createEnumerator, storeInCache, cache, sequentialAccess, false, cancellationToken);
 
-    internal IPreparedQueryCommand<TResult> GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, bool sequentialAccess, bool streamingRowsRequested, bool suppressLobLocator, CancellationToken cancellationToken)
+    internal IPreparedQueryCommand<TResult> GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, PreparedCommandCache cache, bool sequentialAccess, bool streamingRowsRequested, CancellationToken cancellationToken)
+        => GetPreparedQueryCommand(queryCommand, createEnumerator, storeInCache, cache, sequentialAccess, streamingRowsRequested, suppressLobLocator: false, cancellationToken);
+
+    internal IPreparedQueryCommand<TResult> GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, PreparedCommandCache cache, bool sequentialAccess, bool streamingRowsRequested, bool suppressLobLocator, CancellationToken cancellationToken)
     {
+        // The command-reuse policy travels as this call's parameter only. None means a command per
+        // execution, so the plan cache is neither read nor filled; clearing the local storeInCache keeps
+        // QueryCommand.Cache (shared, sticky) untouched.
+        if (cache == PreparedCommandCache.None)
+            storeInCache = false;
+
         // A data-modifying CTE makes the whole statement side-effecting, so its plan must never be
         // shared: the mutation's shape (row count, target columns) is not captured by the CTE query.
         // Clear the call-local storeInCache rather than queryCommand.Cache, which is sticky and would
@@ -901,36 +890,26 @@ internal sealed class QueryPlanner : IQueryPlanner
                 }
             }
 
-            var dbCommand = _createCommand(sql!);
-
-            // The resolved timeout is part of the plan key, so a cached command is only ever reused
-            // with the timeout it was created with; applying it here is safe (it never leaks between
-            // commands, unlike mutating a shared command on execution).
-            if (queryCommand.ResolvedCommandTimeout is int commandTimeout)
-                dbCommand.CommandTimeout = commandTimeout;
-
-            if (!noParams)
-            {
-                var parameterList = @params!;
-                for (var i = 0; i < parameterList.Count; i++)
-                {
-                    var p = parameterList[i];
-                    var dbParameter = _createParam(dbCommand, p.Name, p.Value);
-                    ApplyParameterType(dbParameter, p);
-                    dbCommand.Parameters.Add(dbParameter);
-                }
-            }
-
-            RaiseCommandInitialized(dbCommand);
+            // The command itself is no longer minted at plan time: the immutable factory below carries
+            // the exact same SQL text, resolved timeout and parameter seeds (the former eager
+            // construction block, extracted verbatim as value data), and every execution connection
+            // mints its own command from it after winning that connection's lease. The plan-time
+            // parameter descriptors are minted connection-free for the guarded refresh recipe and the
+            // SQL-generation diagnostics.
+            var commandTimeout = queryCommand.ResolvedCommandTimeout;
+            var seeds = @params is { Count: > 0 } seedList ? seedList.ToArray() : [];
+            var factory = new PreparedCommandFactory(sql!, commandTimeout, seeds);
+            var planParameters = factory.CreatePlanParameters(_createParamSimple);
 
             // Some drivers (ClickHouse) turn CommandBehavior.SingleRow into an extra LIMIT 1. The
             // dialect already renders a limit for a single-row command, so the hint must be dropped
             // there to avoid a duplicated clause.
             var singleRow = queryCommand.SingleRow && _dialect().SupportsCommandBehaviorSingleRow;
 
-            var compiledQuery = new DbPreparedQueryCommand<TResult>(dbCommand, map, new PreparedCommandOptions(singleRow, ext is null ? sql! : null, noParams, needsParamRefresh)
+            var compiledQuery = new DbPreparedQueryCommand<TResult>(factory, planParameters, map, new PreparedCommandOptions(singleRow, ext is null ? sql! : null, noParams, needsParamRefresh)
             {
                 SequentialAccess = sequentialAccess,
+                Cache = cache,
             });
 
             // Attach the policy the planning dialect resolved and, when the statement is planner-rendered,
@@ -949,10 +928,7 @@ internal sealed class QueryPlanner : IQueryPlanner
                 compiledQuery.SetParamRecipe(ParamRefreshRecipe.TryCreate(queryCommand, @params!));
 
             if (createEnumerator)
-            {
-                var enumerator = CreateResultSetEnumerator(compiledQuery!, ownsCommand: streamingRows);
-                compiledQuery.Enumerator = enumerator;
-            }
+                compiledQuery.EnableStreaming(BuildEnumeratorFactory(compiledQuery));
 
             if (storeInCache && queryCommand.Cache)
             {
@@ -1007,10 +983,11 @@ internal sealed class QueryPlanner : IQueryPlanner
             }
 
             // A plan can be stored by a buffered terminal (createEnumerator: false) and later requested
-            // by a streaming one, so the enumerator has to be created on demand. The plan cache is
-            // [ThreadStatic], so this entry is only ever touched by the current thread.
-            if (createEnumerator && compiledQuery.Enumerator is null)
-                compiledQuery.Enumerator = CreateResultSetEnumerator(compiledQuery);
+            // by a streaming one, so streaming has to be enabled on demand. The plan cache is
+            // [ThreadStatic], so this entry is only ever touched by the current thread. Enumerators
+            // themselves are execution-local: each consumption asks the factory for a fresh one.
+            if (createEnumerator && !compiledQuery.StreamingEnabled)
+                compiledQuery.EnableStreaming(BuildEnumeratorFactory(compiledQuery));
 
             return compiledQuery;
         }
@@ -1124,30 +1101,15 @@ internal sealed class QueryPlanner : IQueryPlanner
     }
 
     /// <summary>
-    /// Notifies the registered query interceptors that a plan's command has been created and its
-    /// parameters bound. A cached plan is only initialised once, so the event does not fire again when
-    /// the plan is reused.
+    /// Builds the factory that creates one fresh streaming enumerator per consumption. The delegate
+    /// captures the prepared command and the logging switches only — never the planner or the context —
+    /// so a cached plan does not root its planning context.
     /// </summary>
-    private void RaiseCommandInitialized(DbCommand command)
-    {
-        var interceptors = _interceptors.QueryInterceptors;
-        if (interceptors.Length == 0)
-            return;
-
-        InterceptorHooks.RaiseCommandInitialized(interceptors, _context, command);
-    }
-
-    /// <summary>
-    /// Creates the streaming enumerator and applies the context's logging configuration to it. The
-    /// enumerator receives the logger directly rather than pulling it from the context through a
-    /// property, which is what kept the enumerator tied to the concrete <c>DataContext</c>.
-    /// </summary>
-    private ResultSetEnumerator<TResult> CreateResultSetEnumerator<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, bool ownsCommand = false)
-    {
-        var enumerator = new ResultSetEnumerator<TResult>(compiledQuery);
-        if (ownsCommand)
-            enumerator.OwnCommand();
-        enumerator.InitEnvironment(_resultSetEnumeratorLogger, _logSensitiveData);
-        return enumerator;
-    }
+    private Func<ResultSetEnumerator<TResult>> BuildEnumeratorFactory<TResult>(DbPreparedQueryCommand<TResult> compiledQuery)
+        => () =>
+        {
+            var enumerator = new ResultSetEnumerator<TResult>(compiledQuery);
+            enumerator.InitEnvironment(_resultSetEnumeratorLogger, _logSensitiveData);
+            return enumerator;
+        };
 }

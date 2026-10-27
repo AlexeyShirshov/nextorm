@@ -153,7 +153,20 @@ public partial class InMemoryDataContext : IDataContext
     /// <param name="cancellationToken">Token used to cancel preparation.</param>
     /// <returns>The prepared command, ready to execute.</returns>
     public IPreparedQueryCommand<TResult> GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, CancellationToken cancellationToken)
-        => InMemoryQueryBuilder.GetPreparedQueryCommand(this, queryCommand, createEnumerator, storeInCache && QueryCacheEnabled, cancellationToken);
+        => InMemoryQueryBuilder.GetPreparedQueryCommand(this, queryCommand, createEnumerator, storeInCache && QueryCacheEnabled, PreparedCommandCache.Connection, cancellationToken);
+    /// <summary>
+    /// Prepares <paramref name="queryCommand"/> for in-memory execution with an explicit command-reuse policy,
+    /// delegating to <see cref="InMemoryQueryBuilder"/>.
+    /// </summary>
+    /// <typeparam name="TResult">The projected result type.</typeparam>
+    /// <param name="queryCommand">The command to prepare.</param>
+    /// <param name="createEnumerator">When <see langword="true"/>, builds a streaming enumerator as part of preparation.</param>
+    /// <param name="storeInCache">When <see langword="true"/> (and <see cref="QueryCacheEnabled"/> is set), stores the prepared command in the plan cache.</param>
+    /// <param name="cache">The command-reuse policy the prepared command is built with.</param>
+    /// <param name="cancellationToken">Token used to cancel preparation.</param>
+    /// <returns>The prepared command, ready to execute.</returns>
+    public IPreparedQueryCommand<TResult> GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, PreparedCommandCache cache, CancellationToken cancellationToken)
+        => InMemoryQueryBuilder.GetPreparedQueryCommand(this, queryCommand, createEnumerator, storeInCache && QueryCacheEnabled, cache, cancellationToken);
     /// <summary>Builds the delegate that creates a row enumerator for a prepared query.</summary>
     /// <typeparam name="TResult">The projected result type.</typeparam>
     /// <param name="queryCommand">The command to build the enumerator for.</param>

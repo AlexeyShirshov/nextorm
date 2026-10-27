@@ -465,7 +465,7 @@ public class RootAliasTests
     {
         var prepared = (DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(
             command, createEnumerator: false, storeInCache: false, CancellationToken.None);
-        return prepared.DbCommand.CommandText.Replace("\r\n", "\n");
+        return prepared.SqlStmt!.Replace("\r\n", "\n");
     }
 
     [Fact]

@@ -451,7 +451,12 @@ select patindex('%a%', somestring) as [Pos],
 * **Дата/время:** `datename(datepart, date)` (часть — константа), `date_bucket(datepart, width, date[, origin])` (SQL Server 2022+), серверные часы `sysdatetime`/`sysdatetimeoffset`/`sysutcdatetime`, функции смещения `switchoffset(value, offset)`/`todatetimeoffset(value, offset)` (строка вида `"+02:00"` или минуты со знаком) и семейство конструкторов `timefromparts`/`smalldatetimefromparts`/`datetimefromparts`/`datetime2fromparts`/`datetimeoffsetfromparts`. Завершающая точность `*FROMPARTS` должна быть константой `0..7` (неконстантное, `null` или выходящее за диапазон значение бросает исключение до генерации SQL).
 * **Бинарные/системные:** `hashbytes(algorithm, data)` (алгоритм — константа, например `SHA2_256`), `newsequentialid()` (допустим только как `DEFAULT` столбца, но не в обычном `SELECT`), `checksum(values...)`/`binary_checksum(values...)` (минимум одно значение; форма `checksum(*)` не открыта) и `compress(value)`/`decompress(value)` (GZIP над `varbinary(max)`).
 * **Метаданные:** `col_length`, `col_name`, `ident_incr`/`ident_seed`, `index_col`, `object_definition`/`object_id`/`object_name`/`object_schema_name`, `stats_date`, `db_id`/`db_name`/`original_db_name`, `schema_id`/`schema_name`, `type_id`/`type_name`, `filegroup_id`/`filegroup_name`/`file_id`/`file_idex`/`file_name`, `current_timezone`/`current_timezone_id`, `getansinull`, `parsename` и `publishingservername`. Отсутствующий объект/столбец/индекс/статистика даёт `null`, как и нативная функция.
-* **Преобразование/логика:** `isdate(value)`/`isnumeric(value)` возвращают нативный T-SQL `int` (1/0), а не `bit`, поэтому остаются целочисленными значениями, а не материализованными предикатами; `formatmessage(messageOrId, args...)` принимает не более 20 аргументов форматирования, а `parse(value)`/`try_parse(value)` разбирают `decimal(38,18)` с фиксированной культурой `en-US` (аргумента культуры нет; `parse` отдаёт серверную ошибку на неверном тексте, `try_parse` возвращает NULL).
+* **Живое состояние:** `current_request_id()` (`short?`, NULL вне запроса), `current_transaction_id()`
+  (`long?`, NULL вне транзакции), `xact_state()` (нативный `smallint` 0/1/-1), `ident_current(table)`
+  (`decimal?`, последняя identity таблицы в **любой** сессии — гонка, не API последней вставки),
+  `min_active_rowversion()` (нативный `binary(8)`, не счётчик), `rowcount_big()` (предыдущая инструкция
+  того же соединения) и `scope_identity()` (`decimal?`, только в том же батче, что и `INSERT`).
+* **Преобразование/логика:** `isdate(value)`/`isnumeric(value)` возвращают нативный T-SQL `int` (1/0), а не `bit`, поэтому остаются целочисленными значениями, а не материализованными предикатами; `formatmessage(messageOrId, args...)` принимает не более 20 аргументов форматирования.
 
 Переносимые BASE64 и crypto на этом провайдере требуют SQL Server 2025: `SqlFunctions.Sql.base64_encode` рендерится как `BASE64_ENCODE(value)` над `varbinary`, `base64_decode` — как `BASE64_DECODE(value)` над `varchar` (столбец `nvarchar` нужно привести), а `crypt_gen_random` рендерит типизированную обёртку `CASE WHEN length IS NULL THEN CAST(NULL AS varbinary(8000)) ELSE CRYPT_GEN_RANDOM(length) END`, поэтому NULL-длина остаётся типизированным NULL. Compatibility level и preview-флаг не нужны.
 * **JSON:** `json_array(value, ...)` и `json_object(key, value, ...)` (SQL Server 2022+),
@@ -459,12 +464,14 @@ select patindex('%a%', somestring) as [Pos],
   `json_path_exists(json, path)` (SQL Server 2022+) и `json_contains(json, searchValue, path)`
   (SQL Server 2025+). Два предиката материализуются в `bit`, как `isjson`.
 
-Семь имён, сообщающих живое изменяемое состояние соединения, сессии или инструкции, намеренно **не**
-открыты: `CURRENT_REQUEST_ID`, `CURRENT_TRANSACTION_ID`, `XACT_STATE`, `IDENT_CURRENT`,
-`MIN_ACTIVE_ROWVERSION`, `ROWCOUNT_BIG` и `SCOPE_IDENTITY`; стабильные конфигурационные константы и
-константы идентичности той же области (`CURRENT_TIMEZONE`/`CURRENT_TIMEZONE_ID`, `SERVER_NAME`,
-`HOST_ID`, `HOST_NAME`, `APP_NAME`, `SUSER_NAME`, `ORIGINAL_LOGIN`) открыты. Используйте сырой SQL или
-обёртку `[SqlFunction]` при появлении конкретного построчного применения.
+Живое изменяемое состояние **не** является критерием исключения: семь имён, сообщающих живое
+состояние соединения, транзакции, сессии или инструкции, открыты как есть, с нативной семантикой SQL
+Server и оговорками выше. nextorm не гарантирует построчную стабильность, непрерывность соединения
+между запросами и получение identity — отдельный вызов `SCOPE_IDENTITY`/`IDENT_CURRENT` не является
+API последней вставки, поэтому для ключа используйте `ReturningIdentity<TKey>()`. Стабильные
+конфигурационные константы и константы идентичности той же области (`CURRENT_TIMEZONE`/
+`CURRENT_TIMEZONE_ID`, `SERVER_NAME`, `HOST_ID`, `HOST_NAME`, `APP_NAME`, `SUSER_NAME`,
+`ORIGINAL_LOGIN`) остаются на той же поверхности.
 
 ## Null-safe-сравнение
 

@@ -372,6 +372,17 @@ public interface ISqlDialect
     /// </summary>
     bool SupportsPercentileWindow { get; }
     /// <summary>
+    /// True when the provider expresses percentiles and the median as an ordered-set aggregate
+    /// (<c>percentile_cont(fraction) within group (order by key)</c>) rather than as a window function:
+    /// <see cref="PostgresFunctions.percentile_cont"/>, <see cref="PostgresFunctions.percentile_disc"/>
+    /// and <see cref="PostgresFunctions.median"/>. The safe default is <c>false</c>; only PostgreSQL opts
+    /// in today. This is deliberately separate from <see cref="SupportsOrderedAggregates"/>, which also
+    /// covers non-percentile members (<c>mode</c>), and from <see cref="SupportsPercentileWindow"/>,
+    /// which is the analytic shape. Declared as a default interface member so existing external
+    /// implementations keep compiling.
+    /// </summary>
+    bool SupportsOrderedPercentiles => false;
+    /// <summary>
     /// True when the provider can declare named windows (<c>WINDOW w AS (...)</c>) and reference them
     /// with <c>OVER w</c>. The safe default is <c>false</c>; PostgreSQL, MySQL, MariaDB, ClickHouse and
     /// SQLite opt in, while SQL Server has no <c>WINDOW</c> clause.
@@ -691,6 +702,15 @@ public interface ISqlDialect
     ITopKAggregateRenderer? TopKAggregates => null;
 
     /// <summary>
+    /// The provider's renderer for the ClickHouse aggregate catalogue that has no cross-provider
+    /// spelling (the statistical aggregates, the parameterised quantile algorithms, the array- and
+    /// tuple-returning aggregates, the sequence aggregates and the time-series grid aggregates);
+    /// <c>null</c> means the provider cannot express them. Declared as a default interface method so
+    /// that existing external implementations keep compiling.
+    /// </summary>
+    IClickHouseAggregateRenderer? ClickHouseAggregates => null;
+
+    /// <summary>
     /// True when the provider can render the <c>anyLast</c> row-picking aggregate (the value of an
     /// arbitrary last row; <c>ClickHouseFunctions.any_last</c>). The safe default is <c>false</c>;
     /// ClickHouse opts in today. The arbitrary-value aggregate without the last-row restriction is
@@ -774,7 +794,11 @@ public interface ISqlDialect
 
     /// <summary>
     /// True when the provider can render the ClickHouse dictionary functions
-    /// (<c>dictGet</c>/<c>dictGetOrDefault</c>/<c>dictHas</c>/<c>dictGetHierarchy</c>/<c>dictGetChildren</c>/<c>dictIsIn</c>).
+    /// (<c>dictGet</c>/<c>dictGetOrDefault</c>/<c>dictGetOrNull</c>/<c>dictGetAll</c>/
+    /// <c>dictGetDescendants</c>/<c>dictHas</c>/<c>dictGetHierarchy</c>/<c>dictGetChildren</c>/<c>dictIsIn</c>)
+    /// and the embedded-geobase region functions (<c>regionToName</c>/<c>regionToCity</c>/<c>regionToArea</c>/
+    /// <c>regionToDistrict</c>/<c>regionToCountry</c>/<c>regionToContinent</c>/<c>regionToTopContinent</c>/
+    /// <c>regionToPopulation</c>/<c>regionHierarchy</c>/<c>regionIn</c>).
     /// The safe default is <c>false</c>; ClickHouse opts in today.
     /// </summary>
     bool SupportsDictionaries { get; }
@@ -1325,6 +1349,18 @@ public interface ISqlDialect
     /// integer.
     /// </summary>
     string MakeArrayFunction(string name, string call) => call;
+
+    /// <summary>
+    /// Renders the result of an array-producing facade call over the already-rendered
+    /// <paramref name="call"/>, normalising it to the closed declared CLR <paramref name="resultType"/>.
+    /// <paramref name="name"/> is the facade method name (for example <c>group_array</c> or <c>range</c>),
+    /// never the provider's SQL spelling. The default is the identity: a dialect overrides this only when
+    /// its native element type or nullability differs from the declared CLR array type (ClickHouse returns
+    /// <c>Array(UInt8)</c> for <c>retention</c> and <c>Array(Int64)</c> for an <c>arrayMap</c> over
+    /// <c>int[]</c>). The implementation must return exactly one expression and must not rewrite the
+    /// <paramref name="call"/> itself.
+    /// </summary>
+    string MakeArrayResult(string name, string call, Type resultType) => call;
 
     /// <summary>
     /// Renders an ordered-set aggregate as <c>&lt;aggregate&gt; within group (order by &lt;orderBy&gt;)</c>.

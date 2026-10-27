@@ -269,8 +269,8 @@ internal sealed class PostgresTestProvider : ITestProvider
         create table eager_composite_child
         (
             id integer primary key,
-            tenant integer not null,
-            parent_id integer not null,
+            tenant integer,
+            parent_id integer,
             sort_key integer not null
         );
 

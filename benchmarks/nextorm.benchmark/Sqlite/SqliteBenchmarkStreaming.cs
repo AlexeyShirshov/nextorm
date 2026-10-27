@@ -61,7 +61,7 @@ public class SqliteBenchmarkStreaming
 
         _nextormUnbuffered = _ctx.LargeEntity
             .Select(e => new ProjectionDto { Id = e.Id, Str = e.Str })
-            .Prepare(false);
+            .Prepare(new PrepareOptions { Streaming = true });
 
         _nextormReader = _ctx.LargeEntity
             .Select(e => new ProjectionDto { Id = e.Id, Str = e.Str });

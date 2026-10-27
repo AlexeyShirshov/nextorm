@@ -218,3 +218,27 @@ only):
 They deliberately return the native T-SQL `int` (1/0), **not** a `bit`, so they are projected as
 ordinary integer values and are not materialised into a
 `cast(case when ... then 1 else 0 end as bit)` predicate.
+
+## Type conversion (ClickHouse)
+
+The ClickHouse `to*`/`accurateCast`/`reinterpretAs` surface is typed on `SqlFunctions.ClickHouse` and
+gated by the shared scalar-function capability, so every other dialect rejects it. Targets are exact:
+`Int8` is widened to `short`/`Int16` and `UInt16` to `int` because the shared row reader has no
+`sbyte`/`ushort` accessor, `to_decimal32`/`to_decimal64` take a validated compile-time scale, and
+`accurate_cast_*` is delivered as twelve typed checked targets (base, `_or_null`, `_or_default`)
+instead of collapsing into the `to*` arm.
+
+| Function | SQL |
+|---|---|
+| `SqlFunctions.ClickHouse.to_string(v)` / `to_bool(v)` / `to_fixed_string(v, n)` / `to_low_cardinality(v)` | `toString` / `toBool` / `toFixedString` / `toLowCardinality` |
+| `SqlFunctions.ClickHouse.to_int8(v)` … `to_int64(v)` | `toInt8` … `toInt64` |
+| `SqlFunctions.ClickHouse.to_uint8(v)` … `to_uint64(v)` | `toUInt8` … `toUInt64` |
+| `SqlFunctions.ClickHouse.to_float32(v)` / `to_float64(v)` | `toFloat32` / `toFloat64` |
+| `SqlFunctions.ClickHouse.to_decimal32(v, scale)` / `to_decimal64(v, scale)` | `toDecimal32` / `toDecimal64` |
+| `SqlFunctions.ClickHouse.accurate_cast_int8(v)` … plus `_or_null` / `_or_default` for every target | `accurateCast` / `accurateCastOrNull` / `accurateCastOrDefault` |
+| `SqlFunctions.ClickHouse.reinterpret_as_uint8` … `reinterpret_as_uint64`, `_int8` … `_int64`, `_float32`/`_float64`, `_date`/`_date_time`/`_string`/`_fixed_string`/`_uuid` | `reinterpretAs*` |
+
+`reinterpretAs*` preserves the little-endian bit pattern. The 128/256-bit integers, `Decimal128`/
+`Decimal256` and the eleven `to_interval_*` units remain refused (no exact CLR carrier — `BigInteger`,
+`System.Decimal`'s 96-bit mantissa, and the ClickHouse-only `Interval*` types respectively). See
+[ClickHouse-specific SQL › Not yet supported](../guide/provider-specific-sql/clickhouse.md#not-yet-supported).

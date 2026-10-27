@@ -99,9 +99,12 @@ PostgreSQL о backend/сети (`pg_backend_pid`, `inet_server_addr`, `inet_serv
 ### SQL Server
 
 `SqlFunctions.SqlServer.db_id`/`db_name`/`original_db_name`, `schema_id`/`schema_name`,
-`type_id`/`type_name`, `current_timezone`/`current_timezone_id`, `getansinull` и
-`publishingservername` сообщают текущую базу, схему, тип, часовой пояс и сервер репликации; гейт по
-имени через [`ISqlServerFunctions`](xref:NextORM.Core.ISqlServerFunctions):
+`type_id`/`type_name`, `current_timezone`/`current_timezone_id`, `getansinull`,
+`publishingservername` и живые факты соединения/транзакции/инструкции (`current_request_id`,
+`current_transaction_id`, `xact_state`, `ident_current`, `min_active_rowversion`, `rowcount_big`,
+`scope_identity`) сообщают текущую базу, схему, тип, часовой пояс, сервер репликации и живое
+состояние сервера; гейт по имени через
+[`ISqlServerFunctions`](xref:NextORM.Core.ISqlServerFunctions):
 
 | C# | SQL |
 |---|---|
@@ -114,6 +117,13 @@ PostgreSQL о backend/сети (`pg_backend_pid`, `inet_server_addr`, `inet_serv
 | `current_timezone()` / `current_timezone_id()` | `current_timezone()` / `current_timezone_id()` |
 | `getansinull()` / `getansinull(database)` | `getansinull(...)` |
 | `publishingservername()` | `publishingservername()` |
+| `current_request_id()` | `current_request_id()` |
+| `current_transaction_id()` | `current_transaction_id()` |
+| `xact_state()` | `xact_state()` |
+| `ident_current(table)` | `ident_current(...)` |
+| `min_active_rowversion()` | `min_active_rowversion()` |
+| `rowcount_big()` | `rowcount_big()` |
+| `scope_identity()` | `scope_identity()` |
 
 Метаданные уровня объектов, колонок, индексов и файлов — на той же поверхности:
 
@@ -155,24 +165,24 @@ ClickHouse, SQLite и in-memory провайдер отклоняют член �
 `The crypt_gen_random function is not supported by this provider.` Сгенерированные байты не
 предсказуемы и не воспроизводимы из запроса, и ни один тест не обещает их содержимое или энтропию.
 
-## Не открыто (SQL Server)
+## Живое состояние (SQL Server)
 
-Семь имён T-SQL, сообщающих **живое изменяемое состояние соединения, сессии или инструкции**, не
-смоделированы: их значение меняется независимо от запроса — начинается или заканчивается транзакция,
-выполняется предыдущая инструкция, другая сессия вставляет строку, — а не вычисляется построчно из
-колонок строки. Они остаются доступными через сырой SQL или обёртку `[SqlFunction]`, и у каждого есть
-триггер пересмотра при появлении конкретного построчного применения.
+**Живое изменяемое состояние не является критерием исключения.** Имена T-SQL, сообщающие текущее
+состояние соединения, транзакции, сессии или инструкции, открыты как есть, с нативной семантикой SQL
+Server; nextorm **не гарантирует** построчную стабильность, непрерывность соединения между запросами
+или получение identity. Каждое значение — нативный снимок момента выполнения инструкции, и клиент не
+изобретает вокруг него защиту. Для ключа последней вставки используйте `ReturningIdentity<TKey>()`.
 
-Стабильные конфигурационные константы и константы идентичности той же области открыты:
-`CURRENT_TIMEZONE`/`CURRENT_TIMEZONE_ID` и подмножество идентичности сессии/сервера (`SERVER_NAME`/
-`@@SERVERNAME`, `HOST_ID`, `HOST_NAME`, `APP_NAME`, `SUSER_NAME`, `ORIGINAL_LOGIN`) — см. выше раздел
-[Идентичность сессии и сервера](#идентичность-сессии-и-сервера).
+| C# | CLR | Оговорка |
+|---|---|---|
+| `current_request_id()` | `short?` | NULL вне запроса |
+| `current_transaction_id()` | `long?` | NULL вне транзакции |
+| `xact_state()` | `short` | нативные 0 (нет) / 1 (фиксируемая) / -1 (нефиксируемая); NULL не изобретается |
+| `ident_current(table)` | `decimal?` | последняя identity таблицы в **любой** сессии; гонка, не API последней вставки |
+| `min_active_rowversion()` | `byte[]` | нативный `binary(8)`, а не числовой счётчик |
+| `rowcount_big()` | `long` | предыдущая инструкция того же соединения; отдельный запрос nextorm — своя инструкция |
+| `scope_identity()` | `decimal?` | только в том же батче, что и `INSERT`; отдельный запрос видит NULL |
 
-| Функция | Область |
-|---|---|
-| `CURRENT_REQUEST_ID` | соединение / запрос |
-| `CURRENT_TRANSACTION_ID`, `XACT_STATE` | транзакция |
-| `IDENT_CURRENT` | сессия / таблица |
-| `MIN_ACTIVE_ROWVERSION` | база / транзакция |
-| `ROWCOUNT_BIG` | инструкция |
-| `SCOPE_IDENTITY` | сессия / область |
+Стабильные конфигурационные константы и константы идентичности той же области остаются на той же
+поверхности (`current_timezone`/`current_timezone_id` и подмножество идентичности сессии/сервера) — см.
+выше раздел [Идентичность сессии и сервера](#идентичность-сессии-и-сервера).

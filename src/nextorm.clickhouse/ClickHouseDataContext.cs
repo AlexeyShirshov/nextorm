@@ -240,7 +240,10 @@ public class ClickHouseDataContext : DataContext, IBulkInsertExecutor, IBulkInse
     /// placeholder to <c>{name:Type}</c> and infers the ClickHouse type from the CLR value, so the
     /// stored name omits the <c>@</c> prefix. A <see cref="JsonObject"/>, and an object-root
     /// <see cref="JsonElement"/>/<see cref="JsonDocument"/>, are bound as the native ClickHouse
-    /// <c>JSON</c> type; any other value keeps its existing binding.
+    /// <c>JSON</c> type; a rank-1 CLR array whose declared element type is nullable
+    /// (<see cref="Nullable{T}"/> or <see cref="string"/>) is bound as <c>Array(Nullable(T))</c> so its
+    /// null elements survive the driver's non-nullable inference. Any other value keeps its existing
+    /// binding.
     /// </summary>
     /// <param name="name">The parameter name, without the provider prefix.</param>
     /// <param name="value">The parameter value, or <see langword="null"/>.</param>
@@ -276,8 +279,45 @@ public class ClickHouseDataContext : DataContext, IBulkInsertExecutor, IBulkInse
             parameter.Value = JsonNode.Parse(document.RootElement.GetRawText())!;
             parameter.ClickHouseType = "JSON";
         }
+        else if (value is not null && NullableArrayTypeName(value.GetType()) is { } nullableArrayType)
+        {
+            // The driver infers a non-nullable element type from the CLR array, so a null element is
+            // silently replaced by the element default. The declared nullable element type is the only
+            // reliable source: an explicit Array(Nullable(T)) keeps the nulls, and the value itself is
+            // bound unchanged (never converted or copied).
+            parameter.ClickHouseType = nullableArrayType;
+        }
 
         return parameter;
+    }
+
+    // The declared element type of a rank-1 CLR array that can hold a null: Nullable<T> or string.
+    // Returns the matching Array(Nullable(T)) ClickHouse type name, or null when the shape stays on
+    // the driver's inference (non-nullable element type, jagged/nested array, an element type the
+    // provider cannot name). The name comes from the declared element type only, so empty and
+    // all-null arrays keep it too.
+    private static string? NullableArrayTypeName(Type arrayType)
+    {
+        if (!arrayType.IsArray || arrayType.GetArrayRank() != 1)
+            return null;
+
+        var elementType = arrayType.GetElementType()!;
+        if (Nullable.GetUnderlyingType(elementType) is null && elementType != typeof(string))
+            return null;
+
+        // ClickHouse's canonical Decimal spelling omits the space the table-valued-parameter mapping
+        // carries; the name is only metadata, so keep the element mapping's default precision/scale.
+        if ((Nullable.GetUnderlyingType(elementType) ?? elementType) == typeof(decimal))
+            return "Array(Nullable(Decimal(38,10)))";
+
+        try
+        {
+            return $"Array({ColumnTypeName(elementType)})";
+        }
+        catch (NotSupportedException)
+        {
+            return null;
+        }
     }
 
     /// <summary>

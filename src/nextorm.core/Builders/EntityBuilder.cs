@@ -430,6 +430,12 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         // so a different eager graph cannot reuse an incompatible parent plan.
         if (_loadSpecs is { Count: > 0 } || _eagerLoadMode != EagerLoadMode.Default)
         {
+            // Capability gate at construction: the additive metadata-driven form resolves a declared
+            // relationship into a SQL navigation, and a provider without a SQL pipeline (in-memory) has no
+            // implementation for it. Rejecting here is before any command exists, any SQL is built and any
+            // plan is inserted, and it never touches the sticky QueryCommand.Cache flag.
+            EntityBuilderEagerLoading.EnsureMetadataEagerLoadSupported(RequireContext, _loadSpecs);
+
             cmd.EagerLoadMode = _eagerLoadMode != EagerLoadMode.Default ? _eagerLoadMode : null;
             cmd.EagerLoadShape = BuildEagerLoadShape();
         }
@@ -437,7 +443,10 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
 
     /// <summary>
     /// Builds the ordered structural shape of this builder's eager-load specifications, or the empty shape
-    /// when there are none. Used to key the plan cache by the eager graph.
+    /// when there are none. Used to key the plan cache by the eager graph. Each segment is the declaration's
+    /// <see cref="IEagerLoadNodeSpec.PlanShapeKey"/>: the legacy explicit-key fingerprint, or the canonical
+    /// metadata relationship identity when the explicit keys select a declared relationship — so the two
+    /// frontends of one 1:N declaration cannot split otherwise-equivalent plan entries.
     /// </summary>
     private EagerLoadShape BuildEagerLoadShape()
     {
@@ -446,7 +455,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
 
         var parts = new string[_loadSpecs.Count];
         for (var i = 0; i < _loadSpecs.Count; i++)
-            parts[i] = _loadSpecs[i].ShapeKey;
+            parts[i] = _loadSpecs[i].PlanShapeKey;
 
         return new EagerLoadShape(parts);
     }
@@ -678,7 +687,17 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         EnsureValidEagerLoadMode(mode);
         var resolvedMode = ResolveEagerLoadMode(mode);
 
-        var spec = new EagerLoadSpec<TEntity, TChild, TKey>(collection, childQuery, parentKey, childKey, mode);
+        // Plan-identity normalization: when these explicit keys select exactly a declared 1:N
+        // relationship of the same navigation, the declaration is semantically the inferred-metadata
+        // declaration and must key the same plan entry. ShapeKey (the graph identity) is untouched and
+        // the legacy SQL/execution path is unchanged; only the plan identity is canonicalized. A
+        // missing, ambiguous or malformed declaration returns null and keeps the legacy identity, so the
+        // legacy overload never gains a metadata failure mode or a behavioural change.
+        var planShapeKey = MetadataEagerLoadResolver.TryResolveEquivalentPlanShape(
+            RequireContext, collection, parentKey, childKey);
+
+        var spec = new EagerLoadSpec<TEntity, TChild, TKey>(
+            collection, childQuery, parentKey, childKey, mode, planShapeKey: planShapeKey);
 
         if (spec.CollectionMember is { } member && _loadSpecs is not null)
         {
@@ -688,6 +707,265 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
                     throw new InvalidOperationException(
                         $"The collection member '{member.Name}' on '{typeof(TEntity).Name}' already has an " +
                         "eager-load declaration; remove the earlier LoadWith call or load a different collection.");
+            }
+        }
+
+        var b = Clone();
+        b._eagerLoadMode = resolvedMode;
+        b._loadSpecs = _loadSpecs is null ? [spec] : [.. _loadSpecs, spec];
+
+        return b;
+    }
+    /// <summary>
+    /// Declares the eager loading of a <em>declared</em> collection navigation without explicit key
+    /// selectors: the relationship is read from the mapping metadata — <c>HasMany</c> or
+    /// <c>HasManyThrough</c> (fluent) or <c>[Relationship]</c> — and its ordered key components are
+    /// paired positionally, parent component at position <c>i</c> with child component at position
+    /// <c>i</c>.
+    /// <para>
+    /// The relationship is resolved and structurally validated when this method is called, so an
+    /// undeclared navigation, a reference cardinality and malformed metadata are rejected before any SQL
+    /// is generated and before any plan-cache entry exists. nextorm never infers a relationship from a
+    /// naming convention, never matches key columns by name and never falls back to the first component
+    /// of a composite key. A collection navigation can only be loaded through this collection route; the
+    /// reference route rejects a collection relationship.
+    /// </para>
+    /// <para>
+    /// The child query is the context's ordinary <c>From&lt;TChild&gt;()</c> source, so the related
+    /// type's mapping and global filters apply; use the <c>childQuery</c> overload to add the child's own
+    /// filters, ordering or per-parent paging. Modes, chunking, the assignment rule, ordering and the
+    /// stitching terminals are the same as for the explicit-key overload. The declared-metadata form is
+    /// SQL-only: the in-memory provider rejects it while the parent command is constructed, before any SQL
+    /// and before any plan-cache entry.
+    /// </para>
+    /// </summary>
+    /// <typeparam name="TChild">The related entity type.</typeparam>
+    /// <param name="collection">The parent-side collection navigation to fill.</param>
+    /// <param name="mode">
+    /// The whole-builder eager-load mode; <see cref="EagerLoadMode.Default"/> inherits the current choice.
+    /// </param>
+    /// <returns>A copy of this builder carrying the eager-load declaration.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode"/> is not a defined value.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The navigation already carries an eager-load declaration on this builder.
+    /// </exception>
+    /// <exception cref="NotSupportedException">
+    /// The selector is not a collection navigation, no relationship is declared for it, the declared
+    /// relationship is not a collection relationship of <typeparamref name="TChild"/>, its key lists are
+    /// structurally invalid, a different explicit mode is already active, or the context is the in-memory
+    /// provider.
+    /// </exception>
+    public EntityBuilder<TEntity> LoadWith<TChild>(
+        Expression<Func<TEntity, ICollection<TChild>>> collection,
+        EagerLoadMode mode = EagerLoadMode.Default)
+    {
+        ArgumentNullException.ThrowIfNull(collection);
+        EnsureValidEagerLoadMode(mode);
+
+        const string form = "LoadWith(collection)";
+        var binding = MetadataEagerLoadResolver.Resolve<TEntity, TChild>(
+            RequireContext, collection, MetadataEagerLoadRoute.Collection, mode, form);
+        var spec = new MetadataEagerLoadSpec<TEntity, TChild>(binding, collection, static ctx => ctx.From<TChild>());
+
+        return AddMetadataLoadSpec(spec, binding.Navigation, ResolveEagerLoadMode(mode));
+    }
+    /// <summary>
+    /// Declares the eager loading of a <em>declared</em> collection navigation through a child query,
+    /// without explicit key selectors: the relationship is read from the mapping metadata — <c>HasMany</c>
+    /// or <c>HasManyThrough</c> (fluent) or <c>[Relationship]</c> — and its ordered key components are
+    /// paired positionally.
+    /// <para>
+    /// The relationship is resolved and structurally validated when this method is called, so an
+    /// undeclared navigation, a reference cardinality and malformed metadata are rejected before any SQL
+    /// is generated and before any plan-cache entry exists. nextorm never infers a relationship from a
+    /// naming convention, never matches key columns by name and never falls back to the first component
+    /// of a composite key. A collection navigation can only be loaded through this collection route; the
+    /// reference route rejects a collection relationship.
+    /// </para>
+    /// <para>
+    /// <paramref name="childQuery"/> supplies the child source, so it can add the child's own filters,
+    /// ordering or per-parent paging; split loading honors every child-query shape. Modes, chunking, the
+    /// assignment rule, ordering and the stitching terminals are the same as for the explicit-key
+    /// overload. The declared-metadata form is SQL-only: the in-memory provider rejects it while the
+    /// parent command is constructed, before any SQL and before any plan-cache entry.
+    /// </para>
+    /// </summary>
+    /// <typeparam name="TChild">The related entity type.</typeparam>
+    /// <param name="collection">The parent-side collection navigation to fill.</param>
+    /// <param name="childQuery">Builds the child query from the data context that owns the parent query.</param>
+    /// <param name="mode">
+    /// The whole-builder eager-load mode; <see cref="EagerLoadMode.Default"/> inherits the current choice.
+    /// </param>
+    /// <returns>A copy of this builder carrying the eager-load declaration.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode"/> is not a defined value.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The navigation already carries an eager-load declaration on this builder.
+    /// </exception>
+    /// <exception cref="NotSupportedException">
+    /// The selector is not a collection navigation, no relationship is declared for it, the declared
+    /// relationship is not a collection relationship of <typeparamref name="TChild"/>, its key lists are
+    /// structurally invalid, a different explicit mode is already active, or the context is the in-memory
+    /// provider.
+    /// </exception>
+    public EntityBuilder<TEntity> LoadWith<TChild>(
+        Expression<Func<TEntity, ICollection<TChild>>> collection,
+        Func<IDataContext, EntityBuilder<TChild>> childQuery,
+        EagerLoadMode mode = EagerLoadMode.Default)
+    {
+        ArgumentNullException.ThrowIfNull(collection);
+        ArgumentNullException.ThrowIfNull(childQuery);
+        EnsureValidEagerLoadMode(mode);
+
+        const string form = "LoadWith(collection, childQuery)";
+        var binding = MetadataEagerLoadResolver.Resolve<TEntity, TChild>(
+            RequireContext, collection, MetadataEagerLoadRoute.Collection, mode, form);
+        var spec = new MetadataEagerLoadSpec<TEntity, TChild>(binding, collection, childQuery);
+
+        return AddMetadataLoadSpec(spec, binding.Navigation, ResolveEagerLoadMode(mode));
+    }
+    /// <summary>
+    /// Declares the eager loading of a <em>declared</em> reference navigation without explicit key
+    /// selectors: the relationship is read from the mapping metadata — <c>HasOne</c>/<c>HasOneToOne</c>
+    /// (fluent) or <c>[Relationship]</c> — and its ordered key components are paired positionally, parent
+    /// component at position <c>i</c> with child component at position <c>i</c>.
+    /// <para>
+    /// The relationship is resolved and structurally validated when this method is called, so an
+    /// undeclared navigation, a collection cardinality and malformed metadata are rejected before any SQL
+    /// is generated and before any plan-cache entry exists. nextorm never infers a relationship from a
+    /// naming convention, never matches key columns by name and never falls back to the first component
+    /// of a composite key. A collection navigation can only be loaded through the collection route; this
+    /// reference route rejects a collection relationship, including a many-to-many one.
+    /// </para>
+    /// <para>
+    /// One related row is assigned per parent: no matching row assigns <see langword="null"/>, and more
+    /// than one distinct full identity for the same parent throws
+    /// <see cref="InvalidOperationException"/> before any parent is mutated. A read-only navigation can
+    /// only be loaded when its current value already is the resolved row; otherwise it fails closed with
+    /// <see cref="NotSupportedException"/>. The child query is the context's ordinary
+    /// <c>From&lt;TChild&gt;()</c> source, so the related type's mapping and global filters apply; use the
+    /// <c>childQuery</c> overload to add the child's own filters or ordering. Modes, chunking, ordering and
+    /// the stitching terminals are the same as for the explicit-key overload, and a child page is rejected
+    /// because a per-parent top-N applies to a collection. The declared-metadata form is SQL-only: the
+    /// in-memory provider rejects it while the parent command is constructed, before any SQL and before
+    /// any plan-cache entry.
+    /// </para>
+    /// </summary>
+    /// <typeparam name="TChild">The related entity type.</typeparam>
+    /// <param name="reference">The parent-side reference navigation to fill.</param>
+    /// <param name="mode">
+    /// The whole-builder eager-load mode; <see cref="EagerLoadMode.Default"/> inherits the current choice.
+    /// </param>
+    /// <returns>A copy of this builder carrying the eager-load declaration.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode"/> is not a defined value.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The navigation already carries an eager-load declaration on this builder, or more than one distinct
+    /// related row matches a single parent.
+    /// </exception>
+    /// <exception cref="NotSupportedException">
+    /// The selector is not a reference navigation, no relationship is declared for it, the declared
+    /// relationship is not a reference relationship of <typeparamref name="TChild"/>, its key lists are
+    /// structurally invalid, a different explicit mode is already active, the child query pages per
+    /// parent, the navigation is read-only and would have to be written, or the context is the in-memory
+    /// provider.
+    /// </exception>
+    [OverloadResolutionPriority(-1)]
+    public EntityBuilder<TEntity> LoadWith<TChild>(
+        Expression<Func<TEntity, TChild?>> reference,
+        EagerLoadMode mode = EagerLoadMode.Default)
+        where TChild : class
+    {
+        ArgumentNullException.ThrowIfNull(reference);
+        EnsureValidEagerLoadMode(mode);
+
+        const string form = "LoadWith(reference)";
+        var binding = MetadataEagerLoadResolver.Resolve<TEntity, TChild>(
+            RequireContext, reference, MetadataEagerLoadRoute.Reference, mode, form);
+        var spec = new MetadataEagerLoadSpec<TEntity, TChild>(binding, collection: null, static ctx => ctx.From<TChild>());
+
+        return AddMetadataLoadSpec(spec, binding.Navigation, ResolveEagerLoadMode(mode));
+    }
+    /// <summary>
+    /// Declares the eager loading of a <em>declared</em> reference navigation through a child query,
+    /// without explicit key selectors: the relationship is read from the mapping metadata —
+    /// <c>HasOne</c>/<c>HasOneToOne</c> (fluent) or <c>[Relationship]</c> — and its ordered key components
+    /// are paired positionally.
+    /// <para>
+    /// The relationship is resolved and structurally validated when this method is called, so an
+    /// undeclared navigation, a collection cardinality and malformed metadata are rejected before any SQL
+    /// is generated and before any plan-cache entry exists. nextorm never infers a relationship from a
+    /// naming convention, never matches key columns by name and never falls back to the first component
+    /// of a composite key. A collection navigation can only be loaded through the collection route; this
+    /// reference route rejects a collection relationship, including a many-to-many one.
+    /// </para>
+    /// <para>
+    /// One related row is assigned per parent: no matching row assigns <see langword="null"/>, and more
+    /// than one distinct full identity for the same parent throws
+    /// <see cref="InvalidOperationException"/> before any parent is mutated. A read-only navigation can
+    /// only be loaded when its current value already is the resolved row; otherwise it fails closed with
+    /// <see cref="NotSupportedException"/>. <paramref name="childQuery"/> can add the child's own filters
+    /// or ordering; a child page is rejected because a per-parent top-N applies to a collection. Modes,
+    /// chunking, ordering and the stitching terminals are the same as for the explicit-key overload. The
+    /// declared-metadata form is SQL-only: the in-memory provider rejects it while the parent command is
+    /// constructed, before any SQL and before any plan-cache entry.
+    /// </para>
+    /// </summary>
+    /// <typeparam name="TChild">The related entity type.</typeparam>
+    /// <param name="reference">The parent-side reference navigation to fill.</param>
+    /// <param name="childQuery">Builds the child query from the data context that owns the parent query.</param>
+    /// <param name="mode">
+    /// The whole-builder eager-load mode; <see cref="EagerLoadMode.Default"/> inherits the current choice.
+    /// </param>
+    /// <returns>A copy of this builder carrying the eager-load declaration.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode"/> is not a defined value.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The navigation already carries an eager-load declaration on this builder, or more than one distinct
+    /// related row matches a single parent.
+    /// </exception>
+    /// <exception cref="NotSupportedException">
+    /// The selector is not a reference navigation, no relationship is declared for it, the declared
+    /// relationship is not a reference relationship of <typeparamref name="TChild"/>, its key lists are
+    /// structurally invalid, a different explicit mode is already active, the child query pages per
+    /// parent, the navigation is read-only and would have to be written, or the context is the in-memory
+    /// provider.
+    /// </exception>
+    [OverloadResolutionPriority(-1)]
+    public EntityBuilder<TEntity> LoadWith<TChild>(
+        Expression<Func<TEntity, TChild?>> reference,
+        Func<IDataContext, EntityBuilder<TChild>> childQuery,
+        EagerLoadMode mode = EagerLoadMode.Default)
+        where TChild : class
+    {
+        ArgumentNullException.ThrowIfNull(reference);
+        ArgumentNullException.ThrowIfNull(childQuery);
+        EnsureValidEagerLoadMode(mode);
+
+        const string form = "LoadWith(reference, childQuery)";
+        var binding = MetadataEagerLoadResolver.Resolve<TEntity, TChild>(
+            RequireContext, reference, MetadataEagerLoadRoute.Reference, mode, form);
+        var spec = new MetadataEagerLoadSpec<TEntity, TChild>(binding, collection: null, childQuery);
+
+        return AddMetadataLoadSpec(spec, binding.Navigation, ResolveEagerLoadMode(mode));
+    }
+    /// <summary>
+    /// Registers one additive metadata-driven eager-load declaration on a copy of this builder, applying
+    /// the same duplicate-member rule as the explicit-key overload: a member that already carries a
+    /// declaration on this builder is rejected instead of silently loading twice.
+    /// </summary>
+    /// <param name="spec">The metadata-driven specification to register.</param>
+    /// <param name="member">The navigation member the declaration targets.</param>
+    /// <param name="resolvedMode">The already resolved whole-builder eager-load mode.</param>
+    /// <returns>A copy of this builder carrying the declaration.</returns>
+    /// <exception cref="InvalidOperationException">The member already carries an eager-load declaration.</exception>
+    private EntityBuilder<TEntity> AddMetadataLoadSpec(IEagerLoadSpec<TEntity> spec, MemberInfo member, EagerLoadMode resolvedMode)
+    {
+        if (_loadSpecs is not null)
+        {
+            foreach (var registered in _loadSpecs)
+            {
+                if (registered.CollectionMember is { } existing && existing.Equals(member))
+                    throw new InvalidOperationException(
+                        $"The navigation member '{member.Name}' on '{typeof(TEntity).Name}' already has an " +
+                        "eager-load declaration; remove the earlier LoadWith call or load a different navigation.");
             }
         }
 
@@ -772,6 +1050,33 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         Action<JoinOptions>? options = null)
         => JoinInto(child, predicate, collection, JoinType.Left, options);
     /// <summary>
+    /// Declares a <c>LEFT JOIN</c> to the mapping of <typeparamref name="TChild"/> that fills the
+    /// <paramref name="collection"/> member of every parent when the query is enumerated by a list
+    /// terminal. The child source is the mapping of <typeparamref name="TChild"/>, so no child builder is
+    /// supplied. The returned builder is a copy; the current builder is unchanged.
+    /// <para>
+    /// Equivalent to
+    /// <see cref="JoinInto{TChild}(EntityBuilder{TChild}, Expression{Func{TEntity, TChild, bool}}, Expression{Func{TEntity, ICollection{TChild}}}, Action{JoinOptions}?)"/>
+    /// with the child source resolved from the data context; the parent/child keys are resolved from the
+    /// declared relationship metadata (or from a local <see cref="JoinOptions"/> configuration) and a
+    /// relationship that cannot be resolved is rejected with <see cref="NotSupportedException"/>.
+    /// </para>
+    /// </summary>
+    /// <typeparam name="TChild">The child entity type.</typeparam>
+    /// <param name="predicate">The join predicate over the parent and child.</param>
+    /// <param name="collection">The parent-side collection member the joined children fill.</param>
+    /// <param name="options">Optional per-join configuration, for example <c>j =&gt; j.Global()</c> or <c>j =&gt; j.WithStrictness(JoinStrictness.Any)</c>.</param>
+    /// <returns>A copy of this builder carrying the join declaration.</returns>
+    /// <exception cref="NotSupportedException">The join kind or relationship is not supported.</exception>
+    public EntityBuilder<TEntity> JoinInto<TChild>(
+        Expression<Func<TEntity, TChild, bool>> predicate,
+        Expression<Func<TEntity, ICollection<TChild>>> collection,
+        Action<JoinOptions>? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(predicate);
+        return JoinInto(RequireContext.From<TChild>(), predicate, collection, options);
+    }
+    /// <summary>
     /// Declares a typed join to <paramref name="child"/> (see
     /// <see cref="JoinInto{TChild}(EntityBuilder{TChild}, Expression{Func{TEntity, TChild, bool}}, Expression{Func{TEntity, ICollection{TChild}}}, Action{JoinOptions}?)"/>)
     /// that fills the <paramref name="collection"/> member. Only <see cref="JoinType.Inner"/> and
@@ -833,6 +1138,29 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         });
     }
     /// <summary>
+    /// Declares a typed join to the mapping of <typeparamref name="TChild"/> (see
+    /// <see cref="JoinInto{TChild}(Expression{Func{TEntity, TChild, bool}}, Expression{Func{TEntity, ICollection{TChild}}}, Action{JoinOptions}?)"/>)
+    /// that fills the <paramref name="collection"/> member and uses the given <paramref name="joinType"/>.
+    /// Only <see cref="JoinType.Inner"/> and <see cref="JoinType.Left"/> are accepted; any other kind throws
+    /// <see cref="NotSupportedException"/>. The returned builder is a copy; the current builder is unchanged.
+    /// </summary>
+    /// <typeparam name="TChild">The child entity type.</typeparam>
+    /// <param name="predicate">The join predicate over the parent and child.</param>
+    /// <param name="collection">The parent-side collection member the joined children fill.</param>
+    /// <param name="joinType">The join kind; <see cref="JoinType.Inner"/> or <see cref="JoinType.Left"/>.</param>
+    /// <param name="options">Optional per-join configuration, for example <c>j =&gt; j.Global()</c> or <c>j =&gt; j.WithStrictness(JoinStrictness.Any)</c>.</param>
+    /// <returns>A copy of this builder carrying the join declaration.</returns>
+    /// <exception cref="NotSupportedException">The join kind or relationship is not supported.</exception>
+    public EntityBuilder<TEntity> JoinInto<TChild>(
+        Expression<Func<TEntity, TChild, bool>> predicate,
+        Expression<Func<TEntity, ICollection<TChild>>> collection,
+        JoinType joinType,
+        Action<JoinOptions>? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(predicate);
+        return JoinInto(RequireContext.From<TChild>(), predicate, collection, joinType, options);
+    }
+    /// <summary>
     /// Declares a <c>LEFT JOIN</c> to <paramref name="child"/> that assigns the single joined child to the
     /// one-to-one <paramref name="navigation"/> reference of every parent when the query is enumerated by a
     /// list terminal. The returned builder is a copy; the current builder is unchanged.
@@ -862,6 +1190,34 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         Action<JoinOptions>? options = null)
         where TChild : class
         => JoinInto(child, predicate, navigation, JoinType.Left, options);
+    /// <summary>
+    /// Declares a <c>LEFT JOIN</c> to the mapping of <typeparamref name="TChild"/> that assigns the single
+    /// joined child to the one-to-one <paramref name="navigation"/> reference of every parent when the query
+    /// is enumerated by a list terminal. The child source is the mapping of <typeparamref name="TChild"/>, so
+    /// no child builder is supplied. The returned builder is a copy; the current builder is unchanged.
+    /// <para>
+    /// Equivalent to
+    /// <see cref="JoinInto{TChild}(EntityBuilder{TChild}, Expression{Func{TEntity, TChild, bool}}, Expression{Func{TEntity, TChild}}, Action{JoinOptions}?)"/>
+    /// with the child source resolved from the data context. The relationship must be declared as
+    /// one-to-one so the principal/foreign keys are known; an unresolvable relationship is rejected with
+    /// <see cref="NotSupportedException"/>.
+    /// </para>
+    /// </summary>
+    /// <typeparam name="TChild">The child entity type.</typeparam>
+    /// <param name="predicate">The join predicate over the parent and child.</param>
+    /// <param name="navigation">The parent-side reference navigation the joined child fills.</param>
+    /// <param name="options">Optional per-join configuration, for example <c>j =&gt; j.Global()</c> or <c>j =&gt; j.WithStrictness(JoinStrictness.Any)</c>.</param>
+    /// <returns>A copy of this builder carrying the join declaration.</returns>
+    /// <exception cref="NotSupportedException">The join kind, relationship kind or keys are not supported.</exception>
+    public EntityBuilder<TEntity> JoinInto<TChild>(
+        Expression<Func<TEntity, TChild, bool>> predicate,
+        Expression<Func<TEntity, TChild?>> navigation,
+        Action<JoinOptions>? options = null)
+        where TChild : class
+    {
+        ArgumentNullException.ThrowIfNull(predicate);
+        return JoinInto(RequireContext.From<TChild>(), predicate, navigation, options);
+    }
     /// <summary>
     /// Declares a typed join to <paramref name="child"/> (see
     /// <see cref="JoinInto{TChild}(EntityBuilder{TChild}, Expression{Func{TEntity, TChild, bool}}, Expression{Func{TEntity, TChild}}, Action{JoinOptions}?)"/>)
@@ -916,6 +1272,31 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
             TableHints = opts.TableHints,
             SuppressCartesianWarning = opts.CartesianWarningSuppressed
         });
+    }
+    /// <summary>
+    /// Declares a typed join to the mapping of <typeparamref name="TChild"/> (see
+    /// <see cref="JoinInto{TChild}(Expression{Func{TEntity, TChild, bool}}, Expression{Func{TEntity, TChild}}, Action{JoinOptions}?)"/>)
+    /// that assigns the single joined child to the one-to-one <paramref name="navigation"/> reference and
+    /// uses the given <paramref name="joinType"/>. Only <see cref="JoinType.Inner"/> and
+    /// <see cref="JoinType.Left"/> are accepted; any other kind throws <see cref="NotSupportedException"/>.
+    /// The returned builder is a copy; the current builder is unchanged.
+    /// </summary>
+    /// <typeparam name="TChild">The child entity type.</typeparam>
+    /// <param name="predicate">The join predicate over the parent and child.</param>
+    /// <param name="navigation">The parent-side reference navigation the joined child fills.</param>
+    /// <param name="joinType">The join kind; <see cref="JoinType.Inner"/> or <see cref="JoinType.Left"/>.</param>
+    /// <param name="options">Optional per-join configuration, for example <c>j =&gt; j.Global()</c> or <c>j =&gt; j.WithStrictness(JoinStrictness.Any)</c>.</param>
+    /// <returns>A copy of this builder carrying the join declaration.</returns>
+    /// <exception cref="NotSupportedException">The join kind, relationship kind or keys are not supported.</exception>
+    public EntityBuilder<TEntity> JoinInto<TChild>(
+        Expression<Func<TEntity, TChild, bool>> predicate,
+        Expression<Func<TEntity, TChild?>> navigation,
+        JoinType joinType,
+        Action<JoinOptions>? options = null)
+        where TChild : class
+    {
+        ArgumentNullException.ThrowIfNull(predicate);
+        return JoinInto(RequireContext.From<TChild>(), predicate, navigation, joinType, options);
     }
     /// <summary>
     /// Declares a <c>LEFT JOIN</c> to <paramref name="child"/> that fills the <paramref name="collection"/>
@@ -974,6 +1355,212 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
             SuppressCartesianWarning = opts.CartesianWarningSuppressed
         });
     }
+    /// <summary>
+    /// Declares a <c>LEFT JOIN</c> to the mapping of <typeparamref name="TChild"/> that fills the
+    /// <paramref name="collection"/> member, using the explicit
+    /// <paramref name="parentKey"/>/<paramref name="childKey"/> selectors instead of declared relationship
+    /// metadata. The child source is the mapping of <typeparamref name="TChild"/>, so no child builder is
+    /// supplied; the call is equivalent to
+    /// <see cref="JoinInto{TChild, TKey}(EntityBuilder{TChild}, Expression{Func{TEntity, TChild, bool}}, Expression{Func{TEntity, ICollection{TChild}}}, Expression{Func{TEntity, TKey}}, Expression{Func{TChild, TKey}}, Action{JoinOptions}?)"/>
+    /// with the child source resolved from the data context. The returned builder is a copy; the current
+    /// builder is unchanged.
+    /// </summary>
+    /// <typeparam name="TChild">The child entity type.</typeparam>
+    /// <typeparam name="TKey">The non-nullable key type shared by the two selectors.</typeparam>
+    /// <param name="predicate">The join predicate over the parent and child.</param>
+    /// <param name="collection">The parent-side collection member the joined children fill.</param>
+    /// <param name="parentKey">Selects the parent key used to group the rows.</param>
+    /// <param name="childKey">Selects the child key used to group the rows.</param>
+    /// <param name="options">Optional per-join configuration, for example <c>j =&gt; j.Global()</c> or <c>j =&gt; j.WithStrictness(JoinStrictness.Any)</c>.</param>
+    /// <returns>A copy of this builder carrying the join declaration.</returns>
+    /// <exception cref="NotSupportedException">The key selectors select different types.</exception>
+    public EntityBuilder<TEntity> JoinInto<TChild, TKey>(
+        Expression<Func<TEntity, TChild, bool>> predicate,
+        Expression<Func<TEntity, ICollection<TChild>>> collection,
+        Expression<Func<TEntity, TKey>> parentKey,
+        Expression<Func<TChild, TKey>> childKey,
+        Action<JoinOptions>? options = null)
+        where TKey : notnull
+    {
+        ArgumentNullException.ThrowIfNull(predicate);
+        return JoinInto(RequireContext.From<TChild>(), predicate, collection, parentKey, childKey, options);
+    }
+    /// <summary>
+    /// Declares a <c>LEFT JOIN</c> to the mapping of <typeparamref name="TChild"/> that fills the
+    /// <paramref name="collection"/> member of every parent, taking both join keys from the relationship
+    /// the navigation declares. The navigation selects the relationship, so the caller does not restate
+    /// its keys: the <c>ON</c> condition is the ordered principal/foreign component equality of the
+    /// declared relationship, conjoined componentwise (a composite key contributes one equality per
+    /// component, in declaration order).
+    /// <para>
+    /// <paramref name="filter"/> is an <b>additional</b> restriction appended to that <c>ON</c> condition
+    /// as one more conjunct; it never replaces the declared-key equality and is never moved into a
+    /// parent-filtering <c>WHERE</c>, so a parent whose children are all filtered out is still returned
+    /// with an empty collection. <see langword="null"/> means no additional restriction. For a many-to-many
+    /// navigation the existing junction synthesis supplies both key edges, and the filter is appended to
+    /// the link-to-child edge exactly where the explicit forms append their predicate.
+    /// </para>
+    /// <para>
+    /// The child source is the mapping of <typeparamref name="TChild"/> resolved from the data context -
+    /// the same resolution the source-less overloads use, so a configured mapping keeps precedence. The
+    /// returned builder is a copy; the current builder is unchanged.
+    /// </para>
+    /// </summary>
+    /// <typeparam name="TChild">The child entity type, inferred from the collection navigation.</typeparam>
+    /// <param name="collection">The parent-side collection navigation the joined children fill.</param>
+    /// <param name="filter">An additional predicate over the parent and child, conjoined into the join's <c>ON</c>; <see langword="null"/> for no additional restriction.</param>
+    /// <param name="options">Optional per-join configuration, for example <c>j =&gt; j.Global()</c> or <c>j =&gt; j.WithStrictness(JoinStrictness.Any)</c>.</param>
+    /// <returns>A copy of this builder carrying the join declaration.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="collection"/> is <see langword="null"/>.</exception>
+    /// <exception cref="NotSupportedException">The navigation does not resolve to a declared relationship, the cardinality or the keys are unsupported, or the key type has no value equality.</exception>
+    // Outranks the reference form for a collection-typed navigation: both overloads are applicable to
+    // `p => p.Children` (a concrete List<Children> also converts to `TChild` itself), and the reference
+    // form is ordinarily the "more specific" candidate, which would bind the collection to a one-to-one
+    // join. The priority makes the collection form the winner for exactly the navigations it supports.
+    [OverloadResolutionPriority(1)]
+    public EntityBuilder<TEntity> JoinInto<TChild>(
+        Expression<Func<TEntity, ICollection<TChild>>> collection,
+        Expression<Func<TEntity, TChild, bool>>? filter = null,
+        Action<JoinOptions>? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(collection);
+        EnsureJoinIntoSource(nameof(JoinInto));
+
+        var opts = new JoinOptions();
+        options?.Invoke(opts);
+
+        var relationship = ResolveJoinIntoRelationship(collection, opts);
+        var condition = BuildNavigationJoinCondition(relationship, filter);
+        var child = RequireContext.From<TChild>();
+
+        if (relationship.Kind is RelationshipKind.ManyToMany)
+        {
+            var (manyToMany, linkJoin, childJoin) = JoinIntoManyToManySpec<TEntity, TChild>.Create(
+                child, condition, collection, relationship, JoinType.Left, opts, RequireContext);
+            return AddJoinInto(manyToMany, linkJoin, childJoin);
+        }
+
+        var spec = new JoinIntoSpec<TEntity, TChild>(child, condition, collection, relationship, JoinType.Left);
+        return AddJoinInto(spec, CreateJoinIntoEdge(child, condition, opts));
+    }
+    /// <summary>
+    /// Declares a <c>LEFT JOIN</c> to the mapping of <typeparamref name="TChild"/> that assigns the single
+    /// joined child to the one-to-one <paramref name="navigation"/> reference of every parent, taking both
+    /// join keys from the relationship the navigation declares. The navigation selects the relationship,
+    /// so the caller does not restate its keys: the <c>ON</c> condition is the ordered principal/foreign
+    /// component equality of the declared relationship, conjoined componentwise.
+    /// <para>
+    /// <paramref name="filter"/> is an <b>additional</b> restriction appended to that <c>ON</c> condition
+    /// as one more conjunct; it never replaces the declared-key equality and is never moved into a
+    /// parent-filtering <c>WHERE</c>, so a parent whose only candidate child is filtered out keeps a
+    /// <see langword="null"/> reference instead of disappearing. <see langword="null"/> means no
+    /// additional restriction. At most one child is assigned per parent, as for the explicit forms.
+    /// </para>
+    /// <para>
+    /// The child source is the mapping of <typeparamref name="TChild"/> resolved from the data context -
+    /// the same resolution the source-less overloads use, so a configured mapping keeps precedence. The
+    /// returned builder is a copy; the current builder is unchanged.
+    /// </para>
+    /// </summary>
+    /// <typeparam name="TChild">The child entity type, inferred from the reference navigation.</typeparam>
+    /// <param name="navigation">The parent-side reference navigation the joined child fills.</param>
+    /// <param name="filter">An additional predicate over the parent and child, conjoined into the join's <c>ON</c>; <see langword="null"/> for no additional restriction.</param>
+    /// <param name="options">Optional per-join configuration, for example <c>j =&gt; j.Global()</c> or <c>j =&gt; j.WithStrictness(JoinStrictness.Any)</c>.</param>
+    /// <returns>A copy of this builder carrying the join declaration.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="navigation"/> is <see langword="null"/>.</exception>
+    /// <exception cref="NotSupportedException">The navigation does not resolve to a declared one-to-one relationship, the navigation has no setter, or the key type has no value equality.</exception>
+    public EntityBuilder<TEntity> JoinInto<TChild>(
+        Expression<Func<TEntity, TChild?>> navigation,
+        Expression<Func<TEntity, TChild, bool>>? filter = null,
+        Action<JoinOptions>? options = null)
+        where TChild : class
+    {
+        ArgumentNullException.ThrowIfNull(navigation);
+        EnsureJoinIntoSource(nameof(JoinInto));
+
+        var opts = new JoinOptions();
+        options?.Invoke(opts);
+
+        var relationship = ResolveJoinIntoReferenceRelationship(navigation, opts);
+        var condition = BuildNavigationJoinCondition(relationship, filter);
+        var child = RequireContext.From<TChild>();
+
+        var spec = new JoinIntoReferenceSpec<TEntity, TChild>(child, condition, navigation, relationship, JoinType.Left);
+        return AddJoinInto(spec, CreateJoinIntoEdge(child, condition, opts));
+    }
+    /// <summary>
+    /// Builds the <c>ON</c> condition of a navigation-first <c>JoinInto</c> from the declared relationship:
+    /// one equality per ordered principal/foreign component, conjoined in declaration order, with
+    /// <paramref name="filter"/> appended as an additional conjunct. A junction relationship contributes no
+    /// direct key equality - the junction synthesis supplies both edges - so only the filter (or an
+    /// always-true predicate when it is absent) is returned.
+    /// </summary>
+    /// <typeparam name="TChild">The child entity type.</typeparam>
+    /// <param name="relationship">The declared relationship the navigation resolved to.</param>
+    /// <param name="filter">The additional restriction, or <see langword="null"/> for none.</param>
+    /// <returns>The join condition.</returns>
+    private static Expression<Func<TEntity, TChild, bool>> BuildNavigationJoinCondition<TChild>(
+        IRelationshipMetadata relationship,
+        Expression<Func<TEntity, TChild, bool>>? filter)
+    {
+        if (relationship.Kind is RelationshipKind.ManyToMany)
+        {
+            if (filter is not null)
+                return filter;
+
+            return static (_, _) => true;
+        }
+
+        // A hand-written IRelationshipMetadata validates its keys lazily (or not at all); validate here so
+        // a malformed declaration is rejected before an index past the shorter key list can be read, and
+        // never degrades into a partially-keyed join.
+        RelationshipResolver.ValidateRelationship(relationship);
+
+        var principalKey = relationship.PrincipalKey;
+        var foreignKey = relationship.ForeignKey;
+
+        // The filter's own parameters are reused as the join parameters, so the appended filter needs no
+        // re-binding and both entities are bound exactly once in the emitted SQL.
+        var parentParameter = filter?.Parameters[0] ?? Expression.Parameter(typeof(TEntity), "p");
+        var childParameter = filter?.Parameters[1] ?? Expression.Parameter(typeof(TChild), "c");
+
+        Expression? condition = null;
+        for (var i = 0; i < principalKey.Count; i++)
+        {
+            var equality = JoinIntoSpecHelpers.BuildKeyEquality(
+                Expression.Property(parentParameter, principalKey[i].PropertyInfo),
+                Expression.Property(childParameter, foreignKey[i].PropertyInfo),
+                principalKey[i].PropertyInfo.PropertyType,
+                "JoinInto");
+            condition = condition is null ? equality : Expression.AndAlso(condition, equality);
+        }
+
+        var body = filter is null ? condition! : Expression.AndAlso(condition!, filter.Body);
+        return Expression.Lambda<Func<TEntity, TChild, bool>>(body, parentParameter, childParameter);
+    }
+    /// <summary>
+    /// Builds the child join edge of a navigation-first <c>JoinInto</c>: the metadata-derived condition as
+    /// the <c>ON</c> of a left join, with the per-join options copied onto the edge. This mirrors the edge
+    /// construction inside the legacy overloads, whose bodies stay frozen by the compatibility contract.
+    /// </summary>
+    /// <typeparam name="TChild">The child entity type.</typeparam>
+    /// <param name="child">The child source.</param>
+    /// <param name="condition">The join condition.</param>
+    /// <param name="options">The already-applied per-join options.</param>
+    /// <returns>The child join edge.</returns>
+    private JoinExpression CreateJoinIntoEdge<TChild>(
+        EntityBuilder<TChild> child,
+        Expression<Func<TEntity, TChild, bool>> condition,
+        JoinOptions options)
+        => new(condition, JoinType.Left)
+        {
+            From = JoinSourceLock.Apply(GetJoinSource(child), options),
+            Strictness = options.Strictness ?? JoinStrictness.Default,
+            IsGlobal = options.IsGlobal,
+            JoinHint = options.JoinHint,
+            TableHints = options.TableHints,
+            SuppressCartesianWarning = options.CartesianWarningSuppressed
+        };
     /// <summary>Validates the <c>JoinInto</c> join kind: only inner and left edges are supported.</summary>
     private static void EnsureJoinIntoSupported(JoinType joinType)
     {

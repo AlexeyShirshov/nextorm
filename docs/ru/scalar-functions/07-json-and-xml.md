@@ -192,3 +192,31 @@ select t2.value.value('(.)[1]/@id', 'int') as [Id], t2.value.value('(.)[1]', 'nv
 
 Операнд обязан быть колонкой внешней строки, а XQuery — строковым литералом; все прочие провайдеры
 отвергают `xml_nodes` с `NotSupportedException`, как и in-memory-провайдер.
+
+## Функции JSON (ClickHouse, #286 T286b)
+
+JSON-поверхность ClickHouse диспетчеризуется `JsonExtractSqlTranslator` и проходит через
+`ISqlDialect.SupportsJsonExtract`. Члены ниже дополняют каталог; формы результатов объявлены явно
+(`long?`, `ulong?`, `bool?`, `double?`, `string`, `Tuple<string, string>[]`, `string[]`,
+`Dictionary<string, string>`) и нормализуются через `toNullable`/`toInt64` там, где вендор выводит
+более узкий тип.
+
+| Функция | SQL |
+|---|---|
+| `SqlFunctions.ClickHouse.json_merge_patch(a, b)` | `JSONMergePatch(a, b)` |
+| `SqlFunctions.ClickHouse.json_array_length(j)` | `JSONArrayLength(j)` |
+| `SqlFunctions.ClickHouse.json_dynamic_paths(j)` / `json_dynamic_paths_with_types(j)` | `JSONDynamicPaths` / `JSONDynamicPathsWithTypes` |
+| `SqlFunctions.ClickHouse.json_shared_data_paths(j)` / `json_shared_data_paths_with_types(j)` | `JSONSharedDataPaths` / `JSONSharedDataPathsWithTypes` |
+| `SqlFunctions.ClickHouse.json_key(j, path)` | `JSONKey(j, path)` |
+| `SqlFunctions.ClickHouse.json_extract_keys_and_values_raw(j)` | `JSONExtractKeysAndValuesRaw(j)` |
+| `SqlFunctions.ClickHouse.json_extract_uint(j, path)` | `JSONExtractUInt(j, path)` |
+| `SqlFunctions.ClickHouse.is_valid_json(s)` | `isValidJSON(s)` |
+| `SqlFunctions.ClickHouse.simple_json_extract_raw` / `_int` / `_uint` / `_float` / `_bool` / `_string` | `simpleJSONExtractRaw` / `Int` / `UInt` / `Float` / `Bool` / `String` |
+
+Извлекатели строкового JSON (`JSONExtractString`/`Int`/`Float`/`Bool`/`Raw`/`JSONHas`/`JSONType`,
+`json_length`, `visitParamExtract*`), массивные формы (`json_extract_keys`/`json_extract_array_raw`/
+`json_extract_keys_and_values<T>`) и формы нативного JSON (`json_all_paths`,
+`json_all_paths_with_types`, `to_json_string`, скаляры `JSON_VALUE`/`JSON_QUERY`/`JSON_EXISTS`)
+документированы в [ClickHouse-specific SQL](../guide/provider-specific-sql/clickhouse.md#json-словари-и-функции-массивов).
+`pretty_print_json` (появился в 26.4) и `json_extract_uint_or_default` (такой функции нет; дефолт
+вендора уже покрывает поведение) отклонены с точной причиной.

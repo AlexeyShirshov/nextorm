@@ -41,7 +41,7 @@ public class SqliteBenchmarkIteration
         _ctx = new TestDataRepository(_db);
         ((IConnectionManager)_db).EnsureConnectionOpen();
 
-        _cmd = _ctx.SimpleEntity.Prepare(false);
+        _cmd = _ctx.SimpleEntity.Prepare(new PrepareOptions { Streaming = true });
 
         _cmdToList = _ctx.SimpleEntity.Prepare();
 

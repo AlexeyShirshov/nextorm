@@ -256,14 +256,14 @@ public class LobDataReaderTests
         ];
 
         var inner = new FakeDbDataReader(names, types, rows);
-        var owner = new CommandReaderOwner(null!, inner);
+        var owner = new CommandReaderOwner(null!, inner, null);
         return (new LobDataReader(owner, CancellationToken.None), inner);
     }
 
     private static (LobDataReader Reader, FakeDbDataReader Inner) CreateCancelledReader(CancellationToken cancellationToken)
     {
         var inner = new FakeDbDataReader(["id", "name"], [typeof(long), typeof(string)], [[1L, "alpha"]]);
-        var owner = new CommandReaderOwner(null!, inner);
+        var owner = new CommandReaderOwner(null!, inner, null);
         return (new LobDataReader(owner, cancellationToken), inner);
     }
 

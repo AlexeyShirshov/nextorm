@@ -283,18 +283,18 @@ public class T303_AggregatePredicateTests
     /// whitelist, so it fails closed with a public preparation exception naming terminal and operator.
     /// </summary>
     [Fact]
-    public void LongCountInPredicate_ShouldFailClosed()
+    public void LongCountInPredicate_ShouldRenderTheWideCountSubquery()
     {
         using var ctx = CreateContext();
         var parents = ctx.From<T303Parent>();
         var children = ctx.From<T303Child>();
 
-        FluentActions.Invoking(() => SqlOf(ctx, parents
-                .Where(p => children.Where(c => c.ParentId == p.Id).LongCount() > 0)
-                .Select(p => p.Id)))
-            .Should().Throw<QueryPreparationException>()
-            .WithMessage("*LongCount*")
-            .WithMessage("*GreaterThan*");
+        var sql = SqlOf(ctx, parents
+            .Where(p => children.Where(c => c.ParentId == p.Id).LongCount() > 0)
+            .Select(p => p.Id));
+
+        sql.Should().Contain("> 0)", "the wide count is the scalar the comparison is made against");
+        sql.Should().MatchRegex(@"count(_big)?\(", "the wide count keeps its 64-bit aggregate spelling");
     }
 
     /// <summary>

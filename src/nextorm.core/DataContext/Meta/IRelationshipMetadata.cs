@@ -46,17 +46,24 @@ public interface IRelationshipMetadata
     bool IsCollection { get; }
 
     /// <summary>
-    /// The foreign-key properties on the dependent side, resolved from that type's entity metadata.
+    /// The ordered foreign-key components on the dependent side, resolved from that type's entity
+    /// metadata. The list is never empty when the relationship resolves successfully. Order is part of
+    /// the contract: it is the declaration/selector order of the components, and the component at
+    /// position <c>i</c> pairs positionally with <see cref="PrincipalKey"/>'s component at <c>i</c>.
     /// </summary>
-    /// <exception cref="NotSupportedException">A foreign-key property is not mapped on the dependent type, or its bound type does not match <see cref="PrincipalKey"/>.</exception>
+    /// <exception cref="NotSupportedException">A foreign-key component is not mapped on the dependent type, the component lists are empty or duplicated, have different arities, or a nullable-unwrapped component type does not match <see cref="PrincipalKey"/> at the same position.</exception>
     IReadOnlyList<IPropertyMetadata> ForeignKey { get; }
 
     /// <summary>
-    /// The principal-key properties of the principal side (the properties flagged with
-    /// <see cref="IPropertyMetadata.IsKey"/> via <c>[Key]</c>, <c>.Key()</c>, or the <c>Id</c>/
-    /// <c>&lt;TypeName&gt;Id</c> convention), resolved from that type's entity metadata.
+    /// The ordered principal-key components of the principal side, resolved from that type's entity
+    /// metadata: the properties flagged with <see cref="IPropertyMetadata.IsKey"/> via <c>[Key]</c>,
+    /// <c>.Key()</c>, or the <c>Id</c>/<c>&lt;TypeName&gt;Id</c> convention, or the explicitly selected
+    /// components. Order is part of the contract: it is the selector order for an explicit principal
+    /// key, or the full key in entity-metadata property order for a default principal key; the component
+    /// at position <c>i</c> pairs positionally with <see cref="ForeignKey"/>'s component at <c>i</c>.
+    /// A default principal key is never reduced to its first component.
     /// </summary>
-    /// <exception cref="NotSupportedException">The principal type declares no key, or a bound type does not match <see cref="ForeignKey"/>.</exception>
+    /// <exception cref="NotSupportedException">The principal type declares no key, a component is not mapped, the component lists are empty or duplicated, have different arities, or a nullable-unwrapped component type does not match <see cref="ForeignKey"/> at the same position.</exception>
     IReadOnlyList<IPropertyMetadata> PrincipalKey { get; }
 
     /// <summary>

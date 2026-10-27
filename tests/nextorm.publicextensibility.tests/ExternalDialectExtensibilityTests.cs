@@ -32,7 +32,9 @@ public class ExternalDialectExtensibilityTests
         => (DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(cmd, false, false, CancellationToken.None);
 
     private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd)
-        => Normalize(Prepare(ctx, cmd).DbCommand.CommandText);
+        // A non-friend consumer can only observe the public SQL text; the underlying command is now
+        // internal execution state and is never exposed.
+        => Normalize(Prepare(ctx, cmd).SqlStmt!);
 
     // ---- no friend access: metadata guard --------------------------------------------------
 

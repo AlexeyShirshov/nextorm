@@ -32,11 +32,47 @@ internal static class WindowFunctionTranslator
             || declaringType.GetGenericTypeDefinition() != typeof(WindowFunction<>))
             return false;
 
-        if (node.Object is not MethodCallExpression functionCall
-            || (functionCall.Method.DeclaringType != typeof(CommonFunctions)
-                && functionCall.Method.DeclaringType != typeof(ClickHouseFunctions))
-            || WindowSql.MapWindowFunctionName(functionCall.Method.Name) is not { } functionName)
+        if (node.Object is not MethodCallExpression functionCall)
             return false;
+
+        // The residual percentile members live on a provider surface rather than on CommonFunctions and
+        // are analytic-only: the median is the native composition percentile_cont(0.5), and the generic
+        // percentile is refused. The refusal must fire before any fraction inspection, and it names the
+        // actual dialect because one CLR member serves both MySQL (no percentile at all) and MariaDB
+        // (native percentile_cont/percentile_disc window forms).
+        var functionDeclaringType = functionCall.Method.DeclaringType;
+        var provider = AdvancedAggregateTranslator.ProviderLabel(visitor.Dialect);
+        var isResidualMember = functionDeclaringType == typeof(SqlServerFunctions)
+            || functionDeclaringType == typeof(MySqlFunctions);
+
+        var isResidualMedian = isResidualMember
+            && functionCall.Method.Name == nameof(SqlServerFunctions.median);
+        var isResidualPercentile = isResidualMember
+            && functionCall.Method.Name == nameof(SqlServerFunctions.percentile);
+
+        if (isResidualPercentile)
+            throw new NotSupportedException($"The percentile function is not supported by {provider}.");
+
+        // The median has no spelling of its own on MySQL, so the capability default (false) is reported
+        // with the median's name rather than as a generic percentile refusal.
+        if (isResidualMedian && !visitor.Dialect.SupportsPercentileWindow)
+            throw new NotSupportedException($"The median function is not supported by {provider}.");
+
+        string functionName;
+        if (isResidualMedian)
+        {
+            functionName = "percentile_cont";
+        }
+        else if ((functionCall.Method.DeclaringType == typeof(CommonFunctions)
+                || functionCall.Method.DeclaringType == typeof(ClickHouseFunctions))
+            && WindowSql.MapWindowFunctionName(functionCall.Method.Name) is { } mapped)
+        {
+            functionName = mapped;
+        }
+        else
+        {
+            return false;
+        }
 
         // The Over overloads differ in which parameters are present (partition-only, order-only, arrays,
         // a named window, frame), so the arguments are mapped by parameter name/type rather than by position.
@@ -57,15 +93,32 @@ internal static class WindowFunctionTranslator
         if (functionName is "lagInFrame" or "leadInFrame" && !visitor.Dialect.SupportsInFrameWindowFunctions)
             throw new NotSupportedException("The lagInFrame/leadInFrame window functions are not supported by this provider.");
 
+        // nonNegativeDerivative is a ClickHouse window-only aggregate. The provider gate reuses the
+        // dialect's name-keyed scalar table (the ClickHouse table carries the name) so no new
+        // ISqlDialect member is added; every other provider fails closed before emitting invalid SQL.
+        if (functionName == "nonNegativeDerivative"
+            && (visitor.Dialect.ScalarFunctions is not { } windowScalars
+                || !windowScalars.Supports(nameof(ClickHouseFunctions.non_negative_derivative))))
+            throw new NotSupportedException("The nonNegativeDerivative window function is not supported by this provider.");
+
+        // The exponentialTimeDecayed* aggregates are ClickHouse window-only functions; the capability
+        // object's presence is the provider gate (no other dialect carries it).
+        var parameterCount = WindowSql.MapWindowParameterCount(functionCall.Method.Name);
+        if (parameterCount > 0
+            && (visitor.Dialect.ClickHouseAggregates is not { } decayedAggregates
+                || !decayedAggregates.Supports(functionCall.Method.Name)))
+            throw new NotSupportedException(
+                $"The {functionName} window function is not supported by this provider.");
+
         if (functionName is "percent_rank" or "cume_dist" && !visitor.Dialect.SupportsPercentRankCumeDist)
             throw new NotSupportedException("The percent_rank/cume_dist window functions are not supported by this provider.");
 
         if (functionName == "nth_value" && !visitor.Dialect.SupportsNthValue)
             throw new NotSupportedException("The nth_value window function is not supported by this provider.");
 
-        var isPercentile = functionName is "percentile_cont" or "percentile_disc";
+        var isPercentile = isResidualMedian || functionName is "percentile_cont" or "percentile_disc";
         if (isPercentile && !visitor.Dialect.SupportsPercentileWindow)
-            throw new NotSupportedException("The percentile_cont/percentile_disc window functions are not supported by this provider.");
+            throw new NotSupportedException($"The {functionName} function is not supported by {provider}.");
 
         if (visitor.IsParamMode)
         {
@@ -86,6 +139,12 @@ internal static class WindowFunctionTranslator
         }
 
         var frame = EvaluateWindowFrame(visitor, frameArgument);
+
+        // The median composition takes its ordering from the value argument, so a window ORDER BY or a
+        // frame would silently change the statistic instead of the window shape; refuse it.
+        if (isResidualMedian && (orders.Count > 0 || frame is not null))
+            throw new NotSupportedException(
+                "The median window function supports a partition-only OVER clause; a window ORDER BY or a frame is not supported.");
 
         if (frame is not null)
         {
@@ -111,9 +170,24 @@ internal static class WindowFunctionTranslator
         if (isPercentile)
         {
             visitor.Builder!.Append(functionName).Append('(');
-            visitor.Visit(functionArgs[0]);
+
+            if (isResidualMedian)
+            {
+                // median == percentile_cont(0.5); the fraction is fixed, so there is no user input to
+                // validate and no literal interpolation of a caller value.
+                visitor.Builder!.Append("0.5");
+            }
+            else
+            {
+                AdvancedAggregateTranslator.ValidateFraction(
+                    functionArgs[0],
+                    functionName,
+                    AdvancedAggregateTranslator.ProviderLabel(visitor.Dialect));
+                visitor.Visit(functionArgs[0]);
+            }
+
             visitor.Builder!.Append(visitor.Kw(") within group (order by "));
-            visitor.Visit(functionArgs[1]);
+            visitor.Visit(functionArgs[isResidualMedian ? 0 : 1]);
             visitor.Builder!.Append(named ? visitor.Kw(") over ") : visitor.Kw(") over ("));
         }
         else
@@ -127,6 +201,22 @@ internal static class WindowFunctionTranslator
                 visitor.Builder!.Append(functionName is "sum" or "avg" or "min" or "max"
                     ? visitor.Dialect.MakeAggregate(functionName)
                     : functionName);
+
+                // A parameterised window aggregate renders the vendor's two-parenthesis grammar
+                // name(parameters)(arguments): the leading ClickHouse exponentialTimeDecayed* parameter
+                // (the decay) is the only such family.
+                if (parameterCount > 0)
+                {
+                    visitor.Builder!.Append('(');
+                    for (var (i, cnt) = (0, parameterCount); i < cnt; i++)
+                    {
+                        if (i > 0) visitor.Builder!.Append(", ");
+                        visitor.Visit(functionArgs[i]);
+                    }
+
+                    visitor.Builder!.Append(')');
+                }
+
                 visitor.Builder!.Append('(');
             }
 
@@ -136,9 +226,9 @@ internal static class WindowFunctionTranslator
             }
             else
             {
-                for (var (i, cnt) = (0, functionArgs.Count); i < cnt; i++)
+                for (var (i, cnt) = (parameterCount, functionArgs.Count); i < cnt; i++)
                 {
-                    if (i > 0) visitor.Builder!.Append(", ");
+                    if (i > parameterCount) visitor.Builder!.Append(", ");
 
                     if (functionName == "avg")
                     {

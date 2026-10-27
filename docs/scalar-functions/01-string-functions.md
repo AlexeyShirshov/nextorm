@@ -255,8 +255,8 @@ form rejects the call with a clear `NotSupportedException` instead of emitting S
 | `SqlFunctions.Sql.translate(s, from, to)` | `translate` | `TRANSLATE` | — | `translate` | — |
 | `SqlFunctions.Sql.ascii(s)` | `ascii` | `ASCII` | `ASCII` | `ascii` | `unicode` |
 | `SqlFunctions.Sql.@char(n)` | `chr` | `CHAR` | `CAST(CHAR(..) AS CHAR)` | `char` | `char` |
-| `SqlFunctions.Sql.octet_length(s)` | `octet_length` | `DATALENGTH` | `OCTET_LENGTH` | `length` | `octet_length` |
-| `SqlFunctions.Sql.bit_length(s)` | `bit_length` | `DATALENGTH(s) * 8` | `BIT_LENGTH` | `length(s) * 8` | `octet_length(s) * 8` |
+| `SqlFunctions.Sql.octet_length(s)` | `octet_length` | `DATALENGTH` | `OCTET_LENGTH` | `toInt32(length(s))` | `octet_length` |
+| `SqlFunctions.Sql.bit_length(s)` | `bit_length` | `DATALENGTH(s) * 8` | `BIT_LENGTH` | `toInt32(length(s) * 8)` | `octet_length(s) * 8` |
 
 - `left`/`right`/`lpad`/`rpad` count **characters**, not bytes (ClickHouse uses its `*UTF8` variants).
   A negative `n` is provider-specific: PostgreSQL reads it as "all but the last |n|", the others do not.
@@ -270,6 +270,10 @@ form rejects the call with a clear `NotSupportedException` instead of emitting S
   `Math.Pow`), which already translate per provider — there is no `SqlFunctions.Sql` spelling for them.
 - `octet_length`/`bit_length` count the value's octets, so a multi-byte SQL Server `nvarchar` value
   reports two bytes per character (via `DATALENGTH`); SQLite needs 3.43+ for its native `octet_length()`.
+- The ClickHouse arms convert the server's `UInt64` byte count to `Int32` with `toInt32` (wrapping the
+  complete `length(s) * 8` product for `bit_length`). That conversion is **not checked**: results beyond
+  the `Int32` range wrap instead of throwing and are not lossless, so the declared `int?` follows
+  ClickHouse conversion semantics for very large strings.
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
@@ -284,6 +288,37 @@ var rows = dataContext.From<IComplexEntity>()
 
 The in-memory provider evaluates the same calls through their CLR equivalents, so the same query runs
 without a database.
+
+## ClickHouse string functions (#286, T286b)
+
+The ClickHouse-only string surface lives on `SqlFunctions.ClickHouse`; every member renders the exact
+vendor name and is rejected by every other dialect. Result shapes are explicit: `overlay`/`initcap`/
+`soundex`/`substring_index`/`normalize_utf8_*` return `string` (or `string?` for a nullable argument),
+`count_substrings`/`edit_distance`/`byte_hamming_distance` return `ulong`/`int`, and
+`extract_groups`/`split_by_*` return `string[]`.
+
+| Function | SQL |
+|---|---|
+| `SqlFunctions.ClickHouse.overlay(s, replacement, offset[, length])` | `overlay(s, replacement, offset[, length])` |
+| `SqlFunctions.ClickHouse.initcap(s)` | `initcap(s)` |
+| `SqlFunctions.ClickHouse.soundex(s)` | `soundex(s)` |
+| `SqlFunctions.ClickHouse.base64_encode(s)` / `base64_decode(s)` | `base64Encode` / `base64Decode` |
+| `SqlFunctions.ClickHouse.hex(s)` / `unhex(s)` | `hex` / `unhex` |
+| `SqlFunctions.ClickHouse.edit_distance(a, b)` | `editDistance(a, b)` |
+| `SqlFunctions.ClickHouse.jaro_similarity(a, b)` | `jaroSimilarity(a, b)` |
+| `SqlFunctions.ClickHouse.byte_hamming_distance(a, b)` | `byteHammingDistance(a, b)` |
+| `SqlFunctions.ClickHouse.substring_index(s, delim, count)` | `substringIndex(s, delim, count)` |
+| `SqlFunctions.ClickHouse.count_substrings(s, sub[, start])` | `countSubstrings(s, sub[, start])` |
+| `SqlFunctions.ClickHouse.extract_groups(pattern, s)` | `extractGroups(pattern, s)` → `string[]` |
+| `SqlFunctions.ClickHouse.normalize_utf8_nfc(s)` / `_nfd` / `_nfkc` / `_nfkd` | `normalizeUTF8NFC` / `NFD` / `NFKC` / `NFKD` |
+
+Edge semantics are pinned live on 25.8.33.6: `overlay` is 1-based with the default length equal to the
+replacement length (a zero length inserts, an offset past the end appends); `initcap` is ASCII-only;
+`soundex` returns `0000` when the input has no ASCII letter; `editDistance` counts UTF-8 **bytes** and
+`byteHammingDistance` zero-pads the shorter input. `base64Decode('!!!')`, a multi-character
+`substringIndex` delimiter and a negative `countSubstrings` start are rejected by the server rather than
+defaulted, and `extractGroups` over a nullable argument is refused because ClickHouse cannot nest
+`Array(String)` inside `Nullable`.
 
 ## String and regular-expression extensions (PostgreSQL)
 

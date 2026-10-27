@@ -169,7 +169,9 @@ See [Bulk insert](../guide/22-bulk-insert.md).
 | Session/info functions | `current_user()`, `session_user()`, `schema()`, `database()`, `version()` |
 | Arbitrary-value aggregate | `ANY_VALUE(x)` |
 | Conditional function | `iif(cond, a, b)` → `if(cond, a, b)` |
-| Window percentiles | not supported (`PERCENTILE_CONT` is MariaDB-only) |
+| Window percentiles | not supported: `percentile_cont`/`percentile_disc` on a window throw `NotSupportedException` (MySQL has neither the functions nor `WITHIN GROUP`; `PERCENTILE_CONT` is MariaDB-only) |
+| Median (analytic) | not supported: `SqlFunctions.MySql.median(v).Over(...)` throws `NotSupportedException("The median function is not supported by MySQL.")` |
+| Generic percentile | not supported: `SqlFunctions.MySql.percentile(fraction, v)` throws `NotSupportedException("The percentile function is not supported by MySQL.")` |
 | LOB streaming (`ToStream`/`ToTextReader`) | `NotSupportedException` |
 
 MySQL 8.0.31 and later support `INTERSECT`/`EXCEPT`; the dialect rejects the `*ALL` variants with a

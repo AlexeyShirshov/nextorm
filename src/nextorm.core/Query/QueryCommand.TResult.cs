@@ -67,14 +67,28 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
         ResultType = typeof(TResult);
     }
     /// <summary>
-    /// 
+    /// Prepares the command so it can be executed repeatedly, typically with different parameter values.
     /// </summary>
-    /// <param name="nonStreamUsing">true, if optimized for buffered or scalar value results; false for non-buffered (stream) using, when result is IEnumerable or IAsyncEnumerable</param>
-    /// <param name="cancellationToken"></param>
-    /// <returns></returns>
-    public IPreparedQueryCommand<TResult> Prepare(bool nonStreamUsing = true, CancellationToken cancellationToken = default)
+    /// <param name="options">
+    /// How the prepared command reuses its underlying command and whether rows are streamed. The default
+    /// value prepares a buffered command whose underlying command is reused per connection.
+    /// </param>
+    /// <param name="cancellationToken">A token to cancel preparation.</param>
+    /// <returns>The prepared query command.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="options"/> carries a <see cref="PreparedCommandCache"/> value that is not defined.
+    /// </exception>
+    public IPreparedQueryCommand<TResult> Prepare(PrepareOptions options = default, CancellationToken cancellationToken = default)
     {
-        return _dataContext!.GetPreparedQueryCommand(this, !nonStreamUsing, false, cancellationToken);
+        if (!Enum.IsDefined(options.Cache))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(options),
+                options.Cache,
+                "The prepared-command cache policy is not a defined PreparedCommandCache value; use PreparedCommandCache.Connection or PreparedCommandCache.None.");
+        }
+
+        return _dataContext!.GetPreparedQueryCommand(this, options.Streaming, false, options.Cache, cancellationToken);
     }
     /// <summary>
     /// Prepares the command and returns an async enumerator over its rows.

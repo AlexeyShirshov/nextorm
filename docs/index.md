@@ -141,7 +141,7 @@ In-memory provider is built-in in core library.
 ## Query reuse
 
 There are two independent ways to avoid re-building a query plan on every execution: the implicit plan
-cache (used automatically by [`EntityBuilder`](xref:NextORM.Core.EntityBuilder)/[`QueryCommand`](xref:NextORM.Core.QueryCommand) terminals) and explicit [`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},System.Boolean,System.Threading.CancellationToken)) returning an
+cache (used automatically by [`EntityBuilder`](xref:NextORM.Core.EntityBuilder)/[`QueryCommand`](xref:NextORM.Core.QueryCommand) terminals) and explicit [`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},NextORM.Core.PrepareOptions,System.Threading.CancellationToken)) returning an
 [`IPreparedQueryCommand<TResult>`](xref:NextORM.Core.IPreparedQueryCommand`1).
 
 They differ in cost, lifetime and thread-safety rules. Which one to use, what each one costs per call and

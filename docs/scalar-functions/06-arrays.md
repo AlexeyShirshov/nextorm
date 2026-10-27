@@ -139,13 +139,84 @@ result can be projected like a scalar column.
 | `SqlFunctions.ClickHouse.array_last(f, a)` | `arrayLast(f, a)` |
 | `SqlFunctions.ClickHouse.array_last_index(f, a)` | `arrayLastIndex(f, a)` |
 
+### Delivered array, tuple and map functions (#286, T286b)
+
+The members below complete the array catalogue on the pinned 25.8.33.6 server. Result shapes are
+declared explicitly: element-wise predicates return `bool`, aggregations return the scalar/array CLR
+type they declare, and the sort/split/fill families return `T[]`.
+
+| Function | SQL |
+|---|---|
+| `SqlFunctions.ClickHouse.array_element(a, i)` | `arrayElement(a, i)` |
+| `SqlFunctions.ClickHouse.array_enumerate_dense(a)` | `arrayEnumerateDense(a)` |
+| `SqlFunctions.ClickHouse.array_zip(a, b)` | `arrayZip(a, b)` |
+| `SqlFunctions.ClickHouse.array_difference(a)` | `arrayDifference(a)` |
+| `SqlFunctions.ClickHouse.array_avg(a)` | `arrayAvg(a)` |
+| `SqlFunctions.ClickHouse.array_sum(a)` | `arraySum(a)` |
+| `SqlFunctions.ClickHouse.array_min(a)` | `arrayMin(a)` |
+| `SqlFunctions.ClickHouse.array_max(a)` | `arrayMax(a)` |
+| `SqlFunctions.ClickHouse.array_product(a)` | `arrayProduct(a)` |
+| `SqlFunctions.ClickHouse.array_top_k(a, k)` | `arrayTopK(a, k)` (version-gated: 26.6) |
+| `SqlFunctions.ClickHouse.array_bottom_k(a, k)` | `arrayBottomK(a, k)` (version-gated: 26.6) |
+| `SqlFunctions.ClickHouse.array_random_sample(a, n)` | `arrayRandomSample(a, n)` |
+| `SqlFunctions.ClickHouse.array_compact(a)` | `arrayCompact(a)` |
+| `SqlFunctions.ClickHouse.array_pop_back(a)` | `arrayPopBack(a)` |
+| `SqlFunctions.ClickHouse.array_pop_front(a)` | `arrayPopFront(a)` |
+| `SqlFunctions.ClickHouse.array_push_front(a, element)` | `arrayPushFront(a, element)` |
+| `SqlFunctions.ClickHouse.array_resize(a, size[, extender])` | `arrayResize(a, size[, extender])` |
+| `SqlFunctions.ClickHouse.array_remove(a, f)` | `arrayRemove(a, f)` (version-gated: 25.11) |
+| `SqlFunctions.ClickHouse.array_rotate_left(a, n)` / `array_rotate_right(a, n)` | `arrayRotateLeft` / `arrayRotateRight` |
+| `SqlFunctions.ClickHouse.array_shift_left(a, n)` / `array_shift_right(a, n)` | `arrayShiftLeft` / `arrayShiftRight` |
+| `SqlFunctions.ClickHouse.array_fold(f, a, init)` | `arrayFold(f, a, init)` |
+| `SqlFunctions.ClickHouse.array_fill(f, a)` / `array_reverse_fill(f, a)` | `arrayFill` / `arrayReverseFill` |
+| `SqlFunctions.ClickHouse.array_split(f, a)` / `array_reverse_split(f, a)` | `arraySplit` / `arrayReverseSplit` |
+| `SqlFunctions.ClickHouse.array_reverse_sort(a)` / `array_partial_sort(a, k)` | `arrayReverseSort` / `arrayPartialSort` |
+| `SqlFunctions.ClickHouse.array_sort(a)` | `arraySort(a)` |
+| `SqlFunctions.ClickHouse.array_shingles(a, n)` | `arrayShingles(a, n)` |
+| `SqlFunctions.ClickHouse.array_transpose(a)` | `arrayTranspose(a)` (version-gated: 26.4) |
+| `SqlFunctions.ClickHouse.array_cum_sum_non_negative(a)` | `arrayCumSumNonNegative(a)` |
+| `SqlFunctions.ClickHouse.count_equal(a, b)` | `countEqual(a, b)` |
+| `SqlFunctions.ClickHouse.array_with_constant(n, value)` | `arrayWithConstant(n, value)` |
+| `SqlFunctions.ClickHouse.array_jaccard_index(a, b)` / `array_similarity(a, b)` | `arrayJaccardIndex` / `arraySimilarity` |
+| `SqlFunctions.ClickHouse.tuple_concat(a, b)` | `tupleConcat(a, b)` |
+| `SqlFunctions.ClickHouse.tuple_names(t)` | `tupleNames(t)` |
+| `SqlFunctions.ClickHouse.flatten_tuple(t)` | `flattenTuple(t)` |
+| `SqlFunctions.ClickHouse.tuple_to_name_value_pairs(t)` | `tupleToNameValuePairs(t)` |
+| `SqlFunctions.ClickHouse.tuple_plus` / `tuple_minus` / `tuple_multiply` / `tuple_divide` | `tuplePlus` / `tupleMinus` / `tupleMultiply` / `tupleDivide` |
+| `SqlFunctions.ClickHouse.tuple_hamming_distance(a, b)` | `tupleHammingDistance(a, b)` |
+| `SqlFunctions.ClickHouse.dot_product(a, b)` | `dotProduct(a, b)` |
+| `SqlFunctions.ClickHouse.map_subtract(a, b)` | `mapSubtract(a, b)` |
+| `SqlFunctions.ClickHouse.map_update(a, b)` | `mapUpdate(a, b)` |
+| `SqlFunctions.ClickHouse.map_reverse_sort(m[, f])` / `map_partial_sort(m, k[, f])` | `mapReverseSort` / `mapPartialSort` |
+| `SqlFunctions.ClickHouse.map_from_arrays(keys, values)` | `mapFromArrays(keys, values)` |
+| `SqlFunctions.ClickHouse.map_populate_series(m, start, end[, step])` | `mapPopulateSeries(...)` |
+| `SqlFunctions.ClickHouse.extract_key_value_pairs(s)` | `extractKeyValuePairs(s)` |
+
+`arrayReduce`/`arrayReduceInRanges` stay refused: the aggregate is named by a runtime SQL string, so no
+typed contract can close it (see
+[ClickHouse-specific SQL › Not yet supported](../guide/provider-specific-sql/clickhouse.md#not-yet-supported)).
+`untuple` is refused for the same structural reason: one projection expression maps to exactly one
+result column.
+
 > `length`/`indexOf` return `UInt64` natively, so the dialect casts them with `toInt64(...)`. Functions
 > that return an array (`split_by_char`, `array_sort`, `array_reverse`, `array_distinct`, `range`,
 > `array_enumerate`, `array_cum_sum`, `array_slice`, `array_push_back`, `group_array`,
 > `group_uniq_array`) can be projected directly — the row reader materialises an `Array(T)` result as a
 > CLR `T[]` — or used as the operand of another array function (for example `length(...)` or
-> `array_string_concat(...)`). The same reader materialises a native `Tuple(...)` column (or a
+> `array_string_concat(...)`). The facades whose declared CLR array type can differ from the element type
+> ClickHouse infers (`top_k`, `top_k_weighted`, `group_array`, `group_uniq_array`, `retention`,
+> `array_map`, and the three `range` overloads) are normalised **server-side**: the dialect wraps the
+> completed call in exactly one `cast(... as Array(...))` built from the closed declared CLR type
+> (`int[]` → `Array(Int32)`, `int?[]` → `Array(Nullable(Int32))`, `long[]` → `Array(Int64)`,
+> `string[]`/`string?[]` → `Array(Nullable(String))`). A reference-type element is always declared
+> `Nullable(...)`, because its CLR nullable annotation is erased at runtime, so no caller-side cast is
+> required and `retention` materialises as
+> `int[]`, not `byte[]`. The same reader materialises a native `Tuple(...)` column (or a
 > `Tuple(...)`-returning expression) as a `System.Tuple<...>` of arity 1–7.
+
+> `SqlFunctions.ClickHouse.array_except` is retained for API compatibility but is **not supported**
+> on the pinned 25.8 baseline: the native `arrayExcept` exists only from ClickHouse 25.9, so the call
+> is refused with `NotSupportedException` at translation time instead of being emitted as SQL.
 
 > The array relation predicates return `bool`: `starts_with(array, prefix)`/`ends_with(array, suffix)`
 > test a prefix/suffix and `has_substr(array, other)` tests that `other` occurs in `array` contiguously
@@ -216,8 +287,35 @@ result can be projected like a scalar column.
 > value when nothing matches. They require a provider that supports the higher-order array functions
 > (see [`SupportsHigherOrderArrayFunctions`](xref:NextORM.Core.ISqlDialect.SupportsHigherOrderArrayFunctions);
 > ClickHouse). ClickHouse promotes the arithmetic result type independently of C# (an `Int32` element
-> multiplied by an integer literal becomes `Array(Int64)`), so cast inside the lambda
-> (`v => (long)v * 2`) when the element type must match the projected `T[]`.
+> multiplied by an integer literal becomes `Array(Int64)`); the dialect normalises the completed
+> `arrayMap` result to the closed declared CLR element type, so the lambda operand stays exactly as
+> written and no `(long)v`-style cast inside the lambda is needed (`arrayFilter` already returns its
+> input element type).
+
+> **Nullable elements in a bound array parameter:** a rank-1 CLR array whose **declared** element type is
+> nullable (`Nullable<T>` or `string`) is bound as `Array(Nullable(T))` derived from that declared CLR type
+> (`int?[]` → `Array(Nullable(Int32))`, `double?[]` → `Array(Nullable(Float64))`, `DateTime?[]` →
+> `Array(Nullable(DateTime))`, `decimal?[]` → `Array(Nullable(Decimal(38,10)))`, `string?[]` →
+> `Array(Nullable(String))`), so `null` elements and their positions reach the server —
+> `array_map(v => v, new int?[] { 1, null, 3 })` yields `{ 1, null, 3 }`. Empty and all-`null` arrays carry
+> the same typed element, and the caller's array is not mutated. Non-nullable element arrays (`int[]`,
+> `double[]`, `DateTime[]`, `decimal[]`, `byte[]`) are unchanged; nested/jagged and multidimensional arrays
+> and a `null` array object are **not supported** and keep the previous (driver-inferred) behaviour.
+> Array **results** follow the same element rule: a **reference-type** element result is declared
+> `Nullable(...)` unconditionally (a `string[]`/`string?[]` result renders `Array(Nullable(String))`, a
+> jagged one `Array(Array(Nullable(String)))`) and still materialises as a CLR `string[]` — only the
+> rendered SQL text changes, not the data, the CLR type or the public API, while value-type elements
+> (`int[]`, `int?[]`, `byte[]`) are unaffected. Decimal array **results** are materialised in both
+> shapes since [#337](https://github.com/AlexeyShirshov/nextorm/issues/337):
+> `Array(Nullable(Decimal(38,10)))` → `decimal?[]` and `Array(Decimal(38,10))` → `decimal[]`, through
+> the direct, member-bound, multi-column and raw read routes, with every representable value preserved
+> exactly (no rounding, truncation or culture conversion). A `Decimal(38,10)` element whose scaled
+> mantissa exceeds 96 bits — for example `1e19`, whose mantissa at scale 10 is `1e29` while CLR
+> `decimal`'s mantissa is `2^96 − 1` — is **not** representable in CLR `decimal`: the materialisation
+> fails closed with the driver's `OverflowException` (`Value cannot be represented as System.Decimal`),
+> and because the pinned driver does not trim trailing zeros a mathematically smaller representation is
+> not substituted. The remaining array restrictions are listed under
+> [Limitations](../advanced/limitations.md#limitations).
 
 The CLR `string.Split` is rendered as `splitByChar(separator, value)` (gated by
 [`StringSplit`](xref:NextORM.Core.ISqlDialect.StringSplit)); only a single-character

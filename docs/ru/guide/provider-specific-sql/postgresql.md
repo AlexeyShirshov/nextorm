@@ -148,6 +148,14 @@ select jsonb_agg(somestring)
 * `percentile_cont`/`percentile_disc` — упорядоченные агрегаты, рендерятся как
   `percentile_cont(f) within group (order by x)` ([`SupportsOrderedAggregates`](xref:NextORM.Core.ISqlDialect.SupportsOrderedAggregates),
   [`MakeWithinGroup`](xref:NextORM.Core.ISqlDialect.MakeWithinGroup(System.String,System.String,NextORM.Core.KeywordCase))); `mode()` — упорядоченный агрегат mode;
+* `median(() => x)` — та же поверхность с фиксированной дробью `0.5`
+  (`percentile_cont(0.5) within group (order by x)`, [`SupportsOrderedPercentiles`](xref:NextORM.Core.ISqlDialect.SupportsOrderedPercentiles)):
+  в PostgreSQL нет функции `median`, и эта форма — **агрегат** (одна строка на группу), а не оконная
+  функция, поэтому `OVER` она не принимает;
+* непрерывные формы интерполируют и возвращают `double precision`, поэтому `percentile_cont`/`median`
+  требуют выражения сортировки с плавающей точкой (целочисленный/`numeric` ключ отклоняется);
+  `percentile_disc` сохраняет тип сортировки. Дроби — это `double` в `[0, 1]`, конечные и
+  константные/захваченные, проверяются до рендеринга; общий `percentile` отклоняется;
 * `bool_and`/`bool_or`/`every`, семейство регрессии `regr_*` и `bit_and`/`bit_or`/`bit_xor` есть только
   у PostgreSQL, и остальные диалекты их отклоняют;
 * `array_agg` и поверхность строковых/массивных агрегатов гейтятся

@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Text;
 using NextORM.Core;
 
@@ -29,6 +30,7 @@ public class ClickHouseDialect : SqlDialectBase
     private readonly IUniqAggregateRenderer _uniqAggregates;
     private readonly IQuantileAggregateRenderer _quantileAggregates;
     private readonly ITopKAggregateRenderer _topKAggregates;
+    private readonly IClickHouseAggregateRenderer _clickHouseAggregates;
 
     /// <summary>
     /// Creates the dialect and its capability renderers. The constructor is public so an external
@@ -40,6 +42,7 @@ public class ClickHouseDialect : SqlDialectBase
         _uniqAggregates = new ClickHouseUniqAggregateRenderer(this);
         _quantileAggregates = new ClickHouseQuantileAggregateRenderer(this);
         _topKAggregates = new ClickHouseTopKAggregateRenderer(this);
+        _clickHouseAggregates = new ClickHouseAggregateRenderer(this);
     }
 
     /// <summary>A ClickHouse derived table (subquery in FROM) must have an alias.</summary>
@@ -173,7 +176,54 @@ public class ClickHouseDialect : SqlDialectBase
     /// the result matches the declared CLR <c>long</c>.
     /// </summary>
     public override string MakeArrayFunction(string name, string call) =>
-        name is "length" or "indexOf" or "arrayCount" or "arrayFirstIndex" or "arrayLastIndex" ? $"toInt64({call})" : call;
+        name is "length" or "indexOf" or "arrayCount" or "arrayFirstIndex" or "arrayLastIndex" or "countEqual"
+            ? $"toInt64({call})"
+            : call;
+
+    /// <summary>
+    /// Normalises the result of the array-producing facades to the closed declared CLR array type.
+    /// ClickHouse infers the element type from the arguments and the server defaults
+    /// (<c>retention</c> → <c>Array(UInt8)</c>, <c>range(3)</c> → <c>Array(UInt8)</c>, an <c>arrayMap</c>
+    /// or <c>top_k</c> whose native element type is wider than the declared one → <c>Array(Int64)</c>), so
+    /// a targeted result is wrapped in exactly one <c>cast(&lt;call&gt; as Array(...))</c>. Every other
+    /// facade result is returned unchanged.
+    /// </summary>
+    public override string MakeArrayResult(string name, string call, Type resultType)
+    {
+        if (name is not ("top_k" or "top_k_weighted" or "group_array" or "group_uniq_array" or "retention"
+                or "array_map" or "range" or "array_enumerate_dense" or "array_difference"
+                or "array_fill" or "array_reverse_fill" or "array_top_k" or "array_bottom_k"
+                or "array_random_sample" or "array_compact" or "array_pop_back" or "array_pop_front"
+                or "array_push_front" or "array_resize" or "array_remove" or "array_rotate_left"
+                or "array_rotate_right" or "array_shift_left" or "array_shift_right"
+                or "array_reverse_sort" or "array_partial_sort" or "array_with_constant"
+                or "array_split" or "array_reverse_split" or "array_shingles" or "array_transpose"
+                or "array_cum_sum_non_negative"))
+            return call;
+
+        if (!resultType.IsArray || resultType.GetArrayRank() != 1)
+            throw new NotSupportedException(
+                $"The {name} result type '{resultType}' must be a one-dimensional CLR array.");
+
+        return $"cast({call} as Array({MakeArrayElementType(resultType.GetElementType()!)}))";
+    }
+
+    // Nullable value elements keep their CLR nullability. A reference element's nullable
+    // annotation is erased at runtime, so the CLR says nothing about whether its entries may be
+    // null: every reference element is declared Nullable(...) unconditionally. This intentionally
+    // changes the emitted SQL text for existing string-array results, not the data, the CLR result
+    // type or the public API. The array arm runs first, so a jagged reference element becomes
+    // Array(Array(Nullable(String))) and never Nullable(Array(...)).
+    private string MakeArrayElementType(Type type)
+    {
+        if (Nullable.GetUnderlyingType(type) is { IsValueType: true } underlying)
+            return $"Nullable({MakeTypeName(underlying)})";
+
+        if (type.IsArray)
+            return $"Array({MakeArrayElementType(type.GetElementType()!)})";
+
+        return type.IsValueType ? MakeTypeName(type) : $"Nullable({MakeTypeName(type)})";
+    }
 
     /// <summary>
     /// Renders <c>[global] [inner|left|right|full|cross] [any|all|asof] join</c>. ClickHouse places the
@@ -270,6 +320,9 @@ public class ClickHouseDialect : SqlDialectBase
     /// <summary>ClickHouse implements the parameterised <c>topK(N)(value)</c>/<c>topKWeighted(N)(value, weight)</c> aggregates.</summary>
     public override ITopKAggregateRenderer TopKAggregates => _topKAggregates;
 
+    /// <summary>ClickHouse implements the ClickHouse-only aggregate catalogue (statistical, quantile-algorithm, array/tuple and time-series aggregates).</summary>
+    public override IClickHouseAggregateRenderer ClickHouseAggregates => _clickHouseAggregates;
+
     /// <summary>ClickHouse implements the <c>any</c>/<c>anyLast</c> row-picking aggregates.</summary>
     public override bool SupportsAnyAggregates => true;
 
@@ -333,9 +386,26 @@ public class ClickHouseDialect : SqlDialectBase
     public override bool SupportsJsonExtract => true;
 
     /// <summary>
+    /// The JSON extractors whose vendor result is a value type but which return <c>NULL</c> for a
+    /// <c>NULL</c> argument; their rendered call is wrapped in <c>toNullable</c> so the column type
+    /// matches the declared nullable CLR result.
+    /// </summary>
+    private static readonly HashSet<string> JsonNullableExtractNames = new(StringComparer.Ordinal)
+    {
+        "json_extract_uint", "json_key", "is_valid_json",
+        "simple_json_extract_raw", "simple_json_extract_string", "simple_json_extract_int",
+        "simple_json_extract_uint", "simple_json_extract_float", "simple_json_extract_bool"
+    };
+
+    /// <summary>
     /// ClickHouse spells the string-JSON extractors in camel case and the native-JSON functions as
-    /// <c>JSONAllPaths</c>/<c>JSONAllPathsWithTypes</c>/<c>toJSONString</c>; <c>JSONLength</c> returns
-    /// <c>UInt64</c>, which the row reader cannot materialise, so it is cast to <c>Int64</c>.
+    /// <c>JSONAllPaths</c>/<c>JSONAllPathsWithTypes</c>/<c>toJSONString</c>; <c>JSONLength</c> and
+    /// <c>JSONArrayLength</c> return <c>UInt64</c>/<c>Nullable(UInt64)</c>, which the row reader cannot
+    /// materialise, so they are cast to <c>Int64</c>/<c>Nullable(Int64)</c>. The extractors whose
+    /// vendor result is a value type but which return <c>NULL</c> for a <c>NULL</c> argument
+    /// (<c>JSONExtractUInt</c>, <c>JSONKey</c>, <c>isValidJSON</c> and the <c>simpleJSONExtract*</c>
+    /// family) are wrapped in <c>toNullable</c>, so the declared nullable CLR result is a real
+    /// <c>Nullable(T)</c> column and a SQL <c>NULL</c> never has to masquerade as the vendor default.
     /// </summary>
     public override string MakeJsonExtract(string name, IReadOnlyList<string> args)
     {
@@ -363,11 +433,31 @@ public class ClickHouseDialect : SqlDialectBase
             "json_all_paths" => "JSONAllPaths",
             "json_all_paths_with_types" => "JSONAllPathsWithTypes",
             "to_json_string" => "toJSONString",
+            "json_merge_patch" => "JSONMergePatch",
+            "json_array_length" => "JSONArrayLength",
+            "json_dynamic_paths" => "JSONDynamicPaths",
+            "json_dynamic_paths_with_types" => "JSONDynamicPathsWithTypes",
+            "json_shared_data_paths" => "JSONSharedDataPaths",
+            "json_shared_data_paths_with_types" => "JSONSharedDataPathsWithTypes",
+            "json_key" => "JSONKey",
+            "json_extract_keys_and_values_raw" => "JSONExtractKeysAndValuesRaw",
+            "json_extract_uint" => "JSONExtractUInt",
+            "is_valid_json" => "isValidJSON",
+            "simple_json_extract_raw" => "simpleJSONExtractRaw",
+            "simple_json_extract_string" => "simpleJSONExtractString",
+            "simple_json_extract_int" => "simpleJSONExtractInt",
+            "simple_json_extract_uint" => "simpleJSONExtractUInt",
+            "simple_json_extract_float" => "simpleJSONExtractFloat",
+            "simple_json_extract_bool" => "simpleJSONExtractBool",
             _ => name
         };
 
         var call = $"{function}({string.Join(", ", args)})";
-        return name == "json_length" ? $"toInt64({call})" : call;
+
+        if (name is "json_length" or "json_array_length")
+            return $"toInt64({call})";
+
+        return JsonNullableExtractNames.Contains(name) ? $"toNullable({call})" : call;
     }
 
     /// <summary>
@@ -382,20 +472,40 @@ public class ClickHouseDialect : SqlDialectBase
     /// <summary>ClickHouse renders every cross-provider scalar function (UTF-8 character-wise where it matters).</summary>
     public override IScalarFunctions ScalarFunctions => ClickHouseScalarFunctions.Instance;
 
-    /// <summary>ClickHouse implements the dictionary functions <c>dictGet</c>/<c>dictGetOrDefault</c>/<c>dictHas</c>/<c>dictGetHierarchy</c>/<c>dictGetChildren</c>/<c>dictIsIn</c>.</summary>
+    /// <summary>
+    /// ClickHouse implements the dictionary functions <c>dictGet</c>/<c>dictGetOrDefault</c>/
+    /// <c>dictGetOrNull</c>/<c>dictGetAll</c>/<c>dictGetDescendants</c>/<c>dictHas</c>/
+    /// <c>dictGetHierarchy</c>/<c>dictGetChildren</c>/<c>dictIsIn</c> and the embedded-geobase region
+    /// functions <c>regionToName</c>/<c>regionToCity</c>/<c>regionToArea</c>/<c>regionToDistrict</c>/
+    /// <c>regionToCountry</c>/<c>regionToContinent</c>/<c>regionToTopContinent</c>/
+    /// <c>regionToPopulation</c>/<c>regionHierarchy</c>/<c>regionIn</c>.
+    /// </summary>
     public override bool SupportsDictionaries => true;
 
-    /// <summary>ClickHouse spells the dictionary functions in camel case.</summary>
+    /// <summary>ClickHouse spells the dictionary and region functions in camel case.</summary>
     public override string MakeDictionaryFunction(string name, IReadOnlyList<string> args)
     {
         var function = name switch
         {
             "dict_get" => "dictGet",
             "dict_get_or_default" => "dictGetOrDefault",
+            "dict_get_or_null" => "dictGetOrNull",
+            "dict_get_all" => "dictGetAll",
+            "dict_get_descendants" => "dictGetDescendants",
             "dict_has" => "dictHas",
             "dict_get_hierarchy" => "dictGetHierarchy",
             "dict_get_children" => "dictGetChildren",
             "dict_is_in" => "dictIsIn",
+            "region_to_name" => "regionToName",
+            "region_to_city" => "regionToCity",
+            "region_to_area" => "regionToArea",
+            "region_to_district" => "regionToDistrict",
+            "region_to_country" => "regionToCountry",
+            "region_to_continent" => "regionToContinent",
+            "region_to_top_continent" => "regionToTopContinent",
+            "region_to_population" => "regionToPopulation",
+            "region_hierarchy" => "regionHierarchy",
+            "region_in" => "regionIn",
             _ => name
         };
 
@@ -730,7 +840,10 @@ public class ClickHouseDialect : SqlDialectBase
 
     /// <summary>
     /// ClickHouse adds intervals through the dedicated <c>addYears</c>/<c>addQuarters</c>/.../<c>addSeconds</c>
-    /// functions. <c>decade</c>/<c>century</c>/<c>millennium</c> are folded onto a scaled <c>addYears</c>.
+    /// functions. <c>decade</c>/<c>century</c> are folded onto a scaled <c>addYears</c>; the year family
+    /// (<c>year</c>/<c>decade</c>/<c>century</c>) promotes its operand to <c>DateTime64(6)</c>, because
+    /// <c>addYears</c> on a 4-byte <c>DateTime</c> wraps past 2106 while <c>DateTime64</c> reaches 2299.
+    /// <c>millennium</c> is rejected: the pinned 25.8 server cannot represent such results.
     /// </summary>
     public override string MakeDateAdd(string field, string amount, string value)
     {
@@ -748,13 +861,23 @@ public class ClickHouseDialect : SqlDialectBase
             "microseconds" => ("addMicroseconds", 1),
             "decade" => ("addYears", 10),
             "century" => ("addYears", 100),
-            "millennium" => ("addYears", 1000),
+            "millennium" => throw new NotSupportedException(
+                "ClickHouse date_add does not support the 'millennium' field: on the pinned ClickHouse 25.8 " +
+                "server the supported DateTime64 result range is 1900-2299, so a millennium offset cannot be represented."),
             _ => throw new NotSupportedException($"ClickHouse date_add does not support the '{field}' field.")
         };
 
+        var operand = field is "year" or "decade" or "century" ? $"toDateTime64({value}, 6)" : value;
         var scaled = factor == 1 ? amount : $"({amount}) * {factor}";
-        return $"{function}({value}, {scaled})";
+        return $"{function}({operand}, {scaled})";
     }
+
+    /// <summary>
+    /// ClickHouse 25.8 <c>DateTime64</c> spans 1900-2299, so a <c>millennium</c> offset cannot be
+    /// represented; it is rejected up front instead of being silently clamped. Every other
+    /// <c>date_add</c> part defers to the base capability set.
+    /// </summary>
+    public override bool SupportsDateAddField(string field) => field != "millennium" && base.SupportsDateAddField(field);
 
     /// <summary>ClickHouse stores a <see cref="System.DateTimeOffset"/> as a UTC-normalized <c>DateTime64</c>, so DTO operations are supported.</summary>
     public override bool SupportsDateTimeOffsetTranslation => true;
@@ -801,17 +924,23 @@ public class ClickHouseDialect : SqlDialectBase
     }
 
     /// <summary>ClickHouse computes date differences through <c>dateDiff(unit, start, end)</c>.</summary>
-    public override string MakeDateDiff(string field, string start, string end)
-    {
-        var unit = field switch
-        {
-            "milliseconds" => "millisecond",
-            "microseconds" => "microsecond",
-            _ => field
-        };
+    public override string MakeDateDiff(string field, string start, string end) =>
+        $"toInt32(dateDiff('{DateDiffUnit(field)}', {start}, {end}))";
 
-        return $"dateDiff('{unit}', {start}, {end})";
-    }
+    /// <summary>
+    /// Renders the native 64-bit <c>dateDiff(unit, start, end)</c>: ClickHouse already answers with
+    /// <c>Int64</c>, so <c>date_diff_big</c> must not inherit the narrow <c>toInt32</c> renderer.
+    /// </summary>
+    public override string MakeDateDiffBig(string field, string start, string end) =>
+        $"dateDiff('{DateDiffUnit(field)}', {start}, {end})";
+
+    // ClickHouse dateDiff uses the singular part names; plural ANSI parts map onto them.
+    private static string DateDiffUnit(string field) => field switch
+    {
+        "milliseconds" => "millisecond",
+        "microseconds" => "microsecond",
+        _ => field
+    };
 
     /// <summary>
     /// ClickHouse <c>add*</c> on a <c>Date</c> operand truncates the time of day, so a sub-day operand is
@@ -989,6 +1118,219 @@ internal sealed class ClickHouseTopKAggregateRenderer(ClickHouseDialect dialect)
         $"{dialect.MakeAggregate(name)}({k})({value}, {weight})";
 }
 
+/// <summary>
+/// Renders the ClickHouse-only aggregate catalogue of T286b F16: the statistical/probability
+/// aggregates, the parameterised quantile algorithms, the array- and tuple-returning aggregates, the
+/// sequence aggregates and the time-series grid aggregates. The arm owns the vendor spelling and the
+/// normalisation of the native result to the declared CLR type (signed narrowing of the unsigned
+/// counts, <c>Float64</c> for the approximate quantiles, and <c>Array/Tuple</c> casts for the
+/// composite results), so a name reported by <see cref="Supports"/> always renders the shape the
+/// <see cref="ClickHouseFunctions"/> member declares.
+/// </summary>
+internal sealed class ClickHouseAggregateRenderer(ClickHouseDialect dialect) : IClickHouseAggregateRenderer
+{
+    /// <summary>The CLR member names of the aggregate catalogue this renderer implements.</summary>
+    private static readonly HashSet<string> Names = new(StringComparer.Ordinal)
+    {
+        "entropy", "first_value", "last_value",
+        "max_intersections", "max_intersections_position",
+        "simple_linear_regression", "delta_sum", "delta_sum_timestamp",
+        "gini", "skew_pop", "skew_samp", "kurt_pop", "kurt_samp", "rank_corr",
+        "contingency", "cramers_v", "cramers_v_bias_corrected", "theils_u",
+        "welch_t_test", "student_t_test", "student_t_test_one_sample",
+        "mann_whitney_u_test", "kolmogorov_smirnov_test",
+        "mean_z_test", "analysis_of_variance",
+        "quantile_tdigest", "quantile_gk", "quantile_dd", "quantile_bfloat16",
+        "quantile_prometheus_histogram",
+        "quantiles_exact", "quantiles_exact_low", "quantiles_exact_high",
+        "quantiles_exact_weighted", "quantiles_timing", "quantiles_tdigest",
+        "quantiles_bfloat16", "quantiles_dd", "quantiles_gk", "quantiles_prometheus_histogram",
+        "approx_top_k", "approx_top_sum", "any_heavy", "max_map", "min_map",
+        "sum_count", "sum_kahan",
+        "group_array_moving_avg", "group_array_moving_sum", "group_array_sample",
+        "group_array_sorted", "group_array_last", "group_array_insert_at", "group_array_intersect",
+        "group_concat", "group_format", "histogram", "sparkbar", "uniq_up_to",
+        "sequence_count", "sequence_match_events", "sequence_next_node",
+        "exponential_time_decayed_sum", "exponential_time_decayed_max",
+        "exponential_time_decayed_count", "exponential_time_decayed_avg",
+        "time_series_group_sum", "time_series_group_rate_sum",
+        "time_series_instant_rate_to_grid", "time_series_rate_to_grid",
+        "time_series_resample_to_grid_with_staleness"
+    };
+
+    /// <inheritdoc/>
+    public bool Supports(string name) => Names.Contains(name);
+
+    /// <inheritdoc/>
+    public string Render(string name, IReadOnlyList<string> arguments, Type resultType) =>
+        RenderCore(name, parameters: null, arguments, resultType);
+
+    /// <inheritdoc/>
+    public string RenderParameterised(
+        string name,
+        IReadOnlyList<string> parameters,
+        IReadOnlyList<string> arguments,
+        Type resultType) =>
+        RenderCore(name, parameters, arguments, resultType);
+
+    /// <summary>Renders the vendor call and normalises its result to <paramref name="resultType"/>.</summary>
+    private string RenderCore(
+        string name,
+        IReadOnlyList<string>? parameters,
+        IReadOnlyList<string> arguments,
+        Type resultType)
+    {
+        if (!Names.Contains(name))
+            throw new NotSupportedException($"The {name} aggregate is not supported by this ClickHouse renderer.");
+
+        var vendor = VendorName(name);
+        var call = parameters is null
+            ? $"{vendor}({string.Join(", ", arguments)})"
+            : $"{vendor}({string.Join(", ", parameters)})({string.Join(", ", arguments)})";
+
+        return name switch
+        {
+            // Unsigned native counters narrowed to the declared signed CLR type.
+            "uniq_up_to" or "sequence_count" or "max_intersections" => $"toInt64({call})",
+            "max_intersections_position" => $"toInt32({call})",
+
+            // Approximate quantile algorithms whose native result is the input type or Float32.
+            "quantile_tdigest" or "quantile_gk" or "quantile_prometheus_histogram" => $"toFloat64({call})",
+
+            // deltaSum keeps the input type except for the signed -> unsigned rewrite of
+            // deltaSumTimestamp; both are normalised back to the declared CLR type.
+            "delta_sum" or "delta_sum_timestamp" => $"cast({call} as {TypeName(resultType)})",
+
+            // Composite results: the native Tuple/Array element types follow the arguments, so the
+            // declared CLR shape pins them.
+            "simple_linear_regression" or "welch_t_test" or "student_t_test"
+                or "student_t_test_one_sample" or "mann_whitney_u_test"
+                or "kolmogorov_smirnov_test" or "mean_z_test" or "analysis_of_variance"
+                or "sum_count" or "max_map" or "min_map"
+                => $"cast({call} as {TypeName(resultType)})",
+
+            "sequence_next_node" => $"cast({call} as Nullable(String))",
+
+            // Array results (quantile families, groupArray* family, histograms, top-K pairs, the
+            // sequence event timestamps and the time-series grids).
+            "quantiles_exact" or "quantiles_exact_low" or "quantiles_exact_high"
+                or "quantiles_exact_weighted" or "quantiles_timing" or "quantiles_tdigest"
+                or "quantiles_bfloat16" or "quantiles_dd" or "quantiles_gk"
+                or "quantiles_prometheus_histogram"
+                or "group_array_moving_avg" or "group_array_moving_sum"
+                or "group_array_sample" or "group_array_sorted" or "group_array_last"
+                or "group_array_insert_at" or "group_array_intersect"
+                or "histogram" or "approx_top_k" or "approx_top_sum"
+                or "sequence_match_events"
+                or "time_series_group_sum" or "time_series_group_rate_sum"
+                or "time_series_instant_rate_to_grid" or "time_series_rate_to_grid"
+                or "time_series_resample_to_grid_with_staleness"
+                => $"cast({call} as {ElementArrayType(resultType)})",
+
+            _ => call
+        };
+    }
+
+    /// <summary>Maps the CLR member name to its vendor spelling.</summary>
+    private static string VendorName(string name) => name switch
+    {
+        "max_intersections" => "maxIntersections",
+        "max_intersections_position" => "maxIntersectionsPosition",
+        "simple_linear_regression" => "simpleLinearRegression",
+        "delta_sum" => "deltaSum",
+        "delta_sum_timestamp" => "deltaSumTimestamp",
+        "skew_pop" => "skewPop",
+        "skew_samp" => "skewSamp",
+        "kurt_pop" => "kurtPop",
+        "kurt_samp" => "kurtSamp",
+        "rank_corr" => "rankCorr",
+        "cramers_v" => "cramersV",
+        "cramers_v_bias_corrected" => "cramersVBiasCorrected",
+        "theils_u" => "theilsU",
+        "welch_t_test" => "welchTTest",
+        "student_t_test" => "studentTTest",
+        "student_t_test_one_sample" => "studentTTestOneSample",
+        "mann_whitney_u_test" => "mannWhitneyUTest",
+        "kolmogorov_smirnov_test" => "kolmogorovSmirnovTest",
+        "mean_z_test" => "meanZTest",
+        "analysis_of_variance" => "analysisOfVariance",
+        "quantile_tdigest" => "quantileTDigest",
+        "quantile_gk" => "quantileGK",
+        "quantile_dd" => "quantileDD",
+        "quantile_bfloat16" => "quantileBFloat16",
+        "quantile_prometheus_histogram" => "quantilePrometheusHistogram",
+        "quantiles_exact" => "quantilesExact",
+        "quantiles_exact_low" => "quantilesExactLow",
+        "quantiles_exact_high" => "quantilesExactHigh",
+        "quantiles_exact_weighted" => "quantilesExactWeighted",
+        "quantiles_timing" => "quantilesTiming",
+        "quantiles_tdigest" => "quantilesTDigest",
+        "quantiles_bfloat16" => "quantilesBFloat16",
+        "quantiles_dd" => "quantilesDD",
+        "quantiles_gk" => "quantilesGK",
+        "quantiles_prometheus_histogram" => "quantilesPrometheusHistogram",
+        "any_heavy" => "anyHeavy",
+        "max_map" => "maxMappedArrays",
+        "min_map" => "minMappedArrays",
+        "sum_count" => "sumCount",
+        "sum_kahan" => "sumKahan",
+        "group_array_moving_avg" => "groupArrayMovingAvg",
+        "group_array_moving_sum" => "groupArrayMovingSum",
+        "group_array_sample" => "groupArraySample",
+        "group_array_sorted" => "groupArraySorted",
+        "group_array_last" => "groupArrayLast",
+        "group_array_insert_at" => "groupArrayInsertAt",
+        "group_array_intersect" => "groupArrayIntersect",
+        "group_concat" => "groupConcat",
+        "group_format" => "groupFormat",
+        "uniq_up_to" => "uniqUpTo",
+        "sequence_count" => "sequenceCount",
+        "sequence_match_events" => "sequenceMatchEvents",
+        "sequence_next_node" => "sequenceNextNode",
+        "time_series_group_sum" => "timeSeriesGroupSum",
+        "time_series_group_rate_sum" => "timeSeriesGroupRateSum",
+        "time_series_instant_rate_to_grid" => "timeSeriesInstantRateToGrid",
+        "time_series_rate_to_grid" => "timeSeriesRateToGrid",
+        "time_series_resample_to_grid_with_staleness" => "timeSeriesResampleToGridWithStaleness",
+        _ => name
+    };
+
+    /// <summary>Renders the element type of the declared one-dimensional CLR array result.</summary>
+    private string ElementArrayType(Type resultType)
+    {
+        if (!resultType.IsArray || resultType.GetArrayRank() != 1)
+            throw new NotSupportedException(
+                $"The aggregate result type '{resultType}' must be a one-dimensional CLR array.");
+
+        return $"Array({TypeName(resultType.GetElementType()!)})";
+    }
+
+    /// <summary>
+    /// Renders a ClickHouse type name for a CLR type, covering the nullable, array and
+    /// <see cref="Tuple"/> family shapes the aggregate results declare.
+    /// </summary>
+    private string TypeName(Type type)
+    {
+        if (Nullable.GetUnderlyingType(type) is { IsValueType: true } underlying)
+            return $"Nullable({TypeName(underlying)})";
+
+        if (type.IsArray)
+            return $"Array({TypeName(type.GetElementType()!)})";
+
+        if (type.IsGenericType && TupleArities.Contains(type.GetGenericTypeDefinition()))
+            return "Tuple(" + string.Join(", ", type.GetGenericArguments().Select(TypeName)) + ")";
+
+        return dialect.MakeTypeName(type);
+    }
+
+    /// <summary>The <see cref="Tuple"/> generic arities the row materializer supports.</summary>
+    private static readonly HashSet<Type> TupleArities =
+    [
+        typeof(Tuple<>), typeof(Tuple<,>), typeof(Tuple<,,>), typeof(Tuple<,,,>),
+        typeof(Tuple<,,,,>), typeof(Tuple<,,,,,>), typeof(Tuple<,,,,,,>)
+    ];
+}
+
 internal sealed class ClickHouseSequenceAggregateRenderer : ISequenceAggregateRenderer
 {
     public static readonly ClickHouseSequenceAggregateRenderer Instance = new();
@@ -1134,113 +1476,933 @@ internal sealed class ClickHouseScalarFunctions : IScalarFunctions
     internal static readonly ClickHouseScalarFunctions Instance = new();
 
     /// <inheritdoc/>
-    public bool Supports(string name) => name is
-        "left" or "right" or "lpad" or "rpad" or "repeat" or "reverse" or "space" or
-        "concat_ws" or "translate" or "ascii" or "char" or
-        "lower_utf8" or "upper_utf8" or "trim_left" or "trim_right" or "trim_both" or
-        "replace_regexp_one" or "replace_regexp_all" or "match" or "extract" or "extract_all" or
-        "split_by_string" or "split_by_regexp" or "split_by_whitespace" or
-        "format_date_time" or "parse_date_time" or "parse_date_time_best_effort" or
-        "now" or "today" or "yesterday" or
-        "array_concat" or "array_flatten" or "array_uniq" or "array_intersect" or
-        "array_union" or "array_except" or "array_symmetric_difference" or
-        "map" or "map_keys" or "map_values" or "map_contains_key" or "map_contains_value" or
-        "map_add" or "map_concat" or "map_filter" or "map_apply" or "map_all" or "map_exists" or
-        "map_sort" or
-        "group_bitmap" or "group_bitmap_and" or "group_bitmap_or" or "group_bitmap_xor" or
-        "sum_map" or "sum_map_filtered" or
-        "md5" or "sha1" or "sha256" or "sha512" or
-        "xx_hash32" or "xx_hash64" or "xxh3" or "city_hash64" or
-        "sip_hash64" or "sip_hash128" or
-        "murmur_hash2_32" or "murmur_hash2_64" or "murmur_hash3_32" or "murmur_hash3_64" or
-        "murmur_hash3_128" or "generate_ulid" or
-        "bit_length" or "octet_length" or "degrees" or "radians" or "pi";
+    public bool Supports(string name) => Names.Contains(name);
 
     /// <inheritdoc/>
-    public string Render(string name, IReadOnlyList<string> args) => name switch
-    {
-        // The UTF8 variants count characters, matching the CLR string semantics and the other
-        // providers; the plain left/right/leftPad/rightPad count bytes.
-        "left" => $"leftUTF8({args[0]}, {args[1]})",
-        "right" => $"rightUTF8({args[0]}, {args[1]})",
-        "lpad" => $"leftPadUTF8({args[0]}, {args[1]}, {Pad(args)})",
-        "rpad" => $"rightPadUTF8({args[0]}, {args[1]}, {Pad(args)})",
-        "repeat" => $"repeat({args[0]}, {args[1]})",
-        "reverse" => $"reverseUTF8({args[0]})",
-        "space" => $"space({args[0]})",
-        "concat_ws" => $"concatWithSeparator({string.Join(", ", args)})",
-        "translate" => $"translate({args[0]}, {args[1]}, {args[2]})",
-        "ascii" => $"ascii({args[0]})",
-        "char" => $"char({args[0]})",
-        "lower_utf8" => $"lowerUTF8({args[0]})",
-        "upper_utf8" => $"upperUTF8({args[0]})",
-        "trim_left" => $"trimLeft({string.Join(", ", args)})",
-        "trim_right" => $"trimRight({string.Join(", ", args)})",
-        "trim_both" => $"trimBoth({string.Join(", ", args)})",
-        "replace_regexp_one" => $"replaceRegexpOne({args[0]}, {args[1]}, {args[2]})",
-        "replace_regexp_all" => $"replaceRegexpAll({args[0]}, {args[1]}, {args[2]})",
-        "match" => $"match({args[0]}, {args[1]})",
-        "extract" => $"extract({args[0]}, {args[1]})",
-        "extract_all" => $"extractAll({args[0]}, {args[1]})",
-        "split_by_string" => $"splitByString({args[0]}, {args[1]})",
-        "split_by_regexp" => $"splitByRegexp({args[0]}, {args[1]})",
-        "split_by_whitespace" => $"splitByWhitespace({args[0]})",
-        "format_date_time" => $"formatDateTime({string.Join(", ", args)})",
-        "parse_date_time" => $"parseDateTime({args[0]}, {args[1]})",
-        "parse_date_time_best_effort" => $"parseDateTimeBestEffort({string.Join(", ", args)})",
-        "now" => "now()",
-        "today" => "today()",
-        "yesterday" => "yesterday()",
-        "array_concat" => $"arrayConcat({string.Join(", ", args)})",
-        "array_flatten" => $"arrayFlatten({args[0]})",
-        "array_uniq" => $"toInt64(arrayUniq({args[0]}))",
-        "array_intersect" => $"arrayIntersect({string.Join(", ", args)})",
-        "array_union" => $"arrayUnion({string.Join(", ", args)})",
-        "array_except" => $"arrayExcept({string.Join(", ", args)})",
-        "array_symmetric_difference" => $"arraySymmetricDifference({string.Join(", ", args)})",
-        "map" => $"map({string.Join(", ", args)})",
-        "map_keys" => $"mapKeys({args[0]})",
-        "map_values" => $"mapValues({args[0]})",
-        "map_contains_key" => $"mapContainsKey({args[0]}, {args[1]})",
-        "map_contains_value" => $"mapContainsValue({args[0]}, {args[1]})",
-        "map_add" => $"mapAdd({args[0]}, {args[1]})",
-        "map_concat" => $"mapConcat({string.Join(", ", args)})",
-        "map_filter" => $"mapFilter({args[0]}, {args[1]})",
-        "map_apply" => $"mapApply({args[0]}, {args[1]})",
-        "map_all" => $"mapAll({args[0]}, {args[1]})",
-        "map_exists" => $"mapExists({args[0]}, {args[1]})",
-        "map_sort" => $"mapSort({args[0]})",
-        "group_bitmap" => $"groupBitmap({args[0]})",
-        "group_bitmap_and" => $"groupBitmapAnd({args[0]})",
-        "group_bitmap_or" => $"groupBitmapOr({args[0]})",
-        "group_bitmap_xor" => $"groupBitmapXor({args[0]})",
-        "sum_map" => $"sumMap({args[0]}, {args[1]})",
-        "sum_map_filtered" => $"sumMapFiltered({args[0]})({args[1]}, {args[2]})",
-        "md5" => $"MD5({args[0]})",
-        "sha1" => $"SHA1({args[0]})",
-        "sha256" => $"SHA256({args[0]})",
-        "sha512" => $"SHA512({args[0]})",
-        "xx_hash32" => $"toInt32(xxHash32({args[0]}))",
-        "xx_hash64" => $"toInt64(xxHash64({args[0]}))",
-        "xxh3" => $"toInt64(xxh3({args[0]}))",
-        "city_hash64" => $"toInt64(cityHash64({args[0]}))",
-        "sip_hash64" => $"toInt64(sipHash64({args[0]}))",
-        "sip_hash128" => $"sipHash128({args[0]})",
-        "murmur_hash2_32" => $"toInt32(murmurHash2_32({args[0]}))",
-        "murmur_hash2_64" => $"toInt64(murmurHash2_64({args[0]}))",
-        "murmur_hash3_32" => $"toInt32(murmurHash3_32({args[0]}))",
-        "murmur_hash3_64" => $"toInt64(murmurHash3_64({args[0]}))",
-        "murmur_hash3_128" => $"murmurHash3_128({args[0]})",
-        "generate_ulid" => "generateULID()",
+    public string Render(string name, IReadOnlyList<string> args) =>
+        Arms.TryGetValue(name, out var arm)
+            ? arm(args)
+            : throw new NotSupportedException($"The {name} function is not supported by ClickHouse.");
 
-        // ClickHouse length(String) is the byte count; bit_length is eight times it. There is no cot.
-        "bit_length" => $"length({args[0]}) * 8",
-        "octet_length" => $"length({args[0]})",
-        "degrees" => $"degrees({args[0]})",
-        "radians" => $"radians({args[0]})",
-        "pi" => "pi()",
-        _ => throw new NotSupportedException($"The {name} function is not supported by ClickHouse.")
+    /// <summary>
+    /// The supported names. A hash set keeps <see cref="Supports"/> O(1) and independent of the table
+    /// size (the previous <c>is</c>-pattern chain was linear in the number of names).
+    /// </summary>
+    private static readonly HashSet<string> Names = new(StringComparer.Ordinal)
+    {
+        "left",
+        "right",
+        "lpad",
+        "rpad",
+        "repeat",
+        "reverse",
+        "space",
+        "concat_ws",
+        "translate",
+        "ascii",
+        "char",
+        "lower_utf8",
+        "upper_utf8",
+        "trim_left",
+        "trim_right",
+        "trim_both",
+        "replace_regexp_one",
+        "replace_regexp_all",
+        "match",
+        "extract",
+        "extract_all",
+        "split_by_string",
+        "split_by_regexp",
+        "split_by_whitespace",
+        "overlay",
+        "initcap",
+        "soundex",
+        "base64_encode",
+        "base64_decode",
+        "hex",
+        "unhex",
+        "edit_distance",
+        "jaro_similarity",
+        "byte_hamming_distance",
+        "substring_index",
+        "count_substrings",
+        "extract_groups",
+        "normalize_utf8_nfc",
+        "normalize_utf8_nfd",
+        "normalize_utf8_nfkc",
+        "normalize_utf8_nfkd",
+        "format_date_time",
+        "parse_date_time",
+        "parse_date_time_best_effort",
+        "now",
+        "today",
+        "yesterday",
+        "array_concat",
+        "array_flatten",
+        "array_uniq",
+        "array_intersect",
+        "array_union",
+        "array_symmetric_difference",
+        "map",
+        "map_keys",
+        "map_values",
+        "map_contains_key",
+        "map_contains_value",
+        "map_add",
+        "map_concat",
+        "map_filter",
+        "map_apply",
+        "map_all",
+        "map_exists",
+        "map_sort",
+        "group_bitmap",
+        "group_bitmap_and",
+        "group_bitmap_or",
+        "group_bitmap_xor",
+        "sum_map",
+        "sum_map_filtered",
+        "md5",
+        "sha1",
+        "sha256",
+        "sha512",
+        "xx_hash32",
+        "xx_hash64",
+        "xxh3",
+        "city_hash64",
+        "sip_hash64",
+        "sip_hash128",
+        "murmur_hash2_32",
+        "murmur_hash2_64",
+        "murmur_hash3_32",
+        "murmur_hash3_64",
+        "murmur_hash3_128",
+        "generate_ulid",
+        "bin",
+        "unbin",
+        "base32_encode",
+        "base32_decode",
+        "base58_encode",
+        "base58_decode",
+        "base64_url_encode",
+        "base64_url_decode",
+        "bech32_encode",
+        "bech32_decode",
+        "bitmask_to_array",
+        "bitmask_to_list",
+        "bit_positions_to_array",
+        "sqid_encode",
+        "sqid_decode",
+        "hilbert_encode",
+        "hilbert_decode",
+        "morton_encode",
+        "morton_decode",
+        "uuid_num_to_string",
+        "uuid_string_to_num",
+        "uuid_to_num",
+        "uuid_v7_to_datetime",
+        "to_uuid",
+        "to_uuid_or_default",
+        "to_uuid_or_null",
+        "ulid_string_to_datetime",
+        "generate_snowflake_id",
+        "date_time_to_snowflake_id",
+        "date_time64_to_snowflake_id",
+        "date_time_to_uuid_v7",
+        "snowflake_id_to_date_time",
+        "snowflake_id_to_date_time64",
+        "domain",
+        "protocol",
+        "path",
+        "query_string",
+        "fragment",
+        "port",
+        "cut_url_parameter",
+        "top_level_domain",
+        "encode_url_component",
+        "decode_url_component",
+        "encode_url_form_component",
+        "decode_url_form_component",
+        "domain_without_www",
+        "first_significant_subdomain",
+        "first_significant_subdomain_custom",
+        "path_full",
+        "query_string_and_fragment",
+        "cut_www",
+        "cut_query_string",
+        "cut_fragment",
+        "cut_query_string_and_fragment",
+        "cut_to_first_significant_subdomain",
+        "cut_to_first_significant_subdomain_with_www",
+        "cut_to_first_significant_subdomain_custom",
+        "cut_to_first_significant_subdomain_custom_with_www",
+        "url_hierarchy",
+        "url_path_hierarchy",
+        "extract_url_parameter",
+        "extract_url_parameter_names",
+        "ipv4_num_to_string",
+        "ipv4_num_to_string_class_c",
+        "ipv4_string_to_num",
+        "ipv4_string_to_num_or_default",
+        "ipv4_string_to_num_or_null",
+        "ipv6_num_to_string",
+        "ipv6_string_to_num",
+        "ipv6_string_to_num_or_default",
+        "ipv6_string_to_num_or_null",
+        "cut_ipv6",
+        "is_ipv4_string",
+        "is_ipv6_string",
+        "is_ip_address_in_range",
+        "to_ipv4",
+        "to_ipv6",
+        "ipv4_to_ipv6",
+        "ipv4_cidr_to_range",
+        "ipv6_cidr_to_range",
+        "bit_and",
+        "bit_or",
+        "bit_xor",
+        "bit_not",
+        "bit_shift_left",
+        "bit_shift_right",
+        "bit_rotate_left",
+        "bit_rotate_right",
+        "bit_count",
+        "bit_test",
+        "bit_test_all",
+        "bit_test_any",
+        "bit_hamming_distance",
+        "non_negative_derivative",
+        "sha224",
+        "sha384",
+        "sha512_256",
+        "blake3",
+        "md4",
+        "ripemd160",
+        "keccak256",
+        "farm_hash64",
+        "metro_hash64",
+        "java_hash",
+        "hive_hash",
+        "half_md5",
+        "url_hash",
+        "wy_hash64",
+        "int_hash32",
+        "int_hash64",
+        "ngram_min_hash",
+        "ngram_min_hash_arg",
+        "ngram_sim_hash",
+        "word_shingle_min_hash",
+        "word_shingle_min_hash_arg",
+        "word_shingle_sim_hash",
+        "bit_length",
+        "octet_length",
+        "degrees",
+        "radians",
+        "pi",
+        "log2",
+        "cbrt",
+        "exp2",
+        "exp10",
+        "erf",
+        "erfc",
+        "lgamma",
+        "tgamma",
+        "gcd",
+        "lcm",
+        "is_finite",
+        "is_infinite",
+        "is_nan",
+        "hypot",
+        "int_div",
+        "int_exp2",
+        "int_exp10",
+        "sigmoid",
+        "sqr",
+        "round_age",
+        "round_bankers",
+        "round_down",
+        "round_duration",
+        "round_to_exp2",
+        "make_date",
+        "make_date32",
+        "make_date_time",
+        "now64",
+        "now_in_block",
+        "time_slot",
+        "time_slots",
+        "to_start_of_fifteen_minutes",
+        "to_start_of_five_minutes",
+        "to_start_of_ten_minutes",
+        "to_start_of_interval",
+        "to_iso_year",
+        "to_week",
+        "to_year_week",
+        "to_last_day_of_week",
+        "to_days_in_month",
+        "to_modified_julian_day",
+        "age",
+        "date_name",
+        "server_timezone",
+        "timezone_of",
+        "timezone_offset",
+        "to_time",
+        "timestamp",
+        "from_unix_timestamp",
+        "from_unix_timestamp64_milli",
+        "from_unix_timestamp64_micro",
+        "tuple_concat",
+        "tuple_names",
+        "flatten_tuple",
+        "tuple_to_name_value_pairs",
+        "tuple_plus",
+        "tuple_minus",
+        "tuple_multiply",
+        "tuple_divide",
+        "tuple_hamming_distance",
+        "dot_product",
+        "map_subtract",
+        "map_update",
+        "map_reverse_sort",
+        "map_partial_sort",
+        "map_from_arrays",
+        "map_populate_series",
+        "extract_key_value_pairs",
+        "to_int8",
+        "to_int8_or_null",
+        "to_int8_or_default",
+        "to_int16",
+        "to_int16_or_null",
+        "to_int16_or_default",
+        "to_int32",
+        "to_int32_or_null",
+        "to_int32_or_default",
+        "to_int64",
+        "to_int64_or_null",
+        "to_int64_or_default",
+        "to_uint8",
+        "to_uint8_or_null",
+        "to_uint8_or_default",
+        "to_uint16",
+        "to_uint16_or_null",
+        "to_uint16_or_default",
+        "to_uint32",
+        "to_uint32_or_null",
+        "to_uint32_or_default",
+        "to_uint64",
+        "to_uint64_or_null",
+        "to_uint64_or_default",
+        "to_float32",
+        "to_float32_or_null",
+        "to_float32_or_default",
+        "to_float64",
+        "to_float64_or_null",
+        "to_float64_or_default",
+        "to_decimal32",
+        "to_decimal32_or_null",
+        "to_decimal32_or_default",
+        "to_decimal64",
+        "to_decimal64_or_null",
+        "to_decimal64_or_default",
+        "to_string",
+        "to_bool",
+        "to_fixed_string",
+        "to_low_cardinality",
+        "accurate_cast_int8",
+        "accurate_cast_int8_or_null",
+        "accurate_cast_int8_or_default",
+        "accurate_cast_int16",
+        "accurate_cast_int16_or_null",
+        "accurate_cast_int16_or_default",
+        "accurate_cast_int32",
+        "accurate_cast_int32_or_null",
+        "accurate_cast_int32_or_default",
+        "accurate_cast_int64",
+        "accurate_cast_int64_or_null",
+        "accurate_cast_int64_or_default",
+        "accurate_cast_uint8",
+        "accurate_cast_uint8_or_null",
+        "accurate_cast_uint8_or_default",
+        "accurate_cast_uint16",
+        "accurate_cast_uint16_or_null",
+        "accurate_cast_uint16_or_default",
+        "accurate_cast_uint32",
+        "accurate_cast_uint32_or_null",
+        "accurate_cast_uint32_or_default",
+        "accurate_cast_uint64",
+        "accurate_cast_uint64_or_null",
+        "accurate_cast_uint64_or_default",
+        "accurate_cast_float32",
+        "accurate_cast_float32_or_null",
+        "accurate_cast_float32_or_default",
+        "accurate_cast_float64",
+        "accurate_cast_float64_or_null",
+        "accurate_cast_float64_or_default",
+        "accurate_cast_decimal32",
+        "accurate_cast_decimal32_or_null",
+        "accurate_cast_decimal32_or_default",
+        "accurate_cast_decimal64",
+        "accurate_cast_decimal64_or_null",
+        "accurate_cast_decimal64_or_default",
+        "reinterpret_as_uint8",
+        "reinterpret_as_uint16",
+        "reinterpret_as_uint32",
+        "reinterpret_as_uint64",
+        "reinterpret_as_int8",
+        "reinterpret_as_int16",
+        "reinterpret_as_int32",
+        "reinterpret_as_int64",
+        "reinterpret_as_float32",
+        "reinterpret_as_float64",
+        "reinterpret_as_date",
+        "reinterpret_as_date_time",
+        "reinterpret_as_string",
+        "reinterpret_as_fixed_string",
+        "reinterpret_as_uuid",
     };
+
+    /// <summary>
+    /// The per-name renderers. A frozen hash table keeps <see cref="Render"/> O(1) and independent of
+    /// the arm count (the previous string switch grew with every delivered member), and each arm is a
+    /// non-capturing lambda, so the table is built once and never allocates per call.
+    /// </summary>
+    private static readonly FrozenDictionary<string, Func<IReadOnlyList<string>, string>> Arms =
+        new Dictionary<string, Func<IReadOnlyList<string>, string>>(StringComparer.Ordinal)
+        {
+
+            // The UTF8 variants count characters, matching the CLR string semantics and the other
+            // providers; the plain left/right/leftPad/rightPad count bytes.
+            ["left"] = static args => $"leftUTF8({args[0]}, {args[1]})",
+            ["right"] = static args => $"rightUTF8({args[0]}, {args[1]})",
+            ["lpad"] = static args => $"leftPadUTF8({args[0]}, {args[1]}, {Pad(args)})",
+            ["rpad"] = static args => $"rightPadUTF8({args[0]}, {args[1]}, {Pad(args)})",
+            ["repeat"] = static args => $"repeat({args[0]}, {args[1]})",
+            ["reverse"] = static args => $"reverseUTF8({args[0]})",
+            ["space"] = static args => $"space({args[0]})",
+            ["concat_ws"] = static args => $"concatWithSeparator({string.Join(", ", args)})",
+            ["translate"] = static args => $"translate({args[0]}, {args[1]}, {args[2]})",
+            ["ascii"] = static args => $"ascii({args[0]})",
+            ["char"] = static args => $"char({args[0]})",
+            ["lower_utf8"] = static args => $"lowerUTF8({args[0]})",
+            ["upper_utf8"] = static args => $"upperUTF8({args[0]})",
+            ["trim_left"] = static args => $"trimLeft({string.Join(", ", args)})",
+            ["trim_right"] = static args => $"trimRight({string.Join(", ", args)})",
+            ["trim_both"] = static args => $"trimBoth({string.Join(", ", args)})",
+            ["replace_regexp_one"] = static args => $"replaceRegexpOne({args[0]}, {args[1]}, {args[2]})",
+            ["replace_regexp_all"] = static args => $"replaceRegexpAll({args[0]}, {args[1]}, {args[2]})",
+            ["match"] = static args => $"match({args[0]}, {args[1]})",
+            ["extract"] = static args => $"extract({args[0]}, {args[1]})",
+            ["extract_all"] = static args => $"extractAll({args[0]}, {args[1]})",
+            ["split_by_string"] = static args => $"splitByString({args[0]}, {args[1]})",
+            ["split_by_regexp"] = static args => $"splitByRegexp({args[0]}, {args[1]})",
+            ["split_by_whitespace"] = static args => $"splitByWhitespace({args[0]})",
+
+
+            // String-family arms. The UInt64 results are lowered to Int64 so the materializer sees the
+            // declared long; the trailing optional arguments arrive only when the caller supplied them.
+            ["overlay"] = static args => $"overlay({string.Join(", ", args)})",
+            ["initcap"] = static args => $"initcap({args[0]})",
+            ["soundex"] = static args => $"soundex({args[0]})",
+            ["base64_encode"] = static args => $"base64Encode({args[0]})",
+            ["base64_decode"] = static args => $"base64Decode({args[0]})",
+            ["hex"] = static args => $"hex({args[0]})",
+            ["unhex"] = static args => $"unhex({args[0]})",
+            ["edit_distance"] = static args => $"toInt64(editDistance({args[0]}, {args[1]}))",
+            ["jaro_similarity"] = static args => $"jaroSimilarity({args[0]}, {args[1]})",
+            ["byte_hamming_distance"] = static args => $"toInt64(byteHammingDistance({args[0]}, {args[1]}))",
+            ["substring_index"] = static args => $"substringIndex({args[0]}, {args[1]}, {args[2]})",
+            ["count_substrings"] = static args => $"toInt64(countSubstrings({string.Join(", ", args)}))",
+            ["extract_groups"] = static args => $"extractGroups({args[0]}, {args[1]})",
+            ["normalize_utf8_nfc"] = static args => $"normalizeUTF8NFC({args[0]})",
+            ["normalize_utf8_nfd"] = static args => $"normalizeUTF8NFD({args[0]})",
+            ["normalize_utf8_nfkc"] = static args => $"normalizeUTF8NFKC({args[0]})",
+            ["normalize_utf8_nfkd"] = static args => $"normalizeUTF8NFKD({args[0]})",
+            ["format_date_time"] = static args => $"formatDateTime({string.Join(", ", args)})",
+            ["parse_date_time"] = static args => $"parseDateTime({args[0]}, {args[1]})",
+            ["parse_date_time_best_effort"] = static args => $"parseDateTimeBestEffort({string.Join(", ", args)})",
+            ["now"] = static args => "now()",
+            ["today"] = static args => "today()",
+            ["yesterday"] = static args => "yesterday()",
+            ["array_concat"] = static args => $"arrayConcat({string.Join(", ", args)})",
+            ["array_flatten"] = static args => $"arrayFlatten({args[0]})",
+            ["array_uniq"] = static args => $"toInt64(arrayUniq({args[0]}))",
+            ["array_intersect"] = static args => $"arrayIntersect({string.Join(", ", args)})",
+            ["array_union"] = static args => $"arrayUnion({string.Join(", ", args)})",
+
+            // arrayExcept exists only from ClickHouse 25.9. The capability table no longer advertises
+            // array_except on the pinned 25.8 baseline, so this arm is a defensive refusal for a direct
+            // Render call; the translator gate raises the same NotSupportedException earlier (#252).
+            ["array_except"] = static args => throw new NotSupportedException(
+            "The array_except function is not supported by ClickHouse."),
+            ["array_symmetric_difference"] = static args => $"arraySymmetricDifference({string.Join(", ", args)})",
+            ["map"] = static args => $"map({string.Join(", ", args)})",
+            ["map_keys"] = static args => $"mapKeys({args[0]})",
+            ["map_values"] = static args => $"mapValues({args[0]})",
+            ["map_contains_key"] = static args => $"mapContainsKey({args[0]}, {args[1]})",
+            ["map_contains_value"] = static args => $"mapContainsValue({args[0]}, {args[1]})",
+            ["map_add"] = static args => $"mapAdd({args[0]}, {args[1]})",
+            ["map_concat"] = static args => $"mapConcat({string.Join(", ", args)})",
+            ["map_filter"] = static args => $"mapFilter({args[0]}, {args[1]})",
+            ["map_apply"] = static args => $"mapApply({args[0]}, {args[1]})",
+            ["map_all"] = static args => $"mapAll({args[0]}, {args[1]})",
+            ["map_exists"] = static args => $"mapExists({args[0]}, {args[1]})",
+            ["map_sort"] = static args => $"mapSort({args[0]})",
+            ["group_bitmap"] = static args => $"groupBitmap({args[0]})",
+            ["group_bitmap_and"] = static args => $"groupBitmapAnd({args[0]})",
+            ["group_bitmap_or"] = static args => $"groupBitmapOr({args[0]})",
+            ["group_bitmap_xor"] = static args => $"groupBitmapXor({args[0]})",
+            ["sum_map"] = static args => $"sumMap({args[0]}, {args[1]})",
+            ["sum_map_filtered"] = static args => $"sumMapFiltered({args[0]})({args[1]}, {args[2]})",
+
+            // Tuple family (T286b F06): the native spellings; the translator normalises the completed
+            // call to the declared CLR tuple with a cast, and lowers the UInt* Hamming result to Int64.
+            ["tuple_concat"] = static args => $"tupleConcat({args[0]}, {args[1]})",
+            ["tuple_names"] = static args => $"tupleNames({args[0]})",
+            ["flatten_tuple"] = static args => $"flattenTuple({args[0]})",
+            ["tuple_to_name_value_pairs"] = static args => $"tupleToNameValuePairs({args[0]})",
+            ["tuple_plus"] = static args => $"tuplePlus({args[0]}, {args[1]})",
+            ["tuple_minus"] = static args => $"tupleMinus({args[0]}, {args[1]})",
+            ["tuple_multiply"] = static args => $"tupleMultiply({args[0]}, {args[1]})",
+            ["tuple_divide"] = static args => $"tupleDivide({args[0]}, {args[1]})",
+            ["tuple_hamming_distance"] = static args => $"toInt64(tupleHammingDistance({args[0]}, {args[1]}))",
+            ["dot_product"] = static args => $"dotProduct({args[0]}, {args[1]})",
+
+            // Map family (T286b F07): the native spellings; the translator normalises the completed call
+            // to the declared Map(K, V). mapPartialSort follows the vendor argument order (limit, map).
+            ["map_subtract"] = static args => $"mapSubtract({args[0]}, {args[1]})",
+            ["map_update"] = static args => $"mapUpdate({args[0]}, {args[1]})",
+            ["map_reverse_sort"] = static args => $"mapReverseSort({args[0]})",
+            ["map_partial_sort"] = static args => $"mapPartialSort({args[0]}, {args[1]})",
+            ["map_from_arrays"] = static args => $"mapFromArrays({args[0]}, {args[1]})",
+            ["map_populate_series"] = static args => args.Count == 2
+            ? $"mapPopulateSeries({args[0]}, {args[1]})"
+            : $"mapPopulateSeries({args[0]})",
+            ["extract_key_value_pairs"] = static args => $"extractKeyValuePairs({string.Join(", ", args)})",
+            ["md5"] = static args => $"lower(hex(MD5({args[0]})))",
+            ["sha1"] = static args => $"lower(hex(SHA1({args[0]})))",
+            ["sha256"] = static args => $"lower(hex(SHA256({args[0]})))",
+            ["sha512"] = static args => $"lower(hex(SHA512({args[0]})))",
+            ["xx_hash32"] = static args => $"toInt32(xxHash32({args[0]}))",
+            ["xx_hash64"] = static args => $"toInt64(xxHash64({args[0]}))",
+            ["xxh3"] = static args => $"toInt64(xxh3({args[0]}))",
+            ["city_hash64"] = static args => $"toInt64(cityHash64({args[0]}))",
+            ["sip_hash64"] = static args => $"toInt64(sipHash64({args[0]}))",
+            ["sip_hash128"] = static args => $"lower(hex(sipHash128({args[0]})))",
+            ["murmur_hash2_32"] = static args => $"toInt32(murmurHash2_32({args[0]}))",
+            ["murmur_hash2_64"] = static args => $"toInt64(murmurHash2_64({args[0]}))",
+            ["murmur_hash3_32"] = static args => $"toInt32(murmurHash3_32({args[0]}))",
+            ["murmur_hash3_64"] = static args => $"toInt64(murmurHash3_64({args[0]}))",
+            ["murmur_hash3_128"] = static args => $"lower(hex(murmurHash3_128({args[0]})))",
+
+            // Hash family (T286b F10). Digests keep the shipped md5/sha contract (the server returns
+            // FixedString, so lower(hex(...)) is the readable lowercase form with leading zeros intact).
+            // The non-cryptographic hashes keep the server's own width/signedness: no toInt64 lowering,
+            // because UInt64 must not be reinterpreted as a negative Int64. ngramsize/shinglesize are the
+            // vendor UInt8 parameters, so a supplied value is cast; the vendor hashnum is fixed at its
+            // default 6 and never rendered.
+            ["sha224"] = static args => $"lower(hex(SHA224({args[0]})))",
+            ["sha384"] = static args => $"lower(hex(SHA384({args[0]})))",
+            ["sha512_256"] = static args => $"lower(hex(SHA512_256({args[0]})))",
+            ["blake3"] = static args => $"lower(hex(BLAKE3({args[0]})))",
+            ["md4"] = static args => $"lower(hex(MD4({args[0]})))",
+            ["ripemd160"] = static args => $"lower(hex(RIPEMD160({args[0]})))",
+            ["keccak256"] = static args => $"lower(hex(keccak256({args[0]})))",
+            ["farm_hash64"] = static args => $"farmHash64({args[0]})",
+            ["metro_hash64"] = static args => $"metroHash64({args[0]})",
+            ["java_hash"] = static args => $"javaHash({args[0]})",
+            ["hive_hash"] = static args => $"hiveHash({args[0]})",
+            ["half_md5"] = static args => $"halfMD5({args[0]})",
+            ["url_hash"] = static args => args.Count == 2
+            ? $"URLHash({args[0]}, {args[1]})"
+            : $"URLHash({args[0]})",
+            ["wy_hash64"] = static args => $"wyHash64({args[0]})",
+            ["int_hash32"] = static args => $"intHash32({args[0]})",
+            ["int_hash64"] = static args => $"intHash64({args[0]})",
+            ["ngram_min_hash"] = static args => args.Count == 2
+            ? $"ngramMinHash({args[0]}, {args[1]})"
+            : $"ngramMinHash({args[0]})",
+            ["ngram_min_hash_arg"] = static args => args.Count == 2
+            ? $"ngramMinHashArg({args[0]}, {args[1]})"
+            : $"ngramMinHashArg({args[0]})",
+            ["ngram_sim_hash"] = static args => args.Count == 2
+            ? $"ngramSimHash({args[0]}, {args[1]})"
+            : $"ngramSimHash({args[0]})",
+            ["word_shingle_min_hash"] = static args => args.Count == 2
+            ? $"wordShingleMinHash({args[0]}, {args[1]})"
+            : $"wordShingleMinHash({args[0]})",
+            ["word_shingle_min_hash_arg"] = static args => args.Count == 2
+            ? $"wordShingleMinHashArg({args[0]}, {args[1]})"
+            : $"wordShingleMinHashArg({args[0]})",
+            ["word_shingle_sim_hash"] = static args => args.Count == 2
+            ? $"wordShingleSimHash({args[0]}, {args[1]})"
+            : $"wordShingleSimHash({args[0]})",
+            ["generate_ulid"] = static args => "generateULID()",
+
+
+            // Encoding family (T286b F11). Every binary result is wrapped in hex(...) so the declared CLR
+            // shape is an explicit hexadecimal string rather than a UTF-8-decoded binary string. The
+            // text-taking encoders keep the vendor spelling. bech32Decode returns Tuple(String, String)
+            // with binary data in the second component, so the data is hex-wrapped here as well; the
+            // decode is pure, so evaluating it twice for the two tuple components is value-safe.
+            ["bin"] = static args => $"bin({args[0]})",
+            ["unbin"] = static args => $"hex(unbin({args[0]}))",
+            ["base32_encode"] = static args => $"base32Encode({args[0]})",
+            ["base32_decode"] = static args => $"hex(base32Decode({args[0]}))",
+            ["base58_encode"] = static args => $"base58Encode({args[0]})",
+            ["base58_decode"] = static args => $"hex(base58Decode({args[0]}))",
+            ["base64_url_encode"] = static args => $"base64URLEncode({args[0]})",
+            ["base64_url_decode"] = static args => $"hex(base64URLDecode({args[0]}))",
+            ["bech32_encode"] = static args => args.Count == 3
+            ? $"bech32Encode({args[0]}, {args[1]}, {args[2]})"
+            : $"bech32Encode({args[0]}, {args[1]})",
+            ["bech32_decode"] = static args => $"tuple(tupleElement(bech32Decode({args[0]}), 1), hex(tupleElement(bech32Decode({args[0]}), 2)))",
+            ["bitmask_to_array"] = static args => $"bitmaskToArray(toUInt64({args[0]}))",
+            ["bitmask_to_list"] = static args => $"bitmaskToList({args[0]})",
+            ["bit_positions_to_array"] = static args => $"bitPositionsToArray({args[0]})",
+            ["sqid_encode"] = static args => $"sqidEncode({string.Join(", ", args)})",
+            ["sqid_decode"] = static args => $"sqidDecode({args[0]})",
+            ["hilbert_encode"] = static args => args.Count == 2
+            ? $"hilbertEncode({args[0]}, {args[1]})"
+            : $"hilbertEncode({args[0]})",
+            ["hilbert_decode"] = static args => $"hilbertDecode(2, {args[0]})",
+            ["morton_encode"] = static args => $"mortonEncode({args[0]}, {args[1]})",
+            ["morton_decode"] = static args => $"mortonDecode(2, {args[0]})",
+
+
+            // UUID/ULID/snowflake family (T286b F12). The binary 16-byte UUID values are wrapped in
+            // hex(...) or unpacked with toFixedString(unhex(...)), so a Guid is used only where the
+            // native UUID type is the exact mapping. dateTime64ToSnowflakeID requires DateTime64, which
+            // the arm supplies at millisecond precision (the vendor format itself truncates below ms).
+            ["uuid_num_to_string"] = static args => $"UUIDNumToString(toFixedString(unhex({args[0]}), 16))",
+            ["uuid_string_to_num"] = static args => $"hex(UUIDStringToNum({args[0]}))",
+            ["uuid_to_num"] = static args => $"hex(UUIDToNum({args[0]}))",
+            ["uuid_v7_to_datetime"] = static args => $"UUIDv7ToDateTime({args[0]})",
+            ["to_uuid"] = static args => $"toUUID({args[0]})",
+            ["to_uuid_or_default"] = static args => $"toUUIDOrDefault({args[0]}, {args[1]})",
+            ["to_uuid_or_null"] = static args => $"toUUIDOrNull({args[0]})",
+            ["ulid_string_to_datetime"] = static args => $"ULIDStringToDateTime({args[0]})",
+            ["generate_snowflake_id"] = static args => "generateSnowflakeID()",
+            ["date_time_to_snowflake_id"] = static args => $"dateTimeToSnowflakeID({args[0]})",
+            ["date_time64_to_snowflake_id"] = static args => $"dateTime64ToSnowflakeID(toDateTime64({args[0]}, 3))",
+            ["date_time_to_uuid_v7"] = static args => $"dateTimeToUUIDv7({args[0]})",
+            ["snowflake_id_to_date_time"] = static args => $"snowflakeIDToDateTime({args[0]})",
+            ["snowflake_id_to_date_time64"] = static args => $"snowflakeIDToDateTime64({args[0]})",
+
+
+            // URL/IP family (T286b F13). The vendor function names are case-sensitive: the hierarchy
+            // functions are URLHierarchy/URLPathHierarchy (not urlHierarchy/urlPathHierarchy). The
+            // 16-byte IPv6 binary form is hex text, so an argument that needs FixedString(16) is unpacked
+            // with toFixedString(unhex(...), 16) and a binary result is wrapped in hex(...).
+            ["domain"] = static args => $"domain({args[0]})",
+            ["protocol"] = static args => $"protocol({args[0]})",
+            ["path"] = static args => $"path({args[0]})",
+            ["query_string"] = static args => $"queryString({args[0]})",
+            ["fragment"] = static args => $"fragment({args[0]})",
+            ["port"] = static args => args.Count == 2
+            ? $"toInt32(port({args[0]}, {args[1]}))"
+            : $"toInt32(port({args[0]}))",
+            ["cut_url_parameter"] = static args => $"cutURLParameter({args[0]}, {args[1]})",
+            ["top_level_domain"] = static args => $"topLevelDomain({args[0]})",
+            ["encode_url_component"] = static args => $"encodeURLComponent({args[0]})",
+            ["decode_url_component"] = static args => $"decodeURLComponent({args[0]})",
+            ["encode_url_form_component"] = static args => $"encodeURLFormComponent({args[0]})",
+            ["decode_url_form_component"] = static args => $"decodeURLFormComponent({args[0]})",
+            ["domain_without_www"] = static args => $"domainWithoutWWW({args[0]})",
+            ["first_significant_subdomain"] = static args => $"firstSignificantSubdomain({args[0]})",
+            ["first_significant_subdomain_custom"] = static args => 
+            $"firstSignificantSubdomainCustom({args[0]}, {args[1]})",
+            ["path_full"] = static args => $"pathFull({args[0]})",
+            ["query_string_and_fragment"] = static args => $"queryStringAndFragment({args[0]})",
+            ["cut_www"] = static args => $"cutWWW({args[0]})",
+            ["cut_query_string"] = static args => $"cutQueryString({args[0]})",
+            ["cut_fragment"] = static args => $"cutFragment({args[0]})",
+            ["cut_query_string_and_fragment"] = static args => $"cutQueryStringAndFragment({args[0]})",
+            ["cut_to_first_significant_subdomain"] = static args => $"cutToFirstSignificantSubdomain({args[0]})",
+            ["cut_to_first_significant_subdomain_with_www"] = static args => 
+            $"cutToFirstSignificantSubdomainWithWWW({args[0]})",
+            ["cut_to_first_significant_subdomain_custom"] = static args => 
+            $"cutToFirstSignificantSubdomainCustom({args[0]}, {args[1]})",
+            ["cut_to_first_significant_subdomain_custom_with_www"] = static args => 
+            $"cutToFirstSignificantSubdomainCustomWithWWW({args[0]}, {args[1]})",
+            ["url_hierarchy"] = static args => $"URLHierarchy({args[0]})",
+            ["url_path_hierarchy"] = static args => $"URLPathHierarchy({args[0]})",
+            ["extract_url_parameter"] = static args => $"extractURLParameter({args[0]}, {args[1]})",
+            ["extract_url_parameter_names"] = static args => $"extractURLParameterNames({args[0]})",
+            ["ipv4_num_to_string"] = static args => $"IPv4NumToString({args[0]})",
+            ["ipv4_num_to_string_class_c"] = static args => $"IPv4NumToStringClassC({args[0]})",
+            ["ipv4_string_to_num"] = static args => $"IPv4StringToNum({args[0]})",
+            ["ipv4_string_to_num_or_default"] = static args => $"IPv4StringToNumOrDefault({args[0]})",
+            ["ipv4_string_to_num_or_null"] = static args => $"IPv4StringToNumOrNull({args[0]})",
+            ["ipv6_num_to_string"] = static args => $"IPv6NumToString(toFixedString(unhex({args[0]}), 16))",
+            ["ipv6_string_to_num"] = static args => $"hex(IPv6StringToNum({args[0]}))",
+            ["ipv6_string_to_num_or_default"] = static args => $"hex(IPv6StringToNumOrDefault({args[0]}))",
+            ["ipv6_string_to_num_or_null"] = static args => $"hex(IPv6StringToNumOrNull({args[0]}))",
+            ["cut_ipv6"] = static args => 
+            $"cutIPv6(toFixedString(unhex({args[0]}), 16), {args[1]}, {args[2]})",
+            ["is_ipv4_string"] = static args => $"isIPv4String({args[0]})",
+            ["is_ipv6_string"] = static args => $"isIPv6String({args[0]})",
+            ["is_ip_address_in_range"] = static args => $"isIPAddressInRange({args[0]}, {args[1]})",
+            ["to_ipv4"] = static args => $"toString(toIPv4({args[0]}))",
+            ["to_ipv6"] = static args => $"toString(toIPv6({args[0]}))",
+            ["ipv4_to_ipv6"] = static args => $"toString(IPv4ToIPv6(toIPv4({args[0]})))",
+            ["ipv4_cidr_to_range"] = static args => 
+            $"tuple(toString(tupleElement(IPv4CIDRToRange(toIPv4({args[0]}), {args[1]}), 1)), " +
+            $"toString(tupleElement(IPv4CIDRToRange(toIPv4({args[0]}), {args[1]}), 2)))",
+            ["ipv6_cidr_to_range"] = static args => 
+            $"tuple(toString(tupleElement(IPv6CIDRToRange(toIPv6({args[0]}), {args[1]}), 1)), " +
+            $"toString(tupleElement(IPv6CIDRToRange(toIPv6({args[0]}), {args[1]}), 2)))",
+
+
+            // Bit family (T286b F14). The dialect owns the vendor spelling only; the width decisions
+            // (exact toUInt64 widening and the UInt16 toInt32 result widening) live in the translator,
+            // which sees the overload signature the name alone cannot carry.
+            ["bit_and"] = static args => $"bitAnd({args[0]}, {args[1]})",
+            ["bit_or"] = static args => $"bitOr({args[0]}, {args[1]})",
+            ["bit_xor"] = static args => $"bitXor({args[0]}, {args[1]})",
+            ["bit_not"] = static args => $"bitNot({args[0]})",
+            ["bit_shift_left"] = static args => $"bitShiftLeft({args[0]}, {args[1]})",
+            ["bit_shift_right"] = static args => $"bitShiftRight({args[0]}, {args[1]})",
+            ["bit_rotate_left"] = static args => $"bitRotateLeft({args[0]}, {args[1]})",
+            ["bit_rotate_right"] = static args => $"bitRotateRight({args[0]}, {args[1]})",
+            ["bit_count"] = static args => $"bitCount({args[0]})",
+            ["bit_test"] = static args => $"bitTest({args[0]}, {args[1]})",
+            ["bit_test_all"] = static args => $"bitTestAll({string.Join(", ", args)})",
+            ["bit_test_any"] = static args => $"bitTestAny({string.Join(", ", args)})",
+            ["bit_hamming_distance"] = static args => $"bitHammingDistance({args[0]}, {args[1]})",
+
+
+            // Window family (T286b F17). The function is window-only; the OVER clause is appended by the
+            // window translator, so this arm is the vendor spelling of the call itself (also the pinned
+            // dialect-table row). The translator gate keeps other providers from emitting it.
+            ["non_negative_derivative"] = static args => $"nonNegativeDerivative({string.Join(", ", args)})",
+
+
+            // ClickHouse length(String) is the byte count; bit_length is eight times it. There is no cot.
+            ["bit_length"] = static args => $"toInt32(length({args[0]}) * 8)",
+            ["octet_length"] = static args => $"toInt32(length({args[0]}))",
+            ["degrees"] = static args => $"degrees({args[0]})",
+            ["radians"] = static args => $"radians({args[0]})",
+            ["pi"] = static args => "pi()",
+            ["log2"] = static args => $"log2({args[0]})",
+            ["cbrt"] = static args => $"cbrt({args[0]})",
+            ["exp2"] = static args => $"exp2({args[0]})",
+            ["exp10"] = static args => $"exp10({args[0]})",
+            ["erf"] = static args => $"erf({args[0]})",
+            ["erfc"] = static args => $"erfc({args[0]})",
+            ["lgamma"] = static args => $"lgamma({args[0]})",
+            ["tgamma"] = static args => $"tgamma({args[0]})",
+            ["gcd"] = static args => $"gcd({args[0]}, {args[1]})",
+            ["lcm"] = static args => $"lcm({args[0]}, {args[1]})",
+            ["is_finite"] = static args => $"isFinite({args[0]})",
+            ["is_infinite"] = static args => $"isInfinite({args[0]})",
+            ["is_nan"] = static args => $"isNaN({args[0]})",
+            ["hypot"] = static args => $"hypot({args[0]}, {args[1]})",
+            ["int_div"] = static args => $"intDiv({args[0]}, {args[1]})",
+            ["int_exp2"] = static args => $"intExp2({args[0]})",
+            ["int_exp10"] = static args => $"intExp10({args[0]})",
+            ["sigmoid"] = static args => $"sigmoid({args[0]})",
+
+
+            // sqr was introduced in ClickHouse 26.7 and the pinned 25.8 server rejects the name; the vendor
+            // definition is "the product of x multiplied by itself" with the multiplication operator's return
+            // type, so the arm renders exactly that product and stays version-independent.
+            ["sqr"] = static args => $"({args[0]} * {args[0]})",
+
+
+            // Rounding family. roundAge returns UInt8 and roundDuration UInt16; both are lowered to Int64
+            // so the materializer sees the declared long. roundBankers/roundDown/roundToExp2 already return
+            // the argument's own numeric type, which is the declared CLR shape.
+            ["round_age"] = static args => $"toInt64(roundAge({args[0]}))",
+            ["round_bankers"] = static args => $"roundBankers({string.Join(", ", args)})",
+            ["round_down"] = static args => $"roundDown({args[0]}, {args[1]})",
+            ["round_duration"] = static args => $"toInt64(roundDuration({args[0]}))",
+            ["round_to_exp2"] = static args => $"roundToExp2({args[0]})",
+
+
+            // Date/time family. The UInt8/UInt16/UInt32 results are lowered to Int32 so the materializer
+            // sees the declared int; timeSlots needs exactly UInt32 for its duration, and the week modes
+            // must be UInt8 (the server rejects an Int32 parameter in that position).
+            ["make_date"] = static args => $"makeDate({string.Join(", ", args)})",
+            ["make_date32"] = static args => $"makeDate32({string.Join(", ", args)})",
+            ["make_date_time"] = static args => $"makeDateTime({string.Join(", ", args)})",
+            ["now64"] = static args => args.Count == 0 ? "now64()" : $"now64({args[0]})",
+            ["now_in_block"] = static args => "nowInBlock()",
+            ["time_slot"] = static args => $"timeSlot({args[0]})",
+            ["time_slots"] = static args => $"timeSlots(toDateTime({args[0]}), toUInt32({args[1]}))",
+            ["to_start_of_fifteen_minutes"] = static args => $"toStartOfFifteenMinutes({args[0]})",
+            ["to_start_of_five_minutes"] = static args => $"toStartOfFiveMinutes({args[0]})",
+            ["to_start_of_ten_minutes"] = static args => $"toStartOfTenMinutes({args[0]})",
+            ["to_start_of_interval"] = static args => StartOfIntervalArm(args),
+            ["to_iso_year"] = static args => $"toInt32(toISOYear({args[0]}))",
+            ["to_week"] = static args => args.Count == 1
+            ? $"toInt32(toWeek({args[0]}))"
+            : $"toInt32(toWeek({args[0]}, toUInt8({args[1]})))",
+            ["to_year_week"] = static args => args.Count == 1
+            ? $"toInt32(toYearWeek({args[0]}))"
+            : $"toInt32(toYearWeek({args[0]}, toUInt8({args[1]})))",
+            ["to_last_day_of_week"] = static args => args.Count == 1
+            ? $"toLastDayOfWeek({args[0]})"
+            : $"toLastDayOfWeek({args[0]}, toUInt8({args[1]}))",
+
+            // toDaysInMonth arrived in 26.3; this is the vendor definition with the same UInt8 result.
+            ["to_days_in_month"] = static args => $"toInt32(toDayOfMonth(toLastDayOfMonth({args[0]})))",
+            ["to_modified_julian_day"] = static args => $"toModifiedJulianDay({args[0]})",
+            ["age"] = static args => $"age({string.Join(", ", args)})",
+            ["date_name"] = static args => $"dateName({string.Join(", ", args)})",
+            ["server_timezone"] = static args => "serverTimezone()",
+            ["timezone_of"] = static args => $"timezoneOf({args[0]})",
+            ["timezone_offset"] = static args => $"timezoneOffset({args[0]})",
+
+            // toTime was reassigned in 26.7; toTimeWithFixedDate is the stable name of the legacy value.
+            ["to_time"] = static args => $"toTimeWithFixedDate({args[0]})",
+            ["timestamp"] = static args => $"timestamp({string.Join(", ", args)})",
+            ["from_unix_timestamp"] = static args => $"fromUnixTimestamp({string.Join(", ", args)})",
+            ["from_unix_timestamp64_milli"] = static args => $"fromUnixTimestamp64Milli({args[0]})",
+            ["from_unix_timestamp64_micro"] = static args => $"fromUnixTimestamp64Micro({args[0]})",
+
+            // Type-conversion family (T286b F15). The dialect owns the vendor spelling and the
+            // exact result widening the shared row reader needs (Int8 -> Int16, UInt16 -> Int32,
+            // Int8 reinterpret -> Int16); the scale and default arguments are validated in the
+            // translator, which sees the constant and the overload signature.
+            ["to_int8"] = static args => $"toInt16(toInt8({args[0]}))",
+            ["to_int8_or_null"] = static args => $"toInt16(toInt8OrNull({args[0]}))",
+            ["to_int8_or_default"] = static args => args.Count == 1
+            ? $"toInt16(toInt8OrDefault({args[0]}))"
+            : $"toInt16(toInt8OrDefault({args[0]}, toInt8({args[1]})))",
+            ["to_int16"] = static args => $"toInt16({args[0]})",
+            ["to_int16_or_null"] = static args => $"toInt16OrNull({args[0]})",
+            ["to_int16_or_default"] = static args => args.Count == 1
+            ? $"toInt16OrDefault({args[0]})"
+            : $"toInt16OrDefault({args[0]}, toInt16({args[1]}))",
+            ["to_int32"] = static args => $"toInt32({args[0]})",
+            ["to_int32_or_null"] = static args => $"toInt32OrNull({args[0]})",
+            ["to_int32_or_default"] = static args => args.Count == 1
+            ? $"toInt32OrDefault({args[0]})"
+            : $"toInt32OrDefault({args[0]}, toInt32({args[1]}))",
+            ["to_int64"] = static args => $"toInt64({args[0]})",
+            ["to_int64_or_null"] = static args => $"toInt64OrNull({args[0]})",
+            ["to_int64_or_default"] = static args => args.Count == 1
+            ? $"toInt64OrDefault({args[0]})"
+            : $"toInt64OrDefault({args[0]}, toInt64({args[1]}))",
+            ["to_uint8"] = static args => $"toUInt8({args[0]})",
+            ["to_uint8_or_null"] = static args => $"toUInt8OrNull({args[0]})",
+            ["to_uint8_or_default"] = static args => args.Count == 1
+            ? $"toUInt8OrDefault({args[0]})"
+            : $"toUInt8OrDefault({args[0]}, toUInt8({args[1]}))",
+            ["to_uint16"] = static args => $"toInt32(toUInt16({args[0]}))",
+            ["to_uint16_or_null"] = static args => $"toInt32(toUInt16OrNull({args[0]}))",
+            ["to_uint16_or_default"] = static args => args.Count == 1
+            ? $"toInt32(toUInt16OrDefault({args[0]}))"
+            : $"toInt32(toUInt16OrDefault({args[0]}, toUInt16({args[1]})))",
+            ["to_uint32"] = static args => $"toUInt32({args[0]})",
+            ["to_uint32_or_null"] = static args => $"toUInt32OrNull({args[0]})",
+            ["to_uint32_or_default"] = static args => args.Count == 1
+            ? $"toUInt32OrDefault({args[0]})"
+            : $"toUInt32OrDefault({args[0]}, toUInt32({args[1]}))",
+            ["to_uint64"] = static args => $"toUInt64({args[0]})",
+            ["to_uint64_or_null"] = static args => $"toUInt64OrNull({args[0]})",
+            ["to_uint64_or_default"] = static args => args.Count == 1
+            ? $"toUInt64OrDefault({args[0]})"
+            : $"toUInt64OrDefault({args[0]}, toUInt64({args[1]}))",
+            ["to_float32"] = static args => $"toFloat32({args[0]})",
+            ["to_float32_or_null"] = static args => $"toFloat32OrNull({args[0]})",
+            ["to_float32_or_default"] = static args => args.Count == 1
+            ? $"toFloat32OrDefault({args[0]})"
+            : $"toFloat32OrDefault({args[0]}, toFloat32({args[1]}))",
+            ["to_float64"] = static args => $"toFloat64({args[0]})",
+            ["to_float64_or_null"] = static args => $"toFloat64OrNull({args[0]})",
+            ["to_float64_or_default"] = static args => args.Count == 1
+            ? $"toFloat64OrDefault({args[0]})"
+            : $"toFloat64OrDefault({args[0]}, toFloat64({args[1]}))",
+            ["to_decimal32"] = static args => $"toDecimal32({args[0]}, {args[1]})",
+            ["to_decimal32_or_null"] = static args => $"toDecimal32OrNull({args[0]}, {args[1]})",
+            ["to_decimal32_or_default"] = static args => args.Count == 2
+            ? $"toDecimal32OrDefault({args[0]}, {args[1]})"
+            : $"toDecimal32OrDefault({args[0]}, {args[1]}, toDecimal32({args[2]}, {args[1]}))",
+            ["to_decimal64"] = static args => $"toDecimal64({args[0]}, {args[1]})",
+            ["to_decimal64_or_null"] = static args => $"toDecimal64OrNull({args[0]}, {args[1]})",
+            ["to_decimal64_or_default"] = static args => args.Count == 2
+            ? $"toDecimal64OrDefault({args[0]}, {args[1]})"
+            : $"toDecimal64OrDefault({args[0]}, {args[1]}, toDecimal64({args[2]}, {args[1]}))",
+            ["to_string"] = static args => $"toString({args[0]})",
+            ["to_bool"] = static args => $"toBool({args[0]})",
+            ["to_fixed_string"] = static args => $"toFixedString({args[0]}, {args[1]})",
+            ["to_low_cardinality"] = static args => $"toLowCardinality({args[0]})",
+            ["accurate_cast_int8"] = static args => $"toInt16(accurateCast({args[0]}, 'Int8'))",
+            ["accurate_cast_int8_or_null"] = static args => $"toInt16(accurateCastOrNull({args[0]}, 'Int8'))",
+            ["accurate_cast_int8_or_default"] = static args => $"toInt16(accurateCastOrDefault({args[0]}, 'Int8'))",
+            ["accurate_cast_int16"] = static args => $"accurateCast({args[0]}, 'Int16')",
+            ["accurate_cast_int16_or_null"] = static args => $"accurateCastOrNull({args[0]}, 'Int16')",
+            ["accurate_cast_int16_or_default"] = static args => $"accurateCastOrDefault({args[0]}, 'Int16')",
+            ["accurate_cast_int32"] = static args => $"accurateCast({args[0]}, 'Int32')",
+            ["accurate_cast_int32_or_null"] = static args => $"accurateCastOrNull({args[0]}, 'Int32')",
+            ["accurate_cast_int32_or_default"] = static args => $"accurateCastOrDefault({args[0]}, 'Int32')",
+            ["accurate_cast_int64"] = static args => $"accurateCast({args[0]}, 'Int64')",
+            ["accurate_cast_int64_or_null"] = static args => $"accurateCastOrNull({args[0]}, 'Int64')",
+            ["accurate_cast_int64_or_default"] = static args => $"accurateCastOrDefault({args[0]}, 'Int64')",
+            ["accurate_cast_uint8"] = static args => $"accurateCast({args[0]}, 'UInt8')",
+            ["accurate_cast_uint8_or_null"] = static args => $"accurateCastOrNull({args[0]}, 'UInt8')",
+            ["accurate_cast_uint8_or_default"] = static args => $"accurateCastOrDefault({args[0]}, 'UInt8')",
+            ["accurate_cast_uint16"] = static args => $"toInt32(accurateCast({args[0]}, 'UInt16'))",
+            ["accurate_cast_uint16_or_null"] = static args => $"toInt32(accurateCastOrNull({args[0]}, 'UInt16'))",
+            ["accurate_cast_uint16_or_default"] = static args => $"toInt32(accurateCastOrDefault({args[0]}, 'UInt16'))",
+            ["accurate_cast_uint32"] = static args => $"accurateCast({args[0]}, 'UInt32')",
+            ["accurate_cast_uint32_or_null"] = static args => $"accurateCastOrNull({args[0]}, 'UInt32')",
+            ["accurate_cast_uint32_or_default"] = static args => $"accurateCastOrDefault({args[0]}, 'UInt32')",
+            ["accurate_cast_uint64"] = static args => $"accurateCast({args[0]}, 'UInt64')",
+            ["accurate_cast_uint64_or_null"] = static args => $"accurateCastOrNull({args[0]}, 'UInt64')",
+            ["accurate_cast_uint64_or_default"] = static args => $"accurateCastOrDefault({args[0]}, 'UInt64')",
+            ["accurate_cast_float32"] = static args => $"accurateCast({args[0]}, 'Float32')",
+            ["accurate_cast_float32_or_null"] = static args => $"accurateCastOrNull({args[0]}, 'Float32')",
+            ["accurate_cast_float32_or_default"] = static args => $"accurateCastOrDefault({args[0]}, 'Float32')",
+            ["accurate_cast_float64"] = static args => $"accurateCast({args[0]}, 'Float64')",
+            ["accurate_cast_float64_or_null"] = static args => $"accurateCastOrNull({args[0]}, 'Float64')",
+            ["accurate_cast_float64_or_default"] = static args => $"accurateCastOrDefault({args[0]}, 'Float64')",
+            ["accurate_cast_decimal32"] = static args => $"accurateCast({args[0]}, 'Decimal(9, {args[1]})')",
+            ["accurate_cast_decimal32_or_null"] = static args => $"accurateCastOrNull({args[0]}, 'Decimal(9, {args[1]})')",
+            ["accurate_cast_decimal32_or_default"] = static args => $"accurateCastOrDefault({args[0]}, 'Decimal(9, {args[1]})')",
+            ["accurate_cast_decimal64"] = static args => $"accurateCast({args[0]}, 'Decimal(18, {args[1]})')",
+            ["accurate_cast_decimal64_or_null"] = static args => $"accurateCastOrNull({args[0]}, 'Decimal(18, {args[1]})')",
+            ["accurate_cast_decimal64_or_default"] = static args => $"accurateCastOrDefault({args[0]}, 'Decimal(18, {args[1]})')",
+            ["reinterpret_as_uint8"] = static args => $"reinterpretAsUInt8({args[0]})",
+            ["reinterpret_as_uint16"] = static args => $"toInt32(reinterpretAsUInt16({args[0]}))",
+            ["reinterpret_as_uint32"] = static args => $"reinterpretAsUInt32({args[0]})",
+            ["reinterpret_as_uint64"] = static args => $"reinterpretAsUInt64({args[0]})",
+            ["reinterpret_as_int8"] = static args => $"toInt16(reinterpretAsInt8({args[0]}))",
+            ["reinterpret_as_int16"] = static args => $"reinterpretAsInt16({args[0]})",
+            ["reinterpret_as_int32"] = static args => $"reinterpretAsInt32({args[0]})",
+            ["reinterpret_as_int64"] = static args => $"reinterpretAsInt64({args[0]})",
+            ["reinterpret_as_float32"] = static args => $"reinterpretAsFloat32({args[0]})",
+            ["reinterpret_as_float64"] = static args => $"reinterpretAsFloat64({args[0]})",
+            ["reinterpret_as_date"] = static args => $"reinterpretAsDate({args[0]})",
+            ["reinterpret_as_date_time"] = static args => $"reinterpretAsDateTime({args[0]})",
+            ["reinterpret_as_string"] = static args => $"reinterpretAsString({args[0]})",
+            ["reinterpret_as_fixed_string"] = static args => $"reinterpretAsFixedString({args[0]})",
+            ["reinterpret_as_uuid"] = static args => $"reinterpretAsUUID({args[0]})",
+        }.ToFrozenDictionary(StringComparer.Ordinal);
+    /// <summary>The units <c>toStartOfInterval</c> accepts for a <see cref="DateTime"/> argument.</summary>
+    private static readonly Dictionary<string, string> IntervalUnits = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["second"] = "SECOND",
+        ["minute"] = "MINUTE",
+        ["hour"] = "HOUR",
+        ["day"] = "DAY",
+        ["week"] = "WEEK",
+        ["month"] = "MONTH",
+        ["quarter"] = "QUARTER",
+        ["year"] = "YEAR"
+    };
+
+    private static string StartOfIntervalArm(IReadOnlyList<string> args)
+    {
+        if (args.Count < 3 || !IntervalUnits.TryGetValue(args[2], out var unit))
+            throw new NotSupportedException(
+                "The to_start_of_interval unit must be second, minute, hour, day, week, month, quarter " +
+                "or year; ClickHouse rejects sub-second units for a DateTime argument.");
+        // The anchored (TimescaleDB) form requires the value and the origin to have the same type;
+        // both are cast to DateTime so a DateTime64 column and a CLR DateTime parameter agree.
+        return args.Count == 4
+            ? $"toStartOfInterval(toDateTime({args[0]}), INTERVAL {args[1]} {unit}, toDateTime({args[3]}))"
+            : $"toStartOfInterval({args[0]}, INTERVAL {args[1]} {unit})";
+    }
 
     private static string Pad(IReadOnlyList<string> args) => args.Count == 3 ? args[2] : "' '";
 }

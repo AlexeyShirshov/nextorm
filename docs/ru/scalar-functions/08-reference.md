@@ -37,6 +37,8 @@
 | Расширенная библиотека скалярных функций (`asin`, `split_part`, `regexp_*`, `to_char`, ...) | `NotSupportedException` | `NotSupportedException` | поддерживается |
 | Логические/битовые/статистические агрегаты | `NotSupportedException` | `NotSupportedException` | поддерживается |
 | Упорядоченные агрегаты (`percentile_cont`, ...) | `NotSupportedException` | оконный `percentile_cont(f) within group (order by x) over (...)` | `within group (order by ...)` |
+| Медиана | `NotSupportedException` | `percentile_cont(0.5) within group (order by x) over (...)` (аналитическая: одна строка на входную строку, окно только с `partition by`) | `percentile_cont(0.5) within group (order by x)` (агрегат: одна строка на группу; только сортировка с плавающей точкой) |
+| Общий `percentile(fraction, value)` | `NotSupportedException` | `NotSupportedException` | `NotSupportedException` (никогда не псевдоним непрерывной формы) |
 | JSONPath (`jsonb_path_*`) | `NotSupportedException` | `NotSupportedException` | `cast(path as jsonpath)` |
 | Встроенные табличные функции | `NotSupportedException` | `string_split(...)`, `openjson(...)` | `generate_series(...)`, `unnest(...)` |
 
@@ -45,7 +47,8 @@
 PostgreSQL.
 
 ClickHouse рендерит `dateTrunc('part', x)`, `addDays`/`addMonths`/.../`addSeconds` (и масштабированный
-`addYears` для `decade`/`century`/`millennium`), `toLastDayOfMonth(x)`,
+`addYears` над операндом `DateTime64(6)` для `year`/`decade`/`century`, тип SQL-результата которых —
+`DateTime64(6)`, а CLR-API не меняется; `millennium` бросает исключение), `toLastDayOfMonth(x)`,
 `arrayStringConcat(groupArray(x), delimiter)`, `groupBitAnd`/`groupBitOr`/`groupBitXor`,
 `covarPop`/`covarSamp`, `argMin`/`argMax`, комбинаторы `-If` и `multiIf`. Он отклоняет ANSI-предложение
 `filter (where ...)`, агрегаты `regr_*` и логические агрегаты через `NotSupportedException`; см.

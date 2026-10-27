@@ -154,9 +154,17 @@ public class MySqlFunctionsSqlGenerationTests
             .Distinct(StringComparer.Ordinal)
             .ToArray();
 
+        // T285b declares the residual percentile family on the surface as *named refusals*: MySQL has
+        // neither a median aggregate nor the WITHIN GROUP grammar, so the member exists to carry the
+        // precise message. It is therefore expected to be unsupported here, not supported.
+        string[] declaredRefusals = ["median", "percentile_cont", "percentile_disc", "percentile"];
+        var unsupportedByDesign = mariaDbOnly.Concat(declaredRefusals).ToArray();
+
         declared.Should().NotBeEmpty();
-        foreach (var name in declared.Except(mariaDbOnly, StringComparer.Ordinal))
+        foreach (var name in declared.Except(unsupportedByDesign, StringComparer.Ordinal))
             capability.Supports(name).Should().BeTrue($"MySQL must support the declared marker '{name}'");
+        foreach (var name in declaredRefusals)
+            capability.Supports(name).Should().BeFalse($"'{name}' is a declared refusal on MySQL");
         foreach (var name in mariaDbOnly)
             capability.Supports(name).Should().BeFalse($"'{name}' is MariaDB-only");
         capability.Supports("json_storage_free").Should().BeTrue();

@@ -259,8 +259,8 @@ lookaround, обратные ссылки, именованные группы �
 | `SqlFunctions.Sql.translate(s, from, to)` | `translate` | `TRANSLATE` | — | `translate` | — |
 | `SqlFunctions.Sql.ascii(s)` | `ascii` | `ASCII` | `ASCII` | `ascii` | `unicode` |
 | `SqlFunctions.Sql.@char(n)` | `chr` | `CHAR` | `CAST(CHAR(..) AS CHAR)` | `char` | `char` |
-| `SqlFunctions.Sql.octet_length(s)` | `octet_length` | `DATALENGTH` | `OCTET_LENGTH` | `length` | `octet_length` |
-| `SqlFunctions.Sql.bit_length(s)` | `bit_length` | `DATALENGTH(s) * 8` | `BIT_LENGTH` | `length(s) * 8` | `octet_length(s) * 8` |
+| `SqlFunctions.Sql.octet_length(s)` | `octet_length` | `DATALENGTH` | `OCTET_LENGTH` | `toInt32(length(s))` | `octet_length` |
+| `SqlFunctions.Sql.bit_length(s)` | `bit_length` | `DATALENGTH(s) * 8` | `BIT_LENGTH` | `toInt32(length(s) * 8)` | `octet_length(s) * 8` |
 
 - `left`/`right`/`lpad`/`rpad` считают **символы**, а не байты (ClickHouse использует варианты `*UTF8`).
   Отрицательный `n` зависит от провайдера: PostgreSQL читает его как «всё, кроме последних |n|», остальные — нет.
@@ -275,6 +275,10 @@ lookaround, обратные ссылки, именованные группы �
   `SqlFunctions.Sql` для них нет.
 - `octet_length`/`bit_length` считают октеты значения, поэтому многобайтовый `nvarchar` в SQL Server
   даёт два байта на символ (через `DATALENGTH`); SQLite требует 3.43+ для нативного `octet_length()`.
+- ClickHouse-ветки приводят серверный `UInt64` к `Int32` через `toInt32` (для `bit_length` обёрнуто
+  всё произведение `length(s) * 8`). Это преобразование **не проверяется**: результаты вне диапазона
+  `Int32` переполняются по модулю 2^32, а не бросают исключение, и не являются точными, поэтому
+  объявленный `int?` для очень больших строк следует семантике преобразования ClickHouse.
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
@@ -289,6 +293,37 @@ var rows = dataContext.From<IComplexEntity>()
 
 In-memory провайдер вычисляет те же вызовы через их CLR-эквиваленты, поэтому тот же запрос выполняется
 без базы данных.
+
+## Строковые функции ClickHouse (#286, T286b)
+
+Строковая поверхность, существующая только в ClickHouse, живёт на `SqlFunctions.ClickHouse`; каждый
+член рендерит точное имя вендора и отклоняется всеми остальными диалектами. Формы результатов
+объявлены явно: `overlay`/`initcap`/`soundex`/`substring_index`/`normalize_utf8_*` возвращают `string`
+(или `string?` для nullable-аргумента), `count_substrings`/`edit_distance`/`byte_hamming_distance` —
+`ulong`/`int`, а `extract_groups`/`split_by_*` — `string[]`.
+
+| Функция | SQL |
+|---|---|
+| `SqlFunctions.ClickHouse.overlay(s, replacement, offset[, length])` | `overlay(s, replacement, offset[, length])` |
+| `SqlFunctions.ClickHouse.initcap(s)` | `initcap(s)` |
+| `SqlFunctions.ClickHouse.soundex(s)` | `soundex(s)` |
+| `SqlFunctions.ClickHouse.base64_encode(s)` / `base64_decode(s)` | `base64Encode` / `base64Decode` |
+| `SqlFunctions.ClickHouse.hex(s)` / `unhex(s)` | `hex` / `unhex` |
+| `SqlFunctions.ClickHouse.edit_distance(a, b)` | `editDistance(a, b)` |
+| `SqlFunctions.ClickHouse.jaro_similarity(a, b)` | `jaroSimilarity(a, b)` |
+| `SqlFunctions.ClickHouse.byte_hamming_distance(a, b)` | `byteHammingDistance(a, b)` |
+| `SqlFunctions.ClickHouse.substring_index(s, delim, count)` | `substringIndex(s, delim, count)` |
+| `SqlFunctions.ClickHouse.count_substrings(s, sub[, start])` | `countSubstrings(s, sub[, start])` |
+| `SqlFunctions.ClickHouse.extract_groups(pattern, s)` | `extractGroups(pattern, s)` → `string[]` |
+| `SqlFunctions.ClickHouse.normalize_utf8_nfc(s)` / `_nfd` / `_nfkc` / `_nfkd` | `normalizeUTF8NFC` / `NFD` / `NFKC` / `NFKD` |
+
+Краевые семантики закреплены живыми тестами на 25.8.33.6: `overlay` считает с 1, длина по умолчанию
+равна длине замены (нулевая длина вставляет, смещение за концом дописывает); `initcap` работает только
+с ASCII; `soundex` возвращает `0000`, если во входе нет ASCII-буквы; `editDistance` считает **байты**
+UTF-8, а `byteHammingDistance` дополняет более короткий вход нулями. `base64Decode('!!!')`,
+многосимвольный разделитель `substringIndex` и отрицательный старт `countSubstrings` отклоняются
+сервером, а не подменяются дефолтом; `extractGroups` по nullable-аргументу отклоняется, потому что
+ClickHouse не может вложить `Array(String)` в `Nullable`.
 
 ## Расширения строк и регулярных выражений (PostgreSQL)
 

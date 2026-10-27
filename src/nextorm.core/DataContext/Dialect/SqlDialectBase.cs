@@ -116,6 +116,8 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual bool SupportsNthValue => false;
     /// <summary>Defaults to <c>false</c>; SQL Server and MariaDB opt into the window percentile functions.</summary>
     public virtual bool SupportsPercentileWindow => false;
+    /// <summary>Defaults to <c>false</c>; PostgreSQL opts into the ordered-set percentile/median form.</summary>
+    public virtual bool SupportsOrderedPercentiles => false;
     /// <summary>Defaults to <c>false</c>; PostgreSQL, MySQL, MariaDB, ClickHouse and SQLite opt into named windows.</summary>
     public virtual bool SupportsNamedWindows => false;
     /// <summary>
@@ -242,6 +244,9 @@ public abstract class SqlDialectBase : ISqlDialect
 
     /// <summary>Defaults to <c>null</c>; ClickHouse opts into the <c>windowFunnel</c>/<c>retention</c>/<c>sequenceMatch</c> aggregates.</summary>
     public virtual ISequenceAggregateRenderer? SequenceAggregates => null;
+
+    /// <summary>Defaults to <c>null</c>; ClickHouse opts into the ClickHouse-only aggregate catalogue (statistical, quantile-algorithm, array/tuple and time-series aggregates).</summary>
+    public virtual IClickHouseAggregateRenderer? ClickHouseAggregates => null;
 
     /// <summary>Defaults to <c>false</c>; ClickHouse opts into the string-JSON <c>JSONExtract*</c> family and the native-JSON functions.</summary>
     public virtual bool SupportsJsonExtract => false;
@@ -838,6 +843,8 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual string MakeArrayAgg(string value) => $"array_agg({value})";
     /// <inheritdoc/>
     public virtual string MakeArrayFunction(string name, string call) => call;
+    /// <inheritdoc/>
+    public virtual string MakeArrayResult(string name, string call, Type resultType) => call;
 
     /// <inheritdoc/>
     public virtual string MakeWithinGroup(string aggregate, string orderBy, KeywordCase keywordCase = KeywordCase.Lower) => aggregate + Kw(keywordCase, " within group (order by ") + orderBy + ")";

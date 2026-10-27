@@ -542,7 +542,7 @@ its own dialect capability; PostgreSQL and ClickHouse opt into different subsets
 | Last row | `SqlFunctions.ClickHouse.any_last(x)` | `anyLast(x)` | [`SupportsAnyAggregates`](xref:NextORM.Core.ISqlDialect.SupportsAnyAggregates) | ClickHouse |
 | Filtered aggregate | `SqlFunctions.Sql.count(() => p)`, `sum(x, () => p)`, `avg(x, () => p)`, `min(x, () => p)`, `max(x, () => p)` | `count(*) filter (where p)`, ... / `countIf(p)`, `sumIf(x, p)`, ... | [`AggregateFilterStyle`](xref:NextORM.Core.ISqlDialect.AggregateFilterStyle) | PostgreSQL (9.4+), SQLite (ANSI `FILTER`), ClickHouse (`-If`) |
 | Sequence / funnel | `SqlFunctions.ClickHouse.window_funnel(window, ts, c1, c2)` , `sequence_match(pattern, ts, c1, c2)`, `retention(c1, c2)` | `toInt32(windowFunnel(window)(ts, c1, c2))`, `toInt32(sequenceMatch(pattern)(ts, c1, c2))`, `retention(c1, c2)` | [`SequenceAggregates`](xref:NextORM.Core.ISqlDialect.SequenceAggregates) | ClickHouse |
-| Ordered-set | `SqlFunctions.Postgres.percentile_cont(fraction, () => x)`, `percentile_disc(fraction, () => x)`, `mode(() => x)` | `percentile_cont(f) within group (order by x)`, ... | [`SupportsOrderedAggregates`](xref:NextORM.Core.ISqlDialect.SupportsOrderedAggregates) | PostgreSQL |
+| Ordered-set | `SqlFunctions.Postgres.percentile_cont(fraction, () => x)`, `percentile_disc(fraction, () => x)`, `median(() => x)`, `mode(() => x)` | `percentile_cont(f) within group (order by x)`, `percentile_cont(0.5) within group (order by x)`, ... | [`SupportsOrderedAggregates`](xref:NextORM.Core.ISqlDialect.SupportsOrderedAggregates) (`mode`), [`SupportsOrderedPercentiles`](xref:NextORM.Core.ISqlDialect.SupportsOrderedPercentiles) (percentiles, `median`) | PostgreSQL |
 
 MariaDB does **not** support `any_agg`: it has no `ANY_VALUE` in 10.4–12.x (the SQL-2023 `T626` feature
 is still pending, targeted for 13.2), so [`SupportsAnyValueAggregate`](xref:NextORM.Core.ISqlDialect.SupportsAnyValueAggregate) is `false` and the call is rejected with `NotSupportedException`.
@@ -590,11 +590,22 @@ The ordered-set aggregates take the ordering key as a quoted lambda that closes 
 parameter; the key becomes `order by <key>`. Calling one on a provider without the capability throws
 `NotSupportedException`.
 
+On PostgreSQL the median is not a server function: `SqlFunctions.Postgres.median(() => x)` renders
+`percentile_cont(0.5) within group (order by x)` and is an **aggregate** (one row per group), gated by
+[`SupportsOrderedPercentiles`](xref:NextORM.Core.ISqlDialect.SupportsOrderedPercentiles). The continuous
+forms interpolate and return `double precision`, so `percentile_cont` and `median` require a floating-point
+sort expression — an integer/numeric key is refused with
+`The percentile_cont function on PostgreSQL requires a floating-point sort expression.` —
+while `percentile_disc` keeps the sort expression's type. A fraction is a `double` in `[0, 1]`, not a
+percentage; it must be finite and constant (a literal or a captured variable), and a row-dependent fraction
+is refused at SQL generation. The generic `SqlFunctions.Postgres.percentile(fraction, () => x)` is refused:
+it never becomes an alias of the continuous form.
+
 The ClickHouse sequence/funnel aggregates take the conditions as inline boolean expressions (the
 `timestamp` column first). `window_funnel` returns the longest consecutive chain in a sliding window,
 `sequence_match` returns `1`/`0` for the pattern; both materialise as a CLR `int` (the dialect casts
-the native unsigned result with `toInt32(...)`). `retention` returns a `UInt8` mask as an array,
-materialised as `byte[]` (project it directly or use it inside another array function):
+the native unsigned result with `toInt32(...)`). `retention` returns a `UInt8` mask that the dialect
+normalises to the declared `int[]` (project it directly or use it inside another array function):
 
 ```csharp
 var funnel = dataContext.From<IEventEntity>()
@@ -612,9 +623,17 @@ var funnel = dataContext.From<IEventEntity>()
 -- ClickHouse
 select toInt32(windowFunnel(600)(ts, (event = 1), (event = 2))) as `Level`,
        toInt32(sequenceMatch('(?1).*(?2)')(ts, (event = 1), (event = 2))) as `Matched`,
-       arrayStringConcat(retention((event = 1), (event = 2)), ',') as `Mask`
+       arrayStringConcat(cast(retention((event = 1), (event = 2)) as Array(Int32)), ',') as `Mask`
  from event_entity
 ```
+
+Array-returning aggregates follow the **declared CLR element type**, not the server-inferred one:
+`top_k`/`top_k_weighted`/`group_array`/`group_uniq_array` declare a nullable element type when the input is
+nullable (`int?[]` → `Array(Nullable(Int32))`), while `retention` stays `int[]` and `array_map`/`range`
+follow their own declared types (`int[]`, `long[]`). Nullability describes the **result type** only:
+ClickHouse still elides `NULL` aggregate **inputs**, so `group_array`/`group_uniq_array` over a nullable
+column omit the nulls instead of retaining them — the declared element type is nullable, the aggregate does
+not keep nulls.
 
 ## Filtered aggregates
 

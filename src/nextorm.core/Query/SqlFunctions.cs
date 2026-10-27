@@ -807,7 +807,8 @@ public static partial class SqlFunctions
         /// between two timestamps (SQL Server semantics; a provider without a native <c>datediff</c>
         /// may count whole units instead, which can differ). The field must be a constant string and
         /// cannot be <c>decade</c>/<c>century</c>/<c>millennium</c>, which T-SQL <c>datediff</c> has no
-        /// part for. Requires a provider that supports it (see
+        /// part for. The result is 32-bit, so the span must fit <see cref="int"/>; use
+        /// <see cref="date_diff_big"/> for wider spans. Requires a provider that supports it (see
         /// <see cref="ISqlDialect.SupportsDateArithmetic"/>).
         /// </summary>
         public int? date_diff(string field, DateTime? start, DateTime? end) => default!;

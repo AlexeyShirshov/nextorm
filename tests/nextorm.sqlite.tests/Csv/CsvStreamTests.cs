@@ -786,6 +786,7 @@ public class CsvStreamTests
             command,
             createEnumerator: false,
             storeInCache: false,
+            cache: PreparedCommandCache.Connection,
             sequentialAccess: true,
             streamingRowsRequested: false,
             suppressLobLocator: true,
@@ -797,6 +798,7 @@ public class CsvStreamTests
             command,
             createEnumerator: false,
             storeInCache: false,
+            cache: PreparedCommandCache.Connection,
             sequentialAccess: true,
             streamingRowsRequested: false,
             suppressLobLocator: false,
@@ -832,6 +834,7 @@ public class CsvStreamTests
             command,
             createEnumerator: false,
             storeInCache: false,
+            cache: PreparedCommandCache.Connection,
             sequentialAccess: false,
             streamingRowsRequested: false,
             suppressLobLocator: false,
@@ -842,6 +845,7 @@ public class CsvStreamTests
             command,
             createEnumerator: false,
             storeInCache: false,
+            cache: PreparedCommandCache.Connection,
             sequentialAccess: true,
             streamingRowsRequested: false,
             suppressLobLocator: true,
@@ -855,7 +859,7 @@ public class CsvStreamTests
     }
 
     private static string NormalizeCommand<TResult>(DbPreparedQueryCommand<TResult> command)
-        => command.DbCommand.CommandText.Replace("\r\n", "\n");
+        => command.CommandText.Replace("\r\n", "\n");
 
     private static QueryPlanner CreatePlanner(IDataContext ctx, ISqlDialect dialect)
         => new(
@@ -865,9 +869,8 @@ public class CsvStreamTests
             new ProviderHooks(
                 (column, param) => param,
                 (_, name, value) => new SqliteParameter(name, value ?? DBNull.Value),
-                sql => new SqliteCommand(sql)),
-            new LoggingOptions(null),
-            new InterceptorHooks([], []));
+                (name, value) => new SqliteParameter(name, value ?? DBNull.Value)),
+            new LoggingOptions(null));
 
     /// <summary>A <see cref="MemoryStream"/> that records the largest single write, exposing bounded streaming.</summary>
     private sealed class BoundedStream : MemoryStream

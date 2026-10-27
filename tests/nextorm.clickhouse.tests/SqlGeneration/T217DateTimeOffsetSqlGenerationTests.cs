@@ -84,7 +84,7 @@ public class T217DateTimeOffsetSqlGenerationTests
     }
 
     [Theory]
-    [InlineData("AddYears", "addYears(toTimeZone(value, 'UTC'), 1)")]
+    [InlineData("AddYears", "addYears(toDateTime64(toTimeZone(value, 'UTC'), 6), 1)")]
     [InlineData("AddMonths", "addMonths(toTimeZone(value, 'UTC'), 1)")]
     [InlineData("AddDays", "addMicroseconds(toTimeZone(value, 'UTC'), (1) * 86400000000)")]
     [InlineData("AddHours", "addMicroseconds(toTimeZone(value, 'UTC'), (1) * 3600000000)")]

@@ -425,27 +425,30 @@ internal static class NavigationExpansion
                     : previous.Parameter;
                 var rightParameter = Expression.Parameter(hop.RelatedType, "navigation" + (_joins?.Count ?? 0));
 
-                var (leftKey, rightKey) = hop.Direction == NavigationDirection.DependentToPrincipal
-                    ? (hop.PrimaryLeg.ForeignKey.PropertyInfo, hop.PrimaryLeg.PrincipalKey.PropertyInfo)
-                    : (hop.PrimaryLeg.PrincipalKey.PropertyInfo, hop.PrimaryLeg.ForeignKey.PropertyInfo);
+                var (leftKeys, rightKeys) = hop.Direction == NavigationDirection.DependentToPrincipal
+                    ? (hop.PrimaryLeg.ForeignKeys, hop.PrimaryLeg.PrincipalKeys)
+                    : (hop.PrimaryLeg.PrincipalKeys, hop.PrimaryLeg.ForeignKeys);
 
-                // A nullable foreign key compared with a non-nullable principal key (or the reverse)
-                // needs the narrower operand lifted to the nullable type before the equality is built:
-                // Expression.Equal(int?, int) is undefined. The comparison stays a plain key equality;
-                // only a mismatched nullability pair is converted, so equal types keep their exact
-                // expression and SQL text.
-                Expression leftKeyExpression = Expression.Property(leftParameter, leftKey);
-                Expression rightKeyExpression = Expression.Property(rightParameter, rightKey);
+                // One equality per ordered component, ANDed in declaration order. A single-column
+                // relationship therefore produces exactly the one equality it produced before. The
+                // shared helper handles a nullable foreign-key component against a non-nullable
+                // principal: the lifted equality stays a plain SQL equality (a NULL component matches
+                // nothing), it only makes the expression tree valid.
+                Expression? joinCondition = null;
+                for (var component = 0; component < leftKeys.Count; component++)
+                {
+                    var equality = JoinIntoSpecHelpers.BuildKeyEquality(
+                        Expression.Property(leftParameter, leftKeys[component].PropertyInfo),
+                        Expression.Property(rightParameter, rightKeys[component].PropertyInfo),
+                        leftKeys[component].PropertyInfo.PropertyType,
+                        "JoinInto");
 
-                if (Nullable.GetUnderlyingType(leftKeyExpression.Type) == rightKeyExpression.Type)
-                    rightKeyExpression = Expression.Convert(rightKeyExpression, leftKeyExpression.Type);
-                else if (Nullable.GetUnderlyingType(rightKeyExpression.Type) == leftKeyExpression.Type)
-                    leftKeyExpression = Expression.Convert(leftKeyExpression, rightKeyExpression.Type);
+                    joinCondition = joinCondition is null
+                        ? equality
+                        : Expression.AndAlso(joinCondition, equality);
+                }
 
-                var condition = Expression.Lambda(
-                    Expression.Equal(leftKeyExpression, rightKeyExpression),
-                    leftParameter,
-                    rightParameter);
+                var condition = Expression.Lambda(joinCondition!, leftParameter, rightParameter);
 
                 var from = _command.DataContext?.GetFrom(hop.RelatedType, null)
                     ?? throw new NotSupportedException(
@@ -496,23 +499,35 @@ internal static class NavigationExpansion
         {
             var parameter = GetOrCreate(path);
             var hop = path.FinalHop!;
-            var keyProperty = JoinedKey(hop);
-            var key = Expression.Property(parameter, keyProperty);
+            var keyProperties = JoinedKeys(hop);
 
-            var nullableType = key.Type.IsValueType && Nullable.GetUnderlyingType(key.Type) is null
-                ? typeof(Nullable<>).MakeGenericType(key.Type)
-                : key.Type;
+            // One null test per ordered joined-key component, ANDed in declaration order: the LEFT JOIN
+            // yields a row only when every component matched, so all joined key columns are NULL for an
+            // absent row and non-NULL for a present one. A single-column relationship therefore produces
+            // exactly the one test it produced before (never a null-safe "null == null" match).
+            Expression? presence = null;
+            for (var component = 0; component < keyProperties.Count; component++)
+            {
+                var key = Expression.Property(parameter, keyProperties[component].PropertyInfo);
 
-            Expression left = key.Type == nullableType ? key : Expression.Convert(key, nullableType);
-            var nullConstant = Expression.Constant(null, nullableType);
+                var nullableType = key.Type.IsValueType && Nullable.GetUnderlyingType(key.Type) is null
+                    ? typeof(Nullable<>).MakeGenericType(key.Type)
+                    : key.Type;
 
-            return isNull ? Expression.Equal(left, nullConstant) : Expression.NotEqual(left, nullConstant);
+                Expression left = key.Type == nullableType ? key : Expression.Convert(key, nullableType);
+                var nullConstant = Expression.Constant(null, nullableType);
+
+                var test = isNull ? Expression.Equal(left, nullConstant) : Expression.NotEqual(left, nullConstant);
+                presence = presence is null ? test : Expression.AndAlso(presence, test);
+            }
+
+            return presence!;
         }
 
-        private static PropertyInfo JoinedKey(ResolvedNavigationHop hop)
+        private static IReadOnlyList<IPropertyMetadata> JoinedKeys(ResolvedNavigationHop hop)
             => hop.Direction == NavigationDirection.DependentToPrincipal
-                ? hop.PrimaryLeg.PrincipalKey.PropertyInfo
-                : hop.PrimaryLeg.ForeignKey.PropertyInfo;
+                ? hop.PrimaryLeg.PrincipalKeys
+                : hop.PrimaryLeg.ForeignKeys;
 
         private static string HopKey(ResolvedNavigationHop hop)
             => $"{hop.DeclaringType.FullName}.{hop.Navigation.Name}";

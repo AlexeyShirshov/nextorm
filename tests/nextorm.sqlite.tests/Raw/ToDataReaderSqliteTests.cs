@@ -97,6 +97,9 @@ public class ToDataReaderSqliteTests
     {
         public bool WasDisposed { get; private set; }
 
+        /// <summary>How many times the provider disposed this command (a repeated dispose would exceed 1).</summary>
+        public int DisposeCount { get; private set; }
+
         /// <summary>When set, the command throws on the sync and the async execution path.</summary>
         public bool FailExecute { get; set; }
 
@@ -106,6 +109,7 @@ public class ToDataReaderSqliteTests
         protected override void Dispose(bool disposing)
         {
             WasDisposed = true;
+            DisposeCount++;
             base.Dispose(disposing);
         }
 
@@ -466,27 +470,57 @@ public class ToDataReaderSqliteTests
     [Fact]
     public void ToDataReader_Sqlite_DisposesPerCallCommandAndReader()
     {
+        // Re-anchored in D3/D4 (AC03, re-checked against AC02). The assertion set is the same as before
+        // (the reader owns and disposes the per-call command), but the contract behind it is now explicit:
+        // the reader terminal prepares an EXECUTION-LOCAL command — PrepareResultCommand/PrepareLobCommand
+        // pass storeInCache: false, so no plan cache ever publishes that prepared command and nothing
+        // would ever call IDbCommandHolder.ResetConnection to evict it. It therefore runs under
+        // PreparedCommandCache.None: the command is minted per execution and disposed exactly once by the
+        // reader's CommandReaderOwner when it releases the lease. The Connection policy (AC02) keeps the
+        // command across executions and disposes it on eviction; that contract belongs to plan-cached
+        // executions and is asserted by the plan-cache/ownership tests, not here.
         using var connection = CreateTrackingDb();
         var interceptor = new SqlRecordingInterceptor();
         using var ctx = new SqliteDataContext(connection, new DataContextBuilder().AddInterceptor(interceptor));
 
-        TrackingSqliteCommand? executed = null;
-        using (var reader = ctx.From<ReaderProbeEntity>()
-                   .OrderBy(x => x.Id)
-                   .Select(x => new { x.Id, x.Name })
-                   .ToDataReader())
+        var command = ctx.From<ReaderProbeEntity>()
+            .OrderBy(x => x.Id)
+            .Select(x => new { x.Id, x.Name });
+        var createdBefore = connection.CreatedCommands.Count;
+
+        var reader = command.ToDataReader();
+        TrackingSqliteCommand first;
+        using (reader)
         {
             reader.Read().Should().BeTrue();
-            executed = interceptor.LastCommand.Should().BeOfType<TrackingSqliteCommand>().Which;
-            executed.HasOpenReader.Should().BeTrue("the provider reader is attached while the outer reader is alive");
-            executed.WasDisposed.Should().BeFalse();
+            first = interceptor.LastCommand.Should().BeOfType<TrackingSqliteCommand>().Which;
+            first.HasOpenReader.Should().BeTrue("the provider reader is attached while the outer reader is alive");
+            first.DisposeCount.Should().Be(0, "the per-call command must stay alive while its reader is open");
         }
 
-        var disposed = executed!;
-        disposed.HasOpenReader.Should().BeFalse("disposing the returned reader must release the provider reader");
-        disposed.WasDisposed.Should().BeTrue("disposing the returned reader must dispose the per-call command");
+        first.HasOpenReader.Should().BeFalse("disposing the returned reader must release the provider reader");
+        first.DisposeCount.Should().Be(1, "the reader's owner must dispose the per-call command exactly once");
+        first.WasDisposed.Should().BeTrue("disposing the returned reader must dispose the per-call command");
 
-        // The connection and context stay usable after the per-call command and reader are disposed.
+        // Disposal is idempotent: a repeated reader disposal neither throws nor disposes the command again.
+        FluentActions.Invoking(reader.Dispose).Should().NotThrow("reader disposal is idempotent");
+        first.DisposeCount.Should().Be(1, "a repeated reader disposal must not dispose the command a second time");
+
+        // The disposed reader released its lease with the command, so this prepared object is immediately
+        // usable again on the same connection (a stuck lease would throw "already executing") and mints a
+        // fresh command instead of reusing the disposed one.
+        using (var second = command.ToDataReader())
+        {
+            second.Read().Should().BeTrue("the execution lease must be released when the reader is disposed");
+            second.GetInt32(0).Should().Be(1);
+        }
+
+        connection.CreatedCommands.Count.Should().Be(createdBefore + 2, "every execution mints exactly one command");
+        var secondCommand = connection.CreatedCommands[^1];
+        secondCommand.Should().NotBeSameAs(first, "PreparedCommandCache.None must give every execution its own command");
+        secondCommand.DisposeCount.Should().Be(1, "the second execution's command must also be disposed exactly once");
+
+        // The connection and context stay usable after the per-call commands and readers are disposed.
         ctx.From<ReaderProbeEntity>().Where(x => x.Id == 1).Select(x => x.Name).First().Should().Be("alpha");
     }
 

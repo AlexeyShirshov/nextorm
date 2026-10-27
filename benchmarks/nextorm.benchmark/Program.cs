@@ -42,6 +42,16 @@ if (args.Length > 0 && args[0] == "--t245-attribution")
 if (Environment.GetEnvironmentVariable("NEXTORM_G8_PROBE_ONLY") == "1")
     return SqliteBenchmarkG8Shape.RunAllProbes();
 
+// T333 revision r=2 (rv2): bounded, untimed correctness probe (no BDN job). Benchmark-project-only entry
+// point; it never touches nextorm.core and with the flag absent this file behaves exactly as before.
+if (args.Length > 0 && args[0] == "--t333-r2-probe")
+    return T333R2Probe.Run(args.Length > 1 ? args[1] : throw new ArgumentException("--t333-r2-probe needs an output path"));
+
+// T333 revision r=3 (rv3): bounded, untimed allocation probe (no BDN job). Benchmark-project-only entry
+// point; it never touches nextorm.core and with the flag absent this file behaves exactly as before.
+if (args.Length > 0 && args[0] == "--t333-r3-alloc")
+    return T333R3AllocProbe.Run(args.Length > 1 ? args[1] : throw new ArgumentException("--t333-r3-alloc needs an output path"));
+
 BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args);
 return 0;
 

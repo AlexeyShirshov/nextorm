@@ -34,6 +34,7 @@ whose message mentions [`Over`](xref:NextORM.Core.WindowFunction`1.Over(NextORM.
 | Cumulative distribution | `cume_dist()` | `cume_dist()` |
 | Interpolated percentile | `percentile_cont(fraction, property)` | `percentile_cont(f) within group (order by expr) over (...)` |
 | Discrete percentile | `percentile_disc(fraction, property)` | `percentile_disc(f) within group (order by expr) over (...)` |
+| Median (analytic) | `SqlFunctions.SqlServer.median(property)` / `SqlFunctions.MySql.median(property)` | `percentile_cont(0.5) within group (order by expr) over (...)` |
 | Buckets | `ntile(buckets)` | `ntile(n)` |
 | Previous value | `lag(property[, offset[, defaultValue]])` | `lag(expr, offset[, default])` |
 | Next value | `lead(property[, offset[, defaultValue]])` | `lead(expr, offset[, default])` |
@@ -361,6 +362,18 @@ window functions. SQL Server and MariaDB render them as
 percentiles as an ordered-set **aggregate** instead
 ([`SqlFunctions.Postgres.percentile_cont`](xref:NextORM.Core.PostgresFunctions.percentile_cont``1(System.Double,System.Linq.Expressions.Expression{System.Func{``0}}))), and
 MySQL, SQLite and ClickHouse reject the window form with `NotSupportedException`.
+
+The median has no spelling of its own on SQL Server or MariaDB: `SqlFunctions.SqlServer.median(value)` and
+`SqlFunctions.MySql.median(value)` are the same analytic composition with the fraction fixed at `0.5`
+(`percentile_cont(0.5) within group (order by value) over (...)`), so they must be completed with
+[`Over`](xref:NextORM.Core.WindowFunction`1.Over(NextORM.Core.WindowOrder,NextORM.Core.WindowFrame)) just like the window percentiles.
+These forms are **analytic**, not aggregates: they keep one row per input row, whereas an aggregate collapses
+each group to a single row. Only a partition-only window is supported (`.Over(partitionBy: ...)`, or the empty
+`over ()`); a window `ORDER BY` or a frame is refused, because the ordering comes from the value argument.
+The fraction of `percentile_cont`/`percentile_disc` is a `double` in `[0, 1]`, not a percentage, and must be
+finite and row-independent (a literal or a captured variable); a row-dependent fraction is refused at SQL
+generation. PostgreSQL's ordered-set aggregates never take `OVER`, and the generic `percentile(fraction, value)`
+member is refused by every provider — it never aliases the continuous form.
 
 | Provider | Behaviour |
 |---|---|

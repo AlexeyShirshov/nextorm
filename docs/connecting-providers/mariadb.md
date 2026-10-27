@@ -14,7 +14,11 @@ the same `MySqlConnector` driver and the same connection and parameter handling.
 capability set: `INTERSECT ALL` and `EXCEPT ALL` are supported by MariaDB 10.4 and later, so
 [`SupportsIntersectExceptAll`](xref:NextORM.Core.ISqlDialect.SupportsIntersectExceptAll) is `true`; MariaDB 10.3+ renders the window percentiles
 `percentile_cont`/`percentile_disc` (`... within group (order by ...) over (...)`), so
-[`SupportsPercentileWindow`](xref:NextORM.Core.ISqlDialect.SupportsPercentileWindow) is `true`; and `UPDATE ... RETURNING` is enabled only when an explicit
+[`SupportsPercentileWindow`](xref:NextORM.Core.ISqlDialect.SupportsPercentileWindow) is `true`; the same
+analytic shape backs `SqlFunctions.MySql.median(value).Over(...)` (rendered
+`percentile_cont(0.5) within group (order by value) over (...)`, one row per input row, partition-only
+window), while the generic `SqlFunctions.MySql.percentile` has no MariaDB spelling and throws
+`NotSupportedException`; and `UPDATE ... RETURNING` is enabled only when an explicit
 server version 13.0+ is configured ([`SupportsUpdateReturning`](xref:NextORM.Core.ISqlDialect.SupportsUpdateReturning)). It also keeps the arbitrary-value
 aggregate `any_agg` gated **off**, because MariaDB has no `ANY_VALUE` in 10.4–12.x (the SQL-2023 `T626`
 feature is still pending, targeted for 13.2). Everything else (parameters, quoting, `concat`,
@@ -146,7 +150,10 @@ MariaDB differs from [MySQL](mysql.md) in the set-operation capability, the wind
 | Session/info functions | inherited from MySQL (`current_user()`, `session_user()`, `schema()`, `database()`, `version()`) |
 | Arbitrary-value aggregate | not supported (no `ANY_VALUE` in 10.4–12.x; pending MDEV-10426, targeted for 13.2) |
 | Conditional function | inherited from MySQL (`iif(cond, a, b)` → `if(cond, a, b)`) |
-| Window percentiles | `percentile_cont`/`percentile_disc` as `... within group (order by x) over (...)` (MariaDB 10.3+) |
+| Window percentiles | `percentile_cont`/`percentile_disc` as `... within group (order by x) over (...)` (MariaDB 10.3+); analytic: one row per input row |
+| Median (analytic) | `SqlFunctions.MySql.median(v).Over(...)` → `percentile_cont(0.5) within group (order by v) over (...)`: one row per input row; partition-only `OVER` (window `ORDER BY`/frame refused) |
+| Generic percentile | not supported: `SqlFunctions.MySql.percentile(fraction, v)` throws `NotSupportedException("The percentile function is not supported by MariaDB.")` |
+| Percentile fraction | `double` in `[0, 1]` (not a percentage), validated before rendering; an out-of-range or non-finite value throws `ArgumentOutOfRangeException` |
 | Native functions | the `SqlFunctions.MySql` surface inherited from MySQL **minus** `uuid_to_bin`/`bin_to_uuid`, **plus** the MariaDB-only names (extended regexp, `nvl`/`nvl2`, `add_months`/`months_between`, `to_char`/`to_date`/`to_number`, `kdf`, `xxh3`/`xxh32`, `json_detailed`/`json_compact`, sequence access) |
 | LOB streaming (`ToStream`/`ToTextReader`) | `NotSupportedException` |
 

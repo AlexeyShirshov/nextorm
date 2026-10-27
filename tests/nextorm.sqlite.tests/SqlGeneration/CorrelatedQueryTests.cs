@@ -238,6 +238,80 @@ public class CorrelatedQueryTests
             + "limit 1) as 'c'\n from complex_entity as 't1'");
     }
 
+    /// <summary>
+    /// #279: a selector-free <c>LongCount()</c> is an aggregate terminal just like <c>Count()</c>, so it
+    /// renders the aggregate scalar subquery instead of the receiver's entity projection. SQLite's
+    /// <c>count</c> already returns 64-bit values, so no separate wide function exists; because the
+    /// provider does not enforce scalar-subquery cardinality the single-row form is <c>limit 1</c>.
+    /// </summary>
+    [Fact]
+    public void LongCountProjection_ShouldRenderAggregateSubquery()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var outer = ctx.From<IComplexEntity>();
+        var inner = ctx.From<ISimpleEntity>();
+
+        var sql = SqlOf(ctx, outer.Select(it => new
+        {
+            it.Id,
+            c = inner.Where(s => s.Id == it.Id).LongCount()
+        }));
+
+        sql.Should().Be("select t1.id, (select count(*)\n from simple_entity as 't2'\n"
+            + " where cast(t2.id as bigint) = t1.id\n"
+            + "limit 1) as 'c'\n from complex_entity as 't1'");
+    }
+
+    /// <summary>
+    /// #279 sibling parity: the <c>Count()</c> projection keeps rendering its own aggregate subquery and
+    /// renders the same SQL as <c>LongCount()</c> on SQLite (whose <c>count</c> is 64-bit either way).
+    /// </summary>
+    [Fact]
+    public void CountProjection_ShouldStillRenderItsOwnAggregate()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var outer = ctx.From<IComplexEntity>();
+        var inner = ctx.From<ISimpleEntity>();
+
+        var longCountSql = SqlOf(ctx, outer.Select(it => new
+        {
+            it.Id,
+            c = inner.Where(s => s.Id == it.Id).LongCount()
+        }));
+        var countSql = SqlOf(ctx, outer.Select(it => new
+        {
+            it.Id,
+            c = inner.Where(s => s.Id == it.Id).Count()
+        }));
+
+        countSql.Should().Contain("(select count(*)");
+        countSql.Should().Be(longCountSql);
+    }
+
+    /// <summary>
+    /// #279: the wide count counts rows, not a projected column: the subquery must not fall back to the
+    /// receiver's entity projection and must not filter on a column value, so rows whose projected value
+    /// is null are still counted.
+    /// </summary>
+    [Fact]
+    public void LongCountProjection_ShouldCountRowsNotNullableColumns()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var outer = ctx.From<IComplexEntity>();
+        var inner = ctx.From<ISimpleEntity>();
+
+        var sql = SqlOf(ctx, outer.Select(it => new
+        {
+            it.Id,
+            c = inner.Where(s => s.Id == it.Id).LongCount()
+        }));
+
+        sql.Should().Contain("(select count(*)");
+        sql.Should().NotContain("(select id\n from simple_entity");
+        sql.Should().NotContain("count(t2.");
+        sql.Should().NotContain("is not null");
+    }
+
     [Fact]
     public void AggregateOpsInsideSubquery_ShouldRenderAggregateFunctions()
     {
@@ -628,24 +702,24 @@ public class CorrelatedQueryTests
     }
 
     /// <summary>
-    /// #303: a terminal that still returns the untyped registry placeholder (builder <c>LongCount</c>
-    /// is deliberately outside the whitelist - T279 owns its wide count and result type) fails closed
-    /// with a public preparation exception naming the terminal and the operator, instead of the
-    /// internal expression-tree error.
+    /// T279: <c>LongCount()</c> carries its own 64-bit artifact (<c>count_big(*)</c> where the provider
+    /// has it, <c>count(*)</c> otherwise), so it composes into an ordered comparison exactly like the
+    /// other whitelisted aggregates instead of failing closed: the wide count renders as a correlated
+    /// scalar subquery. (#303's fail-closed path still covers the terminals that stay outside the
+    /// whitelist - see <see cref="ScalarFirstInWhere_ShouldThrowQueryPreparationException"/>.)
     /// </summary>
     [Fact]
-    public void LongCountInWhere_ShouldThrowQueryPreparationException()
+    public void LongCountInWhere_ShouldRenderCorrelatedCountSubquery()
     {
         using var ctx = SqliteTestContext.Create();
         var outer = ctx.From<IComplexEntity>();
         var pairs = ctx.From<IPairEntity>();
 
-        FluentActions.Invoking(() => SqlOf(ctx, outer
+        SqlOf(ctx, outer
                 .Where(it => pairs.Where(p => p.Id == it.Id).LongCount() > 0)
-                .Select(it => it.Id)))
-            .Should().Throw<QueryPreparationException>()
-            .WithMessage("*LongCount*")
-            .WithMessage("*GreaterThan*");
+                .Select(it => it.Id))
+            .Should().Contain("(select count(*)")
+            .And.Contain("limit 1) > 0)", "the wide count is the scalar the comparison is made against");
     }
 
     /// <summary>

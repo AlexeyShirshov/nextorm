@@ -382,25 +382,125 @@ public class SqlGenerationTests
             .Should().Contain("addDays(dt, 1)");
 
         SqlOf(ctx, e.Select(x => new { D = SqlFunctions.Sql.date_add("decade", 2, x.Datetime) }))
-            .Should().Contain("addYears(dt, (2) * 10)");
+            .Should().Contain("addYears(toDateTime64(dt, 6), (2) * 10)");
 
         // A sub-day part promotes the operand to DateTime64 so a Date-only value keeps its time.
         SqlOf(ctx, e.Select(x => new { D = SqlFunctions.Sql.date_add("milliseconds", 5, x.Datetime) }))
             .Should().Contain("addMilliseconds(toDateTime64(dt, 3), 5)");
     }
 
+    /// <summary>
+    /// The narrow <c>date_diff</c> declares <c>int?</c>, so ClickHouse's native <c>Int64</c> result is cast
+    /// down with <c>toInt32</c>; in-range zero, positive and negative spans share the same rendering
+    /// (issue #255). <c>date_diff_big</c> keeps the native width and must not inherit the cast.
+    /// </summary>
     [Fact]
-    public void DateDiff_ShouldUseClickHouseDateDiff()
+    public void DateDiff_ShouldWrapNarrowResultInToInt32()
     {
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
+        // Zero span.
         SqlOf(ctx, e.Select(x => new { D = SqlFunctions.Sql.date_diff("milliseconds", x.Datetime, x.Datetime) }))
-            .Should().Contain("dateDiff('millisecond', dt, dt)");
+            .Should().Contain("toInt32(dateDiff('millisecond', dt, dt))");
 
-        // The 64-bit variant keeps the same SQL; the result is read as Int64.
+        // Positive in-range span: the sibling date_add renderer is spliced verbatim.
+        SqlOf(ctx, e.Select(x => new { D = SqlFunctions.Sql.date_diff("second", x.Datetime, SqlFunctions.Sql.date_add("second", 5, x.Datetime)) }))
+            .Should().Contain("toInt32(dateDiff('second', dt, addSeconds(toDateTime(dt), 5)))");
+
+        // Negative in-range span: same shape, the narrow cast does not care about the sign.
+        SqlOf(ctx, e.Select(x => new { D = SqlFunctions.Sql.date_diff("second", x.Datetime, SqlFunctions.Sql.date_add("second", -5, x.Datetime)) }))
+            .Should().Contain("toInt32(dateDiff('second', dt, addSeconds(toDateTime(dt), -5)))");
+    }
+
+    [Fact]
+    public void DateDiffBig_ShouldKeepNativeInt64Result()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new { D = SqlFunctions.Sql.date_diff_big("milliseconds", x.Datetime, x.Datetime) }));
+
+        sql.Should().Contain("dateDiff('millisecond', dt, dt)");
+        // Regression guard for D5-CH-DATE-DIFF-INT32: the 64-bit form must never inherit toInt32.
+        sql.Should().NotContain("toInt32");
+    }
+
+    [Fact]
+    public void DateDiff_WithNullOperands_ShouldKeepExistingNullSemantics()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        // The field is the accepted ANSI plural name; ClickHouse folds it onto the singular part.
+        SqlOf(ctx, e.Select(x => new { D = SqlFunctions.Sql.date_diff("milliseconds", null, x.Datetime) }))
+            .Should().Contain("toInt32(dateDiff('millisecond', null, dt))");
+
+        SqlOf(ctx, e.Select(x => new { D = SqlFunctions.Sql.date_diff("milliseconds", x.Datetime, null) }))
+            .Should().Contain("toInt32(dateDiff('millisecond', dt, null))");
+
+        SqlOf(ctx, e.Select(x => new { D = SqlFunctions.Sql.date_diff("milliseconds", null, null) }))
+            .Should().Contain("toInt32(dateDiff('millisecond', null, null))");
+
+        SqlOf(ctx, e.Select(x => new { D = SqlFunctions.Sql.date_diff_big("milliseconds", null, x.Datetime) }))
+            .Should().Contain("dateDiff('millisecond', null, dt)")
+            .And.NotContain("toInt32");
+    }
+
+    [Fact]
+    public void DateDiff_WithUnsupportedField_ShouldThrow()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        // The capability guard rejects the T-SQL-less parts (decade/century/millennium) and unknown
+        // names before rendering; the exception must stay a NotSupportedException, not a silent success.
+        Action decade = () => SqlOf(ctx, e.Select(x => new { D = SqlFunctions.Sql.date_diff("decade", x.Datetime, x.Datetime) }));
+        Action century = () => SqlOf(ctx, e.Select(x => new { D = SqlFunctions.Sql.date_diff("century", x.Datetime, x.Datetime) }));
+        Action millennium = () => SqlOf(ctx, e.Select(x => new { D = SqlFunctions.Sql.date_diff("millennium", x.Datetime, x.Datetime) }));
+        Action unknown = () => SqlOf(ctx, e.Select(x => new { D = SqlFunctions.Sql.date_diff("fortnight", x.Datetime, x.Datetime) }));
+
+        decade.Should().Throw<NotSupportedException>().WithMessage("*'decade' is not a supported date_diff field*");
+        century.Should().Throw<NotSupportedException>().WithMessage("*'century' is not a supported date_diff field*");
+        millennium.Should().Throw<NotSupportedException>().WithMessage("*'millennium' is not a supported date_diff field*");
+        unknown.Should().Throw<NotSupportedException>().WithMessage("*'fortnight' is not a supported date_diff field*");
+    }
+
+    /// <summary>
+    /// Representative accepted fields at the query level (the full accepted set is table-driven on the
+    /// dialect hooks): the ANSI plural sub-day names fold to the singular ClickHouse parts, and every
+    /// accepted field renders narrow-wrapped / big-native.
+    /// </summary>
+    [Fact]
+    public void DateDiff_AcceptedFields_ShouldRenderNarrowAndBigWidths()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { D = SqlFunctions.Sql.date_diff("microseconds", x.Datetime, x.Datetime) }))
+            .Should().Contain("toInt32(dateDiff('microsecond', dt, dt))");
+        SqlOf(ctx, e.Select(x => new { D = SqlFunctions.Sql.date_diff_big("microseconds", x.Datetime, x.Datetime) }))
+            .Should().Contain("dateDiff('microsecond', dt, dt)").And.NotContain("toInt32");
+
+        SqlOf(ctx, e.Select(x => new { D = SqlFunctions.Sql.date_diff("milliseconds", x.Datetime, x.Datetime) }))
+            .Should().Contain("toInt32(dateDiff('millisecond', dt, dt))");
         SqlOf(ctx, e.Select(x => new { D = SqlFunctions.Sql.date_diff_big("milliseconds", x.Datetime, x.Datetime) }))
-            .Should().Contain("dateDiff('millisecond', dt, dt)");
+            .Should().Contain("dateDiff('millisecond', dt, dt)").And.NotContain("toInt32");
+
+        SqlOf(ctx, e.Select(x => new { D = SqlFunctions.Sql.date_diff("hour", x.Datetime, x.Datetime) }))
+            .Should().Contain("toInt32(dateDiff('hour', dt, dt))");
+        SqlOf(ctx, e.Select(x => new { D = SqlFunctions.Sql.date_diff_big("hour", x.Datetime, x.Datetime) }))
+            .Should().Contain("dateDiff('hour', dt, dt)").And.NotContain("toInt32");
+
+        SqlOf(ctx, e.Select(x => new { D = SqlFunctions.Sql.date_diff("day", x.Datetime, x.Datetime) }))
+            .Should().Contain("toInt32(dateDiff('day', dt, dt))");
+        SqlOf(ctx, e.Select(x => new { D = SqlFunctions.Sql.date_diff_big("day", x.Datetime, x.Datetime) }))
+            .Should().Contain("dateDiff('day', dt, dt)").And.NotContain("toInt32");
+
+        SqlOf(ctx, e.Select(x => new { D = SqlFunctions.Sql.date_diff("year", x.Datetime, x.Datetime) }))
+            .Should().Contain("toInt32(dateDiff('year', dt, dt))");
+        SqlOf(ctx, e.Select(x => new { D = SqlFunctions.Sql.date_diff_big("year", x.Datetime, x.Datetime) }))
+            .Should().Contain("dateDiff('year', dt, dt)").And.NotContain("toInt32");
     }
 
     [Fact]
@@ -921,7 +1021,7 @@ public class SqlGenerationTests
         var e = ctx.From<IArrayEntity>();
 
         SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.group_array(x.Id) }))
-            .Should().Contain("groupArray(id)");
+            .Should().Contain("cast(groupArray(id) as Array(Int32))");
     }
 
     [Fact]
@@ -931,7 +1031,7 @@ public class SqlGenerationTests
         var e = ctx.From<IArrayEntity>();
 
         SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.group_uniq_array(x.Id) }))
-            .Should().Contain("groupUniqArray(id)");
+            .Should().Contain("cast(groupUniqArray(id) as Array(Int32))");
     }
 
     [Fact]
@@ -1270,8 +1370,8 @@ public class SqlGenerationTests
             W = SqlFunctions.ClickHouse.top_k_weighted(2, x.Id, x.Int)
         }));
 
-        sql.Should().Contain("topK(3)(id)");
-        sql.Should().Contain("topKWeighted(2)(id, nullableint)");
+        sql.Should().Contain("cast(topK(3)(id) as Array(Int64))");
+        sql.Should().Contain("cast(topKWeighted(2)(id, nullableint) as Array(Int64))");
     }
 
     [Fact]
@@ -1315,7 +1415,7 @@ public class SqlGenerationTests
             T = SqlFunctions.ClickHouse.top_k(k, x.Id)
         }));
 
-        sql.Should().Contain("topK(@k)(id)");
+        sql.Should().Contain("cast(topK(@k)(id) as Array(Int64))");
     }
 
     [Fact]
@@ -1330,7 +1430,7 @@ public class SqlGenerationTests
         _ = ctx.GetPreparedQueryCommand(Build(), false, true, CancellationToken.None);
         var second = (DbPreparedQueryCommand<long[]>)ctx.GetPreparedQueryCommand(Build(), false, true, CancellationToken.None);
 
-        Normalize(second.DbCommand.CommandText).Should().Contain("topK(@k)(id)");
+        Normalize(second.DbCommand.CommandText).Should().Contain("cast(topK(@k)(id) as Array(Int64))");
     }
 
     [Fact]
@@ -1405,7 +1505,7 @@ public class SqlGenerationTests
             N = SqlFunctions.ClickHouse.length(SqlFunctions.ClickHouse.retention(x.Id <= 2, x.Id <= 5))
         }));
 
-        sql.Should().Contain("toInt64(length(retention((id <= 2), (id <= 5))))");
+        sql.Should().Contain("toInt64(length(cast(retention((id <= 2), (id <= 5)) as Array(Int32))))");
     }
 
     [Fact]
@@ -2660,9 +2760,9 @@ public class SqlGenerationTests
             C = SqlFunctions.ClickHouse.length(SqlFunctions.ClickHouse.range(1, 5, 2))
         }));
 
-        sql.Should().Contain("toInt64(length(range(5)))");
-        sql.Should().Contain("toInt64(length(range(1, 5)))");
-        sql.Should().Contain("toInt64(length(range(1, 5, 2)))");
+        sql.Should().Contain("toInt64(length(cast(range(5) as Array(Int64))))");
+        sql.Should().Contain("toInt64(length(cast(range(1, 5) as Array(Int64))))");
+        sql.Should().Contain("toInt64(length(cast(range(1, 5, 2) as Array(Int64))))");
     }
 
     [Fact]
