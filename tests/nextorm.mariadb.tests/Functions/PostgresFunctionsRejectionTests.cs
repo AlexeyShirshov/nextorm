@@ -216,7 +216,19 @@ public class PostgresFunctionsRejectionTests
             "pg_ts_config_is_visible",
             "pg_ts_dict_is_visible",
             "pg_ts_parser_is_visible",
-            "pg_ts_template_is_visible"
+            "pg_ts_template_is_visible",
+            "pg_type_is_visible",
+            "pg_char_to_encoding",
+            "pg_encoding_to_char",
+            "pg_basetype",
+            "pg_describe_object",
+            "pg_tablespace_location",
+            "pg_settings_get_flags",
+            "pg_index_has_property",
+            "pg_indexam_has_property",
+            "pg_index_column_has_property",
+            "pg_input_is_valid",
+            "pg_get_serial_sequence"
         })
         {
             scalars.Supports(name).Should().BeFalse($"'{name}' is PostgreSQL-only");
@@ -279,6 +291,37 @@ public class PostgresFunctionsRejectionTests
             ("pg_ts_dict_is_visible", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_ts_dict_is_visible("0") }))),
             ("pg_ts_parser_is_visible", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_ts_parser_is_visible("0") }))),
             ("pg_ts_template_is_visible", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_ts_template_is_visible("0") }))),
+        };
+
+        foreach (var (name, act) in cases)
+            act.Should().Throw<NotSupportedException>().WithMessage($"*{name}*not supported*");
+    }
+
+    /// <summary>
+    /// The PostgreSQL encoding, catalog-format and index-property helpers of #281 are PostgreSQL-only on
+    /// this provider as well: each enrolled name is refused during preparation with a message naming it.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void EncodingAndCatalogFormatFamily_ShouldThrowBecauseNotSupported()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var cases = new (string Name, Action Act)[]
+        {
+            ("pg_type_is_visible", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_type_is_visible("0") }))),
+            ("pg_char_to_encoding", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_char_to_encoding("UTF8") }))),
+            ("pg_encoding_to_char", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_encoding_to_char(6) }))),
+            ("pg_basetype", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_basetype("integer") }))),
+            ("pg_describe_object", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_describe_object("0", "0", 0) }))),
+            ("pg_tablespace_location", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_tablespace_location("0") }))),
+            ("pg_settings_get_flags", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_settings_get_flags("work_mem") }))),
+            ("pg_index_has_property", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_index_has_property("pg_class_oid_index", "clusterable") }))),
+            ("pg_indexam_has_property", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_indexam_has_property("0", "can_order") }))),
+            ("pg_index_column_has_property", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_index_column_has_property("pg_class_oid_index", 1, "orderable") }))),
+            ("pg_input_is_valid", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_input_is_valid("123", "integer") }))),
+            ("pg_get_serial_sequence", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_get_serial_sequence("pg_class", "oid") }))),
         };
 
         foreach (var (name, act) in cases)

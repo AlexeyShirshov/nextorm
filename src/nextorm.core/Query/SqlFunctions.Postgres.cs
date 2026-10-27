@@ -1221,6 +1221,94 @@ namespace NextORM.Core;
         /// </summary>
         public bool? pg_ts_template_is_visible(string? oid) => default!;
 
+        /// <summary>
+        /// Whether the data type with the given <paramref name="oid"/> is visible in the current search
+        /// path (<c>pg_type_is_visible(oid)</c>); NULL when the OID names no type. The OID is passed in
+        /// its text form. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public bool? pg_type_is_visible(string? oid) => default!;
+
+        /// <summary>
+        /// The numeric code of the encoding called <paramref name="name"/>
+        /// (<c>pg_char_to_encoding(name)</c>), or <c>-1</c> when the name is not a known encoding.
+        /// Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public int? pg_char_to_encoding(string? name) => default!;
+
+        /// <summary>
+        /// The canonical name of the encoding with the given <paramref name="code"/>
+        /// (<c>pg_encoding_to_char(code)</c>); code <c>0</c> is <c>SQL_ASCII</c>, and an unknown code
+        /// yields the empty string. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_encoding_to_char(int? code) => default!;
+
+        /// <summary>
+        /// The base type of <paramref name="type"/> (<c>pg_basetype(regtype)</c>) in its text form, e.g.
+        /// <c>integer</c> for <c>integer</c> and <c>integer[]</c> for an integer array; an unknown type
+        /// name raises a server error. The <c>regtype</c> result is cast to text because the driver
+        /// cannot read a <c>regtype</c>. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_basetype(string? type) => default!;
+
+        /// <summary>
+        /// A human-readable description of a catalog object
+        /// (<c>pg_describe_object(classid, objid, objsubid)</c>), e.g. <c>table pg_class</c>; NULL when
+        /// the OIDs name no object. Both OIDs are passed in their text form. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_describe_object(string? classOid, string? objectOid, int? objectSubId) => default!;
+
+        /// <summary>
+        /// The file-system location of the tablespace with the given <paramref name="oid"/>
+        /// (<c>pg_tablespace_location(oid)</c>); the empty string for the default tablespace. The OID is
+        /// passed in its text form. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_tablespace_location(string? oid) => default!;
+
+        /// <summary>
+        /// The flags of the run-time setting <paramref name="setting"/>
+        /// (<c>pg_settings_get_flags(setting)</c>), e.g. <c>EXPLAIN</c>; an empty array when it has none
+        /// and NULL for an unknown setting. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string?[] pg_settings_get_flags(string? setting) => default!;
+
+        /// <summary>
+        /// Whether the index has the named property (<c>pg_index_has_property(index, property)</c>), e.g.
+        /// <c>clusterable</c>; NULL when the property is not recognised. The index is a <c>regclass</c>
+        /// name or a numeric OID in text form. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public bool? pg_index_has_property(string? index, string? property) => default!;
+
+        /// <summary>
+        /// Whether the index access method has the named property
+        /// (<c>pg_indexam_has_property(amoid, property)</c>), e.g. <c>can_order</c>; NULL when the
+        /// property is not recognised. The access-method OID is passed in its text form. Gated per name
+        /// by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public bool? pg_indexam_has_property(string? accessMethodOid, string? property) => default!;
+
+        /// <summary>
+        /// Whether the index column has the named property
+        /// (<c>pg_index_column_has_property(index, column, property)</c>), e.g. <c>orderable</c>; NULL
+        /// when the property is not recognised. The index is a <c>regclass</c> name or a numeric OID in
+        /// text form. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public bool? pg_index_column_has_property(string? index, int? columnNumber, string? property) => default!;
+
+        /// <summary>
+        /// Whether <paramref name="value"/> is valid input for the type <paramref name="typeName"/>
+        /// (<c>pg_input_is_valid(value, type)</c>), without raising an error; an unknown type name is
+        /// still an error. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public bool? pg_input_is_valid(string? value, string? typeName) => default!;
+
+        /// <summary>
+        /// The sequence owned by a serial or identity column
+        /// (<c>pg_get_serial_sequence(table, column)</c>), or NULL when the column has none; an unknown
+        /// column is an error. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_get_serial_sequence(string? table, string? column) => default!;
+
         /// <summary>The current value of the run-time setting <paramref name="name"/> (<c>current_setting</c>).</summary>
         public string? current_setting(string? name) => default!;
 

@@ -59,7 +59,14 @@ internal static class CrossProviderScalarTranslator
         nameof(PostgresFunctions.pg_operator_is_visible), nameof(PostgresFunctions.pg_opfamily_is_visible),
         nameof(PostgresFunctions.pg_statistics_obj_is_visible), nameof(PostgresFunctions.pg_table_is_visible),
         nameof(PostgresFunctions.pg_ts_config_is_visible), nameof(PostgresFunctions.pg_ts_dict_is_visible),
-        nameof(PostgresFunctions.pg_ts_parser_is_visible), nameof(PostgresFunctions.pg_ts_template_is_visible)
+        nameof(PostgresFunctions.pg_ts_parser_is_visible), nameof(PostgresFunctions.pg_ts_template_is_visible),
+        nameof(PostgresFunctions.pg_type_is_visible), nameof(PostgresFunctions.pg_char_to_encoding),
+        nameof(PostgresFunctions.pg_encoding_to_char), nameof(PostgresFunctions.pg_basetype),
+        nameof(PostgresFunctions.pg_describe_object), nameof(PostgresFunctions.pg_tablespace_location),
+        nameof(PostgresFunctions.pg_settings_get_flags), nameof(PostgresFunctions.pg_index_has_property),
+        nameof(PostgresFunctions.pg_indexam_has_property),
+        nameof(PostgresFunctions.pg_index_column_has_property), nameof(PostgresFunctions.pg_input_is_valid),
+        nameof(PostgresFunctions.pg_get_serial_sequence)
     };
 
     /// <summary>

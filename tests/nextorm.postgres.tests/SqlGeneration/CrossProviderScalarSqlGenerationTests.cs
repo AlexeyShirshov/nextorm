@@ -521,6 +521,65 @@ public class CrossProviderScalarSqlGenerationTests
             .Should().Contain("pg_trigger_depth()");
     }
 
+    /// <summary>
+    /// The encoding, catalog-format and index-property helpers of #281. Three render shapes are
+    /// asserted: a plain call, an <c>oid</c>/<c>regtype</c> argument cast (a text parameter does not
+    /// resolve to those overloads) and the <c>regtype</c> result cast to text.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void PostgreSQLEncodingAndCatalogFormatFamily_ShouldEmitNativeSpellings()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            Tiv = SqlFunctions.Postgres.pg_type_is_visible(SqlFunctions.Parameter<string>(0)),
+            Cte = SqlFunctions.Postgres.pg_char_to_encoding("UTF8"),
+            Etc = SqlFunctions.Postgres.pg_encoding_to_char(6),
+            Bt = SqlFunctions.Postgres.pg_basetype(SqlFunctions.Parameter<string>(1)),
+            Do = SqlFunctions.Postgres.pg_describe_object(
+                SqlFunctions.Parameter<string>(2), SqlFunctions.Parameter<string>(3), 0),
+            Tl = SqlFunctions.Postgres.pg_tablespace_location(SqlFunctions.Parameter<string>(4)),
+            Sgf = SqlFunctions.Postgres.pg_settings_get_flags("work_mem"),
+            Ihp = SqlFunctions.Postgres.pg_index_has_property("pg_class_oid_index", "clusterable"),
+            Iahp = SqlFunctions.Postgres.pg_indexam_has_property(SqlFunctions.Parameter<string>(5), "can_order"),
+            Ichp = SqlFunctions.Postgres.pg_index_column_has_property("pg_class_oid_index", 1, "orderable"),
+            Iiv = SqlFunctions.Postgres.pg_input_is_valid("123", "integer"),
+            Gss = SqlFunctions.Postgres.pg_get_serial_sequence("pg_class", "oid")
+        }));
+
+        foreach (var name in new[]
+        {
+            "pg_type_is_visible", "pg_char_to_encoding", "pg_encoding_to_char",
+            "pg_basetype", "pg_describe_object", "pg_tablespace_location",
+            "pg_settings_get_flags", "pg_index_has_property", "pg_indexam_has_property",
+            "pg_index_column_has_property", "pg_input_is_valid", "pg_get_serial_sequence"
+        })
+        {
+            sql.Should().Contain($"{name}(");
+            PostgresDialect.Instance.ScalarFunctions.Supports(name).Should().BeTrue($"'{name}' is delivered on PostgreSQL");
+        }
+
+        sql.Should().Contain("pg_type_is_visible(cast(@norm_p0 as oid))");
+        sql.Should().Contain("pg_char_to_encoding(E'UTF8')");
+        sql.Should().Contain("pg_encoding_to_char(6)");
+        sql.Should().Contain("cast(pg_basetype(cast(@norm_p1 as regtype)) as text)");
+        sql.Should().Contain("pg_describe_object(cast(@norm_p2 as oid), cast(@norm_p3 as oid), 0)");
+        sql.Should().Contain("pg_tablespace_location(cast(@norm_p4 as oid))");
+        sql.Should().Contain("pg_settings_get_flags(E'work_mem')");
+        sql.Should().Contain("pg_index_has_property(E'pg_class_oid_index', E'clusterable')");
+        sql.Should().Contain("pg_indexam_has_property(cast(@norm_p5 as oid), E'can_order')");
+        sql.Should().Contain("pg_index_column_has_property(E'pg_class_oid_index', 1, E'orderable')");
+        sql.Should().Contain("pg_input_is_valid(E'123', E'integer')");
+        sql.Should().Contain("pg_get_serial_sequence(E'pg_class', E'oid')");
+
+        // Positive control: the neighbouring visibility helper still renders on the same shape.
+        SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_table_is_visible("1259") }))
+            .Should().Contain("pg_table_is_visible(cast(E'1259' as oid))");
+    }
+
     [Fact]
     [Trait("Issue", "281")]
     public void RefusedFunctions_ShouldFailBeforeAnySqlIsEmitted()

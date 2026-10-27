@@ -952,7 +952,11 @@ internal sealed class PostgresScalarFunctions : IScalarFunctions
         "pg_collation_is_visible" or "pg_conversion_is_visible" or "pg_function_is_visible" or
         "pg_opclass_is_visible" or "pg_operator_is_visible" or "pg_opfamily_is_visible" or
         "pg_statistics_obj_is_visible" or "pg_table_is_visible" or "pg_ts_config_is_visible" or
-        "pg_ts_dict_is_visible" or "pg_ts_parser_is_visible" or "pg_ts_template_is_visible";
+        "pg_ts_dict_is_visible" or "pg_ts_parser_is_visible" or "pg_ts_template_is_visible" or
+        "pg_type_is_visible" or "pg_char_to_encoding" or "pg_encoding_to_char" or "pg_basetype" or
+        "pg_describe_object" or "pg_tablespace_location" or "pg_settings_get_flags" or
+        "pg_index_has_property" or "pg_indexam_has_property" or "pg_index_column_has_property" or
+        "pg_input_is_valid" or "pg_get_serial_sequence";
 
     /// <inheritdoc/>
     public string Render(string name, IReadOnlyList<string> args) => name switch
@@ -992,7 +996,10 @@ internal sealed class PostgresScalarFunctions : IScalarFunctions
             "current_schemas" or "pg_postmaster_start_time" or "pg_current_logfile" or
             "pg_conf_load_time" or "pg_jit_available" or
             "pg_notification_queue_usage" or "pg_blocking_pids" or
-            "pg_safe_snapshot_blocking_pids" or "pg_trigger_depth"
+            "pg_safe_snapshot_blocking_pids" or "pg_trigger_depth" or
+            "pg_char_to_encoding" or "pg_encoding_to_char" or "pg_settings_get_flags" or
+            "pg_index_has_property" or "pg_index_column_has_property" or "pg_input_is_valid" or
+            "pg_get_serial_sequence"
             => $"{name}({string.Join(", ", args)})",
         // oid-typed arguments: a text parameter does not resolve to the oid overload (measured:
         // "function pg_table_is_visible(text) does not exist"), so the argument is cast, like the
@@ -1001,8 +1008,15 @@ internal sealed class PostgresScalarFunctions : IScalarFunctions
             "pg_function_is_visible" or "pg_opclass_is_visible" or "pg_operator_is_visible" or
             "pg_opfamily_is_visible" or "pg_statistics_obj_is_visible" or "pg_table_is_visible" or
             "pg_ts_config_is_visible" or "pg_ts_dict_is_visible" or "pg_ts_parser_is_visible" or
-            "pg_ts_template_is_visible"
+            "pg_ts_template_is_visible" or "pg_type_is_visible"
             => $"{name}(cast({args[0]} as oid))",
+        "pg_tablespace_location" => $"pg_tablespace_location(cast({args[0]} as oid))",
+        "pg_indexam_has_property" => $"pg_indexam_has_property(cast({args[0]} as oid), {args[1]})",
+        "pg_describe_object" =>
+            $"pg_describe_object(cast({args[0]} as oid), cast({args[1]} as oid), {args[2]})",
+        // regtype argument and regtype result: the driver cannot read a regtype, so the result is cast
+        // to text (as pg_typeof does) and the text argument is cast to regtype to resolve the overload.
+        "pg_basetype" => $"cast(pg_basetype(cast({args[0]} as regtype)) as text)",
         _ => throw new NotSupportedException($"The {name} function is not supported by PostgreSQL.")
     };
 

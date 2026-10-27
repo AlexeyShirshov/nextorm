@@ -1166,7 +1166,19 @@ public class InMemoryTests
             ("pg_ts_config_is_visible", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_ts_config_is_visible("0") }).ToList()),
             ("pg_ts_dict_is_visible", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_ts_dict_is_visible("0") }).ToList()),
             ("pg_ts_parser_is_visible", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_ts_parser_is_visible("0") }).ToList()),
-            ("pg_ts_template_is_visible", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_ts_template_is_visible("0") }).ToList())
+            ("pg_ts_template_is_visible", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_ts_template_is_visible("0") }).ToList()),
+            ("pg_type_is_visible", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_type_is_visible("0") }).ToList()),
+            ("pg_char_to_encoding", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_char_to_encoding("UTF8") }).ToList()),
+            ("pg_encoding_to_char", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_encoding_to_char(6) }).ToList()),
+            ("pg_basetype", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_basetype("integer") }).ToList()),
+            ("pg_describe_object", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_describe_object("0", "0", 0) }).ToList()),
+            ("pg_tablespace_location", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_tablespace_location("0") }).ToList()),
+            ("pg_settings_get_flags", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_settings_get_flags("work_mem") }).ToList()),
+            ("pg_index_has_property", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_index_has_property("pg_class_oid_index", "clusterable") }).ToList()),
+            ("pg_indexam_has_property", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_indexam_has_property("0", "can_order") }).ToList()),
+            ("pg_index_column_has_property", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_index_column_has_property("pg_class_oid_index", 1, "orderable") }).ToList()),
+            ("pg_input_is_valid", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_input_is_valid("123", "integer") }).ToList()),
+            ("pg_get_serial_sequence", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_get_serial_sequence("pg_class", "oid") }).ToList()),
         };
 
         foreach (var (name, act) in cases)

@@ -1641,6 +1641,93 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
 
     }
 
+    /// <summary>
+    /// The encoding, catalog-format and index-property helpers of #281 against the live server: values,
+    /// the NULL and error cases measured on 17.11 (<c>pg_char_to_encoding</c> returns -1 for an unknown
+    /// name, the empty string for the default tablespace, NULL for an unrecognised property) and the
+    /// exact CLR types.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void EncodingAndCatalogFormatFamily_ShouldComputeValuesNullsAndClrTypes()
+    {
+        var ctx = (DataContext)_sut.DataProvider;
+        var typeOid = Scalar(ctx, "select oid from pg_type where typname = 'int4' and typnamespace = 'pg_catalog'::regnamespace");
+        var amOid = Scalar(ctx, "select oid from pg_am where amname = 'btree'");
+        var classOid = "1259";
+
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Tiv = SqlFunctions.Postgres.pg_type_is_visible(typeOid),
+                Cte = SqlFunctions.Postgres.pg_char_to_encoding("UTF8"),
+                CteUnknown = SqlFunctions.Postgres.pg_char_to_encoding("nonesuch"),
+                Etc = SqlFunctions.Postgres.pg_encoding_to_char(6),
+                Bt = SqlFunctions.Postgres.pg_basetype("integer"),
+                Bta = SqlFunctions.Postgres.pg_basetype("integer[]"),
+                Do = SqlFunctions.Postgres.pg_describe_object(classOid, classOid, 0),
+                Tl = SqlFunctions.Postgres.pg_tablespace_location("0"),
+                Sgf = SqlFunctions.Postgres.pg_settings_get_flags("work_mem"),
+                SgfEmpty = SqlFunctions.Postgres.pg_settings_get_flags("shared_buffers"),
+                SgfUnknown = SqlFunctions.Postgres.pg_settings_get_flags("nonesuch"),
+                Ihp = SqlFunctions.Postgres.pg_index_has_property("pg_class_oid_index", "clusterable"),
+                IhpUnknown = SqlFunctions.Postgres.pg_index_has_property("pg_class_oid_index", "nonesuch"),
+                Iahp = SqlFunctions.Postgres.pg_indexam_has_property(amOid, "can_order"),
+                Ichp = SqlFunctions.Postgres.pg_index_column_has_property("pg_class_oid_index", 1, "orderable"),
+                Iiv = SqlFunctions.Postgres.pg_input_is_valid("123", "integer"),
+                IivBad = SqlFunctions.Postgres.pg_input_is_valid("abc", "integer"),
+                Gss = SqlFunctions.Postgres.pg_get_serial_sequence("pg_class", "oid"),
+                MissingType = SqlFunctions.Postgres.pg_type_is_visible("0"),
+                NullInput = SqlFunctions.Postgres.pg_input_is_valid(null, "integer"),
+                NullAm = SqlFunctions.Postgres.pg_indexam_has_property(null, "can_order")
+            })
+            .First();
+
+        r.Tiv.Should().BeTrue("int4 is a visible catalog type");
+        r.Cte.Should().Be(6, "UTF8 is encoding code 6");
+        r.CteUnknown.Should().Be(-1, "an unknown encoding name yields -1, not an error");
+        r.Etc.Should().Be("UTF8");
+        r.Bt.Should().Be("integer");
+        r.Bta.Should().Be("integer[]", "the base type of an array is its element type");
+        r.Do.Should().Be("table pg_class");
+        r.Tl.Should().BeEmpty("the default tablespace has the empty location");
+        r.Sgf.Should().Equal("EXPLAIN");
+        r.SgfEmpty.Should().BeEmpty();
+        r.SgfUnknown.Should().BeNull();
+        r.Ihp.Should().BeTrue();
+        r.IhpUnknown.Should().BeNull("an unrecognised property yields NULL, not false");
+        r.Iahp.Should().BeTrue();
+        r.Ichp.Should().BeTrue();
+        r.Iiv.Should().BeTrue();
+        r.IivBad.Should().BeFalse();
+        r.Gss.Should().BeNull("pg_class.oid is not a serial column");
+        r.MissingType.Should().BeNull();
+        r.NullInput.Should().BeNull();
+        r.NullAm.Should().BeNull();
+
+        // Exact CLR types.
+        ((object)r.Tiv!).Should().BeOfType<bool>();
+        ((object)r.Cte!).Should().BeOfType<int>();
+        ((object)r.Etc!).Should().BeOfType<string>();
+        ((object)r.Bt!).Should().BeOfType<string>();
+        ((object)r.Do!).Should().BeOfType<string>();
+        ((object)r.Tl!).Should().BeOfType<string>();
+        ((object)r.Sgf!).Should().BeOfType<string[]>();
+        ((object)r.Ihp!).Should().BeOfType<bool>();
+        ((object)r.Iiv!).Should().BeOfType<bool>();
+
+        // Two error cases: an unknown type name is a server error in both helpers.
+        var badBaseType = () => _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new { V = SqlFunctions.Postgres.pg_basetype("nonesuch") })
+            .First();
+        badBaseType.Should().Throw<PostgresException>().Which.SqlState.Should().Be("42704");
+
+        var badInputType = () => _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new { V = SqlFunctions.Postgres.pg_input_is_valid("1", "nosuchtype") })
+            .First();
+        badInputType.Should().Throw<PostgresException>().Which.SqlState.Should().Be("42704");
+    }
+
     [Fact]
     [Trait("Issue", "281")]
     public void NumericFamily_ShouldComputeValuesNullsAndClrTypes()
