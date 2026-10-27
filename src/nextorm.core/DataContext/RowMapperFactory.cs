@@ -58,10 +58,11 @@ internal static class RowMapperFactory
     /// </param>
     /// <param name="timeOnlyRefusal">
     /// The context's <see cref="TimeOnly"/> policy: <see langword="null"/> when the provider has a verified
-    /// native time-of-day reader, otherwise the refusal message. The default is a generic refusal, never
-    /// "supported", so an internal caller that cannot reach the context policy fails closed.
+    /// native time-of-day reader, otherwise the refusal message. The default is
+    /// <see cref="TimeOnlyProjectionReader.GenericRefusal"/>, never "supported", so an internal caller that
+    /// cannot reach the context policy fails closed.
     /// </param>
-    public static Expression MapColumn(SelectExpression column, Expression param, bool supportsNativeDuration = true, ISqlDialect? dialect = null, string? timeOnlyRefusal = null)
+    public static Expression MapColumn(SelectExpression column, Expression param, bool supportsNativeDuration = true, ISqlDialect? dialect = null, string? timeOnlyRefusal = TimeOnlyProjectionReader.GenericRefusal)
     {
         if (column.IsLobStreaming)
             throw new NotSupportedException(

@@ -38,8 +38,9 @@
   возвращённый interval с ненулевой месячной составляющей (любого знака) отклоняется через
   `InvalidCastException` с указанием календарных месяцев, дни и микросекунды при нулевых месяцах
   конвертируются точно с проверяемой арифметикой (непредставимое значение падает с
-  `OverflowException`, а не переполняется-обёрткой), а колонки `time`/`timetz` сохраняют прежний
-  аксессор `TimeSpan` драйвера;
+  `OverflowException`, а не переполняется-обёрткой), колонки `time`/`timetz` сохраняют прежний
+  аксессор `TimeSpan` драйвера, а для колонки `time` поддерживается проекция `TimeOnly` (точность до
+  микросекунды, домен суток проверяется);
 - агрегаты `string_agg`/`array_agg` включены ([`SupportsStringArrayAggregates`](xref:NextORM.Core.ISqlDialect.SupportsStringArrayAggregates) равно `true`);
 - полнотекстовый поиск включён ([`SupportsFullText`](xref:NextORM.Core.ISqlDialect.SupportsFullText) равно `true`): `SqlFunctions.Sql.contains` отрисовывает
   `to_tsvector(col) @@ plainto_tsquery(search)`, а `freetext` — `websearch_to_tsquery(search)`;

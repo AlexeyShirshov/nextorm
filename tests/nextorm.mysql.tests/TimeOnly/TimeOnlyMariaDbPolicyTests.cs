@@ -84,6 +84,81 @@ public class TimeOnlyMariaDbPolicyTests
         postgresAccessor!.Type.Should().Be(typeof(TimeOnly?));
     }
 
+    /// <summary>
+    /// The provider policy is the whole contract: under a permitted provider the composed
+    /// <see cref="TimeOnly"/> mapper keeps the exact day-of-day value and enforces the day domain, while under
+    /// a refusing provider the mapper cannot even be composed. Both halves run against the real context type
+    /// of each provider (placeholder connection strings, no server contacted), so a provider override that
+    /// silently widened or lost the policy fails here.
+    /// <para>
+    /// SQLite is not part of the matrix: <c>nextorm.sqlite</c> is not a reference of this test project, and
+    /// adding one is outside the task's planned footprint. Its refusal is covered by the core/SQLite suites
+    /// and by the live integration suite.
+    /// </para>
+    /// </summary>
+    [Theory]
+    [InlineData("SqlServer", null)]
+    [InlineData("PostgreSQL", null)]
+    [InlineData("MySQL", MySqlRefusal)]
+    [InlineData("MariaDB", MariaDbRefusal)]
+    [InlineData("ClickHouse", ClickHouseRefusal)]
+    public void MapColumn_DomainGuard_ShouldHoldUnderEveryProviderPolicy(string provider, string? expectedRefusal)
+    {
+        using var context = CreateContext(provider);
+        var record = Expression.Parameter(typeof(IDataRecord), "record");
+
+        if (expectedRefusal is null)
+        {
+            var body = context.MapColumnExpression(Column(), record);
+            body.Type.Should().Be(typeof(TimeOnly?));
+
+            var mapper = Expression.Lambda<Func<IDataRecord, TimeOnly?>>(body, record).Compile();
+
+            // The largest representable time of day keeps every tick: no modulo, no truncation.
+            Read(mapper, TimeSpan.FromTicks(TimeSpan.TicksPerDay - 1))!.Value
+                .Should().Be(TimeOnly.FromTimeSpan(TimeSpan.FromTicks(863_999_999_999)));
+
+            // A full day is a duration, not a time of day: refused instead of wrapped to midnight.
+            FluentActions.Invoking(() => Read(mapper, TimeSpan.FromTicks(TimeSpan.TicksPerDay)))
+                .Should().Throw<NotSupportedException>()
+                .WithMessage(TimeOnlyProjectionReader.OutOfDomainMessage);
+
+            // Only a native TimeOnly/TimeSpan is a time of day: an integer is never reinterpreted.
+            FluentActions.Invoking(() => Read(mapper, 42))
+                .Should().Throw<NotSupportedException>()
+                .WithMessage(TimeOnlyProjectionReader.AlienValueMessage);
+        }
+        else
+        {
+            FluentActions.Invoking(() => context.MapColumnExpression(Column(), record))
+                .Should().Throw<NotSupportedException>()
+                .WithMessage(expectedRefusal);
+        }
+    }
+
+    private static DataContext CreateContext(string provider) => provider switch
+    {
+        "SqlServer" => new SqlServerDataContext(PlaceholderConnectionString, new DataContextBuilder()),
+        "PostgreSQL" => new PostgresDataContext(PlaceholderConnectionString, new DataContextBuilder()),
+        "MySQL" => new MySqlDataContext(PlaceholderConnectionString, new DataContextBuilder()),
+        "MariaDB" => new MariaDbDataContext(PlaceholderConnectionString, new DataContextBuilder()),
+        "ClickHouse" => new ClickHouseDataContext(
+            "Host=localhost;Port=8123;Database=nextorm;Username=nextorm;Password=nextorm",
+            new DataContextBuilder()),
+        _ => throw new ArgumentOutOfRangeException(nameof(provider), provider, "Unknown provider"),
+    };
+
+    // One single-column reader whose GetValue returns the supplied boxed value.
+    private static TimeOnly? Read(Func<IDataRecord, TimeOnly?> mapper, object value)
+    {
+        var table = new DataTable();
+        table.Columns.Add("T", typeof(object));
+        table.Rows.Add(value);
+        using var reader = table.CreateDataReader();
+        reader.Read().Should().BeTrue();
+        return mapper(reader);
+    }
+
     private static string RefusalOf(DataContext context)
         => FluentActions.Invoking(() => context.MapColumnExpression(Column(), Expression.Parameter(typeof(IDataRecord), "record")))
             .Should().Throw<NotSupportedException>()

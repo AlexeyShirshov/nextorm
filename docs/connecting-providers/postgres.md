@@ -38,8 +38,9 @@
 - a `TimeSpan` column maps a PostgreSQL `interval` only for **zero-month** values: a returned interval
   carrying a non-zero month component (either sign) is rejected with `InvalidCastException` naming
   calendar months, zero-month days and microseconds convert exactly with checked arithmetic (an
-  unrepresentable value fails with `OverflowException` instead of wrapping), and `time`/`timetz`
-  columns keep the driver's `TimeSpan` accessor unchanged;
+  unrepresentable value fails with `OverflowException` instead of wrapping), `time`/`timetz`
+  columns keep the driver's `TimeSpan` accessor unchanged, and a mapped `TimeOnly` projection is
+  supported for a `time` column (µs exact, with the day domain enforced);
 - the `string_agg`/`array_agg` aggregates are enabled ([`SupportsStringArrayAggregates`](xref:NextORM.Core.ISqlDialect.SupportsStringArrayAggregates) is `true`);
 - full-text search is enabled ([`SupportsFullText`](xref:NextORM.Core.ISqlDialect.SupportsFullText) is `true`): `SqlFunctions.Sql.contains` renders
   `to_tsvector(col) @@ plainto_tsquery(search)` and `freetext` `websearch_to_tsquery(search)`; ranking is
