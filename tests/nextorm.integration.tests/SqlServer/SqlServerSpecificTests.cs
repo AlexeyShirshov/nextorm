@@ -3,6 +3,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 using System.Data;
 using System.Data.Common;
 using System.Data.SqlTypes;
+using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using System.Text;
 using FluentAssertions;
@@ -846,6 +847,657 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
         finally
         {
             Execute(ctx, "drop table if exists output_audit");
+        }
+    }
+
+    // ---- T266 (#266): live SQL Server matrix for composable DML OUTPUT --------------------------
+    // Every case below runs against the real server: the capture (DECLARE ... OUTPUT ... INTO @t) and
+    // the composed query are one ;-joined command, so the assertions are made on the rows the server
+    // produced, never on rendered SQL (the only textual assertion, in the AC2 case, pins the four
+    // per-step parameter prefixes next to the live value proof).
+
+    [Fact]
+    public void T266_Insert_ComposesCapturedRows()
+    {
+        _ = _sut.DataProvider; // triggers the one-time container seeding
+        var connection = new T266CountingConnection(SqlServerContainer.ConnectionString);
+        using IDataContext ctx = new SqlServerDataContext(connection, new DataContextBuilder());
+
+        var first = T266Key();
+        var low = first;
+        var high = first + 2;
+        var names = new[]
+        {
+            "t266-c-" + Guid.NewGuid().ToString("N"),
+            "t266-a-" + Guid.NewGuid().ToString("N"),
+            "t266-b-" + Guid.NewGuid().ToString("N"),
+        };
+
+        MergeEntity[] Rows() =>
+        [
+            new MergeEntity { Id = first, Name = names[0], Age = 10 },
+            new MergeEntity { Id = first + 1, Name = names[1], Age = 11 },
+            new MergeEntity { Id = first + 2, Name = names[2], Age = 12 },
+        ];
+
+        var table = "t266_naive_" + Guid.NewGuid().ToString("N")[..8];
+
+        try
+        {
+            var batch = ctx.CreateBatchBuilder();
+            batch.OutputIntoTableVariable(
+                ctx.CreateInsertBuilder<IMergeEntity>()
+                    .Values(Rows())
+                    .Returning(x => new T266CapturedRow { Id = x.Id, Name = x.Name }),
+                "@t",
+                "id int, name nvarchar(100)");
+
+            // Projection + filter + explicit ORDER BY. The rows were inserted in c, a, b order, so only
+            // an ORDER BY can produce the a, b, c sequence; the second query drops the first id.
+            batch.AddQuery(batch.FromOutput<T266CapturedRow>("@t")
+                .Where(r => r.Id >= low && r.Id <= high)
+                .OrderBy(r => r.Name)
+                .Select(r => new T266CapturedRow { Id = r.Id, Name = r.Name }));
+            batch.AddQuery(batch.FromOutput<T266CapturedRow>("@t")
+                .Where(r => r.Id > low)
+                .OrderBy(r => r.Name)
+                .Select(r => new T266CapturedRow { Id = r.Id, Name = r.Name }));
+
+            connection.Reset();
+            var composed = batch.Execute();
+
+            // One batch = one ;-joined command = exactly one server execution and one allocated command.
+            connection.Executions.Should().Be(1, "the whole capture + read-back batch is one command text");
+            connection.CommandsCreated.Should().Be(1);
+
+            var all = composed.Read<T266CapturedRow>();
+            all.Select(r => r.Name).Should().Equal(names[1], names[2], names[0]);
+            all.Select(r => r.Id).Should().Equal(first + 1, first + 2, first);
+
+            var filtered = composed.Read<T266CapturedRow>();
+            filtered.Select(r => r.Id).Should().Equal(first + 1, first + 2);
+
+            // The naive equivalent: the capture as one command, then the read as a second command.
+            Execute(ctx, $"delete from merge_entity where id >= {low} and id <= {high}");
+            Execute(ctx, $"create table {table} (id int, name nvarchar(100))");
+
+            connection.Reset();
+            var affected = ctx.CreateInsertBuilder<IMergeEntity>()
+                .Values(Rows())
+                .Returning(x => new { x.Id, x.Name })
+                .OutputInto(table)
+                .Execute();
+            var naive = ctx.From(table)
+                .Where(t => t.GetInt32("id") >= low && t.GetInt32("id") <= high)
+                .OrderBy(t => t.GetString("name"))
+                .Select(t => new T266CapturedRow { Id = t.GetInt32("id"), Name = t.GetString("name") })
+                .ToList();
+
+            affected.Should().Be(3);
+            connection.Executions.Should().Be(2, "the naive two-statement equivalent needs a second round trip");
+            naive.Should().BeEquivalentTo(all, o => o.WithStrictOrdering());
+        }
+        finally
+        {
+            Execute(ctx, $"delete from merge_entity where id >= {low} and id <= {high}");
+            Execute(ctx, $"drop table if exists {table}");
+        }
+    }
+
+    [Fact]
+    public void T266_Update_ComposesCapturedRows()
+    {
+        var ctx = _sut.DataProvider;
+        var id = T266Key();
+        var low = id;
+        var high = id + 1;
+        var before = "t266-upd-before-" + Guid.NewGuid().ToString("N");
+        var after = "t266-upd-after-" + Guid.NewGuid().ToString("N");
+
+        ctx.CreateInsertBuilder<IMergeEntity>().Values([
+            new MergeEntity { Id = low, Name = before, Age = 1 },
+            new MergeEntity { Id = high, Name = before, Age = 2 },
+        ]).Insert().Should().Be(2);
+
+        try
+        {
+            var batch = ctx.CreateBatchBuilder();
+            batch.OutputIntoTableVariable(
+                ctx.CreateUpdateBuilder<IMergeEntity>()
+                    .Set(x => x.Name, after)
+                    .Where(x => x.Id >= low && x.Id <= high)
+                    .Returning(x => new T266CapturedRow { Id = x.Id, Name = x.Name }),
+                "@t",
+                "id int, name nvarchar(100)");
+
+            var captured = batch.Query(batch.FromOutput<T266CapturedRow>("@t")
+                    .OrderBy(r => r.Id)
+                    .Select(r => new T266CapturedRow { Id = r.Id, Name = r.Name }))
+                .ToList();
+
+            captured.Select(r => r.Id).Should().Equal(low, high);
+            captured.Should().OnlyContain(r => r.Name == after);
+
+            // The same statement's effect on the table, read back independently of the capture.
+            var state = ctx.From<IMergeEntity>()
+                .Where(x => x.Id >= low && x.Id <= high)
+                .OrderBy(x => x.Id)
+                .Select(x => x.Name)
+                .ToList();
+            state.Should().Equal(after, after);
+        }
+        finally
+        {
+            Execute(ctx, $"delete from merge_entity where id >= {low} and id <= {high}");
+        }
+    }
+
+    [Fact]
+    public void T266_Delete_ComposesCapturedRows()
+    {
+        var ctx = _sut.DataProvider;
+        var id = T266Key();
+        var low = id;
+        var high = id + 1;
+        var names = new[]
+        {
+            "t266-del-a-" + Guid.NewGuid().ToString("N"),
+            "t266-del-b-" + Guid.NewGuid().ToString("N"),
+        };
+
+        ctx.CreateInsertBuilder<IMergeEntity>().Values([
+            new MergeEntity { Id = low, Name = names[0], Age = 1 },
+            new MergeEntity { Id = high, Name = names[1], Age = 2 },
+        ]).Insert().Should().Be(2);
+
+        try
+        {
+            var batch = ctx.CreateBatchBuilder();
+            batch.OutputIntoTableVariable(
+                ctx.CreateDeleteBuilder<IMergeEntity>()
+                    .Where(x => x.Id >= low && x.Id <= high)
+                    .Returning(x => new T266CapturedRow { Id = x.Id, Name = x.Name }),
+                "@t",
+                "id int, name nvarchar(100)");
+
+            var removed = batch.Query(batch.FromOutput<T266CapturedRow>("@t")
+                    .OrderBy(r => r.Id)
+                    .Select(r => new T266CapturedRow { Id = r.Id, Name = r.Name }))
+                .ToList();
+
+            // The captured rows are exactly the removed rows, values included.
+            removed.Select(r => r.Id).Should().Equal(low, high);
+            removed.Select(r => r.Name).Should().Equal(names);
+
+            // And the rows really are gone.
+            ctx.From<IMergeEntity>().Where(x => x.Id == low).Any().Should().BeFalse();
+            ctx.From<IMergeEntity>().Where(x => x.Id == high).Any().Should().BeFalse();
+        }
+        finally
+        {
+            Execute(ctx, $"delete from merge_entity where id >= {low} and id <= {high}");
+        }
+    }
+
+    [Fact]
+    public void T266_Merge_ComposesCapturedRowsAndAction()
+    {
+        var ctx = _sut.DataProvider;
+        var matchedId = T266Key();
+        var insertedId = matchedId + 7; // distinct, non-adjacent key
+        var before = "t266-merge-before-" + Guid.NewGuid().ToString("N");
+        var mergedName = "t266-merge-updated-" + Guid.NewGuid().ToString("N");
+        var insertedName = "t266-merge-inserted-" + Guid.NewGuid().ToString("N");
+
+        ctx.CreateInsertBuilder<IMergeEntity>().Values([
+            new MergeEntity { Id = matchedId, Name = before, Age = 3 },
+        ]).Insert().Should().Be(1);
+
+        try
+        {
+            var batch = ctx.CreateBatchBuilder();
+            // $action is the leading OUTPUT expression for MERGE captures, so it lands in the first
+            // declared column; the two source rows take different branches with different values.
+            batch.OutputIntoTableVariable(
+                ctx.CreateMergeBuilder<IMergeEntity>()
+                    .Using([
+                        new MergeEntity { Id = matchedId, Name = mergedName, Age = 41 },
+                        new MergeEntity { Id = insertedId, Name = insertedName, Age = 42 },
+                    ])
+                    .OnKeys()
+                    .WhenMatchedUpdate()
+                    .WhenNotMatchedInsert()
+                    .Returning(x => new T266CapturedRow { Id = x.Id, Name = x.Name }),
+                "@t",
+                "action nvarchar(10), id int, name nvarchar(100)");
+
+            var rows = batch.Query(batch.FromOutputTable("@t")
+                    .OrderBy(t => t["action"].AsString)
+                    .Select(t => new T266MergeActionRow
+                    {
+                        Action = t["action"].AsString,
+                        Id = t["id"].AsInt,
+                        Name = t["name"].AsString,
+                    }))
+                .ToList();
+
+            rows.Should().HaveCount(2);
+            rows.Select(r => r.Action).Should().BeEquivalentTo(["INSERT", "UPDATE"]);
+
+            // The values are distinct per branch, so an action swapped between the rows cannot pass.
+            var updateRow = rows.Single(r => r.Action == "UPDATE");
+            updateRow.Id.Should().Be(matchedId);
+            updateRow.Name.Should().Be(mergedName);
+
+            var insertRow = rows.Single(r => r.Action == "INSERT");
+            insertRow.Id.Should().Be(insertedId);
+            insertRow.Name.Should().Be(insertedName);
+
+            mergedName.Should().NotBe(insertedName);
+            mergedName.Should().NotBe(before);
+            insertedName.Should().NotBe(before);
+
+            // The merged table state matches both branches.
+            ctx.From<IMergeEntity>().Where(x => x.Id == matchedId).Select(x => x.Name).First().Should().Be(mergedName);
+            ctx.From<IMergeEntity>().Where(x => x.Id == insertedId).Select(x => x.Name).First().Should().Be(insertedName);
+        }
+        finally
+        {
+            Execute(ctx, $"delete from merge_entity where id = {matchedId} or id = {insertedId}");
+        }
+    }
+
+    [Fact]
+    public void T266_EmptyAndManyRows_AreMaterialized()
+    {
+        var ctx = _sut.DataProvider;
+        var missing = T266Key();
+        var key = T266Key();
+        var manyFirstId = key + 1;
+        var nullNameId = key + 2;
+        var manyNames = new[]
+        {
+            "t266-many-a-" + Guid.NewGuid().ToString("N"),
+            null,
+            "t266-many-c-" + Guid.NewGuid().ToString("N"),
+        };
+
+        try
+        {
+            // Zero rows: the DML matches nothing, so the capture is empty and no phantom row appears.
+            var emptyBatch = ctx.CreateBatchBuilder();
+            emptyBatch.OutputIntoTableVariable(
+                ctx.CreateUpdateBuilder<IMergeEntity>()
+                    .Set(x => x.Name, "t266-empty")
+                    .Where(x => x.Id == missing)
+                    .Returning(x => new T266CapturedRow { Id = x.Id, Name = x.Name }),
+                "@t",
+                "id int, name nvarchar(100)");
+            emptyBatch.AddQuery(emptyBatch.FromOutput<T266CapturedRow>("@t")
+                .Select(r => new T266CapturedRow { Id = r.Id, Name = r.Name }));
+
+            var empty = emptyBatch.Execute();
+            empty.Read<T266CapturedRow>().Should().BeEmpty("a zero-row capture must not materialise a phantom row");
+
+            // One row.
+            var singleBatch = ctx.CreateBatchBuilder();
+            singleBatch.OutputIntoTableVariable(
+                ctx.CreateInsertBuilder<IMergeEntity>()
+                    .Values(new MergeEntity { Id = key, Name = "t266-single-" + Guid.NewGuid().ToString("N"), Age = 1 })
+                    .Returning(x => new T266CapturedRow { Id = x.Id, Name = x.Name }),
+                "@t",
+                "id int, name nvarchar(100)");
+
+            var single = singleBatch.Query(singleBatch.FromOutput<T266CapturedRow>("@t")
+                    .Select(r => new T266CapturedRow { Id = r.Id, Name = r.Name }))
+                .ToList();
+
+            single.Should().ContainSingle();
+            single[0].Id.Should().Be(key);
+
+            // Many rows (>= 3), one of them carrying a NULL in the nullable column.
+            var manyBatch = ctx.CreateBatchBuilder();
+            manyBatch.OutputIntoTableVariable(
+                ctx.CreateInsertBuilder<IMergeEntity>()
+                    .Values([
+                        new MergeEntity { Id = manyFirstId, Name = manyNames[0], Age = 1 },
+                        new MergeEntity { Id = nullNameId, Name = null, Age = 2 },
+                        new MergeEntity { Id = key + 3, Name = manyNames[2], Age = 3 },
+                    ])
+                    .Returning(x => new T266CapturedRow { Id = x.Id, Name = x.Name }),
+                "@t",
+                "id int, name nvarchar(100)");
+
+            var many = manyBatch.Query(manyBatch.FromOutput<T266CapturedRow>("@t")
+                    .OrderBy(r => r.Id)
+                    .Select(r => new T266CapturedRow { Id = r.Id, Name = r.Name }))
+                .ToList();
+
+            many.Should().HaveCount(3);
+            many.Select(r => r.Id).Should().Equal(manyFirstId, nullNameId, key + 3);
+            many.Single(r => r.Id == nullNameId).Name.Should().BeNull("a captured SQL NULL stays null, not the default value");
+            many.Count(r => r.Name is null).Should().Be(1);
+        }
+        finally
+        {
+            Execute(ctx, $"delete from merge_entity where id >= {key} and id <= {key + 3}");
+        }
+    }
+
+    [Fact]
+    public void T266_ParametersAndTwoCaptures_DoNotCollide()
+    {
+        var ctx = _sut.DataProvider;
+        var idA = T266Key();
+        var idB = idA + 1;
+        var idC = idA + 2;
+        var firstName = "t266-param-one-" + Guid.NewGuid().ToString("N");
+        var secondName = "t266-param-two-" + Guid.NewGuid().ToString("N");
+        var seedName = "t266-param-seed-" + Guid.NewGuid().ToString("N");
+
+        ctx.CreateInsertBuilder<IMergeEntity>().Values([
+            new MergeEntity { Id = idA, Name = seedName, Age = 1 },
+            new MergeEntity { Id = idB, Name = seedName, Age = 2 },
+            new MergeEntity { Id = idC, Name = seedName, Age = 3 },
+        ]).Insert().Should().Be(3);
+
+        try
+        {
+            // Both captures and both reads bind a closure member with the SAME logical name ('min') and a
+            // different value: idA (capture 1), idB (capture 2), idC (read 1), idC (read 2). The batch
+            // gives every step its own @b{i}_ prefix, so the four bindings stay four distinct values.
+            static void CaptureAtLeast(IDataContext database, BatchBuilder batch, string variable, int value, string newName)
+            {
+                var min = value;
+                batch.OutputIntoTableVariable(
+                    database.CreateUpdateBuilder<IMergeEntity>()
+                        .Set(x => x.Name, newName)
+                        .Where(x => x.Id >= min)
+                        .Returning(x => new T266CapturedRow { Id = x.Id, Name = x.Name }),
+                    variable,
+                    "id int, name nvarchar(100)");
+            }
+
+            static void ReadAtLeast(BatchBuilder batch, string variable, int value)
+            {
+                var min = value;
+                batch.AddQuery(batch.FromOutput<T266CapturedRow>(variable)
+                    .Where(r => r.Id >= min)
+                    .OrderBy(r => r.Id)
+                    .Select(r => new T266CapturedRow { Id = r.Id, Name = r.Name }));
+            }
+
+            var batch = ctx.CreateBatchBuilder();
+            CaptureAtLeast(ctx, batch, "@t", idA, firstName);
+            CaptureAtLeast(ctx, batch, "@u", idB, secondName);
+            ReadAtLeast(batch, "@t", idC);
+            ReadAtLeast(batch, "@u", idC);
+
+            var sql = batch.ToSql();
+            foreach (var prefix in new[] { "@b0_min", "@b1_min", "@b2_min", "@b3_min" })
+                sql.Should().Contain(prefix);
+
+            var result = batch.Execute();
+            result.ResultSetCount.Should().Be(2);
+
+            // Read 1 (@t, all three rows captured with firstName) filtered by its own idC binding.
+            // A leaked value changes the row count: idA -> 3 rows, idB -> 2 rows, correct -> 1 row.
+            var fromFirst = result.Read<T266CapturedRow>();
+            fromFirst.Select(r => r.Id).Should().Equal(idC);
+            fromFirst[0].Name.Should().Be(firstName);
+
+            // Read 2 (@u, the two rows captured with secondName) with its own idC binding.
+            var fromSecond = result.Read<T266CapturedRow>();
+            fromSecond.Select(r => r.Id).Should().Equal(idC);
+            fromSecond[0].Name.Should().Be(secondName);
+
+            // The mutation filters used the per-step values too: capture 1 started at idA, capture 2 at
+            // idB, so idA keeps firstName while idB/idC end on secondName.
+            var state = ctx.From<IMergeEntity>()
+                .Where(x => x.Id >= idA && x.Id <= idC)
+                .OrderBy(x => x.Id)
+                .Select(x => x.Name)
+                .ToList();
+            state.Should().Equal(firstName, secondName, secondName);
+        }
+        finally
+        {
+            Execute(ctx, $"delete from merge_entity where id >= {idA} and id <= {idC}");
+        }
+    }
+
+    [Fact]
+    public void T266_TableAliasAndTypedSources_Agree()
+    {
+        var ctx = _sut.DataProvider;
+        // simple_entity is seeded with 1..10, so captured ids 1 and 2 really match the join target.
+        var ids = new[] { 1, 2 };
+        var names = new[]
+        {
+            "t266-source-a-" + Guid.NewGuid().ToString("N"),
+            "t266-source-b-" + Guid.NewGuid().ToString("N"),
+        };
+
+        Execute(ctx, "delete from merge_entity where id in (1, 2)");
+
+        try
+        {
+            var batch = ctx.CreateBatchBuilder();
+            batch.OutputIntoTableVariable(
+                ctx.CreateInsertBuilder<IMergeEntity>()
+                    .Values([
+                        new MergeEntity { Id = ids[0], Name = names[0], Age = 1 },
+                        new MergeEntity { Id = ids[1], Name = names[1], Age = 2 },
+                    ])
+                    .Returning(x => new T266CapturedRow { Id = x.Id, Name = x.Name }),
+                "@t",
+                "id int, name nvarchar(100)");
+
+            var typed = batch.FromOutput<T266CapturedRow>("@t")
+                .OrderBy(r => r.Id)
+                .Select(r => new T266IdNameRow { Id = r.Id, Name = r.Name });
+            var alias = batch.FromOutputTable("@t")
+                .OrderBy(t => t["id"].AsInt)
+                .Select(t => new T266IdNameRow { Id = t["id"].AsInt, Name = t.GetString("name") });
+            var joined = batch.FromOutputTable("@t")
+                .Join(ctx.From<ISimpleEntity>(), (t, s) => t["id"].AsInt == s.Id)
+                .Select(p => new T266JoinRow { Id = p.Item1["id"].AsInt, SimpleId = p.Item2.Id });
+
+            var result = batch.AddQuery(typed).AddQuery(alias).AddQuery(joined).Execute();
+
+            var typedRows = result.Read<T266IdNameRow>();
+            var aliasRows = result.Read<T266IdNameRow>();
+            var joinRows = result.Read<T266JoinRow>();
+
+            // Both sources describe the same captured rows, values included.
+            typedRows.Select(r => (r.Id, r.Name)).Should().Equal(aliasRows.Select(r => (r.Id, r.Name)));
+            typedRows.Select(r => r.Id).Should().Equal(ids);
+            aliasRows.Select(r => r.Name).Should().Equal(names);
+
+            // The join runs through the alias source and matches both captured ids against simple_entity.
+            joinRows.Should().HaveCount(2);
+            joinRows.Select(r => r.Id).Should().BeEquivalentTo(ids);
+            joinRows.Should().OnlyContain(r => r.SimpleId == r.Id);
+        }
+        finally
+        {
+            Execute(ctx, "delete from merge_entity where id in (1, 2)");
+        }
+    }
+
+    [Fact]
+    public async Task T266_SyncAndAsync_Agree()
+    {
+        var ctx = _sut.DataProvider;
+        var id = T266Key();
+        var low = id;
+        var high = id + 1;
+        var name = "t266-sync-" + Guid.NewGuid().ToString("N");
+        var rows = new[]
+        {
+            new MergeEntity { Id = low, Name = name, Age = 1 },
+            new MergeEntity { Id = high, Name = name, Age = 2 },
+        };
+
+        BatchBuilder Capture()
+        {
+            var batch = ctx.CreateBatchBuilder();
+            batch.OutputIntoTableVariable(
+                ctx.CreateInsertBuilder<IMergeEntity>()
+                    .Values(rows)
+                    .Returning(x => new T266CapturedRow { Id = x.Id, Name = x.Name }),
+                "@t",
+                "id int, name nvarchar(100)");
+            return batch;
+        }
+
+        QueryCommand<T266CapturedRow> Read(BatchBuilder batch)
+            => batch.FromOutput<T266CapturedRow>("@t")
+                .OrderBy(r => r.Id)
+                .Select(r => new T266CapturedRow { Id = r.Id, Name = r.Name });
+
+        void Clean() => Execute(ctx, $"delete from merge_entity where id >= {low} and id <= {high}");
+
+        try
+        {
+            // Arm 1/2: Execute() + Read (the materialised list) and ExecuteAsync() + Read, with the
+            // driver's affected-row total observed on both.
+            var syncBatch = Capture();
+            syncBatch.AddQuery(Read(syncBatch));
+            var syncResult = syncBatch.Execute();
+            var syncRows = syncResult.Read<T266CapturedRow>().ToList();
+            Clean();
+
+            var asyncResult = await Capture().ExecuteAsync(TestContext.Current.CancellationToken);
+            var asyncRows = asyncResult.Read<T266CapturedRow>().ToList();
+            Clean();
+
+            // Arm 3/4: the single-result terminal in both shapes, ToList() and ToListAsync().
+            var syncTerminal = Capture();
+            var syncListed = syncTerminal.Query(Read(syncTerminal)).ToList();
+            Clean();
+
+            var asyncTerminal = Capture();
+            var asyncListed = await asyncTerminal.Query(Read(asyncTerminal))
+                .ToListAsync(TestContext.Current.CancellationToken);
+            Clean();
+
+            var expected = new (int Id, string? Name)[] { (low, name), (high, name) };
+            syncRows.Select(r => (r.Id, r.Name)).Should().Equal(expected);
+            asyncRows.Select(r => (r.Id, r.Name)).Should().Equal(expected);
+            syncListed.Select(r => (r.Id, r.Name)).Should().Equal(expected);
+            asyncListed.Select(r => (r.Id, r.Name)).Should().Equal(expected);
+
+            asyncResult.RecordsAffected.Should().Be(
+                syncResult.RecordsAffected, "the sync and async forms report the same affected-row total");
+        }
+        finally
+        {
+            Clean();
+        }
+    }
+
+    [Fact]
+    public async Task T266_Cancellation_IsObserved()
+    {
+        var ctx = _sut.DataProvider;
+        var id = T266Key();
+        var name = "t266-cancel-" + Guid.NewGuid().ToString("N");
+
+        // A capture-only batch, so both the multi-result terminal and the single-result terminal can be
+        // built from the same shape.
+        BatchBuilder Capture()
+        {
+            var batch = ctx.CreateBatchBuilder();
+            batch.OutputIntoTableVariable(
+                ctx.CreateInsertBuilder<IMergeEntity>()
+                    .Values(new MergeEntity { Id = id, Name = name, Age = 1 })
+                    .Returning(x => new T266CapturedRow { Id = x.Id, Name = x.Name }),
+                "@t",
+                "id int, name nvarchar(100)");
+            return batch;
+        }
+
+        static QueryCommand<T266CapturedRow> Read(BatchBuilder batch)
+            => batch.FromOutput<T266CapturedRow>("@t")
+                .Select(r => new T266CapturedRow { Id = r.Id, Name = r.Name });
+
+        try
+        {
+            using var cancelled = new CancellationTokenSource();
+            cancelled.Cancel();
+
+            // An already-cancelled token must surface as cancellation, never as a silent success.
+            // TaskCanceledException derives from OperationCanceledException, so both are accepted.
+            var multi = Capture();
+            multi.AddQuery(Read(multi));
+            await FluentActions.Invoking(() => multi.ExecuteAsync(cancelled.Token))
+                .Should().ThrowAsync<OperationCanceledException>();
+
+            var single = Capture();
+            await FluentActions.Invoking(() => single.Query(Read(single)).ToListAsync(cancelled.Token))
+                .Should().ThrowAsync<OperationCanceledException>();
+        }
+        finally
+        {
+            Execute(ctx, $"delete from merge_entity where id = {id}");
+        }
+    }
+
+    [Fact]
+    public async Task T266_StandaloneSource_IsRejectedBeforeExecution()
+    {
+        _ = _sut.DataProvider; // triggers the one-time container seeding
+        var connection = new T266CountingConnection(SqlServerContainer.ConnectionString);
+        using IDataContext ctx = new SqlServerDataContext(connection, new DataContextBuilder());
+
+        var id = T266Key();
+
+        InsertReturningBuilder<IMergeEntity, T266CapturedRow> Mutation() =>
+            ctx.CreateInsertBuilder<IMergeEntity>()
+                .Values(new MergeEntity { Id = id, Name = "t266-refused-" + Guid.NewGuid().ToString("N"), Age = 1 })
+                .Returning(x => new T266CapturedRow { Id = x.Id, Name = x.Name });
+
+        var batch = ctx.CreateBatchBuilder();
+        batch.OutputIntoTableVariable(Mutation(), "@t", "id int, name nvarchar(100)");
+
+        var typed = batch.FromOutput<T266CapturedRow>("@t")
+            .Select(r => new T266CapturedRow { Id = r.Id, Name = r.Name });
+        var alias = batch.FromOutputTable("@t")
+            .Select(t => new T266IdNameRow { Id = t["id"].AsInt });
+
+        try
+        {
+            connection.Reset();
+
+            // Standalone: the table variable only exists inside its declaring batch, so a direct terminal
+            // is refused at preparation, before any command is allocated or sent.
+            FluentActions.Invoking(() => typed.ToList())
+                .Should().Throw<NotSupportedException>().WithMessage("*batch output source*");
+            await FluentActions.Invoking(() => typed.ToListAsync())
+                .Should().ThrowAsync<NotSupportedException>().WithMessage("*batch output source*");
+            FluentActions.Invoking(() => alias.ToList())
+                .Should().Throw<NotSupportedException>().WithMessage("*batch output source*");
+
+            // Unregistered / use-before-capture names are refused at builder time.
+            var clean = ctx.CreateBatchBuilder();
+            FluentActions.Invoking(() => clean.FromOutput<T266CapturedRow>("@nope"))
+                .Should().Throw<InvalidOperationException>().WithMessage("*batch output source*");
+            FluentActions.Invoking(() => clean.FromOutputTable("@nope"))
+                .Should().Throw<InvalidOperationException>().WithMessage("*batch output source*");
+
+            // Cross-batch: a source of this batch cannot be composed into another batch.
+            var foreign = ctx.CreateBatchBuilder();
+            foreign.OutputIntoTableVariable(Mutation(), "@t", "id int, name nvarchar(100)");
+            FluentActions.Invoking(() => foreign.Query(alias))
+                .Should().Throw<InvalidOperationException>().WithMessage("*batch output source*");
+
+            connection.Executions.Should().Be(0, "every refusal happens before a command reaches the server");
+            connection.CommandsCreated.Should().Be(0, "no command is even allocated for a refused source");
+        }
+        finally
+        {
+            Execute(ctx, $"delete from merge_entity where id = {id}");
         }
     }
 
@@ -2849,6 +3501,217 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
 
         [Column("original_login")]
         public string? OriginalLogin { get; set; }
+    }
+
+    // ---- T266 (#266) test-only helpers ---------------------------------------------------------
+
+    /// <summary>The typed row shape of a captured mutation (merge_entity: id int, name nvarchar(100)).</summary>
+    private sealed class T266CapturedRow
+    {
+        public int Id { get; set; }
+        public string? Name { get; set; }
+    }
+
+    /// <summary>A captured MERGE row, including the leading <c>$action</c> column.</summary>
+    private sealed class T266MergeActionRow
+    {
+        public string Action { get; set; } = string.Empty;
+        public int Id { get; set; }
+        public string? Name { get; set; }
+    }
+
+    /// <summary>One (id, name) row read from a table-variable source.</summary>
+    private sealed class T266IdNameRow
+    {
+        public int Id { get; set; }
+        public string? Name { get; set; }
+    }
+
+    /// <summary>One row of the join through the table-alias source.</summary>
+    private sealed class T266JoinRow
+    {
+        public int Id { get; set; }
+        public int SimpleId { get; set; }
+    }
+
+    /// <summary>A random merge_entity key with room for adjacent ids in the same test.</summary>
+    private static int T266Key() => Random.Shared.Next(1_000_000, int.MaxValue - 64);
+
+    /// <summary>
+    /// Pass-through ADO.NET connection that counts what the driver actually executes. The counter is
+    /// incremented inside <see cref="DbCommand"/> execution (sync and async, reader/non-query/scalar), so
+    /// it observes server round trips, not renders: a batch rendered as one <c>;</c>-joined command text
+    /// reaches the server once and counts once, while the naive "capture, then read" equivalent needs two
+    /// commands and counts twice. The context never disposes a caller-supplied connection, so the test
+    /// owns the lifetime.
+    /// </summary>
+    private sealed class T266CountingConnection : DbConnection
+    {
+        private readonly SqlConnection _inner;
+
+        public T266CountingConnection(string connectionString) => _inner = new SqlConnection(connectionString);
+
+        /// <summary>Commands the context allocated on this connection.</summary>
+        public int CommandsCreated { get; private set; }
+
+        /// <summary>Commands that actually executed against the server.</summary>
+        public int Executions { get; private set; }
+
+        public void Reset()
+        {
+            CommandsCreated = 0;
+            Executions = 0;
+        }
+
+        internal void CountExecution() => Executions++;
+
+        [AllowNull]
+        public override string ConnectionString
+        {
+            get => _inner.ConnectionString;
+            set => _inner.ConnectionString = value;
+        }
+
+        public override string Database => _inner.Database;
+
+        public override string DataSource => _inner.DataSource;
+
+        public override string ServerVersion => _inner.State == ConnectionState.Open ? _inner.ServerVersion : string.Empty;
+
+        public override ConnectionState State => _inner.State;
+
+        public override void ChangeDatabase(string databaseName) => _inner.ChangeDatabase(databaseName);
+
+        public override void Close() => _inner.Close();
+
+        public override void Open() => _inner.Open();
+
+        public override Task OpenAsync(CancellationToken cancellationToken) => _inner.OpenAsync(cancellationToken);
+
+        protected override DbTransaction BeginDbTransaction(IsolationLevel isolationLevel)
+            => _inner.BeginTransaction(isolationLevel);
+
+        protected override DbCommand CreateDbCommand()
+        {
+            CommandsCreated++;
+            return new T266CountingCommand(this, _inner.CreateCommand());
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+                _inner.Dispose();
+
+            base.Dispose(disposing);
+        }
+    }
+
+    /// <summary>Pass-through <see cref="DbCommand"/> that reports every execution to its connection.</summary>
+    private sealed class T266CountingCommand : DbCommand
+    {
+        private readonly T266CountingConnection _owner;
+        private readonly SqlCommand _inner;
+
+        public T266CountingCommand(T266CountingConnection owner, SqlCommand inner)
+        {
+            _owner = owner;
+            _inner = inner;
+        }
+
+        [AllowNull]
+        public override string CommandText
+        {
+            get => _inner.CommandText;
+            set => _inner.CommandText = value;
+        }
+
+        public override int CommandTimeout
+        {
+            get => _inner.CommandTimeout;
+            set => _inner.CommandTimeout = value;
+        }
+
+        public override CommandType CommandType
+        {
+            get => _inner.CommandType;
+            set => _inner.CommandType = value;
+        }
+
+        public override bool DesignTimeVisible
+        {
+            get => _inner.DesignTimeVisible;
+            set => _inner.DesignTimeVisible = value;
+        }
+
+        public override UpdateRowSource UpdatedRowSource
+        {
+            get => _inner.UpdatedRowSource;
+            set => _inner.UpdatedRowSource = value;
+        }
+
+        protected override DbConnection? DbConnection
+        {
+            get => _owner;
+            set => _ = value;
+        }
+
+        protected override DbParameterCollection DbParameterCollection => _inner.Parameters;
+
+        protected override DbTransaction? DbTransaction
+        {
+            get => _inner.Transaction;
+            set => _inner.Transaction = (SqlTransaction?)value;
+        }
+
+        public override void Cancel() => _inner.Cancel();
+
+        public override void Prepare() => _inner.Prepare();
+
+        public override int ExecuteNonQuery()
+        {
+            _owner.CountExecution();
+            return _inner.ExecuteNonQuery();
+        }
+
+        public override object? ExecuteScalar()
+        {
+            _owner.CountExecution();
+            return _inner.ExecuteScalar();
+        }
+
+        public override async Task<int> ExecuteNonQueryAsync(CancellationToken cancellationToken)
+        {
+            _owner.CountExecution();
+            return await _inner.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        public override async Task<object?> ExecuteScalarAsync(CancellationToken cancellationToken)
+        {
+            _owner.CountExecution();
+            return await _inner.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        protected override DbParameter CreateDbParameter() => _inner.CreateParameter();
+
+        protected override DbDataReader ExecuteDbDataReader(CommandBehavior behavior)
+        {
+            _owner.CountExecution();
+            return _inner.ExecuteReader(behavior);
+        }
+
+        protected override async Task<DbDataReader> ExecuteDbDataReaderAsync(CommandBehavior behavior, CancellationToken cancellationToken)
+        {
+            _owner.CountExecution();
+            return await _inner.ExecuteReaderAsync(behavior, cancellationToken).ConfigureAwait(false);
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+                _inner.Dispose();
+
+            base.Dispose(disposing);
+        }
     }
 
     private static void Execute(IDataContext ctx, string sql)
