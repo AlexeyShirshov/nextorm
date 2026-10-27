@@ -67,7 +67,7 @@
 
 | Провайдер | Вывод `ForJson` | Нативные `json`/`jsonb` | Текстовые JSON-функции | `openjson` как `FROM` |
 |---|---|---|---|---|
-| SQL Server | Поддерживается ([`SupportsForJson`](xref:NextORM.Core.ISqlDialect.SupportsForJson)) | `json` в 2025+ ([`SupportsJson`](xref:NextORM.Core.ISqlDialect.SupportsJson)), включается явным `Version(17, 0)`; только корни-объекты и массивы. Иначе JSON хранится в `nvarchar` | Поддерживаются ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)) | Поддерживается |
+| SQL Server | Поддерживается ([`SupportsForJson`](xref:NextORM.Core.ISqlDialect.SupportsForJson)) | `json` в 2025+ ([`SupportsJson`](xref:NextORM.Core.ISqlDialect.SupportsJson)), включается объявленной major-версией 17+ или редакцией движка Azure/Fabric SQL database; только корни-объекты и массивы. Иначе JSON хранится в `nvarchar` | Поддерживаются ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)) | Поддерживается |
 | PostgreSQL | Нет | Поддерживаются ([`SupportsJson`](xref:NextORM.Core.ISqlDialect.SupportsJson)) | Нет | Нет |
 | SQLite | Нет | Нет | Нет (JSON1 через `SqlFunctions.Sqlite`) | Нет |
 | MySQL / MariaDB | Нет | Настоящая колонка `json` (MySQL) / `JSON` = псевдоним `LONGTEXT` + CHECK `json_valid()` (MariaDB); обе — через **текстовое** хранение, `Native` отклоняется | Поддерживаются ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)) | Нет |
@@ -170,13 +170,16 @@ select id
 ### Нативный `json` в SQL Server 2025+
 
 В SQL Server 2025 (17.x) есть **отдельный встроенный тип `json`** — не псевдоним `nvarchar` — и он же есть
-в движках Azure SQL, построенных на этом релизе. nextorm достигает его тем же отображением `[JsonColumn]`,
-но гейт — это **объявленная** версия сервера: возможность объявляет только контекст, построенный с явным
-`Version(17, 0)` или выше ([`SupportsJson`](xref:NextORM.Core.ISqlDialect.SupportsJson)), а конструктор по
-умолчанию (без версии) остаётся текстовым, поэтому уже существующее отображение на `nvarchar` не меняется
-незаметно для вас:
+в движках Azure SQL, построенных на том же релизе. nextorm достигает его тем же отображением `[JsonColumn]`,
+но гейт — это **объявленное** состояние: контекст, построенный с `Version(17, 0)` или выше, **либо** с
+явной редакцией движка `SqlServerEngineEdition` — `SqlDatabase` (5), `AzureSqlManagedInstance` (8) или
+`MicrosoftFabricSqlDatabase` (12). Конструктор по умолчанию (без версии) остаётся текстовым, поэтому уже
+существующее отображение на `nvarchar` не меняется незаметно для вас:
 
 ```csharp
+// Azure SQL Database / база данных SQL в Microsoft Fabric: объявите редакцию движка, а не выдуманную major-версию.
+using var azure = new SqlServerDataContext(SqlServerEngineEdition.SqlDatabase, connectionString);
+
 // Конструктор «версия первой»: объявленная major-версия открывает возможности, зависящие от версии.
 using var dataContext = new SqlServerDataContext(new Version(17, 0), connectionString);
 
@@ -192,11 +195,13 @@ public Address Address { get; set; } = new();
 отклоняет ошибкой сервера **13609** — для таких полезных нагрузок используйте текстовое хранение. Это
 отклонение сервера, возникающее при выполнении; собственных клиентских правил nextorm не добавляет.
 
-Ещё два факта: nextorm не генерирует DDL колонок, поэтому перевод существующей колонки в `json` — решение
-по развёртыванию/миграции; а Azure SQL Database, Managed Instance и Fabric **нельзя включить через этот
-гейт** (они сообщают major-версию 12, и аргумент версии не отличает их от обычного SQL Server — см.
-[ограничения](../advanced/limitations.md) и задачу
-[#345](https://github.com/AlexeyShirshov/nextorm/issues/345)).
+Редакция 11 («Azure Synapse serverless SQL pool, или Microsoft Fabric») **не** даёт возможности по
+редакции; её дают только 5, 8 и 12. nextorm никогда не опрашивает `SERVERPROPERTY('EngineEdition')` —
+редакция является объявлением, неизменяемым для типа контекста, и генерация SQL зависит только от
+объявленного состояния. Azure SQL Database, Managed Instance и база данных SQL в Microsoft Fabric
+проверены **только модульными тестами**: живого экземпляра Azure/Fabric для этой проверки не было, и
+утверждение не распространяется на каждую нагрузку Fabric. nextorm также не генерирует DDL колонок,
+поэтому перевод существующей колонки в `json` остаётся решением по развёртыванию/миграции.
 
 ### Развернуть JSON в строки через `openjson`
 
@@ -527,9 +532,10 @@ select json_value(jsonb_build_object('a', 1), cast('$.a' as jsonpath)) as "Value
   привязывается как `jsonb`. ClickHouse отображает `[JsonColumn]` `Auto`/`Native` и «голые»
   `JsonObject`/`JsonDocument`/`JsonElement` с корнем-объектом на нативную колонку `JSON` с корнем-объектом.
   SQL Server отображает `[JsonColumn]` `Auto`/`Native` на нативный тип `json` **только в контексте,
-  построенном с явным `Version(17, 0)` или выше**, и только для документов-объектов/массивов — скалярный
+  объявившем major-версию 17 или выше либо редакцию движка Azure/Fabric SQL database**, и только для
+  документов-объектов/массивов — скалярный
   корень и документ JSON `null` отклоняет сервер с ошибкой 13609, поэтому таким полезным нагрузкам нужен
-  `Text`. В контексте без версии или до 2025 JSON в SQL Server всегда текст; JSON-колонки MySQL/MariaDB
+  `Text`. В контексте до 2025 без объявленной редакции, эквивалентной версии 17, JSON в SQL Server всегда текст; JSON-колонки MySQL/MariaDB
   достигаются текстовым транспортом на обоих движках (`Auto`/`Text`), а `Native` отклоняется с
   `NotSupportedException`, называющим диалект.
 

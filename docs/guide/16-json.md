@@ -68,7 +68,7 @@ section for your provider; the [provider matrix](#provider-matrix) and
 
 | Provider | `ForJson` output | Native `json`/`jsonb` | JSON-as-text functions | `openjson` as `FROM` |
 |---|---|---|---|---|
-| SQL Server | Supported ([`SupportsForJson`](xref:NextORM.Core.ISqlDialect.SupportsForJson)) | `json` on 2025+ ([`SupportsJson`](xref:NextORM.Core.ISqlDialect.SupportsJson)), opt-in through an explicit `Version(17, 0)`; object/array roots only. Otherwise JSON lives in `nvarchar` | Supported ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)) | Supported |
+| SQL Server | Supported ([`SupportsForJson`](xref:NextORM.Core.ISqlDialect.SupportsForJson)) | `json` on 2025+ ([`SupportsJson`](xref:NextORM.Core.ISqlDialect.SupportsJson)), opt-in through a declared major version 17+ or an Azure/Fabric SQL database engine edition; object/array roots only. Otherwise JSON lives in `nvarchar` | Supported ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)) | Supported |
 | PostgreSQL | No | Supported ([`SupportsJson`](xref:NextORM.Core.ISqlDialect.SupportsJson)) | No | No |
 | SQLite | No | No | No (JSON1 via `SqlFunctions.Sqlite`) | No |
 | MySQL / MariaDB | No | Real `json` column (MySQL) / `JSON` = `LONGTEXT` + `json_valid()` CHECK alias (MariaDB), both used through **text** storage; `Native` refused | Supported ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)) | No |
@@ -169,14 +169,17 @@ select id
 
 ### Native `json` on SQL Server 2025+
 
-SQL Server 2025 (17.x) has a **distinct built-in `json` type** — not an alias of `nvarchar` — and so do
-the Azure SQL engines built on the same release. nextorm reaches it through the same `[JsonColumn]`
-mapping, gated on a **declared** server version: only a context built with an explicit
-`Version(17, 0)` or higher advertises the capability
-([`SupportsJson`](xref:NextORM.Core.ISqlDialect.SupportsJson)), and the default, unversioned
-construction stays text-only, so an existing `nvarchar`-backed mapping never changes under you:
+SQL Server 2025 (17.x) has a **distinct built-in `json` type** — not an alias of `nvarchar` — and the
+Azure SQL engines built on the same release have it too. nextorm reaches it through the same
+`[JsonColumn]` mapping, gated on a **declared** state: a context built with `Version(17, 0)` or higher,
+**or** with an explicit `SqlServerEngineEdition` of `SqlDatabase` (5), `AzureSqlManagedInstance` (8) or
+`MicrosoftFabricSqlDatabase` (12). The default, unversioned construction stays text-only, so an existing
+`nvarchar`-backed mapping never changes under you:
 
 ```csharp
+// Azure SQL Database / Fabric SQL database: declare the engine edition, not a fake major version.
+using var azure = new SqlServerDataContext(SqlServerEngineEdition.SqlDatabase, connectionString);
+
 // Version-first constructor: the declared major version opens the version-gated capabilities.
 using var dataContext = new SqlServerDataContext(new Version(17, 0), connectionString);
 
@@ -193,11 +196,13 @@ server-side constraint: it stores **object and array documents only**, and rejec
 storage for those payloads. That rejection is the server's, raised at execution; nextorm adds no
 client-side rule of its own.
 
-Two further facts: nextorm does not generate column DDL, so switching an existing column to `json` is a
-deployment/migration decision; and Azure SQL Database, Managed Instance and Fabric **cannot be activated
-through this gate** (they report major version 12, which the version argument cannot tell apart from a
-boxed SQL Server — see [limitations](../advanced/limitations.md) and issue
-[#345](https://github.com/AlexeyShirshov/nextorm/issues/345)).
+Edition 11 ("Azure Synapse serverless SQL pool, or Microsoft Fabric") does **not** grant the capability
+by edition; only 5, 8 and 12 do. nextorm never probes `SERVERPROPERTY('EngineEdition')` — the edition is
+a declaration, immutable per context type, and SQL generation depends only on the declared state. Azure
+SQL Database, Managed Instance and Fabric SQL database are **unit-tested only**: no live Azure/Fabric
+instance was available for this validation, and the claim does not extend to every Fabric workload.
+nextorm also generates no column DDL, so switching an existing column to `json` stays a
+deployment/migration decision.
 
 ### Turn JSON into rows with `openjson`
 
@@ -521,10 +526,11 @@ The construction and aggregation functions return `string?`; deserialize with
   write (insert, update and `RETURNING`), and a `JsonDocument`/`JsonElement`/`JsonNode` parameter binds
   as `jsonb`. ClickHouse maps `[JsonColumn]` `Auto`/`Native` and bare object-root
   `JsonObject`/`JsonDocument`/`JsonElement` to its native object-rooted `JSON` column. SQL Server maps
-  `[JsonColumn]` `Auto`/`Native` to its native `json` type **only on a context built with an explicit
-  `Version(17, 0)` or higher**, and then only for object/array documents — a scalar root or the JSON
+  `[JsonColumn]` `Auto`/`Native` to its native `json` type **only on a context that declares major
+  version 17 or higher, or an Azure/Fabric SQL database engine edition**, and then only for
+  object/array documents — a scalar root or the JSON
   `null` document is refused by the server with error 13609, so those payloads need `Text` storage; on
-  an unversioned or pre-2025 context SQL Server JSON is always text. MySQL/MariaDB JSON columns are
+  a pre-2025 context with no version-17-equivalent edition declaration SQL Server JSON is always text. MySQL/MariaDB JSON columns are
   reached through the text transport on both engines (`Auto`/`Text`), and `Native` is refused with the
   dialect-named `NotSupportedException`.
 
