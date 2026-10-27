@@ -53,6 +53,14 @@ public class SqliteDataContext : DataContext
     public override ISqlDialect Dialect => SqliteDialect.Instance;
 
     /// <summary>
+    /// SQLite has no time-of-day type: a duration is an <c>INTEGER</c> tick count and a formatted value is
+    /// <c>TEXT</c>. Reading either into a <see cref="TimeOnly"/> would reinterpret an integer or parse a
+    /// string, so the projection is refused and a value converter must opt in explicitly.
+    /// </summary>
+    protected override string? TimeOnlyProjectionRefusal =>
+        "TimeOnly projection refused for SQLite: there is no native time-of-day type; use an explicit value converter.";
+
+    /// <summary>
     /// Creates a <c>SqliteParameter</c>, mapping a <see langword="null"/> value to
     /// <c>DBNull.Value</c> because Microsoft.Data.Sqlite rejects an unset parameter value.
     /// </summary>

@@ -776,11 +776,27 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         => CreateProcedureParameter(parameter);
 
     /// <summary>
+    /// The refusal a <see cref="TimeOnly"/> projection raises for this provider, or <see langword="null"/>
+    /// when the provider has a verified native time-of-day reader.
+    /// <para>
+    /// A context that does not override this refuses the projection: an unverified reader arm is never
+    /// assumed to work, and the refusal is raised while the row mapper is composed and again in the scalar
+    /// terminal, so a provider cannot end up "supported" because a driver happened to hand back a
+    /// <see cref="TimeOnly"/>.
+    /// </para>
+    /// </summary>
+    protected virtual string? TimeOnlyProjectionRefusal => TimeOnlyProjectionReader.GenericRefusal;
+
+    // QueryExecutor lives outside the context type hierarchy, so it reaches the protected policy through
+    // this internal seam, which still virtual-dispatches to the provider override.
+    internal string? TimeOnlyProjectionRefusalValue => TimeOnlyProjectionRefusal;
+
+    /// <summary>
     /// Maps a projected column to a reader accessor. Providers whose reader does not widen CLR
     /// types (SqlClient throws when a typed getter does not match the field type, for example an
     /// int column projected as long) can override this to read the value and convert it.
     /// </summary>
-    public virtual Expression MapColumnExpression(SelectExpression column, Expression param) => RowMapperFactory.MapColumn(column, param, Dialect.SupportsNativeDuration, Dialect);
+    public virtual Expression MapColumnExpression(SelectExpression column, Expression param) => RowMapperFactory.MapColumn(column, param, Dialect.SupportsNativeDuration, Dialect, TimeOnlyProjectionRefusal);
 
     /// <summary>
     /// Maps a projected column when the reader's actual field (storage) type is known. The CSV terminal

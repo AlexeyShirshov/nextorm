@@ -55,6 +55,14 @@ public class ClickHouseDataContext : DataContext
     public override ISqlDialect Dialect => ClickHouseDialect.Instance;
 
     /// <summary>
+    /// ClickHouse has no time-of-day type: the binder stores a <see cref="TimeOnly"/> as <c>String</c>, so a
+    /// mapped projection would have to parse the text back. The projection is refused and a value
+    /// converter must opt in explicitly.
+    /// </summary>
+    protected override string? TimeOnlyProjectionRefusal =>
+        "TimeOnly projection refused for ClickHouse: there is no native time-of-day type and TimeOnly is bound as String; use an explicit value converter.";
+
+    /// <summary>
     /// Materializes a projected native ClickHouse <c>JSON</c> column. A bare <see cref="JsonObject"/> is
     /// read as-is; a bare <see cref="JsonDocument"/>/<see cref="JsonElement"/> is adapted from the driver's
     /// object-root <see cref="JsonObject"/> transport. A SQL <c>NULL</c> becomes a null reference (or

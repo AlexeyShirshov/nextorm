@@ -64,6 +64,12 @@ public class SqlServerDataContext : DataContext
     public override ISqlDialect Dialect => SqlServerDialect.Instance;
 
     /// <summary>
+    /// SQL Server <c>time</c> is a true time of day and SqlClient surfaces it as
+    /// <see cref="TimeSpan"/> with 100 ns precision, so the projection is supported.
+    /// </summary>
+    protected override string? TimeOnlyProjectionRefusal => null;
+
+    /// <summary>
     /// Creates a <c>SqlParameter</c>, mapping a <see langword="null"/> value to <c>DBNull.Value</c>
     /// because SqlClient otherwise omits the parameter entirely.
     /// </summary>

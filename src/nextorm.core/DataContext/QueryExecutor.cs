@@ -801,12 +801,42 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     }
 
     /// <summary>
+    /// The context's <see cref="TimeOnly"/> policy, or the generic refusal when the executing context is not
+    /// a <see cref="DataContext"/>: an execution path that cannot see the provider policy must fail closed
+    /// instead of assuming support.
+    /// </summary>
+    private string? TimeOnlyProjectionRefusal
+        => _context is DataContext context ? context.TimeOnlyProjectionRefusalValue : TimeOnlyProjectionReader.GenericRefusal;
+
+    /// <summary>
+    /// Refuses a <see cref="TimeOnly"/> scalar projection before the command runs when the provider has no
+    /// verified native reader. The refusal is a mapping policy, not a value check: a <c>NULL</c> payload must
+    /// be refused too, and a scalar terminal never composes a row mapper that could raise it.
+    /// </summary>
+    private void ThrowIfTimeOnlyProjectionRefused<TResult>()
+    {
+        if ((typeof(TResult) == typeof(TimeOnly) || typeof(TResult) == typeof(TimeOnly?))
+            && TimeOnlyProjectionRefusal is { } refusal)
+            throw new NotSupportedException(refusal);
+    }
+
+    /// <summary>
     /// Converts a raw scalar value to <typeparamref name="TResult"/>. SQLite has no bool type
     /// (comparisons/EXISTS come back as INTEGER/<see cref="long"/>), so typed fast paths are used
     /// to avoid boxing and <see cref="IConvertible"/> dispatch for the common scalar types.
     /// </summary>
-    private static TResult ConvertScalar<TResult>(object value)
+    private TResult ConvertScalar<TResult>(object value)
     {
+        // A TimeOnly projection has no IConvertible route: the provider policy decides, and a native
+        // TimeOnly/TimeSpan value is converted by the shared reader helper. Both checks run before the
+        // identity shortcut and before Convert.ChangeType, so a driver that hands back a TimeOnly cannot
+        // bypass a refused provider. SQL NULL never reaches here (the callers return default first).
+        if (typeof(TResult) == typeof(TimeOnly))
+            return (TResult)(object)TimeOnlyProjectionReader.ReadNative(value, TimeOnlyProjectionRefusal);
+
+        if (typeof(TResult) == typeof(TimeOnly?))
+            return (TResult)(object)(TimeOnly?)TimeOnlyProjectionReader.ReadNative(value, TimeOnlyProjectionRefusal);
+
         // Already the wanted runtime type (bool/int/long/double/decimal/string/...): unbox, no
         // IConvertible dispatch. A boxed underlying value also satisfies `is T?`.
         if (value is TResult result) return result;
@@ -869,6 +899,8 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
 
     public TResult? ExecuteScalar<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, ReadOnlySpan<object?> @params, bool throwIfNull)
     {
+        ThrowIfTimeOnlyProjectionRefused<TResult>();
+
         var compiledQuery = AsDbCommand(preparedQueryCommand);
 
         object? r;
@@ -895,6 +927,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     public async Task<TResult?> ExecuteScalar<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, bool throwIfNull, CancellationToken cancellationToken)
     {
         CheckDisposed();
+        ThrowIfTimeOnlyProjectionRefused<TResult>();
         var compiledQuery = AsDbCommand(preparedQueryCommand);
 
         object? r;

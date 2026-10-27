@@ -349,7 +349,18 @@ result and a physical `time`, `time(3)` or `time(7)` column are read as a `TimeS
 the precision the value carries. A mapped **duration property** — a `TimeSpan` property with
 `[Duration(...)]` or the fluent `Duration(...)` — still stores `bigint` on SQL Server and still scales
 through its `DurationUnit`; it can hold negative values and values of 24 h or more, neither of which a
-native `time` can represent. A `TimeOnly` projection is not supported.
+native `time` can represent. A mapped `TimeOnly` projection keeps the native day-of-day value and its exact
+ticks on **SQL Server** (`time`, read through the driver's `TimeSpan`, 100 ns) and **PostgreSQL** (`time`,
+microseconds); a returned value outside `[00:00:00, 24:00:00)` is refused with `NotSupportedException`
+instead of being wrapped or truncated. **MySQL** and **MariaDB** refuse the projection because `TIME` is a
+duration that can be negative or 24 h or more, and **SQLite** and **ClickHouse** refuse it because there is
+no native time-of-day type (ClickHouse binds `TimeOnly` as `String`). An explicit value converter still works
+where the provider's storage is a native time value — observed reading `TIME` into `TimeOnly` on **MySQL**
+and **MariaDB**; on **SQLite** (integer ticks or text) and **ClickHouse** (`String`) a converter would have
+to reinterpret or parse the stored value, which is the caller's explicit decision and outside this contract,
+so the projection stays refused there. JSON streaming shapes and the CSV terminal still reject `TimeOnly`,
+each with its own `NotSupportedException` raised while the shape is planned, and
+`TimeSpan`/`DateTime`/`DateOnly` behaviour is unchanged.
 
 ## Date conversion and parts (ClickHouse)
 
