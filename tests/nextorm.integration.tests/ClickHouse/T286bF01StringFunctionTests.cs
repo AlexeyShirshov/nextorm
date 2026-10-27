@@ -82,9 +82,9 @@ public sealed class T286bF01StringFunctionTests : ProviderTestSuite
                 .Where(x => x.Id == 1)
                 .Select(x => new
                 {
-                    Digits = SqlFunctions.ClickHouse.extract_groups("2020-01-01", "(\\\\d+)-(\\\\d+)-(\\\\d+)"),
+                    Digits = SqlFunctions.ClickHouse.extract_groups("2020-01-01", "(\\d+)-(\\d+)-(\\d+)"),
                     Pair = SqlFunctions.ClickHouse.extract_groups("dadfasd", "(d)(a)"),
-                    None = SqlFunctions.ClickHouse.extract_groups("no digits", "(\\\\d+)")
+                    None = SqlFunctions.ClickHouse.extract_groups("no digits", "(\\d+)")
                 })
                 .First();
             groups.Digits.Should().Equal("2020", "01", "01");

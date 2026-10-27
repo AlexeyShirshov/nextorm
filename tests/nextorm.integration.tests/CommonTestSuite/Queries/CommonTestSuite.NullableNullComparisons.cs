@@ -718,11 +718,27 @@ public abstract partial class CommonTestSuite
         context.EnsureConnectionOpen();
         var prepared = (DbPreparedQueryCommand<TResult>)context
             .GetPreparedQueryCommand(command, createEnumerator: false, storeInCache: false, CancellationToken.None);
-        using var reader = prepared.DbCommand.ExecuteReader();
-        var types = new Type[reader.FieldCount];
-        for (var i = 0; i < types.Length; i++)
-            types[i] = reader.GetFieldType(i);
-        return types;
+
+        // The plan's DbCommand is a connection-free diagnostic view (T333): a real execution runs the
+        // command acquired for this connection, and only that command can be executed.
+        var lease = prepared.Acquire(
+            context.GetConnection(),
+            context.CreateParam,
+            ReadOnlySpan<object?>.Empty,
+            transaction: null,
+            onCommandCreated: null);
+        try
+        {
+            using var reader = lease.Command.ExecuteReader();
+            var types = new Type[reader.FieldCount];
+            for (var i = 0; i < types.Length; i++)
+                types[i] = reader.GetFieldType(i);
+            return types;
+        }
+        finally
+        {
+            lease.Dispose();
+        }
     }
 }
 
