@@ -7,12 +7,16 @@ namespace NextORM.Core;
 /// JSON mutation family, the binary UUID pair and the MariaDB-only names (extended regexp,
 /// <c>nvl</c>/<c>nvl2</c>, the Oracle-compatible date/number conversions, <c>kdf</c>, <c>xxh3</c>/
 /// <c>xxh32</c>, <c>json_detailed</c>/<c>json_compact</c>, the JSON canonicalisation pair
-/// <c>json_equals</c>/<c>json_normalize</c> and sequence access).
+/// <c>json_equals</c>/<c>json_normalize</c> and sequence access). It also carries the MySQL 8.4
+/// string, numeric and bit catalogue: <c>bin</c>, <c>export_set</c>, <c>hex</c>, <c>make_set</c>,
+/// <c>oct</c>, <c>ord</c>, <c>quote</c>, <c>soundex</c>, <c>strcmp</c>, the Base64/hex codecs,
+/// <c>weight_string</c>, <c>conv</c>, <c>crc32</c>, <c>log2</c>, <c>rand</c>, <c>truncate</c>,
+/// <c>bit_count</c> and the <c>bit_and</c>/<c>bit_or</c>/<c>bit_xor</c> aggregates.
 /// <para>
 /// Exposed through <see cref="SqlFunctions.MySql"/>; every member is gated per name by the dialect's
 /// <see cref="IMySqlFunctions"/> capability object and rejected by providers that do not opt in.
-/// MariaDB supports this surface through its MySQL-derived dialect and adds the MariaDB-only names;
-/// MySQL rejects those names with a clear message.
+/// MariaDB supports most of this surface through its composed MySQL renderer, excludes the names it
+/// does not implement and adds the MariaDB-only names; MySQL rejects those names with a clear message.
 /// </para>
 /// </summary>
 public class MySqlFunctions : CommonFunctions
@@ -286,6 +290,194 @@ public class MySqlFunctions : CommonFunctions
     /// connection. MariaDB-only; the <paramref name="sequence"/> name is emitted as an identifier.
     /// </summary>
     public long? lastval(string? sequence) => default!;
+
+    /// <summary>
+    /// <c>bin(value)</c>: the binary representation of <paramref name="value"/> as an unsigned 64-bit
+    /// two's-complement value, without a <c>0b</c> prefix. MySQL-only.
+    /// </summary>
+    public string? bin(ulong? value) => default!;
+
+    /// <summary>
+    /// <c>export_set(bits, on, off)</c>: builds a string by reading the bits of <paramref name="bits"/>
+    /// from the least significant upward, appending <paramref name="on"/> for a set bit and
+    /// <paramref name="off"/> for a clear one, joined by a comma for 64 bits. MySQL-only; the
+    /// separator and count are supplied by the longer overloads.
+    /// </summary>
+    public string? export_set(ulong? bits, string? on, string? off) => default!;
+
+    /// <summary>
+    /// <c>export_set(bits, on, off, separator)</c>: the same bit-string construction with an explicit
+    /// separator and the default 64-bit count. MySQL-only.
+    /// </summary>
+    public string? export_set(ulong? bits, string? on, string? off, string? separator) => default!;
+
+    /// <summary>
+    /// <c>export_set(bits, on, off, separator, count)</c>: the same bit-string construction for
+    /// <paramref name="count"/> bits. MySQL-only; a constant <paramref name="count"/> outside
+    /// <c>[0, 64]</c> is refused before SQL is generated.
+    /// </summary>
+    public string? export_set(ulong? bits, string? on, string? off, string? separator, int? count) => default!;
+
+    /// <summary><c>hex(value)</c>: the hexadecimal representation of the binary value. MySQL-only.</summary>
+    public string? hex(byte[]? value) => default!;
+
+    /// <summary><c>hex(value)</c>: the hexadecimal representation of the text's bytes. MySQL-only.</summary>
+    public string? hex(string? value) => default!;
+
+    /// <summary><c>hex(value)</c>: the 16-digit hexadecimal representation of a 64-bit integer. MySQL-only.</summary>
+    public string? hex(ulong? value) => default!;
+
+    /// <summary>
+    /// <c>make_set(bits, values...)</c>: a comma-separated list of the values whose 1-based position
+    /// corresponds to a set bit of <paramref name="bits"/> (the first value for bit 0), or an empty
+    /// string when no bit is set (<c>null</c> when <paramref name="bits"/> is SQL NULL). MySQL-only.
+    /// </summary>
+    public string? make_set(ulong? bits, params string?[] values) => default!;
+
+    /// <summary>
+    /// <c>oct(value)</c>: the octal representation of <paramref name="value"/> as an unsigned 64-bit
+    /// value. MySQL-only.
+    /// </summary>
+    public string? oct(ulong? value) => default!;
+
+    /// <summary>
+    /// <c>ord(value)</c>: the numeric code of the leftmost character of <paramref name="value"/>, or
+    /// <c>0</c> for an empty string and <c>null</c> for SQL NULL. A multi-byte character yields the
+    /// value MySQL computes from its bytes. MySQL-only.
+    /// </summary>
+    public long? ord(string? value) => default!;
+
+    /// <summary>
+    /// <c>quote(value)</c>: <paramref name="value"/> as a single-quoted SQL literal with embedded
+    /// quotes and backslashes escaped, or the four-character word <c>NULL</c> when it is SQL NULL.
+    /// MySQL-only.
+    /// </summary>
+    public string? quote(string? value) => default!;
+
+    /// <summary>
+    /// <c>soundex(value)</c>: the Soundex code of <paramref name="value"/> (a four-character string such
+    /// as <c>R163</c>), or an empty string when the value contains no alphabetic characters. MySQL-only.
+    /// </summary>
+    public string? soundex(string? value) => default!;
+
+    /// <summary>
+    /// <c>strcmp(left, right)</c>: <c>-1</c>, <c>0</c> or <c>1</c> as <paramref name="left"/> sorts
+    /// before, equal to or after <paramref name="right"/> in the collation, or <c>null</c> when either
+    /// argument is SQL NULL. MySQL-only.
+    /// </summary>
+    public long? strcmp(string? left, string? right) => default!;
+
+    /// <summary>
+    /// <c>to_base64(value)</c>: the Base64 encoding of the binary value, wrapped at 76 characters per
+    /// line. MySQL-only.
+    /// </summary>
+    public string? to_base64(byte[]? value) => default!;
+
+    /// <summary>
+    /// <c>from_base64(value)</c>: the binary value decoded from the Base64 text, or <c>null</c> when the
+    /// text is not valid Base64. MySQL-only.
+    /// </summary>
+    public byte[]? from_base64(string? value) => default!;
+
+    /// <summary>
+    /// <c>unhex(value)</c>: the binary value decoded from a pair of hexadecimal digits per byte, or
+    /// <c>null</c> when <paramref name="value"/> has an odd length or a non-hexadecimal character.
+    /// MySQL-only.
+    /// </summary>
+    public byte[]? unhex(string? value) => default!;
+
+    /// <summary>
+    /// <c>weight_string(value)</c>: the weight of <paramref name="value"/> as a binary string. MySQL-only;
+    /// MariaDB has no <c>WEIGHT_STRING</c> and rejects the call.
+    /// </summary>
+    public byte[]? weight_string(string? value) => default!;
+
+    /// <summary>
+    /// <c>weight_string(value as {char|binary}(length))</c>: the weight of <paramref name="value"/> after
+    /// padding it (or truncating it) to <paramref name="length"/> characters with spaces
+    /// (<see cref="MySqlWeightStringCast.Char"/>) or bytes with <c>0x00</c>
+    /// (<see cref="MySqlWeightStringCast.Binary"/>). Both modifiers must be compile-time constants.
+    /// MySQL-only; MariaDB rejects the call.
+    /// </summary>
+    /// <param name="value">The string whose weight is computed.</param>
+    /// <param name="cast">The padding/truncation unit.</param>
+    /// <param name="length">The number of characters or bytes; at least <c>1</c>.</param>
+    public byte[]? weight_string(string? value, MySqlWeightStringCast cast, int length) => default!;
+
+    /// <summary>
+    /// <c>conv(value, fromBase, toBase)</c>: <paramref name="value"/> re-expressed as a string in the
+    /// target base (bases <c>2</c>–<c>36</c>, and <c>-1</c> for a signed interpretation). MySQL-only.
+    /// </summary>
+    public string? conv(string? value, int? fromBase, int? toBase) => default!;
+
+    /// <summary>
+    /// <c>crc32(value)</c>: the unsigned 32-bit CRC-32 checksum of the binary value, widened to
+    /// <see cref="ulong"/> (the value always fits), or <c>null</c> for SQL NULL. MySQL-only.
+    /// </summary>
+    public ulong? crc32(byte[]? value) => default!;
+
+    /// <summary><c>crc32(value)</c>: the unsigned 32-bit CRC-32 checksum of the text's bytes. MySQL-only.</summary>
+    public ulong? crc32(string? value) => default!;
+
+    /// <summary><c>log2(value)</c>: the base-2 logarithm of <paramref name="value"/>. MySQL-only.</summary>
+    public double? log2(double? value) => default!;
+
+    /// <summary>
+    /// <c>rand()</c>: a random <see cref="double"/> in <c>[0, 1)</c> for the current session. MySQL-only.
+    /// </summary>
+    public double? rand() => default!;
+
+    /// <summary>
+    /// <c>rand(seed)</c>: a random <see cref="double"/> in <c>[0, 1)</c> from the given
+    /// <paramref name="seed"/>; the same seed reproduces the same sequence within a session. MySQL-only.
+    /// </summary>
+    public double? rand(long? seed) => default!;
+
+    /// <summary>
+    /// <c>truncate(value, places)</c>: <paramref name="value"/> truncated toward zero to
+    /// <paramref name="places"/> decimal places (a negative count zeroes the integer part on the left).
+    /// MySQL-only.
+    /// </summary>
+    public decimal? truncate(decimal? value, int? places) => default!;
+
+    /// <summary><c>truncate(value, places)</c>: the same truncation for a floating-point value. MySQL-only.</summary>
+    public double? truncate(double? value, int? places) => default!;
+
+    /// <summary>
+    /// <c>bit_count(value)</c>: the number of set bits in the 64-bit representation of
+    /// <paramref name="value"/>. MySQL-only.
+    /// </summary>
+    public long? bit_count(ulong? value) => default!;
+
+    /// <summary><c>bit_count(value)</c>: the number of set bits in the binary value. MySQL-only.</summary>
+    public long? bit_count(byte[]? value) => default!;
+
+    /// <summary>
+    /// <c>bit_and(value)</c>: the bitwise AND of every non-null value in the group, or <c>null</c> when
+    /// the group has no rows. MySQL-only.
+    /// </summary>
+    public ulong? bit_and(ulong? value) => default!;
+
+    /// <summary><c>bit_and(value)</c>: the bitwise AND of every binary value in the group. MySQL-only.</summary>
+    public byte[]? bit_and(byte[]? value) => default!;
+
+    /// <summary>
+    /// <c>bit_or(value)</c>: the bitwise OR of every non-null value in the group, or <c>null</c> when
+    /// the group has no rows. MySQL-only.
+    /// </summary>
+    public ulong? bit_or(ulong? value) => default!;
+
+    /// <summary><c>bit_or(value)</c>: the bitwise OR of every binary value in the group. MySQL-only.</summary>
+    public byte[]? bit_or(byte[]? value) => default!;
+
+    /// <summary>
+    /// <c>bit_xor(value)</c>: the bitwise XOR of every non-null value in the group, or <c>null</c> when
+    /// the group has no rows. MySQL-only.
+    /// </summary>
+    public ulong? bit_xor(ulong? value) => default!;
+
+    /// <summary><c>bit_xor(value)</c>: the bitwise XOR of every binary value in the group. MySQL-only.</summary>
+    public byte[]? bit_xor(byte[]? value) => default!;
 
     /// <summary>
     /// <c>percentile_cont(0.5) within group (order by value) over (...)</c>: the median as the native

@@ -816,8 +816,9 @@ internal sealed class MySqlScalarFunctions : IScalarFunctions
 /// <summary>
 /// Renders the MySQL/MariaDB-only functions of <see cref="MySqlFunctions"/> natively. Every member of
 /// the surface maps to a full-name swap (MySQL and MariaDB share the spellings), so the renderer reports
-/// the whole family and fails for anything else. Declared non-sealed so that
-/// <c>NextORM.MariaDb</c> can derive its renderer and add the MariaDB-only names.
+/// the whole family and fails for anything else. <c>NextORM.MariaDb</c> does not derive from this type:
+/// <c>MariaDbNativeFunctions</c> composes it as its <c>Inner</c> renderer, adds the MariaDB-only names and
+/// excludes the names MariaDB does not implement.
 /// </summary>
 internal class MySqlNativeFunctions : IMySqlFunctions
 {
@@ -832,7 +833,11 @@ internal class MySqlNativeFunctions : IMySqlFunctions
         "json_merge_patch" or "json_merge_preserve" or "json_array_append" or "json_array_insert" or
         "json_depth" or "json_keys" or "json_length" or "json_type" or
         "json_storage_free" or
-        "uuid_to_bin" or "bin_to_uuid";
+        "uuid_to_bin" or "bin_to_uuid" or
+        "bin" or "export_set" or "hex" or "make_set" or "oct" or "ord" or "quote" or
+        "soundex" or "strcmp" or "to_base64" or "from_base64" or "unhex" or "weight_string" or
+        "conv" or "crc32" or "log2" or "rand" or "truncate" or
+        "bit_count" or "bit_and" or "bit_or" or "bit_xor";
 
     /// <inheritdoc/>
     public string Render(string name, IReadOnlyList<string> args) => name switch
@@ -866,6 +871,32 @@ internal class MySqlNativeFunctions : IMySqlFunctions
         "json_storage_free" => $"json_storage_free({args[0]})",
         "uuid_to_bin" => $"uuid_to_bin({args[0]})",
         "bin_to_uuid" => $"bin_to_uuid({args[0]})",
+        "bin" => $"bin({args[0]})",
+        "export_set" => $"export_set({string.Join(", ", args)})",
+        "hex" => $"hex({args[0]})",
+        "make_set" => $"make_set({string.Join(", ", args)})",
+        "oct" => $"oct({args[0]})",
+        "ord" => $"ord({args[0]})",
+        "quote" => $"quote({args[0]})",
+        "soundex" => $"soundex({args[0]})",
+        "strcmp" => $"strcmp({args[0]}, {args[1]})",
+        "to_base64" => $"to_base64({args[0]})",
+        "from_base64" => $"from_base64({args[0]})",
+        "unhex" => $"unhex({args[0]})",
+        // The cast and length tokens are supplied by the translator from validated constants; the enum
+        // is never rendered as a value.
+        "weight_string" => args.Count == 3
+            ? $"weight_string({args[0]} as {args[1]}({args[2]}))"
+            : $"weight_string({args[0]})",
+        "conv" => $"conv({args[0]}, {args[1]}, {args[2]})",
+        "crc32" => $"crc32({args[0]})",
+        "log2" => $"log2({args[0]})",
+        "rand" => args.Count == 0 ? "rand()" : $"rand({args[0]})",
+        "truncate" => $"truncate({args[0]}, {args[1]})",
+        "bit_count" => $"bit_count({args[0]})",
+        "bit_and" => $"bit_and({args[0]})",
+        "bit_or" => $"bit_or({args[0]})",
+        "bit_xor" => $"bit_xor({args[0]})",
         _ => throw new NotSupportedException($"The {name} function is not supported by MySQL/MariaDB.")
     };
 }

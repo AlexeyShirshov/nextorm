@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Linq.Expressions;
 
 namespace NextORM.Core;
@@ -13,7 +14,7 @@ internal static class MySqlFunctionTranslator
 {
     private static readonly HashSet<string> VariadicNames = new(StringComparer.Ordinal)
     {
-        nameof(MySqlFunctions.field), nameof(MySqlFunctions.elt)
+        nameof(MySqlFunctions.field), nameof(MySqlFunctions.elt), nameof(MySqlFunctions.make_set)
     };
 
     /// <summary>
@@ -46,6 +47,18 @@ internal static class MySqlFunctionTranslator
         if (VariadicNames.Contains(name) && args.Count < 2)
             throw new NotSupportedException($"The {name} function requires at least one value argument.");
 
+        var hasWeightStringModifiers =
+            name == nameof(MySqlFunctions.weight_string) && args.Count == 3;
+        (MySqlWeightStringCast Cast, int Length) weightStringModifiers = hasWeightStringModifiers
+            ? ReadWeightStringModifiers(args[1], args[2])
+            : default;
+
+        if (name == nameof(MySqlFunctions.export_set) && args.Count == 5
+            && TypeFacts.UnwrapConvert(args[4]) is ConstantExpression { Value: int bitCount }
+            && bitCount is < 0 or > 64)
+            throw new NotSupportedException(
+                $"The export_set function requires a bit count between 0 and 64 (got {bitCount}).");
+
         if (visitor.IsParamMode)
         {
             for (var (i, cnt) = (0, args.Count); i < cnt; i++)
@@ -58,6 +71,20 @@ internal static class MySqlFunctionTranslator
         var rendered = new string[args.Count];
         for (var (i, cnt) = (0, args.Count); i < cnt; i++)
         {
+            // The weight_string modifiers are grammar tokens, not values: the cast keyword and the
+            // constant length are emitted as SQL text so the enum never reaches the value policy.
+            if (hasWeightStringModifiers && i == 1)
+            {
+                rendered[i] = weightStringModifiers.Cast == MySqlWeightStringCast.Char ? "CHAR" : "BINARY";
+                continue;
+            }
+
+            if (hasWeightStringModifiers && i == 2)
+            {
+                rendered[i] = weightStringModifiers.Length.ToString(CultureInfo.InvariantCulture);
+                continue;
+            }
+
             // grammar token: the sequence name is an identifier the dialect unquotes, not a data
             // value, so it keeps the historic plain quoted token (the value policy emitted
             // `_utf8mb4 X'…'` for it and `next value for` received the hex literal).
@@ -69,5 +96,39 @@ internal static class MySqlFunctionTranslator
 
         visitor.Builder!.Append(mySql.Render(name, rendered));
         return true;
+    }
+
+    private static (MySqlWeightStringCast Cast, int Length) ReadWeightStringModifiers(
+        Expression castExpression, Expression lengthExpression)
+    {
+        if (!TryReadWeightStringCast(castExpression, out var cast))
+            throw new NotSupportedException(
+                "The weight_string function requires a constant cast " +
+                "(MySqlWeightStringCast.Char or MySqlWeightStringCast.Binary).");
+
+        if (TypeFacts.UnwrapConvert(lengthExpression) is not ConstantExpression { Value: int length })
+            throw new NotSupportedException("The weight_string function requires a constant length.");
+
+        if (length < 1)
+            throw new NotSupportedException("The weight_string function requires a length of at least 1.");
+
+        return (cast, length);
+    }
+
+    private static bool TryReadWeightStringCast(Expression expression, out MySqlWeightStringCast cast)
+    {
+        switch (TypeFacts.UnwrapConvert(expression))
+        {
+            case ConstantExpression { Value: MySqlWeightStringCast value }:
+                cast = value;
+                return true;
+            case ConstantExpression { Value: int raw }
+                when Enum.IsDefined(typeof(MySqlWeightStringCast), raw):
+                cast = (MySqlWeightStringCast)raw;
+                return true;
+            default:
+                cast = default;
+                return false;
+        }
     }
 }

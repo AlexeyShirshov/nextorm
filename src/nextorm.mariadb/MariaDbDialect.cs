@@ -206,7 +206,11 @@ internal sealed class MariaDbNativeFunctions : IMySqlFunctions
     public bool Supports(string name) =>
         IsVersionGated(name) ||
         (IsMariaDbOnly(name) ||
-            (name is not ("uuid_to_bin" or "bin_to_uuid" or "json_storage_free") && Inner.Supports(name)));
+            (name is not ("uuid_to_bin" or "bin_to_uuid" or "json_storage_free" or
+                "bin" or "export_set" or "hex" or "make_set" or "oct" or "ord" or "quote" or
+                "soundex" or "strcmp" or "to_base64" or "from_base64" or "unhex" or "weight_string" or
+                "conv" or "crc32" or "log2" or "rand" or "truncate" or
+                "bit_count" or "bit_and" or "bit_or" or "bit_xor") && Inner.Supports(name)));
 
     /// <inheritdoc/>
     public string Render(string name, IReadOnlyList<string> args) => name switch

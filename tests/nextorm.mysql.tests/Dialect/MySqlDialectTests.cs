@@ -248,4 +248,20 @@ public class MySqlDialectTests
         var act = () => Dialect.MySqlFunctions!.Render("nvl", ["a", "b"]);
         act.Should().Throw<NotSupportedException>();
     }
+
+    [Fact]
+    public void MariaDbCapability_ShouldExcludeTheT349Catalogue()
+    {
+        // T349 (a): the MySQL strings/numeric/bit catalogue is not claimed on MariaDB, so the exclusion
+        // tuple keeps MariaDB behaviour unchanged even though MySQL now supports the names.
+        var mariadb = NextORM.MariaDb.MariaDbDialect.Instance.MySqlFunctions!;
+        string[] excluded = ["bin", "weight_string", "bit_and", "crc32"];
+
+        foreach (var name in excluded)
+            mariadb.Supports(name).Should().BeFalse($"'{name}' is not claimed on MariaDB");
+
+        // The pre-existing inherited surface stays delegated.
+        mariadb.Supports("find_in_set").Should().BeTrue();
+        mariadb.Render("find_in_set", ["a", "'b,c'"]).Should().Be("find_in_set(a, 'b,c')");
+    }
 }
