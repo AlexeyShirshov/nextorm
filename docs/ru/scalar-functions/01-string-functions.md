@@ -238,6 +238,37 @@ lookaround, обратные ссылки, именованные группы �
 [`SqlFunctions.Sql.like`](xref:NextORM.Core.CommonFunctions.like(System.String,System.String)). In-memory
 провайдер выполняет `System.Text.RegularExpressions` нативно.
 
+### SQL Server 2025: `regexp_count`
+
+`SqlFunctions.SqlServer.regexp_count(input, pattern)` возвращает число неперекрывающихся совпадений
+`pattern` в `input` как `int?` — `0`, если совпадений нет, и SQL `NULL`, если вход `NULL`:
+
+```csharp
+var counts = dataContext.From<IComplexEntity>()
+    .Select(e => new
+    {
+        Matches = SqlFunctions.SqlServer.regexp_count(e.String, "[0-9]"),
+        NoMatch = SqlFunctions.SqlServer.regexp_count("abc", "[0-9]"),
+        NullInput = SqlFunctions.SqlServer.regexp_count(null, "[0-9]")
+    })
+    .ToList();
+// Matches = 3 для "a1b2c3", NoMatch = 0, NullInput = null
+```
+
+```sql
+select regexp_count(somestring, N'[0-9]'), regexp_count(N'abc', N'[0-9]'),
+       regexp_count(CAST(NULL AS nvarchar(4000)), N'[0-9]')
+ from complex_entity
+```
+
+Функция доступна **только в SQL Server 2025 (мажорная версия 17)** и закрыта версионным флагом
+[`SupportsSqlServer2025Functions`](xref:NextORM.Core.ISqlDialect.SupportsSqlServer2025Functions). В
+отличие от JSON-гейта, объявление edition никогда не подменяет объявленную мажорную версию: контекст,
+объявленный для 16, неверсионированный контекст или объявление только edition отклоняет вызов **до SQL**
+с `The REGEXP_COUNT function requires SQL Server major version 17 or later; declared major version: 16.`
+(или `… unspecified.` для неустановленной версии). Уровень совместимости БД не требуется — функция
+работает на compat 160 на движке мажорной версии 17.
+
 ## Кросс-провайдерные скалярные функции
 
 [`SqlFunctions.Sql`](xref:NextORM.Core.SqlFunctions.Sql) предоставляет небольшой набор строковых и

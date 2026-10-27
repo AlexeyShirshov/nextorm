@@ -374,6 +374,50 @@ sequence itself is an ordinary database object created with DDL; only its next v
 session `currval`/`lastval`, no value-returning `setval`). See
 [Sequences](../../scalar-functions/10-sequences.md#sql-server).
 
+## Version-gated functions (2022 and 2025)
+
+Four [#282](https://github.com/AlexeyShirshov/nextorm/issues/282) names are gated by the **declared server
+major version** on this provider. The gate is version-only: unlike the native JSON storage type
+(`SupportsJson`, [#345](https://github.com/AlexeyShirshov/nextorm/issues/345)), which also consults an
+engine-edition allowlist because a few Azure/Fabric products have the type while reporting a lower major
+version, function availability follows the engine major version itself. An edition declaration never
+substitutes for a version here, and an unversioned context refuses all four before SQL.
+
+| Member | SQL | Prerequisite |
+|---|---|---|
+| `SqlFunctions.SqlServer.left_shift(value, shift)` | `CASE WHEN value IS NULL OR shift IS NULL THEN CAST(NULL AS int) ELSE left_shift(cast(value as int), cast(shift as bigint)) END` | major 16 (SQL Server 2022) |
+| `SqlFunctions.SqlServer.regexp_count(input, pattern)` | `regexp_count(input, pattern)` | major 17 (SQL Server 2025); no compatibility-level gate |
+| `SqlFunctions.SqlServer.product(value)` | `product(value)` (aggregate context only — no `OVER`) | major 17 |
+| `SqlFunctions.SqlServer.regexp_split_to_table(input, pattern)` | a `FROM` source; rows are `value` plus the one-based `ordinal bigint` | major 17 **and** database compatibility level 170 |
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .Select(e => new
+    {
+        Count = SqlFunctions.SqlServer.regexp_count(e.String, "[0-9]"),
+        Shifted = SqlFunctions.SqlServer.left_shift(e.Int, 1)
+    })
+    .ToList();
+
+var fragments = dataContext
+    .From(() => SqlFunctions.SqlServer.regexp_split_to_table("a,b,c", ","))
+    .Select(r => new { r.Value, r.Ordinal }) // value + ordinal bigint
+    .ToList();
+```
+
+A context declared for 15, 16 or 17 permits exactly the rows its major version lists; anything lower or
+unversioned is refused **before SQL**, for example:
+
+```text
+The LEFT_SHIFT function requires SQL Server major version 16 or later; declared major version: 15.
+The REGEXP_SPLIT_TO_TABLE function requires SQL Server major version 17 or later; declared major version: 16.
+```
+
+`left_shift` types both arguments inside the call and guards a NULL operand or shift with a typed NULL,
+because a bare `left_shift(NULL, …)` is Msg 8116. `regexp_split_to_table` is a real gate on two axes: at
+compatibility level 160 a major-17 engine reports the function as missing (Msg 208), so the 170
+prerequisite is asserted live rather than assumed. `product` is offered in the aggregate context only.
+
 ## T-SQL scalar functions
 
 `SqlFunctions.SqlServer` exposes the T-SQL-only scalar functions through
@@ -480,14 +524,19 @@ operand needs a SQL type derived from metadata; an unmapped one is rejected befo
 ## Not yet supported
 
 The rest of the [#282](https://github.com/AlexeyShirshov/nextorm/issues/282) catalogue stays open in
-`1.0.9-rc4` — 26 positions: regex `REGEXP_SUBSTR`/`REGEXP_COUNT`/`REGEXP_INSTR`/`REGEXP_MATCHES`/
-`REGEXP_SPLIT_TO_TABLE`; fuzzy `EDIT_DISTANCE`/`EDIT_DISTANCE_SIMILARITY`/`JARO_WINKLER_DISTANCE`/
-`JARO_WINKLER_SIMILARITY`; bit `LEFT_SHIFT`/`RIGHT_SHIFT`/`BIT_COUNT`/`GET_BIT`/`SET_BIT`; conversion
-`TRY_CAST`/`TRY_CONVERT`; aggregate `ANY_VALUE`/`APPROX_COUNT_DISTINCT`/`CHECKSUM_AGG`/`GROUPING_ID`/
-`PRODUCT`; analytic `APPROX_PERCENTILE_CONT`/`APPROX_PERCENTILE_DISC`; system `SESSION_CONTEXT`/
-`SESSION_ID`/`@@ROWCOUNT`/`@@ERROR`/`ERROR_*`. The five functions shipped by the selected slice are
-`parse`, `try_parse`, `base64_encode`, `base64_decode` and `crypt_gen_random`; they do not close the
-issue. See [Limitations and out-of-scope features](../../advanced/limitations.md).
+`1.0.9-rc4` — the residual positions left by this slice: regex `REGEXP_SUBSTR`/`REGEXP_INSTR`/
+`REGEXP_MATCHES`; fuzzy `EDIT_DISTANCE`/`EDIT_DISTANCE_SIMILARITY`/`JARO_WINKLER_DISTANCE`/
+`JARO_WINKLER_SIMILARITY`; bit `RIGHT_SHIFT`/`BIT_COUNT`/`GET_BIT`/`SET_BIT`; conversion
+`TRY_CAST`/`TRY_CONVERT`; aggregate `ANY_VALUE`/`APPROX_COUNT_DISTINCT`/`CHECKSUM_AGG`/`GROUPING_ID`;
+analytic `APPROX_PERCENTILE_CONT`/`APPROX_PERCENTILE_DISC`; system `SESSION_CONTEXT`/
+`SESSION_ID`/`@@ROWCOUNT`/`@@ERROR`/`ERROR_*`. The five functions shipped by the T282 slice are
+`parse`, `try_parse`, `base64_encode`, `base64_decode` and `crypt_gen_random`, and this slice adds the
+four version-gated names above; together they do not close the issue.
+
+`ANY_VALUE` is recorded as **engine-unsupported on the tested SQL Server 2025 build** (17.0.5005.3):
+`Msg 195` in both the aggregate and the `OVER ()` forms, at compatibility levels 160 and 170 and with
+`PREVIEW_FEATURES = ON`. It is not a version gap a later nextorm release can close; U5 supplies its
+executable refusal. See [Limitations and out-of-scope features](../../advanced/limitations.md).
 
 ## See also
 

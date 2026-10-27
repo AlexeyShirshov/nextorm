@@ -141,6 +141,20 @@ internal static class AdvancedAggregateTranslator
             case nameof(CommonFunctions.any_agg) when node.Arguments.Count == 1:
                 EmitSimple(visitor, node, "any_agg", () => visitor.Dialect.SupportsAnyValueAggregate, "ANY_VALUE/any");
                 return true;
+
+            // SQL Server 2025 PRODUCT aggregate: aggregate context only, rendered through
+            // MakeAggregate; no window/OVER expansion is offered. The version-bound SQL Server
+            // renderer supplies the exact "requires major version 17" reason.
+            case nameof(SqlServerFunctions.product) when node.Method.DeclaringType == typeof(SqlServerFunctions)
+                && node.Arguments.Count == 1:
+                EmitSimple(
+                    visitor,
+                    node,
+                    "product",
+                    () => visitor.Dialect.SupportsProductAggregate,
+                    "product",
+                    () => visitor.Dialect.SqlServerFunctions?.GetUnsupportedReason("product"));
+                return true;
             case nameof(ClickHouseFunctions.any_last) when node.Arguments.Count == 1:
                 EmitSimple(visitor, node, "any_last", () => visitor.Dialect.SupportsAnyAggregates, "anyLast");
                 return true;
@@ -196,10 +210,13 @@ internal static class AdvancedAggregateTranslator
         MethodCallExpression node,
         string name,
         Func<bool> supported,
-        string surface)
+        string surface,
+        Func<string?>? unsupportedReason = null)
     {
         if (!supported())
-            throw new NotSupportedException($"The {surface} aggregates are not supported by this provider.");
+            throw new NotSupportedException(
+                unsupportedReason?.Invoke()
+                ?? $"The {surface} aggregates are not supported by this provider.");
 
         if (visitor.IsParamMode)
         {

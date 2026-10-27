@@ -42,7 +42,7 @@ public sealed class SqlServerDialectBranchCoverage3Tests : ProviderTestSuite
 
     /// <summary>
     /// The complete SQL Server-only function inventory of <c>SqlServerSpecificFunctions.Supports</c>
-    /// (<c>src/nextorm.sqlserver/SqlServerDialect.cs:1046-1067</c>), read through the live context's
+    /// (<c>src/nextorm.sqlserver/SqlServerDialect.cs:1173-1259</c>), read through the live context's
     /// public <see cref="ISqlServerFunctions"/> surface: 81 T-SQL function names.
     /// </summary>
     private static readonly string[] SqlServerFunctionNames =
@@ -464,7 +464,7 @@ public sealed class SqlServerDialectBranchCoverage3Tests : ProviderTestSuite
     }
 
     /// <summary>
-    /// The dialect's public function table accepts exactly the 79 T-SQL names of the inventory and
+    /// The dialect's public function table accepts exactly the 81 T-SQL names of the inventory and
     /// nothing else; every accepted name has a renderer arm, and the session-identity surface is on.
     /// </summary>
     [Fact]

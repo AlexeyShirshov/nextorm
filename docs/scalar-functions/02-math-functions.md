@@ -59,6 +59,35 @@ var rows = dataContext.From<IComplexEntity>()
     .ToList();
 ```
 
+## SQL Server bit shifts (2022+)
+
+`SqlFunctions.SqlServer.left_shift(value, shift)` renders the T-SQL `LEFT_SHIFT` and returns `int?`; both
+arguments are `int?` (the rendered call types the operand as `int` and the shift amount as `bigint`):
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .Select(e => new
+    {
+        Shifted = SqlFunctions.SqlServer.left_shift(1, 2),       // 4
+        Negative = SqlFunctions.SqlServer.left_shift(-8, 1),     // -16
+        NullOperand = SqlFunctions.SqlServer.left_shift(null, 1) // null
+    })
+    .ToList();
+```
+
+```sql
+CASE WHEN 1 IS NULL OR 2 IS NULL THEN CAST(NULL AS int)
+     ELSE left_shift(cast(1 as int), cast(2 as bigint)) END
+```
+
+A bare `left_shift(NULL, …)` is rejected by the server with **Msg 8116** ("Argument data type NULL is
+invalid"), so the renderer always types both arguments and guards the NULL operand or NULL shift with a
+typed `NULL` result — a NULL never reaches the native call. The function is **SQL Server 2022 (major
+version 16) only**, gated by the version-only
+[`SupportsSqlServer2022Functions`](xref:NextORM.Core.ISqlDialect.SupportsSqlServer2022Functions) flag. A
+context declared for 15 or an unversioned context refuses the call before SQL with `The LEFT_SHIFT
+function requires SQL Server major version 16 or later; declared major version: 15.` (or `… unspecified.`).
+
 ## ClickHouse-only math
 
 Beyond the portable [`SqlFunctions.Sql`](xref:NextORM.Core.SqlFunctions.Sql) surface,

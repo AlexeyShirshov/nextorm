@@ -59,6 +59,35 @@ var rows = dataContext.From<IComplexEntity>()
     .ToList();
 ```
 
+## Битовые сдвиги SQL Server (2022+)
+
+`SqlFunctions.SqlServer.left_shift(value, shift)` рендерит T-SQL `LEFT_SHIFT` и возвращает `int?`; оба
+аргумента — `int?` (в рендере операнд типизируется как `int`, а величина сдвига — как `bigint`):
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .Select(e => new
+    {
+        Shifted = SqlFunctions.SqlServer.left_shift(1, 2),       // 4
+        Negative = SqlFunctions.SqlServer.left_shift(-8, 1),     // -16
+        NullOperand = SqlFunctions.SqlServer.left_shift(null, 1) // null
+    })
+    .ToList();
+```
+
+```sql
+CASE WHEN 1 IS NULL OR 2 IS NULL THEN CAST(NULL AS int)
+     ELSE left_shift(cast(1 as int), cast(2 as bigint)) END
+```
+
+Сервер отклоняет «голый» `left_shift(NULL, …)` с **Msg 8116** («Argument data type NULL is invalid»),
+поэтому рендер всегда типизирует оба аргумента и закрывает NULL-операнд или NULL-сдвиг типизированным
+`NULL` — NULL никогда не доходит до нативного вызова. Функция доступна **только в SQL Server 2022
+(мажорная версия 16)** и закрыта версионным флагом
+[`SupportsSqlServer2022Functions`](xref:NextORM.Core.ISqlDialect.SupportsSqlServer2022Functions). Контекст,
+объявленный для 15, или неверсионированный контекст отклоняет вызов до SQL с `The LEFT_SHIFT function
+requires SQL Server major version 16 or later; declared major version: 15.` (или `… unspecified.`).
+
 ## Математика только для ClickHouse
 
 Помимо переносимой поверхности [`SqlFunctions.Sql`](xref:NextORM.Core.SqlFunctions.Sql),

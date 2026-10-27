@@ -224,6 +224,22 @@ public static partial class SqlFunctions
     }
 
     /// <summary>
+    /// Row shape produced by <see cref="SqlServerFunctions.regexp_split_to_table(string?, string?)"/>:
+    /// SQL Server 2025 returns the fragment as <c>value varchar(n)</c> and its one-based position as
+    /// <c>ordinal bigint</c>.
+    /// </summary>
+    public interface ISqlServerRegexpSplitToTableRow
+    {
+        /// <summary>One fragment produced by the split.</summary>
+        [Column("value")]
+        string? Value { get; set; }
+
+        /// <summary>The one-based position of the fragment in the input.</summary>
+        [Column("ordinal")]
+        long Ordinal { get; set; }
+    }
+
+    /// <summary>
     /// Row shape produced by <see cref="SqlServerFunctions.xml_nodes(string?, string?)"/>: the single
     /// <c>value</c> column holds one XML node selected by the XQuery (an <c>xml</c> value that is
     /// projected further with <c>xml_value</c>/<c>xml_query</c>/<c>xml_exist</c>).

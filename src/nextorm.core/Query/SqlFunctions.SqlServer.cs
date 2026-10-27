@@ -921,4 +921,57 @@ namespace NextORM.Core;
         /// <param name="value">The value to take the percentile of.</param>
         /// <returns>Never returns; the call is refused when the query is translated.</returns>
         public WindowFunction<double?> percentile<T>(double fraction, T? value) => default!;
+
+        /// <summary>
+        /// <c>regexp_count(input, pattern)</c>: the number of non-overlapping matches of the regular
+        /// expression <paramref name="pattern"/> in <paramref name="input"/> (<c>0</c> when there is no
+        /// match, SQL NULL when the input is NULL). Rendered as <c>regexp_count(input, pattern)</c>.
+        /// Requires SQL Server 2025 (major version 17) and the version-bound
+        /// <see cref="ISqlDialect.SupportsSqlServer2025Functions"/> gate; a lower or unversioned
+        /// declaration is refused before SQL.
+        /// </summary>
+        /// <param name="input">The string to search.</param>
+        /// <param name="pattern">The regular expression.</param>
+        /// <returns>The match count as <c>int</c>, or SQL NULL when the input is NULL.</returns>
+        public int? regexp_count(string? input, string? pattern) => default!;
+
+        /// <summary>
+        /// <c>left_shift(value, shift)</c>: the bitwise left shift of <paramref name="value"/> by
+        /// <paramref name="shift"/> bits. Rendered with typed arguments and a typed-NULL guard
+        /// (<c>case when value is null or shift is null then cast(null as int) else
+        /// left_shift(cast(value as int), cast(shift as bigint)) end</c>) because a bare
+        /// <c>left_shift(null, …)</c> raises Msg 8116. Requires SQL Server 2022 (major version 16) and
+        /// the version-bound <see cref="ISqlDialect.SupportsSqlServer2022Functions"/> gate; a lower or
+        /// unversioned declaration is refused before SQL.
+        /// </summary>
+        /// <param name="value">The <c>int</c> operand.</param>
+        /// <param name="shift">The number of bits to shift; SQL NULL when either operand is NULL.</param>
+        /// <returns>The shifted <c>int</c>, or SQL NULL when either operand is NULL.</returns>
+        public int? left_shift(int? value, int? shift) => default!;
+
+        /// <summary>
+        /// <c>product(value)</c>: the product of the non-null <paramref name="value"/> rows in the
+        /// aggregate group (NULL rows are ignored). Rendered as <c>product(value)</c> in an aggregate
+        /// context; no window/<c>OVER</c> expansion is offered. Requires SQL Server 2025 (major
+        /// version 17) and the version-bound <see cref="ISqlDialect.SupportsProductAggregate"/> gate; a
+        /// lower or unversioned declaration is refused before SQL.
+        /// </summary>
+        /// <typeparam name="T">The value type.</typeparam>
+        /// <param name="value">The value to multiply across the group.</param>
+        /// <returns>The product, or SQL NULL when the group has no non-null value.</returns>
+        public T? product<T>(T? value) => default!;
+
+        /// <summary>
+        /// <c>regexp_split_to_table(input, pattern)</c> as a FROM source: splits
+        /// <paramref name="input"/> on the regular expression <paramref name="pattern"/> and returns one
+        /// row per fragment with the row shape
+        /// <see cref="SqlFunctions.ISqlServerRegexpSplitToTableRow"/> (<c>value varchar(n)</c>,
+        /// <c>ordinal bigint</c>). Use through <c>ctx.From(() =&gt; ...)</c>. Requires SQL Server 2025
+        /// (major version 17, see <see cref="ISqlDialect.SupportsSqlServer2025Functions"/>) <b>and</b>
+        /// database compatibility level 170; at 160 the engine raises Msg 208 for the missing function.
+        /// </summary>
+        /// <param name="input">The string to split.</param>
+        /// <param name="pattern">The regular expression delimiter.</param>
+        public TvfEntityBuilder<SqlFunctions.ISqlServerRegexpSplitToTableRow> regexp_split_to_table(string? input, string? pattern)
+            => new("regexp_split_to_table");
     }

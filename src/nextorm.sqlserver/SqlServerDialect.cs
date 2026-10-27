@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using NextORM.Core;
 
@@ -19,15 +20,23 @@ public sealed class SqlServerDialect : SqlDialectBase
     public override bool SupportsSavepoints => true;
 
     private readonly IPivotRenderer _pivot;
+    private readonly SqlServerSpecificFunctions _sqlServerFunctions;
     private readonly int? _serverMajorVersion;
     private readonly SqlServerEngineEdition? _engineEdition;
+
+    /// <summary>The declared server major version, or <see langword="null"/> when unset.</summary>
+    internal int? DeclaredMajorVersion => _serverMajorVersion;
 
     /// <summary>
     /// Creates the version-agnostic dialect and its capability renderers. Every version-dependent
     /// capability stays at its historical value, so SQL declared by this dialect keeps working on every
     /// supported server.
     /// </summary>
-    public SqlServerDialect() => _pivot = new SqlServerPivotRenderer(this);
+    public SqlServerDialect()
+    {
+        _pivot = new SqlServerPivotRenderer(this);
+        _sqlServerFunctions = new SqlServerSpecificFunctions(this);
+    }
 
     /// <summary>
     /// Creates a dialect bound to an explicitly declared server version. The version is the only input:
@@ -55,6 +64,7 @@ public sealed class SqlServerDialect : SqlDialectBase
         _serverMajorVersion = serverVersion?.Major;
         _engineEdition = engineEdition;
         _pivot = new SqlServerPivotRenderer(this);
+        _sqlServerFunctions = new SqlServerSpecificFunctions(this);
     }
 
     private static Version ValidateServerVersion(Version serverVersion)
@@ -303,6 +313,29 @@ public sealed class SqlServerDialect : SqlDialectBase
             or SqlServerEngineEdition.AzureSqlManagedInstance
             or SqlServerEngineEdition.MicrosoftFabricSqlDatabase;
 
+    // Why these gates are version-only while SupportsJson above also consults the edition:
+    // SupportsJson answers "does the server have the native json column type", and a few
+    // Azure/Fabric products have that type while reporting a lower ProductMajorVersion, so the
+    // edition allowlist is a deliberate exception for storage. Function availability is a property
+    // of the engine major version itself: no edition adds REGEXP_COUNT, REGEXP_SPLIT_TO_TABLE,
+    // PRODUCT or LEFT_SHIFT to a major version that lacks it. An edition declaration therefore
+    // never substitutes for a version here, and the unversioned dialect keeps every flag false.
+
+    /// <summary>
+    /// True when the declared server major version is 17 or later: the 2025 function surface
+    /// (<c>REGEXP_COUNT</c>, <c>REGEXP_SPLIT_TO_TABLE</c>, <c>PRODUCT</c>) is available.
+    /// </summary>
+    public override bool SupportsSqlServer2025Functions => _serverMajorVersion >= 17;
+
+    /// <summary>
+    /// True when the declared server major version is 16 or later: the 2022 function surface
+    /// (<c>LEFT_SHIFT</c>/<c>RIGHT_SHIFT</c>) is available.
+    /// </summary>
+    public override bool SupportsSqlServer2022Functions => _serverMajorVersion >= 16;
+
+    /// <summary>The <c>PRODUCT</c> aggregate arrived with SQL Server 2025, so it follows that gate.</summary>
+    public override bool SupportsProductAggregate => SupportsSqlServer2025Functions;
+
     /// <summary>
     /// The native <c>json</c> column is transported as the plain CLR <see cref="string"/>: SqlClient has
     /// no DOM representation that binds and reads both a <c>json</c> and an <c>nvarchar(max)</c> column,
@@ -337,9 +370,16 @@ public sealed class SqlServerDialect : SqlDialectBase
     /// <summary>SQL Server supports the native <c>PIVOT</c>/<c>UNPIVOT</c> source constructs.</summary>
     public override IPivotRenderer Pivot => _pivot;
 
-    /// <summary>SQL Server exposes <c>string_split</c>, <c>openjson</c>, <c>containstable</c> and <c>freetexttable</c>.</summary>
+    /// <summary>
+    /// SQL Server exposes <c>string_split</c>, <c>openjson</c>, <c>containstable</c> and
+    /// <c>freetexttable</c> on every supported version, and <c>regexp_split_to_table</c> from 2025
+    /// (declared major version 17) on. The 2025 name is additionally usable only at database
+    /// compatibility level 170, which the dialect cannot inspect; that prerequisite is documented and
+    /// asserted live rather than silently assumed.
+    /// </summary>
     public override bool SupportsTableFunction(string name) =>
-        name is "string_split" or "openjson" or "containstable" or "freetexttable";
+        name is "string_split" or "openjson" or "containstable" or "freetexttable"
+        || (name == "regexp_split_to_table" && SupportsSqlServer2025Functions);
 
     /// <summary>SQL Server supports a raw SQL derived table (<c>FROM (&lt;sql&gt;) AS alias</c>).</summary>
     public override bool SupportsRawSqlSource => true;
@@ -854,8 +894,13 @@ public sealed class SqlServerDialect : SqlDialectBase
     /// <summary>SQL Server renders every cross-provider scalar function (<c>lpad</c>/<c>rpad</c> through <c>replicate</c>).</summary>
     public override IScalarFunctions ScalarFunctions => SqlServerScalarFunctions.Instance;
 
-    /// <summary>SQL Server renders the T-SQL-only scalar functions (<c>patindex</c>, <c>quotename</c>, the trigonometric functions, the SQL/JSON constructors and aggregates, …).</summary>
-    public override ISqlServerFunctions? SqlServerFunctions => SqlServerSpecificFunctions.Instance;
+    /// <summary>
+    /// SQL Server renders the T-SQL-only scalar functions (<c>patindex</c>, <c>quotename</c>, the
+    /// trigonometric functions, the SQL/JSON constructors and aggregates, …). The renderer is bound to
+    /// this dialect instance so the version-gated names answer from the caller's declaration and never
+    /// from the version-blind singleton.
+    /// </summary>
+    public override ISqlServerFunctions? SqlServerFunctions => _sqlServerFunctions;
 
     /// <summary>SQL Server 2025 has the native <c>BASE64_ENCODE</c> function over <c>varbinary</c>.</summary>
     public override bool SupportsBase64Encode => true;
@@ -1178,13 +1223,16 @@ internal sealed class SqlServerScalarFunctions : IScalarFunctions
 /// </summary>
 internal sealed class SqlServerSpecificFunctions : ISqlServerFunctions
 {
-    internal static readonly SqlServerSpecificFunctions Instance = new();
+    private readonly SqlServerDialect _dialect;
+
+    internal SqlServerSpecificFunctions(SqlServerDialect dialect) => _dialect = dialect;
 
     /// <summary>The SQL Server identity surface is exposed next to the T-SQL scalar library.</summary>
     bool ISqlServerFunctions.SupportsSessionIdentity => true;
 
     /// <inheritdoc/>
-    public bool Supports(string name) => name is
+    public bool Supports(string name) =>
+        name is
         "patindex" or "quotename" or "soundex" or "difference" or "string_escape" or "unicode" or
         "nchar" or "format" or "acos" or "asin" or "atan" or "atn2" or
         "square" or "datename" or "date_bucket" or "hashbytes" or
@@ -1206,11 +1254,39 @@ internal sealed class SqlServerSpecificFunctions : ISqlServerFunctions
         "isdate" or "isnumeric" or "min_active_rowversion" or
         "parsename" or "publishingservername" or "parse" or "try_parse" or
         "rowcount_big" or "scope_identity" or "str" or "xact_state" or
-        "next_value_for" or "nextval";
+        "next_value_for" or "nextval"
+        || (name == "regexp_count" && _dialect.SupportsSqlServer2025Functions)
+        || (name == "left_shift" && _dialect.SupportsSqlServer2022Functions);
+
+    /// <inheritdoc/>
+    public string? GetUnsupportedReason(string name) => name switch
+    {
+        "regexp_count" => Unsupported("REGEXP_COUNT", requiredMajor: 17, _dialect.SupportsSqlServer2025Functions),
+        "regexp_split_to_table" => Unsupported("REGEXP_SPLIT_TO_TABLE", requiredMajor: 17, _dialect.SupportsSqlServer2025Functions),
+        "product" => Unsupported("PRODUCT", requiredMajor: 17, _dialect.SupportsProductAggregate),
+        "left_shift" => Unsupported("LEFT_SHIFT", requiredMajor: 16, _dialect.SupportsSqlServer2022Functions),
+        _ => null
+    };
+
+    /// <summary>
+    /// Builds the version-specific refusal for a gated name, or <see langword="null"/> when the name
+    /// is supported by this dialect's declared state (the caller then keeps its generic message).
+    /// </summary>
+    private string? Unsupported(string sqlName, int requiredMajor, bool supported) =>
+        supported
+            ? null
+            : $"The {sqlName} function requires SQL Server major version {requiredMajor} or later; "
+                + $"declared major version: {_dialect.DeclaredMajorVersion?.ToString(CultureInfo.InvariantCulture) ?? "unspecified"}.";
 
     /// <inheritdoc/>
     public string Render(string name, IReadOnlyList<string> args) => name switch
     {
+        // SQL Server 2025 regex scalar: int count of the non-overlapping matches (0 when none, NULL
+        // when the input is NULL).
+        "regexp_count" => $"regexp_count({args[0]}, {args[1]})",
+        // SQL Server 2022 bit shift. A bare `left_shift(null, ...)` is Msg 8116, so both arguments are
+        // typed inside the call and a NULL operand or shift yields a typed NULL.
+        "left_shift" => LeftShift(args[0], args[1]),
         "patindex" => $"patindex({args[0]}, {args[1]})",
         "quotename" => args.Count == 2 ? $"quotename({args[0]}, {args[1]})" : $"quotename({args[0]})",
         "soundex" => $"soundex({args[0]})",
@@ -1303,6 +1379,24 @@ internal sealed class SqlServerSpecificFunctions : ISqlServerFunctions
         "next_value_for" or "nextval" => $"next value for {args[0]}",
         _ => throw new NotSupportedException($"The {name} function is not supported by SQL Server.")
     };
+
+    /// <summary>
+    /// Renders <c>LEFT_SHIFT</c> with typed arguments and a typed-NULL guard: SQL Server rejects a bare
+    /// <c>left_shift(null, …)</c> with Msg 8116, so a NULL operand or shift returns a typed NULL and
+    /// only the guarded native call is rendered otherwise. The operand is <c>int</c>; the shift amount
+    /// is <c>bigint</c>.
+    /// </summary>
+    private static string LeftShift(string value, string shift)
+    {
+        var operand = TypedNull(value, "int");
+        var amount = TypedNull(shift, "bigint");
+        return $"CASE WHEN {operand} IS NULL OR {amount} IS NULL THEN CAST(NULL AS int) "
+            + $"ELSE left_shift(cast({operand} as int), cast({amount} as bigint)) END";
+    }
+
+    /// <summary>Replaces the bare <c>null</c> token with a typed NULL so the argument keeps its type.</summary>
+    private static string TypedNull(string value, string sqlType) =>
+        value == "null" ? $"CAST(NULL AS {sqlType})" : value;
 
     /// <summary>Strips the surrounding single quotes a constant date-part string is rendered with.</summary>
     private static string DatePart(string value) =>

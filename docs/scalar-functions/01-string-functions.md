@@ -234,6 +234,37 @@ through a CLR-backed `regexp`/`regexp_replace` function registered on every conn
 there [`SqlFunctions.Sql.like`](xref:NextORM.Core.CommonFunctions.like(System.String,System.String)) is
 the fallback for simple patterns. The in-memory provider runs `System.Text.RegularExpressions` natively.
 
+### SQL Server 2025: `regexp_count`
+
+`SqlFunctions.SqlServer.regexp_count(input, pattern)` returns the number of non-overlapping matches of
+`pattern` in `input` as `int?` — `0` when there is no match, SQL `NULL` when the input is `NULL`:
+
+```csharp
+var counts = dataContext.From<IComplexEntity>()
+    .Select(e => new
+    {
+        Matches = SqlFunctions.SqlServer.regexp_count(e.String, "[0-9]"),
+        NoMatch = SqlFunctions.SqlServer.regexp_count("abc", "[0-9]"),
+        NullInput = SqlFunctions.SqlServer.regexp_count(null, "[0-9]")
+    })
+    .ToList();
+// Matches = 3 for "a1b2c3", NoMatch = 0, NullInput = null
+```
+
+```sql
+select regexp_count(somestring, N'[0-9]'), regexp_count(N'abc', N'[0-9]'),
+       regexp_count(CAST(NULL AS nvarchar(4000)), N'[0-9]')
+ from complex_entity
+```
+
+The function is **SQL Server 2025 (major version 17) only** and is gated by the version-only
+[`SupportsSqlServer2025Functions`](xref:NextORM.Core.ISqlDialect.SupportsSqlServer2025Functions) flag.
+Unlike the JSON storage gate, an engine-edition declaration never substitutes for a declared major
+version: a context declared for 16, an unversioned context or an edition-only declaration refuses the
+call **before SQL** with `The REGEXP_COUNT function requires SQL Server major version 17 or later;
+declared major version: 16.` (or `… unspecified.` for an unset version). No database compatibility level
+is required — the function works at compatibility 160 on a major-17 engine.
+
 ## Cross-provider scalar functions
 
 [`SqlFunctions.Sql`](xref:NextORM.Core.SqlFunctions.Sql) exposes a small library of string and number

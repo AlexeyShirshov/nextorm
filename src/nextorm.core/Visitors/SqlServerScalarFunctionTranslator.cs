@@ -63,7 +63,8 @@ internal static class SqlServerScalarFunctionTranslator
         nameof(SqlServerFunctions.parse), nameof(SqlServerFunctions.rowcount_big),
         nameof(SqlServerFunctions.scope_identity), nameof(SqlServerFunctions.str),
         nameof(SqlServerFunctions.try_parse), nameof(SqlServerFunctions.xact_state),
-        nameof(SqlServerFunctions.next_value_for), nameof(SqlServerFunctions.nextval)
+        nameof(SqlServerFunctions.next_value_for), nameof(SqlServerFunctions.nextval),
+        nameof(SqlServerFunctions.regexp_count), nameof(SqlServerFunctions.left_shift)
     };
 
     /// <summary>The functions whose <c>params</c> array is flattened back into individual arguments.</summary>
@@ -121,7 +122,9 @@ internal static class SqlServerScalarFunctionTranslator
         var name = node.Method.Name;
 
         if (visitor.Dialect.SqlServerFunctions is not { } functions || !functions.Supports(name))
-            throw new NotSupportedException($"The {name} function is not supported by this provider.");
+            throw new NotSupportedException(
+                visitor.Dialect.SqlServerFunctions?.GetUnsupportedReason(name)
+                ?? $"The {name} function is not supported by this provider.");
 
         if (SequenceFunctions.Contains(name))
         {

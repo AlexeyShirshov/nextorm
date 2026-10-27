@@ -34,6 +34,34 @@ select group_concat(somestring, ',')
 | `SqlFunctions.Sql.string_agg(x, delimiter)` | `string_agg(x, delimiter)` / `arrayStringConcat(groupArray(x), delimiter)` / `group_concat(x separator delimiter)` / `group_concat(x, delimiter)` | PostgreSQL, SQL Server, ClickHouse, MySQL/MariaDB, SQLite |
 | `SqlFunctions.Postgres.array_agg(x)` | `array_agg(x)` | PostgreSQL |
 
+## SQL Server 2025: `product`
+
+`SqlFunctions.SqlServer.product(value)` рендерит агрегат `PRODUCT` SQL Server 2025 в агрегатном
+контексте. Результат сохраняет тип входа (`int?` для столбца `int`), NULL-строки игнорируются, а группа
+без единого не-NULL значения не имеет произведения (SQL `NULL`):
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .GroupBy(e => new { e.Int })
+    .Select(e => new { e.Int, Product = SqlFunctions.SqlServer.product(e.Id) })
+    .ToList();
+```
+
+```sql
+select nullableint, product(id) as [Product]
+ from complex_entity
+ group by nullableint
+```
+
+Агрегат доступен **только в SQL Server 2025 (мажорная версия 17)** и следует версионному флагу
+[`SupportsProductAggregate`](xref:NextORM.Core.ISqlDialect.SupportsProductAggregate) (который, в свою
+очередь, следует
+[`SupportsSqlServer2025Functions`](xref:NextORM.Core.ISqlDialect.SupportsSqlServer2025Functions)). Он
+предлагается только в агрегатном контексте — без оконного развёртывания `OVER`. Контекст, объявленный
+для 16, неверсионированный контекст или объявление только edition отклоняет вызов до SQL с `The PRODUCT
+function requires SQL Server major version 17 or later; declared major version: 16.` (или `…
+unspecified.`). Edition никогда не подменяет объявленную мажорную версию.
+
 ## Фильтр агрегатов (FILTER)
 
 `count`/`count_big`/`min`/`max`/`avg`/`sum` и строковые/массивные агрегаты принимают дополнительный

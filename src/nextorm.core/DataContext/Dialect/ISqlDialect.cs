@@ -726,6 +726,33 @@ public interface ISqlDialect
     bool SupportsAnyValueAggregate { get; }
 
     /// <summary>
+    /// True when the provider is SQL Server and the declared server major version is 17 or later, so
+    /// the 2025-only T-SQL functions (<c>REGEXP_COUNT</c>, <c>REGEXP_SPLIT_TO_TABLE</c>,
+    /// <c>PRODUCT</c>) can be rendered. The safe default is <see langword="false"/>, and an
+    /// unversioned dialect refuses them. The gate is version-only: unlike <see cref="SupportsJson"/>,
+    /// an engine edition never substitutes for a declared major version. Declared as a default
+    /// interface method so existing external implementations keep compiling.
+    /// </summary>
+    bool SupportsSqlServer2025Functions => false;
+
+    /// <summary>
+    /// True when the provider is SQL Server and the declared server major version is 16 or later, so
+    /// the 2022-only T-SQL functions (<c>LEFT_SHIFT</c>/<c>RIGHT_SHIFT</c>) can be rendered. The safe
+    /// default is <see langword="false"/>, and an unversioned dialect refuses them. Declared as a
+    /// default interface method so existing external implementations keep compiling.
+    /// </summary>
+    bool SupportsSqlServer2022Functions => false;
+
+    /// <summary>
+    /// True when the provider can render the <c>PRODUCT(value)</c> aggregate
+    /// (<see cref="SqlServerFunctions.product{T}(T)"/>). On SQL Server it follows
+    /// <see cref="SupportsSqlServer2025Functions"/> because the aggregate arrived with 2025; the safe
+    /// default is <see langword="false"/>. Declared as a default interface method so existing
+    /// external implementations keep compiling.
+    /// </summary>
+    bool SupportsProductAggregate => false;
+
+    /// <summary>
     /// The provider's renderer for the ClickHouse sequence/funnel aggregates; <c>null</c> means the
     /// provider cannot express them. Declared as a default interface method so that existing external
     /// implementations keep compiling.

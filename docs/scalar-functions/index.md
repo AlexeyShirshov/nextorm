@@ -28,7 +28,7 @@ mapping, so a user-defined attribute cannot change the behaviour of `string`/`Ma
 Cross-provider helpers live on [`SqlFunctions.Sql`](xref:NextORM.Core.SqlFunctions.Sql). Functions that only one provider supports are grouped
 under a provider-specific surface: [`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres) (PostgreSQL: native arrays, native JSON, the extended
 scalar library, the PostgreSQL-only aggregates and the `generate_series`/`unnest` table functions),
-[`SqlServer`](xref:NextORM.Core.SqlFunctions.SqlServer) (SQL Server: the JSON-as-text functions and `string_split`/`openjson`) and
+[`SqlServer`](xref:NextORM.Core.SqlFunctions.SqlServer) (SQL Server: the JSON-as-text functions, the version-gated 2022/2025 scalars such as `left_shift` and `regexp_count`, the `product` aggregate, and `string_split`/`openjson`/`regexp_split_to_table`) and
 [`ClickHouse`](xref:NextORM.Core.SqlFunctions.ClickHouse) (ClickHouse: `arg_min`/`arg_max`, the `-If` combinator, the string-JSON
 `JSONExtract*` family, the flat-JSON `visitParamExtract*` fast path, the JSONPath scalars
 `json_value`/`json_query`/`json_exists` and the dictionary functions

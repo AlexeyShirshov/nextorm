@@ -379,6 +379,51 @@ select next value for [dbo].[order_seq] as [Next]
 значение (без сессионных `currval`/`lastval` и без возвращающего значение `setval`). См.
 [Последовательности](../../scalar-functions/10-sequences.md#sql-server).
 
+## Версионно-зависимые функции (2022 и 2025)
+
+Четыре имени [#282](https://github.com/AlexeyShirshov/nextorm/issues/282) на этом провайдере закрыты
+**объявленной мажорной версией сервера**. Гейт версионный: в отличие от нативного типа хранения JSON
+(`SupportsJson`, [#345](https://github.com/AlexeyShirshov/nextorm/issues/345)), который также учитывает
+allowlist edition, потому что некоторые продукты Azure/Fabric имеют этот тип, сообщая меньшую мажорную
+версию, доступность функций следует самой мажорной версии движка. Объявление edition здесь никогда не
+подменяет версию, а неверсионированный контекст отклоняет все четыре до SQL.
+
+| Член | SQL | Требование |
+|---|---|---|
+| `SqlFunctions.SqlServer.left_shift(value, shift)` | `CASE WHEN value IS NULL OR shift IS NULL THEN CAST(NULL AS int) ELSE left_shift(cast(value as int), cast(shift as bigint)) END` | мажорная версия 16 (SQL Server 2022) |
+| `SqlFunctions.SqlServer.regexp_count(input, pattern)` | `regexp_count(input, pattern)` | мажорная версия 17 (SQL Server 2025); уровень совместимости не требуется |
+| `SqlFunctions.SqlServer.product(value)` | `product(value)` (только агрегатный контекст — без `OVER`) | мажорная версия 17 |
+| `SqlFunctions.SqlServer.regexp_split_to_table(input, pattern)` | источник `FROM`; строки — `value` и one-based `ordinal bigint` | мажорная версия 17 **и** уровень совместимости БД 170 |
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .Select(e => new
+    {
+        Count = SqlFunctions.SqlServer.regexp_count(e.String, "[0-9]"),
+        Shifted = SqlFunctions.SqlServer.left_shift(e.Int, 1)
+    })
+    .ToList();
+
+var fragments = dataContext
+    .From(() => SqlFunctions.SqlServer.regexp_split_to_table("a,b,c", ","))
+    .Select(r => new { r.Value, r.Ordinal }) // value + ordinal bigint
+    .ToList();
+```
+
+Контекст, объявленный для 15, 16 или 17, разрешает ровно те строки, которые перечисляет его мажорная
+версия; всё, что ниже или не версионировано, отклоняется **до SQL**, например:
+
+```text
+The LEFT_SHIFT function requires SQL Server major version 16 or later; declared major version: 15.
+The REGEXP_SPLIT_TO_TABLE function requires SQL Server major version 17 or later; declared major version: 16.
+```
+
+`left_shift` типизирует оба аргумента внутри вызова и закрывает NULL-операнд или NULL-сдвиг
+типизированным NULL, потому что «голый» `left_shift(NULL, …)` даёт Msg 8116. `regexp_split_to_table` —
+реальный гейт по двум осям: на уровне совместимости 160 движок мажорной версии 17 сообщает, что функции
+нет (Msg 208), поэтому условие 170 проверяется вживую, а не предполагается. `product` предлагается
+только в агрегатном контексте.
+
 ## Скаляры T-SQL
 
 `SqlFunctions.SqlServer` открывает скалярные функции, специфичные для T-SQL, через
@@ -487,13 +532,19 @@ null-операнду нужен SQL-тип, выведенный из мета�
 ## Пока не поддерживается
 
 Остаток каталога [#282](https://github.com/AlexeyShirshov/nextorm/issues/282) остаётся открытым в
-`1.0.9-rc4` — 26 позиций: regex `REGEXP_SUBSTR`/`REGEXP_COUNT`/`REGEXP_INSTR`/`REGEXP_MATCHES`/
-`REGEXP_SPLIT_TO_TABLE`; fuzzy `EDIT_DISTANCE`/`EDIT_DISTANCE_SIMILARITY`/`JARO_WINKLER_DISTANCE`/
-`JARO_WINKLER_SIMILARITY`; bit `LEFT_SHIFT`/`RIGHT_SHIFT`/`BIT_COUNT`/`GET_BIT`/`SET_BIT`; conversion
-`TRY_CAST`/`TRY_CONVERT`; aggregate `ANY_VALUE`/`APPROX_COUNT_DISTINCT`/`CHECKSUM_AGG`/`GROUPING_ID`/
-`PRODUCT`; analytic `APPROX_PERCENTILE_CONT`/`APPROX_PERCENTILE_DISC`; system `SESSION_CONTEXT`/
-`SESSION_ID`/`@@ROWCOUNT`/`@@ERROR`/`ERROR_*`. Пять функций выбранного среза — `parse`, `try_parse`,
-`base64_encode`, `base64_decode` и `crypt_gen_random`; issue они не закрывают. См.
+`1.0.9-rc4` — позиции, оставшиеся после этого среза: regex `REGEXP_SUBSTR`/`REGEXP_INSTR`/
+`REGEXP_MATCHES`; fuzzy `EDIT_DISTANCE`/`EDIT_DISTANCE_SIMILARITY`/`JARO_WINKLER_DISTANCE`/
+`JARO_WINKLER_SIMILARITY`; bit `RIGHT_SHIFT`/`BIT_COUNT`/`GET_BIT`/`SET_BIT`; conversion
+`TRY_CAST`/`TRY_CONVERT`; aggregate `ANY_VALUE`/`APPROX_COUNT_DISTINCT`/`CHECKSUM_AGG`/`GROUPING_ID`;
+analytic `APPROX_PERCENTILE_CONT`/`APPROX_PERCENTILE_DISC`; system `SESSION_CONTEXT`/
+`SESSION_ID`/`@@ROWCOUNT`/`@@ERROR`/`ERROR_*`. Пять функций среза T282 — `parse`, `try_parse`,
+`base64_encode`, `base64_decode` и `crypt_gen_random`, а этот срез добавляет четыре версионно-зависимых
+имени выше; вместе они issue не закрывают.
+
+`ANY_VALUE` зафиксирован как **не поддерживаемая движком на протестированной сборке SQL Server 2025**
+(17.0.5005.3): `Msg 195` и в агрегатной форме, и в форме `OVER ()`, на уровнях совместимости 160 и 170 и
+при `PREVIEW_FEATURES = ON`. Это не версионный пробел, который закроет будущий релиз nextorm; U5
+поставляет исполняемый отказ. См.
 [Ограничения и возможности вне области охвата](../../advanced/limitations.md).
 
 ## См. также

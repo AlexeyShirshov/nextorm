@@ -827,6 +827,19 @@ public interface ISqlServerFunctions
     string Render(string name, IReadOnlyList<string> args);
 
     /// <summary>
+    /// The reason the SQL Server-only function <paramref name="name"/> is unavailable on this
+    /// dialect's declared state (for example a function that requires a later major version), or
+    /// <see langword="null"/> when the name is supported or the dialect has no version-specific
+    /// answer. The caller shows this reason instead of its generic "not supported" message, so a
+    /// version-gated name fails closed with the required and the declared major version. Declared as
+    /// a default interface method returning <see langword="null"/> so an external
+    /// <see cref="ISqlServerFunctions"/> written before the member existed keeps its previous
+    /// behaviour.
+    /// </summary>
+    /// <param name="name">The CLR method name of the <see cref="SqlServerFunctions"/> member.</param>
+    string? GetUnsupportedReason(string name) => null;
+
+    /// <summary>
     /// True when the dialect also exposes the SQL Server session/server identity functions
     /// (<see cref="SqlServerFunctions.server_name"/>, <c>host_id</c>, <c>host_name</c>, <c>app_name</c>,
     /// <c>suser_name</c>, <c>original_login</c>) through its

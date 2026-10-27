@@ -436,6 +436,29 @@ public sealed class DialectCapabilityContractTests
     }
 
     /// <summary>
+    /// T348 (#282) U1: the SQL Server version gates are version-only and fail closed. Every dialect
+    /// constructed without a declaration (including the parameterless <c>SqlServerDialect.Instance</c>)
+    /// reports all three flags false; an edition declaration never substitutes for a major version.
+    /// </summary>
+    [Fact]
+    [Trait("PDCA", "T348")]
+    public void SqlServerVersionCapabilities_ShouldStayClosedOnEveryUnversionedDialect()
+    {
+        var dialects = AllDialects().ToList();
+        dialects.Should().NotBeEmpty("the provider dialect assemblies must be loaded");
+
+        foreach (var dialect in dialects)
+        {
+            dialect.SupportsSqlServer2025Functions.Should().BeFalse(
+                $"{dialect.GetType().Name} must not assume a SQL Server 2025 declaration");
+            dialect.SupportsSqlServer2022Functions.Should().BeFalse(
+                $"{dialect.GetType().Name} must not assume a SQL Server 2022 declaration");
+            dialect.SupportsProductAggregate.Should().BeFalse(
+                $"{dialect.GetType().Name} must not assume the PRODUCT aggregate");
+        }
+    }
+
+    /// <summary>
     /// T219 (#219): the T-SQL identity members are gated by
     /// <see cref="ISqlServerFunctions.SupportsSessionIdentity"/>, and the flag is an opt-in: only the SQL
     /// Server dialect reports <c>true</c>. A dialect that never exposes the surface has no

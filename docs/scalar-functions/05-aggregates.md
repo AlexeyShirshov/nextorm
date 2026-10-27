@@ -33,6 +33,33 @@ select group_concat(somestring, ',')
 | `SqlFunctions.Sql.string_agg(x, delimiter)` | `string_agg(x, delimiter)` / `arrayStringConcat(groupArray(x), delimiter)` / `group_concat(x separator delimiter)` / `group_concat(x, delimiter)` | PostgreSQL, SQL Server, ClickHouse, MySQL/MariaDB, SQLite |
 | `SqlFunctions.Postgres.array_agg(x)` | `array_agg(x)` | PostgreSQL |
 
+## SQL Server 2025: `product`
+
+`SqlFunctions.SqlServer.product(value)` renders the SQL Server 2025 `PRODUCT` aggregate in an aggregate
+context. The result keeps the input type (`int?` for an `int` column), NULL rows are ignored, and a
+group with no non-null value has no product (SQL `NULL`):
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .GroupBy(e => new { e.Int })
+    .Select(e => new { e.Int, Product = SqlFunctions.SqlServer.product(e.Id) })
+    .ToList();
+```
+
+```sql
+select nullableint, product(id) as [Product]
+ from complex_entity
+ group by nullableint
+```
+
+The aggregate is **SQL Server 2025 (major version 17) only** and follows the version-only
+[`SupportsProductAggregate`](xref:NextORM.Core.ISqlDialect.SupportsProductAggregate) flag (which in turn
+follows [`SupportsSqlServer2025Functions`](xref:NextORM.Core.ISqlDialect.SupportsSqlServer2025Functions)).
+It is offered in the aggregate context only — no window/`OVER` expansion. A context declared for 16, an
+unversioned context or an edition-only declaration refuses the call before SQL with `The PRODUCT function
+requires SQL Server major version 17 or later; declared major version: 16.` (or `… unspecified.`). An
+edition never substitutes for the declared major version.
+
 ## Aggregate FILTER
 
 `count`/`count_big`/`min`/`max`/`avg`/`sum` and the string/array aggregates accept an extra

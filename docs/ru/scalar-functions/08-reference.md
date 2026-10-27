@@ -40,7 +40,7 @@
 | Медиана | `NotSupportedException` | `percentile_cont(0.5) within group (order by x) over (...)` (аналитическая: одна строка на входную строку, окно только с `partition by`) | `percentile_cont(0.5) within group (order by x)` (агрегат: одна строка на группу; только сортировка с плавающей точкой) |
 | Общий `percentile(fraction, value)` | `NotSupportedException` | `NotSupportedException` | `NotSupportedException` (никогда не псевдоним непрерывной формы) |
 | JSONPath (`jsonb_path_*`) | `NotSupportedException` | `NotSupportedException` | `cast(path as jsonpath)` |
-| Встроенные табличные функции | `NotSupportedException` | `string_split(...)`, `openjson(...)` | `generate_series(...)`, `unnest(...)` |
+| Встроенные табличные функции | `NotSupportedException` | `string_split(...)`, `openjson(...)`, `regexp_split_to_table(...)` (2025+) | `generate_series(...)`, `unnest(...)` |
 
 Провайдер in-memory не рендерит SQL: он компилирует и вычисляет выражение для строк в памяти, поэтому
 выполняется сам метод .NET. Приведённая выше матрица SQL относится к провайдерам SQLite, SQL Server и
@@ -53,6 +53,27 @@ ClickHouse рендерит `dateTrunc('part', x)`, `addDays`/`addMonths`/.../`a
 `covarPop`/`covarSamp`, `argMin`/`argMax`, комбинаторы `-If` и `multiIf`. Он отклоняет ANSI-предложение
 `filter (where ...)`, агрегаты `regr_*` и логические агрегаты через `NotSupportedException`; см.
 [Провайдер ClickHouse](../connecting-providers/clickhouse.md).
+
+## Версионно-зависимые функции SQL Server (2022/2025)
+
+Эти члены живут в [`SqlFunctions.SqlServer`](../guide/provider-specific-sql/sqlserver.md#версионно-зависимые-функции-2022-и-2025)
+и закрыты **только объявленной мажорной версией**: объявление edition никогда не подменяет версию, а
+неверсионированный контекст отклоняет каждый из них до SQL, указывая требуемую и объявленную мажорную
+версию в сообщении.
+
+| Член | SQL | Результат | Требуется |
+|---|---|---|---|
+| `regexp_count(input, pattern)` | `regexp_count(input, pattern)` | `int?` — `0` при отсутствии совпадений, `NULL` при NULL-входе | мажорная версия 17 |
+| `left_shift(value, shift)` | `CASE WHEN value IS NULL OR shift IS NULL THEN CAST(NULL AS int) ELSE left_shift(cast(value as int), cast(shift as bigint)) END` | `int?` — типизированная NULL-защита («голый» `left_shift(NULL, …)` даёт Msg 8116) | мажорная версия 16 |
+| `product(value)` | `product(value)` (агрегатный контекст; без `OVER`) | тип входа; NULL-строки игнорируются, группа только из NULL даёт `NULL` | мажорная версия 17 |
+| `regexp_split_to_table(input, pattern)` | источник `FROM`, например `from regexp_split_to_table(input, pattern)` | одна строка на фрагмент: `value` и one-based `ordinal` (`bigint`) | мажорная версия 17 **и** уровень совместимости БД 170 |
+
+`regexp_split_to_table` возвращает
+[`TvfEntityBuilder<SqlFunctions.ISqlServerRegexpSplitToTableRow>`](xref:NextORM.Core.SqlFunctions.ISqlServerRegexpSplitToTableRow)
+и не требует хука `Render`: член, форма строки и регистрация в `SupportsTableFunction` — весь маршрут. На
+**уровне совместимости 160** движок мажорной версии 17 сообщает, что функции нет (Msg 208), поэтому
+предварительное условие 170 — реальный гейт, который nextorm документирует и проверяет вживую, а не
+молча предполагает (диалект не может прочитать уровень совместимости БД).
 
 ## Функции только для MySQL
 

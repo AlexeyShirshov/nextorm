@@ -242,6 +242,15 @@ public abstract class SqlDialectBase : ISqlDialect
     /// <summary>Defaults to <c>false</c>; MySQL/MariaDB and ClickHouse opt into the arbitrary-value aggregate.</summary>
     public virtual bool SupportsAnyValueAggregate => false;
 
+    /// <inheritdoc/>
+    public virtual bool SupportsSqlServer2025Functions => false;
+
+    /// <inheritdoc/>
+    public virtual bool SupportsSqlServer2022Functions => false;
+
+    /// <inheritdoc/>
+    public virtual bool SupportsProductAggregate => false;
+
     /// <summary>Defaults to <c>null</c>; ClickHouse opts into the <c>windowFunnel</c>/<c>retention</c>/<c>sequenceMatch</c> aggregates.</summary>
     public virtual ISequenceAggregateRenderer? SequenceAggregates => null;
 

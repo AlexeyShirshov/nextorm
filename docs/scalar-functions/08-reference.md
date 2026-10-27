@@ -40,7 +40,7 @@
 | Median | `NotSupportedException` | `percentile_cont(0.5) within group (order by x) over (...)` (analytic: one row per input row, partition-only `OVER`) | `percentile_cont(0.5) within group (order by x)` (aggregate: one row per group; floating-point sort only) |
 | Generic `percentile(fraction, value)` | `NotSupportedException` | `NotSupportedException` | `NotSupportedException` (never an alias of the continuous form) |
 | JSONPath (`jsonb_path_*`) | `NotSupportedException` | `NotSupportedException` | `cast(path as jsonpath)` |
-| Built-in table functions | `NotSupportedException` | `string_split(...)`, `openjson(...)` | `generate_series(...)`, `unnest(...)` |
+| Built-in table functions | `NotSupportedException` | `string_split(...)`, `openjson(...)`, `regexp_split_to_table(...)` (2025+) | `generate_series(...)`, `unnest(...)` |
 
 The in-memory provider does not render SQL: it compiles and evaluates the expression against in-memory
 rows, so the .NET method itself runs. The SQL matrix above applies to the SQLite, SQL Server and
@@ -53,6 +53,27 @@ ClickHouse renders `dateTrunc('part', x)`, `addDays`/`addMonths`/.../`addSeconds
 `covarPop`/`covarSamp`, `argMin`/`argMax`, the `-If` combinators and `multiIf`. It rejects the ANSI
 `filter (where ...)` clause and the `regr_*`/boolean aggregates with `NotSupportedException`; see the
 [ClickHouse provider](../connecting-providers/clickhouse.md).
+
+## SQL Server version-gated functions (2022/2025)
+
+These members live on [`SqlFunctions.SqlServer`](../guide/provider-specific-sql/sqlserver.md#version-gated-functions-2022-and-2025)
+and are gated by the **declared major version** alone: an engine-edition declaration never substitutes for
+a version, and an unversioned context refuses every one of them before SQL with the required and the
+declared major version in the message.
+
+| Member | SQL | Result | Requires |
+|---|---|---|---|
+| `regexp_count(input, pattern)` | `regexp_count(input, pattern)` | `int?` — `0` for no match, `NULL` for a NULL input | major version 17 |
+| `left_shift(value, shift)` | `CASE WHEN value IS NULL OR shift IS NULL THEN CAST(NULL AS int) ELSE left_shift(cast(value as int), cast(shift as bigint)) END` | `int?` — typed-NULL guard (a bare `left_shift(NULL, …)` is Msg 8116) | major version 16 |
+| `product(value)` | `product(value)` (aggregate context; no `OVER`) | the input type; NULL rows are ignored, an all-NULL group is `NULL` | major version 17 |
+| `regexp_split_to_table(input, pattern)` | a `FROM` source, e.g. `from regexp_split_to_table(input, pattern)` | one row per fragment: `value` plus the one-based `ordinal` (`bigint`) | major version 17 **and** database compatibility level 170 |
+
+`regexp_split_to_table` returns
+[`TvfEntityBuilder<SqlFunctions.ISqlServerRegexpSplitToTableRow>`](xref:NextORM.Core.SqlFunctions.ISqlServerRegexpSplitToTableRow)
+and needs no renderer hook: the member, the row shape and the `SupportsTableFunction` registration are the
+whole route. At **compatibility level 160** on a major-17 engine the function does not exist (Msg 208), so
+the 170 prerequisite is a real gate that nextorm documents and asserts live rather than silently assuming
+(the dialect cannot inspect the database compatibility level).
 
 ## MySQL-specific functions
 
