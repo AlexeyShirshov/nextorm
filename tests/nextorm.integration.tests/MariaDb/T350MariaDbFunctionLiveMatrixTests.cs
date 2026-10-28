@@ -28,6 +28,13 @@ namespace NextORM.Integration.Tests;
 /// <param name="NullPolicy"><c>propagates</c>, <c>non-propagating:&lt;expected&gt;</c> or <c>n/a</c>.</param>
 /// <param name="SetupSql">Per-case setup replayed before the raw and the translated observation.</param>
 /// <param name="TeardownSql">Per-case teardown replayed after the case, in both phases.</param>
+/// <param name="Precondition">
+/// The server precondition a row needs before it can be observed at all, or <c>null</c> when the row has
+/// none. A delegate returning a reason string marks the case as <em>skipped</em>: the reason is written to
+/// both artifacts, no statement is executed and no comparison is counted, because a precondition failure
+/// is not a value the two paths could disagree on (<c>BINLOG_GTID_POS</c> on the binlog-less stock image).
+/// Returning <c>null</c> means the precondition holds and the row is compared normally.
+/// </param>
 internal sealed record T350LiveCase(
     string Id,
     string Name,
@@ -40,13 +47,52 @@ internal sealed record T350LiveCase(
     Func<object?, object?, bool> Eq,
     string NullPolicy,
     string? SetupSql = null,
-    string? TeardownSql = null);
+    string? TeardownSql = null,
+    Func<MariaDbDataContext, string?>? Precondition = null);
 
 /// <summary>The one-row probe table the translated projections read from, so no case needs its own source.</summary>
 [SqlTable("t350_probe")]
 public sealed class T350ProbeRow
 {
     /// <summary>The probe row identifier.</summary>
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+}
+
+/// <summary>The two-row aggregate fixture (<c>1</c>, <c>3</c>) the bit aggregates reduce.</summary>
+[SqlTable("t350_agg")]
+public sealed class T350AggRow
+{
+    /// <summary>One row of the fixture.</summary>
+    [Column("x")]
+    public ulong X { get; set; }
+}
+
+/// <summary>The two-row fixture (<c>1</c>, <c>2</c>) <c>JSON_ARRAYAGG</c> collects.</summary>
+[SqlTable("t350_pair")]
+public sealed class T350PairRow
+{
+    /// <summary>One row of the fixture.</summary>
+    [Column("x")]
+    public ulong X { get; set; }
+}
+
+/// <summary>The single-row fixture <c>JSON_OBJECTAGG</c> aggregates.</summary>
+[SqlTable("t350_kv")]
+public sealed class T350KvRow
+{
+    /// <summary>The aggregated value.</summary>
+    [Key]
+    [Column("v")]
+    public int V { get; set; }
+}
+
+/// <summary>The column-default fixture: one row whose <c>id</c> column declares <c>default 7</c>.</summary>
+[SqlTable("t350_def")]
+public sealed class T350DefRow
+{
+    /// <summary>The column whose default <c>DEFAULT(id)</c> returns.</summary>
     [Key]
     [Column("id")]
     public int Id { get; set; }
@@ -69,6 +115,33 @@ public sealed class T350MariaDbFunctionLiveMatrixTests : IDisposable
     private const string DefaultLiveOraclePath = "/tmp/opencode/t350-live-oracle-s2.jsonl";
 
     private const string DefaultLiveResultPath = "/tmp/opencode/t350-live-result-s2.jsonl";
+
+    /// <summary>The <c>text</c> plaintext of the AES rows.</summary>
+    private static readonly byte[] AesText = [116, 101, 120, 116];
+
+    /// <summary>The <c>key</c> of the AES rows.</summary>
+    private static readonly byte[] AesKey = [107, 101, 121];
+
+    /// <summary>The <c>abc</c> bytes of the base64, compress and uncompress rows.</summary>
+    private static readonly byte[] AbcBytes = [97, 98, 99];
+
+    /// <summary>The <c>2020-01-01</c> day the date rows observe.</summary>
+    private static readonly DateTime Day = new(2020, 1, 1);
+
+    /// <summary>The following day, for the difference rows.</summary>
+    private static readonly DateTime NextDay = new(2020, 1, 2);
+
+    /// <summary><c>2020-01-01 00:00:00.123456</c> as a <see cref="DateTime"/> (1 tick = 0.1 µs).</summary>
+    private static readonly DateTime MicroTime = new DateTime(2020, 1, 1).AddTicks(1_234_560);
+
+    /// <summary><c>2020-01-01 12:34:56</c>, the probe's time-of-day value.</summary>
+    private static readonly DateTime Noonish = new(2020, 1, 1, 12, 34, 56);
+
+    /// <summary><c>01:00:00</c>, the probe's duration argument.</summary>
+    private static readonly TimeSpan OneHour = TimeSpan.FromHours(1);
+
+    /// <summary><c>12:34:56</c>, the probe's time-of-day argument.</summary>
+    private static readonly TimeSpan NoonTime = new(12, 34, 56);
 
     private readonly MySqlConnection _connection;
 
@@ -188,10 +261,18 @@ public sealed class T350MariaDbFunctionLiveMatrixTests : IDisposable
             using var oracle = T350RawOracle.Open(oraclePath, FileMode.Create);
             var rawById = new Dictionary<string, T350LiveObservation>(StringComparer.Ordinal);
             var rawNullById = new Dictionary<string, T350LiveObservation>(StringComparer.Ordinal);
+            var skippedById = new Dictionary<string, string>(StringComparer.Ordinal);
             var lines = 0;
 
             foreach (var @case in cases)
             {
+                if (@case.Precondition?.Invoke(ctx) is { Length: > 0 } reason)
+                {
+                    WriteSkip(oracle, server, @case, "primary", reason);
+                    skippedById[@case.Id] = reason;
+                    continue;
+                }
+
                 var primary = Observe(ctx, @case.RawSql, @case.SetupSql);
                 rawById[@case.Id] = primary;
                 WriteLive(oracle, server, @case, "primary", primary);
@@ -210,7 +291,7 @@ public sealed class T350MariaDbFunctionLiveMatrixTests : IDisposable
             }
 
             oracle.Flush();
-            lines.Should().BeGreaterThanOrEqualTo(
+            (lines + skippedById.Count).Should().BeGreaterThanOrEqualTo(
                 cases.Length,
                 "the raw oracle must be complete before any translated assertion runs");
 
@@ -222,6 +303,12 @@ public sealed class T350MariaDbFunctionLiveMatrixTests : IDisposable
 
             foreach (var @case in cases)
             {
+                if (skippedById.TryGetValue(@case.Id, out var skipReason))
+                {
+                    WriteSkip(results, server, @case, "translated", skipReason);
+                    continue;
+                }
+
                 var raw = rawById[@case.Id];
                 var translated = await TryTranslated(ctx, @case, @case.Translated);
                 var verdict = CompareCase(@case, "primary", raw, translated, expectedNull: false);
@@ -257,11 +344,16 @@ public sealed class T350MariaDbFunctionLiveMatrixTests : IDisposable
                     ExecuteRaw(ctx, teardown);
             }
 
-            compared.Should().Be(cases.Length, "every live case must be compared");
+            compared.Should().Be(
+                cases.Length - skippedById.Count,
+                "every live case that is not skipped by a server precondition must be compared");
+            cases.Count(@case => @case.Precondition is not null).Should().BeGreaterThanOrEqualTo(
+                skippedById.Count,
+                "a case may only be skipped through a declared server precondition");
             failures.Should().BeEmpty(
                 "every delivered name must match the raw oracle; failures: " + string.Join(" | ", failures));
             Console.WriteLine(
-                $"T350 live matrix: cases={cases.Length} compared={compared} " +
+                $"T350 live matrix: cases={cases.Length} compared={compared} skipped={skippedById.Count} " +
                 $"nullCompared={nullCompared} oracleLines={lines} failures=0");
         }
         finally
@@ -430,6 +522,32 @@ public sealed class T350MariaDbFunctionLiveMatrixTests : IDisposable
         writer.Flush();
     }
 
+    /// <summary>
+    /// Writes the one line of a case whose server precondition does not hold: the reason is the evidence,
+    /// no statement ran and no comparison is counted.
+    /// </summary>
+    private static void WriteSkip(
+        StreamWriter writer,
+        Dictionary<string, object?> server,
+        T350LiveCase @case,
+        string variant,
+        string reason)
+    {
+        writer.WriteLine(JsonSerializer.Serialize(new Dictionary<string, object?>(server)
+        {
+            ["kind"] = "skipped",
+            ["id"] = @case.Id,
+            ["name"] = @case.Name,
+            ["family"] = @case.Family,
+            ["variant"] = variant,
+            ["sql"] = @case.RawSql,
+            ["reason"] = reason,
+            ["expectedClr"] = @case.ExpectedClr,
+            ["nullPolicy"] = @case.NullPolicy
+        }));
+        writer.Flush();
+    }
+
     // ---------------------------------------------------------------- probe table
 
     private static void CreateProbeTable(MariaDbDataContext ctx)
@@ -437,6 +555,20 @@ public sealed class T350MariaDbFunctionLiveMatrixTests : IDisposable
         ExecuteRaw(ctx, "drop temporary table if exists t350_probe");
         ExecuteRaw(ctx, "create temporary table t350_probe (id int not null primary key)");
         ExecuteRaw(ctx, "insert into t350_probe (id) values (1)");
+        ExecuteRaw(ctx, "drop temporary table if exists t350_agg");
+        ExecuteRaw(ctx, "create temporary table t350_agg (x bigint unsigned not null)");
+        ExecuteRaw(ctx, "insert into t350_agg (x) values (1),(3)");
+        ExecuteRaw(ctx, "drop temporary table if exists t350_pair");
+        ExecuteRaw(ctx, "create temporary table t350_pair (x bigint unsigned not null)");
+        ExecuteRaw(ctx, "insert into t350_pair (x) values (1),(2)");
+        ExecuteRaw(ctx, "drop temporary table if exists t350_kv");
+        ExecuteRaw(ctx, "create temporary table t350_kv (v int not null primary key)");
+        ExecuteRaw(ctx, "insert into t350_kv (v) values (2)");
+        ExecuteRaw(ctx, "drop temporary table if exists t350_def");
+        ExecuteRaw(ctx, "create temporary table t350_def (id int not null default 7)");
+        ExecuteRaw(ctx, "insert into t350_def (id) values (default)");
+        ExecuteRaw(ctx, "drop sequence if exists t350_seq");
+        ExecuteRaw(ctx, "create sequence t350_seq start with 1");
     }
 
     private static void ExecuteRaw(MariaDbDataContext ctx, string sql)
@@ -484,6 +616,88 @@ public sealed class T350MariaDbFunctionLiveMatrixTests : IDisposable
         => raw is null || translated is null
             ? raw is null && translated is null
             : raw.GetType() == translated.GetType();
+
+    /// <summary>
+    /// Numeric equality across the widening a delivered signature applies (<c>int</c> server field read
+    /// through a <c>long?</c> member, <c>uint</c> through a <c>ulong?</c> one): the value is compared
+    /// exactly, as a number, and never as a formatted string.
+    /// </summary>
+    private static bool Numeric(object? raw, object? translated)
+        => raw is null || translated is null
+            ? raw is null && translated is null
+            : Convert.ToDecimal(raw, CultureInfo.InvariantCulture)
+                == Convert.ToDecimal(translated, CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// <see cref="Bytes"/>, with a <c>byte[]</c>/<c>string</c> pair compared as UTF-8 text. A NULL-argument
+    /// form whose field shape depends on the argument type comes back as a binary string from the raw path
+    /// and as text through the delivered signature (<c>QUOTE(NULL)</c> is the four characters
+    /// <c>NULL</c>); the value is still compared exactly.
+    /// </summary>
+    private static bool BytesOrText(object? raw, object? translated)
+    {
+        if (raw is byte[] rawBytes && translated is string translatedText)
+            return System.Text.Encoding.UTF8.GetString(rawBytes) == translatedText;
+        if (raw is string rawText && translated is byte[] translatedBytes)
+            return rawText == System.Text.Encoding.UTF8.GetString(translatedBytes);
+        return Bytes(raw, translated);
+    }
+
+    /// <summary>Checks one invariant on both sides; a NULL on either side compares only to NULL.</summary>
+    private static bool Both(object? raw, object? translated, Func<object, bool> invariant)
+        => raw is null || translated is null
+            ? raw is null && translated is null
+            : invariant(raw) && invariant(translated);
+
+    /// <summary>
+    /// The session/state readers (<c>FOUND_ROWS</c>, <c>LAST_INSERT_ID</c>, <c>BENCHMARK</c>,
+    /// <c>SLEEP</c>): the setup pins the state, but the contract is the documented range, not a
+    /// hand-written constant.
+    /// </summary>
+    private static bool NonNegative(object? raw, object? translated)
+        => Both(raw, translated, value => Convert.ToDecimal(value, CultureInfo.InvariantCulture) >= 0);
+
+    /// <summary><c>ROW_COUNT</c> reports <c>-1</c> for a statement that affected no rows.</summary>
+    private static bool AtLeastMinusOne(object? raw, object? translated)
+        => Both(raw, translated, value => Convert.ToDecimal(value, CultureInfo.InvariantCulture) >= -1);
+
+    /// <summary><c>UUID_SHORT</c> is a positive, monotonically increasing server counter.</summary>
+    private static bool Positive(object? raw, object? translated)
+        => Both(raw, translated, value => Convert.ToDecimal(value, CultureInfo.InvariantCulture) > 0);
+
+    /// <summary>
+    /// <c>RAND</c>: each side draws from its own generator state, so only the documented range
+    /// <c>[0, 1)</c> is compared.
+    /// </summary>
+    private static bool UnitInterval(object? raw, object? translated)
+        => Both(raw, translated, value =>
+        {
+            var number = Convert.ToDouble(value, CultureInfo.InvariantCulture);
+            return number >= 0 && number < 1;
+        });
+
+    /// <summary><c>CHARSET</c>/<c>COLLATION</c>: the session's names are server configuration.</summary>
+    private static bool NonEmptyText(object? raw, object? translated)
+        => Both(raw, translated, value => value is string text && text.Length > 0);
+
+    /// <summary><c>CURRENT_ROLE</c> is NULL without a granted role, otherwise a non-empty role list.</summary>
+    private static bool NullableText(object? raw, object? translated)
+        => (raw is null && translated is null)
+            || Both(raw, translated, value => value is string text && text.Length > 0);
+
+    /// <summary><c>COERCIBILITY</c>'s documented domain is the coercibility classes 0 to 6.</summary>
+    private static bool CoercibilityClass(object? raw, object? translated)
+        => Both(raw, translated, value =>
+        {
+            var number = Convert.ToInt64(value, CultureInfo.InvariantCulture);
+            return number is >= 0 and <= 6;
+        });
+
+    /// <summary>
+    /// <c>RANDOM_BYTES</c>: the content is random, so the rule is the requested length on both sides.
+    /// </summary>
+    private static bool FourRandomBytes(object? raw, object? translated)
+        => Both(raw, translated, value => value is byte[] bytes && bytes.Length == 4);
 
 
     private sealed record Attempt(object? Value, string? Error);
@@ -910,7 +1124,958 @@ public sealed class T350MariaDbFunctionLiveMatrixTests : IDisposable
                 null,
                 "System.String",
                 TypeOnly,
-                "n/a")
+                "n/a"),
+            // ---------------------------------------------------------------- T350 block 3a: JSON
+            // The 75 un-excluded tuple names plus the three block-1 members (rownum, binlog_gtid_pos,
+            // previous_value_for), each raw statement taken verbatim from the S1 oracle
+            // (.pdca/T350/rv1/probe/t350-oracle-s1.jsonl). Where the oracle probed a NULL form it is the
+            // record's NULL form; where it did not, the row carries no NULL claim.
+            new T350LiveCase(
+                "4",
+                "JSON_ARRAY",
+                "JSON",
+                "select json_array(1,2)",
+                "select json_array(null)",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.json_array(1, 2))),
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.json_array((object?)null))),
+                "System.String",
+                BytesOrText,
+                "non-propagating:[null]"),
+            new T350LiveCase(
+                "5",
+                "JSON_ARRAYAGG",
+                "JSON",
+                "select json_arrayagg(x) from (select 1 as x union all select 2) t",
+                null,
+                ctx => Task.FromResult<object?>(
+                    ctx.From<T350PairRow>().Select(x => new { V = SqlFunctions.MySql.json_arrayagg(x.X) })
+                        .ToList()[0].V),
+                null,
+                "System.String",
+                Exact,
+                "n/a"),
+            new T350LiveCase(
+                "8",
+                "JSON_CONTAINS",
+                "JSON",
+                "select json_contains('{\"a\":1}','1','$.a')",
+                "select json_contains(null,'1','$.a')",
+                ctx => Task.FromResult<object?>(
+                    Project(ctx, x => SqlFunctions.MySql.json_contains("{\"a\":1}", "1", "$.a"))),
+                ctx => Task.FromResult<object?>(
+                    Project(ctx, x => SqlFunctions.MySql.json_contains((string?)null, "1", "$.a"))),
+                "System.Int64",
+                Numeric,
+                "propagates"),
+            new T350LiveCase(
+                "9",
+                "JSON_CONTAINS_PATH",
+                "JSON",
+                "select json_contains_path('{\"a\":1}','one','$.a')",
+                null,
+                ctx => Task.FromResult<object?>(
+                    Project(ctx, x => SqlFunctions.MySql.json_contains_path("{\"a\":1}", "one", "$.a"))),
+                null,
+                "System.Int64",
+                Numeric,
+                "n/a"),
+            new T350LiveCase(
+                "10",
+                "JSON_MERGE",
+                "JSON",
+                "select json_merge('{\"a\":1}','{\"b\":2}')",
+                null,
+                ctx => Task.FromResult<object?>(
+                    Project(ctx, x => SqlFunctions.MySql.json_merge("{\"a\":1}", "{\"b\":2}"))),
+                null,
+                "System.String",
+                Exact,
+                "n/a"),
+            new T350LiveCase(
+                "11",
+                "JSON_OBJECT",
+                "JSON",
+                "select json_object('a',1)",
+                null,
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.json_object("a", 1))),
+                null,
+                "System.String",
+                Exact,
+                "n/a"),
+            new T350LiveCase(
+                "12",
+                "JSON_OBJECTAGG",
+                "JSON",
+                "select json_objectagg(k,v) from (select 1 as k, 2 as v) t",
+                null,
+                ctx => Task.FromResult<object?>(
+                    ctx.From<T350KvRow>().Select(x => new { V = SqlFunctions.MySql.json_objectagg("1", x.V) })
+                        .ToList()[0].V),
+                null,
+                "System.String",
+                Exact,
+                "n/a"),
+            new T350LiveCase(
+                "13",
+                "JSON_OVERLAPS",
+                "JSON",
+                "select json_overlaps('{\"a\":1}','{\"a\":1}')",
+                "select json_overlaps(null,'{\"a\":1}')",
+                ctx => Task.FromResult<object?>(
+                    Project(ctx, x => SqlFunctions.MySql.json_overlaps("{\"a\":1}", "{\"a\":1}"))),
+                ctx => Task.FromResult<object?>(
+                    Project(ctx, x => SqlFunctions.MySql.json_overlaps((string?)null, "{\"a\":1}"))),
+                "System.Int64",
+                Numeric,
+                "propagates"),
+            new T350LiveCase(
+                "14",
+                "JSON_PRETTY",
+                "JSON",
+                "select json_pretty('{\"a\":1}')",
+                null,
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.json_pretty("{\"a\":1}"))),
+                null,
+                "System.String",
+                Exact,
+                "n/a"),
+            new T350LiveCase(
+                "15",
+                "JSON_QUOTE",
+                "JSON",
+                "select json_quote('a')",
+                "select json_quote(null)",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.json_quote("a"))),
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.json_quote((string?)null))),
+                "System.String",
+                BytesOrText,
+                "non-propagating:NULL"),
+            new T350LiveCase(
+                "16",
+                "JSON_SCHEMA_VALID",
+                "JSON",
+                "select json_schema_valid('{\"type\":\"object\"}','{\"a\":1}')",
+                null,
+                ctx => Task.FromResult<object?>(
+                    Project(ctx, x => SqlFunctions.MySql.json_schema_valid("{\"type\":\"object\"}", "{\"a\":1}"))),
+                null,
+                "System.Int64",
+                Numeric,
+                "n/a"),
+            new T350LiveCase(
+                "18",
+                "JSON_SEARCH",
+                "JSON",
+                "select json_search('{\"a\":\"b\"}','one','b')",
+                null,
+                ctx => Task.FromResult<object?>(
+                    Project(ctx, x => SqlFunctions.MySql.json_search("{\"a\":\"b\"}", "one", "b"))),
+                null,
+                "System.String",
+                Exact,
+                "n/a"),
+            // ---------------------------------------------------------------- T350 block 3a: string
+            new T350LiveCase(
+                "21",
+                "BIN",
+                "string",
+                "select bin(5)",
+                "select bin(null)",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.bin(5UL))),
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.bin((ulong?)null))),
+                "System.String",
+                Exact,
+                "propagates"),
+            new T350LiveCase(
+                "22",
+                "EXPORT_SET",
+                "string",
+                "select export_set(5,'Y','N')",
+                "select export_set(null,'Y','N')",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.export_set(5UL, "Y", "N"))),
+                ctx => Task.FromResult<object?>(
+                    Project(ctx, x => SqlFunctions.MySql.export_set((ulong?)null, "Y", "N"))),
+                "System.String",
+                Exact,
+                "propagates"),
+            new T350LiveCase(
+                "23",
+                "HEX",
+                "string",
+                "select hex('abc')",
+                "select hex(null)",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.hex("abc"))),
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.hex((string?)null))),
+                "System.String",
+                Exact,
+                "propagates"),
+            new T350LiveCase(
+                "24",
+                "MAKE_SET",
+                "string",
+                "select make_set(1,'a','b')",
+                "select make_set(null,'a','b')",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.make_set(1UL, "a", "b"))),
+                ctx => Task.FromResult<object?>(
+                    Project(ctx, x => SqlFunctions.MySql.make_set((ulong?)null, "a", "b"))),
+                "System.String",
+                Exact,
+                "propagates"),
+            new T350LiveCase(
+                "25",
+                "OCT",
+                "string",
+                "select oct(8)",
+                "select oct(null)",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.oct(8UL))),
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.oct((ulong?)null))),
+                "System.String",
+                Exact,
+                "propagates"),
+            new T350LiveCase(
+                "26",
+                "ORD",
+                "string",
+                "select ord('A')",
+                "select ord(null)",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.ord("A"))),
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.ord((string?)null))),
+                "System.Int64",
+                Numeric,
+                "propagates"),
+            new T350LiveCase(
+                "27",
+                "QUOTE",
+                "string",
+                "select quote('a''b')",
+                "select quote(null)",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.quote("a'b"))),
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.quote((string?)null))),
+                "System.String",
+                BytesOrText,
+                "non-propagating:NULL"),
+            new T350LiveCase(
+                "28",
+                "SOUNDEX",
+                "string",
+                "select soundex('hello')",
+                "select soundex(null)",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.soundex("hello"))),
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.soundex((string?)null))),
+                "System.String",
+                Exact,
+                "propagates"),
+            new T350LiveCase(
+                "29",
+                "STRCMP",
+                "string",
+                "select strcmp('a','b')",
+                "select strcmp(null,'b')",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.strcmp("a", "b"))),
+                ctx => Task.FromResult<object?>(
+                    Project(ctx, x => SqlFunctions.MySql.strcmp((string?)null, "b"))),
+                "System.Int64",
+                Numeric,
+                "propagates"),
+            new T350LiveCase(
+                "30",
+                "TO_BASE64",
+                "string",
+                "select to_base64('abc')",
+                "select to_base64(null)",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.to_base64(AbcBytes))),
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.to_base64((byte[]?)null))),
+                "System.String",
+                Exact,
+                "propagates"),
+            new T350LiveCase(
+                "31",
+                "FROM_BASE64",
+                "string",
+                "select from_base64(to_base64('abc'))",
+                "select from_base64(null)",
+                ctx => Task.FromResult<object?>(
+                    Project(ctx, x => SqlFunctions.MySql.from_base64(SqlFunctions.MySql.to_base64(AbcBytes)))),
+                ctx => Task.FromResult<object?>(
+                    Project(ctx, x => SqlFunctions.MySql.from_base64((string?)null))),
+                "byte[]",
+                Bytes,
+                "propagates"),
+            new T350LiveCase(
+                "32",
+                "UNHEX",
+                "string",
+                "select unhex('6162')",
+                "select unhex(null)",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.unhex("6162"))),
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.unhex((string?)null))),
+                "byte[]",
+                Bytes,
+                "propagates"),
+            new T350LiveCase(
+                "33",
+                "WEIGHT_STRING",
+                "string",
+                "select weight_string('abc')",
+                "select weight_string(null)",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.weight_string("abc"))),
+                ctx => Task.FromResult<object?>(
+                    Project(ctx, x => SqlFunctions.MySql.weight_string((string?)null))),
+                "byte[]",
+                Bytes,
+                "propagates"),
+            // ---------------------------------------------------------------- T350 block 3a: numeric
+            new T350LiveCase(
+                "34",
+                "CONV",
+                "numeric",
+                "select conv('ff',16,10)",
+                "select conv(null,16,10)",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.conv("ff", 16, 10))),
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.conv((string?)null, 16, 10))),
+                "System.String",
+                Exact,
+                "propagates"),
+            new T350LiveCase(
+                "35",
+                "CRC32",
+                "numeric",
+                "select crc32('abc')",
+                "select crc32(null)",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.crc32("abc"))),
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.crc32((string?)null))),
+                "System.UInt64",
+                Numeric,
+                "propagates"),
+            new T350LiveCase(
+                "36",
+                "LOG2",
+                "numeric",
+                "select log2(8)",
+                "select log2(null)",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.log2(8.0))),
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.log2((double?)null))),
+                "System.Double",
+                Exact,
+                "propagates"),
+            // Each side draws from its own generator state, so the rule is the documented range.
+            new T350LiveCase(
+                "37",
+                "RAND",
+                "numeric",
+                "select rand(42)",
+                "select rand(null)",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.rand())),
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.rand((long?)null))),
+                "System.Double",
+                UnitInterval,
+                "non-propagating:[0,1)"),
+            new T350LiveCase(
+                "38",
+                "TRUNCATE",
+                "numeric",
+                "select truncate(1.2345,2)",
+                "select truncate(null,2)",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.truncate(1.2345m, 2))),
+                ctx => Task.FromResult<object?>(
+                    Project(ctx, x => SqlFunctions.MySql.truncate((decimal?)null, 2))),
+                "System.Decimal",
+                Exact,
+                "propagates"),
+            // ---------------------------------------------------------------- T350 block 3a: bit
+            new T350LiveCase(
+                "39",
+                "BIT_COUNT",
+                "bit",
+                "select bit_count(5)",
+                "select bit_count(null)",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.bit_count(5UL))),
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.bit_count((ulong?)null))),
+                "System.Int64",
+                Numeric,
+                "propagates"),
+            // The aggregate rows read the two-row fixture the oracle's inline set declares (1, 3), so the
+            // reduction has the same known row set on both paths.
+            new T350LiveCase(
+                "40",
+                "BIT_AND",
+                "bit",
+                "select bit_and(x) from (select 1 as x union all select 3) t",
+                null,
+                ctx => Task.FromResult<object?>(
+                    ctx.From<T350AggRow>().Select(x => new { V = SqlFunctions.MySql.bit_and(x.X) })
+                        .ToList()[0].V),
+                null,
+                "System.UInt64",
+                Exact,
+                "n/a"),
+            new T350LiveCase(
+                "41",
+                "BIT_OR",
+                "bit",
+                "select bit_or(x) from (select 1 as x union all select 3) t",
+                null,
+                ctx => Task.FromResult<object?>(
+                    ctx.From<T350AggRow>().Select(x => new { V = SqlFunctions.MySql.bit_or(x.X) })
+                        .ToList()[0].V),
+                null,
+                "System.UInt64",
+                Exact,
+                "n/a"),
+            new T350LiveCase(
+                "42",
+                "BIT_XOR",
+                "bit",
+                "select bit_xor(x) from (select 1 as x union all select 3) t",
+                null,
+                ctx => Task.FromResult<object?>(
+                    ctx.From<T350AggRow>().Select(x => new { V = SqlFunctions.MySql.bit_xor(x.X) })
+                        .ToList()[0].V),
+                null,
+                "System.UInt64",
+                Exact,
+                "n/a"),
+            // ---------------------------------------------------------------- T350 block 3a: date/time
+            // The four rows below bind their first argument to DATETIME/TIME. The oracle probed the same
+            // values through string literals, which MariaDB answers with a VARCHAR result — a different
+            // call than the one the delivered signature emits, whose DateTime argument makes the server
+            // return DATETIME. The record therefore observes the delivered call (same name, same values),
+            // so the comparison is like for like.
+            new T350LiveCase(
+                "43",
+                "ADDDATE",
+                "date/time",
+                "select adddate(cast('2020-01-01' as datetime), 1)",
+                "select adddate(null, interval 1 day)",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.adddate(Day, 1))),
+                ctx => Task.FromResult<object?>(
+                    Project(ctx, x => SqlFunctions.MySql.adddate((DateTime?)null, 1))),
+                "System.DateTime",
+                Exact,
+                "propagates"),
+            new T350LiveCase(
+                "44",
+                "ADDTIME",
+                "date/time",
+                "select addtime(cast('2020-01-01 00:00:00' as datetime), cast('01:00:00' as time))",
+                "select addtime(null,'01:00:00')",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.addtime(Day, OneHour))),
+                ctx => Task.FromResult<object?>(
+                    Project(ctx, x => SqlFunctions.MySql.addtime((DateTime?)null, OneHour))),
+                "System.DateTime",
+                Exact,
+                "propagates"),
+            new T350LiveCase(
+                "45",
+                "CONVERT_TZ",
+                "date/time",
+                "select convert_tz('2020-01-01 00:00:00','+00:00','+02:00')",
+                "select convert_tz(null,'+00:00','+02:00')",
+                ctx => Task.FromResult<object?>(
+                    Project(ctx, x => SqlFunctions.MySql.convert_tz(Day, "+00:00", "+02:00"))),
+                ctx => Task.FromResult<object?>(
+                    Project(ctx, x => SqlFunctions.MySql.convert_tz((DateTime?)null, "+00:00", "+02:00"))),
+                "System.DateTime",
+                Exact,
+                "propagates"),
+            new T350LiveCase(
+                "46",
+                "DAYNAME",
+                "date/time",
+                "select dayname('2020-01-01')",
+                "select dayname(null)",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.dayname(Day))),
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.dayname((DateTime?)null))),
+                "System.String",
+                Exact,
+                "propagates"),
+            new T350LiveCase(
+                "47",
+                "FROM_DAYS",
+                "date/time",
+                "select from_days(738000)",
+                "select from_days(null)",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.from_days(738000L))),
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.from_days(null))),
+                "System.DateTime",
+                Exact,
+                "propagates"),
+            new T350LiveCase(
+                "48",
+                "GET_FORMAT",
+                "date/time",
+                "select get_format(DATE,'EUR')",
+                null,
+                ctx => Task.FromResult<object?>(
+                    Project(ctx, x => SqlFunctions.MySql.get_format(MySqlFormatKind.Date, "EUR"))),
+                null,
+                "System.String",
+                Exact,
+                "n/a"),
+            new T350LiveCase(
+                "49",
+                "MAKEDATE",
+                "date/time",
+                "select makedate(2020,32)",
+                "select makedate(null,32)",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.makedate(2020, 32))),
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.makedate(null, 32))),
+                "System.DateTime",
+                Exact,
+                "propagates"),
+            new T350LiveCase(
+                "50",
+                "MAKETIME",
+                "date/time",
+                "select maketime(12,34,56)",
+                "select maketime(null,34,56)",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.maketime(12, 34, 56m))),
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.maketime(null, 34, 56m))),
+                "System.TimeSpan",
+                Exact,
+                "propagates"),
+            new T350LiveCase(
+                "51",
+                "MICROSECOND",
+                "date/time",
+                "select microsecond('2020-01-01 00:00:00.123456')",
+                "select microsecond(null)",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.microsecond(MicroTime))),
+                ctx => Task.FromResult<object?>(
+                    Project(ctx, x => SqlFunctions.MySql.microsecond((DateTime?)null))),
+                "System.Int64",
+                Numeric,
+                "propagates"),
+            new T350LiveCase(
+                "52",
+                "MONTHNAME",
+                "date/time",
+                "select monthname('2020-01-01')",
+                "select monthname(null)",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.monthname(Day))),
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.monthname((DateTime?)null))),
+                "System.String",
+                Exact,
+                "propagates"),
+            new T350LiveCase(
+                "53",
+                "PERIOD_ADD",
+                "date/time",
+                "select period_add(202401,2)",
+                "select period_add(null,2)",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.period_add(202401L, 2L))),
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.period_add(null, 2L))),
+                "System.Int64",
+                Numeric,
+                "propagates"),
+            new T350LiveCase(
+                "54",
+                "PERIOD_DIFF",
+                "date/time",
+                "select period_diff(202402,202401)",
+                "select period_diff(null,202401)",
+                ctx => Task.FromResult<object?>(
+                    Project(ctx, x => SqlFunctions.MySql.period_diff(202402L, 202401L))),
+                ctx => Task.FromResult<object?>(
+                    Project(ctx, x => SqlFunctions.MySql.period_diff(null, 202401L))),
+                "System.Int64",
+                Numeric,
+                "propagates"),
+            new T350LiveCase(
+                "55",
+                "SEC_TO_TIME",
+                "date/time",
+                "select sec_to_time(3661)",
+                "select sec_to_time(null)",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.sec_to_time(3661m))),
+                ctx => Task.FromResult<object?>(
+                    Project(ctx, x => SqlFunctions.MySql.sec_to_time((decimal?)null))),
+                "System.TimeSpan",
+                Exact,
+                "propagates"),
+            new T350LiveCase(
+                "56",
+                "SUBDATE",
+                "date/time",
+                "select subdate(cast('2020-01-01' as datetime), 1)",
+                "select subdate(null, interval 1 day)",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.subdate(Day, 1))),
+                ctx => Task.FromResult<object?>(
+                    Project(ctx, x => SqlFunctions.MySql.subdate((DateTime?)null, 1))),
+                "System.DateTime",
+                Exact,
+                "propagates"),
+            new T350LiveCase(
+                "57",
+                "SUBTIME",
+                "date/time",
+                "select subtime(cast('2020-01-01 00:00:00' as datetime), cast('01:00:00' as time))",
+                "select subtime(null,'01:00:00')",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.subtime(Day, OneHour))),
+                ctx => Task.FromResult<object?>(
+                    Project(ctx, x => SqlFunctions.MySql.subtime((DateTime?)null, OneHour))),
+                "System.DateTime",
+                Exact,
+                "propagates"),
+            new T350LiveCase(
+                "58",
+                "TIME",
+                "date/time",
+                "select time('2020-01-01 12:34:56')",
+                "select time(null)",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.time(Noonish))),
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.time((DateTime?)null))),
+                "System.TimeSpan",
+                Exact,
+                "propagates"),
+            new T350LiveCase(
+                "59",
+                "TIME_FORMAT",
+                "date/time",
+                "select time_format('12:34:56','%H:%i')",
+                "select time_format(null,'%H:%i')",
+                ctx => Task.FromResult<object?>(
+                    Project(ctx, x => SqlFunctions.MySql.time_format(NoonTime, "%H:%i"))),
+                ctx => Task.FromResult<object?>(
+                    Project(ctx, x => SqlFunctions.MySql.time_format((TimeSpan?)null, "%H:%i"))),
+                "System.String",
+                Exact,
+                "propagates"),
+            new T350LiveCase(
+                "60",
+                "TIME_TO_SEC",
+                "date/time",
+                "select time_to_sec('12:34:56')",
+                "select time_to_sec(null)",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.time_to_sec(NoonTime))),
+                ctx => Task.FromResult<object?>(
+                    Project(ctx, x => SqlFunctions.MySql.time_to_sec((TimeSpan?)null))),
+                "System.Int64",
+                Exact,
+                "propagates"),
+            new T350LiveCase(
+                "61",
+                "TIMEDIFF",
+                "date/time",
+                "select timediff('2020-01-02 00:00:00','2020-01-01 00:00:00')",
+                "select timediff(null,'2020-01-01 00:00:00')",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.timediff(NextDay, Day))),
+                ctx => Task.FromResult<object?>(
+                    Project(ctx, x => SqlFunctions.MySql.timediff((DateTime?)null, Day))),
+                "System.TimeSpan",
+                Exact,
+                "propagates"),
+            new T350LiveCase(
+                "62",
+                "TIMESTAMP",
+                "date/time",
+                "select timestamp('2020-01-01 00:00:00')",
+                "select timestamp(null)",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.timestamp(Day))),
+                ctx => Task.FromResult<object?>(
+                    Project(ctx, x => SqlFunctions.MySql.timestamp((DateTime?)null))),
+                "System.DateTime",
+                Exact,
+                "propagates"),
+            new T350LiveCase(
+                "63",
+                "TO_DAYS",
+                "date/time",
+                "select to_days('2020-01-01')",
+                "select to_days(null)",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.to_days(Day))),
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.to_days((DateTime?)null))),
+                "System.Int64",
+                Numeric,
+                "propagates"),
+            new T350LiveCase(
+                "64",
+                "TO_SECONDS",
+                "date/time",
+                "select to_seconds('2020-01-01 00:00:00')",
+                "select to_seconds(null)",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.to_seconds(Day))),
+                ctx => Task.FromResult<object?>(
+                    Project(ctx, x => SqlFunctions.MySql.to_seconds((DateTime?)null))),
+                "System.Int64",
+                Exact,
+                "propagates"),
+            new T350LiveCase(
+                "65",
+                "YEARWEEK",
+                "date/time",
+                "select yearweek('2020-01-01')",
+                "select yearweek(null)",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.yearweek(Day))),
+                ctx => Task.FromResult<object?>(
+                    Project(ctx, x => SqlFunctions.MySql.yearweek((DateTime?)null))),
+                "System.Int64",
+                Numeric,
+                "propagates"),
+            // ---------------------------------------------------------------- T350 block 3a: crypto
+            new T350LiveCase(
+                "66",
+                "AES_ENCRYPT",
+                "crypto",
+                "select aes_encrypt('text','key')",
+                "select aes_encrypt(null,'key')",
+                ctx => Task.FromResult<object?>(
+                    Project(ctx, x => SqlFunctions.MySql.aes_encrypt(AesText, AesKey))),
+                ctx => Task.FromResult<object?>(
+                    Project(ctx, x => SqlFunctions.MySql.aes_encrypt((byte[]?)null, AesKey))),
+                "byte[]",
+                Bytes,
+                "propagates"),
+            new T350LiveCase(
+                "67",
+                "AES_DECRYPT",
+                "crypto",
+                "select aes_decrypt(aes_encrypt('text','key'),'key')",
+                "select aes_decrypt(null,'key')",
+                ctx => Task.FromResult<object?>(
+                    Project(ctx, x => SqlFunctions.MySql.aes_decrypt(
+                        SqlFunctions.MySql.aes_encrypt(AesText, AesKey), AesKey))),
+                ctx => Task.FromResult<object?>(
+                    Project(ctx, x => SqlFunctions.MySql.aes_decrypt((byte[]?)null, AesKey))),
+                "byte[]",
+                Bytes,
+                "propagates"),
+            new T350LiveCase(
+                "68",
+                "COMPRESS",
+                "crypto",
+                "select compress('abc')",
+                "select compress(null)",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.compress(AbcBytes))),
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.compress((byte[]?)null))),
+                "byte[]",
+                Bytes,
+                "propagates"),
+            new T350LiveCase(
+                "69",
+                "UNCOMPRESS",
+                "crypto",
+                "select uncompress(compress('abc'))",
+                "select uncompress(null)",
+                ctx => Task.FromResult<object?>(
+                    Project(ctx, x => SqlFunctions.MySql.uncompress(SqlFunctions.MySql.compress(AbcBytes)))),
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.uncompress((byte[]?)null))),
+                "byte[]",
+                Bytes,
+                "propagates"),
+            new T350LiveCase(
+                "70",
+                "UNCOMPRESSED_LENGTH",
+                "crypto",
+                "select uncompressed_length(compress('abc'))",
+                "select uncompressed_length(null)",
+                ctx => Task.FromResult<object?>(
+                    Project(ctx, x => SqlFunctions.MySql.uncompressed_length(SqlFunctions.MySql.compress(AbcBytes)))),
+                ctx => Task.FromResult<object?>(
+                    Project(ctx, x => SqlFunctions.MySql.uncompressed_length((byte[]?)null))),
+                "System.Int64",
+                Numeric,
+                "propagates"),
+            new T350LiveCase(
+                "71",
+                "RANDOM_BYTES",
+                "crypto",
+                "select random_bytes(4)",
+                "select random_bytes(null)",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.random_bytes(4))),
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.random_bytes((int?)null))),
+                "byte[]",
+                FourRandomBytes,
+                "propagates"),
+            // ---------------------------------------------------------------- T350 block 3a: information
+            // The state readers are pinned by a setup that produces the same session state on both paths,
+            // and each row keeps its documented range as the rule rather than a hand-written constant.
+            new T350LiveCase(
+                "75",
+                "FOUND_ROWS",
+                "information",
+                "select found_rows()",
+                null,
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.found_rows())),
+                null,
+                "System.Int64",
+                NonNegative,
+                "n/a",
+                "select * from t350_probe"),
+            new T350LiveCase(
+                "76",
+                "LAST_INSERT_ID",
+                "information",
+                "select last_insert_id()",
+                null,
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.last_insert_id())),
+                null,
+                "System.UInt64",
+                NonNegative,
+                "n/a",
+                "select last_insert_id(42)"),
+            new T350LiveCase(
+                "77",
+                "ROW_COUNT",
+                "information",
+                "select row_count()",
+                null,
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.row_count())),
+                null,
+                "System.Int64",
+                AtLeastMinusOne,
+                "n/a",
+                "select * from t350_probe"),
+            new T350LiveCase(
+                "78",
+                "CURRENT_ROLE",
+                "information",
+                "select current_role()",
+                null,
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.current_role())),
+                null,
+                "System.String",
+                NullableText,
+                "non-propagating:NULL (no role is granted on the probe server)"),
+            new T350LiveCase(
+                "79",
+                "CHARSET",
+                "information",
+                "select charset('abc')",
+                "select charset(null)",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.charset("abc"))),
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.charset((object?)null))),
+                "System.String",
+                NonEmptyText,
+                "non-propagating:binary"),
+            new T350LiveCase(
+                "80",
+                "COLLATION",
+                "information",
+                "select collation('abc')",
+                "select collation(null)",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.collation("abc"))),
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.collation((object?)null))),
+                "System.String",
+                NonEmptyText,
+                "non-propagating:binary"),
+            new T350LiveCase(
+                "81",
+                "COERCIBILITY",
+                "information",
+                "select coercibility('abc')",
+                "select coercibility(null)",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.coercibility("abc"))),
+                ctx => Task.FromResult<object?>(
+                    Project(ctx, x => SqlFunctions.MySql.coercibility((object?)null))),
+                "System.Int64",
+                CoercibilityClass,
+                "non-propagating:6"),
+            new T350LiveCase(
+                "82",
+                "BENCHMARK",
+                "information",
+                "select benchmark(1,1)",
+                null,
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.benchmark(1L, 1))),
+                null,
+                "System.Int64",
+                NonNegative,
+                "n/a"),
+            new T350LiveCase(
+                "84",
+                "UUID_SHORT",
+                "information",
+                "select uuid_short()",
+                null,
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.uuid_short())),
+                null,
+                "System.UInt64",
+                Positive,
+                "n/a"),
+            // ---------------------------------------------------------------- T350 block 3a: miscellaneous
+            new T350LiveCase(
+                "86",
+                "SLEEP",
+                "miscellaneous",
+                "select sleep(0)",
+                "select sleep(null)",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.sleep(0.0))),
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.sleep((double?)null))),
+                "System.Int64",
+                NonNegative,
+                "non-propagating:0"),
+            new T350LiveCase(
+                "88",
+                "NAME_CONST",
+                "miscellaneous",
+                "select name_const('x',1)",
+                null,
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.name_const("x", 1))),
+                null,
+                "System.Int32",
+                Exact,
+                "n/a"),
+            new T350LiveCase(
+                "89",
+                "COLUMN_DEFAULT",
+                "miscellaneous",
+                "select default(id) from t350_def",
+                null,
+                ctx => Task.FromResult<object?>(
+                    ctx.From<T350DefRow>().Select(x => new { V = SqlFunctions.MySql.column_default(x.Id) })
+                        .ToList()[0].V),
+                null,
+                "System.Int32",
+                Exact,
+                "n/a"),
+            // ---------------------------------------------------------------- T350 block 3a: block-1 members
+            new T350LiveCase(
+                "98",
+                "ROWNUM",
+                "information",
+                "select rownum()",
+                null,
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.rownum())),
+                null,
+                "System.UInt64",
+                Exact,
+                "n/a"),
+            // The stock image runs with the binary log off: the name resolves (error 1381 proves it) but no
+            // value, NULL form or CLR type can be observed, so the row records the server precondition and
+            // counts no comparison instead of weakening the equality rule.
+            new T350LiveCase(
+                "100",
+                "BINLOG_GTID_POS",
+                "information",
+                "select binlog_gtid_pos('', 0)",
+                null,
+                ctx => Task.FromResult<object?>(
+                    Project(ctx, x => SqlFunctions.MySql.binlog_gtid_pos("", 0UL))),
+                null,
+                "System.String",
+                Exact,
+                "n/a (binlog is off on the stock image: 1381, no value to observe)",
+                Precondition: ctx => Scalar(ctx, "select @@log_bin") == "1"
+                    ? null
+                    : "1381: You are not using binary logging (the name resolves, the server precondition " +
+                      "does not hold, so no value is observable)"),
+            // The sequence is created by the probe fixture; the setup advances it once and the teardown
+            // restarts it, so both phases read the same "previous value" from their own NEXTVAL.
+            new T350LiveCase(
+                "121",
+                "PREVIOUS VALUE FOR",
+                "sequence",
+                "select previous value for t350_seq",
+                null,
+                ctx => Task.FromResult<object?>(
+                    Project(ctx, x => SqlFunctions.MySql.previous_value_for("t350_seq"))),
+                null,
+                "System.Int64",
+                Exact,
+                "n/a",
+                "select nextval(t350_seq)",
+                "alter sequence t350_seq restart with 1")
         ];
 
         /// <summary>Evaluates one production projection against the single probe row.</summary>
