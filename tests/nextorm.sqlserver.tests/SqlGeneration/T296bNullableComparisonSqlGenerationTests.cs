@@ -392,9 +392,40 @@ public class T296bNullableComparisonSqlGenerationTests
     }
 
     /// <summary>
+    /// A26: a boolean projection evaluated inside a correlated subquery (the <c>Any()</c> form of the
+    /// live correlation rows) keeps the outer association — <c>t2.id = t1.id</c> per subquery — renders
+    /// the approved total shape for the captured comparison, and reaches this dialect's legal boolean
+    /// scalar exactly once per projection (a no-op here; SQL Server wraps each predicate in one
+    /// CASE/CAST). SQL shape only; the live association is covered by the integration phase.
+    /// </summary>
+    [Fact]
+    public void CorrelatedSelectProjection_ShouldRetainOuterAssociation()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var outer = ctx.From<IT296ShapeEntity>();
+        var inner = ctx.From<IT296ShapeEntity>();
+        int? capturedValue = 42;
+
+        var sql = SqlCollapsed(ctx, outer.Select(x => new
+        {
+            x.Id,
+            HasMatch = inner.Where(i => i.Id == x.Id && i.Int == capturedValue).Any(),
+            HasPresence = inner.Where(i => i.Id == x.Id && i.Int.HasValue).Any(),
+        }));
+
+        sql.Should().Contain("exists(select *");
+        sql.Should().Contain("t2.id = t1.id", "the captured-comparison subquery must stay correlated to the outer row");
+        sql.Should().Contain("t3.id = t1.id", "the presence subquery must stay correlated to the outer row");
+        sql.Should().Contain($"t2.nullableint = {P}capturedValue", "the captured comparison keeps the total shape's comparison arm");
+        sql.Should().Contain("t3.nullableint is not null");
+        AssertScalarLegalisation(sql, 2);
+    }
+
+    /// <summary>
     /// Guards: the approved rewrite is limited to captured operands and mapped presence in the approved
-    /// positions. Column-to-column predicates (A17/A30), the relational operators (A18) and the
-    /// excluded value positions ORDER BY / GROUP BY (A32) keep their previous translation.
+    /// positions. Column-to-column predicates in a JOIN ON, a SELECT projection and a correlated Exists
+    /// body (A17/A30), the relational operators (A18) and the excluded value positions ORDER BY,
+    /// GROUP BY, window PARTITION BY / ORDER BY (A32) keep their previous translation.
     /// </summary>
     [Fact]
     public void GuardPins_ShouldRemainUnchanged()
@@ -411,6 +442,21 @@ public class T296bNullableComparisonSqlGenerationTests
         columnJoin.Should().Contain("t1.nullableint = t2.nullableint")
             .And.NotContain("t1.nullableint is null")
             .And.NotContain("t2.nullableint is null");
+
+        // A30: column-to-column projected in a SELECT is never null-safe either — the boolean scalar
+        // keeps the plain comparison and gains no null arms.
+        var columnSelect = SqlCollapsed(ctx, ctx.From<IT296ShapeEntity>()
+            .Join(inner, (a, b) => a.Id == b.Id)
+            .Select(p => new
+            {
+                p.Item1.Id,
+                SameInt = p.Item1.Int == p.Item2.Int,
+                SameText = p.Item1.String == p.Item2.String,
+            }));
+        columnSelect.Should().Contain("t1.nullableint = t2.nullableint")
+            .And.Contain("t1.somestring = t2.somestring")
+            .And.NotContain(" is null")
+            .And.NotContain(" is not null");
 
         // A17: column-to-column inside a correlated Exists body.
         var columnExists = SqlCollapsed(ctx, e
@@ -441,6 +487,40 @@ public class T296bNullableComparisonSqlGenerationTests
 
         var groupByHasValue = () => SqlCollapsed(ctx, e.GroupBy(x => x.Int.HasValue).Select(x => x.Int));
         groupByHasValue.Should().Throw<BuildSqlCommandException>()
+            .WithMessage("Cannot resolve column for member HasValue");
+
+        // A32: a captured comparison used as a window PARTITION BY key keeps the value translation —
+        // the ordinary comparison with the parameter and no null arms.
+        var windowPartition = SqlCollapsed(ctx, e.Select(x => new
+        {
+            x.Id,
+            Rn = SqlFunctions.Sql.row_number()
+                .Over(partitionBy: () => x.Int == capturedValue, orderBy: () => x.Id),
+        }));
+        windowPartition.Should().Contain($"partition by (nullableint = {P}capturedValue)")
+            .And.Contain("order by id")
+            .And.NotContain(" is null")
+            .And.NotContain(" is not null");
+
+        // A32: the same holds for a window ORDER BY key.
+        var windowOrder = SqlCollapsed(ctx, e.Select(x => new
+        {
+            x.Id,
+            Rn = SqlFunctions.Sql.row_number()
+                .Over(partitionBy: () => x.Id, orderBy: () => x.Int == capturedValue),
+        }));
+        windowOrder.Should().Contain($"order by (nullableint = {P}capturedValue)")
+            .And.NotContain(" is null")
+            .And.NotContain(" is not null");
+
+        // A32: presence in a window PARTITION BY is still the previous typed rejection.
+        var windowPartitionHasValue = () => SqlCollapsed(ctx, e.Select(x => new
+        {
+            x.Id,
+            Rn = SqlFunctions.Sql.row_number()
+                .Over(partitionBy: () => x.Int.HasValue, orderBy: () => x.Id),
+        }));
+        windowPartitionHasValue.Should().Throw<BuildSqlCommandException>()
             .WithMessage("Cannot resolve column for member HasValue");
     }
 }
