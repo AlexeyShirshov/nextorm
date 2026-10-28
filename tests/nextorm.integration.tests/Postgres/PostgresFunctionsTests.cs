@@ -2584,6 +2584,93 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
         ((object)invalid[0].SqlErrorCode!).Should().BeOfType<string>();
     }
 
+    /// <summary>
+    /// The WAL-summary and transaction-origin readers of #281 as FROM sources. WAL summarization is off on
+    /// the fixture, so the test turns it on (<c>summarize_wal</c> is a SIGHUP setting), switches two WAL
+    /// segments and reads the produced summary through the member: the three <c>oid</c> columns come back as
+    /// text while <c>relforknumber</c>/<c>relblocknumber</c>/<c>is_limit_block</c> keep their
+    /// <c>short</c>/<c>long</c>/<c>bool</c> CLR types. When no summary is produced within the budget, the
+    /// reader's documented missing-file error is asserted. The commit-timestamp origin reader follows the
+    /// fixture setting: a row when <c>track_commit_timestamp</c> is on, the documented 55000 when it is off.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void SystemInfoWalSummaryAndXactOriginReaders_ShouldExposeRowsAndClrTypes()
+    {
+        var summarizeContext = Scalar((DataContext)_sut.DataProvider, "select context from pg_settings where name = 'summarize_wal'");
+        var produced = false;
+        if (summarizeContext is "sighup" or "user")
+        {
+            Execute(_sut.DataProvider, "alter system set summarize_wal = on");
+            Execute(_sut.DataProvider, "select pg_reload_conf()");
+            try
+            {
+                Execute(_sut.DataProvider, "select pg_switch_wal()");
+                Execute(_sut.DataProvider, "select pg_switch_wal()");
+                var latest = string.Empty;
+                for (var attempt = 0; attempt < 60 && latest.Length == 0; attempt++)
+                {
+                    latest = Scalar(
+                        (DataContext)_sut.DataProvider,
+                        "select tli || '|' || start_lsn::text || '|' || end_lsn::text"
+                        + " from pg_available_wal_summaries() order by tli desc, start_lsn desc limit 1");
+                }
+
+                if (latest.Length > 0)
+                {
+                    var parts = latest.Split('|');
+                    var contents = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_wal_summary_contents(
+                            long.Parse(parts[0], System.Globalization.CultureInfo.InvariantCulture), parts[1], parts[2]))
+                        .Select(r => new { r.RelFileNode, r.RelTablespace, r.RelDatabase, r.RelForkNumber, r.RelBlockNumber, r.IsLimitBlock })
+                        .ToList();
+                    contents.Should().NotBeEmpty("a produced WAL summary has content rows");
+                    contents.Should().OnlyContain(r => r.RelFileNode != null && r.RelTablespace != null && r.RelDatabase != null);
+                    contents.Should().OnlyContain(r => r.RelForkNumber != null && r.RelBlockNumber != null && r.IsLimitBlock != null);
+                    ((object)contents[0].RelFileNode!).Should().BeOfType<string>("oid has no CLR mapping and is read as text");
+                    ((object)contents[0].RelForkNumber!).Should().BeOfType<short>("int2 maps to short");
+                    ((object)contents[0].RelBlockNumber!).Should().BeOfType<long>("int8 maps to long");
+                    ((object)contents[0].IsLimitBlock!).Should().BeOfType<bool>();
+                    produced = true;
+                }
+            }
+            finally
+            {
+                Execute(_sut.DataProvider, "alter system reset summarize_wal");
+                Execute(_sut.DataProvider, "select pg_reload_conf()");
+            }
+        }
+
+        if (!produced)
+        {
+            FluentActions.Invoking(() => _sut.DataProvider.From(() =>
+                    SqlFunctions.Postgres.pg_wal_summary_contents(1, "0/0", "0/0"))
+                    .Select(r => new { r.RelFileNode }).ToList())
+                .Should().Throw<PostgresException>()
+                .WithMessage("*could not open file*summary*");
+        }
+
+        var trackCommitTimestamp = Scalar((DataContext)_sut.DataProvider, "select current_setting('track_commit_timestamp')");
+        if (trackCommitTimestamp == "on")
+        {
+            var origin = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_xact_commit_timestamp_origin(1u))
+                .Select(r => new { r.Timestamp, r.RoIdent })
+                .ToList();
+            origin.Count.Should().BeLessThanOrEqualTo(1, "the reader returns at most one row");
+            if (origin.Count == 1)
+            {
+                ((object)origin[0].RoIdent!).Should().BeOfType<string>("oid has no CLR mapping and is read as text");
+            }
+        }
+        else
+        {
+            FluentActions.Invoking(() => _sut.DataProvider.From(() =>
+                    SqlFunctions.Postgres.pg_xact_commit_timestamp_origin(1u))
+                    .Select(r => new { r.Timestamp, r.RoIdent }).ToList())
+                .Should().Throw<PostgresException>()
+                .WithMessage("*could not get commit timestamp data*");
+        }
+    }
+
     private static string Scalar(DataContext ctx, string sql)
     {
         ctx.EnsureConnectionOpen();

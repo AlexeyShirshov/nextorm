@@ -1014,4 +1014,43 @@ public class CrossProviderScalarSqlGenerationTests
         info.Should().Contain("from pg_input_error_info(@norm_p0, @norm_p1) as \"t1\"");
         info.Should().Contain("select message, detail, hint, sql_error_code as \"SqlErrorCode\"");
     }
+
+    /// <summary>
+    /// The WAL-summary and transaction-origin readers of #281 as FROM sources: the summary's three
+    /// <c>oid</c> columns are projected as text (the row mapper has no <c>oid</c> accessor) while the
+    /// <c>int2</c>/<c>int8</c>/<c>bool</c> columns stay untouched, the <c>pg_lsn</c> bounds and the
+    /// <c>xid</c> argument travel in their native types, and the origin's <c>roident</c> is projected as
+    /// text. The live shapes are asserted in
+    /// <c>PostgresFunctionsTests.SystemInfoWalSummaryAndXactOriginReaders_ShouldExposeRowsAndClrTypes</c>.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void PostgreSQLSystemInfoWalSummaryAndXactOriginReaders_ShouldEmitCallAndProjection()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        foreach (var name in new[] { "pg_wal_summary_contents", "pg_xact_commit_timestamp_origin" })
+        {
+            PostgresDialect.Instance.SupportsTableFunction(name).Should().BeTrue($"'{name}' is delivered on PostgreSQL");
+        }
+
+        var summary = SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_wal_summary_contents(
+                SqlFunctions.Parameter<long>(0),
+                SqlFunctions.Parameter<string>(1),
+                SqlFunctions.Parameter<string>(2)))
+            .Select(r => new { r.RelFileNode, r.RelTablespace, r.RelDatabase, r.RelForkNumber, r.RelBlockNumber, r.IsLimitBlock }));
+        summary.Should().Contain(
+            "from (select relfilenode::text as relfilenode, reltablespace::text as reltablespace,"
+            + " reldatabase::text as reldatabase, relforknumber, relblocknumber, is_limit_block"
+            + "\n from pg_wal_summary_contents(@norm_p0, cast(@norm_p1 as pg_lsn), cast(@norm_p2 as pg_lsn))) as \"t1\"");
+        summary.Should().Contain(
+            "select relfilenode, reltablespace, reldatabase, relforknumber, relblocknumber, is_limit_block as \"IsLimitBlock\"");
+
+        var origin = SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_xact_commit_timestamp_origin(SqlFunctions.Parameter<uint>(0)))
+            .Select(r => new { r.Timestamp, r.RoIdent }));
+        origin.Should().Contain(
+            "from (select timestamp, roident::text as roident"
+            + "\n from pg_xact_commit_timestamp_origin(cast(@norm_p0 as xid))) as \"t1\"");
+        origin.Should().Contain("select timestamp, roident");
+    }
 }

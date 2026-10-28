@@ -469,6 +469,8 @@ public class PostgresFunctionsRejectionTests
             ("pg_identify_object", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_identify_object("1259", "1259", 0)).Select(r => r.Type))),
             ("pg_identify_object_as_address", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_identify_object_as_address("1259", "1259", 0)).Select(r => r.Type))),
             ("pg_input_error_info", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_input_error_info("1", "integer")).Select(r => r.Message))),
+            ("pg_wal_summary_contents", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_wal_summary_contents(SqlFunctions.Parameter<long>(0), SqlFunctions.Parameter<string>(1), SqlFunctions.Parameter<string>(2))).Select(r => r.RelFileNode))),
+            ("pg_xact_commit_timestamp_origin", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_xact_commit_timestamp_origin(SqlFunctions.Parameter<uint>(0))).Select(r => r.RoIdent))),
         };
 
         foreach (var (name, act) in cases)

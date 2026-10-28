@@ -1238,6 +1238,8 @@ public class InMemoryTests
             ("pg_identify_object", () => _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_identify_object("1259", "1259", 0)).Select(r => r.Type).ToList()),
             ("pg_identify_object_as_address", () => _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_identify_object_as_address("1259", "1259", 0)).Select(r => r.Type).ToList()),
             ("pg_input_error_info", () => _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_input_error_info("1", "integer")).Select(r => r.Message).ToList()),
+            ("pg_wal_summary_contents", () => _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_wal_summary_contents(1, "0/0", "0/0")).Select(r => r.RelFileNode).ToList()),
+            ("pg_xact_commit_timestamp_origin", () => _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_xact_commit_timestamp_origin(1u)).Select(r => r.RoIdent).ToList()),
         };
 
         foreach (var (name, act) in cases)
