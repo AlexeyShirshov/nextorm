@@ -66,7 +66,10 @@ internal static class CrossProviderScalarTranslator
         nameof(PostgresFunctions.pg_settings_get_flags), nameof(PostgresFunctions.pg_index_has_property),
         nameof(PostgresFunctions.pg_indexam_has_property),
         nameof(PostgresFunctions.pg_index_column_has_property), nameof(PostgresFunctions.pg_input_is_valid),
-        nameof(PostgresFunctions.pg_get_serial_sequence)
+        nameof(PostgresFunctions.pg_get_serial_sequence),
+        nameof(PostgresFunctions.pg_get_function_arguments),
+        nameof(PostgresFunctions.pg_get_function_identity_arguments),
+        nameof(PostgresFunctions.pg_get_function_result), nameof(PostgresFunctions.pg_get_functiondef)
     };
 
     /// <summary>

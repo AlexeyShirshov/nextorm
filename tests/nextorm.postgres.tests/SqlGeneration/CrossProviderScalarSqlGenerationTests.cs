@@ -522,6 +522,45 @@ public class CrossProviderScalarSqlGenerationTests
     }
 
     /// <summary>
+    /// The function-definition helpers of #281. The argument is an <c>oid</c>; a text parameter does not
+    /// resolve to the <c>oid</c> overload, so it is cast.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void PostgreSQLFunctionDefinitionFamily_ShouldEmitNativeSpellings()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            Fa = SqlFunctions.Postgres.pg_get_function_arguments(SqlFunctions.Parameter<string>(0)),
+            Fia = SqlFunctions.Postgres.pg_get_function_identity_arguments(SqlFunctions.Parameter<string>(1)),
+            Fr = SqlFunctions.Postgres.pg_get_function_result(SqlFunctions.Parameter<string>(2)),
+            Fd = SqlFunctions.Postgres.pg_get_functiondef(SqlFunctions.Parameter<string>(3))
+        }));
+
+        foreach (var name in new[]
+        {
+            "pg_get_function_arguments", "pg_get_function_identity_arguments",
+            "pg_get_function_result", "pg_get_functiondef"
+        })
+        {
+            sql.Should().Contain($"{name}(");
+            PostgresDialect.Instance.ScalarFunctions.Supports(name).Should().BeTrue($"'{name}' is delivered on PostgreSQL");
+        }
+
+        sql.Should().Contain("pg_get_function_arguments(cast(@norm_p0 as oid))");
+        sql.Should().Contain("pg_get_function_identity_arguments(cast(@norm_p1 as oid))");
+        sql.Should().Contain("pg_get_function_result(cast(@norm_p2 as oid))");
+        sql.Should().Contain("pg_get_functiondef(cast(@norm_p3 as oid))");
+
+        // The pg_node_tree pair carries no SQL at all: the members refuse before any command is built.
+        PostgresDialect.Instance.ScalarFunctions.Supports("pg_get_expr").Should().BeFalse();
+        PostgresDialect.Instance.ScalarFunctions.Supports("pg_get_constraintdef").Should().BeFalse();
+    }
+
+    /// <summary>
     /// The encoding, catalog-format and index-property helpers of #281. Three render shapes are
     /// asserted: a plain call, an <c>oid</c>/<c>regtype</c> argument cast (a text parameter does not
     /// resolve to those overloads) and the <c>regtype</c> result cast to text.

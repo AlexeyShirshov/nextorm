@@ -1179,6 +1179,10 @@ public class InMemoryTests
             ("pg_index_column_has_property", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_index_column_has_property("pg_class_oid_index", 1, "orderable") }).ToList()),
             ("pg_input_is_valid", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_input_is_valid("123", "integer") }).ToList()),
             ("pg_get_serial_sequence", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_get_serial_sequence("pg_class", "oid") }).ToList()),
+            ("pg_get_function_arguments", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_get_function_arguments("1") }).ToList()),
+            ("pg_get_function_identity_arguments", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_get_function_identity_arguments("1") }).ToList()),
+            ("pg_get_function_result", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_get_function_result("1") }).ToList()),
+            ("pg_get_functiondef", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_get_functiondef("1") }).ToList()),
         };
 
         foreach (var (name, act) in cases)

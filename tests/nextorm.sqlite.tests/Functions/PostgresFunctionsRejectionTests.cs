@@ -107,6 +107,17 @@ public class PostgresFunctionsRejectionTests
         crc32.Should().Throw<NotSupportedException>().WithMessage("The crc32 function is refused:*PostgreSQL 18*");
         crc32c.Should().Throw<NotSupportedException>().WithMessage("The crc32c function is refused:*PostgreSQL 18*");
 
+        // The pg_get_expr / pg_get_constraintdef pair is refused at the member itself: PostgreSQL needs
+        // a pg_node_tree value there and no CLR value of that type exists.
+        FluentActions.Invoking(() => SqlFunctions.Postgres.pg_get_expr("x", "0"))
+            .Should().Throw<NotSupportedException>().WithMessage("The pg_get_expr function is refused:*pg_node_tree*");
+        FluentActions.Invoking(() => SqlFunctions.Postgres.pg_get_expr("x", "0", true))
+            .Should().Throw<NotSupportedException>().WithMessage("The pg_get_expr function is refused:*pg_node_tree*");
+        FluentActions.Invoking(() => SqlFunctions.Postgres.pg_get_constraintdef("0"))
+            .Should().Throw<NotSupportedException>().WithMessage("The pg_get_constraintdef function is refused:*pg_node_tree*");
+        FluentActions.Invoking(() => SqlFunctions.Postgres.pg_get_constraintdef("0", true))
+            .Should().Throw<NotSupportedException>().WithMessage("The pg_get_constraintdef function is refused:*pg_node_tree*");
+
         // The pg_sleep family returns void, so no void call can appear in a projection; the refusal is a
         // member-level throw (its body throws before any SQL could be emitted) and is provider-independent.
         FluentActions.Invoking(() => SqlFunctions.Postgres.pg_sleep(0.0))
@@ -291,6 +302,29 @@ public class PostgresFunctionsRejectionTests
             ("pg_index_column_has_property", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_index_column_has_property("pg_class_oid_index", 1, "orderable") }))),
             ("pg_input_is_valid", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_input_is_valid("123", "integer") }))),
             ("pg_get_serial_sequence", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_get_serial_sequence("pg_class", "oid") }))),
+        };
+
+        foreach (var (name, act) in cases)
+            act.Should().Throw<NotSupportedException>().WithMessage($"*{name}*not supported*");
+    }
+
+    /// <summary>
+    /// The PostgreSQL function-definition helpers of #281 are PostgreSQL-only on this provider as well:
+    /// each enrolled name is refused during preparation with a message naming it.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void FunctionDefinitionFamily_ShouldThrowBecauseNotSupported()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var cases = new (string Name, Action Act)[]
+        {
+            ("pg_get_function_arguments", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_get_function_arguments("1") }))),
+            ("pg_get_function_identity_arguments", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_get_function_identity_arguments("1") }))),
+            ("pg_get_function_result", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_get_function_result("1") }))),
+            ("pg_get_functiondef", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_get_functiondef("1") }))),
         };
 
         foreach (var (name, act) in cases)

@@ -1309,6 +1309,89 @@ namespace NextORM.Core;
         /// </summary>
         public string? pg_get_serial_sequence(string? table, string? column) => default!;
 
+        /// <summary>
+        /// The definition of the constraint with the given <paramref name="constraintOid"/>
+        /// (<c>pg_get_constraintdef(oid)</c>). Refused together with <see cref="pg_get_expr(object?, string?)"/>:
+        /// both render a stored node tree as SQL text, and the node-tree argument of <c>pg_get_expr</c>
+        /// cannot be called at all, because PostgreSQL requires a <c>pg_node_tree</c> argument and a value
+        /// of that type cannot be produced from CLR (<c>cannot accept a value of type pg_node_tree</c>).
+        /// Read the constraint text from <c>pg_constraint.conbin</c> through a raw command instead.
+        /// </summary>
+        /// <returns>Never returns; the call is refused when the query is translated.</returns>
+        public string? pg_get_constraintdef(string? constraintOid) =>
+            throw new NotSupportedException(GetConstraintdefRefusal);
+
+        /// <summary>
+        /// The definition of the constraint with the given <paramref name="constraintOid"/>, pretty-printed
+        /// when <paramref name="pretty"/> is true (<c>pg_get_constraintdef(oid, boolean)</c>). Refused with
+        /// <see cref="pg_get_constraintdef(string?)"/>.
+        /// </summary>
+        /// <returns>Never returns; the call is refused when the query is translated.</returns>
+        public string? pg_get_constraintdef(string? constraintOid, bool? pretty) =>
+            throw new NotSupportedException(GetConstraintdefRefusal);
+
+        /// <summary>
+        /// The expression stored in a <c>pg_node_tree</c>
+        /// (<c>pg_get_expr(pg_node_tree, oid)</c>). Refused: PostgreSQL requires a <c>pg_node_tree</c>
+        /// argument and a value of that type cannot be produced from CLR — the pinned 17.11 server answers
+        /// <c>cannot accept a value of type pg_node_tree</c>. There is no CLR type that can carry the
+        /// stored tree, so no form of this function can ever be prepared.
+        /// </summary>
+        /// <returns>Never returns; the call is refused when the query is translated.</returns>
+        public string? pg_get_expr(object? nodeTree, string? relationOid) =>
+            throw new NotSupportedException(GetExprRefusal);
+
+        /// <summary>
+        /// The expression stored in a <c>pg_node_tree</c>, pretty-printed when
+        /// <paramref name="pretty"/> is true (<c>pg_get_expr(pg_node_tree, oid, boolean)</c>). Refused with
+        /// <see cref="pg_get_expr(object?, string?)"/>.
+        /// </summary>
+        /// <returns>Never returns; the call is refused when the query is translated.</returns>
+        public string? pg_get_expr(object? nodeTree, string? relationOid, bool? pretty) =>
+            throw new NotSupportedException(GetExprRefusal);
+
+        /// <summary>
+        /// The argument list of the function with the given <paramref name="functionOid"/>
+        /// (<c>pg_get_function_arguments(oid)</c>), with argument names and defaults; the empty string for a
+        /// function without arguments. The OID is passed in its text form. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_get_function_arguments(string? functionOid) => default!;
+
+        /// <summary>
+        /// The identity argument list of the function with the given <paramref name="functionOid"/>
+        /// (<c>pg_get_function_identity_arguments(oid)</c>), without names and defaults; the form used to
+        /// identify the function in <c>ALTER</c>/<c>DROP</c>. The OID is passed in its text form. Gated per
+        /// name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_get_function_identity_arguments(string? functionOid) => default!;
+
+        /// <summary>
+        /// The result type of the function with the given <paramref name="functionOid"/>
+        /// (<c>pg_get_function_result(oid)</c>), e.g. <c>integer</c> or <c>TABLE(...)</c>. The OID is passed
+        /// in its text form. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_get_function_result(string? functionOid) => default!;
+
+        /// <summary>
+        /// The complete <c>CREATE OR REPLACE FUNCTION</c> statement of the function with the given
+        /// <paramref name="functionOid"/> (<c>pg_get_functiondef(oid)</c>); an aggregate or a window
+        /// function is an error. The OID is passed in its text form. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_get_functiondef(string? functionOid) => default!;
+
+        private const string GetConstraintdefRefusal =
+            "The pg_get_constraintdef function is refused: it renders a stored constraint node tree as " +
+            "SQL text, and its pg_get_expr sibling cannot be called at all because PostgreSQL requires a " +
+            "pg_node_tree argument and a value of that type cannot be produced from CLR (cannot accept a " +
+            "value of type pg_node_tree); the pair is refused rather than half-exposed.";
+
+        private const string GetExprRefusal =
+            "The pg_get_expr function is refused: PostgreSQL requires a pg_node_tree argument and a value " +
+            "of that type cannot be produced from CLR; the pinned 17.11 server answers \"cannot accept a " +
+            "value of type pg_node_tree\".";
+
         /// <summary>The current value of the run-time setting <paramref name="name"/> (<c>current_setting</c>).</summary>
         public string? current_setting(string? name) => default!;
 

@@ -956,7 +956,9 @@ internal sealed class PostgresScalarFunctions : IScalarFunctions
         "pg_type_is_visible" or "pg_char_to_encoding" or "pg_encoding_to_char" or "pg_basetype" or
         "pg_describe_object" or "pg_tablespace_location" or "pg_settings_get_flags" or
         "pg_index_has_property" or "pg_indexam_has_property" or "pg_index_column_has_property" or
-        "pg_input_is_valid" or "pg_get_serial_sequence";
+        "pg_input_is_valid" or "pg_get_serial_sequence" or
+        "pg_get_function_arguments" or "pg_get_function_identity_arguments" or
+        "pg_get_function_result" or "pg_get_functiondef";
 
     /// <inheritdoc/>
     public string Render(string name, IReadOnlyList<string> args) => name switch
@@ -1017,6 +1019,10 @@ internal sealed class PostgresScalarFunctions : IScalarFunctions
         // regtype argument and regtype result: the driver cannot read a regtype, so the result is cast
         // to text (as pg_typeof does) and the text argument is cast to regtype to resolve the overload.
         "pg_basetype" => $"cast(pg_basetype(cast({args[0]} as regtype)) as text)",
+        // pg_get_*_def/arguments take an oid; a text parameter does not resolve to the oid overload.
+        "pg_get_function_arguments" or "pg_get_function_identity_arguments" or
+            "pg_get_function_result" or "pg_get_functiondef"
+            => $"{name}(cast({args[0]} as oid))",
         _ => throw new NotSupportedException($"The {name} function is not supported by PostgreSQL.")
     };
 
