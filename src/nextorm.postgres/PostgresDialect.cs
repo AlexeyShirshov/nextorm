@@ -385,19 +385,19 @@ public class PostgresDialect : SqlDialectBase
     public override string WrapTableFunction(string name, string call) =>
         name is "generate_series" or "unnest" or "regexp_matches" or "regexp_split_to_table" or "string_to_table"
             or "jsonb_object_keys" or "jsonb_path_query"
-            or "pg_listening_channels" or "pg_snapshot_xip" or "pg_tablespace_databases"
+            or "pg_listening_channels"
             ? $"(select {name}\n from {call})"
             : call;
 
     /// <summary>
     /// PostgreSQL renders the record/table-valued system-information readers of #281 with an explicit
     /// projection that keeps every documented column name while converting the types the row mapper
-    /// cannot read: <c>pg_lsn</c> and <c>oid</c> columns become text (the scalar family casts its
-    /// <c>oid</c>/<c>pg_lsn</c> results the same way) and the internal <c>"char"</c> keyword-category
-    /// code becomes text. The argument casts are load-bearing for the same reason as in the scalar
-    /// family: an <c>oid</c>, <c>xid</c>, <c>pg_lsn</c> or <c>pg_snapshot</c> argument does not resolve
-    /// from a text parameter. A function whose columns and arguments are all mappable is left alone and
-    /// keeps its bare call.
+    /// cannot read: <c>pg_lsn</c>, <c>oid</c>, <c>regclass</c> and <c>xid8</c> columns become text (the
+    /// scalar family casts its <c>oid</c>/<c>pg_lsn</c>/<c>xid8</c> results the same way) and the internal
+    /// <c>"char"</c> keyword-category code becomes text. The argument casts are load-bearing for the same
+    /// reason as in the scalar family: an <c>oid</c>, <c>xid</c>, <c>pg_lsn</c> or <c>pg_snapshot</c>
+    /// argument does not resolve from a text parameter. A function whose columns and arguments are all
+    /// mappable is left alone and keeps its bare call.
     /// </summary>
     public override string WrapTableFunction(string name, string call, IReadOnlyList<string> arguments) => name switch
     {
@@ -415,6 +415,15 @@ public class PostgresDialect : SqlDialectBase
             + $"\n from {call})",
         "pg_get_keywords" =>
             "(select word, catcode::text as catcode, barelabel, catdesc, baredesc"
+            + $"\n from {call})",
+        "pg_snapshot_xip" =>
+            "(select pg_snapshot_xip::text as pg_snapshot_xip"
+            + $"\n from pg_snapshot_xip(cast({arguments[0]} as pg_snapshot)))",
+        "pg_tablespace_databases" =>
+            "(select pg_tablespace_databases::text as pg_tablespace_databases"
+            + $"\n from pg_tablespace_databases(cast({arguments[0]} as oid)))",
+        "pg_get_catalog_foreign_keys" =>
+            "(select fktable::text as fktable, fkcols, pktable::text as pktable, pkcols, is_array, is_opt"
             + $"\n from {call})",
         _ => WrapTableFunction(name, call)
     };

@@ -2353,6 +2353,79 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
         keywords.Single(k => k.Word == "all").CatCode.Should().Be("R");
     }
 
+    /// <summary>
+    /// The single-column and catalog-inspection readers of #281 as FROM sources: the restored
+    /// function-named column, the empty sets the fixture really returns, the value rows the server
+    /// produces for a literal snapshot and a real storage-option array, and the exact CLR types the
+    /// projections declare (the <c>oid</c>/<c>xid8</c> columns are text, the two column lists are
+    /// <c>string[]</c>).
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void SystemInfoSingleColumnAndCatalogReaders_ShouldExposeRowsAndClrTypes()
+    {
+        var channels = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_listening_channels())
+            .Select(r => new { r.Channel })
+            .ToList();
+        channels.Should().BeEmpty("the fixture has not issued LISTEN on this connection");
+        Execute(_sut.DataProvider, "listen t347_probe_channel");
+        var listened = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_listening_channels())
+            .Select(r => new { r.Channel })
+            .ToList();
+        Execute(_sut.DataProvider, "unlisten *");
+        listened.Should().ContainSingle("LISTEN was issued on the same connection")
+            .Which.Channel.Should().Be("t347_probe_channel");
+        ((object)listened[0].Channel!).Should().BeOfType<string>();
+
+        var xip = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_snapshot_xip("10:20:10,12"))
+            .Select(r => new { r.Xid })
+            .ToList();
+        xip.Select(r => r.Xid).Should().Equal(new[] { "10", "12" }, "the in-progress ids of the literal snapshot");
+        ((object)xip[0].Xid!).Should().BeOfType<string>("xid8 has no CLR mapping and is read as text");
+
+        var xipEmpty = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_snapshot_xip("10:20:"))
+            .Select(r => new { r.Xid })
+            .ToList();
+        xipEmpty.Should().BeEmpty("a snapshot with an empty in-progress list returns no rows");
+
+        var databases = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_tablespace_databases("1663"))
+            .Select(r => new { r.DatabaseOid })
+            .ToList();
+        databases.Should().HaveCount(3, "the pg_default tablespace holds template0, template1 and postgres");
+        databases.Should().OnlyContain(r => r.DatabaseOid != null && r.DatabaseOid.All(char.IsAsciiDigit));
+        var noTablespace = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_tablespace_databases("0"))
+            .Select(r => new { r.DatabaseOid })
+            .ToList();
+        noTablespace.Should().BeEmpty("OID 0 is not a tablespace, so the function returns no rows");
+
+        var foreignKeys = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_get_catalog_foreign_keys())
+            .Select(r => new { r.FkTable, r.FkColumns, r.PkTable, r.PkColumns, r.IsArray, r.IsOptional })
+            .ToList();
+        foreignKeys.Should().HaveCountGreaterThan(100, "the catalog declares many foreign keys");
+        var relationReference = foreignKeys.First(k => k.FkTable == "pg_class" && k.PkTable == "pg_class");
+        relationReference.FkColumns.Should().NotBeNull().And.HaveCount(1);
+        ((object)relationReference.FkColumns!).Should().BeOfType<string[]>("text[] maps to a string array");
+        relationReference.IsArray.Should().BeFalse();
+        relationReference.IsOptional.Should().BeTrue("pg_class.reltoastrelid/relrewrite may be zero");
+        foreignKeys.Should().OnlyContain(k => k.FkTable != null && k.PkTable != null);
+
+        var optionArray = new[] { "fillfactor=70", "autovacuum_enabled=off" };
+        var options = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_options_to_table(optionArray))
+            .Select(r => new { r.OptionName, r.OptionValue })
+            .ToList();
+        options.Should().HaveCount(2);
+        options[0].OptionName.Should().Be("fillfactor");
+        options[0].OptionValue.Should().Be("70");
+        options[1].OptionName.Should().Be("autovacuum_enabled");
+        options[1].OptionValue.Should().Be("off");
+        ((object)options[0].OptionName!).Should().BeOfType<string>();
+
+        var emptyOptions = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_options_to_table(null!))
+            .Select(r => new { r.OptionName })
+            .ToList();
+        emptyOptions.Should().BeEmpty("a NULL option array yields no rows");
+    }
+
     private static string Scalar(DataContext ctx, string sql)
     {
         ctx.EnsureConnectionOpen();

@@ -852,4 +852,58 @@ public class CrossProviderScalarSqlGenerationTests
             "from (select word, catcode::text as catcode, barelabel, catdesc, baredesc\n from pg_get_keywords()) as \"t1\"");
         keywords.Should().Contain("select word, catcode, barelabel");
     }
+
+    /// <summary>
+    /// The single-column and catalog-inspection readers of #281 as FROM sources. The single-column
+    /// functions restore the function-named column and cast the <c>oid</c>/<c>xid8</c> value to text;
+    /// the two record functions keep their documented columns, with the <c>regclass</c> columns of
+    /// <c>pg_get_catalog_foreign_keys</c> cast to text and its <c>text[]</c> columns left intact.
+    /// The live shape is asserted in
+    /// <c>PostgresFunctionsTests.SystemInfoSingleColumnAndCatalogReaders_ShouldExposeRowsAndClrTypes</c>.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void PostgreSQLSystemInfoSingleColumnAndCatalogReaders_ShouldEmitCallAndProjection()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        foreach (var name in new[]
+        {
+            "pg_listening_channels", "pg_snapshot_xip", "pg_tablespace_databases",
+            "pg_get_catalog_foreign_keys", "pg_options_to_table"
+        })
+        {
+            PostgresDialect.Instance.SupportsTableFunction(name).Should().BeTrue($"'{name}' is delivered on PostgreSQL");
+        }
+
+        var channels = SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_listening_channels())
+            .Select(r => new { r.Channel }));
+        channels.Should().Contain("from (select pg_listening_channels\n from pg_listening_channels()) as \"t1\"");
+        channels.Should().Contain("select pg_listening_channels as \"Channel\"");
+
+        var xip = SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_snapshot_xip("10:20:10,12"))
+            .Select(r => new { r.Xid }));
+        xip.Should().Contain(
+            "from (select pg_snapshot_xip::text as pg_snapshot_xip\n from pg_snapshot_xip(cast(E'10:20:10,12' as pg_snapshot))) as \"t1\"");
+        xip.Should().Contain("select pg_snapshot_xip as \"Xid\"");
+
+        var databases = SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_tablespace_databases("1663"))
+            .Select(r => new { r.DatabaseOid }));
+        databases.Should().Contain(
+            "from (select pg_tablespace_databases::text as pg_tablespace_databases\n from pg_tablespace_databases(cast(E'1663' as oid))) as \"t1\"");
+
+        var foreignKeys = SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_get_catalog_foreign_keys())
+            .Select(r => new { r.FkTable, r.FkColumns, r.PkTable, r.PkColumns, r.IsArray, r.IsOptional }));
+        foreignKeys.Should().Contain(
+            "from (select fktable::text as fktable, fkcols, pktable::text as pktable, pkcols, is_array, is_opt"
+            + "\n from pg_get_catalog_foreign_keys()) as \"t1\"");
+        foreignKeys.Should().Contain("select fktable, fkcols as \"FkColumns\", pktable, pkcols as \"PkColumns\"");
+
+        var options = SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_options_to_table(SqlFunctions.Parameter<string[]>(0)))
+            .Select(r => new { r.OptionName, r.OptionValue }));
+        // Both columns are text, so the call needs no projection wrapper; the text[] argument is a
+        // single array parameter (a constant array would be spread into separate arguments).
+        options.Should().Contain("from pg_options_to_table(@norm_p0) as \"t1\"");
+        options.Should().Contain("select option_name as \"OptionName\", option_value as \"OptionValue\"");
+    }
 }

@@ -397,6 +397,84 @@ public static partial class SqlFunctions
     }
 
     /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.pg_listening_channels()"/>: a single column
+    /// named <c>pg_listening_channels</c> holding one channel name this session is listening on.
+    /// </summary>
+    public interface IListeningChannelRow
+    {
+        /// <summary>The name of a channel the current session has <c>LISTEN</c>ed on.</summary>
+        [Column("pg_listening_channels")]
+        string? Channel { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.pg_snapshot_xip(string?)"/>: a single column
+    /// named <c>pg_snapshot_xip</c> holding one in-progress transaction id of the snapshot. The id is
+    /// read as text (<c>xid8</c> has no CLR mapping in the row mapper), exactly like the scalar
+    /// <c>pg_snapshot_xmin</c>/<c>pg_snapshot_xmax</c> members.
+    /// </summary>
+    public interface ISnapshotXipRow
+    {
+        /// <summary>An in-progress transaction id of the snapshot, in its textual form.</summary>
+        [Column("pg_snapshot_xip")]
+        string? Xid { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.pg_tablespace_databases(string?)"/>: a single
+    /// column named <c>pg_tablespace_databases</c> holding one database OID, read as text like the
+    /// other <c>oid</c>-returning members of the family.
+    /// </summary>
+    public interface ITablespaceDatabaseRow
+    {
+        /// <summary>The OID of a database that has files in the tablespace, as text.</summary>
+        [Column("pg_tablespace_databases")]
+        string? DatabaseOid { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.pg_get_catalog_foreign_keys()"/>: one
+    /// catalog foreign-key relationship per row. Both table columns are <c>regclass</c> and both column
+    /// lists are <c>text[]</c>; the tables are read as text (<c>::text</c> in the projection) and the
+    /// arrays keep their element order, including NULL elements the server may return.
+    /// </summary>
+    public interface IPgCatalogForeignKeyRow
+    {
+        /// <summary>The referencing catalog, as its textual <c>regclass</c> form.</summary>
+        [Column("fktable")]
+        string? FkTable { get; set; }
+        /// <summary>The referencing column names.</summary>
+        [Column("fkcols")]
+        string[]? FkColumns { get; set; }
+        /// <summary>The referenced catalog, as its textual <c>regclass</c> form.</summary>
+        [Column("pktable")]
+        string? PkTable { get; set; }
+        /// <summary>The referenced column names.</summary>
+        [Column("pkcols")]
+        string[]? PkColumns { get; set; }
+        /// <summary>Whether the reference points at an array column.</summary>
+        [Column("is_array")]
+        bool? IsArray { get; set; }
+        /// <summary>Whether the reference is optional (the column may be NULL).</summary>
+        [Column("is_opt")]
+        bool? IsOptional { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.pg_options_to_table(string?[])"/>: one
+    /// storage-option entry per row (the same shape <c>unnest(reloptions)</c> would split by hand).
+    /// </summary>
+    public interface IPgOptionRow
+    {
+        /// <summary>The option name (the part before <c>=</c>).</summary>
+        [Column("option_name")]
+        string? OptionName { get; set; }
+        /// <summary>The option value, or NULL for a flag-style option.</summary>
+        [Column("option_value")]
+        string? OptionValue { get; set; }
+    }
+
+    /// <summary>
     /// Row shape produced by <see cref="SqlServerFunctions.string_split(string?, string?)"/>: a single column
     /// named <c>value</c> holding one fragment (SQL Server <c>string_split</c>).
     /// </summary>

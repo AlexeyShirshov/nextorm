@@ -1225,6 +1225,11 @@ public class InMemoryTests
             ("pg_control_recovery", () => _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_control_recovery()).Select(r => r.MinRecoveryEndLsn).ToList()),
             ("pg_control_checkpoint", () => _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_control_checkpoint()).Select(r => r.CheckpointLsn).ToList()),
             ("pg_get_keywords", () => _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_get_keywords()).Select(r => r.Word).ToList()),
+            ("pg_listening_channels", () => _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_listening_channels()).Select(r => r.Channel).ToList()),
+            ("pg_snapshot_xip", () => _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_snapshot_xip("10:20:")).Select(r => r.Xid).ToList()),
+            ("pg_tablespace_databases", () => _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_tablespace_databases("1663")).Select(r => r.DatabaseOid).ToList()),
+            ("pg_get_catalog_foreign_keys", () => _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_get_catalog_foreign_keys()).Select(r => r.FkTable).ToList()),
+            ("pg_options_to_table", () => _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_options_to_table(new[] { "fillfactor=70" })).Select(r => r.OptionName).ToList()),
         };
 
         foreach (var (name, act) in cases)

@@ -1848,6 +1848,40 @@ namespace NextORM.Core;
         /// </summary>
         public TvfEntityBuilder<SqlFunctions.IPgKeywordRow> pg_get_keywords() => new("pg_get_keywords");
 
+        /// <summary>
+        /// <c>pg_listening_channels()</c> as a FROM source: one row per channel this session is
+        /// listening on (see <see cref="SqlFunctions.IListeningChannelRow"/>). The set is empty until a
+        /// <c>LISTEN</c> is issued on the same connection.
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.IListeningChannelRow> pg_listening_channels() => new("pg_listening_channels");
+
+        /// <summary>
+        /// <c>pg_snapshot_xip(snapshot)</c> as a FROM source: one row per in-progress transaction id of
+        /// the snapshot, read as text (see <see cref="SqlFunctions.ISnapshotXipRow"/>).
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.ISnapshotXipRow> pg_snapshot_xip(string? snapshot) => new("pg_snapshot_xip");
+
+        /// <summary>
+        /// <c>pg_tablespace_databases(oid)</c> as a FROM source: one row per database that has files in
+        /// the tablespace, with the database OID read as text (see
+        /// <see cref="SqlFunctions.ITablespaceDatabaseRow"/>).
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.ITablespaceDatabaseRow> pg_tablespace_databases(string? tablespaceOid) => new("pg_tablespace_databases");
+
+        /// <summary>
+        /// <c>pg_get_catalog_foreign_keys()</c> as a FROM source: one row per catalog foreign-key
+        /// relationship, with both <c>regclass</c> columns read as text and both column lists as
+        /// <c>text[]</c> (see <see cref="SqlFunctions.IPgCatalogForeignKeyRow"/>).
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.IPgCatalogForeignKeyRow> pg_get_catalog_foreign_keys() => new("pg_get_catalog_foreign_keys");
+
+        /// <summary>
+        /// <c>pg_options_to_table(options)</c> as a FROM source: one row per <c>name=value</c> storage
+        /// option, split into <c>option_name</c>/<c>option_value</c> (see
+        /// <see cref="SqlFunctions.IPgOptionRow"/>).
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.IPgOptionRow> pg_options_to_table(string?[] options) => new("pg_options_to_table");
+
         /// <summary><c>a &amp;&amp; b</c>: true when the two ranges overlap (share at least one point).</summary>
         /// <typeparam name="T">The bound type of the ranges.</typeparam>
         /// <param name="a">The left range.</param>

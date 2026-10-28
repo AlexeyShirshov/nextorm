@@ -421,6 +421,11 @@ public class PostgresFunctionsRejectionTests
             ("pg_control_recovery", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_control_recovery()).Select(r => r.MinRecoveryEndLsn))),
             ("pg_control_checkpoint", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_control_checkpoint()).Select(r => r.CheckpointLsn))),
             ("pg_get_keywords", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_get_keywords()).Select(r => r.Word))),
+            ("pg_listening_channels", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_listening_channels()).Select(r => r.Channel))),
+            ("pg_snapshot_xip", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_snapshot_xip("10:20:")).Select(r => r.Xid))),
+            ("pg_tablespace_databases", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_tablespace_databases("1663")).Select(r => r.DatabaseOid))),
+            ("pg_get_catalog_foreign_keys", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_get_catalog_foreign_keys()).Select(r => r.FkTable))),
+            ("pg_options_to_table", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_options_to_table(new[] { "fillfactor=70" })).Select(r => r.OptionName))),
         };
 
         foreach (var (name, act) in cases)
