@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Data;
 using System.Data.Common;
 using System.Globalization;
@@ -55,7 +56,23 @@ public class ClickHouseDataContext : DataContext, IBulkInsertExecutor, IBulkInse
     /// <param name="connectionString">The connection string used to create the <c>ClickHouseConnection</c>.</param>
     /// <param name="optionsBuilder">The options collected from <c>DataContextBuilder</c>.</param>
     public ClickHouseDataContext(string connectionString, DataContextBuilder optionsBuilder)
-        : base(connectionString, null, optionsBuilder)
+        : this(connectionString, null, optionsBuilder, null)
+    {
+    }
+
+    /// <summary>
+    /// Creates a ClickHouse context bound to an explicitly declared server version that owns a
+    /// connection built lazily from <paramref name="connectionString"/>. The version is a caller
+    /// declaration (there is no server probing): it enables the capabilities introduced after the
+    /// pinned baseline (currently the native <c>arrayExcept</c>, ClickHouse 25.9).
+    /// </summary>
+    /// <param name="serverVersion">The ClickHouse server version this context declares.</param>
+    /// <param name="connectionString">The connection string used to create the <c>ClickHouseConnection</c>.</param>
+    /// <param name="optionsBuilder">The options collected from <c>DataContextBuilder</c>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="serverVersion"/> is <see langword="null"/>; use the unversioned constructor instead.</exception>
+    /// <exception cref="InvalidOperationException">A different capability declaration was already registered for this context type.</exception>
+    public ClickHouseDataContext(Version serverVersion, string connectionString, DataContextBuilder optionsBuilder)
+        : this(connectionString, null, optionsBuilder, ValidateServerVersion(serverVersion))
     {
     }
 
@@ -66,19 +83,35 @@ public class ClickHouseDataContext : DataContext, IBulkInsertExecutor, IBulkInse
     /// <param name="connection">An already-created <c>DbConnection</c> owned by the caller.</param>
     /// <param name="optionsBuilder">The options collected from <c>DataContextBuilder</c>.</param>
     public ClickHouseDataContext(DbConnection connection, DataContextBuilder optionsBuilder)
-        : base(null, connection, optionsBuilder)
+        : this(null, connection, optionsBuilder, null)
+    {
+    }
+
+    /// <summary>
+    /// Creates a ClickHouse context bound to an explicitly declared server version over a
+    /// caller-supplied connection, which the context does not dispose.
+    /// </summary>
+    /// <param name="serverVersion">The ClickHouse server version this context declares.</param>
+    /// <param name="connection">An already-created <c>DbConnection</c> owned by the caller.</param>
+    /// <param name="optionsBuilder">The options collected from <c>DataContextBuilder</c>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="serverVersion"/> is <see langword="null"/>; use the unversioned constructor instead.</exception>
+    /// <exception cref="InvalidOperationException">A different capability declaration was already registered for this context type.</exception>
+    public ClickHouseDataContext(Version serverVersion, DbConnection connection, DataContextBuilder optionsBuilder)
+        : this(null, connection, optionsBuilder, ValidateServerVersion(serverVersion))
     {
     }
 
     /// <summary>
     /// Creates a ClickHouse context over a caller-supplied client, which the context does not dispose.
     /// The context's own connection is built from a copy of the client's settings, so both share the same
-    /// actual session id and every other setting; the caller's settings object is never mutated.
+    /// actual session id and every other setting; the caller's settings object is never mutated. This
+    /// (like the data-source overload) is an unversioned construction path: a versioned capability must
+    /// be declared through the versioned connection-string or connection constructor.
     /// </summary>
     /// <param name="client">An already-created <c>ClickHouseClient</c> owned by the caller.</param>
     /// <param name="optionsBuilder">The options collected from <c>DataContextBuilder</c>.</param>
     public ClickHouseDataContext(ClickHouseClient client, DataContextBuilder optionsBuilder)
-        : base(null, null, optionsBuilder)
+        : this(null, null, optionsBuilder, null)
     {
         ArgumentNullException.ThrowIfNull(client);
 
@@ -89,18 +122,75 @@ public class ClickHouseDataContext : DataContext, IBulkInsertExecutor, IBulkInse
     /// <summary>
     /// Creates a ClickHouse context over a caller-supplied data source, which the context does not
     /// dispose: the pooled client is obtained from the data source and its settings are copied for the
-    /// context's own connection, never mutated.
+    /// context's own connection, never mutated. This is an unversioned construction path.
     /// </summary>
     /// <param name="dataSource">An already-created <c>ClickHouseDataSource</c> owned by the caller.</param>
     /// <param name="optionsBuilder">The options collected from <c>DataContextBuilder</c>.</param>
     public ClickHouseDataContext(ClickHouseDataSource dataSource, DataContextBuilder optionsBuilder)
-        : base(null, null, optionsBuilder)
+        : this(null, null, optionsBuilder, null)
     {
         ArgumentNullException.ThrowIfNull(dataSource);
 
         _providedClient = dataSource.GetClient();
         _settings = new ClickHouseClientSettings(dataSource.Settings);
     }
+
+    // The single construction path: declares the capability, then selects the shared dialect for an
+    // undeclared context and a cached versioned dialect otherwise. The declared version reaches the base
+    // through ServerVersion, exactly like the SQL Server provider.
+    private ClickHouseDataContext(
+        string? connectionString,
+        DbConnection? connection,
+        DataContextBuilder optionsBuilder,
+        Version? serverVersion)
+        : base(connectionString, connection, optionsBuilder, serverVersion)
+    {
+        RegisterCapabilityDeclaration(GetType(), ServerVersion);
+        _dialect = ServerVersion is null
+            ? ClickHouseDialect.Instance
+            : VersionedDialects.GetOrAdd(ServerVersion, static version => new ClickHouseDialect(version));
+    }
+
+    private static Version ValidateServerVersion(Version serverVersion)
+    {
+        ArgumentNullException.ThrowIfNull(serverVersion);
+        return serverVersion;
+    }
+
+    // A context type owns one immutable capability declaration: the plan cache is keyed by the context
+    // type, so two declarations would silently share cached SQL. A second, conflicting declaration is a
+    // configuration error that names the remedy: derive a distinct context subclass. "Unspecified" and any
+    // concrete version are different declarations. Validation runs before the dialect is selected and
+    // before any query is prepared.
+    private static void RegisterCapabilityDeclaration(Type contextType, Version? serverVersion)
+    {
+        var candidate = new CapabilityDeclaration(serverVersion);
+        var registered = CapabilitiesByContextType.GetOrAdd(contextType, candidate);
+
+        if (registered.Equals(candidate))
+            return;
+
+        throw new InvalidOperationException(
+            $"The ClickHouse context type '{contextType.Name}' is already bound to server version " +
+            $"{DescribeServerVersion(registered.ServerVersion)}, so it cannot also be used with " +
+            $"{DescribeServerVersion(candidate.ServerVersion)}. A context type has one immutable server " +
+            "version because the plan cache is keyed by the context type; derive a distinct DataContext " +
+            "subclass for each version.");
+    }
+
+    private static string DescribeServerVersion(Version? serverVersion)
+        => serverVersion is null ? "unset (null)" : serverVersion.ToString();
+
+    /// <summary>An immutable capability declaration: the caller's server version, or unset.</summary>
+    private readonly record struct CapabilityDeclaration(Version? ServerVersion);
+
+    /// <summary>One versioned dialect per declared server version, shared by every context type that declares it.</summary>
+    private static readonly ConcurrentDictionary<Version, ClickHouseDialect> VersionedDialects = new();
+
+    /// <summary>One capability declaration per concrete context type (the plan-cache key).</summary>
+    private static readonly ConcurrentDictionary<Type, CapabilityDeclaration> CapabilitiesByContextType = new();
+
+    private readonly ISqlDialect _dialect;
 
     /// <summary>
     /// Creates the context's own <c>ClickHouseConnection</c>: from the connection string when the context
@@ -115,7 +205,7 @@ public class ClickHouseDataContext : DataContext, IBulkInsertExecutor, IBulkInse
             : new ClickHouseConnection(new ClickHouseClientSettings(_settings));
 
     /// <inheritdoc/>
-    public override ISqlDialect Dialect => ClickHouseDialect.Instance;
+    public override ISqlDialect Dialect => _dialect;
 
     /// <summary>
     /// ClickHouse has no time-of-day type: the binder stores a <see cref="TimeOnly"/> as <c>String</c>, so a

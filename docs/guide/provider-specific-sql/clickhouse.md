@@ -237,7 +237,9 @@ every other dialect:
   `parse_date_time`/`parse_date_time_best_effort` (`parseDateTime`/`parseDateTimeBestEffort`) and the
   current-date helpers `now`/`today`/`yesterday`;
 * array set operations: `array_concat`, `array_flatten`, `array_uniq` (`arrayUniq`, wrapped in
-  `toInt64`), `array_intersect`, `array_union`, `array_symmetric_difference`;
+  `toInt64`), `array_intersect`, `array_union`, `array_symmetric_difference`, and `array_except`
+  (`arrayExcept`, available only when the context declares ClickHouse 25.9 or later — see
+  [Declaring the server version](../../connecting-providers/clickhouse.md#declaring-the-server-version));
 * the `Map` family: the `map` constructor (inline `Tuple.Create` pairs), `map_keys`/`map_values`,
   `map_contains_key`/`map_contains_value`, `map_add`/`map_concat`, and the public higher-order
   helpers `map_filter`/`map_apply`/`map_sort` (tuple and array results, lowered to array forms) plus
@@ -306,10 +308,18 @@ empty string or a default digest — and the value survives ordinary string mate
 through an anonymous projection, a typed projection and `Scalar<string>` (a plain `string`, not a byte
 array).
 
-`array_except` keeps its place in `SqlFunctions.ClickHouse` for API compatibility but is **not
-supported** on the pinned 25.8 baseline: the native `arrayExcept` was introduced in ClickHouse 25.9,
-so the call is refused with `NotSupportedException` at translation time and never reaches the server.
-The other array set operations are unaffected.
+`array_except` keeps its place in `SqlFunctions.ClickHouse` for API compatibility and is gated by the
+declared server version, because the native `arrayExcept` was introduced in ClickHouse 25.9:
+
+| Declaration | Behaviour |
+|---|---|
+| none (the pinned 25.8 baseline, the default) | `NotSupportedException` with the historical `The array_except function is not supported by this provider.` — nothing is emitted |
+| earlier than 25.9 (for example `25.8`) | `NotSupportedException` naming the required `25.9` and the declared version, thrown before any SQL |
+| 25.9 or later | the native `arrayExcept(...)`, which takes exactly two arrays; any other arity is refused before SQL |
+
+The declaration is per context, so two versions need distinct context subclasses; see
+[Declaring the server version](../../connecting-providers/clickhouse.md#declaring-the-server-version).
+The other array set operations are unaffected and never consult the version.
 
 A native `Map` result (the `map` constructor, `map_add`, `map_concat`) is surfaced as
 `IDictionary<TKey, TValue>`; combine it with `map_keys`/`map_values` or one of the contains

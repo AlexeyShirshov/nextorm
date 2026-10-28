@@ -21,9 +21,11 @@ namespace NextORM.Integration.Tests;
 ///
 /// <para>
 /// The <c>array_except</c> case stays out of the scalar theory by design (#252): the native
-/// <c>arrayExcept</c> exists only from ClickHouse 25.9, and the pinned 25.8 server rejects it with
-/// Code 46 (UNKNOWN_FUNCTION). The dialect no longer advertises the name, so a call is refused with
-/// <see cref="NotSupportedException"/> at translation time instead of being sent to the server.
+/// <c>arrayExcept</c> exists only from ClickHouse 25.9 and this class runs over the shared undeclared
+/// context, whose table does not advertise the name, so a call is refused with
+/// <see cref="NotSupportedException"/> at translation time instead of being sent to the server. A
+/// context that declares 25.9 or later renders the native call; that arm lives in
+/// <c>ClickHouseArrayExceptLiveTests</c>.
 /// </para>
 ///
 /// <para>
@@ -52,8 +54,9 @@ public sealed class ClickHouseDialectBranchCoverage3Tests : ProviderTestSuite
     /// <summary>
     /// One case per ClickHouse scalar/date branch: the four variance aggregates (each mapping to a
     /// distinct <c>MakeAggregate</c> arm), the <c>dateTrunc</c> arm, the <c>toXxx</c> date-part arm
-    /// and the UTF-8 string arm. The <c>arrayExcept</c> renderer is a refusal arm since #252, not a
-    /// live branch.
+    /// and the UTF-8 string arm. <c>array_except</c> is not a live branch on the shared undeclared
+    /// context: #252 makes the name available only to a context that declares 25.9 or later, so the
+    /// pinned-baseline table advertises neither the name nor an arm.
     /// </summary>
     [Theory]
     [InlineData("stdev_samp")]

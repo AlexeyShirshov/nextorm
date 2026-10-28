@@ -175,6 +175,49 @@ using IDataContext ctx = new ClickHouseDataContext(
     "Host=localhost;Username=default;Database=app", new DataContextBuilder());
 ```
 
+### Declaring the server version
+
+The server version is a caller declaration, never probed: without one the provider keeps the pinned
+25.8 baseline and refuses every function introduced later. When the deployment provably runs a newer
+server, declare it through the versioned constructor (the connection-string and caller-connection
+overloads both accept it):
+
+```csharp
+using var ctx = new ClickHouseDataContext(
+    new Version(25, 9),
+    "Host=localhost;Username=default;Database=app",
+    new DataContextBuilder());
+```
+
+A declared version of 25.9 or later enables the native `arrayExcept` behind
+`SqlFunctions.ClickHouse.array_except`; the two-array call renders as `arrayExcept(...)` (the native
+function takes exactly two arrays, so any other arity is refused before SQL). An undeclared context
+keeps the historical refusal — the shared `ClickHouseDialect.Instance` never enables a 25.9 function —
+and a context declaring an older version (for example `25.8`) still refuses the call, but the
+`NotSupportedException` names both the required `25.9` and the declared version and is thrown before
+any SQL is emitted.
+
+A concrete context type carries one immutable declaration, because the plan cache is keyed by the
+context type. Declare each version through its own subclass:
+
+```csharp
+// One context type = one immutable declaration.
+public sealed class Declared25Context : ClickHouseDataContext
+{
+    public Declared25Context(string connectionString, DataContextBuilder optionsBuilder)
+        : base(new Version(25, 9), connectionString, optionsBuilder)
+    {
+    }
+}
+
+var builder = new DataContextBuilder();
+builder.Factory = b => new Declared25Context(connectionString, b);   // the DI path
+```
+
+A second, different declaration for the same type throws `InvalidOperationException` before any query
+is prepared. The client and data-source constructors are unversioned: they always create the
+pinned-baseline dialect.
+
 ## String concatenation
 
 ```csharp
@@ -303,8 +346,11 @@ select `Id` as `Id`
 ## Notes and limitations
 
 - The native `arrayExcept` exists only from ClickHouse 25.9. `SqlFunctions.ClickHouse.array_except`
-  stays in the public API but is refused with `NotSupportedException` at translation time on the
-  pinned 25.8 baseline; the other array set operations are unaffected.
+  stays in the public API: an undeclared context keeps the pinned 25.8 refusal
+  (`NotSupportedException` at translation time, no SQL), a context declaring 25.9 or later renders
+  `arrayExcept(...)`, and a context declaring an older version refuses with a message naming the
+  required `25.9` and the declared version. See
+  [Declaring the server version](#declaring-the-server-version).
 - `GROUP BY ... WITH TOTALS` renders correctly, but the official `ClickHouse.Driver` returns the totals
   row in a separate response block it does not expose through `IDataReader`, so only the group rows are
   materialised. Use it if your driver surfaces totals; nextorm itself only emits the modifier.

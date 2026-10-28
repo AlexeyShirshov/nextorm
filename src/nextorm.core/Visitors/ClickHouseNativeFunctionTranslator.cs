@@ -603,6 +603,9 @@ internal static class ClickHouseNativeFunctionTranslator
     /// <summary>The map-only sort arm, lowered onto the tuple-array representation.</summary>
     private const string MapSortName = nameof(ClickHouseFunctions.map_sort);
 
+    /// <summary>The number of arrays the native <c>arrayExcept</c> accepts (ClickHouse 25.9+).</summary>
+    private const int ArrayExceptArity = 2;
+
     /// <summary>Base name of the generated tuple lambda identifier of the <c>arrayZip</c> arms.</summary>
     private const string TupleIdentifierBase = "_t";
 
@@ -649,7 +652,24 @@ internal static class ClickHouseNativeFunctionTranslator
             ValidateMapMember(node, name);
 
         if (visitor.Dialect.ScalarFunctions is not { } scalars || !scalars.Supports(name))
-            throw new NotSupportedException($"The {name} function is not supported by this provider.");
+            throw new NotSupportedException(
+                visitor.Dialect.ScalarFunctions?.GetUnsupportedReason(name)
+                ?? $"The {name} function is not supported by this provider.");
+
+        // #252: the native arrayExcept takes exactly two arrays, while the public params T[][] signature
+        // can express any arity. The capability gate above stays first, so the undeclared and the
+        // declared-old refusals keep their own messages; only a declared 25.9+ dialect reaches this
+        // arity guard, which fails closed before a single argument is rendered.
+        if (name == nameof(ClickHouseFunctions.array_except))
+        {
+            var arrayExceptItems = FlattenParams(node.Arguments);
+            if (arrayExceptItems.Count != ArrayExceptArity)
+            {
+                throw new NotSupportedException(
+                    $"The array_except function is not supported by this provider with {arrayExceptItems.Count} " +
+                    "array argument(s): ClickHouse's arrayExcept takes exactly two arrays.");
+            }
+        }
 
         if (name == nameof(ClickHouseFunctions.to_start_of_interval))
         {

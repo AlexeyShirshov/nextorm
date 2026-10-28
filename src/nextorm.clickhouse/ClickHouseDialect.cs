@@ -31,19 +31,68 @@ public class ClickHouseDialect : SqlDialectBase
     private readonly IQuantileAggregateRenderer _quantileAggregates;
     private readonly ITopKAggregateRenderer _topKAggregates;
     private readonly IClickHouseAggregateRenderer _clickHouseAggregates;
+    private readonly IScalarFunctions _scalarFunctions;
+    private readonly Version? _serverVersion;
 
     /// <summary>
     /// Creates the dialect and its capability renderers. The constructor is public so an external
     /// assembly can derive a custom dialect from <see cref="ClickHouseDialect"/>.
     /// </summary>
     public ClickHouseDialect()
+        : this(VersionDeclaration.Undeclared)
+    {
+    }
+
+    /// <summary>
+    /// Creates a dialect bound to an explicitly declared ClickHouse server version. The declaration is
+    /// caller-supplied (there is no server probing): it only widens the capability set for the gates
+    /// whose native function appeared in a later ClickHouse release (currently <c>arrayExcept</c> from
+    /// 25.9). An undeclared dialect keeps the pinned-baseline surface, i.e. the shared
+    /// <see cref="Instance"/> renderers.
+    /// </summary>
+    /// <param name="serverVersion">The ClickHouse server version this dialect declares.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="serverVersion"/> is <see langword="null"/>; use the parameterless constructor for an undeclared dialect.</exception>
+    public ClickHouseDialect(Version serverVersion)
+        : this(VersionDeclaration.Of(serverVersion))
+    {
+    }
+
+    private ClickHouseDialect(VersionDeclaration declaration)
     {
         _multiIf = new ClickHouseMultiIfRenderer(this);
         _uniqAggregates = new ClickHouseUniqAggregateRenderer(this);
         _quantileAggregates = new ClickHouseQuantileAggregateRenderer(this);
         _topKAggregates = new ClickHouseTopKAggregateRenderer(this);
         _clickHouseAggregates = new ClickHouseAggregateRenderer(this);
+        _serverVersion = declaration.ServerVersion;
+        _scalarFunctions = _serverVersion is null
+            ? ClickHouseScalarFunctions.Instance
+            : new ClickHouseScalarFunctions(_serverVersion);
     }
+
+    /// <summary>
+    /// Distinguishes the undeclared constructor from the versioned one: a reference-type nullable
+    /// annotation cannot be an overload, so the two public constructors meet here through a wrapper.
+    /// </summary>
+    private readonly record struct VersionDeclaration(Version? ServerVersion)
+    {
+        public static VersionDeclaration Undeclared => default;
+
+        public static VersionDeclaration Of(Version serverVersion)
+        {
+            ArgumentNullException.ThrowIfNull(serverVersion);
+            return new VersionDeclaration(serverVersion);
+        }
+    }
+
+    /// <summary>The declared server version, or <see langword="null"/> for the undeclared (pinned-baseline) dialect.</summary>
+    internal Version? DeclaredVersion => _serverVersion;
+
+    /// <summary>
+    /// True when the declared server version provides the native <c>arrayExcept</c> function, introduced
+    /// in ClickHouse 25.9. Always <see langword="false"/> for an undeclared dialect.
+    /// </summary>
+    internal bool SupportsClickHouse25_9Functions => ClickHouseVersionFacts.Supports(_serverVersion, 25, 9);
 
     /// <summary>A ClickHouse derived table (subquery in FROM) must have an alias.</summary>
     public override bool RequireSubqueryAlias => true;
@@ -470,7 +519,7 @@ public class ClickHouseDialect : SqlDialectBase
     public override IUuidGenerators UuidGenerators => ClickHouseUuidGenerators.Instance;
 
     /// <summary>ClickHouse renders every cross-provider scalar function (UTF-8 character-wise where it matters).</summary>
-    public override IScalarFunctions ScalarFunctions => ClickHouseScalarFunctions.Instance;
+    public override IScalarFunctions ScalarFunctions => _scalarFunctions;
 
     /// <summary>
     /// ClickHouse implements the dictionary functions <c>dictGet</c>/<c>dictGetOrDefault</c>/
@@ -1465,24 +1514,101 @@ internal sealed class ClickHouseStringFormats : IStringFormatFunctions
 }
 
 /// <summary>
+/// The server-version boundaries of the ClickHouse capability gates. A version is caller-declared on
+/// <see cref="ClickHouseDialect"/>; an undeclared (<see langword="null"/>) version never satisfies a
+/// boundary, so the pinned-baseline surface stays exactly as it was.
+/// </summary>
+internal static class ClickHouseVersionFacts
+{
+    /// <summary>
+    /// True when <paramref name="declaredVersion"/> is at or above
+    /// <paramref name="requiredMajor"/>.<paramref name="requiredMinor"/> (a major/minor boundary; the
+    /// build and revision components are ignored).
+    /// </summary>
+    internal static bool Supports(Version? declaredVersion, int requiredMajor, int requiredMinor) =>
+        declaredVersion is { } version
+        && (version.Major > requiredMajor
+            || (version.Major == requiredMajor && version.Minor >= requiredMinor));
+}
+
+/// <summary>
 /// Renders the cross-provider scalar functions of <see cref="CommonFunctions"/> on ClickHouse:
 /// <c>left</c>/<c>right</c>, <c>leftPad</c>/<c>rightPad</c>, <c>repeat</c>, <c>reverseUTF8</c>,
 /// <c>space</c>, <c>concatWithSeparator</c>, <c>translate</c>, <c>ascii</c> and <c>char</c>.
 /// Note that ClickHouse's <c>concatWithSeparator</c> returns NULL when any argument is NULL,
 /// whereas the other providers skip null arguments.
 /// </summary>
+/// <remarks>
+/// A versioned instance is created by <see cref="ClickHouseDialect"/> when the caller declares a server
+/// version; <see cref="Instance"/> stays the undeclared renderer of the shared dialect. The only
+/// version-gated name today is <c>array_except</c>, whose native <c>arrayExcept</c> appeared in
+/// ClickHouse 25.9 (issue #252).
+/// </remarks>
 internal sealed class ClickHouseScalarFunctions : IScalarFunctions
 {
-    internal static readonly ClickHouseScalarFunctions Instance = new();
+    /// <summary>The scalar name whose native ClickHouse implementation is version-gated.</summary>
+    private const string ArrayExceptName = "array_except";
+
+    /// <summary>The undeclared refusal, byte-identical to the pre-#252 message.</summary>
+    private const string ArrayExceptUndeclaredReason =
+        "The array_except function is not supported by ClickHouse.";
+
+    internal static readonly ClickHouseScalarFunctions Instance = new(null);
+
+    private readonly Version? _declaredVersion;
+
+    /// <summary>Creates a renderer for the declared server version, or the undeclared one when <see langword="null"/>.</summary>
+    internal ClickHouseScalarFunctions(Version? declaredVersion) => _declaredVersion = declaredVersion;
+
+    /// <summary>True when the declared version provides the native <c>arrayExcept</c> (25.9+).</summary>
+    private bool SupportsArrayExcept => ClickHouseVersionFacts.Supports(_declaredVersion, 25, 9);
 
     /// <inheritdoc/>
-    public bool Supports(string name) => Names.Contains(name);
+    public bool Supports(string name) =>
+        name == ArrayExceptName ? SupportsArrayExcept : Names.Contains(name);
 
     /// <inheritdoc/>
     public string Render(string name, IReadOnlyList<string> args) =>
-        Arms.TryGetValue(name, out var arm)
-            ? arm(args)
-            : throw new NotSupportedException($"The {name} function is not supported by ClickHouse.");
+        name == ArrayExceptName
+            ? RenderArrayExcept(args)
+            : Arms.TryGetValue(name, out var arm)
+                ? arm(args)
+                : throw new NotSupportedException($"The {name} function is not supported by ClickHouse.");
+
+    /// <inheritdoc/>
+    public string? GetUnsupportedReason(string name) =>
+        name == ArrayExceptName && _declaredVersion is { } version && !SupportsArrayExcept
+            ? ArrayExceptVersionReason(version)
+            : null;
+
+    /// <summary>
+    /// Renders the native <c>arrayExcept</c>. An undeclared dialect refuses with the historical
+    /// message; a declared version below 25.9 refuses with the required and the declared version.
+    /// </summary>
+    private string RenderArrayExcept(IReadOnlyList<string> args)
+    {
+        if (_declaredVersion is null)
+            throw new NotSupportedException(ArrayExceptUndeclaredReason);
+
+        if (!SupportsArrayExcept)
+            throw new NotSupportedException(ArrayExceptVersionReason(_declaredVersion));
+
+        if (args.Count != ArrayExceptArity)
+            throw new NotSupportedException(ArrayExceptArityReason(args.Count));
+
+        return $"arrayExcept({string.Join(", ", args)})";
+    }
+
+    /// <summary>The number of arrays the native <c>arrayExcept</c> accepts (ClickHouse 25.9+).</summary>
+    private const int ArrayExceptArity = 2;
+
+    private static string ArrayExceptArityReason(int arity) =>
+        $"The array_except function is not supported by ClickHouse with {arity} " +
+        "array argument(s): ClickHouse's arrayExcept takes exactly two arrays.";
+
+    private static string ArrayExceptVersionReason(Version declaredVersion) =>
+        "The array_except function requires ClickHouse version 25.9 or later; " +
+        $"declared server version: {declaredVersion.Major}.{declaredVersion.Minor}.";
 
     /// <summary>
     /// The supported names. A hash set keeps <see cref="Supports"/> O(1) and independent of the table
@@ -1926,12 +2052,6 @@ internal sealed class ClickHouseScalarFunctions : IScalarFunctions
             ["array_uniq"] = static args => $"toInt64(arrayUniq({args[0]}))",
             ["array_intersect"] = static args => $"arrayIntersect({string.Join(", ", args)})",
             ["array_union"] = static args => $"arrayUnion({string.Join(", ", args)})",
-
-            // arrayExcept exists only from ClickHouse 25.9. The capability table no longer advertises
-            // array_except on the pinned 25.8 baseline, so this arm is a defensive refusal for a direct
-            // Render call; the translator gate raises the same NotSupportedException earlier (#252).
-            ["array_except"] = static args => throw new NotSupportedException(
-            "The array_except function is not supported by ClickHouse."),
             ["array_symmetric_difference"] = static args => $"arraySymmetricDifference({string.Join(", ", args)})",
             ["map"] = static args => $"map({string.Join(", ", args)})",
             ["map_keys"] = static args => $"mapKeys({args[0]})",
