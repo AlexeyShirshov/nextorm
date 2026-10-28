@@ -1516,6 +1516,44 @@ namespace NextORM.Core;
         /// </summary>
         public string? pg_current_xact_id_if_assigned() => default!;
 
+        /// <summary>
+        /// The highest transaction id of the snapshot <paramref name="snapshot"/>
+        /// (<c>pg_snapshot_xmax(pg_snapshot)</c>) in its textual form; the snapshot is the text produced by
+        /// <see cref="pg_current_snapshot()"/>. The <c>xid8</c> result is read as text because the driver
+        /// cannot read it. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_snapshot_xmax(string? snapshot) => default!;
+
+        /// <summary>
+        /// The lowest transaction id still in progress in the snapshot <paramref name="snapshot"/>
+        /// (<c>pg_snapshot_xmin(pg_snapshot)</c>) in its textual form; the <c>xid8</c> result is read as
+        /// text because the driver cannot read it. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_snapshot_xmin(string? snapshot) => default!;
+
+        /// <summary>
+        /// Whether the transaction <paramref name="xid"/> is visible in <paramref name="snapshot"/>
+        /// (<c>pg_visible_in_snapshot(xid8, pg_snapshot)</c>); both arguments are the textual forms.
+        /// Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public bool? pg_visible_in_snapshot(string? xid, string? snapshot) => default!;
+
+        /// <summary>
+        /// The commit time of the transaction <paramref name="xid"/> (<c>pg_xact_commit_timestamp(xid)</c>),
+        /// or NULL when the time is not known (the setting <c>track_commit_timestamp</c> is off) — the
+        /// documented behaviour instead of a server restart. The <c>xid</c> argument is passed in its
+        /// numeric text form. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public DateTime? pg_xact_commit_timestamp(uint? xid) => default!;
+
+        /// <summary>
+        /// The status of the transaction <paramref name="xid"/>
+        /// (<c>pg_xact_status(xid8)</c>): <c>in progress</c>, <c>committed</c>, <c>aborted</c> or
+        /// <c>subcommitted</c>. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_xact_status(string? xid) => default!;
+
         private const string GetConstraintdefRefusal =
             "The pg_get_constraintdef function is refused: it renders a stored constraint node tree as " +
             "SQL text, and its pg_get_expr sibling cannot be called at all because PostgreSQL requires a " +

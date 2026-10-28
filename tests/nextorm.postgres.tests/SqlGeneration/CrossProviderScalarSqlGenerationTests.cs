@@ -653,6 +653,44 @@ public class CrossProviderScalarSqlGenerationTests
     }
 
     /// <summary>
+    /// The snapshot-inspection and transaction-status helpers of #281: <c>pg_snapshot</c> and <c>xid8</c>
+    /// arguments are cast from the textual form the producing members return.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void PostgreSQLSnapshotInspectionFamily_ShouldEmitNativeSpellings()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            Sxmax = SqlFunctions.Postgres.pg_snapshot_xmax(SqlFunctions.Parameter<string>(0)),
+            Sxmin = SqlFunctions.Postgres.pg_snapshot_xmin(SqlFunctions.Parameter<string>(1)),
+            Vis = SqlFunctions.Postgres.pg_visible_in_snapshot(
+                SqlFunctions.Parameter<string>(2), SqlFunctions.Parameter<string>(3)),
+            Xct = SqlFunctions.Postgres.pg_xact_commit_timestamp(7u),
+            Xs = SqlFunctions.Postgres.pg_xact_status(SqlFunctions.Parameter<string>(4))
+        }));
+
+        foreach (var name in new[]
+        {
+            "pg_snapshot_xmax", "pg_snapshot_xmin", "pg_visible_in_snapshot",
+            "pg_xact_commit_timestamp", "pg_xact_status"
+        })
+        {
+            sql.Should().Contain($"{name}(");
+            PostgresDialect.Instance.ScalarFunctions.Supports(name).Should().BeTrue($"'{name}' is delivered on PostgreSQL");
+        }
+
+        sql.Should().Contain("cast(pg_snapshot_xmax(cast(@norm_p0 as pg_snapshot)) as text)");
+        sql.Should().Contain("cast(pg_snapshot_xmin(cast(@norm_p1 as pg_snapshot)) as text)");
+        sql.Should().Contain("pg_visible_in_snapshot(cast(@norm_p2 as xid8), cast(@norm_p3 as pg_snapshot))");
+        sql.Should().Contain("pg_xact_commit_timestamp(cast(7 as xid))");
+        sql.Should().Contain("pg_xact_status(cast(@norm_p4 as xid8))");
+    }
+
+    /// <summary>
     /// The encoding, catalog-format and index-property helpers of #281. Three render shapes are
     /// asserted: a plain call, an <c>oid</c>/<c>regtype</c> argument cast (a text parameter does not
     /// resolve to those overloads) and the <c>regtype</c> result cast to text.

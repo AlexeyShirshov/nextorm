@@ -962,7 +962,9 @@ internal sealed class PostgresScalarFunctions : IScalarFunctions
         "pg_get_indexdef" or "pg_get_partition_constraintdef" or "pg_get_partkeydef" or
         "pg_get_ruledef" or "pg_get_statisticsobjdef" or "pg_get_triggerdef" or
         "pg_get_userbyid" or "pg_get_viewdef" or "pg_has_role" or
-        "pg_current_snapshot" or "pg_current_xact_id" or "pg_current_xact_id_if_assigned";
+        "pg_current_snapshot" or "pg_current_xact_id" or "pg_current_xact_id_if_assigned" or
+        "pg_snapshot_xmax" or "pg_snapshot_xmin" or "pg_visible_in_snapshot" or
+        "pg_xact_commit_timestamp" or "pg_xact_status";
 
     /// <inheritdoc/>
     public string Render(string name, IReadOnlyList<string> args) => name switch
@@ -1053,6 +1055,13 @@ internal sealed class PostgresScalarFunctions : IScalarFunctions
         "pg_current_snapshot" => "cast(pg_current_snapshot() as text)",
         "pg_current_xact_id" => "cast(pg_current_xact_id() as text)",
         "pg_current_xact_id_if_assigned" => "cast(pg_current_xact_id_if_assigned() as text)",
+        // xid8 and pg_snapshot arguments are given in the textual form these members return.
+        "pg_snapshot_xmax" => $"cast(pg_snapshot_xmax(cast({args[0]} as pg_snapshot)) as text)",
+        "pg_snapshot_xmin" => $"cast(pg_snapshot_xmin(cast({args[0]} as pg_snapshot)) as text)",
+        "pg_visible_in_snapshot" =>
+            $"pg_visible_in_snapshot(cast({args[0]} as xid8), cast({args[1]} as pg_snapshot))",
+        "pg_xact_commit_timestamp" => $"pg_xact_commit_timestamp(cast({args[0]} as xid))",
+        "pg_xact_status" => $"pg_xact_status(cast({args[0]} as xid8))",
         _ => throw new NotSupportedException($"The {name} function is not supported by PostgreSQL.")
     };
 

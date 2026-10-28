@@ -1195,6 +1195,11 @@ public class InMemoryTests
             ("pg_current_snapshot", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_current_snapshot() }).ToList()),
             ("pg_current_xact_id", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_current_xact_id() }).ToList()),
             ("pg_current_xact_id_if_assigned", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_current_xact_id_if_assigned() }).ToList()),
+            ("pg_snapshot_xmax", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_snapshot_xmax("1:1:") }).ToList()),
+            ("pg_snapshot_xmin", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_snapshot_xmin("1:1:") }).ToList()),
+            ("pg_visible_in_snapshot", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_visible_in_snapshot("1", "1:1:") }).ToList()),
+            ("pg_xact_commit_timestamp", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_xact_commit_timestamp(7u) }).ToList()),
+            ("pg_xact_status", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_xact_status("1") }).ToList()),
         };
 
         foreach (var (name, act) in cases)

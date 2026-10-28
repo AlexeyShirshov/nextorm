@@ -379,4 +379,28 @@ public class PostgresFunctionsRejectionTests
         foreach (var (name, act) in cases)
             act.Should().Throw<NotSupportedException>().WithMessage($"*{name}*not supported*");
     }
+
+    /// <summary>
+    /// The PostgreSQL snapshot-inspection and transaction-status helpers of #281 are PostgreSQL-only on
+    /// this provider too.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void SnapshotInspectionFamily_ShouldThrowBecauseNotSupported()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var cases = new (string Name, Action Act)[]
+        {
+            ("pg_snapshot_xmax", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_snapshot_xmax("1:1:") }))),
+            ("pg_snapshot_xmin", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_snapshot_xmin("1:1:") }))),
+            ("pg_visible_in_snapshot", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_visible_in_snapshot("1", "1:1:") }))),
+            ("pg_xact_commit_timestamp", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_xact_commit_timestamp(7u) }))),
+            ("pg_xact_status", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_xact_status("1") }))),
+        };
+
+        foreach (var (name, act) in cases)
+            act.Should().Throw<NotSupportedException>().WithMessage($"*{name}*not supported*");
+    }
 }
