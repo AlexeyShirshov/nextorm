@@ -53,6 +53,22 @@ public class T296bNullableComparisonSqlGenerationTests
             "this dialect legalises no predicate (expected {0} boolean projection(s))", projectionCount);
 
     /// <summary>
+    /// The exact refusal a ClickHouse command carrying an affected <c>JOIN ON</c> shape raises while it
+    /// is prepared (the core guard in <c>SqlSourceRenderer</c>). Copied verbatim, not paraphrased.
+    /// </summary>
+    private const string JoinOnNullRefusalMessage =
+        "ClickHouse JOIN ON bare-IS-NULL predicates are not supported: ClickHouse 25.8 (verified on 25.8.33.6) can push an IS NULL residual to the left join input instead of preserving ON semantics. Affected forms include column == null and !nullable.HasValue in INNER/LEFT JOIN ON predicates. Use a captured-value equality comparison that preserves ON semantics. Do not move a LEFT JOIN predicate to WHERE as an equivalent workaround.";
+
+    /// <summary>
+    /// The affected <c>ON</c> shapes never reach SQL: preparation itself throws, so a caller cannot
+    /// receive a rendered command text for a statement the server would mis-apply.
+    /// </summary>
+    private static void AssertJoinOnNullRefused<T>(IDataContext ctx, QueryCommand<T> cmd)
+        => FluentActions.Invoking(() => Prepare(ctx, cmd))
+            .Should().Throw<NotSupportedException>()
+            .WithMessage(JoinOnNullRefusalMessage);
+
+    /// <summary>
     /// Captured nullable <c>int?</c>: <c>==</c> and <c>!=</c> become total predicates — the null arms
     /// make the NULL result of a plain comparison impossible — while every captured value stays a
     /// parameter. Both operand orders must translate identically, and the shape must not depend on
@@ -248,8 +264,13 @@ public class T296bNullableComparisonSqlGenerationTests
     }
 
     /// <summary>
-    /// The same forms inside a JOIN <c>ON</c> clause, on the joined alias, with the join structure
-    /// unchanged: table order, join kind and aliases are byte-identical to the same join without the
+    /// The same forms inside a JOIN <c>ON</c> clause, on the joined alias. ClickHouse 25.8 mis-applies a
+    /// bare <c>IS NULL</c> residual there — the residual is pushed to the left join input instead of
+    /// preserving ON semantics — so the affected shapes (<c>column == null</c> in either operand order
+    /// and <c>!nullable.HasValue</c>, on INNER and LEFT joins) are refused with a named
+    /// <see cref="NotSupportedException"/> while the query is prepared, before any SQL is written.
+    /// The supported shapes keep rendering real SQL and stay the controls: the join structure is
+    /// unchanged — table order, join kind and aliases are byte-identical to the same join without the
     /// null-safe predicate, and only the appended predicate differs.
     /// </summary>
     [Fact]
@@ -299,22 +320,67 @@ public class T296bNullableComparisonSqlGenerationTests
             .Should().Contain($"t2.somestring is null and {P}capturedText is null")
             .And.Contain($"t2.somestring is not null and {P}capturedText is not null and t2.somestring = {P}capturedText");
 
-        // Presence forms in ON.
+        // Positive presence stays a real predicate: `HasValue` renders `is not null`.
         var hasValue = SqlCollapsed(ctx, ctx.From<IT296ShapeEntity>()
             .Join(inner, (a, b) => a.Id == b.Id && b.Int.HasValue)
             .Select(p => new { p.Item1.Id }));
         hasValue.Should().StartWith(plain.Replace(" on ", " on (")).And.Contain("t2.nullableint is not null");
 
-        var noValue = SqlCollapsed(ctx, ctx.From<IT296ShapeEntity>()
+        // `!HasValue` in ON would render the bare `is null` the server mis-applies: refused at prepare.
+        AssertJoinOnNullRefused(ctx, ctx.From<IT296ShapeEntity>()
             .Join(inner, (a, b) => a.Id == b.Id && !b.Int.HasValue)
             .Select(p => new { p.Item1.Id }));
-        noValue.Should().StartWith(plain.Replace(" on ", " on (")).And.Contain("t2.nullableint is null");
 
-        // Nullable literal in ON keeps the literal presence semantics.
+        // A nullable literal in ON is refused in both operand orders (INNER).
+        AssertJoinOnNullRefused(ctx, ctx.From<IT296ShapeEntity>()
+            .Join(inner, (a, b) => a.Id == b.Id && b.Int == (int?)null)
+            .Select(p => new { p.Item1.Id }));
+        AssertJoinOnNullRefused(ctx, ctx.From<IT296ShapeEntity>()
+            .Join(inner, (a, b) => a.Id == b.Id && (int?)null == b.Int)
+            .Select(p => new { p.Item1.Id }));
+
+        // LEFT JOIN carries the same residual: both shapes and both literal operand orders are refused.
+        AssertJoinOnNullRefused(ctx, ctx.From<IT296ShapeEntity>()
+            .LeftJoin(inner, (a, b) => a.Id == b.Id && !b.Int.HasValue)
+            .Select(p => new { p.Item1.Id }));
+        AssertJoinOnNullRefused(ctx, ctx.From<IT296ShapeEntity>()
+            .LeftJoin(inner, (a, b) => a.Id == b.Id && b.Int == (int?)null)
+            .Select(p => new { p.Item1.Id }));
+        AssertJoinOnNullRefused(ctx, ctx.From<IT296ShapeEntity>()
+            .LeftJoin(inner, (a, b) => a.Id == b.Id && (int?)null == b.Int)
+            .Select(p => new { p.Item1.Id }));
+
+        // The refusal is shape-specific, not a blanket LEFT JOIN rejection: a captured comparison in a
+        // LEFT JOIN ON still renders the total shape.
+        var leftControl = SqlCollapsed(ctx, ctx.From<IT296ShapeEntity>()
+            .LeftJoin(inner, (a, b) => a.Id == b.Id && b.Int == capturedValue)
+            .Select(p => new { p.Item1.Id }));
+        leftControl.Should().Contain("left join")
+            .And.Contain($"t2.nullableint = {P}capturedValue");
+
+        // Prepare-ordering: the refusal is raised by preparation itself and no SQL text is produced —
+        // the delegate would fail if it ever reached a published command.
+        string? producedSql = null;
+        var refused = ctx.From<IT296ShapeEntity>()
+            .Join(inner, (a, b) => a.Id == b.Id && b.Int == (int?)null)
+            .Select(p => new { p.Item1.Id });
+        var prepareThenRead = () =>
+        {
+            var prepared = Prepare(ctx, refused);
+            producedSql = prepared.DbCommand.CommandText;
+        };
+        prepareThenRead.Should().Throw<NotSupportedException>().WithMessage(JoinOnNullRefusalMessage);
+        producedSql.Should().BeNull("the refusal must precede any SQL emission");
+
+        // Scope isolation: the same presence forms outside an ON clause keep rendering.
+        SqlCollapsed(ctx, ctx.From<IT296ShapeEntity>().Where(x => !x.Int.HasValue).Select(x => x.Id))
+            .Should().Contain("where nullableint is null");
         SqlCollapsed(ctx, ctx.From<IT296ShapeEntity>()
-                .Join(inner, (a, b) => a.Id == b.Id && b.Int == (int?)null)
-                .Select(p => new { p.Item1.Id }))
-            .Should().StartWith(plain.Replace(" on ", " on (")).And.Contain("t2.nullableint is null");
+                .Where(x => SqlFunctions.Sql.exists(inner.Where(i => i.Id == x.Id && !i.Int.HasValue)))
+                .Select(x => x.Id))
+            .Should().Contain("t2.nullableint is null");
+        SqlCollapsed(ctx, ctx.From<IT296ShapeEntity>().Select(x => new { x.Id, Absent = !x.Int.HasValue }))
+            .Should().Contain(Scalar("nullableint is null", AbsentAlias));
     }
 
     /// <summary>
