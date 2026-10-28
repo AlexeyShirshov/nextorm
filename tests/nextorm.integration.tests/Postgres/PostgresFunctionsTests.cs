@@ -2878,6 +2878,7 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
     public void JsonReaderTvfs_ShouldExposeRowsSchemaAndClrTypes()
     {
         var dateTimePath = "$.d.datetime()";
+        var timeZonePath = """$.d.datetime() < "2021-01-01".datetime()""";
 
         // json_array_elements: one row per element; the single `value` column is json, read as string.
         var elements = _sut.DataProvider
@@ -2963,10 +2964,18 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
             .ToList()
             .Should().BeEmpty("a NULL document selects no rows");
 
-        // The non-_tz sibling cannot evaluate the same time-zone-dependent path.
+        // The non-_tz sibling cannot evaluate the same time-zone-dependent path: comparing two .datetime()
+        // values needs the session time zone, which only the _tz variant uses.
+        var tzPredicate = _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.jsonb_path_query_tz(
+                "{\"d\":\"2020-06-01T00:00:00Z\"}", timeZonePath, "{}", false))
+            .Select(r => r.Value)
+            .ToList();
+        tzPredicate.Should().Equal("true", "the instant precedes 2021-01-01");
+
         FluentActions.Invoking(() => _sut.DataProvider
                 .From(() => SqlFunctions.Postgres.jsonb_path_query(
-                    "{\"d\":\"2020-06-01T00:00:00Z\"}", SqlFunctions.Postgres.jsonpath(dateTimePath)))
+                    "{\"d\":\"2020-06-01T00:00:00Z\"}", SqlFunctions.Postgres.jsonpath(timeZonePath)))
                 .Select(r => r.Value)
                 .ToList())
             .Should().Throw<PostgresException>()
