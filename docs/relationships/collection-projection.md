@@ -176,7 +176,7 @@ pipeline:
 | `Where(predicate)` | Filters this parent's elements before ordering and paging. The predicate may read the current parent (`i => i.PostId == p.Id`). |
 | `OrderBy` / `OrderByDescending` | Primary ordering of this parent's elements, ascending or descending (`OrderDirection`). |
 | `ThenBy` / `ThenByDescending` | Secondary ordering keys, applied in call order after the primary key. |
-| `Limit(count)` | Keeps at most `count` elements **of this parent** after filtering and ordering. A captured count is read at execution. |
+| `Limit(count)` | Keeps at most `count` elements **of this parent** after filtering and ordering, for one-to-many and many-to-many slots alike. For a many-to-many slot the count is over the **surviving junction occurrences** (see below). A captured count is read at execution. |
 | `Select(projection)` | Projects each element into the slot's element type (DTO, record or anonymous shape). |
 | `ToList()` / `ToArray()` | Terminates the slot and chooses the destination shape. |
 
@@ -184,6 +184,12 @@ pipeline:
   materialized children of each parent, so a `Limit` is a per-parent page, never a global `LIMIT`/`TOP`/`FETCH`.
   Statement counts do not change: an adapter slot costs the same statements as the direct slot (2 split / 1 single
   for a depth-one one-to-many), whatever the page size.
+- **A many-to-many page counts surviving junction occurrences.** The page slices the navigation the loader produced,
+  so a repeated junction row repeats its child and occupies its own slot, a dangling link (a junction row whose
+  child row is gone) is excluded from the count and from the page, and a parent whose links are all dangling gets
+  an empty collection. Occurrences are read and the page is then trimmed in memory — there is no SQL-side
+  per-junction rank in this release — so a page costs the same statements and selects the same columns as an
+  unpaged many-to-many slot; it does not reduce the rows read.
 - **The pipeline is declarative, not a LINQ-on-collections execution.** The operators are recorded from the
   expression tree and evaluated against the materialized collection; the lambdas keep their reference to the
   projection parameter, so a correlated predicate sees the current parent without recompiling.
@@ -360,7 +366,6 @@ statements** and is a `NotSupportedException`:
 
 | Refused form | Example | Message names |
 |---|---|---|
-| `Limit` on a many-to-many slot | `p.Tags.AsEntityBuilder<Tag>().OrderBy(t => t.Id).Limit(2).ToList()` | `M:N + Limit` — a per-parent page across a junction has no parent partition in this release; remove the `Limit` or page the materialized collection yourself |
 | `GroupBy` inside the adapter | `p.Comments.AsEntityBuilder<Comment>().GroupBy(c => c.AuthorId)…` | the adapter's operator whitelist |
 | `Distinct`, `Union`, `Except`, `Intersect` or a join inside the adapter | `…AsEntityBuilder<Comment>().Distinct()…` | the adapter's operator whitelist |
 | explicit grouping composed with the projection | `GroupBy` / `SelectGroup` plus a slot | *"cannot be combined with grouping"* |
@@ -379,9 +384,10 @@ same context runs correctly.
    mapped column of the parent and of each child level); the adapter pipeline and the destination shape are
    applied afterwards. There is **no SQL column pruning and no pushed-down DTO column** in this release — a
    `Select` inside the adapter narrows the projected CLR shape, not the SQL select list.
-2. **`M:N + Limit` is refused.** A per-parent page across a junction has no parent partition in v1. An unpaged
-   many-to-many slot is supported in both forms, at depth one and nested, with its own ordering; page the
-   materialized collection yourself after loading it.
+2. **A many-to-many `Limit` is trimmed after loading.** The junction rows and the linked children of every parent
+   are read, then each parent's **surviving occurrences** are trimmed to the page. The statement count and the
+   selected columns are the unpaged many-to-many ones; there is no SQL-side per-junction `row_number()` partition in
+   this release, so a page does not reduce the rows read. One-to-many child paging keeps its ranked SQL lowering.
 3. **The adapter operator set is closed:** `Where`, `OrderBy`, `OrderByDescending`, `ThenBy`, `ThenByDescending`,
    `Limit`, `Select`, terminated by `ToList()`/`ToArray()`. `GroupBy`, `Distinct`, `Union`/`Except`/`Intersect`,
    joins and `Offset` are refused by name before SQL, as are an explicit grouping composition, an unsupported outer

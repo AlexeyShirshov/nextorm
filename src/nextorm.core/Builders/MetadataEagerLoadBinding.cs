@@ -975,7 +975,8 @@ internal sealed class MetadataEagerLoadSpec<TEntity, TChild> : IEagerLoadSpec<TE
     private SingleQueryBuild BuildManyToManySingleQuery(IDataContext context, int parentItemNumber)
     {
         var child = ResolveChild(context);
-        EnsureManyToManyChildIsSupported(child);
+        var paged = EntityBuilderEagerLoading.HasPerParentTopN(child);
+        ValidateManyToManyPaging(child);
 
         var nested = ((IEagerLoadNodeSource)child).EagerLoadNodeSpecs;
         if (nested is { Count: > 0 })
@@ -985,7 +986,12 @@ internal sealed class MetadataEagerLoadSpec<TEntity, TChild> : IEagerLoadSpec<TE
                 "occupies the projection item a nested graph would need. Use split-query loading (omit " +
                 "EagerLoadMode.SingleQuery), which recurses through the link table.");
 
-        RejectUnsupportedChildShapes(child);
+        // A paged many-to-many child is not folded at all: its page is applied to the stitched surviving
+        // occurrences (JoinIntoManyToManySpec.AssignChildrenFromLinks), so only the page's own shape
+        // contract applies — ValidateManyToManyPaging has already rejected every other child shape. A
+        // non-paged child keeps the strict fold inventory, like the 1:N single-query route.
+        if (!paged)
+            RejectUnsupportedChildShapes(child);
 
         var collection = _collectionExpression
             ?? throw new InvalidOperationException(
@@ -993,7 +999,8 @@ internal sealed class MetadataEagerLoadSpec<TEntity, TChild> : IEagerLoadSpec<TE
 
         var predicate = BuildManyToManyPredicate(child.Condition);
         var (manyToMany, linkJoin, childJoin) = JoinIntoManyToManySpec<TEntity, TChild>.Create(
-            child, predicate, collection, Binding.Relationship, JoinType.Left, new JoinOptions(), context);
+            child, predicate, collection, Binding.Relationship, JoinType.Left, new JoinOptions(), context,
+            allowChildOrderingAndPaging: paged);
 
         linkJoin.EagerParentItemNumber = parentItemNumber;
         var joins = new List<JoinExpression>
@@ -1351,7 +1358,7 @@ internal sealed class MetadataEagerLoadSpec<TEntity, TChild> : IEagerLoadSpec<TE
     private void ExecuteManyToMany(IDataContext context, QueryFilterScope parentScope, IReadOnlyList<TEntity> parents)
     {
         var child = BuildChild(context, parentScope);
-        EnsureManyToManyChildIsSupported(child);
+        ValidateManyToManyPaging(child);
 
         var loaded = new List<TChild>();
         var grouped = LoadManyToMany(context, child, parents, loaded);
@@ -1364,7 +1371,7 @@ internal sealed class MetadataEagerLoadSpec<TEntity, TChild> : IEagerLoadSpec<TE
     private async Task ExecuteManyToManyAsync(IDataContext context, QueryFilterScope parentScope, IReadOnlyList<TEntity> parents, CancellationToken cancellationToken)
     {
         var child = BuildChild(context, parentScope);
-        EnsureManyToManyChildIsSupported(child);
+        ValidateManyToManyPaging(child);
 
         var loaded = new List<TChild>();
         var grouped = await LoadManyToManyAsync(context, child, parents, loaded, cancellationToken).ConfigureAwait(false);
@@ -1374,12 +1381,18 @@ internal sealed class MetadataEagerLoadSpec<TEntity, TChild> : IEagerLoadSpec<TE
             await EntityBuilderEagerLoading.ExecuteLoadedChildrenAsync(child, loaded, cancellationToken).ConfigureAwait(false);
     }
 
-    private static void EnsureManyToManyChildIsSupported(EntityBuilder<TChild> child)
+    /// <summary>
+    /// Validates a many-to-many child's own <c>Limit</c>/<c>Offset</c>/<c>Page</c>. A per-parent page over a
+    /// junction has no single-child partition to rank in SQL, so the page is applied to the surviving
+    /// occurrence list after loading (the junction read, the child read and the single-query stitching all
+    /// preserve occurrence order). The same shape contract as the ranked 1:N loader applies: a
+    /// non-empty deterministic ordering, no <c>WithTies</c> and no child shape the eager load cannot fold.
+    /// A non-paged child is a no-op.
+    /// </summary>
+    private static void ValidateManyToManyPaging(EntityBuilder<TChild> child)
     {
         if (EntityBuilderEagerLoading.HasPerParentTopN(child))
-            throw new NotSupportedException(
-                "LoadWith cannot apply Limit/Offset/Page to a many-to-many child query: a per-parent page has " +
-                "no direct parent partition across a link table. Remove the child paging.");
+            EntityBuilderEagerLoading.ValidatePerParentPagingChild(child);
     }
 
     private Dictionary<object, List<TChild>> LoadManyToMany(
@@ -1405,7 +1418,7 @@ internal sealed class MetadataEagerLoadSpec<TEntity, TChild> : IEagerLoadSpec<TE
         }
 
         LoadLinkedChildren(child, distinctChildren, loaded);
-        return MetadataManyToManyAssignment.Group(links, loaded, MatchableChildKey);
+        return ApplyPerParentPage(MetadataManyToManyAssignment.Group(links, loaded, MatchableChildKey), child.Paging);
     }
 
     private async Task<Dictionary<object, List<TChild>>> LoadManyToManyAsync(
@@ -1433,7 +1446,25 @@ internal sealed class MetadataEagerLoadSpec<TEntity, TChild> : IEagerLoadSpec<TE
         }
 
         await LoadLinkedChildrenAsync(child, distinctChildren, loaded, cancellationToken).ConfigureAwait(false);
-        return MetadataManyToManyAssignment.Group(links, loaded, MatchableChildKey);
+        return ApplyPerParentPage(
+            MetadataManyToManyAssignment.Group(links, loaded, MatchableChildKey),
+            child.Paging);
+    }
+
+    /// <summary>
+    /// Applies the child query's <c>Limit</c>/<c>Offset</c>/<c>Page</c> to every parent's surviving
+    /// occurrence list. The grouping already holds exactly the occurrences the link table contributes — a
+    /// repeated junction row repeats its child, a dangling link is absent — and each list is in the child
+    /// query's own order, so trimming a prefix is the per-parent page the 1:N ranked lowering renders
+    /// in SQL. The page never reaches a statement as a global <c>LIMIT</c>/<c>TOP</c>: a global page would
+    /// truncate the rows of every parent after the first.
+    /// </summary>
+    private static Dictionary<object, List<TChild>> ApplyPerParentPage(
+        Dictionary<object, List<TChild>> grouped,
+        Paging paging)
+    {
+        MetadataManyToManyAssignment.ApplyPage(grouped, paging);
+        return grouped;
     }
 
     private (IReadOnlyList<PropertyInfo> Parent, IReadOnlyList<PropertyInfo> Child) ResolveJunctionComponents()
@@ -1498,7 +1529,7 @@ internal sealed class MetadataEagerLoadSpec<TEntity, TChild> : IEagerLoadSpec<TE
         for (var offset = 0; offset < distinctChildren.Count; offset += _keyPlan.ChunkSize)
         {
             var predicate = BuildChildPredicate(distinctChildren, offset);
-            var children = child.Where(predicate).ToCommand().ToList();
+            var children = BuildLinkedChildCommand(child, predicate).ToList();
             loaded.AddRange(children);
         }
     }
@@ -1513,9 +1544,25 @@ internal sealed class MetadataEagerLoadSpec<TEntity, TChild> : IEagerLoadSpec<TE
         {
             cancellationToken.ThrowIfCancellationRequested();
             var predicate = BuildChildPredicate(distinctChildren, offset);
-            var children = await child.Where(predicate).ToCommand().ToListAsync(cancellationToken).ConfigureAwait(false);
+            var children = await BuildLinkedChildCommand(child, predicate).ToListAsync(cancellationToken).ConfigureAwait(false);
             loaded.AddRange(children);
         }
+    }
+
+    /// <summary>
+    /// Builds one batched child command of the junction-driven load. The child query's own page is cleared
+    /// here: the per-parent page is applied afterwards to each parent's surviving occurrence list
+    /// (<see cref="ApplyPerParentPage"/>), while a page left on this statement would be a global
+    /// <c>LIMIT</c>/<c>TOP</c> over the whole chunk. The command is a fresh instance, so nothing on the child
+    /// builder — and therefore no shared sticky cache state — is touched.
+    /// </summary>
+    private static QueryCommand<TChild> BuildLinkedChildCommand(
+        EntityBuilder<TChild> child,
+        Expression<Func<TChild, bool>> predicate)
+    {
+        var command = child.Where(predicate).ToCommand();
+        command.Paging = default;
+        return command;
     }
 
     private Expression<Func<TChild, bool>> BuildChildPredicate(

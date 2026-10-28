@@ -1642,13 +1642,23 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// <typeparam name="TChild">The child entity type.</typeparam>
     /// <param name="child">The child source declared on the join.</param>
     /// <param name="predicate">The caller predicate over the parent and child.</param>
+    /// <param name="allowOrderingAndPaging">
+    /// When <see langword="true"/>, the child's own ordering and <c>Limit</c>/<c>Offset</c>/<c>Page</c> are
+    /// accepted because the caller consumes them instead of folding them: the metadata single-query
+    /// many-to-many route renders the ordering as its eager ordering metadata and applies the page to the
+    /// stitched surviving occurrences. Every other unsupported shape is still reported. The public
+    /// <c>JoinInto</c> route keeps the default and rejects them.
+    /// </param>
     /// <returns>The caller predicate, AND-composed with the child's own <c>Where</c> when it has one.</returns>
     /// <exception cref="NotSupportedException">The child query carries an unsupported shape.</exception>
     internal static Expression<Func<TEntity, TChild, bool>> FoldJoinIntoChildPredicate<TChild>(
         EntityBuilder<TChild> child,
-        Expression<Func<TEntity, TChild, bool>> predicate)
+        Expression<Func<TEntity, TChild, bool>> predicate,
+        bool allowOrderingAndPaging = false)
     {
-        var unsupported = child.UnsupportedJoinIntoChildShapes();
+        var unsupported = allowOrderingAndPaging
+            ? child.UnsupportedPerParentPagingChildShapes()
+            : child.UnsupportedJoinIntoChildShapes();
         if (unsupported.Count > 0)
             throw new NotSupportedException(
                 $"JoinInto cannot fold the child query's {string.Join(", ", unsupported)} into the join predicate: " +
