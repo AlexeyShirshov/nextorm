@@ -33,7 +33,17 @@ internal static class MySqlFunctionTranslator
     {
         [nameof(MySqlFunctions.json_table)] = MySqlFunctions.JsonTableRefusal,
         [nameof(MySqlFunctions.uuid)] = MySqlFunctions.UuidRefusal,
-        [nameof(MySqlFunctions.values)] = MySqlFunctions.ValuesRefusal
+        [nameof(MySqlFunctions.values)] = MySqlFunctions.ValuesRefusal,
+        // T350 (#284): the MariaDB 11.4 rows the shared surface cannot express. The route is shared with
+        // MySQL, which has none of these names, and every one of them fails before an argument is visited.
+        [nameof(MySqlFunctions.column_get)] = MySqlFunctions.ColumnGetRefusal,
+        [nameof(MySqlFunctions.trunc)] = MySqlFunctions.TruncRefusal,
+        [nameof(MySqlFunctions._rowid)] = MySqlFunctions.RowIdRefusal,
+        [nameof(MySqlFunctions.vec_from_text)] = MySqlFunctions.VectorRefusal,
+        [nameof(MySqlFunctions.vec_to_text)] = MySqlFunctions.VectorRefusal,
+        [nameof(MySqlFunctions.vec_distance_euclidean)] = MySqlFunctions.VectorRefusal,
+        [nameof(MySqlFunctions.vec_distance_cosine)] = MySqlFunctions.VectorRefusal,
+        [nameof(MySqlFunctions.vec_distance)] = MySqlFunctions.VectorRefusal
     };
 
     /// <summary>
@@ -44,7 +54,8 @@ internal static class MySqlFunctionTranslator
     private static readonly HashSet<string> SequenceNameFunctions = new(StringComparer.Ordinal)
     {
         nameof(MySqlFunctions.next_value_for), nameof(MySqlFunctions.nextval),
-        nameof(MySqlFunctions.setval), nameof(MySqlFunctions.lastval)
+        nameof(MySqlFunctions.setval), nameof(MySqlFunctions.lastval),
+        nameof(MySqlFunctions.previous_value_for)
     };
 
     /// <summary>Translates a MySQL/MariaDB-only call; returns <c>false</c> when it is not one of them.</summary>

@@ -146,7 +146,7 @@ public sealed class MariaDbDialect : MySqlDialect
     /// and adds the MariaDB-only names (extended regexp, <c>NVL</c>/<c>NVL2</c>, <c>ADD_MONTHS</c>,
     /// <c>MONTHS_BETWEEN</c>, <c>TO_CHAR</c>/<c>TO_DATE</c>/<c>TO_NUMBER</c>, <c>KDF</c>,
     /// <c>XXH3</c>/<c>XXH32</c>, <c>JSON_DETAILED</c>/<c>JSON_COMPACT</c>, the JSON canonicalisation pair
-    /// <c>JSON_EQUALS</c>/<c>JSON_NORMALIZE</c> and sequence access). <c>MONTHS_BETWEEN</c>,
+    /// <c>JSON_EQUALS</c>/<c>JSON_NORMALIZE</c>, sequence access and <c>ROWNUM</c>). <c>MONTHS_BETWEEN</c>,
     /// <c>TO_DATE</c> and <c>TO_NUMBER</c> carry their own version minima, so an unversioned dialect
     /// rejects them.
     /// </summary>
@@ -159,8 +159,9 @@ public sealed class MariaDbDialect : MySqlDialect
 /// <c>cast(... as binary(16))</c>/<c>cast(... as uuid)</c>), and <c>json_storage_free</c>, whose
 /// binary-JSON update accounting MariaDB does not implement, and the MariaDB-only names are added here
 /// (extended regexp, <c>nvl</c>/<c>nvl2</c>, the Oracle-compatible date/number conversions, <c>kdf</c>,
-/// <c>xxh3</c>/<c>xxh32</c>, <c>json_detailed</c>/<c>json_compact</c>, <c>json_equals</c>/<c>json_normalize</c>
-/// and sequence access). MySQL's renderer does not report the MariaDB-only names, so MySQL rejects them.
+/// <c>xxh3</c>/<c>xxh32</c>, <c>json_detailed</c>/<c>json_compact</c>, <c>json_equals</c>/<c>json_normalize</c>,
+/// sequence access, <c>rownum</c> and <c>binlog_gtid_pos</c>). MySQL's renderer does not report the
+/// MariaDB-only names, so MySQL rejects them.
 /// <para>
 /// <c>months_between</c> (12.2.1), <c>to_date</c> (12.3) and <c>to_number</c> (12.2.1) are absent from
 /// MariaDB 11.4, so they are enabled only when the dialect was built with a version at or above the
@@ -189,7 +190,8 @@ internal sealed class MariaDbNativeFunctions : IMySqlFunctions
         "to_char" or "kdf" or
         "xxh3" or "xxh32" or "json_detailed" or "json_compact" or
         "json_equals" or "json_normalize" or
-        "next_value_for" or "nextval" or "setval" or "lastval";
+        "next_value_for" or "nextval" or "setval" or "lastval" or
+        "previous_value_for" or "rownum" or "binlog_gtid_pos";
 
     private static Version? MinimumVersion(string name) => name switch
     {
@@ -206,28 +208,15 @@ internal sealed class MariaDbNativeFunctions : IMySqlFunctions
     public bool Supports(string name) =>
         IsVersionGated(name) ||
         (IsMariaDbOnly(name) ||
+            // T350 (#284): the names MariaDB 11.4.13 was measured to accept keep flowing through the
+            // inherited MySQL renderer (Inner.Render). Only the names the baseline does not have stay
+            // excluded: the three permanent MySQL/MariaDB exclusions, the three operator forms the 11.4
+            // parser rejects and the eight names the server reports as absent (error 1305).
             (name is not ("uuid_to_bin" or "bin_to_uuid" or "json_storage_free" or
-                "json_array" or "json_arrayagg" or "json_arrow" or "json_arrow_text" or
-                "json_contains" or "json_contains_path" or "json_merge" or "json_object" or
-                "json_objectagg" or "json_overlaps" or "json_pretty" or "json_quote" or
-                "json_schema_valid" or "json_schema_validation_report" or "json_search" or
-                "json_storage_size" or "member_of" or
-                "bin" or "export_set" or "hex" or "make_set" or "oct" or "ord" or "quote" or
-                "soundex" or "strcmp" or "to_base64" or "from_base64" or "unhex" or "weight_string" or
-                "conv" or "crc32" or "log2" or "rand" or "truncate" or
-                "bit_count" or "bit_and" or "bit_or" or "bit_xor" or
-                "adddate" or "addtime" or "convert_tz" or "dayname" or "from_days" or "get_format" or
-                "makedate" or "maketime" or "microsecond" or "monthname" or "period_add" or
-                "period_diff" or "sec_to_time" or "subdate" or "subtime" or "time" or
-                "time_format" or "time_to_sec" or "timediff" or "timestamp" or "to_days" or
-                "to_seconds" or "yearweek" or
-                "aes_encrypt" or "aes_decrypt" or "compress" or "uncompress" or
-                "uncompressed_length" or "random_bytes" or "validate_password_strength" or
-                "statement_digest" or "statement_digest_text" or
-                "found_rows" or "last_insert_id" or "row_count" or "current_role" or
-                "charset" or "collation" or "coercibility" or "benchmark" or "icu_version" or
-                "uuid_short" or "is_uuid" or "sleep" or "grouping" or "name_const" or
-                "column_default") && Inner.Supports(name)));
+                "json_arrow" or "json_arrow_text" or "json_schema_validation_report" or
+                "json_storage_size" or "member_of" or "validate_password_strength" or
+                "statement_digest" or "statement_digest_text" or "icu_version" or
+                "is_uuid" or "grouping") && Inner.Supports(name)));
 
     /// <inheritdoc/>
     public string Render(string name, IReadOnlyList<string> args) => name switch
@@ -253,6 +242,13 @@ internal sealed class MariaDbNativeFunctions : IMySqlFunctions
         "nextval" => $"nextval({SequenceName(args[0])})",
         "setval" => $"setval({SequenceName(args[0])}, {args[1]})",
         "lastval" => $"lastval({SequenceName(args[0])})",
+        // The last value the connection's own `NEXT VALUE FOR` produced: a grammar form, so the
+        // sequence name is the unquoted identifier and never a quoted value.
+        "previous_value_for" => "previous value for " + SequenceName(args[0]),
+        // MariaDB exposes ROW_NUMBER only as the zero-argument `ROWNUM()` function; the bare pseudo-column
+        // is Oracle-mode-only and is not delivered (T350 S1 grammar re-probe G21).
+        "rownum" => "ROWNUM()",
+        "binlog_gtid_pos" => $"binlog_gtid_pos({args[0]}, {args[1]})",
         _ => Supports(name)
             ? Inner.Render(name, args)
             : throw new NotSupportedException($"The {name} function is not supported by MariaDB.")

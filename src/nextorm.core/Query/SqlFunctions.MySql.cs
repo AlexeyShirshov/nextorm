@@ -443,6 +443,29 @@ public class MySqlFunctions : CommonFunctions
     public long? lastval(string? sequence) => default!;
 
     /// <summary>
+    /// <c>previous value for sequence</c>: the value the current connection's last
+    /// <c>NEXT VALUE FOR</c> produced for the named sequence. MariaDB-only; the
+    /// <paramref name="sequence"/> name is emitted as an identifier.
+    /// </summary>
+    public long? previous_value_for(string? sequence) => default!;
+
+    /// <summary>
+    /// <c>ROWNUM()</c>: the 1-based position of the row in the result. MariaDB-only, and only the
+    /// zero-argument function form — the bare <c>ROWNUM</c> pseudo-column needs <c>sql_mode=ORACLE</c> on
+    /// the verified 11.4 baseline and is not exposed.
+    /// </summary>
+    public ulong? rownum() => default!;
+
+    /// <summary>
+    /// <c>binlog_gtid_pos(file, position)</c>: the GTID position of a binary-log file/offset pair, as
+    /// <c>domain-server-sequence</c> text. MariaDB-only; the server reports error 1381 when binary
+    /// logging is off.
+    /// </summary>
+    /// <param name="file">The binary-log file name.</param>
+    /// <param name="position">The offset in that file.</param>
+    public string? binlog_gtid_pos(string? file, ulong position) => default!;
+
+    /// <summary>
     /// <c>bin(value)</c>: the binary representation of <paramref name="value"/> as an unsigned 64-bit
     /// two's-complement value, without a <c>0b</c> prefix. MySQL-only.
     /// </summary>
@@ -1181,6 +1204,87 @@ public class MySqlFunctions : CommonFunctions
     /// <returns>Never returns; the call is refused when the query is translated.</returns>
     public TValue values<TValue>(TValue column) => throw new NotSupportedException(ValuesRefusal);
 
+    /// <summary>
+    /// <c>COLUMN_GET(dynamic_column, 'name' AS type)</c> is refused: the <c>AS</c> type clause is
+    /// mandatory and selects the CLR type at parse time, so the clause has no safe compile-time
+    /// representation on a scalar function surface. Referencing this member throws
+    /// <see cref="NotSupportedException"/> in the body as well as when the expression is translated.
+    /// </summary>
+    /// <param name="dynamicColumn">The dynamic-columns blob; never read.</param>
+    /// <param name="name">The column name; never read.</param>
+    /// <returns>Never returns; the call is refused when the query is translated.</returns>
+    public object? column_get(object? dynamicColumn, string name) =>
+        throw new NotSupportedException(ColumnGetRefusal);
+
+    /// <summary>
+    /// <c>TRUNC(...)</c> is refused: the verified MariaDB 11.4 baseline does not implement the name in
+    /// default mode or under <c>sql_mode=ORACLE</c>. Referencing this member throws
+    /// <see cref="NotSupportedException"/> in the body as well as when the expression is translated; use
+    /// <c>truncate</c> for numeric truncation.
+    /// </summary>
+    /// <param name="value">The value to truncate; never read.</param>
+    /// <returns>Never returns; the call is refused when the query is translated.</returns>
+    public object? trunc(object? value) => throw new NotSupportedException(TruncRefusal);
+
+    /// <summary>
+    /// <c>_rowid</c> is refused: the pseudo-column needs a source table with exactly one integer
+    /// primary-key column, a table-dependent requirement the function surface cannot validate. On any
+    /// other table the server reports error 1054. Referencing this member throws
+    /// <see cref="NotSupportedException"/> in the body as well as when the expression is translated.
+    /// </summary>
+    /// <returns>Never returns; the call is refused when the query is translated.</returns>
+    public int? _rowid() => throw new NotSupportedException(RowIdRefusal);
+
+    /// <summary>
+    /// <c>VEC_FromText(text)</c> is refused: the vector functions arrived in MariaDB 11.7 and the verified
+    /// baseline is 11.4. Referencing this member throws <see cref="NotSupportedException"/> at
+    /// translation time; the dialect never switches to a newer server.
+    /// </summary>
+    /// <param name="text">The vector text; never read.</param>
+    /// <returns>Never returns; the call is refused when the query is translated.</returns>
+    public object? vec_from_text(string? text) => throw new NotSupportedException(VectorRefusal);
+
+    /// <summary>
+    /// <c>VEC_ToText(vector)</c> is refused: the vector functions arrived in MariaDB 11.7 and the verified
+    /// baseline is 11.4. Referencing this member throws <see cref="NotSupportedException"/> at
+    /// translation time.
+    /// </summary>
+    /// <param name="vector">The vector value; never read.</param>
+    /// <returns>Never returns; the call is refused when the query is translated.</returns>
+    public string? vec_to_text(object? vector) => throw new NotSupportedException(VectorRefusal);
+
+    /// <summary>
+    /// <c>VEC_DISTANCE_EUCLIDEAN(left, right)</c> is refused: the vector functions arrived in MariaDB
+    /// 11.7 and the verified baseline is 11.4. Referencing this member throws
+    /// <see cref="NotSupportedException"/> at translation time.
+    /// </summary>
+    /// <param name="left">The left vector; never read.</param>
+    /// <param name="right">The right vector; never read.</param>
+    /// <returns>Never returns; the call is refused when the query is translated.</returns>
+    public double? vec_distance_euclidean(object? left, object? right) =>
+        throw new NotSupportedException(VectorRefusal);
+
+    /// <summary>
+    /// <c>VEC_DISTANCE_COSINE(left, right)</c> is refused: the vector functions arrived in MariaDB 11.7
+    /// and the verified baseline is 11.4. Referencing this member throws
+    /// <see cref="NotSupportedException"/> at translation time.
+    /// </summary>
+    /// <param name="left">The left vector; never read.</param>
+    /// <param name="right">The right vector; never read.</param>
+    /// <returns>Never returns; the call is refused when the query is translated.</returns>
+    public double? vec_distance_cosine(object? left, object? right) =>
+        throw new NotSupportedException(VectorRefusal);
+
+    /// <summary>
+    /// <c>VEC_DISTANCE(left, right)</c> is refused: the vector functions arrived in MariaDB 11.7 and the
+    /// verified baseline is 11.4. Referencing this member throws <see cref="NotSupportedException"/> at
+    /// translation time.
+    /// </summary>
+    /// <param name="left">The left vector; never read.</param>
+    /// <param name="right">The right vector; never read.</param>
+    /// <returns>Never returns; the call is refused when the query is translated.</returns>
+    public double? vec_distance(object? left, object? right) => throw new NotSupportedException(VectorRefusal);
+
     /// <summary>The exact refusal text for <c>json_table()</c>, shared by the member body and the translator.</summary>
     internal const string JsonTableRefusal =
         "MySQL JSON_TABLE is a table-producing construct that requires a FROM/join position and a " +
@@ -1197,4 +1301,23 @@ public class MySqlFunctions : CommonFunctions
     internal const string ValuesRefusal =
         "MySQL VALUES(column) cannot be translated as a scalar query function; use the mutation " +
         "builder's upsert API.";
+
+    /// <summary>The exact refusal text for <c>column_get(...)</c>, shared by the member body and the translator.</summary>
+    internal const string ColumnGetRefusal =
+        "COLUMN_GET requires a compile-time AS type clause; the supported function surface cannot " +
+        "represent that clause safely.";
+
+    /// <summary>The exact refusal text for <c>trunc(...)</c>, shared by the member body and the translator.</summary>
+    internal const string TruncRefusal =
+        "TRUNC is unavailable on the verified MariaDB 11.4 baseline, including ORACLE mode; " +
+        "use TRUNCATE for numeric truncation.";
+
+    /// <summary>The exact refusal text for <c>_rowid</c>, shared by the member body and the translator.</summary>
+    internal const string RowIdRefusal =
+        "_rowid requires a source table with one integer primary-key column; this function surface " +
+        "cannot validate that table-dependent requirement.";
+
+    /// <summary>The exact refusal text for the five <c>VEC_*</c> members, shared by every body and the translator.</summary>
+    internal const string VectorRefusal =
+        "Requires MariaDB 11.7 or later; the verified baseline is MariaDB 11.4.";
 }
