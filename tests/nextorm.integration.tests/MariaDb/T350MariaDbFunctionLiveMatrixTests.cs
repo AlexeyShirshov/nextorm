@@ -476,6 +476,15 @@ public sealed class T350MariaDbFunctionLiveMatrixTests : IDisposable
             ? left.AsSpan().SequenceEqual(right)
             : Exact(raw, translated);
 
+    /// <summary>
+    /// Type-exact equality without a value comparison, for the deliberately non-deterministic rows
+    /// (<c>SYS_GUID</c>): the observed CLR type is the whole contract there.
+    /// </summary>
+    private static bool TypeOnly(object? raw, object? translated)
+        => raw is null || translated is null
+            ? raw is null && translated is null
+            : raw.GetType() == translated.GetType();
+
 
     private sealed record Attempt(object? Value, string? Error);
 
@@ -801,7 +810,107 @@ public sealed class T350MariaDbFunctionLiveMatrixTests : IDisposable
                 ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.column_check(null))),
                 "System.Int32",
                 Exact,
-                "propagates")
+                "propagates"),
+            // ---------------------------------------------------------------- T350 block 2: galera
+            // The three WSREP_* names stay readable on the default non-Galera server: the probe recorded
+            // "0-0-0" for both GTID readers and 1 for the sync wait, so the row needs no cluster. The two
+            // readers take no argument at all, so they have no NULL form.
+            new T350LiveCase(
+                "131",
+                "WSREP_LAST_SEEN_GTID",
+                "galera",
+                "select wsrep_last_seen_gtid()",
+                null,
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.wsrep_last_seen_gtid())),
+                null,
+                "byte[]",
+                Bytes,
+                "n/a"),
+            new T350LiveCase(
+                "132",
+                "WSREP_LAST_WRITTEN_GTID",
+                "galera",
+                "select wsrep_last_written_gtid()",
+                null,
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.wsrep_last_written_gtid())),
+                null,
+                "byte[]",
+                Bytes,
+                "n/a"),
+            new T350LiveCase(
+                "133",
+                "WSREP_SYNC_WAIT_UPTO_GTID",
+                "galera",
+                "select wsrep_sync_wait_upto_gtid('0-0-0')",
+                null,
+                ctx => Task.FromResult<object?>(
+                    Project(ctx, x => SqlFunctions.MySql.wsrep_sync_wait_upto_gtid("0-0-0"))),
+                null,
+                "System.String",
+                Exact,
+                "n/a"),
+            // ---------------------------------------------------------------- T350 block 2: singles
+            new T350LiveCase(
+                "96",
+                "FORMAT_PICO_TIME",
+                "date/time",
+                "select format_pico_time(1)",
+                "select format_pico_time(null)",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.format_pico_time(1L))),
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.format_pico_time(null))),
+                "System.String",
+                Exact,
+                "propagates"),
+            // Two search branches plus the trailing default; the NULL expression matches neither branch and
+            // therefore falls through to the default, exactly like the four-argument form the probe recorded.
+            new T350LiveCase(
+                "97",
+                "DECODE_ORACLE",
+                "control flow",
+                "select decode_oracle(1, 1, 'a', 2, 'b', 'z')",
+                "select decode_oracle(null, 1, 'a', 2, 'b', 'z')",
+                ctx => Task.FromResult<object?>(
+                    Project(ctx, x => SqlFunctions.MySql.decode_oracle(1, 1, "a", 2, "b", "z"))),
+                ctx => Task.FromResult<object?>(
+                    Project(ctx, x => SqlFunctions.MySql.decode_oracle(null, 1, "a", 2, "b", "z"))),
+                "System.String",
+                Exact,
+                "non-propagating:z"),
+            new T350LiveCase(
+                "99",
+                "DECODE_HISTOGRAM",
+                "information",
+                "select decode_histogram('SINGLE_PREC_HB', 'abc')",
+                null,
+                ctx => Task.FromResult<object?>(
+                    Project(ctx, x => SqlFunctions.MySql.decode_histogram("SINGLE_PREC_HB", "abc"))),
+                null,
+                "System.String",
+                Exact,
+                "n/a"),
+            new T350LiveCase(
+                "107",
+                "CRC32C",
+                "numeric",
+                "select crc32c('abc')",
+                "select crc32c(null)",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.crc32c("abc"))),
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.crc32c(null))),
+                "System.UInt32",
+                Exact,
+                "propagates"),
+            // Random by definition: the row pins the materialised CLR type, not the value.
+            new T350LiveCase(
+                "108",
+                "SYS_GUID",
+                "miscellaneous",
+                "select sys_guid()",
+                null,
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.sys_guid())),
+                null,
+                "System.String",
+                TypeOnly,
+                "n/a")
         ];
 
         /// <summary>Evaluates one production projection against the single probe row.</summary>

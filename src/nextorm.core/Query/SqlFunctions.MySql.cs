@@ -620,6 +620,53 @@ public class MySqlFunctions : CommonFunctions
     public int? column_check(byte[]? dynamicColumn) => default!;
 
     /// <summary>
+    /// <c>wsrep_last_seen_gtid()</c>: the GTID of the last write the node received from the cluster,
+    /// as <c>domain-server-sequence</c> text. MariaDB-only; readable on a non-Galera server too.
+    /// </summary>
+    public byte[]? wsrep_last_seen_gtid() => default!;
+
+    /// <summary>
+    /// <c>wsrep_last_written_gtid()</c>: the GTID of the last write the node applied locally.
+    /// MariaDB-only; readable on a non-Galera server too.
+    /// </summary>
+    public byte[]? wsrep_last_written_gtid() => default!;
+
+    /// <summary>
+    /// <c>wsrep_sync_wait_upto_gtid(gtid)</c>: waits until the node has applied up to
+    /// <paramref name="gtid"/>, returning <c>1</c>. MariaDB-only.
+    /// </summary>
+    public string? wsrep_sync_wait_upto_gtid(string? gtid) => default!;
+
+    /// <summary>
+    /// <c>format_pico_time(picoseconds)</c>: the duration rendered with the largest fitting unit.
+    /// MariaDB-only.
+    /// </summary>
+    public string? format_pico_time(long? picoseconds) => default!;
+
+    /// <summary>
+    /// <c>decode_oracle(expression, search, result, ...)</c>: the <c>result</c> of the first matching
+    /// <c>search</c>, or the trailing default (or <c>null</c> when there is none). MariaDB-only; the
+    /// vendor spelling is <c>DECODE(...)</c>.
+    /// </summary>
+    public string? decode_oracle(object? expression, object? search, string? result, params object?[] rest) => default!;
+
+    /// <summary>
+    /// <c>decode_histogram(bucket, value)</c>: the bucket fractions of a stored histogram decoded for
+    /// <paramref name="value"/>. MariaDB-only.
+    /// </summary>
+    public string? decode_histogram(string? bucket, string? value) => default!;
+
+    /// <summary>
+    /// <c>crc32c(value)</c>: the Castagnoli CRC-32C of <paramref name="value"/>. MariaDB-only.
+    /// </summary>
+    public uint? crc32c(string? value) => default!;
+
+    /// <summary>
+    /// <c>sys_guid()</c>: a random 32-character hexadecimal identifier. MariaDB-only.
+    /// </summary>
+    public string? sys_guid() => default!;
+
+    /// <summary>
     /// <c>bin(value)</c>: the binary representation of <paramref name="value"/> as an unsigned 64-bit
     /// two's-complement value, without a <c>0b</c> prefix. MySQL-only.
     /// </summary>

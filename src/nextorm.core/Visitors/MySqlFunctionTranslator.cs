@@ -30,7 +30,8 @@ internal static class MySqlFunctionTranslator
         [nameof(MySqlFunctions.json_object_filter_keys)] = 1,
         [nameof(MySqlFunctions.column_create)] = 0,
         [nameof(MySqlFunctions.column_add)] = 1,
-        [nameof(MySqlFunctions.column_delete)] = 1
+        [nameof(MySqlFunctions.column_delete)] = 1,
+        [nameof(MySqlFunctions.decode_oracle)] = 3
     };
 
     /// <summary>
@@ -355,6 +356,7 @@ internal static class MySqlFunctionTranslator
         nameof(MySqlFunctions.column_create) => 2,
         nameof(MySqlFunctions.column_add) => 3,
         nameof(MySqlFunctions.column_delete) => 2,
+        nameof(MySqlFunctions.decode_oracle) => 3,
         _ => 0
     };
 

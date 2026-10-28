@@ -153,7 +153,10 @@ public class MySqlFunctionsSqlGenerationTests
             "json_object_filter_keys", "json_object_to_array",
             "encode", "decode", "encrypt", "des_encrypt", "des_decrypt", "old_password",
             "column_create", "column_add", "column_delete", "column_json",
-            "column_list", "column_exists", "column_check"
+            "column_list", "column_exists", "column_check",
+            // #284 (T350) block 2: the residual galera and single-name functions.
+            "wsrep_last_seen_gtid", "wsrep_last_written_gtid", "wsrep_sync_wait_upto_gtid",
+            "format_pico_time", "decode_oracle", "decode_histogram", "crc32c", "sys_guid"
         ];
         var declared = typeof(MySqlFunctions)
             .GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)

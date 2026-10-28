@@ -51,9 +51,10 @@ internal sealed record T350RefusalCase(
 /// <para>
 /// Block 1 covers the 75 names the S1 probe proved supported on MariaDB 11.4.13 and that only the
 /// exclusion tuple was still hiding, plus the three members this block adds (<c>rownum</c>,
-/// <c>binlog_gtid_pos</c>, <c>previous_value_for</c>) — 78 delivered rows. The remaining spec-table names
-/// need their own members and are outside this block. The 18 refusals and the five <c>VEC_*</c> version
-/// gates are pinned with their exact text. These tests never open a connection; the live counterpart is
+/// <c>binlog_gtid_pos</c>, <c>previous_value_for</c>) — 78 delivered rows. Block 2 adds the 31 residual
+/// names (10 string/JSON, 6 crypto, 7 dynamic columns and the 8 galera/singles), 109 in total. The 23
+/// refusals and the five <c>VEC_*</c> version gates are pinned with their exact text. These tests never
+/// open a connection; the live counterpart is
 /// <c>T350MariaDbFunctionLiveMatrixTests</c> in the integration project.
 /// </para>
 /// </summary>
@@ -203,7 +204,17 @@ public class T350MariaDbResidualFunctionSqlGenerationTests
         new("128", "COLUMN_LIST", "dynamic columns", "column_list(column_create(somestring, id))", "delivered"),
         new("129", "COLUMN_EXISTS", "dynamic columns",
             "column_exists(column_create(somestring, id), somestring)", "delivered"),
-        new("130", "COLUMN_CHECK", "dynamic columns", "column_check(column_create(somestring, id))", "delivered")
+        new("130", "COLUMN_CHECK", "dynamic columns", "column_check(column_create(somestring, id))", "delivered"),
+        // T350 block 2: the residual galera names (readable without a Galera cluster).
+        new("131", "WSREP_LAST_SEEN_GTID", "galera", "wsrep_last_seen_gtid()", "delivered"),
+        new("132", "WSREP_LAST_WRITTEN_GTID", "galera", "wsrep_last_written_gtid()", "delivered"),
+        new("133", "WSREP_SYNC_WAIT_UPTO_GTID", "galera", "wsrep_sync_wait_upto_gtid(somestring)", "delivered"),
+        // T350 block 2: the residual single-name functions.
+        new("96", "FORMAT_PICO_TIME", "date/time", "format_pico_time(id)", "delivered"),
+        new("97", "DECODE_ORACLE", "control flow", "decode(id, id, somestring, somestring)", "delivered"),
+        new("99", "DECODE_HISTOGRAM", "information", "decode_histogram(somestring, somestring)", "delivered"),
+        new("107", "CRC32C", "numeric", "crc32c(somestring)", "delivered"),
+        new("108", "SYS_GUID", "miscellaneous", "sys_guid()", "delivered")
     ];
 
     /// <summary>
@@ -322,7 +333,19 @@ public class T350MariaDbResidualFunctionSqlGenerationTests
             ["COLUMN_EXISTS"] = ctx => Plain(ctx, e => e.Select(x =>
                 SqlFunctions.MySql.column_exists(SqlFunctions.MySql.column_create(x.String, x.Id), x.String))),
             ["COLUMN_CHECK"] = ctx => Plain(ctx, e => e.Select(x =>
-                SqlFunctions.MySql.column_check(SqlFunctions.MySql.column_create(x.String, x.Id))))
+                SqlFunctions.MySql.column_check(SqlFunctions.MySql.column_create(x.String, x.Id)))),
+            // T350 block 2: the residual galera and single-name functions.
+            ["WSREP_LAST_SEEN_GTID"] = ctx => Plain(ctx, e => e.Select(_ => SqlFunctions.MySql.wsrep_last_seen_gtid())),
+            ["WSREP_LAST_WRITTEN_GTID"] = ctx => Plain(ctx, e => e.Select(_ => SqlFunctions.MySql.wsrep_last_written_gtid())),
+            ["WSREP_SYNC_WAIT_UPTO_GTID"] = ctx => Plain(ctx, e => e.Select(x =>
+                SqlFunctions.MySql.wsrep_sync_wait_upto_gtid(x.String))),
+            ["FORMAT_PICO_TIME"] = ctx => Plain(ctx, e => e.Select(x => SqlFunctions.MySql.format_pico_time(x.Id))),
+            ["DECODE_ORACLE"] = ctx => Plain(ctx, e => e.Select(x =>
+                SqlFunctions.MySql.decode_oracle(x.Id, x.Id, x.String, x.String))),
+            ["DECODE_HISTOGRAM"] = ctx => Plain(ctx, e => e.Select(x =>
+                SqlFunctions.MySql.decode_histogram(x.String, x.String))),
+            ["CRC32C"] = ctx => Plain(ctx, e => e.Select(x => SqlFunctions.MySql.crc32c(x.String))),
+            ["SYS_GUID"] = ctx => Plain(ctx, e => e.Select(_ => SqlFunctions.MySql.sys_guid()))
         };
 
     /// <summary>
@@ -420,7 +443,10 @@ public class T350MariaDbResidualFunctionSqlGenerationTests
             "ENCODE", "DECODE", "ENCRYPT", "DES_ENCRYPT", "DES_DECRYPT", "OLD_PASSWORD",
             // T350 block 2: the residual dynamic-columns names.
             "COLUMN_CREATE", "COLUMN_ADD", "COLUMN_DELETE", "COLUMN_JSON",
-            "COLUMN_LIST", "COLUMN_EXISTS", "COLUMN_CHECK"
+            "COLUMN_LIST", "COLUMN_EXISTS", "COLUMN_CHECK",
+            // T350 block 2: the residual galera and single-name functions.
+            "WSREP_LAST_SEEN_GTID", "WSREP_LAST_WRITTEN_GTID", "WSREP_SYNC_WAIT_UPTO_GTID",
+            "FORMAT_PICO_TIME", "DECODE_ORACLE", "DECODE_HISTOGRAM", "CRC32C", "SYS_GUID"
         };
 
     /// <summary>
@@ -447,7 +473,8 @@ public class T350MariaDbResidualFunctionSqlGenerationTests
     public void EveryResidualRow_ShouldCarryEitherItsFragmentOrItsRefusal()
     {
         DeliveredCases.Should().HaveCount(
-            101, "75 un-excluded names, the three block-1 members and the twenty-three block-2 names");
+            109, "78 block-1 names plus the 31 block-2 names: 10 string/JSON, 6 crypto, " +
+                 "7 dynamic columns and the 8 galera/singles");
         DeliveredCases.Should().OnlyContain(@case => @case.Behaviour == "delivered");
         DeliveredCases.Select(@case => @case.Id).Should().OnlyHaveUniqueItems("one row per inventory id");
         DeliveredCases.Select(@case => @case.Name).Should().OnlyHaveUniqueItems("one row per canonical name");

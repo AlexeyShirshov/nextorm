@@ -201,7 +201,10 @@ internal sealed class MariaDbNativeFunctions : IMySqlFunctions
         "encode" or "decode" or "encrypt" or "des_encrypt" or "des_decrypt" or "old_password" or
         // T350 block 2: the residual dynamic-columns names (COLUMN_GET stays refused).
         "column_create" or "column_add" or "column_delete" or
-        "column_json" or "column_list" or "column_exists" or "column_check";
+        "column_json" or "column_list" or "column_exists" or "column_check" or
+        // T350 block 2: the residual galera and single-name functions.
+        "wsrep_last_seen_gtid" or "wsrep_last_written_gtid" or "wsrep_sync_wait_upto_gtid" or
+        "format_pico_time" or "decode_oracle" or "decode_histogram" or "crc32c" or "sys_guid";
 
     private static Version? MinimumVersion(string name) => name switch
     {
@@ -287,6 +290,16 @@ internal sealed class MariaDbNativeFunctions : IMySqlFunctions
         "column_list" => $"column_list({args[0]})",
         "column_exists" => $"column_exists({args[0]}, {args[1]})",
         "column_check" => $"column_check({args[0]})",
+        // T350 block 2: the residual galera and single-name functions. DECODE_ORACLE renders the
+        // vendor's short spelling, `decode(...)`.
+        "wsrep_last_seen_gtid" => "wsrep_last_seen_gtid()",
+        "wsrep_last_written_gtid" => "wsrep_last_written_gtid()",
+        "wsrep_sync_wait_upto_gtid" => $"wsrep_sync_wait_upto_gtid({args[0]})",
+        "format_pico_time" => $"format_pico_time({args[0]})",
+        "decode_oracle" => $"decode({string.Join(", ", args)})",
+        "decode_histogram" => $"decode_histogram({args[0]}, {args[1]})",
+        "crc32c" => $"crc32c({args[0]})",
+        "sys_guid" => "sys_guid()",
         _ => Supports(name)
             ? Inner.Render(name, args)
             : throw new NotSupportedException($"The {name} function is not supported by MariaDB.")
