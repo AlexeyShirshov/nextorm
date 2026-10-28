@@ -46,7 +46,8 @@ internal static class WindowFunctionTranslator
             || functionDeclaringType == typeof(MySqlFunctions);
 
         // The SQL Server approximate percentiles are ordered-set aggregates: the engine has no OVER
-        // form (Msg 10754), and the surface exposes them only as WITHIN GROUP. The refusal is narrow —
+        // form (Msg 4113, also raised for count-distinct OVER), and the surface exposes them only as
+        // WITHIN GROUP. The refusal is narrow —
         // only these two SqlServerFunctions members — and fires before any window inspection.
         if (functionDeclaringType == typeof(SqlServerFunctions)
             && functionCall.Method.Name is nameof(SqlServerFunctions.approx_percentile_cont)

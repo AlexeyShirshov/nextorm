@@ -50,8 +50,8 @@ public sealed class T348VersionCapabilityContractTests
     /// <c>long</c>, a checksum as <c>int?</c>, a grouping mask as <c>int</c>, the continuous percentile
     /// as <c>double?</c> and the discrete one as the sort-input type). No member returns a
     /// <see cref="WindowFunction{T}"/>, which is why the translator's <c>OVER</c> refusal is
-    /// unreachable from the public surface — the engine's own Msg 10754 is the only place that
-    /// obligation is observable.
+    /// unreachable from the public surface — the engine's own Msg 4113 (also raised for
+    /// count-distinct <c>OVER</c>) is the only place that obligation is observable.
     /// </summary>
     [Theory]
     [InlineData("approx_count_distinct", "System.Int64")]
