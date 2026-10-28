@@ -208,6 +208,51 @@ fixed `en-US` culture — never the session language and never a culture argumen
 server error for invalid text (`Microsoft.Data.SqlClient.SqlException`); `try_parse` returns NULL.
 Both return `decimal?`, and invalid text never falls back to client-side parsing.
 
+## SQL Server TRY_CAST and TRY_CONVERT
+
+`SqlFunctions.SqlServer.try_cast<T>(value)` and `try_convert<T>(value[, style])` render the T-SQL
+`TRY_CAST`/`TRY_CONVERT`: a malformed, overflowing or out-of-range value yields SQL NULL instead of an
+error. The overloads are separate per target shape:
+
+| C# | SQL |
+|---|---|
+| `try_cast<T>(value)` | `try_cast(value as <type>)` |
+| `try_cast(value)` / `try_convert(value)` | `try_cast(value as nvarchar(4000))` / `try_convert(nvarchar(4000), value)` |
+| `try_convert<T>(value)` | `try_convert(<type>, value)` |
+| `try_convert<T>(value, style)` / `try_convert(value, style)` | `try_convert(<type>, value, style)` |
+
+The destination is a **closed map from the CLR target `T`**, never a CLR type name:
+
+| CLR target | SQL Server type |
+|---|---|
+| `byte` / `short` / `int` / `long` | `tinyint` / `smallint` / `int` / `bigint` |
+| `float` / `double` | `real` / `float(53)` |
+| `decimal` | `decimal(38,10)` |
+| `bool` | `bit` |
+| `Guid` | `uniqueidentifier` |
+| `DateTime` / `DateTimeOffset` | `datetime2(7)` / `datetimeoffset(7)` |
+| `TimeSpan` | `time(7)` |
+| `string` (the non-generic overloads) | `nvarchar(4000)` |
+
+A target outside the map is refused before the command is prepared: `The TRY_CAST function cannot map CLR
+target 'MyType' to a supported SQL Server conversion type.` Lengths and precisions are fixed — there is no
+length or precision argument yet — and the server applies its native truncation: a value longer than 4000
+characters converts to exactly 4000 characters (`try_cast(<5000 chars> as nvarchar(4000))` is 4000
+characters / 8000 bytes), not an error.
+
+The style argument is the native `datetime`/`float`/money style, not a target selector. Omitting it and
+passing a NULL style are **different overloads**: the NULL style is emitted as `CAST(NULL AS int)` and SQL
+Server then returns NULL **regardless of the value** — `try_convert(int, '42', CAST(NULL AS int))` is NULL,
+not `42`.
+
+Invalid *values* become NULL; an invalid *conversion* stays the engine's error, because the renderer never
+rewrites the destination. The closed map exposes no such destination today and `xml` is deliberately not a
+public target — the raw statement `TRY_CAST(1 AS xml)` raises `Msg 529` ("Explicit conversion from data
+type int to xml is not allowed."), which is the behaviour a future target of that kind would inherit. Both
+functions are available on every SQL Server declaration (15, 16, 17 and unversioned), since
+`TRY_CAST`/`TRY_CONVERT` predate 2022; every other provider rejects the member with `The TRY_CAST function
+is not supported by this provider.`
+
 ## SQL Server type predicates
 
 `SqlFunctions.SqlServer.isdate(value)` and `isnumeric(value)` render `isdate(...)` / `isnumeric(...)`

@@ -40,7 +40,7 @@
 | Median | `NotSupportedException` | `percentile_cont(0.5) within group (order by x) over (...)` (analytic: one row per input row, partition-only `OVER`) | `percentile_cont(0.5) within group (order by x)` (aggregate: one row per group; floating-point sort only) |
 | Generic `percentile(fraction, value)` | `NotSupportedException` | `NotSupportedException` | `NotSupportedException` (never an alias of the continuous form) |
 | JSONPath (`jsonb_path_*`) | `NotSupportedException` | `NotSupportedException` | `cast(path as jsonpath)` |
-| Built-in table functions | `NotSupportedException` | `string_split(...)`, `openjson(...)` | `generate_series(...)`, `unnest(...)` |
+| Built-in table functions | `NotSupportedException` | `string_split(...)`, `openjson(...)`, `regexp_split_to_table(...)` (2025+) | `generate_series(...)`, `unnest(...)` |
 
 The in-memory provider does not render SQL: it compiles and evaluates the expression against in-memory
 rows, so the .NET method itself runs. The SQL matrix above applies to the SQLite, SQL Server and
@@ -53,6 +53,127 @@ ClickHouse renders `dateTrunc('part', x)`, `addDays`/`addMonths`/.../`addSeconds
 `covarPop`/`covarSamp`, `argMin`/`argMax`, the `-If` combinators and `multiIf`. It rejects the ANSI
 `filter (where ...)` clause and the `regr_*`/boolean aggregates with `NotSupportedException`; see the
 [ClickHouse provider](../connecting-providers/clickhouse.md).
+
+## SQL Server version-gated functions (2022/2025)
+
+These members live on [`SqlFunctions.SqlServer`](../guide/provider-specific-sql/sqlserver.md#version-gated-functions-2022-and-2025)
+and are gated by the **declared major version** alone: an engine-edition declaration never substitutes for
+a version, and an unversioned context refuses every one of them before SQL with the required and the
+declared major version in the message.
+
+| Member | SQL | Result | Requires |
+|---|---|---|---|
+| `regexp_count(input, pattern)` | `regexp_count(input, pattern)` | `int?` — `0` for no match, `NULL` for a NULL input | major version 17 |
+| `regexp_substr(input, pattern[, start[, occurrence[, match_type]]])` | `regexp_substr(input, pattern[, …])` | `string?` — `NULL` for no match or a NULL operand; the match type renders as `cast(… as varchar(4000))`, because the native argument rejects `nvarchar` (Msg 8116) | major version 17; no compatibility-level gate |
+| `regexp_instr(input, pattern[, start[, occurrence[, return_option[, match_type]]]])` | `regexp_instr(input, pattern[, …])` | `int?` — `0` for no match, `NULL` for a NULL operand; a supplied NULL return option behaves like `0` | major version 17; no compatibility-level gate |
+| `regexp_matches(input, pattern[, match_type])` | a `FROM` source, e.g. `from regexp_matches(input, pattern)` | one row per non-overlapping match: `match_id` (`bigint`), `start_position`/`end_position` (`int`), `match_value`, `substring_matches` (the full JSON capture text); no match → zero rows | major version 17 **and** database compatibility level 170 |
+| `edit_distance(input, pattern[, maximum_distance])` | `edit_distance(input, pattern[, maximum_distance])` | `int?`; the capped form returns `maximum_distance + 1` when the true distance exceeds it, a negative cap is uncapped | major 17 + compatibility 170 + `PREVIEW_FEATURES = ON` + Windows collation |
+| `edit_distance_similarity(input, pattern)` | `edit_distance_similarity(input, pattern)` | `int?` in `0..100` | the same fuzzy prerequisites |
+| `jaro_winkler_distance(input, pattern)` | `jaro_winkler_distance(input, pattern)` | `double?` (`float(53)`) | the same fuzzy prerequisites |
+| `jaro_winkler_similarity(input, pattern)` | `jaro_winkler_similarity(input, pattern)` | `int?` in `0..100` | the same fuzzy prerequisites |
+| `left_shift(value, shift)` / `right_shift(value, shift)` | `CASE WHEN value IS NULL OR shift IS NULL THEN CAST(NULL AS <operand type>) ELSE left_shift(cast(value as <operand type>), cast(shift as bigint)) END` | the operand's own type (`byte?`/`short?`/`int?`/`long?`); logical zero-fill shift; typed-NULL guard (a bare `left_shift(NULL, …)` is Msg 8116) | major version 16 |
+| `bit_count(value)` | `CASE WHEN value IS NULL THEN CAST(NULL AS bigint) ELSE bit_count(cast(value as <operand type>)) END` | `long?` (`bigint`) | major version 16 |
+| `get_bit(value, offset)` | `CASE WHEN value IS NULL OR offset IS NULL THEN CAST(NULL AS bit) ELSE get_bit(cast(value as <operand type>), cast(offset as int)) END` | `bool?` (`bit`) | major version 16 |
+| `set_bit(value, offset[, bitValue])` | `… ELSE set_bit(cast(value as <operand type>), cast(offset as int)[, cast(bitValue as bit)]) END` | the operand's own type; an explicitly NULL `bitValue` yields `NULL`, an omitted one keeps the native default 1 | major version 16 |
+| `product(value)` | `product(value)` (aggregate context; no `OVER`) | the input type; NULL rows are ignored, an all-NULL group is `NULL` | major version 17 |
+| `regexp_split_to_table(input, pattern)` | a `FROM` source, e.g. `from regexp_split_to_table(input, pattern)` | one row per fragment: `value` plus the one-based `ordinal` (`bigint`) | major version 17 **and** database compatibility level 170 |
+| `approx_count_distinct(value)` | `approx_count_distinct(value)` (aggregate context; no `OVER`) | `long` (`bigint`); `0` for an empty or all-NULL group; a NULL operand renders as `CAST(NULL AS <type>)` | major version 15 |
+| `checksum_agg(value)` | `checksum_agg(value)` (aggregate context; the native `OVER` form is not exposed) | `int?` (`int`); `NULL` for an empty or all-NULL group; identical values cancel | every SQL Server declaration (no version floor) |
+| `grouping_id(expressions...)` | `grouping_id(a, b, …)` — `SELECT` list, `HAVING` or `ORDER BY` of a grouped command | `int`; `0` under a plain `GROUP BY`, the subtotal mask under `ROLLUP`/`GROUPING SETS`; every argument must be a `GROUP BY` expression | every SQL Server declaration; the grouping context and the grouping-list match are enforced before SQL |
+| `approx_percentile_cont(fraction, value)` | `approx_percentile_cont(f) within group (order by value)` | `double?` (`float(53)`); `NULL` for an empty or all-NULL group; the endpoints `0`/`1` are exact | major version 16; no `OVER` form |
+| `approx_percentile_disc(fraction, value)` | `approx_percentile_disc(f) within group (order by value)` | `T?` — the sort input type (`int?` for an `int` column); `NULL` for an empty or all-NULL group | major version 16; no `OVER` form |
+
+`regexp_split_to_table` returns
+[`TvfEntityBuilder<SqlFunctions.ISqlServerRegexpSplitToTableRow>`](xref:NextORM.Core.SqlFunctions.ISqlServerRegexpSplitToTableRow)
+and needs no renderer hook: the member, the row shape and the `SupportsTableFunction` registration are the
+whole route. At **compatibility level 160** on a major-17 engine the function does not exist (Msg 208), so
+the 170 prerequisite is a real gate that nextorm documents and asserts live rather than silently assuming
+(the dialect cannot inspect the database compatibility level).
+
+The regex scalars float above the compatibility level: they execute at 160 and at 170 on a major-17
+engine. `regexp_matches` is the exception among them — at compatibility 160 the engine reports it missing
+(Msg 208), so its 170 prerequisite is the same kind of documented, live-asserted runtime gate. The four
+fuzzy names need **all** of compatibility 170, `PREVIEW_FEATURES = ON` and a Windows collation; on the
+tested build `17.0.5005.3` a `SQL_*` collation is Msg 9847 and a missing preview flag is Msg 195. The
+declared-major-17 flag promises the version gate only — those runtime prerequisites are environment
+facts, asserted live, and no promise is made for future builds.
+
+The U4 aggregates extend the same version-only contract. `APPROX_COUNT_DISTINCT` needs major 15 and
+the two approximate percentiles need major 16; `CHECKSUM_AGG` and `GROUPING_ID` have no version floor
+and render in every SQL Server declaration, including an unversioned one. The percentiles are
+ordered-set aggregates: `WITHIN GROUP (ORDER BY …)` only, so there is no `OVER` overload and an `OVER`
+shape constructed by other means is rejected by the engine, and a
+literal or NULL sort key is refused too because the engine answers Msg 5309 (`Windowed functions,
+aggregates and NEXT VALUE FOR functions do not support constants as ORDER BY clause expressions`); a
+captured scalar becomes a parameter and executes. A constant NULL operand of `approx_count_distinct` or
+`checksum_agg` renders as a typed `CAST(NULL AS <type>)`, because a bare `NULL` is Msg 8117 (`Operand
+data type NULL is invalid for … operator.`). The engine messages observed on the tested build
+`17.0.5005.3` are Msg 4113 for `OVER` on both percentiles and on `approx_count_distinct` (`… is not a
+valid windowing function, and cannot be used with the OVER clause.`), Msg 8117 for an untyped NULL
+operand and Msg 5309 for a literal/NULL sort key; `checksum_agg` is the one name whose native `OVER`
+form the engine accepts (observed), but this surface offers the aggregate form only. `GROUPING_ID`'s
+grouping-list obligation and its clause placement are enforced before SQL with zero statements
+executed; the engine's own report is Msg 8161.
+
+## SQL Server TRY_CAST and TRY_CONVERT
+
+`SqlFunctions.SqlServer.try_cast<T>(value)` and `try_convert<T>(value[, style])` render the T-SQL
+`TRY_CAST`/`TRY_CONVERT` through a **closed CLR→SQL destination map**; a malformed, overflowing or
+out-of-range value is SQL NULL instead of an error. Unlike the names above, they are not version-gated:
+every SQL Server declaration (15, 16, 17 and unversioned) renders them, and every other provider rejects
+the member with `The TRY_CAST function is not supported by this provider.`
+
+| Member | SQL | Result |
+|---|---|---|
+| `try_cast<T>(value)` | `try_cast(value as <type>)` | `T?` — NULL when the conversion is invalid |
+| `try_convert<T>(value)` / `try_convert<T>(value, style)` | `try_convert(<type>, value[, style])` | `T?` — NULL when the conversion is invalid |
+| `try_cast(value)` / `try_convert(value[, style])` | `try_cast(value as nvarchar(4000))` / `try_convert(nvarchar(4000), value[, style])` | `string?` — input longer than 4000 characters is truncated to 4000 |
+
+| CLR target `T` | SQL Server type |
+|---|---|
+| `byte` / `short` / `int` / `long` | `tinyint` / `smallint` / `int` / `bigint` |
+| `float` / `double` | `real` / `float(53)` |
+| `decimal` | `decimal(38,10)` |
+| `bool` | `bit` |
+| `Guid` | `uniqueidentifier` |
+| `DateTime` / `DateTimeOffset` | `datetime2(7)` / `datetimeoffset(7)` |
+| `TimeSpan` | `time(7)` |
+
+An unmapped target is refused **before** the command is prepared (`The TRY_CONVERT function cannot map CLR
+target 'MyType' to a supported SQL Server conversion type.`). The style is the native
+`datetime`/`float`/money style: omitting it and passing a NULL style are separate overloads, and the NULL
+style makes the engine return NULL even for a convertible value. A conversion the engine itself prohibits is
+not masked — `TRY_CAST(1 AS xml)` raises Msg 529, and `xml` is not a public target. See
+[conditionals and conversion](04-conditionals-and-conversion.md#sql-server-try_cast-and-try_convert).
+
+## SQL Server deterministic refusals (system names and `ANY_VALUE`)
+
+Eleven `SqlFunctions.SqlServer` members are delivered as **deterministic refusals**: the member exists
+and is callable so the refusal is reachable and tested, but a direct call and an expression-tree
+translation both throw `NotSupportedException` with
+`SqlFunctions.SqlServer.<member> (<TOKEN>) is refused: <reason>`. The refusal is raised at the
+SQL-builder command boundary before any argument is evaluated, so no statement is rendered, no command
+is created and no row is returned. The declared CLR type is a callable placeholder, not a
+materialization contract.
+
+| Member | SQL token | CLR placeholder | Kind and reason |
+|---|---|---|---|
+| `session_context(key)` | `SESSION_CONTEXT` | `object?` | **Scope/CLR:** returns `sql_variant`, for which nextorm has no faithful CLR result contract; no lossy cast substitution is performed. |
+| `session_id()` | `SESSION_ID` | `string?` | **Engine rejection:** not a SQL Server engine function (Msg 195); the documented function belongs to Azure Synapse. Session identity is `@@SPID` or `sys.dm_exec_sessions.session_id`; no substitution is performed. |
+| `rowcount()` | `@@ROWCOUNT` | `int` | **Scope:** describes the previous statement and is statement-scoped; a per-row query projection cannot expose that value faithfully. |
+| `error()` | `@@ERROR` | `int` | **Scope:** the same previous-statement scope as `@@ROWCOUNT`. |
+| `error_number()` | `ERROR_NUMBER` | `int?` | **Scope:** requires a `CATCH`-block scope; outside `CATCH` it returns NULL, and nextorm does not establish that scope. |
+| `error_severity()` | `ERROR_SEVERITY` | `int?` | **Scope:** the same `CATCH`-only scope. |
+| `error_state()` | `ERROR_STATE` | `int?` | **Scope:** the same `CATCH`-only scope. |
+| `error_line()` | `ERROR_LINE` | `int?` | **Scope:** the same `CATCH`-only scope. |
+| `error_message()` | `ERROR_MESSAGE` | `string?` | **Scope:** the same `CATCH`-only scope. |
+| `error_procedure()` | `ERROR_PROCEDURE` | `string?` | **Scope:** the same `CATCH`-only scope. |
+| `any_value(value)` | `ANY_VALUE` | `T?` | **Engine rejection:** SQL Server build `17.0.5005.3` rejected it with `Msg 195`, including with `PREVIEW_FEATURES = ON`; no supported SQL Server execution contract is established. |
+
+See [system functions](09-system-functions.md#refused-statement-and-error-scope-names-sql-server) for the
+ten system names and [aggregates](05-aggregates.md#sql-server-any_value-is-refused) for `ANY_VALUE`. The
+supported siblings of the same surface (`rowcount_big`, `xact_state`, `scope_identity`, `db_name`, …)
+still render, and `CommonFunctions.any_agg` is unaffected on the providers that enable it.
 
 ## MySQL-specific functions
 

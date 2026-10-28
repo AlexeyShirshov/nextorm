@@ -33,6 +33,179 @@ select group_concat(somestring, ',')
 | `SqlFunctions.Sql.string_agg(x, delimiter)` | `string_agg(x, delimiter)` / `arrayStringConcat(groupArray(x), delimiter)` / `group_concat(x separator delimiter)` / `group_concat(x, delimiter)` | PostgreSQL, SQL Server, ClickHouse, MySQL/MariaDB, SQLite |
 | `SqlFunctions.Postgres.array_agg(x)` | `array_agg(x)` | PostgreSQL |
 
+## SQL Server 2025: `product`
+
+`SqlFunctions.SqlServer.product(value)` renders the SQL Server 2025 `PRODUCT` aggregate in an aggregate
+context. The result keeps the input type (`int?` for an `int` column), NULL rows are ignored, and a
+group with no non-null value has no product (SQL `NULL`):
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .GroupBy(e => new { e.Int })
+    .Select(e => new { e.Int, Product = SqlFunctions.SqlServer.product(e.Id) })
+    .ToList();
+```
+
+```sql
+select nullableint, product(id) as [Product]
+ from complex_entity
+ group by nullableint
+```
+
+The aggregate is **SQL Server 2025 (major version 17) only** and follows the version-only
+[`SupportsProductAggregate`](xref:NextORM.Core.ISqlDialect.SupportsProductAggregate) flag (which in turn
+follows [`SupportsSqlServer2025Functions`](xref:NextORM.Core.ISqlDialect.SupportsSqlServer2025Functions)).
+It is offered in the aggregate context only — no window/`OVER` expansion. A context declared for 16, an
+unversioned context or an edition-only declaration refuses the call before SQL with `The PRODUCT function
+requires SQL Server major version 17 or later; declared major version: 16.` (or `… unspecified.`). An
+edition never substitutes for the declared major version.
+
+## SQL Server: `ANY_VALUE` is refused
+
+`SqlFunctions.SqlServer.any_value(value)` exists as a **deterministic refusal**, not as an aggregate.
+On SQL Server build `17.0.5005.3` the engine rejected `ANY_VALUE` with `Msg 195` in both the aggregate
+and the `OVER ()` forms, at compatibility levels 160 and 170 and with `PREVIEW_FEATURES = ON`, so no
+supported SQL Server execution contract is established. Every invocation — direct or inside a query —
+throws `NotSupportedException` with
+`SqlFunctions.SqlServer.any_value (ANY_VALUE) is refused: SQL Server build 17.0.5005.3 rejected this
+function with Msg 195, including with preview features enabled; no supported SQL Server execution
+contract is established.` The refusal is raised before SQL is rendered and before any command is
+created, and a sibling aggregate of the same query still executes.
+
+This is an **observed engine rejection**, not a CLR/scope limitation and not a version gap a later
+nextorm release can close. The portable `CommonFunctions.any_agg` is a different member: it stays gated
+off on SQL Server (`SupportsAnyValueAggregate = false`) and is **not** replaced by this refusal; the
+providers that enable it (MySQL/MariaDB via `ANY_VALUE`, ClickHouse via `any`) keep their dispatch
+unchanged.
+
+## SQL Server aggregate family (2019 and 2022)
+
+Five [#282](https://github.com/AlexeyShirshov/nextorm/issues/282) members close the residual SQL Server
+aggregate names. They are aggregate-context members: the two approximate percentiles are ordered-set
+aggregates spelled `WITHIN GROUP (ORDER BY …)` with no window form, `approx_count_distinct` has no
+`OVER` form in the engine at all, and `checksum_agg` — whose native `OVER` form the engine does accept —
+is offered in the aggregate form only here. `grouping_id` is the analytic member of the family and needs
+a grouped command.
+
+| Member | SQL | CLR result | Empty group / all-NULL group | Requires |
+|---|---|---|---|---|
+| `approx_count_distinct(value)` | `approx_count_distinct(value)` | `long` (`bigint`) | `0` / `0` | major version 15 (SQL Server 2019) |
+| `checksum_agg(value)` | `checksum_agg(value)` | `int?` (`int`) | `NULL` / `NULL` | every declaration (no version floor) |
+| `grouping_id(expressions...)` | `grouping_id(a, b, …)` | `int` | `0` under a plain `GROUP BY`; the subtotal mask otherwise | every declaration; grouped command only |
+| `approx_percentile_cont(fraction, value)` | `approx_percentile_cont(f) within group (order by value)` | `double?` (`float(53)`) | `NULL` / `NULL` | major version 16 (SQL Server 2022) |
+| `approx_percentile_disc(fraction, value)` | `approx_percentile_disc(f) within group (order by value)` | `T?` — the sort input type (`int?` for an `int` column) | `NULL` / `NULL` | major version 16 (SQL Server 2022) |
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .GroupBy(e => new { e.Int, e.Boolean })
+    .Select(e => new
+    {
+        e.Int,
+        e.Boolean,
+        Distinct = SqlFunctions.SqlServer.approx_count_distinct(e.Int),
+        Checksum = SqlFunctions.SqlServer.checksum_agg(e.Int),
+        Group = SqlFunctions.SqlServer.grouping_id(e.Int, e.Boolean),
+        Median = SqlFunctions.SqlServer.approx_percentile_cont(0.5, e.Int),
+        MedianValue = SqlFunctions.SqlServer.approx_percentile_disc(0.5, e.Int)
+    })
+    .ToList();
+```
+
+```sql
+select nullableint, b,
+       approx_count_distinct(nullableint) as [Distinct],
+       checksum_agg(nullableint) as [Checksum],
+       grouping_id(nullableint, b) as [Group],
+       approx_percentile_cont(0.5) within group (order by nullableint) as [Median],
+       approx_percentile_disc(0.5) within group (order by nullableint) as [MedianValue]
+ from complex_entity
+ group by nullableint, b
+```
+
+`approx_count_distinct`, `approx_percentile_cont` and `approx_percentile_disc` follow the same
+version-only contract as [`product`](#sql-server-2025-product): a lower declared major version, an
+unversioned context or an edition-only declaration refuses the call **before SQL**, and an edition never
+substitutes for a version.
+
+```text
+The APPROX_COUNT_DISTINCT function requires SQL Server major version 15 or later; declared major version: 14.
+The APPROX_PERCENTILE_CONT function requires SQL Server major version 16 or later; declared major version: 15.
+```
+
+### `approx_count_distinct`
+
+`approx_count_distinct(value)` returns `long` (`bigint`). NULL rows are not counted, and an empty group
+and an all-NULL group both yield `0` — never SQL NULL. It is an estimate, not the exact
+`count(distinct …)`: keep `SqlFunctions.Sql.count_distinct` when exactness matters. A constant NULL
+operand renders as `CAST(NULL AS <type>)`, because a bare `NULL` operand is Msg 8117
+(`Operand data type NULL is invalid for approx_count_distinct operator.`). The engine has no `OVER`
+form (Msg 4113), and this surface offers the aggregate context only.
+
+### `checksum_agg`
+
+`checksum_agg(value)` returns `int?` (`int`). NULL rows are skipped, and an empty or all-NULL group has
+no checksum (`NULL`). The value is order-insensitive but is **not** a stable identity and not a hash for
+equality: identical values cancel (`checksum_agg` over `(5, 5)` is `0`, over `(5)` is `5`, over
+`(5, 6)` is `3`), so it detects change rather than content. There is no version floor: every declared
+SQL Server major version renders it, including an unversioned declaration. A constant NULL operand
+renders as `CAST(NULL AS int)` (a bare `NULL` is Msg 8117, `Operand data type NULL is invalid for
+checksum_agg operator.`). The aggregate form is the only one offered, although the engine itself would
+accept `checksum_agg(...) over (...)`.
+
+### `grouping_id`
+
+`grouping_id(expressions...)` renders `grouping_id(a, b, …)` and returns `int`. The `params object?[]`
+arguments are flattened into one SQL argument per grouping expression; a captured array is refused. Two
+obligations are **enforced before SQL**, with zero statements executed, instead of being left to the
+server's Msg 8161:
+
+* every argument must match a `GROUP BY` expression, otherwise
+  `The GROUPING_ID function requires every argument to match a GROUP BY expression.` (expressions are
+  compared with the query's expression-plan comparer, so an equivalent expression matches);
+* the call is legal only in the `SELECT` list, `HAVING` and `ORDER BY` of a command with a `GROUP BY`; a
+  missing grouping context — or a call in `WHERE`, a join `ON` or the `GROUP BY` itself — is refused with
+  `The GROUPING_ID function requires a GROUP BY context.`
+
+A plain `GROUP BY` reports `0` for every row. `ROLLUP` and `GROUPING SETS` report the subtotal mask: a
+set bit per expression aggregated away, with the **last** argument as the least significant bit, so
+`grouping_id(grp, value)` over `rollup(grp, value)` is `0` for a detail row, `1` for the `grp` subtotal and
+`3` for the grand total. There is no version floor.
+
+### `approx_percentile_cont` and `approx_percentile_disc`
+
+`approx_percentile_cont(fraction, value)` returns `double?` (`float(53)`) and interpolates;
+`approx_percentile_disc(fraction, value)` returns the sort input type (`T?`, for example `int?` for an
+`int` column) and returns an input value. NULL rows are skipped, and an empty or all-NULL group yields
+`NULL` for both. The spelling is `WITHIN GROUP (ORDER BY value)` and the endpoints `0` and `1` are exact.
+
+The fraction is a `double` in `[0, 1]`, never a 0–100 percentage, and it must be query-independent: a
+literal or a captured scalar. A fraction that depends on a row (`(double)e.Int`) is refused when the SQL
+is generated with `The fraction for approx_percentile_disc on SQL Server must be a constant or a captured
+scalar.`, and a literal or captured value that is `NaN`, infinite or outside `[0, 1]` is refused with
+`The fraction for approx_percentile_cont on SQL Server must be finite and between 0 and 1 inclusive.`
+A runtime query-parameter fraction renders as a parameter; the engine then enforces the same range
+(Msg 8727).
+
+Neither member has an `OVER` overload: they are ordered-set aggregates, `WITHIN GROUP` only, so an
+`OVER` form cannot be written through the public surface. If an `OVER` shape is constructed by other
+means, the engine rejects it with Msg 4113 (`The function 'approx_percentile_cont' is not a valid
+windowing function, and cannot be used with the OVER clause.`).
+
+The `ORDER BY` key must be a column, a parameter or a computed expression. SQL Server answers Msg 5309
+(`Windowed functions, aggregates and NEXT VALUE FOR functions do not support constants as ORDER BY
+clause expressions.`) for a literal or a NULL key — a typed `CAST(NULL AS int)` is still a constant — so
+such a call is refused when the SQL is generated, while a captured scalar becomes a parameter and
+executes.
+
+### Approximate results and their caveat
+
+`approx_count_distinct` and both approximate percentiles are statistical estimates: the vendor documents
+a maximum rank error of about **1.33 % at 99 % confidence** for the percentiles, and the distinct count is
+likewise an estimate. That is a vendor statistical bound, **not** a deterministic tolerance this library
+promises — consecutive runs may return different values. Tests therefore assert the CLR type, a value
+inside the input bounds and the NULL/empty behaviour, never equality with one expected number.
+`checksum_agg` and `grouping_id` are exact.
+
 ## Aggregate FILTER
 
 `count`/`count_big`/`min`/`max`/`avg`/`sum` and the string/array aggregates accept an extra

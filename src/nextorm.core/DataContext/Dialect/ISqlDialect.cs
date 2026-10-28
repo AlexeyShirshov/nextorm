@@ -726,6 +726,79 @@ public interface ISqlDialect
     bool SupportsAnyValueAggregate { get; }
 
     /// <summary>
+    /// True when the provider is SQL Server and the declared server major version is 17 or later, so
+    /// the 2025-only T-SQL functions (<c>REGEXP_COUNT</c>, <c>REGEXP_SPLIT_TO_TABLE</c>,
+    /// <c>PRODUCT</c>) can be rendered. The safe default is <see langword="false"/>, and an
+    /// unversioned dialect refuses them. The gate is version-only: unlike <see cref="SupportsJson"/>,
+    /// an engine edition never substitutes for a declared major version. Declared as a default
+    /// interface method so existing external implementations keep compiling.
+    /// </summary>
+    bool SupportsSqlServer2025Functions => false;
+
+    /// <summary>
+    /// True when the provider is SQL Server and the declared server major version is 16 or later, so
+    /// the 2022-only T-SQL functions (<c>LEFT_SHIFT</c>/<c>RIGHT_SHIFT</c>) can be rendered. The safe
+    /// default is <see langword="false"/>, and an unversioned dialect refuses them. Declared as a
+    /// default interface method so existing external implementations keep compiling.
+    /// </summary>
+    bool SupportsSqlServer2022Functions => false;
+
+    /// <summary>
+    /// True when the provider can render the <c>PRODUCT(value)</c> aggregate
+    /// (<see cref="SqlServerFunctions.product{T}(T)"/>). On SQL Server it follows
+    /// <see cref="SupportsSqlServer2025Functions"/> because the aggregate arrived with 2025; the safe
+    /// default is <see langword="false"/>. Declared as a default interface method so existing
+    /// external implementations keep compiling.
+    /// </summary>
+    bool SupportsProductAggregate => false;
+
+    /// <summary>
+    /// True when the provider can render the <c>APPROX_COUNT_DISTINCT(value)</c> aggregate
+    /// (<see cref="SqlServerFunctions.approx_count_distinct{T}(T)"/>). On SQL Server it is available
+    /// from major version 15; the safe default is <see langword="false"/>, and an unversioned dialect
+    /// refuses the name. Declared as a default interface method so existing external implementations
+    /// keep compiling.
+    /// </summary>
+    bool SupportsApproxCountDistinctAggregate => false;
+
+    /// <summary>
+    /// True when the provider can render the <c>CHECKSUM_AGG(value)</c> aggregate
+    /// (<see cref="SqlServerFunctions.checksum_agg(int?)"/>). SQL Server has it without a version
+    /// floor, so the flag is a plain provider opt-in; the safe default is <see langword="false"/>.
+    /// Declared as a default interface method so existing external implementations keep compiling.
+    /// </summary>
+    bool SupportsChecksumAggregate => false;
+
+    /// <summary>
+    /// True when the provider can render the <c>GROUPING_ID(expressions)</c> aggregate
+    /// (<see cref="SqlServerFunctions.grouping_id(object?[])"/>). SQL Server has it without a version
+    /// floor, so the flag is a plain provider opt-in; the safe default is <see langword="false"/>.
+    /// Declared as a default interface method so existing external implementations keep compiling.
+    /// </summary>
+    bool SupportsGroupingIdAggregate => false;
+
+    /// <summary>
+    /// True when the provider can render the ordered-set aggregate
+    /// <c>APPROX_PERCENTILE_CONT(fraction) WITHIN GROUP (ORDER BY value)</c>
+    /// (<see cref="SqlServerFunctions.approx_percentile_cont{T}(double, T)"/>). On SQL Server it is
+    /// available from major version 16; the safe default is <see langword="false"/>, and an unversioned
+    /// dialect refuses the name. This is a name-specific gate: it deliberately does not widen
+    /// <see cref="SupportsOrderedAggregates"/> or <see cref="SupportsOrderedPercentiles"/>. Declared as
+    /// a default interface method so existing external implementations keep compiling.
+    /// </summary>
+    bool SupportsApproxPercentileCont => false;
+
+    /// <summary>
+    /// True when the provider can render the ordered-set aggregate
+    /// <c>APPROX_PERCENTILE_DISC(fraction) WITHIN GROUP (ORDER BY value)</c>
+    /// (<see cref="SqlServerFunctions.approx_percentile_disc{T}(double, T?)"/>). On SQL Server it is
+    /// available from major version 16; the safe default is <see langword="false"/>, and an unversioned
+    /// dialect refuses the name. Name-specific, like <see cref="SupportsApproxPercentileCont"/>. Declared
+    /// as a default interface method so existing external implementations keep compiling.
+    /// </summary>
+    bool SupportsApproxPercentileDisc => false;
+
+    /// <summary>
     /// The provider's renderer for the ClickHouse sequence/funnel aggregates; <c>null</c> means the
     /// provider cannot express them. Declared as a default interface method so that existing external
     /// implementations keep compiling.
@@ -1015,6 +1088,33 @@ public interface ISqlDialect
     string MakeParam(string name);
     /// <summary>SQL type name used when a CLR conversion has to be rendered as a database cast.</summary>
     string MakeTypeName(Type type);
+    /// <summary>
+    /// Renders a SQL Server <c>TRY_CAST</c> of <paramref name="expression"/> to the SQL type that the
+    /// closed target map assigns to <paramref name="targetType"/>: the value is SQL NULL when the
+    /// conversion is invalid. Providers without the function keep the rejecting default here rather
+    /// than falling back to <see cref="MakeTypeName"/>, whose open name fall-back would emit SQL the
+    /// server rejects; only SQL Server's closed map may answer. A target outside the map is refused
+    /// before the command is prepared.
+    /// </summary>
+    /// <param name="expression">The already-rendered source expression.</param>
+    /// <param name="targetType">The CLR conversion target (possibly <see cref="Nullable{T}"/>).</param>
+    /// <returns>The complete <c>try_cast(… as …)</c> expression.</returns>
+    string MakeTryCast(string expression, Type targetType) =>
+        throw new NotSupportedException("The TRY_CAST function is not supported by this provider.");
+    /// <summary>
+    /// Renders a SQL Server <c>TRY_CONVERT</c> of <paramref name="expression"/> to the closed-map SQL
+    /// type of <paramref name="targetType"/>. <paramref name="style"/> is the already-rendered native
+    /// style argument, or <see langword="null"/> for the no-style form; a supplied SQL NULL style is a
+    /// non-null string and keeps the server's native NULL-style semantics, which the engine applies as a
+    /// NULL result even for a convertible value. Same rejection rules as
+    /// <see cref="MakeTryCast"/>.
+    /// </summary>
+    /// <param name="expression">The already-rendered source expression.</param>
+    /// <param name="targetType">The CLR conversion target (possibly <see cref="Nullable{T}"/>).</param>
+    /// <param name="style">The rendered style argument, or <see langword="null"/> when omitted.</param>
+    /// <returns>The complete <c>try_convert(…, …)</c> expression.</returns>
+    string MakeTryConvert(string expression, Type targetType, string? style) =>
+        throw new NotSupportedException("The TRY_CONVERT function is not supported by this provider.");
     /// <summary>Renders the SQL literal for a boolean value.</summary>
     string MakeBool(bool v);
     /// <summary>Renders <c>coalesce(v1, v2)</c> over the already-rendered operands.</summary>

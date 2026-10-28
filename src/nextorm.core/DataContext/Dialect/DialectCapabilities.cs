@@ -827,6 +827,38 @@ public interface ISqlServerFunctions
     string Render(string name, IReadOnlyList<string> args);
 
     /// <summary>
+    /// The reason the SQL Server-only function <paramref name="name"/> is unavailable on this
+    /// dialect's declared state (for example a function that requires a later major version), or
+    /// <see langword="null"/> when the name is supported or the dialect has no version-specific
+    /// answer. The caller shows this reason instead of its generic "not supported" message, so a
+    /// version-gated name fails closed with the required and the declared major version. Declared as
+    /// a default interface method returning <see langword="null"/> so an external
+    /// <see cref="ISqlServerFunctions"/> written before the member existed keeps its previous
+    /// behaviour.
+    /// </summary>
+    /// <param name="name">The CLR method name of the <see cref="SqlServerFunctions"/> member.</param>
+    string? GetUnsupportedReason(string name) => null;
+
+    /// <summary>
+    /// Renders a SQL Server bit-manipulation call (<c>LEFT_SHIFT</c>, <c>RIGHT_SHIFT</c>,
+    /// <c>BIT_COUNT</c>, <c>GET_BIT</c>, <c>SET_BIT</c>). The SQL depends on the operand's own type, so
+    /// the caller passes the T-SQL operand type (<c>tinyint</c>/<c>smallint</c>/<c>int</c>/<c>bigint</c>)
+    /// rather than expecting the string-only <see cref="Render"/> to guess it: the operand and the
+    /// shift/offset are cast inside the call and a NULL argument yields a typed NULL of the result type,
+    /// because a bare <c>left_shift(null, …)</c> is Msg 8116. Declared as a default interface method so
+    /// an external <see cref="ISqlServerFunctions"/> written before the member existed keeps compiling
+    /// and rejects the family explicitly instead of emitting SQL it cannot render.
+    /// </summary>
+    /// <param name="name">The CLR method name of the <see cref="SqlServerFunctions"/> member.</param>
+    /// <param name="operand">The rendered operand expression.</param>
+    /// <param name="operandType">The T-SQL type of the operand.</param>
+    /// <param name="amount">The rendered shift or bit-offset expression, or <see langword="null"/>.</param>
+    /// <param name="value">The rendered <c>SET_BIT</c> bit value, or <see langword="null"/> when omitted.</param>
+    /// <returns>The complete T-SQL expression.</returns>
+    string RenderBit(string name, string operand, string operandType, string? amount, string? value) =>
+        throw new NotSupportedException($"The {name} function is not supported by this provider.");
+
+    /// <summary>
     /// True when the dialect also exposes the SQL Server session/server identity functions
     /// (<see cref="SqlServerFunctions.server_name"/>, <c>host_id</c>, <c>host_name</c>, <c>app_name</c>,
     /// <c>suser_name</c>, <c>original_login</c>) through its

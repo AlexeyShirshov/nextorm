@@ -31,8 +31,9 @@ nextorm распознаёт фиксированный набор членов 
 Кросс-провайдерные помощники находятся в [`SqlFunctions.Sql`](xref:NextORM.Core.SqlFunctions.Sql). Функции, которые поддерживает только один
 провайдер, сгруппированы в отдельную провайдерную поверхность: [`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres) (PostgreSQL: нативные
 массивы, нативный JSON, расширенная библиотека скалярных функций, PG-only агрегаты и табличные
-функции `generate_series`/`unnest`), [`SqlServer`](xref:NextORM.Core.SqlFunctions.SqlServer) (SQL Server: JSON-как-текст и
-`string_split`/`openjson`), [`ClickHouse`](xref:NextORM.Core.SqlFunctions.ClickHouse) (ClickHouse: `arg_min`/`arg_max`, комбинатор `-If`,
+функции `generate_series`/`unnest`), [`SqlServer`](xref:NextORM.Core.SqlFunctions.SqlServer) (SQL Server: JSON-как-текст,
+версионно-зависимые скаляры 2022/2025, такие как `left_shift` и `regexp_count`, агрегат `product` и
+`string_split`/`openjson`/`regexp_split_to_table`), [`ClickHouse`](xref:NextORM.Core.SqlFunctions.ClickHouse) (ClickHouse: `arg_min`/`arg_max`, комбинатор `-If`,
 семейство строкового JSON `JSONExtract*`, быстрый разбор плоского JSON `visitParamExtract*`,
 JSONPath-скаляры `json_value`/`json_query`/`json_exists` и функции
 словарей `dict_get`/`dict_get_or_default`/`dict_has`/`dict_get_hierarchy`/`dict_get_children`/`dict_is_in`) и

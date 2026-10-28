@@ -213,6 +213,51 @@ SQL NULL (литерал, параметр или nullable-столбец) да�
 `try_parse` возвращает NULL. Оба возвращают `decimal?`, и неверный текст никогда не уходит в
 клиентский разбор.
 
+## SQL Server TRY_CAST и TRY_CONVERT
+
+`SqlFunctions.SqlServer.try_cast<T>(value)` и `try_convert<T>(value[, style])` рендерят T-SQL
+`TRY_CAST`/`TRY_CONVERT`: некорректное, переполняющее или выходящее за диапазон значение даёт SQL NULL
+вместо ошибки. Перегрузки разделены по форме цели:
+
+| C# | SQL |
+|---|---|
+| `try_cast<T>(value)` | `try_cast(value as <type>)` |
+| `try_cast(value)` / `try_convert(value)` | `try_cast(value as nvarchar(4000))` / `try_convert(nvarchar(4000), value)` |
+| `try_convert<T>(value)` | `try_convert(<type>, value)` |
+| `try_convert<T>(value, style)` / `try_convert(value, style)` | `try_convert(<type>, value, style)` |
+
+Цель — **закрытое отображение из CLR-типа `T`**, никогда не имя CLR-типа:
+
+| CLR-цель | Тип SQL Server |
+|---|---|
+| `byte` / `short` / `int` / `long` | `tinyint` / `smallint` / `int` / `bigint` |
+| `float` / `double` | `real` / `float(53)` |
+| `decimal` | `decimal(38,10)` |
+| `bool` | `bit` |
+| `Guid` | `uniqueidentifier` |
+| `DateTime` / `DateTimeOffset` | `datetime2(7)` / `datetimeoffset(7)` |
+| `TimeSpan` | `time(7)` |
+| `string` (негенерические перегрузки) | `nvarchar(4000)` |
+
+Цель вне отображения отклоняется до подготовки команды: `The TRY_CAST function cannot map CLR target
+'MyType' to a supported SQL Server conversion type.` Длины и точности фиксированы — аргумента длины или
+точности пока нет — и сервер применяет своё нативное усечение: значение длиннее 4000 символов
+преобразуется ровно в 4000 символов (`try_cast(<5000 символов> as nvarchar(4000))` даёт 4000 символов /
+8000 байт), а не ошибку.
+
+Аргумент style — это нативный стиль `datetime`/`float`/money, а не селектор цели. Его отсутствие и
+передача NULL-стиля — **разные перегрузки**: NULL-стиль рендерится как `CAST(NULL AS int)`, и тогда SQL
+Server возвращает NULL **независимо от значения** — `try_convert(int, '42', CAST(NULL AS int))` равно
+NULL, а не `42`.
+
+Неверные *значения* становятся NULL; недопустимое *преобразование* остаётся ошибкой движка, потому что
+рендер никогда не переписывает цель. Сегодня закрытое отображение не открывает такой цели, и `xml`
+намеренно не является публичной целью — «сырой» оператор `TRY_CAST(1 AS xml)` даёт `Msg 529` («Explicit
+conversion from data type int to xml is not allowed.»), и именно это унаследует любая будущая цель такого
+рода. Обе функции доступны на любом объявлении SQL Server (15, 16, 17 и неверсионированном), так как
+`TRY_CAST`/`TRY_CONVERT` появились до 2022; любой другой провайдер отклоняет член с `The TRY_CAST function
+is not supported by this provider.`
+
 ## Предикаты типов SQL Server
 
 `SqlFunctions.SqlServer.isdate(value)` и `isnumeric(value)` рендерятся как `isdate(...)` / `isnumeric(...)`

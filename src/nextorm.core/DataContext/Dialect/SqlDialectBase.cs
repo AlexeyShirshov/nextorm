@@ -242,6 +242,30 @@ public abstract class SqlDialectBase : ISqlDialect
     /// <summary>Defaults to <c>false</c>; MySQL/MariaDB and ClickHouse opt into the arbitrary-value aggregate.</summary>
     public virtual bool SupportsAnyValueAggregate => false;
 
+    /// <inheritdoc/>
+    public virtual bool SupportsSqlServer2025Functions => false;
+
+    /// <inheritdoc/>
+    public virtual bool SupportsSqlServer2022Functions => false;
+
+    /// <inheritdoc/>
+    public virtual bool SupportsProductAggregate => false;
+
+    /// <summary>Defaults to <c>false</c>; SQL Server from major version 15 opts into <c>APPROX_COUNT_DISTINCT</c>.</summary>
+    public virtual bool SupportsApproxCountDistinctAggregate => false;
+
+    /// <summary>Defaults to <c>false</c>; SQL Server opts into <c>CHECKSUM_AGG</c>.</summary>
+    public virtual bool SupportsChecksumAggregate => false;
+
+    /// <summary>Defaults to <c>false</c>; SQL Server opts into <c>GROUPING_ID</c>.</summary>
+    public virtual bool SupportsGroupingIdAggregate => false;
+
+    /// <summary>Defaults to <c>false</c>; SQL Server from major version 16 opts into <c>APPROX_PERCENTILE_CONT</c>.</summary>
+    public virtual bool SupportsApproxPercentileCont => false;
+
+    /// <summary>Defaults to <c>false</c>; SQL Server from major version 16 opts into <c>APPROX_PERCENTILE_DISC</c>.</summary>
+    public virtual bool SupportsApproxPercentileDisc => false;
+
     /// <summary>Defaults to <c>null</c>; ClickHouse opts into the <c>windowFunnel</c>/<c>retention</c>/<c>sequenceMatch</c> aggregates.</summary>
     public virtual ISequenceAggregateRenderer? SequenceAggregates => null;
 
@@ -521,6 +545,23 @@ public abstract class SqlDialectBase : ISqlDialect
         _ when type == typeof(DateTimeOffset) => "timestamp with time zone",
         _ => type.Name
     };
+
+    /// <summary>
+    /// The rejecting default of <see cref="ISqlDialect.MakeTryCast"/>: only a dialect with a closed
+    /// conversion map (SQL Server) may answer, so no provider silently renders a cast through
+    /// <see cref="MakeTypeName"/>'s open name fall-back.
+    /// </summary>
+    /// <exception cref="NotSupportedException">Always: the provider has no <c>TRY_CAST</c>.</exception>
+    public virtual string MakeTryCast(string expression, Type targetType) =>
+        throw new NotSupportedException("The TRY_CAST function is not supported by this provider.");
+
+    /// <summary>
+    /// The rejecting default of <see cref="ISqlDialect.MakeTryConvert"/>; see
+    /// <see cref="MakeTryCast"/> for why the conversion cannot reuse <see cref="MakeTypeName"/>.
+    /// </summary>
+    /// <exception cref="NotSupportedException">Always: the provider has no <c>TRY_CONVERT</c>.</exception>
+    public virtual string MakeTryConvert(string expression, Type targetType, string? style) =>
+        throw new NotSupportedException("The TRY_CONVERT function is not supported by this provider.");
 
     /// <inheritdoc/>
     public virtual string MakeBool(bool v) => v ? "1" : "0";

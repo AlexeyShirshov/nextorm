@@ -63,7 +63,49 @@ internal static class SqlServerScalarFunctionTranslator
         nameof(SqlServerFunctions.parse), nameof(SqlServerFunctions.rowcount_big),
         nameof(SqlServerFunctions.scope_identity), nameof(SqlServerFunctions.str),
         nameof(SqlServerFunctions.try_parse), nameof(SqlServerFunctions.xact_state),
-        nameof(SqlServerFunctions.next_value_for), nameof(SqlServerFunctions.nextval)
+        nameof(SqlServerFunctions.next_value_for), nameof(SqlServerFunctions.nextval),
+        nameof(SqlServerFunctions.regexp_count), nameof(SqlServerFunctions.left_shift),
+        nameof(SqlServerFunctions.right_shift), nameof(SqlServerFunctions.bit_count),
+        nameof(SqlServerFunctions.get_bit), nameof(SqlServerFunctions.set_bit),
+        nameof(SqlServerFunctions.try_cast), nameof(SqlServerFunctions.try_convert),
+        nameof(SqlServerFunctions.regexp_substr), nameof(SqlServerFunctions.regexp_instr),
+        nameof(SqlServerFunctions.regexp_matches),
+        nameof(SqlServerFunctions.edit_distance), nameof(SqlServerFunctions.edit_distance_similarity),
+        nameof(SqlServerFunctions.jaro_winkler_distance), nameof(SqlServerFunctions.jaro_winkler_similarity)
+    };
+
+    /// <summary>
+    /// The bit-manipulation functions whose T-SQL depends on the operand's own type: the translator
+    /// passes the closed-map operand type to
+    /// <see cref="ISqlServerFunctions.RenderBit"/> instead of the string-only
+    /// <see cref="ISqlServerFunctions.Render"/>.
+    /// </summary>
+    private static readonly HashSet<string> BitFunctions = new(StringComparer.Ordinal)
+    {
+        nameof(SqlServerFunctions.left_shift), nameof(SqlServerFunctions.right_shift),
+        nameof(SqlServerFunctions.bit_count), nameof(SqlServerFunctions.get_bit),
+        nameof(SqlServerFunctions.set_bit)
+    };
+
+    /// <summary>
+    /// The conversion functions rendered through the dialect's closed target map
+    /// (<see cref="ISqlDialect.MakeTryCast"/>/<see cref="ISqlDialect.MakeTryConvert"/>): the target CLR
+    /// type, never a string, decides the SQL type, and an unmapped target is refused before any command
+    /// is prepared.
+    /// </summary>
+    private static readonly HashSet<string> TryConversionFunctions = new(StringComparer.Ordinal)
+    {
+        nameof(SqlServerFunctions.try_cast), nameof(SqlServerFunctions.try_convert)
+    };
+
+    /// <summary>
+    /// The fuzzy functions whose optional trailing <c>maximum_distance</c> is a native <c>int</c>: a wider
+    /// CLR operand (for example a <c>long</c> or <c>decimal</c> column cast to <c>int?</c>) would be
+    /// rendered as a truncating SQL cast, so it is refused before SQL instead.
+    /// </summary>
+    private static readonly HashSet<string> FuzzyMaximumFunctions = new(StringComparer.Ordinal)
+    {
+        nameof(SqlServerFunctions.edit_distance)
     };
 
     /// <summary>The functions whose <c>params</c> array is flattened back into individual arguments.</summary>
@@ -115,17 +157,40 @@ internal static class SqlServerScalarFunctionTranslator
     /// <summary>Translates a SQL Server-only scalar call; returns <c>false</c> when it is not one of them.</summary>
     internal static bool TryTranslate(BaseExpressionVisitor visitor, MethodCallExpression node)
     {
+        // The eleven deterministic refusals (the ten system names and ANY_VALUE) are keyed by the exact
+        // MethodInfo and rejected here, before the name gate, before the capability gate and
+        // before any argument is visited: the member body, the command-boundary preflight and this
+        // translator guard all raise the same fixed diagnostic.
+        SqlServerFunctionRefusals.ThrowIfRefused(node.Method);
+
         if (node.Method.DeclaringType != typeof(SqlServerFunctions) || !FunctionNames.Contains(node.Method.Name))
             return false;
 
         var name = node.Method.Name;
 
         if (visitor.Dialect.SqlServerFunctions is not { } functions || !functions.Supports(name))
-            throw new NotSupportedException($"The {name} function is not supported by this provider.");
+            throw new NotSupportedException(
+                visitor.Dialect.SqlServerFunctions?.GetUnsupportedReason(name)
+                ?? $"The {name} function is not supported by this provider.");
+
+        if (FuzzyMaximumFunctions.Contains(name))
+            ValidateFuzzyMaximum(name, node.Arguments);
 
         if (SequenceFunctions.Contains(name))
         {
             EmitSequence(visitor, name, node.Arguments);
+            return true;
+        }
+
+        if (TryConversionFunctions.Contains(name))
+        {
+            EmitTryConversion(visitor, name, node);
+            return true;
+        }
+
+        if (BitFunctions.Contains(name))
+        {
+            EmitBitFunction(visitor, functions, name, node);
             return true;
         }
 
@@ -170,6 +235,19 @@ internal static class SqlServerScalarFunctionTranslator
                     : visitor.VisitToString(args[i]);
         }
 
+        // The native match_type argument of the regex scalars is varchar-only: an nvarchar literal,
+        // NULL or parameter is Msg 8116 ("Argument data type nvarchar is invalid for argument 5"),
+        // while a cast to varchar is accepted for every shape. Keep the value untouched, only its
+        // SQL type (probe `substr_nvarchar`/`substr_cast_varchar`/`substr_var_varchar`). The match
+        // type is the fifth argument of regexp_substr and the sixth of regexp_instr (the fifth there
+        // is the int return option).
+        var matchTypeIndex = name == nameof(SqlServerFunctions.regexp_substr) ? 4 : 5;
+        if ((name is nameof(SqlServerFunctions.regexp_substr) or nameof(SqlServerFunctions.regexp_instr))
+            && args.Count > matchTypeIndex)
+        {
+            rendered[matchTypeIndex] = $"cast({rendered[matchTypeIndex]} as varchar(4000))";
+        }
+
         // A non-int integral precision (byte/short/…) would otherwise render with a boxing cast
         // (`cast(5 as int)`); T-SQL's `*FROMPARTS` wants a plain integer literal, so normalise it.
         if (precision is { } value)
@@ -182,6 +260,131 @@ internal static class SqlServerScalarFunctionTranslator
 
         visitor.Builder!.Append(expression);
         return true;
+    }
+
+    /// <summary>
+    /// Renders a closed-map conversion (<c>try_cast</c>/<c>try_convert</c>). The target CLR type is read
+    /// from the method's generic argument (the string-target overloads are non-generic) and handed to the
+    /// dialect hook, which owns the closed SQL type map: the string-only
+    /// <see cref="ISqlServerFunctions.Render"/> can never see the target, and its open name fall-back is
+    /// exactly the defect this route avoids. A supplied style is a separate overload, so an omitted style
+    /// passes <see langword="null"/>; a supplied NULL style is emitted as a typed NULL and keeps the
+    /// server's native NULL-style semantics.
+    /// </summary>
+    private static void EmitTryConversion(BaseExpressionVisitor visitor, string name, MethodCallExpression node)
+    {
+        var args = node.Arguments;
+        var isConvert = name == nameof(SqlServerFunctions.try_convert);
+        var expected = isConvert ? 2 : 1;
+
+        if (args.Count is 0 || args.Count > expected)
+            throw new NotSupportedException(
+                isConvert
+                    ? $"The {name} function accepts a value and an optional style."
+                    : $"The {name} function accepts exactly one value.");
+
+        var targetType = node.Method.IsGenericMethod
+            ? node.Method.GetGenericArguments()[0]
+            : typeof(string);
+
+        if (visitor.IsParamMode)
+        {
+            for (var (i, cnt) = (0, args.Count); i < cnt; i++)
+                visitor.Visit(args[i]);
+
+            return;
+        }
+
+        visitor.NeedAliasForColumn = true;
+        var value = visitor.VisitToString(args[0]);
+
+        string? style = null;
+        if (isConvert && args.Count == 2)
+        {
+            style = visitor.VisitToString(args[1]);
+            if (style == "null")
+                style = "CAST(NULL AS int)";
+        }
+
+        var expression = isConvert
+            ? visitor.Dialect.MakeTryConvert(value, targetType, style)
+            : visitor.Dialect.MakeTryCast(value, targetType);
+
+        visitor.Builder!.Append(expression);
+    }
+
+    /// <summary>
+    /// Validates the trailing <c>maximum_distance</c> of <c>edit_distance</c>. The native argument is a
+    /// 32-bit integer, so an operand whose own CLR type is wider (a <c>long</c>/<c>decimal</c> column cast
+    /// to <c>int?</c>) would be silently truncated by the rendered SQL cast; such an operand is refused
+    /// before any command is prepared unless it is a constant that fits the 32-bit range exactly. Narrow
+    /// integral operands widen losslessly and are accepted.
+    /// </summary>
+    private static void ValidateFuzzyMaximum(string name, IReadOnlyList<Expression> args)
+    {
+        if (args.Count < 3)
+            return;
+
+        var operand = TypeFacts.UnwrapConvert(args[2]);
+        var type = Nullable.GetUnderlyingType(operand.Type) ?? operand.Type;
+
+        if (type == typeof(int) || type == typeof(short) || type == typeof(byte)
+            || type == typeof(sbyte) || type == typeof(ushort))
+            return;
+
+        if (operand is ConstantExpression constant && TryDecodeInt64(constant.Value, out var value)
+            && value is >= int.MinValue and <= int.MaxValue)
+            return;
+
+        throw new NotSupportedException(
+            $"The {name} maximum_distance argument must fit a 32-bit integer; the '{type.Name}' operand would be truncated.");
+    }
+
+    /// <summary>
+    /// Renders a bit-manipulation call. The operand's declared type (nullable-unwrapped) selects the
+    /// closed <c>tinyint</c>/<c>smallint</c>/<c>int</c>/<c>bigint</c> rendering, because the SQL casts
+    /// both the operand and the shift/offset and a NULL has to become a typed NULL of the result type
+    /// (a bare <c>left_shift(null, …)</c> is Msg 8116). The renderer lives on the SQL Server functions so
+    /// a provider without the family rejects it instead of emitting T-SQL.
+    /// </summary>
+    private static void EmitBitFunction(
+        BaseExpressionVisitor visitor, ISqlServerFunctions functions, string name, MethodCallExpression node)
+    {
+        var args = node.Arguments;
+        var operandType = BitOperandType(args[0].Type);
+
+        if (visitor.IsParamMode)
+        {
+            for (var (i, cnt) = (0, args.Count); i < cnt; i++)
+                visitor.Visit(args[i]);
+
+            return;
+        }
+
+        visitor.NeedAliasForColumn = true;
+        var operand = visitor.VisitToString(args[0]);
+        var amount = args.Count > 1 ? visitor.VisitToString(args[1]) : null;
+        var value = args.Count > 2 ? visitor.VisitToString(args[2]) : null;
+
+        visitor.Builder!.Append(functions.RenderBit(name, operand, operandType, amount, value));
+    }
+
+    /// <summary>The closed operand-type map of the bit family; any other operand type is rejected.</summary>
+    private static string BitOperandType(Type type)
+    {
+        var operand = Nullable.GetUnderlyingType(type) ?? type;
+
+        if (operand == typeof(byte))
+            return "tinyint";
+        if (operand == typeof(short))
+            return "smallint";
+        if (operand == typeof(int))
+            return "int";
+        if (operand == typeof(long))
+            return "bigint";
+
+        throw new NotSupportedException(
+            $"The bit-manipulation operand type '{operand.Name}' has no SQL Server equivalent.");
     }
 
     /// <summary>

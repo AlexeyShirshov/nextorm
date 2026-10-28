@@ -34,6 +34,181 @@ select group_concat(somestring, ',')
 | `SqlFunctions.Sql.string_agg(x, delimiter)` | `string_agg(x, delimiter)` / `arrayStringConcat(groupArray(x), delimiter)` / `group_concat(x separator delimiter)` / `group_concat(x, delimiter)` | PostgreSQL, SQL Server, ClickHouse, MySQL/MariaDB, SQLite |
 | `SqlFunctions.Postgres.array_agg(x)` | `array_agg(x)` | PostgreSQL |
 
+## SQL Server 2025: `product`
+
+`SqlFunctions.SqlServer.product(value)` рендерит агрегат `PRODUCT` SQL Server 2025 в агрегатном
+контексте. Результат сохраняет тип входа (`int?` для столбца `int`), NULL-строки игнорируются, а группа
+без единого не-NULL значения не имеет произведения (SQL `NULL`):
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .GroupBy(e => new { e.Int })
+    .Select(e => new { e.Int, Product = SqlFunctions.SqlServer.product(e.Id) })
+    .ToList();
+```
+
+```sql
+select nullableint, product(id) as [Product]
+ from complex_entity
+ group by nullableint
+```
+
+Агрегат доступен **только в SQL Server 2025 (мажорная версия 17)** и следует версионному флагу
+[`SupportsProductAggregate`](xref:NextORM.Core.ISqlDialect.SupportsProductAggregate) (который, в свою
+очередь, следует
+[`SupportsSqlServer2025Functions`](xref:NextORM.Core.ISqlDialect.SupportsSqlServer2025Functions)). Он
+предлагается только в агрегатном контексте — без оконного развёртывания `OVER`. Контекст, объявленный
+для 16, неверсионированный контекст или объявление только edition отклоняет вызов до SQL с `The PRODUCT
+function requires SQL Server major version 17 or later; declared major version: 16.` (или `…
+unspecified.`). Edition никогда не подменяет объявленную мажорную версию.
+
+## SQL Server: `ANY_VALUE` отклонён
+
+`SqlFunctions.SqlServer.any_value(value)` существует как **детерминированный отказ**, а не как агрегат.
+На сборке SQL Server `17.0.5005.3` движок отклонил `ANY_VALUE` с `Msg 195` и в агрегатной форме, и в
+форме `OVER ()`, на уровнях совместимости 160 и 170 и при `PREVIEW_FEATURES = ON`, поэтому
+поддерживаемый контракт выполнения для SQL Server не установлен. Каждый вызов — прямой или внутри
+запроса — бросает `NotSupportedException` с
+`SqlFunctions.SqlServer.any_value (ANY_VALUE) is refused: SQL Server build 17.0.5005.3 rejected this
+function with Msg 195, including with preview features enabled; no supported SQL Server execution
+contract is established.` Отказ поднимается до генерации SQL и до создания любой команды, а соседний
+агрегат того же запроса по-прежнему выполняется.
+
+Это **наблюдаемое отклонение движком**, а не ограничение CLR/области и не версионный пробел, который
+закроет будущий релиз nextorm. Переносимый `CommonFunctions.any_agg` — другой член: на SQL Server он
+остаётся выключенным (`SupportsAnyValueAggregate = false`) и **не** заменяется этим отказом; провайдеры,
+которые его включают (MySQL/MariaDB через `ANY_VALUE`, ClickHouse через `any`), сохраняют свою
+диспетчеризацию без изменений.
+
+## Семейство агрегатов SQL Server (2019 и 2022)
+
+Пять членов [#282](https://github.com/AlexeyShirshov/nextorm/issues/282) закрывают остаточные имена
+агрегатов SQL Server. Это члены агрегатного контекста: два приблизительных квантиля — упорядоченные
+агрегаты с записью `WITHIN GROUP (ORDER BY …)` без оконной формы, у `approx_count_distinct` оконной формы
+нет в самом движке, а `checksum_agg` — чей нативный вид `OVER` движок принимает — здесь предлагается
+только в агрегатной форме. `grouping_id` — аналитический член семейства, ему нужна сгруппированная
+команда.
+
+| Член | SQL | CLR-результат | Пустая группа / группа из NULL | Требование |
+|---|---|---|---|---|
+| `approx_count_distinct(value)` | `approx_count_distinct(value)` | `long` (`bigint`) | `0` / `0` | мажорная версия 15 (SQL Server 2019) |
+| `checksum_agg(value)` | `checksum_agg(value)` | `int?` (`int`) | `NULL` / `NULL` | любое объявление (без версионного порога) |
+| `grouping_id(expressions...)` | `grouping_id(a, b, …)` | `int` | `0` при обычном `GROUP BY`; иначе маска подытогов | любое объявление; только сгруппированная команда |
+| `approx_percentile_cont(fraction, value)` | `approx_percentile_cont(f) within group (order by value)` | `double?` (`float(53)`) | `NULL` / `NULL` | мажорная версия 16 (SQL Server 2022) |
+| `approx_percentile_disc(fraction, value)` | `approx_percentile_disc(f) within group (order by value)` | `T?` — тип входного выражения сортировки (`int?` для столбца `int`) | `NULL` / `NULL` | мажорная версия 16 (SQL Server 2022) |
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .GroupBy(e => new { e.Int, e.Boolean })
+    .Select(e => new
+    {
+        e.Int,
+        e.Boolean,
+        Distinct = SqlFunctions.SqlServer.approx_count_distinct(e.Int),
+        Checksum = SqlFunctions.SqlServer.checksum_agg(e.Int),
+        Group = SqlFunctions.SqlServer.grouping_id(e.Int, e.Boolean),
+        Median = SqlFunctions.SqlServer.approx_percentile_cont(0.5, e.Int),
+        MedianValue = SqlFunctions.SqlServer.approx_percentile_disc(0.5, e.Int)
+    })
+    .ToList();
+```
+
+```sql
+select nullableint, b,
+       approx_count_distinct(nullableint) as [Distinct],
+       checksum_agg(nullableint) as [Checksum],
+       grouping_id(nullableint, b) as [Group],
+       approx_percentile_cont(0.5) within group (order by nullableint) as [Median],
+       approx_percentile_disc(0.5) within group (order by nullableint) as [MedianValue]
+ from complex_entity
+ group by nullableint, b
+```
+
+`approx_count_distinct`, `approx_percentile_cont` и `approx_percentile_disc` следуют тому же
+версионному контракту, что и [`product`](#sql-server-2025-product): меньшая объявленная мажорная
+версия, неверсионированный контекст или объявление только edition отклоняют вызов **до SQL**, и edition
+никогда не подменяет версию.
+
+```text
+The APPROX_COUNT_DISTINCT function requires SQL Server major version 15 or later; declared major version: 14.
+The APPROX_PERCENTILE_CONT function requires SQL Server major version 16 or later; declared major version: 15.
+```
+
+### `approx_count_distinct`
+
+`approx_count_distinct(value)` возвращает `long` (`bigint`). NULL-строки не считаются, а пустая группа
+и группа из одних NULL дают `0` — никогда не SQL NULL. Это оценка, а не точный `count(distinct …)`:
+когда важна точность, используйте `SqlFunctions.Sql.count_distinct`. Постоянный NULL-операнд рендерится
+как `CAST(NULL AS <тип>)`, потому что «голый» `NULL` даёт Msg 8117 (`Operand data type NULL is invalid
+for approx_count_distinct operator.`). У движка нет формы `OVER` (Msg 4113), и здесь предлагается только
+агрегатный контекст.
+
+### `checksum_agg`
+
+`checksum_agg(value)` возвращает `int?` (`int`). NULL-строки пропускаются, а пустая группа или группа из
+одних NULL не имеет контрольной суммы (`NULL`). Значение не зависит от порядка, но **не** является
+стабильной идентичностью и не годится как хеш для сравнения: одинаковые значения взаимно уничтожаются
+(`checksum_agg` по `(5, 5)` — `0`, по `(5)` — `5`, по `(5, 6)` — `3`), то есть он обнаруживает изменение,
+а не содержимое. Версионного порога нет: его рендерит любая объявленная мажорная версия SQL Server,
+включая неверсионированное объявление. Постоянный NULL-операнд рендерится как `CAST(NULL AS int)`
+(«голый» `NULL` — Msg 8117, `Operand data type NULL is invalid for checksum_agg operator.`). Предлагается
+только агрегатная форма, хотя сам движок принял бы `checksum_agg(...) over (...)`.
+
+### `grouping_id`
+
+`grouping_id(expressions...)` рендерит `grouping_id(a, b, …)` и возвращает `int`. Аргументы
+`params object?[]` разворачиваются в один SQL-аргумент на каждое выражение группировки; захваченный
+массив отклоняется. Две обязанности **проверяются до SQL**, при нуле выполненных операторов, а не
+оставляются серверу с его Msg 8161:
+
+* каждый аргумент должен совпадать с выражением `GROUP BY`, иначе
+  `The GROUPING_ID function requires every argument to match a GROUP BY expression.` (выражения
+  сравниваются компаратором плана выражений запроса, поэтому эквивалентное выражение совпадает);
+* вызов допустим только в списке `SELECT`, в `HAVING` и в `ORDER BY` команды с `GROUP BY`; отсутствие
+  контекста группировки — или вызов в `WHERE`, в `ON` соединения или в самом `GROUP BY` — отклоняется с
+  `The GROUPING_ID function requires a GROUP BY context.`
+
+Обычный `GROUP BY` сообщает `0` для каждой строки. `ROLLUP` и `GROUPING SETS` сообщают маску
+подытогов: установленный бит на каждое агрегированное выражение, причём **последний** аргумент — младший
+бит, поэтому `grouping_id(grp, value)` при `rollup(grp, value)` даёт `0` для строки детализации, `1` для
+подытога по `grp` и `3` для общего итога. Версионного порога нет.
+
+### `approx_percentile_cont` и `approx_percentile_disc`
+
+`approx_percentile_cont(fraction, value)` возвращает `double?` (`float(53)`) и интерполирует;
+`approx_percentile_disc(fraction, value)` возвращает тип входного выражения сортировки (`T?`, например
+`int?` для столбца `int`) и возвращает входное значение. NULL-строки пропускаются, а пустая группа или
+группа из одних NULL даёт `NULL` для обоих. Запись — `WITHIN GROUP (ORDER BY value)`, а концы `0` и `1`
+точны.
+
+Дробь — это `double` в `[0, 1]`, никогда не проценты 0–100, и она должна быть независима от строки:
+литерал или захваченная переменная. Дробь, зависящая от строки (`(double)e.Int`), отклоняется при
+генерации SQL с `The fraction for approx_percentile_disc on SQL Server must be a constant or a captured
+scalar.`, а литерал или захваченное значение `NaN`, бесконечное или вне `[0, 1]` отклоняется с
+`The fraction for approx_percentile_cont on SQL Server must be finite and between 0 and 1 inclusive.`
+Дробь — рантайм-параметр запроса рендерится как параметр; тогда тот же диапазон проверяет движок
+(Msg 8727).
+
+Перегрузки `OVER` нет ни у одного из членов: это упорядоченные (ordered-set) агрегаты, только
+`WITHIN GROUP`, поэтому форму `OVER` через публичный интерфейс записать нельзя. Если форма `OVER` всё
+же будет сконструирована другим способом, движок отвергнет её с Msg 4113 (`The function
+'approx_percentile_cont' is not a valid windowing function, and cannot be used with the OVER clause.`).
+
+Ключ `ORDER BY` должен быть столбцом, параметром или вычисляемым выражением. SQL Server отвечает
+Msg 5309 (`Windowed functions, aggregates and NEXT VALUE FOR functions do not support constants as ORDER
+BY clause expressions.`) на литерал или NULL — типизированный `CAST(NULL AS int)` всё равно остаётся
+константой, — поэтому такой вызов отклоняется при генерации SQL, а захваченная переменная становится
+параметром и выполняется.
+
+### Приблизительные результаты и их оговорка
+
+`approx_count_distinct` и оба приблизительных квантиля — статистические оценки: для квантилей вендор
+документирует максимальную ошибку ранга около **1,33 % при 99 % доверия**, а подсчёт различных значений
+также является оценкой. Это статистическая граница вендора, а **не** детерминированный допуск, который
+обещает эта библиотека: последовательные запуски могут вернуть разные значения. Поэтому тесты проверяют
+CLR-тип, попадание значения в границы входа и поведение при NULL/пустой группе, но никогда — равенство
+одному ожидаемому числу. `checksum_agg` и `grouping_id` точны.
+
 ## Фильтр агрегатов (FILTER)
 
 `count`/`count_big`/`min`/`max`/`avg`/`sum` и строковые/массивные агрегаты принимают дополнительный

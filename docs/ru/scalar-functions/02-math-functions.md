@@ -59,8 +59,65 @@ var rows = dataContext.From<IComplexEntity>()
     .ToList();
 ```
 
+## Битовые функции SQL Server (2022+)
+
+`SqlFunctions.SqlServer` открывает пять битовых функций T-SQL, каждая — набор перегрузок по типу
+операнда (`byte?`/`short?`/`int?`/`long?`), и каждый вызов рендерит нативную функцию за типизированной
+NULL-защитой:
+
+| C# | SQL Server | Результат |
+|---|---|---|
+| `left_shift(value, shift)` / `right_shift(value, shift)` | `LEFT_SHIFT` / `RIGHT_SHIFT` (логический сдвиг, zero-fill) | тип самого операнда: `byte?`/`short?`/`int?`/`long?` |
+| `bit_count(value)` | `BIT_COUNT` | `long?` (`bigint`) |
+| `get_bit(value, offset)` | `GET_BIT` | `bool?` (`bit`) |
+| `set_bit(value, offset)` | `SET_BIT`, нативная двухаргументная форма (бит ставится в 1) | тип самого операнда |
+| `set_bit(value, offset, bitValue)` | `SET_BIT`, трёхаргументная форма | тип самого операнда |
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .Select(e => new
+    {
+        Shifted = SqlFunctions.SqlServer.left_shift((int?)1, 2),        // 4
+        Negative = SqlFunctions.SqlServer.left_shift((int?)-8, 1),      // -16
+        RightShifted = SqlFunctions.SqlServer.right_shift((int?)-8, 1), // 2147483644 (логический сдвиг)
+        Bits = SqlFunctions.SqlServer.bit_count((byte?)5),              // 2 (long)
+        Bit = SqlFunctions.SqlServer.get_bit((byte?)5, 1),              // true (bool)
+        Set = SqlFunctions.SqlServer.set_bit((short?)5, 1),             // 7
+        Cleared = SqlFunctions.SqlServer.set_bit((short?)5, 1, false),  // 5
+        NullOperand = SqlFunctions.SqlServer.left_shift((byte?)null, 1) // null
+    })
+    .ToList();
+```
+
+```sql
+CASE WHEN 1 IS NULL OR 2 IS NULL THEN CAST(NULL AS int)
+     ELSE left_shift(cast(1 as int), cast(2 as bigint)) END
+```
+
+SQL-тип определяет операнд — `byte`→`tinyint`, `short`→`smallint`, `int`→`int`, `long`→`bigint`;
+величина сдвига приводится к `bigint`, смещение бита — к `int`, а значение трёхаргументного `SET_BIT` — к
+`bit`. `bit_count` на движке возвращает `bigint`, поэтому его CLR-форма — `long?`; `get_bit` возвращает
+`bit`, поэтому его форма — `bool?`. `right_shift` — логический (zero-fill) сдвиг движка, а не
+арифметический: `right_shift(-8, 1)` равно `2147483644`, а не `-4`.
+
+Сервер отклоняет «голый» `left_shift(NULL, …)` с **Msg 8116** («Argument data type NULL is invalid»),
+поэтому рендер типизирует каждый аргумент и закрывает NULL-операнд, сдвиг, смещение или значение бита
+типизированным `NULL` типа результата — NULL никогда не доходит до нативного вызова.
+
+Всё семейство доступно **в SQL Server 2022 (мажорная версия 16) и новее** и закрыто версионным флагом
+[`SupportsSqlServer2022Functions`](xref:NextORM.Core.ISqlDialect.SupportsSqlServer2022Functions). Контекст,
+объявленный для 15, или неверсионированный контекст отклоняет каждое имя до SQL, например `The SET_BIT
+function requires SQL Server major version 16 or later; declared major version: 15.` (или `… unspecified.`).
+
+> **Разрешение перегрузок.** Поскольку семейство — это набор перегрузок по типу операнда, нетипизированная
+> константа привязывается к *наименьшей* перегрузке, которая её вмещает: `left_shift(1, 2)` выбирает
+> `byte?` и рендерит `tinyint`, а `left_shift(-8, 1)` выбирает `short?`. Поэтому SQL-тип следует за
+> выбором компилятора, а не за намерением литерала — приводите операнд явно (`left_shift((int?)1, 2)`),
+> когда нужен конкретный тип SQL Server.
+
 О числовых, битовых и векторных функциях MariaDB, включая векторные ограничения MariaDB 11.7, см.
 [каталог MariaDB](08-reference.md#mariadb-catalogue).
+
 
 ## Математика только для ClickHouse
 

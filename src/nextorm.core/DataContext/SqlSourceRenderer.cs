@@ -1076,7 +1076,9 @@ internal static class SqlSourceRenderer
         // table-function factories are emitted verbatim and are the caller's responsibility.
         var isBuiltIn = typeof(CommonFunctions).IsAssignableFrom(function.Call.Method.DeclaringType);
         if (isBuiltIn && !ctx.Dialect.SupportsTableFunction(function.Name))
-            throw new NotSupportedException($"The table function '{function.Name}' is not supported by this provider.");
+            throw new NotSupportedException(
+                ctx.Dialect.SqlServerFunctions?.GetUnsupportedReason(function.Name)
+                ?? $"The table function '{function.Name}' is not supported by this provider.");
 
         if (ctx.ParamMode)
         {
