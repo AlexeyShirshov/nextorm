@@ -960,7 +960,9 @@ internal sealed class PostgresScalarFunctions : IScalarFunctions
         "pg_get_function_arguments" or "pg_get_function_identity_arguments" or
         "pg_get_function_result" or "pg_get_functiondef" or
         "pg_get_indexdef" or "pg_get_partition_constraintdef" or "pg_get_partkeydef" or
-        "pg_get_ruledef" or "pg_get_statisticsobjdef" or "pg_get_triggerdef";
+        "pg_get_ruledef" or "pg_get_statisticsobjdef" or "pg_get_triggerdef" or
+        "pg_get_userbyid" or "pg_get_viewdef" or "pg_has_role" or
+        "pg_current_snapshot" or "pg_current_xact_id" or "pg_current_xact_id_if_assigned";
 
     /// <inheritdoc/>
     public string Render(string name, IReadOnlyList<string> args) => name switch
@@ -1036,6 +1038,21 @@ internal sealed class PostgresScalarFunctions : IScalarFunctions
         "pg_get_triggerdef" => args.Count == 1
             ? $"pg_get_triggerdef(cast({args[0]} as oid))"
             : $"pg_get_triggerdef(cast({args[0]} as oid), {args[1]})",
+        "pg_get_userbyid" => $"pg_get_userbyid(cast({args[0]} as oid))",
+        // regclass accepts a view name and a numeric OID, so one render serves the (text) and (oid) rows;
+        // the second argument's type (boolean or integer) picks the pretty overload.
+        "pg_get_viewdef" => args.Count == 1
+            ? $"pg_get_viewdef(cast({args[0]} as regclass))"
+            : $"pg_get_viewdef(cast({args[0]} as regclass), {args[1]})",
+        // regrole accepts a role name and a numeric OID; the two-argument form's second argument is the
+        // privilege text, the three-argument form's is the membership role.
+        "pg_has_role" => args.Count == 2
+            ? $"pg_has_role(cast({args[0]} as regrole), {args[1]})"
+            : $"pg_has_role(cast({args[0]} as regrole), cast({args[1]} as regrole), {args[2]})",
+        // pg_snapshot and xid8 have no CLR mapping; the textual form is the only one the driver can read.
+        "pg_current_snapshot" => "cast(pg_current_snapshot() as text)",
+        "pg_current_xact_id" => "cast(pg_current_xact_id() as text)",
+        "pg_current_xact_id_if_assigned" => "cast(pg_current_xact_id_if_assigned() as text)",
         _ => throw new NotSupportedException($"The {name} function is not supported by PostgreSQL.")
     };
 

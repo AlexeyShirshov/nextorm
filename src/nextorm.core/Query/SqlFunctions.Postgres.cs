@@ -1446,6 +1446,76 @@ namespace NextORM.Core;
         /// </summary>
         public string? pg_get_triggerdef(string? triggerOid, bool? pretty) => default!;
 
+        /// <summary>
+        /// The name of the role with the given <paramref name="roleOid"/> (<c>pg_get_userbyid(oid)</c>), or
+        /// <c>unknown (OID=N)</c> when no role has that OID. The OID is passed in its text form. Gated per
+        /// name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_get_userbyid(string? roleOid) => default!;
+
+        /// <summary>
+        /// The reconstructed <c>SELECT</c> of the view named <paramref name="view"/>
+        /// (<c>pg_get_viewdef(text)</c>), where the argument is a view name or a numeric OID in text form
+        /// (rendered through a <c>regclass</c> cast). Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_get_viewdef(string? view) => default!;
+
+        /// <summary>
+        /// The reconstructed <c>SELECT</c> of the view named <paramref name="view"/>, pretty-printed when
+        /// <paramref name="pretty"/> is true (<c>pg_get_viewdef(text, boolean)</c>); the name or OID goes
+        /// through a <c>regclass</c> cast. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_get_viewdef(string? view, bool? pretty) => default!;
+
+        /// <summary>
+        /// The reconstructed <c>SELECT</c> of the view with the given <paramref name="viewOid"/>
+        /// (<c>pg_get_viewdef(oid, integer)</c>), pretty-printed when <paramref name="pretty"/> is true.
+        /// The OID is passed in its text form. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_get_viewdef(string? viewOid, int? pretty) => default!;
+
+        /// <summary>
+        /// Whether the current user has the privilege <paramref name="privilege"/> on the role
+        /// <paramref name="role"/> (<c>pg_has_role(name, text)</c>); the role may also be given as a numeric
+        /// OID in text form (<c>pg_has_role(oid, text)</c>), since it is rendered through a <c>regrole</c>
+        /// cast. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public bool? pg_has_role(string? role, string? privilege) => default!;
+
+        /// <summary>
+        /// Whether the current user has <paramref name="privilege"/> on <paramref name="role"/>, with
+        /// <paramref name="membership"/> naming the membership to check
+        /// (<c>pg_has_role(name, name, text)</c>); either role may be a numeric OID in text form, since both
+        /// are rendered through a <c>regrole</c> cast. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public bool? pg_has_role(string? role, string? membership, string? privilege) => default!;
+
+        /// <summary>
+        /// The current transaction snapshot (<c>pg_current_snapshot()</c>) in its textual form, e.g.
+        /// <c>100:104:100,102</c>; read as text because the driver cannot read a <c>pg_snapshot</c>. The
+        /// value can be passed back to <c>pg_snapshot_xmax</c>, <c>pg_snapshot_xmin</c> and
+        /// <c>pg_visible_in_snapshot</c>, which accept this textual form.
+        /// Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_current_snapshot() => default!;
+
+        /// <summary>
+        /// The current transaction id (<c>pg_current_xact_id()</c>) in its textual form; read as text
+        /// because the driver cannot read an <c>xid8</c>. A write transaction is assigned one lazily, so
+        /// this form assigns one. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_current_xact_id() => default!;
+
+        /// <summary>
+        /// The transaction id already assigned to the current transaction, or NULL when none is
+        /// (<c>pg_current_xact_id_if_assigned()</c>), in its textual form; read as text because the driver
+        /// cannot read an <c>xid8</c>. Unlike <see cref="pg_current_xact_id()"/> it assigns nothing. Gated
+        /// per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_current_xact_id_if_assigned() => default!;
+
         private const string GetConstraintdefRefusal =
             "The pg_get_constraintdef function is refused: it renders a stored constraint node tree as " +
             "SQL text, and its pg_get_expr sibling cannot be called at all because PostgreSQL requires a " +

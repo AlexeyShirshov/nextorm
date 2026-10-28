@@ -1189,6 +1189,12 @@ public class InMemoryTests
             ("pg_get_ruledef", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_get_ruledef("1") }).ToList()),
             ("pg_get_statisticsobjdef", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_get_statisticsobjdef("1") }).ToList()),
             ("pg_get_triggerdef", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_get_triggerdef("1") }).ToList()),
+            ("pg_get_userbyid", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_get_userbyid("1") }).ToList()),
+            ("pg_get_viewdef", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_get_viewdef("v") }).ToList()),
+            ("pg_has_role", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_has_role("r", "USAGE") }).ToList()),
+            ("pg_current_snapshot", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_current_snapshot() }).ToList()),
+            ("pg_current_xact_id", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_current_xact_id() }).ToList()),
+            ("pg_current_xact_id_if_assigned", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_current_xact_id_if_assigned() }).ToList()),
         };
 
         foreach (var (name, act) in cases)

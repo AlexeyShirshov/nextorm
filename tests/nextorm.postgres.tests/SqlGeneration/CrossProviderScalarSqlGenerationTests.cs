@@ -607,6 +607,52 @@ public class CrossProviderScalarSqlGenerationTests
     }
 
     /// <summary>
+    /// The view/role/snapshot helpers of #281. The <c>regclass</c> and <c>regrole</c> casts accept both a
+    /// name and a numeric OID, and the snapshot/xid8 results are read as text.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void PostgreSQLViewRoleAndSnapshotFamily_ShouldEmitNativeSpellings()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            Ub = SqlFunctions.Postgres.pg_get_userbyid(SqlFunctions.Parameter<string>(0)),
+            Vd1 = SqlFunctions.Postgres.pg_get_viewdef(SqlFunctions.Parameter<string>(1)),
+            Vd2 = SqlFunctions.Postgres.pg_get_viewdef(SqlFunctions.Parameter<string>(2), true),
+            Vd3 = SqlFunctions.Postgres.pg_get_viewdef(SqlFunctions.Parameter<string>(3), 2),
+            Hr2 = SqlFunctions.Postgres.pg_has_role(SqlFunctions.Parameter<string>(4), "USAGE"),
+            Hr3 = SqlFunctions.Postgres.pg_has_role(
+                SqlFunctions.Parameter<string>(5), SqlFunctions.Parameter<string>(6), "USAGE"),
+            Cs = SqlFunctions.Postgres.pg_current_snapshot(),
+            Cx = SqlFunctions.Postgres.pg_current_xact_id(),
+            Cxa = SqlFunctions.Postgres.pg_current_xact_id_if_assigned()
+        }));
+
+        foreach (var name in new[]
+        {
+            "pg_get_userbyid", "pg_get_viewdef", "pg_has_role",
+            "pg_current_snapshot", "pg_current_xact_id", "pg_current_xact_id_if_assigned"
+        })
+        {
+            sql.Should().Contain($"{name}(");
+            PostgresDialect.Instance.ScalarFunctions.Supports(name).Should().BeTrue($"'{name}' is delivered on PostgreSQL");
+        }
+
+        sql.Should().Contain("pg_get_userbyid(cast(@norm_p0 as oid))");
+        sql.Should().Contain("pg_get_viewdef(cast(@norm_p1 as regclass))");
+        sql.Should().Contain("pg_get_viewdef(cast(@norm_p2 as regclass), true)");
+        sql.Should().Contain("pg_get_viewdef(cast(@norm_p3 as regclass), 2)");
+        sql.Should().Contain("pg_has_role(cast(@norm_p4 as regrole), E'USAGE')");
+        sql.Should().Contain("pg_has_role(cast(@norm_p5 as regrole), cast(@norm_p6 as regrole), E'USAGE')");
+        sql.Should().Contain("cast(pg_current_snapshot() as text)");
+        sql.Should().Contain("cast(pg_current_xact_id() as text)");
+        sql.Should().Contain("cast(pg_current_xact_id_if_assigned() as text)");
+    }
+
+    /// <summary>
     /// The encoding, catalog-format and index-property helpers of #281. Three render shapes are
     /// asserted: a plain call, an <c>oid</c>/<c>regtype</c> argument cast (a text parameter does not
     /// resolve to those overloads) and the <c>regtype</c> result cast to text.

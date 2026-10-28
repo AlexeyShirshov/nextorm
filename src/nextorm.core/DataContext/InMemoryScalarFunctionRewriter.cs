@@ -218,7 +218,11 @@ internal sealed class InMemoryScalarFunctionRewriter : ExpressionVisitor
         nameof(PostgresFunctions.pg_get_function_result), nameof(PostgresFunctions.pg_get_functiondef),
         nameof(PostgresFunctions.pg_get_indexdef), nameof(PostgresFunctions.pg_get_partition_constraintdef),
         nameof(PostgresFunctions.pg_get_partkeydef), nameof(PostgresFunctions.pg_get_ruledef),
-        nameof(PostgresFunctions.pg_get_statisticsobjdef), nameof(PostgresFunctions.pg_get_triggerdef)
+        nameof(PostgresFunctions.pg_get_statisticsobjdef), nameof(PostgresFunctions.pg_get_triggerdef),
+        nameof(PostgresFunctions.pg_get_userbyid), nameof(PostgresFunctions.pg_get_viewdef),
+        nameof(PostgresFunctions.pg_has_role), nameof(PostgresFunctions.pg_current_snapshot),
+        nameof(PostgresFunctions.pg_current_xact_id),
+        nameof(PostgresFunctions.pg_current_xact_id_if_assigned)
     };
 
     internal static Expression Rewrite(Expression expression) => new InMemoryScalarFunctionRewriter().Visit(expression)!;

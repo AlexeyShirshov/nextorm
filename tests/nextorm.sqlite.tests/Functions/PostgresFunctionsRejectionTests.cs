@@ -355,4 +355,28 @@ public class PostgresFunctionsRejectionTests
         foreach (var (name, act) in cases)
             act.Should().Throw<NotSupportedException>().WithMessage($"*{name}*not supported*");
     }
+
+    /// <summary>
+    /// The PostgreSQL view, role and snapshot helpers of #281 are PostgreSQL-only on this provider too.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void ViewRoleAndSnapshotFamily_ShouldThrowBecauseNotSupported()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var cases = new (string Name, Action Act)[]
+        {
+            ("pg_get_userbyid", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_get_userbyid("1") }))),
+            ("pg_get_viewdef", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_get_viewdef("v") }))),
+            ("pg_has_role", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_has_role("r", "USAGE") }))),
+            ("pg_current_snapshot", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_current_snapshot() }))),
+            ("pg_current_xact_id", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_current_xact_id() }))),
+            ("pg_current_xact_id_if_assigned", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_current_xact_id_if_assigned() }))),
+        };
+
+        foreach (var (name, act) in cases)
+            act.Should().Throw<NotSupportedException>().WithMessage($"*{name}*not supported*");
+    }
 }
