@@ -390,7 +390,7 @@ allowlist edition, потому что некоторые продукты Azure
 
 | Член | SQL | Требование |
 |---|---|---|
-| `SqlFunctions.SqlServer.left_shift(value, shift)` | `CASE WHEN value IS NULL OR shift IS NULL THEN CAST(NULL AS int) ELSE left_shift(cast(value as int), cast(shift as bigint)) END` | мажорная версия 16 (SQL Server 2022) |
+| `SqlFunctions.SqlServer.left_shift` / `right_shift` / `bit_count` / `get_bit` / `set_bit` (набор перегрузок по типу операнда `byte`/`short`/`int`/`long`) | `CASE WHEN … THEN CAST(NULL AS <тип операнда>) ELSE left_shift(cast(value as tinyint\|smallint\|int\|bigint), cast(shift as bigint)) END`; `bit_count` → `bigint`, `get_bit` → `bit` | мажорная версия 16 (SQL Server 2022) |
 | `SqlFunctions.SqlServer.regexp_count(input, pattern)` | `regexp_count(input, pattern)` | мажорная версия 17 (SQL Server 2025); уровень совместимости не требуется |
 | `SqlFunctions.SqlServer.product(value)` | `product(value)` (только агрегатный контекст — без `OVER`) | мажорная версия 17 |
 | `SqlFunctions.SqlServer.regexp_split_to_table(input, pattern)` | источник `FROM`; строки — `value` и one-based `ordinal bigint` | мажорная версия 17 **и** уровень совместимости БД 170 |
@@ -400,7 +400,10 @@ var rows = dataContext.From<IComplexEntity>()
     .Select(e => new
     {
         Count = SqlFunctions.SqlServer.regexp_count(e.String, "[0-9]"),
-        Shifted = SqlFunctions.SqlServer.left_shift(e.Int, 1)
+        Shifted = SqlFunctions.SqlServer.left_shift(e.Int, 1),
+        Bits = SqlFunctions.SqlServer.bit_count(e.Int),
+        Bit = SqlFunctions.SqlServer.get_bit(e.Int, 1),
+        Set = SqlFunctions.SqlServer.set_bit(e.Int, 1, false)
     })
     .ToList();
 
@@ -418,11 +421,16 @@ The LEFT_SHIFT function requires SQL Server major version 16 or later; declared 
 The REGEXP_SPLIT_TO_TABLE function requires SQL Server major version 17 or later; declared major version: 16.
 ```
 
-`left_shift` типизирует оба аргумента внутри вызова и закрывает NULL-операнд или NULL-сдвиг
-типизированным NULL, потому что «голый» `left_shift(NULL, …)` даёт Msg 8116. `regexp_split_to_table` —
-реальный гейт по двум осям: на уровне совместимости 160 движок мажорной версии 17 сообщает, что функции
-нет (Msg 208), поэтому условие 170 проверяется вживую, а не предполагается. `product` предлагается
-только в агрегатном контексте.
+Битовое семейство типизирует каждый аргумент внутри вызова и закрывает NULL-операнд, сдвиг, смещение или
+значение бита типизированным NULL, потому что «голый» `left_shift(NULL, …)` даёт Msg 8116; тип самого
+операнда выбирает `tinyint`/`smallint`/`int`/`bigint`, `bit_count` возвращает `bigint` (`long?`), а
+`get_bit` — `bit` (`bool?`). `right_shift` — логический (zero-fill) сдвиг движка: `right_shift(-8, 1)`
+равно `2147483644`. Поскольку семейство — набор перегрузок по типу операнда, нетипизированная константа
+привязывается к наименьшей перегрузке (`left_shift(1, 2)` → `byte?`/`tinyint`, `left_shift(-8, 1)` →
+`short?`): приводите операнд (`left_shift((int?)1, 2)`), когда нужен конкретный тип SQL.
+`regexp_split_to_table` — реальный гейт по двум осям: на уровне совместимости 160 движок мажорной версии
+17 сообщает, что функции нет (Msg 208), поэтому условие 170 проверяется вживую, а не предполагается.
+`product` предлагается только в агрегатном контексте.
 
 ## Скаляры T-SQL
 
@@ -501,7 +509,7 @@ select patindex('%a%', somestring) as [Pos],
   (`decimal?`, последняя identity таблицы в **любой** сессии — гонка, не API последней вставки),
   `min_active_rowversion()` (нативный `binary(8)`, не счётчик), `rowcount_big()` (предыдущая инструкция
   того же соединения) и `scope_identity()` (`decimal?`, только в том же батче, что и `INSERT`).
-* **Преобразование/логика:** `isdate(value)`/`isnumeric(value)` возвращают нативный T-SQL `int` (1/0), а не `bit`, поэтому остаются целочисленными значениями, а не материализованными предикатами; `formatmessage(messageOrId, args...)` принимает не более 20 аргументов форматирования.
+* **Преобразование/логика:** `isdate(value)`/`isnumeric(value)` возвращают нативный T-SQL `int` (1/0), а не `bit`, поэтому остаются целочисленными значениями, а не материализованными предикатами; `formatmessage(messageOrId, args...)` принимает не более 20 аргументов форматирования. `try_cast<T>(value)`/`try_convert<T>(value[, style])` (плюс перегрузки с целью `string` поверх `nvarchar(4000)`) рендерят T-SQL `TRY_CAST`/`TRY_CONVERT` через **закрытое** отображение CLR→SQL и не версионно-зависимы: неверное значение даёт SQL NULL, NULL-стиль даёт SQL NULL даже для конвертируемого значения, а цель вне отображения отклоняется до SQL. См. [TRY_CAST и TRY_CONVERT](../../scalar-functions/04-conditionals-and-conversion.md#sql-server-try_cast-и-try_convert).
 
 Переносимые BASE64 и crypto на этом провайдере требуют SQL Server 2025: `SqlFunctions.Sql.base64_encode` рендерится как `BASE64_ENCODE(value)` над `varbinary`, `base64_decode` — как `BASE64_DECODE(value)` над `varchar` (столбец `nvarchar` нужно привести), а `crypt_gen_random` рендерит типизированную обёртку `CASE WHEN length IS NULL THEN CAST(NULL AS varbinary(8000)) ELSE CRYPT_GEN_RANDOM(length) END`, поэтому NULL-длина остаётся типизированным NULL. Compatibility level и preview-флаг не нужны.
 * **JSON:** `json_array(value, ...)` и `json_object(key, value, ...)` (SQL Server 2022+),

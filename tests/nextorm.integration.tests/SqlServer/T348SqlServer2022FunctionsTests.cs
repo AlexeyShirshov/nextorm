@@ -9,10 +9,13 @@ namespace NextORM.Integration.Tests;
 /// <summary>
 /// The 2022 arm is deliberately its own xunit collection: it runs as a separate serial invocation so
 /// the 2022 container never competes with the 2025 one (the dispatch forbids two containers at once).
+/// The container lives for the whole collection and is released once here — a per-test-instance
+/// dispose would stop it between two facts of the same class.
 /// </summary>
 [CollectionDefinition("SqlServer2022", DisableParallelization = true)]
-public sealed class T348SqlServer2022Collection
+public sealed class T348SqlServer2022Collection : IDisposable
 {
+    public void Dispose() => SqlServer2022Container.DisposeContainerAsync().GetAwaiter().GetResult();
 }
 
 /// <summary>
@@ -57,8 +60,6 @@ public sealed class T348SqlServer2022FunctionsTests : IDisposable
     {
         if (_connectionString is not null)
             Execute(_connectionString, $"if object_id('{FixtureTable}') is not null drop table {FixtureTable}");
-
-        SqlServer2022Container.DisposeContainerAsync().GetAwaiter().GetResult();
     }
 
     [Fact]
@@ -90,9 +91,9 @@ public sealed class T348SqlServer2022FunctionsTests : IDisposable
             .Where(x => x.Id == 1)
             .Select(x => new
             {
-                Shift = SqlFunctions.SqlServer.left_shift(1, 2),
-                Negative = SqlFunctions.SqlServer.left_shift(-8, 1),
-                NullOperand = SqlFunctions.SqlServer.left_shift(null, 1)
+                Shift = SqlFunctions.SqlServer.left_shift((int?)1, 2),
+                Negative = SqlFunctions.SqlServer.left_shift((int?)-8, 1),
+                NullOperand = SqlFunctions.SqlServer.left_shift((int?)null, 1)
             })
             .Single();
 
@@ -104,6 +105,91 @@ public sealed class T348SqlServer2022FunctionsTests : IDisposable
 
         T348Evidence.Write(
             $"T348LIVE-2022 major={_major} left_shift=4/-16/null refusals=3 executions_before_control=0 executions_total={counter.Executions} outcome=ok");
+    }
+
+    /// <summary>
+    /// U2 on the real 2022 engine: the whole bit family executes over every operand shape and both
+    /// conversions execute the closed map, so the 16-minimum gate is proven by a real major-16 server
+    /// rather than by the declaration alone. The 2025-only refusals stay covered by the sibling fact.
+    /// </summary>
+    [Fact]
+    public void Real2022_ShouldExecuteTheWholeBitFamilyAndBothConversions()
+    {
+        _major.Should().Be(16, "the 2022 arm must run on the 2022 image");
+
+        using var ctx = new T348V16LiveContext(_connectionString!);
+
+        var row = ctx.From<IT348U1Row>()
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                TinyL = SqlFunctions.SqlServer.left_shift((byte?)x.Value, 1),
+                TinyR = SqlFunctions.SqlServer.right_shift((byte?)x.Value, 1),
+                TinyC = SqlFunctions.SqlServer.bit_count((byte?)x.Value),
+                TinyG = SqlFunctions.SqlServer.get_bit((byte?)x.Value, 1),
+                TinyS = SqlFunctions.SqlServer.set_bit((byte?)x.Value, 0),
+                TinyS3 = SqlFunctions.SqlServer.set_bit((byte?)x.Value, 0, false),
+                TinyNull = SqlFunctions.SqlServer.left_shift((byte?)null, 1),
+
+                SmallL = SqlFunctions.SqlServer.left_shift((short?)x.Value, 1),
+                SmallNull = SqlFunctions.SqlServer.set_bit((short?)null, 1),
+
+                IntL = SqlFunctions.SqlServer.left_shift(x.Value, 1),
+                IntR = SqlFunctions.SqlServer.right_shift(x.Value, 1),
+                IntC = SqlFunctions.SqlServer.bit_count(x.Value),
+                IntG = SqlFunctions.SqlServer.get_bit(x.Value, 1),
+                IntS = SqlFunctions.SqlServer.set_bit(x.Value, 0),
+                IntNullShift = SqlFunctions.SqlServer.left_shift(x.Value, null),
+
+                LongL = SqlFunctions.SqlServer.left_shift((long?)x.Id, 1),
+                LongNull = SqlFunctions.SqlServer.bit_count((long?)null),
+
+                RightNegative = SqlFunctions.SqlServer.right_shift((int?)-8, 1),
+
+                CastInt = SqlFunctions.SqlServer.try_cast<int>("42"),
+                CastBad = SqlFunctions.SqlServer.try_cast<int>("x"),
+                CastGuid = SqlFunctions.SqlServer.try_cast<Guid>("6F9619FF-8B86-D011-B42D-00C04FC964FF"),
+                ConvertDecimal = SqlFunctions.SqlServer.try_convert<decimal>("1.5"),
+                ConvertBad = SqlFunctions.SqlServer.try_convert<decimal>("x"),
+                ConvertStyled = SqlFunctions.SqlServer.try_convert<DateTime>("2024-01-02T03:04:05", 126),
+                ConvertNullStyle = SqlFunctions.SqlServer.try_convert<int>("42", null)
+            })
+            .Single();
+
+        row.TinyL.Should().Be((byte)4);
+        row.TinyR.Should().Be((byte)1);
+        row.TinyC.Should().Be(1L);
+        row.TinyG.Should().BeTrue();
+        row.TinyS.Should().Be((byte)3);
+        row.TinyS3.Should().Be((byte)2);
+        row.TinyNull.Should().BeNull();
+        row.SmallL.Should().Be((short)4);
+        row.SmallNull.Should().BeNull();
+        row.IntL.Should().Be(4);
+        row.IntR.Should().Be(1);
+        row.IntC.Should().Be(1L);
+        row.IntG.Should().BeTrue();
+        row.IntS.Should().Be(3);
+        row.IntNullShift.Should().BeNull();
+        row.LongL.Should().Be(2L);
+        row.LongNull.Should().BeNull();
+        row.RightNegative.Should().Be(2147483644, "RIGHT_SHIFT is a logical shift on 2022 as well");
+        row.CastInt.Should().Be(42);
+        row.CastBad.Should().BeNull();
+        row.CastGuid.Should().Be(Guid.Parse("6F9619FF-8B86-D011-B42D-00C04FC964FF"));
+        row.ConvertDecimal.Should().Be(1.5m);
+        row.ConvertBad.Should().BeNull();
+        row.ConvertStyled.Should().Be(new DateTime(2024, 1, 2, 3, 4, 5));
+        row.ConvertNullStyle.Should().BeNull("a NULL style yields NULL on 2022 too");
+
+        ((object)row.TinyL!).Should().BeOfType<byte>();
+        ((object)row.IntC!).Should().BeOfType<long>();
+        ((object)row.IntG!).Should().BeOfType<bool>();
+        ((object)row.LongL!).Should().BeOfType<long>();
+        ((object)row.CastGuid!).Should().BeOfType<Guid>();
+
+        T348Evidence.Write(
+            "T348LIVE-2022 bit 4/1/1/true/3/2/null + shapes + logical-right-shift=2147483644 try_cast/try_convert 42/null/1.5/null/126/null-style-null outcome=ok");
     }
 
     private static void ShouldRefuse<T>(IDataContext ctx, QueryCommand<T> command, string message)

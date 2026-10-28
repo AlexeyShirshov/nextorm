@@ -64,7 +64,10 @@ declared major version in the message.
 | Member | SQL | Result | Requires |
 |---|---|---|---|
 | `regexp_count(input, pattern)` | `regexp_count(input, pattern)` | `int?` — `0` for no match, `NULL` for a NULL input | major version 17 |
-| `left_shift(value, shift)` | `CASE WHEN value IS NULL OR shift IS NULL THEN CAST(NULL AS int) ELSE left_shift(cast(value as int), cast(shift as bigint)) END` | `int?` — typed-NULL guard (a bare `left_shift(NULL, …)` is Msg 8116) | major version 16 |
+| `left_shift(value, shift)` / `right_shift(value, shift)` | `CASE WHEN value IS NULL OR shift IS NULL THEN CAST(NULL AS <operand type>) ELSE left_shift(cast(value as <operand type>), cast(shift as bigint)) END` | the operand's own type (`byte?`/`short?`/`int?`/`long?`); logical zero-fill shift; typed-NULL guard (a bare `left_shift(NULL, …)` is Msg 8116) | major version 16 |
+| `bit_count(value)` | `CASE WHEN value IS NULL THEN CAST(NULL AS bigint) ELSE bit_count(cast(value as <operand type>)) END` | `long?` (`bigint`) | major version 16 |
+| `get_bit(value, offset)` | `CASE WHEN value IS NULL OR offset IS NULL THEN CAST(NULL AS bit) ELSE get_bit(cast(value as <operand type>), cast(offset as int)) END` | `bool?` (`bit`) | major version 16 |
+| `set_bit(value, offset[, bitValue])` | `… ELSE set_bit(cast(value as <operand type>), cast(offset as int)[, cast(bitValue as bit)]) END` | the operand's own type; an explicitly NULL `bitValue` yields `NULL`, an omitted one keeps the native default 1 | major version 16 |
 | `product(value)` | `product(value)` (aggregate context; no `OVER`) | the input type; NULL rows are ignored, an all-NULL group is `NULL` | major version 17 |
 | `regexp_split_to_table(input, pattern)` | a `FROM` source, e.g. `from regexp_split_to_table(input, pattern)` | one row per fragment: `value` plus the one-based `ordinal` (`bigint`) | major version 17 **and** database compatibility level 170 |
 
@@ -74,6 +77,37 @@ and needs no renderer hook: the member, the row shape and the `SupportsTableFunc
 whole route. At **compatibility level 160** on a major-17 engine the function does not exist (Msg 208), so
 the 170 prerequisite is a real gate that nextorm documents and asserts live rather than silently assuming
 (the dialect cannot inspect the database compatibility level).
+
+## SQL Server TRY_CAST and TRY_CONVERT
+
+`SqlFunctions.SqlServer.try_cast<T>(value)` and `try_convert<T>(value[, style])` render the T-SQL
+`TRY_CAST`/`TRY_CONVERT` through a **closed CLR→SQL destination map**; a malformed, overflowing or
+out-of-range value is SQL NULL instead of an error. Unlike the names above, they are not version-gated:
+every SQL Server declaration (15, 16, 17 and unversioned) renders them, and every other provider rejects
+the member with `The TRY_CAST function is not supported by this provider.`
+
+| Member | SQL | Result |
+|---|---|---|
+| `try_cast<T>(value)` | `try_cast(value as <type>)` | `T?` — NULL when the conversion is invalid |
+| `try_convert<T>(value)` / `try_convert<T>(value, style)` | `try_convert(<type>, value[, style])` | `T?` — NULL when the conversion is invalid |
+| `try_cast(value)` / `try_convert(value[, style])` | `try_cast(value as nvarchar(4000))` / `try_convert(nvarchar(4000), value[, style])` | `string?` — input longer than 4000 characters is truncated to 4000 |
+
+| CLR target `T` | SQL Server type |
+|---|---|
+| `byte` / `short` / `int` / `long` | `tinyint` / `smallint` / `int` / `bigint` |
+| `float` / `double` | `real` / `float(53)` |
+| `decimal` | `decimal(38,10)` |
+| `bool` | `bit` |
+| `Guid` | `uniqueidentifier` |
+| `DateTime` / `DateTimeOffset` | `datetime2(7)` / `datetimeoffset(7)` |
+| `TimeSpan` | `time(7)` |
+
+An unmapped target is refused **before** the command is prepared (`The TRY_CONVERT function cannot map CLR
+target 'MyType' to a supported SQL Server conversion type.`). The style is the native
+`datetime`/`float`/money style: omitting it and passing a NULL style are separate overloads, and the NULL
+style makes the engine return NULL even for a convertible value. A conversion the engine itself prohibits is
+not masked — `TRY_CAST(1 AS xml)` raises Msg 529, and `xml` is not a public target. See
+[conditionals and conversion](04-conditionals-and-conversion.md#sql-server-try_cast-and-try_convert).
 
 ## MySQL-specific functions
 

@@ -531,6 +531,23 @@ public abstract class SqlDialectBase : ISqlDialect
         _ => type.Name
     };
 
+    /// <summary>
+    /// The rejecting default of <see cref="ISqlDialect.MakeTryCast"/>: only a dialect with a closed
+    /// conversion map (SQL Server) may answer, so no provider silently renders a cast through
+    /// <see cref="MakeTypeName"/>'s open name fall-back.
+    /// </summary>
+    /// <exception cref="NotSupportedException">Always: the provider has no <c>TRY_CAST</c>.</exception>
+    public virtual string MakeTryCast(string expression, Type targetType) =>
+        throw new NotSupportedException("The TRY_CAST function is not supported by this provider.");
+
+    /// <summary>
+    /// The rejecting default of <see cref="ISqlDialect.MakeTryConvert"/>; see
+    /// <see cref="MakeTryCast"/> for why the conversion cannot reuse <see cref="MakeTypeName"/>.
+    /// </summary>
+    /// <exception cref="NotSupportedException">Always: the provider has no <c>TRY_CONVERT</c>.</exception>
+    public virtual string MakeTryConvert(string expression, Type targetType, string? style) =>
+        throw new NotSupportedException("The TRY_CONVERT function is not supported by this provider.");
+
     /// <inheritdoc/>
     public virtual string MakeBool(bool v) => v ? "1" : "0";
     /// <inheritdoc/>

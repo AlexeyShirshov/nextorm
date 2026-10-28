@@ -1042,6 +1042,33 @@ public interface ISqlDialect
     string MakeParam(string name);
     /// <summary>SQL type name used when a CLR conversion has to be rendered as a database cast.</summary>
     string MakeTypeName(Type type);
+    /// <summary>
+    /// Renders a SQL Server <c>TRY_CAST</c> of <paramref name="expression"/> to the SQL type that the
+    /// closed target map assigns to <paramref name="targetType"/>: the value is SQL NULL when the
+    /// conversion is invalid. Providers without the function keep the rejecting default here rather
+    /// than falling back to <see cref="MakeTypeName"/>, whose open name fall-back would emit SQL the
+    /// server rejects; only SQL Server's closed map may answer. A target outside the map is refused
+    /// before the command is prepared.
+    /// </summary>
+    /// <param name="expression">The already-rendered source expression.</param>
+    /// <param name="targetType">The CLR conversion target (possibly <see cref="Nullable{T}"/>).</param>
+    /// <returns>The complete <c>try_cast(… as …)</c> expression.</returns>
+    string MakeTryCast(string expression, Type targetType) =>
+        throw new NotSupportedException("The TRY_CAST function is not supported by this provider.");
+    /// <summary>
+    /// Renders a SQL Server <c>TRY_CONVERT</c> of <paramref name="expression"/> to the closed-map SQL
+    /// type of <paramref name="targetType"/>. <paramref name="style"/> is the already-rendered native
+    /// style argument, or <see langword="null"/> for the no-style form; a supplied SQL NULL style is a
+    /// non-null string and keeps the server's native NULL-style semantics, which the engine applies as a
+    /// NULL result even for a convertible value. Same rejection rules as
+    /// <see cref="MakeTryCast"/>.
+    /// </summary>
+    /// <param name="expression">The already-rendered source expression.</param>
+    /// <param name="targetType">The CLR conversion target (possibly <see cref="Nullable{T}"/>).</param>
+    /// <param name="style">The rendered style argument, or <see langword="null"/> when omitted.</param>
+    /// <returns>The complete <c>try_convert(…, …)</c> expression.</returns>
+    string MakeTryConvert(string expression, Type targetType, string? style) =>
+        throw new NotSupportedException("The TRY_CONVERT function is not supported by this provider.");
     /// <summary>Renders the SQL literal for a boolean value.</summary>
     string MakeBool(bool v);
     /// <summary>Renders <c>coalesce(v1, v2)</c> over the already-rendered operands.</summary>

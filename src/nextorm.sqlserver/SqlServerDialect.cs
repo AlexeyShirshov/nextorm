@@ -518,6 +518,62 @@ public sealed class SqlServerDialect : SqlDialectBase
     };
 
     /// <summary>
+    /// Renders <c>try_cast(expression as &lt;type&gt;)</c> through the closed conversion map. The map is
+    /// deliberately separate from <see cref="MakeTypeName"/>: that one falls back to <c>type.Name</c>,
+    /// which is invalid T-SQL for <c>bool</c>/<c>Guid</c>/<c>DateTime</c>/<c>string</c> and wrong for
+    /// <c>TimeSpan</c> (ticks). Lengths and precisions are fixed in the map (no configurable
+    /// length/precision yet); the server applies its native truncation and rounding. An unmapped target
+    /// is refused before the command is prepared.
+    /// </summary>
+    /// <exception cref="NotSupportedException">The target has no entry in the closed map.</exception>
+    public override string MakeTryCast(string expression, Type targetType) =>
+        $"try_cast({expression} as {TryConversionTypeName("TRY_CAST", targetType)})";
+
+    /// <summary>
+    /// Renders <c>try_convert(&lt;type&gt;, expression[, style])</c> through the same closed map. A
+    /// <see langword="null"/> <paramref name="style"/> omits the argument; a supplied style (including a
+    /// typed SQL NULL) is the native style argument and keeps the server's NULL-style semantics, which is
+    /// a NULL result even for a convertible value.
+    /// </summary>
+    /// <exception cref="NotSupportedException">The target has no entry in the closed map.</exception>
+    public override string MakeTryConvert(string expression, Type targetType, string? style)
+    {
+        var sqlType = TryConversionTypeName("TRY_CONVERT", targetType);
+        return style is null
+            ? $"try_convert({sqlType}, {expression})"
+            : $"try_convert({sqlType}, {expression}, {style})";
+    }
+
+    /// <summary>
+    /// The closed CLR-to-SQL Server conversion map shared by <c>TRY_CAST</c> and <c>TRY_CONVERT</c>. It
+    /// never falls through to a CLR type name: an unmapped target is an explicit refusal naming the
+    /// calling member and the target.
+    /// </summary>
+    private static string TryConversionTypeName(string member, Type targetType)
+    {
+        var type = Nullable.GetUnderlyingType(targetType) ?? targetType;
+
+        return type switch
+        {
+            _ when type == typeof(byte) => "tinyint",
+            _ when type == typeof(short) => "smallint",
+            _ when type == typeof(int) => "int",
+            _ when type == typeof(long) => "bigint",
+            _ when type == typeof(float) => "real",
+            _ when type == typeof(double) => "float(53)",
+            _ when type == typeof(decimal) => "decimal(38,10)",
+            _ when type == typeof(bool) => "bit",
+            _ when type == typeof(Guid) => "uniqueidentifier",
+            _ when type == typeof(DateTime) => "datetime2(7)",
+            _ when type == typeof(DateTimeOffset) => "datetimeoffset(7)",
+            _ when type == typeof(TimeSpan) => "time(7)",
+            _ when type == typeof(string) => "nvarchar(4000)",
+            _ => throw new NotSupportedException(
+                $"The {member} function cannot map CLR target '{type.Name}' to a supported SQL Server conversion type.")
+        };
+    }
+
+    /// <summary>
     /// SQL Server evaluates <c>avg</c> over an integer column as an integer and truncates the
     /// fractional part. Widen the argument to <c>float</c> inside the aggregate; casting the
     /// aggregate result cannot recover the discarded fraction.
@@ -1232,31 +1288,33 @@ internal sealed class SqlServerSpecificFunctions : ISqlServerFunctions
 
     /// <inheritdoc/>
     public bool Supports(string name) =>
-        name is
-        "patindex" or "quotename" or "soundex" or "difference" or "string_escape" or "unicode" or
-        "nchar" or "format" or "acos" or "asin" or "atan" or "atn2" or
-        "square" or "datename" or "date_bucket" or "hashbytes" or
-        "newsequentialid" or "json_array" or "json_object" or "json_arrayagg" or "json_objectagg" or
-        "json_contains" or "json_path_exists" or
-        "sysdatetime" or "sysdatetimeoffset" or "sysutcdatetime" or "switchoffset" or
-        "todatetimeoffset" or "timefromparts" or "smalldatetimefromparts" or "datetimefromparts" or
-        "datetime2fromparts" or "datetimeoffsetfromparts" or
-        "checksum" or "binary_checksum" or "compress" or "decompress" or
-        "rand" or "stuff" or
-        "col_length" or "col_name" or "ident_incr" or "ident_seed" or "index_col" or
-        "object_definition" or "object_id" or "object_name" or "object_schema_name" or "stats_date" or
-        "db_id" or "db_name" or "original_db_name" or "schema_id" or "schema_name" or
-        "type_id" or "type_name" or
-        "filegroup_id" or "filegroup_name" or "file_id" or "file_idex" or "file_name" or
-        "current_request_id" or "current_timezone" or "current_timezone_id" or
-        "current_transaction_id" or
-        "formatmessage" or "getansinull" or "ident_current" or
-        "isdate" or "isnumeric" or "min_active_rowversion" or
-        "parsename" or "publishingservername" or "parse" or "try_parse" or
-        "rowcount_big" or "scope_identity" or "str" or "xact_state" or
-        "next_value_for" or "nextval"
+        (name is
+            "patindex" or "quotename" or "soundex" or "difference" or "string_escape" or "unicode" or
+            "nchar" or "format" or "acos" or "asin" or "atan" or "atn2" or
+            "square" or "datename" or "date_bucket" or "hashbytes" or
+            "newsequentialid" or "json_array" or "json_object" or "json_arrayagg" or "json_objectagg" or
+            "json_contains" or "json_path_exists" or
+            "sysdatetime" or "sysdatetimeoffset" or "sysutcdatetime" or "switchoffset" or
+            "todatetimeoffset" or "timefromparts" or "smalldatetimefromparts" or "datetimefromparts" or
+            "datetime2fromparts" or "datetimeoffsetfromparts" or
+            "checksum" or "binary_checksum" or "compress" or "decompress" or
+            "rand" or "stuff" or
+            "col_length" or "col_name" or "ident_incr" or "ident_seed" or "index_col" or
+            "object_definition" or "object_id" or "object_name" or "object_schema_name" or "stats_date" or
+            "db_id" or "db_name" or "original_db_name" or "schema_id" or "schema_name" or
+            "type_id" or "type_name" or
+            "filegroup_id" or "filegroup_name" or "file_id" or "file_idex" or "file_name" or
+            "current_request_id" or "current_timezone" or "current_timezone_id" or
+            "current_transaction_id" or
+            "formatmessage" or "getansinull" or "ident_current" or
+            "isdate" or "isnumeric" or "min_active_rowversion" or
+            "parsename" or "publishingservername" or "parse" or "try_parse" or
+            "rowcount_big" or "scope_identity" or "str" or "xact_state" or
+            "next_value_for" or "nextval" or
+            "try_cast" or "try_convert")
         || (name == "regexp_count" && _dialect.SupportsSqlServer2025Functions)
-        || (name == "left_shift" && _dialect.SupportsSqlServer2022Functions);
+        || ((name is "left_shift" or "right_shift" or "bit_count" or "get_bit" or "set_bit")
+            && _dialect.SupportsSqlServer2022Functions);
 
     /// <inheritdoc/>
     public string? GetUnsupportedReason(string name) => name switch
@@ -1265,6 +1323,10 @@ internal sealed class SqlServerSpecificFunctions : ISqlServerFunctions
         "regexp_split_to_table" => Unsupported("REGEXP_SPLIT_TO_TABLE", requiredMajor: 17, _dialect.SupportsSqlServer2025Functions),
         "product" => Unsupported("PRODUCT", requiredMajor: 17, _dialect.SupportsProductAggregate),
         "left_shift" => Unsupported("LEFT_SHIFT", requiredMajor: 16, _dialect.SupportsSqlServer2022Functions),
+        "right_shift" => Unsupported("RIGHT_SHIFT", requiredMajor: 16, _dialect.SupportsSqlServer2022Functions),
+        "bit_count" => Unsupported("BIT_COUNT", requiredMajor: 16, _dialect.SupportsSqlServer2022Functions),
+        "get_bit" => Unsupported("GET_BIT", requiredMajor: 16, _dialect.SupportsSqlServer2022Functions),
+        "set_bit" => Unsupported("SET_BIT", requiredMajor: 16, _dialect.SupportsSqlServer2022Functions),
         _ => null
     };
 
@@ -1284,9 +1346,9 @@ internal sealed class SqlServerSpecificFunctions : ISqlServerFunctions
         // SQL Server 2025 regex scalar: int count of the non-overlapping matches (0 when none, NULL
         // when the input is NULL).
         "regexp_count" => $"regexp_count({args[0]}, {args[1]})",
-        // SQL Server 2022 bit shift. A bare `left_shift(null, ...)` is Msg 8116, so both arguments are
-        // typed inside the call and a NULL operand or shift yields a typed NULL.
-        "left_shift" => LeftShift(args[0], args[1]),
+        // Legacy string-only arm: the translator routes the whole bit family through RenderBit, which
+        // also knows the operand type. A direct caller of this arm keeps the int operand shape.
+        "left_shift" => RenderBit(name, args[0], "int", args[1], null),
         "patindex" => $"patindex({args[0]}, {args[1]})",
         "quotename" => args.Count == 2 ? $"quotename({args[0]}, {args[1]})" : $"quotename({args[0]})",
         "soundex" => $"soundex({args[0]})",
@@ -1381,17 +1443,70 @@ internal sealed class SqlServerSpecificFunctions : ISqlServerFunctions
     };
 
     /// <summary>
-    /// Renders <c>LEFT_SHIFT</c> with typed arguments and a typed-NULL guard: SQL Server rejects a bare
-    /// <c>left_shift(null, …)</c> with Msg 8116, so a NULL operand or shift returns a typed NULL and
-    /// only the guarded native call is rendered otherwise. The operand is <c>int</c>; the shift amount
-    /// is <c>bigint</c>.
+    /// Renders the SQL Server bit-manipulation family with typed arguments and typed-NULL branches. SQL
+    /// Server rejects a bare <c>left_shift(null, …)</c> with Msg 8116, so a NULL argument never reaches
+    /// the native call: the guard returns a typed NULL of the result type (<c>tinyint</c>/<c>smallint</c>/
+    /// <c>int</c>/<c>bigint</c> for the shifts and <c>SET_BIT</c>, <c>bigint</c> for <c>BIT_COUNT</c>,
+    /// <c>bit</c> for <c>GET_BIT</c>). The operand keeps its own SQL type, the shift amount is
+    /// <c>bigint</c>, the bit offset is <c>int</c> and a supplied <c>SET_BIT</c> value is <c>bit</c>.
     /// </summary>
-    private static string LeftShift(string value, string shift)
+    public string RenderBit(string name, string operand, string operandType, string? amount, string? value) =>
+        name switch
+        {
+            "left_shift" or "right_shift" => Shift(name, operand, operandType, Require(name, amount)),
+            "bit_count" => BitCount(operand, operandType),
+            "get_bit" => GetBit(operand, operandType, Require(name, amount)),
+            "set_bit" => SetBit(operand, operandType, Require(name, amount), value),
+            _ => throw new NotSupportedException($"The {name} function is not a bit-manipulation function.")
+        };
+
+    private static string Require(string name, string? amount) =>
+        amount ?? throw new NotSupportedException($"The {name} function requires a shift or bit-offset argument.");
+
+    /// <summary>Renders <c>LEFT_SHIFT</c>/<c>RIGHT_SHIFT</c> over a typed operand and a <c>bigint</c> shift.</summary>
+    private static string Shift(string name, string operand, string operandType, string amount)
     {
-        var operand = TypedNull(value, "int");
-        var amount = TypedNull(shift, "bigint");
-        return $"CASE WHEN {operand} IS NULL OR {amount} IS NULL THEN CAST(NULL AS int) "
-            + $"ELSE left_shift(cast({operand} as int), cast({amount} as bigint)) END";
+        var value = TypedNull(operand, operandType);
+        var shift = TypedNull(amount, "bigint");
+        return $"CASE WHEN {value} IS NULL OR {shift} IS NULL THEN CAST(NULL AS {operandType}) "
+            + $"ELSE {name}(cast({value} as {operandType}), cast({shift} as bigint)) END";
+    }
+
+    /// <summary>Renders <c>BIT_COUNT</c>: the engine returns <c>bigint</c>, so the NULL branch is too.</summary>
+    private static string BitCount(string operand, string operandType)
+    {
+        var value = TypedNull(operand, operandType);
+        return $"CASE WHEN {value} IS NULL THEN CAST(NULL AS bigint) "
+            + $"ELSE bit_count(cast({value} as {operandType})) END";
+    }
+
+    /// <summary>Renders <c>GET_BIT</c>: the engine returns <c>bit</c>, so the NULL branch is too.</summary>
+    private static string GetBit(string operand, string operandType, string offset)
+    {
+        var value = TypedNull(operand, operandType);
+        var position = TypedNull(offset, "int");
+        return $"CASE WHEN {value} IS NULL OR {position} IS NULL THEN CAST(NULL AS bit) "
+            + $"ELSE get_bit(cast({value} as {operandType}), cast({position} as int)) END";
+    }
+
+    /// <summary>
+    /// Renders <c>SET_BIT</c> with the two- or three-argument native form. An omitted bit value keeps the
+    /// native default (1); an explicitly NULL value is guarded into a NULL result instead of silently
+    /// becoming the default.
+    /// </summary>
+    private static string SetBit(string operand, string operandType, string offset, string? bitValue)
+    {
+        var value = TypedNull(operand, operandType);
+        var position = TypedNull(offset, "int");
+
+        if (bitValue is null)
+            return $"CASE WHEN {value} IS NULL OR {position} IS NULL THEN CAST(NULL AS {operandType}) "
+                + $"ELSE set_bit(cast({value} as {operandType}), cast({position} as int)) END";
+
+        var bit = TypedNull(bitValue, "bit");
+        return $"CASE WHEN {value} IS NULL OR {position} IS NULL OR {bit} IS NULL "
+            + $"THEN CAST(NULL AS {operandType}) "
+            + $"ELSE set_bit(cast({value} as {operandType}), cast({position} as int), cast({bit} as bit)) END";
     }
 
     /// <summary>Replaces the bare <c>null</c> token with a typed NULL so the argument keeps its type.</summary>

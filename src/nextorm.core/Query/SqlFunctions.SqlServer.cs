@@ -947,7 +947,359 @@ namespace NextORM.Core;
         /// <param name="value">The <c>int</c> operand.</param>
         /// <param name="shift">The number of bits to shift; SQL NULL when either operand is NULL.</param>
         /// <returns>The shifted <c>int</c>, or SQL NULL when either operand is NULL.</returns>
+        /// <remarks>
+        /// <b>Overload resolution.</b> The bit family is one overload set per operand type
+        /// (<c>byte?</c>/<c>short?</c>/<c>int?</c>/<c>long?</c>), so an untyped constant binds to the
+        /// <i>smallest</i> operand overload that can hold it: <c>left_shift(1, 2)</c> selects
+        /// <c>byte?</c> and renders <c>tinyint</c>, and <c>left_shift(-8, 1)</c> selects <c>short?</c>.
+        /// The rendered SQL type therefore follows the compiler's pick, not the literal's intent. Cast
+        /// the operand explicitly (<c>left_shift((int?)1, 2)</c>) whenever a specific SQL Server type is
+        /// required. The overload set is deliberately not collapsed in this release.
+        /// </remarks>
         public int? left_shift(int? value, int? shift) => default!;
+
+        /// <summary>
+        /// <c>left_shift(value, shift)</c> for a <see cref="byte"/> operand. Rendered with the operand
+        /// typed as <c>tinyint</c> and the shift amount as <c>bigint</c>, behind a typed-NULL guard
+        /// (<c>case when … then cast(null as tinyint) else … end</c>) because a bare
+        /// <c>left_shift(null, …)</c> raises Msg 8116. Requires SQL Server 2022 (major version 16) and
+        /// the version-bound <see cref="ISqlDialect.SupportsSqlServer2022Functions"/> gate.
+        /// </summary>
+        /// <param name="value">The <c>tinyint</c> operand.</param>
+        /// <param name="shift">The number of bits to shift.</param>
+        /// <returns>The shifted <c>byte</c>, or SQL NULL when either argument is NULL.</returns>
+        public byte? left_shift(byte? value, int? shift) => default!;
+
+        /// <summary>
+        /// <c>left_shift(value, shift)</c> for a <see cref="short"/> operand. Rendered with the operand
+        /// typed as <c>smallint</c> and the shift amount as <c>bigint</c>, behind the same typed-NULL
+        /// guard (a NULL yields <c>cast(null as smallint)</c>). Requires SQL Server 2022 (major version
+        /// 16) and the version-bound <see cref="ISqlDialect.SupportsSqlServer2022Functions"/> gate.
+        /// </summary>
+        /// <param name="value">The <c>smallint</c> operand.</param>
+        /// <param name="shift">The number of bits to shift.</param>
+        /// <returns>The shifted <c>short</c>, or SQL NULL when either argument is NULL.</returns>
+        public short? left_shift(short? value, int? shift) => default!;
+
+        /// <summary>
+        /// <c>left_shift(value, shift)</c> for a <see cref="long"/> operand. Rendered with the operand
+        /// typed as <c>bigint</c> and the shift amount as <c>bigint</c>, behind the same typed-NULL
+        /// guard (a NULL yields <c>cast(null as bigint)</c>). Requires SQL Server 2022 (major version
+        /// 16) and the version-bound <see cref="ISqlDialect.SupportsSqlServer2022Functions"/> gate.
+        /// </summary>
+        /// <param name="value">The <c>bigint</c> operand.</param>
+        /// <param name="shift">The number of bits to shift.</param>
+        /// <returns>The shifted <c>long</c>, or SQL NULL when either argument is NULL.</returns>
+        public long? left_shift(long? value, int? shift) => default!;
+
+        /// <summary>
+        /// <c>right_shift(value, shift)</c> for a <see cref="byte"/> operand: the logical (zero-fill)
+        /// right shift of <paramref name="value"/>. Rendered as
+        /// <c>right_shift(cast(value as tinyint), cast(shift as bigint))</c> behind a typed-NULL guard
+        /// (a NULL yields <c>cast(null as tinyint)</c>). Requires SQL Server 2022 (major version 16) and
+        /// the version-bound <see cref="ISqlDialect.SupportsSqlServer2022Functions"/> gate.
+        /// </summary>
+        /// <param name="value">The <c>tinyint</c> operand.</param>
+        /// <param name="shift">The number of bits to shift.</param>
+        /// <returns>The shifted <c>byte</c>, or SQL NULL when either argument is NULL.</returns>
+        public byte? right_shift(byte? value, int? shift) => default!;
+
+        /// <summary>
+        /// <c>right_shift(value, shift)</c> for a <see cref="short"/> operand. Rendered as
+        /// <c>right_shift(cast(value as smallint), cast(shift as bigint))</c> behind a typed-NULL guard
+        /// (a NULL yields <c>cast(null as smallint)</c>). Requires SQL Server 2022 (major version 16)
+        /// and the version-bound <see cref="ISqlDialect.SupportsSqlServer2022Functions"/> gate.
+        /// </summary>
+        /// <param name="value">The <c>smallint</c> operand.</param>
+        /// <param name="shift">The number of bits to shift.</param>
+        /// <returns>The shifted <c>short</c>, or SQL NULL when either argument is NULL.</returns>
+        public short? right_shift(short? value, int? shift) => default!;
+
+        /// <summary>
+        /// <c>right_shift(value, shift)</c> for an <see cref="int"/> operand. Rendered as
+        /// <c>right_shift(cast(value as int), cast(shift as bigint))</c> behind a typed-NULL guard
+        /// (a NULL yields <c>cast(null as int)</c>). Requires SQL Server 2022 (major version 16) and the
+        /// version-bound <see cref="ISqlDialect.SupportsSqlServer2022Functions"/> gate.
+        /// </summary>
+        /// <param name="value">The <c>int</c> operand.</param>
+        /// <param name="shift">The number of bits to shift.</param>
+        /// <returns>The shifted <c>int</c>, or SQL NULL when either argument is NULL.</returns>
+        public int? right_shift(int? value, int? shift) => default!;
+
+        /// <summary>
+        /// <c>right_shift(value, shift)</c> for a <see cref="long"/> operand. Rendered as
+        /// <c>right_shift(cast(value as bigint), cast(shift as bigint))</c> behind a typed-NULL guard
+        /// (a NULL yields <c>cast(null as bigint)</c>). Requires SQL Server 2022 (major version 16) and
+        /// the version-bound <see cref="ISqlDialect.SupportsSqlServer2022Functions"/> gate.
+        /// </summary>
+        /// <param name="value">The <c>bigint</c> operand.</param>
+        /// <param name="shift">The number of bits to shift.</param>
+        /// <returns>The shifted <c>long</c>, or SQL NULL when either argument is NULL.</returns>
+        public long? right_shift(long? value, int? shift) => default!;
+
+        /// <summary>
+        /// <c>bit_count(value)</c> for a <see cref="byte"/> operand: the number of one bits in the value.
+        /// The T-SQL result is <c>bigint</c>, so the CLR result is <c>long?</c>; the rendered call types
+        /// the operand as <c>tinyint</c> and a NULL operand yields <c>cast(null as bigint)</c>. Requires
+        /// SQL Server 2022 (major version 16) and the version-bound
+        /// <see cref="ISqlDialect.SupportsSqlServer2022Functions"/> gate.
+        /// </summary>
+        /// <param name="value">The <c>tinyint</c> operand.</param>
+        /// <returns>The number of set bits, or SQL NULL when the operand is NULL.</returns>
+        public long? bit_count(byte? value) => default!;
+
+        /// <summary>
+        /// <c>bit_count(value)</c> for a <see cref="short"/> operand. The T-SQL result is <c>bigint</c>,
+        /// so the CLR result is <c>long?</c>; the rendered call types the operand as <c>smallint</c> and
+        /// a NULL operand yields <c>cast(null as bigint)</c>. Requires SQL Server 2022 (major version 16)
+        /// and the version-bound <see cref="ISqlDialect.SupportsSqlServer2022Functions"/> gate.
+        /// </summary>
+        /// <param name="value">The <c>smallint</c> operand.</param>
+        /// <returns>The number of set bits, or SQL NULL when the operand is NULL.</returns>
+        public long? bit_count(short? value) => default!;
+
+        /// <summary>
+        /// <c>bit_count(value)</c> for an <see cref="int"/> operand. The T-SQL result is <c>bigint</c>,
+        /// so the CLR result is <c>long?</c>; the rendered call types the operand as <c>int</c> and a
+        /// NULL operand yields <c>cast(null as bigint)</c>. Requires SQL Server 2022 (major version 16)
+        /// and the version-bound <see cref="ISqlDialect.SupportsSqlServer2022Functions"/> gate.
+        /// </summary>
+        /// <param name="value">The <c>int</c> operand.</param>
+        /// <returns>The number of set bits, or SQL NULL when the operand is NULL.</returns>
+        public long? bit_count(int? value) => default!;
+
+        /// <summary>
+        /// <c>bit_count(value)</c> for a <see cref="long"/> operand. The T-SQL result is <c>bigint</c>,
+        /// so the CLR result is <c>long?</c>; the rendered call types the operand as <c>bigint</c> and a
+        /// NULL operand yields <c>cast(null as bigint)</c>. Requires SQL Server 2022 (major version 16)
+        /// and the version-bound <see cref="ISqlDialect.SupportsSqlServer2022Functions"/> gate.
+        /// </summary>
+        /// <param name="value">The <c>bigint</c> operand.</param>
+        /// <returns>The number of set bits, or SQL NULL when the operand is NULL.</returns>
+        public long? bit_count(long? value) => default!;
+
+        /// <summary>
+        /// <c>get_bit(value, offset)</c> for a <see cref="byte"/> operand: the bit at the zero-based
+        /// <paramref name="offset"/>. The T-SQL result is <c>bit</c>, read as <c>bool?</c>; the rendered
+        /// call types the operand as <c>tinyint</c>, the offset as <c>int</c>, and a NULL argument yields
+        /// <c>cast(null as bit)</c>. Requires SQL Server 2022 (major version 16) and the version-bound
+        /// <see cref="ISqlDialect.SupportsSqlServer2022Functions"/> gate.
+        /// </summary>
+        /// <param name="value">The <c>tinyint</c> operand.</param>
+        /// <param name="offset">The zero-based bit position.</param>
+        /// <returns>The bit as a boolean, or SQL NULL when either argument is NULL.</returns>
+        public bool? get_bit(byte? value, int? offset) => default!;
+
+        /// <summary>
+        /// <c>get_bit(value, offset)</c> for a <see cref="short"/> operand. The T-SQL result is
+        /// <c>bit</c>, read as <c>bool?</c>; the rendered call types the operand as <c>smallint</c>, the
+        /// offset as <c>int</c>, and a NULL argument yields <c>cast(null as bit)</c>. Requires SQL Server
+        /// 2022 (major version 16) and the version-bound
+        /// <see cref="ISqlDialect.SupportsSqlServer2022Functions"/> gate.
+        /// </summary>
+        /// <param name="value">The <c>smallint</c> operand.</param>
+        /// <param name="offset">The zero-based bit position.</param>
+        /// <returns>The bit as a boolean, or SQL NULL when either argument is NULL.</returns>
+        public bool? get_bit(short? value, int? offset) => default!;
+
+        /// <summary>
+        /// <c>get_bit(value, offset)</c> for an <see cref="int"/> operand. The T-SQL result is
+        /// <c>bit</c>, read as <c>bool?</c>; the rendered call types the operand as <c>int</c>, the
+        /// offset as <c>int</c>, and a NULL argument yields <c>cast(null as bit)</c>. Requires SQL Server
+        /// 2022 (major version 16) and the version-bound
+        /// <see cref="ISqlDialect.SupportsSqlServer2022Functions"/> gate.
+        /// </summary>
+        /// <param name="value">The <c>int</c> operand.</param>
+        /// <param name="offset">The zero-based bit position.</param>
+        /// <returns>The bit as a boolean, or SQL NULL when either argument is NULL.</returns>
+        public bool? get_bit(int? value, int? offset) => default!;
+
+        /// <summary>
+        /// <c>get_bit(value, offset)</c> for a <see cref="long"/> operand. The T-SQL result is
+        /// <c>bit</c>, read as <c>bool?</c>; the rendered call types the operand as <c>bigint</c>, the
+        /// offset as <c>int</c>, and a NULL argument yields <c>cast(null as bit)</c>. Requires SQL Server
+        /// 2022 (major version 16) and the version-bound
+        /// <see cref="ISqlDialect.SupportsSqlServer2022Functions"/> gate.
+        /// </summary>
+        /// <param name="value">The <c>bigint</c> operand.</param>
+        /// <param name="offset">The zero-based bit position.</param>
+        /// <returns>The bit as a boolean, or SQL NULL when either argument is NULL.</returns>
+        public bool? get_bit(long? value, int? offset) => default!;
+
+        /// <summary>
+        /// <c>set_bit(value, offset)</c> for a <see cref="byte"/> operand: sets the bit at the zero-based
+        /// <paramref name="offset"/> to the native default value 1. Rendered as
+        /// <c>set_bit(cast(value as tinyint), cast(offset as int))</c> behind a typed-NULL guard (a NULL
+        /// yields <c>cast(null as tinyint)</c>). Requires SQL Server 2022 (major version 16) and the
+        /// version-bound <see cref="ISqlDialect.SupportsSqlServer2022Functions"/> gate.
+        /// </summary>
+        /// <param name="value">The <c>tinyint</c> operand.</param>
+        /// <param name="offset">The zero-based bit position.</param>
+        /// <returns>The value with the bit set, or SQL NULL when either argument is NULL.</returns>
+        public byte? set_bit(byte? value, int? offset) => default!;
+
+        /// <summary>
+        /// <c>set_bit(value, offset)</c> for a <see cref="short"/> operand: sets the bit at the zero-based
+        /// <paramref name="offset"/> to the native default value 1. Rendered as
+        /// <c>set_bit(cast(value as smallint), cast(offset as int))</c> behind a typed-NULL guard (a NULL
+        /// yields <c>cast(null as smallint)</c>). Requires SQL Server 2022 (major version 16) and the
+        /// version-bound <see cref="ISqlDialect.SupportsSqlServer2022Functions"/> gate.
+        /// </summary>
+        /// <param name="value">The <c>smallint</c> operand.</param>
+        /// <param name="offset">The zero-based bit position.</param>
+        /// <returns>The value with the bit set, or SQL NULL when either argument is NULL.</returns>
+        public short? set_bit(short? value, int? offset) => default!;
+
+        /// <summary>
+        /// <c>set_bit(value, offset)</c> for an <see cref="int"/> operand: sets the bit at the zero-based
+        /// <paramref name="offset"/> to the native default value 1. Rendered as
+        /// <c>set_bit(cast(value as int), cast(offset as int))</c> behind a typed-NULL guard (a NULL
+        /// yields <c>cast(null as int)</c>). Requires SQL Server 2022 (major version 16) and the
+        /// version-bound <see cref="ISqlDialect.SupportsSqlServer2022Functions"/> gate.
+        /// </summary>
+        /// <param name="value">The <c>int</c> operand.</param>
+        /// <param name="offset">The zero-based bit position.</param>
+        /// <returns>The value with the bit set, or SQL NULL when either argument is NULL.</returns>
+        public int? set_bit(int? value, int? offset) => default!;
+
+        /// <summary>
+        /// <c>set_bit(value, offset)</c> for a <see cref="long"/> operand: sets the bit at the zero-based
+        /// <paramref name="offset"/> to the native default value 1. Rendered as
+        /// <c>set_bit(cast(value as bigint), cast(offset as int))</c> behind a typed-NULL guard (a NULL
+        /// yields <c>cast(null as bigint)</c>). Requires SQL Server 2022 (major version 16) and the
+        /// version-bound <see cref="ISqlDialect.SupportsSqlServer2022Functions"/> gate.
+        /// </summary>
+        /// <param name="value">The <c>bigint</c> operand.</param>
+        /// <param name="offset">The zero-based bit position.</param>
+        /// <returns>The value with the bit set, or SQL NULL when either argument is NULL.</returns>
+        public long? set_bit(long? value, int? offset) => default!;
+
+        /// <summary>
+        /// <c>set_bit(value, offset, value_to_set)</c> for a <see cref="byte"/> operand: sets the bit at
+        /// the zero-based <paramref name="offset"/> to <paramref name="bitValue"/>. Rendered as
+        /// <c>set_bit(cast(value as tinyint), cast(offset as int), cast(bitValue as bit))</c> behind a
+        /// typed-NULL guard over all three arguments (a NULL yields <c>cast(null as tinyint)</c>; an
+        /// explicitly NULL <paramref name="bitValue"/> yields SQL NULL rather than the native default).
+        /// Requires SQL Server 2022 (major version 16) and the version-bound
+        /// <see cref="ISqlDialect.SupportsSqlServer2022Functions"/> gate.
+        /// </summary>
+        /// <param name="value">The <c>tinyint</c> operand.</param>
+        /// <param name="offset">The zero-based bit position.</param>
+        /// <param name="bitValue">The bit value to set; SQL NULL when either argument is NULL.</param>
+        /// <returns>The value with the bit set, or SQL NULL when any argument is NULL.</returns>
+        public byte? set_bit(byte? value, int? offset, bool? bitValue) => default!;
+
+        /// <summary>
+        /// <c>set_bit(value, offset, value_to_set)</c> for a <see cref="short"/> operand. Rendered as
+        /// <c>set_bit(cast(value as smallint), cast(offset as int), cast(bitValue as bit))</c> behind a
+        /// typed-NULL guard over all three arguments (a NULL yields <c>cast(null as smallint)</c>).
+        /// Requires SQL Server 2022 (major version 16) and the version-bound
+        /// <see cref="ISqlDialect.SupportsSqlServer2022Functions"/> gate.
+        /// </summary>
+        /// <param name="value">The <c>smallint</c> operand.</param>
+        /// <param name="offset">The zero-based bit position.</param>
+        /// <param name="bitValue">The bit value to set; SQL NULL when either argument is NULL.</param>
+        /// <returns>The value with the bit set, or SQL NULL when any argument is NULL.</returns>
+        public short? set_bit(short? value, int? offset, bool? bitValue) => default!;
+
+        /// <summary>
+        /// <c>set_bit(value, offset, value_to_set)</c> for an <see cref="int"/> operand. Rendered as
+        /// <c>set_bit(cast(value as int), cast(offset as int), cast(bitValue as bit))</c> behind a
+        /// typed-NULL guard over all three arguments (a NULL yields <c>cast(null as int)</c>). Requires
+        /// SQL Server 2022 (major version 16) and the version-bound
+        /// <see cref="ISqlDialect.SupportsSqlServer2022Functions"/> gate.
+        /// </summary>
+        /// <param name="value">The <c>int</c> operand.</param>
+        /// <param name="offset">The zero-based bit position.</param>
+        /// <param name="bitValue">The bit value to set; SQL NULL when either argument is NULL.</param>
+        /// <returns>The value with the bit set, or SQL NULL when any argument is NULL.</returns>
+        public int? set_bit(int? value, int? offset, bool? bitValue) => default!;
+
+        /// <summary>
+        /// <c>set_bit(value, offset, value_to_set)</c> for a <see cref="long"/> operand. Rendered as
+        /// <c>set_bit(cast(value as bigint), cast(offset as int), cast(bitValue as bit))</c> behind a
+        /// typed-NULL guard over all three arguments (a NULL yields <c>cast(null as bigint)</c>).
+        /// Requires SQL Server 2022 (major version 16) and the version-bound
+        /// <see cref="ISqlDialect.SupportsSqlServer2022Functions"/> gate.
+        /// </summary>
+        /// <param name="value">The <c>bigint</c> operand.</param>
+        /// <param name="offset">The zero-based bit position.</param>
+        /// <param name="bitValue">The bit value to set; SQL NULL when either argument is NULL.</param>
+        /// <returns>The value with the bit set, or SQL NULL when any argument is NULL.</returns>
+        public long? set_bit(long? value, int? offset, bool? bitValue) => default!;
+
+        /// <summary>
+        /// <c>TRY_CAST(value AS &lt;type&gt;)</c>: converts <paramref name="value"/> to the SQL Server type
+        /// closed-mapped from <typeparamref name="T"/> and returns SQL NULL when the conversion is invalid
+        /// (malformed text, overflow, an out-of-range value) instead of raising an error. The target map is
+        /// fixed: <c>byte</c>→<c>tinyint</c>, <c>short</c>→<c>smallint</c>, <c>int</c>→<c>int</c>,
+        /// <c>long</c>→<c>bigint</c>, <c>float</c>→<c>real</c>, <c>double</c>→<c>float(53)</c>,
+        /// <c>decimal</c>→<c>decimal(38,10)</c>, <c>bool</c>→<c>bit</c>, <c>Guid</c>→<c>uniqueidentifier</c>,
+        /// <c>DateTime</c>→<c>datetime2(7)</c>, <c>DateTimeOffset</c>→<c>datetimeoffset(7)</c>,
+        /// <c>TimeSpan</c>→<c>time(7)</c>; any other target is refused before the command is prepared. A
+        /// target conversion SQL Server itself prohibits is <b>not</b> suppressed and surfaces as the
+        /// engine error. SQL Server only (declared 16, 17 and unversioned contexts); other providers
+        /// reject the call.
+        /// </summary>
+        /// <typeparam name="T">The SQL Server conversion target.</typeparam>
+        /// <param name="value">The value to convert.</param>
+        /// <returns>The converted value, or SQL NULL when the conversion is invalid.</returns>
+        public T? try_cast<T>(object? value) where T : struct => default!;
+
+        /// <summary>
+        /// <c>TRY_CAST(value AS nvarchar(4000))</c>: the string-target overload of
+        /// <see cref="try_cast{T}(object?)"/>. A value longer than 4000 characters is truncated by the
+        /// server, exactly like the native cast; an invalid conversion is SQL NULL.
+        /// </summary>
+        /// <param name="value">The value to convert.</param>
+        /// <returns>The converted string, or SQL NULL when the conversion is invalid.</returns>
+        public string? try_cast(object? value) => default!;
+
+        /// <summary>
+        /// <c>TRY_CONVERT(&lt;type&gt;, value)</c>: the no-style form of
+        /// <see cref="try_convert{T}(object?, int?)"/>. Uses the same closed target map as
+        /// <see cref="try_cast{T}(object?)"/>; an unmapped target is refused before the command is
+        /// prepared, and a target conversion SQL Server prohibits surfaces as the engine error.
+        /// </summary>
+        /// <typeparam name="T">The SQL Server conversion target.</typeparam>
+        /// <param name="value">The value to convert.</param>
+        /// <returns>The converted value, or SQL NULL when the conversion is invalid.</returns>
+        public T? try_convert<T>(object? value) where T : struct => default!;
+
+        /// <summary>
+        /// <c>TRY_CONVERT(&lt;type&gt;, value, style)</c>: the style-taking form. Omitting the argument and
+        /// passing a NULL <paramref name="style"/> are separate overloads: the NULL style is emitted as a
+        /// typed NULL and keeps SQL Server's native NULL-style semantics, which the engine applies as a
+        /// NULL <i>result</i> even when the value itself is convertible (probe C4:
+        /// <c>try_convert(int, '42', cast(null as int))</c> is NULL). The style is a
+        /// <c>datetime</c>/<c>float</c>/money style, not a target-type selector.
+        /// </summary>
+        /// <typeparam name="T">The SQL Server conversion target.</typeparam>
+        /// <param name="value">The value to convert.</param>
+        /// <param name="style">
+        /// The native conversion style, or SQL NULL for the engine's NULL-style result (which is SQL NULL).
+        /// </param>
+        /// <returns>The converted value, or SQL NULL when the conversion is invalid.</returns>
+        public T? try_convert<T>(object? value, int? style) where T : struct => default!;
+
+        /// <summary>
+        /// <c>TRY_CONVERT(nvarchar(4000), value)</c>: the string-target overload without a style.
+        /// </summary>
+        /// <param name="value">The value to convert.</param>
+        /// <returns>The converted string, or SQL NULL when the conversion is invalid.</returns>
+        public string? try_convert(object? value) => default!;
+
+        /// <summary>
+        /// <c>TRY_CONVERT(nvarchar(4000), value, style)</c>: the string-target overload with a style. A
+        /// NULL <paramref name="style"/> keeps SQL Server's native NULL-style semantics, which the engine
+        /// applies as a NULL result even for a convertible value.
+        /// </summary>
+        /// <param name="value">The value to convert.</param>
+        /// <param name="style">
+        /// The native conversion style, or SQL NULL for the engine's NULL-style result (which is SQL NULL).
+        /// </param>
+        /// <returns>The converted string, or SQL NULL when the conversion is invalid.</returns>
+        public string? try_convert(object? value, int? style) => default!;
 
         /// <summary>
         /// <c>product(value)</c>: the product of the non-null <paramref name="value"/> rows in the

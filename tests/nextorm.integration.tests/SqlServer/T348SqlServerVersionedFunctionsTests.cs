@@ -111,10 +111,10 @@ public sealed class T348SqlServer2025FunctionsTests : IDisposable
                 Count = SqlFunctions.SqlServer.regexp_count("a1b2c3", "[0-9]"),
                 NoMatch = SqlFunctions.SqlServer.regexp_count("abc", "[0-9]"),
                 NullRegex = SqlFunctions.SqlServer.regexp_count(null, "[0-9]"),
-                Shift = SqlFunctions.SqlServer.left_shift(1, 2),
-                Negative = SqlFunctions.SqlServer.left_shift(-8, 1),
-                NullOperand = SqlFunctions.SqlServer.left_shift(null, 1),
-                NullAmount = SqlFunctions.SqlServer.left_shift(8, null)
+                Shift = SqlFunctions.SqlServer.left_shift((int?)1, 2),
+                Negative = SqlFunctions.SqlServer.left_shift((int?)-8, 1),
+                NullOperand = SqlFunctions.SqlServer.left_shift((int?)null, 1),
+                NullAmount = SqlFunctions.SqlServer.left_shift((int?)8, null)
             })
             .Single();
 
@@ -130,6 +130,197 @@ public sealed class T348SqlServer2025FunctionsTests : IDisposable
         ((object)row.Shift).Should().BeOfType<int>();
 
         Report($"T348LIVE-2025 regexp_count=3/0/null left_shift=4/-16/null/null outcome=ok");
+    }
+
+    /// <summary>
+    /// U2: the whole bit family executes on the real 2025 engine across all four operand shapes, with the
+    /// typed-NULL guard on the operand and on the shift/offset, and each name lands in its CLR type
+    /// (<c>byte?</c>/<c>short?</c>/<c>int?</c>/<c>long?</c> for the shifts and <c>SET_BIT</c>,
+    /// <c>long?</c> for <c>BIT_COUNT</c>, <c>bool?</c> for <c>GET_BIT</c>).
+    /// </summary>
+    [Fact]
+    public void BitFamily_ShouldExecuteEveryOperandShapeWithValuesNullsAndClrTypes()
+    {
+        using var ctx = new T348V17LiveContext(_connectionString);
+
+        // Row id = 1 carries value = 2: shift 1 -> 4, right shift 1 -> 1, one set bit, bit 1 set,
+        // set_bit(2, 0) -> 3 and clearing bit 0 -> 2.
+        var row = ctx.From<IT348U1Row>()
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                TinyL = SqlFunctions.SqlServer.left_shift((byte?)x.Value, 1),
+                TinyR = SqlFunctions.SqlServer.right_shift((byte?)x.Value, 1),
+                TinyC = SqlFunctions.SqlServer.bit_count((byte?)x.Value),
+                TinyG = SqlFunctions.SqlServer.get_bit((byte?)x.Value, 1),
+                TinyS = SqlFunctions.SqlServer.set_bit((byte?)x.Value, 0),
+                TinyS3 = SqlFunctions.SqlServer.set_bit((byte?)x.Value, 0, false),
+                TinyNull = SqlFunctions.SqlServer.left_shift((byte?)null, 1),
+
+                SmallL = SqlFunctions.SqlServer.left_shift((short?)x.Value, 1),
+                SmallR = SqlFunctions.SqlServer.right_shift((short?)x.Value, 1),
+                SmallC = SqlFunctions.SqlServer.bit_count((short?)x.Value),
+                SmallG = SqlFunctions.SqlServer.get_bit((short?)x.Value, 1),
+                SmallS = SqlFunctions.SqlServer.set_bit((short?)x.Value, 0),
+                SmallNull = SqlFunctions.SqlServer.bit_count((short?)null),
+
+                IntL = SqlFunctions.SqlServer.left_shift(x.Value, 1),
+                IntR = SqlFunctions.SqlServer.right_shift(x.Value, 1),
+                IntC = SqlFunctions.SqlServer.bit_count(x.Value),
+                IntG = SqlFunctions.SqlServer.get_bit(x.Value, 1),
+                IntS = SqlFunctions.SqlServer.set_bit(x.Value, 0),
+                IntNull = SqlFunctions.SqlServer.get_bit((int?)null, 1),
+                IntNullShift = SqlFunctions.SqlServer.left_shift(x.Value, null),
+
+                // Id is an int column; the explicit (long?) conversion selects the bigint operand shape
+                // (id = 1).
+                LongL = SqlFunctions.SqlServer.left_shift((long?)x.Id, 1),
+                LongR = SqlFunctions.SqlServer.right_shift((long?)x.Id, 1),
+                LongC = SqlFunctions.SqlServer.bit_count((long?)x.Id),
+                LongG = SqlFunctions.SqlServer.get_bit((long?)x.Id, 0),
+                LongS = SqlFunctions.SqlServer.set_bit((long?)x.Id, 1),
+                LongNull = SqlFunctions.SqlServer.right_shift((long?)null, 1),
+
+                Negative = SqlFunctions.SqlServer.right_shift((int?)-8, 1)
+            })
+            .Single();
+
+        row.TinyL.Should().Be((byte)4);
+        row.TinyR.Should().Be((byte)1);
+        row.TinyC.Should().Be(1L);
+        row.TinyG.Should().BeTrue();
+        row.TinyS.Should().Be((byte)3);
+        row.TinyS3.Should().Be((byte)2);
+        row.TinyNull.Should().BeNull();
+
+        row.SmallL.Should().Be((short)4);
+        row.SmallR.Should().Be((short)1);
+        row.SmallC.Should().Be(1L);
+        row.SmallG.Should().BeTrue();
+        row.SmallS.Should().Be((short)3);
+        row.SmallNull.Should().BeNull();
+
+        row.IntL.Should().Be(4);
+        row.IntR.Should().Be(1);
+        row.IntC.Should().Be(1L);
+        row.IntG.Should().BeTrue();
+        row.IntS.Should().Be(3);
+        row.IntNull.Should().BeNull("the typed-NULL operand guard removes Msg 8116");
+        row.IntNullShift.Should().BeNull("the typed-NULL shift guard keeps NULL");
+
+        row.LongL.Should().Be(2L);
+        row.LongR.Should().Be(0L);
+        row.LongC.Should().Be(1L);
+        row.LongG.Should().BeTrue();
+        row.LongS.Should().Be(3L);
+        row.LongNull.Should().BeNull();
+        row.Negative.Should().Be(2147483644, "RIGHT_SHIFT is a logical (zero-fill) shift, not an arithmetic one");
+
+        ((object)row.TinyL!).Should().BeOfType<byte>();
+        ((object)row.SmallL!).Should().BeOfType<short>();
+        ((object)row.IntL!).Should().BeOfType<int>();
+        ((object)row.LongL!).Should().BeOfType<long>();
+        ((object)row.TinyC!).Should().BeOfType<long>("BIT_COUNT always returns bigint");
+        ((object)row.IntG!).Should().BeOfType<bool>("GET_BIT returns bit");
+
+        Report("T348LIVE-2025 bit tiny=4/1/1/true/3/2/null small=4/1/1/true/3/null int=4/1/1/true/3/null/null long=2/0/1/true/3/null right_shift(-8,1)=2147483644 outcome=ok");
+    }
+
+    /// <summary>
+    /// U2: both conversions execute on the real 2025 engine over the whole 13-entry closed map — a valid
+    /// source for every destination and an invalid source that must come back as SQL NULL, not an engine
+    /// error — plus the three style forms of <c>TRY_CONVERT</c>.
+    /// </summary>
+    [Fact]
+    public void TryCastAndTryConvert_ShouldExecuteTheWholeClosedMap()
+    {
+        using var ctx = new T348V17LiveContext(_connectionString);
+
+        var row = ctx.From<IT348U1Row>()
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Byte = SqlFunctions.SqlServer.try_cast<byte>("42"),
+                ByteBad = SqlFunctions.SqlServer.try_cast<byte>("300"),
+                Short = SqlFunctions.SqlServer.try_cast<short>("42"),
+                ShortBad = SqlFunctions.SqlServer.try_cast<short>("70000"),
+                Int = SqlFunctions.SqlServer.try_cast<int>("42"),
+                IntBad = SqlFunctions.SqlServer.try_cast<int>("not-a-number"),
+                Long = SqlFunctions.SqlServer.try_cast<long>("42"),
+                LongBad = SqlFunctions.SqlServer.try_cast<long>("not-a-number"),
+                Single = SqlFunctions.SqlServer.try_cast<float>("1.5"),
+                SingleBad = SqlFunctions.SqlServer.try_cast<float>("x"),
+                Double = SqlFunctions.SqlServer.try_cast<double>("1.5"),
+                DoubleBad = SqlFunctions.SqlServer.try_cast<double>("x"),
+                Decimal = SqlFunctions.SqlServer.try_cast<decimal>("1.5"),
+                DecimalBad = SqlFunctions.SqlServer.try_cast<decimal>("x"),
+                Bool = SqlFunctions.SqlServer.try_cast<bool>("1"),
+                BoolBad = SqlFunctions.SqlServer.try_cast<bool>("x"),
+                Guid = SqlFunctions.SqlServer.try_cast<Guid>("6F9619FF-8B86-D011-B42D-00C04FC964FF"),
+                GuidBad = SqlFunctions.SqlServer.try_cast<Guid>("x"),
+                DateTime = SqlFunctions.SqlServer.try_cast<DateTime>("2024-01-02T03:04:05"),
+                DateTimeBad = SqlFunctions.SqlServer.try_cast<DateTime>("x"),
+                Offset = SqlFunctions.SqlServer.try_cast<DateTimeOffset>("2024-01-02T03:04:05+02:00"),
+                OffsetBad = SqlFunctions.SqlServer.try_cast<DateTimeOffset>("x"),
+                Time = SqlFunctions.SqlServer.try_cast<TimeSpan>("03:04:05"),
+                TimeBad = SqlFunctions.SqlServer.try_cast<TimeSpan>("x"),
+                Text = SqlFunctions.SqlServer.try_cast(x.Label),
+
+                Converted = SqlFunctions.SqlServer.try_convert<int>("42"),
+                ConvertedBad = SqlFunctions.SqlServer.try_convert<int>("x"),
+                Styled = SqlFunctions.SqlServer.try_convert<DateTime>("2024-01-02T03:04:05", 126),
+                StyledBad = SqlFunctions.SqlServer.try_convert<DateTime>(x.Label, 126),
+                NullStyle = SqlFunctions.SqlServer.try_convert<int>("42", null),
+                TextConverted = SqlFunctions.SqlServer.try_convert(x.Label)
+            })
+            .Single();
+
+        row.Byte.Should().Be((byte)42);
+        row.ByteBad.Should().BeNull("300 overflows tinyint");
+        row.Short.Should().Be((short)42);
+        row.ShortBad.Should().BeNull("70000 overflows smallint");
+        row.Int.Should().Be(42);
+        row.IntBad.Should().BeNull();
+        row.Long.Should().Be(42L);
+        row.LongBad.Should().BeNull();
+        row.Single.Should().Be(1.5f);
+        row.SingleBad.Should().BeNull();
+        row.Double.Should().Be(1.5d);
+        row.DoubleBad.Should().BeNull();
+        row.Decimal.Should().Be(1.5m);
+        row.DecimalBad.Should().BeNull();
+        row.Bool.Should().BeTrue();
+        row.BoolBad.Should().BeNull();
+        row.Guid.Should().Be(Guid.Parse("6F9619FF-8B86-D011-B42D-00C04FC964FF"));
+        row.GuidBad.Should().BeNull();
+        row.DateTime.Should().Be(new DateTime(2024, 1, 2, 3, 4, 5));
+        row.DateTimeBad.Should().BeNull();
+        row.Offset.Should().Be(new DateTimeOffset(2024, 1, 2, 3, 4, 5, TimeSpan.FromHours(2)));
+        row.OffsetBad.Should().BeNull();
+        row.Time.Should().Be(new TimeSpan(3, 4, 5));
+        row.TimeBad.Should().BeNull();
+        row.Text.Should().Be("a1b2c3");
+
+        row.Converted.Should().Be(42);
+        row.ConvertedBad.Should().BeNull();
+        row.Styled.Should().Be(new DateTime(2024, 1, 2, 3, 4, 5));
+        row.StyledBad.Should().BeNull("label 1 is 'a1b2c3'");
+        row.NullStyle.Should().BeNull(
+            "a NULL style makes the native conversion return NULL even for a valid value (probe C4)");
+        row.TextConverted.Should().Be("a1b2c3");
+
+        ((object)row.Byte!).Should().BeOfType<byte>();
+        ((object)row.Single!).Should().BeOfType<float>();
+        ((object)row.Double!).Should().BeOfType<double>();
+        ((object)row.Decimal!).Should().BeOfType<decimal>();
+        ((object)row.Bool!).Should().BeOfType<bool>();
+        ((object)row.Guid!).Should().BeOfType<Guid>();
+        ((object)row.DateTime!).Should().BeOfType<DateTime>();
+        ((object)row.Offset!).Should().BeOfType<DateTimeOffset>();
+        ((object)row.Time!).Should().BeOfType<TimeSpan>();
+        ((object)row.Text!).Should().BeOfType<string>();
+
+        Report("T348LIVE-2025 try_cast 13/13 valid + 12/12 invalid=null try_convert 42/null/126/null-style-null outcome=ok");
     }
 
     [Fact]

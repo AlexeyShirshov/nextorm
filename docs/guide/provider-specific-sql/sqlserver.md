@@ -385,7 +385,7 @@ substitutes for a version here, and an unversioned context refuses all four befo
 
 | Member | SQL | Prerequisite |
 |---|---|---|
-| `SqlFunctions.SqlServer.left_shift(value, shift)` | `CASE WHEN value IS NULL OR shift IS NULL THEN CAST(NULL AS int) ELSE left_shift(cast(value as int), cast(shift as bigint)) END` | major 16 (SQL Server 2022) |
+| `SqlFunctions.SqlServer.left_shift` / `right_shift` / `bit_count` / `get_bit` / `set_bit` (one overload set per operand type `byte`/`short`/`int`/`long`) | `CASE WHEN … THEN CAST(NULL AS <operand type>) ELSE left_shift(cast(value as tinyint\|smallint\|int\|bigint), cast(shift as bigint)) END`; `bit_count` → `bigint`, `get_bit` → `bit` | major 16 (SQL Server 2022) |
 | `SqlFunctions.SqlServer.regexp_count(input, pattern)` | `regexp_count(input, pattern)` | major 17 (SQL Server 2025); no compatibility-level gate |
 | `SqlFunctions.SqlServer.product(value)` | `product(value)` (aggregate context only — no `OVER`) | major 17 |
 | `SqlFunctions.SqlServer.regexp_split_to_table(input, pattern)` | a `FROM` source; rows are `value` plus the one-based `ordinal bigint` | major 17 **and** database compatibility level 170 |
@@ -395,7 +395,10 @@ var rows = dataContext.From<IComplexEntity>()
     .Select(e => new
     {
         Count = SqlFunctions.SqlServer.regexp_count(e.String, "[0-9]"),
-        Shifted = SqlFunctions.SqlServer.left_shift(e.Int, 1)
+        Shifted = SqlFunctions.SqlServer.left_shift(e.Int, 1),
+        Bits = SqlFunctions.SqlServer.bit_count(e.Int),
+        Bit = SqlFunctions.SqlServer.get_bit(e.Int, 1),
+        Set = SqlFunctions.SqlServer.set_bit(e.Int, 1, false)
     })
     .ToList();
 
@@ -413,9 +416,14 @@ The LEFT_SHIFT function requires SQL Server major version 16 or later; declared 
 The REGEXP_SPLIT_TO_TABLE function requires SQL Server major version 17 or later; declared major version: 16.
 ```
 
-`left_shift` types both arguments inside the call and guards a NULL operand or shift with a typed NULL,
-because a bare `left_shift(NULL, …)` is Msg 8116. `regexp_split_to_table` is a real gate on two axes: at
-compatibility level 160 a major-17 engine reports the function as missing (Msg 208), so the 170
+The bit family types every argument inside the call and guards a NULL operand, shift, offset or bit value
+with a typed NULL, because a bare `left_shift(NULL, …)` is Msg 8116; the operand's own type selects
+`tinyint`/`smallint`/`int`/`bigint`, `bit_count` is `bigint` (`long?`) and `get_bit` is `bit` (`bool?`).
+`right_shift` is the engine's logical (zero-fill) shift — `right_shift(-8, 1)` is `2147483644`. Because the
+family is one overload set per operand type, an untyped constant binds to the smallest overload
+(`left_shift(1, 2)` → `byte?`/`tinyint`, `left_shift(-8, 1)` → `short?`): cast the operand
+(`left_shift((int?)1, 2)`) when a specific SQL type is required. `regexp_split_to_table` is a real gate on
+two axes: at compatibility level 160 a major-17 engine reports the function as missing (Msg 208), so the 170
 prerequisite is asserted live rather than assumed. `product` is offered in the aggregate context only.
 
 ## T-SQL scalar functions
@@ -494,7 +502,7 @@ select patindex('%a%', somestring) as [Pos],
   (`decimal?`, the last identity of the table in **any** session — racy, not a last-insert API),
   `min_active_rowversion()` (native `binary(8)`, not a counter), `rowcount_big()` (the previous command on
   the same connection) and `scope_identity()` (`decimal?`, only in the same batch as the `INSERT`).
-* **Conversion/logical:** `isdate(value)`/`isnumeric(value)` return the native T-SQL `int` (1/0), not a `bit`, so they stay integer values rather than materialised predicates, and `formatmessage(messageOrId, args...)` accepts at most 20 formatting arguments.
+* **Conversion/logical:** `isdate(value)`/`isnumeric(value)` return the native T-SQL `int` (1/0), not a `bit`, so they stay integer values rather than materialised predicates, and `formatmessage(messageOrId, args...)` accepts at most 20 formatting arguments. `try_cast<T>(value)`/`try_convert<T>(value[, style])` (plus the `string`-target overloads over `nvarchar(4000)`) render the T-SQL `TRY_CAST`/`TRY_CONVERT` through a **closed** CLR→SQL destination map and are not version-gated: an invalid value is SQL NULL, a NULL style is SQL NULL even for a convertible value, and a target outside the map is refused before SQL. See [TRY_CAST and TRY_CONVERT](../../scalar-functions/04-conditionals-and-conversion.md#sql-server-try_cast-and-try_convert).
 
 The portable BASE64 and crypto members are SQL Server 2025-only on this provider: `SqlFunctions.Sql.base64_encode` renders `BASE64_ENCODE(value)` over `varbinary` and `base64_decode` renders `BASE64_DECODE(value)` over `varchar` (cast an `nvarchar` column), while `crypt_gen_random` renders the typed `CASE WHEN length IS NULL THEN CAST(NULL AS varbinary(8000)) ELSE CRYPT_GEN_RANDOM(length) END` wrapper so a NULL length stays a typed NULL. No compatibility level or preview flag is required.
 * **JSON:** `json_array(value, ...)` and `json_object(key, value, ...)` (SQL Server 2022+),

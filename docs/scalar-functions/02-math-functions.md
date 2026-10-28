@@ -59,18 +59,31 @@ var rows = dataContext.From<IComplexEntity>()
     .ToList();
 ```
 
-## SQL Server bit shifts (2022+)
+## SQL Server bit functions (2022+)
 
-`SqlFunctions.SqlServer.left_shift(value, shift)` renders the T-SQL `LEFT_SHIFT` and returns `int?`; both
-arguments are `int?` (the rendered call types the operand as `int` and the shift amount as `bigint`):
+`SqlFunctions.SqlServer` exposes the five T-SQL bit functions, each as one overload set per operand type
+(`byte?`/`short?`/`int?`/`long?`), and every call renders the native function behind a typed-NULL guard:
+
+| C# | SQL Server | Result |
+|---|---|---|
+| `left_shift(value, shift)` / `right_shift(value, shift)` | `LEFT_SHIFT` / `RIGHT_SHIFT` (logical, zero-fill) | the operand's own type: `byte?`/`short?`/`int?`/`long?` |
+| `bit_count(value)` | `BIT_COUNT` | `long?` (`bigint`) |
+| `get_bit(value, offset)` | `GET_BIT` | `bool?` (`bit`) |
+| `set_bit(value, offset)` | `SET_BIT`, native two-argument form (bit set to 1) | the operand's own type |
+| `set_bit(value, offset, bitValue)` | `SET_BIT`, three-argument form | the operand's own type |
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
     .Select(e => new
     {
-        Shifted = SqlFunctions.SqlServer.left_shift(1, 2),       // 4
-        Negative = SqlFunctions.SqlServer.left_shift(-8, 1),     // -16
-        NullOperand = SqlFunctions.SqlServer.left_shift(null, 1) // null
+        Shifted = SqlFunctions.SqlServer.left_shift((int?)1, 2),        // 4
+        Negative = SqlFunctions.SqlServer.left_shift((int?)-8, 1),      // -16
+        RightShifted = SqlFunctions.SqlServer.right_shift((int?)-8, 1), // 2147483644 (logical shift)
+        Bits = SqlFunctions.SqlServer.bit_count((byte?)5),              // 2 (long)
+        Bit = SqlFunctions.SqlServer.get_bit((byte?)5, 1),              // true (bool)
+        Set = SqlFunctions.SqlServer.set_bit((short?)5, 1),             // 7
+        Cleared = SqlFunctions.SqlServer.set_bit((short?)5, 1, false),  // 5
+        NullOperand = SqlFunctions.SqlServer.left_shift((byte?)null, 1) // null
     })
     .ToList();
 ```
@@ -80,13 +93,26 @@ CASE WHEN 1 IS NULL OR 2 IS NULL THEN CAST(NULL AS int)
      ELSE left_shift(cast(1 as int), cast(2 as bigint)) END
 ```
 
+The operand decides the SQL type — `byte`→`tinyint`, `short`→`smallint`, `int`→`int`, `long`→`bigint` —
+the shift amount is cast to `bigint`, the bit offset to `int`, and the three-argument `SET_BIT` value to
+`bit`. `bit_count` is `bigint` on the engine, so its CLR shape is `long?`; `get_bit` is `bit`, so it is
+`bool?`. `right_shift` is the engine's logical (zero-fill) shift, not an arithmetic one:
+`right_shift(-8, 1)` is `2147483644`, not `-4`.
+
 A bare `left_shift(NULL, …)` is rejected by the server with **Msg 8116** ("Argument data type NULL is
-invalid"), so the renderer always types both arguments and guards the NULL operand or NULL shift with a
-typed `NULL` result — a NULL never reaches the native call. The function is **SQL Server 2022 (major
-version 16) only**, gated by the version-only
+invalid"), so the renderer types every argument and guards a NULL operand, shift, offset or bit value with a
+typed NULL of the result type — a NULL never reaches the native call.
+
+The whole family is **SQL Server 2022 (major version 16) or later**, gated by the version-only
 [`SupportsSqlServer2022Functions`](xref:NextORM.Core.ISqlDialect.SupportsSqlServer2022Functions) flag. A
-context declared for 15 or an unversioned context refuses the call before SQL with `The LEFT_SHIFT
+context declared for 15 or an unversioned context refuses every name before SQL, for example `The SET_BIT
 function requires SQL Server major version 16 or later; declared major version: 15.` (or `… unspecified.`).
+
+> **Overload resolution.** Because the family is one overload set per operand type, an untyped constant
+> binds to the *smallest* overload that can hold it: `left_shift(1, 2)` selects `byte?` and renders
+> `tinyint`, and `left_shift(-8, 1)` selects `short?`. The rendered SQL type therefore follows the
+> compiler's pick, not the literal's intent — cast the operand explicitly (`left_shift((int?)1, 2)`)
+> whenever a specific SQL Server type is required.
 
 ## ClickHouse-only math
 

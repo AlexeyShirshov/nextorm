@@ -64,7 +64,34 @@ internal static class SqlServerScalarFunctionTranslator
         nameof(SqlServerFunctions.scope_identity), nameof(SqlServerFunctions.str),
         nameof(SqlServerFunctions.try_parse), nameof(SqlServerFunctions.xact_state),
         nameof(SqlServerFunctions.next_value_for), nameof(SqlServerFunctions.nextval),
-        nameof(SqlServerFunctions.regexp_count), nameof(SqlServerFunctions.left_shift)
+        nameof(SqlServerFunctions.regexp_count), nameof(SqlServerFunctions.left_shift),
+        nameof(SqlServerFunctions.right_shift), nameof(SqlServerFunctions.bit_count),
+        nameof(SqlServerFunctions.get_bit), nameof(SqlServerFunctions.set_bit),
+        nameof(SqlServerFunctions.try_cast), nameof(SqlServerFunctions.try_convert)
+    };
+
+    /// <summary>
+    /// The bit-manipulation functions whose T-SQL depends on the operand's own type: the translator
+    /// passes the closed-map operand type to
+    /// <see cref="ISqlServerFunctions.RenderBit"/> instead of the string-only
+    /// <see cref="ISqlServerFunctions.Render"/>.
+    /// </summary>
+    private static readonly HashSet<string> BitFunctions = new(StringComparer.Ordinal)
+    {
+        nameof(SqlServerFunctions.left_shift), nameof(SqlServerFunctions.right_shift),
+        nameof(SqlServerFunctions.bit_count), nameof(SqlServerFunctions.get_bit),
+        nameof(SqlServerFunctions.set_bit)
+    };
+
+    /// <summary>
+    /// The conversion functions rendered through the dialect's closed target map
+    /// (<see cref="ISqlDialect.MakeTryCast"/>/<see cref="ISqlDialect.MakeTryConvert"/>): the target CLR
+    /// type, never a string, decides the SQL type, and an unmapped target is refused before any command
+    /// is prepared.
+    /// </summary>
+    private static readonly HashSet<string> TryConversionFunctions = new(StringComparer.Ordinal)
+    {
+        nameof(SqlServerFunctions.try_cast), nameof(SqlServerFunctions.try_convert)
     };
 
     /// <summary>The functions whose <c>params</c> array is flattened back into individual arguments.</summary>
@@ -132,6 +159,18 @@ internal static class SqlServerScalarFunctionTranslator
             return true;
         }
 
+        if (TryConversionFunctions.Contains(name))
+        {
+            EmitTryConversion(visitor, name, node);
+            return true;
+        }
+
+        if (BitFunctions.Contains(name))
+        {
+            EmitBitFunction(visitor, functions, name, node);
+            return true;
+        }
+
         var isFormatMessage = name is nameof(SqlServerFunctions.formatmessage);
         var isVariadic = isFormatMessage || VariadicFunctions.Contains(name);
         if (isVariadic && ArgumentFlattener.IsRuntimeArray(node.Arguments, isFormatMessage ? 1 : 0))
@@ -185,6 +224,104 @@ internal static class SqlServerScalarFunctionTranslator
 
         visitor.Builder!.Append(expression);
         return true;
+    }
+
+    /// <summary>
+    /// Renders a closed-map conversion (<c>try_cast</c>/<c>try_convert</c>). The target CLR type is read
+    /// from the method's generic argument (the string-target overloads are non-generic) and handed to the
+    /// dialect hook, which owns the closed SQL type map: the string-only
+    /// <see cref="ISqlServerFunctions.Render"/> can never see the target, and its open name fall-back is
+    /// exactly the defect this route avoids. A supplied style is a separate overload, so an omitted style
+    /// passes <see langword="null"/>; a supplied NULL style is emitted as a typed NULL and keeps the
+    /// server's native NULL-style semantics.
+    /// </summary>
+    private static void EmitTryConversion(BaseExpressionVisitor visitor, string name, MethodCallExpression node)
+    {
+        var args = node.Arguments;
+        var isConvert = name == nameof(SqlServerFunctions.try_convert);
+        var expected = isConvert ? 2 : 1;
+
+        if (args.Count is 0 || args.Count > expected)
+            throw new NotSupportedException(
+                isConvert
+                    ? $"The {name} function accepts a value and an optional style."
+                    : $"The {name} function accepts exactly one value.");
+
+        var targetType = node.Method.IsGenericMethod
+            ? node.Method.GetGenericArguments()[0]
+            : typeof(string);
+
+        if (visitor.IsParamMode)
+        {
+            for (var (i, cnt) = (0, args.Count); i < cnt; i++)
+                visitor.Visit(args[i]);
+
+            return;
+        }
+
+        visitor.NeedAliasForColumn = true;
+        var value = visitor.VisitToString(args[0]);
+
+        string? style = null;
+        if (isConvert && args.Count == 2)
+        {
+            style = visitor.VisitToString(args[1]);
+            if (style == "null")
+                style = "CAST(NULL AS int)";
+        }
+
+        var expression = isConvert
+            ? visitor.Dialect.MakeTryConvert(value, targetType, style)
+            : visitor.Dialect.MakeTryCast(value, targetType);
+
+        visitor.Builder!.Append(expression);
+    }
+
+    /// <summary>
+    /// Renders a bit-manipulation call. The operand's declared type (nullable-unwrapped) selects the
+    /// closed <c>tinyint</c>/<c>smallint</c>/<c>int</c>/<c>bigint</c> rendering, because the SQL casts
+    /// both the operand and the shift/offset and a NULL has to become a typed NULL of the result type
+    /// (a bare <c>left_shift(null, …)</c> is Msg 8116). The renderer lives on the SQL Server functions so
+    /// a provider without the family rejects it instead of emitting T-SQL.
+    /// </summary>
+    private static void EmitBitFunction(
+        BaseExpressionVisitor visitor, ISqlServerFunctions functions, string name, MethodCallExpression node)
+    {
+        var args = node.Arguments;
+        var operandType = BitOperandType(args[0].Type);
+
+        if (visitor.IsParamMode)
+        {
+            for (var (i, cnt) = (0, args.Count); i < cnt; i++)
+                visitor.Visit(args[i]);
+
+            return;
+        }
+
+        visitor.NeedAliasForColumn = true;
+        var operand = visitor.VisitToString(args[0]);
+        var amount = args.Count > 1 ? visitor.VisitToString(args[1]) : null;
+        var value = args.Count > 2 ? visitor.VisitToString(args[2]) : null;
+
+        visitor.Builder!.Append(functions.RenderBit(name, operand, operandType, amount, value));
+    }
+
+    /// <summary>The closed operand-type map of the bit family; any other operand type is rejected.</summary>
+    private static string BitOperandType(Type type)
+    {
+        var operand = Nullable.GetUnderlyingType(type) ?? type;
+
+        if (operand == typeof(byte))
+            return "tinyint";
+        if (operand == typeof(short))
+            return "smallint";
+        if (operand == typeof(int))
+            return "int";
+        if (operand == typeof(long))
+            return "bigint";
+
+        throw new NotSupportedException(
+            $"The bit-manipulation operand type '{operand.Name}' has no SQL Server equivalent.");
     }
 
     /// <summary>

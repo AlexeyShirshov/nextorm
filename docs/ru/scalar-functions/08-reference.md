@@ -64,7 +64,10 @@ ClickHouse рендерит `dateTrunc('part', x)`, `addDays`/`addMonths`/.../`a
 | Член | SQL | Результат | Требуется |
 |---|---|---|---|
 | `regexp_count(input, pattern)` | `regexp_count(input, pattern)` | `int?` — `0` при отсутствии совпадений, `NULL` при NULL-входе | мажорная версия 17 |
-| `left_shift(value, shift)` | `CASE WHEN value IS NULL OR shift IS NULL THEN CAST(NULL AS int) ELSE left_shift(cast(value as int), cast(shift as bigint)) END` | `int?` — типизированная NULL-защита («голый» `left_shift(NULL, …)` даёт Msg 8116) | мажорная версия 16 |
+| `left_shift(value, shift)` / `right_shift(value, shift)` | `CASE WHEN value IS NULL OR shift IS NULL THEN CAST(NULL AS <тип операнда>) ELSE left_shift(cast(value as <тип операнда>), cast(shift as bigint)) END` | тип самого операнда (`byte?`/`short?`/`int?`/`long?`); логический zero-fill сдвиг; типизированная NULL-защита («голый» `left_shift(NULL, …)` даёт Msg 8116) | мажорная версия 16 |
+| `bit_count(value)` | `CASE WHEN value IS NULL THEN CAST(NULL AS bigint) ELSE bit_count(cast(value as <тип операнда>)) END` | `long?` (`bigint`) | мажорная версия 16 |
+| `get_bit(value, offset)` | `CASE WHEN value IS NULL OR offset IS NULL THEN CAST(NULL AS bit) ELSE get_bit(cast(value as <тип операнда>), cast(offset as int)) END` | `bool?` (`bit`) | мажорная версия 16 |
+| `set_bit(value, offset[, bitValue])` | `… ELSE set_bit(cast(value as <тип операнда>), cast(offset as int)[, cast(bitValue as bit)]) END` | тип самого операнда; явный NULL в `bitValue` даёт `NULL`, опущенный — нативное значение по умолчанию 1 | мажорная версия 16 |
 | `product(value)` | `product(value)` (агрегатный контекст; без `OVER`) | тип входа; NULL-строки игнорируются, группа только из NULL даёт `NULL` | мажорная версия 17 |
 | `regexp_split_to_table(input, pattern)` | источник `FROM`, например `from regexp_split_to_table(input, pattern)` | одна строка на фрагмент: `value` и one-based `ordinal` (`bigint`) | мажорная версия 17 **и** уровень совместимости БД 170 |
 
@@ -74,6 +77,37 @@ ClickHouse рендерит `dateTrunc('part', x)`, `addDays`/`addMonths`/.../`a
 **уровне совместимости 160** движок мажорной версии 17 сообщает, что функции нет (Msg 208), поэтому
 предварительное условие 170 — реальный гейт, который nextorm документирует и проверяет вживую, а не
 молча предполагает (диалект не может прочитать уровень совместимости БД).
+
+## SQL Server TRY_CAST и TRY_CONVERT
+
+`SqlFunctions.SqlServer.try_cast<T>(value)` и `try_convert<T>(value[, style])` рендерят T-SQL
+`TRY_CAST`/`TRY_CONVERT` через **закрытое отображение CLR→SQL**; некорректное, переполняющее или
+выходящее за диапазон значение даёт SQL NULL вместо ошибки. В отличие от имён выше, они не версионно-
+зависимы: любое объявление SQL Server (15, 16, 17 и неверсионированное) их рендерит, а любой другой
+провайдер отклоняет член с `The TRY_CAST function is not supported by this provider.`
+
+| Член | SQL | Результат |
+|---|---|---|
+| `try_cast<T>(value)` | `try_cast(value as <type>)` | `T?` — NULL, когда преобразование недопустимо |
+| `try_convert<T>(value)` / `try_convert<T>(value, style)` | `try_convert(<type>, value[, style])` | `T?` — NULL, когда преобразование недопустимо |
+| `try_cast(value)` / `try_convert(value[, style])` | `try_cast(value as nvarchar(4000))` / `try_convert(nvarchar(4000), value[, style])` | `string?` — вход длиннее 4000 символов усекается до 4000 |
+
+| CLR-цель `T` | Тип SQL Server |
+|---|---|
+| `byte` / `short` / `int` / `long` | `tinyint` / `smallint` / `int` / `bigint` |
+| `float` / `double` | `real` / `float(53)` |
+| `decimal` | `decimal(38,10)` |
+| `bool` | `bit` |
+| `Guid` | `uniqueidentifier` |
+| `DateTime` / `DateTimeOffset` | `datetime2(7)` / `datetimeoffset(7)` |
+| `TimeSpan` | `time(7)` |
+
+Цель вне отображения отклоняется **до** подготовки команды (`The TRY_CONVERT function cannot map CLR
+target 'MyType' to a supported SQL Server conversion type.`). Style — нативный стиль
+`datetime`/`float`/money: его отсутствие и NULL-стиль — разные перегрузки, и NULL-стиль заставляет движок
+вернуть NULL даже для конвертируемого значения. Преобразование, которое движок сам запрещает, не
+маскируется — `TRY_CAST(1 AS xml)` даёт Msg 529, и `xml` не является публичной целью. См.
+[условные функции и преобразования](04-conditionals-and-conversion.md#sql-server-try_cast-и-try_convert).
 
 ## Функции только для MySQL
 
