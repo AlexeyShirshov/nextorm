@@ -65,6 +65,9 @@ select nullableint, count(*) filter (where (id > 10)) as "Big", sum(id) filter (
 
 В ClickHouse тот же запрос генерирует `toInt32(countIf((id > 10)))` и `sumIf(id, (b = true))`.
 
+MariaDB явно отклоняет `GROUPING` в этом каталоге; см.
+[каталог MariaDB](08-reference.md#mariadb-catalogue).
+
 ## Медиана и квантили
 
 Четыре имени непереносимы и намеренно не взаимозаменяемы: `percentile_cont` интерполирует,

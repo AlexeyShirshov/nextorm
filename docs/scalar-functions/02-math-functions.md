@@ -59,6 +59,9 @@ var rows = dataContext.From<IComplexEntity>()
     .ToList();
 ```
 
+For MariaDB numeric, bit and vector functions, including the MariaDB 11.7 vector gates, see the
+[MariaDB catalogue](08-reference.md#mariadb-catalogue).
+
 ## ClickHouse-only math
 
 Beyond the portable [`SqlFunctions.Sql`](xref:NextORM.Core.SqlFunctions.Sql) surface,

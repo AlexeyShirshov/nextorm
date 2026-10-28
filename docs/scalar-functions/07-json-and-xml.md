@@ -132,6 +132,9 @@ On MySQL/MariaDB the same calls render as `json_unquote(json_extract(...))`, `js
 returns an `int`) and as a projected value it is cast to `bit`. `isjson` is also used directly in a
 `WHERE` (`Where(e => SqlFunctions.SqlServer.isjson(e.String))`).
 
+MariaDB JSON and dynamic-column support is provider-specific; consult the
+[MariaDB catalogue](08-reference.md#mariadb-catalogue) for supported forms and refusals.
+
 ## XML data-type methods (SQL Server)
 
 SQL Server's `xml` type exposes postfix methods

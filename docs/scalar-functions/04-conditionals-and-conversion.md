@@ -182,6 +182,9 @@ otherwise `EqualityComparer<T>.Default` — so a `NULL` reference is never deref
 equality is **not** database collation: the in-memory provider compares CLR strings, while a SQL
 provider compares with the column's collation, so no cross-collation equality is promised.
 
+MariaDB conditional and conversion support, including explicit refusals, is listed in the
+[MariaDB catalogue](08-reference.md#mariadb-catalogue).
+
 ## BASE64 and decimal parsing
 
 `SqlFunctions.Sql.base64_encode(byte[]?)` and `base64_decode(string?)` render standard RFC 4648 BASE64

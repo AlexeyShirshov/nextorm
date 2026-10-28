@@ -191,6 +191,7 @@ MySQL; PostgreSQL, SQL Server, SQLite, ClickHouse и in-memory-провайде�
 | `json_table` | конструирует таблицу: нужна позиция `FROM`/join и список определений `COLUMNS`, поэтому это не скалярная функция | сырой SQL или обёртка `[SqlFunction]` |
 
 <a id="mariadb-only-json-functions"></a>
+<a id="mariadb-catalogue"></a>
 
 ## Каталог MariaDB
 

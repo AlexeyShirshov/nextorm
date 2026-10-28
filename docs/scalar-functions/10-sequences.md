@@ -55,6 +55,9 @@ These names are MariaDB-only: MySQL, PostgreSQL, SQL Server, SQLite, ClickHouse 
 context reject them with `NotSupportedException`. `lastval` reads the **connection's** last generated
 value.
 
+MariaDB sequence functions and their availability are listed in the
+[MariaDB catalogue](08-reference.md#mariadb-catalogue).
+
 ## SQL Server
 
 SQL Server reads a sequence through `NEXT VALUE FOR`, exposed by

@@ -153,6 +153,9 @@ Oracle-совместимые конверсии MariaDB **зависят от �
 доступны с MariaDB 10.6. См.
 [MySQL и MariaDB-специфичный SQL](../guide/provider-specific-sql/mysql.md#mariadb).
 
+Поддержка функций даты и времени в MariaDB и оговорки к их поведению перечислены в
+[каталоге MariaDB](08-reference.md#mariadb-catalogue).
+
 ## Форматирование дат и чисел в строки
 
 nextorm транслирует culture-invariant подмножество CLR-форматирования — `string.Format`,

@@ -181,11 +181,13 @@ The three names it has never supported stay excluded: `uuid_to_bin`/`bin_to_uuid
 freed-space accounting), so `MariaDbDialect.MySqlFunctions` reports them as unsupported and the query
 is rejected with `NotSupportedException`.
 
-The names added by this slice are delivered against **MySQL 8.4 only**. `MariaDbNativeFunctions` keeps
-every one of them in its exclusion list, so MariaDB refuses each name explicitly instead of rendering
-SQL whose behaviour this unit cannot claim. MariaDB verification is owned by
-[#284](https://github.com/AlexeyShirshov/nextorm/issues/284), which will revisit the exclusions name by
-name; the three exclusions above and all MariaDB-only/version-gated arms below are unchanged.
+The MySQL catalogue delivered by #283 was verified against MySQL 8.4. Its MariaDB assessment is now
+closed by #284: the 138-row inventory contains 109 delivered names, 6 already-covered names, 18 explicit
+refusals, and 5 functions gated to MariaDB 11.7, with no pending rows. MariaDB verification used 11.4.13;
+the 11.7-gated functions were not executed. The permanent exclusions `UUID_TO_BIN`, `BIN_TO_UUID`, and
+`JSON_STORAGE_FREE` remain. See the
+[MariaDB catalogue](../../scalar-functions/08-reference.md#mariadb-catalogue) for the per-name
+disposition, version gates, refusal reasons, and verification qualifications.
 
 On top of the inherited surface, MariaDB adds its own names through the same `SqlFunctions.MySql`
 entry point. MySQL's dialect does not report them, so a MySQL query using one of them is rejected with

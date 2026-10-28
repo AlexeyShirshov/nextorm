@@ -234,6 +234,9 @@ through a CLR-backed `regexp`/`regexp_replace` function registered on every conn
 there [`SqlFunctions.Sql.like`](xref:NextORM.Core.CommonFunctions.like(System.String,System.String)) is
 the fallback for simple patterns. The in-memory provider runs `System.Text.RegularExpressions` natively.
 
+MariaDB string-function availability, version gates and refusals are listed in the
+[MariaDB catalogue](08-reference.md#mariadb-catalogue).
+
 ## Cross-provider scalar functions
 
 [`SqlFunctions.Sql`](xref:NextORM.Core.SqlFunctions.Sql) exposes a small library of string and number
