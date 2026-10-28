@@ -45,6 +45,20 @@ internal static class WindowFunctionTranslator
         var isResidualMember = functionDeclaringType == typeof(SqlServerFunctions)
             || functionDeclaringType == typeof(MySqlFunctions);
 
+        // The SQL Server approximate percentiles are ordered-set aggregates: the engine has no OVER
+        // form (Msg 10754), and the surface exposes them only as WITHIN GROUP. The refusal is narrow —
+        // only these two SqlServerFunctions members — and fires before any window inspection.
+        if (functionDeclaringType == typeof(SqlServerFunctions)
+            && functionCall.Method.Name is nameof(SqlServerFunctions.approx_percentile_cont)
+                or nameof(SqlServerFunctions.approx_percentile_disc))
+        {
+            var sqlName = functionCall.Method.Name == nameof(SqlServerFunctions.approx_percentile_cont)
+                ? "APPROX_PERCENTILE_CONT"
+                : "APPROX_PERCENTILE_DISC";
+            throw new NotSupportedException(
+                $"The {sqlName} function does not support OVER; use WITHIN GROUP without OVER.");
+        }
+
         var isResidualMedian = isResidualMember
             && functionCall.Method.Name == nameof(SqlServerFunctions.median);
         var isResidualPercentile = isResidualMember

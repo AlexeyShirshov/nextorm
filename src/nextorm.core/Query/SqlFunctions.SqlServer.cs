@@ -1425,6 +1425,83 @@ namespace NextORM.Core;
         public T? product<T>(T? value) => default!;
 
         /// <summary>
+        /// <c>approx_count_distinct(value)</c>: the approximate number of distinct non-null
+        /// <paramref name="value"/> rows in the aggregate group, returned as <c>bigint</c>. An empty group
+        /// and an all-NULL group both yield <c>0</c> (not SQL NULL). Rendered in an aggregate context
+        /// only; the engine is not a windowing function here, so an <c>OVER</c> clause is rejected by the
+        /// server (Msg 4113). Requires SQL Server 2019 (major version 15) and the version-bound
+        /// <see cref="ISqlDialect.SupportsApproxCountDistinctAggregate"/> gate; a lower or unversioned
+        /// declaration is refused before SQL.
+        /// </summary>
+        /// <typeparam name="T">The value type.</typeparam>
+        /// <param name="value">The value whose distinct non-null occurrences are counted.</param>
+        /// <returns>The approximate distinct count as <c>bigint</c>; <c>0</c> for an empty or all-NULL group.</returns>
+        public long approx_count_distinct<T>(T? value) => default!;
+
+        /// <summary>
+        /// <c>checksum_agg(value)</c>: the checksum of the non-null <paramref name="value"/> rows in the
+        /// aggregate group, returned as <c>int</c>. SQL NULL rows are skipped and the result is
+        /// order-insensitive but not a stable identity (identical values cancel: two <c>5</c> rows and one
+        /// <c>5</c> row checksum identically); an empty group and an all-NULL group yield SQL NULL.
+        /// Rendered as <c>checksum_agg(value)</c>; unlike the approximate percentiles the engine does allow
+        /// an <c>OVER</c> clause. SQL Server has the function without a version floor, so the gate is a
+        /// plain provider opt-in (<see cref="ISqlDialect.SupportsChecksumAggregate"/>).
+        /// </summary>
+        /// <param name="value">The value to checksum across the group.</param>
+        /// <returns>The checksum as <c>int</c>, or SQL NULL when the group has no non-null value.</returns>
+        public int? checksum_agg(int? value) => default!;
+
+        /// <summary>
+        /// <c>grouping_id(expressions)</c>: the bit mask identifying which of the listed expressions are
+        /// aggregated away by the current grouping set, returned as <c>int</c> (<c>0</c> under a plain
+        /// <c>GROUP BY</c>; the ROLLUP/GROUPING SETS subtotal bits otherwise). Every argument must be a
+        /// <c>GROUP BY</c> expression: the server reports Msg 8161 without a <c>GROUP BY</c> and for an
+        /// argument that is not grouped, and this library enforces the same obligation <b>before</b> SQL is
+        /// executed (a missing grouping context or a mismatched argument is refused with a
+        /// <see cref="BuildSqlCommandException"/> and zero statements run). Allowed only in the SELECT
+        /// list, <c>HAVING</c> and <c>ORDER BY</c> of a grouped command. SQL Server has the function
+        /// without a version floor, so the gate is a plain provider opt-in
+        /// (<see cref="ISqlDialect.SupportsGroupingIdAggregate"/>).
+        /// </summary>
+        /// <param name="expressions">The grouping expressions whose subtotal bits are reported.</param>
+        /// <returns>The grouping bit mask as <c>int</c>.</returns>
+        public int grouping_id(params object?[] expressions) => default!;
+
+        /// <summary>
+        /// <c>approx_percentile_cont(fraction) within group (order by value)</c>: the approximate
+        /// continuous (interpolated) percentile of the non-null <paramref name="value"/> rows, returned as
+        /// <c>float(53)</c>. The engine accepts an integer sort expression even though the result is
+        /// <c>float</c>; an empty group and an all-NULL group yield SQL NULL, and the endpoints <c>0</c>
+        /// and <c>1</c> are exact. The fraction must be constant or captured and finite in <c>[0, 1]</c>;
+        /// a row-dependent, NaN/infinite or out-of-range fraction is refused before SQL. The aggregate is
+        /// ordered-set only: completing it with <c>OVER</c> is refused, the engine's own form being
+        /// <c>WITHIN GROUP</c> without <c>OVER</c>. Requires SQL Server 2022 (major version 16) and the
+        /// name-specific <see cref="ISqlDialect.SupportsApproxPercentileCont"/> gate.
+        /// </summary>
+        /// <typeparam name="T">The sort-input type.</typeparam>
+        /// <param name="fraction">The percentile fraction, in <c>[0, 1]</c>.</param>
+        /// <param name="value">The value to take the percentile of.</param>
+        /// <returns>The approximate interpolated percentile, or SQL NULL when the group has no non-null value.</returns>
+        public double? approx_percentile_cont<T>(double fraction, T? value) => default!;
+
+        /// <summary>
+        /// <c>approx_percentile_disc(fraction) within group (order by value)</c>: the approximate discrete
+        /// percentile of the non-null <paramref name="value"/> rows, returned as the sort input type (the
+        /// engine's <c>APPROX_PERCENTILE_DISC</c> result type tracks the input, e.g. <c>int</c> for an
+        /// integer sort expression; a <c>decimal</c> sort expression is rejected by the engine, Msg 402).
+        /// An empty group and an all-NULL group yield SQL NULL, and the endpoints <c>0</c> and <c>1</c>
+        /// are exact. The fraction must be constant or captured and finite in <c>[0, 1]</c>; a
+        /// row-dependent, NaN/infinite or out-of-range fraction is refused before SQL. Ordered-set only:
+        /// completing it with <c>OVER</c> is refused. Requires SQL Server 2022 (major version 16) and the
+        /// name-specific <see cref="ISqlDialect.SupportsApproxPercentileDisc"/> gate.
+        /// </summary>
+        /// <typeparam name="T">The sort-input type; a value type, because the discrete result is an input value.</typeparam>
+        /// <param name="fraction">The percentile fraction, in <c>[0, 1]</c>.</param>
+        /// <param name="value">The value to take the percentile of.</param>
+        /// <returns>The approximate discrete percentile, or SQL NULL when the group has no non-null value.</returns>
+        public T? approx_percentile_disc<T>(double fraction, T? value) where T : struct => default!;
+
+        /// <summary>
         /// <c>regexp_split_to_table(input, pattern)</c> as a FROM source: splits
         /// <paramref name="input"/> on the regular expression <paramref name="pattern"/> and returns one
         /// row per fragment with the row shape

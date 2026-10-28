@@ -753,6 +753,52 @@ public interface ISqlDialect
     bool SupportsProductAggregate => false;
 
     /// <summary>
+    /// True when the provider can render the <c>APPROX_COUNT_DISTINCT(value)</c> aggregate
+    /// (<see cref="SqlServerFunctions.approx_count_distinct{T}(T)"/>). On SQL Server it is available
+    /// from major version 15; the safe default is <see langword="false"/>, and an unversioned dialect
+    /// refuses the name. Declared as a default interface method so existing external implementations
+    /// keep compiling.
+    /// </summary>
+    bool SupportsApproxCountDistinctAggregate => false;
+
+    /// <summary>
+    /// True when the provider can render the <c>CHECKSUM_AGG(value)</c> aggregate
+    /// (<see cref="SqlServerFunctions.checksum_agg(int?)"/>). SQL Server has it without a version
+    /// floor, so the flag is a plain provider opt-in; the safe default is <see langword="false"/>.
+    /// Declared as a default interface method so existing external implementations keep compiling.
+    /// </summary>
+    bool SupportsChecksumAggregate => false;
+
+    /// <summary>
+    /// True when the provider can render the <c>GROUPING_ID(expressions)</c> aggregate
+    /// (<see cref="SqlServerFunctions.grouping_id(object?[])"/>). SQL Server has it without a version
+    /// floor, so the flag is a plain provider opt-in; the safe default is <see langword="false"/>.
+    /// Declared as a default interface method so existing external implementations keep compiling.
+    /// </summary>
+    bool SupportsGroupingIdAggregate => false;
+
+    /// <summary>
+    /// True when the provider can render the ordered-set aggregate
+    /// <c>APPROX_PERCENTILE_CONT(fraction) WITHIN GROUP (ORDER BY value)</c>
+    /// (<see cref="SqlServerFunctions.approx_percentile_cont{T}(double, T)"/>). On SQL Server it is
+    /// available from major version 16; the safe default is <see langword="false"/>, and an unversioned
+    /// dialect refuses the name. This is a name-specific gate: it deliberately does not widen
+    /// <see cref="SupportsOrderedAggregates"/> or <see cref="SupportsOrderedPercentiles"/>. Declared as
+    /// a default interface method so existing external implementations keep compiling.
+    /// </summary>
+    bool SupportsApproxPercentileCont => false;
+
+    /// <summary>
+    /// True when the provider can render the ordered-set aggregate
+    /// <c>APPROX_PERCENTILE_DISC(fraction) WITHIN GROUP (ORDER BY value)</c>
+    /// (<see cref="SqlServerFunctions.approx_percentile_disc{T}(double, T?)"/>). On SQL Server it is
+    /// available from major version 16; the safe default is <see langword="false"/>, and an unversioned
+    /// dialect refuses the name. Name-specific, like <see cref="SupportsApproxPercentileCont"/>. Declared
+    /// as a default interface method so existing external implementations keep compiling.
+    /// </summary>
+    bool SupportsApproxPercentileDisc => false;
+
+    /// <summary>
     /// The provider's renderer for the ClickHouse sequence/funnel aggregates; <c>null</c> means the
     /// provider cannot express them. Declared as a default interface method so that existing external
     /// implementations keep compiling.

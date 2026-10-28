@@ -337,6 +337,31 @@ public sealed class SqlServerDialect : SqlDialectBase
     public override bool SupportsProductAggregate => SupportsSqlServer2025Functions;
 
     /// <summary>
+    /// <c>APPROX_COUNT_DISTINCT</c> arrived with SQL Server 2019 (major version 15). Version-only, like
+    /// every other function-availability gate here: no edition substitutes for a major version.
+    /// </summary>
+    public override bool SupportsApproxCountDistinctAggregate => _serverMajorVersion >= 15;
+
+    /// <summary><c>CHECKSUM_AGG</c> has no version floor: every declared SQL Server major version has it.</summary>
+    public override bool SupportsChecksumAggregate => true;
+
+    /// <summary><c>GROUPING_ID</c> has no version floor: every declared SQL Server major version has it.</summary>
+    public override bool SupportsGroupingIdAggregate => true;
+
+    /// <summary>
+    /// The approximate ordered-set percentiles arrived with SQL Server 2022 (major version 16).
+    /// Name-specific by design: the broad ordered-aggregate and interpolating-percentile flags stay
+    /// untouched, because SQL Server expresses those only as window functions.
+    /// </summary>
+    public override bool SupportsApproxPercentileCont => _serverMajorVersion >= 16;
+
+    /// <summary>
+    /// <c>APPROX_PERCENTILE_DISC</c> arrived with SQL Server 2022 (major version 16); name-specific for
+    /// the same reason as <see cref="SupportsApproxPercentileCont"/>.
+    /// </summary>
+    public override bool SupportsApproxPercentileDisc => _serverMajorVersion >= 16;
+
+    /// <summary>
     /// The native <c>json</c> column is transported as the plain CLR <see cref="string"/>: SqlClient has
     /// no DOM representation that binds and reads both a <c>json</c> and an <c>nvarchar(max)</c> column,
     /// so the native storage resolves to the existing text converter with an inferred
@@ -1348,6 +1373,9 @@ internal sealed class SqlServerSpecificFunctions : ISqlServerFunctions
         "jaro_winkler_similarity" => Unsupported("JARO_WINKLER_SIMILARITY", requiredMajor: 17, _dialect.SupportsSqlServer2025Functions),
         "regexp_split_to_table" => Unsupported("REGEXP_SPLIT_TO_TABLE", requiredMajor: 17, _dialect.SupportsSqlServer2025Functions),
         "product" => Unsupported("PRODUCT", requiredMajor: 17, _dialect.SupportsProductAggregate),
+        "approx_count_distinct" => Unsupported("APPROX_COUNT_DISTINCT", requiredMajor: 15, _dialect.SupportsApproxCountDistinctAggregate),
+        "approx_percentile_cont" => Unsupported("APPROX_PERCENTILE_CONT", requiredMajor: 16, _dialect.SupportsApproxPercentileCont),
+        "approx_percentile_disc" => Unsupported("APPROX_PERCENTILE_DISC", requiredMajor: 16, _dialect.SupportsApproxPercentileDisc),
         "left_shift" => Unsupported("LEFT_SHIFT", requiredMajor: 16, _dialect.SupportsSqlServer2022Functions),
         "right_shift" => Unsupported("RIGHT_SHIFT", requiredMajor: 16, _dialect.SupportsSqlServer2022Functions),
         "bit_count" => Unsupported("BIT_COUNT", requiredMajor: 16, _dialect.SupportsSqlServer2022Functions),

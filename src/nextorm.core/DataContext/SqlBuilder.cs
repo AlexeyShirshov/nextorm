@@ -258,6 +258,11 @@ internal readonly struct SqlBuilder
                     SqlSourceRenderer.MakeWhere(in _ctx, sqlBuilder, entityType, cmd.PreparedCondition, 0, dontNeedAlias, root);
                 }
 
+                // The SQL Server GROUPING_ID function is only valid in the SELECT list, HAVING or
+                // ORDER BY of a grouped command, and every argument must be a grouping expression.
+                // The server reports Msg 8161, but the library refuses before execution.
+                ValidateGroupingId(cmd);
+
                 var grouping = cmd.GroupingList;
                 if (grouping?.Length > 0)
                 {
@@ -2450,11 +2455,184 @@ internal readonly struct SqlBuilder
         }
     }
 
+    private const string GroupingIdContextMessage =
+        "The GROUPING_ID function requires a GROUP BY context.";
+
+    private const string GroupingIdArgumentMessage =
+        "The GROUPING_ID function requires every argument to match a GROUP BY expression.";
+
+    /// <summary>
+    /// Enforces the SQL Server <c>GROUPING_ID</c> grouping-context obligation before SQL is built and
+    /// therefore before execution. The allowed placements are the SELECT list, <c>HAVING</c> and
+    /// <c>ORDER BY</c> of a command that has a non-empty <see cref="QueryCommand.GroupingList"/>; the
+    /// WHERE/PREWHERE, JOIN <c>ON</c> and GROUP BY clauses reject the call. Each flattened argument must
+    /// match a grouping expression under the existing
+    /// <see cref="ExpressionPlanEqualityComparer"/> (the prepared clauses use different parameter
+    /// instances, so identity cannot be used). The engine would report Msg 8161 for both violations;
+    /// the stable pre-execution messages are the library's contract.
+    /// </summary>
+    private void ValidateGroupingId(QueryCommand cmd)
+    {
+        // The validation is a SQL Server concern; other dialects refuse the member through their
+        // capability gate before this point.
+        if (!_ctx.Dialect.SupportsGroupingIdAggregate)
+            return;
+
+        if (ContainsGroupingId(cmd.PreparedCondition ?? cmd.Condition)
+            || ContainsGroupingId(cmd.PreparedPreWhere ?? cmd.PreWhere)
+            || ContainsGroupingIdInJoins(cmd.Joins)
+            || ContainsGroupingIdInGroupingList(cmd.GroupingList))
+            throw new BuildSqlCommandException(GroupingIdContextMessage);
+
+        var calls = new List<MethodCallExpression>();
+        if (cmd.SelectList is { } selectList)
+        {
+            for (var i = 0; i < selectList.Length; i++)
+                CollectGroupingIdCalls(selectList[i].Expression, calls);
+        }
+
+        CollectGroupingIdCalls(cmd.PreparedHaving ?? cmd.Having, calls);
+
+        if (cmd.Sorting is { } sorting)
+        {
+            for (var i = 0; i < sorting.Length; i++)
+                CollectGroupingIdCalls(sorting[i].PreparedExpression ?? sorting[i].SortExpression, calls);
+        }
+
+        if (calls.Count == 0)
+            return;
+
+        var grouping = cmd.GroupingList;
+        if (grouping is null || grouping.Length == 0)
+            throw new BuildSqlCommandException(GroupingIdContextMessage);
+
+        var comparer = cmd.GetExpressionPlanEqualityComparer();
+
+        for (var c = 0; c < calls.Count; c++)
+        {
+            var call = calls[c];
+
+            if (ArgumentFlattener.IsRuntimeArray(call.Arguments, 0))
+                throw new BuildSqlCommandException(GroupingIdArgumentMessage);
+
+            var arguments = ArgumentFlattener.Flatten(call.Arguments, 0);
+            if (arguments.Count == 0)
+                throw new BuildSqlCommandException(GroupingIdArgumentMessage);
+
+            for (var a = 0; a < arguments.Count; a++)
+            {
+                var argument = UnwrapGroupingExpression(arguments[a]);
+                var matched = false;
+
+                for (var g = 0; g < grouping.Length; g++)
+                {
+                    if (grouping[g].Expression is not { } key)
+                        continue;
+
+                    if (comparer.Equals(argument, UnwrapGroupingExpression(key)))
+                    {
+                        matched = true;
+                        break;
+                    }
+                }
+
+                if (!matched)
+                    throw new BuildSqlCommandException(GroupingIdArgumentMessage);
+            }
+        }
+    }
+
+    private static bool ContainsGroupingIdInJoins(JoinExpression[]? joins)
+    {
+        if (joins is null)
+            return false;
+
+        for (var i = 0; i < joins.Length; i++)
+        {
+            if (ContainsGroupingId(joins[i].JoinCondition))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool ContainsGroupingIdInGroupingList(SelectExpression[]? grouping)
+    {
+        if (grouping is null)
+            return false;
+
+        for (var i = 0; i < grouping.Length; i++)
+        {
+            if (ContainsGroupingId(grouping[i].Expression))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool ContainsGroupingId(Expression? expression)
+    {
+        if (expression is null)
+            return false;
+
+        var collector = new GroupingIdCallCollector();
+        collector.Visit(UnwrapClauseLambda(expression));
+        return collector.Calls.Count > 0;
+    }
+
+    private static void CollectGroupingIdCalls(Expression? expression, List<MethodCallExpression> calls)
+    {
+        if (expression is null)
+            return;
+
+        var collector = new GroupingIdCallCollector();
+        collector.Visit(UnwrapClauseLambda(expression));
+        calls.AddRange(collector.Calls);
+    }
+
+    /// <summary>Unwraps the quote/lambda wrapper of a prepared clause (HAVING, PREWHERE) and of a sort key.</summary>
+    private static Expression UnwrapClauseLambda(Expression expression)
+    {
+        if (expression is UnaryExpression { NodeType: ExpressionType.Quote } quote)
+            expression = quote.Operand;
+
+        return expression is LambdaExpression lambda ? lambda.Body : expression;
+    }
+
+    /// <summary>
+    /// Unwraps the object boxing of a <c>params object?[]</c> element and any lambda wrapper, so the
+    /// plan-equality comparer sees the grouping expression itself.
+    /// </summary>
+    private static Expression UnwrapGroupingExpression(Expression expression)
+        => TypeFacts.UnwrapConvert(UnwrapClauseLambda(TypeFacts.UnwrapConvert(expression)));
+
+    /// <summary>
+    /// Collects <c>GROUPING_ID</c> calls inside one clause. Nested lambdas mark another command's
+    /// scope (a subquery is validated by its own <c>MakeSelect</c>), so the walk stops at them.
+    /// </summary>
+    private sealed class GroupingIdCallCollector : ExpressionVisitor
+    {
+        internal List<MethodCallExpression> Calls { get; } = [];
+
+        protected override Expression VisitMethodCall(MethodCallExpression node)
+        {
+            if (node.Method.DeclaringType == typeof(SqlServerFunctions)
+                && node.Method.Name == nameof(SqlServerFunctions.grouping_id))
+            {
+                Calls.Add(node);
+                return node;
+            }
+
+            return base.VisitMethodCall(node);
+        }
+
+        protected override Expression VisitLambda<T>(Expression<T> node) => node;
+    }
+
     // A raw SQL FROM source adds its parameters by property name; a captured variable of the same name
     // in the surrounding query would add a second parameter with that name, which most providers reject
     // at execution. Fail at build time with an actionable message instead.
-    private static void EnsureUniqueParameterNames(List<Parameter> @params)
-    {
+    private static void EnsureUniqueParameterNames(List<Parameter> @params)    {
         for (var i = 0; i < @params.Count; i++)
         {
             for (var j = i + 1; j < @params.Count; j++)

@@ -251,6 +251,21 @@ public abstract class SqlDialectBase : ISqlDialect
     /// <inheritdoc/>
     public virtual bool SupportsProductAggregate => false;
 
+    /// <summary>Defaults to <c>false</c>; SQL Server from major version 15 opts into <c>APPROX_COUNT_DISTINCT</c>.</summary>
+    public virtual bool SupportsApproxCountDistinctAggregate => false;
+
+    /// <summary>Defaults to <c>false</c>; SQL Server opts into <c>CHECKSUM_AGG</c>.</summary>
+    public virtual bool SupportsChecksumAggregate => false;
+
+    /// <summary>Defaults to <c>false</c>; SQL Server opts into <c>GROUPING_ID</c>.</summary>
+    public virtual bool SupportsGroupingIdAggregate => false;
+
+    /// <summary>Defaults to <c>false</c>; SQL Server from major version 16 opts into <c>APPROX_PERCENTILE_CONT</c>.</summary>
+    public virtual bool SupportsApproxPercentileCont => false;
+
+    /// <summary>Defaults to <c>false</c>; SQL Server from major version 16 opts into <c>APPROX_PERCENTILE_DISC</c>.</summary>
+    public virtual bool SupportsApproxPercentileDisc => false;
+
     /// <summary>Defaults to <c>null</c>; ClickHouse opts into the <c>windowFunnel</c>/<c>retention</c>/<c>sequenceMatch</c> aggregates.</summary>
     public virtual ISequenceAggregateRenderer? SequenceAggregates => null;
 

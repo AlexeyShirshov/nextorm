@@ -155,6 +155,49 @@ internal static class AdvancedAggregateTranslator
                     "product",
                     () => visitor.Dialect.SqlServerFunctions?.GetUnsupportedReason("product"));
                 return true;
+            // SQL Server 2019 approximate distinct count: aggregate context only, bigint result
+            // (0 on an empty and on an all-NULL group), no window/OVER expansion. The version-bound
+            // SQL Server renderer supplies the exact "requires major version 15" reason.
+            case nameof(SqlServerFunctions.approx_count_distinct) when node.Method.DeclaringType == typeof(SqlServerFunctions)
+                && node.Arguments.Count == 1:
+                EmitSimple(
+                    visitor,
+                    node,
+                    "approx_count_distinct",
+                    () => visitor.Dialect.SupportsApproxCountDistinctAggregate,
+                    "approx_count_distinct",
+                    () => visitor.Dialect.SqlServerFunctions?.GetUnsupportedReason("approx_count_distinct"));
+                return true;
+            // CHECKSUM_AGG has no version floor, so the gate is the plain provider opt-in and the
+            // failure is the generic provider message (the engine does allow OVER, but this surface
+            // offers the aggregate form only).
+            case nameof(SqlServerFunctions.checksum_agg) when node.Method.DeclaringType == typeof(SqlServerFunctions)
+                && node.Arguments.Count == 1:
+                EmitSimple(
+                    visitor,
+                    node,
+                    "checksum_agg",
+                    () => visitor.Dialect.SupportsChecksumAggregate,
+                    "checksum_agg");
+                return true;
+            // GROUPING_ID's params array is flattened into one SQL argument per grouping expression;
+            // the grouping-context obligation is enforced at the command boundary (SqlBuilder), so this
+            // translator only renders the call and the provider gate.
+            case nameof(SqlServerFunctions.grouping_id) when node.Method.DeclaringType == typeof(SqlServerFunctions)
+                && node.Arguments.Count == 1:
+                EmitGroupingId(visitor, node);
+                return true;
+            // The SQL Server 2022 approximate percentiles are ordered-set aggregates with a
+            // name-specific gate: they deliberately do not widen the broad ordered-aggregate or
+            // interpolating-percentile flags. No OVER form is offered.
+            case nameof(SqlServerFunctions.approx_percentile_cont) when node.Method.DeclaringType == typeof(SqlServerFunctions)
+                && node.Arguments.Count == 2:
+                EmitApproxPercentile(visitor, node, "approx_percentile_cont", () => visitor.Dialect.SupportsApproxPercentileCont);
+                return true;
+            case nameof(SqlServerFunctions.approx_percentile_disc) when node.Method.DeclaringType == typeof(SqlServerFunctions)
+                && node.Arguments.Count == 2:
+                EmitApproxPercentile(visitor, node, "approx_percentile_disc", () => visitor.Dialect.SupportsApproxPercentileDisc);
+                return true;
             case nameof(ClickHouseFunctions.any_last) when node.Arguments.Count == 1:
                 EmitSimple(visitor, node, "any_last", () => visitor.Dialect.SupportsAnyAggregates, "anyLast");
                 return true;
@@ -227,6 +270,83 @@ internal static class AdvancedAggregateTranslator
         visitor.NeedAliasForColumn = true;
         var call = $"{visitor.Dialect.MakeAggregate(name)}({visitor.VisitToString(node.Arguments[0])})";
         visitor.Builder!.Append(visitor.Dialect.MakeArrayResult(node.Method.Name, call, node.Method.ReturnType));
+    }
+
+    /// <summary>
+    /// Renders <c>grouping_id(a, b, ...)</c> in an aggregate context. The <c>params</c> array is
+    /// flattened through <see cref="ArgumentFlattener"/> so each grouping expression becomes its own SQL
+    /// argument; a runtime array (rather than the compiler-generated inline array) cannot be flattened
+    /// and is refused. The grouping-context/matching obligation is enforced earlier, at the command
+    /// boundary in <see cref="SqlBuilder"/>, not here.
+    /// </summary>
+    private static void EmitGroupingId(BaseExpressionVisitor visitor, MethodCallExpression node)
+    {
+        if (!visitor.Dialect.SupportsGroupingIdAggregate)
+            throw new NotSupportedException(
+                visitor.Dialect.SqlServerFunctions?.GetUnsupportedReason("grouping_id")
+                ?? "The grouping_id function is not supported by this provider.");
+
+        if (ArgumentFlattener.IsRuntimeArray(node.Arguments, 0))
+            throw new NotSupportedException("The grouping_id arguments must be inline expressions, not a captured array.");
+
+        var arguments = ArgumentFlattener.Flatten(node.Arguments, 0);
+        if (arguments.Count == 0)
+            throw new NotSupportedException("The grouping_id function requires at least one argument.");
+
+        if (visitor.IsParamMode)
+        {
+            for (var (i, cnt) = (0, arguments.Count); i < cnt; i++)
+                visitor.Visit(TypeFacts.UnwrapConvert(arguments[i]));
+
+            return;
+        }
+
+        visitor.NeedAliasForColumn = true;
+
+        var rendered = new string[arguments.Count];
+        for (var (i, cnt) = (0, arguments.Count); i < cnt; i++)
+            rendered[i] = visitor.VisitToString(TypeFacts.UnwrapConvert(arguments[i]));
+
+        visitor.Builder!.Append(visitor.Dialect.MakeAggregate("grouping_id"))
+            .Append('(').Append(string.Join(", ", rendered)).Append(')');
+    }
+
+    /// <summary>
+    /// Renders a SQL Server approximate percentile as
+    /// <c>approx_percentile_cont(fraction) within group (order by value)</c>. The emitter is
+    /// name-specific: it is gated only by the two percentile flags and deliberately bypasses
+    /// <see cref="ISqlDialect.SupportsOrderedAggregates"/>, <see cref="ISqlDialect.SupportsOrderedPercentiles"/>
+    /// and the PostgreSQL floating-point sort rule. The fraction is validated like every other
+    /// ordered-set fraction (constant/captured, finite, <c>[0, 1]</c>); no <c>OVER</c> form is emitted.
+    /// </summary>
+    private static void EmitApproxPercentile(
+        BaseExpressionVisitor visitor,
+        MethodCallExpression node,
+        string name,
+        Func<bool> supported)
+    {
+        if (!supported())
+            throw new NotSupportedException(
+                visitor.Dialect.SqlServerFunctions?.GetUnsupportedReason(name)
+                ?? $"The {name} function is not supported by this provider.");
+
+        var fractionArg = node.Arguments[0];
+        var orderArg = node.Arguments[1];
+
+        if (visitor.IsParamMode)
+        {
+            visitor.Visit(fractionArg);
+            visitor.Visit(orderArg);
+            return;
+        }
+
+        ValidateFraction(fractionArg, name, ProviderLabel(visitor.Dialect));
+
+        visitor.NeedAliasForColumn = true;
+
+        var aggregate = $"{name}({visitor.VisitToString(fractionArg)})";
+        visitor.Builder!.Append(visitor.Dialect.MakeWithinGroup(
+            aggregate, visitor.VisitToString(orderArg), visitor.KeywordCase));
     }
 
     /// <summary>
