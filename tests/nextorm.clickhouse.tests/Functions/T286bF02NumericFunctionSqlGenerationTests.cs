@@ -332,36 +332,55 @@ public class T286bF02NumericFunctionSqlGenerationTests
         sql.Should().Contain("sigmoid(`nd`) as `S`", "the argument stays a quoted column and the alias is preserved");
     }
 
+    // #281 T347 (D2a/D2b): PostgreSQL 17 ships erf and erfc, so PostgresScalarFunctions advertises both
+    // names — the earlier "ClickHouse-only" expectation was written before that expansion and is now
+    // factually wrong for the PostgreSQL half only. A SqlFunctions.ClickHouse.erf/erfc call therefore
+    // renders the PostgreSQL spelling in a PostgreSQL context instead of throwing.
     [Fact]
-    public void PostgresAndSqlServer_ShouldReportEveryNameUnsupportedAndRejectTheCalls()
+    public void Postgres_ShouldSupportTheSharedNamesAndRenderThePostgresSpelling()
     {
-        IScalarFunctions[] others =
-        [
-            PostgresDialect.Instance.ScalarFunctions!,
-            SqlServerDialect.Instance.ScalarFunctions!
-        ];
+        var postgres = PostgresDialect.Instance.ScalarFunctions!;
 
         using (new AssertionScope())
         {
-            foreach (var functions in others)
-            {
-                foreach (var name in MemberNames)
-                    functions.Supports(name).Should().BeFalse("'{0}' is ClickHouse-only", name);
-            }
+            postgres.Supports("erf").Should().BeTrue("PostgreSQL 17 has erf (#281 T347)");
+            postgres.Supports("erfc").Should().BeTrue("PostgreSQL 17 has erfc (#281 T347)");
+
+            foreach (var name in MemberNames.Except(["erf", "erfc"]))
+                postgres.Supports(name).Should().BeFalse("'{0}' is ClickHouse-only", name);
         }
 
-        using var postgres = new PostgresDataContext("Host=localhost", new DataContextBuilder());
-        using var sqlServer = new SqlServerDataContext(
+        using var ctx = new PostgresDataContext("Host=localhost", new DataContextBuilder());
+        var e = ctx.From<IT286bNumericEntity>();
+
+        using (new AssertionScope())
+        {
+            SqlOf(ctx, e.Select(x => SqlFunctions.ClickHouse.erf(x.NullableDouble.GetValueOrDefault())))
+                .Should().Contain("erf(nd)", "the ClickHouse member renders the PostgreSQL erf spelling");
+            SqlOf(ctx, e.Select(x => SqlFunctions.ClickHouse.erfc(x.Double)))
+                .Should().Contain("erfc(d)", "the ClickHouse member renders the PostgreSQL erfc spelling");
+        }
+    }
+
+    [Fact]
+    public void SqlServer_ShouldReportEveryNameUnsupportedAndRejectTheCalls()
+    {
+        var sqlServer = SqlServerDialect.Instance.ScalarFunctions!;
+
+        using (new AssertionScope())
+        {
+            foreach (var name in MemberNames)
+                sqlServer.Supports(name).Should().BeFalse("'{0}' is ClickHouse-only", name);
+        }
+
+        using var ctx = new SqlServerDataContext(
             "Server=localhost;Database=nextorm;User Id=sa;Password=nextorm;TrustServerCertificate=True",
             new DataContextBuilder());
 
         using (new AssertionScope())
         {
             foreach (var name in MemberNames)
-            {
-                AssertRejected(postgres, name);
-                AssertRejected(sqlServer, name);
-            }
+                AssertRejected(ctx, name);
         }
 
         static void AssertRejected(IDataContext ctx, string name)
