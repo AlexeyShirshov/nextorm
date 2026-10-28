@@ -2971,7 +2971,7 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
                 "{\"d\":\"2020-06-01T00:00:00Z\"}", timeZonePath, "{}", false))
             .Select(r => r.Value)
             .ToList();
-        tzPredicate.Should().Equal("true", "the instant precedes 2021-01-01");
+        tzPredicate.Should().Equal(new[] { "true" }, "the instant precedes 2021-01-01");
 
         FluentActions.Invoking(() => _sut.DataProvider
                 .From(() => SqlFunctions.Postgres.jsonb_path_query(
