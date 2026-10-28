@@ -795,7 +795,7 @@ public abstract partial class CommonTestSuite
         counter.Executing.Should().Be(4);
     }
 
-    internal static void CompositeJunctionSlotAndPageRefusal(IDataContext ctx)
+    internal static void CompositeJunctionSlotAndPage(IDataContext ctx)
     {
         var (first, second) = JoinIntoCompositeJunctionFixtures.Seed(ctx);
         var counter = CollectionProjectionLiveCounter(ctx);
@@ -830,6 +830,26 @@ public abstract partial class CommonTestSuite
         pagedRows[0].Children.Should().ContainSingle(
             "the page keeps one of the two surviving junction occurrences of the composite pair");
         pagedRows[0].Children.Select(c => c.Id).Should().Equal([first + 100]);
+
+        // The fixture seeds three junction rows for this parent: the pair twice and one dangling child
+        // foreign key (first + 999). A page of two must be filled by the two surviving occurrences — if
+        // the dangling link still occupied a slot, the second one would be missing and the page short.
+        // (Offset is not part of the slot adapter's supported chain, so the page proves it by width.)
+        var widerPage = ctx.From<JiCompositeJunctionParent>()
+            .Where(p => p.RowId == first)
+            .Select(p => new
+            {
+                p.RowId,
+                Children = p.Children.AsEntityBuilder<JiCompositeJunctionChild>()
+                    .OrderBy(c => c.Id)
+                    .Limit(2)
+                    .ToList(),
+            })
+            .ToList();
+
+        widerPage.Single().Children.Should().HaveCount(2,
+            "the dangling composite link consumes no page slot, so the two surviving occurrences fill the page");
+        widerPage.Single().Children.Select(c => c.Id).Should().Equal([first + 100, first + 100]);
     }
 
     // ================================================================================================
@@ -996,10 +1016,10 @@ public abstract partial class CommonTestSuite
     }
 
     [Fact]
-    public void CollectionProjectionLive_CompositeJunctionSlotAndPageRefusal()
+    public void CollectionProjectionLive_CompositeJunctionSlotAndPage()
     {
         EnsureCollectionProjectionLiveSeeded(_sut);
-        CompositeJunctionSlotAndPageRefusal(_sut.DataProvider);
+        CompositeJunctionSlotAndPage(_sut.DataProvider);
     }
 }
 

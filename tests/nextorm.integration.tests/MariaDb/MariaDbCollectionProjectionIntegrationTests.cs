@@ -31,6 +31,13 @@ public sealed class MariaDbCollectionProjectionIntegrationTests : IDisposable
     private const int BrokenProfile = 9706;
     private const int RepeatedProfile = 9707;
 
+    /// <summary>
+    /// The paging witness, mirroring <c>CommonTestSuite.CollectionProjectionLive.LivePaged</c>: a repeated
+    /// occurrence of tag 9770 (two junction rows), one more tag 9771, and a dangling junction row whose
+    /// child (9799) does not exist. The dangling link must never consume a page slot.
+    /// </summary>
+    private const int Paged = 9708;
+
     private readonly IDataContext _ctx;
 
     public MariaDbCollectionProjectionIntegrationTests()
@@ -393,26 +400,134 @@ public sealed class MariaDbCollectionProjectionIntegrationTests : IDisposable
     }
 
     [Fact]
-    public void CollectionProjectionLive_ManyToManyWithLimit()
+    public void CollectionProjectionLive_ManyToManyWithLimit_Split()
     {
         var counter = Count();
 
         var rows = Parents(_ctx)
-            .Where(p => p.Id == Rich || p.Id == Profile || p.Id == Empty)
+            .Where(p => p.Id == Empty || p.Id == Profile || p.Id == Paged)
             .OrderBy(p => p.Id)
             .Select(p => new
             {
                 p.Id,
-                Tags = p.Tags.AsEntityBuilder<Mdb353Tag>().OrderBy(t => t.Id).Limit(1).ToList(),
+                Tags = p.Tags.AsEntityBuilder<Mdb353Tag>().OrderBy(t => t.Id).Limit(2).ToList(),
             })
             .ToList();
 
-        rows.Select(r => r.Id).Should().Equal(Rich, Empty, Profile);
-        rows[0].Tags.Select(t => t.Id).Should().Equal([9770],
-            "the page splits this parent's surviving occurrences and keeps the first by id");
-        rows[1].Tags.Should().NotBeNull().And.BeEmpty("a parent with no surviving occurrence keeps an empty page");
-        rows[2].Tags.Select(t => t.Id).Should().Equal([9772]);
+        rows.Select(r => r.Id).Should().Equal(Empty, Profile, Paged);
+        rows[0].Tags.Should().NotBeNull().And.BeEmpty("a parent with no surviving occurrence keeps an empty page");
+        rows[1].Tags.Select(t => t.Id).Should().Equal([9772],
+            "a parent with fewer occurrences than the page keeps them all");
+        rows[2].Tags.Should().NotBeNull();
+        rows[2].Tags.Should().HaveCount(2, "the page splits the parent's surviving occurrences");
+        rows[2].Tags.Select(t => t.Id).Should().Equal([9770, 9770],
+            "a repeated junction row occupies its own slot while the dangling link consumes none");
         counter.Executing.Should().Be(3, "split many-to-many: parent + junction + tag statements");
+    }
+
+    [Fact]
+    public void CollectionProjectionLive_ManyToManyWithLimit_Single()
+    {
+        using var single = new MariaDbDataContext(
+            MariaDbContainer.ConnectionString,
+            new DataContextBuilder().UseEagerLoadMode(EagerLoadMode.SingleQuery));
+        RegisterSingle(single);
+        var counter = new JoinIntoQueryCountingInterceptor();
+        ((DataContext)single).AddInterceptor(counter);
+
+        var rows = single.From<Mdb353Parent>()
+            .Where(p => p.Id == Empty || p.Id == Profile || p.Id == Paged)
+            .OrderBy(p => p.Id)
+            .Select(p => new
+            {
+                p.Id,
+                Tags = p.Tags.AsEntityBuilder<Mdb353Tag>().OrderBy(t => t.Id).Limit(2).ToList(),
+            })
+            .ToList();
+
+        rows.Select(r => r.Id).Should().Equal(Empty, Profile, Paged);
+        rows[0].Tags.Should().NotBeNull().And.BeEmpty();
+        rows[1].Tags.Select(t => t.Id).Should().Equal([9772]);
+        rows[2].Tags.Should().HaveCount(2, "single mode pages the same surviving occurrences");
+        rows[2].Tags.Select(t => t.Id).Should().Equal([9770, 9770],
+            "the dangling link is excluded before the page is taken, never instead of a real slot");
+        counter.Executing.Should().Be(1, "single many-to-many: one statement for the whole graph");
+    }
+
+    [Fact]
+    public void CollectionProjectionLive_LoadWithManyToManyPage_Split()
+    {
+        var counter = Count();
+
+        var parents = Parents(_ctx)
+            .Where(p => p.Id == Empty || p.Id == Profile || p.Id == Paged)
+            .LoadWith(p => p.Tags, t => t.From<Mdb353Tag>().OrderBy(x => x.Id).Offset(1).Limit(2))
+            .OrderBy(p => p.Id)
+            .ToList();
+
+        parents.Select(p => p.Id).Should().Equal(Empty, Profile, Paged);
+        parents[0].Tags.Should().BeEmpty();
+        parents[1].Tags.Should().BeEmpty("the only surviving occurrence of this parent is skipped by the offset");
+        parents[2].Tags.Select(t => t.Id).Should().Equal([9770, 9771],
+            "the page crosses the occurrence boundary: one duplicate is skipped and the next tag is kept");
+        counter.Executing.Should().Be(3, "split many-to-many: parent + junction + tag statements");
+    }
+
+    [Fact]
+    public void CollectionProjectionLive_LoadWithManyToManyPage_Single()
+    {
+        using var single = new MariaDbDataContext(
+            MariaDbContainer.ConnectionString,
+            new DataContextBuilder().UseEagerLoadMode(EagerLoadMode.SingleQuery));
+        RegisterSingle(single);
+        var counter = new JoinIntoQueryCountingInterceptor();
+        ((DataContext)single).AddInterceptor(counter);
+
+        var parents = single.From<Mdb353Parent>()
+            .Where(p => p.Id == Empty || p.Id == Profile || p.Id == Paged)
+            .LoadWith(p => p.Tags, t => t.From<Mdb353Tag>().OrderBy(x => x.Id).Offset(1).Limit(2))
+            .OrderBy(p => p.Id)
+            .ToList();
+
+        parents.Select(p => p.Id).Should().Equal(Empty, Profile, Paged);
+        parents[0].Tags.Should().BeEmpty();
+        parents[1].Tags.Should().BeEmpty();
+        parents[2].Tags.Select(t => t.Id).Should().Equal([9770, 9771],
+            "single mode trims the same occurrence-ordered page at stitch");
+        counter.Executing.Should().Be(1, "single many-to-many: one statement for the whole graph");
+    }
+
+    [Fact]
+    public void CollectionProjectionLive_NestedManyToManyWithLimit_Split()
+    {
+        var counter = Count();
+
+        var rows = Parents(_ctx)
+            .Where(p => p.Id == Rich)
+            .Select(p => new
+            {
+                p.Id,
+                Items = p.Items.AsEntityBuilder<Mdb353Item>()
+                    .Where(i => i.Name != "skip")
+                    .OrderBy(i => i.Id)
+                    .Select(i => new
+                    {
+                        i.Id,
+                        Tags = i.Tags.AsEntityBuilder<Mdb353Tag>()
+                            .OrderBy(t => t.Id)
+                            .Limit(1)
+                            .ToList(),
+                    })
+                    .ToList(),
+            })
+            .ToList();
+
+        var items = rows.Single().Items;
+        items.Should().HaveCount(2);
+        items.Single(i => i.Id == 9710).Tags.Select(t => t.Id).Should().Equal([9770],
+            "the nested many-to-many page is never an empty success");
+        items.Single(i => i.Id == 9711).Tags.Select(t => t.Id).Should().Equal([9771]);
+        counter.Executing.Should().Be(4, "split nested many-to-many: parent + items + junction + tags");
     }
 
     [Fact]
@@ -571,6 +686,7 @@ public sealed class MariaDbCollectionProjectionIntegrationTests : IDisposable
             new Mdb353Parent { Id = Profile, Name = "r5" },
             new Mdb353Parent { Id = BrokenProfile, Name = "r6" },
             new Mdb353Parent { Id = RepeatedProfile, Name = "r7" },
+            new Mdb353Parent { Id = Paged, Name = "r8" },
         ]).Insert();
 
         _ctx.CreateInsertBuilder<Mdb353Item>().Values([
@@ -616,6 +732,12 @@ public sealed class MariaDbCollectionProjectionIntegrationTests : IDisposable
             new Mdb353Link { Id = 9744, ParentId = 9710, ChildId = 9771 },
             new Mdb353Link { Id = 9745, ParentId = 9711, ChildId = 9771 },
             new Mdb353Link { Id = 9746, ParentId = 9712, ChildId = 9772 },
+            // Paging witness: a repeated occurrence of 9770, one more tag, and a dangling link whose
+            // child row (9799) does not exist — the last must never occupy a page slot.
+            new Mdb353Link { Id = 9750, ParentId = Paged, ChildId = 9770 },
+            new Mdb353Link { Id = 9751, ParentId = Paged, ChildId = 9770 },
+            new Mdb353Link { Id = 9752, ParentId = Paged, ChildId = 9771 },
+            new Mdb353Link { Id = 9753, ParentId = Paged, ChildId = 9799 },
         ]).Insert();
     }
 

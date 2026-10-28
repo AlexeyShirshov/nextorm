@@ -175,9 +175,9 @@ public sealed class ClickHouseCollectionProjectionIntegrationTests : ProviderTes
     }
 
     [Fact]
-    public void CollectionProjectionLive_CompositeJunctionSlotAndPageRefusal()
+    public void CollectionProjectionLive_CompositeJunctionSlotAndPage()
     {
         CommonTestSuite.EnsureCollectionProjectionLiveSeeded(_sut);
-        CommonTestSuite.CompositeJunctionSlotAndPageRefusal(_sut.DataProvider);
+        CommonTestSuite.CompositeJunctionSlotAndPage(_sut.DataProvider);
     }
 }
