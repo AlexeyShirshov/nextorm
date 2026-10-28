@@ -1684,6 +1684,74 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void TableFunction_UnnestTwoArrays_ShouldRenameBothColumns()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var command = Prepare(ctx, ctx
+            .From(() => SqlFunctions.Postgres.unnest(
+                SqlFunctions.Parameter<long[]>(0), SqlFunctions.Parameter<string[]>(1)))
+            .Select(r => new { r.Value1, r.Value2 }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Be("select value1, value2\n from (select value1, value2\n from rows from (unnest(@norm_p0), unnest(@norm_p1)) as u(value1, value2)) as \"t1\"");
+    }
+
+    [Fact]
+    public void TableFunction_UnnestThreeArrays_ShouldRenameAllColumns()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var command = Prepare(ctx, ctx
+            .From(() => SqlFunctions.Postgres.unnest(
+                SqlFunctions.Parameter<long[]>(0), SqlFunctions.Parameter<string[]>(1), SqlFunctions.Parameter<int[]>(2)))
+            .Select(r => new { r.Value1, r.Value2, r.Value3 }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Be("select value1, value2, value3\n from (select value1, value2, value3\n from rows from (unnest(@norm_p0), unnest(@norm_p1), unnest(@norm_p2)) as u(value1, value2, value3)) as \"t1\"");
+    }
+
+    [Fact]
+    public void TableFunction_UnnestWithOrdinality_ShouldProjectValueAndOrdinality()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var command = Prepare(ctx, ctx
+            .From(() => SqlFunctions.Postgres.unnest_with_ordinality(SqlFunctions.Parameter<long[]>(0)))
+            .Select(r => new { r.Value, r.Ordinality }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Be("select value, ordinality\n from (select value, ordinality\n from rows from (unnest(@norm_p0)) with ordinality as u(value, ordinality)) as \"t1\"");
+    }
+
+    [Fact]
+    public void TableFunction_UnnestTwoArraysWithOrdinality_ShouldProjectBothColumnsAndOrdinality()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var command = Prepare(ctx, ctx
+            .From(() => SqlFunctions.Postgres.unnest_with_ordinality(
+                SqlFunctions.Parameter<long[]>(0), SqlFunctions.Parameter<string[]>(1)))
+            .Select(r => new { r.Value1, r.Value2, r.Ordinality }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Be("select value1, value2, ordinality\n from (select value1, value2, ordinality\n from rows from (unnest(@norm_p0), unnest(@norm_p1)) with ordinality as u(value1, value2, ordinality)) as \"t1\"");
+    }
+
+    [Fact]
+    public void TableFunction_GenerateSubscripts_ShouldEmitCall()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var command = Prepare(ctx, ctx
+            .From(() => SqlFunctions.Postgres.generate_subscripts(SqlFunctions.Parameter<long[]>(0), 1))
+            .Select(r => new { r.Value }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Be("select generate_subscripts as \"Value\"\n from (select generate_subscripts\n from generate_subscripts(@norm_p0, 1)) as \"t1\"");
+    }
+
+    [Fact]
     public void TableFunction_RegexpMatches_ShouldEmitCall()
     {
         using var ctx = PostgresTestContext.Create();
@@ -3680,6 +3748,20 @@ public class SqlGenerationTests
 
         sql.Should().Contain("array_shuffle(@norm_p0)");
         sql.Should().Contain("array_sample(@norm_p1, 3)");
+    }
+
+    [Fact]
+    public void TrimArray_ShouldEmit()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            T = SqlFunctions.Postgres.trim_array(SqlFunctions.Parameter<long[]>(0), 2)
+        }));
+
+        sql.Should().Contain("trim_array(@norm_p0, 2)");
     }
 
     [Fact]

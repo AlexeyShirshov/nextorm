@@ -350,6 +350,9 @@ public class PostgresDialect : SqlDialectBase
             or "jsonb_each" or "jsonb_each_text" or "jsonb_object_keys"
             or "jsonb_path_query" or "ts_stat"
             or "jsonb_to_record" or "jsonb_to_recordset"
+            // The #281 array sources of PG17: the multi-array and WITH ORDINALITY forms of unnest (three
+            // and two admitted arities, rendered as ROWS FROM) and the single-column generate_subscripts.
+            or "unnest_with_ordinality" or "generate_subscripts"
             // The #281 JSON readers of PG17: the two array readers, the two object readers, the
             // time-zone-aware JSONPath query and the two <c>record</c> readers with a caller-declared
             // column definition list. The non-<c>b</c> readers take the payload as JSON text and are
@@ -393,7 +396,7 @@ public class PostgresDialect : SqlDialectBase
     public override string WrapTableFunction(string name, string call) =>
         name is "generate_series" or "unnest" or "regexp_matches" or "regexp_split_to_table" or "string_to_table"
             or "jsonb_object_keys" or "jsonb_path_query"
-            or "pg_listening_channels"
+            or "pg_listening_channels" or "generate_subscripts"
             ? $"(select {name}\n from {call})"
             : call;
 
@@ -409,6 +412,26 @@ public class PostgresDialect : SqlDialectBase
     /// </summary>
     public override string WrapTableFunction(string name, string call, IReadOnlyList<string> arguments) => name switch
     {
+        // The multi-array and WITH ORDINALITY forms of unnest are FROM-clause grammar: the server names
+        // every output column `unnest` (measured: two such columns, ambiguous by name), so the rows are
+        // built with ROWS FROM and the columns renamed through its alias column list, then restored in a
+        // one-column-per-array subquery. ROWS FROM keeps PostgreSQL's NULL padding of the shorter arrays.
+        // The arity is fixed by the overloads (one, two and three arrays); four or more are refused before
+        // rendering, so this arm never sees them.
+        "unnest" when arguments.Count >= 2 =>
+            "(select " + string.Join(", ", Enumerable.Range(1, arguments.Count).Select(i => $"value{i}"))
+            + "\n from rows from (" + string.Join(", ", arguments.Select(a => $"unnest({a})"))
+            + ") as u("
+            + string.Join(", ", Enumerable.Range(1, arguments.Count).Select(i => $"value{i}")) + "))",
+        "unnest_with_ordinality" when arguments.Count == 1 =>
+            "(select value, ordinality\n from rows from (unnest(" + arguments[0]
+            + ")) with ordinality as u(value, ordinality))",
+        "unnest_with_ordinality" =>
+            "(select " + string.Join(", ", Enumerable.Range(1, arguments.Count).Select(i => $"value{i}"))
+            + ", ordinality\n from rows from (" + string.Join(", ", arguments.Select(a => $"unnest({a})"))
+            + ") with ordinality as u("
+            + string.Join(", ", Enumerable.Range(1, arguments.Count).Select(i => $"value{i}"))
+            + ", ordinality))",
         "json_array_elements" or "json_array_elements_text" or "json_each" or "json_each_text"
             or "json_to_record" or "json_to_recordset" =>
             // The non-b JSON readers take a json value; a text parameter does not resolve the overload

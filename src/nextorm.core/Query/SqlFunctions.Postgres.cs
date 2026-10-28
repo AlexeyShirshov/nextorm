@@ -103,6 +103,14 @@ namespace NextORM.Core;
         /// <summary>Returns <paramref name="n"/> randomly selected elements of <paramref name="array"/> (<c>array_sample</c>, PostgreSQL 16+).</summary>
         public T[] array_sample<T>(T[] array, int n) => default!;
 
+        /// <summary>
+        /// Removes the last <paramref name="n"/> elements of a one-dimensional <paramref name="array"/>
+        /// (<c>trim_array</c>), keeping the element type. PostgreSQL raises an error when
+        /// <paramref name="n"/> is greater than the array length, and only one-dimensional arrays are
+        /// accepted; a SQL-NULL array stays NULL.
+        /// </summary>
+        public T[] trim_array<T>(T[] array, int? n) => default!;
+
         /// <summary><c>array &lt;@ other</c>: true when every element of <paramref name="array"/> is contained in <paramref name="other"/>.</summary>
         public bool array_contained_by<T>(T[] array, T[] other) => default!;
 
@@ -1805,6 +1813,92 @@ namespace NextORM.Core;
         /// array is normally supplied through <c>SqlFunctions.Parameter&lt;T[]&gt;(idx)</c>.
         /// </summary>
         public TvfEntityBuilder<SqlFunctions.IUnnestRow<T>> unnest<T>(T[] array) => new("unnest");
+
+        /// <summary>
+        /// <c>unnest(array1, array2)</c> as a FROM source: one row per position of the longest array, with
+        /// <see cref="SqlFunctions.IUnnestMultiRow{T1,T2}.Value1"/> and
+        /// <see cref="SqlFunctions.IUnnestMultiRow{T1,T2}.Value2"/> taking the elements of the two arrays and
+        /// the shorter array padded with <see langword="null"/>. The multi-array form is FROM-clause
+        /// grammar, not a <c>pg_proc</c> function: PostgreSQL rejects a column definition list on it and
+        /// points at <c>ROWS FROM</c>, which the provider renders. The admitted arities are one, two and
+        /// three arrays — there is no variadic claim.
+        /// </summary>
+        /// <typeparam name="T1">The element type of the first array.</typeparam>
+        /// <typeparam name="T2">The element type of the second array.</typeparam>
+        /// <param name="first">The first array.</param>
+        /// <param name="second">The second array; the shorter array is padded with <see langword="null"/>.</param>
+        public TvfEntityBuilder<SqlFunctions.IUnnestMultiRow<T1, T2>> unnest<T1, T2>(T1[] first, T2[] second) => new("unnest");
+
+        /// <summary>
+        /// <c>unnest(array1, array2, array3)</c> as a FROM source: the three admitted array positions, all
+        /// padded with <see langword="null"/> to the longest array (see
+        /// <see cref="SqlFunctions.IUnnestMultiRow{T1,T2,T3}"/>).
+        /// </summary>
+        /// <typeparam name="T1">The element type of the first array.</typeparam>
+        /// <typeparam name="T2">The element type of the second array.</typeparam>
+        /// <typeparam name="T3">The element type of the third array.</typeparam>
+        /// <param name="first">The first array.</param>
+        /// <param name="second">The second array.</param>
+        /// <param name="third">The third array.</param>
+        public TvfEntityBuilder<SqlFunctions.IUnnestMultiRow<T1, T2, T3>> unnest<T1, T2, T3>(T1[] first, T2[] second, T3[] third) => new("unnest");
+
+        /// <summary>
+        /// <c>unnest(four or more arrays)</c> is refused: PostgreSQL's multi-array <c>unnest</c> is
+        /// FROM-clause grammar with no variadic arity, and this library admits exactly one, two and three
+        /// arrays as typed overloads. Claiming an arbitrary arity through one overload would misrepresent
+        /// the grammar, so the call fails while the source is composed and no SQL is emitted.
+        /// </summary>
+        /// <typeparam name="TRow">The row shape the caller hoped to project; never produced.</typeparam>
+        /// <param name="first">The first array.</param>
+        /// <param name="second">The second array.</param>
+        /// <param name="third">The third array.</param>
+        /// <param name="fourth">The fourth array, which exceeds the admitted arities.</param>
+        /// <returns>Never returns; the call is refused when the source is composed.</returns>
+        public TvfEntityBuilder<TRow> unnest<TRow>(object? first, object? second, object? third, object? fourth) =>
+            throw new NotSupportedException(
+                "The unnest function is refused for four or more arrays: multi-array unnest is FROM-clause " +
+                "grammar with no variadic arity, and this library admits exactly one, two and three arrays " +
+                "as typed overloads.");
+
+        /// <summary>
+        /// <c>unnest(array) WITH ORDINALITY</c> as a FROM source: the element and its one-based position
+        /// (see <see cref="SqlFunctions.IUnnestOrdinalityRow{T}"/>). <c>WITH ORDINALITY</c> is FROM-clause
+        /// grammar, and the ordinality column is <c>bigint</c>, so it is <see cref="long"/> here.
+        /// </summary>
+        /// <typeparam name="T">The element type of the array.</typeparam>
+        /// <param name="array">The array to expand.</param>
+        public TvfEntityBuilder<SqlFunctions.IUnnestOrdinalityRow<T>> unnest_with_ordinality<T>(T[] array) => new("unnest_with_ordinality");
+
+        /// <summary>
+        /// <c>unnest(array1, array2) WITH ORDINALITY</c> as a FROM source: both admitted array positions
+        /// plus the shared one-based position; the shorter array is padded with <see langword="null"/> (see
+        /// <see cref="SqlFunctions.IUnnestOrdinalityMultiRow{T1,T2}"/>).
+        /// </summary>
+        /// <typeparam name="T1">The element type of the first array.</typeparam>
+        /// <typeparam name="T2">The element type of the second array.</typeparam>
+        /// <param name="first">The first array.</param>
+        /// <param name="second">The second array; the shorter array is padded with <see langword="null"/>.</param>
+        public TvfEntityBuilder<SqlFunctions.IUnnestOrdinalityMultiRow<T1, T2>> unnest_with_ordinality<T1, T2>(T1[] first, T2[] second) => new("unnest_with_ordinality");
+
+        /// <summary>
+        /// <c>generate_subscripts(array, dimension)</c> as a FROM source: one row per valid subscript of
+        /// the requested dimension (see <see cref="SqlFunctions.IGenerateSubscriptsRow"/>). PostgreSQL
+        /// numbers dimensions from one, and an empty or SQL-NULL array yields no rows.
+        /// </summary>
+        /// <typeparam name="T">The element type of the array.</typeparam>
+        /// <param name="array">The array whose subscripts are generated.</param>
+        /// <param name="dimension">The one-based array dimension.</param>
+        public TvfEntityBuilder<SqlFunctions.IGenerateSubscriptsRow> generate_subscripts<T>(T[] array, int? dimension) => new("generate_subscripts");
+
+        /// <summary>
+        /// <c>generate_subscripts(array, dimension, reverse)</c> as a FROM source: the same subscripts in
+        /// descending order when <paramref name="reverse"/> is <see langword="true"/>.
+        /// </summary>
+        /// <typeparam name="T">The element type of the array.</typeparam>
+        /// <param name="array">The array whose subscripts are generated.</param>
+        /// <param name="dimension">The one-based array dimension.</param>
+        /// <param name="reverse">Whether to generate the subscripts in descending order; <see langword="null"/> is not reversed.</param>
+        public TvfEntityBuilder<SqlFunctions.IGenerateSubscriptsRow> generate_subscripts<T>(T[] array, int? dimension, bool? reverse) => new("generate_subscripts");
 
         /// <summary>
         /// <c>regexp_matches(source, pattern)</c> as a FROM source: one row per match, the

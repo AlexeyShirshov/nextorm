@@ -1349,6 +1349,40 @@ public class InMemoryTests
             act.Should().Throw<NotSupportedException>()
                 .WithMessage("*able-valued function sources are not supported*", "{0} is a table-valued function", name);
     }
+
+    /// <summary>
+    /// The #281 (#347 D3b) array surface has no in-memory equivalent: the multi-array and
+    /// <c>WITH ORDINALITY</c> <c>unnest</c> forms and <c>generate_subscripts</c> are table-valued sources
+    /// the in-memory provider refuses before compiling them, <c>trim_array</c> is a SQL-only scalar, and
+    /// the four-or-more-array arity is refused with its own reason while the source is composed.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void PostgresArrayFamily_ShouldThrow()
+    {
+        var sources = new (string Name, Action Act)[]
+        {
+            ("unnest", () => _sut.DataProvider.From(() => SqlFunctions.Postgres.unnest(new long[] { 1 }, new[] { "a" })).Select(r => r.Value1).ToList()),
+            ("unnest", () => _sut.DataProvider.From(() => SqlFunctions.Postgres.unnest(new long[] { 1 }, new[] { "a" }, new[] { 2 })).Select(r => r.Value1).ToList()),
+            ("unnest_with_ordinality", () => _sut.DataProvider.From(() => SqlFunctions.Postgres.unnest_with_ordinality(new long[] { 1 })).Select(r => r.Value).ToList()),
+            ("unnest_with_ordinality", () => _sut.DataProvider.From(() => SqlFunctions.Postgres.unnest_with_ordinality(new long[] { 1 }, new[] { "a" })).Select(r => r.Value1).ToList()),
+            ("generate_subscripts", () => _sut.DataProvider.From(() => SqlFunctions.Postgres.generate_subscripts(new long[] { 1 }, 1)).Select(r => r.Value).ToList()),
+            ("generate_subscripts", () => _sut.DataProvider.From(() => SqlFunctions.Postgres.generate_subscripts(new long[] { 1 }, 1, true)).Select(r => r.Value).ToList()),
+        };
+
+        foreach (var (name, act) in sources)
+            act.Should().Throw<NotSupportedException>()
+                .WithMessage("*able-valued function sources are not supported*", "{0} is a table-valued function", name);
+
+        FluentActions.Invoking(() => _sut.SimpleEntity
+                .Select(it => new { V = SqlFunctions.Postgres.trim_array(new long[] { 1, 2 }, 1) })
+                .ToList())
+            .Should().Throw<NotSupportedException>().WithMessage("*trim_array*not supported*");
+
+        FluentActions.Invoking(() => _sut.DataProvider
+                .From(() => SqlFunctions.Postgres.unnest<object>(new long[] { 1 }, new long[] { 2 }, new long[] { 3 }, new long[] { 4 }))
+                .Select(r => r))
+            .Should().Throw<NotSupportedException>().WithMessage("*unnest function is refused*");    }
 }
 
 // D178 T12 fixtures: an enum member for the in-memory fail-closed checks.

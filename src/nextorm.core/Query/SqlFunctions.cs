@@ -124,6 +124,90 @@ public static partial class SqlFunctions
     }
 
     /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.unnest{T1,T2}(T1[], T2[])"/>: one column per
+    /// array, named <c>value1</c>/<c>value2</c> after the position of the source array. Unequal array
+    /// lengths are NULL-padded by the server to the longest array.
+    /// </summary>
+    /// <typeparam name="T1">The element type of the first array.</typeparam>
+    /// <typeparam name="T2">The element type of the second array.</typeparam>
+    public interface IUnnestMultiRow<T1, T2>
+    {
+        /// <summary>The element from the first array (NULL when that array is shorter).</summary>
+        [Column("value1")]
+        T1 Value1 { get; set; }
+        /// <summary>The element from the second array (NULL when that array is shorter).</summary>
+        [Column("value2")]
+        T2 Value2 { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.unnest{T1,T2,T3}(T1[], T2[], T3[])"/>: the
+    /// three admitted array positions, NULL-padded to the longest array.
+    /// </summary>
+    /// <typeparam name="T1">The element type of the first array.</typeparam>
+    /// <typeparam name="T2">The element type of the second array.</typeparam>
+    /// <typeparam name="T3">The element type of the third array.</typeparam>
+    public interface IUnnestMultiRow<T1, T2, T3>
+    {
+        /// <summary>The element from the first array (NULL when that array is shorter).</summary>
+        [Column("value1")]
+        T1 Value1 { get; set; }
+        /// <summary>The element from the second array (NULL when that array is shorter).</summary>
+        [Column("value2")]
+        T2 Value2 { get; set; }
+        /// <summary>The element from the third array (NULL when that array is shorter).</summary>
+        [Column("value3")]
+        T3 Value3 { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.unnest_with_ordinality{T}(T[])"/>: the element
+    /// and its one-based position. PostgreSQL types the ordinality column as <c>bigint</c>, so it is
+    /// <see cref="long"/> here.
+    /// </summary>
+    /// <typeparam name="T">The element type of the array.</typeparam>
+    public interface IUnnestOrdinalityRow<T>
+    {
+        /// <summary>The array element.</summary>
+        [Column("value")]
+        T Value { get; set; }
+        /// <summary>The one-based position of the element (<c>bigint</c>).</summary>
+        [Column("ordinality")]
+        long Ordinality { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.unnest_with_ordinality{T1,T2}(T1[], T2[])"/>:
+    /// one column per admitted array plus the shared one-based position (<c>bigint</c>, so
+    /// <see cref="long"/>). Unequal arrays are NULL-padded to the longest.
+    /// </summary>
+    /// <typeparam name="T1">The element type of the first array.</typeparam>
+    /// <typeparam name="T2">The element type of the second array.</typeparam>
+    public interface IUnnestOrdinalityMultiRow<T1, T2>
+    {
+        /// <summary>The element from the first array (NULL when that array is shorter).</summary>
+        [Column("value1")]
+        T1 Value1 { get; set; }
+        /// <summary>The element from the second array (NULL when that array is shorter).</summary>
+        [Column("value2")]
+        T2 Value2 { get; set; }
+        /// <summary>The one-based position of the row (<c>bigint</c>).</summary>
+        [Column("ordinality")]
+        long Ordinality { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.generate_subscripts{T}(T[], int?)"/>: the single
+    /// <c>generate_subscripts</c> column holds one subscript of the requested dimension.
+    /// </summary>
+    public interface IGenerateSubscriptsRow
+    {
+        /// <summary>One valid subscript of the requested array dimension.</summary>
+        [Column("generate_subscripts")]
+        int Value { get; set; }
+    }
+
+    /// <summary>
     /// Row shape produced by <see cref="PostgresFunctions.regexp_matches(string?, string?)"/>: the single
     /// <c>regexp_matches</c> column is a <c>text[]</c> holding the captured groups (the whole match when
     /// there are no groups). PostgreSQL returns <c>setof text[]</c>.

@@ -3053,6 +3053,116 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
         string? B { get; set; }
     }
 
+    /// <summary>
+    /// The #281 (#347 D3b) array sources and scalar against the live server: <c>trim_array</c> keeps the
+    /// element type and the SQL-NULL/empty-array behaviour, <c>generate_subscripts</c> yields the one-based
+    /// subscripts of a dimension (and nothing for an empty or NULL array), and the multi-array /
+    /// <c>WITH ORDINALITY</c> <c>unnest</c> forms expose one column per admitted array with NULL padding of
+    /// the shorter arrays and a <c>bigint</c> ordinality read back as <see cref="long"/>. The four-array
+    /// arity is refused at preparation while the three-array sibling still renders and executes.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void ArrayTrimSubscriptsAndUnnestForms_ShouldExposeValuesAndClrTypes()
+    {
+        var trimmed = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Two = SqlFunctions.Postgres.trim_array(new long[] { 1, 2, 3, 4 }, 2),
+                All = SqlFunctions.Postgres.trim_array(new long[] { 1, 2 }, 2),
+                None = SqlFunctions.Postgres.trim_array(new long[] { 1, 2 }, 0),
+                Text = SqlFunctions.Postgres.trim_array(new[] { "a", "b", "c" }, 1),
+            })
+            .First();
+
+        trimmed.Two.Should().Equal(1L, 2L);
+        trimmed.Two![0].GetType().Should().Be(typeof(long));
+        trimmed.All.Should().BeEmpty("trim_array removes the last n elements, here both of them");
+        trimmed.None.Should().Equal(1L, 2L);
+        // A SQL-NULL array cannot be produced through the public API: an inline null literal (or a null
+        // parameter value) reaches the polymorphic anyarray argument untyped (42804), and the array
+        // translator evaluates a nested array-typed call client-side. The NULL behaviour itself is
+        // measured live in the D3b probe (`19-d3b-probe.log`, section B: `null::int[]` -> NULL,
+        // `pg_typeof` still integer[]).
+        trimmed.Text.Should().Equal("a", "b");
+        trimmed.Text![0].GetType().Should().Be(typeof(string));
+
+        // generate_subscripts: the one-based subscripts of the requested dimension. The array is a typed
+        // bigint[] parameter — the documented pattern for an array source argument.
+        var arrayParam = SqlFunctions.Parameter<long[]>(0);
+
+        var subscripts = _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.generate_subscripts(arrayParam, 1))
+            .Select(r => r.Value)
+            .ToList(new long[] { 10, 20, 30 });
+        subscripts.Should().Equal(1, 2, 3);
+        subscripts[0].GetType().Should().Be(typeof(int));
+
+        _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.generate_subscripts(arrayParam, 1, true))
+            .Select(r => r.Value)
+            .ToList(new long[] { 10, 20, 30 })
+            .Should().Equal([3, 2, 1], "reverse generates the subscripts in descending order");
+        _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.generate_subscripts(arrayParam, 1))
+            .Select(r => r.Value)
+            .ToList(Array.Empty<long>())
+            .Should().BeEmpty("an empty array has no subscripts");
+
+        // unnest(array, array): one column per array, the shorter array NULL-padded.
+        var firstArray = SqlFunctions.Parameter<long[]>(0);
+        var secondArray = SqlFunctions.Parameter<string?[]>(1);
+        var pairs = _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.unnest(firstArray, secondArray))
+            .Select(r => new { r.Value1, r.Value2 })
+            .ToList(new long[] { 1, 2 }, new string?[] { "a" });
+        pairs.Select(p => (p.Value1, p.Value2)).Should().Equal((1L, "a"), (2L, (string?)null));
+        pairs[0].Value1.GetType().Should().Be(typeof(long));
+        pairs[0].Value2!.GetType().Should().Be(typeof(string));
+
+        var thirdArray = SqlFunctions.Parameter<int?[]>(2);
+        var triples = _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.unnest(firstArray, secondArray, thirdArray))
+            .Select(r => new { r.Value1, r.Value2, r.Value3 })
+            .ToList(new long[] { 1, 2, 3 }, new string?[] { "a" }, new int?[] { 10 });
+        triples.Select(t => (t.Value1, t.Value2, t.Value3)).Should().Equal(
+            (1L, "a", (int?)10),
+            (2L, (string?)null, (int?)null),
+            (3L, (string?)null, (int?)null));
+        triples[0].Value3!.Value.GetType().Should().Be(typeof(int));
+
+        _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.unnest(firstArray, secondArray))
+            .Select(r => r.Value1)
+            .ToList(Array.Empty<long>(), Array.Empty<string>())
+            .Should().BeEmpty("two empty arrays produce no rows");
+
+        // unnest(array) WITH ORDINALITY: the ordinality column is bigint, read back as long.
+        var ordinal = _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.unnest_with_ordinality(arrayParam))
+            .Select(r => new { r.Value, r.Ordinality })
+            .ToList(new long[] { 10, 20 });
+        ordinal.Select(o => (o.Value, o.Ordinality)).Should().Equal((10L, 1L), (20L, 2L));
+        ordinal[0].Ordinality.GetType().Should().Be(typeof(long));
+
+        var ordinalPairs = _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.unnest_with_ordinality(firstArray, secondArray))
+            .Select(r => new { r.Value1, r.Value2, r.Ordinality })
+            .ToList(new long[] { 1, 2 }, new string?[] { "a" });
+        ordinalPairs.Select(o => (o.Value1, o.Value2, o.Ordinality)).Should().Equal(
+            (1L, "a", 1L),
+            (2L, (string?)null, 2L));
+        ordinalPairs[1].Ordinality.GetType().Should().Be(typeof(long));
+
+        // The four-array arity is refused while the source is composed; nothing is sent to the server and
+        // the three-array form above is the positive control that the sibling arity executes.
+        FluentActions.Invoking(() => _sut.DataProvider
+                .From(() => SqlFunctions.Postgres.unnest<object>(
+                    new long[] { 1 }, new long[] { 2 }, new long[] { 3 }, new long[] { 4 }))
+                .Select(r => r).ToList())
+            .Should().Throw<NotSupportedException>().WithMessage("*unnest function is refused*");
+    }
+
     private static void Execute(IDataContext ctx, string sql)
     {
         ((DataContext)ctx).EnsureConnectionOpen();

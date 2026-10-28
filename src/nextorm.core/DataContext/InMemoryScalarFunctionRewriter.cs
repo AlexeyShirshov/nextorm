@@ -199,6 +199,7 @@ internal sealed class InMemoryScalarFunctionRewriter : ExpressionVisitor
         nameof(PostgresFunctions.get_bit), nameof(PostgresFunctions.set_bit),
         nameof(PostgresFunctions.get_byte), nameof(PostgresFunctions.set_byte),
         nameof(PostgresFunctions.bit_count), nameof(PostgresFunctions.crc32), nameof(PostgresFunctions.crc32c),
+        nameof(PostgresFunctions.trim_array),
         nameof(PostgresFunctions.current_schemas), nameof(PostgresFunctions.pg_postmaster_start_time),
         nameof(PostgresFunctions.pg_current_logfile), nameof(PostgresFunctions.pg_conf_load_time),
         nameof(PostgresFunctions.pg_jit_available), nameof(PostgresFunctions.pg_my_temp_schema),
