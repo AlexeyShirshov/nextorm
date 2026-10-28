@@ -403,4 +403,28 @@ public class PostgresFunctionsRejectionTests
         foreach (var (name, act) in cases)
             act.Should().Throw<NotSupportedException>().WithMessage($"*{name}*not supported*");
     }
+
+    /// <summary>
+    /// The PostgreSQL system-information table-valued functions of #281 (#347 D2c, block E) are
+    /// PostgreSQL-only query sources: this provider refuses each name during preparation with a message
+    /// naming it, instead of rendering PostgreSQL SQL.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void SystemInfoTvfControlAndKeywordFamily_ShouldThrowBecauseNotSupported()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        var cases = new (string Name, Action Act)[]
+        {
+            ("pg_control_system", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_control_system()).Select(r => r.PgControlVersion))),
+            ("pg_control_init", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_control_init()).Select(r => r.MaxDataAlignment))),
+            ("pg_control_recovery", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_control_recovery()).Select(r => r.MinRecoveryEndLsn))),
+            ("pg_control_checkpoint", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_control_checkpoint()).Select(r => r.CheckpointLsn))),
+            ("pg_get_keywords", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_get_keywords()).Select(r => r.Word))),
+        };
+
+        foreach (var (name, act) in cases)
+            act.Should().Throw<NotSupportedException>().WithMessage($"*{name}*not supported*");
+    }
 }

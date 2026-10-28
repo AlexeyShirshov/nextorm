@@ -795,4 +795,61 @@ public class CrossProviderScalarSqlGenerationTests
         SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.erf(0.5) }))
             .Should().Contain("erf(0.5)");
     }
+
+    /// <summary>
+    /// The control-file and keyword readers of #281 as FROM sources. Three render shapes are asserted:
+    /// a bare call whose columns all map (<c>pg_control_system</c>, <c>pg_control_init</c>), a
+    /// projection that casts only the unreadable column types (<c>pg_lsn</c>, <c>oid</c>, the internal
+    /// <c>"char"</c>) and the column names the row interfaces map. The live shape is asserted in
+    /// <c>PostgresFunctionsTests.SystemInfoControlAndKeywordReaders_ShouldExposeRowsAndClrTypes</c>.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void PostgreSQLSystemInfoControlAndKeywordReaders_ShouldEmitCallAndProjection()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        foreach (var name in new[]
+        {
+            "pg_control_system", "pg_control_init", "pg_control_recovery", "pg_control_checkpoint",
+            "pg_get_keywords"
+        })
+        {
+            PostgresDialect.Instance.SupportsTableFunction(name).Should().BeTrue($"'{name}' is delivered on PostgreSQL");
+        }
+
+        var system = SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_control_system())
+            .Select(r => new { r.PgControlVersion, r.CatalogVersionNo, r.PgControlLastModified }));
+        // Every column of the record maps, so the call is emitted unchanged (no projection wrapper).
+        system.Should().Contain("from pg_control_system() as \"t1\"");
+        system.Should().Contain("select pg_control_version as \"PgControlVersion\", catalog_version_no as \"CatalogVersionNo\"");
+
+        var init = SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_control_init())
+            .Select(r => new { r.MaxDataAlignment, r.Float8PassByValue, r.DataPageChecksumVersion }));
+        init.Should().Contain("from pg_control_init() as \"t1\"");
+        init.Should().Contain("select max_data_alignment as \"MaxDataAlignment\", float8_pass_by_value as \"Float8PassByValue\"");
+
+        var recovery = SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_control_recovery())
+            .Select(r => new { r.MinRecoveryEndLsn, r.BackupEndLsn, r.EndOfBackupRecordRequired }));
+        recovery.Should().Contain(
+            "from (select min_recovery_end_lsn::text as min_recovery_end_lsn, min_recovery_end_timeline,"
+            + " backup_start_lsn::text as backup_start_lsn, backup_end_lsn::text as backup_end_lsn,"
+            + " end_of_backup_record_required\n from pg_control_recovery()) as \"t1\"");
+        recovery.Should().Contain("select min_recovery_end_lsn as \"MinRecoveryEndLsn\"");
+
+        var checkpoint = SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_control_checkpoint())
+            .Select(r => new { r.CheckpointLsn, r.NextOid, r.OldestXid, r.CheckpointTime }));
+        checkpoint.Should().Contain("from (select checkpoint_lsn::text as checkpoint_lsn");
+        checkpoint.Should().Contain("next_oid::text as next_oid");
+        checkpoint.Should().Contain("oldest_xid_dbid::text as oldest_xid_dbid");
+        checkpoint.Should().Contain("oldest_multi_dbid::text as oldest_multi_dbid");
+        checkpoint.Should().Contain("newest_commit_ts_xid, checkpoint_time\n from pg_control_checkpoint()) as \"t1\"");
+        checkpoint.Should().Contain("select checkpoint_lsn as \"CheckpointLsn\", next_oid as \"NextOid\", oldest_xid as \"OldestXid\"");
+
+        var keywords = SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_get_keywords())
+            .Select(r => new { r.Word, r.CatCode, r.BareLabel }));
+        keywords.Should().Contain(
+            "from (select word, catcode::text as catcode, barelabel, catdesc, baredesc\n from pg_get_keywords()) as \"t1\"");
+        keywords.Should().Contain("select word, catcode, barelabel");
+    }
 }

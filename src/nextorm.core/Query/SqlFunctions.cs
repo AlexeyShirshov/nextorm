@@ -224,6 +224,179 @@ public static partial class SqlFunctions
     }
 
     /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.pg_control_system()"/>: the one
+    /// <c>pg_control_system</c> record (control-file version, catalog version, the cluster's system
+    /// identifier and the control file's modification time).
+    /// </summary>
+    public interface IPgControlSystemRow
+    {
+        /// <summary>The <c>pg_control</c> format version (1700 on PostgreSQL 17).</summary>
+        [Column("pg_control_version")]
+        int? PgControlVersion { get; set; }
+        /// <summary>The catalog version number of the running server.</summary>
+        [Column("catalog_version_no")]
+        int? CatalogVersionNo { get; set; }
+        /// <summary>The cluster-wide system identifier from <c>pg_control</c>.</summary>
+        [Column("system_identifier")]
+        long? SystemIdentifier { get; set; }
+        /// <summary>The time the control file was last written.</summary>
+        [Column("pg_control_last_modified")]
+        DateTime? PgControlLastModified { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.pg_control_init()"/>: the compile-time and
+    /// <c>pg_control</c> constants of the running server (alignment, block sizes, identifier limits).
+    /// </summary>
+    public interface IPgControlInitRow
+    {
+        /// <summary>The maximum alignment the server guarantees.</summary>
+        [Column("max_data_alignment")]
+        int? MaxDataAlignment { get; set; }
+        /// <summary>The database block size (<c>BLCKSZ</c>).</summary>
+        [Column("database_block_size")]
+        int? DatabaseBlockSize { get; set; }
+        /// <summary>The number of blocks per segment file.</summary>
+        [Column("blocks_per_segment")]
+        int? BlocksPerSegment { get; set; }
+        /// <summary>The WAL block size (<c>XLOG_BLCKSZ</c>).</summary>
+        [Column("wal_block_size")]
+        int? WalBlockSize { get; set; }
+        /// <summary>The size of one WAL segment file, in bytes.</summary>
+        [Column("bytes_per_wal_segment")]
+        int? BytesPerWalSegment { get; set; }
+        /// <summary>The maximum length of an identifier, in bytes.</summary>
+        [Column("max_identifier_length")]
+        int? MaxIdentifierLength { get; set; }
+        /// <summary>The maximum number of columns in an index.</summary>
+        [Column("max_index_columns")]
+        int? MaxIndexColumns { get; set; }
+        /// <summary>The maximum size of a <c>TOAST</c>ed chunk, in bytes.</summary>
+        [Column("max_toast_chunk_size")]
+        int? MaxToastChunkSize { get; set; }
+        /// <summary>The chunk size used for large objects, in bytes.</summary>
+        [Column("large_object_chunk_size")]
+        int? LargeObjectChunkSize { get; set; }
+        /// <summary>Whether <c>float8</c> is passed by value on this build.</summary>
+        [Column("float8_pass_by_value")]
+        bool? Float8PassByValue { get; set; }
+        /// <summary>The data page checksum version the cluster was initialised with.</summary>
+        [Column("data_page_checksum_version")]
+        int? DataPageChecksumVersion { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.pg_control_recovery()"/>: the recovery
+    /// state recorded in the control file. The <c>pg_lsn</c> columns are read as text
+    /// (<c>0/0</c> when unset), because the driver's LSN type has no CLR mapping in the row mapper.
+    /// </summary>
+    public interface IPgControlRecoveryRow
+    {
+        /// <summary>The minimum recovery end LSN, as text.</summary>
+        [Column("min_recovery_end_lsn")]
+        string? MinRecoveryEndLsn { get; set; }
+        /// <summary>The timeline of the minimum recovery end point.</summary>
+        [Column("min_recovery_end_timeline")]
+        int? MinRecoveryEndTimeline { get; set; }
+        /// <summary>The start LSN of the backup, as text.</summary>
+        [Column("backup_start_lsn")]
+        string? BackupStartLsn { get; set; }
+        /// <summary>The end LSN of the backup, as text.</summary>
+        [Column("backup_end_lsn")]
+        string? BackupEndLsn { get; set; }
+        /// <summary>Whether the end-of-backup record is still required.</summary>
+        [Column("end_of_backup_record_required")]
+        bool? EndOfBackupRecordRequired { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.pg_control_checkpoint()"/>: the checkpoint
+    /// state recorded in the control file. <c>pg_lsn</c> and <c>oid</c> columns are read as text and
+    /// <c>xid</c> columns as <see cref="uint"/>, the CLR type the driver exposes for <c>xid</c>.
+    /// </summary>
+    public interface IPgControlCheckpointRow
+    {
+        /// <summary>The checkpoint's redo location, as text.</summary>
+        [Column("checkpoint_lsn")]
+        string? CheckpointLsn { get; set; }
+        /// <summary>The redo location the next WAL record must start at, as text.</summary>
+        [Column("redo_lsn")]
+        string? RedoLsn { get; set; }
+        /// <summary>The WAL file that contains <see cref="RedoLsn"/>.</summary>
+        [Column("redo_wal_file")]
+        string? RedoWalFile { get; set; }
+        /// <summary>The timeline the checkpoint belongs to.</summary>
+        [Column("timeline_id")]
+        int? TimelineId { get; set; }
+        /// <summary>The previous timeline identifier.</summary>
+        [Column("prev_timeline_id")]
+        int? PrevTimelineId { get; set; }
+        /// <summary>Whether full-page writes are enabled.</summary>
+        [Column("full_page_writes")]
+        bool? FullPageWrites { get; set; }
+        /// <summary>The next transaction id, in its textual <c>epoch:counter</c> form.</summary>
+        [Column("next_xid")]
+        string? NextXid { get; set; }
+        /// <summary>The next OID, as text.</summary>
+        [Column("next_oid")]
+        string? NextOid { get; set; }
+        /// <summary>The next multixact id.</summary>
+        [Column("next_multixact_id")]
+        uint? NextMultixactId { get; set; }
+        /// <summary>The next multixact offset.</summary>
+        [Column("next_multi_offset")]
+        uint? NextMultiOffset { get; set; }
+        /// <summary>The oldest transaction id that has not been vacuumed.</summary>
+        [Column("oldest_xid")]
+        uint? OldestXid { get; set; }
+        /// <summary>The database of <see cref="OldestXid"/>, as text.</summary>
+        [Column("oldest_xid_dbid")]
+        string? OldestXidDbId { get; set; }
+        /// <summary>The oldest transaction id that is still running.</summary>
+        [Column("oldest_active_xid")]
+        uint? OldestActiveXid { get; set; }
+        /// <summary>The oldest multixact id.</summary>
+        [Column("oldest_multi_xid")]
+        uint? OldestMultiXid { get; set; }
+        /// <summary>The database of <see cref="OldestMultiXid"/>, as text.</summary>
+        [Column("oldest_multi_dbid")]
+        string? OldestMultiDbId { get; set; }
+        /// <summary>The oldest transaction id with a commit timestamp.</summary>
+        [Column("oldest_commit_ts_xid")]
+        uint? OldestCommitTsXid { get; set; }
+        /// <summary>The newest transaction id with a commit timestamp.</summary>
+        [Column("newest_commit_ts_xid")]
+        uint? NewestCommitTsXid { get; set; }
+        /// <summary>The time of the checkpoint.</summary>
+        [Column("checkpoint_time")]
+        DateTime? CheckpointTime { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.pg_get_keywords()"/>: one SQL keyword or
+    /// keyword-like token per row. <c>catcode</c> is PostgreSQL's internal <c>"char"</c> one-byte
+    /// category code, read as text because the row mapper has no <see cref="char"/> accessor.
+    /// </summary>
+    public interface IPgKeywordRow
+    {
+        /// <summary>The keyword or token text.</summary>
+        [Column("word")]
+        string? Word { get; set; }
+        /// <summary>The one-letter category code (<c>U</c>, <c>C</c>, <c>T</c> or <c>R</c>), as text.</summary>
+        [Column("catcode")]
+        string? CatCode { get; set; }
+        /// <summary>Whether the keyword can be used as a bare column label.</summary>
+        [Column("barelabel")]
+        bool? BareLabel { get; set; }
+        /// <summary>The human-readable description of the category.</summary>
+        [Column("catdesc")]
+        string? CatDesc { get; set; }
+        /// <summary>The bare-label description.</summary>
+        [Column("baredesc")]
+        string? BareDesc { get; set; }
+    }
+
+    /// <summary>
     /// Row shape produced by <see cref="SqlServerFunctions.string_split(string?, string?)"/>: a single column
     /// named <c>value</c> holding one fragment (SQL Server <c>string_split</c>).
     /// </summary>

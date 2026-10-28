@@ -349,7 +349,17 @@ public class PostgresDialect : SqlDialectBase
             or "jsonb_array_elements" or "jsonb_array_elements_text"
             or "jsonb_each" or "jsonb_each_text" or "jsonb_object_keys"
             or "jsonb_path_query" or "ts_stat"
-            or "jsonb_to_record" or "jsonb_to_recordset";
+            or "jsonb_to_record" or "jsonb_to_recordset"
+            // The #281 system-information readers: 17 record/table-shaped functions plus the three
+            // single-column ones. Every name is a PostgreSQL built-in of PG17's system-information
+            // chapter; the row shapes are pinned by local row interfaces in SqlFunctions.
+            or "pg_available_wal_summaries" or "pg_control_checkpoint" or "pg_control_init"
+            or "pg_control_recovery" or "pg_control_system" or "pg_get_catalog_foreign_keys"
+            or "pg_get_keywords" or "pg_get_multixact_members" or "pg_get_object_address"
+            or "pg_get_wal_summarizer_state" or "pg_identify_object" or "pg_identify_object_as_address"
+            or "pg_input_error_info" or "pg_last_committed_xact" or "pg_listening_channels"
+            or "pg_options_to_table" or "pg_snapshot_xip" or "pg_tablespace_databases"
+            or "pg_wal_summary_contents" or "pg_xact_commit_timestamp_origin";
 
     /// <summary>PostgreSQL renders the row-derived schema as the alias column-definition list of the record function.</summary>
     public override bool SupportsResultSchema(TableFunctionSchema placement) => placement == TableFunctionSchema.AliasColumnList;
@@ -375,8 +385,39 @@ public class PostgresDialect : SqlDialectBase
     public override string WrapTableFunction(string name, string call) =>
         name is "generate_series" or "unnest" or "regexp_matches" or "regexp_split_to_table" or "string_to_table"
             or "jsonb_object_keys" or "jsonb_path_query"
+            or "pg_listening_channels" or "pg_snapshot_xip" or "pg_tablespace_databases"
             ? $"(select {name}\n from {call})"
             : call;
+
+    /// <summary>
+    /// PostgreSQL renders the record/table-valued system-information readers of #281 with an explicit
+    /// projection that keeps every documented column name while converting the types the row mapper
+    /// cannot read: <c>pg_lsn</c> and <c>oid</c> columns become text (the scalar family casts its
+    /// <c>oid</c>/<c>pg_lsn</c> results the same way) and the internal <c>"char"</c> keyword-category
+    /// code becomes text. The argument casts are load-bearing for the same reason as in the scalar
+    /// family: an <c>oid</c>, <c>xid</c>, <c>pg_lsn</c> or <c>pg_snapshot</c> argument does not resolve
+    /// from a text parameter. A function whose columns and arguments are all mappable is left alone and
+    /// keeps its bare call.
+    /// </summary>
+    public override string WrapTableFunction(string name, string call, IReadOnlyList<string> arguments) => name switch
+    {
+        "pg_control_recovery" =>
+            "(select min_recovery_end_lsn::text as min_recovery_end_lsn, min_recovery_end_timeline,"
+            + " backup_start_lsn::text as backup_start_lsn, backup_end_lsn::text as backup_end_lsn,"
+            + " end_of_backup_record_required"
+            + $"\n from {call})",
+        "pg_control_checkpoint" =>
+            "(select checkpoint_lsn::text as checkpoint_lsn, redo_lsn::text as redo_lsn, redo_wal_file,"
+            + " timeline_id, prev_timeline_id, full_page_writes, next_xid, next_oid::text as next_oid,"
+            + " next_multixact_id, next_multi_offset, oldest_xid, oldest_xid_dbid::text as oldest_xid_dbid,"
+            + " oldest_active_xid, oldest_multi_xid, oldest_multi_dbid::text as oldest_multi_dbid,"
+            + " oldest_commit_ts_xid, newest_commit_ts_xid, checkpoint_time"
+            + $"\n from {call})",
+        "pg_get_keywords" =>
+            "(select word, catcode::text as catcode, barelabel, catdesc, baredesc"
+            + $"\n from {call})",
+        _ => WrapTableFunction(name, call)
+    };
 
     // PostgreSQL has native json/jsonb types and the associated functions/operators.
     /// <inheritdoc/>

@@ -1816,6 +1816,38 @@ namespace NextORM.Core;
         /// </summary>
         public TvfEntityBuilder<SqlFunctions.ITsStatRow> ts_stat(string? query) => new("ts_stat");
 
+        /// <summary>
+        /// <c>pg_control_system()</c> as a FROM source: the single control-file row (see
+        /// <see cref="SqlFunctions.IPgControlSystemRow"/>).
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.IPgControlSystemRow> pg_control_system() => new("pg_control_system");
+
+        /// <summary>
+        /// <c>pg_control_init()</c> as a FROM source: the single row of compile-time and control-file
+        /// constants (see <see cref="SqlFunctions.IPgControlInitRow"/>).
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.IPgControlInitRow> pg_control_init() => new("pg_control_init");
+
+        /// <summary>
+        /// <c>pg_control_recovery()</c> as a FROM source: the single recovery-state row; the
+        /// <c>pg_lsn</c> columns are text (see <see cref="SqlFunctions.IPgControlRecoveryRow"/>).
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.IPgControlRecoveryRow> pg_control_recovery() => new("pg_control_recovery");
+
+        /// <summary>
+        /// <c>pg_control_checkpoint()</c> as a FROM source: the single checkpoint-state row; the
+        /// <c>pg_lsn</c>/<c>oid</c> columns are text and the <c>xid</c> columns are <see cref="uint"/>
+        /// (see <see cref="SqlFunctions.IPgControlCheckpointRow"/>).
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.IPgControlCheckpointRow> pg_control_checkpoint() => new("pg_control_checkpoint");
+
+        /// <summary>
+        /// <c>pg_get_keywords()</c> as a FROM source: one row per SQL keyword or keyword-like token;
+        /// the <c>"char"</c> category code is read as text (see
+        /// <see cref="SqlFunctions.IPgKeywordRow"/>).
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.IPgKeywordRow> pg_get_keywords() => new("pg_get_keywords");
+
         /// <summary><c>a &amp;&amp; b</c>: true when the two ranges overlap (share at least one point).</summary>
         /// <typeparam name="T">The bound type of the ranges.</typeparam>
         /// <param name="a">The left range.</param>

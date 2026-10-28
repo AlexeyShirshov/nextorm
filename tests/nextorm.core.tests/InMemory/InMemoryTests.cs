@@ -1208,6 +1208,29 @@ public class InMemoryTests
             act.Should().Throw<NotSupportedException>().WithMessage($"*{expected}*not supported*");
         }
     }
+
+    /// <summary>
+    /// The PostgreSQL system-information table-valued functions of #281 (#347 D2c) are SQL-only query
+    /// sources: the in-memory provider refuses a table-function source before compiling it, so none of
+    /// the members can leak a compiled call on the <see cref="SqlFunctions.Postgres"/> marker surface.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void PostgresSystemInfoTvfs_ShouldThrow()
+    {
+        var cases = new (string Name, Action Act)[]
+        {
+            ("pg_control_system", () => _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_control_system()).Select(r => r.PgControlVersion).ToList()),
+            ("pg_control_init", () => _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_control_init()).Select(r => r.MaxDataAlignment).ToList()),
+            ("pg_control_recovery", () => _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_control_recovery()).Select(r => r.MinRecoveryEndLsn).ToList()),
+            ("pg_control_checkpoint", () => _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_control_checkpoint()).Select(r => r.CheckpointLsn).ToList()),
+            ("pg_get_keywords", () => _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_get_keywords()).Select(r => r.Word).ToList()),
+        };
+
+        foreach (var (name, act) in cases)
+            act.Should().Throw<NotSupportedException>()
+                .WithMessage("*able-valued function sources are not supported*", "{0} is a table-valued function", name);
+    }
 }
 
 // D178 T12 fixtures: an enum member for the in-memory fail-closed checks.

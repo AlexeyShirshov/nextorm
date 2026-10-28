@@ -2224,6 +2224,135 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
             .First().V.Should().Be("dadfasd");
     }
 
+    /// <summary>
+    /// The control-file and keyword readers of #281 as FROM sources: the row schema, the cardinality of
+    /// each single-row record function, the exact CLR type of every projection the row mapper cannot
+    /// read from the server type directly (<c>pg_lsn</c>/<c>oid</c>/<c>"char"</c> are text, <c>xid</c>
+    /// is <see cref="uint"/>), and the keyword table's contents.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void SystemInfoControlAndKeywordReaders_ShouldExposeRowsAndClrTypes()
+    {
+        var system = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_control_system())
+            .Select(r => new { r.PgControlVersion, r.CatalogVersionNo, r.SystemIdentifier, r.PgControlLastModified })
+            .ToList();
+        system.Should().ContainSingle("pg_control_system() returns exactly one row");
+        var sc = system[0];
+        sc.PgControlVersion.Should().Be(1700, "the pinned server is PostgreSQL 17");
+        sc.CatalogVersionNo.Should().BePositive();
+        sc.SystemIdentifier.Should().BePositive();
+        sc.PgControlLastModified.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromDays(2));
+        ((object)sc.PgControlVersion!).Should().BeOfType<int>();
+        ((object)sc.SystemIdentifier!).Should().BeOfType<long>();
+        ((object)sc.PgControlLastModified!).Should().BeOfType<DateTime>();
+
+        var init = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_control_init())
+            .Select(r => new
+            {
+                r.MaxDataAlignment,
+                r.DatabaseBlockSize,
+                r.MaxIdentifierLength,
+                r.Float8PassByValue,
+                r.DataPageChecksumVersion
+            })
+            .ToList();
+        init.Should().ContainSingle("pg_control_init() returns exactly one row");
+        var ci = init[0];
+        ci.MaxDataAlignment.Should().Be(8);
+        ci.DatabaseBlockSize.Should().Be(8192);
+        ci.MaxIdentifierLength.Should().Be(64);
+        ci.Float8PassByValue.Should().BeTrue();
+        ci.DataPageChecksumVersion.Should().Be(0, "the fixture cluster is initialised without page checksums");
+        ((object)ci.DatabaseBlockSize!).Should().BeOfType<int>();
+        ((object)ci.Float8PassByValue!).Should().BeOfType<bool>();
+
+        var recovery = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_control_recovery())
+            .Select(r => new
+            {
+                r.MinRecoveryEndLsn,
+                r.MinRecoveryEndTimeline,
+                r.BackupStartLsn,
+                r.BackupEndLsn,
+                r.EndOfBackupRecordRequired
+            })
+            .ToList();
+        recovery.Should().ContainSingle("pg_control_recovery() returns exactly one row");
+        var cr = recovery[0];
+        cr.MinRecoveryEndLsn.Should().Be("0/0");
+        cr.MinRecoveryEndTimeline.Should().Be(0);
+        cr.BackupStartLsn.Should().Be("0/0");
+        cr.BackupEndLsn.Should().Be("0/0");
+        cr.EndOfBackupRecordRequired.Should().BeFalse("the fixture server is not in an exclusive backup");
+        ((object)cr.MinRecoveryEndLsn!).Should().BeOfType<string>("pg_lsn has no CLR mapping and is read as text");
+        ((object)cr.EndOfBackupRecordRequired!).Should().BeOfType<bool>();
+
+        var checkpoint = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_control_checkpoint())
+            .Select(r => new
+            {
+                r.CheckpointLsn,
+                r.RedoLsn,
+                r.RedoWalFile,
+                r.TimelineId,
+                r.PrevTimelineId,
+                r.FullPageWrites,
+                r.NextXid,
+                r.NextOid,
+                r.NextMultixactId,
+                r.OldestXid,
+                r.OldestXidDbId,
+                r.OldestActiveXid,
+                r.OldestMultiXid,
+                r.OldestMultiDbId,
+                r.OldestCommitTsXid,
+                r.NewestCommitTsXid,
+                r.CheckpointTime
+            })
+            .ToList();
+        checkpoint.Should().ContainSingle("pg_control_checkpoint() returns exactly one row");
+        var cc = checkpoint[0];
+        cc.CheckpointLsn.Should().MatchRegex("^[0-9A-F]+/[0-9A-F]+$");
+        cc.RedoLsn.Should().MatchRegex("^[0-9A-F]+/[0-9A-F]+$");
+        cc.RedoWalFile.Should().MatchRegex("^[0-9A-F]{24}$");
+        cc.TimelineId.Should().Be(1);
+        cc.PrevTimelineId.Should().Be(1);
+        cc.FullPageWrites.Should().Be(
+            Scalar((DataContext)_sut.DataProvider, "select current_setting('full_page_writes')") == "on",
+            "the column reports the server's own full_page_writes setting");
+        cc.NextXid.Should().MatchRegex(@"^\d+:\d+$");
+        cc.NextOid.Should().MatchRegex(@"^\d+$");
+        cc.NextMultixactId.Should().BePositive();
+        cc.OldestXid.Should().BePositive();
+        cc.OldestXidDbId.Should().MatchRegex(@"^\d+$", "the oid column is read as its text form");
+        cc.OldestActiveXid.Should().BeLessThan(
+            uint.Parse(cc.NextXid!.Split(':')[1], System.Globalization.CultureInfo.InvariantCulture),
+            "the oldest active xid, 0 when none was active, precedes the next transaction id");
+        cc.OldestXid.Should().BeLessThan(
+            uint.Parse(cc.NextXid!.Split(':')[1], System.Globalization.CultureInfo.InvariantCulture));
+        cc.OldestMultiXid.Should().BePositive();
+        // track_commit_timestamp is off on the pinned server, so no xid carries a commit timestamp.
+        cc.OldestCommitTsXid.Should().Be(0);
+        cc.NewestCommitTsXid.Should().Be(0);
+        cc.CheckpointTime.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromDays(2));
+        ((object)cc.CheckpointLsn!).Should().BeOfType<string>();
+        ((object)cc.NextOid!).Should().BeOfType<string>();
+        ((object)cc.NextMultixactId!).Should().BeOfType<uint>("xid is exposed as UInt32 by the driver");
+        ((object)cc.OldestXid!).Should().BeOfType<uint>();
+        ((object)cc.CheckpointTime!).Should().BeOfType<DateTime>();
+
+        var keywords = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_get_keywords())
+            .Select(r => new { r.Word, r.CatCode, r.BareLabel, r.CatDesc })
+            .ToList();
+        keywords.Should().HaveCountGreaterThan(400, "the PG17 keyword table is far larger than the SQL standard list");
+        var select = keywords.Single(k => k.Word == "select");
+        select.CatCode.Should().Be("R");
+        select.BareLabel.Should().BeTrue();
+        select.CatDesc.Should().Be("reserved");
+        ((object)select.CatCode!).Should().BeOfType<string>("the internal \"char\" category code is read as text");
+        ((object)select.BareLabel!).Should().BeOfType<bool>();
+        keywords.Single(k => k.Word == "all").CatCode.Should().Be("R");
+    }
+
     private static string Scalar(DataContext ctx, string sql)
     {
         ctx.EnsureConnectionOpen();
