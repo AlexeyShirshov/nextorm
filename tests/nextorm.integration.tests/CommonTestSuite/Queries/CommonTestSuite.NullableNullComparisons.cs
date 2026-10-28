@@ -513,6 +513,14 @@ public abstract partial class CommonTestSuite
         CheckCorrelated("correlated 42 again", 42, [false, true, false, false]);
     }
 
+    /// <summary>
+    /// The exact refusal a ClickHouse command carrying an affected <c>JOIN ON</c> predicate raises while
+    /// it is prepared (the core guard in <c>SqlSourceRenderer.ValidateClickHouseJoinOnPredicates</c>).
+    /// Copied verbatim, not paraphrased, so a wording change is a test failure rather than silent drift.
+    /// </summary>
+    internal const string T296bBareIsNullRefusalMessage =
+        "ClickHouse JOIN ON bare-IS-NULL predicates are not supported: ClickHouse 25.8 (verified on 25.8.33.6) can push an IS NULL residual to the left join input instead of preserving ON semantics. Affected forms include column == null and !nullable.HasValue in INNER/LEFT JOIN ON predicates. Use a captured-value equality comparison that preserves ON semantics. Do not move a LEFT JOIN predicate to WHERE as an equivalent workaround.";
+
     /// <summary>Runs the JOIN ON multiplicity / outer-preservation checks on a seeded context.</summary>
     internal static void AssertT296bJoinOnTruthTable(IDataContext ctx, string provider, Action<string> log)
     {
@@ -524,15 +532,21 @@ public abstract partial class CommonTestSuite
         static string[] Format(IEnumerable<string> pairs) => pairs.OrderBy(x => x, StringComparer.Ordinal).ToArray();
 
         // ClickHouse 25.8 mis-applies a bare `IS NULL` ON residual: the residual is pushed to the left
-        // join input, where the right-side column is NULL, so every matched row passes. The identical
-        // form works with one more conjunct, wrapped as `isNull(col) = 1`, inside OR, or in WHERE.
-        // Ground truth of the real container is recorded in rv1/live/clickhouse-join-on-null-residual.txt;
-        // the shape is a provider limitation, not something this task may work around by changing the
-        // join algorithm or widening the SQL semantics.
+        // join input, where the right-side column is NULL, so every matched row passes. Ground truth of
+        // the real container is recorded in rv1/live/clickhouse-join-on-null-residual.txt. The affected
+        // shapes are now refused at preparation by the core guard, so the ClickHouse branches below
+        // assert the typed refusal instead of pretending the query executed; every unaffected ON shape
+        // keeps executing and is still asserted against its rows.
         var clickHouseBareNullResidual = provider == "clickhouse";
 
-        void NotApplicable(string scenario, string reason)
-            => log($"T296B_JOIN_JSON {JsonSerializer.Serialize(new { provider, scenario, status = "not-applicable", reason })}");
+        // Preparing and executing both fail with the guard's exact message: the guard runs before the
+        // first SQL character is written, so no statement for a refused shape can reach the server.
+        void ExpectRefusal(string scenario, Action prepare, Action execute)
+        {
+            prepare.Should().Throw<NotSupportedException>(scenario).WithMessage(T296bBareIsNullRefusalMessage);
+            execute.Should().Throw<NotSupportedException>(scenario).WithMessage(T296bBareIsNullRefusalMessage);
+            log($"T296B_JOIN_JSON {JsonSerializer.Serialize(new { provider, scenario, status = "refused", message = T296bBareIsNullRefusalMessage })}");
+        }
 
         void Check(string scenario, IEnumerable<string> pairs, params string[] expected)
         {
@@ -587,9 +601,13 @@ public abstract partial class CommonTestSuite
 
         if (clickHouseBareNullResidual)
         {
-            NotApplicable(
+            ExpectRefusal(
                 "inner nullable literal",
-                "ClickHouse 25.8 mis-applies a bare IS NULL ON residual (rv1/live/clickhouse-join-on-null-residual.txt); the approved rendering is unchanged");
+                () => NullableComparisonSql(ctx, parents.Join(children, (p, c) => p.Id == c.ParentId && c.Amount == (int?)null)
+                    .Select(p => new { Parent = p.Item1.Id, Child = p.Item2.Id })),
+                () => parents.Join(children, (p, c) => p.Id == c.ParentId && c.Amount == (int?)null)
+                    .Select(p => new { Parent = p.Item1.Id, Child = p.Item2.Id })
+                    .ToList());
         }
         else
         {
@@ -613,9 +631,13 @@ public abstract partial class CommonTestSuite
 
         if (clickHouseBareNullResidual)
         {
-            NotApplicable(
+            ExpectRefusal(
                 "inner !HasValue",
-                "ClickHouse 25.8 mis-applies a bare IS NULL ON residual (rv1/live/clickhouse-join-on-null-residual.txt); the approved rendering is unchanged");
+                () => NullableComparisonSql(ctx, parents.Join(children, (p, c) => p.Id == c.ParentId && !c.Amount.HasValue)
+                    .Select(p => new { Parent = p.Item1.Id, Child = p.Item2.Id })),
+                () => parents.Join(children, (p, c) => p.Id == c.ParentId && !c.Amount.HasValue)
+                    .Select(p => new { Parent = p.Item1.Id, Child = p.Item2.Id })
+                    .ToList());
         }
         else
         {
@@ -636,6 +658,20 @@ public abstract partial class CommonTestSuite
                 .Select(p => (p.Parent, p.Child))),
             "2:21", "2:22");
 
+        if (clickHouseBareNullResidual)
+        {
+            // Shape isolation, live: an ON predicate with no null atom still executes, so the refusal
+            // above is shape-specific rather than a blanket refusal of JOINs on this provider.
+            var columnToColumn = parents.Join(children, (p, c) => p.Id == c.ParentId)
+                .Select(p => new { Parent = p.Item1.Id, Child = p.Item2.Id });
+            log($"provider={provider} test=T296b_JoinOn scenario=inner column to column stage=sql " +
+                $"sql={CollapseNullableSql(NullableComparisonSql(ctx, columnToColumn))}");
+            Check(
+                "inner column to column",
+                InnerPairs(columnToColumn.ToList().Select(p => (p.Parent, p.Child))),
+                "1:11", "1:12", "2:21", "2:22", "3:31");
+        }
+
         // A29: LEFT JOIN preserves every outer row; unmatched rows project a null right side, including
         // parent 4 (no child at all) and every parent whose only children fail the ON predicate.
         static IEnumerable<string> OuterPairs(IEnumerable<(long Parent, long? Child)> pairs)
@@ -643,9 +679,13 @@ public abstract partial class CommonTestSuite
 
         if (clickHouseBareNullResidual)
         {
-            NotApplicable(
+            ExpectRefusal(
                 "left nullable literal",
-                "ClickHouse 25.8 mis-applies a bare IS NULL ON residual (rv1/live/clickhouse-join-on-null-residual.txt)");
+                () => NullableComparisonSql(ctx, parents.LeftJoin(children, (p, c) => p.Id == c.ParentId && c.Amount == (int?)null)
+                    .Select(p => new { Parent = p.Item1.Id, Child = (long?)p.Item2.Id })),
+                () => parents.LeftJoin(children, (p, c) => p.Id == c.ParentId && c.Amount == (int?)null)
+                    .Select(p => new { Parent = p.Item1.Id, Child = (long?)p.Item2.Id })
+                    .ToList());
 
             CheckLeftPreserved(
                 "left captured 42",

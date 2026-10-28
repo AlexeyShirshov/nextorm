@@ -53,6 +53,22 @@ public class T296bNullableComparisonSqlGenerationTests
             "this dialect legalises no predicate (expected {0} boolean projection(s))", projectionCount);
 
     /// <summary>
+    /// The exact refusal a ClickHouse command carrying an affected <c>JOIN ON</c> shape raises while it
+    /// is prepared (the core guard in <c>SqlSourceRenderer</c>). Copied verbatim, not paraphrased.
+    /// </summary>
+    private const string JoinOnNullRefusalMessage =
+        "ClickHouse JOIN ON bare-IS-NULL predicates are not supported: ClickHouse 25.8 (verified on 25.8.33.6) can push an IS NULL residual to the left join input instead of preserving ON semantics. Affected forms include column == null and !nullable.HasValue in INNER/LEFT JOIN ON predicates. Use a captured-value equality comparison that preserves ON semantics. Do not move a LEFT JOIN predicate to WHERE as an equivalent workaround.";
+
+    /// <summary>
+    /// The affected <c>ON</c> shapes never reach SQL: preparation itself throws, so a caller cannot
+    /// receive a rendered command text for a statement the server would mis-apply.
+    /// </summary>
+    private static void AssertJoinOnNullRefused<T>(IDataContext ctx, QueryCommand<T> cmd)
+        => FluentActions.Invoking(() => Prepare(ctx, cmd))
+            .Should().Throw<NotSupportedException>()
+            .WithMessage(JoinOnNullRefusalMessage);
+
+    /// <summary>
     /// Captured nullable <c>int?</c>: <c>==</c> and <c>!=</c> become total predicates — the null arms
     /// make the NULL result of a plain comparison impossible — while every captured value stays a
     /// parameter. Both operand orders must translate identically, and the shape must not depend on
@@ -248,8 +264,13 @@ public class T296bNullableComparisonSqlGenerationTests
     }
 
     /// <summary>
-    /// The same forms inside a JOIN <c>ON</c> clause, on the joined alias, with the join structure
-    /// unchanged: table order, join kind and aliases are byte-identical to the same join without the
+    /// The same forms inside a JOIN <c>ON</c> clause, on the joined alias. ClickHouse 25.8 mis-applies a
+    /// bare <c>IS NULL</c> residual there — the residual is pushed to the left join input instead of
+    /// preserving ON semantics — so the affected shapes (<c>column == null</c> in either operand order
+    /// and <c>!nullable.HasValue</c>, on INNER and LEFT joins) are refused with a named
+    /// <see cref="NotSupportedException"/> while the query is prepared, before any SQL is written.
+    /// The supported shapes keep rendering real SQL and stay the controls: the join structure is
+    /// unchanged — table order, join kind and aliases are byte-identical to the same join without the
     /// null-safe predicate, and only the appended predicate differs.
     /// </summary>
     [Fact]
@@ -299,22 +320,67 @@ public class T296bNullableComparisonSqlGenerationTests
             .Should().Contain($"t2.somestring is null and {P}capturedText is null")
             .And.Contain($"t2.somestring is not null and {P}capturedText is not null and t2.somestring = {P}capturedText");
 
-        // Presence forms in ON.
+        // Positive presence stays a real predicate: `HasValue` renders `is not null`.
         var hasValue = SqlCollapsed(ctx, ctx.From<IT296ShapeEntity>()
             .Join(inner, (a, b) => a.Id == b.Id && b.Int.HasValue)
             .Select(p => new { p.Item1.Id }));
         hasValue.Should().StartWith(plain.Replace(" on ", " on (")).And.Contain("t2.nullableint is not null");
 
-        var noValue = SqlCollapsed(ctx, ctx.From<IT296ShapeEntity>()
+        // `!HasValue` in ON would render the bare `is null` the server mis-applies: refused at prepare.
+        AssertJoinOnNullRefused(ctx, ctx.From<IT296ShapeEntity>()
             .Join(inner, (a, b) => a.Id == b.Id && !b.Int.HasValue)
             .Select(p => new { p.Item1.Id }));
-        noValue.Should().StartWith(plain.Replace(" on ", " on (")).And.Contain("t2.nullableint is null");
 
-        // Nullable literal in ON keeps the literal presence semantics.
+        // A nullable literal in ON is refused in both operand orders (INNER).
+        AssertJoinOnNullRefused(ctx, ctx.From<IT296ShapeEntity>()
+            .Join(inner, (a, b) => a.Id == b.Id && b.Int == (int?)null)
+            .Select(p => new { p.Item1.Id }));
+        AssertJoinOnNullRefused(ctx, ctx.From<IT296ShapeEntity>()
+            .Join(inner, (a, b) => a.Id == b.Id && (int?)null == b.Int)
+            .Select(p => new { p.Item1.Id }));
+
+        // LEFT JOIN carries the same residual: both shapes and both literal operand orders are refused.
+        AssertJoinOnNullRefused(ctx, ctx.From<IT296ShapeEntity>()
+            .LeftJoin(inner, (a, b) => a.Id == b.Id && !b.Int.HasValue)
+            .Select(p => new { p.Item1.Id }));
+        AssertJoinOnNullRefused(ctx, ctx.From<IT296ShapeEntity>()
+            .LeftJoin(inner, (a, b) => a.Id == b.Id && b.Int == (int?)null)
+            .Select(p => new { p.Item1.Id }));
+        AssertJoinOnNullRefused(ctx, ctx.From<IT296ShapeEntity>()
+            .LeftJoin(inner, (a, b) => a.Id == b.Id && (int?)null == b.Int)
+            .Select(p => new { p.Item1.Id }));
+
+        // The refusal is shape-specific, not a blanket LEFT JOIN rejection: a captured comparison in a
+        // LEFT JOIN ON still renders the total shape.
+        var leftControl = SqlCollapsed(ctx, ctx.From<IT296ShapeEntity>()
+            .LeftJoin(inner, (a, b) => a.Id == b.Id && b.Int == capturedValue)
+            .Select(p => new { p.Item1.Id }));
+        leftControl.Should().Contain("left join")
+            .And.Contain($"t2.nullableint = {P}capturedValue");
+
+        // Prepare-ordering: the refusal is raised by preparation itself and no SQL text is produced —
+        // the delegate would fail if it ever reached a published command.
+        string? producedSql = null;
+        var refused = ctx.From<IT296ShapeEntity>()
+            .Join(inner, (a, b) => a.Id == b.Id && b.Int == (int?)null)
+            .Select(p => new { p.Item1.Id });
+        var prepareThenRead = () =>
+        {
+            var prepared = Prepare(ctx, refused);
+            producedSql = prepared.DbCommand.CommandText;
+        };
+        prepareThenRead.Should().Throw<NotSupportedException>().WithMessage(JoinOnNullRefusalMessage);
+        producedSql.Should().BeNull("the refusal must precede any SQL emission");
+
+        // Scope isolation: the same presence forms outside an ON clause keep rendering.
+        SqlCollapsed(ctx, ctx.From<IT296ShapeEntity>().Where(x => !x.Int.HasValue).Select(x => x.Id))
+            .Should().Contain("where nullableint is null");
         SqlCollapsed(ctx, ctx.From<IT296ShapeEntity>()
-                .Join(inner, (a, b) => a.Id == b.Id && b.Int == (int?)null)
-                .Select(p => new { p.Item1.Id }))
-            .Should().StartWith(plain.Replace(" on ", " on (")).And.Contain("t2.nullableint is null");
+                .Where(x => SqlFunctions.Sql.exists(inner.Where(i => i.Id == x.Id && !i.Int.HasValue)))
+                .Select(x => x.Id))
+            .Should().Contain("t2.nullableint is null");
+        SqlCollapsed(ctx, ctx.From<IT296ShapeEntity>().Select(x => new { x.Id, Absent = !x.Int.HasValue }))
+            .Should().Contain(Scalar("nullableint is null", AbsentAlias));
     }
 
     /// <summary>
@@ -391,9 +457,52 @@ public class T296bNullableComparisonSqlGenerationTests
     }
 
     /// <summary>
+    /// A26: a boolean projection evaluated inside a correlated subquery (the <c>Any()</c> form of the
+    /// live correlation rows) keeps the outer association — <c>t2.id = t1.id</c> per subquery — renders
+    /// the approved total shape for the captured comparison, and reaches this dialect's legal boolean
+    /// scalar exactly once per projection (a no-op here; SQL Server wraps each predicate in one
+    /// CASE/CAST). SQL shape only; the live association is covered by the integration phase.
+    /// </summary>
+    [Fact]
+    public void CorrelatedSelectProjection_ShouldRetainOuterAssociation()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var outer = ctx.From<IT296ShapeEntity>();
+        var inner = ctx.From<IT296ShapeEntity>();
+        int? capturedValue = 42;
+
+        var sql = SqlCollapsed(ctx, outer.Select(x => new
+        {
+            x.Id,
+            HasMatch = inner.Where(i => i.Id == x.Id && i.Int == capturedValue).Any(),
+            HasPresence = inner.Where(i => i.Id == x.Id && i.Int.HasValue).Any(),
+        }));
+
+        sql.Should().Contain("exists(select *");
+        sql.Should().Contain("t2.id = t1.id", "the captured-comparison subquery must stay correlated to the outer row");
+        sql.Should().Contain("t3.id = t1.id", "the presence subquery must stay correlated to the outer row");
+        sql.Should().Contain($"t2.nullableint = {P}capturedValue", "the captured comparison keeps the total shape's comparison arm");
+        // The total-boolean shape must survive the projection context: both null arms and the
+        // non-null arm stay, so dropping the rewrite cannot pass this pin.
+        sql.Should().Contain($"t2.nullableint is null and {P}capturedValue is null",
+            "the null/null arm keeps the projected comparison two-valued instead of NULL");
+        sql.Should().Contain(
+            $"t2.nullableint is not null and {P}capturedValue is not null and t2.nullableint = {P}capturedValue",
+            "the non-null arm keeps the projected comparison two-valued instead of NULL");
+        // The predicates are SELECT-list projections, so the statement must start with the outer
+        // id followed by the correlated subquery (this dialect renders no projection alias for a
+        // subquery column); a rendering that moved them into WHERE cannot satisfy this.
+        sql.Should().StartWith("select t1.id, exists(select *",
+            "the boolean predicates must stay in the SELECT list, not move into WHERE");
+        sql.Should().Contain("t3.nullableint is not null");
+        AssertScalarLegalisation(sql, 2);
+    }
+
+    /// <summary>
     /// Guards: the approved rewrite is limited to captured operands and mapped presence in the approved
-    /// positions. Column-to-column predicates (A17/A30), the relational operators (A18) and the
-    /// excluded value positions ORDER BY / GROUP BY (A32) keep their previous translation.
+    /// positions. Column-to-column predicates in a JOIN ON, a SELECT projection and a correlated Exists
+    /// body (A17/A30), the relational operators (A18) and the excluded value positions ORDER BY,
+    /// GROUP BY, window PARTITION BY / ORDER BY (A32) keep their previous translation.
     /// </summary>
     [Fact]
     public void GuardPins_ShouldRemainUnchanged()
@@ -410,6 +519,21 @@ public class T296bNullableComparisonSqlGenerationTests
         columnJoin.Should().Contain("t1.nullableint = t2.nullableint")
             .And.NotContain("t1.nullableint is null")
             .And.NotContain("t2.nullableint is null");
+
+        // A30: column-to-column projected in a SELECT is never null-safe either — the boolean scalar
+        // keeps the plain comparison and gains no null arms.
+        var columnSelect = SqlCollapsed(ctx, ctx.From<IT296ShapeEntity>()
+            .Join(inner, (a, b) => a.Id == b.Id)
+            .Select(p => new
+            {
+                p.Item1.Id,
+                SameInt = p.Item1.Int == p.Item2.Int,
+                SameText = p.Item1.String == p.Item2.String,
+            }));
+        columnSelect.Should().Contain("t1.nullableint = t2.nullableint")
+            .And.Contain("t1.somestring = t2.somestring")
+            .And.NotContain(" is null")
+            .And.NotContain(" is not null");
 
         // A17: column-to-column inside a correlated Exists body.
         var columnExists = SqlCollapsed(ctx, e
@@ -451,5 +575,51 @@ public class T296bNullableComparisonSqlGenerationTests
         var limitByHasValue = () => SqlCollapsed(ctx, e.LimitBy(2, x => x.Int.HasValue).Select(x => new { x.Id }));
         limitByHasValue.Should().Throw<BuildSqlCommandException>()
             .WithMessage("Cannot resolve column for member HasValue");
+
+        // A32: a captured comparison used as a window PARTITION BY key keeps the value translation —
+        // the ordinary comparison with the parameter and no null arms.
+        var windowPartition = SqlCollapsed(ctx, e.Select(x => new
+        {
+            x.Id,
+            Rn = SqlFunctions.Sql.row_number()
+                .Over(partitionBy: () => x.Int == capturedValue, orderBy: () => x.Id),
+        }));
+        windowPartition.Should().Contain($"partition by (nullableint = {P}capturedValue)")
+            .And.Contain("order by id")
+            .And.NotContain(" is null")
+            .And.NotContain(" is not null");
+
+        // A32: the same holds for a window ORDER BY key.
+        var windowOrder = SqlCollapsed(ctx, e.Select(x => new
+        {
+            x.Id,
+            Rn = SqlFunctions.Sql.row_number()
+                .Over(partitionBy: () => x.Id, orderBy: () => x.Int == capturedValue),
+        }));
+        windowOrder.Should().Contain($"order by (nullableint = {P}capturedValue)")
+            .And.NotContain(" is null")
+            .And.NotContain(" is not null");
+
+        // A32: presence in a window PARTITION BY is still the previous typed rejection.
+        var windowPartitionHasValue = () => SqlCollapsed(ctx, e.Select(x => new
+        {
+            x.Id,
+            Rn = SqlFunctions.Sql.row_number()
+                .Over(partitionBy: () => x.Int.HasValue, orderBy: () => x.Id),
+        }));
+        windowPartitionHasValue.Should().Throw<BuildSqlCommandException>()
+            .WithMessage("Cannot resolve column for member HasValue");
+
+        // A32: the named-window route renders the same value translation inside the WINDOW clause.
+        var windowBuilder = e.Window("w", partitionBy: [x => x.Int == capturedValue], orderBy: [e.Asc(x => x.Id)]);
+        var namedWindow = SqlCollapsed(ctx, windowBuilder.Select(x => new
+        {
+            x.Id,
+            Rn = SqlFunctions.Sql.row_number().Over("w"),
+        }));
+        namedWindow.Should().Contain("over w")
+            .And.Contain($"window w as (partition by (nullableint = {P}capturedValue) order by id)")
+            .And.NotContain(" is null")
+            .And.NotContain(" is not null");
     }
 }

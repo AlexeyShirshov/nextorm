@@ -153,7 +153,9 @@ The total forms are supported in three positions:
 The rest of the statement is unchanged. A boolean projection materialises as a non-nullable `bool`;
 SQL Server renders `cast(case when ... then 1 else 0 end as bit)` through its usual projection
 legalisation, while the other providers emit the predicate directly. In `JOIN ON` only the `ON`
-expression changes: the join kind, cardinality and outer-row preservation are not affected.
+expression changes: the join kind, cardinality and outer-row preservation are not affected. On
+ClickHouse the `ON` shapes that would render a bare `IS NULL` are refused while the query is prepared
+instead — see [Limitations](../advanced/limitations.md#clickhouse-join-on-bare-is-null).
 
 ### Parameters and plan reuse
 

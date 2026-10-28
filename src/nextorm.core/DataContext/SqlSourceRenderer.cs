@@ -326,6 +326,119 @@ internal static class SqlSourceRenderer
         }
     }
 
+    // The exact refusal a ClickHouse command carrying an affected JOIN ON predicate raises. It states
+    // no version claim beyond the verified one: the behaviour was observed on ClickHouse 25.8.33.6 (the
+    // test fixture's pinned `25.8-alpine` image), and no later server is claimed to be affected, fixed
+    // or supported. The supported alternative is named and the WHERE rewrite is refused because it is
+    // not equivalent for a LEFT JOIN (the predicate would filter the padded rows instead of matching).
+    private const string ClickHouseJoinOnNullPredicateMessage =
+        "ClickHouse JOIN ON bare-IS-NULL predicates are not supported: ClickHouse 25.8 (verified on 25.8.33.6) can push an IS NULL residual to the left join input instead of preserving ON semantics. Affected forms include column == null and !nullable.HasValue in INNER/LEFT JOIN ON predicates. Use a captured-value equality comparison that preserves ON semantics. Do not move a LEFT JOIN predicate to WHERE as an equivalent workaround.";
+
+    /// <summary>
+    /// Rejects a ClickHouse join whose <c>ON</c> predicate carries an atom that renders as a bare
+    /// <c>IS NULL</c>, before any SQL for the statement is written. ClickHouse 25.8 can push such a
+    /// residual to the left join input instead of preserving the <c>ON</c> semantics, so executing the
+    /// statement would silently return rows that differ from the other providers; preparation fails
+    /// instead. The check is a read-only walk of the prepared condition tree (no dialect hook, no
+    /// render, no parameter work), so it runs before the first SQL write, before the command is
+    /// published to the plan cache and before any connection is acquired.
+    /// <para>
+    /// The affected atoms are exactly the shapes the translator folds into <c>is null</c> in an
+    /// <c>ON</c> position (<see cref="WhereExpressionVisitor"/> is the condition visitor there):
+    /// a null-literal equality in either operand order and a negated mapped
+    /// <c>Nullable&lt;T&gt;.HasValue</c>. Positive <c>HasValue</c>, captured-value comparisons, the
+    /// inequality forms (<c>!= null</c> renders <c>is not null</c>) and column-to-column comparisons
+    /// keep their existing rendering.
+    /// </para>
+    /// </summary>
+    internal static void ValidateClickHouseJoinOnPredicates(in SqlBuildContext ctx, QueryCommand cmd)
+    {
+        if (!IsClickHouseDialect(ctx.Dialect))
+            return;
+
+        var joins = cmd.Joins;
+        if (joins is not { Length: > 0 })
+            return;
+
+        for (var i = 0; i < joins.Length; i++)
+        {
+            var join = joins[i];
+
+            // Only the join kinds the residual was observed on. RIGHT/FULL are not supported by the
+            // ClickHouse dialect and the remaining kinds carry no rendered ON condition.
+            if (join.JoinType is not (JoinType.Inner or JoinType.Left))
+                continue;
+
+            if (join.JoinCondition is { } condition
+                && ClickHouseJoinOnNullResidualDetector.ContainsAffectedAtom(condition.Body))
+                throw new NotSupportedException(ClickHouseJoinOnNullPredicateMessage);
+        }
+    }
+
+    // Core cannot reference the provider assembly (that reference would be circular), so a shipped
+    // provider dialect is identified by its runtime type name — the existing core convention (see
+    // AdvancedAggregateTranslator.ProviderLabel's dialect-name switch and SqlStringLiteralPolicies'
+    // exact-type map). A user dialect is never mistaken for the built-in one unless it carries the
+    // same type name.
+    private static bool IsClickHouseDialect(ISqlDialect dialect)
+        => dialect.GetType().Name == "ClickHouseDialect";
+
+    /// <summary>
+    /// Depth-first scan of a join <c>ON</c> body for the atoms that would render as a bare
+    /// <c>IS NULL</c> on ClickHouse. It mirrors the translator's own classification
+    /// (<see cref="TypeFacts.IsNullLiteral"/> for the literal side and
+    /// <see cref="TypeFacts.IsPresenceMember"/> for a mapped presence access) instead of inspecting
+    /// rendered text, so the decision never depends on operand order, on how the condition is
+    /// combined with <c>&amp;&amp;</c>/<c>||</c>, or on the parameter mode of the pass.
+    /// </summary>
+    private sealed class ClickHouseJoinOnNullResidualDetector : ExpressionVisitor
+    {
+        private bool _found;
+
+        /// <summary>Whether the condition contains at least one affected atom.</summary>
+        internal static bool ContainsAffectedAtom(Expression onBody)
+        {
+            var detector = new ClickHouseJoinOnNullResidualDetector();
+            detector.Visit(onBody);
+            return detector._found;
+        }
+
+        public override Expression? Visit(Expression? node)
+        {
+            if (_found || node is null)
+                return node;
+
+            // `!column.HasValue`: the negated mapped presence access renders the direct `is null`
+            // form (never `not (... is not null)`). A captured value's own HasValue is not a presence
+            // member, so it keeps its ordinary evaluation and is not rejected.
+            if (node is UnaryExpression { NodeType: ExpressionType.Not } negated
+                && TypeFacts.UnwrapConvert(negated.Operand) is MemberExpression presence
+                && TypeFacts.IsPresenceMember(presence))
+            {
+                _found = true;
+                return node;
+            }
+
+            // `column == null` / `null == column`: the null-aware comparison path renders `is null` in
+            // either operand order. `!= null` is deliberately not affected (it renders `is not null`).
+            if (node is BinaryExpression { NodeType: ExpressionType.Equal, Type: var type } comparison
+                && type == typeof(bool)
+                && (TypeFacts.IsNullLiteral(comparison.Left) || TypeFacts.IsNullLiteral(comparison.Right)))
+            {
+                _found = true;
+                return node;
+            }
+
+            // A nested lambda is an independent statement body (a subquery or a projection argument):
+            // its predicates are that statement's WHERE/EXISTS predicates, not atoms of this join, so
+            // the ON residual never reaches them and they keep their existing rendering.
+            if (node is LambdaExpression)
+                return node;
+
+            return base.Visit(node);
+        }
+    }
+
     // The strictness/GLOBAL modifiers are ClickHouse-only and their applicability depends on the join
     // type; shared so the multi-table DELETE USING path rejects them exactly like the SELECT path.
     private static void ValidateJoinModifiers(in SqlBuildContext ctx, JoinExpression join)

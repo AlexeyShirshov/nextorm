@@ -9,7 +9,7 @@ namespace NextORM.Integration.Tests;
 
 /// <summary>
 /// Serializes <see cref="T296bNullableCacheTests"/> against every other integration collection: its
-/// nine facts assert prepared-command <em>identity</em> across executions, while a concurrent
+/// ten facts assert prepared-command <em>identity</em> across executions, while a concurrent
 /// <see cref="DataContext.PurgeQueryCache"/> anywhere in the process bumps the process-wide
 /// plan-store generation and evicts every thread's thread-local plan dictionary. The next "cache hit"
 /// then legitimately re-prepares and returns a different <c>DbPreparedQueryCommand</c> — correct
@@ -247,6 +247,67 @@ public sealed class T296bNullableCacheTests : IDisposable
             .OrderBy(x => x, StringComparer.Ordinal)
             .ToArray();
         return (prepared.DbCommand.CommandText, pairs);
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // A6/A7 — within ONE cold ordering the second preparation of the same command shape returns the
+    // same prepared-command instance, and the two orderings (null-first / value-first) render the
+    // identical SQL text. Identity is never compared across independently purged caches: a purge bumps
+    // the process-wide store generation and legitimately mints a new plan on the next miss.
+    // ---------------------------------------------------------------------------------------------
+
+    [Fact]
+    public void ColdPreparation_SameOrdering_ShouldReusePlanReference()
+    {
+        var nullFirst = CreateContext();
+        string nullFirstSql;
+        try
+        {
+            nullFirst.PurgeQueryCache();
+            var first = ColdWherePlan(nullFirst, null);
+            var second = ColdWherePlan(nullFirst, null);
+
+            ReferenceEquals(second, first).Should().BeTrue(
+                "a repeated preparation inside one cold ordering must reuse the cached plan instance");
+            second.DbCommand.CommandText.Should().Be(first.DbCommand.CommandText);
+            nullFirstSql = first.DbCommand.CommandText;
+            Dump($"cold-identity ordering=null-first plan_reused=true sql={nullFirstSql}");
+        }
+        finally
+        {
+            nullFirst.Dispose();
+        }
+
+        var valueFirst = CreateContext();
+        string valueFirstSql;
+        try
+        {
+            valueFirst.PurgeQueryCache();
+            var first = ColdWherePlan(valueFirst, 42);
+            var second = ColdWherePlan(valueFirst, 42);
+
+            ReferenceEquals(second, first).Should().BeTrue(
+                "a repeated preparation inside one cold ordering must reuse the cached plan instance");
+            second.DbCommand.CommandText.Should().Be(first.DbCommand.CommandText);
+            valueFirstSql = first.DbCommand.CommandText;
+            Dump($"cold-identity ordering=value-first plan_reused=true sql={valueFirstSql}");
+        }
+        finally
+        {
+            valueFirst.Dispose();
+        }
+
+        valueFirstSql.Should().Be(nullFirstSql, "the cold ordering must not change the rendered SQL text");
+        nullFirstSql.Should().Contain("is null", "the null-first shape keeps the approved total comparison");
+    }
+
+    private static DbPreparedQueryCommand<long> ColdWherePlan(DataContext context, int? captured)
+    {
+        var prepared = Prepare(
+            context,
+            context.From<T296bCacheRow>().Where(x => x.N == captured).OrderBy(x => x.Id).Select(x => x.Id));
+        context.ToList(prepared).Should().NotBeEmpty("every preparation in this fact executes against the real table");
+        return prepared;
     }
 
     // ---------------------------------------------------------------------------------------------

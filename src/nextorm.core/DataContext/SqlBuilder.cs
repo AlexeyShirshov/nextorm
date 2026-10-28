@@ -59,6 +59,14 @@ internal readonly struct SqlBuilder
         // not emit a WITH of its own (see CteHoister); only the root of the render emits it.
         var ctes = _ctx.SuppressCtes ? null : cmd.Ctes;
 
+        // Unsupported ClickHouse ON null predicates are refused here, at the earliest point of the
+        // render that sees this command's join tree and before the first SQL character is written.
+        // The check cannot live inside MakeJoin: by the time a join is rendered the FROM clause is
+        // already in `sqlBuilder`, so the guard would fire after a partial statement was assembled.
+        // Every nested statement (a CTE body, a UNION branch, a derived source, a correlated subquery)
+        // reaches this same entry point and is therefore validated on its own join tree.
+        SqlSourceRenderer.ValidateClickHouseJoinOnPredicates(in _ctx, cmd);
+
         var sqlBuilder = _ctx.ParamMode ? null : StringBuilderPool.Shared.Get();
         var selectBuilder = _ctx.ParamMode ? null : StringBuilderPool.Shared.Get();
         string? topStmt = null;
