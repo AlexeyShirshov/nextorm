@@ -121,6 +121,8 @@ two blocking helpers only report process ids — they never act on a session.
 
 | C# | SQL |
 |---|---|
+| `SqlFunctions.Postgres.current_role()` | `current_role` → `name` (bare keyword) |
+| `SqlFunctions.Postgres.current_catalog()` | `current_catalog` → `name` (bare keyword) |
 | `SqlFunctions.Postgres.current_schemas(includeImplicit)` | `current_schemas(include_implicit)` → `name[]` |
 | `SqlFunctions.Postgres.pg_postmaster_start_time()` | `pg_postmaster_start_time()` |
 | `SqlFunctions.Postgres.pg_current_logfile()` | `pg_current_logfile()` |

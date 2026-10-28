@@ -494,6 +494,8 @@ public class CrossProviderScalarSqlGenerationTests
         var sql = SqlOf(ctx, e.Select(x => new
         {
             Cs = SqlFunctions.Postgres.current_schemas(false),
+            Cr = SqlFunctions.Postgres.current_role(),
+            Cd = SqlFunctions.Postgres.current_catalog(),
             Pst = SqlFunctions.Postgres.pg_postmaster_start_time(),
             Cl = SqlFunctions.Postgres.pg_current_logfile(),
             Clf = SqlFunctions.Postgres.pg_current_logfile("stderr"),
@@ -519,6 +521,11 @@ public class CrossProviderScalarSqlGenerationTests
         }
 
         sql.Should().Contain("current_schemas(false)");
+        // `current_role` and `current_catalog` are SQL keywords, so they render without parentheses.
+        sql.Should().Contain("current_role");
+        sql.Should().Contain("current_catalog");
+        sql.Should().NotContain("current_role()");
+        sql.Should().NotContain("current_catalog()");
         sql.Should().Contain("pg_postmaster_start_time()");
         sql.Should().Contain("pg_current_logfile()");
         sql.Should().Contain("pg_current_logfile(E'stderr')");
@@ -838,6 +845,10 @@ public class CrossProviderScalarSqlGenerationTests
         var toAsciiOneArg = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.to_ascii(x.String) }));
         var crc32 = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.crc32(SqlFunctions.Parameter<byte[]>(8)) }));
         var crc32c = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.crc32c(SqlFunctions.Parameter<byte[]>(9)) }));
+        var getExpr2 = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_get_expr("x", "0") }));
+        var getExpr3 = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_get_expr("x", "0", true) }));
+        var getConDef1 = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_get_constraintdef("0") }));
+        var getConDef2 = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_get_constraintdef("0", true) }));
 
         casefold.Should().Throw<NotSupportedException>().WithMessage("The casefold function is refused:*PostgreSQL 18*");
         gamma.Should().Throw<NotSupportedException>().WithMessage("The gamma function is refused:*17.11*");
@@ -848,6 +859,16 @@ public class CrossProviderScalarSqlGenerationTests
         crc32.Should().Throw<NotSupportedException>().WithMessage("The crc32 function is refused:*PostgreSQL 18*");
         crc32c.Should().Throw<NotSupportedException>().WithMessage("The crc32c function is refused:*PostgreSQL 18*");
 
+        // The pg_get_expr / pg_get_constraintdef pair must refuse with its own reason *inside* a query
+        // expression too: the member body never runs there, so the refusal has to be reachable from the
+        // translator (ExtendedScalarFunctionTranslator.Refused), not only from a direct C# call.
+        getExpr2.Should().Throw<NotSupportedException>().WithMessage("The pg_get_expr function is refused:*pg_node_tree*");
+        getExpr3.Should().Throw<NotSupportedException>().WithMessage("The pg_get_expr function is refused:*pg_node_tree*");
+        getConDef1.Should().Throw<NotSupportedException>()
+            .WithMessage("The pg_get_constraintdef function is refused:*pg_node_tree*");
+        getConDef2.Should().Throw<NotSupportedException>()
+            .WithMessage("The pg_get_constraintdef function is refused:*pg_node_tree*");
+
         // The pg_sleep family returns void, so no void call can appear in a projection; the refusal is
         // asserted at the member itself (its body throws before any SQL could be emitted).
         FluentActions.Invoking(() => SqlFunctions.Postgres.pg_sleep(0.0))
@@ -857,7 +878,11 @@ public class CrossProviderScalarSqlGenerationTests
         FluentActions.Invoking(() => SqlFunctions.Postgres.pg_sleep_until(DateTime.UnixEpoch))
             .Should().Throw<NotSupportedException>().WithMessage("The pg_sleep_until function is refused:*void*");
 
-        foreach (var name in new[] { "crc32", "crc32c", "pg_sleep", "pg_sleep_for", "pg_sleep_until" })
+        foreach (var name in new[]
+                 {
+                     "crc32", "crc32c", "pg_sleep", "pg_sleep_for", "pg_sleep_until",
+                     "pg_get_expr", "pg_get_constraintdef"
+                 })
             PostgresDialect.Instance.ScalarFunctions.Supports(name).Should().BeFalse($"'{name}' is refused on every provider");
 
         // Positive control: a sibling of the same family on the same query shape still renders, so the

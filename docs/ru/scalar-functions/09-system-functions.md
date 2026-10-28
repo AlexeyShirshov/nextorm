@@ -125,6 +125,8 @@ OID-аргумент приводится обратно к `oid`/`regclass`/`re
 
 | C# | SQL |
 |---|---|
+| `SqlFunctions.Postgres.current_role()` | `current_role` → `name` (ключевое слово без скобок) |
+| `SqlFunctions.Postgres.current_catalog()` | `current_catalog` → `name` (ключевое слово без скобок) |
 | `SqlFunctions.Postgres.current_schemas(includeImplicit)` | `current_schemas(include_implicit)` → `name[]` |
 | `SqlFunctions.Postgres.pg_postmaster_start_time()` | `pg_postmaster_start_time()` |
 | `SqlFunctions.Postgres.pg_current_logfile()` | `pg_current_logfile()` |

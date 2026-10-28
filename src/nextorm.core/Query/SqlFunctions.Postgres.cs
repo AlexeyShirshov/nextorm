@@ -1266,6 +1266,20 @@ namespace NextORM.Core;
         /// <summary>The current timestamp without time zone.</summary>
         public DateTime? localtimestamp() => default!;
 
+        /// <summary>
+        /// The current role (<c>current_role</c>), normally the session user; the value is read as a
+        /// <c>name</c>. A bare SQL keyword rather than a call, so PostgreSQL renders it unparenthesised;
+        /// other providers and the in-memory provider refuse the name.
+        /// </summary>
+        public string? current_role() => default!;
+
+        /// <summary>
+        /// The name of the current database (<c>current_catalog</c>), read as a <c>name</c>. A bare SQL
+        /// keyword rather than a call, so PostgreSQL renders it unparenthesised; other providers and the
+        /// in-memory provider refuse the name.
+        /// </summary>
+        public string? current_catalog() => default!;
+
         /// <summary>The type name of <paramref name="value"/> (<c>pg_typeof</c>).</summary>
         public string? pg_typeof(object? value) => default!;
 
@@ -1771,13 +1785,13 @@ namespace NextORM.Core;
         /// </summary>
         public string? pg_xact_status(string? xid) => default!;
 
-        private const string GetConstraintdefRefusal =
+        internal const string GetConstraintdefRefusal =
             "The pg_get_constraintdef function is refused: it renders a stored constraint node tree as " +
             "SQL text, and its pg_get_expr sibling cannot be called at all because PostgreSQL requires a " +
             "pg_node_tree argument and a value of that type cannot be produced from CLR (cannot accept a " +
             "value of type pg_node_tree); the pair is refused rather than half-exposed.";
 
-        private const string GetExprRefusal =
+        internal const string GetExprRefusal =
             "The pg_get_expr function is refused: PostgreSQL requires a pg_node_tree argument and a value " +
             "of that type cannot be produced from CLR; the pinned 17.11 server answers \"cannot accept a " +
             "value of type pg_node_tree\".";

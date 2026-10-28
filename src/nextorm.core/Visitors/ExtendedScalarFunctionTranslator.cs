@@ -78,7 +78,11 @@ internal static class ExtendedScalarFunctionTranslator
         [(nameof(PostgresFunctions.jsonb_populate_record_valid), 2)] =
             "The jsonb_populate_record_valid function is refused: its first argument is an anyelement " +
             "base row that a CLR type cannot name, and without a base row the server raises 0A000 " +
-            "(could not determine row type for result of jsonb_populate_record)."
+            "(could not determine row type for result of jsonb_populate_record).",
+        [(nameof(PostgresFunctions.pg_get_expr), 2)] = PostgresFunctions.GetExprRefusal,
+        [(nameof(PostgresFunctions.pg_get_expr), 3)] = PostgresFunctions.GetExprRefusal,
+        [(nameof(PostgresFunctions.pg_get_constraintdef), 1)] = PostgresFunctions.GetConstraintdefRefusal,
+        [(nameof(PostgresFunctions.pg_get_constraintdef), 2)] = PostgresFunctions.GetConstraintdefRefusal
     };
 
     private static readonly HashSet<string> MathFunctions = new(StringComparer.Ordinal)
@@ -110,7 +114,8 @@ internal static class ExtendedScalarFunctionTranslator
     private static readonly HashSet<string> KeywordFunctions = new(StringComparer.Ordinal)
     {
         nameof(PostgresFunctions.current_date), nameof(PostgresFunctions.current_time),
-        nameof(PostgresFunctions.localtime), nameof(PostgresFunctions.localtimestamp)
+        nameof(PostgresFunctions.localtime), nameof(PostgresFunctions.localtimestamp),
+        nameof(PostgresFunctions.current_role), nameof(PostgresFunctions.current_catalog)
     };
 
     private static readonly HashSet<string> VariadicFunctions = new(StringComparer.Ordinal)

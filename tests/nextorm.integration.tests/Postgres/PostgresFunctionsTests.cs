@@ -1507,6 +1507,8 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
         var r = _sut.ComplexEntity.Where(x => x.Id == 2)
             .Select(x => new
             {
+                Cr = SqlFunctions.Postgres.current_role(),
+                Cd = SqlFunctions.Postgres.current_catalog(),
                 CsFalse = SqlFunctions.Postgres.current_schemas(false),
                 CsTrue = SqlFunctions.Postgres.current_schemas(true),
                 Pst = SqlFunctions.Postgres.pg_postmaster_start_time(),
@@ -1524,6 +1526,12 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
             .First();
 
         var now = DateTime.UtcNow;
+        // `current_role` / `current_catalog` are bare keywords: compare them with the server's own report
+        // for this very session instead of pinning the fixture's user/database names.
+        r.Cr.Should().Be(Scalar((DataContext)_sut.DataProvider, "select current_role"),
+            "the member renders the bare current_role keyword");
+        r.Cd.Should().Be(Scalar((DataContext)_sut.DataProvider, "select current_catalog"),
+            "the member renders the bare current_catalog keyword");
         r.CsFalse.Should().Contain("public").And.NotContain("pg_catalog");
         r.CsTrue.Should().Contain("pg_catalog");
         r.Pst.Should().NotBeNull().And.BeBefore(now);
@@ -1532,7 +1540,12 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
         r.ClFmt.Should().BeNull();
         r.Cfg.Should().NotBeNull().And.BeBefore(now);
         r.Jit.Should().NotBeNull();
-        r.Mts.Should().Be("0", "no temporary schema has been created by this session");
+        // The physical backend session is pooled and other tests create temporary tables on it, so this
+        // session may already own a temporary schema and the oid is not necessarily "0". Assert the
+        // member against the server's own report for this very session (same DataContext, same
+        // connection) instead of pinning an isolation-dependent constant.
+        var tempSchema = Scalar((DataContext)_sut.DataProvider, "select cast(pg_my_temp_schema() as text)");
+        r.Mts.Should().Be(tempSchema, "the member projects this session's own temporary schema oid as text");
         r.Iots.Should().BeFalse();
         r.Nqu.Should().Be(0.0);
         r.Nqu!.Value.Should().BeInRange(0.0, 1.0);
@@ -1542,6 +1555,8 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
         r.Td.Should().Be(0, "the projection runs outside any trigger");
 
         // Exact CLR types.
+        ((object)r.Cr!).Should().BeOfType<string>();
+        ((object)r.Cd!).Should().BeOfType<string>();
         ((object)r.CsFalse!).Should().BeOfType<string[]>();
         ((object)r.CsTrue!).Should().BeOfType<string[]>();
         ((object)r.Pst!).Should().BeOfType<DateTime>();

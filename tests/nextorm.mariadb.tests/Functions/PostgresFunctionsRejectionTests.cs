@@ -279,6 +279,32 @@ public class PostgresFunctionsRejectionTests
 
         foreach (var (name, act) in cases)
             act.Should().Throw<NotSupportedException>().WithMessage($"*{name}*not supported*");
+
+        // `current_role` / `current_catalog` are PostgreSQL-only bare keywords: the extended-scalar gate
+        // refuses them here, and its message names the library rather than the function (the same shape
+        // `current_date`/`localtime` have).
+        FluentActions.Invoking(() => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.current_role() })))
+            .Should().Throw<NotSupportedException>().WithMessage("*extended scalar function library*PostgreSQL*");
+        FluentActions.Invoking(() => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.current_catalog() })))
+            .Should().Throw<NotSupportedException>().WithMessage("*extended scalar function library*PostgreSQL*");
+
+        // `pg_get_expr` / `pg_get_constraintdef` must refuse with their own reason *inside a query
+        // expression*: the member body never runs there, so the translator carries the refusal
+        // (`ExtendedScalarFunctionTranslator.Refused`, keyed by name and arity).
+        FluentActions.Invoking(() =>
+                SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_get_expr("x", "0") })))
+            .Should().Throw<NotSupportedException>().WithMessage("The pg_get_expr function is refused:*pg_node_tree*");
+        FluentActions.Invoking(() =>
+                SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_get_expr("x", "0", true) })))
+            .Should().Throw<NotSupportedException>().WithMessage("The pg_get_expr function is refused:*pg_node_tree*");
+        FluentActions.Invoking(() =>
+                SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_get_constraintdef("0") })))
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("The pg_get_constraintdef function is refused:*pg_node_tree*");
+        FluentActions.Invoking(() =>
+                SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_get_constraintdef("0", true) })))
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("The pg_get_constraintdef function is refused:*pg_node_tree*");
     }
 
     /// <summary>
