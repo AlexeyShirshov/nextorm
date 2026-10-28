@@ -1,5 +1,5 @@
 {
-  "totalSkipped": 195,
+  "totalSkipped": 197,
   "reasons": {
     "Data-modifying CTE bodies are only supported by PostgreSQL.": 6,
     "The shared table-valued function test uses SQLite's json_each; MySQL exposes JSON rows through JSON_TABLE with a different shape.": 4,
@@ -36,6 +36,8 @@
     "This provider supports stored procedures.": 6,
     "This provider supports tuple IN/Contains.": 3,
     "This provider's LIKE cannot be made byte-wise.": 1,
-    "This provider's scalar subqueries do not enforce cardinality (Single/SingleOrDefault are rejected there).": 5
+    "This provider's scalar subqueries do not enforce cardinality (Single/SingleOrDefault are rejected there).": 5,
+    "the live server is 25.8.33.6; the native arrayExcept exists only from ClickHouse 25.9": 1,
+    "the live server is 25.8.33.6; the native arrayExcept exists only from ClickHouse 25.9, so this arm is not evidence on the pinned 25.8 baseline": 1
   }
 }
