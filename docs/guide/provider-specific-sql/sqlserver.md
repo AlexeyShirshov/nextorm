@@ -376,8 +376,8 @@ session `currval`/`lastval`, no value-returning `setval`). See
 
 ## Version-gated functions (2022 and 2025)
 
-Four [#282](https://github.com/AlexeyShirshov/nextorm/issues/282) names are gated by the **declared server
-major version** on this provider. The gate is version-only: unlike the native JSON storage type
+The [#282](https://github.com/AlexeyShirshov/nextorm/issues/282) names below are gated by the **declared
+server major version** on this provider. The gate is version-only: unlike the native JSON storage type
 (`SupportsJson`, [#345](https://github.com/AlexeyShirshov/nextorm/issues/345)), which also consults an
 engine-edition allowlist because a few Azure/Fabric products have the type while reporting a lower major
 version, function availability follows the engine major version itself. An edition declaration never
@@ -392,6 +392,9 @@ substitutes for a version here, and an unversioned context refuses them before S
 | `SqlFunctions.SqlServer.edit_distance(input, pattern[, maximum_distance])` / `edit_distance_similarity` / `jaro_winkler_distance` / `jaro_winkler_similarity` | the native call; the capped `edit_distance` returns `maximum_distance + 1` when the distance exceeds the cap | major 17 **and** compatibility level 170 **and** `PREVIEW_FEATURES = ON` **and** a Windows collation |
 | `SqlFunctions.SqlServer.product(value)` | `product(value)` (aggregate context only — no `OVER`) | major 17 |
 | `SqlFunctions.SqlServer.regexp_split_to_table(input, pattern)` | a `FROM` source; rows are `value` plus the one-based `ordinal bigint` | major 17 **and** database compatibility level 170 |
+| `SqlFunctions.SqlServer.approx_count_distinct(value)` | `approx_count_distinct(value)` (aggregate context; `0` for an empty or all-NULL group) | major 15 (SQL Server 2019) |
+| `SqlFunctions.SqlServer.checksum_agg(value)` / `grouping_id(expressions...)` | `checksum_agg(value)`; `grouping_id(a, b, …)` in the `SELECT` list, `HAVING` or `ORDER BY` of a grouped command | no version floor; `GROUPING_ID` needs a `GROUP BY` context and every argument must be a grouping expression (both enforced before SQL) |
+| `SqlFunctions.SqlServer.approx_percentile_cont(fraction, value)` / `approx_percentile_disc(fraction, value)` | `approx_percentile_cont(f) within group (order by value)`; the `_disc` form returns the sort input type | major 16 (SQL Server 2022); no `OVER` form |
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
@@ -436,6 +439,20 @@ The U3 regex scalars and the fuzzy family were executed on the tested engine bas
 missing preview flag is Msg 195). Those are runtime prerequisites the dialect cannot inspect, so they are
 documented and asserted live; the version flag promises the major-version gate only, and no promise is
 made for future builds.
+
+The U4 aggregate family is aggregate-context only. `approx_count_distinct` is `long` (`bigint`) and
+counts `0` — not `NULL` — for an empty or all-NULL group; `checksum_agg` is `int?` and returns `NULL`
+there; the approximate percentiles are `double?` and the sort input type respectively and also return
+`NULL`. A constant NULL operand renders as a typed `CAST(NULL AS <type>)` (a bare `NULL` is Msg 8117);
+the percentile fraction must be a query-independent literal or captured scalar in `[0, 1]`, a
+row-dependent fraction is refused before SQL, and a literal or NULL `WITHIN GROUP` sort key is refused
+before SQL because the engine answers Msg 5309. `GROUPING_ID`'s grouping-context and grouping-list
+obligations are enforced before execution with zero statements dispatched, and `Over(...)` on either
+approximate percentile is refused — the engine has the `WITHIN GROUP` form only (Msg 4113 for `OVER`;
+`checksum_agg` is the one name whose native `OVER` the engine accepts, but this surface offers the
+aggregate form only). Both percentiles and the distinct count are approximate: the vendor documents a
+≈1.33 % rank error at 99 % confidence for the percentiles, which is a statistical bound, not a
+deterministic tolerance.
 
 ## T-SQL scalar functions
 

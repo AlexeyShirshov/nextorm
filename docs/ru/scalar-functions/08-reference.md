@@ -77,6 +77,11 @@ ClickHouse рендерит `dateTrunc('part', x)`, `addDays`/`addMonths`/.../`a
 | `set_bit(value, offset[, bitValue])` | `… ELSE set_bit(cast(value as <тип операнда>), cast(offset as int)[, cast(bitValue as bit)]) END` | тип самого операнда; явный NULL в `bitValue` даёт `NULL`, опущенный — нативное значение по умолчанию 1 | мажорная версия 16 |
 | `product(value)` | `product(value)` (агрегатный контекст; без `OVER`) | тип входа; NULL-строки игнорируются, группа только из NULL даёт `NULL` | мажорная версия 17 |
 | `regexp_split_to_table(input, pattern)` | источник `FROM`, например `from regexp_split_to_table(input, pattern)` | одна строка на фрагмент: `value` и one-based `ordinal` (`bigint`) | мажорная версия 17 **и** уровень совместимости БД 170 |
+| `approx_count_distinct(value)` | `approx_count_distinct(value)` (агрегатный контекст; без `OVER`) | `long` (`bigint`); `0` для пустой группы и группы из NULL; NULL-операнд рендерится как `CAST(NULL AS <тип>)` | мажорная версия 15 |
+| `checksum_agg(value)` | `checksum_agg(value)` (агрегатный контекст; нативная форма `OVER` не предоставляется) | `int?` (`int`); `NULL` для пустой группы и группы из NULL; одинаковые значения взаимно уничтожаются | любое объявление SQL Server (без версионного порога) |
+| `grouping_id(expressions...)` | `grouping_id(a, b, …)` — список `SELECT`, `HAVING` или `ORDER BY` сгруппированной команды | `int`; `0` при обычном `GROUP BY`, маска подытогов при `ROLLUP`/`GROUPING SETS`; каждый аргумент должен быть выражением `GROUP BY` | любое объявление SQL Server; контекст группировки и совпадение с группой проверяются до SQL |
+| `approx_percentile_cont(fraction, value)` | `approx_percentile_cont(f) within group (order by value)` | `double?` (`float(53)`); `NULL` для пустой группы и группы из NULL; концы `0`/`1` точны | мажорная версия 16; формы `OVER` нет |
+| `approx_percentile_disc(fraction, value)` | `approx_percentile_disc(f) within group (order by value)` | `T?` — тип входного выражения сортировки (`int?` для столбца `int`); `NULL` для пустой группы и группы из NULL | мажорная версия 16; формы `OVER` нет |
 
 `regexp_split_to_table` возвращает
 [`TvfEntityBuilder<SqlFunctions.ISqlServerRegexpSplitToTableRow>`](xref:NextORM.Core.SqlFunctions.ISqlServerRegexpSplitToTableRow)
@@ -93,6 +98,23 @@ Regex-скаляры не зависят от уровня совместимо�
 отсутствие preview-флага — Msg 195. Флаг объявленной мажорной версии 17 обещает только версионный
 гейт; эти рантайм-предусловия — факты окружения, проверяемые вживую, и обещаний для будущих сборок не
 даётся.
+
+Агрегаты U4 продолжают тот же версионный контракт. `APPROX_COUNT_DISTINCT` требует мажорную версию 15,
+а два приблизительных квантиля — мажорную версию 16; `CHECKSUM_AGG` и `GROUPING_ID` версионного порога
+не имеют и рендерятся в любом объявлении SQL Server, включая неверсионированное. Квантили —
+упорядоченные агрегаты: только `WITHIN GROUP (ORDER BY …)`, поэтому `Over(...)` отклоняется до SQL, а
+литеральный или NULL-ключ сортировки тоже отклоняется, потому что движок отвечает Msg 5309 (`Windowed
+functions, aggregates and NEXT VALUE FOR functions do not support constants as ORDER BY clause
+expressions`); захваченная переменная становится параметром и выполняется. Постоянный NULL-операнд
+`approx_count_distinct` или `checksum_agg` рендерится как типизированный `CAST(NULL AS <тип>)`, потому
+что «голый» `NULL` даёт Msg 8117 (`Operand data type NULL is invalid for … operator.`). Сообщения
+движка, наблюдавшиеся на протестированной сборке `17.0.5005.3`: Msg 4113 для `OVER` у обоих квантилей и
+у `approx_count_distinct` (`… is not a valid windowing function, and cannot be used with the OVER
+clause.`), Msg 8117 для нетипизированного NULL-операнда и Msg 5309 для литерального/NULL-ключа
+сортировки; `checksum_agg` — единственное имя, чью нативную форму `OVER` движок принимает (наблюдалось),
+но здесь предоставляется только агрегатная форма. Обязанность `GROUPING_ID` по списку группировки и его
+размещение в предложениях проверяются до SQL при нуле выполненных операторов; собственное сообщение
+движка — Msg 8161.
 
 ## SQL Server TRY_CAST и TRY_CONVERT
 

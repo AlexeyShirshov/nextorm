@@ -77,6 +77,11 @@ declared major version in the message.
 | `set_bit(value, offset[, bitValue])` | `… ELSE set_bit(cast(value as <operand type>), cast(offset as int)[, cast(bitValue as bit)]) END` | the operand's own type; an explicitly NULL `bitValue` yields `NULL`, an omitted one keeps the native default 1 | major version 16 |
 | `product(value)` | `product(value)` (aggregate context; no `OVER`) | the input type; NULL rows are ignored, an all-NULL group is `NULL` | major version 17 |
 | `regexp_split_to_table(input, pattern)` | a `FROM` source, e.g. `from regexp_split_to_table(input, pattern)` | one row per fragment: `value` plus the one-based `ordinal` (`bigint`) | major version 17 **and** database compatibility level 170 |
+| `approx_count_distinct(value)` | `approx_count_distinct(value)` (aggregate context; no `OVER`) | `long` (`bigint`); `0` for an empty or all-NULL group; a NULL operand renders as `CAST(NULL AS <type>)` | major version 15 |
+| `checksum_agg(value)` | `checksum_agg(value)` (aggregate context; the native `OVER` form is not exposed) | `int?` (`int`); `NULL` for an empty or all-NULL group; identical values cancel | every SQL Server declaration (no version floor) |
+| `grouping_id(expressions...)` | `grouping_id(a, b, …)` — `SELECT` list, `HAVING` or `ORDER BY` of a grouped command | `int`; `0` under a plain `GROUP BY`, the subtotal mask under `ROLLUP`/`GROUPING SETS`; every argument must be a `GROUP BY` expression | every SQL Server declaration; the grouping context and the grouping-list match are enforced before SQL |
+| `approx_percentile_cont(fraction, value)` | `approx_percentile_cont(f) within group (order by value)` | `double?` (`float(53)`); `NULL` for an empty or all-NULL group; the endpoints `0`/`1` are exact | major version 16; no `OVER` form |
+| `approx_percentile_disc(fraction, value)` | `approx_percentile_disc(f) within group (order by value)` | `T?` — the sort input type (`int?` for an `int` column); `NULL` for an empty or all-NULL group | major version 16; no `OVER` form |
 
 `regexp_split_to_table` returns
 [`TvfEntityBuilder<SqlFunctions.ISqlServerRegexpSplitToTableRow>`](xref:NextORM.Core.SqlFunctions.ISqlServerRegexpSplitToTableRow)
@@ -92,6 +97,22 @@ fuzzy names need **all** of compatibility 170, `PREVIEW_FEATURES = ON` and a Win
 tested build `17.0.5005.3` a `SQL_*` collation is Msg 9847 and a missing preview flag is Msg 195. The
 declared-major-17 flag promises the version gate only — those runtime prerequisites are environment
 facts, asserted live, and no promise is made for future builds.
+
+The U4 aggregates extend the same version-only contract. `APPROX_COUNT_DISTINCT` needs major 15 and
+the two approximate percentiles need major 16; `CHECKSUM_AGG` and `GROUPING_ID` have no version floor
+and render in every SQL Server declaration, including an unversioned one. The percentiles are
+ordered-set aggregates: `WITHIN GROUP (ORDER BY …)` only, so `Over(...)` is refused before SQL, and a
+literal or NULL sort key is refused too because the engine answers Msg 5309 (`Windowed functions,
+aggregates and NEXT VALUE FOR functions do not support constants as ORDER BY clause expressions`); a
+captured scalar becomes a parameter and executes. A constant NULL operand of `approx_count_distinct` or
+`checksum_agg` renders as a typed `CAST(NULL AS <type>)`, because a bare `NULL` is Msg 8117 (`Operand
+data type NULL is invalid for … operator.`). The engine messages observed on the tested build
+`17.0.5005.3` are Msg 4113 for `OVER` on both percentiles and on `approx_count_distinct` (`… is not a
+valid windowing function, and cannot be used with the OVER clause.`), Msg 8117 for an untyped NULL
+operand and Msg 5309 for a literal/NULL sort key; `checksum_agg` is the one name whose native `OVER`
+form the engine accepts (observed), but this surface offers the aggregate form only. `GROUPING_ID`'s
+grouping-list obligation and its clause placement are enforced before SQL with zero statements
+executed; the engine's own report is Msg 8161.
 
 ## SQL Server TRY_CAST and TRY_CONVERT
 

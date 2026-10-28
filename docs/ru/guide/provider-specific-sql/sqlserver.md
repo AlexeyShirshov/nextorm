@@ -381,8 +381,8 @@ select next value for [dbo].[order_seq] as [Next]
 
 ## Версионно-зависимые функции (2022 и 2025)
 
-Четыре имени [#282](https://github.com/AlexeyShirshov/nextorm/issues/282) на этом провайдере закрыты
-**объявленной мажорной версией сервера**. Гейт версионный: в отличие от нативного типа хранения JSON
+Имена [#282](https://github.com/AlexeyShirshov/nextorm/issues/282) ниже закрыты **объявленной
+мажорной версией сервера**. Гейт версионный: в отличие от нативного типа хранения JSON
 (`SupportsJson`, [#345](https://github.com/AlexeyShirshov/nextorm/issues/345)), который также учитывает
 allowlist edition, потому что некоторые продукты Azure/Fabric имеют этот тип, сообщая меньшую мажорную
 версию, доступность функций следует самой мажорной версии движка. Объявление edition здесь никогда не
@@ -397,6 +397,9 @@ allowlist edition, потому что некоторые продукты Azure
 | `SqlFunctions.SqlServer.edit_distance(input, pattern[, maximum_distance])` / `edit_distance_similarity` / `jaro_winkler_distance` / `jaro_winkler_similarity` | нативный вызов; ограниченная форма `edit_distance` возвращает `maximum_distance + 1`, когда расстояние больше предела | мажорная версия 17 **и** уровень совместимости 170 **и** `PREVIEW_FEATURES = ON` **и** Windows-коллация |
 | `SqlFunctions.SqlServer.product(value)` | `product(value)` (только агрегатный контекст — без `OVER`) | мажорная версия 17 |
 | `SqlFunctions.SqlServer.regexp_split_to_table(input, pattern)` | источник `FROM`; строки — `value` и one-based `ordinal bigint` | мажорная версия 17 **и** уровень совместимости БД 170 |
+| `SqlFunctions.SqlServer.approx_count_distinct(value)` | `approx_count_distinct(value)` (агрегатный контекст; `0` для пустой группы и группы из NULL) | мажорная версия 15 (SQL Server 2019) |
+| `SqlFunctions.SqlServer.checksum_agg(value)` / `grouping_id(expressions...)` | `checksum_agg(value)`; `grouping_id(a, b, …)` в списке `SELECT`, в `HAVING` или в `ORDER BY` сгруппированной команды | версионного порога нет; `GROUPING_ID` требует контекста `GROUP BY`, и каждый аргумент должен быть выражением группировки (оба условия проверяются до SQL) |
+| `SqlFunctions.SqlServer.approx_percentile_cont(fraction, value)` / `approx_percentile_disc(fraction, value)` | `approx_percentile_cont(f) within group (order by value)`; форма `_disc` возвращает тип входного выражения сортировки | мажорная версия 16 (SQL Server 2022); формы `OVER` нет |
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
@@ -442,6 +445,20 @@ Regex-скаляры U3 и fuzzy-семейство выполнены на пр
 отсутствие preview-флага — Msg 195). Это рантайм-предусловия, которые диалект не может прочитать,
 поэтому они документируются и проверяются вживую; версионный флаг обещает только гейт мажорной версии,
 и обещаний для будущих сборок не даётся.
+
+Семейство агрегатов U4 существует только в агрегатном контексте. `approx_count_distinct` — это `long`
+(`bigint`), и для пустой группы и группы из NULL он считает `0`, а не `NULL`; `checksum_agg` — `int?` и
+возвращает там `NULL`; приблизительные квантили — `double?` и тип входного выражения сортировки
+соответственно, и тоже возвращают `NULL`. Постоянный NULL-операнд рендерится как типизированный
+`CAST(NULL AS <тип>)` («голый» `NULL` даёт Msg 8117); дробь квантиля должна быть независимым от строки
+литералом или захваченной переменной в `[0, 1]`, зависящая от строки дробь отклоняется до SQL, а
+литеральный или NULL-ключ `WITHIN GROUP` отклоняется до SQL, потому что движок отвечает Msg 5309.
+Обязанности `GROUPING_ID` по контексту группировки и по списку группировки проверяются до выполнения при
+нуле отправленных операторов, а `Over(...)` у любого приблизительного квантиля отклоняется — у движка
+есть только форма `WITHIN GROUP` (Msg 4113 для `OVER`; `checksum_agg` — единственное имя, чью нативную
+форму `OVER` движок принимает, но здесь предоставляется только агрегатная форма). Оба квантиля и подсчёт
+различных значений приблизительны: вендор документирует ошибку ранга около 1,33 % при 99 % доверия для
+квантилей, и это статистическая граница, а не детерминированный допуск.
 
 ## Скаляры T-SQL
 
