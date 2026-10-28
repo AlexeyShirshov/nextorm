@@ -210,6 +210,13 @@ public interface ITestProvider
     IDataContext CreateContext();
 
     /// <summary>
+    /// Creates a context from an explicit builder, so a fact can select context-wide options the shared
+    /// harness default does not set (today: <c>UseEagerLoadMode</c>). The provider owns the connection
+    /// string; the caller owns the builder. A provider that cannot honour a builder leaves the default.
+    /// </summary>
+    IDataContext CreateContext(DataContextBuilder builder);
+
+    /// <summary>
     /// Creates a context that routes its diagnostics through <paramref name="loggerFactory"/>. Providers
     /// that can honour the factory override this; the default ignores it and returns the ordinary
     /// context, so a diagnostic-observation test must skip when the provider does not override.

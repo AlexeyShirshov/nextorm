@@ -51,7 +51,7 @@ internal sealed class SqliteTestProvider : ITestProvider
     public string TableValuedFunctionSkipReason => string.Empty;
     public string SkipReason => string.Empty;
 
-    public IDataContext CreateContext() => CreateContext(null);
+    public IDataContext CreateContext() => CreateContext((Microsoft.Extensions.Logging.ILoggerFactory?)null);
 
     public IDataContext CreateContext(Microsoft.Extensions.Logging.ILoggerFactory? loggerFactory)
     {
@@ -60,6 +60,9 @@ internal sealed class SqliteTestProvider : ITestProvider
             builder = builder.UseLoggerFactory(loggerFactory);
         return new SqliteDataContext($"Data Source='{DatabasePath}'", builder);
     }
+
+    public IDataContext CreateContext(DataContextBuilder builder)
+        => new SqliteDataContext($"Data Source='{DatabasePath}'", builder);
 
     public void EnsureSeeded()
     {
