@@ -407,11 +407,11 @@ public sealed class MariaDbCollectionProjectionIntegrationTests : IDisposable
             })
             .ToList();
 
-        rows.Select(r => r.Id).Should().Equal(Rich, Profile, Empty);
+        rows.Select(r => r.Id).Should().Equal(Rich, Empty, Profile);
         rows[0].Tags.Select(t => t.Id).Should().Equal([9770],
             "the page splits this parent's surviving occurrences and keeps the first by id");
-        rows[1].Tags.Select(t => t.Id).Should().Equal([9772]);
-        rows[2].Tags.Should().NotBeNull().And.BeEmpty("a parent with no surviving occurrence keeps an empty page");
+        rows[1].Tags.Should().NotBeNull().And.BeEmpty("a parent with no surviving occurrence keeps an empty page");
+        rows[2].Tags.Select(t => t.Id).Should().Equal([9772]);
         counter.Executing.Should().Be(3, "split many-to-many: parent + junction + tag statements");
     }
 
