@@ -448,6 +448,87 @@ NULL-аргумент даёт NULL для каждого из них. Неоч�
 бинарных помощников (`get_bit`/`set_bit`/`bit_count` над `bit`) нет CLR-отображения, поэтому для них
 не выставлено ни одного члена, и вызов отклоняется, а не транслируется.
 
+## Полнотекстовый поиск (PostgreSQL, #281)
+
+Кросс-провайдерные предикаты и более ранняя native-поверхность — `contains`/`freetext`, `to_tsvector`,
+`to_tsquery`, `plainto_tsquery`/`phraseto_tsquery`/`websearch_to_tsquery`, `ts_match`, `ts_rank`,
+`ts_rank_cd`, `ts_headline` и `@@` — описаны в разделе
+[SQL для конкретных провайдеров › Полнотекстовый поиск](../guide/provider-specific-sql/postgresql.md#полнотекстовый-поиск).
+17 поставленных имён ниже живут на той же поверхности, гейтятся
+[`SupportsTextSearchFunctions`](xref:NextORM.Core.ISqlDialect.SupportsTextSearchFunctions), и все
+остальные провайдеры отклоняют их на этапе построения SQL.
+
+**Мост через `text`.** Npgsql отображает `tsvector`/`tsquery` в собственные типы
+`NpgsqlTsVector`/`NpgsqlTsQuery`, а не в `string`, поэтому каждый `tsvector`-результат этих членов
+отрисовывается как `cast(... as text)`. По той же причине каждый аргумент типов
+`tsvector`/`tsquery`/`regconfig`/`regdictionary`/`"char"` приводится к своему серверному типу:
+`text`-параметр не разрешается ни в одну из таких перегрузок. `to_tsvector` (и остальные более ранние
+члены) сохраняют голый native-вызов, потому что используются в позиции аргумента (`@@`, `ts_rank`,
+`ts_headline`), а не проецируются как значение.
+
+14 скалярных имён делятся на три группы в таком порядке — векторы и запросы, проверка и перезапись
+запроса, преобразование и лексирование:
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.Postgres.to_tsvector(document)` | `to_tsvector(document)` |
+| `SqlFunctions.Postgres.array_to_tsvector(words)` | `cast(array_to_tsvector(@words) as text)` |
+| `SqlFunctions.Postgres.json_to_tsvector(json, filter)` | `cast(json_to_tsvector(cast(@json as json), cast(@filter as jsonb)) as text)` |
+| `SqlFunctions.Postgres.json_to_tsvector(config, json, filter)` | `cast(json_to_tsvector(cast(@config as regconfig), cast(@json as json), cast(@filter as jsonb)) as text)` |
+| `SqlFunctions.Postgres.jsonb_to_tsvector(json, filter)` | `cast(jsonb_to_tsvector(cast(@json as jsonb), cast(@filter as jsonb)) as text)` |
+| `SqlFunctions.Postgres.jsonb_to_tsvector(config, json, filter)` | `cast(jsonb_to_tsvector(cast(@config as regconfig), cast(@json as jsonb), cast(@filter as jsonb)) as text)` |
+| `SqlFunctions.Postgres.numnode(tsquery)` | `numnode(cast(@tsquery as tsquery))` |
+| `SqlFunctions.Postgres.querytree(tsquery)` | `querytree(cast(@tsquery as tsquery))` |
+| `SqlFunctions.Postgres.setweight(tsvector, weight)` | `cast(setweight(cast(@tsvector as tsvector), cast(@weight as "char")) as text)` |
+| `SqlFunctions.Postgres.setweight(tsvector, weight, lexemes)` | `cast(setweight(cast(@tsvector as tsvector), cast(@weight as "char"), cast(@lexemes as text[])) as text)` |
+| `SqlFunctions.Postgres.strip(tsvector)` | `cast(strip(cast(@tsvector as tsvector)) as text)` |
+| `SqlFunctions.Postgres.ts_delete(tsvector, lexeme)` | `cast(ts_delete(cast(@tsvector as tsvector), @lexeme) as text)` |
+| `SqlFunctions.Postgres.ts_delete(tsvector, lexemes)` | `cast(ts_delete(cast(@tsvector as tsvector), @lexemes) as text)` |
+| `SqlFunctions.Postgres.ts_filter(tsvector, weights)` | `cast(ts_filter(cast(@tsvector as tsvector), cast(@weights as "char"[])) as text)` |
+| `SqlFunctions.Postgres.ts_rewrite(query, select)` | `cast(ts_rewrite(cast(@query as tsquery), @select) as text)` |
+| `SqlFunctions.Postgres.ts_rewrite(query, target, substitute)` | `cast(ts_rewrite(cast(@query as tsquery), cast(@target as tsquery), cast(@substitute as tsquery)) as text)` |
+| `SqlFunctions.Postgres.tsquery_phrase(query1, query2)` | `cast(tsquery_phrase(cast(@query1 as tsquery), cast(@query2 as tsquery)) as text)` |
+| `SqlFunctions.Postgres.tsquery_phrase(query1, query2, distance)` | `cast(tsquery_phrase(cast(@query1 as tsquery), cast(@query2 as tsquery), @distance) as text)` |
+| `SqlFunctions.Postgres.tsvector_to_array(tsvector)` | `tsvector_to_array(cast(@tsvector as tsvector))` |
+| `SqlFunctions.Postgres.ts_lexize(dictionary, token)` | `ts_lexize(cast(@dictionary as regdictionary), @token)` |
+
+* `array_to_tsvector` не назначает позиции и вызывает ошибку, если массив содержит `NULL`; пустой
+  массив даёт пустой `tsvector`.
+* `json_to_tsvector`/`jsonb_to_tsvector` принимают фильтр как текст `jsonb`-массива
+  (`["string","numeric","boolean","key","all"]`); форма с тремя аргументами задаёт конфигурацию
+  (`regconfig`).
+* Второй аргумент `ts_delete` намеренно оставлен без приведения: объявленный тип параметра выбирает
+  перегрузку `ts_delete(tsvector, text)` или `ts_delete(tsvector, text[])`.
+* `strip` отбрасывает позиции и веса, `ts_filter` оставляет только лексемы с указанным весом, а
+  `setweight` переназначает вес всем лексемам или только перечисленным — `NULL`-элемент, пустой массив
+  и лексема, отсутствующая в векторе, оставляют его без изменений.
+* `ts_rewrite` принимает либо SQL-запрос таблицы перезаписи (текст), либо пару
+  `target`/`substitute`; `tsquery_phrase` соединяет два запроса через `<->`, а форма с тремя
+  аргументами задаёт расстояние.
+* `tsvector_to_array` возвращает лексемы как `text[]` в порядке хранения; `ts_lexize` возвращает
+  лексемы одного токена как `text[]`, а стоп-слово даёт пустой массив.
+* **Аргументы-массивы должны приходить из параметра.** `words`, `lexemes` и `weights` — это CLR
+  `string?[]`: передавайте их как `SqlFunctions.Parameter<string?[]>(idx)` (или захваченный массив) и
+  никогда как встроенный литерал массива — отправленный вызов всегда читает значения из связанного
+  параметра, который диалект приводит к `text[]` или `"char"[]`.
+
+Три читателя токенизатора — это `FROM`-источники (`ctx.From(() => ...)`); они токенизируют текст
+конфигурацией текстового поиска текущей сессии:
+
+| C# | SQL | Row interface | Columns (C# ← SQL: CLR) |
+|---|---|---|---|
+| `SqlFunctions.Postgres.ts_debug(document)` | `ts_debug(@document)` | `ITsDebugRow` | `Alias string? ← alias`; `Description string? ← description`; `Token string? ← token`; `Dictionaries string[]? ← dictionaries`; `Dictionary string? ← dictionary`; `Lexemes string[]? ← lexemes` |
+| `SqlFunctions.Postgres.ts_parse(parser, document)` | `ts_parse(@parser, @document)` | `ITsParseRow` | `Tokid int? ← tokid`; `Token string? ← token` |
+| `SqlFunctions.Postgres.ts_token_type(parser)` | `ts_token_type(@parser)` | `ITsTokenTypeRow` | `Tokid int? ← tokid`; `Alias string? ← alias`; `Description string? ← description` |
+
+Перегрузки с `oid` у `ts_parse`/`ts_token_type` и `ts_debug(regconfig, text)` **не выставлены**:
+оба члена принимают парсер по **имени** (или работают через конфигурацию сессии), неявного
+приведения `text` → `oid` в PostgreSQL нет, поэтому `text`-аргумент никогда не может попасть в
+`oid`-формы. У колонок `regdictionary`/`regdictionary[]` в `ts_debug` тоже нет CLR-отображения,
+поэтому проекция приводит их к `text[]`/`text`. `ts_debug('')` и `ts_debug(NULL)` не дают строк,
+`ts_token_type('default')` даёт 23 строки на PostgreSQL 17, а неизвестное имя парсера вызывает
+`42704`.
+
 ## Строковые функции, хэширование и сжатие SQL Server
 
 Остальные строковые функции и функции хэширования/сжатия, специфичные для T-SQL, живут на

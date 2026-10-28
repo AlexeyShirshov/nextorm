@@ -198,6 +198,14 @@ select id, ts_rank(to_tsvector(somestring), to_tsquery('cat'))
 Native-поверхность реализована только в PostgreSQL; остальные провайдеры отклоняют её на этапе
 построения SQL.
 
+Дополнения `#281` расширяют ту же поверхность: конструкторы вектора и запроса `array_to_tsvector`,
+`json_to_tsvector` и `jsonb_to_tsvector`; члены проверки и перезаписи `numnode`, `querytree`,
+`setweight`, `strip`, `ts_delete`, `ts_filter`, `ts_rewrite` и `tsquery_phrase`; пару преобразования и
+лексирования `tsvector_to_array` и `ts_lexize`; и читатели токенизатора `ts_debug`, `ts_parse` и
+`ts_token_type` как `FROM`-источники. Их SQL-формы, интерфейсы строк и мост `cast(... as text)`
+перечислены в разделе
+[Строковые функции › Полнотекстовый поиск (PostgreSQL, #281)](../../scalar-functions/01-string-functions.md#полнотекстовый-поиск-postgresql-281).
+
 ## Расширенные скаляры и regexp
 
 Поверхность [`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres) добавляет `pg_typeof`, `num_nulls`/

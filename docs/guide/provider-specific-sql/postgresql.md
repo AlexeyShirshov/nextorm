@@ -196,6 +196,13 @@ select id, ts_rank(to_tsvector(somestring), to_tsquery('cat'))
 
 Only PostgreSQL implements the native surface; every other provider rejects it at SQL build time.
 
+The `#281` additions extend the same surface: the vector and query constructors `array_to_tsvector`,
+`json_to_tsvector` and `jsonb_to_tsvector`; the inspection and rewriting members `numnode`, `querytree`,
+`setweight`, `strip`, `ts_delete`, `ts_filter`, `ts_rewrite` and `tsquery_phrase`; the conversion and
+lexing pair `tsvector_to_array` and `ts_lexize`; and the tokenizer readers `ts_debug`, `ts_parse` and
+`ts_token_type` as `FROM` sources. Their SQL forms, row interfaces and the `cast(... as text)` bridge are
+listed in [String functions › Full-text search (PostgreSQL, #281)](../../scalar-functions/01-string-functions.md#full-text-search-postgresql-281).
+
 ## Extended scalar and regexp helpers
 
 The [`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres) surface adds `pg_typeof`, `num_nulls`/
