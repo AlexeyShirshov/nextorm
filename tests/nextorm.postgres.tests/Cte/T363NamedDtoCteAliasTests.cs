@@ -33,6 +33,14 @@ public class T363NamedDtoCteAliasTests
         public int? num { get; init; }
     }
 
+    /// <summary>Mixed declaration body: a renamed derived column followed by a physical column whose
+    /// identifier already equals the member name (so it must stay bare).</summary>
+    public sealed class MixedRow
+    {
+        public int? Renamed { get; init; }
+        public long id { get; init; }
+    }
+
     private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd)
         => ((DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(cmd, false, false, CancellationToken.None))
             .DbCommand.CommandText.Replace("\r\n", "\n");
@@ -114,6 +122,34 @@ public class T363NamedDtoCteAliasTests
         sql.Should().Contain("same as (select \"id\", \"num\"");
         sql.Should().NotContain("\"id\" as");
         sql.Should().NotContain("\"num\" as");
+    }
+
+    /// <summary>
+    /// T363 CHECK #1 / F-01 (refuted): the <c>DerivedColumnName</c> signal was suspected of leaking
+    /// from one select-list entry into the next, so a physical column following a renamed derived one
+    /// would gain a spurious alias. It cannot: <c>MakeColumn</c> creates a **fresh** visitor per entry
+    /// (<c>SqlBuildContext.CreateColumnVisitor</c> always constructs a new one), so the signal's whole
+    /// lifetime is one column. This pins that invariant as behaviour rather than as a comment — if a
+    /// future pooling change breaks it, this test turns red.
+    /// </summary>
+    [Fact]
+    public void Mixed_body_should_alias_the_renamed_derived_column_only()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var source = ctx.From<IComplexEntity>().Select(x => new { id = x.Id, num = x.Int }).AsCte("source");
+        var mixed = ctx.From(source)
+            .Join<IComplexEntity>(ctx.From<IComplexEntity>(), (s, e) => s.id == e.Id)
+            .Select(p => new MixedRow { Renamed = p.Item1.num, id = p.Item2.Id })
+            .AsCte("mixed");
+
+        var sql = SqlOf(ctx, ctx.From(mixed).Select(x => new { x.Renamed }));
+
+        // The derived column is aliased to the member name; the physical column whose identifier
+        // already matches the member name stays bare — no alias carried over from the earlier column.
+        sql.Should().Contain("mixed as (select t1.\"num\" as \"Renamed\", t2.id");
+        sql.Should().NotContain("t2.id as");
+        sql.Should().NotContain("\"id\" as \"id\"");
     }
 
     [Fact]
