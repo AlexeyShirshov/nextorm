@@ -58,9 +58,11 @@ ClickHouse renders `dateTrunc('part', x)`, `addDays`/`addMonths`/.../`addSeconds
 
 The names on [`SqlFunctions.MySql`](../guide/provider-specific-sql/mysql.md) render only on the MySQL
 provider; PostgreSQL, SQL Server, SQLite, ClickHouse and the in-memory provider reject them with
-`NotSupportedException`. Every name below is **verified against MySQL 8.4 only**: MariaDB refuses the
-names added by this slice until its own verification ([#284](https://github.com/AlexeyShirshov/nextorm/issues/284)),
-while the MariaDB-only names keep their separate section below.
+`NotSupportedException`. This half of the catalogue was **delivered by
+[#283](https://github.com/AlexeyShirshov/nextorm/issues/283) and verified against MySQL 8.4 only**.
+MariaDB evidence is separate and is never inferred from MySQL: [#284](https://github.com/AlexeyShirshov/nextorm/issues/284)
+re-verified every name on MariaDB 11.4.13 and records the outcome in the
+[MariaDB catalogue](#mariadb-catalogue) — which is why fourteen names claimed in this half are refused there.
 
 The catalogue holds 86 newly delivered members plus the two names that were already covered
 (`json_storage_free`, delivered in an earlier slice, and the cross-provider `connection_id`); the three
@@ -186,19 +188,191 @@ control on the same provider. The exact messages are listed in the
 | `values` | `VALUES(column)` has no scalar-expression contract — it names the new row only inside the upsert mutation builder — and is deprecated in MySQL 8.4 | the mutation builder's upsert API |
 | `json_table` | a table-producing construct: needs a `FROM`/join position and a `COLUMNS` definition list, so it is not a scalar function | raw SQL, or a `[SqlFunction]` wrapper |
 
-## MariaDB-only JSON functions
+<a id="mariadb-only-json-functions"></a>
 
-`json_equals` and `json_normalize` on
-[`SqlFunctions.MySql`](../guide/provider-specific-sql/mysql.md#mariadb) render only on MariaDB
-(verified on the 11.4 baseline); MySQL, PostgreSQL, SQL Server, SQLite, ClickHouse and the in-memory
-provider reject both with `NotSupportedException`.
+## MariaDB catalogue
 
-| Member | SQL | Result | Availability |
+`SqlFunctions.MySql` carries both halves: the names only MySQL renders are the section above, and the names
+MariaDB renders are listed here. A MariaDB-only member is refused by MySQL, PostgreSQL, SQL Server, SQLite,
+ClickHouse and the in-memory provider. [#283](https://github.com/AlexeyShirshov/nextorm/issues/283) delivered
+the MySQL catalogue; [#284](https://github.com/AlexeyShirshov/nextorm/issues/284) closes its MariaDB
+assessment and adds the MariaDB-only surface.
+
+The table covers all 138 candidates of the #284 inventory: **109 delivered / 6 already covered / 18 refused
+with a reason / 5 version-gated (MariaDB 11.7) / 0 pending**. Verification used **MariaDB 11.4.13**; the five
+11.7-gated functions were not executed, and no MariaDB behaviour is inferred from the MySQL result. In the
+third column `11.4` means "present on the verified 11.4.13 baseline", a lower value is a documented minimum
+and a higher one an unverified gate. Seventeen delivered rows return a 32-bit provider field where the shared
+member is typed for the wider MySQL type: the asserted contract is the declared CLR type and the widening is
+lossless.
+
+### Delivered
+
+| Inventory name | Public API / form | MariaDB minimum or gate | Behaviour / refusal reason / verification qualification |
 |---|---|---|---|
-| `json_equals(json1, json2)` | `json_equals(...)` | `int?` — `1` for equal JSON documents (object key order does not matter), `0` when they differ, `null` for SQL NULL | [MariaDB only](../guide/provider-specific-sql/mysql.md#mariadb); MySQL and other providers reject |
-| `json_normalize(json)` | `json_normalize(...)` | `string?` — canonical JSON text with sorted object keys and no unnecessary whitespace (idempotent), `null` for SQL NULL | [MariaDB only](../guide/provider-specific-sql/mysql.md#mariadb); MySQL and other providers reject |
+| `JSON_ARRAY` | `json_array(values...)` | 11.4 | accepted on 11.4.13 (`[1, 2]`); the untyped-NULL form is **not comparable** (binary wire metadata produces `byte[]`), the non-NULL form is verified |
+| `JSON_ARRAYAGG` | `json_arrayagg(value)` | 11.4 | accepted on 11.4.13 (`[1,2]`) |
+| `JSON_CONTAINS` | `json_contains(target, candidate[, path])` | 11.4 | accepted on 11.4.13 (`1`); provider wire type `Int32` widened losslessly to the declared CLR contract |
+| `JSON_CONTAINS_PATH` | `json_contains_path(json, oneOrAll, paths...)` | 11.4 | accepted on 11.4.13 (`1`); provider wire type `Int32` widened losslessly to the declared CLR contract |
+| `JSON_MERGE` | `json_merge(first, second[, rest...])` | 11.4 | accepted on 11.4.13 (`{"a": 1, "b": 2}`) |
+| `JSON_OBJECT` | `json_object(keyValues...)` | 11.4 | accepted on 11.4.13 (`{"a": 1}`) |
+| `JSON_OBJECTAGG` | `json_objectagg(key, value)` | 11.4 | accepted on 11.4.13 (`{"1":2}`) |
+| `JSON_OVERLAPS` | `json_overlaps(left, right)` | 11.4 | accepted on 11.4.13 (`1`); provider wire type `Int32` widened losslessly to the declared CLR contract |
+| `JSON_PRETTY` | `json_pretty(json)` | 11.4 | accepted on 11.4.13 (the document re-indented over several lines) |
+| `JSON_QUOTE` | `json_quote(value)` | 11.4 | accepted on 11.4.13 (`"a"`); the untyped-NULL form is **not comparable** (binary wire metadata produces `byte[]`), the non-NULL form is verified |
+| `JSON_SCHEMA_VALID` | `json_schema_valid(schema, document)` | 11.4 | accepted on 11.4.13 (`1`); provider wire type `Int32` widened losslessly to the declared CLR contract |
+| `JSON_SEARCH` | `json_search(json, oneOrAll, search[, escape[, paths...]])` | 11.4 | accepted on 11.4.13 (`"$.a"`) |
+| `BIN` | `bin(value)` | 11.4 | accepted on 11.4.13 (`101`) |
+| `EXPORT_SET` | `export_set(bits, on, off[, separator[, count]])` | 11.4 | accepted on 11.4.13 (the 64-character bit string `Y,N,Y,N,...` for `5`) |
+| `HEX` | `hex(value)` | 11.4 | accepted on 11.4.13 (`616263`) |
+| `MAKE_SET` | `make_set(bits, values...)` | 11.4 | accepted on 11.4.13 (`a`) |
+| `OCT` | `oct(value)` | 11.4 | accepted on 11.4.13 (`10`) |
+| `ORD` | `ord(value)` | 11.4 | accepted on 11.4.13 (`65`); provider wire type `Int32` widened losslessly to the declared CLR contract |
+| `QUOTE` | `quote(value)` | 11.4 | accepted on 11.4.13 (`'a\'b'`); the untyped-NULL form is **not comparable** (binary wire metadata produces `byte[]`), the non-NULL form is verified |
+| `SOUNDEX` | `soundex(value)` | 11.4 | accepted on 11.4.13 (`H400`) |
+| `STRCMP` | `strcmp(left, right)` | 11.4 | accepted on 11.4.13 (`-1`); provider wire type `Int32` widened losslessly to the declared CLR contract |
+| `TO_BASE64` | `to_base64(value)` | 11.4 | accepted on 11.4.13 (`YWJj`) |
+| `FROM_BASE64` | `from_base64(text)` | 11.4 | accepted on 11.4.13 (`byte[]` with the bytes `abc`) |
+| `UNHEX` | `unhex(text)` | 11.4 | accepted on 11.4.13 (`byte[]` with the bytes `ab`) |
+| `WEIGHT_STRING` | `weight_string(value[, cast, length])` | 11.4 | accepted on 11.4.13 (`byte[]`, `2075208F20A9`) |
+| `CONV` | `conv(value, fromBase, toBase)` | 11.4 | accepted on 11.4.13 (`255`) |
+| `CRC32` | `crc32(value)` | 11.4 | accepted on 11.4.13 (`891568578`); provider wire type `UInt32` widened losslessly to the declared CLR contract |
+| `LOG2` | `log2(value)` | 11.4 | accepted on 11.4.13 (`3`) |
+| `RAND` | `rand([seed])` | 11.4 | accepted on 11.4.13 (`0.6629110161800972`; the value is not deterministic) |
+| `TRUNCATE` | `truncate(value, places)` | 11.4 | accepted on 11.4.13 (`1.23`) |
+| `BIT_COUNT` | `bit_count(value)` | 11.4 | accepted on 11.4.13 (`2`); provider wire type `Int32` widened losslessly to the declared CLR contract |
+| `BIT_AND` | `bit_and(value)` | 11.4 | accepted on 11.4.13 (`1`) |
+| `BIT_OR` | `bit_or(value)` | 11.4 | accepted on 11.4.13 (`3`) |
+| `BIT_XOR` | `bit_xor(value)` | 11.4 | accepted on 11.4.13 (`2`) |
+| `ADDDATE` | `adddate(date, days)` | 11.4 | accepted on 11.4.13 (`2020-01-02`) |
+| `ADDTIME` | `addtime(datetime, time)` | 11.4 | accepted on 11.4.13 (`2020-01-01 01:00:00`) |
+| `CONVERT_TZ` | `convert_tz(datetime, from, to)` | 11.4 | accepted on 11.4.13 (`2020-01-01T02:00:00`) |
+| `DAYNAME` | `dayname(date)` | 11.4 | accepted on 11.4.13 (`Wednesday`) |
+| `FROM_DAYS` | `from_days(days)` | 11.4 | accepted on 11.4.13 (`2020-07-29T00:00:00`) |
+| `GET_FORMAT` | `get_format(kind, format)` | 11.4 | accepted on 11.4.13 (`%d.%m.%Y`) |
+| `MAKEDATE` | `makedate(year, dayOfYear)` | 11.4 | accepted on 11.4.13 (`2020-02-01T00:00:00`) |
+| `MAKETIME` | `maketime(hour, minute, second)` | 11.4 | accepted on 11.4.13 (`12:34:56`) |
+| `MICROSECOND` | `microsecond(datetime)` | 11.4 | accepted on 11.4.13 (`123456`); provider wire type `Int32` widened losslessly to the declared CLR contract |
+| `MONTHNAME` | `monthname(date)` | 11.4 | accepted on 11.4.13 (`January`) |
+| `PERIOD_ADD` | `period_add(period, months)` | 11.4 | accepted on 11.4.13 (`202403`); provider wire type `Int32` widened losslessly to the declared CLR contract |
+| `PERIOD_DIFF` | `period_diff(period1, period2)` | 11.4 | accepted on 11.4.13 (`1`); provider wire type `Int32` widened losslessly to the declared CLR contract |
+| `SEC_TO_TIME` | `sec_to_time(seconds)` | 11.4 | accepted on 11.4.13 (`01:01:01`) |
+| `SUBDATE` | `subdate(date, days)` | 11.4 | accepted on 11.4.13 (`2019-12-31`) |
+| `SUBTIME` | `subtime(datetime, time)` | 11.4 | accepted on 11.4.13 (`2019-12-31 23:00:00`) |
+| `TIME` | `time(datetime)` | 11.4 | accepted on 11.4.13 (`12:34:56`) |
+| `TIME_FORMAT` | `time_format(time, format)` | 11.4 | accepted on 11.4.13 (`12:34`) |
+| `TIME_TO_SEC` | `time_to_sec(time)` | 11.4 | accepted on 11.4.13 (`45296`) |
+| `TIMEDIFF` | `timediff(datetime1, datetime2)` | 11.4 | accepted on 11.4.13 (`1.00:00:00`) |
+| `TIMESTAMP` | `timestamp(datetime)` | 11.4 | accepted on 11.4.13 (`2020-01-01T00:00:00`) |
+| `TO_DAYS` | `to_days(date)` | 11.4 | accepted on 11.4.13 (`737790`); provider wire type `Int32` widened losslessly to the declared CLR contract |
+| `TO_SECONDS` | `to_seconds(date)` | 11.4 | accepted on 11.4.13 (`63745056000`) |
+| `YEARWEEK` | `yearweek(date[, mode])` | 11.4 | accepted on 11.4.13 (`201952`); provider wire type `Int32` widened losslessly to the declared CLR contract |
+| `AES_ENCRYPT` | `aes_encrypt(data, key[, iv, kdf, salt, iterations])` | 11.4 | accepted on 11.4.13 (`byte[]`; the AES key makes the ciphertext stable per key) |
+| `AES_DECRYPT` | `aes_decrypt(data, key[, iv, kdf, salt, iterations])` | 11.4 | accepted on 11.4.13 (`byte[]` with the plaintext `text`) |
+| `COMPRESS` | `compress(value)` | 11.4 | accepted on 11.4.13 (`byte[]` with the zlib frame and length prefix) |
+| `UNCOMPRESS` | `uncompress(value)` | 11.4 | accepted on 11.4.13 (`byte[]` with the bytes `abc`) |
+| `UNCOMPRESSED_LENGTH` | `uncompressed_length(value)` | 11.4 | accepted on 11.4.13 (`3`); provider wire type `Int32` widened losslessly to the declared CLR contract |
+| `RANDOM_BYTES` | `random_bytes(length)` | 11.4 | accepted on 11.4.13 (`byte[]`; the value is random) |
+| `FOUND_ROWS` | `found_rows()` | 11.4 | accepted on 11.4.13 (`1`) |
+| `LAST_INSERT_ID` | `last_insert_id([value])` | 11.4 | accepted on 11.4.13 (`0`) |
+| `ROW_COUNT` | `row_count()` | 11.4 | accepted on 11.4.13 (`-1`) |
+| `CURRENT_ROLE` | `current_role()` | 11.4 | accepted on 11.4.13 (SQL NULL for the anonymous connection, `string?`) |
+| `CHARSET` | `charset(expression)` | 11.4 | accepted on 11.4.13 (`utf8mb4`) |
+| `COLLATION` | `collation(expression)` | 11.4 | accepted on 11.4.13 (`utf8mb4_uca1400_ai_ci`) |
+| `COERCIBILITY` | `coercibility(expression)` | 11.4 | accepted on 11.4.13 (`4`); provider wire type `Int32` widened losslessly to the declared CLR contract |
+| `BENCHMARK` | `benchmark(count, expression)` | 11.4 | accepted on 11.4.13 (`0`); provider wire type `Int32` widened losslessly to the declared CLR contract |
+| `UUID_SHORT` | `uuid_short()` | 11.4 | accepted on 11.4.13 (`102141557221621760`; unique to the server instance) |
+| `SLEEP` | `sleep(seconds)` | 11.4 | accepted on 11.4.13 (`0`); provider wire type `Int32` widened losslessly to the declared CLR contract |
+| `NAME_CONST` | `name_const(name, value)` | 11.4 | accepted on 11.4.13 (`1`) |
+| `COLUMN_DEFAULT` | `column_default(column)` | 11.4 | accepted on 11.4.13 (`7`) |
+| `SFORMAT` | `sformat(format, values...)` | 11.4 | accepted on 11.4.13 (`42`) |
+| `TRIM_ORACLE` | `trim_oracle(value)` | 11.4 | accepted on 11.4.13 (`a`) |
+| `NATURAL_SORT_KEY` | `natural_sort_key(value)` | 11.4 | accepted on 11.4.13 (`a110`) |
+| `LENGTHB` | `lengthb(value)` | 11.4 | accepted on 11.4.13 (`3`) |
+| `CHR` | `chr(value)` | 11.4 | accepted on 11.4.13 (`A`) |
+| `FORMAT_PICO_TIME` | `format_pico_time(picoseconds)` | 11.4 | accepted on 11.4.13 (`  1 ps`) |
+| `DECODE_ORACLE` | `decode_oracle(expression, search, result, ...)` | 11.4 | accepted on 11.4.13 (`a`) |
+| `ROWNUM` | `rownum()` | 11.4 | accepted on 11.4.13 (`1`); **zero-argument function form only** — it renders exactly `ROWNUM()`, while the bare pseudo-column needs `sql_mode=ORACLE` and is not delivered |
+| `DECODE_HISTOGRAM` | `decode_histogram(bucket, value)` | 11.4 | accepted on 11.4.13 (`0.380,0.004,0.004,0.612`) |
+| `BINLOG_GTID_POS` | `binlog_gtid_pos(file, position)` | 11.4 + binary logging | the name resolves on 11.4.13, but the live case is **precondition-skipped on the stock container** (error 1381, binary logging off); verified separately on a binlog-enabled 11.4.13 instance — `VARCHAR`, nullable, value `0-1-5` |
+| `ENCODE` | `encode(value, password)` | 11.4 | accepted on 11.4.13 (`byte[]`; the password makes the ciphertext stable per key) |
+| `DECODE` | `decode(value, password)` | 11.4 | accepted on 11.4.13 (`byte[]` with the bytes `abc`) |
+| `ENCRYPT` | `encrypt(value[, salt])` | 11.4 | accepted on 11.4.13 (`abcFZSxKKdq5s6`) |
+| `DES_ENCRYPT` | `des_encrypt(value[, key])` | 11.4 (removed in 13.0) | accepted on 11.4.13 (`byte[]`); present on the 11.4 baseline and removed in MariaDB 13.0 |
+| `DES_DECRYPT` | `des_decrypt(value[, key])` | 11.4 (removed in 13.0) | accepted on 11.4.13 (`byte[]` with the bytes `abc`); removed in MariaDB 13.0 |
+| `OLD_PASSWORD` | `old_password(value)` | 11.4 | accepted on 11.4.13 (`7cd2b5942be28759`) |
+| `CRC32C` | `crc32c(value)` | 11.4 | accepted on 11.4.13 (`910901175`) |
+| `SYS_GUID` | `sys_guid()` | 11.4 | accepted on 11.4.13 (a 32-character hexadecimal identifier; the value is random) |
+| `JSON_LOOSE` | `json_loose(json)` | 11.4 | accepted on 11.4.13 (`{"a": 1, "b": [2, 3]}`) |
+| `JSON_ARRAY_INTERSECT` | `json_array_intersect(first, second[, rest...])` | 11.2 | accepted on 11.4.13 (`[1, 2]`) |
+| `JSON_KEY_VALUE` | `json_key_value(json, path)` | 11.2 | accepted on 11.4.13 (`[{"key": "a", "value": 1}]`) |
+| `JSON_OBJECT_FILTER_KEYS` | `json_object_filter_keys(json, keys...)` | 11.2 | accepted on 11.4.13 (`byte[]` carrying the JSON object `{"a": 1}`) |
+| `JSON_OBJECT_TO_ARRAY` | `json_object_to_array(json)` | 11.2 | accepted on 11.4.13 (`byte[]` carrying `[["a", 1]]`) |
+| `PREVIOUS VALUE FOR` | `previous_value_for(sequence)` | 11.4 | accepted on 11.4.13 (`1`); a grammar form, so the sequence name is the unquoted identifier (`previous value for t350_seq`); it returns the value this connection's `NEXT VALUE FOR` produced |
+| `COLUMN_CREATE` | `column_create(name, value, ...)` | 11.4 | accepted on 11.4.13 (`byte[]`, the dynamic-columns blob) |
+| `COLUMN_ADD` | `column_add(dynamicColumn, name, value, ...)` | 11.4 | accepted on 11.4.13 (`byte[]`, the extended blob) |
+| `COLUMN_DELETE` | `column_delete(dynamicColumn, name, ...)` | 11.4 | accepted on 11.4.13 (`byte[]`, the reduced blob) |
+| `COLUMN_JSON` | `column_json(dynamicColumn)` | 11.4 | accepted on 11.4.13 (`{"a":1}`) |
+| `COLUMN_LIST` | `column_list(dynamicColumn)` | 11.4 | accepted on 11.4.13 (the column name wrapped in backticks: `` `a` ``) |
+| `COLUMN_EXISTS` | `column_exists(dynamicColumn, name)` | 11.4 | accepted on 11.4.13 (`1`) |
+| `COLUMN_CHECK` | `column_check(dynamicColumn)` | 11.4 | accepted on 11.4.13 (`1`) |
+| `WSREP_LAST_SEEN_GTID` | `wsrep_last_seen_gtid()` | 11.4 | accepted on the default non-Galera server on 11.4.13 (`byte[]` with the text `0-0-0`) |
+| `WSREP_LAST_WRITTEN_GTID` | `wsrep_last_written_gtid()` | 11.4 | accepted on the default non-Galera server on 11.4.13 (`byte[]` with the text `0-0-0`) |
+| `WSREP_SYNC_WAIT_UPTO_GTID` | `wsrep_sync_wait_upto_gtid(gtid)` | 11.4 | accepted on 11.4.13 (`1`); returns the string `1` on the non-Galera server |
+
+### Already covered
+
+| Inventory name | Public API / form | MariaDB minimum or gate | Behaviour / refusal reason / verification qualification |
+|---|---|---|---|
+| `JSON_NORMALIZE` | `json_normalize(json)` | 11.4 | already covered by the T284 MariaDB-only surface (`json_normalize`, live case `T284_JsonNormalize_ShouldEvaluate`): canonical text with sorted keys, idempotent; accepted on 11.4.13 (`{"a":1.0E0,"b":2.0E0}`). |
+| `JSON_EQUALS` | `json_equals(json1, json2)` | 11.4 | already covered by the T284 surface (`json_equals`, live case `T284_JsonEquals_ShouldEvaluate`): `1` for equal documents (key order does not matter); accepted on 11.4.13 (`1`). |
+| `MEDIAN` | `median(value)` | 10.3 | already covered by the percentile work: composes to `percentile_cont(0.5) within group (order by ...) over (...)`; accepted on 11.4.13 (`2`). |
+| `PERCENTILE_CONT` | `SqlFunctions.Sql.percentile_cont(fraction, value)` | 10.3 | already covered: native window percentile `percentile_cont(f) within group (order by ...) over (...)`; accepted on 11.4.13 (`2`). |
+| `PERCENTILE_DISC` | `SqlFunctions.Sql.percentile_disc(fraction, value)` | 10.3 | already covered: native window percentile `percentile_disc(f) within group (order by ...) over (...)`; accepted on 11.4.13 (`1`). |
+| `NEXT VALUE FOR` | `next_value_for(sequence)` | 11.4 | already covered on the sequence seam: renders `next value for <sequence>` with the name as an identifier; accepted on 11.4.13 (`1`). |
+
+### Refused
+
+Each name below is refused before any SQL is emitted (`NotSupportedException`); the reason quotes the
+11.4.13 observation that produced the disposition.
+
+| Inventory name | Public API / form | MariaDB minimum or gate | Behaviour / refusal reason / verification qualification |
+|---|---|---|---|
+| `UUID_TO_BIN` | `uuid_to_bin(value)` | none — absent on 11.4.13 | no `UUID_TO_BIN` on the server (error 1305 on the value and the NULL form); MariaDB spells the conversion as a cast. Inherited from the three-name permanent exclusion set; the member throws `NotSupportedException` before any SQL. |
+| `BIN_TO_UUID` | `bin_to_uuid(value)` | none — absent on 11.4.13 | no `BIN_TO_UUID` (error 1305 on both forms); MariaDB spells the conversion as a cast. Inherited from the same permanent exclusion set. |
+| `JSON_STORAGE_FREE` | `json_storage_free(json)` | none — absent on 11.4.13 | error 1305 on both forms: MariaDB has no binary-JSON update accounting. Inherited from the permanent exclusion set, although the name is delivered on MySQL. |
+| `JSON_ARROW` | `json_arrow(column, path)` | none — 11.4 parser rejects the form | error 1064 at the `->` token and again with the spaced spelling `'{"a":1}' -> '$.a'`; the corrected statement is refused too, so this is absence, not a typo. The accepted control is `JSON_EXTRACT`. |
+| `JSON_ARROW_TEXT` | `json_arrow_text(column, path)` | none — 11.4 parser rejects the form | error 1064 at the `->>` token and with the spaced spelling; MariaDB extracts with `JSON_EXTRACT`/`JSON_VALUE` instead. |
+| `JSON_SCHEMA_VALIDATION_REPORT` | `json_schema_validation_report(schema, document)` | none — absent on 11.4.13 | error 1305 `FUNCTION ... does not exist` on the only form. |
+| `JSON_STORAGE_SIZE` | `json_storage_size(json)` | none — absent on 11.4.13 | error 1305 on both forms: no binary-JSON storage accounting. |
+| `MEMBER_OF` | `member_of(value, jsonArray)` | none — 11.4 parser rejects the form | error 1064 at the `OF` token for `1 MEMBER OF ('[1,2]')` and for the unparenthesised `1 MEMBER OF JSON_ARRAY(1,2)`; the accepted control is `JSON_CONTAINS`. |
+| `VALIDATE_PASSWORD_STRENGTH` | `validate_password_strength(password)` | none — absent on 11.4.13 | error 1305 on both forms; the component is absent from the stock 11.4 image. |
+| `STATEMENT_DIGEST` | `statement_digest(statement)` | none — absent on 11.4.13 | error 1305 on both forms; the performance-schema digest functions are not built in. |
+| `STATEMENT_DIGEST_TEXT` | `statement_digest_text(statement)` | none — absent on 11.4.13 | error 1305 on both forms; sibling of `STATEMENT_DIGEST`. |
+| `ICU_VERSION` | `icu_version()` | none — absent on 11.4.13 | error 1305; the image links no ICU build identifier. |
+| `IS_UUID` | `is_uuid(value)` | none — absent on 11.4.13 | error 1305 on both forms. |
+| `GROUPING` | `grouping(expressions...)` | none — absent on 11.4.13 | error 1305 on the `WITH ROLLUP` form; MariaDB has no `GROUPING()` aggregate. |
+| `TRUNC` | `trunc(value)` | none — absent on 11.4.13, ORACLE mode included | error 1305 for the string form in default mode and for `TRUNC(SYSDATE)`, `TRUNC(CAST(... AS DATETIME),'DD')` and `TRUNC(123.456)` under `sql_mode=ORACLE`, while the ORACLE-mode session is proven live by bare `ROWNUM`. Use `TRUNCATE` for numeric truncation. |
+| `FORMAT_BYTES` | — (no member; the dialect renderer refuses) | none — absent on 11.4.13 | error 1305 on both forms; no surface member exists for the name, so the dialect renderer is the path that refuses it. |
+| `_rowid` | `_rowid()` | n/a — table-dependent precondition | requires a source table with one integer primary-key column, which this function surface cannot validate. `Int32` on a single-integer-primary-key rowid table; error 1054 `Unknown column` on a no-PK, a text-PK and a composite-PK table. |
+| `COLUMN_GET` | `column_get(value, path)` | none — no compile-time `AS` clause | requires a compile-time `AS` type clause the supported function surface cannot represent safely. The token is mandatory (error 1064 for the two-argument form) and selects the CLR type: `unsigned`→`UInt64`, `char`→`String`, `int`→`Int64`; it is rejected on `COLUMN_CREATE`/`COLUMN_ADD`. |
+
+### Version-gated
+
+| Inventory name | Public API / form | MariaDB minimum or gate | Behaviour / refusal reason / verification qualification |
+|---|---|---|---|
+| `VEC_FromText` | `vec_from_text(text)` | 11.7 | requires MariaDB 11.7 or later; error 1305 on the 11.4.13 baseline and not executed — the member throws `NotSupportedException` carrying the 11.7 gate. |
+| `VEC_ToText` | `vec_to_text(vector)` | 11.7 | requires MariaDB 11.7 or later; error 1305 on the 11.4.13 baseline and not executed — the member throws `NotSupportedException` carrying the 11.7 gate. |
+| `VEC_DISTANCE_EUCLIDEAN` | `vec_distance_euclidean(left, right)` | 11.7 | requires MariaDB 11.7 or later; error 1305 on the 11.4.13 baseline and not executed — the member throws `NotSupportedException` carrying the 11.7 gate. |
+| `VEC_DISTANCE_COSINE` | `vec_distance_cosine(left, right)` | 11.7 | requires MariaDB 11.7 or later; error 1305 on the 11.4.13 baseline and not executed — the member throws `NotSupportedException` carrying the 11.7 gate. |
+| `VEC_DISTANCE` | `vec_distance(left, right)` | 11.7 | requires MariaDB 11.7 or later; error 1305 on the 11.4.13 baseline and not executed — the member throws `NotSupportedException` carrying the 11.7 gate. |
 
 ## Explicitly unsupported
+
+The MariaDB refusals are a different category and are not repeated here: they are vendor names
+MariaDB 11.4.13 does not implement (or cannot express through this surface), and each keeps its exact reason
+and evidence in the [MariaDB catalogue](#mariadb-catalogue). The list below is provider-independent API
+surface that no provider renders.
 
 These throw `NotSupportedException` rather than emitting SQL with different semantics:
 
