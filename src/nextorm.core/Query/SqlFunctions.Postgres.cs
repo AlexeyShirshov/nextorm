@@ -1845,6 +1845,42 @@ namespace NextORM.Core;
         public TvfEntityBuilder<SqlFunctions.IJsonbEachRow> jsonb_each_text(object? json) => new("jsonb_each_text");
 
         /// <summary>
+        /// <c>json_array_elements(json)</c> as a FROM source: one row per array element of the <c>json</c>
+        /// document, the single <c>value</c> column is the element as a <c>json</c> value (see
+        /// <see cref="SqlFunctions.IJsonArrayElementsRow"/>). The document is a JSON <em>text</em>: the
+        /// argument is cast to <c>json</c> in the emitted SQL, because a text parameter does not resolve to
+        /// the function. An empty array yields no rows.
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.IJsonArrayElementsRow> json_array_elements(string? json) => new("json_array_elements");
+
+        /// <summary>
+        /// <c>json_array_elements_text(json)</c> as a FROM source: one row per array element, the
+        /// <c>value</c> column is text (<c>null</c> for a JSON <c>null</c> element).
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.IJsonArrayElementsRow> json_array_elements_text(string? json) => new("json_array_elements_text");
+
+        /// <summary>
+        /// <c>json_each(json)</c> as a FROM source: one row per top-level object property, the
+        /// <c>key</c> (text) and <c>value</c> (a <c>json</c> value) columns (see
+        /// <see cref="SqlFunctions.IJsonbEachRow"/>; PostgreSQL 17 returns exactly two columns). An empty
+        /// object yields no rows.
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.IJsonbEachRow> json_each(string? json) => new("json_each");
+
+        /// <summary><c>json_each_text(json)</c> as a FROM source: one row per property, <c>key</c>/<c>value</c> are text.</summary>
+        public TvfEntityBuilder<SqlFunctions.IJsonbEachRow> json_each_text(string? json) => new("json_each_text");
+
+        /// <summary>
+        /// <c>jsonb_path_query_tz(json, path, vars, silent)</c> as a FROM source: one row per JSONPath
+        /// match, the single <c>jsonb_path_query_tz</c> column holds the match as text (see
+        /// <see cref="SqlFunctions.IJsonPathQueryTzRow"/>). The <c>_tz</c> form is required for paths that
+        /// depend on the session time zone (for example the <c>.datetime()</c> method); the non-<c>_tz</c>
+        /// sibling <see cref="jsonb_path_query(object?, string?)"/> raises an error for them. No match
+        /// yields no rows, and a SQL-NULL document yields no rows.
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.IJsonPathQueryTzRow> jsonb_path_query_tz(string? json, string? path, string? vars, bool? silent) => new("jsonb_path_query_tz");
+
+        /// <summary>
         /// <c>jsonb_object_keys(json)</c> as a FROM source: one row per top-level object key (see
         /// <see cref="SqlFunctions.IJsonObjectKeysRow"/>).
         /// </summary>
@@ -1878,6 +1914,118 @@ namespace NextORM.Core;
         /// <typeparam name="TRow">The caller-declared row shape; its <c>[Column]</c> names/types form the column list.</typeparam>
         /// <param name="json">The JSON array to expand.</param>
         public TvfEntityBuilder<TRow> jsonb_to_recordset<TRow>(object? json) => new("jsonb_to_recordset", null, null, null, [], TableFunctionSchema.AliasColumnList);
+
+        /// <summary>
+        /// <c>json_to_record(json) AS x(col type, ...)</c> as a FROM source: one row from a single
+        /// <c>json</c> object, with the result schema derived from <typeparamref name="TRow"/>'s mapped
+        /// properties and rendered as the alias column-definition list. The document is a JSON
+        /// <em>text</em> (the argument is cast to <c>json</c> in the emitted SQL). Requires a provider that
+        /// supports a typed result schema (see <see cref="ISqlDialect.SupportsResultSchema(TableFunctionSchema)"/>;
+        /// PostgreSQL). Use through <c>ctx.From(() =&gt; ...)</c>.
+        /// </summary>
+        /// <typeparam name="TRow">The caller-declared row shape; its <c>[Column]</c> names/types form the column list.</typeparam>
+        /// <param name="json">The JSON object to expand.</param>
+        public TvfEntityBuilder<TRow> json_to_record<TRow>(string? json) => new("json_to_record", null, null, null, [], TableFunctionSchema.AliasColumnList);
+
+        /// <summary>
+        /// <c>json_to_recordset(json) AS x(col type, ...)</c> as a FROM source: one row per element of a
+        /// <c>json</c> array, with the result schema derived from <typeparamref name="TRow"/>'s mapped
+        /// properties. This is the set form of <see cref="json_to_record{TRow}(string?)"/>; an empty array
+        /// yields no rows.
+        /// </summary>
+        /// <typeparam name="TRow">The caller-declared row shape; its <c>[Column]</c> names/types form the column list.</typeparam>
+        /// <param name="json">The JSON array to expand.</param>
+        public TvfEntityBuilder<TRow> json_to_recordset<TRow>(string? json) => new("json_to_recordset", null, null, null, [], TableFunctionSchema.AliasColumnList);
+
+        /// <summary>
+        /// <c>json_populate_record(base, json, use_json_as_text)</c> is refused: the first argument is an
+        /// <c>anyelement</c> base <em>row</em> whose composite type a CLR type cannot name, so no faithful
+        /// call can be built (the column-definition list is available but does not replace the base row).
+        /// Referencing this member fails while the query is prepared.
+        /// </summary>
+        /// <typeparam name="TRow">The base row type the server would have to infer from the base value.</typeparam>
+        /// <param name="baseRecord">The base row value; a CLR type cannot carry the <c>anyelement</c> base.</param>
+        /// <param name="json">The JSON document to expand.</param>
+        /// <param name="useJsonAsText">Whether JSON strings are read as text values.</param>
+        /// <returns>Never returns; the call is refused when the source is composed.</returns>
+        public TvfEntityBuilder<TRow> json_populate_record<TRow>(object? baseRecord, string? json, bool? useJsonAsText) =>
+            throw new NotSupportedException(
+                "The json_populate_record function is refused: its first argument is an anyelement base row, " +
+                "and neither a named composite type nor the pseudo-type record can be named from a CLR type, " +
+                "so no faithful call can be emitted.");
+
+        /// <summary>
+        /// <c>json_populate_recordset(base, json, use_json_as_text)</c> is refused for the same reason as
+        /// <see cref="json_populate_record{TRow}(object?, string?, bool?)"/>: the <c>anyelement</c> base row
+        /// cannot be supplied from a CLR type.
+        /// </summary>
+        /// <typeparam name="TRow">The base row type the server would have to infer from the base value.</typeparam>
+        /// <param name="baseRecord">The base row value; a CLR type cannot carry the <c>anyelement</c> base.</param>
+        /// <param name="json">The JSON array to expand.</param>
+        /// <param name="useJsonAsText">Whether JSON strings are read as text values.</param>
+        /// <returns>Never returns; the call is refused when the source is composed.</returns>
+        public TvfEntityBuilder<TRow> json_populate_recordset<TRow>(object? baseRecord, string? json, bool? useJsonAsText) =>
+            throw new NotSupportedException(
+                "The json_populate_recordset function is refused: its first argument is an anyelement base row, " +
+                "and neither a named composite type nor the pseudo-type record can be named from a CLR type, " +
+                "so no faithful call can be emitted.");
+
+        /// <summary>
+        /// <c>jsonb_populate_record(base, json)</c> is refused: the <c>anyelement</c> base row's composite
+        /// type is what the result row carries, and no CLR type can name it.
+        /// </summary>
+        /// <typeparam name="TRow">The base row type the server would have to infer from the base value.</typeparam>
+        /// <param name="baseRecord">The base row value; a CLR type cannot carry the <c>anyelement</c> base.</param>
+        /// <param name="json">The JSON document to expand.</param>
+        /// <returns>Never returns; the call is refused when the source is composed.</returns>
+        public TvfEntityBuilder<TRow> jsonb_populate_record<TRow>(object? baseRecord, string? json) =>
+            throw new NotSupportedException(
+                "The jsonb_populate_record function is refused: its first argument is an anyelement base row, " +
+                "and the result row type is that base row's composite type, which no CLR type can name.");
+
+        /// <summary>
+        /// <c>jsonb_populate_recordset(base, json)</c> is refused for the same reason as
+        /// <see cref="jsonb_populate_record{TRow}(object?, string?)"/>: the <c>anyelement</c> base row cannot
+        /// be supplied from a CLR type.
+        /// </summary>
+        /// <typeparam name="TRow">The base row type the server would have to infer from the base value.</typeparam>
+        /// <param name="baseRecord">The base row value; a CLR type cannot carry the <c>anyelement</c> base.</param>
+        /// <param name="json">The JSON array to expand.</param>
+        /// <returns>Never returns; the call is refused when the source is composed.</returns>
+        public TvfEntityBuilder<TRow> jsonb_populate_recordset<TRow>(object? baseRecord, string? json) =>
+            throw new NotSupportedException(
+                "The jsonb_populate_recordset function is refused: its first argument is an anyelement base row, " +
+                "and the result row type is that base row's composite type, which no CLR type can name.");
+
+        /// <summary>
+        /// <c>jsonb_populate_record_valid(base, json)</c> is refused: the <c>anyelement</c> base row cannot be
+        /// supplied from a CLR type, and without a base row the server cannot determine the row type
+        /// (<c>0A000</c>). Referencing this member fails while the query is prepared, before any SQL is emitted.
+        /// </summary>
+        /// <param name="baseRecord">The base row value; a CLR type cannot carry the <c>anyelement</c> base.</param>
+        /// <param name="json">The JSON document to validate.</param>
+        /// <returns>Never returns; the call is refused when the query is prepared.</returns>
+        public bool? jsonb_populate_record_valid(object? baseRecord, string? json) =>
+            throw new NotSupportedException(
+                "The jsonb_populate_record_valid function is refused: its first argument is an anyelement base " +
+                "row that a CLR type cannot name, and without a base row the server raises 0A000 (could not " +
+                "determine row type).");
+
+        /// <summary>
+        /// <c>json_table(json, path COLUMNS (...))</c> is refused: the SQL/JSON table function needs its
+        /// per-call <c>COLUMNS (...)</c> clause inside the call parentheses, and the expression model only
+        /// renders a caller-declared schema as an alias column-definition list after the alias. The construct
+        /// itself works on PostgreSQL 17; only the rendering model cannot express it.
+        /// </summary>
+        /// <typeparam name="TRow">The row type the <c>COLUMNS</c> clause would declare.</typeparam>
+        /// <param name="json">The JSON document to read.</param>
+        /// <param name="path">The JSONPath that selects the rows.</param>
+        /// <returns>Never returns; the call is refused when the source is composed.</returns>
+        public TvfEntityBuilder<TRow> json_table<TRow>(string? json, string? path) =>
+            throw new NotSupportedException(
+                "The json_table function is refused: it needs a per-call COLUMNS (...) clause inside the call " +
+                "parentheses, which the expression model cannot render (a caller-declared schema is only " +
+                "rendered as an alias column-definition list after the alias).");
 
         /// <summary>
         /// <c>ts_stat(query)</c> as a FROM source: one row per lexeme of a <c>tsvector</c> query, the

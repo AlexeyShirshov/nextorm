@@ -2864,6 +2864,186 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
         return Convert.ToString(cmd.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture)!;
     }
 
+    /// <summary>
+    /// The PostgreSQL 17 JSON reader table functions of #281 (#347 D3a) against the live server: one row
+    /// per element/property/match, the row schema and cardinality of <c>json_array_elements</c> and
+    /// <c>json_each</c>, the exact CLR type (<c>json</c>/<c>jsonb</c> values read back as
+    /// <see cref="string"/>), the empty-array/empty-object inputs, the SQL-NULL document, the
+    /// time-zone-dependent <c>.datetime()</c> path that only the <c>_tz</c> variant accepts, the
+    /// caller-declared row of the two <c>record</c> readers, and the refused <c>populate_record</c> family
+    /// with <c>json_table</c> (preparation throws with its reason while the sibling reader still renders).
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void JsonReaderTvfs_ShouldExposeRowsSchemaAndClrTypes()
+    {
+        var dateTimePath = "$.d.datetime()";
+
+        // json_array_elements: one row per element; the single `value` column is json, read as string.
+        var elements = _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.json_array_elements("[1,{\"a\":2}]"))
+            .Select(r => r.Value)
+            .ToList();
+        elements.Should().Equal("1", "{\"a\":2}");
+        elements[0]!.GetType().Should().Be(typeof(string));
+        elements[1]!.GetType().Should().Be(typeof(string));
+
+        _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.json_array_elements("[]"))
+            .Select(r => r.Value)
+            .ToList()
+            .Should().BeEmpty("an empty JSON array has no elements");
+        _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.json_array_elements((string?)null))
+            .Select(r => r.Value)
+            .ToList()
+            .Should().BeEmpty("a NULL document produces no rows");
+
+        // json_array_elements_text: text values; a JSON null element reads back as a NULL value.
+        var texts = _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.json_array_elements_text("[1,\"a\",null]"))
+            .Select(r => r.Value)
+            .ToList();
+        texts.Should().Equal("1", "a", null);
+        texts[1]!.GetType().Should().Be(typeof(string));
+
+        _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.json_array_elements_text("[]"))
+            .Select(r => r.Value)
+            .ToList()
+            .Should().BeEmpty();
+
+        // json_each: two columns (key text, value json) on PostgreSQL 17, one row per property.
+        var each = _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.json_each("{\"a\":1,\"b\":{\"c\":2}}"))
+            .OrderBy(r => r.Key)
+            .Select(r => new { r.Key, r.Value })
+            .ToList();
+        each.Should().HaveCount(2, "the object has two top-level properties");
+        each.Select(r => (r.Key, r.Value)).Should().Equal(("a", "1"), ("b", "{\"c\":2}"));
+        each[0].Value!.GetType().Should().Be(typeof(string));
+        each[1].Value!.GetType().Should().Be(typeof(string));
+
+        _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.json_each("{}"))
+            .Select(r => r.Key)
+            .ToList()
+            .Should().BeEmpty("an empty JSON object has no properties");
+        _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.json_each((string?)null))
+            .Select(r => r.Key)
+            .ToList()
+            .Should().BeEmpty("a NULL document produces no rows");
+
+        var eachText = _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.json_each_text("{\"a\":1,\"b\":{\"c\":2}}"))
+            .OrderBy(r => r.Key)
+            .Select(r => new { r.Key, r.Value })
+            .ToList();
+        eachText.Select(r => (r.Key, r.Value)).Should().Equal(("a", "1"), ("b", "{\"c\":2}"));
+        eachText[0].Value!.GetType().Should().Be(typeof(string));
+
+        // jsonb_path_query_tz: a time-zone-dependent .datetime() path is accepted and returns the instant.
+        var matches = _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.jsonb_path_query_tz(
+                "{\"d\":\"2020-06-01T00:00:00Z\"}", dateTimePath, "{}", false))
+            .Select(r => r.Value)
+            .ToList();
+        matches.Should().Equal("\"2020-06-01T00:00:00+00:00\"");
+        matches[0]!.GetType().Should().Be(typeof(string));
+
+        _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.jsonb_path_query_tz("{\"a\":1}", "$.zz", "{}", false))
+            .Select(r => r.Value)
+            .ToList()
+            .Should().BeEmpty("a path with no match selects no rows");
+        _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.jsonb_path_query_tz((string?)null, "$", "{}", false))
+            .Select(r => r.Value)
+            .ToList()
+            .Should().BeEmpty("a NULL document selects no rows");
+
+        // The non-_tz sibling cannot evaluate the same time-zone-dependent path.
+        FluentActions.Invoking(() => _sut.DataProvider
+                .From(() => SqlFunctions.Postgres.jsonb_path_query(
+                    "{\"d\":\"2020-06-01T00:00:00Z\"}", SqlFunctions.Postgres.jsonpath(dateTimePath)))
+                .Select(r => r.Value)
+                .ToList())
+            .Should().Throw<PostgresException>()
+            .WithMessage("*without time zone usage*");
+
+        // json_to_record / json_to_recordset: the caller-declared column definition list shapes the row.
+        var record = _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.json_to_record<IJsonRecordRow>("{\"a\":1,\"b\":\"x\",\"c\":true}"))
+            .Select(r => new { r.A, r.B })
+            .First();
+        (record.A, record.B).Should().Be((1, "x"));
+        record.A.GetType().Should().Be(typeof(int));
+        record.B!.GetType().Should().Be(typeof(string));
+
+        var missing = _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.json_to_record<IJsonRecordRow>("{\"a\":1}"))
+            .Select(r => new { r.A, r.B })
+            .First();
+        (missing.A, missing.B).Should().Be((1, (string?)null), "an absent property leaves the column NULL");
+
+        var recordset = _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.json_to_recordset<IJsonRecordRow>("[{\"a\":1},{\"a\":2,\"b\":\"y\"}]"))
+            .OrderBy(r => r.A)
+            .Select(r => new { r.A, r.B })
+            .ToList();
+        recordset.Select(r => (r.A, r.B)).Should().Equal((1, (string?)null), (2, "y"));
+
+        _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.json_to_recordset<IJsonRecordRow>("[]"))
+            .Select(r => r.A)
+            .ToList()
+            .Should().BeEmpty("an empty JSON array has no rows");
+
+        // Refusals: the anyelement base row and the json_table COLUMNS placement cannot be expressed, so the
+        // source is refused while it is composed — nothing is sent to the server. json_to_record above is the
+        // positive control that the sibling record reader renders and executes.
+        FluentActions.Invoking(() => _sut.DataProvider
+                .From(() => SqlFunctions.Postgres.json_populate_record<IJsonRecordRow>(null, "{\"a\":1}", false))
+                .Select(r => r.A).ToList())
+            .Should().Throw<NotSupportedException>().WithMessage("*json_populate_record function is refused*");
+        FluentActions.Invoking(() => _sut.DataProvider
+                .From(() => SqlFunctions.Postgres.json_populate_recordset<IJsonRecordRow>(null, "[{\"a\":1}]", false))
+                .Select(r => r.A).ToList())
+            .Should().Throw<NotSupportedException>().WithMessage("*json_populate_recordset function is refused*");
+        FluentActions.Invoking(() => _sut.DataProvider
+                .From(() => SqlFunctions.Postgres.jsonb_populate_record<IJsonRecordRow>(null, "{\"a\":1}"))
+                .Select(r => r.A).ToList())
+            .Should().Throw<NotSupportedException>().WithMessage("*jsonb_populate_record function is refused*");
+        FluentActions.Invoking(() => _sut.DataProvider
+                .From(() => SqlFunctions.Postgres.jsonb_populate_recordset<IJsonRecordRow>(null, "[{\"a\":1}]"))
+                .Select(r => r.A).ToList())
+            .Should().Throw<NotSupportedException>().WithMessage("*jsonb_populate_recordset function is refused*");
+        FluentActions.Invoking(() => _sut.DataProvider
+                .From(() => SqlFunctions.Postgres.json_table<IJsonRecordRow>("[{\"a\":1}]", "$[*]"))
+                .Select(r => r.A).ToList())
+            .Should().Throw<NotSupportedException>().WithMessage("*json_table function is refused*");
+        FluentActions.Invoking(() => _sut.SimpleEntity.Where(x => x.Id == 1)
+                .Select(x => new { V = SqlFunctions.Postgres.jsonb_populate_record_valid(null, "{}") })
+                .First())
+            .Should().Throw<NotSupportedException>().WithMessage("*jsonb_populate_record_valid function is refused*");
+    }
+
+    /// <summary>
+    /// #347 D3a fixture: the caller-declared row shape of the PostgreSQL <c>json_to_record</c>/
+    /// <c>json_to_recordset</c> readers.
+    /// </summary>
+    public interface IJsonRecordRow
+    {
+        /// <summary>The <c>a</c> column.</summary>
+        [Column("a")]
+        int A { get; set; }
+
+        /// <summary>The <c>b</c> column.</summary>
+        [Column("b")]
+        string? B { get; set; }
+    }
+
     private static void Execute(IDataContext ctx, string sql)
     {
         ((DataContext)ctx).EnsureConnectionOpen();

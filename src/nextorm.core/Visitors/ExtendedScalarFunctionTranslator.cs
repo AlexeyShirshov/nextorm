@@ -29,8 +29,9 @@ internal static class ExtendedScalarFunctionTranslator
     /// a UTF8 database, so only the two-argument (explicit-encoding) forms are delivered. <c>crc32</c>
     /// and <c>crc32c</c> are PostgreSQL 18 functions, absent from 17.11; <c>pg_sleep</c>,
     /// <c>pg_sleep_for</c> and <c>pg_sleep_until</c> return <c>void</c>, for which the expression model
-    /// has no faithful projection. The key is the member name together with its arity, because
-    /// <c>to_ascii</c> is refused for one shape only.
+    /// has no faithful projection. <c>jsonb_populate_record_valid</c> takes an <c>anyelement</c> base row
+    /// whose composite type a CLR type cannot name. The key is the member name together with its arity,
+    /// because <c>to_ascii</c> is refused for one shape only.
     /// </summary>
     private static readonly Dictionary<(string Name, int Arity), string> Refused = new()
     {
@@ -73,7 +74,11 @@ internal static class ExtendedScalarFunctionTranslator
         [(nameof(PostgresFunctions.pg_sleep_until), 1)] =
             "The pg_sleep_until function is refused: it returns void, and the expression model has no " +
             "void-typed projection, so no faithful CLR result exists; a fabricated value is never " +
-            "returned."
+            "returned.",
+        [(nameof(PostgresFunctions.jsonb_populate_record_valid), 2)] =
+            "The jsonb_populate_record_valid function is refused: its first argument is an anyelement " +
+            "base row that a CLR type cannot name, and without a base row the server raises 0A000 " +
+            "(could not determine row type for result of jsonb_populate_record)."
     };
 
     private static readonly HashSet<string> MathFunctions = new(StringComparer.Ordinal)

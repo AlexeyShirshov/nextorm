@@ -1845,6 +1845,100 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void TableFunction_JsonArrayElements_ShouldCastDocumentAndProjectValue()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var command = Prepare(ctx, ctx
+            .From(() => SqlFunctions.Postgres.json_array_elements("[1,{\"a\":2}]"))
+            .Select(r => new { r.Value }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Be("select value\n from json_array_elements(cast(E'[1,{\"a\":2}]' as json)) as \"t1\"");
+    }
+
+    [Fact]
+    public void TableFunction_JsonArrayElementsText_ShouldCastDocumentAndProjectValue()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var command = Prepare(ctx, ctx
+            .From(() => SqlFunctions.Postgres.json_array_elements_text("[1,\"a\",null]"))
+            .Select(r => new { r.Value }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Be("select value\n from json_array_elements_text(cast(E'[1,\"a\",null]' as json)) as \"t1\"");
+    }
+
+    [Fact]
+    public void TableFunction_JsonEach_ShouldCastDocumentAndProjectKeyAndValue()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var command = Prepare(ctx, ctx
+            .From(() => SqlFunctions.Postgres.json_each("{\"a\":1,\"b\":{\"c\":2}}"))
+            .Select(r => new { r.Key, r.Value }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Be("select key, value\n from json_each(cast(E'{\"a\":1,\"b\":{\"c\":2}}' as json)) as \"t1\"");
+    }
+
+    [Fact]
+    public void TableFunction_JsonEachText_ShouldCastDocumentAndProjectKeyAndValue()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var command = Prepare(ctx, ctx
+            .From(() => SqlFunctions.Postgres.json_each_text("{\"a\":1,\"b\":2}"))
+            .Select(r => new { r.Key, r.Value }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Be("select key, value\n from json_each_text(cast(E'{\"a\":1,\"b\":2}' as json)) as \"t1\"");
+    }
+
+    [Fact]
+    public void TableFunction_JsonbPathQueryTz_ShouldCastArgumentsAndRestoreFunctionColumn()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var path = "$.d.datetime()";
+        var vars = "{}";
+
+        var command = Prepare(ctx, ctx
+            .From(() => SqlFunctions.Postgres.jsonb_path_query_tz(
+                SqlFunctions.Parameter<string>(0), path, vars, false))
+            .Select(r => new { r.Value }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Be("select jsonb_path_query_tz as \"Value\"\n from (select jsonb_path_query_tz\n from jsonb_path_query_tz(cast(@norm_p0 as jsonb), cast(@path as jsonpath), cast(@vars as jsonb), false)) as \"t1\"");
+    }
+
+    [Fact]
+    public void TableFunction_JsonToRecord_ShouldRenderAliasColumnList()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var command = Prepare(ctx, ctx
+            .From(() => SqlFunctions.Postgres.json_to_record<IDynamicRecordRow>(SqlFunctions.Parameter<string>(0)))
+            .Select(r => new { r.A, r.B }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Be("select a, b\n from json_to_record(cast(@norm_p0 as json)) as \"t1\"(a integer, b text)");
+    }
+
+    [Fact]
+    public void TableFunction_JsonToRecordset_ShouldRenderAliasColumnList()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var command = Prepare(ctx, ctx
+            .From(() => SqlFunctions.Postgres.json_to_recordset<IDynamicRecordRow>(SqlFunctions.Parameter<string>(0)))
+            .Select(r => new { r.A, r.B }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Be("select a, b\n from json_to_recordset(cast(@norm_p0 as json)) as \"t1\"(a integer, b text)");
+    }
+
+    [Fact]
     public void TableFunction_TsStat_ShouldEmitCall()
     {
         using var ctx = PostgresTestContext.Create();

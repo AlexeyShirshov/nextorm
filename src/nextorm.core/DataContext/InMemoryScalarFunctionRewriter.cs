@@ -181,6 +181,7 @@ internal sealed class InMemoryScalarFunctionRewriter : ExpressionVisitor
         nameof(PostgresFunctions.jsonb_extract_path_text), nameof(PostgresFunctions.jsonb_set_lax),
         nameof(PostgresFunctions.jsonb_path_exists_tz), nameof(PostgresFunctions.jsonb_path_match_tz),
         nameof(PostgresFunctions.jsonb_path_query_array_tz), nameof(PostgresFunctions.jsonb_path_query_first_tz),
+        nameof(PostgresFunctions.jsonb_populate_record_valid),
         nameof(PostgresFunctions.div), nameof(PostgresFunctions.erf), nameof(PostgresFunctions.erfc),
         nameof(PostgresFunctions.random_normal),
         nameof(PostgresFunctions.acosd), nameof(PostgresFunctions.asind), nameof(PostgresFunctions.atand),

@@ -350,6 +350,14 @@ public class PostgresDialect : SqlDialectBase
             or "jsonb_each" or "jsonb_each_text" or "jsonb_object_keys"
             or "jsonb_path_query" or "ts_stat"
             or "jsonb_to_record" or "jsonb_to_recordset"
+            // The #281 JSON readers of PG17: the two array readers, the two object readers, the
+            // time-zone-aware JSONPath query and the two <c>record</c> readers with a caller-declared
+            // column definition list. The non-<c>b</c> readers take the payload as JSON text and are
+            // cast in the call; the populate_record family stays refused (an anyelement base row).
+            or "json_array_elements" or "json_array_elements_text"
+            or "json_each" or "json_each_text"
+            or "jsonb_path_query_tz"
+            or "json_to_record" or "json_to_recordset"
             // The #281 system-information readers: 17 record/table-shaped functions plus the three
             // single-column ones. Every name is a PostgreSQL built-in of PG17's system-information
             // chapter; the row shapes are pinned by local row interfaces in SqlFunctions.
@@ -401,6 +409,20 @@ public class PostgresDialect : SqlDialectBase
     /// </summary>
     public override string WrapTableFunction(string name, string call, IReadOnlyList<string> arguments) => name switch
     {
+        "json_array_elements" or "json_array_elements_text" or "json_each" or "json_each_text"
+            or "json_to_record" or "json_to_recordset" =>
+            // The non-b JSON readers take a json value; a text parameter does not resolve the overload
+            // (json_array_elements(text) does not exist), so the document argument is cast — harmless for
+            // an inline JSON literal, load-bearing for a bound parameter.
+            $"{name}(cast({arguments[0]} as json))",
+        "jsonb_path_query_tz" =>
+            // A scalar set-returning function names its only column after the function, but aliasing the
+            // call in FROM renames that column to the alias, so the match column is restored in a
+            // one-column subquery. The document/path/vars arguments are cast: a text parameter resolves to
+            // none of jsonb/jsonpath.
+            "(select jsonb_path_query_tz\n from jsonb_path_query_tz("
+            + $"cast({arguments[0]} as jsonb), cast({arguments[1]} as jsonpath),"
+            + $" cast({arguments[2]} as jsonb), {arguments[3]}))",
         "pg_control_recovery" =>
             "(select min_recovery_end_lsn::text as min_recovery_end_lsn, min_recovery_end_timeline,"
             + " backup_start_lsn::text as backup_start_lsn, backup_end_lsn::text as backup_end_lsn,"

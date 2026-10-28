@@ -158,21 +158,26 @@ public static partial class SqlFunctions
     }
 
     /// <summary>
-    /// Row shape produced by <see cref="PostgresFunctions.jsonb_array_elements(object?)"/> and
-    /// <see cref="PostgresFunctions.jsonb_array_elements_text(object?)"/>: the single <c>value</c> column
-    /// holds one array element (a jsonb document rendered as text, or plain text).
+    /// Row shape produced by <see cref="PostgresFunctions.jsonb_array_elements(object?)"/>,
+    /// <see cref="PostgresFunctions.jsonb_array_elements_text(object?)"/>,
+    /// <see cref="PostgresFunctions.json_array_elements(string?)"/> and
+    /// <see cref="PostgresFunctions.json_array_elements_text(string?)"/>: the single <c>value</c> column
+    /// holds one array element (a <c>json</c>/<c>jsonb</c> document rendered as text, or plain text).
     /// </summary>
     public interface IJsonArrayElementsRow
     {
-        /// <summary>One array element (a jsonb document rendered as text, or plain text).</summary>
+        /// <summary>One array element (a <c>json</c>/<c>jsonb</c> document rendered as text, or plain text).</summary>
         [Column("value")]
         string? Value { get; set; }
     }
 
     /// <summary>
-    /// Row shape produced by <see cref="PostgresFunctions.jsonb_each(object?)"/> and
-    /// <see cref="PostgresFunctions.jsonb_each_text(object?)"/>: the <c>key</c>/<c>value</c> columns of
-    /// one object property (the value is a jsonb document rendered as text, or plain text).
+    /// Row shape produced by <see cref="PostgresFunctions.jsonb_each(object?)"/>,
+    /// <see cref="PostgresFunctions.jsonb_each_text(object?)"/>,
+    /// <see cref="PostgresFunctions.json_each(string?)"/> and
+    /// <see cref="PostgresFunctions.json_each_text(string?)"/>: the <c>key</c>/<c>value</c> columns of
+    /// one object property (the value is a <c>json</c>/<c>jsonb</c> document rendered as text, or plain
+    /// text). All four functions return exactly two columns on PostgreSQL 17, so they share this shape.
     /// </summary>
     public interface IJsonbEachRow
     {
@@ -203,6 +208,19 @@ public static partial class SqlFunctions
     {
         /// <summary>One JSONPath match (a jsonb document rendered as text).</summary>
         [Column("jsonb_path_query")]
+        string? Value { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.jsonb_path_query_tz(string?, string?, string?, bool?)"/>:
+    /// the single <c>jsonb_path_query_tz</c> column holds one time-zone-aware JSONPath match (a jsonb
+    /// document rendered as text). The column is named after the function, unlike the <c>value</c> column of
+    /// the array readers, so the row shape is separate from <see cref="IJsonPathQueryRow"/>.
+    /// </summary>
+    public interface IJsonPathQueryTzRow
+    {
+        /// <summary>One time-zone-aware JSONPath match (a jsonb document rendered as text).</summary>
+        [Column("jsonb_path_query_tz")]
         string? Value { get; set; }
     }
 

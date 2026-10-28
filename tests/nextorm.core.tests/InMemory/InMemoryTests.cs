@@ -1261,11 +1261,55 @@ public class InMemoryTests
             ("jsonb_path_query_first_tz", () => _sut.SimpleEntity.Select(it => new
             {
                 V = SqlFunctions.Postgres.jsonb_path_query_first_tz("{}", "$", "{}", false)
+            }).ToList()),
+            ("jsonb_populate_record_valid", () => _sut.SimpleEntity.Select(it => new
+            {
+                V = SqlFunctions.Postgres.jsonb_populate_record_valid(null, "{}")
             }).ToList())
         };
 
         foreach (var (name, act) in cases)
             act.Should().Throw<NotSupportedException>().WithMessage($"*{name}*not supported*");
+    }
+
+    /// <summary>
+    /// The PostgreSQL 17 JSON reader table functions of #281 (#347 D3a) are SQL-only query sources: the
+    /// in-memory provider refuses a table-function source before executing anything. The refused
+    /// <c>populate_record</c> family and <c>json_table</c> are asserted separately — their refusal is
+    /// raised while the source is composed, so the precise technical reason surfaces before the generic
+    /// table-function refusal.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void PostgresJsonReaderTvfs_ShouldThrow()
+    {
+        var cases = new (string Name, Action Act)[]
+        {
+            ("json_array_elements", () => _sut.DataProvider.From(() => SqlFunctions.Postgres.json_array_elements("[1,2]")).Select(r => r.Value).ToList()),
+            ("json_array_elements_text", () => _sut.DataProvider.From(() => SqlFunctions.Postgres.json_array_elements_text("[1,2]")).Select(r => r.Value).ToList()),
+            ("json_each", () => _sut.DataProvider.From(() => SqlFunctions.Postgres.json_each("{\"a\":1}")).Select(r => r.Key).ToList()),
+            ("json_each_text", () => _sut.DataProvider.From(() => SqlFunctions.Postgres.json_each_text("{\"a\":1}")).Select(r => r.Value).ToList()),
+            ("jsonb_path_query_tz", () => _sut.DataProvider.From(() => SqlFunctions.Postgres.jsonb_path_query_tz("{}", "$", "{}", false)).Select(r => r.Value).ToList()),
+            ("json_to_record", () => _sut.DataProvider.From(() => SqlFunctions.Postgres.json_to_record<InMemoryJsonRecordRow>("{}")).Select(r => r.A).ToList()),
+            ("json_to_recordset", () => _sut.DataProvider.From(() => SqlFunctions.Postgres.json_to_recordset<InMemoryJsonRecordRow>("[]")).Select(r => r.A).ToList()),
+        };
+
+        foreach (var (name, act) in cases)
+            act.Should().Throw<NotSupportedException>()
+                .WithMessage("*able-valued function sources are not supported*", "{0} is a table-valued function", name);
+
+        var refusals = new (string Name, Action Act)[]
+        {
+            ("json_populate_record", () => _sut.DataProvider.From(() => SqlFunctions.Postgres.json_populate_record<InMemoryJsonRecordRow>(null, "{}", false)).Select(r => r.A).ToList()),
+            ("json_populate_recordset", () => _sut.DataProvider.From(() => SqlFunctions.Postgres.json_populate_recordset<InMemoryJsonRecordRow>(null, "[]", false)).Select(r => r.A).ToList()),
+            ("jsonb_populate_record", () => _sut.DataProvider.From(() => SqlFunctions.Postgres.jsonb_populate_record<InMemoryJsonRecordRow>(null, "{}")).Select(r => r.A).ToList()),
+            ("jsonb_populate_recordset", () => _sut.DataProvider.From(() => SqlFunctions.Postgres.jsonb_populate_recordset<InMemoryJsonRecordRow>(null, "[]")).Select(r => r.A).ToList()),
+            ("json_table", () => _sut.DataProvider.From(() => SqlFunctions.Postgres.json_table<InMemoryJsonRecordRow>("[]", "$[*]")).Select(r => r.A).ToList()),
+        };
+
+        foreach (var (name, act) in refusals)
+            act.Should().Throw<NotSupportedException>()
+                .WithMessage($"*{name} function is refused*", "{0} is refused with its technical reason", name);
     }
 
     /// <summary>
@@ -1312,6 +1356,17 @@ public enum InMemoryJsonEnum
 {
     Unknown = 0,
     Active = 7,
+}
+
+/// <summary>
+/// #347 D3a fixture: the caller-declared row shape of the PostgreSQL <c>json_to_record</c>/
+/// <c>json_to_recordset</c> readers (and of the refused <c>populate_record</c> family). The in-memory
+/// provider must reject the source before this shape is materialised.
+/// </summary>
+public class InMemoryJsonRecordRow
+{
+    public int A { get; set; }
+    public string? B { get; set; }
 }
 
 public class InMemoryEnumEntity

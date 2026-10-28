@@ -501,4 +501,56 @@ public class PostgresFunctionsRejectionTests
         foreach (var (name, act) in cases)
             act.Should().Throw<NotSupportedException>().WithMessage($"*{name}*not supported*");
     }
+
+    /// <summary>
+    /// The PostgreSQL 17 JSON reader table functions of #281 (#347 D3a) are PostgreSQL-only: this provider
+    /// refuses each name during preparation with a message naming it, instead of rendering SQL it cannot
+    /// execute. The refused <c>populate_record</c> family and <c>json_table</c> keep their precise
+    /// preparation-time reason, because that reason is a property of the expression model and of the pinned
+    /// target server, not of a provider.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void JsonReaderTvfs_ShouldThrowBecauseNotSupported()
+    {
+        using var ctx = MySqlTestContext.Create();
+
+        var cases = new (string Name, Action Act)[]
+        {
+            ("json_array_elements", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.json_array_elements("[1,2]")).Select(r => r.Value))),
+            ("json_array_elements_text", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.json_array_elements_text("[1,2]")).Select(r => r.Value))),
+            ("json_each", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.json_each("{\"a\":1}")).Select(r => r.Key))),
+            ("json_each_text", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.json_each_text("{\"a\":1}")).Select(r => r.Value))),
+            ("jsonb_path_query_tz", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.jsonb_path_query_tz("{}", "$", "{}", false)).Select(r => r.Value))),
+            ("json_to_record", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.json_to_record<IJsonRecordRow>("{}")).Select(r => r.A))),
+            ("json_to_recordset", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.json_to_recordset<IJsonRecordRow>("[]")).Select(r => r.A)))
+        };
+
+        foreach (var (name, act) in cases)
+            act.Should().Throw<NotSupportedException>().WithMessage($"*{name}*not supported*");
+
+        var refusals = new (string Name, Action Act)[]
+        {
+            ("json_populate_record", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.json_populate_record<IJsonRecordRow>(null, "{}", false)).Select(r => r.A))),
+            ("json_populate_recordset", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.json_populate_recordset<IJsonRecordRow>(null, "[]", false)).Select(r => r.A))),
+            ("jsonb_populate_record", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.jsonb_populate_record<IJsonRecordRow>(null, "{}")).Select(r => r.A))),
+            ("jsonb_populate_recordset", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.jsonb_populate_recordset<IJsonRecordRow>(null, "[]")).Select(r => r.A))),
+            ("json_table", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.json_table<IJsonRecordRow>("[]", "$[*]")).Select(r => r.A))),
+            ("jsonb_populate_record_valid", () => SqlOf(ctx, ctx.From<IComplexEntity>().Select(x => new
+            {
+                V = SqlFunctions.Postgres.jsonb_populate_record_valid(null, "{}")
+            })))
+        };
+
+        foreach (var (name, act) in refusals)
+            act.Should().Throw<NotSupportedException>().WithMessage($"*{name} function is refused*");
+    }
+
+    /// <summary>#347 D3a fixture: the caller-declared row shape of the PostgreSQL JSON record readers.</summary>
+    public interface IJsonRecordRow
+    {
+        /// <summary>The <c>a</c> column.</summary>
+        [System.ComponentModel.DataAnnotations.Schema.Column("a")]
+        int A { get; set; }
+    }
 }
