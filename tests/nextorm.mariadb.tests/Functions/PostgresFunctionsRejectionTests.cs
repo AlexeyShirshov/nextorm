@@ -462,6 +462,9 @@ public class PostgresFunctionsRejectionTests
             ("pg_get_object_address", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_get_object_address(SqlFunctions.Parameter<string>(1), SqlFunctions.Parameter<string[]>(2), SqlFunctions.Parameter<string[]>(3))).Select(r => r.ClassId))),
             ("pg_get_wal_summarizer_state", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_get_wal_summarizer_state()).Select(r => r.SummarizedTli))),
             ("pg_last_committed_xact", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_last_committed_xact()).Select(r => r.Xid))),
+            ("pg_identify_object", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_identify_object("1259", "1259", 0)).Select(r => r.Type))),
+            ("pg_identify_object_as_address", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_identify_object_as_address("1259", "1259", 0)).Select(r => r.Type))),
+            ("pg_input_error_info", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_input_error_info("1", "integer")).Select(r => r.Message))),
         };
 
         foreach (var (name, act) in cases)

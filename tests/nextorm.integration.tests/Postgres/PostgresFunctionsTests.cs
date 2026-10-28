@@ -2528,6 +2528,62 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
         emptyOptions.Should().BeEmpty("a NULL option array yields no rows");
     }
 
+    /// <summary>
+    /// The object-identity and input-error readers of #281 as FROM sources: the identity of
+    /// <c>pg_class</c> (a real catalog relation), its machine-readable address with the two text arrays,
+    /// the all-NULL row a non-existent object produces, and the soft input-error report for a valid and an
+    /// invalid value.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void SystemInfoObjectIdentityAndInputReaders_ShouldExposeRowsAndClrTypes()
+    {
+        var identity = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_identify_object("1259", "1259", 0))
+            .Select(r => new { r.Type, r.Schema, r.Name, r.Identity })
+            .ToList();
+        identity.Should().ContainSingle("pg_class is one object");
+        identity[0].Type.Should().Be("table");
+        identity[0].Schema.Should().Be("pg_catalog");
+        identity[0].Name.Should().Be("pg_class");
+        identity[0].Identity.Should().Be("pg_catalog.pg_class");
+        ((object)identity[0].Type!).Should().BeOfType<string>();
+
+        var missing = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_identify_object("1259", "0", 0))
+            .Select(r => new { r.Type, r.Schema, r.Name, r.Identity })
+            .ToList();
+        missing.Should().ContainSingle("a missing object still yields one row");
+        missing[0].Type.Should().BeNull();
+        missing[0].Schema.Should().BeNull();
+        missing[0].Name.Should().BeNull();
+        missing[0].Identity.Should().BeNull();
+
+        var address = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_identify_object_as_address("1259", "1259", 0))
+            .Select(r => new { r.Type, r.ObjectNames, r.ObjectArgs })
+            .ToList();
+        address.Should().ContainSingle();
+        address[0].Type.Should().Be("table");
+        address[0].ObjectNames.Should().Equal("pg_catalog", "pg_class");
+        address[0].ObjectArgs.Should().BeEmpty("a relation address needs no positional arguments");
+        ((object)address[0].ObjectNames!).Should().BeOfType<string[]>("text[] maps to a string array");
+
+        var valid = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_input_error_info("42", "integer"))
+            .Select(r => new { r.Message, r.Detail, r.Hint, r.SqlErrorCode })
+            .ToList();
+        valid.Should().ContainSingle("a parsable value yields one row");
+        valid[0].Message.Should().BeNull();
+        valid[0].Detail.Should().BeNull();
+        valid[0].Hint.Should().BeNull();
+        valid[0].SqlErrorCode.Should().BeNull();
+
+        var invalid = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_input_error_info("abc", "integer"))
+            .Select(r => new { r.Message, r.Detail, r.Hint, r.SqlErrorCode })
+            .ToList();
+        invalid.Should().ContainSingle();
+        invalid[0].Message.Should().Be("invalid input syntax for type integer: \"abc\"");
+        invalid[0].SqlErrorCode.Should().Be("22P02", "a malformed integer raises the invalid-text-representation SQLSTATE");
+        ((object)invalid[0].SqlErrorCode!).Should().BeOfType<string>();
+    }
+
     private static string Scalar(DataContext ctx, string sql)
     {
         ctx.EnsureConnectionOpen();

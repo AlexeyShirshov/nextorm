@@ -965,4 +965,53 @@ public class CrossProviderScalarSqlGenerationTests
             "from (select xid, timestamp, roident::text as roident"
             + "\n from pg_last_committed_xact()) as \"t1\"");
     }
+
+    /// <summary>
+    /// The object-identity and input-error readers of #281 as FROM sources: both OID arguments travel as
+    /// <c>oid</c> (a text parameter does not resolve to the <c>oid</c> overloads), the identity columns are
+    /// all text and the error-info reader keeps its bare call because every column and argument is already
+    /// mappable. The live shapes are asserted in
+    /// <c>PostgresFunctionsTests.SystemInfoObjectIdentityAndInputReaders_ShouldExposeRowsAndClrTypes</c>.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void PostgreSQLSystemInfoObjectIdentityAndInputReaders_ShouldEmitCallAndProjection()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        foreach (var name in new[]
+        {
+            "pg_identify_object", "pg_identify_object_as_address", "pg_input_error_info"
+        })
+        {
+            PostgresDialect.Instance.SupportsTableFunction(name).Should().BeTrue($"'{name}' is delivered on PostgreSQL");
+        }
+
+        var identity = SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_identify_object(
+                SqlFunctions.Parameter<string>(0),
+                SqlFunctions.Parameter<string>(1),
+                SqlFunctions.Parameter<int>(2)))
+            .Select(r => new { r.Type, r.Schema, r.Name, r.Identity }));
+        identity.Should().Contain(
+            "from (select * from pg_identify_object(cast(@norm_p0 as oid), cast(@norm_p1 as oid), @norm_p2)) as \"t1\"");
+        // The projection stays unaliased where the column name already matches the member name
+        // case-insensitively (the same convention as pg_get_keywords' "select word, catcode, barelabel").
+        identity.Should().Contain("select type, schema, name, identity");
+
+        var address = SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_identify_object_as_address(
+                SqlFunctions.Parameter<string>(0),
+                SqlFunctions.Parameter<string>(1),
+                SqlFunctions.Parameter<int>(2)))
+            .Select(r => new { r.Type, r.ObjectNames, r.ObjectArgs }));
+        address.Should().Contain(
+            "from (select * from pg_identify_object_as_address(cast(@norm_p0 as oid), cast(@norm_p1 as oid), @norm_p2)) as \"t1\"");
+        address.Should().Contain("select type, object_names as \"ObjectNames\", object_args as \"ObjectArgs\"");
+
+        var info = SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_input_error_info(
+                SqlFunctions.Parameter<string>(0),
+                SqlFunctions.Parameter<string>(1)))
+            .Select(r => new { r.Message, r.Detail, r.Hint, r.SqlErrorCode }));
+        info.Should().Contain("from pg_input_error_info(@norm_p0, @norm_p1) as \"t1\"");
+        info.Should().Contain("select message, detail, hint, sql_error_code as \"SqlErrorCode\"");
+    }
 }

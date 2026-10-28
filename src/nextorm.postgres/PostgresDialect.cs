@@ -447,6 +447,18 @@ public class PostgresDialect : SqlDialectBase
         "pg_last_committed_xact" =>
             "(select xid, timestamp, roident::text as roident"
             + $"\n from {call})",
+        "pg_identify_object" =>
+            $"(select * from pg_identify_object(cast({arguments[0]} as oid), cast({arguments[1]} as oid), {arguments[2]}))",
+        "pg_identify_object_as_address" =>
+            $"(select * from pg_identify_object_as_address(cast({arguments[0]} as oid), cast({arguments[1]} as oid), {arguments[2]}))",
+        "pg_wal_summary_contents" =>
+            "(select relfilenode::text as relfilenode, reltablespace::text as reltablespace,"
+            + " reldatabase::text as reldatabase, relforknumber, relblocknumber, is_limit_block"
+            + "\n from pg_wal_summary_contents("
+            + $"{arguments[0]}, cast({arguments[1]} as pg_lsn), cast({arguments[2]} as pg_lsn)))",
+        "pg_xact_commit_timestamp_origin" =>
+            "(select timestamp, roident::text as roident"
+            + $"\n from pg_xact_commit_timestamp_origin(cast({arguments[0]} as xid)))",
         _ => WrapTableFunction(name, call)
     };
 

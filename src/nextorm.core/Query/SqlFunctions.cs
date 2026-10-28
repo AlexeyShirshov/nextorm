@@ -565,6 +565,112 @@ public static partial class SqlFunctions
     }
 
     /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.pg_identify_object(string?, string?, int?)"/>: the
+    /// human-readable identification of one catalog object — its type, schema, name and the identity
+    /// string that the server accepts back as an object reference. An object that does not exist yields
+    /// one all-NULL row.
+    /// </summary>
+    public interface IPgIdentifyObjectRow
+    {
+        /// <summary>The object type, for example <c>table</c> or <c>index</c>.</summary>
+        [Column("type")]
+        string? Type { get; set; }
+        /// <summary>The schema the object lives in, or NULL for objects without a schema.</summary>
+        [Column("schema")]
+        string? Schema { get; set; }
+        /// <summary>The object name, or NULL for objects without a name.</summary>
+        [Column("name")]
+        string? Name { get; set; }
+        /// <summary>The exact textual identity the server accepts as an object reference.</summary>
+        [Column("identity")]
+        string? Identity { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by
+    /// <see cref="PostgresFunctions.pg_identify_object_as_address(string?, string?, int?)"/>: the
+    /// machine-readable address of one catalog object. Both address components are <c>text[]</c> and keep
+    /// their element order; <c>object_args</c> is empty for objects whose address needs no arguments.
+    /// </summary>
+    public interface IPgIdentifyObjectAddressRow
+    {
+        /// <summary>The object type, for example <c>table</c> or <c>column</c>.</summary>
+        [Column("type")]
+        string? Type { get; set; }
+        /// <summary>The name components of the address (schema, relation, column, …).</summary>
+        [Column("object_names")]
+        string[]? ObjectNames { get; set; }
+        /// <summary>The positional arguments of the address (for example the argument types of a function).</summary>
+        [Column("object_args")]
+        string[]? ObjectArgs { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.pg_input_error_info(string?, string?)"/>: the
+    /// soft error report of parsing a value as a type, without raising the error. A valid value yields one
+    /// all-NULL row; an invalid value yields the message, the SQLSTATE code and the optional detail/hint.
+    /// </summary>
+    public interface IPgInputErrorInfoRow
+    {
+        /// <summary>The primary error message, or NULL when the value parses.</summary>
+        [Column("message")]
+        string? Message { get; set; }
+        /// <summary>The optional error detail line.</summary>
+        [Column("detail")]
+        string? Detail { get; set; }
+        /// <summary>The optional error hint line.</summary>
+        [Column("hint")]
+        string? Hint { get; set; }
+        /// <summary>The SQLSTATE code of the error (for example <c>22P02</c>), or NULL when the value parses.</summary>
+        [Column("sql_error_code")]
+        string? SqlErrorCode { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by
+    /// <see cref="PostgresFunctions.pg_wal_summary_contents(long?, string?, string?)"/>: one block range of
+    /// a WAL summary file. The <c>oid</c> columns are read as text like the other <c>oid</c>-returning
+    /// members of the family and <c>relforknumber</c> is a <see cref="short"/> (<c>int2</c>).
+    /// </summary>
+    public interface IPgWalSummaryContentRow
+    {
+        /// <summary>The OID of the relation the block belongs to, as text (0 for non-relation blocks).</summary>
+        [Column("relfilenode")]
+        string? RelFileNode { get; set; }
+        /// <summary>The OID of the relation's tablespace, as text.</summary>
+        [Column("reltablespace")]
+        string? RelTablespace { get; set; }
+        /// <summary>The OID of the relation's database, as text.</summary>
+        [Column("reldatabase")]
+        string? RelDatabase { get; set; }
+        /// <summary>The fork number of the relation (0 for the main fork).</summary>
+        [Column("relforknumber")]
+        short? RelForkNumber { get; set; }
+        /// <summary>The first block number of the range.</summary>
+        [Column("relblocknumber")]
+        long? RelBlockNumber { get; set; }
+        /// <summary>Whether this row marks the end of the block range rather than a modified block.</summary>
+        [Column("is_limit_block")]
+        bool? IsLimitBlock { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.pg_xact_commit_timestamp_origin(uint?)"/>: the
+    /// commit timestamp of one transaction and the replication origin it belongs to (<c>roident</c> read as
+    /// text). Requires <c>track_commit_timestamp</c>; a transaction without a commit timestamp yields NULL
+    /// columns.
+    /// </summary>
+    public interface IPgXactCommitOriginRow
+    {
+        /// <summary>The commit time of the transaction.</summary>
+        [Column("timestamp")]
+        DateTime? Timestamp { get; set; }
+        /// <summary>The replication origin of the transaction, as text.</summary>
+        [Column("roident")]
+        string? RoIdent { get; set; }
+    }
+
+    /// <summary>
     /// Row shape produced by <see cref="SqlServerFunctions.string_split(string?, string?)"/>: a single column
     /// named <c>value</c> holding one fragment (SQL Server <c>string_split</c>).
     /// </summary>

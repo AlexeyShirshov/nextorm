@@ -1918,6 +1918,42 @@ namespace NextORM.Core;
         /// </summary>
         public TvfEntityBuilder<SqlFunctions.IPgCommittedXactRow> pg_last_committed_xact() => new("pg_last_committed_xact");
 
+        /// <summary>
+        /// <c>pg_identify_object(classid, objid, objsubid)</c> as a FROM source: the type, schema, name
+        /// and identity of one catalog object (see <see cref="SqlFunctions.IPgIdentifyObjectRow"/>). An
+        /// object that does not exist yields one all-NULL row.
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.IPgIdentifyObjectRow> pg_identify_object(string? classId, string? objectId, int? objectSubId) => new("pg_identify_object");
+
+        /// <summary>
+        /// <c>pg_identify_object_as_address(classid, objid, objsubid)</c> as a FROM source: the
+        /// machine-readable address of one catalog object, both components as <c>text[]</c> (see
+        /// <see cref="SqlFunctions.IPgIdentifyObjectAddressRow"/>).
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.IPgIdentifyObjectAddressRow> pg_identify_object_as_address(string? classId, string? objectId, int? objectSubId) => new("pg_identify_object_as_address");
+
+        /// <summary>
+        /// <c>pg_input_error_info(value, type_name)</c> as a FROM source: the soft error report of parsing
+        /// <paramref name="value"/> as <paramref name="typeName"/>. A valid value yields one all-NULL row;
+        /// an invalid value yields the message and SQLSTATE (see
+        /// <see cref="SqlFunctions.IPgInputErrorInfoRow"/>).
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.IPgInputErrorInfoRow> pg_input_error_info(string? value, string? typeName) => new("pg_input_error_info");
+
+        /// <summary>
+        /// <c>pg_wal_summary_contents(tli, start_lsn, end_lsn)</c> as a FROM source: one block range of the
+        /// WAL summary file that covers the requested range, with the <c>oid</c> columns read as text (see
+        /// <see cref="SqlFunctions.IPgWalSummaryContentRow"/>).
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.IPgWalSummaryContentRow> pg_wal_summary_contents(long? timelineId, string? startLsn, string? endLsn) => new("pg_wal_summary_contents");
+
+        /// <summary>
+        /// <c>pg_xact_commit_timestamp_origin(xid)</c> as a FROM source: the commit timestamp of one
+        /// transaction and its replication origin, with <c>roident</c> read as text (see
+        /// <see cref="SqlFunctions.IPgXactCommitOriginRow"/>). Requires <c>track_commit_timestamp</c>.
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.IPgXactCommitOriginRow> pg_xact_commit_timestamp_origin(uint? xid) => new("pg_xact_commit_timestamp_origin");
+
         /// <summary><c>a &amp;&amp; b</c>: true when the two ranges overlap (share at least one point).</summary>
         /// <typeparam name="T">The bound type of the ranges.</typeparam>
         /// <param name="a">The left range.</param>
