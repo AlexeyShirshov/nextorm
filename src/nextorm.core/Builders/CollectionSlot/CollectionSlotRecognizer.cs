@@ -170,6 +170,8 @@ internal static class CollectionSlotRecognizer
         if (!TryGetCollectionElement(member.Type, out var elementType))
             return false;
 
+        EnsureAssignableNavigation(property);
+
         if (!CollectionSlotShapes.IsSupported(destinationType, elementType))
             throw UnsupportedShape(Describe(member.Member), destinationType);
 
@@ -284,6 +286,8 @@ internal static class CollectionSlotRecognizer
             || !IsRootedAt(navigation, root)
             || !TryGetCollectionElement(navigation.Type, out var childType))
             return false;
+
+        EnsureAssignableNavigation(navigationProperty);
 
         var elementType = operations.OfType<CollectionSlotSelect>().LastOrDefault()?.ResultType ?? childType;
 
@@ -439,6 +443,27 @@ internal static class CollectionSlotRecognizer
 
     internal static string Describe(MemberInfo? member)
         => member is null ? "a constructor argument" : $"{member.DeclaringType?.Name}.{member.Name}";
+
+    /// <summary>
+    /// Refuses a navigation member whose declared type the eager-loading carrier cannot fill, before any SQL.
+    /// The carrier assigns through a mutable <see cref="ICollection{T}"/> (it clears the current value and adds
+    /// the loaded children), so a fixed-size array-typed navigation member would fail inside the loader after the
+    /// query had already run. The array <em>destination</em> stays supported through the adapter's
+    /// <c>ToArray()</c>; only the navigation declaration itself must be a mutable collection.
+    /// </summary>
+    /// <param name="navigation">The navigation property the slot reads.</param>
+    /// <exception cref="NotSupportedException">The navigation is declared as an array.</exception>
+    private static void EnsureAssignableNavigation(PropertyInfo navigation)
+    {
+        if (!navigation.PropertyType.IsArray)
+            return;
+
+        throw new NotSupportedException(
+            $"The collection projection slot navigation '{Describe(navigation)}' is declared as " +
+            $"'{navigation.PropertyType}': the eager-loading carrier fills a mutable collection and cannot assign " +
+            "an array-typed navigation member. Declare the navigation as List<T> and project an array destination " +
+            "with the adapter's ToArray().");
+    }
 
     internal static NotSupportedException UnsupportedShape(string path, Type slotType)
         => new(

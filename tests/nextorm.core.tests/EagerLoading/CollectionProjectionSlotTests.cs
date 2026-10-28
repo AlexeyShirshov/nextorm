@@ -17,8 +17,10 @@ namespace NextORM.Core.Tests;
 /// <para>
 /// The navigation property is declared as <see cref="List{T}"/> on purpose: a slot's destination type must be
 /// assignable from the navigation's static type inside the projection expression tree, so a
-/// <c>List&lt;T&gt;</c>-typed navigation is the widest direct-slot witness this CLR surface permits. <c>T[]</c>
-/// cannot be a navigation member at all and is covered through the adapter's <c>ToArray()</c>.
+/// <c>List&lt;T&gt;</c>-typed navigation is the widest direct-slot witness this CLR surface permits. An
+/// array-typed navigation member can be declared and registered (see <see cref="ArrayNavigationParent"/>), but
+/// the eager-loading carrier cannot fill it, so such a projection is refused by name before any SQL; the array
+/// <em>destination</em> is reached through the adapter's <c>ToArray()</c>.
 /// </para>
 /// </summary>
 [Collection("Query cache controls")]
@@ -108,6 +110,21 @@ public sealed class CollectionProjectionSlotTests
         public IList<Child> ListInterface { get; set; } = [];
         public IReadOnlyCollection<Child> ReadOnlyCollection { get; set; } = [];
         public IReadOnlyList<Child> ReadOnlyList { get; set; } = [];
+    }
+
+    /// <summary>
+    /// A navigation declared as <c>T[]</c>: metadata binding accepts it (an array is an
+    /// <see cref="ICollection{T}"/>), but the eager-loading carrier assigns through a mutable collection, so the
+    /// projection must be refused by name before any SQL instead of half-loading after the query ran.
+    /// </summary>
+    [SqlTable("t353_slot_parent")]
+    public sealed class ArrayNavigationParent
+    {
+        [Key]
+        [Column("id")]
+        public int Id { get; set; }
+
+        public Child[] Children { get; set; } = [];
     }
 
     public sealed class DirectShapeA
@@ -231,10 +248,12 @@ public sealed class CollectionProjectionSlotTests
         }
     }
 
-    [Fact]
-    public void DirectSlot_ShouldAcceptEveryAssignableShape()
+    [Theory]
+    [InlineData(EagerLoadMode.SplitQuery, 2)]
+    [InlineData(EagerLoadMode.SingleQuery, 1)]
+    public void DirectSlot_ShouldAcceptEveryAssignableShape(EagerLoadMode mode, int expectedStatements)
     {
-        var (context, path, recorder) = CreateDb();
+        var (context, path, recorder) = CreateDb(mode);
         try
         {
             RegisterMetadata(context);
@@ -261,7 +280,10 @@ public sealed class CollectionProjectionSlotTests
             row.ListInterface.Select(c => c.Id).Should().Equal(10, 11, 12);
             row.ReadOnlyCollection.Select(c => c.Id).Should().Equal(10, 11, 12);
             row.ReadOnlyList.Select(c => c.Id).Should().Equal(10, 11, 12);
-            recorder.Statements.Should().HaveCount(2, "one eager-load declaration serves all six conversions");
+            recorder.Statements.Should().HaveCount(expectedStatements,
+                mode == EagerLoadMode.SplitQuery
+                    ? "split loading runs the parent query and one child query"
+                    : "single mode serves all six conversions from one statement");
         }
         finally
         {
@@ -270,10 +292,12 @@ public sealed class CollectionProjectionSlotTests
         }
     }
 
-    [Fact]
-    public void AdapterSlot_ShouldAcceptAllSevenShapes()
+    [Theory]
+    [InlineData(EagerLoadMode.SplitQuery, 2)]
+    [InlineData(EagerLoadMode.SingleQuery, 1)]
+    public void AdapterSlot_ShouldAcceptAllSevenShapes(EagerLoadMode mode, int expectedStatements)
     {
-        var (context, path, recorder) = CreateDb();
+        var (context, path, recorder) = CreateDb(mode);
         try
         {
             RegisterMetadata(context);
@@ -303,7 +327,10 @@ public sealed class CollectionProjectionSlotTests
             row.ListInterface.Select(c => c.Id).Should().Equal(10, 11, 12);
             row.ReadOnlyCollection.Select(c => c.Id).Should().Equal(10, 11, 12);
             row.ReadOnlyList.Select(c => c.Id).Should().Equal(10, 11, 12);
-            recorder.Statements.Should().HaveCount(2, "one eager-load declaration serves all seven conversions");
+            recorder.Statements.Should().HaveCount(expectedStatements,
+                mode == EagerLoadMode.SplitQuery
+                    ? "one eager-load declaration serves all seven conversions over two statements"
+                    : "single mode serves all seven conversions from one statement");
         }
         finally
         {
@@ -655,6 +682,213 @@ public sealed class CollectionProjectionSlotTests
             unsupported.Should().Throw<NotSupportedException>()
                 .WithMessage("*applies Distinct(...) inside its adapter chain*");
             recorder.Statements.Should().BeEmpty();
+        }
+        finally
+        {
+            context.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void AdapterUnion_ShouldBeRefusedBeforeSql()
+    {
+        var (context, path, recorder) = CreateDb();
+        try
+        {
+            RegisterMetadata(context);
+            var others = context.From<Child>().Select(c => new ChildDto { Id = c.Id, Rank = c.Rank });
+
+            Action unsupported = () => context.From<Parent>()
+                .Select(p => new
+                {
+                    p.Id,
+                    Items = p.Children.AsEntityBuilder<Child>()
+                        .Select(c => new ChildDto { Id = c.Id, Rank = c.Rank })
+                        .Union(others)
+                        .ToList(),
+                });
+
+            unsupported.Should().Throw<NotSupportedException>()
+                .WithMessage("*applies Union(...) inside its adapter chain*");
+            recorder.Statements.Should().BeEmpty("a rejected adapter operation is refused before a command exists");
+        }
+        finally
+        {
+            context.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void AdapterExcept_ShouldBeRefusedBeforeSql()
+    {
+        var (context, path, recorder) = CreateDb();
+        try
+        {
+            RegisterMetadata(context);
+            var others = context.From<Child>().Select(c => new ChildDto { Id = c.Id, Rank = c.Rank });
+
+            Action unsupported = () => context.From<Parent>()
+                .Select(p => new
+                {
+                    p.Id,
+                    Items = p.Children.AsEntityBuilder<Child>()
+                        .Select(c => new ChildDto { Id = c.Id, Rank = c.Rank })
+                        .Except(others)
+                        .ToList(),
+                });
+
+            unsupported.Should().Throw<NotSupportedException>()
+                .WithMessage("*applies Except(...) inside its adapter chain*");
+            recorder.Statements.Should().BeEmpty("a rejected adapter operation is refused before a command exists");
+        }
+        finally
+        {
+            context.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void AdapterIntersect_ShouldBeRefusedBeforeSql()
+    {
+        var (context, path, recorder) = CreateDb();
+        try
+        {
+            RegisterMetadata(context);
+            var others = context.From<Child>().Select(c => new ChildDto { Id = c.Id, Rank = c.Rank });
+
+            Action unsupported = () => context.From<Parent>()
+                .Select(p => new
+                {
+                    p.Id,
+                    Items = p.Children.AsEntityBuilder<Child>()
+                        .Select(c => new ChildDto { Id = c.Id, Rank = c.Rank })
+                        .Intersect(others)
+                        .ToList(),
+                });
+
+            unsupported.Should().Throw<NotSupportedException>()
+                .WithMessage("*applies Intersect(...) inside its adapter chain*");
+            recorder.Statements.Should().BeEmpty("a rejected adapter operation is refused before a command exists");
+        }
+        finally
+        {
+            context.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void AdapterJoin_ShouldBeRefusedBeforeSql()
+    {
+        var (context, path, recorder) = CreateDb();
+        try
+        {
+            RegisterMetadata(context);
+
+            Action unsupported = () => context.From<Parent>()
+                .Select(p => new
+                {
+                    p.Id,
+                    Items = p.Children.AsEntityBuilder<Child>()
+                        .Join(context.From<Tag>(), (c, t) => c.Id == t.Id)
+                        .ToList(),
+                });
+
+            unsupported.Should().Throw<NotSupportedException>()
+                .WithMessage("*applies Join(...) inside its adapter chain*");
+            recorder.Statements.Should().BeEmpty("a rejected adapter operation is refused before a command exists");
+        }
+        finally
+        {
+            context.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    /// <summary>
+    /// `Limit` followed by `Select` is expressible on the public surface and the recognizer tolerates it: the page
+    /// applies per parent over the materialized children, before the projection. (`ThenByDescending` is not
+    /// expressible on <c>EntityBuilder&lt;T&gt;</c> — only <c>ThenBy(expr, OrderDirection.Desc)</c> is — so the
+    /// descending secondary order is covered through that form in
+    /// <see cref="AdapterSlot_Split_ShouldApplyWhereOrderAndLimitPerParent"/>.)
+    /// </summary>
+    [Fact]
+    public void AdapterSlot_Split_LimitThenSelect_ShouldPagePerParent()
+    {
+        var (context, path, recorder) = CreateDb();
+        try
+        {
+            RegisterMetadata(context);
+
+            var rows = context.From<Parent>()
+                .OrderBy(p => p.Id)
+                .Select(p => new
+                {
+                    p.Id,
+                    Paged = p.Children.AsEntityBuilder<Child>()
+                        .OrderBy(c => c.Rank)
+                        .Limit(1)
+                        .Select(c => new ChildDto { Id = c.Id, Rank = c.Rank })
+                        .ToList(),
+                })
+                .ToList();
+
+            rows.Single(r => r.Id == 1).Paged.Select(c => c.Id).Should().Equal(new[] { 11 },
+                "the page is taken per parent after OrderBy and before the Select projection");
+            rows.Single(r => r.Id == 2).Paged.Should().BeEmpty();
+            recorder.Statements.Should().HaveCount(2);
+        }
+        finally
+        {
+            context.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    /// <summary>
+    /// An array-typed navigation is accepted by metadata binding (a <c>T[]</c> is an
+    /// <see cref="ICollection{T}"/>), but the eager-loading carrier assigns through a mutable collection, so a
+    /// direct slot over it must be refused by name before any SQL rather than fail after the query ran.
+    /// </summary>
+    [Fact]
+    public void ArrayNavigation_DirectSlot_ShouldBeRefusedBeforeSql()
+    {
+        var (context, path, recorder) = CreateDb();
+        try
+        {
+            _ = context.From<ArrayNavigationParent>(cfg => cfg.HasMany(p => p.Children, c => c.ParentId));
+
+            Action unsupported = () => context.From<ArrayNavigationParent>()
+                .Select(p => new { p.Id, p.Children });
+
+            unsupported.Should().Throw<NotSupportedException>()
+                .WithMessage("*ArrayNavigationParent.Children*array-typed navigation member*");
+            recorder.Statements.Should().BeEmpty("an array-typed navigation is refused while the projection is bound");
+        }
+        finally
+        {
+            context.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void ArrayNavigation_AdapterSlot_ShouldBeRefusedBeforeSql()
+    {
+        var (context, path, recorder) = CreateDb();
+        try
+        {
+            _ = context.From<ArrayNavigationParent>(cfg => cfg.HasMany(p => p.Children, c => c.ParentId));
+
+            Action unsupported = () => context.From<ArrayNavigationParent>()
+                .Select(p => new { p.Id, Items = p.Children.AsEntityBuilder<Child>().ToArray() });
+
+            unsupported.Should().Throw<NotSupportedException>()
+                .WithMessage("*ArrayNavigationParent.Children*array-typed navigation member*");
+            recorder.Statements.Should().BeEmpty("an array-typed navigation is refused while the projection is bound");
         }
         finally
         {

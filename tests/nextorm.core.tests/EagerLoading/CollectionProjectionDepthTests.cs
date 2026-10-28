@@ -724,6 +724,79 @@ public sealed class CollectionProjectionDepthTests
         }
     }
 
+    /// <summary>
+    /// A forbidden adapter operator declared at depth two (inside the outer adapter's <c>Select</c>) must be
+    /// refused by the same validation as one at depth one: the nested projection is visited during recognition,
+    /// so no nested node can evade the whitelist and no SQL is ever built.
+    /// </summary>
+    [Fact]
+    public void Depth2_ForbiddenAdapterOperators_ShouldBeRefusedBeforeAnySql()
+    {
+        var (context, path, recorder) = CreateDb(EagerLoadMode.SplitQuery);
+        try
+        {
+            var allNotes = context.From<Note>().Select(n => new { n.Id });
+
+            Action nestedDistinct = () => context.From<Parent>()
+                .Select(p => new
+                {
+                    p.Id,
+                    Items = p.Items.AsEntityBuilder<Item>()
+                        .Select(i => new { i.Id, Notes = i.Notes.AsEntityBuilder<Note>().Distinct().ToList() })
+                        .ToList(),
+                });
+            Action nestedGroupBy = () => context.From<Parent>()
+                .Select(p => new
+                {
+                    p.Id,
+                    Items = p.Items.AsEntityBuilder<Item>()
+                        .Select(i => new { i.Id, Notes = i.Notes.AsEntityBuilder<Note>().GroupBy(n => n.ItemId).ToList() })
+                        .ToList(),
+                });
+            Action nestedUnion = () => context.From<Parent>()
+                .Select(p => new
+                {
+                    p.Id,
+                    Items = p.Items.AsEntityBuilder<Item>()
+                        .Select(i => new
+                        {
+                            i.Id,
+                            Notes = i.Notes.AsEntityBuilder<Note>().Select(n => new { n.Id }).Union(allNotes).ToList(),
+                        })
+                        .ToList(),
+                });
+            Action nestedJoin = () => context.From<Parent>()
+                .Select(p => new
+                {
+                    p.Id,
+                    Items = p.Items.AsEntityBuilder<Item>()
+                        .Select(i => new
+                        {
+                            i.Id,
+                            Notes = i.Notes.AsEntityBuilder<Note>()
+                                .Join(context.From<Note>(), (n, other) => n.Id == other.Id)
+                                .ToList(),
+                        })
+                        .ToList(),
+                });
+
+            nestedDistinct.Should().Throw<NotSupportedException>()
+                .WithMessage("*applies Distinct(...) inside its adapter chain*");
+            nestedGroupBy.Should().Throw<NotSupportedException>()
+                .WithMessage("*applies GroupBy(...) inside its adapter chain*");
+            nestedUnion.Should().Throw<NotSupportedException>()
+                .WithMessage("*applies Union(...) inside its adapter chain*");
+            nestedJoin.Should().Throw<NotSupportedException>()
+                .WithMessage("*applies Join(...) inside its adapter chain*");
+            recorder.Statements.Should().BeEmpty("every depth-two forbidden operator is refused before any SQL");
+        }
+        finally
+        {
+            context.Dispose();
+            File.Delete(path);
+        }
+    }
+
     private static class OrderDirection
     {
         internal const global::NextORM.Core.OrderDirection Desc = global::NextORM.Core.OrderDirection.Desc;
