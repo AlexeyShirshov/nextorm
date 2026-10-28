@@ -123,9 +123,10 @@ public sealed class ClickHouseScalarFunctionsTests : ProviderTestSuite
     // count_substrings, the scale of roundBankers, the two makeDate forms, the now64 scale, both
     // toStartOfInterval forms, the week-mode forms, the timestamp time form, the three
     // fromUnixTimestamp forms, the two port forms, the three toIPv4 overloads, the 13 bit-family names and the window-only nonNegativeDerivative name. 345 names -> 379
-    // arms; array_except is refused by #252 (native arrayExcept needs server 25.9) and the three
-    // date/time CLR-shape refusals (from_utc_timestamp, to_time64, from_unix_timestamp64_nano) have
-    // no accepted arm.
+    // arms; array_except is absent from the undeclared (pinned 25.8) table — #252 gates the native
+    // arrayExcept behind a context that declares ClickHouse 25.9+, so the shared singleton advertises
+    // neither the name nor an arm — and the three date/time CLR-shape refusals (from_utc_timestamp,
+    // to_time64, from_unix_timestamp64_nano) have no accepted arm.
     private static readonly (string Name, string[] Args, string Expected)[] RenderArms =
     [
         ("left", ["s", "2"], "leftUTF8(s, 2)"),

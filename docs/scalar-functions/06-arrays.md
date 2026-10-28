@@ -274,9 +274,14 @@ result column.
 > `int[]`, not `byte[]`. The same reader materialises a native `Tuple(...)` column (or a
 > `Tuple(...)`-returning expression) as a `System.Tuple<...>` of arity 1–7.
 
-> `SqlFunctions.ClickHouse.array_except` is retained for API compatibility but is **not supported**
-> on the pinned 25.8 baseline: the native `arrayExcept` exists only from ClickHouse 25.9, so the call
-> is refused with `NotSupportedException` at translation time instead of being emitted as SQL.
+> `SqlFunctions.ClickHouse.array_except` is retained for API compatibility. An undeclared context —
+> the pinned 25.8 baseline — has no native `arrayExcept` (it exists only from ClickHouse 25.9), so the
+> call is refused with `NotSupportedException` at translation time instead of being emitted as SQL.
+> A context that declares 25.9 or later through the versioned `ClickHouseDataContext` constructor
+> renders the native `arrayExcept(...)` for the two-array form only (the native function takes exactly
+> two arrays; any other arity is refused before SQL); a declared older version still refuses, naming the required
+> `25.9` and the declared version. See
+> [Declaring the server version](../connecting-providers/clickhouse.md#declaring-the-server-version).
 
 > The array relation predicates return `bool`: `starts_with(array, prefix)`/`ends_with(array, suffix)`
 > test a prefix/suffix and `has_substr(array, other)` tests that `other` occurs in `array` contiguously

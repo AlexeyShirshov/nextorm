@@ -239,7 +239,9 @@ ClickHouse, у которых нет переносимого написания
   `parse_date_time`/`parse_date_time_best_effort` (`parseDateTime`/`parseDateTimeBestEffort`) и
   текущая дата `now`/`today`/`yesterday`;
 * операции над множествами массивов: `array_concat`, `array_flatten`, `array_uniq` (`arrayUniq`, в
-  обёртке `toInt64`), `array_intersect`, `array_union`, `array_symmetric_difference`;
+  обёртке `toInt64`), `array_intersect`, `array_union`, `array_symmetric_difference` и `array_except`
+  (`arrayExcept`, доступна только если контекст объявляет ClickHouse 25.9 или новее — см.
+  [Объявление версии сервера](../../connecting-providers/clickhouse.md#объявление-версии-сервера));
 * семейство `Map`: конструктор `map` (inline-пары `Tuple.Create`), `map_keys`/`map_values`,
   `map_contains_key`/`map_contains_value`, `map_add`/`map_concat`, а также публичные
   высокопорядковые помощники `map_filter`/`map_apply`/`map_sort` (результат — кортежи и массивы,
@@ -308,10 +310,18 @@ UTF-8 с потерями):
 хэшем по умолчанию. Значение без изменений проходит обычную материализацию строки — через анонимную
 проекцию, типизированную проекцию и `Scalar<string>` (это `string`, а не массив байтов).
 
-`array_except` остаётся в `SqlFunctions.ClickHouse` для совместимости API, но **не
-поддерживается** на закреплённой базовой версии 25.8: нативная `arrayExcept` появилась в
-ClickHouse 25.9, поэтому вызов отклоняется с `NotSupportedException` на этапе трансляции и не
-доходит до сервера. Остальные операции над множествами массивов не затронуты.
+`array_except` остаётся в `SqlFunctions.ClickHouse` для совместимости API, а её доступность
+определяется объявленной версией сервера: нативная `arrayExcept` появилась в ClickHouse 25.9.
+
+| Объявление | Поведение |
+|---|---|
+| нет (закреплённая базовая версия 25.8, по умолчанию) | `NotSupportedException` с историческим сообщением `The array_except function is not supported by this provider.` — SQL не генерируется |
+| раньше 25.9 (например, `25.8`) | `NotSupportedException`, называющий требуемую версию `25.9` и объявленную версию; бросается до любого SQL |
+| 25.9 или новее | нативная `arrayExcept(...)`, принимающая ровно два массива; любая другая арность отклоняется до генерации SQL |
+
+Объявление привязано к контексту, поэтому для двух версий нужны разные подклассы контекста; см.
+[Объявление версии сервера](../../connecting-providers/clickhouse.md#объявление-версии-сервера).
+Остальные операции над множествами массивов не затронуты и версию не проверяют.
 
 Нативный результат `Map` (конструктор `map`, `map_add`, `map_concat`) представляется как
 `IDictionary<TKey, TValue>`; при проецировании комбинируйте его с `map_keys`/`map_values` или одним

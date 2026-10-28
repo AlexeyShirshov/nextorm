@@ -1453,8 +1453,10 @@ public sealed class ClickHouseFunctionExecutionTests : ProviderTestSuite
 
     /// <summary>
     /// #252: <c>array_except</c> is declared for API compatibility, but the native <c>arrayExcept</c>
-    /// exists only from ClickHouse 25.9. On the pinned 25.8 baseline the call must be refused at
-    /// translation/preparation time instead of reaching the server as an <c>UNKNOWN_FUNCTION</c>.
+    /// exists only from ClickHouse 25.9. An undeclared context keeps the pinned-baseline capability
+    /// table, so the call must be refused at translation/preparation time on every server — the gate is
+    /// the declaration, not the observed server version — instead of reaching the server as an
+    /// <c>UNKNOWN_FUNCTION</c>.
     /// </summary>
     [Fact]
     public void ArrayExcept_ShouldRefuseBeforeTouchingTheServer()
@@ -1468,18 +1470,20 @@ public sealed class ClickHouseFunctionExecutionTests : ProviderTestSuite
             .First();
 
         act.Should().Throw<NotSupportedException>(
-                "the pinned 25.8 server has no arrayExcept, so the capability gate must refuse early")
+                "an undeclared context keeps the pinned-baseline surface, so the capability gate must refuse early")
             .WithMessage("The array_except function is not supported by this provider.");
     }
 
     /// <summary>
-    /// D0 live server characterization for #252: the pinned image
-    /// <c>clickhouse/clickhouse-server:25.8-alpine</c> reports 25.8.33.6, keeps no
-    /// <c>arrayExcept</c> entry in <c>system.functions</c>, and rejects the raw call with Code 46
-    /// (UNKNOWN_FUNCTION). Raw ADO.NET keeps this oracle independent of the nextorm translator.
+    /// D0 live server characterization for #252, truthful on both supported servers. Below 25.9 (the
+    /// pinned <c>clickhouse/clickhouse-server:25.8-alpine</c>, 25.8.33.6) the server keeps no
+    /// <c>arrayExcept</c> entry in <c>system.functions</c> and rejects the raw call with Code 46
+    /// (UNKNOWN_FUNCTION). From 25.9 (the external probe server, 25.9.7.56) the function is present and
+    /// the raw call returns the documented rows. Raw ADO.NET keeps this oracle independent of the
+    /// nextorm translator.
     /// </summary>
     [Fact]
-    public async Task ServerCharacterization_ArrayExceptIsAbsentOnThePinnedServer()
+    public async Task ServerCharacterization_ArrayExceptFollowsTheServerVersion()
     {
         await using var connection = new ClickHouseConnection(ClickHouseContainer.ConnectionString);
         await connection.OpenAsync(TestContext.Current.CancellationToken);
@@ -1491,20 +1495,34 @@ public sealed class ClickHouseFunctionExecutionTests : ProviderTestSuite
             return await command.ExecuteScalarAsync(TestContext.Current.CancellationToken);
         }
 
-        var version = await ScalarAsync(connection, "SELECT version()");
-        version.Should().Be("25.8.33.6", "the collection pins clickhouse/clickhouse-server:25.8-alpine");
+        var version = Convert.ToString(
+            await ScalarAsync(connection, "SELECT version()"), CultureInfo.InvariantCulture)!;
 
-        var functions = await ScalarAsync(
-            connection,
-            "SELECT count() FROM system.functions WHERE name = 'arrayExcept'");
-        Convert.ToInt64(functions, CultureInfo.InvariantCulture)
-            .Should().Be(0, "arrayExcept was introduced in server 25.9 and the pinned server is 25.8");
+        var functions = Convert.ToInt64(
+            await ScalarAsync(
+                connection,
+                "SELECT count() FROM system.functions WHERE name = 'arrayExcept'"),
+            CultureInfo.InvariantCulture);
 
-        Func<Task> act = async () => await ScalarAsync(connection, "SELECT arrayExcept([1], [1])");
-        var thrown = await act.Should().ThrowAsync<ClickHouseServerException>(
-            "the pinned 25.8 server has no arrayExcept function");
-        thrown.Which.Message.Should().Contain("Code: 46")
-            .And.Contain("arrayExcept", "the server reports the unknown function by name");
+        if (Version.Parse(version.Split(' ')[0]) < new Version(25, 9))
+        {
+            version.Should().Be("25.8.33.6", "the collection pins clickhouse/clickhouse-server:25.8-alpine");
+            functions.Should().Be(
+                0, "arrayExcept was introduced in server 25.9 and the pinned server is 25.8");
+            Func<Task> act = async () => await ScalarAsync(connection, "SELECT arrayExcept([1], [1])");
+            var thrown = await act.Should().ThrowAsync<ClickHouseServerException>(
+                "the pinned 25.8 server has no arrayExcept function");
+            thrown.Which.Message.Should().Contain("Code: 46")
+                .And.Contain("arrayExcept", "the server reports the unknown function by name");
+            return;
+        }
+
+        version.Should().StartWith("25.9", "the external probe server runs ClickHouse 25.9");
+        functions.Should().Be(1, "arrayExcept exists from server 25.9");
+        (await ScalarAsync(connection, "SELECT toString(arrayExcept([1, 2, 3], [2]))"))
+            .Should().Be("[1,3]", "[1,2,3] except [2] is [1,3]");
+        (await ScalarAsync(connection, "SELECT toString(arrayExcept([1, 2, 3, 2], [2]))"))
+            .Should().Be("[1,3]", "every occurrence of a subtracted element is removed");
     }
 
     /// <summary>The captured dictionary member used by the T257 operand-source matrix.</summary>

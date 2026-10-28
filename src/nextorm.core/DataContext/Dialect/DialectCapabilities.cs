@@ -766,6 +766,18 @@ public interface IScalarFunctions
     /// <see cref="CommonFunctions"/> member (for example <c>lpad</c>, <c>concat_ws</c>).
     /// </summary>
     string Render(string name, IReadOnlyList<string> args);
+
+    /// <summary>
+    /// The reason the scalar function <paramref name="name"/> is unavailable on this dialect's
+    /// declared state (for example a function that requires a later server version), or
+    /// <see langword="null"/> when the name is supported, is unknown to the dialect, or the dialect
+    /// has no version-specific answer. The caller shows this reason instead of its generic "not
+    /// supported" message, so a version-gated name fails closed with the required and the declared
+    /// version. Declared as a default interface method returning <see langword="null"/> so an external
+    /// <see cref="IScalarFunctions"/> written before the member existed keeps its previous behaviour.
+    /// </summary>
+    /// <param name="name">The CLR method name of the <see cref="CommonFunctions"/> member.</param>
+    string? GetUnsupportedReason(string name) => null;
 }
 
 /// <summary>
