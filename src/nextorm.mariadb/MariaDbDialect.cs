@@ -191,7 +191,12 @@ internal sealed class MariaDbNativeFunctions : IMySqlFunctions
         "xxh3" or "xxh32" or "json_detailed" or "json_compact" or
         "json_equals" or "json_normalize" or
         "next_value_for" or "nextval" or "setval" or "lastval" or
-        "previous_value_for" or "rownum" or "binlog_gtid_pos";
+        "previous_value_for" or "rownum" or "binlog_gtid_pos" or
+        // T350 block 2 (issue #284): the residual string and JSON names MariaDB 11.4.13 accepts and
+        // MySQL has no spelling for.
+        "sformat" or "trim_oracle" or "natural_sort_key" or "lengthb" or "chr" or
+        "json_loose" or "json_array_intersect" or "json_key_value" or
+        "json_object_filter_keys" or "json_object_to_array";
 
     private static Version? MinimumVersion(string name) => name switch
     {
@@ -249,6 +254,18 @@ internal sealed class MariaDbNativeFunctions : IMySqlFunctions
         // is Oracle-mode-only and is not delivered (T350 S1 grammar re-probe G21).
         "rownum" => "ROWNUM()",
         "binlog_gtid_pos" => $"binlog_gtid_pos({args[0]}, {args[1]})",
+        // T350 block 2: the residual string and JSON names. The variadic forms join every positional
+        // argument; the vendor spelling is unchanged from MySQL's where MySQL has none.
+        "sformat" => $"sformat({string.Join(", ", args)})",
+        "trim_oracle" => $"trim_oracle({args[0]})",
+        "natural_sort_key" => $"natural_sort_key({args[0]})",
+        "lengthb" => $"lengthb({args[0]})",
+        "chr" => $"chr({args[0]})",
+        "json_loose" => $"json_loose({args[0]})",
+        "json_array_intersect" => $"json_array_intersect({string.Join(", ", args)})",
+        "json_key_value" => $"json_key_value({args[0]}, {args[1]})",
+        "json_object_filter_keys" => $"json_object_filter_keys({string.Join(", ", args)})",
+        "json_object_to_array" => $"json_object_to_array({args[0]})",
         _ => Supports(name)
             ? Inner.Render(name, args)
             : throw new NotSupportedException($"The {name} function is not supported by MariaDB.")

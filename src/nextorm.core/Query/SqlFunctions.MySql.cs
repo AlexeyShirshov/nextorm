@@ -466,6 +466,65 @@ public class MySqlFunctions : CommonFunctions
     public string? binlog_gtid_pos(string? file, ulong position) => default!;
 
     /// <summary>
+    /// <c>sformat(format, values...)</c>: the arguments formatted with an fmtlib-style <c>{}</c> format
+    /// string. MariaDB-only.
+    /// </summary>
+    public string? sformat(string? format, params object?[] values) => default!;
+
+    /// <summary>
+    /// <c>trim_oracle(value)</c>: Oracle-compatible <c>TRIM</c>, which removes the spaces both leading and
+    /// trailing. MariaDB-only.
+    /// </summary>
+    public string? trim_oracle(string? value) => default!;
+
+    /// <summary>
+    /// <c>natural_sort_key(value)</c>: a sort key that orders embedded digit runs numerically rather than
+    /// lexically. MariaDB-only.
+    /// </summary>
+    public string? natural_sort_key(string? value) => default!;
+
+    /// <summary>
+    /// <c>lengthb(value)</c>: the length of <paramref name="value"/> in bytes. MariaDB-only.
+    /// </summary>
+    public int? lengthb(string? value) => default!;
+
+    /// <summary>
+    /// <c>chr(code)</c>: the character with the given code point. MariaDB-only (MySQL spells the same
+    /// conversion <c>CHAR()</c>).
+    /// </summary>
+    public string? chr(int? code) => default!;
+
+    /// <summary>
+    /// <c>json_loose(json)</c>: the JSON document re-formatted with readable whitespace but without the
+    /// strict validity check. MariaDB-only.
+    /// </summary>
+    public string? json_loose(string? json) => default!;
+
+    /// <summary>
+    /// <c>json_array_intersect(json, json, ...)</c>: the array of elements common to every argument array.
+    /// MariaDB-only (MariaDB 11.2+).
+    /// </summary>
+    public string? json_array_intersect(string? first, string? second, params string?[] rest) => default!;
+
+    /// <summary>
+    /// <c>json_key_value(json, path)</c>: the key/value pairs of the object selected by the JSON
+    /// <paramref name="path"/>, as a JSON array. MariaDB-only (MariaDB 11.2+).
+    /// </summary>
+    public string? json_key_value(string? json, string? path) => default!;
+
+    /// <summary>
+    /// <c>json_object_filter_keys(json, keys...)</c>: the object reduced to the named keys, or an empty
+    /// object when none is present. MariaDB-only (MariaDB 11.2+).
+    /// </summary>
+    public byte[]? json_object_filter_keys(string? json, params string?[] keys) => default!;
+
+    /// <summary>
+    /// <c>json_object_to_array(json)</c>: the object as an array of <c>[key, value]</c> pairs.
+    /// MariaDB-only (MariaDB 11.2+).
+    /// </summary>
+    public byte[]? json_object_to_array(string? json) => default!;
+
+    /// <summary>
     /// <c>bin(value)</c>: the binary representation of <paramref name="value"/> as an unsigned 64-bit
     /// two's-complement value, without a <c>0b</c> prefix. MySQL-only.
     /// </summary>

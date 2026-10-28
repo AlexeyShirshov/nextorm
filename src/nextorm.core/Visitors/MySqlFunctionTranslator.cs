@@ -22,7 +22,12 @@ internal static class MySqlFunctionTranslator
         [nameof(MySqlFunctions.json_merge)] = 2,
         [nameof(MySqlFunctions.json_contains_path)] = 2,
         [nameof(MySqlFunctions.json_search)] = 4,
-        [nameof(MySqlFunctions.grouping)] = 0
+        [nameof(MySqlFunctions.grouping)] = 0,
+        // T350 (#284): the MariaDB-only variadic shapes — the leading arguments are positional and the
+        // remaining ones are the variadic tail.
+        [nameof(MySqlFunctions.sformat)] = 1,
+        [nameof(MySqlFunctions.json_array_intersect)] = 2,
+        [nameof(MySqlFunctions.json_object_filter_keys)] = 1
     };
 
     /// <summary>
@@ -341,6 +346,9 @@ internal static class MySqlFunctionTranslator
         nameof(MySqlFunctions.json_merge) => 2,
         nameof(MySqlFunctions.json_contains_path) or nameof(MySqlFunctions.json_search) => 3,
         nameof(MySqlFunctions.json_array) or nameof(MySqlFunctions.json_object) => 0,
+        nameof(MySqlFunctions.sformat) => 1,
+        nameof(MySqlFunctions.json_array_intersect) => 2,
+        nameof(MySqlFunctions.json_object_filter_keys) => 2,
         _ => 0
     };
 
@@ -355,6 +363,7 @@ internal static class MySqlFunctionTranslator
         nameof(MySqlFunctions.json_contains_path) => index >= 1,
         nameof(MySqlFunctions.json_search) => index is 1 or 3 || index >= 4,
         nameof(MySqlFunctions.member_of) => index == 1,
+        nameof(MySqlFunctions.json_key_value) => index == 1,
         _ => false
     };
 

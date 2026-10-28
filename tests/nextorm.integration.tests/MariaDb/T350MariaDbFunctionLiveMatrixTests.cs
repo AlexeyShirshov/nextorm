@@ -470,6 +470,13 @@ public sealed class T350MariaDbFunctionLiveMatrixTests : IDisposable
             ? raw is null && translated is null
             : raw.GetType() == translated.GetType() && raw.Equals(translated);
 
+    /// <summary>Value-exact equality for the binary results, plus <see cref="Exact"/> for NULL.</summary>
+    private static bool Bytes(object? raw, object? translated)
+        => raw is byte[] left && translated is byte[] right
+            ? left.AsSpan().SequenceEqual(right)
+            : Exact(raw, translated);
+
+
     private sealed record Attempt(object? Value, string? Error);
 
     private sealed record T350LiveObservation(
@@ -526,7 +533,127 @@ public sealed class T350MariaDbFunctionLiveMatrixTests : IDisposable
                         .ToList()[0].V),
                 "System.String",
                 Exact,
+                "propagates"),
+            // ---------------------------------------------------------------- T350 block 2: string
+            new T350LiveCase(
+                "90",
+                "SFORMAT",
+                "string",
+                "select sformat('{}', 42)",
+                "select sformat('{}', null)",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.sformat("{}", 42))),
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.sformat("{}", (object?)null))),
+                "System.String",
+                Exact,
+                "propagates"),
+            new T350LiveCase(
+                "91",
+                "TRIM_ORACLE",
+                "string",
+                "select trim_oracle('  a  ')",
+                "select trim_oracle(null)",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.trim_oracle("  a  "))),
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.trim_oracle(null))),
+                "System.String",
+                Exact,
+                "propagates"),
+            new T350LiveCase(
+                "92",
+                "NATURAL_SORT_KEY",
+                "string",
+                "select natural_sort_key('a10')",
+                "select natural_sort_key(null)",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.natural_sort_key("a10"))),
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.natural_sort_key(null))),
+                "System.String",
+                Exact,
+                "propagates"),
+            new T350LiveCase(
+                "93",
+                "LENGTHB",
+                "string",
+                "select lengthb('abc')",
+                "select lengthb(null)",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.lengthb("abc"))),
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.lengthb(null))),
+                "System.Int32",
+                Exact,
+                "propagates"),
+            new T350LiveCase(
+                "94",
+                "CHR",
+                "string",
+                "select chr(65)",
+                "select chr(null)",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.chr(65))),
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.chr(null))),
+                "System.String",
+                Exact,
+                "propagates"),
+            // ---------------------------------------------------------------- T350 block 2: JSON
+            new T350LiveCase(
+                "110",
+                "JSON_LOOSE",
+                "JSON",
+                "select json_loose('{\"a\":1,\"b\":[2,3]}')",
+                "select json_loose(null)",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.json_loose("{\"a\":1,\"b\":[2,3]}"))),
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.json_loose(null))),
+                "System.String",
+                Exact,
+                "propagates"),
+            new T350LiveCase(
+                "113",
+                "JSON_ARRAY_INTERSECT",
+                "JSON",
+                "select json_array_intersect('[1,2,3]','[1,2,4]')",
+                "select json_array_intersect(null,'[1,2,4]')",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.json_array_intersect("[1,2,3]", "[1,2,4]"))),
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.json_array_intersect(null, "[1,2,4]"))),
+                "System.String",
+                Exact,
+                "propagates"),
+            new T350LiveCase(
+                "114",
+                "JSON_KEY_VALUE",
+                "JSON",
+                "select json_key_value('{\"a\":1}','$')",
+                "select json_key_value(null,'$')",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.json_key_value("{\"a\":1}", "$"))),
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.json_key_value(null, "$"))),
+                "System.String",
+                Exact,
+                "propagates"),
+            new T350LiveCase(
+                "115",
+                "JSON_OBJECT_FILTER_KEYS",
+                "JSON",
+                "select json_object_filter_keys('{\"a\":1,\"b\":2}','[\"a\"]')",
+                "select json_object_filter_keys(null,'[\"a\"]')",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.json_object_filter_keys("{\"a\":1,\"b\":2}", "[\"a\"]"))),
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.json_object_filter_keys(null, "[\"a\"]"))),
+                "byte[]",
+                Bytes,
+                "propagates"),
+            new T350LiveCase(
+                "116",
+                "JSON_OBJECT_TO_ARRAY",
+                "JSON",
+                "select json_object_to_array('{\"a\":1}')",
+                "select json_object_to_array(null)",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.json_object_to_array("{\"a\":1}"))),
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.json_object_to_array(null))),
+                "byte[]",
+                Bytes,
                 "propagates")
         ];
+
+        /// <summary>Evaluates one production projection against the single probe row.</summary>
+        private static object? Project<T>(
+            MariaDbDataContext ctx, System.Linq.Expressions.Expression<Func<T350ProbeRow, T>> projection)
+            => ctx.From<T350ProbeRow>()
+                .Where(x => x.Id == 1)
+                .Select(projection)
+                .ToList()[0];
     }
 }

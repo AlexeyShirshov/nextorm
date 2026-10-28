@@ -173,7 +173,19 @@ public class T350MariaDbResidualFunctionSqlGenerationTests
         new("89", "COLUMN_DEFAULT", "miscellaneous", "default(id)", "delivered"),
         new("98", "ROWNUM", "information", "ROWNUM()", "delivered"),
         new("100", "BINLOG_GTID_POS", "information", "binlog_gtid_pos(_utf8mb4 X'6d7973716c642d62696e2e303030303032', 740)", "delivered"),
-        new("121", "PREVIOUS VALUE FOR", "sequence", "previous value for t350_seq", "delivered")
+        new("121", "PREVIOUS VALUE FOR", "sequence", "previous value for t350_seq", "delivered"),
+        // T350 block 2: the residual string names MariaDB 11.4.13 accepts and MySQL has no spelling for.
+        new("90", "SFORMAT", "string", "sformat(somestring, id)", "delivered"),
+        new("91", "TRIM_ORACLE", "string", "trim_oracle(somestring)", "delivered"),
+        new("92", "NATURAL_SORT_KEY", "string", "natural_sort_key(somestring)", "delivered"),
+        new("93", "LENGTHB", "string", "lengthb(somestring)", "delivered"),
+        new("94", "CHR", "string", "chr(65)", "delivered"),
+        // T350 block 2: the residual JSON names of the same group.
+        new("110", "JSON_LOOSE", "JSON", "json_loose(somestring)", "delivered"),
+        new("113", "JSON_ARRAY_INTERSECT", "JSON", "json_array_intersect(somestring, somestring)", "delivered"),
+        new("114", "JSON_KEY_VALUE", "JSON", "json_key_value(somestring, '$.a')", "delivered"),
+        new("115", "JSON_OBJECT_FILTER_KEYS", "JSON", "json_object_filter_keys(somestring, somestring)", "delivered"),
+        new("116", "JSON_OBJECT_TO_ARRAY", "JSON", "json_object_to_array(somestring)", "delivered")
     ];
 
     /// <summary>
@@ -262,7 +274,17 @@ public class T350MariaDbResidualFunctionSqlGenerationTests
             ["COLUMN_DEFAULT"] = ctx => Plain(ctx, e => e.Select(x => SqlFunctions.MySql.column_default(x.Id))),
             ["ROWNUM"] = ctx => Plain(ctx, e => e.Select(_ => SqlFunctions.MySql.rownum())),
             ["BINLOG_GTID_POS"] = ctx => Plain(ctx, e => e.Select(_ => SqlFunctions.MySql.binlog_gtid_pos("mysqld-bin.000002", 740UL))),
-            ["PREVIOUS VALUE FOR"] = ctx => Plain(ctx, e => e.Select(_ => SqlFunctions.MySql.previous_value_for("t350_seq")))
+            ["PREVIOUS VALUE FOR"] = ctx => Plain(ctx, e => e.Select(_ => SqlFunctions.MySql.previous_value_for("t350_seq"))),
+            ["SFORMAT"] = ctx => Plain(ctx, e => e.Select(x => SqlFunctions.MySql.sformat(x.String, x.Id))),
+            ["TRIM_ORACLE"] = ctx => Plain(ctx, e => e.Select(x => SqlFunctions.MySql.trim_oracle(x.String))),
+            ["NATURAL_SORT_KEY"] = ctx => Plain(ctx, e => e.Select(x => SqlFunctions.MySql.natural_sort_key(x.String))),
+            ["LENGTHB"] = ctx => Plain(ctx, e => e.Select(x => SqlFunctions.MySql.lengthb(x.String))),
+            ["CHR"] = ctx => Plain(ctx, e => e.Select(x => SqlFunctions.MySql.chr(65))),
+            ["JSON_LOOSE"] = ctx => Plain(ctx, e => e.Select(x => SqlFunctions.MySql.json_loose(x.String))),
+            ["JSON_ARRAY_INTERSECT"] = ctx => Plain(ctx, e => e.Select(x => SqlFunctions.MySql.json_array_intersect(x.String, x.String))),
+            ["JSON_KEY_VALUE"] = ctx => Plain(ctx, e => e.Select(x => SqlFunctions.MySql.json_key_value(x.String, "$.a"))),
+            ["JSON_OBJECT_FILTER_KEYS"] = ctx => Plain(ctx, e => e.Select(x => SqlFunctions.MySql.json_object_filter_keys(x.String, x.String))),
+            ["JSON_OBJECT_TO_ARRAY"] = ctx => Plain(ctx, e => e.Select(x => SqlFunctions.MySql.json_object_to_array(x.String)))
         };
 
     /// <summary>
@@ -349,7 +371,14 @@ public class T350MariaDbResidualFunctionSqlGenerationTests
 
     /// <summary>The three names this block delivered on MariaDB only; MySQL has none of them.</summary>
     private static readonly HashSet<string> MariaDbOnlyNames =
-        new(StringComparer.Ordinal) { "ROWNUM", "BINLOG_GTID_POS", "PREVIOUS VALUE FOR" };
+        new(StringComparer.Ordinal)
+        {
+            "ROWNUM", "BINLOG_GTID_POS", "PREVIOUS VALUE FOR",
+            // T350 block 2: the residual string and JSON names.
+            "SFORMAT", "TRIM_ORACLE", "NATURAL_SORT_KEY", "LENGTHB", "CHR",
+            "JSON_LOOSE", "JSON_ARRAY_INTERSECT", "JSON_KEY_VALUE",
+            "JSON_OBJECT_FILTER_KEYS", "JSON_OBJECT_TO_ARRAY"
+        };
 
     /// <summary>
     /// The 14 refused rows that <b>are</b> MySQL 8.4 functions: the inventory's three permanent exclusions,
@@ -374,7 +403,8 @@ public class T350MariaDbResidualFunctionSqlGenerationTests
     [Fact]
     public void EveryResidualRow_ShouldCarryEitherItsFragmentOrItsRefusal()
     {
-        DeliveredCases.Should().HaveCount(78, "75 un-excluded names plus the three members this block adds");
+        DeliveredCases.Should().HaveCount(
+            88, "75 un-excluded names, the three block-1 members and the ten block-2 string/JSON names");
         DeliveredCases.Should().OnlyContain(@case => @case.Behaviour == "delivered");
         DeliveredCases.Select(@case => @case.Id).Should().OnlyHaveUniqueItems("one row per inventory id");
         DeliveredCases.Select(@case => @case.Name).Should().OnlyHaveUniqueItems("one row per canonical name");
