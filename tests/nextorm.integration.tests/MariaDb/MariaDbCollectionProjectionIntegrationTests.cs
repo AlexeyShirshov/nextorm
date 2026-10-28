@@ -170,7 +170,11 @@ public sealed class MariaDbCollectionProjectionIntegrationTests : IDisposable
             .ToList();
 
         rows.Select(r => r.Id).Should().Equal(Rich, Empty);
-        rows[0].Items.Select(i => i.Id).Should().Equal(9710, 9711, 9712);
+        // A direct slot carries no child ordering: single mode stitches the flattened rows in the
+        // order the server returned them, and MariaDB is free to change that order between runs
+        // (observed once as {9712, 9710, 9711} against a green isolated run). Order is only a
+        // contract through an explicit OrderBy, so the assertion is set-based, like the shared suite.
+        rows[0].Items.Select(i => i.Id).Should().BeEquivalentTo([9710, 9711, 9712]);
         rows[1].Items.Should().NotBeNull("an empty collection slot is empty, never null").And.BeEmpty();
         counter.Executing.Should().Be(1, "single: the inherited mode flattens the slot in one statement");
     }
