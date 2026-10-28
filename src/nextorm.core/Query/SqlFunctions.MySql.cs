@@ -525,6 +525,59 @@ public class MySqlFunctions : CommonFunctions
     public byte[]? json_object_to_array(string? json) => default!;
 
     /// <summary>
+    /// <c>encode(value, password)</c>: the symmetric ciphertext of <paramref name="value"/> under
+    /// <paramref name="password"/>; the historical pair of <c>decode</c>. MariaDB-only.
+    /// </summary>
+    public byte[]? encode(string? value, string? password) => default!;
+
+    /// <summary>
+    /// <c>decode(value, password)</c>: the plaintext of the <paramref name="value"/> ciphertext under
+    /// <paramref name="password"/>; the pair of <c>encode</c>. MariaDB-only.
+    /// </summary>
+    public byte[]? decode(byte[]? value, string? password) => default!;
+
+    /// <summary>
+    /// <c>encrypt(value)</c>: the Unix <c>crypt()</c> hash of <paramref name="value"/> with a random
+    /// two-character salt. MariaDB-only.
+    /// </summary>
+    public byte[]? encrypt(string? value) => default!;
+
+    /// <summary>
+    /// <c>encrypt(value, salt)</c>: the Unix <c>crypt()</c> hash of <paramref name="value"/> with the
+    /// two-character <paramref name="salt"/>, which makes the result deterministic. MariaDB-only.
+    /// </summary>
+    public byte[]? encrypt(string? value, string? salt) => default!;
+
+    /// <summary>
+    /// <c>des_encrypt(value)</c>: the DES ciphertext under the first key of the server's DES key file.
+    /// MariaDB-only; removed in MariaDB 13.0.
+    /// </summary>
+    public byte[]? des_encrypt(string? value) => default!;
+
+    /// <summary>
+    /// <c>des_encrypt(value, key)</c>: the DES ciphertext under the literal <paramref name="key"/>.
+    /// MariaDB-only; removed in MariaDB 13.0.
+    /// </summary>
+    public byte[]? des_encrypt(string? value, string? key) => default!;
+
+    /// <summary>
+    /// <c>des_decrypt(value)</c>: the plaintext of the <paramref name="value"/> DES ciphertext under the
+    /// first key of the server's DES key file. MariaDB-only; removed in MariaDB 13.0.
+    /// </summary>
+    public byte[]? des_decrypt(byte[]? value) => default!;
+
+    /// <summary>
+    /// <c>des_decrypt(value, key)</c>: the plaintext of the <paramref name="value"/> DES ciphertext under
+    /// the literal <paramref name="key"/>. MariaDB-only; removed in MariaDB 13.0.
+    /// </summary>
+    public byte[]? des_decrypt(byte[]? value, string? key) => default!;
+
+    /// <summary>
+    /// <c>old_password(value)</c>: the pre-4.1 (16-character) MySQL password hash. MariaDB-only.
+    /// </summary>
+    public string? old_password(string? value) => default!;
+
+    /// <summary>
     /// <c>bin(value)</c>: the binary representation of <paramref name="value"/> as an unsigned 64-bit
     /// two's-complement value, without a <c>0b</c> prefix. MySQL-only.
     /// </summary>

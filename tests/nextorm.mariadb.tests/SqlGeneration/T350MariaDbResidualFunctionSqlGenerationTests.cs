@@ -185,7 +185,14 @@ public class T350MariaDbResidualFunctionSqlGenerationTests
         new("113", "JSON_ARRAY_INTERSECT", "JSON", "json_array_intersect(somestring, somestring)", "delivered"),
         new("114", "JSON_KEY_VALUE", "JSON", "json_key_value(somestring, '$.a')", "delivered"),
         new("115", "JSON_OBJECT_FILTER_KEYS", "JSON", "json_object_filter_keys(somestring, somestring)", "delivered"),
-        new("116", "JSON_OBJECT_TO_ARRAY", "JSON", "json_object_to_array(somestring)", "delivered")
+        new("116", "JSON_OBJECT_TO_ARRAY", "JSON", "json_object_to_array(somestring)", "delivered"),
+        // T350 block 2: the residual crypto names (DES_* are still present on the 11.4 baseline).
+        new("101", "ENCODE", "crypto", "encode(somestring, somestring)", "delivered"),
+        new("102", "DECODE", "crypto", "decode(@norm_p0, somestring)", "delivered"),
+        new("103", "ENCRYPT", "crypto", "encrypt(somestring, somestring)", "delivered"),
+        new("104", "DES_ENCRYPT", "crypto", "des_encrypt(somestring, somestring)", "delivered"),
+        new("105", "DES_DECRYPT", "crypto", "des_decrypt(des_encrypt(somestring, somestring), somestring)", "delivered"),
+        new("106", "OLD_PASSWORD", "crypto", "old_password(somestring)", "delivered")
     ];
 
     /// <summary>
@@ -284,7 +291,14 @@ public class T350MariaDbResidualFunctionSqlGenerationTests
             ["JSON_ARRAY_INTERSECT"] = ctx => Plain(ctx, e => e.Select(x => SqlFunctions.MySql.json_array_intersect(x.String, x.String))),
             ["JSON_KEY_VALUE"] = ctx => Plain(ctx, e => e.Select(x => SqlFunctions.MySql.json_key_value(x.String, "$.a"))),
             ["JSON_OBJECT_FILTER_KEYS"] = ctx => Plain(ctx, e => e.Select(x => SqlFunctions.MySql.json_object_filter_keys(x.String, x.String))),
-            ["JSON_OBJECT_TO_ARRAY"] = ctx => Plain(ctx, e => e.Select(x => SqlFunctions.MySql.json_object_to_array(x.String)))
+            ["JSON_OBJECT_TO_ARRAY"] = ctx => Plain(ctx, e => e.Select(x => SqlFunctions.MySql.json_object_to_array(x.String))),
+            ["ENCODE"] = ctx => Plain(ctx, e => e.Select(x => SqlFunctions.MySql.encode(x.String, x.String))),
+            ["DECODE"] = ctx => Plain(ctx, e => e.Select(x => SqlFunctions.MySql.decode(SqlFunctions.Parameter<byte[]>(0), x.String))),
+            ["ENCRYPT"] = ctx => Plain(ctx, e => e.Select(x => SqlFunctions.MySql.encrypt(x.String, x.String))),
+            ["DES_ENCRYPT"] = ctx => Plain(ctx, e => e.Select(x => SqlFunctions.MySql.des_encrypt(x.String, x.String))),
+            ["DES_DECRYPT"] = ctx => Plain(ctx, e => e.Select(x => SqlFunctions.MySql.des_decrypt(
+                SqlFunctions.MySql.des_encrypt(x.String, x.String), x.String))),
+            ["OLD_PASSWORD"] = ctx => Plain(ctx, e => e.Select(x => SqlFunctions.MySql.old_password(x.String)))
         };
 
     /// <summary>
@@ -377,7 +391,9 @@ public class T350MariaDbResidualFunctionSqlGenerationTests
             // T350 block 2: the residual string and JSON names.
             "SFORMAT", "TRIM_ORACLE", "NATURAL_SORT_KEY", "LENGTHB", "CHR",
             "JSON_LOOSE", "JSON_ARRAY_INTERSECT", "JSON_KEY_VALUE",
-            "JSON_OBJECT_FILTER_KEYS", "JSON_OBJECT_TO_ARRAY"
+            "JSON_OBJECT_FILTER_KEYS", "JSON_OBJECT_TO_ARRAY",
+            // T350 block 2: the residual crypto names.
+            "ENCODE", "DECODE", "ENCRYPT", "DES_ENCRYPT", "DES_DECRYPT", "OLD_PASSWORD"
         };
 
     /// <summary>
@@ -404,7 +420,7 @@ public class T350MariaDbResidualFunctionSqlGenerationTests
     public void EveryResidualRow_ShouldCarryEitherItsFragmentOrItsRefusal()
     {
         DeliveredCases.Should().HaveCount(
-            88, "75 un-excluded names, the three block-1 members and the ten block-2 string/JSON names");
+            94, "75 un-excluded names, the three block-1 members and the sixteen block-2 names");
         DeliveredCases.Should().OnlyContain(@case => @case.Behaviour == "delivered");
         DeliveredCases.Select(@case => @case.Id).Should().OnlyHaveUniqueItems("one row per inventory id");
         DeliveredCases.Select(@case => @case.Name).Should().OnlyHaveUniqueItems("one row per canonical name");

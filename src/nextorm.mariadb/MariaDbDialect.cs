@@ -196,7 +196,9 @@ internal sealed class MariaDbNativeFunctions : IMySqlFunctions
         // MySQL has no spelling for.
         "sformat" or "trim_oracle" or "natural_sort_key" or "lengthb" or "chr" or
         "json_loose" or "json_array_intersect" or "json_key_value" or
-        "json_object_filter_keys" or "json_object_to_array";
+        "json_object_filter_keys" or "json_object_to_array" or
+        // T350 block 2: the residual crypto names of the same baseline.
+        "encode" or "decode" or "encrypt" or "des_encrypt" or "des_decrypt" or "old_password";
 
     private static Version? MinimumVersion(string name) => name switch
     {
@@ -266,6 +268,13 @@ internal sealed class MariaDbNativeFunctions : IMySqlFunctions
         "json_key_value" => $"json_key_value({args[0]}, {args[1]})",
         "json_object_filter_keys" => $"json_object_filter_keys({string.Join(", ", args)})",
         "json_object_to_array" => $"json_object_to_array({args[0]})",
+        // T350 block 2: the residual crypto names; encrypt/des_* have one- and two-argument overloads.
+        "encode" => $"encode({args[0]}, {args[1]})",
+        "decode" => $"decode({args[0]}, {args[1]})",
+        "encrypt" => $"encrypt({string.Join(", ", args)})",
+        "des_encrypt" => $"des_encrypt({string.Join(", ", args)})",
+        "des_decrypt" => $"des_decrypt({string.Join(", ", args)})",
+        "old_password" => $"old_password({args[0]})",
         _ => Supports(name)
             ? Inner.Render(name, args)
             : throw new NotSupportedException($"The {name} function is not supported by MariaDB.")
