@@ -95,6 +95,15 @@ internal static class AdvancedAggregateTranslator
             case nameof(PostgresFunctions.regr_avgy) when node.Arguments.Count == 2:
                 EmitBinary(visitor, node, "regr_avgy", () => visitor.Dialect.SupportsRegressionAggregates, "regr_*");
                 return true;
+            case nameof(PostgresFunctions.regr_sxx) when node.Arguments.Count == 2:
+                EmitBinary(visitor, node, "regr_sxx", () => visitor.Dialect.SupportsRegressionAggregates, "regr_*");
+                return true;
+            case nameof(PostgresFunctions.regr_sxy) when node.Arguments.Count == 2:
+                EmitBinary(visitor, node, "regr_sxy", () => visitor.Dialect.SupportsRegressionAggregates, "regr_*");
+                return true;
+            case nameof(PostgresFunctions.regr_syy) when node.Arguments.Count == 2:
+                EmitBinary(visitor, node, "regr_syy", () => visitor.Dialect.SupportsRegressionAggregates, "regr_*");
+                return true;
 
             case nameof(ClickHouseFunctions.arg_min) when node.Arguments.Count == 2:
                 EmitBinary(visitor, node, "arg_min", () => visitor.Dialect.SupportsArgMinMax, "argMin/argMax");

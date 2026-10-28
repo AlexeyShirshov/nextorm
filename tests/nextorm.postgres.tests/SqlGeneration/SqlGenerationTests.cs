@@ -3327,7 +3327,10 @@ public class SqlGenerationTests
             F = SqlFunctions.Postgres.regr_r2(x.Id, x.Id),
             G = SqlFunctions.Postgres.regr_count(x.Id, x.Id),
             H = SqlFunctions.Postgres.regr_avgx(x.Id, x.Id),
-            I = SqlFunctions.Postgres.regr_avgy(x.Id, x.Id)
+            I = SqlFunctions.Postgres.regr_avgy(x.Id, x.Id),
+            J = SqlFunctions.Postgres.regr_sxx(x.Id, x.Id),
+            K = SqlFunctions.Postgres.regr_sxy(x.Id, x.Id),
+            L = SqlFunctions.Postgres.regr_syy(x.Id, x.Id)
         }));
 
         sql.Should().Contain("corr(id, id)");
@@ -3339,6 +3342,33 @@ public class SqlGenerationTests
         sql.Should().Contain("regr_count(id, id)");
         sql.Should().Contain("regr_avgx(id, id)");
         sql.Should().Contain("regr_avgy(id, id)");
+        sql.Should().Contain("regr_sxx(id, id)");
+        sql.Should().Contain("regr_sxy(id, id)");
+        sql.Should().Contain("regr_syy(id, id)");
+    }
+
+    /// <summary>
+    /// The PostgreSQL 17 <c>any_value</c> aggregate of #281 (#347 D4) is <c>anyelement → anyelement</c>,
+    /// so it is rendered as the bare native aggregate over a column (no cast: an untyped constant would
+    /// have no target type) and refuses a result shape the row materialiser cannot read back.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void AnyValueAggregate_ShouldEmitAndRefuseNonScalarResults()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.any_value(x.Int) }));
+
+        sql.Should().Contain("any_value(nullableint)");
+        sql.Should().NotContain("cast(", "anyelement takes the column's own type, so no cast is emitted");
+
+        // The aggregate is polymorphic: the CLR result type is the only read-back contract, so a shape
+        // outside the single-column set is refused before any SQL or parameter is produced.
+        var act = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.any_value<object>(x) }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*any_value*polymorphic*");
     }
 
     [Fact]

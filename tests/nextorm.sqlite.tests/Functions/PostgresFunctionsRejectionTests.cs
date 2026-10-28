@@ -181,6 +181,7 @@ public class PostgresFunctionsRejectionTests
             "date_subtract", "justify_interval", "make_timestamptz", "clock_timestamp", "statement_timestamp",
             "transaction_timestamp", "timeofday", "isfinite", "uuid_extract_timestamp",
             "uuid_extract_version", "get_bit", "set_bit", "get_byte", "set_byte", "bit_count",
+            "any_value",
             "current_schemas", "pg_postmaster_start_time", "pg_current_logfile",
             "pg_conf_load_time", "pg_jit_available", "pg_my_temp_schema",
             "pg_is_other_temp_schema", "pg_notification_queue_usage", "pg_blocking_pids",
@@ -589,6 +590,35 @@ public class PostgresFunctionsRejectionTests
 
         foreach (var (name, act) in cases)
             act.Should().Throw<NotSupportedException>().WithMessage($"*{name}*not supported*");
+    }
+
+    /// <summary>
+    /// The PostgreSQL 17 <c>any_value</c> aggregate and the three regression sums (<c>regr_sxx</c>,
+    /// <c>regr_sxy</c>, <c>regr_syy</c>) of #281 (#347 D4) are PostgreSQL-only: <c>any_value</c> is
+    /// refused by name, and the <c>regr_*</c> family by its dialect capability gate, so neither is
+    /// rendered as SQL this provider cannot execute.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void AnyValueAndRegressionSums_ShouldThrowBecauseNotSupported()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        FluentActions.Invoking(() => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.any_value(x.Int) })))
+            .Should().Throw<NotSupportedException>().WithMessage("*any_value*not supported*");
+
+        var regression = new (string Name, Action Act)[]
+        {
+            ("regr_sxx", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.regr_sxx((double)x.Id, (double)x.Id) }))),
+            ("regr_sxy", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.regr_sxy((double)x.Id, (double)x.Id) }))),
+            ("regr_syy", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.regr_syy((double)x.Id, (double)x.Id) })))
+        };
+
+        foreach (var (name, act) in regression)
+            act.Should().Throw<NotSupportedException>()
+                .Which.Message.Should().Contain(
+                    "The regr_* aggregates are not supported by this provider", "{0} is gated by the regr_* capability", name);
     }
 
     /// <summary>#347 D3a fixture: the caller-declared row shape of the PostgreSQL JSON record readers.</summary>

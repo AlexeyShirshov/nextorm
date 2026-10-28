@@ -240,7 +240,9 @@ internal sealed class InMemoryScalarFunctionRewriter : ExpressionVisitor
         nameof(PostgresFunctions.setweight), nameof(PostgresFunctions.strip),
         nameof(PostgresFunctions.ts_delete), nameof(PostgresFunctions.ts_filter),
         nameof(PostgresFunctions.ts_rewrite), nameof(PostgresFunctions.tsquery_phrase),
-        nameof(PostgresFunctions.tsvector_to_array), nameof(PostgresFunctions.ts_lexize)
+        nameof(PostgresFunctions.tsvector_to_array), nameof(PostgresFunctions.ts_lexize),
+        nameof(PostgresFunctions.any_value), nameof(PostgresFunctions.regr_sxx),
+        nameof(PostgresFunctions.regr_sxy), nameof(PostgresFunctions.regr_syy)
     };
 
     internal static Expression Rewrite(Expression expression) => new InMemoryScalarFunctionRewriter().Visit(expression)!;

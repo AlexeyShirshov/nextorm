@@ -3458,6 +3458,96 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
             .Which.SqlState.Should().Be("42704", "the text form resolves the parser by name on the server");
     }
 
+    /// <summary>
+    /// #281 (#347 D4) group 1: <c>any_value</c> and the three regression sums against PostgreSQL 17.
+    /// The aggregate is arbitrary by definition, so a multi-value group asserts membership while a
+    /// single-non-NULL group asserts the exact value; the all-NULL group and the empty input prove the
+    /// NULL/single-row contract, and the CLR types prove the materialisation (<c>int?</c> for
+    /// <c>anyelement</c>, <c>double?</c> for the sums).
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void AnyValueAndRegressionSums_ShouldComputeValuesNullsTypesAndGroups()
+    {
+        // complex_entity: ids 1..3, nullableint NULL,1,1 — so any_value sees the single non-NULL value 1,
+        // and the sums over (id, id) are sum(i^2) - sum(i)^2/3 = 14 - 12 = 2 in every direction.
+        var whole = _sut.ComplexEntity
+            .Select(x => new
+            {
+                AnyNullableInt = SqlFunctions.Postgres.any_value(x.Int),
+                AnyString = SqlFunctions.Postgres.any_value(x.String),
+                Sxx = SqlFunctions.Postgres.regr_sxx((double)x.Id, (double)x.Id),
+                Sxy = SqlFunctions.Postgres.regr_sxy((double)x.Id, (double)x.Id),
+                Syy = SqlFunctions.Postgres.regr_syy((double)x.Id, (double)x.Id)
+            })
+            .First();
+
+        whole.AnyNullableInt.Should().Be(1, "1 is the only non-NULL value of the group");
+        ((object)whole.AnyNullableInt!).Should().BeOfType<int>(
+            "anyelement carries the argument's own CLR type (int? at the API level)");
+        whole.AnyString.Should().BeOneOf(
+            ["dadfasd", "xxx"], "any_value may return any value of the group");
+        ((object)whole.AnyString!).Should().BeOfType<string>();
+
+        whole.Sxx.Should().BeApproximately(2.0, 1e-12);
+        whole.Sxy.Should().BeApproximately(2.0, 1e-12);
+        whole.Syy.Should().BeApproximately(2.0, 1e-12);
+        ((object)whole.Sxx!).Should().BeOfType<double>();
+        ((object)whole.Sxy!).Should().BeOfType<double>();
+        ((object)whole.Syy!).Should().BeOfType<double>();
+
+        // All-NULL group: avg_fixture row 1 seeds NULL in every nullable column; a group of NULLs is NULL.
+        var allNull = _sut.AvgFixture
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Any = SqlFunctions.Postgres.any_value(x.NI),
+                Sxx = SqlFunctions.Postgres.regr_sxx((double?)x.NI, (double?)x.NI)
+            })
+            .FirstOrDefault();
+
+        allNull.Should().NotBeNull("an aggregate always yields one row");
+        allNull!.Any.Should().BeNull();
+        allNull.Sxx.Should().BeNull("no (Y, X) pair has both arguments non-null");
+
+        // Empty input: the aggregate still yields exactly one row — any_value and the sums are NULL,
+        // and count(*) over that empty input is 0 (the row count is not zero, the counted rows are).
+        var empty = _sut.AvgFixture
+            .Where(x => x.Id > 100)
+            .Select(x => new
+            {
+                Any = SqlFunctions.Postgres.any_value(x.NI),
+                Count = SqlFunctions.Sql.count(),
+                Sxx = SqlFunctions.Postgres.regr_sxx((double?)x.NI, (double?)x.NI)
+            })
+            .ToList();
+
+        empty.Should().HaveCount(1, "an aggregate over an empty input still produces one row");
+        empty[0].Count.Should().Be(0, "the empty input has no rows: count(*) = 0");
+        empty[0].Any.Should().BeNull();
+        empty[0].Sxx.Should().BeNull();
+
+        // GROUP BY interaction: avg_fixture i = 1,2,1,3 with ni = NULL,1,2,3 — group i=1 is the only
+        // group with more than one row, so it is the only one whose sum of squares is non-zero.
+        var groups = _sut.AvgFixture
+            .GroupBy(x => new { x.I })
+            .Select(x => new
+            {
+                x.I,
+                Any = SqlFunctions.Postgres.any_value(x.NI),
+                Sxx = SqlFunctions.Postgres.regr_sxx((double)x.Id, (double)x.Id)
+            })
+            .ToList();
+
+        groups.Should().HaveCount(3);
+        groups.Single(g => g.I == 1).Any.Should().Be(2, "NULL is ignored, so 2 is the only non-NULL value");
+        groups.Single(g => g.I == 1).Sxx.Should().BeApproximately(2.0, 1e-12, "ids 1 and 3: (1+9) - 16/2");
+        groups.Single(g => g.I == 2).Any.Should().Be(1);
+        groups.Single(g => g.I == 2).Sxx.Should().Be(0.0, "a single pair is a zero sum of squares");
+        groups.Single(g => g.I == 3).Any.Should().Be(3);
+        groups.Single(g => g.I == 3).Sxx.Should().Be(0.0, "a single pair is a zero sum of squares");
+    }
+
     private static void Execute(IDataContext ctx, string sql)
     {
         ((DataContext)ctx).EnsureConnectionOpen();

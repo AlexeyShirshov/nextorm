@@ -1424,6 +1424,29 @@ public class InMemoryTests
             act.Should().Throw<NotSupportedException>()
                 .WithMessage("*able-valued function sources are not supported*", "{0} is a table-valued function", name);
     }
+
+    /// <summary>
+    /// The #281 (#347 D4) PostgreSQL aggregates of group 1 have no in-memory equivalent:
+    /// <c>any_value</c> is polymorphic (<c>anyelement</c>) and the three <c>regr_s*</c> sums are
+    /// SQL-only, so each name is refused before the projection is compiled instead of evaluating the
+    /// marker call on the null <see cref="SqlFunctions.Postgres"/> surface.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void PostgresAnyValueAndRegressionSums_ShouldThrow()
+    {
+        var cases = new (string Name, Action Act)[]
+        {
+            ("any_value", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.any_value(it.Id) }).ToList()),
+            ("regr_sxx", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.regr_sxx((double)it.Id, (double)it.Id) }).ToList()),
+            ("regr_sxy", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.regr_sxy((double)it.Id, (double)it.Id) }).ToList()),
+            ("regr_syy", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.regr_syy((double)it.Id, (double)it.Id) }).ToList()),
+        };
+
+        foreach (var (name, act) in cases)
+            act.Should().Throw<NotSupportedException>()
+                .WithMessage($"*{name}*not supported*", "{0} is a SQL-only aggregate", name);
+    }
 }
 
 // D178 T12 fixtures: an enum member for the in-memory fail-closed checks.

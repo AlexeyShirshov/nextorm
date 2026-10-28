@@ -1908,6 +1908,47 @@ namespace NextORM.Core;
         public double? regr_avgy<TY, TX>(TY? y, TX? x) => default!;
 
         /// <summary>
+        /// The sum of squares of the independent variable (<c>regr_sxx</c>), <c>sum(X^2) - sum(X)^2/N</c>
+        /// over the (Y, X) pairs in which both arguments are non-null. A group with no such pair, and
+        /// an empty input, yield NULL; a single pair yields 0.
+        /// </summary>
+        /// <param name="y">The dependent variable.</param>
+        /// <param name="x">The independent variable.</param>
+        public double? regr_sxx<TY, TX>(TY? y, TX? x) => default!;
+
+        /// <summary>
+        /// The sum of products of the independent and dependent variables (<c>regr_sxy</c>),
+        /// <c>sum(X*Y) - sum(X)*sum(Y)/N</c> over the pairs in which both arguments are non-null. A
+        /// group with no such pair, and an empty input, yield NULL.
+        /// </summary>
+        /// <param name="y">The dependent variable.</param>
+        /// <param name="x">The independent variable.</param>
+        public double? regr_sxy<TY, TX>(TY? y, TX? x) => default!;
+
+        /// <summary>
+        /// The sum of squares of the dependent variable (<c>regr_syy</c>), <c>sum(Y^2) - sum(Y)^2/N</c>
+        /// over the (Y, X) pairs in which both arguments are non-null. A group with no such pair, and
+        /// an empty input, yield NULL; a single pair yields 0.
+        /// </summary>
+        /// <param name="y">The dependent variable.</param>
+        /// <param name="x">The independent variable.</param>
+        public double? regr_syy<TY, TX>(TY? y, TX? x) => default!;
+
+        /// <summary>
+        /// An arbitrary value of the group (<c>any_value</c>, PostgreSQL 16+). The aggregate's
+        /// argument and result are <c>anyelement</c>, so the CLR result type is the argument's own
+        /// type; a group whose values are all NULL yields NULL, and — because this is an aggregate —
+        /// an empty input still produces one row with NULL. Only single-column CLR types (the
+        /// primitives, strings, dates, <see cref="decimal"/>, <see cref="Guid"/>, <see cref="byte"/>
+        /// arrays and their nullable forms) can be read back; any other type argument is refused
+        /// before SQL is emitted. This is the PostgreSQL 17 <c>any_value</c> <c>pg_proc</c> aggregate,
+        /// distinct from the portable <see cref="CommonFunctions.any_agg{T}(T)"/> member, whose
+        /// <c>ANY_VALUE</c>/<c>any</c> spellings PostgreSQL does not advertise.
+        /// </summary>
+        /// <param name="value">The value to sample.</param>
+        public T? any_value<T>(T? value) => default!;
+
+        /// <summary>
         /// <c>percentile_cont(fraction) within group (order by key)</c>: the interpolated value at
         /// the given fraction. Requires a provider that supports ordered-set aggregates. This is the
         /// ordered-set aggregate; <paramref name="orderBy"/> must be a lambda. The window form is the

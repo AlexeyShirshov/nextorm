@@ -86,7 +86,8 @@ internal static class CrossProviderScalarTranslator
         nameof(PostgresFunctions.setweight), nameof(PostgresFunctions.strip),
         nameof(PostgresFunctions.ts_delete), nameof(PostgresFunctions.ts_filter),
         nameof(PostgresFunctions.ts_rewrite), nameof(PostgresFunctions.tsquery_phrase),
-        nameof(PostgresFunctions.tsvector_to_array), nameof(PostgresFunctions.ts_lexize)
+        nameof(PostgresFunctions.tsvector_to_array), nameof(PostgresFunctions.ts_lexize),
+        nameof(PostgresFunctions.any_value)
     };
 
     /// <summary>
@@ -142,6 +143,9 @@ internal static class CrossProviderScalarTranslator
             ? RenderNormalizationForm(args[1])
             : null;
 
+        if (name == nameof(PostgresFunctions.any_value))
+            RequireSingleColumnAggregateResult(node);
+
         visitor.NeedAliasForColumn = true;
         var rendered = new string[args.Count];
         for (var (i, cnt) = (0, args.Count); i < cnt; i++)
@@ -164,5 +168,27 @@ internal static class CrossProviderScalarTranslator
                 "The normalize form must be a constant string among NFC, NFD, NFKC and NFKD: PostgreSQL takes the " +
                 "normalization form as a grammar keyword, not as a string value, so it cannot be a parameter or an expression.");
         return form.ToUpperInvariant();
+    }
+
+    /// <summary>
+    /// Refuses an <c>any_value</c> call whose type argument the projection/materialisation paths cannot
+    /// read back. The aggregate is polymorphic (<c>anyelement</c>), so nothing in the SQL identifies the
+    /// result type: the CLR type of the call is the only contract, and a type outside the single-column
+    /// shapes (a composite, a tuple, <see cref="object"/>, a JSON DOM node, an enum) would either render
+    /// an argument the visitors cannot emit or fail while a row is materialised. The guard runs before
+    /// any SQL or parameter is produced, so the failure names the limitation instead of surfacing a
+    /// rendering or reading error later.
+    /// </summary>
+    private static void RequireSingleColumnAggregateResult(MethodCallExpression node)
+    {
+        var resultType = node.Method.ReturnType;
+        if (TypeFacts.IsSingleColumnProjection(resultType))
+            return;
+
+        throw new NotSupportedException(
+            $"The any_value aggregate is polymorphic (anyelement): its result type is the argument's own type, " +
+            $"and '{resultType.Name}' is not a single-column CLR shape this provider can read back. Use a column " +
+            "whose CLR type is a primitive, string, date/time, decimal, Guid or byte array, or project the value " +
+            "with an explicit conversion.");
     }
 }

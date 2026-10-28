@@ -1114,7 +1114,8 @@ internal sealed class PostgresScalarFunctions : IScalarFunctions
         "array_to_tsvector" or "json_to_tsvector" or "jsonb_to_tsvector" or
         "get_current_ts_config" or "numnode" or
         "querytree" or "setweight" or "strip" or "ts_delete" or "ts_filter" or
-        "ts_rewrite" or "tsquery_phrase" or "tsvector_to_array" or "ts_lexize";
+        "ts_rewrite" or "tsquery_phrase" or "tsvector_to_array" or "ts_lexize" or
+        "any_value";
 
     /// <inheritdoc/>
     public string Render(string name, IReadOnlyList<string> args) => name switch
@@ -1256,6 +1257,9 @@ internal sealed class PostgresScalarFunctions : IScalarFunctions
         "tsvector_to_array" => $"tsvector_to_array(cast({args[0]} as tsvector))",
         // regdictionary is carried as text, so the dictionary argument is cast; the token is already text.
         "ts_lexize" => $"ts_lexize(cast({args[0]} as regdictionary), {args[1]})",
+        // A pg_proc aggregate whose argument and result are anyelement: the argument is a column or a
+        // typed parameter, so no cast is needed (an untyped constant has no target type to cast to).
+        "any_value" => $"any_value({args[0]})",
         _ => throw new NotSupportedException($"The {name} function is not supported by PostgreSQL.")
     };
 
