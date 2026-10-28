@@ -58,9 +58,12 @@ ClickHouse рендерит `dateTrunc('part', x)`, `addDays`/`addMonths`/.../`a
 
 Имена из [`SqlFunctions.MySql`](../guide/provider-specific-sql/mysql.md) рендерятся только провайдером
 MySQL; PostgreSQL, SQL Server, SQLite, ClickHouse и in-memory-провайдер отклоняют их с
-`NotSupportedException`. Каждое имя ниже **проверено только на MySQL 8.4**: MariaDB отклоняет имена,
-добавленные в этом срезе, до собственной проверки ([#284](https://github.com/AlexeyShirshov/nextorm/issues/284)),
-а имена только для MariaDB остаются в отдельном разделе ниже.
+`NotSupportedException`. Эта половина каталога **поставлена в
+[#283](https://github.com/AlexeyShirshov/nextorm/issues/283) и проверена только на MySQL 8.4**.
+Свидетельства MariaDB отдельны и никогда не выводятся из MySQL:
+[#284](https://github.com/AlexeyShirshov/nextorm/issues/284) перепроверил каждое имя на MariaDB 11.4.13 и
+записал результат в [каталоге MariaDB](#каталог-mariadb) — поэтому четырнадцать имён, заявленных в этой
+половине, там отклонены.
 
 Каталог содержит 86 новых членов и два имени, которые уже были покрыты (`json_storage_free`, поставлен
 в предыдущем срезе, и кросс-провайдерный `connection_id`); три отклонённых имени перечислены в разделе
@@ -187,19 +190,193 @@ MySQL; PostgreSQL, SQL Server, SQLite, ClickHouse и in-memory-провайде�
 | `values` | у `VALUES(column)` нет контракта скалярного выражения — имя ссылается на новую строку только внутри построителя upsert — и оно устарело в MySQL 8.4 | API upsert построителя мутаций |
 | `json_table` | конструирует таблицу: нужна позиция `FROM`/join и список определений `COLUMNS`, поэтому это не скалярная функция | сырой SQL или обёртка `[SqlFunction]` |
 
-## Функции JSON только для MariaDB
+<a id="mariadb-only-json-functions"></a>
+<a id="mariadb-catalogue"></a>
 
-`json_equals` и `json_normalize` из
-[`SqlFunctions.MySql`](../guide/provider-specific-sql/mysql.md#mariadb) рендерятся только на MariaDB
-(проверено на базовой версии 11.4); MySQL, PostgreSQL, SQL Server, SQLite, ClickHouse и
-in-memory-провайдер отклоняют оба имени с `NotSupportedException`.
+## Каталог MariaDB
 
-| Член | SQL | Результат | Доступность |
+`SqlFunctions.MySql` несёт обе половины: имена, которые рендерит только MySQL, — в разделе выше, а имена,
+которые рендерит MariaDB, перечислены здесь. Член только для MariaDB отклоняют MySQL, PostgreSQL,
+SQL Server, SQLite, ClickHouse и in-memory-провайдер.
+[#283](https://github.com/AlexeyShirshov/nextorm/issues/283) поставил каталог MySQL;
+[#284](https://github.com/AlexeyShirshov/nextorm/issues/284) закрывает его оценку для MariaDB и добавляет
+поверхность только для MariaDB.
+
+Таблица покрывает все 138 кандидатов инвентаря #284: **109 поставлено / 6 уже покрыто / 18 отклонено с
+причиной / 5 ограничено версией (MariaDB 11.7) / 0 в ожидании**. Проверка выполнена на
+**MariaDB 11.4.13**; пять функций, ограниченных версией 11.7, не исполнялись, и поведение MariaDB никогда
+не выводится из результата MySQL. В третьей колонке `11.4` означает «присутствует на проверенной базовой
+версии 11.4.13», меньшее значение — документированный минимум, большее — непроверенное ограничение.
+Семнадцать поставленных строк возвращают 32-битное поле провайдера там, где общий член типизирован под
+более широкий тип MySQL: утверждаемый контракт — объявленный CLR-тип, а расширение выполняется без потерь.
+
+### Поставлено
+
+| Inventory name | Public API / form | MariaDB minimum or gate | Behaviour / refusal reason / verification qualification |
 |---|---|---|---|
-| `json_equals(json1, json2)` | `json_equals(...)` | `int?` — `1` для равных JSON-документов (порядок ключей объекта не важен), `0`, если различаются, `null` при SQL NULL | [только MariaDB](../guide/provider-specific-sql/mysql.md#mariadb); MySQL и другие провайдеры отклоняют |
-| `json_normalize(json)` | `json_normalize(...)` | `string?` — канонический текст JSON с отсортированными ключами объекта и без лишних пробелов (идемпотентно), `null` при SQL NULL | [только MariaDB](../guide/provider-specific-sql/mysql.md#mariadb); MySQL и другие провайдеры отклоняют |
+| `JSON_ARRAY` | `json_array(values...)` | 11.4 | принято на 11.4.13 (`[1, 2]`); форма безтипового NULL **не сравнима** (бинарные сетевые метаданные дают `byte[]`), форма с не-NULL значением проверена |
+| `JSON_ARRAYAGG` | `json_arrayagg(value)` | 11.4 | принято на 11.4.13 (`[1,2]`) |
+| `JSON_CONTAINS` | `json_contains(target, candidate[, path])` | 11.4 | принято на 11.4.13 (`1`); сетевой тип провайдера `Int32`, без потерь расширен до объявленного CLR-контракта |
+| `JSON_CONTAINS_PATH` | `json_contains_path(json, oneOrAll, paths...)` | 11.4 | принято на 11.4.13 (`1`); сетевой тип провайдера `Int32`, без потерь расширен до объявленного CLR-контракта |
+| `JSON_MERGE` | `json_merge(first, second[, rest...])` | 11.4 | принято на 11.4.13 (`{"a": 1, "b": 2}`) |
+| `JSON_OBJECT` | `json_object(keyValues...)` | 11.4 | принято на 11.4.13 (`{"a": 1}`) |
+| `JSON_OBJECTAGG` | `json_objectagg(key, value)` | 11.4 | принято на 11.4.13 (`{"1":2}`) |
+| `JSON_OVERLAPS` | `json_overlaps(left, right)` | 11.4 | принято на 11.4.13 (`1`); сетевой тип провайдера `Int32`, без потерь расширен до объявленного CLR-контракта |
+| `JSON_PRETTY` | `json_pretty(json)` | 11.4 | принято на 11.4.13 (документ переформатирован с отступами на несколько строк) |
+| `JSON_QUOTE` | `json_quote(value)` | 11.4 | принято на 11.4.13 (`"a"`); форма безтипового NULL **не сравнима** (бинарные сетевые метаданные дают `byte[]`), форма с не-NULL значением проверена |
+| `JSON_SCHEMA_VALID` | `json_schema_valid(schema, document)` | 11.4 | принято на 11.4.13 (`1`); сетевой тип провайдера `Int32`, без потерь расширен до объявленного CLR-контракта |
+| `JSON_SEARCH` | `json_search(json, oneOrAll, search[, escape[, paths...]])` | 11.4 | принято на 11.4.13 (`"$.a"`) |
+| `BIN` | `bin(value)` | 11.4 | принято на 11.4.13 (`101`) |
+| `EXPORT_SET` | `export_set(bits, on, off[, separator[, count]])` | 11.4 | принято на 11.4.13 (битовая строка из 64 символов `Y,N,Y,N,...` для `5`) |
+| `HEX` | `hex(value)` | 11.4 | принято на 11.4.13 (`616263`) |
+| `MAKE_SET` | `make_set(bits, values...)` | 11.4 | принято на 11.4.13 (`a`) |
+| `OCT` | `oct(value)` | 11.4 | принято на 11.4.13 (`10`) |
+| `ORD` | `ord(value)` | 11.4 | принято на 11.4.13 (`65`); сетевой тип провайдера `Int32`, без потерь расширен до объявленного CLR-контракта |
+| `QUOTE` | `quote(value)` | 11.4 | принято на 11.4.13 (`'a\'b'`); форма безтипового NULL **не сравнима** (бинарные сетевые метаданные дают `byte[]`), форма с не-NULL значением проверена |
+| `SOUNDEX` | `soundex(value)` | 11.4 | принято на 11.4.13 (`H400`) |
+| `STRCMP` | `strcmp(left, right)` | 11.4 | принято на 11.4.13 (`-1`); сетевой тип провайдера `Int32`, без потерь расширен до объявленного CLR-контракта |
+| `TO_BASE64` | `to_base64(value)` | 11.4 | принято на 11.4.13 (`YWJj`) |
+| `FROM_BASE64` | `from_base64(text)` | 11.4 | принято на 11.4.13 (`byte[]` с байтами `abc`) |
+| `UNHEX` | `unhex(text)` | 11.4 | принято на 11.4.13 (`byte[]` с байтами `ab`) |
+| `WEIGHT_STRING` | `weight_string(value[, cast, length])` | 11.4 | принято на 11.4.13 (`byte[]`, `2075208F20A9`) |
+| `CONV` | `conv(value, fromBase, toBase)` | 11.4 | принято на 11.4.13 (`255`) |
+| `CRC32` | `crc32(value)` | 11.4 | принято на 11.4.13 (`891568578`); сетевой тип провайдера `UInt32`, без потерь расширен до объявленного CLR-контракта |
+| `LOG2` | `log2(value)` | 11.4 | принято на 11.4.13 (`3`) |
+| `RAND` | `rand([seed])` | 11.4 | принято на 11.4.13 (`0.6629110161800972`; значение не детерминировано) |
+| `TRUNCATE` | `truncate(value, places)` | 11.4 | принято на 11.4.13 (`1.23`) |
+| `BIT_COUNT` | `bit_count(value)` | 11.4 | принято на 11.4.13 (`2`); сетевой тип провайдера `Int32`, без потерь расширен до объявленного CLR-контракта |
+| `BIT_AND` | `bit_and(value)` | 11.4 | принято на 11.4.13 (`1`) |
+| `BIT_OR` | `bit_or(value)` | 11.4 | принято на 11.4.13 (`3`) |
+| `BIT_XOR` | `bit_xor(value)` | 11.4 | принято на 11.4.13 (`2`) |
+| `ADDDATE` | `adddate(date, days)` | 11.4 | принято на 11.4.13 (`2020-01-02`) |
+| `ADDTIME` | `addtime(datetime, time)` | 11.4 | принято на 11.4.13 (`2020-01-01 01:00:00`) |
+| `CONVERT_TZ` | `convert_tz(datetime, from, to)` | 11.4 | принято на 11.4.13 (`2020-01-01T02:00:00`) |
+| `DAYNAME` | `dayname(date)` | 11.4 | принято на 11.4.13 (`Wednesday`) |
+| `FROM_DAYS` | `from_days(days)` | 11.4 | принято на 11.4.13 (`2020-07-29T00:00:00`) |
+| `GET_FORMAT` | `get_format(kind, format)` | 11.4 | принято на 11.4.13 (`%d.%m.%Y`) |
+| `MAKEDATE` | `makedate(year, dayOfYear)` | 11.4 | принято на 11.4.13 (`2020-02-01T00:00:00`) |
+| `MAKETIME` | `maketime(hour, minute, second)` | 11.4 | принято на 11.4.13 (`12:34:56`) |
+| `MICROSECOND` | `microsecond(datetime)` | 11.4 | принято на 11.4.13 (`123456`); сетевой тип провайдера `Int32`, без потерь расширен до объявленного CLR-контракта |
+| `MONTHNAME` | `monthname(date)` | 11.4 | принято на 11.4.13 (`January`) |
+| `PERIOD_ADD` | `period_add(period, months)` | 11.4 | принято на 11.4.13 (`202403`); сетевой тип провайдера `Int32`, без потерь расширен до объявленного CLR-контракта |
+| `PERIOD_DIFF` | `period_diff(period1, period2)` | 11.4 | принято на 11.4.13 (`1`); сетевой тип провайдера `Int32`, без потерь расширен до объявленного CLR-контракта |
+| `SEC_TO_TIME` | `sec_to_time(seconds)` | 11.4 | принято на 11.4.13 (`01:01:01`) |
+| `SUBDATE` | `subdate(date, days)` | 11.4 | принято на 11.4.13 (`2019-12-31`) |
+| `SUBTIME` | `subtime(datetime, time)` | 11.4 | принято на 11.4.13 (`2019-12-31 23:00:00`) |
+| `TIME` | `time(datetime)` | 11.4 | принято на 11.4.13 (`12:34:56`) |
+| `TIME_FORMAT` | `time_format(time, format)` | 11.4 | принято на 11.4.13 (`12:34`) |
+| `TIME_TO_SEC` | `time_to_sec(time)` | 11.4 | принято на 11.4.13 (`45296`) |
+| `TIMEDIFF` | `timediff(datetime1, datetime2)` | 11.4 | принято на 11.4.13 (`1.00:00:00`) |
+| `TIMESTAMP` | `timestamp(datetime)` | 11.4 | принято на 11.4.13 (`2020-01-01T00:00:00`) |
+| `TO_DAYS` | `to_days(date)` | 11.4 | принято на 11.4.13 (`737790`); сетевой тип провайдера `Int32`, без потерь расширен до объявленного CLR-контракта |
+| `TO_SECONDS` | `to_seconds(date)` | 11.4 | принято на 11.4.13 (`63745056000`) |
+| `YEARWEEK` | `yearweek(date[, mode])` | 11.4 | принято на 11.4.13 (`201952`); сетевой тип провайдера `Int32`, без потерь расширен до объявленного CLR-контракта |
+| `AES_ENCRYPT` | `aes_encrypt(data, key[, iv, kdf, salt, iterations])` | 11.4 | принято на 11.4.13 (`byte[]`; при фиксированном ключе AES шифротекст стабилен) |
+| `AES_DECRYPT` | `aes_decrypt(data, key[, iv, kdf, salt, iterations])` | 11.4 | принято на 11.4.13 (`byte[]` с открытым текстом `text`) |
+| `COMPRESS` | `compress(value)` | 11.4 | принято на 11.4.13 (`byte[]` с zlib-кадром и префиксом длины) |
+| `UNCOMPRESS` | `uncompress(value)` | 11.4 | принято на 11.4.13 (`byte[]` с байтами `abc`) |
+| `UNCOMPRESSED_LENGTH` | `uncompressed_length(value)` | 11.4 | принято на 11.4.13 (`3`); сетевой тип провайдера `Int32`, без потерь расширен до объявленного CLR-контракта |
+| `RANDOM_BYTES` | `random_bytes(length)` | 11.4 | принято на 11.4.13 (`byte[]`; значение случайно) |
+| `FOUND_ROWS` | `found_rows()` | 11.4 | принято на 11.4.13 (`1`) |
+| `LAST_INSERT_ID` | `last_insert_id([value])` | 11.4 | принято на 11.4.13 (`0`) |
+| `ROW_COUNT` | `row_count()` | 11.4 | принято на 11.4.13 (`-1`) |
+| `CURRENT_ROLE` | `current_role()` | 11.4 | принято на 11.4.13 (SQL NULL для анонимного соединения, `string?`) |
+| `CHARSET` | `charset(expression)` | 11.4 | принято на 11.4.13 (`utf8mb4`) |
+| `COLLATION` | `collation(expression)` | 11.4 | принято на 11.4.13 (`utf8mb4_uca1400_ai_ci`) |
+| `COERCIBILITY` | `coercibility(expression)` | 11.4 | принято на 11.4.13 (`4`); сетевой тип провайдера `Int32`, без потерь расширен до объявленного CLR-контракта |
+| `BENCHMARK` | `benchmark(count, expression)` | 11.4 | принято на 11.4.13 (`0`); сетевой тип провайдера `Int32`, без потерь расширен до объявленного CLR-контракта |
+| `UUID_SHORT` | `uuid_short()` | 11.4 | принято на 11.4.13 (`102141557221621760`; уникально для экземпляра сервера) |
+| `SLEEP` | `sleep(seconds)` | 11.4 | принято на 11.4.13 (`0`); сетевой тип провайдера `Int32`, без потерь расширен до объявленного CLR-контракта |
+| `NAME_CONST` | `name_const(name, value)` | 11.4 | принято на 11.4.13 (`1`) |
+| `COLUMN_DEFAULT` | `column_default(column)` | 11.4 | принято на 11.4.13 (`7`) |
+| `SFORMAT` | `sformat(format, values...)` | 11.4 | принято на 11.4.13 (`42`) |
+| `TRIM_ORACLE` | `trim_oracle(value)` | 11.4 | принято на 11.4.13 (`a`) |
+| `NATURAL_SORT_KEY` | `natural_sort_key(value)` | 11.4 | принято на 11.4.13 (`a110`) |
+| `LENGTHB` | `lengthb(value)` | 11.4 | принято на 11.4.13 (`3`) |
+| `CHR` | `chr(value)` | 11.4 | принято на 11.4.13 (`A`) |
+| `FORMAT_PICO_TIME` | `format_pico_time(picoseconds)` | 11.4 | принято на 11.4.13 (`  1 ps`) |
+| `DECODE_ORACLE` | `decode_oracle(expression, search, result, ...)` | 11.4 | принято на 11.4.13 (`a`) |
+| `ROWNUM` | `rownum()` | 11.4 | принято на 11.4.13 (`1`); **только форма функции без аргументов** — рендерится ровно `ROWNUM()`, а голый псевдостолбец требует `sql_mode=ORACLE` и не поставлен |
+| `DECODE_HISTOGRAM` | `decode_histogram(bucket, value)` | 11.4 | принято на 11.4.13 (`0.380,0.004,0.004,0.612`) |
+| `BINLOG_GTID_POS` | `binlog_gtid_pos(file, position)` | 11.4 + binary logging | имя разрешается на 11.4.13, но живой случай **пропущен по предусловию на стоковом контейнере** (ошибка 1381, бинарный лог выключен); отдельно проверено на экземпляре 11.4.13 с включённым бинарным логом — `VARCHAR`, допускает NULL, значение `0-1-5` |
+| `ENCODE` | `encode(value, password)` | 11.4 | принято на 11.4.13 (`byte[]`; при фиксированном пароле шифротекст стабилен) |
+| `DECODE` | `decode(value, password)` | 11.4 | принято на 11.4.13 (`byte[]` с байтами `abc`) |
+| `ENCRYPT` | `encrypt(value[, salt])` | 11.4 | принято на 11.4.13 (`abcFZSxKKdq5s6`) |
+| `DES_ENCRYPT` | `des_encrypt(value[, key])` | 11.4 (removed in 13.0) | принято на 11.4.13 (`byte[]`); есть в базовой версии 11.4 и удалено в MariaDB 13.0 |
+| `DES_DECRYPT` | `des_decrypt(value[, key])` | 11.4 (removed in 13.0) | принято на 11.4.13 (`byte[]` с байтами `abc`); удалено в MariaDB 13.0 |
+| `OLD_PASSWORD` | `old_password(value)` | 11.4 | принято на 11.4.13 (`7cd2b5942be28759`) |
+| `CRC32C` | `crc32c(value)` | 11.4 | принято на 11.4.13 (`910901175`) |
+| `SYS_GUID` | `sys_guid()` | 11.4 | принято на 11.4.13 (шестнадцатеричный идентификатор из 32 символов; значение случайно) |
+| `JSON_LOOSE` | `json_loose(json)` | 11.4 | принято на 11.4.13 (`{"a": 1, "b": [2, 3]}`) |
+| `JSON_ARRAY_INTERSECT` | `json_array_intersect(first, second[, rest...])` | 11.2 | принято на 11.4.13 (`[1, 2]`) |
+| `JSON_KEY_VALUE` | `json_key_value(json, path)` | 11.2 | принято на 11.4.13 (`[{"key": "a", "value": 1}]`) |
+| `JSON_OBJECT_FILTER_KEYS` | `json_object_filter_keys(json, keys...)` | 11.2 | принято на 11.4.13 (`byte[]` с JSON-объектом `{"a": 1}`) |
+| `JSON_OBJECT_TO_ARRAY` | `json_object_to_array(json)` | 11.2 | принято на 11.4.13 (`byte[]` с `[["a", 1]]`) |
+| `PREVIOUS VALUE FOR` | `previous_value_for(sequence)` | 11.4 | принято на 11.4.13 (`1`); грамматическая форма, поэтому имя последовательности — некавыченный идентификатор (`previous value for t350_seq`); возвращает значение, которое произвёл `NEXT VALUE FOR` этого соединения |
+| `COLUMN_CREATE` | `column_create(name, value, ...)` | 11.4 | принято на 11.4.13 (`byte[]`, блоб динамических колонок) |
+| `COLUMN_ADD` | `column_add(dynamicColumn, name, value, ...)` | 11.4 | принято на 11.4.13 (`byte[]`, расширенный блоб) |
+| `COLUMN_DELETE` | `column_delete(dynamicColumn, name, ...)` | 11.4 | принято на 11.4.13 (`byte[]`, уменьшенный блоб) |
+| `COLUMN_JSON` | `column_json(dynamicColumn)` | 11.4 | принято на 11.4.13 (`{"a":1}`) |
+| `COLUMN_LIST` | `column_list(dynamicColumn)` | 11.4 | принято на 11.4.13 (имя колонки в обратных кавычках: `` `a` ``) |
+| `COLUMN_EXISTS` | `column_exists(dynamicColumn, name)` | 11.4 | принято на 11.4.13 (`1`) |
+| `COLUMN_CHECK` | `column_check(dynamicColumn)` | 11.4 | принято на 11.4.13 (`1`) |
+| `WSREP_LAST_SEEN_GTID` | `wsrep_last_seen_gtid()` | 11.4 | принято на обычном сервере без Galera на 11.4.13 (`byte[]` с текстом `0-0-0`) |
+| `WSREP_LAST_WRITTEN_GTID` | `wsrep_last_written_gtid()` | 11.4 | принято на обычном сервере без Galera на 11.4.13 (`byte[]` с текстом `0-0-0`) |
+| `WSREP_SYNC_WAIT_UPTO_GTID` | `wsrep_sync_wait_upto_gtid(gtid)` | 11.4 | принято на 11.4.13 (`1`); на сервере без Galera возвращает строку `1` |
+
+### Уже покрыто
+
+| Inventory name | Public API / form | MariaDB minimum or gate | Behaviour / refusal reason / verification qualification |
+|---|---|---|---|
+| `JSON_NORMALIZE` | `json_normalize(json)` | 11.4 | уже покрыто поверхностью MariaDB из T284 (`json_normalize`, живой тест `T284_JsonNormalize_ShouldEvaluate`): канонический текст с отсортированными ключами, идемпотентно; принято на 11.4.13 (`{"a":1.0E0,"b":2.0E0}`). |
+| `JSON_EQUALS` | `json_equals(json1, json2)` | 11.4 | уже покрыто поверхностью из T284 (`json_equals`, живой тест `T284_JsonEquals_ShouldEvaluate`): `1` для равных документов (порядок ключей не важен); принято на 11.4.13 (`1`). |
+| `MEDIAN` | `median(value)` | 10.3 | уже покрыто работой по перцентилям: компилируется в `percentile_cont(0.5) within group (order by ...) over (...)`; принято на 11.4.13 (`2`). |
+| `PERCENTILE_CONT` | `SqlFunctions.Sql.percentile_cont(fraction, value)` | 10.3 | уже покрыто: нативный оконный перцентиль `percentile_cont(f) within group (order by ...) over (...)`; принято на 11.4.13 (`2`). |
+| `PERCENTILE_DISC` | `SqlFunctions.Sql.percentile_disc(fraction, value)` | 10.3 | уже покрыто: нативный оконный перцентиль `percentile_disc(f) within group (order by ...) over (...)`; принято на 11.4.13 (`1`). |
+| `NEXT VALUE FOR` | `next_value_for(sequence)` | 11.4 | уже покрыто на шве последовательностей: рендерит `next value for <sequence>` с именем как идентификатором; принято на 11.4.13 (`1`). |
+
+### Отказы
+
+Каждое имя ниже отклоняется до эмиссии любого SQL (`NotSupportedException`); причина цитирует наблюдение
+на 11.4.13, на котором основано решение.
+
+| Inventory name | Public API / form | MariaDB minimum or gate | Behaviour / refusal reason / verification qualification |
+|---|---|---|---|
+| `UUID_TO_BIN` | `uuid_to_bin(value)` | none — absent on 11.4.13 | на сервере нет `UUID_TO_BIN` (ошибка 1305 в форме значения и в форме NULL); MariaDB выполняет это приведение через `CAST`. Наследуется из постоянного набора исключений из трёх имён; член бросает `NotSupportedException` до любого SQL. |
+| `BIN_TO_UUID` | `bin_to_uuid(value)` | none — absent on 11.4.13 | нет `BIN_TO_UUID` (ошибка 1305 в обеих формах); MariaDB выполняет это приведение через `CAST`. Наследуется из того же постоянного набора исключений. |
+| `JSON_STORAGE_FREE` | `json_storage_free(json)` | none — absent on 11.4.13 | ошибка 1305 в обеих формах: в MariaDB нет учёта обновлений бинарного JSON. Наследуется из постоянного набора исключений, хотя на MySQL имя поставлено. |
+| `JSON_ARROW` | `json_arrow(column, path)` | none — 11.4 parser rejects the form | ошибка 1064 на токене `->` и повторно в написании с пробелами `'{"a":1}' -> '$.a'`; исправленная инструкция тоже отклоняется, значит это отсутствие, а не опечатка. Принятый контроль — `JSON_EXTRACT`. |
+| `JSON_ARROW_TEXT` | `json_arrow_text(column, path)` | none — 11.4 parser rejects the form | ошибка 1064 на токене `->>` и в написании с пробелами; MariaDB извлекает через `JSON_EXTRACT`/`JSON_VALUE`. |
+| `JSON_SCHEMA_VALIDATION_REPORT` | `json_schema_validation_report(schema, document)` | none — absent on 11.4.13 | ошибка 1305 `FUNCTION ... does not exist` в единственной форме. |
+| `JSON_STORAGE_SIZE` | `json_storage_size(json)` | none — absent on 11.4.13 | ошибка 1305 в обеих формах: нет учёта хранения бинарного JSON. |
+| `MEMBER_OF` | `member_of(value, jsonArray)` | none — 11.4 parser rejects the form | ошибка 1064 на токене `OF` для `1 MEMBER OF ('[1,2]')` и для формы без скобок `1 MEMBER OF JSON_ARRAY(1,2)`; принятый контроль — `JSON_CONTAINS`. |
+| `VALIDATE_PASSWORD_STRENGTH` | `validate_password_strength(password)` | none — absent on 11.4.13 | ошибка 1305 в обеих формах; компонент отсутствует в стоковом образе 11.4. |
+| `STATEMENT_DIGEST` | `statement_digest(statement)` | none — absent on 11.4.13 | ошибка 1305 в обеих формах; функции дайджеста performance-schema не встроены. |
+| `STATEMENT_DIGEST_TEXT` | `statement_digest_text(statement)` | none — absent on 11.4.13 | ошибка 1305 в обеих формах; родственное имя `STATEMENT_DIGEST`. |
+| `ICU_VERSION` | `icu_version()` | none — absent on 11.4.13 | ошибка 1305; образ не содержит идентификатора сборки ICU. |
+| `IS_UUID` | `is_uuid(value)` | none — absent on 11.4.13 | ошибка 1305 в обеих формах. |
+| `GROUPING` | `grouping(expressions...)` | none — absent on 11.4.13 | ошибка 1305 в форме `WITH ROLLUP`; в MariaDB нет агрегата `GROUPING()`. |
+| `TRUNC` | `trunc(value)` | none — absent on 11.4.13, ORACLE mode included | ошибка 1305 для строковой формы в обычном режиме и для `TRUNC(SYSDATE)`, `TRUNC(CAST(... AS DATETIME),'DD')` и `TRUNC(123.456)` при `sql_mode=ORACLE`, при этом живой режим ORACLE подтверждён голым `ROWNUM`. Для числового усечения используйте `TRUNCATE`. |
+| `FORMAT_BYTES` | — (no member; the dialect renderer refuses) | none — absent on 11.4.13 | ошибка 1305 в обеих формах; члена поверхности у имени нет, поэтому отказ выдаёт рендерер диалекта. |
+| `_rowid` | `_rowid()` | n/a — table-dependent precondition | нужна исходная таблица с единственной целочисленной колонкой первичного ключа, а поверхность функций не может проверить это условие. `Int32` на таблице rowid с одним целочисленным первичным ключом; ошибка 1054 `Unknown column` на таблице без PK, с текстовым PK и с составным PK. |
+| `COLUMN_GET` | `column_get(value, path)` | none — no compile-time `AS` clause | требуется клауза типа `AS` времени компиляции, которую поддерживаемая поверхность функций не может безопасно представить. Токен обязателен (ошибка 1064 для формы с двумя аргументами) и выбирает CLR-тип: `unsigned`→`UInt64`, `char`→`String`, `int`→`Int64`; на `COLUMN_CREATE`/`COLUMN_ADD` токен отклоняется. |
+
+### Ограничения по версии
+
+| Inventory name | Public API / form | MariaDB minimum or gate | Behaviour / refusal reason / verification qualification |
+|---|---|---|---|
+| `VEC_FromText` | `vec_from_text(text)` | 11.7 | требует MariaDB 11.7 или новее; ошибка 1305 на базовой версии 11.4.13, не исполнялось — член бросает `NotSupportedException` с текстом ограничения 11.7. |
+| `VEC_ToText` | `vec_to_text(vector)` | 11.7 | требует MariaDB 11.7 или новее; ошибка 1305 на базовой версии 11.4.13, не исполнялось — член бросает `NotSupportedException` с текстом ограничения 11.7. |
+| `VEC_DISTANCE_EUCLIDEAN` | `vec_distance_euclidean(left, right)` | 11.7 | требует MariaDB 11.7 или новее; ошибка 1305 на базовой версии 11.4.13, не исполнялось — член бросает `NotSupportedException` с текстом ограничения 11.7. |
+| `VEC_DISTANCE_COSINE` | `vec_distance_cosine(left, right)` | 11.7 | требует MariaDB 11.7 или новее; ошибка 1305 на базовой версии 11.4.13, не исполнялось — член бросает `NotSupportedException` с текстом ограничения 11.7. |
+| `VEC_DISTANCE` | `vec_distance(left, right)` | 11.7 | требует MariaDB 11.7 или новее; ошибка 1305 на базовой версии 11.4.13, не исполнялось — член бросает `NotSupportedException` с текстом ограничения 11.7. |
 
 ## Явно не поддерживается
+
+Отказы MariaDB — отдельная категория, и здесь они не дублируются: это имена вендора, которых нет в
+MariaDB 11.4.13 (или которые нельзя выразить через эту поверхность), и каждое сохраняет точную причину и
+улику в [каталоге MariaDB](#каталог-mariadb). Список ниже — не зависящая от провайдера поверхность API,
+которую не рендерит ни один провайдер.
 
 Эти случаи бросают `NotSupportedException`, а не генерируют SQL с другой семантикой:
 

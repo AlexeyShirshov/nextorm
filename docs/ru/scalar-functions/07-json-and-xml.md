@@ -130,6 +130,9 @@ select json_value(somestring, '$.id') as [Id], json_query(somestring, '$.name') 
 (T-SQL `ISJSON` возвращает `int`), а при проецировании как значение приводится к `bit`. `isjson`
 можно также использовать прямо в `WHERE` (`Where(e => SqlFunctions.SqlServer.isjson(e.String))`).
 
+Поддержка JSON и динамических колонок в MariaDB зависит от провайдера; поддерживаемые формы и отказы —
+в [каталоге MariaDB](08-reference.md#mariadb-catalogue).
+
 ## Методы типа XML (SQL Server)
 
 Тип `xml` SQL Server предоставляет постфиксные методы

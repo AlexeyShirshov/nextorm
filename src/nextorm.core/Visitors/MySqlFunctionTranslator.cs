@@ -22,7 +22,16 @@ internal static class MySqlFunctionTranslator
         [nameof(MySqlFunctions.json_merge)] = 2,
         [nameof(MySqlFunctions.json_contains_path)] = 2,
         [nameof(MySqlFunctions.json_search)] = 4,
-        [nameof(MySqlFunctions.grouping)] = 0
+        [nameof(MySqlFunctions.grouping)] = 0,
+        // T350 (#284): the MariaDB-only variadic shapes — the leading arguments are positional and the
+        // remaining ones are the variadic tail.
+        [nameof(MySqlFunctions.sformat)] = 1,
+        [nameof(MySqlFunctions.json_array_intersect)] = 2,
+        [nameof(MySqlFunctions.json_object_filter_keys)] = 1,
+        [nameof(MySqlFunctions.column_create)] = 0,
+        [nameof(MySqlFunctions.column_add)] = 1,
+        [nameof(MySqlFunctions.column_delete)] = 1,
+        [nameof(MySqlFunctions.decode_oracle)] = 3
     };
 
     /// <summary>
@@ -33,7 +42,17 @@ internal static class MySqlFunctionTranslator
     {
         [nameof(MySqlFunctions.json_table)] = MySqlFunctions.JsonTableRefusal,
         [nameof(MySqlFunctions.uuid)] = MySqlFunctions.UuidRefusal,
-        [nameof(MySqlFunctions.values)] = MySqlFunctions.ValuesRefusal
+        [nameof(MySqlFunctions.values)] = MySqlFunctions.ValuesRefusal,
+        // T350 (#284): the MariaDB 11.4 rows the shared surface cannot express. The route is shared with
+        // MySQL, which has none of these names, and every one of them fails before an argument is visited.
+        [nameof(MySqlFunctions.column_get)] = MySqlFunctions.ColumnGetRefusal,
+        [nameof(MySqlFunctions.trunc)] = MySqlFunctions.TruncRefusal,
+        [nameof(MySqlFunctions._rowid)] = MySqlFunctions.RowIdRefusal,
+        [nameof(MySqlFunctions.vec_from_text)] = MySqlFunctions.VectorRefusal,
+        [nameof(MySqlFunctions.vec_to_text)] = MySqlFunctions.VectorRefusal,
+        [nameof(MySqlFunctions.vec_distance_euclidean)] = MySqlFunctions.VectorRefusal,
+        [nameof(MySqlFunctions.vec_distance_cosine)] = MySqlFunctions.VectorRefusal,
+        [nameof(MySqlFunctions.vec_distance)] = MySqlFunctions.VectorRefusal
     };
 
     /// <summary>
@@ -44,7 +63,8 @@ internal static class MySqlFunctionTranslator
     private static readonly HashSet<string> SequenceNameFunctions = new(StringComparer.Ordinal)
     {
         nameof(MySqlFunctions.next_value_for), nameof(MySqlFunctions.nextval),
-        nameof(MySqlFunctions.setval), nameof(MySqlFunctions.lastval)
+        nameof(MySqlFunctions.setval), nameof(MySqlFunctions.lastval),
+        nameof(MySqlFunctions.previous_value_for)
     };
 
     /// <summary>Translates a MySQL/MariaDB-only call; returns <c>false</c> when it is not one of them.</summary>
@@ -330,6 +350,13 @@ internal static class MySqlFunctionTranslator
         nameof(MySqlFunctions.json_merge) => 2,
         nameof(MySqlFunctions.json_contains_path) or nameof(MySqlFunctions.json_search) => 3,
         nameof(MySqlFunctions.json_array) or nameof(MySqlFunctions.json_object) => 0,
+        nameof(MySqlFunctions.sformat) => 1,
+        nameof(MySqlFunctions.json_array_intersect) => 2,
+        nameof(MySqlFunctions.json_object_filter_keys) => 2,
+        nameof(MySqlFunctions.column_create) => 2,
+        nameof(MySqlFunctions.column_add) => 3,
+        nameof(MySqlFunctions.column_delete) => 2,
+        nameof(MySqlFunctions.decode_oracle) => 3,
         _ => 0
     };
 
@@ -344,6 +371,7 @@ internal static class MySqlFunctionTranslator
         nameof(MySqlFunctions.json_contains_path) => index >= 1,
         nameof(MySqlFunctions.json_search) => index is 1 or 3 || index >= 4,
         nameof(MySqlFunctions.member_of) => index == 1,
+        nameof(MySqlFunctions.json_key_value) => index == 1,
         _ => false
     };
 

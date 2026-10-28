@@ -238,6 +238,9 @@ lookaround, обратные ссылки, именованные группы �
 [`SqlFunctions.Sql.like`](xref:NextORM.Core.CommonFunctions.like(System.String,System.String)). In-memory
 провайдер выполняет `System.Text.RegularExpressions` нативно.
 
+Доступность строковых функций в MariaDB, ограничения версий и отказы перечислены в
+[каталоге MariaDB](08-reference.md#mariadb-catalogue).
+
 ## Кросс-провайдерные скалярные функции
 
 [`SqlFunctions.Sql`](xref:NextORM.Core.SqlFunctions.Sql) предоставляет небольшой набор строковых и

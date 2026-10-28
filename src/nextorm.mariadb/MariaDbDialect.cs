@@ -146,7 +146,7 @@ public sealed class MariaDbDialect : MySqlDialect
     /// and adds the MariaDB-only names (extended regexp, <c>NVL</c>/<c>NVL2</c>, <c>ADD_MONTHS</c>,
     /// <c>MONTHS_BETWEEN</c>, <c>TO_CHAR</c>/<c>TO_DATE</c>/<c>TO_NUMBER</c>, <c>KDF</c>,
     /// <c>XXH3</c>/<c>XXH32</c>, <c>JSON_DETAILED</c>/<c>JSON_COMPACT</c>, the JSON canonicalisation pair
-    /// <c>JSON_EQUALS</c>/<c>JSON_NORMALIZE</c> and sequence access). <c>MONTHS_BETWEEN</c>,
+    /// <c>JSON_EQUALS</c>/<c>JSON_NORMALIZE</c>, sequence access and <c>ROWNUM</c>). <c>MONTHS_BETWEEN</c>,
     /// <c>TO_DATE</c> and <c>TO_NUMBER</c> carry their own version minima, so an unversioned dialect
     /// rejects them.
     /// </summary>
@@ -159,8 +159,9 @@ public sealed class MariaDbDialect : MySqlDialect
 /// <c>cast(... as binary(16))</c>/<c>cast(... as uuid)</c>), and <c>json_storage_free</c>, whose
 /// binary-JSON update accounting MariaDB does not implement, and the MariaDB-only names are added here
 /// (extended regexp, <c>nvl</c>/<c>nvl2</c>, the Oracle-compatible date/number conversions, <c>kdf</c>,
-/// <c>xxh3</c>/<c>xxh32</c>, <c>json_detailed</c>/<c>json_compact</c>, <c>json_equals</c>/<c>json_normalize</c>
-/// and sequence access). MySQL's renderer does not report the MariaDB-only names, so MySQL rejects them.
+/// <c>xxh3</c>/<c>xxh32</c>, <c>json_detailed</c>/<c>json_compact</c>, <c>json_equals</c>/<c>json_normalize</c>,
+/// sequence access, <c>rownum</c> and <c>binlog_gtid_pos</c>). MySQL's renderer does not report the
+/// MariaDB-only names, so MySQL rejects them.
 /// <para>
 /// <c>months_between</c> (12.2.1), <c>to_date</c> (12.3) and <c>to_number</c> (12.2.1) are absent from
 /// MariaDB 11.4, so they are enabled only when the dialect was built with a version at or above the
@@ -189,7 +190,21 @@ internal sealed class MariaDbNativeFunctions : IMySqlFunctions
         "to_char" or "kdf" or
         "xxh3" or "xxh32" or "json_detailed" or "json_compact" or
         "json_equals" or "json_normalize" or
-        "next_value_for" or "nextval" or "setval" or "lastval";
+        "next_value_for" or "nextval" or "setval" or "lastval" or
+        "previous_value_for" or "rownum" or "binlog_gtid_pos" or
+        // T350 block 2 (issue #284): the residual string and JSON names MariaDB 11.4.13 accepts and
+        // MySQL has no spelling for.
+        "sformat" or "trim_oracle" or "natural_sort_key" or "lengthb" or "chr" or
+        "json_loose" or "json_array_intersect" or "json_key_value" or
+        "json_object_filter_keys" or "json_object_to_array" or
+        // T350 block 2: the residual crypto names of the same baseline.
+        "encode" or "decode" or "encrypt" or "des_encrypt" or "des_decrypt" or "old_password" or
+        // T350 block 2: the residual dynamic-columns names (COLUMN_GET stays refused).
+        "column_create" or "column_add" or "column_delete" or
+        "column_json" or "column_list" or "column_exists" or "column_check" or
+        // T350 block 2: the residual galera and single-name functions.
+        "wsrep_last_seen_gtid" or "wsrep_last_written_gtid" or "wsrep_sync_wait_upto_gtid" or
+        "format_pico_time" or "decode_oracle" or "decode_histogram" or "crc32c" or "sys_guid";
 
     private static Version? MinimumVersion(string name) => name switch
     {
@@ -206,28 +221,15 @@ internal sealed class MariaDbNativeFunctions : IMySqlFunctions
     public bool Supports(string name) =>
         IsVersionGated(name) ||
         (IsMariaDbOnly(name) ||
+            // T350 (#284): the names MariaDB 11.4.13 was measured to accept keep flowing through the
+            // inherited MySQL renderer (Inner.Render). Only the names the baseline does not have stay
+            // excluded: the three permanent MySQL/MariaDB exclusions, the three operator forms the 11.4
+            // parser rejects and the eight names the server reports as absent (error 1305).
             (name is not ("uuid_to_bin" or "bin_to_uuid" or "json_storage_free" or
-                "json_array" or "json_arrayagg" or "json_arrow" or "json_arrow_text" or
-                "json_contains" or "json_contains_path" or "json_merge" or "json_object" or
-                "json_objectagg" or "json_overlaps" or "json_pretty" or "json_quote" or
-                "json_schema_valid" or "json_schema_validation_report" or "json_search" or
-                "json_storage_size" or "member_of" or
-                "bin" or "export_set" or "hex" or "make_set" or "oct" or "ord" or "quote" or
-                "soundex" or "strcmp" or "to_base64" or "from_base64" or "unhex" or "weight_string" or
-                "conv" or "crc32" or "log2" or "rand" or "truncate" or
-                "bit_count" or "bit_and" or "bit_or" or "bit_xor" or
-                "adddate" or "addtime" or "convert_tz" or "dayname" or "from_days" or "get_format" or
-                "makedate" or "maketime" or "microsecond" or "monthname" or "period_add" or
-                "period_diff" or "sec_to_time" or "subdate" or "subtime" or "time" or
-                "time_format" or "time_to_sec" or "timediff" or "timestamp" or "to_days" or
-                "to_seconds" or "yearweek" or
-                "aes_encrypt" or "aes_decrypt" or "compress" or "uncompress" or
-                "uncompressed_length" or "random_bytes" or "validate_password_strength" or
-                "statement_digest" or "statement_digest_text" or
-                "found_rows" or "last_insert_id" or "row_count" or "current_role" or
-                "charset" or "collation" or "coercibility" or "benchmark" or "icu_version" or
-                "uuid_short" or "is_uuid" or "sleep" or "grouping" or "name_const" or
-                "column_default") && Inner.Supports(name)));
+                "json_arrow" or "json_arrow_text" or "json_schema_validation_report" or
+                "json_storage_size" or "member_of" or "validate_password_strength" or
+                "statement_digest" or "statement_digest_text" or "icu_version" or
+                "is_uuid" or "grouping") && Inner.Supports(name)));
 
     /// <inheritdoc/>
     public string Render(string name, IReadOnlyList<string> args) => name switch
@@ -253,6 +255,53 @@ internal sealed class MariaDbNativeFunctions : IMySqlFunctions
         "nextval" => $"nextval({SequenceName(args[0])})",
         "setval" => $"setval({SequenceName(args[0])}, {args[1]})",
         "lastval" => $"lastval({SequenceName(args[0])})",
+        // The last value the connection's own `NEXT VALUE FOR` produced: a grammar form, so the
+        // sequence name is the unquoted identifier and never a quoted value.
+        "previous_value_for" => "previous value for " + SequenceName(args[0]),
+        // MariaDB exposes ROW_NUMBER only as the zero-argument `ROWNUM()` function; the bare pseudo-column
+        // is Oracle-mode-only and is not delivered (T350 S1 grammar re-probe G21).
+        "rownum" => "ROWNUM()",
+        "binlog_gtid_pos" => $"binlog_gtid_pos({args[0]}, {args[1]})",
+        // T350 block 2: the residual string and JSON names. The variadic forms join every positional
+        // argument; the vendor spelling is unchanged from MySQL's where MySQL has none.
+        "sformat" => $"sformat({string.Join(", ", args)})",
+        "trim_oracle" => $"trim_oracle({args[0]})",
+        "natural_sort_key" => $"natural_sort_key({args[0]})",
+        "lengthb" => $"lengthb({args[0]})",
+        "chr" => $"chr({args[0]})",
+        "json_loose" => $"json_loose({args[0]})",
+        "json_array_intersect" => $"json_array_intersect({string.Join(", ", args)})",
+        "json_key_value" => $"json_key_value({args[0]}, {args[1]})",
+        "json_object_filter_keys" => $"json_object_filter_keys({string.Join(", ", args)})",
+        "json_object_to_array" => $"json_object_to_array({args[0]})",
+        // T350 block 2: the residual crypto names; encrypt/des_* have one- and two-argument overloads.
+        "encode" => $"encode({args[0]}, {args[1]})",
+        "decode" => $"decode({args[0]}, {args[1]})",
+        "encrypt" => $"encrypt({string.Join(", ", args)})",
+        "des_encrypt" => $"des_encrypt({string.Join(", ", args)})",
+        "des_decrypt" => $"des_decrypt({string.Join(", ", args)})",
+        "old_password" => $"old_password({args[0]})",
+        // T350 block 2: the residual dynamic-columns names. column_create/column_add are variadic pairs,
+        // column_delete a variadic name list; COLUMN_GET needs the refused AS type clause and stays out.
+        "column_create" => $"column_create({string.Join(", ", args)})",
+        "column_add" => $"column_add({string.Join(", ", args)})",
+        "column_delete" => $"column_delete({string.Join(", ", args)})",
+        "column_json" => $"column_json({args[0]})",
+        "column_list" => $"column_list({args[0]})",
+        "column_exists" => $"column_exists({args[0]}, {args[1]})",
+        "column_check" => $"column_check({args[0]})",
+        // T350 block 2: the residual galera and single-name functions. DECODE_ORACLE renders the
+        // vendor's long spelling, `decode_oracle(...)`: the short `decode(...)` resolves to the
+        // two-argument crypto function outside sql_mode=ORACLE (probe t350-decode-oracle-s2, error 1582
+        // for the six-argument form), while DECODE_ORACLE(...) is accepted in default mode.
+        "wsrep_last_seen_gtid" => "wsrep_last_seen_gtid()",
+        "wsrep_last_written_gtid" => "wsrep_last_written_gtid()",
+        "wsrep_sync_wait_upto_gtid" => $"wsrep_sync_wait_upto_gtid({args[0]})",
+        "format_pico_time" => $"format_pico_time({args[0]})",
+        "decode_oracle" => $"decode_oracle({string.Join(", ", args)})",
+        "decode_histogram" => $"decode_histogram({args[0]}, {args[1]})",
+        "crc32c" => $"crc32c({args[0]})",
+        "sys_guid" => "sys_guid()",
         _ => Supports(name)
             ? Inner.Render(name, args)
             : throw new NotSupportedException($"The {name} function is not supported by MariaDB.")

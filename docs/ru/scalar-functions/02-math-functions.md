@@ -59,6 +59,9 @@ var rows = dataContext.From<IComplexEntity>()
     .ToList();
 ```
 
+О числовых, битовых и векторных функциях MariaDB, включая векторные ограничения MariaDB 11.7, см.
+[каталог MariaDB](08-reference.md#mariadb-catalogue).
+
 ## Математика только для ClickHouse
 
 Помимо переносимой поверхности [`SqlFunctions.Sql`](xref:NextORM.Core.SqlFunctions.Sql),

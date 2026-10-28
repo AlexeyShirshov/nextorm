@@ -184,12 +184,13 @@ public class T349CryptoInfoMiscSqlGenerationTests
     }
 
     [Fact]
-    public void MariaDb_ShouldKeepTheNewlyEnabledKeysUnsupported()
+    public void MariaDb_ShouldClaimTheKeysT350ProvedAndKeepTheAbsentOne()
     {
         var capability = MariaDbDialect.Instance.MySqlFunctions!;
 
-        capability.Supports("uuid_short").Should().BeFalse("MariaDB has no UUID_SHORT");
-        capability.Supports("aes_encrypt").Should().BeFalse("the AES options differ on MariaDB");
+        // #284 (T350 S1, MariaDB 11.4.13) accepted both names, so the T349 temporary exclusion is resolved.
+        capability.Supports("uuid_short").Should().BeTrue("#284 delivered UUID_SHORT on MariaDB 11.4");
+        capability.Supports("aes_encrypt").Should().BeTrue("#284 delivered AES_ENCRYPT on MariaDB 11.4");
         capability.Supports("grouping").Should().BeFalse("MariaDB's rollup uses GROUPING differently");
     }
 }

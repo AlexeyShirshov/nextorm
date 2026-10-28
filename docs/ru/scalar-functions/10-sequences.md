@@ -57,6 +57,9 @@ var rows = dataContext.From<IOrderEntity>()
 отклоняют их с `NotSupportedException`. `lastval` читает последнее сгенерированное значение
 **соединения**.
 
+Функции последовательностей MariaDB и их доступность перечислены в
+[каталоге MariaDB](08-reference.md#mariadb-catalogue).
+
 ## SQL Server
 
 SQL Server читает последовательность через `NEXT VALUE FOR`, это открывают

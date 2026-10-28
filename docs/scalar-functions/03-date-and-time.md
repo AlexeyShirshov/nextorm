@@ -151,6 +151,9 @@ MariaDB's Oracle-compatible conversions are **version-gated**, not part of the p
 with `NotSupportedException` by an unversioned `MariaDbDataContext`; `add_months`/`to_char` are available from
 MariaDB 10.6. See [MySQL and MariaDB-specific SQL](../guide/provider-specific-sql/mysql.md#mariadb).
 
+MariaDB date/time function support and behaviour qualifications are listed in the
+[MariaDB catalogue](08-reference.md#mariadb-catalogue).
+
 ## Formatting dates and numbers to strings
 
 nextorm translates the culture-invariant subset of the CLR formatting API — `string.Format`,

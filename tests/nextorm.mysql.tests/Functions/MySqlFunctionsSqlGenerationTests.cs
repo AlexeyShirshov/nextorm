@@ -145,7 +145,18 @@ public class MySqlFunctionsSqlGenerationTests
             "regexp_substr", "regexp_instr", "regexp_replace", "nvl", "nvl2", "add_months",
             "months_between", "to_char", "to_date", "to_number", "kdf", "xxh3", "xxh32",
             "json_detailed", "json_compact", "json_equals", "json_normalize",
-            "next_value_for", "nextval", "setval", "lastval"
+            "next_value_for", "nextval", "setval", "lastval",
+            // #284 (T350): delivered on MariaDB only — MySQL has none of these names.
+            "rownum", "binlog_gtid_pos", "previous_value_for",
+            "sformat", "trim_oracle", "natural_sort_key", "lengthb", "chr",
+            "json_loose", "json_array_intersect", "json_key_value",
+            "json_object_filter_keys", "json_object_to_array",
+            "encode", "decode", "encrypt", "des_encrypt", "des_decrypt", "old_password",
+            "column_create", "column_add", "column_delete", "column_json",
+            "column_list", "column_exists", "column_check",
+            // #284 (T350) block 2: the residual galera and single-name functions.
+            "wsrep_last_seen_gtid", "wsrep_last_written_gtid", "wsrep_sync_wait_upto_gtid",
+            "format_pico_time", "decode_oracle", "decode_histogram", "crc32c", "sys_guid"
         ];
         var declared = typeof(MySqlFunctions)
             .GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
@@ -161,7 +172,11 @@ public class MySqlFunctionsSqlGenerationTests
         // UUID/VALUES refusals (a v1 UUID and a statement-position-only name this scalar API rejects).
         string[] declaredRefusals =
         [
-            "median", "percentile_cont", "percentile_disc", "percentile", "json_table", "uuid", "values"
+            "median", "percentile_cont", "percentile_disc", "percentile", "json_table", "uuid", "values",
+            // #284 (T350): members whose body only carries the MariaDB 11.4 refusal text (the clause /
+            // baseline / table-dependent requirements below the surface), plus the 11.7 vector gate.
+            "column_get", "trunc", "_rowid",
+            "vec_from_text", "vec_to_text", "vec_distance_euclidean", "vec_distance_cosine", "vec_distance"
         ];
         var unsupportedByDesign = mariaDbOnly.Concat(declaredRefusals).ToArray();
 

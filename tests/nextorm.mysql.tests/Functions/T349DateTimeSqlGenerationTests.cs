@@ -179,7 +179,7 @@ public class T349DateTimeSqlGenerationTests
     }
 
     [Fact]
-    public void T349DateTimeFunctions_ShouldBeReportedSupportedOnMySqlAndRefusedByMariaDb()
+    public void T349DateTimeFunctions_ShouldBeReportedSupportedOnMySqlAndMariaDb()
     {
         var capability = MySqlDialect.Instance.MySqlFunctions!;
         string[] names =
@@ -194,12 +194,11 @@ public class T349DateTimeSqlGenerationTests
         foreach (var name in names)
             capability.Supports(name).Should().BeTrue($"'{name}' is a MySQL 8.4 gate key");
 
-        // T349 (b2): the date/time catalogue is not claimed on MariaDB this cycle, so the exclusion
-        // tuple keeps MariaDB behaviour unchanged even though MySQL now supports the names.
+        // #284 (T350 S1: MariaDB 11.4.13 accepted every one of these names) resolves the T349 (b2)
+        // temporary exclusion, so MariaDB now claims the same date/time catalogue as MySQL.
         var mariadb = NextORM.MariaDb.MariaDbDialect.Instance.MySqlFunctions!;
-        string[] sample = ["adddate", "addtime", "get_format", "time_to_sec", "timestamp", "yearweek"];
 
-        foreach (var name in sample)
-            mariadb.Supports(name).Should().BeFalse($"'{name}' is not claimed on MariaDB");
+        foreach (var name in names)
+            mariadb.Supports(name).Should().BeTrue($"#{284} delivered '{name}' on MariaDB 11.4");
     }
 }
