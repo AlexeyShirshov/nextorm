@@ -110,11 +110,22 @@ public sealed class ClickHouseCollectionProjectionIntegrationTests : ProviderTes
     }
 
     [Fact]
-    public void CollectionProjectionLive_ManyToManyWithLimit_Refused()
+    public void CollectionProjectionLive_ManyToManyWithLimit_Split()
     {
         CommonTestSuite.EnsureCollectionProjectionLiveSeeded(_sut);
-        CommonTestSuite.ManyToManyWithLimitRefused(_sut.DataProvider);
-        CommonTestSuite.NestedManyToManyWithLimitRefused(_sut.DataProvider);
+        CommonTestSuite.ManyToManyWithLimit_Split(_sut.DataProvider);
+        CommonTestSuite.NestedManyToManyWithLimit_Split(_sut.DataProvider);
+        CommonTestSuite.LoadWithManyToManyPage_Split(_sut.DataProvider);
+    }
+
+    [Fact]
+    public void CollectionProjectionLive_ManyToManyWithLimit_Single()
+    {
+        CommonTestSuite.EnsureCollectionProjectionLiveSeeded(_sut);
+        using var ctx = Provider.CreateContext(new DataContextBuilder().UseEagerLoadMode(EagerLoadMode.SingleQuery));
+        CommonTestSuite.RegisterCollectionProjectionLive(ctx);
+        CommonTestSuite.ManyToManyWithLimit_Single(ctx);
+        CommonTestSuite.LoadWithManyToManyPage_Single(ctx);
     }
 
     [Fact]

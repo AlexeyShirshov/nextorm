@@ -663,6 +663,42 @@ internal static class MetadataManyToManyAssignment
 
         return grouped;
     }
+
+    /// <summary>
+    /// Applies a per-parent page to every grouped surviving-occurrence list, in list order. The caller
+    /// passes the list only after a dangling link and a cartesian repeat of one junction row have been
+    /// discarded, so neither consumes a slot and the page counts surviving junction occurrences.
+    /// </summary>
+    /// <typeparam name="TChild">The related entity type.</typeparam>
+    /// <param name="grouped">The per-parent occurrence lists, in occurrence order.</param>
+    /// <param name="paging">The page to apply; <see cref="Paging.IsEmpty"/> leaves every list untouched.</param>
+    public static void ApplyPage<TChild>(Dictionary<object, List<TChild>> grouped, Paging paging)
+    {
+        ArgumentNullException.ThrowIfNull(grouped);
+        if (paging.IsEmpty)
+            return;
+
+        var offset = paging.Offset;
+        var limit = paging.Limit;
+        var keys = new List<object>(grouped.Keys);
+        for (var i = 0; i < keys.Count; i++)
+        {
+            var items = grouped[keys[i]];
+            if (offset > 0)
+            {
+                if (offset >= items.Count)
+                {
+                    items.Clear();
+                    continue;
+                }
+
+                items.RemoveRange(0, offset);
+            }
+
+            if (limit > 0 && items.Count > limit)
+                items.RemoveRange(limit, items.Count - limit);
+        }
+    }
 }
 
 /// <summary>

@@ -296,20 +296,59 @@ public class CollectionProjectionSqlGenerationTests
     }
 
     [Fact]
-    public void ManyToManyWithLimit_ShouldBeRefusedBeforeAnySql()
+    public void ManyToManyWithLimit_ShouldKeepThePerParentPageOutOfTheSql()
     {
-        using var context = Context(EagerLoadMode.SplitQuery);
-        Register(context);
+        // A many-to-many page counts surviving junction occurrences, so it is applied to the materialized
+        // occurrences: no statement may carry it as a global LIMIT/TOP/FETCH. The paged slot must therefore
+        // render exactly the same statements as the unpaged one.
+        using (var split = Context(EagerLoadMode.SplitQuery))
+        {
+            Register(split);
 
-        var act = () => context.From<Parent>()
-            .Select(p => new
-            {
-                p.Id,
-                Tags = p.Tags.AsEntityBuilder<Tag>().OrderBy(t => t.Id).Limit(1).ToList(),
-            });
+            QueryCommand splitPaged = split.From<Parent>()
+                .Select(p => new
+                {
+                    p.Id,
+                    Tags = p.Tags.AsEntityBuilder<Tag>().OrderBy(t => t.Id).Limit(1).ToList(),
+                });
+            QueryCommand splitUnpaged = split.From<Parent>()
+                .Select(p => new
+                {
+                    p.Id,
+                    Tags = p.Tags.AsEntityBuilder<Tag>().OrderBy(t => t.Id).ToList(),
+                });
 
-        // The refusal is raised while the projection is bound: no command exists yet, so no statement can reach
-        // a connection and no plan entry is created.
-        act.Should().Throw<NotSupportedException>().WithMessage("*M:N + Limit*");
+            var pagedSplit = SplitSql(split, EntityBuilderOf(splitPaged));
+            var unpagedSplit = SplitSql(split, EntityBuilderOf(splitUnpaged));
+
+            pagedSplit.Statements.Should().Be(unpagedSplit.Statements, "a per-parent page adds no statement");
+            pagedSplit.Sql.Should().Be(unpagedSplit.Sql,
+                "the page is trimmed from the materialized occurrences, so the split statements stay unpaged");
+        }
+
+        using (var single = Context(EagerLoadMode.SingleQuery))
+        {
+            Register(single);
+
+            QueryCommand singlePaged = single.From<Parent>()
+                .Select(p => new
+                {
+                    p.Id,
+                    Tags = p.Tags.AsEntityBuilder<Tag>().OrderBy(t => t.Id).Limit(1).ToList(),
+                });
+            QueryCommand singleUnpaged = single.From<Parent>()
+                .Select(p => new
+                {
+                    p.Id,
+                    Tags = p.Tags.AsEntityBuilder<Tag>().OrderBy(t => t.Id).ToList(),
+                });
+
+            var pagedSingle = SingleSql(single, EntityBuilderOf(singlePaged));
+            var unpagedSingle = SingleSql(single, EntityBuilderOf(singleUnpaged));
+
+            pagedSingle.Statements.Should().Be(unpagedSingle.Statements);
+            pagedSingle.Sql.Should().Be(unpagedSingle.Sql,
+                "the folded statement keeps the junction joins but never a global limit for the many-to-many page");
+        }
     }
 }

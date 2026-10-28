@@ -625,22 +625,33 @@ public sealed class CollectionProjectionDepthTests
     }
 
     [Fact]
-    public void NestedManyToManyWithLimit_ShouldBeRefusedBeforeAnySql()
+    public void NestedManyToManyWithLimit_ShouldPageEachNestedLevelPerParent()
     {
         var (context, path, recorder) = CreateDb(EagerLoadMode.SplitQuery);
         try
         {
-            Action unsupported = () => context.From<Parent>()
+            var rows = context.From<Parent>()
                 .Select(p => new
                 {
                     p.Id,
                     Items = p.Items.AsEntityBuilder<Item>()
-                        .Select(i => new { i.Id, Tags = i.Tags.AsEntityBuilder<Tag>().Limit(1).ToList() })
+                        .Where(i => i.Active)
+                        .OrderBy(i => i.Id)
+                        .Select(i => new
+                        {
+                            i.Id,
+                            Tags = i.Tags.AsEntityBuilder<Tag>().OrderBy(t => t.Id).Limit(1).ToList(),
+                        })
                         .ToList(),
-                });
+                })
+                .ToList();
 
-            unsupported.Should().Throw<NotSupportedException>().WithMessage("*M:N + Limit*");
-            recorder.Statements.Should().BeEmpty("a nested M:N + Limit is refused while the projection is recognized");
+            var items = rows.Single(r => r.Id == 1).Items;
+            items.Should().HaveCount(2, "the nested level keeps its own filter");
+            items.Single(i => i.Id == 10).Tags.Select(t => t.Id).Should().Equal([300],
+                "the nested many-to-many page is never an empty success");
+            items.Single(i => i.Id == 11).Tags.Select(t => t.Id).Should().Equal([301]);
+            recorder.Statements.Should().HaveCount(4, "parent + items + junction + tags");
         }
         finally
         {

@@ -393,14 +393,35 @@ public sealed class MariaDbCollectionProjectionIntegrationTests : IDisposable
     }
 
     [Fact]
+    public void CollectionProjectionLive_ManyToManyWithLimit()
+    {
+        var counter = Count();
+
+        var rows = Parents(_ctx)
+            .Where(p => p.Id == Rich || p.Id == Profile || p.Id == Empty)
+            .OrderBy(p => p.Id)
+            .Select(p => new
+            {
+                p.Id,
+                Tags = p.Tags.AsEntityBuilder<Mdb353Tag>().OrderBy(t => t.Id).Limit(1).ToList(),
+            })
+            .ToList();
+
+        rows.Select(r => r.Id).Should().Equal(Rich, Profile, Empty);
+        rows[0].Tags.Select(t => t.Id).Should().Equal([9770],
+            "the page splits this parent's surviving occurrences and keeps the first by id");
+        rows[1].Tags.Select(t => t.Id).Should().Equal([9772]);
+        rows[2].Tags.Should().NotBeNull().And.BeEmpty("a parent with no surviving occurrence keeps an empty page");
+        counter.Executing.Should().Be(3, "split many-to-many: parent + junction + tag statements");
+    }
+
+    [Fact]
     public void CollectionProjectionLive_Refusals_ArePreSql()
     {
         var counter = Count();
         var navigation = Parents(_ctx);
         var all = _ctx.From<Mdb353Item>().Select(i => new { i.Id });
 
-        Action manyToManyLimit = () => navigation
-            .Select(p => new { p.Id, Tags = p.Tags.AsEntityBuilder<Mdb353Tag>().Limit(1).ToList() });
         Action groupBy = () => navigation
             .Select(p => new { p.Id, Items = p.Items.AsEntityBuilder<Mdb353Item>().GroupBy(i => i.ParentId).ToList() });
         Action distinct = () => navigation
@@ -428,7 +449,6 @@ public sealed class MariaDbCollectionProjectionIntegrationTests : IDisposable
         Action customSlot = () => navigation
             .Select(p => new Mdb353ObjectSlot { Id = p.Id, Items = p.Items });
 
-        manyToManyLimit.Should().Throw<NotSupportedException>().WithMessage("*M:N + Limit*");
         groupBy.Should().Throw<NotSupportedException>().WithMessage("*applies GroupBy(...) inside its adapter chain*");
         distinct.Should().Throw<NotSupportedException>().WithMessage("*applies Distinct(...) inside its adapter chain*");
         union.Should().Throw<NotSupportedException>().WithMessage("*applies Union(...) inside its adapter chain*");

@@ -40,6 +40,27 @@ SQL — the statement count stays the ordinary eager-loading one and the stateme
 This page describes the per-parent paging of a **child query** (`Limit`/`Offset`/`Page` declared on the child query
 of `LoadWith`/`JoinInto`), where the database computes the page inside each partition.
 
+## Many-to-many child paging is applied to surviving occurrences
+
+A many-to-many child has no single child column to partition on: the parent link lives in the junction table while
+the ordering lives on the child. Such a page is therefore applied to the **surviving junction occurrences** instead
+of being ranked in SQL:
+
+- a parent's occurrences are the rows the loader matched — a repeated junction row repeats its child and occupies
+  its own slot, a dangling link (a junction row whose child row is gone) is absent from the count and from the page,
+  and a parent with no surviving occurrence keeps an **empty** collection;
+- the occurrence list follows the child query's `OrderBy`, so `Offset`/`Limit` are the `skip → take` slice of that
+  list, per parent;
+- the child statement carries **no** global `LIMIT`/`TOP`/`FETCH` — a global page would starve every parent after the
+  first — and the page is trimmed after materialization. The statement count and the selected columns are the
+  unpaged ones, so a page does not reduce the rows read;
+- the shape rules are the ranked route's: an actual page needs a child `OrderBy`, `WithTies()` is rejected, and so is
+  any child shape the eager load cannot fold in.
+
+Both eager modes apply the same rule: split mode trims each parent's occurrence list after the batched junction and
+child reads, and single-query mode trims the stitched occurrences after a dangling link and a cartesian repeat of one
+junction row have been discarded.
+
 ## Root paging stays independent
 
 Parent paging and child paging are separate bounds on separate sources. `.Offset(...)`/`.Limit(...)` applied to the outer builder still select the parent rows; the child page is resolved per parent afterwards and never changes the parent set:
@@ -134,6 +155,7 @@ The ranking gives each parent a deterministic sequence only for a **total** orde
 | SQL Server | yes — the rank filter is applied inside a derived source; the nested source carries no statement-level `ORDER BY` |
 | MySQL / MariaDB | yes, where the server supports window functions (see the server prerequisite below) |
 | ClickHouse | yes, where the server supports window functions and derived sources |
+| Many-to-many child | yes in both modes — the page is trimmed from each parent's surviving junction occurrences after loading (no SQL rank, no global limit) |
 | In-memory | rejected fail-closed (`NotSupportedException`) — no SQL window; client-side relational paging is never substituted |
 | `JoinInto` | rejected fail-closed — per-parent top-N is a `LoadWith` capability |
 

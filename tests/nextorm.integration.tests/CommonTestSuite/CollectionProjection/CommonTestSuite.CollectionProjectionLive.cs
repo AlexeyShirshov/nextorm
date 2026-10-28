@@ -24,7 +24,9 @@ namespace NextORM.Integration.Tests;
 /// <c>9701</c> rich (items 9710 "beta" → notes 9720,9721 + tips; 9711 "alpha" → note 9722;
 /// 9712 "skip" filtered at level two; tags 9770,9771), <c>9702</c> no items, <c>9703</c> item 9713 with
 /// no notes, <c>9704</c> no profile, <c>9705</c> profile 9724 + tag 9772, <c>9706</c> two profiles
-/// (broken 1:1), <c>9707</c> profile 9727 + two items (repeated physical rows of one identity).
+/// (broken 1:1), <c>9707</c> profile 9727 + two items (repeated physical rows of one identity), and
+/// <c>9708</c> the many-to-many paging witness (tag 9770 linked twice, tag 9771 once, and a dangling link to
+/// the missing tag 9799 that must consume no page slot).
 /// </para>
 /// </summary>
 public abstract partial class CommonTestSuite
@@ -36,6 +38,7 @@ public abstract partial class CommonTestSuite
     internal const int LiveProfile = 9705;
     internal const int LiveBrokenProfile = 9706;
     internal const int LiveRepeatedProfile = 9707;
+    internal const int LivePaged = 9708;
 
     private static readonly object LiveSeedGate = new();
 
@@ -63,6 +66,7 @@ public abstract partial class CommonTestSuite
                 new CollectionProjectionLiveParent { Id = LiveProfile, Name = "r5" },
                 new CollectionProjectionLiveParent { Id = LiveBrokenProfile, Name = "r6" },
                 new CollectionProjectionLiveParent { Id = LiveRepeatedProfile, Name = "r7" },
+                new CollectionProjectionLiveParent { Id = LivePaged, Name = "r8" },
             ]).Insert();
 
             ctx.CreateInsertBuilder<CollectionProjectionLiveItem>().Values([
@@ -110,6 +114,12 @@ public abstract partial class CommonTestSuite
                 new CollectionProjectionLiveLink { Id = 9744, ParentId = 9710, ChildId = 9771 },
                 new CollectionProjectionLiveLink { Id = 9745, ParentId = 9711, ChildId = 9771 },
                 new CollectionProjectionLiveLink { Id = 9746, ParentId = 9712, ChildId = 9772 },
+                // Paging witness: a repeated occurrence of 9770, one more tag, and a dangling link whose
+                // child row (9799) does not exist — the last must never occupy a page slot.
+                new CollectionProjectionLiveLink { Id = 9750, ParentId = LivePaged, ChildId = 9770 },
+                new CollectionProjectionLiveLink { Id = 9751, ParentId = LivePaged, ChildId = 9770 },
+                new CollectionProjectionLiveLink { Id = 9752, ParentId = LivePaged, ChildId = 9771 },
+                new CollectionProjectionLiveLink { Id = 9753, ParentId = LivePaged, ChildId = 9799 },
             ]).Insert();
         }
     }
@@ -477,36 +487,126 @@ public abstract partial class CommonTestSuite
     }
 
     // ================================================================================================
-    // Refusals — all raised while the projection is bound, before any SQL exists.
+    // Many-to-many per-parent paging — the page counts surviving junction occurrences.
     // ================================================================================================
 
-    internal static void ManyToManyWithLimitRefused(IDataContext ctx)
+    internal static void ManyToManyWithLimit_Split(IDataContext ctx)
     {
         var counter = CollectionProjectionLiveCounter(ctx);
 
-        Action unsupported = () => LiveParents(ctx)
-            .Select(p => new { p.Id, Tags = p.Tags.AsEntityBuilder<CollectionProjectionLiveTag>().Limit(1).ToList() });
+        var rows = LiveParents(ctx)
+            .Where(p => p.Id == LiveEmpty || p.Id == LiveProfile || p.Id == LivePaged)
+            .OrderBy(p => p.Id)
+            .Select(p => new
+            {
+                p.Id,
+                Tags = p.Tags.AsEntityBuilder<CollectionProjectionLiveTag>().OrderBy(t => t.Id).Limit(2).ToList(),
+            })
+            .ToList();
 
-        unsupported.Should().Throw<NotSupportedException>().WithMessage("*M:N + Limit*");
-        counter.Executing.Should().Be(0, "a refused slot constructs no command");
+        rows.Select(r => r.Id).Should().Equal(LiveEmpty, LiveProfile, LivePaged);
+        rows[0].Tags.Should().NotBeNull().And.BeEmpty("a parent with no surviving occurrence keeps an empty page");
+        rows[1].Tags.Select(t => t.Id).Should().Equal([9772], "a parent with fewer occurrences than the page keeps them all");
+        rows[2].Tags.Should().NotBeNull();
+        rows[2].Tags.Should().HaveCount(2, "the page splits the parent's surviving occurrences");
+        rows[2].Tags.Select(t => t.Id).Should().Equal([9770, 9770],
+            "a repeated junction row occupies its own slot while the dangling link consumes none");
+        counter.Executing.Should().Be(3, "split many-to-many: parent + junction + tag statements");
     }
 
-    internal static void NestedManyToManyWithLimitRefused(IDataContext ctx)
+    internal static void ManyToManyWithLimit_Single(IDataContext ctx)
     {
         var counter = CollectionProjectionLiveCounter(ctx);
 
-        Action unsupported = () => LiveParents(ctx)
+        var rows = LiveParents(ctx)
+            .Where(p => p.Id == LiveEmpty || p.Id == LiveProfile || p.Id == LivePaged)
+            .OrderBy(p => p.Id)
+            .Select(p => new
+            {
+                p.Id,
+                Tags = p.Tags.AsEntityBuilder<CollectionProjectionLiveTag>().OrderBy(t => t.Id).Limit(2).ToList(),
+            })
+            .ToList();
+
+        rows.Select(r => r.Id).Should().Equal(LiveEmpty, LiveProfile, LivePaged);
+        rows[0].Tags.Should().NotBeNull().And.BeEmpty();
+        rows[1].Tags.Select(t => t.Id).Should().Equal([9772]);
+        rows[2].Tags.Should().NotBeNull();
+        rows[2].Tags.Should().HaveCount(2, "single mode pages the same surviving occurrences");
+        rows[2].Tags.Select(t => t.Id).Should().Equal([9770, 9770]);
+        counter.Executing.Should().Be(1, "single many-to-many: one statement for the whole graph");
+    }
+
+    internal static void LoadWithManyToManyPage_Split(IDataContext ctx)
+    {
+        var counter = CollectionProjectionLiveCounter(ctx);
+
+        var parents = LiveParents(ctx)
+            .Where(p => p.Id == LiveEmpty || p.Id == LiveProfile || p.Id == LivePaged)
+            .LoadWith(p => p.Tags, t => t.From<CollectionProjectionLiveTag>().OrderBy(x => x.Id).Offset(1).Limit(2))
+            .OrderBy(p => p.Id)
+            .ToList();
+
+        parents.Select(p => p.Id).Should().Equal(LiveEmpty, LiveProfile, LivePaged);
+        parents[0].Tags.Should().BeEmpty();
+        parents[1].Tags.Should().BeEmpty("the only surviving occurrence of this parent is skipped by the offset");
+        parents[2].Tags.Select(t => t.Id).Should().Equal([9770, 9771],
+            "the page crosses the occurrence boundary: one duplicate is skipped and the next tag is kept");
+        counter.Executing.Should().Be(3, "split many-to-many: parent + junction + tag statements");
+    }
+
+    internal static void LoadWithManyToManyPage_Single(IDataContext ctx)
+    {
+        var counter = CollectionProjectionLiveCounter(ctx);
+
+        var parents = LiveParents(ctx)
+            .Where(p => p.Id == LiveEmpty || p.Id == LiveProfile || p.Id == LivePaged)
+            .LoadWith(p => p.Tags, t => t.From<CollectionProjectionLiveTag>().OrderBy(x => x.Id).Offset(1).Limit(2))
+            .OrderBy(p => p.Id)
+            .ToList();
+
+        parents.Select(p => p.Id).Should().Equal(LiveEmpty, LiveProfile, LivePaged);
+        parents[0].Tags.Should().BeEmpty();
+        parents[1].Tags.Should().BeEmpty();
+        parents[2].Tags.Select(t => t.Id).Should().Equal([9770, 9771]);
+        counter.Executing.Should().Be(1, "single many-to-many: one statement for the whole graph");
+    }
+
+    internal static void NestedManyToManyWithLimit_Split(IDataContext ctx)
+    {
+        var counter = CollectionProjectionLiveCounter(ctx);
+
+        var rows = LiveParents(ctx)
+            .Where(p => p.Id == LiveRich)
             .Select(p => new
             {
                 p.Id,
                 Items = p.Items.AsEntityBuilder<CollectionProjectionLiveItem>()
-                    .Select(i => new { i.Id, Tags = i.Tags.AsEntityBuilder<CollectionProjectionLiveTag>().Limit(1).ToList() })
+                    .Where(i => i.Name != "skip")
+                    .OrderBy(i => i.Id)
+                    .Select(i => new
+                    {
+                        i.Id,
+                        Tags = i.Tags.AsEntityBuilder<CollectionProjectionLiveTag>()
+                            .OrderBy(t => t.Id)
+                            .Limit(1)
+                            .ToList(),
+                    })
                     .ToList(),
-            });
+            })
+            .ToList();
 
-        unsupported.Should().Throw<NotSupportedException>().WithMessage("*M:N + Limit*");
-        counter.Executing.Should().Be(0, "a nested M:N + Limit is refused before any SQL");
+        var items = rows.Single().Items;
+        items.Should().HaveCount(2);
+        items.Single(i => i.Id == 9710).Tags.Select(t => t.Id).Should().Equal([9770],
+            "the nested many-to-many page is never an empty success");
+        items.Single(i => i.Id == 9711).Tags.Select(t => t.Id).Should().Equal([9771]);
+        counter.Executing.Should().Be(4, "split nested many-to-many: parent + items + junction + tags");
     }
+
+    // ================================================================================================
+    // Refusals — all raised while the projection is bound, before any SQL exists.
+    // ================================================================================================
 
     internal static void AdapterRefusals(IDataContext ctx)
     {
@@ -714,15 +814,22 @@ public abstract partial class CommonTestSuite
             "the shared first component never cross-links the second parent");
         counter.Executing.Should().Be(3, "a composite junction slot is the ordinary split many-to-many");
 
-        Action paged = () => ctx.From<JiCompositeJunctionParent>()
+        var pagedRows = ctx.From<JiCompositeJunctionParent>()
             .Where(p => p.RowId == first)
             .Select(p => new
             {
                 p.RowId,
-                Children = p.Children.AsEntityBuilder<JiCompositeJunctionChild>().Limit(1).ToList(),
-            });
+                Children = p.Children.AsEntityBuilder<JiCompositeJunctionChild>()
+                    .OrderBy(c => c.Id)
+                    .Limit(1)
+                    .ToList(),
+            })
+            .ToList();
 
-        paged.Should().Throw<NotSupportedException>().WithMessage("*M:N + Limit*");
+        pagedRows.Should().ContainSingle();
+        pagedRows[0].Children.Should().ContainSingle(
+            "the page keeps one of the two surviving junction occurrences of the composite pair");
+        pagedRows[0].Children.Select(c => c.Id).Should().Equal([first + 100]);
     }
 
     // ================================================================================================
@@ -824,11 +931,22 @@ public abstract partial class CommonTestSuite
     }
 
     [Fact]
-    public void CollectionProjectionLive_ManyToManyWithLimit_Refused()
+    public void CollectionProjectionLive_ManyToManyWithLimit_Split()
     {
         EnsureCollectionProjectionLiveSeeded(_sut);
-        ManyToManyWithLimitRefused(_sut.DataProvider);
-        NestedManyToManyWithLimitRefused(_sut.DataProvider);
+        ManyToManyWithLimit_Split(_sut.DataProvider);
+        NestedManyToManyWithLimit_Split(_sut.DataProvider);
+        LoadWithManyToManyPage_Split(_sut.DataProvider);
+    }
+
+    [Fact]
+    public void CollectionProjectionLive_ManyToManyWithLimit_Single()
+    {
+        EnsureCollectionProjectionLiveSeeded(_sut);
+        using var ctx = Provider.CreateContext(new DataContextBuilder().UseEagerLoadMode(EagerLoadMode.SingleQuery));
+        RegisterCollectionProjectionLive(ctx);
+        ManyToManyWithLimit_Single(ctx);
+        LoadWithManyToManyPage_Single(ctx);
     }
 
     [Fact]

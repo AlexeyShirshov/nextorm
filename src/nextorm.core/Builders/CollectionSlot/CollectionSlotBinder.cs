@@ -141,29 +141,19 @@ internal static class CollectionSlotBinder
         where TChild : class
     {
         var route = slot.IsReference ? MetadataEagerLoadRoute.Reference : MetadataEagerLoadRoute.Collection;
-        var binding = MetadataEagerLoadResolver.Resolve<TParent, TChild>(
+        _ = MetadataEagerLoadResolver.Resolve<TParent, TChild>(
             provider,
             Expression.Lambda(slot.Navigation, slot.Root),
             route,
             EagerLoadMode.Default,
             "a collection projection slot");
 
-        if (!slot.IsReference
-            && binding.Relationship.Kind == RelationshipKind.ManyToMany
-            && slot.Operations.OfType<CollectionSlotLimit>().Any())
-        {
-            throw ManyToManyLimit(slot.Path, typeof(TParent), binding.Navigation.Name);
-        }
-
+        // A slot's Limit is an in-memory per-parent page applied by CollectionSlotReaderFactory over the
+        // materialized navigation. A many-to-many navigation already carries exactly the surviving junction
+        // occurrences (a duplicate link repeats its child, a dangling link contributes nothing), so the page
+        // counts those occurrences for every cardinality — the junction needs no SQL partition of its own.
         return null;
     }
-
-    private static NotSupportedException ManyToManyLimit(string path, Type parentType, string navigationName)
-        => new(
-            $"The collection projection slot '{path}' applies Limit(...) to the many-to-many relationship " +
-            $"'{parentType.Name}.{navigationName}': a per-parent page across a junction has no parent partition in " +
-            "this release (M:N + Limit). Remove the Limit, or load the relationship with the split many-to-many " +
-            "loader and page the materialized collection yourself.");
 
     private static BoundSlot<TEntity> BindSlot<TEntity, TChild>(EntityBuilder<TEntity> builder, CollectionSlotDescriptor slot)
         where TChild : class

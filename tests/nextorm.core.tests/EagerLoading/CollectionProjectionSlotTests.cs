@@ -156,7 +156,7 @@ public sealed class CollectionProjectionSlotTests
 
     /// <summary>
     /// Parent 1 owns children 10 (rank 2, active), 11 (rank 1, active) and 12 (rank 3, inactive); parent 2 owns
-    /// none. Tag tables exist so the many-to-many refusal is reached with real metadata in place.
+    /// none. Tag tables exist so the many-to-many page is exercised with real junction metadata in place.
     /// </summary>
     private static (SqliteDataContext Ctx, string Path, SqlRecordingInterceptor Recorder) CreateDb(
         EagerLoadMode mode = EagerLoadMode.SplitQuery)
@@ -596,19 +596,22 @@ public sealed class CollectionProjectionSlotTests
     }
 
     [Fact]
-    public void ManyToManyWithLimit_ShouldBeRefusedBeforeSql()
+    public void ManyToManyWithLimit_ShouldPageEachParentBySurvivingOccurrences()
     {
         var (context, path, recorder) = CreateDb();
         try
         {
             RegisterManyToManyMetadata(context);
 
-            Action unsupported = () => context.From<Parent>()
-                .Select(p => new { p.Id, Page = p.Tags.AsEntityBuilder<Tag>().Limit(1).ToList() });
+            var rows = context.From<Parent>()
+                .OrderBy(p => p.Id)
+                .Select(p => new { p.Id, Page = p.Tags.AsEntityBuilder<Tag>().OrderBy(t => t.Id).Limit(1).ToList() })
+                .ToList();
 
-            unsupported.Should().Throw<NotSupportedException>()
-                .WithMessage("*M:N + Limit*");
-            recorder.Statements.Should().BeEmpty();
+            rows.Select(r => r.Id).Should().Equal(1, 2);
+            rows[0].Page.Select(t => t.Id).Should().Equal([100], "the page keeps the first surviving occurrence of the parent");
+            rows[1].Page.Should().NotBeNull().And.BeEmpty("a parent without surviving occurrences keeps an empty page");
+            recorder.Statements.Should().HaveCount(3, "split many-to-many: parent + junction + tag statements");
         }
         finally
         {
