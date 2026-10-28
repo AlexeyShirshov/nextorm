@@ -3,21 +3,32 @@ name: benchmarks
 # Re-runs the SQLite comparison benchmarks (end-to-end + Category B warm-cache), regenerates the
 # tables in readme.md and docs/comparisons/benchmarks.md (EN + RU) and opens a pull request with the
 # refreshed reports. The tables are derived data: .pdca/scripts/perf/update_benchmark_tables.py owns them, so a
-# scheduled run cannot leave the prose behind.
+# refresh run cannot leave the prose behind.
 on:
-  # Manual refresh at any time.
+  # Refresh after every merge into main that can move the numbers: engine or benchmark code, or the
+  # build/package configuration the benchmark project resolves its dependencies from.
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'benchmarks/**'
+      - 'Directory.Build.props'
+      - 'Directory.Packages.props'
+      # The committed BDN reports are derived output: a pull request that only rewrites them must not
+      # start another refresh, or the workflow would chase its own tail.
+      - '!benchmarks/BenchmarkDotNet.Artifacts/**'
+  # Manual refresh at any time (`workflow_dispatch` ignores the `paths` filter above).
   workflow_dispatch:
-  # Monthly refresh on the first day of the month.
-  schedule:
-    - cron: "0 3 1 * *"
 
 permissions:
   contents: write
   pull-requests: write
 
 concurrency:
+  # Only the newest commit on main matters: a merge that lands while a refresh is running supersedes
+  # it, so the superseded run is cancelled instead of queueing another multi-hour job behind it.
   group: ${{ github.workflow }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   refresh-tables:
@@ -47,6 +58,8 @@ jobs:
 
           # Full globs (BDN rejects an exact-suffix filter): "*SqliteBenchmarkIteration*" does not
           # match SqliteBenchmarkLargeIteration because the type name differs after "SqliteBenchmark".
+          # "*SqliteBenchmarkFeaturesFair.*" is the Category A class only: the trailing dot keeps
+          # SqliteBenchmarkFeaturesFairCached out of it.
           filters=(
             "*SqliteBenchmarkIteration*"
             "*SqliteBenchmarkLargeIteration*"
@@ -55,6 +68,7 @@ jobs:
             "*SqliteBenchmarkAny*"
             "*SqliteBenchmarkFirst*"
             "*SqliteBenchmarkSingle*"
+            "*SqliteBenchmarkFeaturesFair.*"
             "*SqliteBenchmarkFeaturesFairCached*"
           )
           for filter in "${filters[@]}"; do
@@ -65,11 +79,13 @@ jobs:
           done
 
           # A typo in the filter makes BDN exit 0 without running anything; require every report
-          # to have been rewritten by this job.
+          # to have been rewritten by this job. Category A feeds the basic-feature rows of the
+          # readme table, so it is as mandatory as the end-to-end classes.
           results="benchmarks/BenchmarkDotNet.Artifacts/results"
           for class in SqliteBenchmarkIteration SqliteBenchmarkLargeIteration SqliteBenchmarkWhere \
                        SqliteBenchmarkSimulateWork SqliteBenchmarkAny SqliteBenchmarkFirst \
-                       SqliteBenchmarkSingle SqliteBenchmarkFeaturesFairCached; do
+                       SqliteBenchmarkSingle SqliteBenchmarkFeaturesFair \
+                       SqliteBenchmarkFeaturesFairCached; do
             report="${results}/NextORM.Benchmark.${class}-report-github.md"
             if [ ! -f "$report" ] || [ "$report" -ot "$RUNNER_TEMP/bench-start" ]; then
               echo "::error::${class} did not produce a fresh report"
@@ -101,7 +117,9 @@ jobs:
             - Machine: the GitHub Actions `ubuntu-latest` runner, **not** the Ryzen 7 5800HS used
               for earlier numbers. The conditions line in `readme.md` is regenerated from the report
               header, so the published machine/cores/runtime stay truthful.
-            - Suites: end-to-end comparison (7 classes) and Category B (warm cached vs regular).
+            - Suites: end-to-end comparison (7 classes), Category A (basic features — prepared vs
+              compiled vs raw) and Category B (warm cached vs regular). Category A feeds the
+              basic-feature rows of the readme table.
             - Source of truth: the committed `NextORM.Benchmark.*-report-*` files under
               `benchmarks/BenchmarkDotNet.Artifacts/results/`.
 

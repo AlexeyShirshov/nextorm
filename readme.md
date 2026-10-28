@@ -94,7 +94,10 @@ They differ in cost, lifetime and thread-safety rules — see
 Benchmark conditions: provider SQLite (`Microsoft.Data.Sqlite`); async queries; each cell is the fastest
 method for that ORM in the linked report. Machine: AMD Ryzen 7 5800HS with Radeon Graphics (8 logical / 4
 physical cores), .NET 10.0.12, BenchmarkDotNet 0.15.8 (`ShortRun` + `InProcessEmitToolchain`). As of
-**2026-10-17**.
+**2026-10-20**. The last twelve rows are the basic-feature scenarios (Category A in the [comparison
+article](https://alexeyshirshov.github.io/nextorm/comparisons/benchmarks.html)): Nextorm through `Prepare()`
+against the compiled form of EF Core and linq2db and raw Dapper, ten queries per iteration, so each cell there
+is the per-query mean. Those rows come from the Category A suite run on **2026-10-28**.
 <!-- benchmarks:conditions:end -->
 
 <!-- benchmarks:e2e:start -->
@@ -107,6 +110,18 @@ physical cores), .NET 10.0.12, BenchmarkDotNet 0.15.8 (`ShortRun` + `InProcessEm
 | [Any](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report-github.md) | **889.9 μs** | 1,399.7 μs | 1,498.9 μs | 3,620.0 μs |
 | [FirstOrDefault](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkFirst-report-github.md) | **91.35 μs** | 146.41 μs | 388.41 μs | 351.03 μs |
 | [SingleOrDefault](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkSingle-report-github.md) | **90.87 μs** | 140.79 μs | 394.50 μs | 345.20 μs |
+| [`CASE WHEN`](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkFeaturesFair-report-github.md) | **15.40 μs** | 22.34 μs | 23.52 μs | 65.48 μs |
+| [CTE](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkFeaturesFair-report-github.md) | **15.37 μs** | 32.57 μs | 35.08 μs | — |
+| [`SELECT DISTINCT`](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkFeaturesFair-report-github.md) | **17.25 μs** | 27.84 μs | 29.24 μs | 58.57 μs |
+| [`EXCEPT`](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkFeaturesFair-report-github.md) | **15.62 μs** | 26.20 μs | 28.71 μs | 66.22 μs |
+| [IN-list](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkFeaturesFair-report-github.md) | **19.78 μs** | 29.79 μs | 66.97 μs | 85.96 μs |
+| [`INTERSECT`](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkFeaturesFair-report-github.md) | **16.48 μs** | 27.24 μs | 33.34 μs | 64.09 μs |
+| [4-table join](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkFeaturesFair-report-github.md) | **21.14 μs** | 39.56 μs | 38.82 μs | 74.38 μs |
+| [`LEFT JOIN`](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkFeaturesFair-report-github.md) | **18.65 μs** | 32.07 μs | 33.19 μs | 66.57 μs |
+| [Recursive CTE](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkFeaturesFair-report-github.md) | **18.62 μs** | 38.18 μs | 40.70 μs | — |
+| [String functions](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkFeaturesFair-report-github.md) | **14.22 μs** | 21.73 μs | 23.90 μs | 55.54 μs |
+| [UDF](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkFeaturesFair-report-github.md) | **13.94 μs** | 22.32 μs | 24.46 μs | 53.67 μs |
+| [Window functions](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkFeaturesFair-report-github.md) | **20.82 μs** | 43.68 μs | 43.94 μs | — |
 <!-- benchmarks:e2e:end -->
 
 The full comparison — capabilities and benchmarks, with methodology — is in the

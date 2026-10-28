@@ -12,8 +12,9 @@ rewrites the generated blocks in place, so a benchmark run cannot leave the pros
 
 Targets:
 
-* ``readme.md`` — conditions + end-to-end (time) table;
-* ``docs/comparisons/benchmarks.md`` — conditions + end-to-end + allocations + Category B;
+* ``readme.md`` — conditions + end-to-end (time) table, extended with the basic-feature rows of
+  the Category A suite;
+* ``docs/comparisons/benchmarks.md`` — conditions + end-to-end + allocations + Category A + Category B;
 * ``docs/ru/comparisons/benchmarks.md`` — the Russian mirror of the same.
 
 Usage::
@@ -48,6 +49,8 @@ BENCH_SRC_DIR = REPO_ROOT / "benchmarks" / "nextorm.benchmark"
 GITHUB_BLOB_PREFIX = "https://github.com/AlexeyShirshov/nextorm/blob/main"
 
 LIBRARIES = ("Nextorm", "Dapper", "linq2db", "EF Core")
+CATEGORY_A_CLASS = "SqliteBenchmarkFeaturesFair"
+CATEGORY_A_LOGICAL_OPS = 10
 CATEGORY_B_CLASS = "SqliteBenchmarkFeaturesFairCached"
 CATEGORY_B_LOGICAL_OPS = 10
 
@@ -79,21 +82,27 @@ E2E_ROWS = (
     E2ERow("SqliteBenchmarkSingle", "SingleOrDefault", "SingleOrDefault"),
 )
 
-# (BDN category, display label EN, display label RU) in table order.
-CATEGORY_B = (
-    ("B_CaseWhen", "`CASE WHEN`", "`CASE WHEN`"),
-    ("B_Cte", "CTE", "CTE"),
-    ("B_Distinct", "`SELECT DISTINCT`", "`SELECT DISTINCT`"),
-    ("B_Except", "`EXCEPT`", "`EXCEPT`"),
-    ("B_InList", "IN-list", "IN-list"),
-    ("B_Intersect", "`INTERSECT`", "`INTERSECT`"),
-    ("B_Join4", "4-table join", "Join по 4 таблицам"),
-    ("B_LeftJoin", "`LEFT JOIN`", "`LEFT JOIN`"),
-    ("B_RecursiveCte", "Recursive CTE", "Рекурсивный CTE"),
-    ("B_StringFunctions", "String functions", "Строковые функции"),
-    ("B_Udf", "UDF", "UDF"),
-    ("B_Window", "Window functions", "Оконные функции"),
+# Basic query features shared by the two fair-comparison suites: (BDN category suffix, label EN,
+# label RU) in table order. Both derived tuples below come from this one list so the readme
+# (Category A) and the article (Category B) can never drift apart.
+FEATURE_CATEGORIES = (
+    ("CaseWhen", "`CASE WHEN`", "`CASE WHEN`"),
+    ("Cte", "CTE", "CTE"),
+    ("Distinct", "`SELECT DISTINCT`", "`SELECT DISTINCT`"),
+    ("Except", "`EXCEPT`", "`EXCEPT`"),
+    ("InList", "IN-list", "IN-list"),
+    ("Intersect", "`INTERSECT`", "`INTERSECT`"),
+    ("Join4", "4-table join", "Join по 4 таблицам"),
+    ("LeftJoin", "`LEFT JOIN`", "`LEFT JOIN`"),
+    ("RecursiveCte", "Recursive CTE", "Рекурсивный CTE"),
+    ("StringFunctions", "String functions", "Строковые функции"),
+    ("Udf", "UDF", "UDF"),
+    ("Window", "Window functions", "Оконные функции"),
 )
+
+# (BDN category, display label EN, display label RU) in table order.
+CATEGORY_A = tuple((f"A_{key}", en, ru) for key, en, ru in FEATURE_CATEGORIES)
+CATEGORY_B = tuple((f"B_{key}", en, ru) for key, en, ru in FEATURE_CATEGORIES)
 
 _BLOCK_RE = re.compile(
     r"(?ms)^<!-- benchmarks:(?P<name>[a-z0-9-]+):start -->\r?\n.*?^<!-- benchmarks:(?P=name):end -->"
@@ -106,6 +115,10 @@ class Target:
     path: Path
     lang: str
     blocks: tuple
+    # Append the basic-feature rows to the end-to-end table. Only the readme has no feature table
+    # of its own: the article prints those numbers (time *and* allocations) in its Category A/B
+    # sections, so growing its end-to-end table too would duplicate them on the same page.
+    feature_rows: bool = False
 
 
 TARGETS = (
@@ -114,18 +127,19 @@ TARGETS = (
         REPO_ROOT / "readme.md",
         "en",
         ("conditions", "e2e"),
+        feature_rows=True,
     ),
     Target(
         "docs",
         REPO_ROOT / "docs" / "comparisons" / "benchmarks.md",
         "en",
-        ("conditions", "e2e", "allocations", "category-b"),
+        ("conditions", "e2e", "allocations", "category-a", "category-b"),
     ),
     Target(
         "docs-ru",
         REPO_ROOT / "docs" / "ru" / "comparisons" / "benchmarks.md",
         "ru",
-        ("conditions", "e2e", "allocations", "category-b"),
+        ("conditions", "e2e", "allocations", "category-a", "category-b"),
     ),
 )
 
@@ -248,8 +262,9 @@ def read_measurements(csv_path: Path) -> list:
 
 
 def library_of(method: str) -> str | None:
-    # Category B names its arms ``B_<Library>_<Feature>``; the end-to-end classes do not.
-    name = method[2:] if method.startswith("B_") else method
+    # The fair-comparison suites name their arms ``A_<Library>_<Feature>`` /
+    # ``B_<Library>_<Feature>``; the end-to-end classes do not.
+    name = method[2:] if method[:2] in ("A_", "B_") else method
     if name.startswith("Nextorm"):
         return "Nextorm"
     if name.startswith("Dapper"):
@@ -292,7 +307,7 @@ def _report_url(class_name: str) -> str:
     )
 
 
-def build_e2e_table(results_dir: Path, lang: str) -> str:
+def build_e2e_table(results_dir: Path, lang: str, *, include_features: bool = False) -> str:
     header = "| Method | Nextorm | Dapper | linq2db | EF Core |" if lang == "en" else "| Метод | Nextorm | Dapper | linq2db | EF Core |"
     lines = [header, "|---|:---:|:---:|:---:|:---:|"]
     for row in E2E_ROWS:
@@ -308,7 +323,70 @@ def build_e2e_table(results_dir: Path, lang: str) -> str:
             + " | ".join(cells)
             + " |"
         )
+    if include_features:
+        lines.extend(build_feature_rows(results_dir, lang))
     return "\n".join(lines)
+
+
+def _fair_groups(results_dir: Path, class_name: str, categories: tuple, expected_ops: int) -> tuple:
+    """Read one fair-comparison suite and split it into per-feature groups.
+
+    Every feature method runs ``Iterations`` logical queries, so the caller divides the BDN totals by
+    that divisor. Unknown or missing categories fail closed: a renamed benchmark must break the
+    generator, never silently drop a row.
+    """
+    divisor = _verify_divisor(class_name, expected_ops)
+    csv_path, _ = report_paths(results_dir, class_name)
+    measurements = read_measurements(csv_path)
+    known = {category for category, _, _ in categories}
+    unknown = sorted({m.category for m in measurements if m.category and m.category not in known})
+    if unknown:
+        raise TableError(
+            f"{class_name}: unknown categories {unknown}; add them to FEATURE_CATEGORIES "
+            "instead of dropping rows"
+        )
+    groups = []
+    for category, label_en, label_ru in categories:
+        group = [m for m in measurements if m.category == category]
+        if not group:
+            raise TableError(f"{class_name}: missing category {category} in {csv_path.name}")
+        groups.append((label_en, label_ru, group))
+    return divisor, groups
+
+
+def build_feature_rows(results_dir: Path, lang: str) -> list:
+    """Basic-feature rows read from the Category A suite, one row per feature.
+
+    Each feature method runs ``Iterations`` queries, so the cell is the per-query mean of the
+    fastest arm of that library — the same numbers the article's Category A table prints, minus the
+    allocations.
+    """
+    divisor, groups = _fair_groups(
+        results_dir, CATEGORY_A_CLASS, CATEGORY_A, CATEGORY_A_LOGICAL_OPS
+    )
+    url = _report_url(CATEGORY_A_CLASS)
+    lines = []
+    for label_en, label_ru, group in groups:
+        winners = fastest_per_library(
+            f"{CATEGORY_A_CLASS}/{group[0].category}", group, require_all=False
+        )
+        best = min(measurement.time_ns for measurement in winners.values())
+        cells = []
+        for library in LIBRARIES:
+            measurement = winners.get(library)
+            if measurement is None:
+                cells.append("—")
+                continue
+            cells.append(
+                _bold(
+                    format_time_ns(measurement.time_ns / divisor),
+                    measurement.time_ns == best,
+                )
+            )
+        lines.append(
+            f"| [{label_en if lang == 'en' else label_ru}]({url}) | " + " | ".join(cells) + " |"
+        )
+    return lines
 
 
 def build_allocations_table(results_dir: Path, lang: str) -> str:
@@ -352,43 +430,35 @@ def _benchmark_source(class_name: str) -> Path:
     return matches[0]
 
 
-def _verify_category_b_divisor() -> int:
-    source = _benchmark_source(CATEGORY_B_CLASS).read_text(encoding="utf-8")
+def _verify_divisor(class_name: str, expected: int) -> int:
+    source = _benchmark_source(class_name).read_text(encoding="utf-8")
     match = re.search(r"private\s+const\s+int\s+Iterations\s*=\s*(\d+)\s*;", source)
     if not match:
-        raise TableError(f"{CATEGORY_B_CLASS}.cs: cannot find the Iterations constant")
+        raise TableError(f"{class_name}.cs: cannot find the Iterations constant")
     iterations = int(match.group(1))
-    if iterations != CATEGORY_B_LOGICAL_OPS:
+    if iterations != expected:
         raise TableError(
-            f"{CATEGORY_B_CLASS}.cs: Iterations={iterations}, "
-            f"but the table divides by {CATEGORY_B_LOGICAL_OPS}; update CATEGORY_B_LOGICAL_OPS"
+            f"{class_name}.cs: Iterations={iterations}, "
+            f"but the table divides by {expected}; update the divisor constant"
         )
     return iterations
 
 
-def build_category_b_table(results_dir: Path, lang: str) -> str:
-    divisor = _verify_category_b_divisor()
-    csv_path, _ = report_paths(results_dir, CATEGORY_B_CLASS)
-    measurements = read_measurements(csv_path)
-    known = {category for category, _, _ in CATEGORY_B}
-    unknown = sorted({m.category for m in measurements if m.category and m.category not in known})
-    if unknown:
-        raise TableError(
-            f"{CATEGORY_B_CLASS}: unknown Category-B categories {unknown}; "
-            "add them to CATEGORY_B (labels EN/RU) instead of dropping rows"
-        )
-
-    header = (
-        "| Feature | Nextorm (cached) | Dapper | linq2db | EF Core |"
-        if lang == "en"
-        else "| Фича | Nextorm (cached) | Dapper | linq2db | EF Core |"
-    )
+def _feature_table(
+    results_dir: Path,
+    class_name: str,
+    categories: tuple,
+    expected_ops: int,
+    header: str,
+    lang: str,
+) -> str:
+    """One table per fair-comparison suite: per-query mean and allocation, fastest arm in bold."""
+    divisor, groups = _fair_groups(results_dir, class_name, categories, expected_ops)
     lines = [header, "|---|---|---|---|---|"]
-    for category, label_en, label_ru in CATEGORY_B:
-        group = [m for m in measurements if m.category == category]
-        if not group:
-            raise TableError(f"{CATEGORY_B_CLASS}: missing category {category} in {csv_path.name}")
-        winners = fastest_per_library(f"{CATEGORY_B_CLASS}/{category}", group, require_all=False)
+    for label_en, label_ru, group in groups:
+        winners = fastest_per_library(
+            f"{class_name}/{group[0].category}", group, require_all=False
+        )
         best = min(measurement.time_ns for measurement in winners.values())
         cells = []
         for library in LIBRARIES:
@@ -405,6 +475,50 @@ def build_category_b_table(results_dir: Path, lang: str) -> str:
             f"| {label_en if lang == 'en' else label_ru} | " + " | ".join(cells) + " |"
         )
     return "\n".join(lines)
+
+
+def _dated_feature_table(
+    results_dir: Path,
+    class_name: str,
+    categories: tuple,
+    expected_ops: int,
+    header: str,
+    lang: str,
+) -> str:
+    """A feature table preceded by its own run date.
+
+    Category A can be re-run on its own (the readme's basic-feature rows come from it), so its block
+    dates itself instead of borrowing the end-to-end date printed in the conditions paragraph.
+    """
+    stamp = report_date(results_dir, class_name)
+    dated = f"As of **{stamp}**." if lang == "en" else f"На **{stamp}**."
+    return (
+        dated
+        + "\n\n"
+        + _feature_table(results_dir, class_name, categories, expected_ops, header, lang)
+    )
+
+
+def build_category_a_table(results_dir: Path, lang: str) -> str:
+    header = (
+        "| Feature | Nextorm (prepared) | Dapper | linq2db (compiled) | EF Core (compiled) |"
+        if lang == "en"
+        else "| Фича | Nextorm (prepared) | Dapper | linq2db (compiled) | EF Core (compiled) |"
+    )
+    return _dated_feature_table(
+        results_dir, CATEGORY_A_CLASS, CATEGORY_A, CATEGORY_A_LOGICAL_OPS, header, lang
+    )
+
+
+def build_category_b_table(results_dir: Path, lang: str) -> str:
+    header = (
+        "| Feature | Nextorm (cached) | Dapper | linq2db | EF Core |"
+        if lang == "en"
+        else "| Фича | Nextorm (cached) | Dapper | linq2db | EF Core |"
+    )
+    return _feature_table(
+        results_dir, CATEGORY_B_CLASS, CATEGORY_B, CATEGORY_B_LOGICAL_OPS, header, lang
+    )
 
 
 # ------------------------------------------------------------------------------------------------
@@ -437,12 +551,14 @@ def read_run_conditions(results_dir: Path) -> dict:
     }
 
 
-def report_date(results_dir: Path) -> str:
-    """Date of the benchmark run, taken from the end-to-end report mtime.
+def report_date(results_dir: Path, class_name: str = E2E_ROWS[0].class_name) -> str:
+    """Date of the benchmark run, taken from the report mtime.
 
-    Deriving it from the report (not from the clock) keeps ``--check`` stable on later days.
+    Deriving it from the report (not from the clock) keeps ``--check`` stable on later days. Each
+    suite is dated by its own report, so a table that mixes two runs can print both dates instead
+    of pretending everything was measured on the same day.
     """
-    _, md_path = report_paths(results_dir, E2E_ROWS[0].class_name)
+    _, md_path = report_paths(results_dir, class_name)
     return dt.date.fromtimestamp(md_path.stat().st_mtime).isoformat()
 
 
@@ -463,7 +579,12 @@ def build_conditions(target: Target, results_dir: Path, date: str) -> str:
             "Benchmark conditions: provider SQLite (`Microsoft.Data.Sqlite`); async queries; each cell is "
             "the fastest method for that ORM in the linked report. Machine: "
             f"{machine}, .NET {conditions['runtime']}, BenchmarkDotNet {conditions['bdn']} "
-            f"(`{conditions['job']}` + `{conditions['toolchain']}`). As of **{date}**."
+            f"(`{conditions['job']}` + `{conditions['toolchain']}`). As of **{date}**. The last twelve rows "
+            "are the basic-feature scenarios (Category A in the [comparison article]"
+            "(https://alexeyshirshov.github.io/nextorm/comparisons/benchmarks.html)): Nextorm through "
+            "`Prepare()` against the compiled form of EF Core and linq2db and raw Dapper, ten queries per "
+            "iteration, so each cell there is the per-query mean. Those rows come from the Category A suite "
+            f"run on **{report_date(results_dir, CATEGORY_A_CLASS)}**."
         )
     elif target.lang == "en":
         text = (
@@ -471,8 +592,9 @@ def build_conditions(target: Target, results_dir: Path, date: str) -> str:
             "queries; each cell is the **fastest method** for that library in the linked BenchmarkDotNet "
             f"report. Machine: {machine}, .NET {conditions['runtime']}, "
             f"BenchmarkDotNet {conditions['bdn']} (`{conditions['job']}` + "
-            f"`{conditions['toolchain']}`). As of **{date}** for the end-to-end, allocations, Category A and "
-            "Category B tables (the tier-1 section keeps the date of its own run). In each row the "
+            f"`{conditions['toolchain']}`). As of **{date}** for the end-to-end, allocations and "
+            "Category B tables (the Category A table and the tier-1 section keep the date of their own "
+            "run). In each row the "
             "leading cell is **bold** — the fastest in the time tables and the smallest allocation in the "
             "allocations table."
         )
@@ -482,8 +604,8 @@ def build_conditions(target: Target, results_dir: Path, date: str) -> str:
             "в ячейке — **самый быстрый метод** этой библиотеки в связанном отчёте BenchmarkDotNet. "
             f"Машина: {machine}, .NET {conditions['runtime']}, BenchmarkDotNet {conditions['bdn']} "
             f"(`{conditions['job']}` + `{conditions['toolchain']}`). На **{date}** для таблиц сквозных "
-            "сценариев, аллокаций, категории A и категории B (раздел tier-1 сохраняет дату своего "
-            "прогона). В каждой строке лидирующая ячейка выделена **полужирным** — быстрейшая в таблицах "
+            "сценариев, аллокаций и категории B (таблица категории A и раздел tier-1 сохраняют дату "
+            "своего прогона). В каждой строке лидирующая ячейка выделена **полужирным** — быстрейшая в таблицах "
             "времени и с наименьшей аллокацией в таблице аллокаций."
         )
     return textwrap.fill(text, width=110)
@@ -533,9 +655,11 @@ def render_target(target: Target, results_dir: Path, date: str) -> str:
         if name == "conditions":
             blocks[name] = build_conditions(target, results_dir, date)
         elif name == "e2e":
-            blocks[name] = build_e2e_table(results_dir, target.lang)
+            blocks[name] = build_e2e_table(results_dir, target.lang, include_features=target.feature_rows)
         elif name == "allocations":
             blocks[name] = build_allocations_table(results_dir, target.lang)
+        elif name == "category-a":
+            blocks[name] = build_category_a_table(results_dir, target.lang)
         elif name == "category-b":
             blocks[name] = build_category_b_table(results_dir, target.lang)
         else:

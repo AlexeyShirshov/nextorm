@@ -148,6 +148,93 @@ class E2ETableTests(unittest.TestCase):
         self.assertEqual(tables.report_date(self.results), "2026-10-17")
 
 
+class FeatureRowTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.results = Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _write_features(self):
+        write_report(
+            self.results,
+            tables.CATEGORY_A_CLASS,
+            [
+                "A_Nextorm_Prepared_Cte,90.0 μs,7.0 KB,A_Cte",
+                "A_Dapper_Cte,120.0 μs,13.0 KB,A_Cte",
+                "A_Linq2Db_Compiled_Cte,150.0 μs,15.0 KB,A_Cte",
+                "A_Nextorm_Prepared_CaseWhen,100.0 μs,7.0 KB,A_CaseWhen",
+                "A_Dapper_CaseWhen,140.0 μs,13.0 KB,A_CaseWhen",
+                "A_Linq2Db_Compiled_CaseWhen,150.0 μs,15.0 KB,A_CaseWhen",
+                "A_EFCore_Compiled_CaseWhen,350.0 μs,70.0 KB,A_CaseWhen",
+            ],
+        )
+
+    def test_per_query_values_come_from_the_category_a_report(self):
+        self._write_features()
+        categories = tuple(item for item in tables.CATEGORY_A if item[0] in ("A_Cte", "A_CaseWhen"))
+        with mock.patch.object(tables, "CATEGORY_A", categories):
+            rows = tables.build_feature_rows(self.results, "en")
+        self.assertEqual(
+            rows,
+            [
+                "| [`CASE WHEN`](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/"
+                "BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkFeaturesFair-report-github.md)"
+                " | **10.00 μs** | 14.00 μs | 15.00 μs | 35.00 μs |",
+                "| [CTE](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/"
+                "BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkFeaturesFair-report-github.md)"
+                " | **9.00 μs** | 12.00 μs | 15.00 μs | — |",
+            ],
+        )
+
+    def test_category_a_block_carries_its_own_run_date(self):
+        self._write_features()
+        categories = tuple(item for item in tables.CATEGORY_A if item[0] in ("A_Cte", "A_CaseWhen"))
+        with mock.patch.object(tables, "CATEGORY_A", categories):
+            table = tables.build_category_a_table(self.results, "en")
+        stamp = tables.report_date(self.results, tables.CATEGORY_A_CLASS)
+        self.assertTrue(table.startswith(f"As of **{stamp}**.\n\n"), table)
+        self.assertIn("| Feature | Nextorm (prepared) |", table)
+
+    def test_unknown_feature_category_fails_closed(self):
+        write_report(
+            self.results,
+            tables.CATEGORY_A_CLASS,
+            ["A_Nextorm_Prepared_Unknown,1 μs,1 B,A_Unknown"],
+        )
+        with self.assertRaises(tables.TableError):
+            tables.build_feature_rows(self.results, "en")
+
+    def test_only_the_readme_table_grows_with_features(self):
+        self._write_features()
+        write_report(
+            self.results,
+            "SqliteBenchmarkIteration",
+            [
+                "Nextorm_Prepared,10.00 μs,800 B,",
+                "Dapper_Async,15.00 μs,1 KB,",
+                "Linq2Db_Compiled,17.00 μs,2 KB,",
+                "EFCore_Compiled,38.00 μs,10 KB,",
+            ],
+        )
+        categories = tuple(item for item in tables.CATEGORY_A if item[0] in ("A_Cte", "A_CaseWhen"))
+        with mock.patch.object(tables, "E2E_ROWS", (tables.E2E_ROWS[0],)), mock.patch.object(
+            tables, "CATEGORY_A", categories
+        ):
+            plain = tables.build_e2e_table(self.results, "en")
+            extended = tables.build_e2e_table(self.results, "en", include_features=True)
+        self.assertNotIn("| [CTE](", plain)
+        self.assertIn("| [CTE](", extended)
+        self.assertEqual(extended.count("\n"), plain.count("\n") + len(categories))
+
+    def test_readme_is_the_only_target_with_feature_rows(self):
+        by_name = {target.name: target for target in tables.TARGETS}
+        self.assertTrue(by_name["readme"].feature_rows)
+        self.assertFalse(by_name["docs"].feature_rows)
+        self.assertFalse(by_name["docs-ru"].feature_rows)
+
+
 class CategoryBTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
