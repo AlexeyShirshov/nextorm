@@ -1429,7 +1429,9 @@ namespace NextORM.Core;
         /// <paramref name="value"/> rows in the aggregate group, returned as <c>bigint</c>. An empty group
         /// and an all-NULL group both yield <c>0</c> (not SQL NULL). Rendered in an aggregate context
         /// only; the engine is not a windowing function here, so an <c>OVER</c> clause is rejected by the
-        /// server (Msg 4113). Requires SQL Server 2019 (major version 15) and the version-bound
+        /// server (Msg 4113, observed on 17.0.5005.3). A NULL operand is rendered as a typed NULL
+        /// (<c>approx_count_distinct(cast(null as int))</c>), because a bare <c>NULL</c> operand is
+        /// rejected with Msg 8117. Requires SQL Server 2019 (major version 15) and the version-bound
         /// <see cref="ISqlDialect.SupportsApproxCountDistinctAggregate"/> gate; a lower or unversioned
         /// declaration is refused before SQL.
         /// </summary>
@@ -1444,8 +1446,11 @@ namespace NextORM.Core;
         /// order-insensitive but not a stable identity (identical values cancel: two <c>5</c> rows and one
         /// <c>5</c> row checksum identically); an empty group and an all-NULL group yield SQL NULL.
         /// Rendered as <c>checksum_agg(value)</c>; unlike the approximate percentiles the engine does allow
-        /// an <c>OVER</c> clause. SQL Server has the function without a version floor, so the gate is a
-        /// plain provider opt-in (<see cref="ISqlDialect.SupportsChecksumAggregate"/>).
+        /// an <c>OVER</c> clause (observed on 17.0.5005.3), but this surface offers the aggregate form
+        /// only. A NULL operand is rendered as a typed NULL (<c>checksum_agg(cast(null as int))</c>),
+        /// because a bare <c>NULL</c> operand is rejected with Msg 8117. SQL Server has the function
+        /// without a version floor, so the gate is a plain provider opt-in
+        /// (<see cref="ISqlDialect.SupportsChecksumAggregate"/>).
         /// </summary>
         /// <param name="value">The value to checksum across the group.</param>
         /// <returns>The checksum as <c>int</c>, or SQL NULL when the group has no non-null value.</returns>
@@ -1473,10 +1478,13 @@ namespace NextORM.Core;
         /// <c>float(53)</c>. The engine accepts an integer sort expression even though the result is
         /// <c>float</c>; an empty group and an all-NULL group yield SQL NULL, and the endpoints <c>0</c>
         /// and <c>1</c> are exact. The fraction must be constant or captured and finite in <c>[0, 1]</c>;
-        /// a row-dependent, NaN/infinite or out-of-range fraction is refused before SQL. The aggregate is
-        /// ordered-set only: completing it with <c>OVER</c> is refused, the engine's own form being
-        /// <c>WITHIN GROUP</c> without <c>OVER</c>. Requires SQL Server 2022 (major version 16) and the
-        /// name-specific <see cref="ISqlDialect.SupportsApproxPercentileCont"/> gate.
+        /// a row-dependent, NaN/infinite or out-of-range fraction is refused before SQL. The sort
+        /// expression must be a column, a parameter or a computed expression: SQL Server rejects a NULL
+        /// or literal constant <c>ORDER BY</c> inside <c>WITHIN GROUP</c> (Msg 5309), so such a call is
+        /// refused before SQL too. The aggregate is ordered-set only: completing it with <c>OVER</c> is
+        /// refused, the engine's
+        /// own form being <c>WITHIN GROUP</c> without <c>OVER</c>. Requires SQL Server 2022 (major
+        /// version 16) and the name-specific <see cref="ISqlDialect.SupportsApproxPercentileCont"/> gate.
         /// </summary>
         /// <typeparam name="T">The sort-input type.</typeparam>
         /// <param name="fraction">The percentile fraction, in <c>[0, 1]</c>.</param>
@@ -1491,9 +1499,11 @@ namespace NextORM.Core;
         /// integer sort expression; a <c>decimal</c> sort expression is rejected by the engine, Msg 402).
         /// An empty group and an all-NULL group yield SQL NULL, and the endpoints <c>0</c> and <c>1</c>
         /// are exact. The fraction must be constant or captured and finite in <c>[0, 1]</c>; a
-        /// row-dependent, NaN/infinite or out-of-range fraction is refused before SQL. Ordered-set only:
-        /// completing it with <c>OVER</c> is refused. Requires SQL Server 2022 (major version 16) and the
-        /// name-specific <see cref="ISqlDialect.SupportsApproxPercentileDisc"/> gate.
+        /// row-dependent, NaN/infinite or out-of-range fraction is refused before SQL. The sort
+        /// expression must be a column, a parameter or a computed expression (a NULL or literal constant
+        /// <c>ORDER BY</c> is Msg 5309 and is refused before SQL). Ordered-set only: completing it with
+        /// <c>OVER</c> is refused. Requires SQL Server 2022 (major version 16) and the name-specific
+        /// <see cref="ISqlDialect.SupportsApproxPercentileDisc"/> gate.
         /// </summary>
         /// <typeparam name="T">The sort-input type; a value type, because the discrete result is an input value.</typeparam>
         /// <param name="fraction">The percentile fraction, in <c>[0, 1]</c>.</param>

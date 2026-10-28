@@ -3,8 +3,13 @@ using System.Globalization;
 using FluentAssertions;
 using Microsoft.Data.SqlClient;
 using NextORM.Core;
+using NextORM.SqlServer;
 
 namespace NextORM.Integration.Tests;
+
+/// <summary>A context declared for SQL Server 2019 (major 15), used to prove the percentile floor on a real 16 engine.</summary>
+internal sealed class T348V15LiveContext(string connectionString)
+    : SqlServerDataContext(new Version(15, 0), connectionString);
 
 /// <summary>
 /// The 2022 arm is deliberately its own xunit collection: it runs as a separate serial invocation so
@@ -216,12 +221,159 @@ public sealed class T348SqlServer2022FunctionsTests : IDisposable
             "T348LIVE-2022 bit 4/1/1/true/3/2/null + shapes + logical-right-shift=2147483644 try_cast/try_convert 42/null/1.5/null/126/null-style-null outcome=ok");
     }
 
+    /// <summary>
+    /// T348 (#282) U4 on the real major-16 engine: all five aggregate names execute there
+    /// (<c>APPROX_COUNT_DISTINCT</c> from major 15, the two approximate percentiles from major 16,
+    /// <c>CHECKSUM_AGG</c>/<c>GROUPING_ID</c> without a floor), with values, NULL groups, CLR types and
+    /// the grouping flags; a declared-15 context then refuses exactly the two percentiles by name with
+    /// zero executions, while the three undated/15 names keep executing as the sibling controls.
+    /// </summary>
+    [Fact]
+    public void Real2022_ShouldExecuteTheFiveU4AggregatesAndRefuseThePercentilesOnDeclared15()
+    {
+        _major.Should().Be(16, "the 2022 arm must run on the 2022 image");
+
+        using var ctx = new T348V16LiveContext(_connectionString!);
+
+        // grp 1: 2,3,4 | grp 2: 2,NULL,3 | grp 3: NULL
+        var groups = ctx.From<IT348U1Row>()
+            .GroupBy(x => new { x.Grp })
+            .Select(x => new
+            {
+                x.Grp,
+                Distinct = SqlFunctions.SqlServer.approx_count_distinct(x.Value),
+                Checksum = SqlFunctions.SqlServer.checksum_agg(x.Value),
+                G = SqlFunctions.SqlServer.grouping_id(x.Grp),
+                Continuous = SqlFunctions.SqlServer.approx_percentile_cont(0.5, x.Value),
+                Discrete = SqlFunctions.SqlServer.approx_percentile_disc(0.5, x.Value)
+            })
+            .ToList()
+            .OrderBy(r => r.Grp)
+            .ToList();
+
+        groups.Should().HaveCount(3);
+        groups[0].Distinct.Should().Be(3L);
+        groups[2].Distinct.Should().Be(0L);
+        groups[0].Checksum.Should().NotBeNull();
+        groups[2].Checksum.Should().BeNull();
+        groups.Should().OnlyContain(r => r.G == 0, "a plain GROUP BY aggregates nothing away");
+        groups[0].Continuous.Should().BeInRange(2d, 4d);
+        groups[2].Continuous.Should().BeNull();
+        groups[0].Discrete.Should().BeOneOf(2, 3, 4);
+        groups[2].Discrete.Should().BeNull();
+        ((object)groups[0].Distinct).Should().BeOfType<long>();
+        ((object)groups[0].Continuous!).Should().BeOfType<double>();
+
+        var rollup = ctx.From<IT348U1Row>()
+            .GroupByRollup(x => new { x.Grp, x.Value })
+            .Select(x => new { x.Grp, x.Value, F = SqlFunctions.SqlServer.grouping_id(x.Grp, x.Value) })
+            .ToList();
+
+        rollup.Should().HaveCount(11);
+        rollup.Count(r => r.F == 1).Should().Be(3);
+        rollup.Count(r => r.F == 3).Should().Be(1);
+
+        var typedNull = ctx.From<IT348U1Row>()
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Distinct = SqlFunctions.SqlServer.approx_count_distinct((int?)null),
+                Checksum = SqlFunctions.SqlServer.checksum_agg((int?)null)
+            })
+            .Single();
+
+        typedNull.Distinct.Should().Be(0L, "the typed NULL operand executes on 16 too");
+        typedNull.Checksum.Should().BeNull();
+
+        T348Evidence.Write(
+            "T348LIVE-2022 U4 approx_count_distinct=3/2/0 checksum=notnull/notnull/null grouping_id plain=0x3 "
+            + "rollup=1x3/3x1 cont=in[2,4]/null disc=in{2,3,4}/null typed_null=0/null outcome=ok");
+
+        // A declared-15 context on the real major-16 engine: the version-only gate refuses both
+        // percentiles by name before SQL and lets the other three execute.
+        using var declared15 = new T348V15LiveContext(_connectionString!);
+        var counter = new CommandCounter();
+        declared15.AddInterceptor(counter);
+
+        ShouldRefuse(declared15, declared15.From<IT348U1Row>()
+                .GroupBy(x => new { x.Grp })
+                .Select(x => new { P = SqlFunctions.SqlServer.approx_percentile_cont(0.5, x.Value) }),
+            "The APPROX_PERCENTILE_CONT function requires SQL Server major version 16 or later; declared major version: 15.");
+        ShouldRefuse(declared15, declared15.From<IT348U1Row>()
+                .GroupBy(x => new { x.Grp })
+                .Select(x => new { P = SqlFunctions.SqlServer.approx_percentile_disc(0.5, x.Value) }),
+            "The APPROX_PERCENTILE_DISC function requires SQL Server major version 16 or later; declared major version: 15.");
+
+        counter.Executions.Should().Be(0, "both percentile refusals happen before a command is dispatched");
+
+        var controls = declared15.From<IT348U1Row>()
+            .GroupBy(x => new { x.Grp })
+            .Select(x => new
+            {
+                x.Grp,
+                Distinct = SqlFunctions.SqlServer.approx_count_distinct(x.Value),
+                Checksum = SqlFunctions.SqlServer.checksum_agg(x.Value),
+                G = SqlFunctions.SqlServer.grouping_id(x.Grp)
+            })
+            .ToList();
+
+        controls.Should().HaveCount(3);
+        controls[0].Distinct.Should().Be(3L);
+        controls.Should().OnlyContain(r => r.G == 0);
+        counter.Executions.Should().BeGreaterThan(0, "the three undated/15 names executed on the real 16 engine");
+
+        T348Evidence.Write(
+            $"T348LIVE-2022 U4 declared15 percentiles_refused=2 executions_before_control=0 "
+            + $"siblings=approx_count_distinct/checksum_agg/grouping_id executions_total={counter.Executions} outcome=ok");
+    }
+
+    /// <summary>U4: both <c>GROUPING_ID</c> obligations refuse before SQL on the real 2022 engine too.</summary>
+    [Fact]
+    public void Real2022_ShouldRefuseBothGroupingIdViolationsWithZeroExecutions()
+    {
+        _major.Should().Be(16);
+
+        using var ctx = new T348V16LiveContext(_connectionString!);
+        var counter = new CommandCounter();
+        ctx.AddInterceptor(counter);
+
+        ShouldGroupingRefuse(ctx, ctx.From<IT348U1Row>()
+                .Select(x => new { G = SqlFunctions.SqlServer.grouping_id(x.Value) }),
+            "The GROUPING_ID function requires a GROUP BY context.");
+
+        ShouldGroupingRefuse(ctx, ctx.From<IT348U1Row>()
+                .GroupBy(x => new { x.Grp })
+                .Select(x => new { G = SqlFunctions.SqlServer.grouping_id(x.Value) }),
+            "The GROUPING_ID function requires every argument to match a GROUP BY expression.");
+
+        counter.Executions.Should().Be(0);
+
+        var control = ctx.From<IT348U1Row>()
+            .GroupBy(x => new { x.Grp })
+            .Select(x => new { x.Grp, G = SqlFunctions.SqlServer.grouping_id(x.Grp) })
+            .ToList();
+
+        control.Should().HaveCount(3);
+        counter.Executions.Should().BeGreaterThan(0);
+
+        T348Evidence.Write(
+            $"T348LIVE-2022 grouping_refusals=2 executions_before_control=0 executions_total={counter.Executions} outcome=ok");
+    }
+
     private static void ShouldRefuse<T>(IDataContext ctx, QueryCommand<T> command, string message)
     {
         var act = () => ((DataContext)ctx).GetPreparedQueryCommand(
             command, createEnumerator: false, storeInCache: false, CancellationToken.None);
 
         act.Should().Throw<NotSupportedException>().WithMessage(message);
+    }
+
+    private static void ShouldGroupingRefuse<T>(IDataContext ctx, QueryCommand<T> command, string message)
+    {
+        var act = () => ((DataContext)ctx).GetPreparedQueryCommand(
+            command, createEnumerator: false, storeInCache: false, CancellationToken.None);
+
+        act.Should().Throw<BuildSqlCommandException>().WithMessage(message);
     }
 
     private static int ReadMajor(string connectionString)

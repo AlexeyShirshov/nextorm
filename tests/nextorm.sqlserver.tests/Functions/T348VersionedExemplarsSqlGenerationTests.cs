@@ -1003,9 +1003,10 @@ public class T348VersionedExemplarsSqlGenerationTests
         sql.Should().NotContain("over (", "the U4 aggregates offer no window form");
     }
 
-    /// <summary>A NULL operand is rendered as SQL NULL; the aggregate keeps its own spelling.</summary>
+    /// <summary>A NULL operand is rendered as a typed NULL (a bare <c>null</c> is Msg 8117); the
+    /// aggregate keeps its own spelling. A NULL sort key is refused before SQL (Msg 5309).</summary>
     [Fact]
-    public void U4Aggregates_ShouldRenderNullOperands()
+    public void U4Aggregates_ShouldRenderTypedNullOperandsAndRefuseANullSortKey()
     {
         using var ctx = Declared(17);
         var e = ctx.From<IComplexEntity>();
@@ -1014,15 +1015,29 @@ public class T348VersionedExemplarsSqlGenerationTests
         {
             x.Boolean,
             A = SqlFunctions.SqlServer.approx_count_distinct((int?)null),
-            C = SqlFunctions.SqlServer.checksum_agg((int?)null),
-            P = SqlFunctions.SqlServer.approx_percentile_cont(0.5, (int?)null),
-            D = SqlFunctions.SqlServer.approx_percentile_disc(0.5, (int?)null)
+            C = SqlFunctions.SqlServer.checksum_agg((int?)null)
         }));
 
-        sql.Should().Contain("approx_count_distinct(null)");
-        sql.Should().Contain("checksum_agg(null)");
-        sql.Should().Contain("approx_percentile_cont(0.5) within group (order by null)");
-        sql.Should().Contain("approx_percentile_disc(0.5) within group (order by null)");
+        sql.Should().Contain("approx_count_distinct(CAST(NULL AS int))");
+        sql.Should().Contain("checksum_agg(CAST(NULL AS int))");
+
+        const string orderKeyMessage =
+            "The order expression for approx_percentile_* on SQL Server must be a column, a parameter or a computed expression, not NULL or a literal constant.";
+
+        FluentActions.Invoking(() => SqlOf(ctx, e.GroupBy(x => new { x.Boolean })
+                .Select(x => new { P = SqlFunctions.SqlServer.approx_percentile_cont(0.5, (int?)null) })))
+            .Should().Throw<NotSupportedException>().WithMessage(orderKeyMessage);
+
+        FluentActions.Invoking(() => SqlOf(ctx, e.GroupBy(x => new { x.Boolean })
+                .Select(x => new { P = SqlFunctions.SqlServer.approx_percentile_disc(0.5, (int?)null) })))
+            .Should().Throw<NotSupportedException>().WithMessage(orderKeyMessage);
+
+        // A captured scalar becomes a query parameter, which WITHIN GROUP does accept (Msg 5309 is
+        // about literals only; the engine executes "order by @p").
+        var captured = 1;
+        SqlOf(ctx, e.GroupBy(x => new { x.Boolean })
+                .Select(x => new { P = SqlFunctions.SqlServer.approx_percentile_cont(0.5, (int?)captured) }))
+            .Should().Contain("within group (order by @");
     }
 
     /// <summary>The <c>params</c> array is flattened: one SQL argument per grouping expression, never a

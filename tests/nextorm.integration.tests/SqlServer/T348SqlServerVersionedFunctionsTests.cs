@@ -679,6 +679,218 @@ public sealed class T348SqlServer2025FunctionsTests : IDisposable
         }
     }
 
+    /// <summary>
+    /// U4: the five aggregate names execute on the real major-17 engine with their values, NULL
+    /// behaviour and CLR types — the approximate distinct count as <c>long</c> (<c>0</c> on an all-NULL
+    /// group, never NULL), the checksum as <c>int?</c> (NULL on an all-NULL group), the two approximate
+    /// percentiles as <c>double?</c> and the sort-input type, each within the input bounds and NULL when
+    /// the group has no non-null value. The empty group is a second, ungrouped command. The typed-NULL
+    /// operand is proven here: a bare NULL is Msg 8117 on this engine.
+    /// </summary>
+    [Fact]
+    public void U4Aggregates_ShouldExecuteWithValuesNullsAndClrTypes()
+    {
+        using var ctx = new T348V17LiveContext(_connectionString);
+
+        // grp 1: 2,3,4 | grp 2: 2,NULL,3 | grp 3: NULL
+        var groups = ctx.From<IT348U1Row>()
+            .GroupBy(x => new { x.Grp })
+            .Select(x => new
+            {
+                x.Grp,
+                Distinct = SqlFunctions.SqlServer.approx_count_distinct(x.Value),
+                Checksum = SqlFunctions.SqlServer.checksum_agg(x.Value),
+                Continuous = SqlFunctions.SqlServer.approx_percentile_cont(0.5, x.Value),
+                Discrete = SqlFunctions.SqlServer.approx_percentile_disc(0.5, x.Value)
+            })
+            .ToList()
+            .OrderBy(r => r.Grp)
+            .ToList();
+
+        groups.Should().HaveCount(3);
+
+        groups[0].Distinct.Should().Be(3L);
+        groups[1].Distinct.Should().Be(2L, "the NULL row is not a distinct value");
+        groups[2].Distinct.Should().Be(0L, "an all-NULL group yields 0, not NULL");
+
+        groups[0].Checksum.Should().NotBeNull("the group has non-null values");
+        groups[1].Checksum.Should().NotBeNull();
+        groups[2].Checksum.Should().BeNull("an all-NULL group has no checksum");
+
+        // Percentile oracle: one row per group, the expected CLR type, a value inside the input
+        // bounds, and NULL where the group has no non-null value. No exact interpolated value and no
+        // repeated-run equality: the aggregate is approximate by contract.
+        groups[0].Continuous.Should().BeInRange(2d, 4d);
+        groups[1].Continuous.Should().BeInRange(2d, 3d);
+        groups[2].Continuous.Should().BeNull();
+        groups[0].Discrete.Should().BeOneOf(2, 3, 4);
+        groups[1].Discrete.Should().BeOneOf(2, 3);
+        groups[2].Discrete.Should().BeNull();
+
+        ((object)groups[0].Distinct).Should().BeOfType<long>("APPROX_COUNT_DISTINCT returns bigint");
+        ((object)groups[0].Checksum!).Should().BeOfType<int>();
+        ((object)groups[0].Continuous!).Should().BeOfType<double>("APPROX_PERCENTILE_CONT returns float(53)");
+        ((object)groups[0].Discrete!.Value).Should().BeOfType<int>("APPROX_PERCENTILE_DISC returns the sort input type");
+
+        var empty = ctx.From<IT348U1Row>()
+            .Where(x => x.Id < 0)
+            .Select(x => new
+            {
+                Distinct = SqlFunctions.SqlServer.approx_count_distinct(x.Value),
+                Checksum = SqlFunctions.SqlServer.checksum_agg(x.Value),
+                Continuous = SqlFunctions.SqlServer.approx_percentile_cont(0.5, x.Value),
+                Discrete = SqlFunctions.SqlServer.approx_percentile_disc(0.5, x.Value)
+            })
+            .Single();
+
+        empty.Distinct.Should().Be(0L, "an empty group counts zero distinct values");
+        empty.Checksum.Should().BeNull("an empty group has no checksum");
+        empty.Continuous.Should().BeNull();
+        empty.Discrete.Should().BeNull();
+
+        var typedNull = ctx.From<IT348U1Row>()
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Distinct = SqlFunctions.SqlServer.approx_count_distinct((int?)null),
+                Checksum = SqlFunctions.SqlServer.checksum_agg((int?)null)
+            })
+            .Single();
+
+        typedNull.Distinct.Should().Be(0L, "the typed NULL operand executes (a bare NULL is Msg 8117)");
+        typedNull.Checksum.Should().BeNull();
+
+        Report("T348LIVE-2025 U4 approx_count_distinct=3/2/0 checksum=notnull/notnull/null "
+            + "cont=in[2,4]/in[2,3]/null disc=in{2,3,4}/in{2,3}/null empty=0/null/null/null typed_null=0/null outcome=ok");
+    }
+
+    /// <summary>
+    /// U4: <c>GROUPING_ID</c> reports the grouping mask on the real engine — <c>0</c> for every row of a
+    /// plain <c>GROUP BY</c>, the subtotal bits under <c>ROLLUP</c> and under <c>GROUPING SETS</c>
+    /// (0 for a detail row, 1 for the one-column subtotal, 3 for the grand total of a two-column
+    /// grouping list — the plain-GROUP-BY-vs-ROLLUP distinction the docs carry).
+    /// </summary>
+    [Fact]
+    public void GroupingId_ShouldReportThePlainRollupAndGroupingSetsFlags()
+    {
+        using var ctx = new T348V17LiveContext(_connectionString);
+
+        var plain = ctx.From<IT348U1Row>()
+            .GroupBy(x => new { x.Grp })
+            .Select(x => new { x.Grp, G = SqlFunctions.SqlServer.grouping_id(x.Grp) })
+            .ToList();
+
+        plain.Should().HaveCount(3).And.OnlyContain(r => r.G == 0, "a plain GROUP BY aggregates nothing away");
+
+        var rollup = ctx.From<IT348U1Row>()
+            .GroupByRollup(x => new { x.Grp, x.Value })
+            .Select(x => new { x.Grp, x.Value, G = SqlFunctions.SqlServer.grouping_id(x.Grp, x.Value) })
+            .ToList();
+
+        rollup.Should().HaveCount(11, "7 detail rows + 3 grp subtotals + 1 grand total");
+        rollup.Count(r => r.G == 0).Should().Be(7, "the detail rows");
+        rollup.Count(r => r.G == 1).Should().Be(3, "the grouped-by-grp subtotals (value aggregated away)");
+        rollup.Count(r => r.G == 3).Should().Be(1, "the grand total (both expressions aggregated away)");
+        ((object)rollup[0].G).Should().BeOfType<int>();
+
+        var sets = ctx.From<IT348U1Row>()
+            .GroupByGroupingSets(x => new { x.Grp, x.Value }, [0, 1], [0], [])
+            .Select(x => new { x.Grp, x.Value, G = SqlFunctions.SqlServer.grouping_id(x.Grp, x.Value) })
+            .ToList();
+
+        sets.Should().HaveCount(11, "GROUPING SETS ((grp, value), (grp), ()) is the same shape as the ROLLUP");
+        sets.Count(r => r.G == 0).Should().Be(7);
+        sets.Count(r => r.G == 1).Should().Be(3);
+        sets.Count(r => r.G == 3).Should().Be(1);
+
+        Report($"T348LIVE-2025 grouping_id plain=0x3 rollup=0x7/1x3/3x1 grouping_sets=0x7/1x3/3x1 outcome=ok");
+    }
+
+    /// <summary>
+    /// U4: both <c>GROUPING_ID</c> obligations are enforced before SQL on the real engine — no grouping
+    /// context and an argument outside the grouping list — with zero commands dispatched, and the
+    /// matching shape then executes as the sibling control.
+    /// </summary>
+    [Fact]
+    public void GroupingId_ShouldRefuseBothViolationsBeforeSqlWithZeroExecutions()
+    {
+        using var ctx = new T348V17LiveContext(_connectionString);
+        var counter = new CommandCounter();
+        ctx.AddInterceptor(counter);
+
+        ShouldGroupingRefuse(ctx, ctx.From<IT348U1Row>()
+                .Select(x => new { G = SqlFunctions.SqlServer.grouping_id(x.Value) }),
+            "The GROUPING_ID function requires a GROUP BY context.");
+
+        ShouldGroupingRefuse(ctx, ctx.From<IT348U1Row>()
+                .GroupBy(x => new { x.Grp })
+                .Select(x => new { G = SqlFunctions.SqlServer.grouping_id(x.Value) }),
+            "The GROUPING_ID function requires every argument to match a GROUP BY expression.");
+
+        counter.Executions.Should().Be(0, "both violations are raised before a command is dispatched");
+
+        var control = ctx.From<IT348U1Row>()
+            .GroupBy(x => new { x.Grp })
+            .Select(x => new { x.Grp, G = SqlFunctions.SqlServer.grouping_id(x.Grp) })
+            .ToList();
+
+        control.Should().HaveCount(3);
+        control.Should().OnlyContain(r => r.G == 0);
+        counter.Executions.Should().BeGreaterThan(0, "the sibling control executed a real command");
+
+        Report($"T348LIVE-2025 grouping_refusals=2 executions_before_control=0 executions_total={counter.Executions} outcome=ok");
+    }
+
+    /// <summary>
+    /// U4: the engine-side evidence for the <c>OVER</c> obligation — the approximate percentiles are
+    /// not windowing functions (Msg 4113) and <c>APPROX_COUNT_DISTINCT</c> is not one either, while
+    /// <c>CHECKSUM_AGG</c> is; the public surface exposes no <c>WindowFunction</c>-returning overload for
+    /// any of the five (a reflection assertion in
+    /// <c>tests/nextorm.core.tests/Contracts/T348VersionCapabilityContractTests.cs</c>), so the
+    /// translator guard is defence in depth rather than a reachable public path.
+    /// </summary>
+    [Fact]
+    public void U4Aggregates_ShouldHaveNoOverFormOnTheEngine()
+    {
+        _major.Should().Be(17);
+
+        AssertSqlError(_connectionString,
+            "select approx_percentile_cont(0.5) within group (order by v) over () as p from (values (1),(2),(3)) t(v)",
+            4113);
+        AssertSqlError(_connectionString,
+            "select approx_percentile_disc(0.5) within group (order by v) over () as p from (values (1),(2),(3)) t(v)",
+            4113);
+        AssertSqlError(_connectionString,
+            "select approx_count_distinct(v) over () as a from (values (1),(2),(3)) t(v)",
+            4113);
+
+        ScalarInt(_connectionString,
+                "select top (1) checksum_agg(v) over () as a from (values (1),(2),(3)) t(v)")
+            .Should().Be(0, "CHECKSUM_AGG is the one windowing-capable aggregate of the five");
+
+        Report("T348LIVE-2025 over cont=Msg4113 disc=Msg4113 approx_count_distinct=Msg4113 checksum_agg=allowed outcome=ok");
+    }
+
+    /// <summary>
+    /// U4: a NULL sort key is refused before SQL because SQL Server rejects a constant
+    /// <c>ORDER BY</c> inside <c>WITHIN GROUP</c> (Msg 5309, observed) and a typed NULL does not help;
+    /// the engine-side statement is asserted here, the library-side refusal in the generation suite.
+    /// </summary>
+    [Fact]
+    public void ApproxPercentiles_ShouldHaveNoConstantSortKeyOnTheEngine()
+    {
+        _major.Should().Be(17);
+
+        AssertSqlError(_connectionString,
+            "select approx_percentile_cont(0.5) within group (order by null) as p from (values (1),(2)) t(v)",
+            5309);
+        AssertSqlError(_connectionString,
+            "select approx_percentile_cont(0.5) within group (order by cast(null as int)) as p from (values (1),(2)) t(v)",
+            5309);
+
+        Report("T348LIVE-2025 order_by_null=Msg5309 order_by_cast_null=Msg5309 outcome=environment_fact");
+    }
+
     [Fact]
     public void DeclaredSixteen_ShouldRefuseThe2025NamesBeforeSql_WhileLeftShiftStillExecutes()
     {
@@ -742,6 +954,14 @@ public sealed class T348SqlServer2025FunctionsTests : IDisposable
             command, createEnumerator: false, storeInCache: false, CancellationToken.None);
 
         act.Should().Throw<NotSupportedException>().WithMessage(message);
+    }
+
+    private static void ShouldGroupingRefuse<T>(IDataContext ctx, QueryCommand<T> command, string message)
+    {
+        var act = () => ((DataContext)ctx).GetPreparedQueryCommand(
+            command, createEnumerator: false, storeInCache: false, CancellationToken.None);
+
+        act.Should().Throw<BuildSqlCommandException>().WithMessage(message);
     }
 
     private static int ReadMajor(string connectionString)

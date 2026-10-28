@@ -157,7 +157,8 @@ internal static class AdvancedAggregateTranslator
                 return true;
             // SQL Server 2019 approximate distinct count: aggregate context only, bigint result
             // (0 on an empty and on an all-NULL group), no window/OVER expansion. The version-bound
-            // SQL Server renderer supplies the exact "requires major version 15" reason.
+            // SQL Server renderer supplies the exact "requires major version 15" reason. A NULL
+            // operand is rendered as a typed NULL: a bare NULL is Msg 8117 (probe U4).
             case nameof(SqlServerFunctions.approx_count_distinct) when node.Method.DeclaringType == typeof(SqlServerFunctions)
                 && node.Arguments.Count == 1:
                 EmitSimple(
@@ -166,11 +167,12 @@ internal static class AdvancedAggregateTranslator
                     "approx_count_distinct",
                     () => visitor.Dialect.SupportsApproxCountDistinctAggregate,
                     "approx_count_distinct",
-                    () => visitor.Dialect.SqlServerFunctions?.GetUnsupportedReason("approx_count_distinct"));
+                    () => visitor.Dialect.SqlServerFunctions?.GetUnsupportedReason("approx_count_distinct"),
+                    typedNullOperand: true);
                 return true;
             // CHECKSUM_AGG has no version floor, so the gate is the plain provider opt-in and the
             // failure is the generic provider message (the engine does allow OVER, but this surface
-            // offers the aggregate form only).
+            // offers the aggregate form only). A NULL operand is a typed NULL for the same reason.
             case nameof(SqlServerFunctions.checksum_agg) when node.Method.DeclaringType == typeof(SqlServerFunctions)
                 && node.Arguments.Count == 1:
                 EmitSimple(
@@ -178,7 +180,8 @@ internal static class AdvancedAggregateTranslator
                     node,
                     "checksum_agg",
                     () => visitor.Dialect.SupportsChecksumAggregate,
-                    "checksum_agg");
+                    "checksum_agg",
+                    typedNullOperand: true);
                 return true;
             // GROUPING_ID's params array is flattened into one SQL argument per grouping expression;
             // the grouping-context obligation is enforced at the command boundary (SqlBuilder), so this
@@ -254,7 +257,8 @@ internal static class AdvancedAggregateTranslator
         string name,
         Func<bool> supported,
         string surface,
-        Func<string?>? unsupportedReason = null)
+        Func<string?>? unsupportedReason = null,
+        bool typedNullOperand = false)
     {
         if (!supported())
             throw new NotSupportedException(
@@ -268,8 +272,36 @@ internal static class AdvancedAggregateTranslator
         }
 
         visitor.NeedAliasForColumn = true;
-        var call = $"{visitor.Dialect.MakeAggregate(name)}({visitor.VisitToString(node.Arguments[0])})";
+        var operand = visitor.VisitToString(node.Arguments[0]);
+
+        if (typedNullOperand)
+            operand = TypedNullOperand(visitor, operand, node.Arguments[0].Type);
+
+        var call = $"{visitor.Dialect.MakeAggregate(name)}({operand})";
         visitor.Builder!.Append(visitor.Dialect.MakeArrayResult(node.Method.Name, call, node.Method.ReturnType));
+    }
+
+    /// <summary>
+    /// Replaces the bare <c>null</c> token of an aggregate operand with a typed NULL, in the same style
+    /// as the bit family's <c>TypedNull</c>: SQL Server rejects an untyped operand with Msg 8117
+    /// ("Operand data type NULL is invalid for …"). The CLR set is closed to the types
+    /// <see cref="ISqlDialect.MakeTypeName"/> maps to a SQL Server type, so the SQL type name stays
+    /// provider-owned; any other operand type (only reachable through a constant NULL) is refused.
+    /// </summary>
+    private static string TypedNullOperand(BaseExpressionVisitor visitor, string rendered, Type type)
+    {
+        if (rendered != "null")
+            return rendered;
+
+        var operand = Nullable.GetUnderlyingType(type) ?? type;
+
+        if (operand == typeof(byte) || operand == typeof(short) || operand == typeof(int)
+            || operand == typeof(long) || operand == typeof(float) || operand == typeof(double)
+            || operand == typeof(decimal) || operand == typeof(DateTimeOffset))
+            return $"CAST(NULL AS {visitor.Dialect.MakeTypeName(operand)})";
+
+        throw new NotSupportedException(
+            $"The {operand.Name} operand type has no typed NULL on {ProviderLabel(visitor.Dialect)}.");
     }
 
     /// <summary>
@@ -342,11 +374,32 @@ internal static class AdvancedAggregateTranslator
 
         ValidateFraction(fractionArg, name, ProviderLabel(visitor.Dialect));
 
+        // SQL Server rejects a literal constant as an ORDER BY expression inside WITHIN GROUP
+        // (Msg 5309: "Windowed functions, aggregates and NEXT VALUE FOR functions do not support
+        // constants as ORDER BY clause expressions"), and a typed NULL is still a constant — a bare
+        // NULL and a CAST(NULL AS int) both fail. A parameter on the other hand is accepted (probe:
+        // "order by @p" executes), so only a literal constant is refused before SQL.
+        if (IsConstantSortKey(orderArg))
+            throw new NotSupportedException(
+                $"The order expression for {name} on {ProviderLabel(visitor.Dialect)} must be a column, "
+                + "a parameter or a computed expression, not NULL or a literal constant.");
+
         visitor.NeedAliasForColumn = true;
 
         var aggregate = $"{name}({visitor.VisitToString(fractionArg)})";
         visitor.Builder!.Append(visitor.Dialect.MakeWithinGroup(
             aggregate, visitor.VisitToString(orderArg), visitor.KeywordCase));
+    }
+
+    /// <summary>
+    /// True when a <c>WITHIN GROUP (ORDER BY …)</c> key is a literal constant (including <c>null</c>).
+    /// SQL Server rejects those with Msg 5309; a parameter or a column is accepted and is not refused.
+    /// </summary>
+    private static bool IsConstantSortKey(Expression expression)
+    {
+        var key = TypeFacts.UnwrapConvert(UnwrapLambdaBody(expression));
+
+        return key is ConstantExpression;
     }
 
     /// <summary>
