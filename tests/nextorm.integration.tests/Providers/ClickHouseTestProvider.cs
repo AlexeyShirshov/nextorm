@@ -61,7 +61,7 @@ internal sealed class ClickHouseTestProvider : ITestProvider
 
     public string SkipReason => ClickHouseContainer.Failure ?? "ClickHouse is not available.";
 
-    public IDataContext CreateContext() => CreateContext(null);
+    public IDataContext CreateContext() => CreateContext((Microsoft.Extensions.Logging.ILoggerFactory?)null);
 
     public IDataContext CreateContext(Microsoft.Extensions.Logging.ILoggerFactory? loggerFactory)
     {
@@ -70,6 +70,9 @@ internal sealed class ClickHouseTestProvider : ITestProvider
             builder = builder.UseLoggerFactory(loggerFactory);
         return new ClickHouseDataContext(EffectiveConnectionString(), builder);
     }
+
+    public IDataContext CreateContext(DataContextBuilder builder)
+        => new ClickHouseDataContext(EffectiveConnectionString(), builder);
 
     /// <summary>
     /// The connection string every ClickHouse context in this process must use: the container/external

@@ -29,6 +29,15 @@ internal interface IJoinIntoManyToManySpec
     IReadOnlyList<PropertyInfo> JunctionChildForeignKeys { get; }
 
     /// <summary>
+    /// The number of flattened projection items one many-to-many declaration occupies in a single-query
+    /// result row: the link item followed by the child item. <see cref="GetItemTypes(bool)"/> always returns
+    /// exactly this many types (only the link item's identity -- the derived <c>JoinIntoLink</c> on SQL, the
+    /// junction entity in memory -- is path-dependent), so the row layout and the stitcher's slice stride
+    /// cannot disagree.
+    /// </summary>
+    const int ItemCount = 2;
+
+    /// <summary>
     /// The projection item types the declaration contributes for the given provider path: the derived
     /// <see cref="JoinIntoLink{TParentKey,TChildKey}"/> followed by the child on a SQL provider; the
     /// junction entity followed by the child on the in-memory provider.

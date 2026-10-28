@@ -414,6 +414,54 @@ anonymous `new { it.Id }` or a DTO `new Dto { Id = it.Id }`) is refused during p
 restriction, not an anonymous-type requirement — see
 [Subqueries](07-subqueries.md#subquery-as-a-from-source).
 
+## Collection-valued projection
+
+A projection member can name a **declared** collection navigation and receive that parent's collection in the
+result — a *collection-valued slot*. The direct form projects the member as-is; the adapter form lifts it into a
+per-parent pipeline:
+
+```csharp
+// direct: the whole per-parent collection
+var posts = ctx.From<Post>()
+    .OrderBy(p => p.Id)
+    .Select(p => new { p.Id, p.Comments })
+    .ToList();
+
+// adapter: filter, order and page each parent's collection before projecting it
+var pageSize = 2;
+var digest = ctx.From<Post>()
+    .OrderBy(p => p.Id)
+    .Select(p => new
+    {
+        p.Id,
+        Recent = p.Comments
+            .AsEntityBuilder<Comment>()
+            .Where(c => c.Active)
+            .OrderBy(c => c.CreatedAt)
+            .ThenBy(c => c.Id, OrderDirection.Desc)
+            .Limit(pageSize)
+            .Select(c => new CommentRow { Id = c.Id, CreatedAt = c.CreatedAt })
+            .ToList(),
+    })
+    .ToList();
+```
+
+- **The relationship must be declared** (`HasMany`/`HasManyThrough`/`[Relationship]`); both one-to-many and
+  many-to-many slots are supported, and slots nest through the adapter's `Select(...)` to any depth with per-level
+  filtering, ordering and paging.
+- **Materialization is the eager loading's.** The entity graph is loaded with the ordinary split (default) or
+  single-query route — two statements for a depth-one one-to-many slot, one statement in single-query mode — and the
+  projected shape is then computed **in memory over the materialized entities**. There is no SQL column pruning in
+  this release.
+- **Seven destination shapes** are accepted: `List<T>`, `T[]`, `IEnumerable<T>`, `ICollection<T>`, `IList<T>`,
+  `IReadOnlyCollection<T>`, `IReadOnlyList<T>`. Any other shape fails closed.
+- **The adapter is what makes the parameterless terminals matter.** `EntityBuilder<TEntity>.ToList()`/`ToArray()`
+  and `QueryCommand<TResult>.ToList()`/`ToArray()` exist as parameterless overloads so the chain is expressible in an
+  expression tree (the `params ReadOnlySpan<object?>` twins cannot be referenced from one).
+
+The operator set, the pre-SQL refusals, the cardinality rule for a projected reference and the v1 limits are
+documented in [Collection-valued projection slots](../relationships/collection-projection.md).
+
 ## Named join aliases
 
 A joined query can name its slots instead of addressing them positionally. A join carries an optional

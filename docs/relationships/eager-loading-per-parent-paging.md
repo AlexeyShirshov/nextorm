@@ -32,6 +32,14 @@ For every parent the effective pipeline is:
 
 Paging normalization follows the existing [`Paging`](../guide/06-sorting-and-paging.md) contract, not a second implementation: `Take(0)` means "no limit" and does **not** activate paging, so a parent keeps every child; a `Skip` past the end of a parent's children and a parent with no matching children produce an empty collection. An actual page needs a child `OrderBy` (see below). Bounds are overflow-safe exactly as ordinary paging.
 
+## A projection slot's `Limit` is an in-memory page
+
+A [collection-valued projection slot](collection-projection.md) also pages per parent, but on a different path: its
+`Limit` is applied **after** the children are materialized, to each parent's collection, and never reaches the
+SQL — the statement count stays the ordinary eager-loading one and the statement carries no `row_number()` page.
+This page describes the per-parent paging of a **child query** (`Limit`/`Offset`/`Page` declared on the child query
+of `LoadWith`/`JoinInto`), where the database computes the page inside each partition.
+
 ## Root paging stays independent
 
 Parent paging and child paging are separate bounds on separate sources. `.Offset(...)`/`.Limit(...)` applied to the outer builder still select the parent rows; the child page is resolved per parent afterwards and never changes the parent set:
@@ -138,6 +146,7 @@ Window-function support is a **server compatibility prerequisite**, not an auto-
 - [Joins](../guide/04-joins.md) — the explicit join surface.
 - [Sorting and paging](../guide/06-sorting-and-paging.md) — the paging contract reused per parent.
 - [Implicit navigation queries](implicit-navigation.md) — declared relationships as query constructs.
+- [Collection-valued projection slots](collection-projection.md) — a per-parent collection returned inside a projected result.
 
 ---
 

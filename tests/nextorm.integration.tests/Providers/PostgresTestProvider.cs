@@ -58,7 +58,7 @@ internal sealed class PostgresTestProvider : ITestProvider
 
     public string SkipReason => PostgresContainer.Failure ?? "PostgreSQL is not available.";
 
-    public IDataContext CreateContext() => CreateContext(null);
+    public IDataContext CreateContext() => CreateContext((Microsoft.Extensions.Logging.ILoggerFactory?)null);
 
     public IDataContext CreateContext(Microsoft.Extensions.Logging.ILoggerFactory? loggerFactory)
     {
@@ -67,6 +67,9 @@ internal sealed class PostgresTestProvider : ITestProvider
             builder = builder.UseLoggerFactory(loggerFactory);
         return new PostgresDataContext(PostgresContainer.ConnectionString, builder);
     }
+
+    public IDataContext CreateContext(DataContextBuilder builder)
+        => new PostgresDataContext(PostgresContainer.ConnectionString, builder);
 
     public void EnsureSeeded()
     {

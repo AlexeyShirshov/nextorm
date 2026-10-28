@@ -52,6 +52,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     private List<IEagerLoadSpec<TEntity>>? _loadSpecs;
     private List<IJoinIntoSpec<TEntity>>? _joinIntos;
     private EagerLoadMode _eagerLoadMode;
+    private CollectionSlotShape _collectionSlotShape;
     /// <summary>The join clauses collected so far, or <c>null</c> when the query has no joins.</summary>
     protected List<JoinExpression>? _joins;
     private string? _table;
@@ -135,6 +136,13 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// collection declared on the builder, including ones declared earlier.
     /// </summary>
     internal EagerLoadMode Mode => _eagerLoadMode;
+    /// <summary>
+    /// The structural identity of the collection-valued projection slot graph this builder materializes for a
+    /// carrier (#249 / T353), or the empty shape when it carries none. The carrier sets it on the entity query
+    /// builder; every command the builder creates carries it into the plan key, so two projection variants that
+    /// share one SQL shape still own distinct plan entries.
+    /// </summary>
+    internal CollectionSlotShape CollectionSlotShape { get => _collectionSlotShape; set => _collectionSlotShape = value; }
     /// <summary>
     /// The executable eager-load strategy for this builder: the explicit <c>LoadWith</c> choice when one
     /// was made, otherwise the context default (with <see cref="EagerLoadMode.Auto"/> conservatively
@@ -429,6 +437,16 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
 
         ApplyCommandOptions(cmd);
 
+        // #249 / T353: a projection may carry collection-valued slots (a direct navigation member or an adapter
+        // chain terminated by ToList()/ToArray()). They are recognized and validated here — before preparation can
+        // reach the ordinary navigation-projection refusal — and bound to an entity carrier that keeps the public
+        // projected type while executing the entity graph.
+        CollectionSlotBinder.TryBind(
+            this,
+            exp,
+            cmd,
+            selectGroup || _group is not null || GroupingType != NextORM.Core.GroupingType.None || GroupingSets is { Count: > 0 } || GroupByWithTotals);
+
         return cmd;
     }
     /// <summary>
@@ -456,6 +474,10 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         cmd.Temporal = _temporal;
         cmd.RowLock = _rowLock;
         cmd.SourceLockClause = _sourceLock;
+
+        // Structural identity of the collection-valued projection slot graph this entity query materializes
+        // (#249 / T353). Empty for every ordinary command, so unrelated plan keys are untouched.
+        cmd.CollectionSlotShape = _collectionSlotShape;
 
         // Eager-load strategy and graph identity: only commands that actually carry eager loads record
         // them, so a command with no eager loads is never touched. The requested override (or null to
@@ -3216,6 +3238,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         dst.Tag = Tag;
         dst.CommandTimeout = CommandTimeout;
         dst.Ctes = Ctes;
+        dst._collectionSlotShape = _collectionSlotShape;
     }
     /// <summary>
     /// Creates a typed copy of this raw-source builder with <paramref name="binding"/> attached to the

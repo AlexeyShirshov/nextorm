@@ -404,6 +404,21 @@ public static class EntityBuilderExtensions
     }
 
     /// <summary>
+    /// Executes the query and materializes the matching entities into a list, binding no query parameters.
+    /// </summary>
+    /// <remarks>
+    /// The parameterless form is the expression-tree-usable terminal: the <c>params ReadOnlySpan&lt;object?&gt;</c>
+    /// overload is a ref struct and an expanded <c>params</c> collection, so a query expression tree that ends in
+    /// <c>ToList()</c> cannot reference it (<c>CS8640</c>/<c>CS9226</c>). Both overloads execute the identical
+    /// query; a zero-argument call simply takes this one.
+    /// </remarks>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <returns>A list containing the matching entities.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static List<TEntity> ToList<TEntity>(this EntityBuilder<TEntity> builder)
+        => MaterializeList(builder, ReadOnlySpan<object?>.Empty);
+    /// <summary>
     /// Executes the query and materializes the matching entities into a list. When the builder carries a
     /// <c>JoinInto</c> declaration or a single-query (<c>EagerLoadMode.SingleQuery</c>) eager load, one denormalized
     /// command is executed and its rows are stitched; otherwise the parent query is executed and any
@@ -435,6 +450,21 @@ public static class EntityBuilderExtensions
     /// <returns>A task whose result is a list containing the matching entities.</returns>
     public static Task<List<TEntity>> ToListAsync<TEntity>(this EntityBuilder<TEntity> builder, CancellationToken cancellationToken, params object[] @params)
         => MaterializeListAsync(builder, cancellationToken, @params);
+    /// <summary>
+    /// Executes the query and materializes the matching entities into an array, binding no query parameters.
+    /// </summary>
+    /// <remarks>
+    /// The parameterless form is the expression-tree-usable terminal: the <c>params ReadOnlySpan&lt;object?&gt;</c>
+    /// overload is a ref struct and an expanded <c>params</c> collection, so a query expression tree that ends in
+    /// <c>ToArray()</c> cannot reference it (<c>CS8640</c>/<c>CS9226</c>). Both overloads execute the identical
+    /// query; a zero-argument call simply takes this one.
+    /// </remarks>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <returns>An array containing the matching entities.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static TEntity[] ToArray<TEntity>(this EntityBuilder<TEntity> builder)
+        => ToArray(builder, ReadOnlySpan<object?>.Empty);
     /// <summary>
     /// Executes the query and materializes the matching entities into an array, applying the same
     /// stitching as <see cref="ToList{TEntity}(EntityBuilder{TEntity}, ReadOnlySpan{object?})"/>.

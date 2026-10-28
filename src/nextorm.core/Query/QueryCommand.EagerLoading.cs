@@ -34,6 +34,24 @@ public partial class QueryCommand
     internal EagerLoadShape EagerLoadShape;
 
     /// <summary>
+    /// The structural identity of the collection-valued projection slot graph this entity query materializes
+    /// (#249 / T353). Empty for every ordinary command. It is part of the plan key so two projection variants —
+    /// a different CLR destination shape, adapter predicate, ordering, limit, nested projection, inherited
+    /// mode or validation policy — can never share a plan entry, while identical shapes with different captured
+    /// values still do (the values live in the per-execution carrier reader, not in the key).
+    /// </summary>
+    internal CollectionSlotShape CollectionSlotShape;
+
+    /// <summary>
+    /// The collection-valued projection carrier of this command (#249 / T353), or <see langword="null"/> for an
+    /// ordinary relational command. When present, the command's terminals never prepare SQL of their own: the
+    /// carrier executes the entity query and projects the materialized graph in memory. It is typed
+    /// <see cref="object"/> here so the non-generic command does not depend on the projected result type; the
+    /// typed terminals cast it to <see cref="CollectionSlotCarrier{TResult}"/>.
+    /// </summary>
+    internal object? CollectionSlotCarrier;
+
+    /// <summary>
     /// Whether one of this command's eager-load children requests a per-parent top-N (a child
     /// <c>Limit</c>/<c>Offset</c>/<c>Page</c>). Recorded when the parent command is built so
     /// <see cref="QueryPreparer"/> can reject the query during preparation — before any SQL is executed

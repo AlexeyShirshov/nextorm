@@ -65,7 +65,7 @@ internal sealed class MySqlTestProvider : ITestProvider
 
     public string SkipReason => MySqlContainer.Failure ?? "MySQL is not available.";
 
-    public IDataContext CreateContext() => CreateContext(null);
+    public IDataContext CreateContext() => CreateContext((Microsoft.Extensions.Logging.ILoggerFactory?)null);
 
     public IDataContext CreateContext(Microsoft.Extensions.Logging.ILoggerFactory? loggerFactory)
     {
@@ -74,6 +74,9 @@ internal sealed class MySqlTestProvider : ITestProvider
             builder = builder.UseLoggerFactory(loggerFactory);
         return new MySqlDataContext(MySqlContainer.ConnectionString, builder);
     }
+
+    public IDataContext CreateContext(DataContextBuilder builder)
+        => new MySqlDataContext(MySqlContainer.ConnectionString, builder);
 
     public void EnsureSeeded()
     {
