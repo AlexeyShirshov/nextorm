@@ -3209,6 +3209,60 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
         r.NodesNull.Should().BeNull("a SQL-NULL tsquery stays NULL");
     }
 
+    /// <summary>
+    /// The #281 (#347 D3b) full-text query-tree and vector-rewriting scalars against the live server:
+    /// <c>querytree</c> renders the parsed tree as text, <c>setweight</c> applies a weight to every
+    /// lexeme or only to the listed ones, <c>strip</c> drops positions, <c>ts_delete</c> accepts both the
+    /// single-lexeme and the array overload, and <c>ts_filter</c> keeps only the requested weights. Every
+    /// <c>tsvector</c> result reads back as <see cref="string"/> and a SQL-NULL input stays NULL.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void FullTextQueryAndVectorFamily_ShouldComputeValuesNullsAndClrTypes()
+    {
+        string? nullVector = null;
+
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Tree = SqlFunctions.Postgres.querytree(SqlFunctions.Parameter<string>(0)),
+                Weighted = SqlFunctions.Postgres.setweight(
+                    SqlFunctions.Parameter<string>(1), SqlFunctions.Parameter<string>(2)),
+                WeightedLex = SqlFunctions.Postgres.setweight(
+                    SqlFunctions.Parameter<string>(3), SqlFunctions.Parameter<string>(4),
+                    SqlFunctions.Parameter<string?[]>(5)),
+                Stripped = SqlFunctions.Postgres.strip(SqlFunctions.Parameter<string>(6)),
+                Deleted = SqlFunctions.Postgres.ts_delete(
+                    SqlFunctions.Parameter<string>(7), SqlFunctions.Parameter<string>(8)),
+                DeletedMany = SqlFunctions.Postgres.ts_delete(
+                    SqlFunctions.Parameter<string>(9), SqlFunctions.Parameter<string?[]>(10)),
+                Filtered = SqlFunctions.Postgres.ts_filter(
+                    SqlFunctions.Parameter<string>(11), SqlFunctions.Parameter<string?[]>(12)),
+                StrippedNull = SqlFunctions.Postgres.strip(nullVector),
+            })
+            .First(new object?[]
+            {
+                "a & b",
+                "'a':1 'b':2", "A",
+                "'a':1 'b':2", "A", new string?[] { "a" },
+                "'a':1A 'b':2B",
+                "'a':1 'b':2 'c':3", "b",
+                "'a':1 'b':2 'c':3", new string?[] { "b" },
+                "'a':1A 'b':2B 'c':3C", new string?[] { "A", "C" },
+            });
+
+        r.Tree.Should().Be("'a' & 'b'");
+        r.Weighted.Should().Be("'a':1A 'b':2A");
+        r.Weighted!.GetType().Should().Be(typeof(string));
+        r.WeightedLex.Should().Be("'a':1A 'b':2");
+        r.Stripped.Should().Be("'a' 'b'");
+        r.Deleted.Should().Be("'a':1 'c':3");
+        r.DeletedMany.Should().Be("'a':1 'c':3");
+        r.Filtered.Should().Be("'a':1A 'c':3C");
+        r.Filtered!.GetType().Should().Be(typeof(string));
+        r.StrippedNull.Should().BeNull("a SQL-NULL tsvector stays NULL");
+    }
+
     private static void Execute(IDataContext ctx, string sql)
     {
         ((DataContext)ctx).EnsureConnectionOpen();

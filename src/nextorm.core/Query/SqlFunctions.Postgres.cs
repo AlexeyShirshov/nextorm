@@ -1761,6 +1761,63 @@ namespace NextORM.Core;
         /// <param name="tsquery">The <c>tsquery</c> text, for example <c>a &amp; b</c>.</param>
         public int? numnode(string? tsquery) => default!;
 
+        /// <summary>
+        /// The query tree of <paramref name="tsquery"/> as text (<c>querytree</c>), with the operators and
+        /// the grouping the parser produced, for example <c>'b' &amp; 'a'</c>.
+        /// </summary>
+        /// <param name="tsquery">The <c>tsquery</c> text.</param>
+        public string? querytree(string? tsquery) => default!;
+
+        /// <summary>
+        /// Assigns the weight <paramref name="weight"/> to every lexeme of <paramref name="tsvector"/>
+        /// (<c>setweight</c>). The result is a <c>tsvector</c>, which the driver reads as text.
+        /// </summary>
+        /// <param name="tsvector">The <c>tsvector</c> text.</param>
+        /// <param name="weight">One of <c>A</c>, <c>B</c>, <c>C</c> or <c>D</c>; the server rejects anything else.</param>
+        public string? setweight(string? tsvector, string? weight) => default!;
+
+        /// <summary>
+        /// Assigns the weight <paramref name="weight"/> only to the lexemes listed in
+        /// <paramref name="lexemes"/> (<c>setweight</c>); the remaining lexemes keep their weights.
+        /// </summary>
+        /// <param name="tsvector">The <c>tsvector</c> text.</param>
+        /// <param name="weight">One of <c>A</c>, <c>B</c>, <c>C</c> or <c>D</c>.</param>
+        /// <param name="lexemes">The lexemes whose weight changes; a NULL element, an empty array and a
+        /// lexeme absent from <paramref name="tsvector"/> all leave the vector unchanged (measured on 17.11).</param>
+        public string? setweight(string? tsvector, string? weight, string?[] lexemes) => default!;
+
+        /// <summary>
+        /// Removes the positions and weights of <paramref name="tsvector"/>, leaving only the lexemes
+        /// (<c>strip</c>).
+        /// </summary>
+        /// <param name="tsvector">The <c>tsvector</c> text.</param>
+        public string? strip(string? tsvector) => default!;
+
+        /// <summary>
+        /// Removes <paramref name="lexeme"/> from <paramref name="tsvector"/>, NULLing the positions it
+        /// occupied (<c>ts_delete</c>). A missing lexeme leaves the vector unchanged.
+        /// </summary>
+        /// <param name="tsvector">The <c>tsvector</c> text.</param>
+        /// <param name="lexeme">The lexeme to delete.</param>
+        public string? ts_delete(string? tsvector, string? lexeme) => default!;
+
+        /// <summary>
+        /// Removes every lexeme listed in <paramref name="lexemes"/> from <paramref name="tsvector"/>
+        /// (<c>ts_delete</c>). A lexeme that does not match is ignored; a NULL element or an empty array
+        /// leaves the vector unchanged, and a SQL-NULL array yields NULL (measured on 17.11).
+        /// </summary>
+        /// <param name="tsvector">The <c>tsvector</c> text.</param>
+        /// <param name="lexemes">The lexemes to delete.</param>
+        public string? ts_delete(string? tsvector, string?[] lexemes) => default!;
+
+        /// <summary>
+        /// Keeps only the lexemes of <paramref name="tsvector"/> whose weight is one of
+        /// <paramref name="weights"/> (<c>ts_filter</c>).
+        /// </summary>
+        /// <param name="tsvector">The <c>tsvector</c> text.</param>
+        /// <param name="weights">The accepted weights, each one of <c>A</c>, <c>B</c>, <c>C</c> or <c>D</c>.</param>
+        public string? ts_filter(string? tsvector, string?[] weights) => default!;
+
         /// <summary><c>bool_and(property)</c>: true when every non-null value is true. Requires a provider that supports it.</summary>
         public T? bool_and<T>(T? property) => default!;
 

@@ -1100,7 +1100,8 @@ internal sealed class PostgresScalarFunctions : IScalarFunctions
         "pg_snapshot_xmax" or "pg_snapshot_xmin" or "pg_visible_in_snapshot" or
         "pg_xact_commit_timestamp" or "pg_xact_status" or
         "array_to_tsvector" or "json_to_tsvector" or "jsonb_to_tsvector" or
-        "get_current_ts_config" or "numnode";
+        "get_current_ts_config" or "numnode" or
+        "querytree" or "setweight" or "strip" or "ts_delete" or "ts_filter";
 
     /// <inheritdoc/>
     public string Render(string name, IReadOnlyList<string> args) => name switch
@@ -1212,6 +1213,18 @@ internal sealed class PostgresScalarFunctions : IScalarFunctions
             : $"cast(jsonb_to_tsvector(cast({args[0]} as regconfig), cast({args[1]} as jsonb), cast({args[2]} as jsonb)) as text)",
         "get_current_ts_config" => "cast(get_current_ts_config() as text)",
         "numnode" => $"numnode(cast({args[0]} as tsquery))",
+        // tsquery and text results need no bridge; every tsvector result is cast back to text, and the
+        // `"char"` weight arguments are cast because a text parameter does not resolve those overloads.
+        "querytree" => $"querytree(cast({args[0]} as tsquery))",
+        "setweight" => args.Count == 2
+            ? $"cast(setweight(cast({args[0]} as tsvector), cast({args[1]} as \"char\")) as text)"
+            : $"cast(setweight(cast({args[0]} as tsvector), cast({args[1]} as \"char\"), cast({args[2]} as text[])) as text)",
+        "strip" => $"cast(strip(cast({args[0]} as tsvector)) as text)",
+        // Measured on 17.11 (PREPARE, no cast in the call): args[1] is left uncast so the parameter's declared
+        // type picks the ts_delete overload — text[] selects ts_delete(tsvector, text[]), text selects
+        // ts_delete(tsvector, text); a cast to either single type would break the other.
+        "ts_delete" => $"cast(ts_delete(cast({args[0]} as tsvector), {args[1]}) as text)",
+        "ts_filter" => $"cast(ts_filter(cast({args[0]} as tsvector), cast({args[1]} as \"char\"[])) as text)",
         _ => throw new NotSupportedException($"The {name} function is not supported by PostgreSQL.")
     };
 

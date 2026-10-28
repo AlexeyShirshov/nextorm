@@ -3777,6 +3777,32 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void FullTextQueryTreeAndVectorFamily_ShouldEmitCastsAndTextResult()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            Tree = SqlFunctions.Postgres.querytree(SqlFunctions.Parameter<string>(0)),
+            Weighted = SqlFunctions.Postgres.setweight(SqlFunctions.Parameter<string>(1), SqlFunctions.Parameter<string>(2)),
+            WeightedLex = SqlFunctions.Postgres.setweight(SqlFunctions.Parameter<string>(3), SqlFunctions.Parameter<string>(4), SqlFunctions.Parameter<string?[]>(5)),
+            Stripped = SqlFunctions.Postgres.strip(SqlFunctions.Parameter<string>(6)),
+            Deleted = SqlFunctions.Postgres.ts_delete(SqlFunctions.Parameter<string>(7), SqlFunctions.Parameter<string>(8)),
+            DeletedMany = SqlFunctions.Postgres.ts_delete(SqlFunctions.Parameter<string>(9), SqlFunctions.Parameter<string?[]>(10)),
+            Filtered = SqlFunctions.Postgres.ts_filter(SqlFunctions.Parameter<string>(11), SqlFunctions.Parameter<string?[]>(12)),
+        }));
+
+        sql.Should().Contain("querytree(cast(@norm_p0 as tsquery))");
+        sql.Should().Contain("cast(setweight(cast(@norm_p1 as tsvector), cast(@norm_p2 as \"char\")) as text)");
+        sql.Should().Contain("cast(setweight(cast(@norm_p3 as tsvector), cast(@norm_p4 as \"char\"), cast(@norm_p5 as text[])) as text)");
+        sql.Should().Contain("cast(strip(cast(@norm_p6 as tsvector)) as text)");
+        sql.Should().Contain("cast(ts_delete(cast(@norm_p7 as tsvector), @norm_p8) as text)");
+        sql.Should().Contain("cast(ts_delete(cast(@norm_p9 as tsvector), @norm_p10) as text)");
+        sql.Should().Contain("cast(ts_filter(cast(@norm_p11 as tsvector), cast(@norm_p12 as \"char\"[])) as text)");
+    }
+
+    [Fact]
     public void TrimArray_ShouldEmit()
     {
         using var ctx = PostgresTestContext.Create();

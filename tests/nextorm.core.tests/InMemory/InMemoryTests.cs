@@ -1393,6 +1393,13 @@ public class InMemoryTests
             ("jsonb_to_tsvector", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.jsonb_to_tsvector("english", "{}", "[]") }).ToList()),
             ("get_current_ts_config", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.get_current_ts_config() }).ToList()),
             ("numnode", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.numnode("a & b") }).ToList()),
+            ("querytree", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.querytree("a & b") }).ToList()),
+            ("setweight", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.setweight("'a':1", "A") }).ToList()),
+            ("setweight", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.setweight("'a':1", "A", new[] { "a" }) }).ToList()),
+            ("strip", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.strip("'a':1A") }).ToList()),
+            ("ts_delete", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.ts_delete("'a':1", "a") }).ToList()),
+            ("ts_delete", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.ts_delete("'a':1", new[] { "a" }) }).ToList()),
+            ("ts_filter", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.ts_filter("'a':1A", new[] { "A" }) }).ToList()),
         };
 
         foreach (var (name, act) in fullText)
