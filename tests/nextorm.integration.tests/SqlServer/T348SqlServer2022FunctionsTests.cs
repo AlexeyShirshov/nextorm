@@ -30,6 +30,7 @@ public sealed class T348SqlServer2022Collection : IDisposable
 /// </summary>
 [Collection("SqlServer2022")]
 [Trait("Category", "T348SqlServer2022")]
+[Trait("T348Engine", "SqlServer2022")]
 public sealed class T348SqlServer2022FunctionsTests : IDisposable
 {
     private const string FixtureTable = "t348_u1";
