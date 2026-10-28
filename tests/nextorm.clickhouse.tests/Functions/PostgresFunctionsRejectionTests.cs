@@ -461,6 +461,11 @@ public class PostgresFunctionsRejectionTests
             ("pg_tablespace_databases", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_tablespace_databases("1663")).Select(r => r.DatabaseOid))),
             ("pg_get_catalog_foreign_keys", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_get_catalog_foreign_keys()).Select(r => r.FkTable))),
             ("pg_options_to_table", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_options_to_table(new[] { "fillfactor=70" })).Select(r => r.OptionName))),
+            ("pg_available_wal_summaries", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_available_wal_summaries()).Select(r => r.TimelineId))),
+            ("pg_get_multixact_members", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_get_multixact_members(SqlFunctions.Parameter<uint>(0))).Select(r => r.Xid))),
+            ("pg_get_object_address", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_get_object_address(SqlFunctions.Parameter<string>(1), SqlFunctions.Parameter<string[]>(2), SqlFunctions.Parameter<string[]>(3))).Select(r => r.ClassId))),
+            ("pg_get_wal_summarizer_state", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_get_wal_summarizer_state()).Select(r => r.SummarizedTli))),
+            ("pg_last_committed_xact", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_last_committed_xact()).Select(r => r.Xid))),
         };
 
         foreach (var (name, act) in cases)

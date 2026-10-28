@@ -2354,6 +2354,108 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
     }
 
     /// <summary>
+    /// The WAL-summary, multixact, object-address and transaction-status readers of #281 as FROM
+    /// sources: the empty WAL-summary set on a server without <c>summarize_wal</c>, a real
+    /// two-member multixact produced by two concurrent share lockers, a resolvable object address and
+    /// its all-NULL form when the arguments cannot identify an object, the summarizer's state row, and
+    /// the commit-timestamp reader (a row when <c>track_commit_timestamp</c> is on, the server's
+    /// documented error when it is off).
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void SystemInfoWalAndXactReaders_ShouldExposeRowsAndClrTypes()
+    {
+        var summaries = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_available_wal_summaries())
+            .Select(r => new { r.TimelineId, r.StartLsn, r.EndLsn })
+            .ToList();
+        summaries.Should().BeEmpty("summarize_wal is off on the fixture, so the server has no summary files");
+
+        Execute(_sut.DataProvider, "drop table if exists t347_multixact_probe");
+        Execute(_sut.DataProvider, "create table t347_multixact_probe (id integer primary key, value integer)");
+        Execute(_sut.DataProvider, "insert into t347_multixact_probe values (1, 1)");
+        try
+        {
+            using var locker1 = new NpgsqlConnection(PostgresContainer.ConnectionString);
+            using var locker2 = new NpgsqlConnection(PostgresContainer.ConnectionString);
+            locker1.Open();
+            locker2.Open();
+            using var tx1 = locker1.BeginTransaction();
+            using var tx2 = locker2.BeginTransaction();
+            using (var cmd = new NpgsqlCommand("select * from t347_multixact_probe where id = 1 for share", locker1, tx1))
+                cmd.ExecuteNonQuery();
+            using (var cmd = new NpgsqlCommand("select * from t347_multixact_probe where id = 1 for share", locker2, tx2))
+                cmd.ExecuteNonQuery();
+
+            var multixactId = Convert.ToUInt32(
+                Scalar((DataContext)_sut.DataProvider, "select xmax::text from t347_multixact_probe where id = 1"),
+                System.Globalization.CultureInfo.InvariantCulture);
+            multixactId.Should().BePositive("the two share lockers created a multixact");
+
+            var members = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_get_multixact_members(multixactId))
+                .Select(r => new { r.Xid, r.Mode })
+                .ToList();
+            members.Should().HaveCount(2, "both share lockers are members of the multixact");
+            members.Should().OnlyContain(m => m.Mode == "sh");
+            members.Should().OnlyContain(m => m.Xid != null);
+            ((object)members[0].Xid!).Should().BeOfType<uint>();
+
+            tx1.Rollback();
+            tx2.Rollback();
+        }
+        finally
+        {
+            Execute(_sut.DataProvider, "drop table if exists t347_multixact_probe");
+        }
+
+        var objectNames = new[] { "pg_class" };
+        var noObjectArgs = Array.Empty<string>();
+        var address = _sut.DataProvider.From(() =>
+                SqlFunctions.Postgres.pg_get_object_address("table", objectNames, noObjectArgs))
+            .Select(r => new { r.ClassId, r.ObjId, r.ObjSubId })
+            .ToList();
+        address.Should().ContainSingle("the object address is one row");
+        address[0].ClassId.Should().Be("1259", "pg_class lives in pg_class, OID 1259");
+        address[0].ObjId.Should().Be("1259");
+        address[0].ObjSubId.Should().Be(0);
+        ((object)address[0].ClassId!).Should().BeOfType<string>("oid has no CLR mapping and is read as text");
+
+        var unresolved = _sut.DataProvider.From(() =>
+                SqlFunctions.Postgres.pg_get_object_address("table", objectNames, null!))
+            .Select(r => new { r.ClassId, r.ObjId, r.ObjSubId })
+            .ToList();
+        unresolved.Should().ContainSingle("a null object_args yields one all-NULL row");
+        unresolved[0].ClassId.Should().BeNull();
+        unresolved[0].ObjId.Should().BeNull();
+
+        var summarizer = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_get_wal_summarizer_state())
+            .Select(r => new { r.SummarizedTli, r.SummarizedLsn, r.PendingLsn, r.SummarizerPid })
+            .ToList();
+        summarizer.Should().ContainSingle("the summarizer state is one row");
+        summarizer[0].SummarizedTli.Should().Be(0, "nothing has been summarized while summarize_wal is off");
+        summarizer[0].SummarizedLsn.Should().Be("0/0");
+        summarizer[0].PendingLsn.Should().Be("0/0");
+        summarizer[0].SummarizerPid.Should().BeNull("the summarizer process runs only while summarize_wal is on");
+
+        var trackCommitTimestamp = Scalar((DataContext)_sut.DataProvider, "select current_setting('track_commit_timestamp')");
+        if (trackCommitTimestamp == "on")
+        {
+            var last = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_last_committed_xact())
+                .Select(r => new { r.Xid, r.Timestamp, r.RoIdent })
+                .ToList();
+            last.Should().ContainSingle("one transaction has a recorded commit timestamp");
+            last[0].Timestamp.Should().NotBeNull();
+            ((object)last[0].Xid!).Should().BeOfType<uint>();
+        }
+        else
+        {
+            FluentActions.Invoking(() => _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_last_committed_xact())
+                    .Select(r => new { r.Xid }).ToList())
+                .Should().Throw<PostgresException>()
+                .WithMessage("*could not get commit timestamp data*");
+        }
+    }
+
+    /// <summary>
     /// The single-column and catalog-inspection readers of #281 as FROM sources: the restored
     /// function-named column, the empty sets the fixture really returns, the value rows the server
     /// produces for a literal snapshot and a real storage-option array, and the exact CLR types the

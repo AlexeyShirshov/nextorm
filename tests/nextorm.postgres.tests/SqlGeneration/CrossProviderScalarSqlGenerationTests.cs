@@ -906,4 +906,63 @@ public class CrossProviderScalarSqlGenerationTests
         options.Should().Contain("from pg_options_to_table(@norm_p0) as \"t1\"");
         options.Should().Contain("select option_name as \"OptionName\", option_value as \"OptionValue\"");
     }
+    /// <summary>
+    /// The WAL-summary, multixact, object-address and transaction-status readers of #281 as FROM
+    /// sources: the <c>pg_lsn</c>/<c>oid</c> projections, the <c>xid</c> argument cast that makes the
+    /// text/unsigned parameter resolve, and the bare-call shape of the two functions whose columns all
+    /// map. The live shape is asserted in
+    /// <c>PostgresFunctionsTests.SystemInfoWalAndXactReaders_ShouldExposeRowsAndClrTypes</c>.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void PostgreSQLSystemInfoWalAndXactReaders_ShouldEmitCallAndProjection()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        foreach (var name in new[]
+        {
+            "pg_available_wal_summaries", "pg_get_multixact_members", "pg_get_object_address",
+            "pg_get_wal_summarizer_state", "pg_last_committed_xact"
+        })
+        {
+            PostgresDialect.Instance.SupportsTableFunction(name).Should().BeTrue($"'{name}' is delivered on PostgreSQL");
+        }
+
+        var summaries = SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_available_wal_summaries())
+            .Select(r => new { r.TimelineId, r.StartLsn, r.EndLsn }));
+        summaries.Should().Contain(
+            "from (select tli, start_lsn::text as start_lsn, end_lsn::text as end_lsn"
+            + "\n from pg_available_wal_summaries()) as \"t1\"");
+        summaries.Should().Contain("select tli as \"TimelineId\", start_lsn as \"StartLsn\", end_lsn as \"EndLsn\"");
+
+        var members = SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_get_multixact_members(SqlFunctions.Parameter<uint>(0)))
+            .Select(r => new { r.Xid, r.Mode }));
+        members.Should().Contain("from (select * from pg_get_multixact_members(cast(@norm_p0 as xid))) as \"t1\"");
+        // The projection stays unaliased where the column name already matches the member name
+        // case-insensitively (the same convention as pg_get_keywords' "select word, catcode, barelabel").
+        members.Should().Contain("select xid, mode");
+
+        var address = SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_get_object_address(
+                SqlFunctions.Parameter<string>(0),
+                SqlFunctions.Parameter<string[]>(1),
+                SqlFunctions.Parameter<string[]>(2)))
+            .Select(r => new { r.ClassId, r.ObjId, r.ObjSubId }));
+        address.Should().Contain(
+            "from (select classid::text as classid, objid::text as objid, objsubid"
+            + "\n from pg_get_object_address(@norm_p0, cast(@norm_p1 as text[]), cast(@norm_p2 as text[]))) as \"t1\"");
+        address.Should().Contain("select classid, objid, objsubid");
+
+        var summarizer = SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_get_wal_summarizer_state())
+            .Select(r => new { r.SummarizedTli, r.SummarizedLsn, r.PendingLsn, r.SummarizerPid }));
+        summarizer.Should().Contain(
+            "from (select summarized_tli, summarized_lsn::text as summarized_lsn,"
+            + " pending_lsn::text as pending_lsn, summarizer_pid"
+            + "\n from pg_get_wal_summarizer_state()) as \"t1\"");
+
+        var committed = SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_last_committed_xact())
+            .Select(r => new { r.Xid, r.Timestamp, r.RoIdent }));
+        committed.Should().Contain(
+            "from (select xid, timestamp, roident::text as roident"
+            + "\n from pg_last_committed_xact()) as \"t1\"");
+    }
 }

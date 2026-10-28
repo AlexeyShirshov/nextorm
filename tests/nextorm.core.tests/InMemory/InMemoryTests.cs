@@ -1230,6 +1230,11 @@ public class InMemoryTests
             ("pg_tablespace_databases", () => _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_tablespace_databases("1663")).Select(r => r.DatabaseOid).ToList()),
             ("pg_get_catalog_foreign_keys", () => _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_get_catalog_foreign_keys()).Select(r => r.FkTable).ToList()),
             ("pg_options_to_table", () => _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_options_to_table(new[] { "fillfactor=70" })).Select(r => r.OptionName).ToList()),
+            ("pg_available_wal_summaries", () => _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_available_wal_summaries()).Select(r => r.TimelineId).ToList()),
+            ("pg_get_multixact_members", () => _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_get_multixact_members(1u)).Select(r => r.Xid).ToList()),
+            ("pg_get_object_address", () => _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_get_object_address("table", new[] { "pg_class" }, Array.Empty<string>())).Select(r => r.ClassId).ToList()),
+            ("pg_get_wal_summarizer_state", () => _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_get_wal_summarizer_state()).Select(r => r.SummarizedTli).ToList()),
+            ("pg_last_committed_xact", () => _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_last_committed_xact()).Select(r => r.Xid).ToList()),
         };
 
         foreach (var (name, act) in cases)

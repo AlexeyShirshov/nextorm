@@ -475,6 +475,96 @@ public static partial class SqlFunctions
     }
 
     /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.pg_available_wal_summaries()"/>: one WAL
+    /// summary file per row. The <c>pg_lsn</c> bounds are read as text (the row mapper has no LSN
+    /// accessor); the set is empty until the server has written summaries (it needs
+    /// <c>summarize_wal = on</c>).
+    /// </summary>
+    public interface IPgAvailableWalSummaryRow
+    {
+        /// <summary>The timeline the summary belongs to.</summary>
+        [Column("tli")]
+        long? TimelineId { get; set; }
+        /// <summary>The first LSN covered by the summary, as text.</summary>
+        [Column("start_lsn")]
+        string? StartLsn { get; set; }
+        /// <summary>The last LSN covered by the summary, as text.</summary>
+        [Column("end_lsn")]
+        string? EndLsn { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.pg_get_multixact_members(uint?)"/>: one row
+    /// per transaction that is a member of the multixact. Nothing is returned for a multixact id the
+    /// server has not created yet.
+    /// </summary>
+    public interface IPgMultixactMemberRow
+    {
+        /// <summary>The member transaction id.</summary>
+        [Column("xid")]
+        uint? Xid { get; set; }
+        /// <summary>The lock mode the member holds (for example <c>sh</c> or <c>nokeyex</c>).</summary>
+        [Column("mode")]
+        string? Mode { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.pg_get_object_address(string?, string?[], string?[])"/>:
+    /// the catalog coordinates of one object. Both OIDs are read as text, like the other
+    /// <c>oid</c>-returning members of the family.
+    /// </summary>
+    public interface IPgObjectAddressRow
+    {
+        /// <summary>The OID of the catalog that holds the object, as text.</summary>
+        [Column("classid")]
+        string? ClassId { get; set; }
+        /// <summary>The OID of the object, as text.</summary>
+        [Column("objid")]
+        string? ObjId { get; set; }
+        /// <summary>The sub-object id (0 for the object itself, the column number for a column).</summary>
+        [Column("objsubid")]
+        int? ObjSubId { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.pg_get_wal_summarizer_state()"/>: the single
+    /// state row of the WAL summarizer. The <c>pg_lsn</c> columns are text and
+    /// <c>summarizer_pid</c> is NULL while the summarizer is not running.
+    /// </summary>
+    public interface IPgWalSummarizerStateRow
+    {
+        /// <summary>The timeline the summarizer is working on.</summary>
+        [Column("summarized_tli")]
+        long? SummarizedTli { get; set; }
+        /// <summary>The LSN up to which WAL has been summarized, as text.</summary>
+        [Column("summarized_lsn")]
+        string? SummarizedLsn { get; set; }
+        /// <summary>The LSN of the last WAL record the summarizer has seen, as text.</summary>
+        [Column("pending_lsn")]
+        string? PendingLsn { get; set; }
+        /// <summary>The summarizer process id, or NULL when it is not running.</summary>
+        [Column("summarizer_pid")]
+        int? SummarizerPid { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.pg_last_committed_xact()"/>: the most recent
+    /// transaction with a commit timestamp (zero or one row). <c>roident</c> is read as text.
+    /// </summary>
+    public interface IPgCommittedXactRow
+    {
+        /// <summary>The transaction id of the last committed transaction.</summary>
+        [Column("xid")]
+        uint? Xid { get; set; }
+        /// <summary>The commit time of that transaction.</summary>
+        [Column("timestamp")]
+        DateTime? Timestamp { get; set; }
+        /// <summary>The replication origin of that transaction, as text.</summary>
+        [Column("roident")]
+        string? RoIdent { get; set; }
+    }
+
+    /// <summary>
     /// Row shape produced by <see cref="SqlServerFunctions.string_split(string?, string?)"/>: a single column
     /// named <c>value</c> holding one fragment (SQL Server <c>string_split</c>).
     /// </summary>

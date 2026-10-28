@@ -1882,6 +1882,42 @@ namespace NextORM.Core;
         /// </summary>
         public TvfEntityBuilder<SqlFunctions.IPgOptionRow> pg_options_to_table(string?[] options) => new("pg_options_to_table");
 
+        /// <summary>
+        /// <c>pg_available_wal_summaries()</c> as a FROM source: one row per WAL summary file on disk,
+        /// with the <c>pg_lsn</c> bounds read as text (see
+        /// <see cref="SqlFunctions.IPgAvailableWalSummaryRow"/>). Empty while
+        /// <c>summarize_wal</c> is off.
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.IPgAvailableWalSummaryRow> pg_available_wal_summaries() => new("pg_available_wal_summaries");
+
+        /// <summary>
+        /// <c>pg_get_multixact_members(multixactid)</c> as a FROM source: one row per transaction that
+        /// is a member of the multixact, with its lock mode (see
+        /// <see cref="SqlFunctions.IPgMultixactMemberRow"/>).
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.IPgMultixactMemberRow> pg_get_multixact_members(uint? multixactId) => new("pg_get_multixact_members");
+
+        /// <summary>
+        /// <c>pg_get_object_address(type, object_names, object_args)</c> as a FROM source: the catalog
+        /// coordinates of the described object, with both OIDs read as text (see
+        /// <see cref="SqlFunctions.IPgObjectAddressRow"/>).
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.IPgObjectAddressRow> pg_get_object_address(string? type, string?[] objectNames, string?[] objectArgs) => new("pg_get_object_address");
+
+        /// <summary>
+        /// <c>pg_get_wal_summarizer_state()</c> as a FROM source: the single WAL summarizer state row,
+        /// with the <c>pg_lsn</c> columns read as text (see
+        /// <see cref="SqlFunctions.IPgWalSummarizerStateRow"/>).
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.IPgWalSummarizerStateRow> pg_get_wal_summarizer_state() => new("pg_get_wal_summarizer_state");
+
+        /// <summary>
+        /// <c>pg_last_committed_xact()</c> as a FROM source: the last transaction with a commit
+        /// timestamp, or no row when none is recorded (see
+        /// <see cref="SqlFunctions.IPgCommittedXactRow"/>).
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.IPgCommittedXactRow> pg_last_committed_xact() => new("pg_last_committed_xact");
+
         /// <summary><c>a &amp;&amp; b</c>: true when the two ranges overlap (share at least one point).</summary>
         /// <typeparam name="T">The bound type of the ranges.</typeparam>
         /// <param name="a">The left range.</param>

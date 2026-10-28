@@ -425,6 +425,28 @@ public class PostgresDialect : SqlDialectBase
         "pg_get_catalog_foreign_keys" =>
             "(select fktable::text as fktable, fkcols, pktable::text as pktable, pkcols, is_array, is_opt"
             + $"\n from {call})",
+        "pg_available_wal_summaries" =>
+            "(select tli, start_lsn::text as start_lsn, end_lsn::text as end_lsn"
+            + $"\n from {call})",
+        "pg_get_multixact_members" =>
+            $"(select * from pg_get_multixact_members(cast({arguments[0]} as xid)))",
+        "pg_get_object_address" =>
+            "(select classid::text as classid, objid::text as objid, objsubid"
+            + "\n from pg_get_object_address("
+            + string.Join(", ", new[]
+            {
+                arguments[0],
+                $"cast({arguments[1]} as text[])",
+                $"cast({arguments[2]} as text[])"
+            })
+            + "))",
+        "pg_get_wal_summarizer_state" =>
+            "(select summarized_tli, summarized_lsn::text as summarized_lsn,"
+            + " pending_lsn::text as pending_lsn, summarizer_pid"
+            + $"\n from {call})",
+        "pg_last_committed_xact" =>
+            "(select xid, timestamp, roident::text as roident"
+            + $"\n from {call})",
         _ => WrapTableFunction(name, call)
     };
 
