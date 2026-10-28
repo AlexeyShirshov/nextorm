@@ -155,18 +155,29 @@ class Iteration14GateTests(unittest.TestCase):
         self.assertEqual(code, 0, output)
         self.assertIn("within budget", output)
 
-    def test_default_reports_dir_is_the_pinned_benchmark_artifacts_dir(self):
-        # Regression: the benchmark pins its artifacts to benchmarks/BenchmarkDotNet.Artifacts
-        # (BenchmarkArtifacts.Path, used as NextormConfig.ArtifactsPath). The gate must read the
-        # reports from that same directory, never the legacy repo-root BenchmarkDotNet.Artifacts.
-        self.assertEqual(
+    def test_artifacts_are_isolated_from_the_committed_reports(self):
+        # Regression: the gate runs `--job short`, which adds a second (out-of-process) job on top
+        # of the InProcess one NextormConfig pins, so its reports hold every case twice. Writing
+        # them into benchmarks/BenchmarkDotNet.Artifacts used to overwrite the canonical committed
+        # reports with doubled rows and break update_benchmark_tables.py --check; the gate now owns
+        # a scratch artifacts root.
+        self.assertEqual(gate.DEFAULT_REPORTS_DIR, gate.DEFAULT_ARTIFACTS_DIR / "results")
+        self.assertFalse(gate.REPO_ROOT in gate.DEFAULT_ARTIFACTS_DIR.parents)
+        self.assertNotEqual(
             gate.DEFAULT_REPORTS_DIR,
             gate.REPO_ROOT / "benchmarks" / "BenchmarkDotNet.Artifacts" / "results",
         )
-        self.assertNotEqual(
-            gate.DEFAULT_REPORTS_DIR,
-            gate.REPO_ROOT / "BenchmarkDotNet.Artifacts" / "results",
-        )
+
+    def test_benchmark_command_writes_to_the_scratch_artifacts_root(self):
+        args = gate.resolve_dirs(gate.parse_args([]))
+        manifest = gate.parse_manifest(gate.MANIFEST_PATH)
+        cmd = gate.benchmark_command(args, "/tmp/nextorm-gate.db", manifest)
+        self.assertEqual(cmd[cmd.index("--artifacts") + 1], str(gate.DEFAULT_ARTIFACTS_DIR))
+        self.assertEqual(cmd[cmd.index("--job") + 1], "short")
+
+    def test_reports_dir_follows_an_explicit_artifacts_dir(self):
+        args = gate.resolve_dirs(gate.parse_args(["--artifacts-dir", str(self.tmp)]))
+        self.assertEqual(args.reports_dir, self.tmp / "results")
 
     def test_benchmark_filters_select_only_the_budgeted_rows(self):
         # Class-level globs also run the exploratory arms and overran the step timeout once the

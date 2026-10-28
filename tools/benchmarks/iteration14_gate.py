@@ -50,9 +50,10 @@ is not 1 all fail closed.
 
 Usage
 -----
-    python3 tools/benchmarks/iteration14_gate.py                 # full run + check
-    python3 tools/benchmarks/iteration14_gate.py --no-run        # parse existing reports
-    python3 tools/benchmarks/iteration14_gate.py --reports-dir D # custom artifacts dir
+    python3 tools/benchmarks/iteration14_gate.py                  # full run + check
+    python3 tools/benchmarks/iteration14_gate.py --no-run         # parse existing reports
+    python3 tools/benchmarks/iteration14_gate.py --artifacts-dir D # custom scratch artifacts dir
+    python3 tools/benchmarks/iteration14_gate.py --reports-dir D   # parse reports from D
 
 Exit code 0 only when every row/job is within budget and every report is complete.
 """
@@ -74,11 +75,15 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 GATE_DIR = Path(__file__).resolve().parent
 MANIFEST_PATH = GATE_DIR / "iteration14-budgets.json"
-# BenchmarkDotNet artifacts are pinned to benchmarks/BenchmarkDotNet.Artifacts by
-# BenchmarkArtifacts.Path (NextormConfig.ArtifactsPath), the same location the canonical
-# committed reports and scripts/iteration15_evidence.py use. The gate must read the reports
-# where the benchmark actually writes them.
-DEFAULT_REPORTS_DIR = REPO_ROOT / "benchmarks" / "BenchmarkDotNet.Artifacts" / "results"
+# The gate runs BDN with `--job short`, and NextormConfig already pins a Job.ShortRun +
+# InProcessEmitToolchain job: the CLI flag adds a *second* (out-of-process) job, so every case is
+# measured twice and such a report can never be the source of the published tables (one toolchain
+# per table). The gate therefore keeps its artifacts in a scratch directory of its own: writing to
+# benchmarks/BenchmarkDotNet.Artifacts, the canonical committed reports' home, would overwrite them
+# with doubled rows and make update_benchmark_tables.py --check fail. `--artifacts` is the override
+# BenchmarkArtifacts honours on the benchmark side.
+DEFAULT_ARTIFACTS_DIR = Path(tempfile.gettempdir()) / "nextorm-bench-gate" / "artifacts"
+DEFAULT_REPORTS_DIR = DEFAULT_ARTIFACTS_DIR / "results"
 BENCH_SRC_DIR = REPO_ROOT / "benchmarks" / "nextorm.benchmark"
 SEED_DB = REPO_ROOT / "benchmarks" / "nextorm.benchmark" / "data" / "test.db"
 
@@ -465,11 +470,9 @@ def prepare_db(db_path):
     return str(path)
 
 
-def run_benchmarks(args, db_path, manifest):
-    """Run the budgeted benchmark rows; returns (exit_code, wall_seconds)."""
-    env = dict(os.environ)
-    env["NEXTORM_BENCH_DB"] = db_path
-    cmd = [
+def benchmark_command(args, db_path, manifest):
+    """The BDN invocation for the budgeted rows, isolated from the committed artifacts."""
+    return [
         "dotnet",
         "run",
         "--project",
@@ -483,7 +486,16 @@ def run_benchmarks(args, db_path, manifest):
         "short",
         "--exporters",
         "json",
+        "--artifacts",
+        str(args.artifacts_dir),
     ]
+
+
+def run_benchmarks(args, db_path, manifest):
+    """Run the budgeted benchmark rows; returns (exit_code, wall_seconds)."""
+    env = dict(os.environ)
+    env["NEXTORM_BENCH_DB"] = db_path
+    cmd = benchmark_command(args, db_path, manifest)
     print("+ " + " ".join(cmd), flush=True)
     print(f"  NEXTORM_BENCH_DB={db_path}", flush=True)
     start = time.monotonic()
@@ -497,7 +509,19 @@ def run_benchmarks(args, db_path, manifest):
 def parse_args(argv):
     parser = argparse.ArgumentParser(description="Iteration-14 allocation regression gate")
     parser.add_argument("--manifest", default=str(MANIFEST_PATH))
-    parser.add_argument("--reports-dir", default=str(DEFAULT_REPORTS_DIR))
+    parser.add_argument(
+        "--artifacts-dir",
+        default=None,
+        help=(
+            "scratch BDN artifacts root the gate runs into (default: "
+            f"{DEFAULT_ARTIFACTS_DIR}); never the committed benchmarks/BenchmarkDotNet.Artifacts"
+        ),
+    )
+    parser.add_argument(
+        "--reports-dir",
+        default=None,
+        help="reports to parse (default: <artifacts-dir>/results)",
+    )
     parser.add_argument(
         "--bench-src-dir",
         default=str(BENCH_SRC_DIR),
@@ -517,8 +541,21 @@ def parse_args(argv):
     return parser.parse_args(argv)
 
 
+def resolve_dirs(args):
+    """Pin the gate's scratch artifacts root and the reports parsed from it.
+
+    The gate always owns its artifacts root: reports default to the run it performs, and an
+    explicit ``--reports-dir`` only overrides where they are parsed from.
+    """
+    args.artifacts_dir = Path(args.artifacts_dir) if args.artifacts_dir else DEFAULT_ARTIFACTS_DIR
+    args.reports_dir = (
+        Path(args.reports_dir) if args.reports_dir else args.artifacts_dir / "results"
+    )
+    return args
+
+
 def gate_main(argv=None, runner=None):
-    args = parse_args(argv)
+    args = resolve_dirs(parse_args(argv))
     if runner is None:
         runner = run_benchmarks
 
