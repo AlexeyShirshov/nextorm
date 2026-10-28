@@ -159,6 +159,31 @@ namespace NextORM.Core;
         /// </summary>
         public string json_cast(object? value) => default!;
 
+        /// <summary>
+        /// SQL/JSON <c>json(expression FORMAT JSON)</c>: parses <paramref name="value"/>'s text as a JSON
+        /// document and returns it as <c>json</c>. The argument is rendered as text
+        /// (<c>cast(value as text)</c>) and <c>FORMAT JSON</c> declares it to be JSON text, so an invalid
+        /// document is rejected by the server. Distinct from <see cref="json_scalar{T}(T)"/>, which
+        /// converts a value to JSON (a string becomes a JSON string, not a parsed document).
+        /// A PostgreSQL 17 SQL/JSON constructor: it is grammar, not a <c>pg_proc</c> function.
+        /// </summary>
+        public string? json<T>(T? value) => default!;
+
+        /// <summary>
+        /// SQL/JSON <c>json_scalar(value)</c>: converts <paramref name="value"/> to a <c>json</c> scalar
+        /// (a string becomes a JSON string, a number a JSON number, SQL NULL stays NULL).
+        /// A PostgreSQL 17 SQL/JSON constructor: grammar, not a <c>pg_proc</c> function.
+        /// </summary>
+        public string? json_scalar<T>(T? value) => default!;
+
+        /// <summary>
+        /// SQL/JSON <c>json_serialize(expression FORMAT JSON RETURNING text)</c>: parses
+        /// <paramref name="value"/>'s text as JSON and returns its serialized <c>text</c>. The result is
+        /// text, not <c>json</c> — that is the difference from <see cref="json{T}(T)"/>.
+        /// A PostgreSQL 17 SQL/JSON constructor: grammar, not a <c>pg_proc</c> function.
+        /// </summary>
+        public string? json_serialize<T>(T? value) => default!;
+
         /// <summary><c>json -&gt; key</c>: the JSON element for <paramref name="key"/> (or null).</summary>
         public string? json_get(object? json, string? key) => default!;
 
@@ -245,6 +270,50 @@ namespace NextORM.Core;
 
         /// <summary>All items selected by <paramref name="path"/> as a JSON array.</summary>
         public string? jsonb_path_query_array(object? json, string? path) => default!;
+
+        /// <summary>
+        /// <c>json_extract_path(json, path)</c>: the <c>json</c> element at the key/index
+        /// <paramref name="path"/>. The document is a JSON <em>text</em> (the argument is cast to
+        /// <c>json</c> in the emitted SQL); the path is passed to the variadic parameter as one
+        /// <c>text[]</c>. An absent path, a JSON <c>null</c> element and a SQL NULL path all yield SQL
+        /// NULL; an empty path returns the document itself.
+        /// </summary>
+        public string? json_extract_path(string? json, string?[] path) => default!;
+
+        /// <summary><c>json_extract_path_text(json, path)</c>: the element at <paramref name="path"/> as text (SQL NULL when absent).</summary>
+        public string? json_extract_path_text(string? json, string?[] path) => default!;
+
+        /// <summary><c>jsonb_extract_path(json, path)</c>: the <c>jsonb</c> element at <paramref name="path"/> (SQL NULL when absent).</summary>
+        public string? jsonb_extract_path(string? json, string?[] path) => default!;
+
+        /// <summary><c>jsonb_extract_path_text(json, path)</c>: the <c>jsonb</c> element at <paramref name="path"/> as text (SQL NULL when absent).</summary>
+        public string? jsonb_extract_path_text(string? json, string?[] path) => default!;
+
+        /// <summary>
+        /// <c>jsonb_set_lax(json, path, new_value, create_if_missing, null_value_treatment)</c>: replaces
+        /// the value at <paramref name="path"/>, with the SQL-NULL <paramref name="newValue"/> handled by
+        /// <paramref name="nullValueTreatment"/> (<c>use_json_null</c>, <c>delete_key</c>,
+        /// <c>return_target</c> or <c>raise_exception</c>). Both PostgreSQL defaults are exposed as
+        /// explicit arguments (<paramref name="createIfMissing"/> = <c>true</c>,
+        /// <paramref name="nullValueTreatment"/> = <c>use_json_null</c>) instead of a nullable overload.
+        /// </summary>
+        public string? jsonb_set_lax(string? json, string?[] path, string? newValue, bool? createIfMissing, string? nullValueTreatment) => default!;
+
+        /// <summary>
+        /// <c>jsonb_path_exists_tz(json, path, vars, silent)</c>: true when <paramref name="path"/> selects
+        /// any item. The <c>_tz</c> form is required for paths that depend on the session time zone (for
+        /// example the <c>.datetime()</c> method); the non-<c>_tz</c> sibling raises an error for them.
+        /// </summary>
+        public bool? jsonb_path_exists_tz(string? json, string? path, string? vars, bool? silent) => default!;
+
+        /// <summary><c>jsonb_path_match_tz(json, path, vars, silent)</c>: true when <paramref name="path"/> selects a single true (time-zone-aware).</summary>
+        public bool? jsonb_path_match_tz(string? json, string? path, string? vars, bool? silent) => default!;
+
+        /// <summary><c>jsonb_path_query_array_tz(json, path, vars, silent)</c>: all matches as a <c>jsonb</c> array (time-zone-aware).</summary>
+        public string? jsonb_path_query_array_tz(string? json, string? path, string? vars, bool? silent) => default!;
+
+        /// <summary><c>jsonb_path_query_first_tz(json, path, vars, silent)</c>: the first match, or SQL NULL (time-zone-aware).</summary>
+        public string? jsonb_path_query_first_tz(string? json, string? path, string? vars, bool? silent) => default!;
 
         /// <summary>
         /// Casts <paramref name="path"/> to the PostgreSQL <c>jsonpath</c> type

@@ -476,4 +476,64 @@ public class PostgresFunctionsRejectionTests
         foreach (var (name, act) in cases)
             act.Should().Throw<NotSupportedException>().WithMessage($"*{name}*not supported*");
     }
+
+    /// <summary>
+    /// The PostgreSQL 17 SQL/JSON constructors and JSON path/extraction helpers of #281 (#347 D3a) are
+    /// PostgreSQL-only: this provider refuses each name during preparation with a message naming it,
+    /// instead of rendering SQL it cannot execute.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void JsonConstructorAndPathFamily_ShouldThrowBecauseNotSupported()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+        string[] path = ["a"];
+
+        var cases = new (string Name, Action Act)[]
+        {
+            ("json", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.json(x.String) }))),
+            ("json_scalar", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.json_scalar(x.String) }))),
+            ("json_serialize", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.json_serialize(x.String) }))),
+            ("json_extract_path", () => SqlOf(ctx, e.Select(x => new
+            {
+                V = SqlFunctions.Postgres.json_extract_path(x.String, path)
+            }))),
+            ("json_extract_path_text", () => SqlOf(ctx, e.Select(x => new
+            {
+                V = SqlFunctions.Postgres.json_extract_path_text(x.String, path)
+            }))),
+            ("jsonb_extract_path", () => SqlOf(ctx, e.Select(x => new
+            {
+                V = SqlFunctions.Postgres.jsonb_extract_path(x.String, path)
+            }))),
+            ("jsonb_extract_path_text", () => SqlOf(ctx, e.Select(x => new
+            {
+                V = SqlFunctions.Postgres.jsonb_extract_path_text(x.String, path)
+            }))),
+            ("jsonb_set_lax", () => SqlOf(ctx, e.Select(x => new
+            {
+                V = SqlFunctions.Postgres.jsonb_set_lax(x.String, path, "2", true, "use_json_null")
+            }))),
+            ("jsonb_path_exists_tz", () => SqlOf(ctx, e.Select(x => new
+            {
+                V = SqlFunctions.Postgres.jsonb_path_exists_tz(x.String, "$", "{}", false)
+            }))),
+            ("jsonb_path_match_tz", () => SqlOf(ctx, e.Select(x => new
+            {
+                V = SqlFunctions.Postgres.jsonb_path_match_tz(x.String, "$", "{}", false)
+            }))),
+            ("jsonb_path_query_array_tz", () => SqlOf(ctx, e.Select(x => new
+            {
+                V = SqlFunctions.Postgres.jsonb_path_query_array_tz(x.String, "$", "{}", false)
+            }))),
+            ("jsonb_path_query_first_tz", () => SqlOf(ctx, e.Select(x => new
+            {
+                V = SqlFunctions.Postgres.jsonb_path_query_first_tz(x.String, "$", "{}", false)
+            })))
+        };
+
+        foreach (var (name, act) in cases)
+            act.Should().Throw<NotSupportedException>().WithMessage($"*{name}*not supported*");
+    }
 }

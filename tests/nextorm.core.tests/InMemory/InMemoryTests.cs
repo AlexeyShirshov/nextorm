@@ -1210,6 +1210,65 @@ public class InMemoryTests
     }
 
     /// <summary>
+    /// The PostgreSQL 17 SQL/JSON constructors and JSON path/extraction helpers of #281 (#347 D3a) are
+    /// SQL-only: the in-memory provider must refuse every name explicitly with a
+    /// <see cref="NotSupportedException"/> naming the function, instead of compiling a call on the
+    /// <see cref="SqlFunctions.Postgres"/> marker surface.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void PostgresJsonFamily_ShouldThrow()
+    {
+        string[] path = ["a"];
+
+        var cases = new (string Name, Action Act)[]
+        {
+            ("json", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.json("{\"a\":1}") }).ToList()),
+            ("json_scalar", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.json_scalar("abc") }).ToList()),
+            ("json_serialize", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.json_serialize("{\"a\":1}") }).ToList()),
+            ("json_extract_path", () => _sut.SimpleEntity.Select(it => new
+            {
+                V = SqlFunctions.Postgres.json_extract_path("{\"a\":1}", path)
+            }).ToList()),
+            ("json_extract_path_text", () => _sut.SimpleEntity.Select(it => new
+            {
+                V = SqlFunctions.Postgres.json_extract_path_text("{\"a\":1}", path)
+            }).ToList()),
+            ("jsonb_extract_path", () => _sut.SimpleEntity.Select(it => new
+            {
+                V = SqlFunctions.Postgres.jsonb_extract_path("{\"a\":1}", path)
+            }).ToList()),
+            ("jsonb_extract_path_text", () => _sut.SimpleEntity.Select(it => new
+            {
+                V = SqlFunctions.Postgres.jsonb_extract_path_text("{\"a\":1}", path)
+            }).ToList()),
+            ("jsonb_set_lax", () => _sut.SimpleEntity.Select(it => new
+            {
+                V = SqlFunctions.Postgres.jsonb_set_lax("{\"a\":1}", path, "2", true, "use_json_null")
+            }).ToList()),
+            ("jsonb_path_exists_tz", () => _sut.SimpleEntity.Select(it => new
+            {
+                V = SqlFunctions.Postgres.jsonb_path_exists_tz("{}", "$", "{}", false)
+            }).ToList()),
+            ("jsonb_path_match_tz", () => _sut.SimpleEntity.Select(it => new
+            {
+                V = SqlFunctions.Postgres.jsonb_path_match_tz("{}", "$", "{}", false)
+            }).ToList()),
+            ("jsonb_path_query_array_tz", () => _sut.SimpleEntity.Select(it => new
+            {
+                V = SqlFunctions.Postgres.jsonb_path_query_array_tz("{}", "$", "{}", false)
+            }).ToList()),
+            ("jsonb_path_query_first_tz", () => _sut.SimpleEntity.Select(it => new
+            {
+                V = SqlFunctions.Postgres.jsonb_path_query_first_tz("{}", "$", "{}", false)
+            }).ToList())
+        };
+
+        foreach (var (name, act) in cases)
+            act.Should().Throw<NotSupportedException>().WithMessage($"*{name}*not supported*");
+    }
+
+    /// <summary>
     /// The PostgreSQL system-information table-valued functions of #281 (#347 D2c) are SQL-only query
     /// sources: the in-memory provider refuses a table-function source before compiling it, so none of
     /// the members can leak a compiled call on the <see cref="SqlFunctions.Postgres"/> marker surface.

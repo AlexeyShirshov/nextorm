@@ -410,6 +410,80 @@ public class CrossProviderScalarSqlGenerationTests
             .Should().Contain("decode(somestring, E'hex')");
     }
 
+    /// <summary>
+    /// The PostgreSQL 17 SQL/JSON constructors and the JSON path/extraction helpers of #281 (#347 D3a).
+    /// <c>json</c>/<c>json_serialize</c> are parser-level constructs, so their <c>FORMAT JSON</c> /
+    /// <c>RETURNING text</c> spelling is asserted literally; the extract-path family passes its array
+    /// through the <c>VARIADIC</c> parameter; <c>jsonb_set_lax</c> and the <c>_tz</c> path functions cast
+    /// their document/path operands because a text parameter does not resolve to <c>jsonb</c>/<c>jsonpath</c>.
+    /// These members are gated as one family by <see cref="ISqlDialect.SupportsPostgresJsonSql"/> (the
+    /// JSON surface has no per-name <c>Supports</c> table).
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void PostgreSQLJsonConstructorAndPathFamily_ShouldEmitNativeSpellings()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            J = SqlFunctions.Postgres.json(SqlFunctions.Parameter<string>(0)),
+            S = SqlFunctions.Postgres.json_scalar(SqlFunctions.Parameter<string>(1)),
+            Ser = SqlFunctions.Postgres.json_serialize(SqlFunctions.Parameter<string>(2)),
+            Je = SqlFunctions.Postgres.json_extract_path(SqlFunctions.Parameter<string>(3), SqlFunctions.Parameter<string[]>(4)),
+            Jet = SqlFunctions.Postgres.json_extract_path_text(SqlFunctions.Parameter<string>(5), SqlFunctions.Parameter<string[]>(6)),
+            Jbe = SqlFunctions.Postgres.jsonb_extract_path(SqlFunctions.Parameter<string>(7), SqlFunctions.Parameter<string[]>(8)),
+            Jbet = SqlFunctions.Postgres.jsonb_extract_path_text(SqlFunctions.Parameter<string>(9), SqlFunctions.Parameter<string[]>(10)),
+            Set = SqlFunctions.Postgres.jsonb_set_lax(
+                SqlFunctions.Parameter<string>(11),
+                SqlFunctions.Parameter<string[]>(12),
+                SqlFunctions.Parameter<string>(13),
+                SqlFunctions.Parameter<bool>(14),
+                SqlFunctions.Parameter<string>(15)),
+            Ex = SqlFunctions.Postgres.jsonb_path_exists_tz(
+                SqlFunctions.Parameter<string>(16),
+                SqlFunctions.Parameter<string>(17),
+                SqlFunctions.Parameter<string>(18),
+                SqlFunctions.Parameter<bool>(19)),
+            Ma = SqlFunctions.Postgres.jsonb_path_match_tz(
+                SqlFunctions.Parameter<string>(20),
+                SqlFunctions.Parameter<string>(21),
+                SqlFunctions.Parameter<string>(22),
+                SqlFunctions.Parameter<bool>(23)),
+            Ar = SqlFunctions.Postgres.jsonb_path_query_array_tz(
+                SqlFunctions.Parameter<string>(24),
+                SqlFunctions.Parameter<string>(25),
+                SqlFunctions.Parameter<string>(26),
+                SqlFunctions.Parameter<bool>(27)),
+            Fi = SqlFunctions.Postgres.jsonb_path_query_first_tz(
+                SqlFunctions.Parameter<string>(28),
+                SqlFunctions.Parameter<string>(29),
+                SqlFunctions.Parameter<string>(30),
+                SqlFunctions.Parameter<bool>(31))
+        }));
+
+        sql.Should().Contain("json(cast(@norm_p0 as text) format json)");
+        sql.Should().Contain("json_scalar(@norm_p1)");
+        sql.Should().Contain("json_serialize(cast(@norm_p2 as text) format json returning text)");
+        sql.Should().Contain("json_extract_path(cast(@norm_p3 as json), variadic cast(@norm_p4 as text[]))");
+        sql.Should().Contain("json_extract_path_text(cast(@norm_p5 as json), variadic cast(@norm_p6 as text[]))");
+        sql.Should().Contain("jsonb_extract_path(cast(@norm_p7 as jsonb), variadic cast(@norm_p8 as text[]))");
+        sql.Should().Contain("jsonb_extract_path_text(cast(@norm_p9 as jsonb), variadic cast(@norm_p10 as text[]))");
+        sql.Should().Contain("jsonb_set_lax(cast(@norm_p11 as jsonb), cast(@norm_p12 as text[]), cast(@norm_p13 as jsonb), @norm_p14, @norm_p15)");
+        sql.Should().Contain("jsonb_path_exists_tz(cast(@norm_p16 as jsonb), cast(@norm_p17 as jsonpath), cast(@norm_p18 as jsonb), @norm_p19)");
+        sql.Should().Contain("jsonb_path_match_tz(cast(@norm_p20 as jsonb), cast(@norm_p21 as jsonpath), cast(@norm_p22 as jsonb), @norm_p23)");
+        sql.Should().Contain("jsonb_path_query_array_tz(cast(@norm_p24 as jsonb), cast(@norm_p25 as jsonpath), cast(@norm_p26 as jsonb), @norm_p27)");
+        sql.Should().Contain("jsonb_path_query_first_tz(cast(@norm_p28 as jsonb), cast(@norm_p29 as jsonpath), cast(@norm_p30 as jsonb), @norm_p31)");
+
+        PostgresDialect.Instance.SupportsPostgresJsonSql.Should().BeTrue(
+            "the SQL/JSON constructor and path surface is the PostgreSQL JSON gate");
+
+        // Positive control: the neighbouring JSON accessor still renders on the same shape.
+        SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.jsonb_path_query_first(x.String, "$.a") }))
+            .Should().Contain("jsonb_path_query_first(somestring, cast(E'$.a' as jsonpath))");
+    }
+
     [Fact]
     [Trait("Issue", "281")]
     public void PostgreSQLSystemInfoFamily_ShouldEmitNativeSpellings()

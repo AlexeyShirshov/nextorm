@@ -2722,6 +2722,141 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
         }
     }
 
+    /// <summary>
+    /// The PostgreSQL 17 SQL/JSON constructors and the JSON path/extraction helpers of #281 (#347 D3a)
+    /// against the live server: the value each one produces, the exact CLR type the driver materialises
+    /// (<c>json</c>/<c>jsonb</c>/<c>text</c> results all read back as <see cref="string"/>), the
+    /// <c>pg_typeof</c> measurement of every result type, the NULL cases (absent path, JSON null, SQL
+    /// NULL document), the <c>jsonb_set_lax</c> null-value treatments, and the time-zone-dependent
+    /// <c>.datetime()</c> path that only the <c>_tz</c> variants accept.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void JsonConstructorAndPathFamily_ShouldComputeValuesNullsAndClrTypes()
+    {
+        var r = _sut.SimpleEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                J = SqlFunctions.Postgres.json("{\"a\":1}"),
+                JT = SqlFunctions.Postgres.pg_typeof(SqlFunctions.Postgres.json("{\"a\":1}")),
+                Sc = SqlFunctions.Postgres.json_scalar("abc"),
+                ScInt = SqlFunctions.Postgres.json_scalar(5),
+                ScNull = SqlFunctions.Postgres.json_scalar<string>(null),
+                ScT = SqlFunctions.Postgres.pg_typeof(SqlFunctions.Postgres.json_scalar(1)),
+                Ser = SqlFunctions.Postgres.json_serialize("{\"a\":1}"),
+                SerT = SqlFunctions.Postgres.pg_typeof(SqlFunctions.Postgres.json_serialize("{\"a\":1}"))
+            })
+            .First();
+
+        r.J.Should().Be("{\"a\":1}");
+        r.J!.GetType().Should().Be(typeof(string));
+        r.JT.Should().Be("json");
+        r.Sc.Should().Be("\"abc\"");
+        r.ScInt.Should().Be("5");
+        r.ScNull.Should().BeNull("json_scalar(null) is SQL NULL");
+        r.ScT.Should().Be("json");
+        r.Ser.Should().Be("{\"a\":1}");
+        r.SerT.Should().Be("text", "json_serialize(... RETURNING text) is text, unlike json(...)");
+
+        // The constructors parse their argument: invalid JSON text is rejected by the server.
+        FluentActions.Invoking(() => _sut.SimpleEntity.Where(x => x.Id == 1)
+                .Select(x => new { V = SqlFunctions.Postgres.json_serialize("abc") }).First())
+            .Should().Throw<PostgresException>()
+            .Which.SqlState.Should().Be("22P02", "FORMAT JSON makes the server parse the argument as JSON");
+
+        string[] path = ["a", "b"];
+        string[] single = ["a"];
+        string[] missing = ["zz"];
+
+        var p = _sut.SimpleEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Je = SqlFunctions.Postgres.json_extract_path("{\"a\":{\"b\":2}}", path),
+                Jet = SqlFunctions.Postgres.json_extract_path_text("{\"a\":{\"b\":2}}", path),
+                JetJsonNull = SqlFunctions.Postgres.json_extract_path_text("{\"a\":null}", single),
+                JetMissing = SqlFunctions.Postgres.json_extract_path_text("{\"a\":1}", missing),
+                JeEmptyPath = SqlFunctions.Postgres.json_extract_path("{\"a\":1}", Array.Empty<string>()),
+                JeT = SqlFunctions.Postgres.pg_typeof(SqlFunctions.Postgres.json_extract_path("{\"a\":1}", single)),
+                Jbe = SqlFunctions.Postgres.jsonb_extract_path("{\"a\":{\"b\":2}}", path),
+                Jbet = SqlFunctions.Postgres.jsonb_extract_path_text("{\"a\":{\"b\":2}}", path),
+                JbeMissing = SqlFunctions.Postgres.jsonb_extract_path_text("{\"a\":1}", missing),
+                JbeT = SqlFunctions.Postgres.pg_typeof(SqlFunctions.Postgres.jsonb_extract_path("{\"a\":1}", single)),
+                JbetT = SqlFunctions.Postgres.pg_typeof(SqlFunctions.Postgres.jsonb_extract_path_text("{\"a\":1}", single))
+            })
+            .First();
+
+        p.Je.Should().Be("2");
+        p.Jet.Should().Be("2");
+        p.JetJsonNull.Should().BeNull("a JSON null element reads back as SQL NULL from the _text form");
+        p.JetMissing.Should().BeNull("an absent path yields SQL NULL");
+        p.JeEmptyPath.Should().Be("{\"a\":1}", "an empty path returns the document itself");
+        p.JeT.Should().Be("json");
+        p.Jbe.Should().Be("2");
+        p.Jbet.Should().Be("2");
+        p.JbeMissing.Should().BeNull();
+        p.JbeT.Should().Be("jsonb");
+        p.JbetT.Should().Be("text");
+
+        string[] other = ["b"];
+
+        var s = _sut.SimpleEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Replace = SqlFunctions.Postgres.jsonb_set_lax("{\"a\":1}", single, "2", true, "use_json_null"),
+                Delete = SqlFunctions.Postgres.jsonb_set_lax("{\"a\":1}", single, (string?)null, true, "delete_key"),
+                NullAdd = SqlFunctions.Postgres.jsonb_set_lax("{\"a\":1}", other, (string?)null, true, "use_json_null"),
+                ReturnTarget = SqlFunctions.Postgres.jsonb_set_lax("{\"a\":1}", other, (string?)null, true, "return_target"),
+                NoCreate = SqlFunctions.Postgres.jsonb_set_lax("{\"a\":1}", other, "2", false, "use_json_null"),
+                NullDocument = SqlFunctions.Postgres.jsonb_set_lax((string?)null, single, "1", true, "use_json_null")
+            })
+            .First();
+
+        s.Replace.Should().Be("{\"a\": 2}");
+        s.Delete.Should().Be("{}", "delete_key removes the target key when the new value is SQL NULL");
+        s.NullAdd.Should().Be("{\"a\": 1, \"b\": null}", "use_json_null adds the key with a JSON null");
+        s.ReturnTarget.Should().Be("{\"a\": 1}", "return_target leaves the document unchanged");
+        s.NoCreate.Should().Be("{\"a\": 1}", "create_if_missing = false does not add the key");
+        s.NullDocument.Should().BeNull();
+
+        // An unknown null-value treatment is validated by the server, not silently accepted.
+        FluentActions.Invoking(() => _sut.SimpleEntity.Where(x => x.Id == 1)
+                .Select(x => new { V = SqlFunctions.Postgres.jsonb_set_lax("{\"a\":1}", single, (string?)null, true, "bogus") })
+                .First())
+            .Should().Throw<PostgresException>()
+            .WithMessage("*null_value_treatment must be*");
+
+        string timeZonePath = """$.d.datetime() < "2021-01-01".datetime()""";
+        string dateTimePath = "$.d.datetime()";
+
+        var tz = _sut.SimpleEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Exists = SqlFunctions.Postgres.jsonb_path_exists_tz("{\"d\":\"2020-06-01T00:00:00Z\"}", timeZonePath, "{}", false),
+                Match = SqlFunctions.Postgres.jsonb_path_match_tz("{\"d\":\"2020-06-01T00:00:00Z\"}", timeZonePath, "{}", false),
+                Arr = SqlFunctions.Postgres.jsonb_path_query_array_tz("{\"d\":\"2020-06-01T00:00:00Z\"}", dateTimePath, "{}", false),
+                First = SqlFunctions.Postgres.jsonb_path_query_first_tz("{\"d\":\"2020-06-01T00:00:00Z\"}", dateTimePath, "{}", false),
+                FirstMissing = SqlFunctions.Postgres.jsonb_path_query_first_tz("{\"a\":1}", "$.zz", "{}", false),
+                ArrMissing = SqlFunctions.Postgres.jsonb_path_query_array_tz("{\"a\":1}", "$.zz", "{}", false),
+                ExistsNullDocument = SqlFunctions.Postgres.jsonb_path_exists_tz((string?)null, "$", "{}", false)
+            })
+            .First();
+
+        tz.Exists.Should().BeTrue();
+        tz.Match.Should().BeTrue();
+        tz.Arr.Should().Be("[\"2020-06-01T00:00:00+00:00\"]");
+        tz.First.Should().Be("\"2020-06-01T00:00:00+00:00\"");
+        tz.FirstMissing.Should().BeNull();
+        tz.ArrMissing.Should().Be("[]", "the array form of an empty match set is an empty array, not NULL");
+        tz.ExistsNullDocument.Should().BeNull();
+
+        // The non-_tz sibling cannot evaluate a time-zone-dependent path; the _tz form above can.
+        FluentActions.Invoking(() => _sut.SimpleEntity.Where(x => x.Id == 1)
+                .Select(x => new { V = SqlFunctions.Postgres.jsonb_path_exists("{\"d\":\"2020-06-01T00:00:00Z\"}", timeZonePath) })
+                .First())
+            .Should().Throw<PostgresException>()
+            .WithMessage("*without time zone usage*");
+    }
+
     private static string Scalar(DataContext ctx, string sql)
     {
         ctx.EnsureConnectionOpen();
