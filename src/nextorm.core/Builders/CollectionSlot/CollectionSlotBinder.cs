@@ -111,6 +111,12 @@ internal static class CollectionSlotBinder
             readers[i] = bound.Reader;
         }
 
+        // Structural plan identity of the whole slot graph: the entity query the carrier executes is keyed by
+        // the slot path, CLR shape, nested projection, adapter operation shape, inherited mode and validation
+        // policy, so two projection variants cannot share a plan entry even though their SQL is identical.
+        // Captured values stay out of the shape; they are read per execution by the readers above.
+        entityBuilder.CollectionSlotShape = CollectionSlotShape.ForSlots(recognition.Slots, builder.ResolvedEagerLoadMode);
+
         var projector = CollectionSlotProjector.Build(projection, recognition.Nodes);
         command.CollectionSlotCarrier = new CollectionSlotCarrier<TEntity, TResult>(entityBuilder, readers, projector);
     }

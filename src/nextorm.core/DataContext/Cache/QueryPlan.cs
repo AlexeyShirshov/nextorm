@@ -25,6 +25,9 @@ public sealed class QueryPlan : IEquatable<QueryPlan>
     // clone, exactly like _hashPlan.
     private readonly EagerLoadMode _eagerLoadMode;
     private readonly EagerLoadShape _eagerLoadShape;
+    // Structural identity of the collection-valued projection slot graph (#249 / T353): captured here for the
+    // same reason as the eager shape — identity must survive GetCacheVersion's equal-clone swap.
+    private readonly CollectionSlotShape _collectionSlotShape;
     // Non-null only for the test-only collision seam. When set, ComputeHash returns it verbatim, so
     // the "_hashPlan == ComputeHash(...)" invariant (asserted by GetCacheVersion) holds even for a
     // forced collision; production plans leave it null and hash structurally as before.
@@ -44,6 +47,7 @@ public sealed class QueryPlan : IEquatable<QueryPlan>
         _comparer = cmd.GetQueryPlanEqualityComparer();
         _eagerLoadMode = cmd.ResolvedEagerLoadMode;
         _eagerLoadShape = cmd.EagerLoadShape;
+        _collectionSlotShape = cmd.CollectionSlotShape;
         _hashPlan = ComputeHash(cmd, sql, _comparer);
     }
 
@@ -66,6 +70,7 @@ public sealed class QueryPlan : IEquatable<QueryPlan>
         _forcedHash = forcedHash;
         _eagerLoadMode = cmd.ResolvedEagerLoadMode;
         _eagerLoadShape = cmd.EagerLoadShape;
+        _collectionSlotShape = cmd.CollectionSlotShape;
         _hashPlan = ComputeHash(cmd, sql, _comparer);
     }
 
@@ -89,6 +94,7 @@ public sealed class QueryPlan : IEquatable<QueryPlan>
                 // captured plan identity is self-consistent even if a command is later re-cloned.
                 hash.Add((int)_eagerLoadMode);
                 _eagerLoadShape.AddTo(ref hash);
+                _collectionSlotShape.AddTo(ref hash);
                 hash.Add(sql);
                 return hash.ToHashCode();
             }
@@ -129,6 +135,7 @@ public sealed class QueryPlan : IEquatable<QueryPlan>
         return _sql == obj._sql
             && _eagerLoadMode == obj._eagerLoadMode
             && _eagerLoadShape.Equals(obj._eagerLoadShape)
+            && _collectionSlotShape.Equals(obj._collectionSlotShape)
             && _comparer.Equals(QueryCommand, obj.QueryCommand);
     }
 

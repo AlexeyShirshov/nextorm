@@ -64,6 +64,9 @@ public partial class QueryCommand
         dst.EagerLoadMode = EagerLoadMode;
         dst.ResolvedEagerLoadMode = ResolvedEagerLoadMode;
         dst.EagerLoadShape = EagerLoadShape;
+        // The collection-slot graph shape participates in the plan key too (QueryPlanEqualityComparer), so the
+        // cached clone must carry it or GetCacheVersion's recomputed hash would differ from the frozen one.
+        dst.CollectionSlotShape = CollectionSlotShape;
         dst.HasPerParentEagerTopN = HasPerParentEagerTopN;
         // Outer references participate in the plan key (QueryPlanEqualityComparer), so the cached
         // clone must carry them; otherwise the hash captured at construction would not match the

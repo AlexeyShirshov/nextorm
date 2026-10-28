@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Text.RegularExpressions;
 
 namespace NextORM.Core;
 
@@ -67,7 +68,12 @@ internal sealed class CollectionSlotDescriptor
     /// <summary>Whether the slot came from an adapter chain rather than a direct navigation member.</summary>
     internal bool IsAdapter => Operations.Count > 0;
 
-    /// <summary>The structural identity this slot contributes to the plan key.</summary>
+    /// <summary>
+    /// The structural identity this slot contributes to the plan key: destination path, reference/collection
+    /// kind, declared CLR shape, element shape, the validation policy (a reference slot carries the
+    /// identity-cardinality guard, a collection slot none), the adapter operation shape and the nested slot
+    /// graph. Captured values never appear here — <see cref="SlotExpressionShape"/> masks every constant.
+    /// </summary>
     internal string Fingerprint
     {
         get
@@ -75,12 +81,39 @@ internal sealed class CollectionSlotDescriptor
             var operations = string.Join(",", Operations.Select(static op => op.Fingerprint));
             var nested = string.Join(";", Nested.Select(static slot => slot.Fingerprint));
             var kind = IsReference ? "ref" : "col";
-            return $"SLOT:{ParentType.Name}.{Path}|{kind}|{Describe(SlotType)}|{Describe(ElementType)}|{operations}|{nested}";
+            var policy = IsReference ? "reference-identity-guard" : "none";
+            return $"SLOT:{ParentType.Name}.{Path}|{kind}|{Describe(SlotType)}|{Describe(ElementType)}|{policy}|{operations}|{nested}";
         }
     }
 
     private static string Describe(Type type)
         => type.IsArray ? type.GetElementType()!.Name + "[]" : type.Name;
+}
+
+/// <summary>
+/// Canonical structural rendering of a slot lambda for the plan key (#249 / T353). Every constant is masked
+/// before rendering, so an adapter shape that differs only in a captured value — or in a literal argument —
+/// keeps one plan entry, while a different operator, member, method or projection binding still separates.
+/// The values themselves are read per execution by the carrier's reader, never from the key.
+/// </summary>
+internal static class SlotExpressionShape
+{
+    private static readonly Regex ConstantMarkers = new(@"default\([^()]*\)|value\([^()]*\)", RegexOptions.Compiled);
+
+    /// <summary>Renders <paramref name="lambda"/> with constant leaves replaced by a value-free marker.</summary>
+    /// <param name="lambda">The adapter lambda whose structural shape is wanted.</param>
+    /// <returns>The canonical shape string.</returns>
+    internal static string Describe(LambdaExpression lambda)
+        => ConstantMarkers.Replace(ConstantMask.Instance.Visit(lambda).ToString(), static _ => "$");
+
+    /// <summary>Replaces every non-null constant with a default expression of the same type.</summary>
+    private sealed class ConstantMask : ExpressionVisitor
+    {
+        internal static readonly ConstantMask Instance = new();
+
+        protected override Expression VisitConstant(ConstantExpression node)
+            => node.Value is null ? node : Expression.Default(node.Type);
+    }
 }
 
 /// <summary>One recorded adapter operation (#249 / T353), applied in memory after the entities materialize.</summary>
@@ -95,7 +128,7 @@ internal sealed class CollectionSlotWhere(LambdaExpression predicate) : Collecti
 {
     internal LambdaExpression Predicate { get; } = predicate;
 
-    internal override string Fingerprint => "where(" + Predicate + ")";
+    internal override string Fingerprint => "where(" + SlotExpressionShape.Describe(Predicate) + ")";
 }
 
 /// <summary>A recorded ordering key: the primary <c>OrderBy</c> and every subsequent <c>ThenBy</c>.</summary>
@@ -114,7 +147,8 @@ internal sealed class CollectionSlotOrder : CollectionSlotOperation
 
     internal bool ThenBy { get; }
 
-    internal override string Fingerprint => (ThenBy ? "then" : "order") + (Descending ? "Desc" : "Asc") + "(" + Selector + ")";
+    internal override string Fingerprint =>
+        (ThenBy ? "then" : "order") + (Descending ? "Desc" : "Asc") + "(" + SlotExpressionShape.Describe(Selector) + ")";
 }
 
 /// <summary>A recorded per-parent <c>Limit</c>. The count is evaluated at execution, never folded into the key.</summary>
@@ -132,5 +166,5 @@ internal sealed class CollectionSlotSelect(LambdaExpression projection, Type res
 
     internal Type ResultType { get; } = resultType;
 
-    internal override string Fingerprint => "select(" + Projection + ")";
+    internal override string Fingerprint => "select(" + SlotExpressionShape.Describe(Projection) + ")";
 }

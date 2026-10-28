@@ -3986,6 +3986,7 @@ public partial class QueryCommand
         internal int? CommandTimeout;
         internal EagerLoadMode? EagerLoadMode;
         internal EagerLoadShape EagerLoadShape;
+        internal CollectionSlotShape CollectionSlotShape;
         // Effective (override ?? context) forms of the settings an apply overwrites via Resolved*:
         // two contexts of the same type with different defaults must never share a candidate.
         internal bool EffectiveQuoteIdentifiers;
@@ -4061,6 +4062,7 @@ public partial class QueryCommand
             if (CommandTimeout != other.CommandTimeout) return false;
             if (EagerLoadMode != other.EagerLoadMode) return false;
             if (!EagerLoadShape.Equals(other.EagerLoadShape)) return false;
+            if (!CollectionSlotShape.Equals(other.CollectionSlotShape)) return false;
 
             // Effective (override ?? context) settings that an apply overwrites through Resolved*.
             if (EffectiveQuoteIdentifiers != other.EffectiveQuoteIdentifiers) return false;
@@ -4323,6 +4325,7 @@ public partial class QueryCommand
             CommandTimeout = cmd.CommandTimeout,
             EagerLoadMode = cmd.EagerLoadMode,
             EagerLoadShape = cmd.EagerLoadShape,
+            CollectionSlotShape = cmd.CollectionSlotShape,
             EffectiveQuoteIdentifiers = cmd.QuoteIdentifiers ?? cmd._dataContext?.QuoteIdentifiers ?? false,
             EffectiveNamingConvention = cmd.NamingConvention ?? cmd._dataContext?.NamingConvention,
             EffectiveKeywordCase = cmd.KeywordCase ?? cmd._dataContext?.KeywordCase ?? default,
@@ -4631,6 +4634,7 @@ public partial class QueryCommand
             hash.Add(shape.EffectiveKeywordCase);
             hash.Add(shape.EffectiveCommandTimeout);
             hash.Add(shape.ContextEagerLoadMode);
+            shape.CollectionSlotShape.AddTo(ref hash);
             hash.Add(shape.Tag);
             foreach (var hint in shape.Hints ?? []) hash.Add(hint);
             foreach (var hint in shape.TableHints ?? []) hash.Add(hint);
