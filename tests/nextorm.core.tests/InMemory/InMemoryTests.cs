@@ -1183,6 +1183,12 @@ public class InMemoryTests
             ("pg_get_function_identity_arguments", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_get_function_identity_arguments("1") }).ToList()),
             ("pg_get_function_result", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_get_function_result("1") }).ToList()),
             ("pg_get_functiondef", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_get_functiondef("1") }).ToList()),
+            ("pg_get_indexdef", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_get_indexdef("1") }).ToList()),
+            ("pg_get_partition_constraintdef", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_get_partition_constraintdef("1") }).ToList()),
+            ("pg_get_partkeydef", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_get_partkeydef("1") }).ToList()),
+            ("pg_get_ruledef", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_get_ruledef("1") }).ToList()),
+            ("pg_get_statisticsobjdef", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_get_statisticsobjdef("1") }).ToList()),
+            ("pg_get_triggerdef", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.pg_get_triggerdef("1") }).ToList()),
         };
 
         foreach (var (name, act) in cases)

@@ -1381,6 +1381,71 @@ namespace NextORM.Core;
         /// </summary>
         public string? pg_get_functiondef(string? functionOid) => default!;
 
+        /// <summary>
+        /// The <c>CREATE INDEX</c> statement of the index with the given <paramref name="indexOid"/>
+        /// (<c>pg_get_indexdef(oid)</c>). The OID is passed in its text form. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_get_indexdef(string? indexOid) => default!;
+
+        /// <summary>
+        /// The definition of one index column of the index with the given <paramref name="indexOid"/>
+        /// (<c>pg_get_indexdef(oid, integer, boolean)</c>); an out-of-range column is an error. The OID is
+        /// passed in its text form. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_get_indexdef(string? indexOid, int? columnNumber, bool? pretty) => default!;
+
+        /// <summary>
+        /// The <c>FOR VALUES</c> clause of the partition bound of the relation with the given
+        /// <paramref name="relationOid"/> (<c>pg_get_partition_constraintdef(oid)</c>); an error when the
+        /// relation is not a partition. The OID is passed in its text form. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_get_partition_constraintdef(string? relationOid) => default!;
+
+        /// <summary>
+        /// The partition key of the partitioned table with the given <paramref name="relationOid"/>
+        /// (<c>pg_get_partkeydef(oid)</c>), e.g. <c>RANGE (id)</c>; an error when the relation is not
+        /// partitioned. The OID is passed in its text form. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_get_partkeydef(string? relationOid) => default!;
+
+        /// <summary>
+        /// The <c>CREATE RULE</c> statement of the rule with the given <paramref name="ruleOid"/>
+        /// (<c>pg_get_ruledef(oid)</c>). The OID is passed in its text form. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_get_ruledef(string? ruleOid) => default!;
+
+        /// <summary>
+        /// The <c>CREATE RULE</c> statement of the rule with the given <paramref name="ruleOid"/>,
+        /// pretty-printed when <paramref name="pretty"/> is true (<c>pg_get_ruledef(oid, boolean)</c>). The
+        /// OID is passed in its text form. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_get_ruledef(string? ruleOid, bool? pretty) => default!;
+
+        /// <summary>
+        /// The <c>CREATE STATISTICS</c> statement of the extended statistics object with the given
+        /// <paramref name="statisticsOid"/> (<c>pg_get_statisticsobjdef(oid)</c>). The OID is passed in its
+        /// text form. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_get_statisticsobjdef(string? statisticsOid) => default!;
+
+        /// <summary>
+        /// The <c>CREATE TRIGGER</c> statement of the trigger with the given <paramref name="triggerOid"/>
+        /// (<c>pg_get_triggerdef(oid)</c>). The OID is passed in its text form. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_get_triggerdef(string? triggerOid) => default!;
+
+        /// <summary>
+        /// The <c>CREATE TRIGGER</c> statement of the trigger with the given <paramref name="triggerOid"/>,
+        /// pretty-printed when <paramref name="pretty"/> is true (<c>pg_get_triggerdef(oid, boolean)</c>).
+        /// The OID is passed in its text form. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_get_triggerdef(string? triggerOid, bool? pretty) => default!;
+
         private const string GetConstraintdefRefusal =
             "The pg_get_constraintdef function is refused: it renders a stored constraint node tree as " +
             "SQL text, and its pg_get_expr sibling cannot be called at all because PostgreSQL requires a " +

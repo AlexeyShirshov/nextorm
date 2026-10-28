@@ -330,4 +330,29 @@ public class PostgresFunctionsRejectionTests
         foreach (var (name, act) in cases)
             act.Should().Throw<NotSupportedException>().WithMessage($"*{name}*not supported*");
     }
+
+    /// <summary>
+    /// The PostgreSQL catalog-definition helpers of #281 (index, partition, rule, statistics, trigger)
+    /// are PostgreSQL-only on this provider as well.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void CatalogDefinitionFamily_ShouldThrowBecauseNotSupported()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var cases = new (string Name, Action Act)[]
+        {
+            ("pg_get_indexdef", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_get_indexdef("1") }))),
+            ("pg_get_partition_constraintdef", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_get_partition_constraintdef("1") }))),
+            ("pg_get_partkeydef", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_get_partkeydef("1") }))),
+            ("pg_get_ruledef", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_get_ruledef("1") }))),
+            ("pg_get_statisticsobjdef", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_get_statisticsobjdef("1") }))),
+            ("pg_get_triggerdef", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_get_triggerdef("1") }))),
+        };
+
+        foreach (var (name, act) in cases)
+            act.Should().Throw<NotSupportedException>().WithMessage($"*{name}*not supported*");
+    }
 }

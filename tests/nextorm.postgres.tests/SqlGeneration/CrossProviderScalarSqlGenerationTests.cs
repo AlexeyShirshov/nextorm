@@ -561,6 +561,52 @@ public class CrossProviderScalarSqlGenerationTests
     }
 
     /// <summary>
+    /// The remaining catalog-definition helpers of #281 (index, partition, rule, statistics, trigger).
+    /// Both the one-argument and the boolean-column form are asserted for the three multi-arity names.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void PostgreSQLCatalogDefinitionFamily_ShouldEmitNativeSpellings()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            Id1 = SqlFunctions.Postgres.pg_get_indexdef(SqlFunctions.Parameter<string>(0)),
+            Id3 = SqlFunctions.Postgres.pg_get_indexdef(
+                SqlFunctions.Parameter<string>(1), 2, true),
+            Pcd = SqlFunctions.Postgres.pg_get_partition_constraintdef(SqlFunctions.Parameter<string>(2)),
+            Pkd = SqlFunctions.Postgres.pg_get_partkeydef(SqlFunctions.Parameter<string>(3)),
+            Rd1 = SqlFunctions.Postgres.pg_get_ruledef(SqlFunctions.Parameter<string>(4)),
+            Rd2 = SqlFunctions.Postgres.pg_get_ruledef(SqlFunctions.Parameter<string>(5), true),
+            Sodb = SqlFunctions.Postgres.pg_get_statisticsobjdef(SqlFunctions.Parameter<string>(6)),
+            Td1 = SqlFunctions.Postgres.pg_get_triggerdef(SqlFunctions.Parameter<string>(7)),
+            Td2 = SqlFunctions.Postgres.pg_get_triggerdef(SqlFunctions.Parameter<string>(8), true)
+        }));
+
+        foreach (var name in new[]
+        {
+            "pg_get_indexdef", "pg_get_partition_constraintdef", "pg_get_partkeydef",
+            "pg_get_ruledef", "pg_get_statisticsobjdef", "pg_get_triggerdef"
+        })
+        {
+            sql.Should().Contain($"{name}(");
+            PostgresDialect.Instance.ScalarFunctions.Supports(name).Should().BeTrue($"'{name}' is delivered on PostgreSQL");
+        }
+
+        sql.Should().Contain("pg_get_indexdef(cast(@norm_p0 as oid))");
+        sql.Should().Contain("pg_get_indexdef(cast(@norm_p1 as oid), 2, true)");
+        sql.Should().Contain("pg_get_partition_constraintdef(cast(@norm_p2 as oid))");
+        sql.Should().Contain("pg_get_partkeydef(cast(@norm_p3 as oid))");
+        sql.Should().Contain("pg_get_ruledef(cast(@norm_p4 as oid))");
+        sql.Should().Contain("pg_get_ruledef(cast(@norm_p5 as oid), true)");
+        sql.Should().Contain("pg_get_statisticsobjdef(cast(@norm_p6 as oid))");
+        sql.Should().Contain("pg_get_triggerdef(cast(@norm_p7 as oid))");
+        sql.Should().Contain("pg_get_triggerdef(cast(@norm_p8 as oid), true)");
+    }
+
+    /// <summary>
     /// The encoding, catalog-format and index-property helpers of #281. Three render shapes are
     /// asserted: a plain call, an <c>oid</c>/<c>regtype</c> argument cast (a text parameter does not
     /// resolve to those overloads) and the <c>regtype</c> result cast to text.

@@ -958,7 +958,9 @@ internal sealed class PostgresScalarFunctions : IScalarFunctions
         "pg_index_has_property" or "pg_indexam_has_property" or "pg_index_column_has_property" or
         "pg_input_is_valid" or "pg_get_serial_sequence" or
         "pg_get_function_arguments" or "pg_get_function_identity_arguments" or
-        "pg_get_function_result" or "pg_get_functiondef";
+        "pg_get_function_result" or "pg_get_functiondef" or
+        "pg_get_indexdef" or "pg_get_partition_constraintdef" or "pg_get_partkeydef" or
+        "pg_get_ruledef" or "pg_get_statisticsobjdef" or "pg_get_triggerdef";
 
     /// <inheritdoc/>
     public string Render(string name, IReadOnlyList<string> args) => name switch
@@ -1021,8 +1023,19 @@ internal sealed class PostgresScalarFunctions : IScalarFunctions
         "pg_basetype" => $"cast(pg_basetype(cast({args[0]} as regtype)) as text)",
         // pg_get_*_def/arguments take an oid; a text parameter does not resolve to the oid overload.
         "pg_get_function_arguments" or "pg_get_function_identity_arguments" or
-            "pg_get_function_result" or "pg_get_functiondef"
+            "pg_get_function_result" or "pg_get_functiondef" or
+            "pg_get_partition_constraintdef" or "pg_get_partkeydef" or "pg_get_statisticsobjdef"
             => $"{name}(cast({args[0]} as oid))",
+        // The same name has both a one-argument and a boolean-column form, so the arity picks the shape.
+        "pg_get_indexdef" => args.Count == 1
+            ? $"pg_get_indexdef(cast({args[0]} as oid))"
+            : $"pg_get_indexdef(cast({args[0]} as oid), {args[1]}, {args[2]})",
+        "pg_get_ruledef" => args.Count == 1
+            ? $"pg_get_ruledef(cast({args[0]} as oid))"
+            : $"pg_get_ruledef(cast({args[0]} as oid), {args[1]})",
+        "pg_get_triggerdef" => args.Count == 1
+            ? $"pg_get_triggerdef(cast({args[0]} as oid))"
+            : $"pg_get_triggerdef(cast({args[0]} as oid), {args[1]})",
         _ => throw new NotSupportedException($"The {name} function is not supported by PostgreSQL.")
     };
 
