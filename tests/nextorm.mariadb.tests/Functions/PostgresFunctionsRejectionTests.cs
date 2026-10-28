@@ -40,4 +40,682 @@ public class PostgresFunctionsRejectionTests
         scalars.Supports("min_scale").Should().BeFalse();
         scalars.Supports("trim_scale").Should().BeFalse();
     }
+
+    /// <summary>
+    /// The residual string family of #281 is PostgreSQL-only: every name must be refused during
+    /// preparation with a message naming it, never rendered as PostgreSQL SQL against MariaDB.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void StringFamily_ShouldThrowBecauseNotSupported()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var cases = new (string Name, Action Act)[]
+        {
+            ("btrim", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.btrim(x.String) }))),
+            ("ltrim", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.ltrim(x.String, "xy") }))),
+            ("rtrim", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.rtrim(x.String, "xy") }))),
+            ("starts_with", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.starts_with(x.String, "d") }))),
+            ("parse_ident", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.parse_ident("a.b", false) }))),
+            ("quote_ident", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.quote_ident("a b") }))),
+            ("quote_literal", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.quote_literal(x.String) }))),
+            ("quote_nullable", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.quote_nullable(x.String) }))),
+            ("to_ascii", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.to_ascii(x.String, "LATIN1") }))),
+            ("to_ascii", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.to_ascii(x.String, 8) }))),
+            ("to_hex", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.to_hex(x.Int) }))),
+            ("to_oct", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.to_oct(x.Int) }))),
+            ("to_bin", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.to_bin(x.Int) }))),
+            ("convert_from", () => SqlOf(ctx, e.Select(x => new
+            {
+                V = SqlFunctions.Postgres.convert_from(SqlFunctions.Postgres.convert_to(x.String, "UTF8"), "UTF8")
+            }))),
+            ("convert_to", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.convert_to(x.String, "UTF8") }))),
+            ("encode", () => SqlOf(ctx, e.Select(x => new
+            {
+                V = SqlFunctions.Postgres.encode(SqlFunctions.Postgres.convert_to(x.String, "UTF8"), "hex")
+            }))),
+            ("decode", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.decode(x.String, "hex") }))),
+            ("normalize", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.normalize(x.String, "NFC") }))),
+            ("unistr", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.unistr(x.String) }))),
+            ("regexp_match", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.regexp_match(x.String, "a") })))
+        };
+
+        foreach (var (name, act) in cases)
+            act.Should().Throw<NotSupportedException>().WithMessage($"*{name}*not supported*");
+    }
+
+    /// <summary>The residual numeric family of #281 is PostgreSQL-only as well.</summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void NumericFamily_ShouldThrowBecauseNotSupported()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var cases = new (string Name, Action Act)[]
+        {
+            ("div", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.div(7m, 2m) }))),
+            ("erf", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.erf(0.5) }))),
+            ("erfc", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.erfc(0.5) }))),
+            ("random_normal", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.random_normal(0.0, 1.0) }))),
+            ("acosd", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.acosd(0.5) }))),
+            ("asind", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.asind(0.5) }))),
+            ("atand", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.atand(0.5) }))),
+            ("atan2d", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.atan2d(1.0, 1.0) }))),
+            ("cosd", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.cosd(60.0) }))),
+            ("cotd", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.cotd(45.0) }))),
+            ("sind", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.sind(30.0) }))),
+            ("tand", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.tand(45.0) })))
+        };
+
+        foreach (var (name, act) in cases)
+            act.Should().Throw<NotSupportedException>().WithMessage($"*{name}*not supported*");
+    }
+
+    /// <summary>The refused members keep their technical reason on MariaDB too.</summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void RefusedMembers_ShouldCarryTheirReason()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var casefold = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.casefold(x.String) }));
+        var gamma = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.gamma(1.5) }));
+        var tgamma = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.tgamma(1.5) }));
+        var lgamma = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.lgamma(1.5) }));
+        var toAsciiOneArg = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.to_ascii(x.String) }));
+        var crc32 = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.crc32(SqlFunctions.Parameter<byte[]>(8)) }));
+        var crc32c = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.crc32c(SqlFunctions.Parameter<byte[]>(9)) }));
+
+        casefold.Should().Throw<NotSupportedException>().WithMessage("*casefold*refused*");
+        gamma.Should().Throw<NotSupportedException>().WithMessage("*gamma*refused*");
+        tgamma.Should().Throw<NotSupportedException>().WithMessage("*tgamma*refused*");
+        lgamma.Should().Throw<NotSupportedException>().WithMessage("*lgamma*refused*");
+        toAsciiOneArg.Should().Throw<NotSupportedException>().WithMessage("*to_ascii*refused*0A000*");
+        crc32.Should().Throw<NotSupportedException>().WithMessage("The crc32 function is refused:*PostgreSQL 18*");
+        crc32c.Should().Throw<NotSupportedException>().WithMessage("The crc32c function is refused:*PostgreSQL 18*");
+
+        // The pg_get_expr / pg_get_constraintdef pair is refused at the member itself: PostgreSQL needs
+        // a pg_node_tree value there and no CLR value of that type exists.
+        FluentActions.Invoking(() => SqlFunctions.Postgres.pg_get_expr("x", "0"))
+            .Should().Throw<NotSupportedException>().WithMessage("The pg_get_expr function is refused:*pg_node_tree*");
+        FluentActions.Invoking(() => SqlFunctions.Postgres.pg_get_expr("x", "0", true))
+            .Should().Throw<NotSupportedException>().WithMessage("The pg_get_expr function is refused:*pg_node_tree*");
+        FluentActions.Invoking(() => SqlFunctions.Postgres.pg_get_constraintdef("0"))
+            .Should().Throw<NotSupportedException>().WithMessage("The pg_get_constraintdef function is refused:*pg_node_tree*");
+        FluentActions.Invoking(() => SqlFunctions.Postgres.pg_get_constraintdef("0", true))
+            .Should().Throw<NotSupportedException>().WithMessage("The pg_get_constraintdef function is refused:*pg_node_tree*");
+
+        // The pg_sleep family returns void, so no void call can appear in a projection; the refusal is a
+        // member-level throw (its body throws before any SQL could be emitted) and is provider-independent.
+        FluentActions.Invoking(() => SqlFunctions.Postgres.pg_sleep(0.0))
+            .Should().Throw<NotSupportedException>().WithMessage("The pg_sleep function is refused:*void*");
+        FluentActions.Invoking(() => SqlFunctions.Postgres.pg_sleep_for(TimeSpan.Zero))
+            .Should().Throw<NotSupportedException>().WithMessage("The pg_sleep_for function is refused:*void*");
+        FluentActions.Invoking(() => SqlFunctions.Postgres.pg_sleep_until(DateTime.UnixEpoch))
+            .Should().Throw<NotSupportedException>().WithMessage("The pg_sleep_until function is refused:*void*");
+    }
+
+    /// <summary>
+    /// The residual PostgreSQL date/time, UUID and binary-string families of #281 are PostgreSQL-only
+    /// on this provider as well: each enrolled name must be refused during preparation with a message
+    /// naming it, never rendered as PostgreSQL SQL.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void DateTimeUuidAndBinaryFamilies_ShouldThrowBecauseNotSupported()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var cases = new (string Name, Action Act)[]
+        {
+            ("date_subtract", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.date_subtract(x.Datetime, TimeSpan.FromDays(1)) }))),
+            ("date_subtract", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.date_subtract(x.Datetime, TimeSpan.FromDays(1), "UTC") }))),
+            ("justify_interval", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.justify_interval(TimeSpan.FromHours(25)) }))),
+            ("make_timestamptz", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.make_timestamptz(2024, 1, 2, 3, 4, 5.5) }))),
+            ("make_timestamptz", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.make_timestamptz(2024, 1, 2, 3, 4, 5.5, "UTC") }))),
+            ("clock_timestamp", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.clock_timestamp() }))),
+            ("statement_timestamp", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.statement_timestamp() }))),
+            ("transaction_timestamp", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.transaction_timestamp() }))),
+            ("timeofday", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.timeofday() }))),
+            ("isfinite", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.isfinite(x.Datetime) }))),
+            ("isfinite", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.isfinite(TimeSpan.FromDays(1)) }))),
+            ("uuid_extract_timestamp", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.uuid_extract_timestamp(Guid.Empty) }))),
+            ("uuid_extract_version", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.uuid_extract_version(Guid.Empty) }))),
+            ("get_bit", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.get_bit(SqlFunctions.Parameter<byte[]>(0), 0L) }))),
+            ("set_bit", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.set_bit(SqlFunctions.Parameter<byte[]>(1), 0L, 1) }))),
+            ("get_byte", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.get_byte(SqlFunctions.Parameter<byte[]>(2), 0) }))),
+            ("set_byte", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.set_byte(SqlFunctions.Parameter<byte[]>(3), 0, 255) }))),
+            ("bit_count", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.bit_count(SqlFunctions.Parameter<byte[]>(4)) })))
+        };
+
+        foreach (var (name, act) in cases)
+            act.Should().Throw<NotSupportedException>().WithMessage($"*{name}*not supported*");
+    }
+
+    [Fact]
+    [Trait("Issue", "281")]
+    public void ResidualFamilies_ShouldNotBeAdvertised()
+    {
+        var scalars = MariaDbDialect.Instance.ScalarFunctions;
+
+        foreach (var name in new[]
+        {
+            "btrim", "ltrim", "rtrim", "starts_with", "parse_ident", "quote_ident", "quote_literal",
+            "quote_nullable", "to_ascii", "to_hex", "to_oct", "to_bin", "convert_from", "convert_to",
+            "encode", "decode", "normalize", "unistr", "regexp_match",
+            "div", "random_normal", "acosd", "asind", "atand", "atan2d", "cosd", "cotd", "sind", "tand",
+            "date_subtract", "justify_interval", "make_timestamptz", "clock_timestamp", "statement_timestamp",
+            "transaction_timestamp", "timeofday", "isfinite", "uuid_extract_timestamp",
+            "uuid_extract_version", "get_bit", "set_bit", "get_byte", "set_byte", "bit_count",
+            "any_value",
+            "xmlagg", "json_agg_strict", "jsonb_agg_strict",
+            "json_object_agg_unique", "json_object_agg_unique_strict",
+            "json_arrayagg", "jsonb_arrayagg", "json_objectagg", "json_objectagg_unique",
+            "jsonb_objectagg", "grouping",
+            "current_schemas", "pg_postmaster_start_time", "pg_current_logfile",
+            "pg_conf_load_time", "pg_jit_available", "pg_my_temp_schema",
+            "pg_is_other_temp_schema", "pg_notification_queue_usage", "pg_blocking_pids",
+            "pg_safe_snapshot_blocking_pids", "pg_trigger_depth",
+            "pg_collation_is_visible",
+            "pg_conversion_is_visible",
+            "pg_function_is_visible",
+            "pg_opclass_is_visible",
+            "pg_operator_is_visible",
+            "pg_opfamily_is_visible",
+            "pg_statistics_obj_is_visible",
+            "pg_table_is_visible",
+            "pg_ts_config_is_visible",
+            "pg_ts_dict_is_visible",
+            "pg_ts_parser_is_visible",
+            "pg_ts_template_is_visible",
+            "pg_type_is_visible",
+            "pg_char_to_encoding",
+            "pg_encoding_to_char",
+            "pg_basetype",
+            "pg_describe_object",
+            "pg_tablespace_location",
+            "pg_settings_get_flags",
+            "pg_index_has_property",
+            "pg_indexam_has_property",
+            "pg_index_column_has_property",
+            "pg_input_is_valid",
+            "pg_get_serial_sequence"
+        })
+        {
+            scalars.Supports(name).Should().BeFalse($"'{name}' is PostgreSQL-only");
+        }
+    }
+    /// <summary>
+    /// The PostgreSQL system-information members of #281 (session identity, log and temp-schema
+    /// helpers, the blocking-pid arrays and the trigger depth) are PostgreSQL-only: each enrolled
+    /// name is refused during preparation with a message naming it.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void SystemInfoFamily_ShouldThrowBecauseNotSupported()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var cases = new (string Name, Action Act)[]
+        {
+            ("current_schemas", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.current_schemas(true) }))),
+            ("pg_postmaster_start_time", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_postmaster_start_time() }))),
+            ("pg_current_logfile", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_current_logfile("stderr") }))),
+            ("pg_conf_load_time", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_conf_load_time() }))),
+            ("pg_jit_available", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_jit_available() }))),
+            ("pg_my_temp_schema", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_my_temp_schema() }))),
+            ("pg_is_other_temp_schema", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_is_other_temp_schema("0") }))),
+            ("pg_notification_queue_usage", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_notification_queue_usage() }))),
+            ("pg_blocking_pids", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_blocking_pids(x.Int) }))),
+            ("pg_safe_snapshot_blocking_pids", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_safe_snapshot_blocking_pids(x.Int) }))),
+            ("pg_trigger_depth", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_trigger_depth() })))
+        };
+
+        foreach (var (name, act) in cases)
+            act.Should().Throw<NotSupportedException>().WithMessage($"*{name}*not supported*");
+
+        // `current_role` / `current_catalog` are PostgreSQL-only bare keywords: the extended-scalar gate
+        // refuses them here, and its message names the library rather than the function (the same shape
+        // `current_date`/`localtime` have).
+        FluentActions.Invoking(() => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.current_role() })))
+            .Should().Throw<NotSupportedException>().WithMessage("*extended scalar function library*PostgreSQL*");
+        FluentActions.Invoking(() => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.current_catalog() })))
+            .Should().Throw<NotSupportedException>().WithMessage("*extended scalar function library*PostgreSQL*");
+
+        // `pg_get_expr` / `pg_get_constraintdef` must refuse with their own reason *inside a query
+        // expression*: the member body never runs there, so the translator carries the refusal
+        // (`ExtendedScalarFunctionTranslator.Refused`, keyed by name and arity).
+        FluentActions.Invoking(() =>
+                SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_get_expr("x", "0") })))
+            .Should().Throw<NotSupportedException>().WithMessage("The pg_get_expr function is refused:*pg_node_tree*");
+        FluentActions.Invoking(() =>
+                SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_get_expr("x", "0", true) })))
+            .Should().Throw<NotSupportedException>().WithMessage("The pg_get_expr function is refused:*pg_node_tree*");
+        FluentActions.Invoking(() =>
+                SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_get_constraintdef("0") })))
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("The pg_get_constraintdef function is refused:*pg_node_tree*");
+        FluentActions.Invoking(() =>
+                SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_get_constraintdef("0", true) })))
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("The pg_get_constraintdef function is refused:*pg_node_tree*");
+    }
+
+    /// <summary>
+    /// The PostgreSQL catalog-visibility helpers of #281 are PostgreSQL-only on this provider as well:
+    /// each enrolled name is refused during preparation with a message naming it, never rendered as
+    /// PostgreSQL SQL.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void CatalogVisibilityFamily_ShouldThrowBecauseNotSupported()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var cases = new (string Name, Action Act)[]
+        {
+            ("pg_collation_is_visible", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_collation_is_visible("0") }))),
+            ("pg_conversion_is_visible", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_conversion_is_visible("0") }))),
+            ("pg_function_is_visible", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_function_is_visible("0") }))),
+            ("pg_opclass_is_visible", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_opclass_is_visible("0") }))),
+            ("pg_operator_is_visible", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_operator_is_visible("0") }))),
+            ("pg_opfamily_is_visible", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_opfamily_is_visible("0") }))),
+            ("pg_statistics_obj_is_visible", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_statistics_obj_is_visible("0") }))),
+            ("pg_table_is_visible", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_table_is_visible("0") }))),
+            ("pg_ts_config_is_visible", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_ts_config_is_visible("0") }))),
+            ("pg_ts_dict_is_visible", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_ts_dict_is_visible("0") }))),
+            ("pg_ts_parser_is_visible", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_ts_parser_is_visible("0") }))),
+            ("pg_ts_template_is_visible", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_ts_template_is_visible("0") }))),
+        };
+
+        foreach (var (name, act) in cases)
+            act.Should().Throw<NotSupportedException>().WithMessage($"*{name}*not supported*");
+    }
+
+    /// <summary>
+    /// The PostgreSQL encoding, catalog-format and index-property helpers of #281 are PostgreSQL-only on
+    /// this provider as well: each enrolled name is refused during preparation with a message naming it.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void EncodingAndCatalogFormatFamily_ShouldThrowBecauseNotSupported()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var cases = new (string Name, Action Act)[]
+        {
+            ("pg_type_is_visible", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_type_is_visible("0") }))),
+            ("pg_char_to_encoding", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_char_to_encoding("UTF8") }))),
+            ("pg_encoding_to_char", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_encoding_to_char(6) }))),
+            ("pg_basetype", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_basetype("integer") }))),
+            ("pg_describe_object", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_describe_object("0", "0", 0) }))),
+            ("pg_tablespace_location", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_tablespace_location("0") }))),
+            ("pg_settings_get_flags", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_settings_get_flags("work_mem") }))),
+            ("pg_index_has_property", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_index_has_property("pg_class_oid_index", "clusterable") }))),
+            ("pg_indexam_has_property", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_indexam_has_property("0", "can_order") }))),
+            ("pg_index_column_has_property", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_index_column_has_property("pg_class_oid_index", 1, "orderable") }))),
+            ("pg_input_is_valid", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_input_is_valid("123", "integer") }))),
+            ("pg_get_serial_sequence", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_get_serial_sequence("pg_class", "oid") }))),
+        };
+
+        foreach (var (name, act) in cases)
+            act.Should().Throw<NotSupportedException>().WithMessage($"*{name}*not supported*");
+    }
+    /// <summary>
+    /// The PostgreSQL function-definition helpers of #281 are PostgreSQL-only on this provider as well:
+    /// each enrolled name is refused during preparation with a message naming it.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void FunctionDefinitionFamily_ShouldThrowBecauseNotSupported()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var cases = new (string Name, Action Act)[]
+        {
+            ("pg_get_function_arguments", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_get_function_arguments("1") }))),
+            ("pg_get_function_identity_arguments", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_get_function_identity_arguments("1") }))),
+            ("pg_get_function_result", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_get_function_result("1") }))),
+            ("pg_get_functiondef", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_get_functiondef("1") }))),
+        };
+
+        foreach (var (name, act) in cases)
+            act.Should().Throw<NotSupportedException>().WithMessage($"*{name}*not supported*");
+    }
+
+    /// <summary>
+    /// The PostgreSQL catalog-definition helpers of #281 (index, partition, rule, statistics, trigger)
+    /// are PostgreSQL-only on this provider as well.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void CatalogDefinitionFamily_ShouldThrowBecauseNotSupported()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var cases = new (string Name, Action Act)[]
+        {
+            ("pg_get_indexdef", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_get_indexdef("1") }))),
+            ("pg_get_partition_constraintdef", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_get_partition_constraintdef("1") }))),
+            ("pg_get_partkeydef", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_get_partkeydef("1") }))),
+            ("pg_get_ruledef", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_get_ruledef("1") }))),
+            ("pg_get_statisticsobjdef", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_get_statisticsobjdef("1") }))),
+            ("pg_get_triggerdef", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_get_triggerdef("1") }))),
+        };
+
+        foreach (var (name, act) in cases)
+            act.Should().Throw<NotSupportedException>().WithMessage($"*{name}*not supported*");
+    }
+
+    /// <summary>
+    /// The PostgreSQL view, role and snapshot helpers of #281 are PostgreSQL-only on this provider too.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void ViewRoleAndSnapshotFamily_ShouldThrowBecauseNotSupported()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var cases = new (string Name, Action Act)[]
+        {
+            ("pg_get_userbyid", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_get_userbyid("1") }))),
+            ("pg_get_viewdef", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_get_viewdef("v") }))),
+            ("pg_has_role", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_has_role("r", "USAGE") }))),
+            ("pg_current_snapshot", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_current_snapshot() }))),
+            ("pg_current_xact_id", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_current_xact_id() }))),
+            ("pg_current_xact_id_if_assigned", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_current_xact_id_if_assigned() }))),
+        };
+
+        foreach (var (name, act) in cases)
+            act.Should().Throw<NotSupportedException>().WithMessage($"*{name}*not supported*");
+    }
+
+    /// <summary>
+    /// The PostgreSQL snapshot-inspection and transaction-status helpers of #281 are PostgreSQL-only on
+    /// this provider too.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void SnapshotInspectionFamily_ShouldThrowBecauseNotSupported()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var cases = new (string Name, Action Act)[]
+        {
+            ("pg_snapshot_xmax", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_snapshot_xmax("1:1:") }))),
+            ("pg_snapshot_xmin", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_snapshot_xmin("1:1:") }))),
+            ("pg_visible_in_snapshot", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_visible_in_snapshot("1", "1:1:") }))),
+            ("pg_xact_commit_timestamp", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_xact_commit_timestamp("7") }))),
+            ("pg_xact_status", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_xact_status("1") }))),
+        };
+
+        foreach (var (name, act) in cases)
+            act.Should().Throw<NotSupportedException>().WithMessage($"*{name}*not supported*");
+    }
+
+    /// <summary>
+    /// The PostgreSQL system-information table-valued functions of #281 (#347 D2c, block E) are
+    /// PostgreSQL-only query sources: this provider refuses each name during preparation with a message
+    /// naming it, instead of rendering PostgreSQL SQL.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void SystemInfoTvfControlAndKeywordFamily_ShouldThrowBecauseNotSupported()
+    {
+        using var ctx = MariaDbTestContext.Create();
+
+        var cases = new (string Name, Action Act)[]
+        {
+            ("pg_control_system", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_control_system()).Select(r => r.PgControlVersion))),
+            ("pg_control_init", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_control_init()).Select(r => r.MaxDataAlignment))),
+            ("pg_control_recovery", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_control_recovery()).Select(r => r.MinRecoveryEndLsn))),
+            ("pg_control_checkpoint", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_control_checkpoint()).Select(r => r.CheckpointLsn))),
+            ("pg_get_keywords", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_get_keywords()).Select(r => r.Word))),
+            ("pg_listening_channels", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_listening_channels()).Select(r => r.Channel))),
+            ("pg_snapshot_xip", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_snapshot_xip("10:20:")).Select(r => r.Xid))),
+            ("pg_tablespace_databases", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_tablespace_databases("1663")).Select(r => r.DatabaseOid))),
+            ("pg_get_catalog_foreign_keys", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_get_catalog_foreign_keys()).Select(r => r.FkTable))),
+            ("pg_options_to_table", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_options_to_table(new[] { "fillfactor=70" })).Select(r => r.OptionName))),
+            ("pg_available_wal_summaries", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_available_wal_summaries()).Select(r => r.TimelineId))),
+            ("pg_get_multixact_members", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_get_multixact_members(SqlFunctions.Parameter<uint>(0))).Select(r => r.Xid))),
+            ("pg_get_object_address", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_get_object_address(SqlFunctions.Parameter<string>(1), SqlFunctions.Parameter<string[]>(2), SqlFunctions.Parameter<string[]>(3))).Select(r => r.ClassId))),
+            ("pg_get_wal_summarizer_state", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_get_wal_summarizer_state()).Select(r => r.SummarizedTli))),
+            ("pg_last_committed_xact", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_last_committed_xact()).Select(r => r.Xid))),
+            ("pg_identify_object", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_identify_object("1259", "1259", 0)).Select(r => r.Type))),
+            ("pg_identify_object_as_address", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_identify_object_as_address("1259", "1259", 0)).Select(r => r.Type))),
+            ("pg_input_error_info", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_input_error_info("1", "integer")).Select(r => r.Message))),
+            ("pg_wal_summary_contents", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_wal_summary_contents(SqlFunctions.Parameter<long>(0), SqlFunctions.Parameter<string>(1), SqlFunctions.Parameter<string>(2))).Select(r => r.RelFileNode))),
+            ("pg_xact_commit_timestamp_origin", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_xact_commit_timestamp_origin(SqlFunctions.Parameter<uint>(0))).Select(r => r.RoIdent))),
+        };
+
+        foreach (var (name, act) in cases)
+            act.Should().Throw<NotSupportedException>().WithMessage($"*{name}*not supported*");
+    }
+
+    /// <summary>
+    /// The PostgreSQL 17 SQL/JSON constructors and JSON path/extraction helpers of #281 (#347 D3a) are
+    /// PostgreSQL-only: this provider refuses each name during preparation with a message naming it,
+    /// instead of rendering SQL it cannot execute.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void JsonConstructorAndPathFamily_ShouldThrowBecauseNotSupported()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+        string[] path = ["a"];
+
+        var cases = new (string Name, Action Act)[]
+        {
+            ("json", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.json(x.String) }))),
+            ("json_scalar", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.json_scalar(x.String) }))),
+            ("json_serialize", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.json_serialize(x.String) }))),
+            ("json_extract_path", () => SqlOf(ctx, e.Select(x => new
+            {
+                V = SqlFunctions.Postgres.json_extract_path(x.String, path)
+            }))),
+            ("json_extract_path_text", () => SqlOf(ctx, e.Select(x => new
+            {
+                V = SqlFunctions.Postgres.json_extract_path_text(x.String, path)
+            }))),
+            ("jsonb_extract_path", () => SqlOf(ctx, e.Select(x => new
+            {
+                V = SqlFunctions.Postgres.jsonb_extract_path(x.String, path)
+            }))),
+            ("jsonb_extract_path_text", () => SqlOf(ctx, e.Select(x => new
+            {
+                V = SqlFunctions.Postgres.jsonb_extract_path_text(x.String, path)
+            }))),
+            ("jsonb_set_lax", () => SqlOf(ctx, e.Select(x => new
+            {
+                V = SqlFunctions.Postgres.jsonb_set_lax(x.String, path, "2", true, "use_json_null")
+            }))),
+            ("jsonb_path_exists_tz", () => SqlOf(ctx, e.Select(x => new
+            {
+                V = SqlFunctions.Postgres.jsonb_path_exists_tz(x.String, "$", "{}", false)
+            }))),
+            ("jsonb_path_match_tz", () => SqlOf(ctx, e.Select(x => new
+            {
+                V = SqlFunctions.Postgres.jsonb_path_match_tz(x.String, "$", "{}", false)
+            }))),
+            ("jsonb_path_query_array_tz", () => SqlOf(ctx, e.Select(x => new
+            {
+                V = SqlFunctions.Postgres.jsonb_path_query_array_tz(x.String, "$", "{}", false)
+            }))),
+            ("jsonb_path_query_first_tz", () => SqlOf(ctx, e.Select(x => new
+            {
+                V = SqlFunctions.Postgres.jsonb_path_query_first_tz(x.String, "$", "{}", false)
+            })))
+        };
+
+        foreach (var (name, act) in cases)
+            act.Should().Throw<NotSupportedException>().WithMessage($"*{name}*not supported*");
+    }
+
+    /// <summary>
+    /// The PostgreSQL 17 JSON reader table functions of #281 (#347 D3a) are PostgreSQL-only: this provider
+    /// refuses each name during preparation with a message naming it, instead of rendering SQL it cannot
+    /// execute. The refused <c>populate_record</c> family and <c>json_table</c> keep their precise
+    /// preparation-time reason, because that reason is a property of the expression model and of the pinned
+    /// target server, not of a provider.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void JsonReaderTvfs_ShouldThrowBecauseNotSupported()
+    {
+        using var ctx = MariaDbTestContext.Create();
+
+        var cases = new (string Name, Action Act)[]
+        {
+            ("json_array_elements", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.json_array_elements("[1,2]")).Select(r => r.Value))),
+            ("json_array_elements_text", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.json_array_elements_text("[1,2]")).Select(r => r.Value))),
+            ("json_each", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.json_each("{\"a\":1}")).Select(r => r.Key))),
+            ("json_each_text", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.json_each_text("{\"a\":1}")).Select(r => r.Value))),
+            ("jsonb_path_query_tz", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.jsonb_path_query_tz("{}", "$", "{}", false)).Select(r => r.Value))),
+            ("json_to_record", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.json_to_record<IJsonRecordRow>("{}")).Select(r => r.A))),
+            ("json_to_recordset", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.json_to_recordset<IJsonRecordRow>("[]")).Select(r => r.A)))
+        };
+
+        foreach (var (name, act) in cases)
+            act.Should().Throw<NotSupportedException>().WithMessage($"*{name}*not supported*");
+
+        var refusals = new (string Name, Action Act)[]
+        {
+            ("json_populate_record", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.json_populate_record<IJsonRecordRow>(null, "{}", false)).Select(r => r.A))),
+            ("json_populate_recordset", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.json_populate_recordset<IJsonRecordRow>(null, "[]", false)).Select(r => r.A))),
+            ("jsonb_populate_record", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.jsonb_populate_record<IJsonRecordRow>(null, "{}")).Select(r => r.A))),
+            ("jsonb_populate_recordset", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.jsonb_populate_recordset<IJsonRecordRow>(null, "[]")).Select(r => r.A))),
+            ("json_table", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.json_table<IJsonRecordRow>("[]", "$[*]")).Select(r => r.A))),
+            ("jsonb_populate_record_valid", () => SqlOf(ctx, ctx.From<IComplexEntity>().Select(x => new
+            {
+                V = SqlFunctions.Postgres.jsonb_populate_record_valid(null, "{}")
+            })))
+        };
+
+        foreach (var (name, act) in refusals)
+            act.Should().Throw<NotSupportedException>().WithMessage($"*{name} function is refused*");
+    }
+
+    /// <summary>
+    /// The PostgreSQL 17 full-text tokenizer readers of #281 (#347 D3b) are PostgreSQL-only query
+    /// sources: this provider refuses each name during preparation with a message naming it, instead of
+    /// rendering SQL it cannot execute.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void FullTextTokenizerTvfs_ShouldThrowBecauseNotSupported()
+    {
+        using var ctx = MariaDbTestContext.Create();
+
+        var cases = new (string Name, Action Act)[]
+        {
+            ("ts_debug", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.ts_debug("The quick brown")).Select(r => r.Token))),
+            ("ts_parse", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.ts_parse("default", "foo - bar")).Select(r => r.Token))),
+            ("ts_token_type", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.ts_token_type("default")).Select(r => r.Alias)))
+        };
+
+        foreach (var (name, act) in cases)
+            act.Should().Throw<NotSupportedException>().WithMessage($"*{name}*not supported*");
+    }
+
+    /// <summary>
+    /// The PostgreSQL 17 <c>any_value</c> aggregate and the three regression sums (<c>regr_sxx</c>,
+    /// <c>regr_sxy</c>, <c>regr_syy</c>) of #281 (#347 D4) are PostgreSQL-only: <c>any_value</c> is
+    /// refused by name, and the <c>regr_*</c> family by its dialect capability gate, so neither is
+    /// rendered as SQL this provider cannot execute.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void AnyValueAndRegressionSums_ShouldThrowBecauseNotSupported()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        FluentActions.Invoking(() => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.any_value(x.Int) })))
+            .Should().Throw<NotSupportedException>().WithMessage("*any_value*not supported*");
+
+        var regression = new (string Name, Action Act)[]
+        {
+            ("regr_sxx", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.regr_sxx((double)x.Id, (double)x.Id) }))),
+            ("regr_sxy", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.regr_sxy((double)x.Id, (double)x.Id) }))),
+            ("regr_syy", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.regr_syy((double)x.Id, (double)x.Id) })))
+        };
+
+        foreach (var (name, act) in regression)
+            act.Should().Throw<NotSupportedException>()
+                .Which.Message.Should().Contain(
+                    "The regr_* aggregates are not supported by this provider", "{0} is gated by the regr_* capability", name);
+    }
+
+    /// <summary>
+    /// The #281 (#347 D4) group-2 aggregates (<c>xmlagg</c> and the strict/unique JSON aggregates) are
+    /// PostgreSQL-only, so each enrolled name is refused during preparation with a message naming it
+    /// instead of being rendered as SQL this provider cannot execute.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void XmlAndStrictJsonAggregates_ShouldThrowBecauseNotSupported()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var cases = new (string Name, Action Act)[]
+        {
+            ("xmlagg", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.xmlagg(x.String) }))),
+            ("json_agg_strict", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.json_agg_strict(x.Int) }))),
+            ("jsonb_agg_strict", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.jsonb_agg_strict(x.Int) }))),
+            ("json_object_agg_unique", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.json_object_agg_unique(x.String, x.Int) }))),
+            ("json_object_agg_unique_strict", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.json_object_agg_unique_strict(x.String, x.Int) })))
+        };
+
+        foreach (var (name, act) in cases)
+            act.Should().Throw<NotSupportedException>().WithMessage($"*{name}*not supported*");
+    }
+
+    /// <summary>
+    /// The #281 (#347 D4) group-3 SQL/JSON aggregate constructs (<c>json_arrayagg</c>/
+    /// <c>json_objectagg</c>, their <c>RETURNING jsonb</c> and <c>WITH UNIQUE KEYS</c> variants) and the
+    /// <c>grouping</c> grouping function are PostgreSQL-only, so each enrolled name is refused during
+    /// preparation with a message naming it instead of being rendered as SQL this provider cannot execute.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void SqlJsonAggregatesAndGrouping_ShouldThrowBecauseNotSupported()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var cases = new (string Name, Action Act)[]
+        {
+            ("json_arrayagg", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.json_arrayagg(x.Int) }))),
+            ("jsonb_arrayagg", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.jsonb_arrayagg(x.Int) }))),
+            ("json_objectagg", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.json_objectagg(x.String, x.Int) }))),
+            ("json_objectagg_unique", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.json_objectagg_unique(x.String, x.Int) }))),
+            ("jsonb_objectagg", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.jsonb_objectagg(x.String, x.Int) }))),
+            ("grouping", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.grouping(x.Int) })))
+        };
+
+        foreach (var (name, act) in cases)
+            act.Should().Throw<NotSupportedException>().WithMessage($"*{name}*not supported*");
+    }
+
+    /// <summary>#347 D3a fixture: the caller-declared row shape of the PostgreSQL JSON record readers.</summary>
+    public interface IJsonRecordRow
+    {
+        /// <summary>The <c>a</c> column.</summary>
+        [System.ComponentModel.DataAnnotations.Schema.Column("a")]
+        int A { get; set; }
+    }
 }

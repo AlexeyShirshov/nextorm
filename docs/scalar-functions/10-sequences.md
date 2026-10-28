@@ -110,3 +110,11 @@ server-side generators, evaluated per row by the database; `Guid.NewGuid()` is a
 is not a substitute. SQL Server additionally exposes `newsequentialid()`
 (`SqlFunctions.SqlServer.newsequentialid()`), which is valid only as a column `DEFAULT` and not in an
 ordinary `SELECT`.
+
+PostgreSQL also reads data back out of a stored UUID, on `SqlFunctions.Postgres` and gated per name by
+[`IScalarFunctions.Supports`](xref:NextORM.Core.IScalarFunctions.Supports(System.String)):
+
+| C# | SQL | Returns |
+|---|---|---|
+| `SqlFunctions.Postgres.uuid_extract_timestamp(value)` | `uuid_extract_timestamp(value)` | `timestamptz` (`DateTime?`) — NULL for a version-4 UUID or the nil UUID |
+| `SqlFunctions.Postgres.uuid_extract_version(value)` | `uuid_extract_version(value)` | `smallint` (`short?`) — the embedded version, NULL for the nil UUID |

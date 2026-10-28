@@ -84,6 +84,42 @@ internal static class JsonSqlTranslator
             case nameof(PostgresFunctions.json_cast) when args.Count == 1:
                 EmitCast(visitor, args[0]);
                 return true;
+            case nameof(PostgresFunctions.json) when args.Count == 1:
+                EmitJsonTextConstructor(visitor, "json", args[0]);
+                return true;
+            case nameof(PostgresFunctions.json_scalar) when args.Count == 1:
+                EmitNamedFunction(visitor, "json_scalar", args);
+                return true;
+            case nameof(PostgresFunctions.json_serialize) when args.Count == 1:
+                EmitJsonTextConstructor(visitor, "json_serialize", args[0]);
+                return true;
+            case nameof(PostgresFunctions.json_extract_path) when args.Count == 2:
+                EmitExtractPath(visitor, "json_extract_path", "json", args[0], args[1]);
+                return true;
+            case nameof(PostgresFunctions.json_extract_path_text) when args.Count == 2:
+                EmitExtractPath(visitor, "json_extract_path_text", "json", args[0], args[1]);
+                return true;
+            case nameof(PostgresFunctions.jsonb_extract_path) when args.Count == 2:
+                EmitExtractPath(visitor, "jsonb_extract_path", "jsonb", args[0], args[1]);
+                return true;
+            case nameof(PostgresFunctions.jsonb_extract_path_text) when args.Count == 2:
+                EmitExtractPath(visitor, "jsonb_extract_path_text", "jsonb", args[0], args[1]);
+                return true;
+            case nameof(PostgresFunctions.jsonb_set_lax) when args.Count == 5:
+                EmitJsonbSetLax(visitor, args);
+                return true;
+            case nameof(PostgresFunctions.jsonb_path_exists_tz) when args.Count == 4:
+                EmitJsonbPathTz(visitor, "jsonb_path_exists_tz", args);
+                return true;
+            case nameof(PostgresFunctions.jsonb_path_match_tz) when args.Count == 4:
+                EmitJsonbPathTz(visitor, "jsonb_path_match_tz", args);
+                return true;
+            case nameof(PostgresFunctions.jsonb_path_query_array_tz) when args.Count == 4:
+                EmitJsonbPathTz(visitor, "jsonb_path_query_array_tz", args);
+                return true;
+            case nameof(PostgresFunctions.jsonb_path_query_first_tz) when args.Count == 4:
+                EmitJsonbPathTz(visitor, "jsonb_path_query_first_tz", args);
+                return true;
 
             // Access operators: -> ->> #> #>>. Both operands have to carry a type: PostgreSQL cannot
             // resolve the operator family when an operand is `unknown` (SQLSTATE 42725).
@@ -188,6 +224,16 @@ internal static class JsonSqlTranslator
     private static void EmitFunction(BaseExpressionVisitor visitor, string sqlName, IReadOnlyList<Expression> args)
     {
         RequireJsonSupport(visitor);
+        SqlOperandTranslator.EmitFunction(visitor, sqlName, args);
+    }
+
+    /// <summary>
+    /// Renders <c>name(arg, ...)</c> with every argument rendered as-is, refusing a non-PostgreSQL provider
+    /// with a message that names the function (the #281 JSON members are gated per name at the call site).
+    /// </summary>
+    private static void EmitNamedFunction(BaseExpressionVisitor visitor, string sqlName, IReadOnlyList<Expression> args)
+    {
+        RequireJsonSupport(visitor, sqlName);
         SqlOperandTranslator.EmitFunction(visitor, sqlName, args);
     }
 
@@ -611,6 +657,133 @@ internal static class JsonSqlTranslator
     }
 
     /// <summary>
+    /// Renders the SQL/JSON text constructors <c>json(value FORMAT JSON)</c> and
+    /// <c>json_serialize(value FORMAT JSON RETURNING text)</c>. Both are parser-level constructs
+    /// (no <c>pg_proc</c> row on PostgreSQL 17, measured live), and both take the argument's JSON
+    /// <em>text</em>: the operand is cast to <c>text</c> and <c>FORMAT JSON</c> declares the result of
+    /// that cast to be JSON, so the server parses it. <c>json_serialize</c> additionally names its text
+    /// result with <c>RETURNING text</c>, which is what distinguishes it from <c>json</c>.
+    /// </summary>
+    private static void EmitJsonTextConstructor(BaseExpressionVisitor visitor, string sqlName, Expression value)
+    {
+        RequireJsonSupport(visitor, sqlName);
+
+        if (visitor.IsParamMode)
+        {
+            SqlOperandTranslator.AppendArgument(visitor, value);
+            return;
+        }
+
+        visitor.NeedAliasForColumn = true;
+        var builder = visitor.Builder!;
+        builder.Append(sqlName).Append('(').Append(visitor.Kw("cast("));
+        SqlOperandTranslator.AppendArgument(visitor, value);
+        builder.Append(visitor.Kw(" as text) format json"));
+
+        if (sqlName == "json_serialize")
+            builder.Append(visitor.Kw(" returning text"));
+
+        builder.Append(')');
+    }
+
+    /// <summary>
+    /// Renders <c>json_extract_path</c>/<c>jsonb_extract_path</c> (and the <c>_text</c> forms). The
+    /// document is a JSON text, so it is cast to the function's document type; the path list is bound as
+    /// one <c>text[]</c> and passed through the <c>VARIADIC</c> parameter, which PostgreSQL requires when
+    /// the array arrives as a single expression (measured: the bare <c>text[]</c> form resolves to no
+    /// function).
+    /// </summary>
+    private static void EmitExtractPath(
+        BaseExpressionVisitor visitor,
+        string sqlName,
+        string documentType,
+        Expression document,
+        Expression path)
+    {
+        RequireJsonSupport(visitor, sqlName);
+
+        if (visitor.IsParamMode)
+        {
+            SqlOperandTranslator.AppendArgument(visitor, document);
+            SqlOperandTranslator.AppendArgument(visitor, path);
+            return;
+        }
+
+        visitor.NeedAliasForColumn = true;
+        var builder = visitor.Builder!;
+        builder.Append(sqlName).Append('(').Append(visitor.Kw("cast("));
+        SqlOperandTranslator.AppendArgument(visitor, document);
+        builder.Append(visitor.Kw(" as ")).Append(documentType).Append(visitor.Kw("), variadic cast("));
+        SqlOperandTranslator.AppendArgument(visitor, path);
+        builder.Append(visitor.Kw(" as text[]))"));
+    }
+
+    /// <summary>
+    /// Renders <c>jsonb_set_lax(jsonb, text[], jsonb, boolean, text)</c>. The document and the new value
+    /// are JSON texts (cast to <c>jsonb</c>), the path is one <c>text[]</c> (not variadic: this function
+    /// takes the array as one argument), and the flag/treatment are rendered as ordinary arguments so a
+    /// bound parameter reaches the server (measured: the treatment parameter is accepted and validated
+    /// there).
+    /// </summary>
+    private static void EmitJsonbSetLax(BaseExpressionVisitor visitor, IReadOnlyList<Expression> args)
+    {
+        RequireJsonSupport(visitor, "jsonb_set_lax");
+
+        if (visitor.IsParamMode)
+        {
+            for (var (i, cnt) = (0, args.Count); i < cnt; i++)
+                SqlOperandTranslator.AppendArgument(visitor, args[i]);
+
+            return;
+        }
+
+        visitor.NeedAliasForColumn = true;
+        var builder = visitor.Builder!;
+        builder.Append("jsonb_set_lax(").Append(visitor.Kw("cast("));
+        SqlOperandTranslator.AppendArgument(visitor, args[0]);
+        builder.Append(visitor.Kw(" as jsonb), cast("));
+        SqlOperandTranslator.AppendArgument(visitor, args[1]);
+        builder.Append(visitor.Kw(" as text[]), cast("));
+        SqlOperandTranslator.AppendArgument(visitor, args[2]);
+        builder.Append(visitor.Kw(" as jsonb), "));
+        SqlOperandTranslator.AppendArgument(visitor, args[3]);
+        builder.Append(", ");
+        SqlOperandTranslator.AppendArgument(visitor, args[4]);
+        builder.Append(')');
+    }
+
+    /// <summary>
+    /// Renders a <c>jsonb_path_*_tz</c> function: the document and the variables are JSON texts (cast to
+    /// <c>jsonb</c>), the path is cast to <c>jsonpath</c> (a text parameter is not implicitly coerced) and
+    /// the <c>silent</c> flag is an ordinary boolean argument. These four-argument forms exist only with
+    /// the <c>_tz</c> suffix; the plain siblings reject a time-zone-dependent <c>.datetime()</c> path.
+    /// </summary>
+    private static void EmitJsonbPathTz(BaseExpressionVisitor visitor, string sqlName, IReadOnlyList<Expression> args)
+    {
+        RequireJsonSupport(visitor, sqlName);
+
+        if (visitor.IsParamMode)
+        {
+            for (var (i, cnt) = (0, args.Count); i < cnt; i++)
+                SqlOperandTranslator.AppendArgument(visitor, args[i]);
+
+            return;
+        }
+
+        visitor.NeedAliasForColumn = true;
+        var builder = visitor.Builder!;
+        builder.Append(sqlName).Append('(').Append(visitor.Kw("cast("));
+        SqlOperandTranslator.AppendArgument(visitor, args[0]);
+        builder.Append(visitor.Kw(" as jsonb), cast("));
+        SqlOperandTranslator.AppendArgument(visitor, args[1]);
+        builder.Append(visitor.Kw(" as jsonpath), cast("));
+        SqlOperandTranslator.AppendArgument(visitor, args[2]);
+        builder.Append(visitor.Kw(" as jsonb), "));
+        SqlOperandTranslator.AppendArgument(visitor, args[3]);
+        builder.Append(')');
+    }
+
+    /// <summary>
     /// Casts an argument to <c>jsonpath</c> (<c>cast(expr as jsonpath)</c>) for
     /// <see cref="PostgresFunctions.jsonpath"/> so that a text parameter or column is accepted where
     /// PostgreSQL expects a <c>jsonpath</c>.
@@ -631,10 +804,19 @@ internal static class JsonSqlTranslator
             visitor.Builder!.Append(visitor.Kw(" as jsonpath)"));
     }
 
-    private static void RequireJsonSupport(BaseExpressionVisitor visitor)
+    /// <summary>
+    /// Refuses a provider without <see cref="ISqlDialect.SupportsPostgresJsonSql"/>. With a
+    /// <paramref name="functionName"/> the message names the refused function, which is what the
+    /// per-name provider rejection contract of #281 asserts; the family-wide wording is kept for the
+    /// members enrolled before that contract.
+    /// </summary>
+    private static void RequireJsonSupport(BaseExpressionVisitor visitor, string? functionName = null)
     {
-        if (!visitor.Dialect.SupportsPostgresJsonSql)
-            throw new NotSupportedException(
-                "JSON is not supported by this provider: the json/jsonb functions and operators require PostgreSQL.");
+        if (visitor.Dialect.SupportsPostgresJsonSql)
+            return;
+
+        throw new NotSupportedException(functionName is null
+            ? "JSON is not supported by this provider: the json/jsonb functions and operators require PostgreSQL."
+            : $"The {functionName} function is not supported by this provider: the PostgreSQL JSON surface requires PostgreSQL.");
     }
 }

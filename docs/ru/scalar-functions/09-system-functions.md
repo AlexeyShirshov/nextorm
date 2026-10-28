@@ -96,6 +96,209 @@ PostgreSQL о backend/сети (`pg_backend_pid`, `inet_server_addr`, `inet_serv
 | `SqlFunctions.Postgres.current_setting(name)` / `current_setting(name, missingOk)` | `current_setting(name[, missing_ok])` |
 | `SqlFunctions.Postgres.set_config(name, value, isLocal)` | `set_config(name, value, is_local)` |
 
+Поверхность системной информации `pg_*` существует только для PostgreSQL и гейтится **по имени**:
+каждый скалярный член объявляется через
+[`IScalarFunctions.Supports`](xref:NextORM.Core.IScalarFunctions.Supports(System.String)), каждый
+множественный читатель — через `SupportsTableFunction`, а любой другой провайдер отклоняет вызов
+`NotSupportedException`. Она покрывает 79 имён `pg_*` из расширения системной информации PostgreSQL 17:
+56 поставленных скалярных функций, 2 проверенных отказа, уже покрытый `pg_backend_pid` и 20
+множественных читателей.
+
+**Семантика, измеренная на PostgreSQL 17.11.** Результаты типов-алиасов OID и транзакционных типов,
+для которых у Npgsql нет CLR-отображения — `oid`, `regclass`, `regtype`, `xid8` и `pg_lsn` — переводятся
+в `text` на стороне сервера (`cast(... as text)` или `::text` внутри проекции строки), а текстовый
+OID-аргумент приводится обратно к `oid`/`regclass`/`regtype`/`regrole`, потому что текстовый параметр не
+разрешает такие перегрузки. `pg_current_logfile()` возвращает NULL, когда ни одно место назначения
+журнала не является файловым (`logging_collector` выключен или журнал пишется в `syslog`), а не пустую
+строку; именованная форма принимает `stderr`, `csvlog` или `jsonlog`, а любое другое значение выдаёт
+ошибку на сервере. `pg_xact_commit_timestamp` выдаёт SQLSTATE `55000` (`could not get commit timestamp data`),
+когда `track_commit_timestamp` выключен — он не возвращает NULL. Помощники определения объектов
+возвращают NULL для аргумента, не называющего объект, вместо ошибки (`pg_get_indexdef`,
+`pg_get_viewdef`, `pg_get_ruledef`, `pg_get_triggerdef`, `pg_get_partkeydef`,
+`pg_get_partition_constraintdef`, `pg_get_statisticsobjdef`). Семейство только читающее: разрушительные
+или меняющие состояние элементы управления сервером (`pg_terminate_backend`, `pg_cancel_backend`,
+`pg_switch_wal`, `pg_promote`, `pg_create_restore_point`, `pg_reload_conf`, `pg_rotate_logfile`) не
+выставлены, а два помощника блокировок только сообщают id процессов — они никогда не действуют на
+сессию.
+
+#### Идентичность сессии и сервера
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.Postgres.current_role()` | `current_role` → `name` (ключевое слово без скобок) |
+| `SqlFunctions.Postgres.current_catalog()` | `current_catalog` → `name` (ключевое слово без скобок) |
+| `SqlFunctions.Postgres.current_schemas(includeImplicit)` | `current_schemas(include_implicit)` → `name[]` |
+| `SqlFunctions.Postgres.pg_postmaster_start_time()` | `pg_postmaster_start_time()` |
+| `SqlFunctions.Postgres.pg_current_logfile()` | `pg_current_logfile()` |
+| `SqlFunctions.Postgres.pg_current_logfile(format)` | `pg_current_logfile(format)` |
+| `SqlFunctions.Postgres.pg_conf_load_time()` | `pg_conf_load_time()` |
+| `SqlFunctions.Postgres.pg_jit_available()` | `pg_jit_available()` |
+| `SqlFunctions.Postgres.pg_my_temp_schema()` | `cast(pg_my_temp_schema() as text)` → `oid` как текст |
+| `SqlFunctions.Postgres.pg_is_other_temp_schema(schemaOid)` | `pg_is_other_temp_schema(schemaOid)` → аргумент `oid` |
+| `SqlFunctions.Postgres.pg_notification_queue_usage()` | `pg_notification_queue_usage()` |
+| `SqlFunctions.Postgres.pg_blocking_pids(pid)` | `pg_blocking_pids(pid)` → `integer[]` |
+| `SqlFunctions.Postgres.pg_safe_snapshot_blocking_pids(pid)` | `pg_safe_snapshot_blocking_pids(pid)` → `integer[]` |
+| `SqlFunctions.Postgres.pg_trigger_depth()` | `pg_trigger_depth()` |
+
+`pg_backend_pid()` остаётся на общей поверхности `SqlFunctions.Sql` и описан выше в разделе
+[Идентичность сессии и сервера](#идентичность-сессии-и-сервера); `pg_typeof` описан вместе с помощниками
+типов в разделе [Дата и время](03-date-and-time.md).
+
+#### Видимость в каталоге и привилегия роли
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.Postgres.pg_collation_is_visible(oid)` | `pg_collation_is_visible(oid)` |
+| `SqlFunctions.Postgres.pg_conversion_is_visible(oid)` | `pg_conversion_is_visible(oid)` |
+| `SqlFunctions.Postgres.pg_function_is_visible(oid)` | `pg_function_is_visible(oid)` |
+| `SqlFunctions.Postgres.pg_opclass_is_visible(oid)` | `pg_opclass_is_visible(oid)` |
+| `SqlFunctions.Postgres.pg_operator_is_visible(oid)` | `pg_operator_is_visible(oid)` |
+| `SqlFunctions.Postgres.pg_opfamily_is_visible(oid)` | `pg_opfamily_is_visible(oid)` |
+| `SqlFunctions.Postgres.pg_statistics_obj_is_visible(oid)` | `pg_statistics_obj_is_visible(oid)` |
+| `SqlFunctions.Postgres.pg_table_is_visible(oid)` | `pg_table_is_visible(oid)` |
+| `SqlFunctions.Postgres.pg_ts_config_is_visible(oid)` | `pg_ts_config_is_visible(oid)` |
+| `SqlFunctions.Postgres.pg_ts_dict_is_visible(oid)` | `pg_ts_dict_is_visible(oid)` |
+| `SqlFunctions.Postgres.pg_ts_parser_is_visible(oid)` | `pg_ts_parser_is_visible(oid)` |
+| `SqlFunctions.Postgres.pg_ts_template_is_visible(oid)` | `pg_ts_template_is_visible(oid)` |
+| `SqlFunctions.Postgres.pg_type_is_visible(oid)` | `pg_type_is_visible(oid)` |
+| `SqlFunctions.Postgres.pg_has_role(role, privilege)` | `pg_has_role(role, privilege)` → аргумент `regrole` |
+| `SqlFunctions.Postgres.pg_has_role(role, membership, privilege)` | `pg_has_role(role, membership, privilege)` → два аргумента `regrole` |
+
+Помощники видимости возвращают NULL, когда OID не называет объект; `pg_has_role` принимает имя роли
+или числовой OID в текстовой форме в любой позиции роли.
+
+#### Кодировки и описание каталога
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.Postgres.pg_char_to_encoding(name)` | `pg_char_to_encoding(name)` → `-1` для неизвестного имени |
+| `SqlFunctions.Postgres.pg_encoding_to_char(code)` | `pg_encoding_to_char(code)` → пустая строка для неизвестного кода |
+| `SqlFunctions.Postgres.pg_basetype(type)` | `cast(pg_basetype(type) as text)` → аргумент и результат `regtype` |
+| `SqlFunctions.Postgres.pg_describe_object(classOid, objectOid, objectSubId)` | `pg_describe_object(classid, objid, objsubid)` |
+| `SqlFunctions.Postgres.pg_tablespace_location(oid)` | `pg_tablespace_location(oid)` → пустая строка для tablespace по умолчанию |
+| `SqlFunctions.Postgres.pg_settings_get_flags(setting)` | `pg_settings_get_flags(setting)` → `text[]` |
+| `SqlFunctions.Postgres.pg_index_has_property(index, property)` | `pg_index_has_property(index, property)` |
+| `SqlFunctions.Postgres.pg_indexam_has_property(accessMethodOid, property)` | `pg_indexam_has_property(amoid, property)` |
+| `SqlFunctions.Postgres.pg_index_column_has_property(index, columnNumber, property)` | `pg_index_column_has_property(index, column, property)` |
+| `SqlFunctions.Postgres.pg_input_is_valid(value, typeName)` | `pg_input_is_valid(value, type)` |
+| `SqlFunctions.Postgres.pg_get_serial_sequence(table, column)` | `pg_get_serial_sequence(table, column)` |
+
+`pg_settings_get_flags` возвращает пустой массив для настройки без флагов и NULL для неизвестной
+настройки; нераспознанное свойство индекса — NULL; `pg_describe_object` равен NULL, когда OID не
+называют объект; `pg_input_is_valid` никогда не выдаёт ошибку для некорректного ввода, но неизвестное
+имя типа — по-прежнему ошибка; `pg_get_serial_sequence` равен NULL для столбца без последовательности.
+
+#### Помощники размеров
+
+Помощник размеров не выставлен: `pg_column_size`, `pg_relation_size`, `pg_total_relation_size`,
+`pg_indexes_size`, `pg_database_size`, `pg_size_pretty` и `pg_size_bytes` не имеют члена на
+`SqlFunctions.Postgres`. Единственные размеры блоков и сегментов на поверхности — столбцы только для
+чтения `pg_control_init()` в разделе [Файлы управления](#файлы-управления) ниже.
+
+#### Определения объектов
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.Postgres.pg_get_function_arguments(functionOid)` | `pg_get_function_arguments(oid)` |
+| `SqlFunctions.Postgres.pg_get_function_identity_arguments(functionOid)` | `pg_get_function_identity_arguments(oid)` |
+| `SqlFunctions.Postgres.pg_get_function_result(functionOid)` | `pg_get_function_result(oid)` |
+| `SqlFunctions.Postgres.pg_get_functiondef(functionOid)` | `pg_get_functiondef(oid)` |
+| `SqlFunctions.Postgres.pg_get_indexdef(indexOid)` | `pg_get_indexdef(oid)` |
+| `SqlFunctions.Postgres.pg_get_indexdef(indexOid, columnNumber, pretty)` | `pg_get_indexdef(oid, integer, boolean)` |
+| `SqlFunctions.Postgres.pg_get_partition_constraintdef(relationOid)` | `pg_get_partition_constraintdef(oid)` |
+| `SqlFunctions.Postgres.pg_get_partkeydef(relationOid)` | `pg_get_partkeydef(oid)` |
+| `SqlFunctions.Postgres.pg_get_ruledef(ruleOid)` | `pg_get_ruledef(oid)` |
+| `SqlFunctions.Postgres.pg_get_ruledef(ruleOid, pretty)` | `pg_get_ruledef(oid, boolean)` |
+| `SqlFunctions.Postgres.pg_get_statisticsobjdef(statisticsOid)` | `pg_get_statisticsobjdef(oid)` |
+| `SqlFunctions.Postgres.pg_get_triggerdef(triggerOid)` | `pg_get_triggerdef(oid)` |
+| `SqlFunctions.Postgres.pg_get_triggerdef(triggerOid, pretty)` | `pg_get_triggerdef(oid, boolean)` |
+| `SqlFunctions.Postgres.pg_get_userbyid(roleOid)` | `pg_get_userbyid(oid)` → `unknown (OID=N)` для отсутствующей роли |
+| `SqlFunctions.Postgres.pg_get_viewdef(view)` | `pg_get_viewdef(to_regclass(view))` |
+| `SqlFunctions.Postgres.pg_get_viewdef(view, pretty)` | `pg_get_viewdef(to_regclass(view), boolean)` |
+| `SqlFunctions.Postgres.pg_get_viewdef(viewOid, pretty)` | `pg_get_viewdef(to_regclass(viewOid), integer)` |
+
+Аргумент view — имя представления или числовой OID в текстовой форме. `pg_get_functiondef` — ошибка
+для агрегата или оконной функции, а `pg_get_indexdef(oid, integer, boolean)` — ошибка для столбца вне
+диапазона; оба сохраняют нативную ошибку сервера.
+
+#### Снимки и транзакции
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.Postgres.pg_current_snapshot()` | `cast(pg_current_snapshot() as text)` → `pg_snapshot` как текст |
+| `SqlFunctions.Postgres.pg_current_xact_id()` | `cast(pg_current_xact_id() as text)` → `xid8` как текст |
+| `SqlFunctions.Postgres.pg_current_xact_id_if_assigned()` | `cast(pg_current_xact_id_if_assigned() as text)` |
+| `SqlFunctions.Postgres.pg_snapshot_xmax(snapshot)` | `cast(pg_snapshot_xmax(snapshot) as text)` |
+| `SqlFunctions.Postgres.pg_snapshot_xmin(snapshot)` | `cast(pg_snapshot_xmin(snapshot) as text)` |
+| `SqlFunctions.Postgres.pg_visible_in_snapshot(xid, snapshot)` | `pg_visible_in_snapshot(xid, snapshot)` → аргументы `xid8` и `pg_snapshot` |
+| `SqlFunctions.Postgres.pg_xact_commit_timestamp(xid)` | `pg_xact_commit_timestamp(xid)` → аргумент `xid` |
+| `SqlFunctions.Postgres.pg_xact_status(xid)` | `pg_xact_status(xid)` → аргумент `xid8` |
+
+Текстовый снимок — это значение, которое возвращает `pg_current_snapshot()`, и тот же текст принимают
+`pg_snapshot_xmax`, `pg_snapshot_xmin` и `pg_visible_in_snapshot`. `pg_current_xact_id()` назначает id
+пишущей транзакции, у которой его ещё нет; `pg_current_xact_id_if_assigned()` не назначает и возвращает
+NULL.
+
+#### Отказы
+
+| Семейство | Отклонённый член | Проверенная причина |
+|---|---|---|
+| system information | `pg_get_expr(pg_node_tree, oid)` / `pg_get_expr(pg_node_tree, oid, boolean)` | `0A000: cannot accept a value of type pg_node_tree`; значение внутреннего типа `pg_node_tree` нельзя получить из CLR, поэтому ни одна форма функции не может быть подготовлена. |
+| system information | `pg_get_constraintdef(oid)` / `pg_get_constraintdef(oid, boolean)` | `0A000: cannot accept a value of type pg_node_tree`; соседний `pg_get_expr` вообще не может быть вызван, и пара отклонена целиком, а не наполовину. Читайте текст ограничения из `pg_constraint.conbin` сырой командой. |
+
+#### Файлы управления
+
+Четыре читателя файлов управления — это FROM-источники `TvfEntityBuilder<...>`, дающие по одной строке
+каждый:
+
+| C# | SQL | Row interface | Columns (C# ← SQL: CLR) |
+|---|---|---|---|
+| `SqlFunctions.Postgres.pg_control_system()` | `pg_control_system()` | `IPgControlSystemRow` | `PgControlVersion int? ← pg_control_version`; `CatalogVersionNo int? ← catalog_version_no`; `SystemIdentifier long? ← system_identifier`; `PgControlLastModified DateTime? ← pg_control_last_modified` |
+| `SqlFunctions.Postgres.pg_control_init()` | `pg_control_init()` | `IPgControlInitRow` | `MaxDataAlignment int? ← max_data_alignment`; `DatabaseBlockSize int? ← database_block_size`; `BlocksPerSegment int? ← blocks_per_segment`; `WalBlockSize int? ← wal_block_size`; `BytesPerWalSegment int? ← bytes_per_wal_segment`; `MaxIdentifierLength int? ← max_identifier_length`; `MaxIndexColumns int? ← max_index_columns`; `MaxToastChunkSize int? ← max_toast_chunk_size`; `LargeObjectChunkSize int? ← large_object_chunk_size`; `Float8PassByValue bool? ← float8_pass_by_value`; `DataPageChecksumVersion int? ← data_page_checksum_version` |
+| `SqlFunctions.Postgres.pg_control_recovery()` | `pg_control_recovery()` | `IPgControlRecoveryRow` | `MinRecoveryEndLsn string? ← min_recovery_end_lsn`; `MinRecoveryEndTimeline int? ← min_recovery_end_timeline`; `BackupStartLsn string? ← backup_start_lsn`; `BackupEndLsn string? ← backup_end_lsn`; `EndOfBackupRecordRequired bool? ← end_of_backup_record_required` |
+| `SqlFunctions.Postgres.pg_control_checkpoint()` | `pg_control_checkpoint()` | `IPgControlCheckpointRow` | `CheckpointLsn string? ← checkpoint_lsn`; `RedoLsn string? ← redo_lsn`; `RedoWalFile string? ← redo_wal_file`; `TimelineId int? ← timeline_id`; `PrevTimelineId int? ← prev_timeline_id`; `FullPageWrites bool? ← full_page_writes`; `NextXid string? ← next_xid`; `NextOid string? ← next_oid`; `NextMultixactId uint? ← next_multixact_id`; `NextMultiOffset uint? ← next_multi_offset`; `OldestXid uint? ← oldest_xid`; `OldestXidDbId string? ← oldest_xid_dbid`; `OldestActiveXid uint? ← oldest_active_xid`; `OldestMultiXid uint? ← oldest_multi_xid`; `OldestMultiDbId string? ← oldest_multi_dbid`; `OldestCommitTsXid uint? ← oldest_commit_ts_xid`; `NewestCommitTsXid uint? ← newest_commit_ts_xid`; `CheckpointTime DateTime? ← checkpoint_time` |
+
+`pg_control_recovery()` и `pg_control_checkpoint()` читают столбцы `pg_lsn` как текст; столбцы OID и
+`xid` строки checkpoint используют тот же мост (`next_oid`/`oldest_xid_dbid`/`oldest_multi_dbid` как
+текст, значения `xid` как `uint`).
+
+#### Читатели WAL и транзакций
+
+| C# | SQL | Row interface | Columns (C# ← SQL: CLR) |
+|---|---|---|---|
+| `SqlFunctions.Postgres.pg_available_wal_summaries()` | `pg_available_wal_summaries()` | `IPgAvailableWalSummaryRow` | `TimelineId long? ← tli`; `StartLsn string? ← start_lsn`; `EndLsn string? ← end_lsn` |
+| `SqlFunctions.Postgres.pg_get_wal_summarizer_state()` | `pg_get_wal_summarizer_state()` | `IPgWalSummarizerStateRow` | `SummarizedTli long? ← summarized_tli`; `SummarizedLsn string? ← summarized_lsn`; `PendingLsn string? ← pending_lsn`; `SummarizerPid int? ← summarizer_pid` |
+| `SqlFunctions.Postgres.pg_wal_summary_contents(timelineId, startLsn, endLsn)` | `pg_wal_summary_contents(tli, start_lsn, end_lsn)` | `IPgWalSummaryContentRow` | `RelFileNode string? ← relfilenode`; `RelTablespace string? ← reltablespace`; `RelDatabase string? ← reldatabase`; `RelForkNumber short? ← relforknumber`; `RelBlockNumber long? ← relblocknumber`; `IsLimitBlock bool? ← is_limit_block` |
+| `SqlFunctions.Postgres.pg_last_committed_xact()` | `pg_last_committed_xact()` | `IPgCommittedXactRow` | `Xid uint? ← xid`; `Timestamp DateTime? ← timestamp`; `RoIdent string? ← roident` |
+| `SqlFunctions.Postgres.pg_get_multixact_members(multixactId)` | `pg_get_multixact_members(xid)` | `IPgMultixactMemberRow` | `Xid uint? ← xid`; `Mode string? ← mode` |
+| `SqlFunctions.Postgres.pg_xact_commit_timestamp_origin(xid)` | `pg_xact_commit_timestamp_origin(xid)` | `IPgXactCommitOriginRow` | `Timestamp DateTime? ← timestamp`; `RoIdent string? ← roident` |
+| `SqlFunctions.Postgres.pg_snapshot_xip(snapshot)` | `pg_snapshot_xip(snapshot)` | `ISnapshotXipRow` | `Xid string? ← pg_snapshot_xip` |
+
+`pg_available_wal_summaries()` пуст, пока `summarize_wal` выключен; `pg_last_committed_xact()` даёт
+ноль или одну строку и не даёт строк, пока не записан коммит при `track_commit_timestamp`;
+`pg_xact_commit_timestamp_origin` даёт NULL-столбцы для транзакции без отметки времени коммита;
+`pg_get_multixact_members` не даёт строк для multixact id, который сервер ещё не создал;
+`pg_snapshot_xip` читает каждый `xid8` как текст.
+
+#### Читатели каталога, ключевых слов и объектов
+
+| C# | SQL | Row interface | Columns (C# ← SQL: CLR) |
+|---|---|---|---|
+| `SqlFunctions.Postgres.pg_get_keywords()` | `pg_get_keywords()` | `IPgKeywordRow` | `Word string? ← word`; `CatCode string? ← catcode`; `BareLabel bool? ← barelabel`; `CatDesc string? ← catdesc`; `BareDesc string? ← baredesc` |
+| `SqlFunctions.Postgres.pg_listening_channels()` | `pg_listening_channels()` | `IListeningChannelRow` | `Channel string? ← pg_listening_channels` |
+| `SqlFunctions.Postgres.pg_tablespace_databases(tablespaceOid)` | `pg_tablespace_databases(oid)` | `ITablespaceDatabaseRow` | `DatabaseOid string? ← pg_tablespace_databases` |
+| `SqlFunctions.Postgres.pg_get_catalog_foreign_keys()` | `pg_get_catalog_foreign_keys()` | `IPgCatalogForeignKeyRow` | `FkTable string? ← fktable`; `FkColumns string[]? ← fkcols`; `PkTable string? ← pktable`; `PkColumns string[]? ← pkcols`; `IsArray bool? ← is_array`; `IsOptional bool? ← is_opt` |
+| `SqlFunctions.Postgres.pg_options_to_table(options)` | `pg_options_to_table(options)` | `IPgOptionRow` | `OptionName string? ← option_name`; `OptionValue string? ← option_value` |
+| `SqlFunctions.Postgres.pg_get_object_address(type, objectNames, objectArgs)` | `pg_get_object_address(type, object_names, object_args)` | `IPgObjectAddressRow` | `ClassId string? ← classid`; `ObjId string? ← objid`; `ObjSubId int? ← objsubid` |
+| `SqlFunctions.Postgres.pg_identify_object(classId, objectId, objectSubId)` | `pg_identify_object(classid, objid, objsubid)` | `IPgIdentifyObjectRow` | `Type string? ← type`; `Schema string? ← schema`; `Name string? ← name`; `Identity string? ← identity` |
+| `SqlFunctions.Postgres.pg_identify_object_as_address(classId, objectId, objectSubId)` | `pg_identify_object_as_address(classid, objid, objsubid)` | `IPgIdentifyObjectAddressRow` | `Type string? ← type`; `ObjectNames string[]? ← object_names`; `ObjectArgs string[]? ← object_args` |
+| `SqlFunctions.Postgres.pg_input_error_info(value, typeName)` | `pg_input_error_info(value, type_name)` | `IPgInputErrorInfoRow` | `Message string? ← message`; `Detail string? ← detail`; `Hint string? ← hint`; `SqlErrorCode string? ← sql_error_code` |
+
+`pg_listening_channels()` пуст, пока то же соединение не выполнит `LISTEN`; `catcode` у
+`pg_get_keywords` — однобайтовый код `"char"`, прочитанный как текст; `pg_identify_object` даёт одну
+полностью NULL-строку для несуществующего объекта; `pg_input_error_info` даёт одну полностью NULL-строку
+для значения, которое разбирается.
+
 ### SQL Server
 
 `SqlFunctions.SqlServer.db_id`/`db_name`/`original_db_name`, `schema_id`/`schema_name`,

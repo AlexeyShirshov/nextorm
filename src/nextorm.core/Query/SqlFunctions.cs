@@ -124,6 +124,90 @@ public static partial class SqlFunctions
     }
 
     /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.unnest{T1,T2}(T1[], T2[])"/>: one column per
+    /// array, named <c>value1</c>/<c>value2</c> after the position of the source array. Unequal array
+    /// lengths are NULL-padded by the server to the longest array.
+    /// </summary>
+    /// <typeparam name="T1">The element type of the first array.</typeparam>
+    /// <typeparam name="T2">The element type of the second array.</typeparam>
+    public interface IUnnestMultiRow<T1, T2>
+    {
+        /// <summary>The element from the first array (NULL when that array is shorter).</summary>
+        [Column("value1")]
+        T1 Value1 { get; set; }
+        /// <summary>The element from the second array (NULL when that array is shorter).</summary>
+        [Column("value2")]
+        T2 Value2 { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.unnest{T1,T2,T3}(T1[], T2[], T3[])"/>: the
+    /// three admitted array positions, NULL-padded to the longest array.
+    /// </summary>
+    /// <typeparam name="T1">The element type of the first array.</typeparam>
+    /// <typeparam name="T2">The element type of the second array.</typeparam>
+    /// <typeparam name="T3">The element type of the third array.</typeparam>
+    public interface IUnnestMultiRow<T1, T2, T3>
+    {
+        /// <summary>The element from the first array (NULL when that array is shorter).</summary>
+        [Column("value1")]
+        T1 Value1 { get; set; }
+        /// <summary>The element from the second array (NULL when that array is shorter).</summary>
+        [Column("value2")]
+        T2 Value2 { get; set; }
+        /// <summary>The element from the third array (NULL when that array is shorter).</summary>
+        [Column("value3")]
+        T3 Value3 { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.unnest_with_ordinality{T}(T[])"/>: the element
+    /// and its one-based position. PostgreSQL types the ordinality column as <c>bigint</c>, so it is
+    /// <see cref="long"/> here.
+    /// </summary>
+    /// <typeparam name="T">The element type of the array.</typeparam>
+    public interface IUnnestOrdinalityRow<T>
+    {
+        /// <summary>The array element.</summary>
+        [Column("value")]
+        T Value { get; set; }
+        /// <summary>The one-based position of the element (<c>bigint</c>).</summary>
+        [Column("ordinality")]
+        long Ordinality { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.unnest_with_ordinality{T1,T2}(T1[], T2[])"/>:
+    /// one column per admitted array plus the shared one-based position (<c>bigint</c>, so
+    /// <see cref="long"/>). Unequal arrays are NULL-padded to the longest.
+    /// </summary>
+    /// <typeparam name="T1">The element type of the first array.</typeparam>
+    /// <typeparam name="T2">The element type of the second array.</typeparam>
+    public interface IUnnestOrdinalityMultiRow<T1, T2>
+    {
+        /// <summary>The element from the first array (NULL when that array is shorter).</summary>
+        [Column("value1")]
+        T1 Value1 { get; set; }
+        /// <summary>The element from the second array (NULL when that array is shorter).</summary>
+        [Column("value2")]
+        T2 Value2 { get; set; }
+        /// <summary>The one-based position of the row (<c>bigint</c>).</summary>
+        [Column("ordinality")]
+        long Ordinality { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.generate_subscripts{T}(T[], int?)"/>: the single
+    /// <c>generate_subscripts</c> column holds one subscript of the requested dimension.
+    /// </summary>
+    public interface IGenerateSubscriptsRow
+    {
+        /// <summary>One valid subscript of the requested array dimension.</summary>
+        [Column("generate_subscripts")]
+        int Value { get; set; }
+    }
+
+    /// <summary>
     /// Row shape produced by <see cref="PostgresFunctions.regexp_matches(string?, string?)"/>: the single
     /// <c>regexp_matches</c> column is a <c>text[]</c> holding the captured groups (the whole match when
     /// there are no groups). PostgreSQL returns <c>setof text[]</c>.
@@ -147,21 +231,37 @@ public static partial class SqlFunctions
     }
 
     /// <summary>
-    /// Row shape produced by <see cref="PostgresFunctions.jsonb_array_elements(object?)"/> and
-    /// <see cref="PostgresFunctions.jsonb_array_elements_text(object?)"/>: the single <c>value</c> column
-    /// holds one array element (a jsonb document rendered as text, or plain text).
+    /// Row shape produced by <see cref="PostgresFunctions.string_to_table(string?, string?)"/>: the
+    /// single <c>string_to_table</c> column holds one fragment.
+    /// </summary>
+    public interface IStringToTableRow
+    {
+        /// <summary>One fragment produced by the split; NULL when it matched the <c>null_string</c> argument.</summary>
+        [Column("string_to_table")]
+        string? Value { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.jsonb_array_elements(object?)"/>,
+    /// <see cref="PostgresFunctions.jsonb_array_elements_text(object?)"/>,
+    /// <see cref="PostgresFunctions.json_array_elements(string?)"/> and
+    /// <see cref="PostgresFunctions.json_array_elements_text(string?)"/>: the single <c>value</c> column
+    /// holds one array element (a <c>json</c>/<c>jsonb</c> document rendered as text, or plain text).
     /// </summary>
     public interface IJsonArrayElementsRow
     {
-        /// <summary>One array element (a jsonb document rendered as text, or plain text).</summary>
+        /// <summary>One array element (a <c>json</c>/<c>jsonb</c> document rendered as text, or plain text).</summary>
         [Column("value")]
         string? Value { get; set; }
     }
 
     /// <summary>
-    /// Row shape produced by <see cref="PostgresFunctions.jsonb_each(object?)"/> and
-    /// <see cref="PostgresFunctions.jsonb_each_text(object?)"/>: the <c>key</c>/<c>value</c> columns of
-    /// one object property (the value is a jsonb document rendered as text, or plain text).
+    /// Row shape produced by <see cref="PostgresFunctions.jsonb_each(object?)"/>,
+    /// <see cref="PostgresFunctions.jsonb_each_text(object?)"/>,
+    /// <see cref="PostgresFunctions.json_each(string?)"/> and
+    /// <see cref="PostgresFunctions.json_each_text(string?)"/>: the <c>key</c>/<c>value</c> columns of
+    /// one object property (the value is a <c>json</c>/<c>jsonb</c> document rendered as text, or plain
+    /// text). All four functions return exactly two columns on PostgreSQL 17, so they share this shape.
     /// </summary>
     public interface IJsonbEachRow
     {
@@ -196,6 +296,19 @@ public static partial class SqlFunctions
     }
 
     /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.jsonb_path_query_tz(string?, string?, string?, bool?)"/>:
+    /// the single <c>jsonb_path_query_tz</c> column holds one time-zone-aware JSONPath match (a jsonb
+    /// document rendered as text). The column is named after the function, unlike the <c>value</c> column of
+    /// the array readers, so the row shape is separate from <see cref="IJsonPathQueryRow"/>.
+    /// </summary>
+    public interface IJsonPathQueryTzRow
+    {
+        /// <summary>One time-zone-aware JSONPath match (a jsonb document rendered as text).</summary>
+        [Column("jsonb_path_query_tz")]
+        string? Value { get; set; }
+    }
+
+    /// <summary>
     /// Row shape produced by <see cref="PostgresFunctions.ts_stat(string?)"/>: one statistic for a lexeme
     /// (<c>word</c>, document count <c>ndoc</c>, total occurrences <c>nentry</c>).
     /// </summary>
@@ -210,6 +323,517 @@ public static partial class SqlFunctions
         /// <summary>The total number of occurrences of the lexeme.</summary>
         [Column("nentry")]
         int? Nentry { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.ts_debug(string?)"/>: one tokenizer step of
+    /// the default text-search configuration for the document. The six columns are the documented
+    /// <c>ts_debug</c> result on PostgreSQL 17 — <c>alias</c>, <c>description</c>, <c>token</c>,
+    /// <c>dictionaries</c> (<c>regdictionary[]</c>), <c>dictionary</c> (<c>regdictionary</c>) and
+    /// <c>lexemes</c> (<c>text[]</c>). The two dictionary columns have no CLR mapping and are read as
+    /// text (the emitted projection casts them: <c>dictionaries::text[]</c> and
+    /// <c>dictionary::text</c>), exactly like the <c>regclass</c>/<c>oid</c> columns of the
+    /// system-information readers.
+    /// </summary>
+    public interface ITsDebugRow
+    {
+        /// <summary>The token type alias (<c>asciiword</c>, <c>blank</c>, <c>word</c>, …).</summary>
+        [Column("alias")]
+        string? Alias { get; set; }
+        /// <summary>The human-readable description of the token type.</summary>
+        [Column("description")]
+        string? Description { get; set; }
+        /// <summary>The token text extracted from the document.</summary>
+        [Column("token")]
+        string? Token { get; set; }
+        /// <summary>The dictionaries consulted for the token, as their textual names.</summary>
+        [Column("dictionaries")]
+        string[]? Dictionaries { get; set; }
+        /// <summary>The dictionary that produced the lexemes, as its textual name; NULL when none matched.</summary>
+        [Column("dictionary")]
+        string? Dictionary { get; set; }
+        /// <summary>The lexemes the token normalised to; an empty array when the token is not a word.</summary>
+        [Column("lexemes")]
+        string[]? Lexemes { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.ts_parse(string?, string?)"/>: one token of
+    /// the document as the named text-search parser split it (<c>tokid</c> is the token type id,
+    /// <c>token</c> the token text).
+    /// </summary>
+    public interface ITsParseRow
+    {
+        /// <summary>The token type id of the token.</summary>
+        [Column("tokid")]
+        int? Tokid { get; set; }
+        /// <summary>The token text.</summary>
+        [Column("token")]
+        string? Token { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.ts_token_type(string?)"/>: the token types
+    /// the named text-search parser recognises (<c>tokid</c>, <c>alias</c>, <c>description</c>).
+    /// </summary>
+    public interface ITsTokenTypeRow
+    {
+        /// <summary>The token type id.</summary>
+        [Column("tokid")]
+        int? Tokid { get; set; }
+        /// <summary>The token type alias (<c>asciiword</c>, <c>blank</c>, <c>word</c>, …).</summary>
+        [Column("alias")]
+        string? Alias { get; set; }
+        /// <summary>The human-readable description of the token type.</summary>
+        [Column("description")]
+        string? Description { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.pg_control_system()"/>: the one
+    /// <c>pg_control_system</c> record (control-file version, catalog version, the cluster's system
+    /// identifier and the control file's modification time).
+    /// </summary>
+    public interface IPgControlSystemRow
+    {
+        /// <summary>The <c>pg_control</c> format version (1700 on PostgreSQL 17).</summary>
+        [Column("pg_control_version")]
+        int? PgControlVersion { get; set; }
+        /// <summary>The catalog version number of the running server.</summary>
+        [Column("catalog_version_no")]
+        int? CatalogVersionNo { get; set; }
+        /// <summary>The cluster-wide system identifier from <c>pg_control</c>.</summary>
+        [Column("system_identifier")]
+        long? SystemIdentifier { get; set; }
+        /// <summary>The time the control file was last written.</summary>
+        [Column("pg_control_last_modified")]
+        DateTime? PgControlLastModified { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.pg_control_init()"/>: the compile-time and
+    /// <c>pg_control</c> constants of the running server (alignment, block sizes, identifier limits).
+    /// </summary>
+    public interface IPgControlInitRow
+    {
+        /// <summary>The maximum alignment the server guarantees.</summary>
+        [Column("max_data_alignment")]
+        int? MaxDataAlignment { get; set; }
+        /// <summary>The database block size (<c>BLCKSZ</c>).</summary>
+        [Column("database_block_size")]
+        int? DatabaseBlockSize { get; set; }
+        /// <summary>The number of blocks per segment file.</summary>
+        [Column("blocks_per_segment")]
+        int? BlocksPerSegment { get; set; }
+        /// <summary>The WAL block size (<c>XLOG_BLCKSZ</c>).</summary>
+        [Column("wal_block_size")]
+        int? WalBlockSize { get; set; }
+        /// <summary>The size of one WAL segment file, in bytes.</summary>
+        [Column("bytes_per_wal_segment")]
+        int? BytesPerWalSegment { get; set; }
+        /// <summary>The maximum length of an identifier, in bytes.</summary>
+        [Column("max_identifier_length")]
+        int? MaxIdentifierLength { get; set; }
+        /// <summary>The maximum number of columns in an index.</summary>
+        [Column("max_index_columns")]
+        int? MaxIndexColumns { get; set; }
+        /// <summary>The maximum size of a <c>TOAST</c>ed chunk, in bytes.</summary>
+        [Column("max_toast_chunk_size")]
+        int? MaxToastChunkSize { get; set; }
+        /// <summary>The chunk size used for large objects, in bytes.</summary>
+        [Column("large_object_chunk_size")]
+        int? LargeObjectChunkSize { get; set; }
+        /// <summary>Whether <c>float8</c> is passed by value on this build.</summary>
+        [Column("float8_pass_by_value")]
+        bool? Float8PassByValue { get; set; }
+        /// <summary>The data page checksum version the cluster was initialised with.</summary>
+        [Column("data_page_checksum_version")]
+        int? DataPageChecksumVersion { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.pg_control_recovery()"/>: the recovery
+    /// state recorded in the control file. The <c>pg_lsn</c> columns are read as text
+    /// (<c>0/0</c> when unset), because the driver's LSN type has no CLR mapping in the row mapper.
+    /// </summary>
+    public interface IPgControlRecoveryRow
+    {
+        /// <summary>The minimum recovery end LSN, as text.</summary>
+        [Column("min_recovery_end_lsn")]
+        string? MinRecoveryEndLsn { get; set; }
+        /// <summary>The timeline of the minimum recovery end point.</summary>
+        [Column("min_recovery_end_timeline")]
+        int? MinRecoveryEndTimeline { get; set; }
+        /// <summary>The start LSN of the backup, as text.</summary>
+        [Column("backup_start_lsn")]
+        string? BackupStartLsn { get; set; }
+        /// <summary>The end LSN of the backup, as text.</summary>
+        [Column("backup_end_lsn")]
+        string? BackupEndLsn { get; set; }
+        /// <summary>Whether the end-of-backup record is still required.</summary>
+        [Column("end_of_backup_record_required")]
+        bool? EndOfBackupRecordRequired { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.pg_control_checkpoint()"/>: the checkpoint
+    /// state recorded in the control file. <c>pg_lsn</c> and <c>oid</c> columns are read as text and
+    /// <c>xid</c> columns as <see cref="uint"/>, the CLR type the driver exposes for <c>xid</c>.
+    /// </summary>
+    public interface IPgControlCheckpointRow
+    {
+        /// <summary>The checkpoint's redo location, as text.</summary>
+        [Column("checkpoint_lsn")]
+        string? CheckpointLsn { get; set; }
+        /// <summary>The redo location the next WAL record must start at, as text.</summary>
+        [Column("redo_lsn")]
+        string? RedoLsn { get; set; }
+        /// <summary>The WAL file that contains <see cref="RedoLsn"/>.</summary>
+        [Column("redo_wal_file")]
+        string? RedoWalFile { get; set; }
+        /// <summary>The timeline the checkpoint belongs to.</summary>
+        [Column("timeline_id")]
+        int? TimelineId { get; set; }
+        /// <summary>The previous timeline identifier.</summary>
+        [Column("prev_timeline_id")]
+        int? PrevTimelineId { get; set; }
+        /// <summary>Whether full-page writes are enabled.</summary>
+        [Column("full_page_writes")]
+        bool? FullPageWrites { get; set; }
+        /// <summary>The next transaction id, in its textual <c>epoch:counter</c> form.</summary>
+        [Column("next_xid")]
+        string? NextXid { get; set; }
+        /// <summary>The next OID, as text.</summary>
+        [Column("next_oid")]
+        string? NextOid { get; set; }
+        /// <summary>The next multixact id.</summary>
+        [Column("next_multixact_id")]
+        uint? NextMultixactId { get; set; }
+        /// <summary>The next multixact offset.</summary>
+        [Column("next_multi_offset")]
+        uint? NextMultiOffset { get; set; }
+        /// <summary>The oldest transaction id that has not been vacuumed.</summary>
+        [Column("oldest_xid")]
+        uint? OldestXid { get; set; }
+        /// <summary>The database of <see cref="OldestXid"/>, as text.</summary>
+        [Column("oldest_xid_dbid")]
+        string? OldestXidDbId { get; set; }
+        /// <summary>The oldest transaction id that is still running.</summary>
+        [Column("oldest_active_xid")]
+        uint? OldestActiveXid { get; set; }
+        /// <summary>The oldest multixact id.</summary>
+        [Column("oldest_multi_xid")]
+        uint? OldestMultiXid { get; set; }
+        /// <summary>The database of <see cref="OldestMultiXid"/>, as text.</summary>
+        [Column("oldest_multi_dbid")]
+        string? OldestMultiDbId { get; set; }
+        /// <summary>The oldest transaction id with a commit timestamp.</summary>
+        [Column("oldest_commit_ts_xid")]
+        uint? OldestCommitTsXid { get; set; }
+        /// <summary>The newest transaction id with a commit timestamp.</summary>
+        [Column("newest_commit_ts_xid")]
+        uint? NewestCommitTsXid { get; set; }
+        /// <summary>The time of the checkpoint.</summary>
+        [Column("checkpoint_time")]
+        DateTime? CheckpointTime { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.pg_get_keywords()"/>: one SQL keyword or
+    /// keyword-like token per row. <c>catcode</c> is PostgreSQL's internal <c>"char"</c> one-byte
+    /// category code, read as text because the row mapper has no <see cref="char"/> accessor.
+    /// </summary>
+    public interface IPgKeywordRow
+    {
+        /// <summary>The keyword or token text.</summary>
+        [Column("word")]
+        string? Word { get; set; }
+        /// <summary>The one-letter category code (<c>U</c>, <c>C</c>, <c>T</c> or <c>R</c>), as text.</summary>
+        [Column("catcode")]
+        string? CatCode { get; set; }
+        /// <summary>Whether the keyword can be used as a bare column label.</summary>
+        [Column("barelabel")]
+        bool? BareLabel { get; set; }
+        /// <summary>The human-readable description of the category.</summary>
+        [Column("catdesc")]
+        string? CatDesc { get; set; }
+        /// <summary>The bare-label description.</summary>
+        [Column("baredesc")]
+        string? BareDesc { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.pg_listening_channels()"/>: a single column
+    /// named <c>pg_listening_channels</c> holding one channel name this session is listening on.
+    /// </summary>
+    public interface IListeningChannelRow
+    {
+        /// <summary>The name of a channel the current session has <c>LISTEN</c>ed on.</summary>
+        [Column("pg_listening_channels")]
+        string? Channel { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.pg_snapshot_xip(string?)"/>: a single column
+    /// named <c>pg_snapshot_xip</c> holding one in-progress transaction id of the snapshot. The id is
+    /// read as text (<c>xid8</c> has no CLR mapping in the row mapper), exactly like the scalar
+    /// <c>pg_snapshot_xmin</c>/<c>pg_snapshot_xmax</c> members.
+    /// </summary>
+    public interface ISnapshotXipRow
+    {
+        /// <summary>An in-progress transaction id of the snapshot, in its textual form.</summary>
+        [Column("pg_snapshot_xip")]
+        string? Xid { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.pg_tablespace_databases(string?)"/>: a single
+    /// column named <c>pg_tablespace_databases</c> holding one database OID, read as text like the
+    /// other <c>oid</c>-returning members of the family.
+    /// </summary>
+    public interface ITablespaceDatabaseRow
+    {
+        /// <summary>The OID of a database that has files in the tablespace, as text.</summary>
+        [Column("pg_tablespace_databases")]
+        string? DatabaseOid { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.pg_get_catalog_foreign_keys()"/>: one
+    /// catalog foreign-key relationship per row. Both table columns are <c>regclass</c> and both column
+    /// lists are <c>text[]</c>; the tables are read as text (<c>::text</c> in the projection) and the
+    /// arrays keep their element order, including NULL elements the server may return.
+    /// </summary>
+    public interface IPgCatalogForeignKeyRow
+    {
+        /// <summary>The referencing catalog, as its textual <c>regclass</c> form.</summary>
+        [Column("fktable")]
+        string? FkTable { get; set; }
+        /// <summary>The referencing column names.</summary>
+        [Column("fkcols")]
+        string[]? FkColumns { get; set; }
+        /// <summary>The referenced catalog, as its textual <c>regclass</c> form.</summary>
+        [Column("pktable")]
+        string? PkTable { get; set; }
+        /// <summary>The referenced column names.</summary>
+        [Column("pkcols")]
+        string[]? PkColumns { get; set; }
+        /// <summary>Whether the reference points at an array column.</summary>
+        [Column("is_array")]
+        bool? IsArray { get; set; }
+        /// <summary>Whether the reference is optional (the column may be NULL).</summary>
+        [Column("is_opt")]
+        bool? IsOptional { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.pg_options_to_table(string?[])"/>: one
+    /// storage-option entry per row (the same shape <c>unnest(reloptions)</c> would split by hand).
+    /// </summary>
+    public interface IPgOptionRow
+    {
+        /// <summary>The option name (the part before <c>=</c>).</summary>
+        [Column("option_name")]
+        string? OptionName { get; set; }
+        /// <summary>The option value, or NULL for a flag-style option.</summary>
+        [Column("option_value")]
+        string? OptionValue { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.pg_available_wal_summaries()"/>: one WAL
+    /// summary file per row. The <c>pg_lsn</c> bounds are read as text (the row mapper has no LSN
+    /// accessor); the set is empty until the server has written summaries (it needs
+    /// <c>summarize_wal = on</c>).
+    /// </summary>
+    public interface IPgAvailableWalSummaryRow
+    {
+        /// <summary>The timeline the summary belongs to.</summary>
+        [Column("tli")]
+        long? TimelineId { get; set; }
+        /// <summary>The first LSN covered by the summary, as text.</summary>
+        [Column("start_lsn")]
+        string? StartLsn { get; set; }
+        /// <summary>The last LSN covered by the summary, as text.</summary>
+        [Column("end_lsn")]
+        string? EndLsn { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.pg_get_multixact_members(uint?)"/>: one row
+    /// per transaction that is a member of the multixact. Nothing is returned for a multixact id the
+    /// server has not created yet.
+    /// </summary>
+    public interface IPgMultixactMemberRow
+    {
+        /// <summary>The member transaction id.</summary>
+        [Column("xid")]
+        uint? Xid { get; set; }
+        /// <summary>The lock mode the member holds (for example <c>sh</c> or <c>nokeyex</c>).</summary>
+        [Column("mode")]
+        string? Mode { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.pg_get_object_address(string?, string?[], string?[])"/>:
+    /// the catalog coordinates of one object. Both OIDs are read as text, like the other
+    /// <c>oid</c>-returning members of the family.
+    /// </summary>
+    public interface IPgObjectAddressRow
+    {
+        /// <summary>The OID of the catalog that holds the object, as text.</summary>
+        [Column("classid")]
+        string? ClassId { get; set; }
+        /// <summary>The OID of the object, as text.</summary>
+        [Column("objid")]
+        string? ObjId { get; set; }
+        /// <summary>The sub-object id (0 for the object itself, the column number for a column).</summary>
+        [Column("objsubid")]
+        int? ObjSubId { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.pg_get_wal_summarizer_state()"/>: the single
+    /// state row of the WAL summarizer. The <c>pg_lsn</c> columns are text and
+    /// <c>summarizer_pid</c> is NULL while the summarizer is not running.
+    /// </summary>
+    public interface IPgWalSummarizerStateRow
+    {
+        /// <summary>The timeline the summarizer is working on.</summary>
+        [Column("summarized_tli")]
+        long? SummarizedTli { get; set; }
+        /// <summary>The LSN up to which WAL has been summarized, as text.</summary>
+        [Column("summarized_lsn")]
+        string? SummarizedLsn { get; set; }
+        /// <summary>The LSN of the last WAL record the summarizer has seen, as text.</summary>
+        [Column("pending_lsn")]
+        string? PendingLsn { get; set; }
+        /// <summary>The summarizer process id, or NULL when it is not running.</summary>
+        [Column("summarizer_pid")]
+        int? SummarizerPid { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.pg_last_committed_xact()"/>: the most recent
+    /// transaction with a commit timestamp (zero or one row). <c>roident</c> is read as text.
+    /// </summary>
+    public interface IPgCommittedXactRow
+    {
+        /// <summary>The transaction id of the last committed transaction.</summary>
+        [Column("xid")]
+        uint? Xid { get; set; }
+        /// <summary>The commit time of that transaction.</summary>
+        [Column("timestamp")]
+        DateTime? Timestamp { get; set; }
+        /// <summary>The replication origin of that transaction, as text.</summary>
+        [Column("roident")]
+        string? RoIdent { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.pg_identify_object(string?, string?, int?)"/>: the
+    /// human-readable identification of one catalog object — its type, schema, name and the identity
+    /// string that the server accepts back as an object reference. An object that does not exist yields
+    /// one all-NULL row.
+    /// </summary>
+    public interface IPgIdentifyObjectRow
+    {
+        /// <summary>The object type, for example <c>table</c> or <c>index</c>.</summary>
+        [Column("type")]
+        string? Type { get; set; }
+        /// <summary>The schema the object lives in, or NULL for objects without a schema.</summary>
+        [Column("schema")]
+        string? Schema { get; set; }
+        /// <summary>The object name, or NULL for objects without a name.</summary>
+        [Column("name")]
+        string? Name { get; set; }
+        /// <summary>The exact textual identity the server accepts as an object reference.</summary>
+        [Column("identity")]
+        string? Identity { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by
+    /// <see cref="PostgresFunctions.pg_identify_object_as_address(string?, string?, int?)"/>: the
+    /// machine-readable address of one catalog object. Both address components are <c>text[]</c> and keep
+    /// their element order; <c>object_args</c> is empty for objects whose address needs no arguments.
+    /// </summary>
+    public interface IPgIdentifyObjectAddressRow
+    {
+        /// <summary>The object type, for example <c>table</c> or <c>column</c>.</summary>
+        [Column("type")]
+        string? Type { get; set; }
+        /// <summary>The name components of the address (schema, relation, column, …).</summary>
+        [Column("object_names")]
+        string[]? ObjectNames { get; set; }
+        /// <summary>The positional arguments of the address (for example the argument types of a function).</summary>
+        [Column("object_args")]
+        string[]? ObjectArgs { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.pg_input_error_info(string?, string?)"/>: the
+    /// soft error report of parsing a value as a type, without raising the error. A valid value yields one
+    /// all-NULL row; an invalid value yields the message, the SQLSTATE code and the optional detail/hint.
+    /// </summary>
+    public interface IPgInputErrorInfoRow
+    {
+        /// <summary>The primary error message, or NULL when the value parses.</summary>
+        [Column("message")]
+        string? Message { get; set; }
+        /// <summary>The optional error detail line.</summary>
+        [Column("detail")]
+        string? Detail { get; set; }
+        /// <summary>The optional error hint line.</summary>
+        [Column("hint")]
+        string? Hint { get; set; }
+        /// <summary>The SQLSTATE code of the error (for example <c>22P02</c>), or NULL when the value parses.</summary>
+        [Column("sql_error_code")]
+        string? SqlErrorCode { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by
+    /// <see cref="PostgresFunctions.pg_wal_summary_contents(long?, string?, string?)"/>: one block range of
+    /// a WAL summary file. The <c>oid</c> columns are read as text like the other <c>oid</c>-returning
+    /// members of the family and <c>relforknumber</c> is a <see cref="short"/> (<c>int2</c>).
+    /// </summary>
+    public interface IPgWalSummaryContentRow
+    {
+        /// <summary>The OID of the relation the block belongs to, as text (0 for non-relation blocks).</summary>
+        [Column("relfilenode")]
+        string? RelFileNode { get; set; }
+        /// <summary>The OID of the relation's tablespace, as text.</summary>
+        [Column("reltablespace")]
+        string? RelTablespace { get; set; }
+        /// <summary>The OID of the relation's database, as text.</summary>
+        [Column("reldatabase")]
+        string? RelDatabase { get; set; }
+        /// <summary>The fork number of the relation (0 for the main fork).</summary>
+        [Column("relforknumber")]
+        short? RelForkNumber { get; set; }
+        /// <summary>The first block number of the range.</summary>
+        [Column("relblocknumber")]
+        long? RelBlockNumber { get; set; }
+        /// <summary>Whether this row marks the end of the block range rather than a modified block.</summary>
+        [Column("is_limit_block")]
+        bool? IsLimitBlock { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.pg_xact_commit_timestamp_origin(uint?)"/>: the
+    /// commit timestamp of one transaction and the replication origin it belongs to (<c>roident</c> read as
+    /// text). Requires <c>track_commit_timestamp</c>; a transaction without a commit timestamp yields NULL
+    /// columns.
+    /// </summary>
+    public interface IPgXactCommitOriginRow
+    {
+        /// <summary>The commit time of the transaction.</summary>
+        [Column("timestamp")]
+        DateTime? Timestamp { get; set; }
+        /// <summary>The replication origin of the transaction, as text.</summary>
+        [Column("roident")]
+        string? RoIdent { get; set; }
     }
 
     /// <summary>

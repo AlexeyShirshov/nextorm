@@ -287,6 +287,106 @@ var elements = dataContext
 `generate_series` проецируется на [`Value`](xref:NextORM.Core.SqlFunctions.IGenerateSeriesRow.Value), а `unnest` — на
 [`Value`](xref:NextORM.Core.SqlFunctions.IUnnestRow`1.Value); обе соответствуют единственной колонке, которую возвращает функция.
 
+## Дополнения агрегатов PostgreSQL (#281)
+
+Члены ниже дополняют агрегатную поверхность PostgreSQL. Это обычные агрегаты `pg_proc` — или, для
+агрегатов SQL/JSON и `grouping`, конструкции уровня парсера без строки в `pg_proc` — с проверкой по
+каждому имени; любой другой провайдер, включая in-memory, при трансляции выбрасывает
+`NotSupportedException`. `json_agg`, `jsonb_agg`, `json_object_agg` и `jsonb_object_agg` по-прежнему
+документированы вместе с JSON-функциями в разделе [JSON и JSONB](07-json-and-xml.md).
+
+### `any_value`
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.Postgres.any_value(x)` | `any_value(x)` |
+
+`any_value` возвращает произвольное значение группы (`anyelement → anyelement`, PostgreSQL 16+), причём
+и аргумент, и результат сохраняют собственный тип аргумента (`integer` остаётся `integer`). Это агрегат
+`pg_proc` PostgreSQL, а не переносимый `Sql.any_agg`. Поскольку результат полиморфен, nextorm требует
+одноколоночную CLR-форму — примитив, строку, дату/время, decimal, `Guid` или массив байтов — и
+отклоняет любой другой `T` до генерации SQL; при необходимости проецируйте значение с явным
+преобразованием. Группа, все значения которой NULL, даёт NULL, а пустой вход по-прежнему даёт одну
+строку с NULL.
+
+### Регрессионные суммы (`regr_sxx`, `regr_sxy`, `regr_syy`)
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.Postgres.regr_sxx(y, x)` | `regr_sxx(y, x)` |
+| `SqlFunctions.Postgres.regr_sxy(y, x)` | `regr_sxy(y, x)` |
+| `SqlFunctions.Postgres.regr_syy(y, x)` | `regr_syy(y, x)` |
+
+Оба операнда — обобщённые (`TY?`/`TX?`); перегрузки агрегата в PostgreSQL принимают `double precision`,
+и результат — `double precision` (`double?`). `regr_sxx` равен
+`sum(X^2) - sum(X)^2/N`, `regr_syy` — то же по `Y`, а `regr_sxy` — `sum(X*Y) - sum(X)*sum(Y)/N`. Пара
+с NULL-операндом пропускается; группа с единственной не-NULL парой даёт `0` (измерено), а группа из
+одних NULL или пустой вход дают NULL — пустой вход по-прежнему даёт одну строку.
+
+### `xmlagg`
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.Postgres.xmlagg(x)` | `xmlagg(cast(x as xml))` |
+
+В PostgreSQL есть единственный агрегат `xmlagg(xml) → xml`: `xmlagg(text)` и `xmlagg(integer)` дают
+`42883` "function … does not exist" (измерено), поэтому операнд приводится к `xml` и обязан содержать
+XML-разметку, которую принимает тип `xml`. Результат — конкатенация документов группы без разделителя,
+и Npgsql материализует результат `xml` как `string` (измерено), что и объявляет член. NULL-операнды
+пропускаются, группа, все операнды которой NULL, даёт NULL, а пустой вход по-прежнему даёт одну строку
+с NULL.
+
+### Строгие и уникальные JSON-агрегаты
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.Postgres.json_agg_strict(x)` | `json_agg_strict(x)` |
+| `SqlFunctions.Postgres.jsonb_agg_strict(x)` | `jsonb_agg_strict(x)` |
+| `SqlFunctions.Postgres.json_object_agg_unique(k, v)` | `json_object_agg_unique(k, v)` |
+| `SqlFunctions.Postgres.json_object_agg_unique_strict(k, v)` | `json_object_agg_unique_strict(k, v)` |
+
+Агрегаты PostgreSQL 16. Две массивные формы игнорируют NULL-значения: группа, все значения которой
+NULL, даёт `[]` (а не массив null, измерено), пустой вход по-прежнему даёт одну строку с NULL, а
+результат `json`/`jsonb` читается как строка. `json_object_agg_unique` сохраняет NULL-значение как JSON
+`null`, а `json_object_agg_unique_strict` отбрасывает пару с NULL-значением; оба поднимают `22030` при
+дубликате ключа и `22004` при NULL-ключе (измерено на 17.11), а пустой вход даёт одну строку с NULL.
+
+### Агрегаты SQL/JSON (`json_arrayagg`, `json_objectagg`)
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.Postgres.json_arrayagg(x)` | `json_arrayagg(x)` |
+| `SqlFunctions.Postgres.jsonb_arrayagg(x)` | `json_arrayagg(x returning jsonb)` |
+| `SqlFunctions.Postgres.json_objectagg(k, v)` | `json_objectagg(k value v)` |
+| `SqlFunctions.Postgres.json_objectagg_unique(k, v)` | `json_objectagg(k value v with unique keys)` |
+| `SqlFunctions.Postgres.jsonb_objectagg(k, v)` | `json_objectagg(k value v returning jsonb)` |
+
+Конструкции уровня парсера PostgreSQL 17 без строки в `pg_proc`. `json_arrayagg` по умолчанию работает
+как `ABSENT ON NULL`: NULL-значения отбрасываются, группа из одних NULL даёт `[]`, а пустой вход даёт
+NULL. `json_objectagg` принимает ровно одну пару на вызов (`key value value`; форма из двух пар через
+запятую — это `42601`) и по умолчанию работает как `NULL ON NULL`, сохраняя дубликаты ключей, а
+`with unique keys` поднимает `22030`; NULL-ключ поднимает `22004`, а пустой вход даёт NULL. Ключ не
+приводится — сервер сам приводит его к тексту (измерено на целочисленном ключе). `jsonb_arrayagg` и
+`jsonb_objectagg` — имена членов для пунктов `RETURNING jsonb`, поскольку функций с такими именами в
+PostgreSQL нет. У построителя нет места для внутреннего списка аргументов агрегата, поэтому `ORDER BY …`,
+`ABSENT|NULL ON NULL` и `DISTINCT` не экспонируются; написание `DISTINCT` на 17.11 — синтаксическая
+ошибка (`42601`, измерено). Любой результат — это `json`/`jsonb`, читаемый как строка.
+
+### `grouping`
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.Postgres.grouping(column)` | `grouping(column)` |
+
+Один бит идентичности супер-агрегата текущей строки: `0`, когда строка группирует колонку, и `1`, когда
+строка — супер-агрегат, который её агрегировал. Аргумент обязан быть выражением собственного списка
+группировки запроса — иначе `42803` — и функция полезна только внутри группировки
+`GROUP BY ROLLUP`/`CUBE`/`GROUPING SETS`; в обычном `GROUP BY` она допустима и всегда равна `0`.
+`GroupByRollup(...)` в nextorm порождает такую группировку (как и `GroupByCube`/`GroupByGroupingSets`),
+поэтому `grouping` можно проецировать рядом с агрегатными колонками. Вызов без аргументов `grouping()` —
+синтаксическая ошибка (`42601`), а результат — `integer` (`int?`). Измерено на 17.11. Для каждой строки
+возвращается `0` или `1`; случая NULL или пустого входа у неё нет.
+
 ## Каталог агрегатов ClickHouse (#286, T286b)
 
 Остаточный каталог агрегатов ClickHouse типизирован на `ClickHouseFunctions` и диспетчеризуется

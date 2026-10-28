@@ -1684,6 +1684,74 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void TableFunction_UnnestTwoArrays_ShouldRenameBothColumns()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var command = Prepare(ctx, ctx
+            .From(() => SqlFunctions.Postgres.unnest(
+                SqlFunctions.Parameter<long[]>(0), SqlFunctions.Parameter<string[]>(1)))
+            .Select(r => new { r.Value1, r.Value2 }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Be("select value1, value2\n from (select value1, value2\n from rows from (unnest(@norm_p0), unnest(@norm_p1)) as u(value1, value2)) as \"t1\"");
+    }
+
+    [Fact]
+    public void TableFunction_UnnestThreeArrays_ShouldRenameAllColumns()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var command = Prepare(ctx, ctx
+            .From(() => SqlFunctions.Postgres.unnest(
+                SqlFunctions.Parameter<long[]>(0), SqlFunctions.Parameter<string[]>(1), SqlFunctions.Parameter<int[]>(2)))
+            .Select(r => new { r.Value1, r.Value2, r.Value3 }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Be("select value1, value2, value3\n from (select value1, value2, value3\n from rows from (unnest(@norm_p0), unnest(@norm_p1), unnest(@norm_p2)) as u(value1, value2, value3)) as \"t1\"");
+    }
+
+    [Fact]
+    public void TableFunction_UnnestWithOrdinality_ShouldProjectValueAndOrdinality()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var command = Prepare(ctx, ctx
+            .From(() => SqlFunctions.Postgres.unnest_with_ordinality(SqlFunctions.Parameter<long[]>(0)))
+            .Select(r => new { r.Value, r.Ordinality }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Be("select value, ordinality\n from (select value, ordinality\n from rows from (unnest(@norm_p0)) with ordinality as u(value, ordinality)) as \"t1\"");
+    }
+
+    [Fact]
+    public void TableFunction_UnnestTwoArraysWithOrdinality_ShouldProjectBothColumnsAndOrdinality()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var command = Prepare(ctx, ctx
+            .From(() => SqlFunctions.Postgres.unnest_with_ordinality(
+                SqlFunctions.Parameter<long[]>(0), SqlFunctions.Parameter<string[]>(1)))
+            .Select(r => new { r.Value1, r.Value2, r.Ordinality }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Be("select value1, value2, ordinality\n from (select value1, value2, ordinality\n from rows from (unnest(@norm_p0), unnest(@norm_p1)) with ordinality as u(value1, value2, ordinality)) as \"t1\"");
+    }
+
+    [Fact]
+    public void TableFunction_GenerateSubscripts_ShouldEmitCall()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var command = Prepare(ctx, ctx
+            .From(() => SqlFunctions.Postgres.generate_subscripts(SqlFunctions.Parameter<long[]>(0), 1))
+            .Select(r => new { r.Value }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Be("select generate_subscripts as \"Value\"\n from (select generate_subscripts\n from generate_subscripts(@norm_p0, 1)) as \"t1\"");
+    }
+
+    [Fact]
     public void TableFunction_RegexpMatches_ShouldEmitCall()
     {
         using var ctx = PostgresTestContext.Create();
@@ -1845,6 +1913,100 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void TableFunction_JsonArrayElements_ShouldCastDocumentAndProjectValue()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var command = Prepare(ctx, ctx
+            .From(() => SqlFunctions.Postgres.json_array_elements("[1,{\"a\":2}]"))
+            .Select(r => new { r.Value }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Be("select value\n from json_array_elements(cast(E'[1,{\"a\":2}]' as json)) as \"t1\"");
+    }
+
+    [Fact]
+    public void TableFunction_JsonArrayElementsText_ShouldCastDocumentAndProjectValue()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var command = Prepare(ctx, ctx
+            .From(() => SqlFunctions.Postgres.json_array_elements_text("[1,\"a\",null]"))
+            .Select(r => new { r.Value }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Be("select value\n from json_array_elements_text(cast(E'[1,\"a\",null]' as json)) as \"t1\"");
+    }
+
+    [Fact]
+    public void TableFunction_JsonEach_ShouldCastDocumentAndProjectKeyAndValue()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var command = Prepare(ctx, ctx
+            .From(() => SqlFunctions.Postgres.json_each("{\"a\":1,\"b\":{\"c\":2}}"))
+            .Select(r => new { r.Key, r.Value }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Be("select key, value\n from json_each(cast(E'{\"a\":1,\"b\":{\"c\":2}}' as json)) as \"t1\"");
+    }
+
+    [Fact]
+    public void TableFunction_JsonEachText_ShouldCastDocumentAndProjectKeyAndValue()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var command = Prepare(ctx, ctx
+            .From(() => SqlFunctions.Postgres.json_each_text("{\"a\":1,\"b\":2}"))
+            .Select(r => new { r.Key, r.Value }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Be("select key, value\n from json_each_text(cast(E'{\"a\":1,\"b\":2}' as json)) as \"t1\"");
+    }
+
+    [Fact]
+    public void TableFunction_JsonbPathQueryTz_ShouldCastArgumentsAndRestoreFunctionColumn()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var path = "$.d.datetime()";
+        var vars = "{}";
+
+        var command = Prepare(ctx, ctx
+            .From(() => SqlFunctions.Postgres.jsonb_path_query_tz(
+                SqlFunctions.Parameter<string>(0), path, vars, false))
+            .Select(r => new { r.Value }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Be("select jsonb_path_query_tz as \"Value\"\n from (select jsonb_path_query_tz\n from jsonb_path_query_tz(cast(@norm_p0 as jsonb), cast(@path as jsonpath), cast(@vars as jsonb), false)) as \"t1\"");
+    }
+
+    [Fact]
+    public void TableFunction_JsonToRecord_ShouldRenderAliasColumnList()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var command = Prepare(ctx, ctx
+            .From(() => SqlFunctions.Postgres.json_to_record<IDynamicRecordRow>(SqlFunctions.Parameter<string>(0)))
+            .Select(r => new { r.A, r.B }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Be("select a, b\n from json_to_record(cast(@norm_p0 as json)) as \"t1\"(a integer, b text)");
+    }
+
+    [Fact]
+    public void TableFunction_JsonToRecordset_ShouldRenderAliasColumnList()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var command = Prepare(ctx, ctx
+            .From(() => SqlFunctions.Postgres.json_to_recordset<IDynamicRecordRow>(SqlFunctions.Parameter<string>(0)))
+            .Select(r => new { r.A, r.B }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Be("select a, b\n from json_to_recordset(cast(@norm_p0 as json)) as \"t1\"(a integer, b text)");
+    }
+
+    [Fact]
     public void TableFunction_TsStat_ShouldEmitCall()
     {
         using var ctx = PostgresTestContext.Create();
@@ -1856,6 +2018,47 @@ public class SqlGenerationTests
 
         Normalize(command.DbCommand.CommandText)
             .Should().Be("select word, ndoc, nentry\n from ts_stat(@query) as \"t1\"");
+    }
+
+    /// <summary>
+    /// The #281 full-text readers of PostgreSQL 17 as FROM sources: <c>ts_debug</c> is wrapped in a
+    /// projection that casts its <c>regdictionary</c>/<c>regdictionary[]</c> columns to
+    /// <c>text</c>/<c>text[]</c> (they have no CLR mapping), while <c>ts_parse</c> and
+    /// <c>ts_token_type</c> keep their bare calls — their text (name) argument form is the one the
+    /// members expose. The live shape is asserted in
+    /// <c>PostgresFunctionsTests.FullTextTokenizerReaders_ShouldExposeRowsSchemaAndClrTypes</c>.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void TableFunction_FullTextTokenizerReaders_ShouldEmitCallsAndProjectDictionaryColumns()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        foreach (var name in new[] { "ts_debug", "ts_parse", "ts_token_type" })
+            PostgresDialect.Instance.SupportsTableFunction(name).Should().BeTrue($"'{name}' is delivered on PostgreSQL");
+
+        var debug = Prepare(ctx, ctx
+            .From(() => SqlFunctions.Postgres.ts_debug(SqlFunctions.Parameter<string>(0)))
+            .Select(r => new { r.Alias, r.Description, r.Token, r.Dictionaries, r.Dictionary, r.Lexemes }));
+
+        Normalize(debug.DbCommand.CommandText)
+            .Should().Be(
+                "select alias, description, token, dictionaries, dictionary, lexemes\n from (select alias, description, token," +
+                " dictionaries::text[] as dictionaries, dictionary::text as dictionary, lexemes\n from ts_debug(@norm_p0)) as \"t1\"");
+
+        var parse = Prepare(ctx, ctx
+            .From(() => SqlFunctions.Postgres.ts_parse(SqlFunctions.Parameter<string>(0), SqlFunctions.Parameter<string>(1)))
+            .Select(r => new { r.Tokid, r.Token }));
+
+        Normalize(parse.DbCommand.CommandText)
+            .Should().Be("select tokid, token\n from ts_parse(@norm_p0, @norm_p1) as \"t1\"");
+
+        var types = Prepare(ctx, ctx
+            .From(() => SqlFunctions.Postgres.ts_token_type(SqlFunctions.Parameter<string>(0)))
+            .Select(r => new { r.Tokid, r.Alias, r.Description }));
+
+        Normalize(types.DbCommand.CommandText)
+            .Should().Be("select tokid, alias, description\n from ts_token_type(@norm_p0) as \"t1\"");
     }
 
     [Fact]
@@ -3124,7 +3327,10 @@ public class SqlGenerationTests
             F = SqlFunctions.Postgres.regr_r2(x.Id, x.Id),
             G = SqlFunctions.Postgres.regr_count(x.Id, x.Id),
             H = SqlFunctions.Postgres.regr_avgx(x.Id, x.Id),
-            I = SqlFunctions.Postgres.regr_avgy(x.Id, x.Id)
+            I = SqlFunctions.Postgres.regr_avgy(x.Id, x.Id),
+            J = SqlFunctions.Postgres.regr_sxx(x.Id, x.Id),
+            K = SqlFunctions.Postgres.regr_sxy(x.Id, x.Id),
+            L = SqlFunctions.Postgres.regr_syy(x.Id, x.Id)
         }));
 
         sql.Should().Contain("corr(id, id)");
@@ -3136,6 +3342,126 @@ public class SqlGenerationTests
         sql.Should().Contain("regr_count(id, id)");
         sql.Should().Contain("regr_avgx(id, id)");
         sql.Should().Contain("regr_avgy(id, id)");
+        sql.Should().Contain("regr_sxx(id, id)");
+        sql.Should().Contain("regr_sxy(id, id)");
+        sql.Should().Contain("regr_syy(id, id)");
+    }
+
+    /// <summary>
+    /// The PostgreSQL 17 <c>any_value</c> aggregate of #281 (#347 D4) is <c>anyelement → anyelement</c>,
+    /// so it is rendered as the bare native aggregate over a column (no cast: an untyped constant would
+    /// have no target type) and refuses a result shape the row materialiser cannot read back.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void AnyValueAggregate_ShouldEmitAndRefuseNonScalarResults()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.any_value(x.Int) }));
+
+        sql.Should().Contain("any_value(nullableint)");
+        sql.Should().NotContain("cast(", "anyelement takes the column's own type, so no cast is emitted");
+
+        // The aggregate is polymorphic: the CLR result type is the only read-back contract, so a shape
+        // outside the single-column set is refused before any SQL or parameter is produced.
+        var act = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.any_value<object>(x) }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*any_value*polymorphic*");
+    }
+
+    /// <summary>
+    /// The #281 (#347 D4) group-2 aggregates render natively and, for <c>xmlagg</c>, in the only form
+    /// PostgreSQL has: <c>xmlagg(xml)</c>. The operand is cast to <c>xml</c> because there is no
+    /// <c>xmlagg(text)</c>/<c>xmlagg(integer)</c> overload (measured <c>42883</c>), so the rendered call
+    /// is the one that resolves; the JSON aggregates take their arguments uncast (<c>anyelement</c> and
+    /// <c>"any"</c>).
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void XmlAndStrictJsonAggregates_ShouldEmitResolvableForms()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            X = SqlFunctions.Postgres.xmlagg(x.String),
+            A = SqlFunctions.Postgres.json_agg_strict(x.Int),
+            B = SqlFunctions.Postgres.jsonb_agg_strict(x.Int),
+            U = SqlFunctions.Postgres.json_object_agg_unique(x.String, x.Int),
+            S = SqlFunctions.Postgres.json_object_agg_unique_strict(x.String, x.Int)
+        }));
+
+        // xmlagg has exactly one overload, xmlagg(xml) -> xml, so the operand is cast and the emitted
+        // call is the resolvable one: the uncast form was measured as 42883 "function xmlagg(text)".
+        sql.Should().Contain("xmlagg(cast(somestring as xml))");
+        sql.Should().NotContain("xmlagg(somestring)", "xmlagg has no text overload: the uncast call is 42883");
+
+        sql.Should().Contain("json_agg_strict(nullableint)");
+        sql.Should().Contain("jsonb_agg_strict(nullableint)");
+        sql.Should().Contain("json_object_agg_unique(somestring, nullableint)");
+        sql.Should().Contain("json_object_agg_unique_strict(somestring, nullableint)");
+    }
+
+    /// <summary>
+    /// The #281 (#347 D4) group-3 SQL/JSON aggregates render the forms the builder can express
+    /// faithfully. PostgreSQL 17 admits exactly one <c>key VALUE value</c> pair per
+    /// <c>json_objectagg</c> call (the two-pair comma form is <c>42601</c>, measured), so the pair is
+    /// emitted with the <c>VALUE</c> keyword and no cast (the server coerces the key to text); the
+    /// <c>RETURNING jsonb</c> variants ride their own members, and the <c>WITH UNIQUE KEYS</c> clause is
+    /// its own member too, because an aggregate's internal argument list has no clause slot in the
+    /// builder. Neither <c>ORDER BY</c> nor the <c>ABSENT|NULL ON NULL</c> clause can be expressed, so
+    /// nothing of the sort may appear in the rendered SQL.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void SqlJsonAggregates_ShouldEmitTheExpressibleForms()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            A = SqlFunctions.Postgres.json_arrayagg(x.Int),
+            B = SqlFunctions.Postgres.jsonb_arrayagg(x.Int),
+            C = SqlFunctions.Postgres.json_objectagg(x.String, x.Int),
+            D = SqlFunctions.Postgres.json_objectagg_unique(x.String, x.Int),
+            E = SqlFunctions.Postgres.jsonb_objectagg(x.String, x.Int)
+        }));
+
+        sql.Should().Contain("json_arrayagg(nullableint)");
+        sql.Should().Contain("json_arrayagg(nullableint returning jsonb)");
+        sql.Should().Contain("json_objectagg(somestring value nullableint)");
+        sql.Should().Contain("json_objectagg(somestring value nullableint with unique keys)");
+        sql.Should().Contain("json_objectagg(somestring value nullableint returning jsonb)");
+
+        sql.Should().NotContain("order by", "an aggregate's ORDER BY has no clause slot in the builder");
+        sql.Should().NotContain("on null", "the ABSENT/NULL ON NULL clause has no clause slot in the builder");
+        sql.Should().NotContain("json_objectagg(somestring, nullableint)",
+            "PostgreSQL 17 takes one key VALUE value pair; the comma form is 42601");
+    }
+
+    /// <summary>
+    /// The <c>grouping</c> grouping function renders over the rollup grouping list. The query builder
+    /// can emit the ANSI super-aggregate grouping (<c>GroupByRollup</c> → <c>group by rollup (...)</c>,
+    /// <c>PostgresDialect.SupportsRollup</c> is <c>true</c>), so the function is delivered rather than
+    /// refused; its one argument is the grouping expression itself.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void GroupingOverRollup_ShouldRenderInsideTheSuperAggregateQuery()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e
+            .GroupByRollup(x => new { x.Int })
+            .Select(x => new { x.Int, G = SqlFunctions.Postgres.grouping(x.Int) }));
+
+        sql.Should().Contain("group by rollup (nullableint)");
+        sql.Should().Contain("grouping(nullableint)");
     }
 
     [Fact]
@@ -3586,6 +3912,98 @@ public class SqlGenerationTests
 
         sql.Should().Contain("array_shuffle(@norm_p0)");
         sql.Should().Contain("array_sample(@norm_p1, 3)");
+    }
+
+    [Fact]
+    public void FullTextConstructors_ShouldEmitCastsAndTextResult()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            A2T = SqlFunctions.Postgres.array_to_tsvector(SqlFunctions.Parameter<string?[]>(0)),
+            Json2Ts = SqlFunctions.Postgres.json_to_tsvector("{\"a\":1}", "[\"numeric\"]"),
+            Json2TsCfg = SqlFunctions.Postgres.json_to_tsvector("english", "{\"a\":1}", "[\"string\"]"),
+            Jsonb2Ts = SqlFunctions.Postgres.jsonb_to_tsvector("{\"a\":1}", "[\"numeric\"]"),
+            Jsonb2TsCfg = SqlFunctions.Postgres.jsonb_to_tsvector("english", "{\"a\":1}", "[\"string\"]"),
+            CurrentCfg = SqlFunctions.Postgres.get_current_ts_config(),
+            Nodes = SqlFunctions.Postgres.numnode(SqlFunctions.Parameter<string>(1)),
+        }));
+
+        sql.Should().Contain("cast(array_to_tsvector(@norm_p0) as text)");
+        sql.Should().Contain("cast(json_to_tsvector(cast(E'{\"a\":1}' as json), cast(E'[\"numeric\"]' as jsonb)) as text)");
+        sql.Should().Contain("cast(json_to_tsvector(cast(E'english' as regconfig), cast(E'{\"a\":1}' as json), cast(E'[\"string\"]' as jsonb)) as text)");
+        sql.Should().Contain("cast(jsonb_to_tsvector(cast(E'{\"a\":1}' as jsonb), cast(E'[\"numeric\"]' as jsonb)) as text)");
+        sql.Should().Contain("cast(jsonb_to_tsvector(cast(E'english' as regconfig), cast(E'{\"a\":1}' as jsonb), cast(E'[\"string\"]' as jsonb)) as text)");
+        sql.Should().Contain("cast(get_current_ts_config() as text)");
+        sql.Should().Contain("numnode(cast(@norm_p1 as tsquery))");
+    }
+
+    [Fact]
+    public void FullTextQueryTreeAndVectorFamily_ShouldEmitCastsAndTextResult()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            Tree = SqlFunctions.Postgres.querytree(SqlFunctions.Parameter<string>(0)),
+            Weighted = SqlFunctions.Postgres.setweight(SqlFunctions.Parameter<string>(1), SqlFunctions.Parameter<string>(2)),
+            WeightedLex = SqlFunctions.Postgres.setweight(SqlFunctions.Parameter<string>(3), SqlFunctions.Parameter<string>(4), SqlFunctions.Parameter<string?[]>(5)),
+            Stripped = SqlFunctions.Postgres.strip(SqlFunctions.Parameter<string>(6)),
+            Deleted = SqlFunctions.Postgres.ts_delete(SqlFunctions.Parameter<string>(7), SqlFunctions.Parameter<string>(8)),
+            DeletedMany = SqlFunctions.Postgres.ts_delete(SqlFunctions.Parameter<string>(9), SqlFunctions.Parameter<string?[]>(10)),
+            Filtered = SqlFunctions.Postgres.ts_filter(SqlFunctions.Parameter<string>(11), SqlFunctions.Parameter<string?[]>(12)),
+        }));
+
+        sql.Should().Contain("querytree(cast(@norm_p0 as tsquery))");
+        sql.Should().Contain("cast(setweight(cast(@norm_p1 as tsvector), cast(@norm_p2 as \"char\")) as text)");
+        sql.Should().Contain("cast(setweight(cast(@norm_p3 as tsvector), cast(@norm_p4 as \"char\"), cast(@norm_p5 as text[])) as text)");
+        sql.Should().Contain("cast(strip(cast(@norm_p6 as tsvector)) as text)");
+        sql.Should().Contain("cast(ts_delete(cast(@norm_p7 as tsvector), @norm_p8) as text)");
+        sql.Should().Contain("cast(ts_delete(cast(@norm_p9 as tsvector), @norm_p10) as text)");
+        sql.Should().Contain("cast(ts_filter(cast(@norm_p11 as tsvector), cast(@norm_p12 as \"char\"[])) as text)");
+    }
+
+    [Fact]
+    public void FullTextRewritePhraseAndArrayFamily_ShouldEmitCasts()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            Rewritten = SqlFunctions.Postgres.ts_rewrite(SqlFunctions.Parameter<string>(0), SqlFunctions.Parameter<string>(1)),
+            RewrittenPair = SqlFunctions.Postgres.ts_rewrite(
+                SqlFunctions.Parameter<string>(2), SqlFunctions.Parameter<string>(3), SqlFunctions.Parameter<string>(4)),
+            Phrase = SqlFunctions.Postgres.tsquery_phrase(SqlFunctions.Parameter<string>(5), SqlFunctions.Parameter<string>(6)),
+            PhraseDistance = SqlFunctions.Postgres.tsquery_phrase(
+                SqlFunctions.Parameter<string>(7), SqlFunctions.Parameter<string>(8), SqlFunctions.Parameter<int>(9)),
+            Lexemes = SqlFunctions.Postgres.tsvector_to_array(SqlFunctions.Parameter<string>(10)),
+            Stemmed = SqlFunctions.Postgres.ts_lexize(SqlFunctions.Parameter<string>(11), SqlFunctions.Parameter<string>(12)),
+        }));
+
+        sql.Should().Contain("cast(ts_rewrite(cast(@norm_p0 as tsquery), @norm_p1) as text)");
+        sql.Should().Contain("cast(ts_rewrite(cast(@norm_p2 as tsquery), cast(@norm_p3 as tsquery), cast(@norm_p4 as tsquery)) as text)");
+        sql.Should().Contain("cast(tsquery_phrase(cast(@norm_p5 as tsquery), cast(@norm_p6 as tsquery)) as text)");
+        sql.Should().Contain("cast(tsquery_phrase(cast(@norm_p7 as tsquery), cast(@norm_p8 as tsquery), @norm_p9) as text)");
+        sql.Should().Contain("tsvector_to_array(cast(@norm_p10 as tsvector))");
+        sql.Should().Contain("ts_lexize(cast(@norm_p11 as regdictionary), @norm_p12)");
+    }
+
+    [Fact]
+    public void TrimArray_ShouldEmit()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            T = SqlFunctions.Postgres.trim_array(SqlFunctions.Parameter<long[]>(0), 2)
+        }));
+
+        sql.Should().Contain("trim_array(@norm_p0, 2)");
     }
 
     [Fact]

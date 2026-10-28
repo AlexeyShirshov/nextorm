@@ -143,6 +143,44 @@ time) и материализуют `DateTimeOffset` с нулевым offset'о
 | `SqlFunctions.Postgres.current_date()` / `current_time()` / `localtime()` / `localtimestamp()` | те же ключевые слова |
 | `SqlFunctions.Postgres.pg_typeof(x)` | `cast(pg_typeof(x) as text)` |
 
+Остаточное семейство даты/времени #281 живёт на той же поверхности, один член на серверную
+перегрузку, и каждое имя гейтится **отдельно** через
+[`IScalarFunctions.Supports`](xref:NextORM.Core.IScalarFunctions.Supports(System.String)), а не общим
+флагом семейства:
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.Postgres.date_subtract(value, interval)` | `date_subtract(value, interval)` → `timestamptz` |
+| `SqlFunctions.Postgres.date_subtract(value, interval, zone)` | `date_subtract(value, interval, zone)` → `timestamptz` |
+| `SqlFunctions.Postgres.justify_interval(interval)` | `justify_interval(interval)` → `interval` |
+| `SqlFunctions.Postgres.make_timestamptz(y, mo, d, h, mi, sec)` | `make_timestamptz(y, mo, d, h, mi, sec)` → `timestamptz` |
+| `SqlFunctions.Postgres.make_timestamptz(y, mo, d, h, mi, sec, zone)` | `make_timestamptz(..., zone)` → `timestamptz` |
+| `SqlFunctions.Postgres.clock_timestamp()` | `clock_timestamp()` → `timestamptz` |
+| `SqlFunctions.Postgres.statement_timestamp()` | `statement_timestamp()` → `timestamptz` |
+| `SqlFunctions.Postgres.transaction_timestamp()` | `transaction_timestamp()` → `timestamptz` |
+| `SqlFunctions.Postgres.timeofday()` | `timeofday()` → `text` |
+| `SqlFunctions.Postgres.isfinite(value)` (`DateOnly?`) | `isfinite(value)` → `boolean` (форма `date`) |
+| `SqlFunctions.Postgres.isfinite(value)` (`DateTime?`) | `isfinite(value)` → `boolean` (форма `timestamp`) |
+| `SqlFunctions.Postgres.isfinite(value)` (`TimeSpan?`) | `isfinite(value)` → `boolean` (форма `interval`) |
+
+`clock_timestamp()` вычисляется на каждую строку и меняется внутри одного запроса, а
+`statement_timestamp()` фиксируется на старте запроса, `transaction_timestamp()` — на старте
+транзакции. Обе формы `date_subtract` возвращают `timestamp with time zone` (поставляемые сигнатуры
+возвращают `DateTime?`, а не `interval`), а `justify_interval` возвращает `interval` и потому идёт
+через обработку interval провайдера: вернувшийся interval с ненулевой месячной составляющей
+отклоняется через `InvalidCastException` на пути смэппированных колонок. NULL-аргумент даёт NULL, а
+каждое имя гейтится по имени, поэтому провайдер без `IScalarFunctions` закрывается отказом
+`NotSupportedException`.
+
+Три члена отклоняются во время подготовки запроса: каждый возвращает `void`, а у модели выражений
+нет проекции типа `void`, поэтому достоверного CLR-результата не существует и SQL не отправляется:
+
+| Отклонённый член | Проверенная причина |
+|---|---|
+| `SqlFunctions.Postgres.pg_sleep(seconds)` | `pg_sleep` возвращает `void`; сфабрикованное значение никогда не возвращается. |
+| `SqlFunctions.Postgres.pg_sleep_for(interval)` | `pg_sleep_for` возвращает `void`; сфабрикованное значение никогда не возвращается. |
+| `SqlFunctions.Postgres.pg_sleep_until(timestamptz)` | `pg_sleep_until` возвращает `void`; сфабрикованное значение никогда не возвращается. |
+
 Для построения дат и арифметики в остальном используется переносимый набор: `date_from_parts`
 (рендерит PostgreSQL `make_date`), `date_add`, `date_diff`, `date_trunc` и члены `DateTime` (см.
 [Арифметику дат](#арифметика-дат) ниже).

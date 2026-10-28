@@ -92,6 +92,125 @@ A `path`/`keys` operand is a `string[]` and is bound as a **single array paramet
 `cast(<path> as jsonpath)`; `JSON_EXISTS`, `jsonpath` and the sibling JSON functions are unchanged by this
 typing rule.
 
+## SQL/JSON constructors, paths and readers (PostgreSQL 17)
+
+These members complete the PostgreSQL JSON surface. All of them are PostgreSQL-only: the scalar and path
+forms are gated by
+[`SupportsPostgresJsonSql`](xref:NextORM.Core.ISqlDialect.SupportsPostgresJsonSql) and the readers by
+`SupportsTableFunction`, so every other provider — including the in-memory provider — throws
+`NotSupportedException` at translation. The aggregate members of the family are listed on the
+[aggregates](05-aggregates.md) page; this page documents the scalar and row-returning members.
+
+### SQL/JSON constructors
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.Postgres.json(x)` | `json(cast(x as text) format json)` |
+| `SqlFunctions.Postgres.json_scalar(x)` | `json_scalar(x)` |
+| `SqlFunctions.Postgres.json_serialize(x)` | `json_serialize(cast(x as text) format json returning text)` |
+
+`json` and `json_serialize` take JSON **text**: the argument is rendered as `cast(x as text)` and
+`FORMAT JSON` makes the server parse it, so invalid text raises `22P02` (measured) and a plain text
+parameter needs no separate cast. `json` returns `json`, while `json_serialize` names its text result
+with `returning text`, so it reads back as `text`. `json_scalar` is the value constructor — a string
+becomes a JSON string (`"abc"`), a number a JSON number (`5`), and SQL NULL stays SQL NULL. All three
+are PostgreSQL 17 parser-level constructs with no `pg_proc` row.
+
+### Path extraction
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.Postgres.json_extract_path(doc, path)` | `json_extract_path(cast(doc as json), variadic cast(path as text[]))` |
+| `SqlFunctions.Postgres.json_extract_path_text(doc, path)` | `json_extract_path_text(cast(doc as json), variadic cast(path as text[]))` |
+| `SqlFunctions.Postgres.jsonb_extract_path(doc, path)` | `jsonb_extract_path(cast(doc as jsonb), variadic cast(path as text[]))` |
+| `SqlFunctions.Postgres.jsonb_extract_path_text(doc, path)` | `jsonb_extract_path_text(cast(doc as jsonb), variadic cast(path as text[]))` |
+
+The document is JSON text cast to `json`/`jsonb`, and the `string[]` path is bound as **one** `text[]`
+parameter passed through `variadic`, which PostgreSQL requires when the array arrives as a single
+expression (measured: the bare `text[]` form resolves to no function). An absent path, a JSON `null`
+element and a SQL NULL path all yield SQL NULL; the `_text` forms read a JSON `null` element as SQL
+NULL, and an empty path returns the document itself (measured). `json_extract_path` returns `json`;
+the `_text` forms return `text` and `jsonb_extract_path` returns `jsonb`.
+
+### `jsonb_set_lax`
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.Postgres.jsonb_set_lax(doc, path, newValue, createIfMissing, nullValueTreatment)` | `jsonb_set_lax(cast(doc as jsonb), cast(path as text[]), cast(newValue as jsonb), createIfMissing, nullValueTreatment)` |
+
+All five arguments are explicit — both PostgreSQL defaults are rendered instead of omitted. The
+document and the new value are JSON text cast to `jsonb`, the path is one `text[]` (not variadic), and
+`createIfMissing` is `true` for the default. `nullValueTreatment` applies only when `newValue` is SQL
+NULL and is one of `use_json_null` (the default, writes JSON `null`), `delete_key` (removes the target
+key), `return_target` (returns the document unchanged) or `raise_exception` (raises). An unknown
+treatment is validated by the server, whose message names `null_value_treatment`; a SQL-NULL document
+stays NULL.
+
+### Time-zone-aware JSONPath scalars
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.Postgres.jsonb_path_exists_tz(doc, path, vars, silent)` | `jsonb_path_exists_tz(cast(doc as jsonb), cast(path as jsonpath), cast(vars as jsonb), silent)` |
+| `SqlFunctions.Postgres.jsonb_path_match_tz(doc, path, vars, silent)` | `jsonb_path_match_tz(cast(doc as jsonb), cast(path as jsonpath), cast(vars as jsonb), silent)` |
+| `SqlFunctions.Postgres.jsonb_path_query_array_tz(doc, path, vars, silent)` | `jsonb_path_query_array_tz(cast(doc as jsonb), cast(path as jsonpath), cast(vars as jsonb), silent)` |
+| `SqlFunctions.Postgres.jsonb_path_query_first_tz(doc, path, vars, silent)` | `jsonb_path_query_first_tz(cast(doc as jsonb), cast(path as jsonpath), cast(vars as jsonb), silent)` |
+
+The document and `vars` are JSON text cast to `jsonb`, the path is cast to `jsonpath` (a text
+parameter is not implicitly coerced) and `silent` is an ordinary boolean argument. The `_tz` form is
+required for a path that compares date/time values with a time-zone-dependent (`timestamptz`)
+conversion, such as the `.datetime()` method: the plain siblings are immutable and raise a server error
+for such a path (measured message: "… without time zone usage"), while these four are time-zone-aware.
+An empty match set yields `[]` from `query_array` and SQL NULL from `query_first`; a SQL-NULL document
+yields SQL NULL (measured for `exists`).
+
+### Reader table functions
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.Postgres.json_array_elements(doc)` | `json_array_elements(cast(doc as json))` |
+| `SqlFunctions.Postgres.json_array_elements_text(doc)` | `json_array_elements_text(cast(doc as json))` |
+| `SqlFunctions.Postgres.json_each(doc)` | `json_each(cast(doc as json))` |
+| `SqlFunctions.Postgres.json_each_text(doc)` | `json_each_text(cast(doc as json))` |
+| `SqlFunctions.Postgres.jsonb_path_query_tz(doc, path, vars, silent)` | `(select jsonb_path_query_tz from jsonb_path_query_tz(cast(doc as jsonb), cast(path as jsonpath), cast(vars as jsonb), silent))` |
+| `SqlFunctions.Postgres.json_to_record<TRow>(doc)` | `json_to_record(cast(doc as json)) as x(col type, ...)` |
+| `SqlFunctions.Postgres.json_to_recordset<TRow>(doc)` | `json_to_recordset(cast(doc as json)) as x(col type, ...)` |
+
+The non-`jsonb` readers take JSON **text**, so the document is cast to `json` in the call (a text
+parameter does not resolve the function). Row shapes are local interfaces in `SqlFunctions`:
+
+- `json_array_elements`/`json_array_elements_text` produce
+  [`IJsonArrayElementsRow`](xref:NextORM.Core.SqlFunctions.IJsonArrayElementsRow): one
+  `[Column("value")] string? Value` per element — a `json` document rendered as text, or plain text
+  from the `_text` form, where a JSON `null` element is SQL NULL.
+- `json_each`/`json_each_text` produce [`IJsonbEachRow`](xref:NextORM.Core.SqlFunctions.IJsonbEachRow):
+  `[Column("key")] string? Key` and `[Column("value")] string? Value` — a `json` document rendered as
+  text, or plain text from the `_text` form.
+- `jsonb_path_query_tz` produces
+  [`IJsonPathQueryTzRow`](xref:NextORM.Core.SqlFunctions.IJsonPathQueryTzRow): the single
+  `[Column("jsonb_path_query_tz")] string? Value` holds one match as a `jsonb` document rendered as
+  text; the one-column subquery restores that column name after the FROM alias.
+- `json_to_record<TRow>`/`json_to_recordset<TRow>` derive the alias column-definition list from
+  `TRow`'s mapped `[Column]` names and types, so the caller declares the row shape;
+  `json_to_record` reads one object into one row and `json_to_recordset` one row per array element.
+
+An empty array, an empty object and a SQL-NULL document produce no rows, a path with no match selects
+no rows (measured), and an absent JSON property leaves the caller-declared column SQL NULL.
+
+### Refusals
+
+| Family | Refused member | Tested reason |
+|---|---|---|
+| `json_populate_record(set)` | `SqlFunctions.Postgres.json_populate_record<TRow>(baseRecord, json, useJsonAsText)` | The first argument is an `anyelement` base row: neither a named composite type nor the pseudo-type `record` can be named from a CLR type, so no faithful call can be emitted. |
+| `json_populate_record(set)` | `SqlFunctions.Postgres.json_populate_recordset<TRow>(baseRecord, json, useJsonAsText)` | The same `anyelement` base row as `json_populate_record`. |
+| `jsonb_populate_record(set)` | `SqlFunctions.Postgres.jsonb_populate_record<TRow>(baseRecord, json)` | The result row type is the base row's composite type, which no CLR type can name. |
+| `jsonb_populate_record(set)` | `SqlFunctions.Postgres.jsonb_populate_recordset<TRow>(baseRecord, json)` | The same `anyelement` base row as `jsonb_populate_record`. |
+| `jsonb_populate_record_valid` | `SqlFunctions.Postgres.jsonb_populate_record_valid(baseRecord, json)` | Needs the same `anyelement` base row; without a base row the server raises `0A000` (could not determine row type). |
+| `json_table` | `SqlFunctions.Postgres.json_table<TRow>(json, path)` | Needs a per-call `COLUMNS (...)` clause inside the call parentheses, while the expression model only renders a caller-declared schema as an alias column-definition list after the alias. |
+
+Each member is refused with `NotSupportedException` when the source or expression is composed, before
+any SQL is emitted. The `json_table` construct itself works on PostgreSQL 17; only the rendering model
+cannot express it.
+
 ## JSON as text (SQL Server, MySQL/MariaDB)
 
 SQL Server stores JSON in an ordinary `nvarchar` column — or, on 2025+ with a context declaring major

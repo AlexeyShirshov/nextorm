@@ -306,8 +306,31 @@ public class T286bF14BitFunctionSqlGenerationTests
         }
     }
 
+    // #281 T347 (D2a/D2b): PostgreSQL 17 ships bit_count, so PostgresScalarFunctions advertises it — the
+    // earlier "ClickHouse-only" expectation for the PostgreSQL half is now factually wrong. The ClickHouse
+    // member renders the PostgreSQL arm instead of throwing; the ClickHouse argument widening
+    // (toUInt64) is part of the composed SQL and is recorded here exactly as measured.
     [Fact]
-    public void PostgresAndSqlServer_ShouldRejectEveryDeliveredMember()
+    public void Postgres_ShouldSupportBitCountAndRenderThePostgresSpelling()
+    {
+        var postgres = PostgresDialect.Instance.ScalarFunctions!;
+
+        using (new AssertionScope())
+        {
+            postgres.Supports("bit_count").Should().BeTrue("PostgreSQL 17 has bit_count (#281 T347)");
+
+            foreach (var name in DeliveredNames.Except(["bit_count"]))
+                postgres.Supports(name).Should().BeFalse("'{0}' is ClickHouse-only", name);
+        }
+
+        using var ctx = new PostgresDataContext("Host=localhost", new DataContextBuilder());
+        SqlOf(ctx, ctx.From<IT286bBitEntity>().Select(x => new { V = SqlFunctions.ClickHouse.bit_count(x.U8) }))
+            .Should().Contain("bit_count(toUInt64(u8))",
+                "the measured Postgres spelling keeps the ClickHouse toUInt64 widening");
+    }
+
+    [Fact]
+    public void PostgresAndSqlServer_ShouldRejectEveryNameOutsideTheSharedSet()
     {
         using var postgres = new PostgresDataContext("Host=localhost", new DataContextBuilder());
         using var sqlServer = new SqlServerDataContext(
@@ -316,11 +339,10 @@ public class T286bF14BitFunctionSqlGenerationTests
 
         using (new AssertionScope())
         {
-            foreach (var name in DeliveredNames)
-            {
+            foreach (var name in DeliveredNames.Except(["bit_count"]))
                 AssertRejected(postgres, name);
+            foreach (var name in DeliveredNames)
                 AssertRejected(sqlServer, name);
-            }
         }
 
         static void AssertRejected(IDataContext ctx, string name)

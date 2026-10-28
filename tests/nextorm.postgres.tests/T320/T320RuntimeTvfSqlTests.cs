@@ -327,8 +327,9 @@ public class T320RuntimeTvfSqlTests
 
     /// <summary>
     /// F: a PostgreSQL built-in declaration and a custom factory with the same SQL name stay distinct in the
-    /// render path (separate plan entries, built-in support check and literal policy), while a built-in
-    /// declared for another provider stays a named capability refusal.
+    /// render path (separate plan entries, built-in support check and literal policy); a built-in declared
+    /// for another provider is admitted when the target dialect advertises the same name, and otherwise
+    /// stays a named capability refusal.
     /// </summary>
     [Fact]
     public void RuntimeTvf_F_BuiltInGenerateSeriesVersusCustomFactory_ShouldStayDistinct()
@@ -352,10 +353,21 @@ public class T320RuntimeTvfSqlTests
             "the built-in verdict is part of the SQL identity, so a custom factory with the same name keeps its own plan");
         ReferenceEquals(builtIn, custom).Should().BeFalse("the two take different render paths");
 
-        // The built-in surface stays gated: SQLite's json_each is not a PostgreSQL table function.
-        Action builtInGate = () => Prepare(ctx, ctx.From(() => SqlFunctions.Sqlite.json_each("[]")).Select(r => r.Value), false);
+        // The built-in gate is keyed by name against the *target* dialect, not the declaring class. Since
+        // T347/#281 PostgreSQL advertises json_each as a set-returning function, so a SQLite-declared
+        // builder carrying that name is admitted and rendered in the PostgreSQL spelling (the non-b
+        // readers cast the text payload to json).
+        var jsonEach = Prepare(ctx, ctx.From(() => SqlFunctions.Sqlite.json_each("[]")).Select(r => r.Value), false);
+        var jsonEachSql = Normalize(jsonEach.DbCommand.CommandText);
+        jsonEachSql.Should().Be(
+            "select value\n from json_each(cast(E'[]' as json)) as \"t1\"",
+            "a name the target dialect advertises is admitted whatever provider declared the member (T347/#281)");
+
+        // The sibling name stays a named capability refusal: PostgreSQL has no json_tree, only SQLite does,
+        // so the same foreign declaration is still rejected by name rather than silently rendered.
+        Action builtInGate = () => Prepare(ctx, ctx.From(() => SqlFunctions.Sqlite.json_tree("[]")).Select(r => r.Value), false);
         builtInGate.Should().Throw<NotSupportedException>()
-            .WithMessage("*'json_each'*not supported by this provider*");
+            .WithMessage("*'json_tree'*not supported by this provider*");
     }
 
     /// <summary>

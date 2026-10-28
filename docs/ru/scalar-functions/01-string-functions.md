@@ -463,6 +463,174 @@ var rows = dataContext.From<IComplexEntity>()
     .ToList();
 ```
 
+### Остаточные строковые, кодировочные и regexp-помощники (#281)
+
+Оставшаяся часть строкового каталога PostgreSQL доступна на той же поверхности, один член на
+серверную перегрузку. Каждое имя гейтится **отдельно** через
+[`IScalarFunctions.Supports`](xref:NextORM.Core.IScalarFunctions.Supports(System.String)), а
+провайдер, не реализующий интерфейс, отклоняет вызов `NotSupportedException`:
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.Postgres.btrim(value)` | `btrim(value)` |
+| `SqlFunctions.Postgres.btrim(value, characters)` | `btrim(value, characters)` |
+| `SqlFunctions.Postgres.btrim(bytes, bytesToTrim)` | `btrim(bytes, bytesToTrim)` → `bytea` |
+| `SqlFunctions.Postgres.ltrim(value, characters)` | `ltrim(value, characters)` |
+| `SqlFunctions.Postgres.ltrim(bytes, bytesToTrim)` | `ltrim(bytes, bytesToTrim)` → `bytea` |
+| `SqlFunctions.Postgres.rtrim(value, characters)` | `rtrim(value, characters)` |
+| `SqlFunctions.Postgres.rtrim(bytes, bytesToTrim)` | `rtrim(bytes, bytesToTrim)` → `bytea` |
+| `SqlFunctions.Postgres.starts_with(value, prefix)` | `starts_with(value, prefix)` |
+| `SqlFunctions.Postgres.parse_ident(value, strict)` | `parse_ident(value, strict)` → `text[]` |
+| `SqlFunctions.Postgres.quote_ident(value)` | `quote_ident(value)` |
+| `SqlFunctions.Postgres.quote_literal(value)` | `quote_literal(value)` |
+| `SqlFunctions.Postgres.quote_nullable(value)` | `quote_nullable(value)` |
+| `SqlFunctions.Postgres.to_ascii(value, encoding)` | `to_ascii(value, encoding)` (`text`, `name`) |
+| `SqlFunctions.Postgres.to_ascii(value, encodingCode)` (`int`) | `to_ascii(value, encodingCode)` (`text`, `integer`) — **код** кодировки PostgreSQL: `8` = `LATIN1`, `9` = `LATIN2`, `16` = `LATIN9`, `29` = `WIN1250` |
+| `SqlFunctions.Postgres.to_hex(value)` (`int?`) | `to_hex(value)` |
+| `SqlFunctions.Postgres.to_hex(value)` (`long?`) | `to_hex(value)` (`bigint`) |
+| `SqlFunctions.Postgres.to_oct(value)` (`int?`) | `to_oct(value)` |
+| `SqlFunctions.Postgres.to_oct(value)` (`long?`) | `to_oct(value)` (`bigint`) |
+| `SqlFunctions.Postgres.to_bin(value)` (`int?`) | `to_bin(value)` |
+| `SqlFunctions.Postgres.to_bin(value)` (`long?`) | `to_bin(value)` (`bigint`) |
+| `SqlFunctions.Postgres.convert_from(bytes, encoding)` | `convert_from(bytes, encoding)` |
+| `SqlFunctions.Postgres.convert_to(value, encoding)` | `convert_to(value, encoding)` → `bytea` |
+| `SqlFunctions.Postgres.encode(bytes, format)` | `encode(bytes, format)` |
+| `SqlFunctions.Postgres.decode(value, format)` | `decode(value, format)` → `bytea` |
+| `SqlFunctions.Postgres.get_bit(bytes, index)` | `get_bit(bytes, index)` → `int` (`0` или `1`) |
+| `SqlFunctions.Postgres.set_bit(bytes, index, value)` | `set_bit(bytes, index, value)` → `bytea` |
+| `SqlFunctions.Postgres.get_byte(bytes, index)` | `get_byte(bytes, index)` → `int` |
+| `SqlFunctions.Postgres.set_byte(bytes, index, value)` | `set_byte(bytes, index, value)` → `bytea` |
+| `SqlFunctions.Postgres.bit_count(bytes)` | `bit_count(bytes)` → `bigint` |
+| `SqlFunctions.Postgres.normalize(value, form)` | `normalize(value, form)` |
+| `SqlFunctions.Postgres.unistr(value)` | `unistr(value)` |
+| `SqlFunctions.Postgres.string_to_table(value, delimiter)` | `string_to_table(value, delimiter)` → одна строка на фрагмент |
+| `SqlFunctions.Postgres.string_to_table(value, delimiter, nullString)` | `string_to_table(value, delimiter, nullString)` |
+| `SqlFunctions.Postgres.regexp_match(value, pattern)` | `regexp_match(value, pattern)` → `text[]` |
+| `SqlFunctions.Postgres.regexp_match(value, pattern, flags)` | `regexp_match(value, pattern, flags)` → `text[]` |
+
+NULL-аргумент даёт NULL для каждого из них. Неочевидная семантика:
+
+* `regexp_match` возвращает NULL, когда шаблон не совпал, — а не пустой массив, — и массив из одного
+  элемента с полным совпадением, когда в шаблоне нет захватывающих групп.
+* `normalize` принимает голое ключевое слово грамматики (`NFC`, `NFD`, `NFKC` или `NFKD`), а не
+  строковый литерал: форма обязана быть константой и рендерится без кавычек (`normalize(value, NFD)`).
+* `to_hex` для отрицательного `int` даёт запись в дополнительном коде (`-1` → `ffffffff`);
+  перегрузки с `long` — это формы `to_hex`/`to_oct`/`to_bin` для `bigint`.
+* `encode`/`decode` принимают `(data, format)` с `base64`, `hex` или `escape`; некорректный вход
+  `decode` вызывает ошибку на сервере, а не «ремонтируется».
+* `get_bit`/`set_bit` нумеруют биты от младшего бита первого байта, `get_byte`/`set_byte` — байты
+  с нуля, а `bit_count` возвращает число установленных бит как `bigint` (`0xA1`: бит 0 установлен,
+  байт 0 = `161`, установлено три бита).
+* Двухаргументные `btrim`/`ltrim`/`rtrim` принимают **набор символов** (срезается каждый
+  перечисленный символ), а не подстроку; перегрузки с `byte[]` — это формы для `bytea`.
+* `parse_ident` возвращает части через точку как `text[]`, а `strict` решает, бросить ли ошибку на
+  невалидном идентификаторе или обрезать его после первой ошибки.
+* `string_to_table` — единственный член семейства, возвращающий набор строк: одна строка на фрагмент,
+  а третий аргумент превращает совпавший с ним фрагмент в NULL-строку.
+* `to_ascii` доступна с кодировкой, заданной текстом (`to_ascii(value, 'LATIN1')`), и с кодировкой,
+  заданной её **кодом** PostgreSQL (`to_ascii(value, 8)`); одноаргументная форма отклонена (см. ниже).
+
+### Проверенные отказы
+
+Закреплённый сервер — PostgreSQL 17.11. Член, который на нём не исполняется, отклоняется во время
+подготовки запроса — `NotSupportedException`, до того как на сервер уйдёт команда:
+
+| Семейство | Отклонённый член | Проверенная причина |
+|---|---|---|
+| string | `casefold(text)` | Функция PostgreSQL 18, отсутствует в `pg_proc` версии 17.11; имя падает с `42883`. |
+| string | `to_ascii(text)` (один аргумент) | PostgreSQL 17 поддерживает конверсию только из LATIN1, LATIN2, LATIN9 и WIN1250, а закреплённая база-фикстура — UTF8, поэтому форма выдаёт `0A000`; используйте `to_ascii(value, encoding)` — поставляемое сообщение: `The one-argument to_ascii function is refused: PostgreSQL 17 supports the conversion only from LATIN1, LATIN2, LATIN9 and WIN1250, and the pinned fixture database is UTF8, so the form raises 0A000; use to_ascii(value, encoding).` |
+| string | `crc32(bytea)` / `crc32c(bytea)` | Функции PostgreSQL 18, отсутствуют в `pg_proc` версии 17.11; имя падает с `42883`. |
+| string | `quote_literal(anyelement)` | доступна только перегрузка `text`; типизированная перегрузка над каждым CLR-типом вынудила бы преобразования, которых пути выражений не поддерживают. |
+| string | `quote_nullable(anyelement)` | то же ограничение `anyelement`; перегрузка `text` доступна. |
+
+`unistr(text)` поставлена — в 17.11 она есть. Выставлены обе перегрузки `to_ascii`: форма
+`(text, integer)` принимает код кодировки PostgreSQL, поэтому `to_ascii(value, 8)` — это конверсия
+`LATIN1` (`SELECT pg_encoding_to_char(8)` → `LATIN1`), а номер Windows-кодовой страницы вроде `1252`
+кодом кодировки не является, и отправленная команда падает на сервере с `42704`. У `bit`-форм
+бинарных помощников (`get_bit`/`set_bit`/`bit_count` над `bit`) нет CLR-отображения, поэтому для них
+не выставлено ни одного члена, и вызов отклоняется, а не транслируется.
+
+## Полнотекстовый поиск (PostgreSQL, #281)
+
+Кросс-провайдерные предикаты и более ранняя native-поверхность — `contains`/`freetext`, `to_tsvector`,
+`to_tsquery`, `plainto_tsquery`/`phraseto_tsquery`/`websearch_to_tsquery`, `ts_match`, `ts_rank`,
+`ts_rank_cd`, `ts_headline` и `@@` — описаны в разделе
+[SQL для конкретных провайдеров › Полнотекстовый поиск](../guide/provider-specific-sql/postgresql.md#полнотекстовый-поиск).
+17 поставленных имён ниже живут на той же поверхности, гейтятся
+[`SupportsTextSearchFunctions`](xref:NextORM.Core.ISqlDialect.SupportsTextSearchFunctions), и все
+остальные провайдеры отклоняют их на этапе построения SQL.
+
+**Мост через `text`.** Npgsql отображает `tsvector`/`tsquery` в собственные типы
+`NpgsqlTsVector`/`NpgsqlTsQuery`, а не в `string`, поэтому каждый `tsvector`-результат этих членов
+отрисовывается как `cast(... as text)`. По той же причине каждый аргумент типов
+`tsvector`/`tsquery`/`regconfig`/`regdictionary`/`"char"` приводится к своему серверному типу:
+`text`-параметр не разрешается ни в одну из таких перегрузок. `to_tsvector` (и остальные более ранние
+члены) сохраняют голый native-вызов, потому что используются в позиции аргумента (`@@`, `ts_rank`,
+`ts_headline`), а не проецируются как значение.
+
+14 скалярных имён делятся на три группы в таком порядке — векторы и запросы, проверка и перезапись
+запроса, преобразование и лексирование:
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.Postgres.to_tsvector(document)` | `to_tsvector(document)` |
+| `SqlFunctions.Postgres.array_to_tsvector(words)` | `cast(array_to_tsvector(@words) as text)` |
+| `SqlFunctions.Postgres.json_to_tsvector(json, filter)` | `cast(json_to_tsvector(cast(@json as json), cast(@filter as jsonb)) as text)` |
+| `SqlFunctions.Postgres.json_to_tsvector(config, json, filter)` | `cast(json_to_tsvector(cast(@config as regconfig), cast(@json as json), cast(@filter as jsonb)) as text)` |
+| `SqlFunctions.Postgres.jsonb_to_tsvector(json, filter)` | `cast(jsonb_to_tsvector(cast(@json as jsonb), cast(@filter as jsonb)) as text)` |
+| `SqlFunctions.Postgres.jsonb_to_tsvector(config, json, filter)` | `cast(jsonb_to_tsvector(cast(@config as regconfig), cast(@json as jsonb), cast(@filter as jsonb)) as text)` |
+| `SqlFunctions.Postgres.numnode(tsquery)` | `numnode(cast(@tsquery as tsquery))` |
+| `SqlFunctions.Postgres.querytree(tsquery)` | `querytree(cast(@tsquery as tsquery))` |
+| `SqlFunctions.Postgres.setweight(tsvector, weight)` | `cast(setweight(cast(@tsvector as tsvector), cast(@weight as "char")) as text)` |
+| `SqlFunctions.Postgres.setweight(tsvector, weight, lexemes)` | `cast(setweight(cast(@tsvector as tsvector), cast(@weight as "char"), cast(@lexemes as text[])) as text)` |
+| `SqlFunctions.Postgres.strip(tsvector)` | `cast(strip(cast(@tsvector as tsvector)) as text)` |
+| `SqlFunctions.Postgres.ts_delete(tsvector, lexeme)` | `cast(ts_delete(cast(@tsvector as tsvector), @lexeme) as text)` |
+| `SqlFunctions.Postgres.ts_delete(tsvector, lexemes)` | `cast(ts_delete(cast(@tsvector as tsvector), @lexemes) as text)` |
+| `SqlFunctions.Postgres.ts_filter(tsvector, weights)` | `cast(ts_filter(cast(@tsvector as tsvector), cast(@weights as "char"[])) as text)` |
+| `SqlFunctions.Postgres.ts_rewrite(query, select)` | `cast(ts_rewrite(cast(@query as tsquery), @select) as text)` |
+| `SqlFunctions.Postgres.ts_rewrite(query, target, substitute)` | `cast(ts_rewrite(cast(@query as tsquery), cast(@target as tsquery), cast(@substitute as tsquery)) as text)` |
+| `SqlFunctions.Postgres.tsquery_phrase(query1, query2)` | `cast(tsquery_phrase(cast(@query1 as tsquery), cast(@query2 as tsquery)) as text)` |
+| `SqlFunctions.Postgres.tsquery_phrase(query1, query2, distance)` | `cast(tsquery_phrase(cast(@query1 as tsquery), cast(@query2 as tsquery), @distance) as text)` |
+| `SqlFunctions.Postgres.tsvector_to_array(tsvector)` | `tsvector_to_array(cast(@tsvector as tsvector))` |
+| `SqlFunctions.Postgres.ts_lexize(dictionary, token)` | `ts_lexize(cast(@dictionary as regdictionary), @token)` |
+
+* `array_to_tsvector` не назначает позиции и вызывает ошибку, если массив содержит `NULL`; пустой
+  массив даёт пустой `tsvector`.
+* `json_to_tsvector`/`jsonb_to_tsvector` принимают фильтр как текст `jsonb`-массива
+  (`["string","numeric","boolean","key","all"]`); форма с тремя аргументами задаёт конфигурацию
+  (`regconfig`).
+* Второй аргумент `ts_delete` намеренно оставлен без приведения: объявленный тип параметра выбирает
+  перегрузку `ts_delete(tsvector, text)` или `ts_delete(tsvector, text[])`.
+* `strip` отбрасывает позиции и веса, `ts_filter` оставляет только лексемы с указанным весом, а
+  `setweight` переназначает вес всем лексемам или только перечисленным — `NULL`-элемент, пустой массив
+  и лексема, отсутствующая в векторе, оставляют его без изменений.
+* `ts_rewrite` принимает либо SQL-запрос таблицы перезаписи (текст), либо пару
+  `target`/`substitute`; `tsquery_phrase` соединяет два запроса через `<->`, а форма с тремя
+  аргументами задаёт расстояние.
+* `tsvector_to_array` возвращает лексемы как `text[]` в порядке хранения; `ts_lexize` возвращает
+  лексемы одного токена как `text[]`, а стоп-слово даёт пустой массив.
+* **Аргументы-массивы должны приходить из параметра.** `words`, `lexemes` и `weights` — это CLR
+  `string?[]`: передавайте их как `SqlFunctions.Parameter<string?[]>(idx)` (или захваченный массив) и
+  никогда как встроенный литерал массива — отправленный вызов всегда читает значения из связанного
+  параметра, который диалект приводит к `text[]` или `"char"[]`.
+
+Три читателя токенизатора — это `FROM`-источники (`ctx.From(() => ...)`); они токенизируют текст
+конфигурацией текстового поиска текущей сессии:
+
+| C# | SQL | Row interface | Columns (C# ← SQL: CLR) |
+|---|---|---|---|
+| `SqlFunctions.Postgres.ts_debug(document)` | `ts_debug(@document)` | `ITsDebugRow` | `Alias string? ← alias`; `Description string? ← description`; `Token string? ← token`; `Dictionaries string[]? ← dictionaries`; `Dictionary string? ← dictionary`; `Lexemes string[]? ← lexemes` |
+| `SqlFunctions.Postgres.ts_parse(parser, document)` | `ts_parse(@parser, @document)` | `ITsParseRow` | `Tokid int? ← tokid`; `Token string? ← token` |
+| `SqlFunctions.Postgres.ts_token_type(parser)` | `ts_token_type(@parser)` | `ITsTokenTypeRow` | `Tokid int? ← tokid`; `Alias string? ← alias`; `Description string? ← description` |
+
+Перегрузки с `oid` у `ts_parse`/`ts_token_type` и `ts_debug(regconfig, text)` **не выставлены**:
+оба члена принимают парсер по **имени** (или работают через конфигурацию сессии), неявного
+приведения `text` → `oid` в PostgreSQL нет, поэтому `text`-аргумент никогда не может попасть в
+`oid`-формы. У колонок `regdictionary`/`regdictionary[]` в `ts_debug` тоже нет CLR-отображения,
+поэтому проекция приводит их к `text[]`/`text`. `ts_debug('')` и `ts_debug(NULL)` не дают строк,
+`ts_token_type('default')` даёт 23 строки на PostgreSQL 17, а неизвестное имя парсера вызывает
+`42704`.
+
 ## Строковые функции, хэширование и сжатие SQL Server
 
 Остальные строковые функции и функции хэширования/сжатия, специфичные для T-SQL, живут на

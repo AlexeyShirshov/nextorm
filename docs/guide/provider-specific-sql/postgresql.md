@@ -196,6 +196,13 @@ select id, ts_rank(to_tsvector(somestring), to_tsquery('cat'))
 
 Only PostgreSQL implements the native surface; every other provider rejects it at SQL build time.
 
+The `#281` additions extend the same surface: the vector and query constructors `array_to_tsvector`,
+`json_to_tsvector` and `jsonb_to_tsvector`; the inspection and rewriting members `numnode`, `querytree`,
+`setweight`, `strip`, `ts_delete`, `ts_filter`, `ts_rewrite` and `tsquery_phrase`; the conversion and
+lexing pair `tsvector_to_array` and `ts_lexize`; and the tokenizer readers `ts_debug`, `ts_parse` and
+`ts_token_type` as `FROM` sources. Their SQL forms, row interfaces and the `cast(... as text)` bridge are
+listed in [String functions › Full-text search (PostgreSQL, #281)](../../scalar-functions/01-string-functions.md#full-text-search-postgresql-281).
+
 ## Extended scalar and regexp helpers
 
 The [`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres) surface adds `pg_typeof`, `num_nulls`/
@@ -204,6 +211,47 @@ The [`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres) surface adds `pg_typeo
 (`pi`/`random`/`gcd`/`lcm`/`width_bucket`/...), the extended date/time helpers (`to_char`/`to_date`/
 `to_number`/`to_timestamp`/`timezone`/`make_interval`/`justify_*`) and the array constructors, all gated
 by `SupportsExtendedScalarFunctions`.
+
+The residual string catalogue of #281 sits on the same `Postgres` surface, one member per server
+overload: `btrim` (one-argument, character-set and `bytea` forms), the two-argument and `bytea` forms
+of `ltrim`/`rtrim`, `starts_with`, `parse_ident`, the `text` overloads of
+`quote_ident`/`quote_literal`/`quote_nullable`, `to_ascii(value, encoding)` (encoding named as text or
+as its PostgreSQL code),
+`to_hex`/`to_oct`/`to_bin` (integer and `bigint`), `convert_from`/`convert_to`, `encode`/`decode`,
+`normalize`, `unistr`, `regexp_match` (two- and three-argument) and the set-returning
+`string_to_table`. Each of these names is gated **individually** by
+[`IScalarFunctions.Supports`](xref:NextORM.Core.IScalarFunctions.Supports(System.String)) rather than
+by the family flag: a provider that does not implement the interface fails closed with
+`NotSupportedException`, and PostgreSQL SQL never reaches it. `normalize` takes its form as a bare
+grammar keyword (`NFC`/`NFD`/`NFKC`/`NFKD`), `regexp_match` returns NULL when nothing matches, and
+`to_hex` spells a negative `int` in two's complement (`-1` → `ffffffff`). Members that cannot run on
+the pinned PostgreSQL 17.11 — `casefold`, the one-argument `to_ascii` and the `anyelement` `quote_*`
+overloads — are refused while the query is prepared; the tested reasons are in the refusal table of
+[String functions](../../scalar-functions/01-string-functions.md#tested-refusals).
+
+The residual date/time family of #281 follows the same rule: `date_subtract` (the two-argument
+`interval` form and the zoned three-argument form, both returning `timestamp with time zone`),
+`justify_interval`, `make_timestamptz` (with and without a zone), the clocks
+`clock_timestamp`/`statement_timestamp`/`transaction_timestamp`, `timeofday` and `isfinite` over
+`date`, `timestamp` and `interval`. `clock_timestamp` is evaluated per row while
+`statement_timestamp`/`transaction_timestamp` stay fixed for the statement/transaction, and
+`justify_interval` returns an `interval`, so it follows the provider's interval handling described
+below. Each name is gated **individually** by `IScalarFunctions.Supports` and fails closed with
+`NotSupportedException` on a provider without the interface; `pg_sleep`/`pg_sleep_for`/`pg_sleep_until`
+are refused because each returns `void` and no faithful expression result exists — the refusal rows are
+in [Date and time functions](../../scalar-functions/03-date-and-time.md#postgresql-extended-date-and-time).
+
+UUID extraction is PostgreSQL-only as well: `uuid_extract_timestamp` yields a `timestamptz` (NULL for a
+version-4 UUID or the nil UUID) and `uuid_extract_version` yields a `smallint` (NULL for the nil UUID),
+both gated per name by `IScalarFunctions.Supports` with the same fail-closed refusal — see
+[Sequences and UUID generators](../../scalar-functions/10-sequences.md#uuid-generators).
+
+Next to `encode`/`decode`, the binary-string family adds `get_bit`/`set_bit` (bit indexes counted from
+the least significant bit of the first byte), `get_byte`/`set_byte` (zero-based byte indexes) and
+`bit_count` (set bits as `bigint`), each gated individually by `IScalarFunctions.Supports` and failing
+closed the same way. The `bit`-typed spellings have no CLR mapping and are refused, and
+`crc32`/`crc32c` are PostgreSQL 18 functions refused on the pinned 17.11; both reasons are in the
+refusal table of [String functions](../../scalar-functions/01-string-functions.md#tested-refusals).
 
 On the mapped-column path the duration rule follows the **returned** interval, never the function name:
 `make_interval`, a `justify_*` normalization and `age` all reject a result carrying a non-zero month
@@ -242,6 +290,16 @@ var rows = dataContext.From<IComplexEntity>()
     })
     .ToList();
 ```
+
+Next to the scale helpers, `SqlFunctions.Postgres` exposes the residual numeric family: `div`
+(truncating `numeric` division, so `div(7, 2)` is `3` and `div(-7, 2)` is `-3`), `erf`/`erfc`, the
+two-argument `random_normal(mean, stddev)` and the degree-based trigonometry
+`acosd`/`asind`/`atand`/`atan2d`/`cosd`/`cotd`/`sind`/`tand`, which take and return degrees. Every one
+of these names — like the three scale helpers — is gated individually by
+`IScalarFunctions.Supports`, so any other provider rejects the call with `NotSupportedException`.
+`gamma`/`tgamma`/`lgamma` are refused because they do not exist on the pinned PostgreSQL 17.11; the
+tested reasons for that and for the refused string members are listed in the refusal tables of the
+scalar-functions articles.
 
 See [Math functions](../../scalar-functions/02-math-functions.md#postgresql-numeric-scale).
 

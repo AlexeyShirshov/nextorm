@@ -192,6 +192,7 @@ public sealed class T286bF13UrlIpFunctionTests : ProviderTestSuite
     [Fact]
     public void Cutters_ShouldRemoveTheDocumentedParts()
     {
+        Seed();
         using var ctx = Provider.CreateContext();
         var url = SampleUrl;
 
@@ -231,6 +232,7 @@ public sealed class T286bF13UrlIpFunctionTests : ProviderTestSuite
     [Fact]
     public void EncodingComponents_ShouldRoundTrip()
     {
+        Seed();
         using var ctx = Provider.CreateContext();
         var text = "a b&c/d?e=f";
 
@@ -261,6 +263,7 @@ public sealed class T286bF13UrlIpFunctionTests : ProviderTestSuite
     [Fact]
     public void SignificantSubdomainMembers_ShouldUseTheBuiltInList()
     {
+        Seed();
         using var ctx = Provider.CreateContext();
 
         var r = ctx.From<IT286bUrlIpEntity>()

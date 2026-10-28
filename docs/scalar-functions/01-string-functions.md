@@ -457,6 +457,172 @@ var rows = dataContext.From<IComplexEntity>()
     .ToList();
 ```
 
+### Residual string, encoding and regexp helpers (#281)
+
+The rest of the PostgreSQL string catalogue is exposed on the same surface, one member per server
+overload. Every name is gated **individually** by
+[`IScalarFunctions.Supports`](xref:NextORM.Core.IScalarFunctions.Supports(System.String)), and a
+provider that does not implement the interface rejects the call with `NotSupportedException`:
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.Postgres.btrim(value)` | `btrim(value)` |
+| `SqlFunctions.Postgres.btrim(value, characters)` | `btrim(value, characters)` |
+| `SqlFunctions.Postgres.btrim(bytes, bytesToTrim)` | `btrim(bytes, bytesToTrim)` → `bytea` |
+| `SqlFunctions.Postgres.ltrim(value, characters)` | `ltrim(value, characters)` |
+| `SqlFunctions.Postgres.ltrim(bytes, bytesToTrim)` | `ltrim(bytes, bytesToTrim)` → `bytea` |
+| `SqlFunctions.Postgres.rtrim(value, characters)` | `rtrim(value, characters)` |
+| `SqlFunctions.Postgres.rtrim(bytes, bytesToTrim)` | `rtrim(bytes, bytesToTrim)` → `bytea` |
+| `SqlFunctions.Postgres.starts_with(value, prefix)` | `starts_with(value, prefix)` |
+| `SqlFunctions.Postgres.parse_ident(value, strict)` | `parse_ident(value, strict)` → `text[]` |
+| `SqlFunctions.Postgres.quote_ident(value)` | `quote_ident(value)` |
+| `SqlFunctions.Postgres.quote_literal(value)` | `quote_literal(value)` |
+| `SqlFunctions.Postgres.quote_nullable(value)` | `quote_nullable(value)` |
+| `SqlFunctions.Postgres.to_ascii(value, encoding)` | `to_ascii(value, encoding)` (`text`, `name`) |
+| `SqlFunctions.Postgres.to_ascii(value, encodingCode)` (`int`) | `to_ascii(value, encodingCode)` (`text`, `integer`) — a PostgreSQL encoding **code**: `8` = `LATIN1`, `9` = `LATIN2`, `16` = `LATIN9`, `29` = `WIN1250` |
+| `SqlFunctions.Postgres.to_hex(value)` (`int?`) | `to_hex(value)` |
+| `SqlFunctions.Postgres.to_hex(value)` (`long?`) | `to_hex(value)` (`bigint`) |
+| `SqlFunctions.Postgres.to_oct(value)` (`int?`) | `to_oct(value)` |
+| `SqlFunctions.Postgres.to_oct(value)` (`long?`) | `to_oct(value)` (`bigint`) |
+| `SqlFunctions.Postgres.to_bin(value)` (`int?`) | `to_bin(value)` |
+| `SqlFunctions.Postgres.to_bin(value)` (`long?`) | `to_bin(value)` (`bigint`) |
+| `SqlFunctions.Postgres.convert_from(bytes, encoding)` | `convert_from(bytes, encoding)` |
+| `SqlFunctions.Postgres.convert_to(value, encoding)` | `convert_to(value, encoding)` → `bytea` |
+| `SqlFunctions.Postgres.encode(bytes, format)` | `encode(bytes, format)` |
+| `SqlFunctions.Postgres.decode(value, format)` | `decode(value, format)` → `bytea` |
+| `SqlFunctions.Postgres.get_bit(bytes, index)` | `get_bit(bytes, index)` → `int` (`0` or `1`) |
+| `SqlFunctions.Postgres.set_bit(bytes, index, value)` | `set_bit(bytes, index, value)` → `bytea` |
+| `SqlFunctions.Postgres.get_byte(bytes, index)` | `get_byte(bytes, index)` → `int` |
+| `SqlFunctions.Postgres.set_byte(bytes, index, value)` | `set_byte(bytes, index, value)` → `bytea` |
+| `SqlFunctions.Postgres.bit_count(bytes)` | `bit_count(bytes)` → `bigint` |
+| `SqlFunctions.Postgres.normalize(value, form)` | `normalize(value, form)` |
+| `SqlFunctions.Postgres.unistr(value)` | `unistr(value)` |
+| `SqlFunctions.Postgres.string_to_table(value, delimiter)` | `string_to_table(value, delimiter)` → one row per fragment |
+| `SqlFunctions.Postgres.string_to_table(value, delimiter, nullString)` | `string_to_table(value, delimiter, nullString)` |
+| `SqlFunctions.Postgres.regexp_match(value, pattern)` | `regexp_match(value, pattern)` → `text[]` |
+| `SqlFunctions.Postgres.regexp_match(value, pattern, flags)` | `regexp_match(value, pattern, flags)` → `text[]` |
+
+A NULL argument yields NULL for every one of them. The non-obvious semantics are:
+
+* `regexp_match` returns NULL when the pattern does not match — not an empty array — and a
+  one-element array holding the whole match when the pattern has no capturing group.
+* `normalize` takes a bare grammar keyword (`NFC`, `NFD`, `NFKC` or `NFKD`), not a string literal:
+  the form must be a constant and is rendered unquoted (`normalize(value, NFD)`).
+* `to_hex` on a negative `int` yields the two's-complement spelling (`-1` → `ffffffff`); the `long`
+  overloads are the `bigint` forms for `to_hex`/`to_oct`/`to_bin`.
+* `encode`/`decode` take `(data, format)` with `base64`, `hex` or `escape`; a malformed `decode`
+  input raises on the server instead of being repaired.
+* `get_bit`/`set_bit` index bits from the least significant bit of the first byte, `get_byte`/
+  `set_byte` index bytes from zero, and `bit_count` returns the number of set bits as `bigint`
+  (`0xA1` has bit 0 set, byte 0 = `161` and three set bits).
+* The two-argument `btrim`/`ltrim`/`rtrim` take a **character set** (every listed character is
+  trimmed), not a substring; the `byte[]` overloads are the `bytea` forms.
+* `parse_ident` returns the dot-separated parts as `text[]`, and `strict` decides whether an invalid
+  identifier raises or is truncated after the first error.
+* `string_to_table` is the one set-returning member of the family: one row per fragment, and the
+  third argument turns a fragment equal to it into a NULL row.
+* `to_ascii` is exposed with the encoding named as text (`to_ascii(value, 'LATIN1')`) and with the
+  encoding as its PostgreSQL **code** (`to_ascii(value, 8)`); the one-argument form is refused (see
+  below).
+
+### Tested refusals
+
+The pinned server is PostgreSQL 17.11. A member that cannot run on it is refused while the query is
+prepared — `NotSupportedException`, before any command reaches the server:
+
+| Family | Refused member | Tested reason |
+|---|---|---|
+| string | `casefold(text)` | PostgreSQL 18 function, absent from 17.11 `pg_proc`; the name fails with `42883`. |
+| string | `to_ascii(text)` (one argument) | PostgreSQL 17 supports the conversion only from LATIN1, LATIN2, LATIN9 and WIN1250, and the pinned fixture database is UTF8, so the form raises `0A000`; use `to_ascii(value, encoding)` — the shipped message is `The one-argument to_ascii function is refused: PostgreSQL 17 supports the conversion only from LATIN1, LATIN2, LATIN9 and WIN1250, and the pinned fixture database is UTF8, so the form raises 0A000; use to_ascii(value, encoding).` |
+| string | `crc32(bytea)` / `crc32c(bytea)` | PostgreSQL 18 functions, absent from the 17.11 `pg_proc`; the name fails with `42883`. |
+| string | `quote_literal(anyelement)` | only the `text` overload is exposed; a typed overload over every CLR type would force conversions the expression paths do not support. |
+| string | `quote_nullable(anyelement)` | the same `anyelement` limitation; the `text` overload is exposed. |
+
+`unistr(text)` is delivered — 17.11 has it. Both `to_ascii` overloads are exposed: the `(text,
+integer)` form takes a PostgreSQL encoding code, so `to_ascii(value, 8)` is the `LATIN1` conversion
+(`SELECT pg_encoding_to_char(8)` → `LATIN1`), while a Windows codepage number such as `1252` is not an
+encoding code and the emitted statement fails on the server with `42704`. The `bit`-typed spellings of
+the binary helpers (`get_bit`/`set_bit`/`bit_count` over `bit`) have no CLR mapping, so no member is
+offered for them and the call is refused instead of being translated.
+
+## Full-text search (PostgreSQL, #281)
+
+The cross-provider predicates and the earlier native surface — `contains`/`freetext`, `to_tsvector`,
+`to_tsquery`, `plainto_tsquery`/`phraseto_tsquery`/`websearch_to_tsquery`, `ts_match`, `ts_rank`,
+`ts_rank_cd`, `ts_headline` and `@@` — are described in
+[PostgreSQL-specific SQL › Full-text search](../guide/provider-specific-sql/postgresql.md#full-text-search).
+The 17 delivered names below sit on the same surface, gated by
+[`SupportsTextSearchFunctions`](xref:NextORM.Core.ISqlDialect.SupportsTextSearchFunctions), and every
+other provider refuses them while the SQL is built.
+
+**The `text` bridge.** Npgsql maps `tsvector`/`tsquery` to its own `NpgsqlTsVector`/`NpgsqlTsQuery`
+types rather than to `string`, so every `tsvector` result of these members is emitted as
+`cast(... as text)`. Every `tsvector`/`tsquery`/`regconfig`/`regdictionary`/`"char"` argument is cast to
+its server type for the same reason: a `text` parameter matches no such overload. `to_tsvector` (and the
+other earlier members) keep their bare native call, because they are consumed in argument positions
+(`@@`, `ts_rank`, `ts_headline`) rather than projected as a value.
+
+The 14 scalar names fall into three groups, in this order — vectors and queries, query inspection and
+rewriting, conversion and lexing:
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.Postgres.to_tsvector(document)` | `to_tsvector(document)` |
+| `SqlFunctions.Postgres.array_to_tsvector(words)` | `cast(array_to_tsvector(@words) as text)` |
+| `SqlFunctions.Postgres.json_to_tsvector(json, filter)` | `cast(json_to_tsvector(cast(@json as json), cast(@filter as jsonb)) as text)` |
+| `SqlFunctions.Postgres.json_to_tsvector(config, json, filter)` | `cast(json_to_tsvector(cast(@config as regconfig), cast(@json as json), cast(@filter as jsonb)) as text)` |
+| `SqlFunctions.Postgres.jsonb_to_tsvector(json, filter)` | `cast(jsonb_to_tsvector(cast(@json as jsonb), cast(@filter as jsonb)) as text)` |
+| `SqlFunctions.Postgres.jsonb_to_tsvector(config, json, filter)` | `cast(jsonb_to_tsvector(cast(@config as regconfig), cast(@json as jsonb), cast(@filter as jsonb)) as text)` |
+| `SqlFunctions.Postgres.numnode(tsquery)` | `numnode(cast(@tsquery as tsquery))` |
+| `SqlFunctions.Postgres.querytree(tsquery)` | `querytree(cast(@tsquery as tsquery))` |
+| `SqlFunctions.Postgres.setweight(tsvector, weight)` | `cast(setweight(cast(@tsvector as tsvector), cast(@weight as "char")) as text)` |
+| `SqlFunctions.Postgres.setweight(tsvector, weight, lexemes)` | `cast(setweight(cast(@tsvector as tsvector), cast(@weight as "char"), cast(@lexemes as text[])) as text)` |
+| `SqlFunctions.Postgres.strip(tsvector)` | `cast(strip(cast(@tsvector as tsvector)) as text)` |
+| `SqlFunctions.Postgres.ts_delete(tsvector, lexeme)` | `cast(ts_delete(cast(@tsvector as tsvector), @lexeme) as text)` |
+| `SqlFunctions.Postgres.ts_delete(tsvector, lexemes)` | `cast(ts_delete(cast(@tsvector as tsvector), @lexemes) as text)` |
+| `SqlFunctions.Postgres.ts_filter(tsvector, weights)` | `cast(ts_filter(cast(@tsvector as tsvector), cast(@weights as "char"[])) as text)` |
+| `SqlFunctions.Postgres.ts_rewrite(query, select)` | `cast(ts_rewrite(cast(@query as tsquery), @select) as text)` |
+| `SqlFunctions.Postgres.ts_rewrite(query, target, substitute)` | `cast(ts_rewrite(cast(@query as tsquery), cast(@target as tsquery), cast(@substitute as tsquery)) as text)` |
+| `SqlFunctions.Postgres.tsquery_phrase(query1, query2)` | `cast(tsquery_phrase(cast(@query1 as tsquery), cast(@query2 as tsquery)) as text)` |
+| `SqlFunctions.Postgres.tsquery_phrase(query1, query2, distance)` | `cast(tsquery_phrase(cast(@query1 as tsquery), cast(@query2 as tsquery), @distance) as text)` |
+| `SqlFunctions.Postgres.tsvector_to_array(tsvector)` | `tsvector_to_array(cast(@tsvector as tsvector))` |
+| `SqlFunctions.Postgres.ts_lexize(dictionary, token)` | `ts_lexize(cast(@dictionary as regdictionary), @token)` |
+
+* `array_to_tsvector` assigns no positions and raises when the array holds a `NULL`; an empty array
+  yields an empty `tsvector`.
+* `json_to_tsvector`/`jsonb_to_tsvector` take the filter as the `jsonb` array text
+  (`["string","numeric","boolean","key","all"]`); the three-argument form names the configuration
+  (`regconfig`).
+* `ts_delete`'s second argument is deliberately left uncast: the parameter's declared type picks the
+  `ts_delete(tsvector, text)` or the `ts_delete(tsvector, text[])` overload.
+* `strip` drops positions and weights, `ts_filter` keeps only the lexemes whose weight is listed, and
+  `setweight` relabels every lexeme or only the listed ones — a `NULL` element, an empty array and a
+  lexeme absent from the vector all leave it unchanged.
+* `ts_rewrite` takes either a rewrite-table SQL query (text) or a `target`/`substitute` pair;
+  `tsquery_phrase` joins two queries with `<->`, and the three-argument form sets the distance.
+* `tsvector_to_array` returns the lexemes as `text[]` in stored order; `ts_lexize` returns the lexemes of
+  one token as `text[]`, and a stop word yields an empty array.
+* **Array arguments must come from a parameter.** `words`, `lexemes` and `weights` are CLR `string?[]`:
+  pass them as `SqlFunctions.Parameter<string?[]>(idx)` (or a captured array) and never as an inline
+  array literal — the emitted call always reads the values from the bound parameter, which the dialect
+  casts to `text[]` or `"char"[]`.
+
+The three tokenizer readers are `FROM` sources (`ctx.From(() => ...)`) and tokenize with the session's
+default text-search configuration:
+
+| C# | SQL | Row interface | Columns (C# ← SQL: CLR) |
+|---|---|---|---|
+| `SqlFunctions.Postgres.ts_debug(document)` | `ts_debug(@document)` | `ITsDebugRow` | `Alias string? ← alias`; `Description string? ← description`; `Token string? ← token`; `Dictionaries string[]? ← dictionaries`; `Dictionary string? ← dictionary`; `Lexemes string[]? ← lexemes` |
+| `SqlFunctions.Postgres.ts_parse(parser, document)` | `ts_parse(@parser, @document)` | `ITsParseRow` | `Tokid int? ← tokid`; `Token string? ← token` |
+| `SqlFunctions.Postgres.ts_token_type(parser)` | `ts_token_type(@parser)` | `ITsTokenTypeRow` | `Tokid int? ← tokid`; `Alias string? ← alias`; `Description string? ← description` |
+
+The `oid` overloads of `ts_parse`/`ts_token_type` and `ts_debug(regconfig, text)` are **not exposed**:
+both members take the parser by **name** (or run through the session configuration), PostgreSQL has no
+implicit `text` → `oid` cast, and a `text` argument can therefore never reach the `oid` forms. The
+`regdictionary`/`regdictionary[]` columns of `ts_debug` have no CLR mapping either, so the projection
+casts them to `text[]`/`text`. `ts_debug('')` and `ts_debug(NULL)` yield no rows, `ts_token_type('default')`
+yields 23 rows on PostgreSQL 17, and an unknown parser name raises `42704`.
+
 ## SQL Server string, hashing and compression functions
 
 The remaining T-SQL-only string, hashing and compression scalars live on `SqlFunctions.SqlServer` and

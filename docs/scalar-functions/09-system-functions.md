@@ -95,6 +95,204 @@ PostgreSQL only):
 | `SqlFunctions.Postgres.current_setting(name)` / `current_setting(name, missingOk)` | `current_setting(name[, missing_ok])` |
 | `SqlFunctions.Postgres.set_config(name, value, isLocal)` | `set_config(name, value, is_local)` |
 
+The `pg_*` system-information surface is PostgreSQL-only and gated **per name**: every scalar member is
+advertised by [`IScalarFunctions.Supports`](xref:NextORM.Core.IScalarFunctions.Supports(System.String)),
+each set-returning reader by `SupportsTableFunction`, and any other provider rejects the call with
+`NotSupportedException`. It covers the 79 `pg_*` names of the PostgreSQL 17 system-information expansion:
+56 delivered scalars, 2 tested refusals, the already-covered `pg_backend_pid`, and 20 set-returning
+readers.
+
+**Semantics measured on PostgreSQL 17.11.** Results of the OID-alias and transaction types that Npgsql has
+no CLR mapping for — `oid`, `regclass`, `regtype`, `xid8` and `pg_lsn` — are bridged to `text`
+server-side (`cast(... as text)`, or `::text` inside a row projection), and a `text` OID argument is cast
+back to `oid`/`regclass`/`regtype`/`regrole`, because a text parameter does not resolve those overloads.
+`pg_current_logfile()` returns NULL when no log destination is file-based (`logging_collector` off, or
+logging to `syslog`), not an empty string; the named form takes `stderr`, `csvlog` or `jsonlog`, and any
+other value raises on the server. `pg_xact_commit_timestamp` raises SQLSTATE `55000` (`could not
+get commit timestamp data`) when `track_commit_timestamp` is off — it does not return NULL. The
+object-definition helpers return NULL for an argument that names no object instead of raising
+(`pg_get_indexdef`, `pg_get_viewdef`, `pg_get_ruledef`, `pg_get_triggerdef`, `pg_get_partkeydef`,
+`pg_get_partition_constraintdef`, `pg_get_statisticsobjdef`). The family is read-only: destructive or
+state-changing server controls (`pg_terminate_backend`, `pg_cancel_backend`, `pg_switch_wal`,
+`pg_promote`, `pg_create_restore_point`, `pg_reload_conf`, `pg_rotate_logfile`) are not exposed, and the
+two blocking helpers only report process ids — they never act on a session.
+
+#### Session and server identity
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.Postgres.current_role()` | `current_role` → `name` (bare keyword) |
+| `SqlFunctions.Postgres.current_catalog()` | `current_catalog` → `name` (bare keyword) |
+| `SqlFunctions.Postgres.current_schemas(includeImplicit)` | `current_schemas(include_implicit)` → `name[]` |
+| `SqlFunctions.Postgres.pg_postmaster_start_time()` | `pg_postmaster_start_time()` |
+| `SqlFunctions.Postgres.pg_current_logfile()` | `pg_current_logfile()` |
+| `SqlFunctions.Postgres.pg_current_logfile(format)` | `pg_current_logfile(format)` |
+| `SqlFunctions.Postgres.pg_conf_load_time()` | `pg_conf_load_time()` |
+| `SqlFunctions.Postgres.pg_jit_available()` | `pg_jit_available()` |
+| `SqlFunctions.Postgres.pg_my_temp_schema()` | `cast(pg_my_temp_schema() as text)` → `oid` as text |
+| `SqlFunctions.Postgres.pg_is_other_temp_schema(schemaOid)` | `pg_is_other_temp_schema(schemaOid)` → `oid` argument |
+| `SqlFunctions.Postgres.pg_notification_queue_usage()` | `pg_notification_queue_usage()` |
+| `SqlFunctions.Postgres.pg_blocking_pids(pid)` | `pg_blocking_pids(pid)` → `integer[]` |
+| `SqlFunctions.Postgres.pg_safe_snapshot_blocking_pids(pid)` | `pg_safe_snapshot_blocking_pids(pid)` → `integer[]` |
+| `SqlFunctions.Postgres.pg_trigger_depth()` | `pg_trigger_depth()` |
+
+`pg_backend_pid()` stays on the shared `SqlFunctions.Sql` surface and is documented in
+[Session and server identity](#session-and-server-identity) above; `pg_typeof` is documented with the
+type helpers in [Date and time](03-date-and-time.md).
+
+#### Catalog visibility and role privilege
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.Postgres.pg_collation_is_visible(oid)` | `pg_collation_is_visible(oid)` |
+| `SqlFunctions.Postgres.pg_conversion_is_visible(oid)` | `pg_conversion_is_visible(oid)` |
+| `SqlFunctions.Postgres.pg_function_is_visible(oid)` | `pg_function_is_visible(oid)` |
+| `SqlFunctions.Postgres.pg_opclass_is_visible(oid)` | `pg_opclass_is_visible(oid)` |
+| `SqlFunctions.Postgres.pg_operator_is_visible(oid)` | `pg_operator_is_visible(oid)` |
+| `SqlFunctions.Postgres.pg_opfamily_is_visible(oid)` | `pg_opfamily_is_visible(oid)` |
+| `SqlFunctions.Postgres.pg_statistics_obj_is_visible(oid)` | `pg_statistics_obj_is_visible(oid)` |
+| `SqlFunctions.Postgres.pg_table_is_visible(oid)` | `pg_table_is_visible(oid)` |
+| `SqlFunctions.Postgres.pg_ts_config_is_visible(oid)` | `pg_ts_config_is_visible(oid)` |
+| `SqlFunctions.Postgres.pg_ts_dict_is_visible(oid)` | `pg_ts_dict_is_visible(oid)` |
+| `SqlFunctions.Postgres.pg_ts_parser_is_visible(oid)` | `pg_ts_parser_is_visible(oid)` |
+| `SqlFunctions.Postgres.pg_ts_template_is_visible(oid)` | `pg_ts_template_is_visible(oid)` |
+| `SqlFunctions.Postgres.pg_type_is_visible(oid)` | `pg_type_is_visible(oid)` |
+| `SqlFunctions.Postgres.pg_has_role(role, privilege)` | `pg_has_role(role, privilege)` → `regrole` argument |
+| `SqlFunctions.Postgres.pg_has_role(role, membership, privilege)` | `pg_has_role(role, membership, privilege)` → two `regrole` arguments |
+
+The visibility helpers return NULL when the OID names no object; `pg_has_role` accepts a role name or a
+numeric OID in text form in either role position.
+
+#### Encoding and catalog description
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.Postgres.pg_char_to_encoding(name)` | `pg_char_to_encoding(name)` → `-1` for an unknown name |
+| `SqlFunctions.Postgres.pg_encoding_to_char(code)` | `pg_encoding_to_char(code)` → the empty string for an unknown code |
+| `SqlFunctions.Postgres.pg_basetype(type)` | `cast(pg_basetype(type) as text)` → `regtype` argument and result |
+| `SqlFunctions.Postgres.pg_describe_object(classOid, objectOid, objectSubId)` | `pg_describe_object(classid, objid, objsubid)` |
+| `SqlFunctions.Postgres.pg_tablespace_location(oid)` | `pg_tablespace_location(oid)` → the empty string for the default tablespace |
+| `SqlFunctions.Postgres.pg_settings_get_flags(setting)` | `pg_settings_get_flags(setting)` → `text[]` |
+| `SqlFunctions.Postgres.pg_index_has_property(index, property)` | `pg_index_has_property(index, property)` |
+| `SqlFunctions.Postgres.pg_indexam_has_property(accessMethodOid, property)` | `pg_indexam_has_property(amoid, property)` |
+| `SqlFunctions.Postgres.pg_index_column_has_property(index, columnNumber, property)` | `pg_index_column_has_property(index, column, property)` |
+| `SqlFunctions.Postgres.pg_input_is_valid(value, typeName)` | `pg_input_is_valid(value, type)` |
+| `SqlFunctions.Postgres.pg_get_serial_sequence(table, column)` | `pg_get_serial_sequence(table, column)` |
+
+`pg_settings_get_flags` returns an empty array for a setting with no flags and NULL for an unknown
+setting; an unrecognised index property is NULL; `pg_describe_object` is NULL when the OIDs name no object;
+`pg_input_is_valid` never raises for invalid input but an unknown type name is still an error;
+`pg_get_serial_sequence` is NULL for a column without a sequence.
+
+#### Size helpers
+
+No size helper is exposed: `pg_column_size`, `pg_relation_size`, `pg_total_relation_size`,
+`pg_indexes_size`, `pg_database_size`, `pg_size_pretty` and `pg_size_bytes` have no member on
+`SqlFunctions.Postgres`. The only block and segment sizes on the surface are the read-only
+`pg_control_init()` columns in [Control files](#control-files) below.
+
+#### Object definitions
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.Postgres.pg_get_function_arguments(functionOid)` | `pg_get_function_arguments(oid)` |
+| `SqlFunctions.Postgres.pg_get_function_identity_arguments(functionOid)` | `pg_get_function_identity_arguments(oid)` |
+| `SqlFunctions.Postgres.pg_get_function_result(functionOid)` | `pg_get_function_result(oid)` |
+| `SqlFunctions.Postgres.pg_get_functiondef(functionOid)` | `pg_get_functiondef(oid)` |
+| `SqlFunctions.Postgres.pg_get_indexdef(indexOid)` | `pg_get_indexdef(oid)` |
+| `SqlFunctions.Postgres.pg_get_indexdef(indexOid, columnNumber, pretty)` | `pg_get_indexdef(oid, integer, boolean)` |
+| `SqlFunctions.Postgres.pg_get_partition_constraintdef(relationOid)` | `pg_get_partition_constraintdef(oid)` |
+| `SqlFunctions.Postgres.pg_get_partkeydef(relationOid)` | `pg_get_partkeydef(oid)` |
+| `SqlFunctions.Postgres.pg_get_ruledef(ruleOid)` | `pg_get_ruledef(oid)` |
+| `SqlFunctions.Postgres.pg_get_ruledef(ruleOid, pretty)` | `pg_get_ruledef(oid, boolean)` |
+| `SqlFunctions.Postgres.pg_get_statisticsobjdef(statisticsOid)` | `pg_get_statisticsobjdef(oid)` |
+| `SqlFunctions.Postgres.pg_get_triggerdef(triggerOid)` | `pg_get_triggerdef(oid)` |
+| `SqlFunctions.Postgres.pg_get_triggerdef(triggerOid, pretty)` | `pg_get_triggerdef(oid, boolean)` |
+| `SqlFunctions.Postgres.pg_get_userbyid(roleOid)` | `pg_get_userbyid(oid)` → `unknown (OID=N)` for a missing role |
+| `SqlFunctions.Postgres.pg_get_viewdef(view)` | `pg_get_viewdef(to_regclass(view))` |
+| `SqlFunctions.Postgres.pg_get_viewdef(view, pretty)` | `pg_get_viewdef(to_regclass(view), boolean)` |
+| `SqlFunctions.Postgres.pg_get_viewdef(viewOid, pretty)` | `pg_get_viewdef(to_regclass(viewOid), integer)` |
+
+The view argument is a view name or a numeric OID in text form. `pg_get_functiondef` is an error for an
+aggregate or a window function, and `pg_get_indexdef(oid, integer, boolean)` is an error for an
+out-of-range column; both keep the native server error.
+
+#### Snapshots and transactions
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.Postgres.pg_current_snapshot()` | `cast(pg_current_snapshot() as text)` → `pg_snapshot` as text |
+| `SqlFunctions.Postgres.pg_current_xact_id()` | `cast(pg_current_xact_id() as text)` → `xid8` as text |
+| `SqlFunctions.Postgres.pg_current_xact_id_if_assigned()` | `cast(pg_current_xact_id_if_assigned() as text)` |
+| `SqlFunctions.Postgres.pg_snapshot_xmax(snapshot)` | `cast(pg_snapshot_xmax(snapshot) as text)` |
+| `SqlFunctions.Postgres.pg_snapshot_xmin(snapshot)` | `cast(pg_snapshot_xmin(snapshot) as text)` |
+| `SqlFunctions.Postgres.pg_visible_in_snapshot(xid, snapshot)` | `pg_visible_in_snapshot(xid, snapshot)` → `xid8` and `pg_snapshot` arguments |
+| `SqlFunctions.Postgres.pg_xact_commit_timestamp(xid)` | `pg_xact_commit_timestamp(xid)` → `xid` argument |
+| `SqlFunctions.Postgres.pg_xact_status(xid)` | `pg_xact_status(xid)` → `xid8` argument |
+
+The textual snapshot is the value `pg_current_snapshot()` returns, and the same text feeds
+`pg_snapshot_xmax`, `pg_snapshot_xmin` and `pg_visible_in_snapshot`. `pg_current_xact_id()` assigns an id
+to a write transaction that has none yet; `pg_current_xact_id_if_assigned()` does not and returns NULL
+instead.
+
+#### Refusals
+
+| Family | Refused member | Tested reason |
+|---|---|---|
+| system information | `pg_get_expr(pg_node_tree, oid)` / `pg_get_expr(pg_node_tree, oid, boolean)` | `0A000: cannot accept a value of type pg_node_tree`; a value of the internal `pg_node_tree` type cannot be produced from CLR, so no form of the function can be prepared. |
+| system information | `pg_get_constraintdef(oid)` / `pg_get_constraintdef(oid, boolean)` | `0A000: cannot accept a value of type pg_node_tree`; the sibling `pg_get_expr` cannot be called at all, and the pair is refused rather than half-exposed. Read the constraint text from `pg_constraint.conbin` through a raw command instead. |
+
+#### Control files
+
+The four control-file readers are `TvfEntityBuilder<...>` FROM sources that yield a single row each:
+
+| C# | SQL | Row interface | Columns (C# ← SQL: CLR) |
+|---|---|---|---|
+| `SqlFunctions.Postgres.pg_control_system()` | `pg_control_system()` | `IPgControlSystemRow` | `PgControlVersion int? ← pg_control_version`; `CatalogVersionNo int? ← catalog_version_no`; `SystemIdentifier long? ← system_identifier`; `PgControlLastModified DateTime? ← pg_control_last_modified` |
+| `SqlFunctions.Postgres.pg_control_init()` | `pg_control_init()` | `IPgControlInitRow` | `MaxDataAlignment int? ← max_data_alignment`; `DatabaseBlockSize int? ← database_block_size`; `BlocksPerSegment int? ← blocks_per_segment`; `WalBlockSize int? ← wal_block_size`; `BytesPerWalSegment int? ← bytes_per_wal_segment`; `MaxIdentifierLength int? ← max_identifier_length`; `MaxIndexColumns int? ← max_index_columns`; `MaxToastChunkSize int? ← max_toast_chunk_size`; `LargeObjectChunkSize int? ← large_object_chunk_size`; `Float8PassByValue bool? ← float8_pass_by_value`; `DataPageChecksumVersion int? ← data_page_checksum_version` |
+| `SqlFunctions.Postgres.pg_control_recovery()` | `pg_control_recovery()` | `IPgControlRecoveryRow` | `MinRecoveryEndLsn string? ← min_recovery_end_lsn`; `MinRecoveryEndTimeline int? ← min_recovery_end_timeline`; `BackupStartLsn string? ← backup_start_lsn`; `BackupEndLsn string? ← backup_end_lsn`; `EndOfBackupRecordRequired bool? ← end_of_backup_record_required` |
+| `SqlFunctions.Postgres.pg_control_checkpoint()` | `pg_control_checkpoint()` | `IPgControlCheckpointRow` | `CheckpointLsn string? ← checkpoint_lsn`; `RedoLsn string? ← redo_lsn`; `RedoWalFile string? ← redo_wal_file`; `TimelineId int? ← timeline_id`; `PrevTimelineId int? ← prev_timeline_id`; `FullPageWrites bool? ← full_page_writes`; `NextXid string? ← next_xid`; `NextOid string? ← next_oid`; `NextMultixactId uint? ← next_multixact_id`; `NextMultiOffset uint? ← next_multi_offset`; `OldestXid uint? ← oldest_xid`; `OldestXidDbId string? ← oldest_xid_dbid`; `OldestActiveXid uint? ← oldest_active_xid`; `OldestMultiXid uint? ← oldest_multi_xid`; `OldestMultiDbId string? ← oldest_multi_dbid`; `OldestCommitTsXid uint? ← oldest_commit_ts_xid`; `NewestCommitTsXid uint? ← newest_commit_ts_xid`; `CheckpointTime DateTime? ← checkpoint_time` |
+
+`pg_control_recovery()` and `pg_control_checkpoint()` read the `pg_lsn` columns as text; the OID and
+`xid` columns of the checkpoint row follow the same bridge (`next_oid`/`oldest_xid_dbid`/
+`oldest_multi_dbid` as text, the `xid` values as `uint`).
+
+#### WAL and transaction readers
+
+| C# | SQL | Row interface | Columns (C# ← SQL: CLR) |
+|---|---|---|---|
+| `SqlFunctions.Postgres.pg_available_wal_summaries()` | `pg_available_wal_summaries()` | `IPgAvailableWalSummaryRow` | `TimelineId long? ← tli`; `StartLsn string? ← start_lsn`; `EndLsn string? ← end_lsn` |
+| `SqlFunctions.Postgres.pg_get_wal_summarizer_state()` | `pg_get_wal_summarizer_state()` | `IPgWalSummarizerStateRow` | `SummarizedTli long? ← summarized_tli`; `SummarizedLsn string? ← summarized_lsn`; `PendingLsn string? ← pending_lsn`; `SummarizerPid int? ← summarizer_pid` |
+| `SqlFunctions.Postgres.pg_wal_summary_contents(timelineId, startLsn, endLsn)` | `pg_wal_summary_contents(tli, start_lsn, end_lsn)` | `IPgWalSummaryContentRow` | `RelFileNode string? ← relfilenode`; `RelTablespace string? ← reltablespace`; `RelDatabase string? ← reldatabase`; `RelForkNumber short? ← relforknumber`; `RelBlockNumber long? ← relblocknumber`; `IsLimitBlock bool? ← is_limit_block` |
+| `SqlFunctions.Postgres.pg_last_committed_xact()` | `pg_last_committed_xact()` | `IPgCommittedXactRow` | `Xid uint? ← xid`; `Timestamp DateTime? ← timestamp`; `RoIdent string? ← roident` |
+| `SqlFunctions.Postgres.pg_get_multixact_members(multixactId)` | `pg_get_multixact_members(xid)` | `IPgMultixactMemberRow` | `Xid uint? ← xid`; `Mode string? ← mode` |
+| `SqlFunctions.Postgres.pg_xact_commit_timestamp_origin(xid)` | `pg_xact_commit_timestamp_origin(xid)` | `IPgXactCommitOriginRow` | `Timestamp DateTime? ← timestamp`; `RoIdent string? ← roident` |
+| `SqlFunctions.Postgres.pg_snapshot_xip(snapshot)` | `pg_snapshot_xip(snapshot)` | `ISnapshotXipRow` | `Xid string? ← pg_snapshot_xip` |
+
+`pg_available_wal_summaries()` is empty while `summarize_wal` is off; `pg_last_committed_xact()` yields
+zero or one row and yields no row until a commit has been recorded under `track_commit_timestamp`;
+`pg_xact_commit_timestamp_origin` yields NULL columns for a transaction without a commit timestamp;
+`pg_get_multixact_members` yields no row for a multixact id the server has not created;
+`pg_snapshot_xip` reads each `xid8` as text.
+
+#### Catalog, keyword and object readers
+
+| C# | SQL | Row interface | Columns (C# ← SQL: CLR) |
+|---|---|---|---|
+| `SqlFunctions.Postgres.pg_get_keywords()` | `pg_get_keywords()` | `IPgKeywordRow` | `Word string? ← word`; `CatCode string? ← catcode`; `BareLabel bool? ← barelabel`; `CatDesc string? ← catdesc`; `BareDesc string? ← baredesc` |
+| `SqlFunctions.Postgres.pg_listening_channels()` | `pg_listening_channels()` | `IListeningChannelRow` | `Channel string? ← pg_listening_channels` |
+| `SqlFunctions.Postgres.pg_tablespace_databases(tablespaceOid)` | `pg_tablespace_databases(oid)` | `ITablespaceDatabaseRow` | `DatabaseOid string? ← pg_tablespace_databases` |
+| `SqlFunctions.Postgres.pg_get_catalog_foreign_keys()` | `pg_get_catalog_foreign_keys()` | `IPgCatalogForeignKeyRow` | `FkTable string? ← fktable`; `FkColumns string[]? ← fkcols`; `PkTable string? ← pktable`; `PkColumns string[]? ← pkcols`; `IsArray bool? ← is_array`; `IsOptional bool? ← is_opt` |
+| `SqlFunctions.Postgres.pg_options_to_table(options)` | `pg_options_to_table(options)` | `IPgOptionRow` | `OptionName string? ← option_name`; `OptionValue string? ← option_value` |
+| `SqlFunctions.Postgres.pg_get_object_address(type, objectNames, objectArgs)` | `pg_get_object_address(type, object_names, object_args)` | `IPgObjectAddressRow` | `ClassId string? ← classid`; `ObjId string? ← objid`; `ObjSubId int? ← objsubid` |
+| `SqlFunctions.Postgres.pg_identify_object(classId, objectId, objectSubId)` | `pg_identify_object(classid, objid, objsubid)` | `IPgIdentifyObjectRow` | `Type string? ← type`; `Schema string? ← schema`; `Name string? ← name`; `Identity string? ← identity` |
+| `SqlFunctions.Postgres.pg_identify_object_as_address(classId, objectId, objectSubId)` | `pg_identify_object_as_address(classid, objid, objsubid)` | `IPgIdentifyObjectAddressRow` | `Type string? ← type`; `ObjectNames string[]? ← object_names`; `ObjectArgs string[]? ← object_args` |
+| `SqlFunctions.Postgres.pg_input_error_info(value, typeName)` | `pg_input_error_info(value, type_name)` | `IPgInputErrorInfoRow` | `Message string? ← message`; `Detail string? ← detail`; `Hint string? ← hint`; `SqlErrorCode string? ← sql_error_code` |
+
+`pg_listening_channels()` is empty until the same connection issues `LISTEN`; the `catcode` of
+`pg_get_keywords` is the one-byte `"char"` code read as text; `pg_identify_object` yields one all-NULL row
+for an object that does not exist; `pg_input_error_info` yields one all-NULL row for a value that parses.
+
 ### SQL Server
 
 `SqlFunctions.SqlServer.db_id`/`db_name`/`original_db_name`, `schema_id`/`schema_name`,

@@ -95,6 +95,15 @@ internal static class AdvancedAggregateTranslator
             case AdvancedAggregateKind.RegrAvgy:
                 EmitBinary(visitor, node, "regr_avgy", () => visitor.Dialect.SupportsRegressionAggregates, "regr_*");
                 return true;
+            case AdvancedAggregateKind.RegrSxx:
+                EmitBinary(visitor, node, "regr_sxx", () => visitor.Dialect.SupportsRegressionAggregates, "regr_*");
+                return true;
+            case AdvancedAggregateKind.RegrSxy:
+                EmitBinary(visitor, node, "regr_sxy", () => visitor.Dialect.SupportsRegressionAggregates, "regr_*");
+                return true;
+            case AdvancedAggregateKind.RegrSyy:
+                EmitBinary(visitor, node, "regr_syy", () => visitor.Dialect.SupportsRegressionAggregates, "regr_*");
+                return true;
 
             case AdvancedAggregateKind.ArgMin:
                 EmitBinary(visitor, node, "arg_min", () => visitor.Dialect.SupportsArgMinMax, "argMin/argMax");
@@ -298,6 +307,12 @@ internal static class AdvancedAggregateTranslator
         GroupingId,
         ApproxPercentileCont,
         ApproxPercentileDisc,
+
+        // #281 / T347 residual PostgreSQL aggregates: the dispatch is enum-based here, so each
+        // name-classified aggregate needs its own kind.
+        RegrSxx,
+        RegrSxy,
+        RegrSyy,
     }
 
     /// <summary>
@@ -391,6 +406,13 @@ internal static class AdvancedAggregateTranslator
 
             nameof(ClickHouseFunctions.group_array) when node.Arguments.Count == 1 => AdvancedAggregateKind.GroupArray,
             nameof(ClickHouseFunctions.group_uniq_array) when node.Arguments.Count == 1 => AdvancedAggregateKind.GroupUniqArray,
+
+            nameof(PostgresFunctions.regr_sxx) when node.Method.DeclaringType == typeof(PostgresFunctions)
+                && node.Arguments.Count == 2 => AdvancedAggregateKind.RegrSxx,
+            nameof(PostgresFunctions.regr_sxy) when node.Method.DeclaringType == typeof(PostgresFunctions)
+                && node.Arguments.Count == 2 => AdvancedAggregateKind.RegrSxy,
+            nameof(PostgresFunctions.regr_syy) when node.Method.DeclaringType == typeof(PostgresFunctions)
+                && node.Arguments.Count == 2 => AdvancedAggregateKind.RegrSyy,
 
             nameof(SqlServerFunctions.product) when node.Method.DeclaringType == typeof(SqlServerFunctions)
                 && node.Arguments.Count == 1 => AdvancedAggregateKind.Product,

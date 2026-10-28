@@ -155,13 +155,104 @@ internal sealed class InMemoryScalarFunctionRewriter : ExpressionVisitor
     };
 
     /// <summary>
-    /// The PostgreSQL numeric-scale members <c>scale</c>/<c>min_scale</c>/<c>trim_scale</c> are
-    /// SQL-only. Rejecting them explicitly keeps the failure a <see cref="NotSupportedException"/>
-    /// instead of a compiled call on the null <see cref="SqlFunctions.Postgres"/> marker surface.
+    /// The PostgreSQL-only scalar members of the string, numeric, date/time, UUID and binary-string
+    /// families (and the PostgreSQL numeric-scale members <c>scale</c>/<c>min_scale</c>/<c>trim_scale</c>)
+    /// are SQL-only. Rejecting them explicitly keeps the failure a <see cref="NotSupportedException"/>
+    /// instead of a compiled call on the null <see cref="SqlFunctions.Postgres"/> marker surface. The
+    /// refusals (<c>casefold</c>, <c>gamma</c>/<c>tgamma</c>/<c>lgamma</c>, <c>pg_sleep*</c>,
+    /// <c>crc32</c>/<c>crc32c</c>) are listed for the same reason: their member bodies throw, but the
+    /// call is compiled against the null surface first.
     /// </summary>
-    private static readonly HashSet<string> PostgresNumericScaleFunctionNames = new(StringComparer.Ordinal)
+    private static readonly HashSet<string> PostgresSqlOnlyScalarFunctionNames = new(StringComparer.Ordinal)
     {
-        nameof(PostgresFunctions.scale), nameof(PostgresFunctions.min_scale), nameof(PostgresFunctions.trim_scale)
+        nameof(PostgresFunctions.scale), nameof(PostgresFunctions.min_scale), nameof(PostgresFunctions.trim_scale),
+        nameof(PostgresFunctions.btrim), nameof(PostgresFunctions.ltrim), nameof(PostgresFunctions.rtrim),
+        nameof(PostgresFunctions.starts_with), nameof(PostgresFunctions.parse_ident),
+        nameof(PostgresFunctions.quote_ident), nameof(PostgresFunctions.quote_literal),
+        nameof(PostgresFunctions.quote_nullable), nameof(PostgresFunctions.to_ascii),
+        nameof(PostgresFunctions.to_hex), nameof(PostgresFunctions.to_oct), nameof(PostgresFunctions.to_bin),
+        nameof(PostgresFunctions.convert_from), nameof(PostgresFunctions.convert_to),
+        nameof(PostgresFunctions.encode), nameof(PostgresFunctions.decode),
+        nameof(PostgresFunctions.normalize), nameof(PostgresFunctions.unistr),
+        nameof(PostgresFunctions.regexp_match),
+        nameof(PostgresFunctions.json), nameof(PostgresFunctions.json_scalar),
+        nameof(PostgresFunctions.json_serialize), nameof(PostgresFunctions.json_extract_path),
+        nameof(PostgresFunctions.json_extract_path_text), nameof(PostgresFunctions.jsonb_extract_path),
+        nameof(PostgresFunctions.jsonb_extract_path_text), nameof(PostgresFunctions.jsonb_set_lax),
+        nameof(PostgresFunctions.jsonb_path_exists_tz), nameof(PostgresFunctions.jsonb_path_match_tz),
+        nameof(PostgresFunctions.jsonb_path_query_array_tz), nameof(PostgresFunctions.jsonb_path_query_first_tz),
+        nameof(PostgresFunctions.jsonb_populate_record_valid),
+        nameof(PostgresFunctions.div), nameof(PostgresFunctions.erf), nameof(PostgresFunctions.erfc),
+        nameof(PostgresFunctions.random_normal),
+        nameof(PostgresFunctions.acosd), nameof(PostgresFunctions.asind), nameof(PostgresFunctions.atand),
+        nameof(PostgresFunctions.atan2d), nameof(PostgresFunctions.cosd), nameof(PostgresFunctions.cotd),
+        nameof(PostgresFunctions.sind), nameof(PostgresFunctions.tand),
+        nameof(PostgresFunctions.casefold), nameof(PostgresFunctions.gamma),
+        nameof(PostgresFunctions.tgamma), nameof(PostgresFunctions.lgamma),
+        nameof(PostgresFunctions.date_subtract), nameof(PostgresFunctions.justify_interval),
+        nameof(PostgresFunctions.make_timestamptz), nameof(PostgresFunctions.clock_timestamp),
+        nameof(PostgresFunctions.statement_timestamp), nameof(PostgresFunctions.transaction_timestamp),
+        nameof(PostgresFunctions.timeofday), nameof(PostgresFunctions.isfinite),
+        nameof(PostgresFunctions.pg_sleep), nameof(PostgresFunctions.pg_sleep_for),
+        nameof(PostgresFunctions.pg_sleep_until),
+        nameof(PostgresFunctions.uuid_extract_timestamp), nameof(PostgresFunctions.uuid_extract_version),
+        nameof(PostgresFunctions.get_bit), nameof(PostgresFunctions.set_bit),
+        nameof(PostgresFunctions.get_byte), nameof(PostgresFunctions.set_byte),
+        nameof(PostgresFunctions.bit_count), nameof(PostgresFunctions.crc32), nameof(PostgresFunctions.crc32c),
+        nameof(PostgresFunctions.trim_array),
+        nameof(PostgresFunctions.current_schemas), nameof(PostgresFunctions.current_role),
+        nameof(PostgresFunctions.current_catalog),
+        nameof(PostgresFunctions.pg_postmaster_start_time),
+        nameof(PostgresFunctions.pg_current_logfile), nameof(PostgresFunctions.pg_conf_load_time),
+        nameof(PostgresFunctions.pg_jit_available), nameof(PostgresFunctions.pg_my_temp_schema),
+        nameof(PostgresFunctions.pg_is_other_temp_schema),
+        nameof(PostgresFunctions.pg_notification_queue_usage),
+        nameof(PostgresFunctions.pg_blocking_pids),
+        nameof(PostgresFunctions.pg_safe_snapshot_blocking_pids),
+        nameof(PostgresFunctions.pg_trigger_depth),
+        nameof(PostgresFunctions.pg_collation_is_visible), nameof(PostgresFunctions.pg_conversion_is_visible),
+        nameof(PostgresFunctions.pg_function_is_visible), nameof(PostgresFunctions.pg_opclass_is_visible),
+        nameof(PostgresFunctions.pg_operator_is_visible), nameof(PostgresFunctions.pg_opfamily_is_visible),
+        nameof(PostgresFunctions.pg_statistics_obj_is_visible), nameof(PostgresFunctions.pg_table_is_visible),
+        nameof(PostgresFunctions.pg_ts_config_is_visible), nameof(PostgresFunctions.pg_ts_dict_is_visible),
+        nameof(PostgresFunctions.pg_ts_parser_is_visible), nameof(PostgresFunctions.pg_ts_template_is_visible),
+        nameof(PostgresFunctions.pg_type_is_visible), nameof(PostgresFunctions.pg_char_to_encoding),
+        nameof(PostgresFunctions.pg_encoding_to_char), nameof(PostgresFunctions.pg_basetype),
+        nameof(PostgresFunctions.pg_describe_object), nameof(PostgresFunctions.pg_tablespace_location),
+        nameof(PostgresFunctions.pg_settings_get_flags), nameof(PostgresFunctions.pg_index_has_property),
+        nameof(PostgresFunctions.pg_indexam_has_property),
+        nameof(PostgresFunctions.pg_index_column_has_property), nameof(PostgresFunctions.pg_input_is_valid),
+        nameof(PostgresFunctions.pg_get_serial_sequence),
+        nameof(PostgresFunctions.pg_get_function_arguments),
+        nameof(PostgresFunctions.pg_get_function_identity_arguments),
+        nameof(PostgresFunctions.pg_get_function_result), nameof(PostgresFunctions.pg_get_functiondef),
+        nameof(PostgresFunctions.pg_get_indexdef), nameof(PostgresFunctions.pg_get_partition_constraintdef),
+        nameof(PostgresFunctions.pg_get_partkeydef), nameof(PostgresFunctions.pg_get_ruledef),
+        nameof(PostgresFunctions.pg_get_statisticsobjdef), nameof(PostgresFunctions.pg_get_triggerdef),
+        nameof(PostgresFunctions.pg_get_userbyid), nameof(PostgresFunctions.pg_get_viewdef),
+        nameof(PostgresFunctions.pg_get_expr), nameof(PostgresFunctions.pg_get_constraintdef),
+        nameof(PostgresFunctions.pg_has_role), nameof(PostgresFunctions.pg_current_snapshot),
+        nameof(PostgresFunctions.pg_current_xact_id),
+        nameof(PostgresFunctions.pg_current_xact_id_if_assigned),
+        nameof(PostgresFunctions.pg_snapshot_xmax), nameof(PostgresFunctions.pg_snapshot_xmin),
+        nameof(PostgresFunctions.pg_visible_in_snapshot),
+        nameof(PostgresFunctions.pg_xact_commit_timestamp), nameof(PostgresFunctions.pg_xact_status),
+        nameof(PostgresFunctions.array_to_tsvector), nameof(PostgresFunctions.json_to_tsvector),
+        nameof(PostgresFunctions.jsonb_to_tsvector), nameof(PostgresFunctions.get_current_ts_config),
+        nameof(PostgresFunctions.numnode), nameof(PostgresFunctions.querytree),
+        nameof(PostgresFunctions.setweight), nameof(PostgresFunctions.strip),
+        nameof(PostgresFunctions.ts_delete), nameof(PostgresFunctions.ts_filter),
+        nameof(PostgresFunctions.ts_rewrite), nameof(PostgresFunctions.tsquery_phrase),
+        nameof(PostgresFunctions.tsvector_to_array), nameof(PostgresFunctions.ts_lexize),
+        nameof(PostgresFunctions.any_value), nameof(PostgresFunctions.regr_sxx),
+        nameof(PostgresFunctions.regr_sxy), nameof(PostgresFunctions.regr_syy),
+        nameof(PostgresFunctions.xmlagg), nameof(PostgresFunctions.json_agg_strict),
+        nameof(PostgresFunctions.jsonb_agg_strict),
+        nameof(PostgresFunctions.json_object_agg_unique),
+        nameof(PostgresFunctions.json_object_agg_unique_strict),
+        nameof(PostgresFunctions.json_arrayagg), nameof(PostgresFunctions.jsonb_arrayagg),
+        nameof(PostgresFunctions.json_objectagg), nameof(PostgresFunctions.json_objectagg_unique),
+        nameof(PostgresFunctions.jsonb_objectagg), nameof(PostgresFunctions.grouping)
     };
 
     internal static Expression Rewrite(Expression expression) => new InMemoryScalarFunctionRewriter().Visit(expression)!;
@@ -225,7 +316,7 @@ internal sealed class InMemoryScalarFunctionRewriter : ExpressionVisitor
         }
         else if (node.Method.DeclaringType == typeof(PostgresFunctions))
         {
-            if (PostgresNumericScaleFunctionNames.Contains(node.Method.Name))
+            if (PostgresSqlOnlyScalarFunctionNames.Contains(node.Method.Name))
                 throw new NotSupportedException($"The {node.Method.Name} function is not supported by the in-memory provider.");
 
             if (HasRangeArrayParameter(node))

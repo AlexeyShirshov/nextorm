@@ -20,6 +20,71 @@ namespace NextORM.Core;
 /// </summary>
 internal static class ExtendedScalarFunctionTranslator
 {
+    /// <summary>
+    /// Members refused for a demonstrated server limitation. The refusal is raised before the dialect
+    /// gate, so every provider gets the precise technical reason instead of SQL the pinned PostgreSQL
+    /// server would reject. <c>casefold</c> arrived in PostgreSQL 18; <c>gamma</c>, <c>tgamma</c> and
+    /// <c>lgamma</c> exist in no PostgreSQL release — all four are absent from <c>pg_proc</c> on 17.11
+    /// and fail with <c>42883</c>. The one-argument <c>to_ascii</c> exists but raises <c>0A000</c> from
+    /// a UTF8 database, so only the two-argument (explicit-encoding) forms are delivered. <c>crc32</c>
+    /// and <c>crc32c</c> are PostgreSQL 18 functions, absent from 17.11; <c>pg_sleep</c>,
+    /// <c>pg_sleep_for</c> and <c>pg_sleep_until</c> return <c>void</c>, for which the expression model
+    /// has no faithful projection. <c>jsonb_populate_record_valid</c> takes an <c>anyelement</c> base row
+    /// whose composite type a CLR type cannot name. The key is the member name together with its arity,
+    /// because <c>to_ascii</c> is refused for one shape only.
+    /// </summary>
+    private static readonly Dictionary<(string Name, int Arity), string> Refused = new()
+    {
+        [(nameof(PostgresFunctions.casefold), 1)] =
+            "The casefold function is refused: it was introduced in PostgreSQL 18 and does not exist on the " +
+            "pinned 17.11 server (absent from pg_proc; the name fails with 42883), so no SQL that executes " +
+            "on the target server can be emitted.",
+        [(nameof(PostgresFunctions.gamma), 1)] =
+            "The gamma function is refused: it does not exist on the pinned PostgreSQL 17.11 server (absent " +
+            "from pg_proc and from the PG17 mathematical-functions table; the name fails with 42883), so no " +
+            "SQL that executes on the target server can be emitted.",
+        [(nameof(PostgresFunctions.tgamma), 1)] =
+            "The tgamma function is refused: it does not exist on the pinned PostgreSQL 17.11 server (absent " +
+            "from pg_proc and from the PG17 mathematical-functions table; the name fails with 42883), so no " +
+            "SQL that executes on the target server can be emitted.",
+        [(nameof(PostgresFunctions.lgamma), 1)] =
+            "The lgamma function is refused: it does not exist on the pinned PostgreSQL 17.11 server (absent " +
+            "from pg_proc and from the PG17 mathematical-functions table; the name fails with 42883), so no " +
+            "SQL that executes on the target server can be emitted.",
+        [(nameof(PostgresFunctions.to_ascii), 1)] =
+            "The one-argument to_ascii function is refused: PostgreSQL 17 supports the conversion only " +
+            "from LATIN1, LATIN2, LATIN9 and WIN1250, and the pinned fixture database is UTF8, so the " +
+            "form raises 0A000; use to_ascii(value, encoding).",
+        [(nameof(PostgresFunctions.crc32), 1)] =
+            "The crc32 function is refused: it was introduced in PostgreSQL 18 and does not exist on " +
+            "the pinned 17.11 server (absent from pg_proc; the name fails with 42883), so no SQL that " +
+            "executes on the target server can be emitted.",
+        [(nameof(PostgresFunctions.crc32c), 1)] =
+            "The crc32c function is refused: it was introduced in PostgreSQL 18 and does not exist on " +
+            "the pinned 17.11 server (absent from pg_proc; the name fails with 42883), so no SQL that " +
+            "executes on the target server can be emitted.",
+        [(nameof(PostgresFunctions.pg_sleep), 1)] =
+            "The pg_sleep function is refused: it returns void, and the expression model has no " +
+            "void-typed projection, so no faithful CLR result exists; a fabricated value is never " +
+            "returned.",
+        [(nameof(PostgresFunctions.pg_sleep_for), 1)] =
+            "The pg_sleep_for function is refused: it returns void, and the expression model has no " +
+            "void-typed projection, so no faithful CLR result exists; a fabricated value is never " +
+            "returned.",
+        [(nameof(PostgresFunctions.pg_sleep_until), 1)] =
+            "The pg_sleep_until function is refused: it returns void, and the expression model has no " +
+            "void-typed projection, so no faithful CLR result exists; a fabricated value is never " +
+            "returned.",
+        [(nameof(PostgresFunctions.jsonb_populate_record_valid), 2)] =
+            "The jsonb_populate_record_valid function is refused: its first argument is an anyelement " +
+            "base row that a CLR type cannot name, and without a base row the server raises 0A000 " +
+            "(could not determine row type for result of jsonb_populate_record).",
+        [(nameof(PostgresFunctions.pg_get_expr), 2)] = PostgresFunctions.GetExprRefusal,
+        [(nameof(PostgresFunctions.pg_get_expr), 3)] = PostgresFunctions.GetExprRefusal,
+        [(nameof(PostgresFunctions.pg_get_constraintdef), 1)] = PostgresFunctions.GetConstraintdefRefusal,
+        [(nameof(PostgresFunctions.pg_get_constraintdef), 2)] = PostgresFunctions.GetConstraintdefRefusal
+    };
+
     private static readonly HashSet<string> MathFunctions = new(StringComparer.Ordinal)
     {
         nameof(PostgresFunctions.asin), nameof(PostgresFunctions.acos), nameof(PostgresFunctions.atan),
@@ -49,7 +114,8 @@ internal static class ExtendedScalarFunctionTranslator
     private static readonly HashSet<string> KeywordFunctions = new(StringComparer.Ordinal)
     {
         nameof(PostgresFunctions.current_date), nameof(PostgresFunctions.current_time),
-        nameof(PostgresFunctions.localtime), nameof(PostgresFunctions.localtimestamp)
+        nameof(PostgresFunctions.localtime), nameof(PostgresFunctions.localtimestamp),
+        nameof(PostgresFunctions.current_role), nameof(PostgresFunctions.current_catalog)
     };
 
     private static readonly HashSet<string> VariadicFunctions = new(StringComparer.Ordinal)
@@ -70,6 +136,8 @@ internal static class ExtendedScalarFunctionTranslator
     internal static bool TryTranslate(BaseExpressionVisitor visitor, MethodCallExpression node)
     {
         var name = node.Method.Name;
+
+        ThrowIfRefused(node);
 
         if (MathFunctions.Contains(name))
         {
@@ -339,6 +407,18 @@ internal static class ExtendedScalarFunctionTranslator
             sqlArgs[i] = visitor.VisitToString(args[i]);
 
         visitor.Builder!.Append(visitor.Dialect.MakeMathFunction(name, sqlArgs));
+    }
+
+    /// <summary>
+    /// Raises the recorded refusal for a <see cref="PostgresFunctions"/> member whose name and arity are
+    /// listed in <see cref="Refused"/>. Called by every translator that can reach such a member, so the
+    /// failure happens while the query is prepared and no SQL is emitted.
+    /// </summary>
+    internal static void ThrowIfRefused(MethodCallExpression node)
+    {
+        if (node.Method.DeclaringType == typeof(PostgresFunctions)
+            && Refused.TryGetValue((node.Method.Name, node.Arguments.Count), out var refusal))
+            throw new NotSupportedException(refusal);
     }
 
     private static void RequireExtended(BaseExpressionVisitor visitor)

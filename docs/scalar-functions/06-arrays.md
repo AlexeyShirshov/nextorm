@@ -99,6 +99,66 @@ select cardinality(@norm_p1) as "N"
  from complex_entity where array_length(@norm_p0, 1) = 3
 ```
 
+### Shaping and expanding arrays (#281)
+
+`trim_array` returns a shortened copy of a one-dimensional array, and the multi-array `unnest`, the
+`WITH ORDINALITY` and the `generate_subscripts` forms expand arrays into rows. The six set-returning
+members are `FROM` sources: call them inside `ctx.From(() => ...)` and project the members of their row
+interface. The single-array `unnest(array)` source (`IUnnestRow<T>`, the `unnest` column) is described in
+[Table-valued functions](../guide/13-table-valued-functions.md#built-in-table-functions).
+
+The scalar member:
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.Postgres.trim_array(array, n)` | `trim_array(@p0, n)` |
+
+The set-returning members — the `FROM` fragment each one renders:
+
+| C# | SQL | Row interface | Columns (C# ← SQL: CLR) |
+|---|---|---|---|
+| `SqlFunctions.Postgres.unnest(first, second)` | `rows from (unnest(@p0), unnest(@p1)) as u(value1, value2)` | `IUnnestMultiRow<T1, T2>` | `Value1 T1 ← value1`; `Value2 T2 ← value2` |
+| `SqlFunctions.Postgres.unnest(first, second, third)` | `rows from (unnest(@p0), unnest(@p1), unnest(@p2)) as u(value1, value2, value3)` | `IUnnestMultiRow<T1, T2, T3>` | `Value1 T1 ← value1`; `Value2 T2 ← value2`; `Value3 T3 ← value3` |
+| `SqlFunctions.Postgres.unnest_with_ordinality(array)` | `rows from (unnest(@p0)) with ordinality as u(value, ordinality)` | `IUnnestOrdinalityRow<T>` | `Value T ← value`; `Ordinality long ← ordinality` |
+| `SqlFunctions.Postgres.unnest_with_ordinality(first, second)` | `rows from (unnest(@p0), unnest(@p1)) with ordinality as u(value1, value2, ordinality)` | `IUnnestOrdinalityMultiRow<T1, T2>` | `Value1 T1 ← value1`; `Value2 T2 ← value2`; `Ordinality long ← ordinality` |
+| `SqlFunctions.Postgres.generate_subscripts(array, dimension)` | `generate_subscripts(@p0, 1)` | `IGenerateSubscriptsRow` | `Value int ← generate_subscripts` |
+| `SqlFunctions.Postgres.generate_subscripts(array, dimension, reverse)` | `generate_subscripts(@p0, 1, true)` | `IGenerateSubscriptsRow` | `Value int ← generate_subscripts` |
+
+Measured behaviour on PostgreSQL 17.11:
+
+* **Unequal arrays are padded with `NULL`.** One row is produced per position of the longest array, and
+  every shorter array contributes `NULL` from that position on: `unnest({1,2}, {a})` yields
+  `(1, 'a')`, `(2, NULL)`. Two empty arrays yield no rows.
+* **The ordinality column is `bigint`, so it is `long` on the CLR side.** It is one-based and shared by
+  every admitted array of the call, so `unnest_with_ordinality({10,20})` yields `(10, 1)`, `(20, 2)`, and
+  the two-array form returns the shared position alongside both arrays.
+* **The admitted multi-array arity is one, two or three arrays.** Four or more arrays are refused while
+  the source is composed — `NotSupportedException`, no SQL emitted — with
+  `The unnest function is refused for four or more arrays: multi-array unnest is FROM-clause grammar with no variadic arity, and this library admits exactly one, two and three arrays as typed overloads.`
+  PostgreSQL's multi-array `unnest` is `FROM`-clause grammar rather than a `pg_proc` function, so it has
+  no variadic arity; the provider renders the admitted arities through `ROWS FROM (...)`.
+* `generate_subscripts` numbers dimensions from one and yields one row per valid subscript as an `int`;
+  `reverse: true` generates them in descending order, and an empty (or SQL-NULL) array yields no rows.
+* `trim_array` removes the last `n` elements and keeps the element type; `n` equal to the length yields an
+  empty array, `n = 0` returns the array unchanged, and `n` greater than the length raises the server's
+  error. Only one-dimensional arrays are accepted.
+* An array operand travels as **one** parameter of its own type — `SqlFunctions.Parameter<T[]>(idx)` or a
+  captured array — including the array of a `FROM` source:
+  `generate_subscripts(SqlFunctions.Parameter<long[]>(0), 1)`.
+
+```csharp
+var rows = dataContext
+    .From(() => SqlFunctions.Postgres.unnest_with_ordinality(SqlFunctions.Parameter<long[]>(0)))
+    .Select(r => new { r.Value, r.Ordinality })
+    .ToList(new long[] { 10, 20 });
+```
+
+```sql
+select value, ordinality
+ from (select value, ordinality
+ from rows from (unnest(@norm_p0)) with ordinality as u(value, ordinality)) as "t1"
+```
+
 ## Arrays (ClickHouse)
 
 ClickHouse has a native `Array(T)` type. The array functions operate on array **columns** (or on nested
