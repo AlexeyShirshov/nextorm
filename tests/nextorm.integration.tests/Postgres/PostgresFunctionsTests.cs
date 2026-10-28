@@ -3548,6 +3548,135 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
         groups.Single(g => g.I == 3).Sxx.Should().Be(0.0, "a single pair is a zero sum of squares");
     }
 
+    /// <summary>
+    /// The #281 (#347 D4) group-2 aggregates on PostgreSQL 17.11: <c>xmlagg</c> is rendered in its only
+    /// resolvable form <c>xmlagg(xml)</c> and its <c>xml</c> result arrives as a string;
+    /// <c>json_agg_strict</c>/<c>jsonb_agg_strict</c> drop the NULL values, so an all-NULL group is
+    /// <c>[]</c>; <c>json_object_agg_unique</c> keeps a NULL value and its strict twin drops the pair;
+    /// and an empty input still yields one NULL row for all five names.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void XmlAndStrictJsonAggregates_ShouldComputeValuesNullsTypesAndGroups()
+    {
+        // complex_entity: three rows, nullableint NULL,1,1 and somestring 'dadfasd','xxx',NULL.
+        // The XML operand is derived per row, so the concatenation order may vary: all permutations are
+        // accepted, but exactly one '<a/>' (the NULL nullableint row) is required and no separator is
+        // inserted between the documents (measured: <a/><b>x</b> for ('<a/>','<b>x</b>')).
+        var xml = _sut.ComplexEntity
+            .Select(x => new
+            {
+                V = SqlFunctions.Postgres.xmlagg(x.Int == null ? "<a/>" : "<b/>"),
+                C = SqlFunctions.Sql.count()
+            })
+            .First();
+
+        xml.C.Should().Be(3);
+        xml.V.Should().BeOneOf(
+            ["<a/><b/><b/>", "<b/><a/><b/>", "<b/><b/><a/>"],
+            "xmlagg concatenates the documents with no separator; the row order is not guaranteed");
+        ((object)xml.V!).Should().BeOfType<string>(
+            "Npgsql materialises the xml result as System.String (measured)");
+
+        // A group whose only operand is NULL: xmlagg over NULL is NULL.
+        var xmlNull = _sut.ComplexEntity
+            .Where(x => x.Id == 3)
+            .Select(x => new { V = SqlFunctions.Postgres.xmlagg(x.String) })
+            .First();
+
+        xmlNull.V.Should().BeNull("the group's only operand is NULL (somestring is NULL at id 3)");
+
+        // Populated group: the strict array aggregates skip NULL values, so NULL,1,1 becomes [1, 1];
+        // the unique object aggregate keeps the NULL value, its strict twin drops that pair.
+        var json = _sut.ComplexEntity
+            .Select(x => new
+            {
+                A = SqlFunctions.Postgres.json_agg_strict(x.Int),
+                B = SqlFunctions.Postgres.jsonb_agg_strict(x.Int),
+                U = SqlFunctions.Postgres.json_object_agg_unique(x.RequiredString, x.Int),
+                S = SqlFunctions.Postgres.json_object_agg_unique_strict(x.RequiredString, x.Int)
+            })
+            .First();
+
+        json.A.Should().Be("[1, 1]", "json_agg_strict ignores the NULL nullableint row");
+        json.B.Should().Be("[1, 1]");
+        ((object)json.A!).Should().BeOfType<string>("json is materialised as System.String");
+        ((object)json.B!).Should().BeOfType<string>("jsonb is materialised as System.String");
+
+        using (var unique = JsonDocument.Parse(json.U!))
+        {
+            unique.RootElement.EnumerateObject().Select(p => p.Name)
+                .Should().BeEquivalentTo(["sdf", "asdfgoi", "34mfs"]);
+            unique.RootElement.GetProperty("sdf").ValueKind.Should().Be(
+                JsonValueKind.Null, "json_object_agg_unique keeps a NULL value instead of dropping the pair");
+            unique.RootElement.GetProperty("asdfgoi").GetInt32().Should().Be(1);
+        }
+
+        using (var strict = JsonDocument.Parse(json.S!))
+        {
+            strict.RootElement.EnumerateObject().Select(p => p.Name)
+                .Should().BeEquivalentTo(["asdfgoi", "34mfs"], "the strict twin drops the NULL-valued pair");
+        }
+
+        // All-NULL group: the strict array aggregates yield [] (not NULL) — measured on 17.11.
+        var allNull = _sut.ComplexEntity
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                A = SqlFunctions.Postgres.json_agg_strict(x.Int),
+                B = SqlFunctions.Postgres.jsonb_agg_strict(x.Int),
+                U = SqlFunctions.Postgres.json_object_agg_unique(x.RequiredString, x.Int),
+                S = SqlFunctions.Postgres.json_object_agg_unique_strict(x.RequiredString, x.Int)
+            })
+            .First();
+
+        allNull.A.Should().Be("[]", "a group whose values are all NULL is an empty array, not NULL");
+        allNull.B.Should().Be("[]");
+
+        using (var uniqueNull = JsonDocument.Parse(allNull.U!))
+        {
+            uniqueNull.RootElement.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo(["sdf"]);
+            uniqueNull.RootElement.GetProperty("sdf").ValueKind.Should().Be(JsonValueKind.Null);
+        }
+
+        using (var strictNull = JsonDocument.Parse(allNull.S!))
+            strictNull.RootElement.EnumerateObject().Should().BeEmpty(
+                "the only pair has a NULL value, so the strict twin keeps no pair");
+
+        // GROUP BY interaction: avg_fixture ni is NULL,1,2,3 with i = 1,2,1,3, so group 1 keeps ni = 2.
+        var groups = _sut.AvgFixture
+            .GroupBy(x => new { x.I })
+            .Select(x => new { x.I, J = SqlFunctions.Postgres.json_agg_strict(x.NI) })
+            .ToList();
+
+        groups.Should().HaveCount(3);
+        groups.Single(g => g.I == 1).J.Should().Be("[2]", "group 1 is ni NULL and 2; the NULL is skipped");
+        groups.Single(g => g.I == 2).J.Should().Be("[1]");
+        groups.Single(g => g.I == 3).J.Should().Be("[3]");
+
+        // Empty input: every aggregate still yields one row, all five values are NULL, and count(*) is 0.
+        var empty = _sut.ComplexEntity
+            .Where(x => x.Id > 100)
+            .Select(x => new
+            {
+                X = SqlFunctions.Postgres.xmlagg(x.String),
+                A = SqlFunctions.Postgres.json_agg_strict(x.Int),
+                B = SqlFunctions.Postgres.jsonb_agg_strict(x.Int),
+                U = SqlFunctions.Postgres.json_object_agg_unique(x.RequiredString, x.Int),
+                S = SqlFunctions.Postgres.json_object_agg_unique_strict(x.RequiredString, x.Int),
+                C = SqlFunctions.Sql.count()
+            })
+            .ToList();
+
+        empty.Should().HaveCount(1, "an aggregate over an empty input still produces one row");
+        empty[0].C.Should().Be(0, "the empty input has no rows: count(*) = 0");
+        empty[0].X.Should().BeNull();
+        empty[0].A.Should().BeNull("json_agg_strict over an empty input is NULL, not []");
+        empty[0].B.Should().BeNull();
+        empty[0].U.Should().BeNull();
+        empty[0].S.Should().BeNull();
+    }
+
     private static void Execute(IDataContext ctx, string sql)
     {
         ((DataContext)ctx).EnsureConnectionOpen();

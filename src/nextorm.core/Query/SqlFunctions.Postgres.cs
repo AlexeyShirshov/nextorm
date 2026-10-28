@@ -132,6 +132,61 @@ namespace NextORM.Core;
         /// <summary>Aggregates key/value pairs into a JSONB object (<c>jsonb_object_agg</c>).</summary>
         public string? jsonb_object_agg<TKey, TValue>(TKey? key, TValue? value) => default!;
 
+        /// <summary>
+        /// Aggregates the XML values of a group into one <c>xml</c> document (<c>xmlagg</c>, PostgreSQL 9.0+).
+        /// PostgreSQL has a single <c>xmlagg(xml) → xml</c> aggregate and no <c>text</c>/integer overload
+        /// (measured on 17.11: <c>xmlagg(text)</c> is <c>42883</c> "function xmlagg(text) does not exist"), so
+        /// the operand is cast to <c>xml</c> in the rendered SQL, so <paramref name="value"/> must hold
+        /// XML markup the <c>xml</c> type accepts; the cast is what keeps the emitted call in the
+        /// <c>xmlagg(xml)</c> form. The result is the
+        /// concatenation of the group's documents with no separator, read back by the driver as a plain
+        /// string (measured: the <c>xml</c> result arrives as <see cref="string"/> with data type name
+        /// <c>xml</c>). NULL operands are skipped, a group whose operands are all NULL yields NULL, and —
+        /// because this is an aggregate — an empty input still produces one row with NULL.
+        /// </summary>
+        /// <param name="value">The XML markup to aggregate.</param>
+        public string? xmlagg(string? value) => default!;
+
+        /// <summary>
+        /// Aggregates the values of <paramref name="property"/> into a JSON array, ignoring the NULL
+        /// values (<c>json_agg_strict</c>, PostgreSQL 16+). Unlike <c>json_agg</c> a group
+        /// whose values are all NULL yields an empty array (<c>[]</c>, measured), not an array of nulls;
+        /// an empty input still produces one NULL row. The result is <c>json</c>, read back as a string.
+        /// </summary>
+        /// <param name="property">The value to aggregate.</param>
+        public string? json_agg_strict<T>(T? property) => default!;
+
+        /// <summary>
+        /// Aggregates the values of <paramref name="property"/> into a JSONB array, ignoring the NULL
+        /// values (<c>jsonb_agg_strict</c>, PostgreSQL 16+). A group whose values are all NULL yields an
+        /// empty array (<c>[]</c>), an empty input still produces one NULL row, and the result is
+        /// <c>jsonb</c>, read back as a string.
+        /// </summary>
+        /// <param name="property">The value to aggregate.</param>
+        public string? jsonb_agg_strict<T>(T? property) => default!;
+
+        /// <summary>
+        /// Aggregates the key/value pairs of a group into a JSON object and rejects a duplicate key
+        /// (<c>json_object_agg_unique</c>, PostgreSQL 16+). A NULL value is kept as <c>null</c>, while a
+        /// duplicate key (<c>22030</c>) and a NULL key (<c>22004</c>) raise on execution — both measured on
+        /// 17.11. An empty input still produces one NULL row, and the result is <c>json</c>, read back as a
+        /// string.
+        /// </summary>
+        /// <param name="key">The object key.</param>
+        /// <param name="value">The value stored under the key.</param>
+        public string? json_object_agg_unique<TKey, TValue>(TKey? key, TValue? value) => default!;
+
+        /// <summary>
+        /// Aggregates the key/value pairs of a group into a JSON object, skipping the pairs whose value is
+        /// NULL and rejecting a duplicate key (<c>json_object_agg_unique_strict</c>, PostgreSQL 16+). A
+        /// pair whose value is NULL is dropped from the object (measured), a duplicate key (<c>22030</c>)
+        /// and a NULL key (<c>22004</c>) raise on execution — both measured on 17.11. An empty input still
+        /// produces one NULL row, and the result is <c>json</c>, read back as a string.
+        /// </summary>
+        /// <param name="key">The object key.</param>
+        /// <param name="value">The value stored under the key.</param>
+        public string? json_object_agg_unique_strict<TKey, TValue>(TKey? key, TValue? value) => default!;
+
         /// <summary>Builds a JSON object from alternating key/value arguments (<c>json_build_object</c>).</summary>
         public string json_build_object(params object?[] args) => default!;
 

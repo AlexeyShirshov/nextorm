@@ -186,6 +186,8 @@ public class PostgresFunctionsRejectionTests
             "transaction_timestamp", "timeofday", "isfinite", "uuid_extract_timestamp",
             "uuid_extract_version", "get_bit", "set_bit", "get_byte", "set_byte",
             "any_value",
+            "xmlagg", "json_agg_strict", "jsonb_agg_strict",
+            "json_object_agg_unique", "json_object_agg_unique_strict",
             "current_schemas", "pg_postmaster_start_time", "pg_current_logfile",
             "pg_conf_load_time", "pg_jit_available", "pg_my_temp_schema",
             "pg_is_other_temp_schema", "pg_notification_queue_usage", "pg_blocking_pids",
@@ -631,6 +633,31 @@ public class PostgresFunctionsRejectionTests
             act.Should().Throw<NotSupportedException>()
                 .Which.Message.Should().Contain(
                     "The regr_* aggregates are not supported by this provider", "{0} is gated by the regr_* capability", name);
+    }
+
+    /// <summary>
+    /// The #281 (#347 D4) group-2 aggregates (<c>xmlagg</c> and the strict/unique JSON aggregates) are
+    /// PostgreSQL-only, so each enrolled name is refused during preparation with a message naming it
+    /// instead of being rendered as SQL this provider cannot execute.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void XmlAndStrictJsonAggregates_ShouldThrowBecauseNotSupported()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var cases = new (string Name, Action Act)[]
+        {
+            ("xmlagg", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.xmlagg(x.String) }))),
+            ("json_agg_strict", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.json_agg_strict(x.Int) }))),
+            ("jsonb_agg_strict", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.jsonb_agg_strict(x.Int) }))),
+            ("json_object_agg_unique", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.json_object_agg_unique(x.String, x.Int) }))),
+            ("json_object_agg_unique_strict", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.json_object_agg_unique_strict(x.String, x.Int) })))
+        };
+
+        foreach (var (name, act) in cases)
+            act.Should().Throw<NotSupportedException>().WithMessage($"*{name}*not supported*");
     }
 
     /// <summary>#347 D3a fixture: the caller-declared row shape of the PostgreSQL JSON record readers.</summary>

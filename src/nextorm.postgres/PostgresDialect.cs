@@ -1068,7 +1068,8 @@ internal sealed class PostgresStringFormats : IStringFormatFunctions
 /// date/time family (<c>date_subtract</c>, <c>justify_interval</c>, <c>make_timestamptz</c>, the
 /// transaction clock functions, <c>timeofday</c>, <c>isfinite</c>), the UUID extraction functions and
 /// the binary-string family (<c>get_bit</c>/<c>set_bit</c>, <c>get_byte</c>/<c>set_byte</c>,
-/// <c>bit_count</c>), each advertised by its own name.
+/// <c>bit_count</c>), and the #281 aggregates (<c>any_value</c>, <c>xmlagg</c>, the strict JSON array
+/// aggregates and the unique JSON object aggregates), each advertised by its own name.
 /// </summary>
 internal sealed class PostgresScalarFunctions : IScalarFunctions
 {
@@ -1115,7 +1116,9 @@ internal sealed class PostgresScalarFunctions : IScalarFunctions
         "get_current_ts_config" or "numnode" or
         "querytree" or "setweight" or "strip" or "ts_delete" or "ts_filter" or
         "ts_rewrite" or "tsquery_phrase" or "tsvector_to_array" or "ts_lexize" or
-        "any_value";
+        "any_value" or
+        "xmlagg" or "json_agg_strict" or "jsonb_agg_strict" or
+        "json_object_agg_unique" or "json_object_agg_unique_strict";
 
     /// <inheritdoc/>
     public string Render(string name, IReadOnlyList<string> args) => name switch
@@ -1260,6 +1263,15 @@ internal sealed class PostgresScalarFunctions : IScalarFunctions
         // A pg_proc aggregate whose argument and result are anyelement: the argument is a column or a
         // typed parameter, so no cast is needed (an untyped constant has no target type to cast to).
         "any_value" => $"any_value({args[0]})",
+        // xmlagg has one overload, xmlagg(xml) -> xml (measured: xmlagg(text) is 42883), so the operand
+        // is cast to xml; the xml result needs no bridge — the driver reads it as a string.
+        "xmlagg" => $"xmlagg(cast({args[0]} as xml))",
+        // The strict array aggregates take anyelement and skip NULL inputs; no cast is needed.
+        "json_agg_strict" => $"json_agg_strict({args[0]})",
+        "jsonb_agg_strict" => $"jsonb_agg_strict({args[0]})",
+        // The unique object aggregates take ("any", "any") and return json; no cast is needed.
+        "json_object_agg_unique" => $"json_object_agg_unique({args[0]}, {args[1]})",
+        "json_object_agg_unique_strict" => $"json_object_agg_unique_strict({args[0]}, {args[1]})",
         _ => throw new NotSupportedException($"The {name} function is not supported by PostgreSQL.")
     };
 

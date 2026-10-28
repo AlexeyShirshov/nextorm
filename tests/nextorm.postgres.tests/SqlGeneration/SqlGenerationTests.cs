@@ -3371,6 +3371,40 @@ public class SqlGenerationTests
         act.Should().Throw<NotSupportedException>().WithMessage("*any_value*polymorphic*");
     }
 
+    /// <summary>
+    /// The #281 (#347 D4) group-2 aggregates render natively and, for <c>xmlagg</c>, in the only form
+    /// PostgreSQL has: <c>xmlagg(xml)</c>. The operand is cast to <c>xml</c> because there is no
+    /// <c>xmlagg(text)</c>/<c>xmlagg(integer)</c> overload (measured <c>42883</c>), so the rendered call
+    /// is the one that resolves; the JSON aggregates take their arguments uncast (<c>anyelement</c> and
+    /// <c>"any"</c>).
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void XmlAndStrictJsonAggregates_ShouldEmitResolvableForms()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            X = SqlFunctions.Postgres.xmlagg(x.String),
+            A = SqlFunctions.Postgres.json_agg_strict(x.Int),
+            B = SqlFunctions.Postgres.jsonb_agg_strict(x.Int),
+            U = SqlFunctions.Postgres.json_object_agg_unique(x.String, x.Int),
+            S = SqlFunctions.Postgres.json_object_agg_unique_strict(x.String, x.Int)
+        }));
+
+        // xmlagg has exactly one overload, xmlagg(xml) -> xml, so the operand is cast and the emitted
+        // call is the resolvable one: the uncast form was measured as 42883 "function xmlagg(text)".
+        sql.Should().Contain("xmlagg(cast(somestring as xml))");
+        sql.Should().NotContain("xmlagg(somestring)", "xmlagg has no text overload: the uncast call is 42883");
+
+        sql.Should().Contain("json_agg_strict(nullableint)");
+        sql.Should().Contain("jsonb_agg_strict(nullableint)");
+        sql.Should().Contain("json_object_agg_unique(somestring, nullableint)");
+        sql.Should().Contain("json_object_agg_unique_strict(somestring, nullableint)");
+    }
+
     [Fact]
     public void OrderedSetAggregates_ShouldEmitWithinGroup()
     {
