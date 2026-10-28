@@ -108,6 +108,108 @@ var elements = dataContext
 `generate_series` selects [`Value`](xref:NextORM.Core.SqlFunctions.IGenerateSeriesRow.Value) and `unnest` selects
 [`Value`](xref:NextORM.Core.SqlFunctions.IUnnestRow`1.Value); both map to the single column the function returns.
 
+## PostgreSQL aggregate additions (#281)
+
+The members below extend the PostgreSQL aggregate surface. They are ordinary `pg_proc` aggregates — or,
+for the SQL/JSON aggregates and `grouping`, parser-level constructs with no `pg_proc` row — gated per
+name, and every other provider, including the in-memory provider, throws `NotSupportedException` at
+translation.
+`json_agg`, `jsonb_agg`, `json_object_agg` and `jsonb_object_agg` remain documented with the JSON
+functions in [JSON and JSONB](07-json-and-xml.md).
+
+### `any_value`
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.Postgres.any_value(x)` | `any_value(x)` |
+
+`any_value` returns an arbitrary value of the group (`anyelement → anyelement`, PostgreSQL 16+) and both
+the argument and the result keep the argument's own type (`integer` stays `integer`). It is the
+PostgreSQL `pg_proc` aggregate, not the portable `Sql.any_agg`. Because the result is polymorphic,
+nextorm requires a single-column CLR shape — a primitive, string, date/time, decimal, `Guid` or byte
+array — and refuses any other `T` before SQL is emitted; project the value with an explicit conversion
+when needed. A group whose values are all NULL yields NULL, and empty input still produces one NULL
+row.
+
+### Regression sums (`regr_sxx`, `regr_sxy`, `regr_syy`)
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.Postgres.regr_sxx(y, x)` | `regr_sxx(y, x)` |
+| `SqlFunctions.Postgres.regr_sxy(y, x)` | `regr_sxy(y, x)` |
+| `SqlFunctions.Postgres.regr_syy(y, x)` | `regr_syy(y, x)` |
+
+Both operands are generic (`TY?`/`TX?`); PostgreSQL's aggregate overloads take `double precision` and
+the result is `double precision` (`double?`). `regr_sxx` is
+`sum(X^2) - sum(X)^2/N`, `regr_syy` is the same over `Y`, and `regr_sxy` is
+`sum(X*Y) - sum(X)*sum(Y)/N`. A pair with a NULL operand is skipped; a group with a single non-NULL
+pair yields `0` (measured), and an all-NULL group or empty input yields NULL — empty input still
+produces one row.
+
+### `xmlagg`
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.Postgres.xmlagg(x)` | `xmlagg(cast(x as xml))` |
+
+PostgreSQL has a single `xmlagg(xml) → xml` aggregate: `xmlagg(text)` and `xmlagg(integer)` are both
+`42883` "function … does not exist" (measured), so the operand is cast to `xml` and must hold XML
+markup the `xml` type accepts. The result is the concatenation of the group's documents with no
+separator, and Npgsql materialises the `xml` result as `string` (measured), which is what the member
+declares. NULL operands are skipped, a group whose operands are all NULL yields NULL, and empty input
+still produces one NULL row.
+
+### Strict and unique JSON aggregates
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.Postgres.json_agg_strict(x)` | `json_agg_strict(x)` |
+| `SqlFunctions.Postgres.jsonb_agg_strict(x)` | `jsonb_agg_strict(x)` |
+| `SqlFunctions.Postgres.json_object_agg_unique(k, v)` | `json_object_agg_unique(k, v)` |
+| `SqlFunctions.Postgres.json_object_agg_unique_strict(k, v)` | `json_object_agg_unique_strict(k, v)` |
+
+PostgreSQL 16 aggregates. The two array forms ignore NULL values: a group whose values are all NULL
+yields `[]` (not an array of nulls, measured), empty input still produces one NULL row, and the
+`json`/`jsonb` result is read back as a string. `json_object_agg_unique` keeps a NULL value as JSON
+`null`, while `json_object_agg_unique_strict` drops a NULL-valued pair; both raise `22030` on a
+duplicate key and `22004` on a NULL key (measured on 17.11), and empty input yields one NULL row.
+
+### SQL/JSON aggregates (`json_arrayagg`, `json_objectagg`)
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.Postgres.json_arrayagg(x)` | `json_arrayagg(x)` |
+| `SqlFunctions.Postgres.jsonb_arrayagg(x)` | `json_arrayagg(x returning jsonb)` |
+| `SqlFunctions.Postgres.json_objectagg(k, v)` | `json_objectagg(k value v)` |
+| `SqlFunctions.Postgres.json_objectagg_unique(k, v)` | `json_objectagg(k value v with unique keys)` |
+| `SqlFunctions.Postgres.jsonb_objectagg(k, v)` | `json_objectagg(k value v returning jsonb)` |
+
+PostgreSQL 17 parser-level constructs with no `pg_proc` row. `json_arrayagg` defaults to
+`ABSENT ON NULL`: NULL values are dropped, an all-NULL group yields `[]`, and empty input yields NULL.
+`json_objectagg` admits exactly one pair per call (`key value value`; the comma-separated two-pair
+form is `42601`) and defaults to `NULL ON NULL` with duplicate keys kept, while `with unique keys`
+raises `22030`; a NULL key raises `22004`, and empty input yields NULL. The key is not cast — the
+server coerces it to text (measured with an integer key). `jsonb_arrayagg` and `jsonb_objectagg` are
+member names for the `RETURNING jsonb` clauses, since PostgreSQL has no functions of those names. The
+builder has no clause slot for an aggregate's internal argument list, so `ORDER BY …`,
+`ABSENT|NULL ON NULL` and `DISTINCT` are not exposed; the `DISTINCT` spelling is a syntax error on
+17.11 (`42601`, measured). Every result is `json`/`jsonb` read back as a string.
+
+### `grouping`
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.Postgres.grouping(column)` | `grouping(column)` |
+
+One bit of the super-aggregate identity of the current row: `0` when the row groups the column, `1`
+when the row is a super-aggregate that aggregated it away. The argument must be an expression of the
+query's own grouping list — anything else raises `42803` — and the function is only useful inside a
+`GROUP BY ROLLUP`/`CUBE`/`GROUPING SETS` grouping; in a plain `GROUP BY` it is legal and always `0`.
+Nextorm's `GroupByRollup(...)` emits that grouping (as do `GroupByCube` and `GroupByGroupingSets`), so
+`grouping` can be projected next to the aggregate columns. The zero-argument `grouping()` is a syntax
+error (`42601`), and the result is `integer` (`int?`). Measured on 17.11. It returns `0` or `1` for
+every row; there is no NULL or empty-input case.
+
 ## ClickHouse aggregate catalogue (#286, T286b)
 
 The residual ClickHouse aggregate catalogue is typed on `ClickHouseFunctions` and dispatched by

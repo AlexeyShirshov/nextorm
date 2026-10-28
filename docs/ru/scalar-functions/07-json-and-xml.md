@@ -92,6 +92,126 @@ JSON-выражение выводятся без приведения (`doc -> 
 `cast(<path> as jsonpath)`; `JSON_EXISTS`, `jsonpath` и соседние JSON-функции это правило типизации не
 меняет.
 
+## Конструкторы SQL/JSON, пути и читатели (PostgreSQL 17)
+
+Эти члены дополняют JSON-поверхность PostgreSQL. Все они существуют только на PostgreSQL: скалярные и
+путевые формы проходят через
+[`SupportsPostgresJsonSql`](xref:NextORM.Core.ISqlDialect.SupportsPostgresJsonSql), а читатели — через
+`SupportsTableFunction`, поэтому любой другой провайдер (включая in-memory) при трансляции выбрасывает
+`NotSupportedException`. Агрегатные члены семейства перечислены на странице
+[агрегатов](05-aggregates.md); здесь документированы только скалярные члены и члены, возвращающие строки.
+
+### Конструкторы SQL/JSON
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.Postgres.json(x)` | `json(cast(x as text) format json)` |
+| `SqlFunctions.Postgres.json_scalar(x)` | `json_scalar(x)` |
+| `SqlFunctions.Postgres.json_serialize(x)` | `json_serialize(cast(x as text) format json returning text)` |
+
+`json` и `json_serialize` принимают JSON-**текст**: аргумент отрисовывается как `cast(x as text)`, а
+`FORMAT JSON` заставляет сервер его разобрать, поэтому невалидный текст даёт `22P02` (измерено), а
+обычному параметру-строке не нужен отдельный каст. `json` возвращает `json`, а `json_serialize` называет
+свой текстовый результат через `returning text`, поэтому читается как `text`. `json_scalar` — конструктор
+значения: строка становится JSON-строкой (`"abc"`), число — JSON-числом (`5`), а SQL NULL остаётся SQL
+NULL. Все три — конструкции уровня парсера PostgreSQL 17 без строки в `pg_proc`.
+
+### Извлечение по пути
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.Postgres.json_extract_path(doc, path)` | `json_extract_path(cast(doc as json), variadic cast(path as text[]))` |
+| `SqlFunctions.Postgres.json_extract_path_text(doc, path)` | `json_extract_path_text(cast(doc as json), variadic cast(path as text[]))` |
+| `SqlFunctions.Postgres.jsonb_extract_path(doc, path)` | `jsonb_extract_path(cast(doc as jsonb), variadic cast(path as text[]))` |
+| `SqlFunctions.Postgres.jsonb_extract_path_text(doc, path)` | `jsonb_extract_path_text(cast(doc as jsonb), variadic cast(path as text[]))` |
+
+Документ — это JSON-текст, приводимый к `json`/`jsonb`, а путь `string[]` привязывается как **один**
+параметр `text[]` и передаётся через `variadic`, что требуется PostgreSQL, когда массив приходит одним
+выражением (измерено: форма с голым `text[]` не разрешается ни в одну функцию). Отсутствующий путь,
+JSON-элемент `null` и SQL NULL в пути дают SQL NULL; формы `_text` читают JSON-элемент `null` как SQL
+NULL, а пустой путь возвращает сам документ (измерено). `json_extract_path` возвращает `json`; формы
+`_text` возвращают `text`, а `jsonb_extract_path` — `jsonb`.
+
+### `jsonb_set_lax`
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.Postgres.jsonb_set_lax(doc, path, newValue, createIfMissing, nullValueTreatment)` | `jsonb_set_lax(cast(doc as jsonb), cast(path as text[]), cast(newValue as jsonb), createIfMissing, nullValueTreatment)` |
+
+Все пять аргументов явные — оба значения по умолчанию PostgreSQL отрисовываются, а не опускаются.
+Документ и новое значение — JSON-текст, приводимый к `jsonb`, путь — один `text[]` (не variadic), а
+`createIfMissing` для значения по умолчанию равен `true`. `nullValueTreatment` действует только когда
+`newValue` — SQL NULL, и принимает одно из значений: `use_json_null` (по умолчанию, записывает JSON
+`null`), `delete_key` (удаляет целевой ключ), `return_target` (возвращает документ без изменений) или
+`raise_exception` (выбрасывает ошибку). Неизвестное значение проверяется сервером, и его сообщение
+называет `null_value_treatment`; SQL-NULL документ остаётся NULL.
+
+### Скаляры JSONPath с учётом часового пояса
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.Postgres.jsonb_path_exists_tz(doc, path, vars, silent)` | `jsonb_path_exists_tz(cast(doc as jsonb), cast(path as jsonpath), cast(vars as jsonb), silent)` |
+| `SqlFunctions.Postgres.jsonb_path_match_tz(doc, path, vars, silent)` | `jsonb_path_match_tz(cast(doc as jsonb), cast(path as jsonpath), cast(vars as jsonb), silent)` |
+| `SqlFunctions.Postgres.jsonb_path_query_array_tz(doc, path, vars, silent)` | `jsonb_path_query_array_tz(cast(doc as jsonb), cast(path as jsonpath), cast(vars as jsonb), silent)` |
+| `SqlFunctions.Postgres.jsonb_path_query_first_tz(doc, path, vars, silent)` | `jsonb_path_query_first_tz(cast(doc as jsonb), cast(path as jsonpath), cast(vars as jsonb), silent)` |
+
+Документ и `vars` — JSON-текст, приводимый к `jsonb`, путь приводится к `jsonpath` (параметр-строка не
+приводится неявно), а `silent` — обычный логический аргумент. Форма `_tz` обязательна для пути, который
+сравнивает значения даты/времени с зависящим от часового пояса (`timestamptz`) преобразованием, например
+для метода `.datetime()`: обычные соседние функции неизменяемы и на таком пути дают ошибку сервера (измеренное
+сообщение: "… without time zone usage"), а эти четыре учитывают часовой пояс. Пустой набор совпадений
+даёт `[]` у `query_array` и SQL NULL у `query_first`; SQL-NULL документ даёт SQL NULL (измерено для
+`exists`).
+
+### Читатели, возвращающие строки
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.Postgres.json_array_elements(doc)` | `json_array_elements(cast(doc as json))` |
+| `SqlFunctions.Postgres.json_array_elements_text(doc)` | `json_array_elements_text(cast(doc as json))` |
+| `SqlFunctions.Postgres.json_each(doc)` | `json_each(cast(doc as json))` |
+| `SqlFunctions.Postgres.json_each_text(doc)` | `json_each_text(cast(doc as json))` |
+| `SqlFunctions.Postgres.jsonb_path_query_tz(doc, path, vars, silent)` | `(select jsonb_path_query_tz from jsonb_path_query_tz(cast(doc as jsonb), cast(path as jsonpath), cast(vars as jsonb), silent))` |
+| `SqlFunctions.Postgres.json_to_record<TRow>(doc)` | `json_to_record(cast(doc as json)) as x(col type, ...)` |
+| `SqlFunctions.Postgres.json_to_recordset<TRow>(doc)` | `json_to_recordset(cast(doc as json)) as x(col type, ...)` |
+
+Читатели без `jsonb` принимают JSON-**текст**, поэтому документ приводится к `json` прямо в вызове (на
+параметре-строке функция иначе не разрешается). Формы строк — локальные интерфейсы в `SqlFunctions`:
+
+- `json_array_elements`/`json_array_elements_text` возвращают
+  [`IJsonArrayElementsRow`](xref:NextORM.Core.SqlFunctions.IJsonArrayElementsRow): одна колонка
+  `[Column("value")] string? Value` на элемент — документ `json`, отрисованный как текст, либо обычный
+  текст из формы `_text`, где JSON-элемент `null` — это SQL NULL.
+- `json_each`/`json_each_text` возвращают [`IJsonbEachRow`](xref:NextORM.Core.SqlFunctions.IJsonbEachRow):
+  `[Column("key")] string? Key` и `[Column("value")] string? Value` — документ `json`, отрисованный как
+  текст, либо обычный текст из формы `_text`.
+- `jsonb_path_query_tz` возвращает
+  [`IJsonPathQueryTzRow`](xref:NextORM.Core.SqlFunctions.IJsonPathQueryTzRow): единственная колонка
+  `[Column("jsonb_path_query_tz")] string? Value` содержит одно совпадение — документ `jsonb`,
+  отрисованный как текст; подзапрос с одной колонкой восстанавливает это имя после алиаса FROM.
+- `json_to_record<TRow>`/`json_to_recordset<TRow>` строят список определений колонок после алиаса из
+  имён и типов `[Column]` типа `TRow`, поэтому форму строки объявляет вызывающий код; `json_to_record`
+  читает один объект в одну строку, а `json_to_recordset` — по строке на элемент массива.
+
+Пустой массив, пустой объект и SQL-NULL документ не дают строк, путь без совпадений не выбирает ни
+одной строки (измерено), а отсутствующее свойство JSON оставляет объявленную вызывающим кодом колонку
+SQL NULL.
+
+### Отказы
+
+| Семейство | Отклонённый член | Проверенная причина |
+|---|---|---|
+| `json_populate_record(set)` | `SqlFunctions.Postgres.json_populate_record<TRow>(baseRecord, json, useJsonAsText)` | Первый аргумент — базовая строка `anyelement`: ни именованный составной тип, ни псевдотип `record` нельзя назвать из CLR-типа, поэтому достоверный вызов построить невозможно. |
+| `json_populate_record(set)` | `SqlFunctions.Postgres.json_populate_recordset<TRow>(baseRecord, json, useJsonAsText)` | Та же базовая строка `anyelement`, что и у `json_populate_record`. |
+| `jsonb_populate_record(set)` | `SqlFunctions.Postgres.jsonb_populate_record<TRow>(baseRecord, json)` | Тип строки результата — составной тип базовой строки, который не может назвать ни один CLR-тип. |
+| `jsonb_populate_record(set)` | `SqlFunctions.Postgres.jsonb_populate_recordset<TRow>(baseRecord, json)` | Та же базовая строка `anyelement`, что и у `jsonb_populate_record`. |
+| `jsonb_populate_record_valid` | `SqlFunctions.Postgres.jsonb_populate_record_valid(baseRecord, json)` | Нужна та же базовая строка `anyelement`; без базовой строки сервер поднимает `0A000` (could not determine row type). |
+| `json_table` | `SqlFunctions.Postgres.json_table<TRow>(json, path)` | Нужен пункт `COLUMNS (...)` внутри скобок вызова для каждого вызова, а модель выражений отрисовывает объявленную схему только как список определений колонок после алиаса. |
+
+Каждый член отклоняется с `NotSupportedException` при композиции источника или выражения, до
+генерации SQL. Сама конструкция `json_table` работает на PostgreSQL 17; её не выражает только модель
+рендеринга.
+
 ## JSON как текст (SQL Server, MySQL/MariaDB)
 
 SQL Server хранит JSON в обычной колонке `nvarchar` — а в 2025+ с контекстом, построенным из явного `Version(17, 0)`, — в своём опциональном нативном типе `json` ([`SupportsJson`](xref:NextORM.Core.ISqlDialect.SupportsJson);
