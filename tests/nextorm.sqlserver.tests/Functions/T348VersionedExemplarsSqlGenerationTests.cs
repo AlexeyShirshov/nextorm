@@ -1244,4 +1244,188 @@ public class T348VersionedExemplarsSqlGenerationTests
         => FluentActions.Invoking(() => SqlOf(ctx, command))
             .Should().Throw<NotSupportedException>()
             .WithMessage(message);
+
+    // U5: the eleven deterministic refusals (the ten system names and ANY_VALUE). The message is one
+    // stable template per member — `SqlFunctions.SqlServer.<member> (<TOKEN>) is refused: <reason>` —
+    // and it is identical from the member body, from expression-tree translation and from the
+    // SQL-builder command-boundary preflight.
+
+    private static readonly string[] RefusedMemberNames =
+    [
+        "session_context", "session_id", "rowcount", "error",
+        "error_number", "error_severity", "error_state", "error_line", "error_message", "error_procedure",
+        "any_value"
+    ];
+
+    /// <summary>The eleven refused member names, one test case each.</summary>
+    public static TheoryData<string> RefusedNames
+    {
+        get
+        {
+            var data = new TheoryData<string>();
+            foreach (var name in RefusedMemberNames)
+                data.Add(name);
+            return data;
+        }
+    }
+
+    private const string CatchScope =
+        "requires a SQL Server CATCH-block scope; outside CATCH it returns NULL, "
+        + "and nextorm does not establish that scope.";
+
+    private static string ExpectedRefusal(string name) => name switch
+    {
+        "session_context" =>
+            "SqlFunctions.SqlServer.session_context (SESSION_CONTEXT) is refused: returns sql_variant, "
+            + "for which nextorm has no faithful CLR result contract; no lossy cast substitution is performed.",
+        "session_id" =>
+            "SqlFunctions.SqlServer.session_id (SESSION_ID) is refused: is not a SQL Server engine function; "
+            + "the documented function belongs to Azure Synapse. SQL Server exposes session identity through "
+            + "@@SPID or sys.dm_exec_sessions.session_id; no substitution is performed.",
+        "rowcount" =>
+            "SqlFunctions.SqlServer.rowcount (@@ROWCOUNT) is refused: describes the previous statement and is "
+            + "statement-scoped; a per-row query projection cannot expose that value faithfully.",
+        "error" =>
+            "SqlFunctions.SqlServer.error (@@ERROR) is refused: describes the previous statement and is "
+            + "statement-scoped; a per-row query projection cannot expose that value faithfully.",
+        "error_number" => $"SqlFunctions.SqlServer.error_number (ERROR_NUMBER) is refused: {CatchScope}",
+        "error_severity" => $"SqlFunctions.SqlServer.error_severity (ERROR_SEVERITY) is refused: {CatchScope}",
+        "error_state" => $"SqlFunctions.SqlServer.error_state (ERROR_STATE) is refused: {CatchScope}",
+        "error_line" => $"SqlFunctions.SqlServer.error_line (ERROR_LINE) is refused: {CatchScope}",
+        "error_message" => $"SqlFunctions.SqlServer.error_message (ERROR_MESSAGE) is refused: {CatchScope}",
+        "error_procedure" => $"SqlFunctions.SqlServer.error_procedure (ERROR_PROCEDURE) is refused: {CatchScope}",
+        "any_value" =>
+            "SqlFunctions.SqlServer.any_value (ANY_VALUE) is refused: SQL Server build 17.0.5005.3 rejected "
+            + "this function with Msg 195, including with preview features enabled; no supported SQL Server "
+            + "execution contract is established.",
+        _ => throw new ArgumentOutOfRangeException(nameof(name), name, "No such refused SQL Server function.")
+    };
+
+    [Theory]
+    [MemberData(nameof(RefusedNames))]
+    public void RefusedMember_ShouldThrowTheExactDiagnosticOnDirectInvocation(string name)
+    {
+        var thrown = FluentActions.Invoking(DirectInvocation(name))
+            .Should().Throw<NotSupportedException>("the member body is a callable refusal")
+            .Which;
+
+        thrown.Message.Should().Be(ExpectedRefusal(name));
+    }
+
+    [Theory]
+    [MemberData(nameof(RefusedNames))]
+    public void RefusedMember_ShouldThrowTheSameDiagnosticInAnExpressionTreeWithoutEvaluatingArguments(string name)
+    {
+        using var ctx = Declared(17);
+        RefusalSentinel.Reset();
+
+        var thrown = FluentActions.Invoking(ExpressionInvocation(ctx, name))
+            .Should().Throw<NotSupportedException>("the translator refuses the exact member before visiting arguments")
+            .Which;
+
+        thrown.Message.Should().Be(ExpectedRefusal(name));
+        RefusalSentinel.Touches.Should().Be(0, "a refused call must not evaluate its argument expressions");
+    }
+
+    /// <summary>
+    /// The eleven refusals do not disturb their supported siblings: the live session/statement facts of
+    /// the same surface still render, and the member set is closed (eleven distinct diagnostics, one per
+    /// name). The refusal is raised while the SQL is being built — <c>GetPreparedQueryCommand</c> never
+    /// returns a plan, so no <c>PreparedCommandFactory</c> and no plan command exist: the preflight is
+    /// the first statement of <c>SqlBuilder.MakeSelect</c>, which <c>QueryPlanner</c> calls before
+    /// <c>new DbPreparedQueryCommand</c> (QueryPlanner.cs:866/909). The live arm proves the same with
+    /// the <c>IQueryInterceptor.CommandInitialized</c> creation hook.
+    /// </summary>
+    [Fact]
+    public void RefusedMembers_ShouldKeepTheSupportedSystemSiblingsRendering()
+    {
+        using var ctx = Declared(17);
+
+        var siblings = SqlOf(ctx, ctx.From<IComplexEntity>().Where(x => x.Id == 1).Select(x => new
+        {
+            User = SqlFunctions.Sql.current_user(),
+            Database = SqlFunctions.SqlServer.db_name(),
+            Rows = SqlFunctions.SqlServer.rowcount_big(),
+            State = SqlFunctions.SqlServer.xact_state(),
+            Identity = SqlFunctions.SqlServer.scope_identity()
+        }));
+
+        siblings.Should().Contain("current_user")
+            .And.Contain("db_name()")
+            .And.Contain("rowcount_big()")
+            .And.Contain("xact_state()")
+            .And.Contain("scope_identity()");
+
+        var diagnostics = RefusedMemberNames.Select(ExpectedRefusal).Distinct().ToList();
+        diagnostics.Should().HaveCount(11, "one distinct diagnostic per refused member");
+    }
+
+    private static Action DirectInvocation(string name) => name switch
+    {
+        "session_context" => () => SqlFunctions.SqlServer.session_context("k"),
+        "session_id" => () => SqlFunctions.SqlServer.session_id(),
+        "rowcount" => () => SqlFunctions.SqlServer.rowcount(),
+        "error" => () => SqlFunctions.SqlServer.error(),
+        "error_number" => () => SqlFunctions.SqlServer.error_number(),
+        "error_severity" => () => SqlFunctions.SqlServer.error_severity(),
+        "error_state" => () => SqlFunctions.SqlServer.error_state(),
+        "error_line" => () => SqlFunctions.SqlServer.error_line(),
+        "error_message" => () => SqlFunctions.SqlServer.error_message(),
+        "error_procedure" => () => SqlFunctions.SqlServer.error_procedure(),
+        "any_value" => () => SqlFunctions.SqlServer.any_value((int?)1),
+        _ => throw new ArgumentOutOfRangeException(nameof(name), name, "No such refused SQL Server function.")
+    };
+
+    private static Action ExpressionInvocation(SqlServerDataContext ctx, string name) => name switch
+    {
+        "session_context" => () => SqlOf(ctx, ctx.From<IComplexEntity>()
+            .Select(x => new { V = SqlFunctions.SqlServer.session_context(RefusalSentinel.TouchText()) })),
+        "session_id" => () => SqlOf(ctx, ctx.From<IComplexEntity>()
+            .Select(x => new { V = SqlFunctions.SqlServer.session_id() })),
+        "rowcount" => () => SqlOf(ctx, ctx.From<IComplexEntity>()
+            .Select(x => new { V = SqlFunctions.SqlServer.rowcount() })),
+        "error" => () => SqlOf(ctx, ctx.From<IComplexEntity>()
+            .Select(x => new { V = SqlFunctions.SqlServer.error() })),
+        "error_number" => () => SqlOf(ctx, ctx.From<IComplexEntity>()
+            .Select(x => new { V = SqlFunctions.SqlServer.error_number() })),
+        "error_severity" => () => SqlOf(ctx, ctx.From<IComplexEntity>()
+            .Select(x => new { V = SqlFunctions.SqlServer.error_severity() })),
+        "error_state" => () => SqlOf(ctx, ctx.From<IComplexEntity>()
+            .Select(x => new { V = SqlFunctions.SqlServer.error_state() })),
+        "error_line" => () => SqlOf(ctx, ctx.From<IComplexEntity>()
+            .Select(x => new { V = SqlFunctions.SqlServer.error_line() })),
+        "error_message" => () => SqlOf(ctx, ctx.From<IComplexEntity>()
+            .Select(x => new { V = SqlFunctions.SqlServer.error_message() })),
+        "error_procedure" => () => SqlOf(ctx, ctx.From<IComplexEntity>()
+            .Select(x => new { V = SqlFunctions.SqlServer.error_procedure() })),
+        "any_value" => () => SqlOf(ctx, ctx.From<IComplexEntity>()
+            .Select(x => new { V = SqlFunctions.SqlServer.any_value(RefusalSentinel.TouchInt()) })),
+        _ => throw new ArgumentOutOfRangeException(nameof(name), name, "No such refused SQL Server function.")
+    };
+
+    /// <summary>
+    /// A sentinel argument for the expression-tree path: touching it increments the counter and throws,
+    /// so a refusal that evaluated its arguments would be visible as both a different exception and a
+    /// non-zero count. Direct-call argument evaluation cannot be prevented and is not asserted.
+    /// </summary>
+    public static class RefusalSentinel
+    {
+        private static int _touches;
+
+        public static int Touches => Volatile.Read(ref _touches);
+
+        public static void Reset() => Volatile.Write(ref _touches, 0);
+
+        public static string TouchText()
+        {
+            Interlocked.Increment(ref _touches);
+            throw new InvalidOperationException("A refused call must not evaluate its arguments.");
+        }
+
+        public static int TouchInt()
+        {
+            Interlocked.Increment(ref _touches);
+            throw new InvalidOperationException("A refused call must not evaluate its arguments.");
+        }
+    }
 }

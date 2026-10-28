@@ -60,6 +60,24 @@ unversioned context or an edition-only declaration refuses the call before SQL w
 requires SQL Server major version 17 or later; declared major version: 16.` (or `… unspecified.`). An
 edition never substitutes for the declared major version.
 
+## SQL Server: `ANY_VALUE` is refused
+
+`SqlFunctions.SqlServer.any_value(value)` exists as a **deterministic refusal**, not as an aggregate.
+On SQL Server build `17.0.5005.3` the engine rejected `ANY_VALUE` with `Msg 195` in both the aggregate
+and the `OVER ()` forms, at compatibility levels 160 and 170 and with `PREVIEW_FEATURES = ON`, so no
+supported SQL Server execution contract is established. Every invocation — direct or inside a query —
+throws `NotSupportedException` with
+`SqlFunctions.SqlServer.any_value (ANY_VALUE) is refused: SQL Server build 17.0.5005.3 rejected this
+function with Msg 195, including with preview features enabled; no supported SQL Server execution
+contract is established.` The refusal is raised before SQL is rendered and before any command is
+created, and a sibling aggregate of the same query still executes.
+
+This is an **observed engine rejection**, not a CLR/scope limitation and not a version gap a later
+nextorm release can close. The portable `CommonFunctions.any_agg` is a different member: it stays gated
+off on SQL Server (`SupportsAnyValueAggregate = false`) and is **not** replaced by this refusal; the
+providers that enable it (MySQL/MariaDB via `ANY_VALUE`, ClickHouse via `any`) keep their dispatch
+unchanged.
+
 ## SQL Server aggregate family (2019 and 2022)
 
 Five [#282](https://github.com/AlexeyShirshov/nextorm/issues/282) members close the residual SQL Server

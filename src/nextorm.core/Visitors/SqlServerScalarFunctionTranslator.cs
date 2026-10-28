@@ -157,6 +157,12 @@ internal static class SqlServerScalarFunctionTranslator
     /// <summary>Translates a SQL Server-only scalar call; returns <c>false</c> when it is not one of them.</summary>
     internal static bool TryTranslate(BaseExpressionVisitor visitor, MethodCallExpression node)
     {
+        // The eleven deterministic refusals (the ten system names and ANY_VALUE) are keyed by the exact
+        // MethodInfo and rejected here, before the name gate, before the capability gate and
+        // before any argument is visited: the member body, the command-boundary preflight and this
+        // translator guard all raise the same fixed diagnostic.
+        SqlServerFunctionRefusals.ThrowIfRefused(node.Method);
+
         if (node.Method.DeclaringType != typeof(SqlServerFunctions) || !FunctionNames.Contains(node.Method.Name))
             return false;
 

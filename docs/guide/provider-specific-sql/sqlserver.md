@@ -557,22 +557,36 @@ operand needs a SQL type derived from metadata; an unmapped one is rejected befo
 `Null-safe comparison requires a SQL Server type mapping for null operands.` See
 [Null-safe comparison](../../scalar-functions/04-conditionals-and-conversion.md#null-safe-comparison-is-not-distinct-from).
 
-## Not yet supported
+## Refused functions (deterministic, before SQL)
 
-The rest of the [#282](https://github.com/AlexeyShirshov/nextorm/issues/282) catalogue stays open in
-`1.0.9-rc4` — the residual positions left by this slice: aggregate
-`APPROX_COUNT_DISTINCT`/`CHECKSUM_AGG`/`GROUPING_ID`; analytic
-`APPROX_PERCENTILE_CONT`/`APPROX_PERCENTILE_DISC`; and the whole-goal refusals
-`ANY_VALUE`/`SESSION_CONTEXT`/`SESSION_ID`/`@@ROWCOUNT`/`@@ERROR`/`ERROR_*`. The five functions shipped by
-the T282 slice are `parse`, `try_parse`, `base64_encode`, `base64_decode` and `crypt_gen_random`; this
-slice delivers the seven regex and fuzzy names above, the 2022 bit family and `TRY_CAST`/`TRY_CONVERT`.
-Accounting after U3: **17 delivered / 5 delivery names remaining / 11 refusals pending**; together they do
-not close the issue.
+[#282](https://github.com/AlexeyShirshov/nextorm/issues/282) is closed for this slice:
+**22 delivered / 0 delivery names remaining / 11 tested refusals**. The eleven refusals are part of the
+surface — callable `SqlFunctions.SqlServer` members that throw `NotSupportedException` with one stable
+message per member (`SqlFunctions.SqlServer.<member> (<TOKEN>) is refused: <reason>`) at the SQL-builder
+command boundary, before SQL is rendered and before any command is created. They are not deferred names:
+they are deterministic, tested refusals, and each keeps the supported siblings of the same surface
+(`rowcount_big`, `xact_state`, `scope_identity`, `db_name`, `current_user`, …) rendering.
 
-`ANY_VALUE` is recorded as **engine-unsupported on the tested SQL Server 2025 build** (17.0.5005.3):
-`Msg 195` in both the aggregate and the `OVER ()` forms, at compatibility levels 160 and 170 and with
-`PREVIEW_FEATURES = ON`. It is not a version gap a later nextorm release can close; U5 supplies its
-executable refusal. See [Limitations and out-of-scope features](../../advanced/limitations.md).
+| Member | SQL token | Kind and reason |
+|---|---|---|
+| `session_context(key)` | `SESSION_CONTEXT` | Scope/CLR: returns `sql_variant`, for which nextorm has no faithful CLR result contract; no lossy cast substitution is performed. |
+| `session_id()` | `SESSION_ID` | Engine rejection: not a SQL Server engine function (Msg 195); the documented function belongs to Azure Synapse. Session identity is `@@SPID` or `sys.dm_exec_sessions.session_id`; no substitution is performed. |
+| `rowcount()` | `@@ROWCOUNT` | Scope: describes the previous statement and is statement-scoped; a per-row query projection cannot expose that value faithfully. |
+| `error()` | `@@ERROR` | Scope: the same previous-statement scope as `@@ROWCOUNT`. |
+| `error_number()` | `ERROR_NUMBER` | Scope: requires a `CATCH`-block scope; outside `CATCH` it returns NULL, and nextorm does not establish that scope. |
+| `error_severity()` | `ERROR_SEVERITY` | Scope: the same `CATCH`-only scope. |
+| `error_state()` | `ERROR_STATE` | Scope: the same `CATCH`-only scope. |
+| `error_line()` | `ERROR_LINE` | Scope: the same `CATCH`-only scope. |
+| `error_message()` | `ERROR_MESSAGE` | Scope: the same `CATCH`-only scope. |
+| `error_procedure()` | `ERROR_PROCEDURE` | Scope: the same `CATCH`-only scope. |
+| `any_value(value)` | `ANY_VALUE` | Engine rejection: SQL Server build `17.0.5005.3` rejected it with `Msg 195` in the aggregate and `OVER ()` forms, at compatibility 160/170 and with `PREVIEW_FEATURES = ON`; no supported SQL Server execution contract is established. |
+
+The two kinds stay distinct: the ten system names are **scope/CLR limitations** (a statement or `CATCH`
+scope, or `sql_variant` without a faithful CLR carrier) except `SESSION_ID`, which — like `ANY_VALUE` — is
+an **observed engine rejection**. `ANY_VALUE` is not a version gap a later nextorm release can close, and
+the portable `CommonFunctions.any_agg` is unaffected on the providers that enable it. See
+[Limitations and out-of-scope features](../../advanced/limitations.md) and
+[system functions](../../scalar-functions/09-system-functions.md#refused-statement-and-error-scope-names-sql-server).
 
 ## See also
 

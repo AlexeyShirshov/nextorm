@@ -1616,4 +1616,107 @@ namespace NextORM.Core;
         /// <param name="pattern">The second string.</param>
         /// <returns>The similarity as <c>int</c>, or SQL NULL when either operand is NULL.</returns>
         public int? jaro_winkler_similarity(string? input, string? pattern) => default!;
+
+        /// <summary>
+        /// <c>SESSION_CONTEXT(key)</c> is <b>refused</b>: the native result is <c>sql_variant</c>, for
+        /// which nextorm has no faithful CLR result contract, and no lossy cast substitution is
+        /// performed. The declared <see cref="object"/> result is a callable placeholder, not a claim
+        /// that the <c>sql_variant</c> value can be materialised: every invocation, direct or inside a
+        /// query, throws <see cref="NotSupportedException"/> with the stable diagnostic before SQL is
+        /// rendered.
+        /// </summary>
+        /// <param name="key">The session-context key.</param>
+        public object? session_context(string? key) =>
+            throw new NotSupportedException(SqlServerFunctionRefusals.Diagnostic(nameof(session_context)));
+
+        /// <summary>
+        /// <c>SESSION_ID()</c> is <b>refused</b>: it is not a SQL Server engine function — the
+        /// documented function belongs to Azure Synapse. On SQL Server the session identity is
+        /// <c>@@SPID</c> or <c>sys.dm_exec_sessions.session_id</c>, and no substitution is performed.
+        /// The result is a callable placeholder; every invocation throws
+        /// <see cref="NotSupportedException"/> with the stable diagnostic.
+        /// </summary>
+        public string? session_id() =>
+            throw new NotSupportedException(SqlServerFunctionRefusals.Diagnostic(nameof(session_id)));
+
+        /// <summary>
+        /// <c>@@ROWCOUNT</c> is <b>refused</b>: it describes the previous statement and is
+        /// statement-scoped, so a per-row query projection cannot expose that value faithfully. The
+        /// result is a callable placeholder; every invocation throws
+        /// <see cref="NotSupportedException"/> with the stable diagnostic.
+        /// </summary>
+        public int rowcount() =>
+            throw new NotSupportedException(SqlServerFunctionRefusals.Diagnostic(nameof(rowcount)));
+
+        /// <summary>
+        /// <c>@@ERROR</c> is <b>refused</b>: it describes the previous statement and is
+        /// statement-scoped, so a per-row query projection cannot expose that value faithfully. The
+        /// result is a callable placeholder; every invocation throws
+        /// <see cref="NotSupportedException"/> with the stable diagnostic.
+        /// </summary>
+        public int error() =>
+            throw new NotSupportedException(SqlServerFunctionRefusals.Diagnostic(nameof(error)));
+
+        /// <summary>
+        /// <c>ERROR_NUMBER()</c> is <b>refused</b>: it requires a SQL Server <c>CATCH</c>-block scope
+        /// and returns NULL outside <c>CATCH</c>, which nextorm does not establish. The result is a
+        /// callable placeholder; every invocation throws <see cref="NotSupportedException"/> with the
+        /// stable diagnostic.
+        /// </summary>
+        public int? error_number() =>
+            throw new NotSupportedException(SqlServerFunctionRefusals.Diagnostic(nameof(error_number)));
+
+        /// <summary>
+        /// <c>ERROR_SEVERITY()</c> is <b>refused</b> for the same <c>CATCH</c>-block scope reason as
+        /// <see cref="error_number"/>; the result is a callable placeholder and every invocation throws
+        /// <see cref="NotSupportedException"/> with the stable diagnostic.
+        /// </summary>
+        public int? error_severity() =>
+            throw new NotSupportedException(SqlServerFunctionRefusals.Diagnostic(nameof(error_severity)));
+
+        /// <summary>
+        /// <c>ERROR_STATE()</c> is <b>refused</b> for the same <c>CATCH</c>-block scope reason as
+        /// <see cref="error_number"/>; the result is a callable placeholder and every invocation throws
+        /// <see cref="NotSupportedException"/> with the stable diagnostic.
+        /// </summary>
+        public int? error_state() =>
+            throw new NotSupportedException(SqlServerFunctionRefusals.Diagnostic(nameof(error_state)));
+
+        /// <summary>
+        /// <c>ERROR_LINE()</c> is <b>refused</b> for the same <c>CATCH</c>-block scope reason as
+        /// <see cref="error_number"/>; the result is a callable placeholder and every invocation throws
+        /// <see cref="NotSupportedException"/> with the stable diagnostic.
+        /// </summary>
+        public int? error_line() =>
+            throw new NotSupportedException(SqlServerFunctionRefusals.Diagnostic(nameof(error_line)));
+
+        /// <summary>
+        /// <c>ERROR_MESSAGE()</c> is <b>refused</b> for the same <c>CATCH</c>-block scope reason as
+        /// <see cref="error_number"/>; the result is a callable placeholder and every invocation throws
+        /// <see cref="NotSupportedException"/> with the stable diagnostic.
+        /// </summary>
+        public string? error_message() =>
+            throw new NotSupportedException(SqlServerFunctionRefusals.Diagnostic(nameof(error_message)));
+
+        /// <summary>
+        /// <c>ERROR_PROCEDURE()</c> is <b>refused</b> for the same <c>CATCH</c>-block scope reason as
+        /// <see cref="error_number"/>; the result is a callable placeholder and every invocation throws
+        /// <see cref="NotSupportedException"/> with the stable diagnostic.
+        /// </summary>
+        public string? error_procedure() =>
+            throw new NotSupportedException(SqlServerFunctionRefusals.Diagnostic(nameof(error_procedure)));
+
+        /// <summary>
+        /// <c>ANY_VALUE(value)</c> is <b>refused</b>: SQL Server build <c>17.0.5005.3</c> rejected the
+        /// function with <c>Msg 195</c>, in both the aggregate and the <c>OVER ()</c> forms, at
+        /// compatibility levels 160 and 170 and with <c>PREVIEW_FEATURES = ON</c>, so no supported SQL
+        /// Server execution contract is established. The result is a callable placeholder; every
+        /// invocation throws <see cref="NotSupportedException"/> with the stable diagnostic. This is not
+        /// a replacement for <see cref="CommonFunctions.any_agg"/>, whose dispatch on the providers that
+        /// enable it is unchanged.
+        /// </summary>
+        /// <typeparam name="T">The value type.</typeparam>
+        /// <param name="value">The value whose arbitrary row would be picked.</param>
+        public T? any_value<T>(T? value) =>
+            throw new NotSupportedException(SqlServerFunctionRefusals.Diagnostic(nameof(any_value)));
     }

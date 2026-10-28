@@ -337,6 +337,16 @@ public sealed class SqlServerDialect : SqlDialectBase
     public override bool SupportsProductAggregate => SupportsSqlServer2025Functions;
 
     /// <summary>
+    /// <see cref="CommonFunctions.any_agg"/> stays gated off on SQL Server: the T-SQL <c>ANY_VALUE</c>
+    /// aggregate does not exist on the recorded engine build <c>17.0.5005.3</c> (<c>Msg 195</c> in the
+    /// aggregate and <c>OVER ()</c> forms, at compatibility levels 160 and 170 and with
+    /// <c>PREVIEW_FEATURES = ON</c>), so there is no execution contract to enable. The
+    /// <see cref="SqlServerFunctions.any_value"/> member is a deterministic refusal, not this
+    /// aggregate's replacement; the providers that do enable <c>any_agg</c> keep their dispatch.
+    /// </summary>
+    public override bool SupportsAnyValueAggregate => false;
+
+    /// <summary>
     /// <c>APPROX_COUNT_DISTINCT</c> arrived with SQL Server 2019 (major version 15). Version-only, like
     /// every other function-availability gate here: no edition substitutes for a major version.
     /// </summary>

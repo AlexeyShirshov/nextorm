@@ -145,6 +145,35 @@ style makes the engine return NULL even for a convertible value. A conversion th
 not masked — `TRY_CAST(1 AS xml)` raises Msg 529, and `xml` is not a public target. See
 [conditionals and conversion](04-conditionals-and-conversion.md#sql-server-try_cast-and-try_convert).
 
+## SQL Server deterministic refusals (system names and `ANY_VALUE`)
+
+Eleven `SqlFunctions.SqlServer` members are delivered as **deterministic refusals**: the member exists
+and is callable so the refusal is reachable and tested, but a direct call and an expression-tree
+translation both throw `NotSupportedException` with
+`SqlFunctions.SqlServer.<member> (<TOKEN>) is refused: <reason>`. The refusal is raised at the
+SQL-builder command boundary before any argument is evaluated, so no statement is rendered, no command
+is created and no row is returned. The declared CLR type is a callable placeholder, not a
+materialization contract.
+
+| Member | SQL token | CLR placeholder | Kind and reason |
+|---|---|---|---|
+| `session_context(key)` | `SESSION_CONTEXT` | `object?` | **Scope/CLR:** returns `sql_variant`, for which nextorm has no faithful CLR result contract; no lossy cast substitution is performed. |
+| `session_id()` | `SESSION_ID` | `string?` | **Engine rejection:** not a SQL Server engine function (Msg 195); the documented function belongs to Azure Synapse. Session identity is `@@SPID` or `sys.dm_exec_sessions.session_id`; no substitution is performed. |
+| `rowcount()` | `@@ROWCOUNT` | `int` | **Scope:** describes the previous statement and is statement-scoped; a per-row query projection cannot expose that value faithfully. |
+| `error()` | `@@ERROR` | `int` | **Scope:** the same previous-statement scope as `@@ROWCOUNT`. |
+| `error_number()` | `ERROR_NUMBER` | `int?` | **Scope:** requires a `CATCH`-block scope; outside `CATCH` it returns NULL, and nextorm does not establish that scope. |
+| `error_severity()` | `ERROR_SEVERITY` | `int?` | **Scope:** the same `CATCH`-only scope. |
+| `error_state()` | `ERROR_STATE` | `int?` | **Scope:** the same `CATCH`-only scope. |
+| `error_line()` | `ERROR_LINE` | `int?` | **Scope:** the same `CATCH`-only scope. |
+| `error_message()` | `ERROR_MESSAGE` | `string?` | **Scope:** the same `CATCH`-only scope. |
+| `error_procedure()` | `ERROR_PROCEDURE` | `string?` | **Scope:** the same `CATCH`-only scope. |
+| `any_value(value)` | `ANY_VALUE` | `T?` | **Engine rejection:** SQL Server build `17.0.5005.3` rejected it with `Msg 195`, including with `PREVIEW_FEATURES = ON`; no supported SQL Server execution contract is established. |
+
+See [system functions](09-system-functions.md#refused-statement-and-error-scope-names-sql-server) for the
+ten system names and [aggregates](05-aggregates.md#sql-server-any_value-is-refused) for `ANY_VALUE`. The
+supported siblings of the same surface (`rowcount_big`, `xact_state`, `scope_identity`, `db_name`, …)
+still render, and `CommonFunctions.any_agg` is unaffected on the providers that enable it.
+
 ## MySQL-specific functions
 
 The names on [`SqlFunctions.MySql`](../guide/provider-specific-sql/mysql.md) render only on the MySQL

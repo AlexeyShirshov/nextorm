@@ -842,6 +842,129 @@ public sealed class T348SqlServer2025FunctionsTests : IDisposable
     }
 
     /// <summary>
+    /// U5: the ten refused system names are refused on the real 2025 engine before any command is
+    /// created or dispatched. The counters are reset after the setup query, so the measurement covers
+    /// only the refusals; the supported session/statement siblings then execute as the positive
+    /// control through the same connection.
+    /// </summary>
+    [Fact]
+    public void SystemFunctions_ShouldRefuseEveryMemberBeforeAnyCommandIsCreated()
+    {
+        using var ctx = new T348V17LiveContext(_connectionString);
+        var counter = new CommandCounter();
+        ctx.AddInterceptor(counter);
+
+        ctx.From<IT348U1Row>()
+            .Where(x => x.Id == 1)
+            .Select(x => new { User = SqlFunctions.Sql.current_user(), Database = SqlFunctions.SqlServer.db_name() })
+            .Single();
+
+        counter.Reset();
+
+        ShouldRefuse(ctx, ctx.From<IT348U1Row>()
+                .Select(x => new { V = SqlFunctions.SqlServer.session_context("k") }),
+            "SqlFunctions.SqlServer.session_context (SESSION_CONTEXT) is refused: returns sql_variant, "
+            + "for which nextorm has no faithful CLR result contract; no lossy cast substitution is performed.");
+        ShouldRefuse(ctx, ctx.From<IT348U1Row>()
+                .Select(x => new { V = SqlFunctions.SqlServer.session_id() }),
+            "SqlFunctions.SqlServer.session_id (SESSION_ID) is refused: is not a SQL Server engine function; "
+            + "the documented function belongs to Azure Synapse. SQL Server exposes session identity through "
+            + "@@SPID or sys.dm_exec_sessions.session_id; no substitution is performed.");
+        ShouldRefuse(ctx, ctx.From<IT348U1Row>()
+                .Select(x => new { V = SqlFunctions.SqlServer.rowcount() }),
+            "SqlFunctions.SqlServer.rowcount (@@ROWCOUNT) is refused: describes the previous statement and is "
+            + "statement-scoped; a per-row query projection cannot expose that value faithfully.");
+        ShouldRefuse(ctx, ctx.From<IT348U1Row>()
+                .Select(x => new { V = SqlFunctions.SqlServer.error() }),
+            "SqlFunctions.SqlServer.error (@@ERROR) is refused: describes the previous statement and is "
+            + "statement-scoped; a per-row query projection cannot expose that value faithfully.");
+
+        var catchScope =
+            "requires a SQL Server CATCH-block scope; outside CATCH it returns NULL, "
+            + "and nextorm does not establish that scope.";
+
+        ShouldRefuse(ctx, ctx.From<IT348U1Row>()
+                .Select(x => new { V = SqlFunctions.SqlServer.error_number() }),
+            $"SqlFunctions.SqlServer.error_number (ERROR_NUMBER) is refused: {catchScope}");
+        ShouldRefuse(ctx, ctx.From<IT348U1Row>()
+                .Select(x => new { V = SqlFunctions.SqlServer.error_severity() }),
+            $"SqlFunctions.SqlServer.error_severity (ERROR_SEVERITY) is refused: {catchScope}");
+        ShouldRefuse(ctx, ctx.From<IT348U1Row>()
+                .Select(x => new { V = SqlFunctions.SqlServer.error_state() }),
+            $"SqlFunctions.SqlServer.error_state (ERROR_STATE) is refused: {catchScope}");
+        ShouldRefuse(ctx, ctx.From<IT348U1Row>()
+                .Select(x => new { V = SqlFunctions.SqlServer.error_line() }),
+            $"SqlFunctions.SqlServer.error_line (ERROR_LINE) is refused: {catchScope}");
+        ShouldRefuse(ctx, ctx.From<IT348U1Row>()
+                .Select(x => new { V = SqlFunctions.SqlServer.error_message() }),
+            $"SqlFunctions.SqlServer.error_message (ERROR_MESSAGE) is refused: {catchScope}");
+        ShouldRefuse(ctx, ctx.From<IT348U1Row>()
+                .Select(x => new { V = SqlFunctions.SqlServer.error_procedure() }),
+            $"SqlFunctions.SqlServer.error_procedure (ERROR_PROCEDURE) is refused: {catchScope}");
+
+        counter.Creations.Should().Be(0, "every refusal is raised before a command is created");
+        counter.Executions.Should().Be(0, "every refusal is raised before a command is dispatched");
+
+        var control = ctx.From<IT348U1Row>()
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                User = SqlFunctions.Sql.current_user(),
+                Identity = SqlFunctions.SqlServer.scope_identity(),
+                Rows = SqlFunctions.SqlServer.rowcount_big()
+            })
+            .Single();
+
+        control.User.Should().NotBeNullOrEmpty("the sibling control executed a real query");
+        counter.Creations.Should().BeGreaterThan(0, "the sibling control created a real command");
+        counter.Executions.Should().BeGreaterThan(0, "the sibling control executed a real command");
+
+        Report($"T348LIVE-2025 system_refusals=10 creations_before_control=0 executions_before_control=0 "
+            + $"creations_total={counter.Creations} executions_total={counter.Executions} outcome=ok");
+    }
+
+    /// <summary>
+    /// U5: <c>ANY_VALUE</c> is refused on the real 2025 engine (<c>Msg 195</c> on build
+    /// <c>17.0.5005.3</c>, including with preview features enabled) before any command is created,
+    /// while the ordinary aggregate siblings of the same grouping query still execute.
+    /// </summary>
+    [Fact]
+    public void AnyValue_ShouldRefuseBeforeAnyCommandIsCreatedAndKeepAggregateSiblings()
+    {
+        using var ctx = new T348V17LiveContext(_connectionString);
+        var counter = new CommandCounter();
+        ctx.AddInterceptor(counter);
+
+        ctx.From<IT348U1Row>()
+            .Where(x => x.Id == 1)
+            .Select(x => new { Count = SqlFunctions.Sql.count(x.Value) })
+            .Single();
+
+        counter.Reset();
+
+        ShouldRefuse(ctx, ctx.From<IT348U1Row>()
+                .Select(x => new { V = SqlFunctions.SqlServer.any_value(x.Value) }),
+            "SqlFunctions.SqlServer.any_value (ANY_VALUE) is refused: SQL Server build 17.0.5005.3 rejected "
+            + "this function with Msg 195, including with preview features enabled; no supported SQL Server "
+            + "execution contract is established.");
+
+        counter.Creations.Should().Be(0, "the refusal is raised before a command is created");
+        counter.Executions.Should().Be(0, "the refusal is raised before a command is dispatched");
+
+        var control = ctx.From<IT348U1Row>()
+            .GroupBy(x => new { x.Grp })
+            .Select(x => new { x.Grp, Min = SqlFunctions.Sql.min(x.Value), Count = SqlFunctions.Sql.count(x.Value) })
+            .ToList();
+
+        control.Should().HaveCount(3, "the ordinary aggregate siblings still execute");
+        counter.Creations.Should().BeGreaterThan(0, "the sibling control created a real command");
+        counter.Executions.Should().BeGreaterThan(0, "the sibling control executed a real command");
+
+        Report($"T348LIVE-2025 any_value_refusals=1 creations_before_control=0 executions_before_control=0 "
+            + $"creations_total={counter.Creations} executions_total={counter.Executions} outcome=ok");
+    }
+
+    /// <summary>
     /// U4: the engine-side evidence for the <c>OVER</c> obligation — the approximate percentiles are
     /// not windowing functions (Msg 4113) and <c>APPROX_COUNT_DISTINCT</c> is not one either, while
     /// <c>CHECKSUM_AGG</c> is; the public surface exposes no <c>WindowFunction</c>-returning overload for
@@ -1021,12 +1144,28 @@ public sealed class T348SqlServer2025FunctionsTests : IDisposable
 
     private static void Report(string message) => T348Evidence.Write(message);
 
-    /// <summary>Counts the commands that actually reach execution.</summary>
+    /// <summary>
+    /// Counts the commands created (<see cref="CommandInitialized"/>) and the commands that actually
+    /// reach execution (<see cref="CommandExecuting"/>). Both counters are resettable so a measurement
+    /// can exclude its own setup query.
+    /// </summary>
     private sealed class CommandCounter : IQueryInterceptor
     {
         private int _executions;
+        private int _creations;
 
         public int Executions => Volatile.Read(ref _executions);
+
+        public int Creations => Volatile.Read(ref _creations);
+
+        public void Reset()
+        {
+            Volatile.Write(ref _executions, 0);
+            Volatile.Write(ref _creations, 0);
+        }
+
+        public void CommandInitialized(CommandEventData eventData, DbCommand command)
+            => Interlocked.Increment(ref _creations);
 
         public void CommandExecuting(CommandEventData eventData, DbCommand command)
             => Interlocked.Increment(ref _executions);

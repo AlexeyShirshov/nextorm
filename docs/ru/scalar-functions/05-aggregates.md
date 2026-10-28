@@ -62,6 +62,24 @@ select nullableint, product(id) as [Product]
 function requires SQL Server major version 17 or later; declared major version: 16.` (или `…
 unspecified.`). Edition никогда не подменяет объявленную мажорную версию.
 
+## SQL Server: `ANY_VALUE` отклонён
+
+`SqlFunctions.SqlServer.any_value(value)` существует как **детерминированный отказ**, а не как агрегат.
+На сборке SQL Server `17.0.5005.3` движок отклонил `ANY_VALUE` с `Msg 195` и в агрегатной форме, и в
+форме `OVER ()`, на уровнях совместимости 160 и 170 и при `PREVIEW_FEATURES = ON`, поэтому
+поддерживаемый контракт выполнения для SQL Server не установлен. Каждый вызов — прямой или внутри
+запроса — бросает `NotSupportedException` с
+`SqlFunctions.SqlServer.any_value (ANY_VALUE) is refused: SQL Server build 17.0.5005.3 rejected this
+function with Msg 195, including with preview features enabled; no supported SQL Server execution
+contract is established.` Отказ поднимается до генерации SQL и до создания любой команды, а соседний
+агрегат того же запроса по-прежнему выполняется.
+
+Это **наблюдаемое отклонение движком**, а не ограничение CLR/области и не версионный пробел, который
+закроет будущий релиз nextorm. Переносимый `CommonFunctions.any_agg` — другой член: на SQL Server он
+остаётся выключенным (`SupportsAnyValueAggregate = false`) и **не** заменяется этим отказом; провайдеры,
+которые его включают (MySQL/MariaDB через `ANY_VALUE`, ClickHouse через `any`), сохраняют свою
+диспетчеризацию без изменений.
+
 ## Семейство агрегатов SQL Server (2019 и 2022)
 
 Пять членов [#282](https://github.com/AlexeyShirshov/nextorm/issues/282) закрывают остаточные имена

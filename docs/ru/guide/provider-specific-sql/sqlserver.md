@@ -565,22 +565,38 @@ null-операнду нужен SQL-тип, выведенный из мета�
 `Null-safe comparison requires a SQL Server type mapping for null operands.` См.
 [Null-safe-сравнение](../../scalar-functions/04-conditionals-and-conversion.md#null-safe-сравнение-is-not-distinct-from).
 
-## Пока не поддерживается
+## Отклонённые функции (детерминированно, до SQL)
 
-Остаток каталога [#282](https://github.com/AlexeyShirshov/nextorm/issues/282) остаётся открытым в
-`1.0.9-rc4` — позиции, оставшиеся после этого среза: aggregate
-`APPROX_COUNT_DISTINCT`/`CHECKSUM_AGG`/`GROUPING_ID`; analytic
-`APPROX_PERCENTILE_CONT`/`APPROX_PERCENTILE_DISC`; и отказы уровня цели
-`ANY_VALUE`/`SESSION_CONTEXT`/`SESSION_ID`/`@@ROWCOUNT`/`@@ERROR`/`ERROR_*`. Пять функций среза T282 —
-`parse`, `try_parse`, `base64_encode`, `base64_decode` и `crypt_gen_random`; этот срез поставляет семь
-regex- и fuzzy-имён выше, битовое семейство 2022 года и `TRY_CAST`/`TRY_CONVERT`. Учёт после U3:
-**17 поставлено / 5 имён поставки осталось / 11 отказов в ожидании**; вместе они issue не закрывают.
+[#282](https://github.com/AlexeyShirshov/nextorm/issues/282) закрыт для этого среза:
+**22 поставлено / 0 имён поставки осталось / 11 протестированных отказов**. Одиннадцать отказов — часть
+поверхности: вызываемые члены `SqlFunctions.SqlServer`, бросающие `NotSupportedException` с одним
+стабильным сообщением на член
+(`SqlFunctions.SqlServer.<member> (<TOKEN>) is refused: <reason>`) на границе команды SQL-билдера, до
+генерации SQL и до создания любой команды. Это не отложенные имена: это детерминированные,
+протестированные отказы, и каждый сохраняет рендеринг поддерживаемых соседей той же поверхности
+(`rowcount_big`, `xact_state`, `scope_identity`, `db_name`, `current_user`, …).
 
-`ANY_VALUE` зафиксирован как **не поддерживаемая движком на протестированной сборке SQL Server 2025**
-(17.0.5005.3): `Msg 195` и в агрегатной форме, и в форме `OVER ()`, на уровнях совместимости 160 и 170 и
-при `PREVIEW_FEATURES = ON`. Это не версионный пробел, который закроет будущий релиз nextorm; U5
-поставляет исполняемый отказ. См.
-[Ограничения и возможности вне области охвата](../../advanced/limitations.md).
+| Член | Токен SQL | Вид и причина |
+|---|---|---|
+| `session_context(key)` | `SESSION_CONTEXT` | Область/CLR: возвращает `sql_variant`, для которого у nextorm нет достоверного контракта результата CLR; замена с потерями (lossy cast) не выполняется. |
+| `session_id()` | `SESSION_ID` | Отклонение движком: не является функцией движка SQL Server (Msg 195); документированная функция принадлежит Azure Synapse. Идентичность сессии — `@@SPID` или `sys.dm_exec_sessions.session_id`; подстановка не выполняется. |
+| `rowcount()` | `@@ROWCOUNT` | Область: описывает предыдущую инструкцию и привязан к инструкции; построчная проекция запроса не может достоверно отдать это значение. |
+| `error()` | `@@ERROR` | Область: та же область предыдущей инструкции, что у `@@ROWCOUNT`. |
+| `error_number()` | `ERROR_NUMBER` | Область: требует области блока `CATCH`; вне `CATCH` возвращает NULL, а nextorm не создаёт эту область. |
+| `error_severity()` | `ERROR_SEVERITY` | Область: та же область только `CATCH`. |
+| `error_state()` | `ERROR_STATE` | Область: та же область только `CATCH`. |
+| `error_line()` | `ERROR_LINE` | Область: та же область только `CATCH`. |
+| `error_message()` | `ERROR_MESSAGE` | Область: та же область только `CATCH`. |
+| `error_procedure()` | `ERROR_PROCEDURE` | Область: та же область только `CATCH`. |
+| `any_value(value)` | `ANY_VALUE` | Отклонение движком: сборка SQL Server `17.0.5005.3` отклонила её с `Msg 195` в агрегатной форме и в форме `OVER ()`, на совместимости 160/170 и при `PREVIEW_FEATURES = ON`; поддерживаемый контракт выполнения для SQL Server не установлен. |
+
+Два вида остаются различимыми: десять системных имён — это **ограничения области/CLR** (область
+инструкции или `CATCH`, либо `sql_variant` без достоверного носителя CLR), кроме `SESSION_ID`, который —
+как и `ANY_VALUE` — является **наблюдаемым отклонением движком**. `ANY_VALUE` — не версионный пробел,
+который закроет будущий релиз nextorm, а переносимый `CommonFunctions.any_agg` не затронут на
+провайдерах, которые его включают. См.
+[Ограничения и возможности вне области охвата](../../advanced/limitations.md) и
+[системные функции](../../scalar-functions/09-system-functions.md#отклонённые-имена-инструкций-и-области-ошибок-sql-server).
 
 ## См. также
 

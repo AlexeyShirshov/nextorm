@@ -43,6 +43,12 @@ internal readonly struct SqlBuilder
         var entityType = cmd.EntityType;
         ArgumentNullException.ThrowIfNull(entityType);
 
+        // The eleven refused SQL Server functions are rejected at the command boundary, before any
+        // clause is rendered: the diagnostic names the member and the reason, and arguments are never
+        // visited (they would be evaluated by a later translation step). A subquery is preflighted by
+        // its own MakeSelect, so the walk stops at nested lambdas.
+        SqlServerFunctionRefusals.ValidateCommand(cmd);
+
         // A SelectWhereMax/SelectWhereMin command is lowered to a portable window-function derived
         // table (see MakeExtremeRowSelect) instead of the plain single-statement rendering below.
         if (cmd.ExtremeRow is not null)

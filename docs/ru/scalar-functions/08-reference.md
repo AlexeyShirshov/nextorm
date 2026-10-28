@@ -147,6 +147,35 @@ target 'MyType' to a supported SQL Server conversion type.`). Style — нати
 маскируется — `TRY_CAST(1 AS xml)` даёт Msg 529, и `xml` не является публичной целью. См.
 [условные функции и преобразования](04-conditionals-and-conversion.md#sql-server-try_cast-и-try_convert).
 
+## Детерминированные отказы SQL Server (системные имена и `ANY_VALUE`)
+
+Одиннадцать членов `SqlFunctions.SqlServer` поставляются как **детерминированные отказы**: член
+существует и вызываем, чтобы отказ был достижим и протестирован, но и прямой вызов, и трансляция
+дерева выражений бросают `NotSupportedException` с
+`SqlFunctions.SqlServer.<member> (<TOKEN>) is refused: <reason>`. Отказ поднимается на границе команды
+SQL-билдера до вычисления любого аргумента, поэтому инструкция не генерируется, команда не создаётся и
+строка не возвращается. Объявленный тип CLR — вызываемый плейсхолдер, а не контракт материализации.
+
+| Член | Токен SQL | Плейсхолдер CLR | Вид и причина |
+|---|---|---|---|
+| `session_context(key)` | `SESSION_CONTEXT` | `object?` | **Область/CLR:** возвращает `sql_variant`, для которого у nextorm нет достоверного контракта результата CLR; замена с потерями (lossy cast) не выполняется. |
+| `session_id()` | `SESSION_ID` | `string?` | **Отклонение движком:** не является функцией движка SQL Server (Msg 195); документированная функция принадлежит Azure Synapse. Идентичность сессии — `@@SPID` или `sys.dm_exec_sessions.session_id`; подстановка не выполняется. |
+| `rowcount()` | `@@ROWCOUNT` | `int` | **Область:** описывает предыдущую инструкцию и привязан к инструкции; построчная проекция запроса не может достоверно отдать это значение. |
+| `error()` | `@@ERROR` | `int` | **Область:** та же область предыдущей инструкции, что у `@@ROWCOUNT`. |
+| `error_number()` | `ERROR_NUMBER` | `int?` | **Область:** требует области блока `CATCH`; вне `CATCH` возвращает NULL, а nextorm не создаёт эту область. |
+| `error_severity()` | `ERROR_SEVERITY` | `int?` | **Область:** та же область только `CATCH`. |
+| `error_state()` | `ERROR_STATE` | `int?` | **Область:** та же область только `CATCH`. |
+| `error_line()` | `ERROR_LINE` | `int?` | **Область:** та же область только `CATCH`. |
+| `error_message()` | `ERROR_MESSAGE` | `string?` | **Область:** та же область только `CATCH`. |
+| `error_procedure()` | `ERROR_PROCEDURE` | `string?` | **Область:** та же область только `CATCH`. |
+| `any_value(value)` | `ANY_VALUE` | `T?` | **Отклонение движком:** сборка SQL Server `17.0.5005.3` отклонила её с `Msg 195`, в том числе при `PREVIEW_FEATURES = ON`; поддерживаемый контракт выполнения для SQL Server не установлен. |
+
+См. [системные функции](09-system-functions.md#отклонённые-имена-инструкций-и-области-ошибок-sql-server)
+для десяти системных имён и [агрегаты](05-aggregates.md#sql-server-any_value-отклонён) для
+`ANY_VALUE`. Поддерживаемые соседи той же поверхности (`rowcount_big`, `xact_state`, `scope_identity`,
+`db_name`, …) по-прежнему рендерятся, а `CommonFunctions.any_agg` не затронут на провайдерах, которые
+его включают.
+
 ## Функции только для MySQL
 
 Имена из [`SqlFunctions.MySql`](../guide/provider-specific-sql/mysql.md) рендерятся только провайдером

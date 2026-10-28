@@ -145,6 +145,37 @@ arguments (database id, object type) are exposed as overloads. `object_definitio
 source only when the caller has the permission (otherwise `null`); `file_idex` differs from `file_id`
 in that it is not bounded to the current database.
 
+### Refused statement and error-scope names (SQL Server)
+
+Ten SQL Server system names are **refused before SQL** instead of being modelled. Each member exists on
+[`SqlFunctions.SqlServer`](../guide/provider-specific-sql/sqlserver.md) so the refusal is reachable and
+testable, returns a callable placeholder (the placeholder type is **not** a materialization contract),
+and throws `NotSupportedException` with the stable message
+`SqlFunctions.SqlServer.<member> (<TOKEN>) is refused: <reason>`. The refusal is raised at the
+SQL-builder command boundary before any argument is evaluated, so a member used as one projection of a
+larger query fails the same way; no statement reaches the server and no command is created.
+
+| C# | SQL token | CLR placeholder | Reason |
+|---|---|---|---|
+| `session_context(key)` | `SESSION_CONTEXT` | `object?` | Returns `sql_variant`, for which nextorm has no faithful CLR result contract; no lossy cast substitution is performed. A **scope/CLR limitation**, not a version gap. |
+| `session_id()` | `SESSION_ID` | `string?` | Is **not a SQL Server engine function**: the documented function belongs to Azure Synapse (SQL Server reports Msg 195). SQL Server exposes session identity through `@@SPID` or `sys.dm_exec_sessions.session_id`; no substitution is performed. |
+| `rowcount()` | `@@ROWCOUNT` | `int` | Describes the previous statement and is **statement-scoped**; a per-row query projection cannot expose that value faithfully. |
+| `error()` | `@@ERROR` | `int` | The same previous-statement scope as `@@ROWCOUNT`. |
+| `error_number()` | `ERROR_NUMBER` | `int?` | Requires a SQL Server `CATCH`-block scope; outside `CATCH` it returns NULL, and nextorm does not establish that scope. |
+| `error_severity()` | `ERROR_SEVERITY` | `int?` | The same `CATCH`-only scope. |
+| `error_state()` | `ERROR_STATE` | `int?` | The same `CATCH`-only scope. |
+| `error_line()` | `ERROR_LINE` | `int?` | The same `CATCH`-only scope. |
+| `error_message()` | `ERROR_MESSAGE` | `string?` | The same `CATCH`-only scope. |
+| `error_procedure()` | `ERROR_PROCEDURE` | `string?` | The same `CATCH`-only scope. |
+
+The distinction matters: `SESSION_CONTEXT`, `@@ROWCOUNT`/`@@ERROR` and the six `ERROR_*` names are
+**scope/CLR limitations** of a per-row projection (they describe a statement or a `CATCH` block, and
+`sql_variant` has no faithful CLR carrier), while `SESSION_ID` is an **observed engine rejection** —
+the name a different product documents is simply absent from the SQL Server engine. Neither kind is
+deferred: all ten are deterministic, tested refusals. The supported live facts of the same surface
+(`rowcount_big`, `xact_state`, `scope_identity`, `db_name`, `current_user`, …) are unaffected and keep
+rendering.
+
 ## Cryptographic random bytes
 
 `SqlFunctions.Sql.crypt_gen_random(int? length)` returns `length` cryptographically strong random bytes
