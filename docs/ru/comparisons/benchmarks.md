@@ -314,8 +314,8 @@ out-of-process прогон вместо `ShortRun`.
 отчётов — не правьте их вручную. После прогона:
 
 ```bash
-python3 .pdca/scripts/perf/update_benchmark_tables.py          # переписать readme.md и обе языковые версии статьи
-python3 .pdca/scripts/perf/update_benchmark_tables.py --check  # режим CI: упасть, если таблица устарела
+python3 tools/benchmarks/update_benchmark_tables.py          # переписать readme.md и обе языковые версии статьи
+python3 tools/benchmarks/update_benchmark_tables.py --check  # режим CI: упасть, если таблица устарела
 ```
 
 Тот же процесс запускается из `.github/workflows/benchmarks.yml` — автоматически после каждого мержа в `main`,

@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "iteration": 14,
+  "planRevision": "r3",
+  "logical_ops_per_invocation": 100,
+  "bdn_operations_per_invoke": 1,
+  "notes": "B/op = BDN Memory.BytesAllocatedPerOperation / logical_ops_per_invocation (both benchmark bodies run 100 logical ops per invocation while BDN OperationsPerInvoke=1). Every row is measured under both ShortRun jobs ('--job short' adds a Default-toolchain job to the config's ShortRun+InProcessEmitToolchain job); the worse (larger) B/op of the two jobs must be <= max_bytes_per_op. 'kind' records zero (must be exactly 0 in both jobs), no_growth (must not grow) or budget rows.",
+  "required_toolchains": [
+    "Default",
+    "InProcessEmitToolchain"
+  ],
+  "rows": [
+    { "id": "Cte_Warm_Reused", "type": "NextORM.Benchmark.SqliteBenchmarkWarmDecompose", "method": "Cte_Warm_Reused", "max_bytes_per_op": 0, "kind": "zero" },
+    { "id": "RecursiveCte_Warm_Reused", "type": "NextORM.Benchmark.SqliteBenchmarkWarmDecompose", "method": "RecursiveCte_Warm_Reused", "max_bytes_per_op": 0, "kind": "zero" },
+    { "id": "Join4_Warm_Reused", "type": "NextORM.Benchmark.SqliteBenchmarkWarmDecompose", "method": "Join4_Warm_Reused", "max_bytes_per_op": 0, "kind": "zero" },
+    { "id": "Cte_Prepare_NoHash", "type": "NextORM.Benchmark.SqliteBenchmarkWarmDecompose", "method": "Cte_Prepare_NoHash", "max_bytes_per_op": 15152, "kind": "budget" },
+    { "id": "Cte_Prepare_Hash", "type": "NextORM.Benchmark.SqliteBenchmarkWarmDecompose", "method": "Cte_Prepare_Hash", "max_bytes_per_op": 16222, "kind": "budget" },
+    { "id": "Cte_Warm_PlanOnly", "type": "NextORM.Benchmark.SqliteBenchmarkWarmDecompose", "method": "Cte_Warm_PlanOnly", "max_bytes_per_op": 16822, "kind": "budget" },
+    { "id": "RecursiveCte_Prepare_NoHash", "type": "NextORM.Benchmark.SqliteBenchmarkWarmDecompose", "method": "RecursiveCte_Prepare_NoHash", "max_bytes_per_op": 16740, "kind": "budget" },
+    { "id": "RecursiveCte_Prepare_Hash", "type": "NextORM.Benchmark.SqliteBenchmarkWarmDecompose", "method": "RecursiveCte_Prepare_Hash", "max_bytes_per_op": 18400, "kind": "budget" },
+    { "id": "RecursiveCte_Warm_PlanOnly", "type": "NextORM.Benchmark.SqliteBenchmarkWarmDecompose", "method": "RecursiveCte_Warm_PlanOnly", "max_bytes_per_op": 18730, "kind": "budget" },
+    { "id": "Join4_Prepare_NoHash", "type": "NextORM.Benchmark.SqliteBenchmarkWarmDecompose", "method": "Join4_Prepare_NoHash", "max_bytes_per_op": 14102, "kind": "budget" },
+    { "id": "Join4_Prepare_Hash", "type": "NextORM.Benchmark.SqliteBenchmarkWarmDecompose", "method": "Join4_Prepare_Hash", "max_bytes_per_op": 14252, "kind": "budget" },
+    { "id": "Join4_Warm_PlanOnly", "type": "NextORM.Benchmark.SqliteBenchmarkWarmDecompose", "method": "Join4_Warm_PlanOnly", "max_bytes_per_op": 15362, "kind": "budget" },
+    { "id": "InAtIn_Inline_Prepare_NoHash", "type": "NextORM.Benchmark.SqliteBenchmarkWarmDecompose", "method": "InAtIn_Inline_Prepare_NoHash", "max_bytes_per_op": 5760, "kind": "budget" },
+    { "id": "InAtIn_Captured_Prepare_NoHash", "type": "NextORM.Benchmark.SqliteBenchmarkWarmDecompose", "method": "InAtIn_Captured_Prepare_NoHash", "max_bytes_per_op": 5520, "kind": "budget" },
+    { "id": "InAtIn_Inline_Prepare_Hash", "type": "NextORM.Benchmark.SqliteBenchmarkWarmDecompose", "method": "InAtIn_Inline_Prepare_Hash", "max_bytes_per_op": 7100, "kind": "budget" },
+    { "id": "InAtIn_Captured_Prepare_Hash", "type": "NextORM.Benchmark.SqliteBenchmarkWarmDecompose", "method": "InAtIn_Captured_Prepare_Hash", "max_bytes_per_op": 6800, "kind": "budget" },
+    { "id": "InAtIn_Inline_Warm_Reused", "type": "NextORM.Benchmark.SqliteBenchmarkWarmDecompose", "method": "InAtIn_Inline_Warm_Reused", "max_bytes_per_op": 840, "kind": "budget" },
+    { "id": "InAtIn_Inline_Warm_PlanOnly", "type": "NextORM.Benchmark.SqliteBenchmarkWarmDecompose", "method": "InAtIn_Inline_Warm_PlanOnly", "max_bytes_per_op": 7830, "kind": "budget" },
+    { "id": "Cte_Construct", "type": "NextORM.Benchmark.SqliteBenchmarkWarmDecompose", "method": "Cte_Construct", "max_bytes_per_op": 10752, "kind": "budget" },
+    { "id": "RecursiveCte_Construct", "type": "NextORM.Benchmark.SqliteBenchmarkWarmDecompose", "method": "RecursiveCte_Construct", "max_bytes_per_op": 12600, "kind": "budget" },
+    { "id": "Join4_Construct", "type": "NextORM.Benchmark.SqliteBenchmarkWarmDecompose", "method": "Join4_Construct", "max_bytes_per_op": 10862, "kind": "budget" },
+    { "id": "InAtIn_Inline_Construct", "type": "NextORM.Benchmark.SqliteBenchmarkWarmDecompose", "method": "InAtIn_Inline_Construct", "max_bytes_per_op": 4080, "kind": "budget" },
+    { "id": "InAtIn_Captured_Construct", "type": "NextORM.Benchmark.SqliteBenchmarkWarmDecompose", "method": "InAtIn_Captured_Construct", "max_bytes_per_op": 3840, "kind": "budget" },
+    { "id": "Build_Baseline_SimpleSelect", "type": "NextORM.Benchmark.SqliteBenchmarkFeaturePlanBuild", "method": "Build_Baseline_SimpleSelect", "max_bytes_per_op": 8202, "kind": "budget" },
+    { "id": "RePrepare_PlanOnly_Param", "type": "NextORM.Benchmark.SqliteBenchmarkCachedPlan", "method": "RePrepare_PlanOnly_Param", "max_bytes_per_op": 2780, "kind": "budget" },
+    { "id": "Build_Sql", "type": "NextORM.Benchmark.SqliteBenchmarkCachedPlan", "method": "Build_Sql", "max_bytes_per_op": 8982, "kind": "budget" },
+    { "id": "Cached_PlanOnly_Param", "type": "NextORM.Benchmark.SqliteBenchmarkCachedPlan", "method": "Cached_PlanOnly_Param", "max_bytes_per_op": 7002, "kind": "budget" },
+    { "id": "Prepared_ToList", "type": "NextORM.Benchmark.SqliteBenchmarkCachedPlan", "method": "Prepared_ToList", "max_bytes_per_op": 780, "kind": "no_growth" }
+  ]
+}

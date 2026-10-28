@@ -79,14 +79,14 @@ jobs:
             echo "::warning::Integration coverage below threshold (line ${LINE}% < ${MIN_INTEGRATION_LINE_COVERAGE}% or branch ${BRANCH}% < ${MIN_INTEGRATION_BRANCH_COVERAGE}%); hard-fails on main only"
           fi
       - name: Benchmark table generator self-tests
-        run: python3 -m unittest discover -s .pdca/scripts/perf/tests -p 'test_update_benchmark_tables.py'
+        run: python3 -m unittest discover -s tools/benchmarks/tests -p 'test_update_benchmark_tables.py'
       - name: Allocation regression gate
         timeout-minutes: 20
         run: |
           mkdir -p /tmp/nextorm-bench-gate
           export NEXTORM_BENCH_DB=/tmp/nextorm-bench-gate/test.db
-          python3 -m unittest discover -s .pdca/scripts/perf/tests -p 'test_iteration14_gate.py'
-          python3 .pdca/scripts/perf/iteration14_gate.py --timeout 1200
+          python3 -m unittest discover -s tools/benchmarks/tests -p 'test_iteration14_gate.py'
+          python3 tools/benchmarks/iteration14_gate.py --timeout 1200
       - name: PDCA evidence pipeline gate
         run: |
           python3 -m unittest discover -s .pdca/scripts/tests -p 'test_pdca_evidence.py'

@@ -310,8 +310,8 @@ The end-to-end, allocations, Category A and Category B tables on this page are *
 reports — do not edit them by hand. After a run:
 
 ```bash
-python3 .pdca/scripts/perf/update_benchmark_tables.py          # rewrite readme.md and both article mirrors
-python3 .pdca/scripts/perf/update_benchmark_tables.py --check  # CI mode: fail when a table is stale
+python3 tools/benchmarks/update_benchmark_tables.py          # rewrite readme.md and both article mirrors
+python3 tools/benchmarks/update_benchmark_tables.py --check  # CI mode: fail when a table is stale
 ```
 
 The same refresh runs from `.github/workflows/benchmarks.yml` — automatically after every merge into `main`
