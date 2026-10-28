@@ -269,6 +269,73 @@ select regexp_count(somestring, N'[0-9]'), regexp_count(N'abc', N'[0-9]'),
 (или `… unspecified.` для неустановленной версии). Уровень совместимости БД не требуется — функция
 работает на compat 160 на движке мажорной версии 17.
 
+### SQL Server 2025: regex-скаляры и `regexp_matches`
+
+`regexp_substr` возвращает первую совпавшую подстроку, а `regexp_instr` — one-based позицию
+совпадения (`0`, если совпадений нет); обе принимают необязательные нативные аргументы `start`,
+`occurrence`, `return_option` (только `regexp_instr`) и `match_type` (`c`/`i`/`s`/`m`). Опущенный
+необязательный аргумент и переданный SQL `NULL` — разные формы вызова: переданный `NULL` для start,
+occurrence или match type даёт SQL `NULL`, а переданный `NULL` для return option ведёт себя как `0`.
+Некорректные шаблоны, флаги и позиции — нативные ошибки движка (Msg 19308/19303/19301); nextorm
+никогда не проверяет их на клиенте. Нативный match type — аргумент `varchar`: литерал или параметр
+`nvarchar` даёт Msg 8116, поэтому рендерер выдаёт его как `cast(… as varchar(4000))`.
+
+```csharp
+var matches = dataContext.From<IComplexEntity>()
+    .Select(e => new
+    {
+        Sub = SqlFunctions.SqlServer.regexp_substr(e.String, "[0-9]+", 1, 1, "i"),
+        Pos = SqlFunctions.SqlServer.regexp_instr(e.String, "[0-9]+", 1, 1, 1)
+    })
+    .ToList();
+```
+
+`regexp_matches(input, pattern[, match_type])` — источник `FROM`: одна строка на неперекрывающееся
+совпадение с `match_id bigint`, `start_position int`, `end_position int`, `match_value` (`varchar(n)`)
+и `substring_matches` (`varchar(max)`, JSON-текст захватов движка, материализуется полностью и никогда
+не обрезается). Строка без совпадений или `NULL`-вход дают ноль строк.
+
+```csharp
+var rows = dataContext
+    .From(() => SqlFunctions.SqlServer.regexp_matches("a1b2", "[0-9]"))
+    .Select(r => new { r.MatchId, r.MatchValue, r.SubstringMatches })
+    .ToList();
+```
+
+Все три доступны **только в SQL Server 2025 (мажорная версия 17)** и закрыты так же, как
+`regexp_count`; скаляры не зависят от уровня совместимости и работают на 160 и 170. `regexp_matches`
+отличается: ему нужен уровень совместимости **170**, а на 160 движок сообщает, что функции нет
+(Msg 208). Это рантайм-свойство, которое диалект не может прочитать; оно документируется и
+проверяется вживую, а не предполагается. SQL Server 2022 и раньше отклоняют каждое имя до SQL.
+
+### SQL Server 2025: нечёткое сопоставление
+
+`edit_distance(input, pattern)` возвращает расстояние Левенштейна как `int?`,
+`edit_distance_similarity` — сходство как `int?` в `0..100`, `jaro_winkler_distance` — как `double?`
+(`float(53)`), `jaro_winkler_similarity` — как `int?` в `0..100`; `NULL`-операнд даёт SQL `NULL`.
+Ограниченная форма `edit_distance(input, pattern, maximum_distance)` возвращает `maximum_distance + 1`,
+когда истинное расстояние превышает предел, а отрицательный предел движок трактует как отсутствие
+ограничения; опущенный предел и переданный `NULL` различаются (`NULL` даёт SQL `NULL`). CLR-операнд
+шире 32 бит для предела отклоняется до SQL, а не обрезается.
+
+```csharp
+var scores = dataContext.From<IComplexEntity>()
+    .Select(e => new
+    {
+        Distance = SqlFunctions.SqlServer.edit_distance(e.String, "kitten"),
+        Bounded = SqlFunctions.SqlServer.edit_distance(e.String, "kitten", 2),
+        Similar = SqlFunctions.SqlServer.edit_distance_similarity(e.String, "kitten"),
+        Jaro = SqlFunctions.SqlServer.jaro_winkler_similarity(e.String, "martha")
+    })
+    .ToList();
+```
+
+Четыре имени доступны **только в SQL Server 2025 (мажорная версия 17)**, и на протестированной
+сборке (`17.0.5005.3`) дополнительно требуют уровень совместимости БД 170, `PREVIEW_FEATURES = ON`
+(по умолчанию выключен) и Windows-коллацию — коллация `SQL_*` даёт Msg 9847, а без preview-флага
+функция даёт Msg 195. Версионный флаг выражает только гейт мажорной версии; рантайм-предусловия
+документируются и проверяются вживую, и обещаний для будущих сборок не даётся.
+
 ## Кросс-провайдерные скалярные функции
 
 [`SqlFunctions.Sql`](xref:NextORM.Core.SqlFunctions.Sql) предоставляет небольшой набор строковых и

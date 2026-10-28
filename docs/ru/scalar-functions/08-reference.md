@@ -64,6 +64,13 @@ ClickHouse рендерит `dateTrunc('part', x)`, `addDays`/`addMonths`/.../`a
 | Член | SQL | Результат | Требуется |
 |---|---|---|---|
 | `regexp_count(input, pattern)` | `regexp_count(input, pattern)` | `int?` — `0` при отсутствии совпадений, `NULL` при NULL-входе | мажорная версия 17 |
+| `regexp_substr(input, pattern[, start[, occurrence[, match_type]]])` | `regexp_substr(input, pattern[, …])` | `string?` — `NULL` при отсутствии совпадения или NULL-операнде; match type рендерится как `cast(… as varchar(4000))`, потому что нативный аргумент не принимает `nvarchar` (Msg 8116) | мажорная версия 17; уровень совместимости не требуется |
+| `regexp_instr(input, pattern[, start[, occurrence[, return_option[, match_type]]]])` | `regexp_instr(input, pattern[, …])` | `int?` — `0` при отсутствии совпадения, `NULL` при NULL-операнде; переданный NULL return option ведёт себя как `0` | мажорная версия 17; уровень совместимости не требуется |
+| `regexp_matches(input, pattern[, match_type])` | источник `FROM`, например `from regexp_matches(input, pattern)` | одна строка на неперекрывающееся совпадение: `match_id` (`bigint`), `start_position`/`end_position` (`int`), `match_value`, `substring_matches` (полный JSON-текст захватов); нет совпадений → ноль строк | мажорная версия 17 **и** уровень совместимости БД 170 |
+| `edit_distance(input, pattern[, maximum_distance])` | `edit_distance(input, pattern[, maximum_distance])` | `int?`; ограниченная форма возвращает `maximum_distance + 1`, когда истинное расстояние больше предела; отрицательный предел — без ограничения | мажор 17 + совместимость 170 + `PREVIEW_FEATURES = ON` + Windows-коллация |
+| `edit_distance_similarity(input, pattern)` | `edit_distance_similarity(input, pattern)` | `int?` в `0..100` | те же предусловия fuzzy |
+| `jaro_winkler_distance(input, pattern)` | `jaro_winkler_distance(input, pattern)` | `double?` (`float(53)`) | те же предусловия fuzzy |
+| `jaro_winkler_similarity(input, pattern)` | `jaro_winkler_similarity(input, pattern)` | `int?` в `0..100` | те же предусловия fuzzy |
 | `left_shift(value, shift)` / `right_shift(value, shift)` | `CASE WHEN value IS NULL OR shift IS NULL THEN CAST(NULL AS <тип операнда>) ELSE left_shift(cast(value as <тип операнда>), cast(shift as bigint)) END` | тип самого операнда (`byte?`/`short?`/`int?`/`long?`); логический zero-fill сдвиг; типизированная NULL-защита («голый» `left_shift(NULL, …)` даёт Msg 8116) | мажорная версия 16 |
 | `bit_count(value)` | `CASE WHEN value IS NULL THEN CAST(NULL AS bigint) ELSE bit_count(cast(value as <тип операнда>)) END` | `long?` (`bigint`) | мажорная версия 16 |
 | `get_bit(value, offset)` | `CASE WHEN value IS NULL OR offset IS NULL THEN CAST(NULL AS bit) ELSE get_bit(cast(value as <тип операнда>), cast(offset as int)) END` | `bool?` (`bit`) | мажорная версия 16 |
@@ -77,6 +84,15 @@ ClickHouse рендерит `dateTrunc('part', x)`, `addDays`/`addMonths`/.../`a
 **уровне совместимости 160** движок мажорной версии 17 сообщает, что функции нет (Msg 208), поэтому
 предварительное условие 170 — реальный гейт, который nextorm документирует и проверяет вживую, а не
 молча предполагает (диалект не может прочитать уровень совместимости БД).
+
+Regex-скаляры не зависят от уровня совместимости: они работают на 160 и на 170 на движке мажорной
+версии 17. `regexp_matches` — исключение среди них: на уровне совместимости 160 движок сообщает, что
+функции нет (Msg 208), поэтому его условие 170 — такой же документированный и проверяемый вживую
+рантайм-гейт. Четырём fuzzy-именам нужны **все** условия: совместимость 170, `PREVIEW_FEATURES = ON`
+и Windows-коллация; на протестированной сборке `17.0.5005.3` коллация `SQL_*` даёт Msg 9847, а
+отсутствие preview-флага — Msg 195. Флаг объявленной мажорной версии 17 обещает только версионный
+гейт; эти рантайм-предусловия — факты окружения, проверяемые вживую, и обещаний для будущих сборок не
+даётся.
 
 ## SQL Server TRY_CAST и TRY_CONVERT
 

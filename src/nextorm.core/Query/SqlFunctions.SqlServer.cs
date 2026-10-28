@@ -936,6 +936,117 @@ namespace NextORM.Core;
         public int? regexp_count(string? input, string? pattern) => default!;
 
         /// <summary>
+        /// <c>regexp_substr(input, pattern)</c>: the first substring of <paramref name="input"/> matching
+        /// the regular expression <paramref name="pattern"/>, or SQL NULL when there is no match or the
+        /// input or pattern is NULL. Rendered as <c>regexp_substr(input, pattern)</c>. Requires SQL Server
+        /// 2025 (major version 17) and the version-bound
+        /// <see cref="ISqlDialect.SupportsSqlServer2025Functions"/> gate; a lower or unversioned
+        /// declaration is refused before SQL. The function is <b>not</b> compatibility-level gated: it
+        /// executes at compatibility 160 on a major-17 engine.
+        /// </summary>
+        /// <param name="input">The string to search.</param>
+        /// <param name="pattern">The regular expression; invalid patterns are the engine's error.</param>
+        /// <returns>The first match, or SQL NULL when there is no match or an operand is NULL.</returns>
+        public string? regexp_substr(string? input, string? pattern) => default!;
+
+        /// <summary>
+        /// <c>regexp_substr(input, pattern, start)</c>: the first match at or after the one-based
+        /// <paramref name="start"/> position. Omitting <paramref name="start"/> and passing a NULL start
+        /// are separate forms with distinct native semantics: the omitted form starts at position 1, while
+        /// a supplied NULL start yields SQL NULL (probe <c>substr_null_start</c>).
+        /// </summary>
+        /// <param name="input">The string to search.</param>
+        /// <param name="pattern">The regular expression.</param>
+        /// <param name="start">The one-based search start; a value below 1 is the engine's error.</param>
+        /// <returns>The match, or SQL NULL when there is no match or an operand is NULL.</returns>
+        public string? regexp_substr(string? input, string? pattern, int? start) => default!;
+
+        /// <summary>
+        /// <c>regexp_substr(input, pattern, start, occurrence)</c>: the <paramref name="occurrence"/>-th
+        /// (one-based) match at or after <paramref name="start"/>. A supplied NULL occurrence yields SQL
+        /// NULL; an occurrence below 1 is the engine's error.
+        /// </summary>
+        /// <param name="input">The string to search.</param>
+        /// <param name="pattern">The regular expression.</param>
+        /// <param name="start">The one-based search start.</param>
+        /// <param name="occurrence">The one-based match number.</param>
+        /// <returns>The match, or SQL NULL when there is no match or an operand is NULL.</returns>
+        public string? regexp_substr(string? input, string? pattern, int? start, int? occurrence) => default!;
+
+        /// <summary>
+        /// <c>regexp_substr(input, pattern, start, occurrence, match_type)</c>: the full native form with
+        /// the <paramref name="match_type"/> flag string (<c>c</c>, <c>i</c>, <c>s</c> and <c>m</c>; any
+        /// other flag is the engine's Msg 19303). A supplied NULL match type yields SQL NULL; the value is
+        /// passed through, never validated client-side.
+        /// </summary>
+        /// <param name="input">The string to search.</param>
+        /// <param name="pattern">The regular expression.</param>
+        /// <param name="start">The one-based search start.</param>
+        /// <param name="occurrence">The one-based match number.</param>
+        /// <param name="match_type">The native match-type flags, or SQL NULL.</param>
+        /// <returns>The match, or SQL NULL when there is no match or an operand is NULL.</returns>
+        public string? regexp_substr(
+            string? input, string? pattern, int? start, int? occurrence, string? match_type) => default!;
+
+        /// <summary>
+        /// <c>regexp_instr(input, pattern)</c>: the one-based position of the first match of
+        /// <paramref name="pattern"/> in <paramref name="input"/>, <c>0</c> when there is no match and SQL
+        /// NULL when an operand is NULL. Requires SQL Server 2025 (major version 17) and the version-bound
+        /// <see cref="ISqlDialect.SupportsSqlServer2025Functions"/> gate; it is not compatibility-level
+        /// gated.
+        /// </summary>
+        /// <param name="input">The string to search.</param>
+        /// <param name="pattern">The regular expression.</param>
+        /// <returns>The match position, <c>0</c> for no match, or SQL NULL for a NULL operand.</returns>
+        public int? regexp_instr(string? input, string? pattern) => default!;
+
+        /// <summary><c>regexp_instr(input, pattern, start)</c>: searches from the one-based <paramref name="start"/>.</summary>
+        /// <param name="input">The string to search.</param>
+        /// <param name="pattern">The regular expression.</param>
+        /// <param name="start">The one-based search start; a value below 1 is the engine's error.</param>
+        /// <returns>The match position, <c>0</c> for no match, or SQL NULL for a NULL operand.</returns>
+        public int? regexp_instr(string? input, string? pattern, int? start) => default!;
+
+        /// <summary><c>regexp_instr(input, pattern, start, occurrence)</c>: the <paramref name="occurrence"/>-th match.</summary>
+        /// <param name="input">The string to search.</param>
+        /// <param name="pattern">The regular expression.</param>
+        /// <param name="start">The one-based search start.</param>
+        /// <param name="occurrence">The one-based match number.</param>
+        /// <returns>The match position, <c>0</c> for no match, or SQL NULL for a NULL operand.</returns>
+        public int? regexp_instr(string? input, string? pattern, int? start, int? occurrence) => default!;
+
+        /// <summary>
+        /// <c>regexp_instr(input, pattern, start, occurrence, return_option)</c>: <paramref name="return_option"/>
+        /// <c>0</c> returns the match position (the default) and <c>1</c> the position immediately after
+        /// the match. A supplied NULL return option behaves like the omitted form (<c>0</c>) in the
+        /// observed engine; any other value is the engine's Msg 19301.
+        /// </summary>
+        /// <param name="input">The string to search.</param>
+        /// <param name="pattern">The regular expression.</param>
+        /// <param name="start">The one-based search start.</param>
+        /// <param name="occurrence">The one-based match number.</param>
+        /// <param name="return_option">The native return option (<c>0</c> or <c>1</c>).</param>
+        /// <returns>The requested position, <c>0</c> for no match, or SQL NULL for a NULL operand.</returns>
+        public int? regexp_instr(
+            string? input, string? pattern, int? start, int? occurrence, int? return_option) => default!;
+
+        /// <summary>
+        /// <c>regexp_instr(input, pattern, start, occurrence, return_option, match_type)</c>: the full
+        /// native form with the <paramref name="match_type"/> flag string. A supplied NULL match type
+        /// yields SQL NULL; invalid flags are the engine's Msg 19303.
+        /// </summary>
+        /// <param name="input">The string to search.</param>
+        /// <param name="pattern">The regular expression.</param>
+        /// <param name="start">The one-based search start.</param>
+        /// <param name="occurrence">The one-based match number.</param>
+        /// <param name="return_option">The native return option (<c>0</c> or <c>1</c>).</param>
+        /// <param name="match_type">The native match-type flags, or SQL NULL.</param>
+        /// <returns>The requested position, <c>0</c> for no match, or SQL NULL for a NULL operand.</returns>
+        public int? regexp_instr(
+            string? input, string? pattern, int? start, int? occurrence, int? return_option,
+            string? match_type) => default!;
+
+        /// <summary>
         /// <c>left_shift(value, shift)</c>: the bitwise left shift of <paramref name="value"/> by
         /// <paramref name="shift"/> bits. Rendered with typed arguments and a typed-NULL guard
         /// (<c>case when value is null or shift is null then cast(null as int) else
@@ -1326,4 +1437,96 @@ namespace NextORM.Core;
         /// <param name="pattern">The regular expression delimiter.</param>
         public TvfEntityBuilder<SqlFunctions.ISqlServerRegexpSplitToTableRow> regexp_split_to_table(string? input, string? pattern)
             => new("regexp_split_to_table");
+
+        /// <summary>
+        /// <c>regexp_matches(input, pattern)</c> as a FROM source: returns one row per non-overlapping
+        /// match with the row shape <see cref="SqlFunctions.ISqlServerRegexpMatchRow"/>
+        /// (<c>match_id bigint</c>, <c>start_position int</c>, <c>end_position int</c>,
+        /// <c>match_value varchar(n)</c>, <c>substring_matches varchar(max)</c>); a string without a match
+        /// produces zero rows. Use through <c>ctx.From(() =&gt; ...)</c>. Requires SQL Server 2025 (major
+        /// version 17, see <see cref="ISqlDialect.SupportsSqlServer2025Functions"/>) <b>and</b> database
+        /// compatibility level 170: at 160 the engine raises Msg 208 for the missing function, a runtime
+        /// prerequisite the dialect cannot inspect.
+        /// </summary>
+        /// <param name="input">The string to search.</param>
+        /// <param name="pattern">The regular expression.</param>
+        public TvfEntityBuilder<SqlFunctions.ISqlServerRegexpMatchRow> regexp_matches(string? input, string? pattern)
+            => new("regexp_matches");
+
+        /// <summary>
+        /// <c>regexp_matches(input, pattern, match_type)</c>: the flag-taking form (<c>c</c>, <c>i</c>,
+        /// <c>s</c> and <c>m</c>). A supplied NULL match type returns zero rows; invalid flags are the
+        /// engine's Msg 19303. The row shape and the compatibility-170 prerequisite are those of
+        /// <see cref="regexp_matches(string?, string?)"/>.
+        /// </summary>
+        /// <param name="input">The string to search.</param>
+        /// <param name="pattern">The regular expression.</param>
+        /// <param name="match_type">The native match-type flags, or SQL NULL.</param>
+        public TvfEntityBuilder<SqlFunctions.ISqlServerRegexpMatchRow> regexp_matches(
+            string? input, string? pattern, string? match_type)
+            => new("regexp_matches");
+
+        /// <summary>
+        /// <c>edit_distance(input, pattern)</c>: the Levenshtein edit distance between the two strings,
+        /// or SQL NULL when either operand is NULL. Rendered as <c>edit_distance(input, pattern)</c>.
+        /// Requires SQL Server 2025 (major version 17) and the version-bound
+        /// <see cref="ISqlDialect.SupportsSqlServer2025Functions"/> gate. The major-17 gate does not
+        /// promise the runtime prerequisite: the function additionally needs database compatibility level
+        /// 170, <c>PREVIEW_FEATURES = ON</c> and a Windows collation (a <c>SQL_*</c> collation raises
+        /// Msg 9847); those are observed environment facts, documented and asserted live, not modelled by
+        /// the version flag.
+        /// </summary>
+        /// <param name="input">The first string.</param>
+        /// <param name="pattern">The second string.</param>
+        /// <returns>The edit distance as <c>int</c>, or SQL NULL when either operand is NULL.</returns>
+        public int? edit_distance(string? input, string? pattern) => default!;
+
+        /// <summary>
+        /// <c>edit_distance(input, pattern, maximum_distance)</c>: the bounded form. The native result is
+        /// the true distance when it is at most <paramref name="maximum_distance"/>, and
+        /// <c>maximum_distance + 1</c> otherwise (observed: <c>0</c> for equal strings, <c>1</c> for a
+        /// positive distance capped at <c>0</c>, <c>2</c> capped at <c>1</c>); a negative maximum is
+        /// treated as uncapped by the engine. Omitting the argument and passing a NULL maximum are
+        /// distinct: a supplied NULL yields SQL NULL. The argument is passed through as an <c>int</c>;
+        /// a wider CLR operand is refused before SQL rather than truncated.
+        /// </summary>
+        /// <param name="input">The first string.</param>
+        /// <param name="pattern">The second string.</param>
+        /// <param name="maximum_distance">The native distance cap, or SQL NULL.</param>
+        /// <returns>The bounded distance as <c>int</c>, or SQL NULL when an operand is NULL.</returns>
+        public int? edit_distance(string? input, string? pattern, int? maximum_distance) => default!;
+
+        /// <summary>
+        /// <c>edit_distance_similarity(input, pattern)</c>: the edit-distance similarity as an
+        /// <c>int</c> in <c>0..100</c> (<c>57</c> for <c>kitten</c>/<c>sitting</c> on the tested build),
+        /// or SQL NULL when either operand is NULL. Requires SQL Server 2025 (major version 17) and the
+        /// same runtime prerequisites as <see cref="edit_distance(string?, string?)"/> (compatibility 170,
+        /// <c>PREVIEW_FEATURES = ON</c>, Windows collation).
+        /// </summary>
+        /// <param name="input">The first string.</param>
+        /// <param name="pattern">The second string.</param>
+        /// <returns>The similarity as <c>int</c>, or SQL NULL when either operand is NULL.</returns>
+        public int? edit_distance_similarity(string? input, string? pattern) => default!;
+
+        /// <summary>
+        /// <c>jaro_winkler_distance(input, pattern)</c>: the Jaro-Winkler distance as <c>float(53)</c>
+        /// (<c>0.0388888888888862</c> for <c>martha</c>/<c>marhta</c> on the tested build), or SQL NULL
+        /// when either operand is NULL. Requires SQL Server 2025 (major version 17) and the same runtime
+        /// prerequisites as <see cref="edit_distance(string?, string?)"/>.
+        /// </summary>
+        /// <param name="input">The first string.</param>
+        /// <param name="pattern">The second string.</param>
+        /// <returns>The distance as <c>double</c>, or SQL NULL when either operand is NULL.</returns>
+        public double? jaro_winkler_distance(string? input, string? pattern) => default!;
+
+        /// <summary>
+        /// <c>jaro_winkler_similarity(input, pattern)</c>: the Jaro-Winkler similarity as an <c>int</c> in
+        /// <c>0..100</c> (<c>96</c> for <c>martha</c>/<c>marhta</c> on the tested build), or SQL NULL when
+        /// either operand is NULL. Requires SQL Server 2025 (major version 17) and the same runtime
+        /// prerequisites as <see cref="edit_distance(string?, string?)"/>.
+        /// </summary>
+        /// <param name="input">The first string.</param>
+        /// <param name="pattern">The second string.</param>
+        /// <returns>The similarity as <c>int</c>, or SQL NULL when either operand is NULL.</returns>
+        public int? jaro_winkler_similarity(string? input, string? pattern) => default!;
     }

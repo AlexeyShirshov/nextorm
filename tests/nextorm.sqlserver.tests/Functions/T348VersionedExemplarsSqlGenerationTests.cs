@@ -1,4 +1,6 @@
+using System.ComponentModel.DataAnnotations.Schema;
 using System.Data.Common;
+using System.Reflection;
 using FluentAssertions;
 using NextORM.Core;
 
@@ -696,6 +698,253 @@ public class T348VersionedExemplarsSqlGenerationTests
         var e15 = fifteen.From<IComplexEntity>();
         AssertRefused(fifteen, e15.Select(x => new { V = SqlFunctions.SqlServer.set_bit(x.Int, 1) }),
             "The SET_BIT function requires SQL Server major version 16 or later; declared major version: 15.");
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // U3 — regex (scalars + TVF) and fuzzy matching
+    // ---------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Every shipped <c>regexp_substr</c>/<c>regexp_instr</c> overload renders its native prefix form,
+    /// and an omitted optional argument is a different call shape from a supplied NULL: the NULL is a
+    /// typed NULL, which the engine turns into a NULL result (probe <c>substr_null_start</c>,
+    /// <c>instr_null_return</c>).
+    /// </summary>
+    [Fact]
+    public void RegexScalars_ShouldRenderEveryOverloadAndPreserveOmittedVersusNull()
+    {
+        using var ctx = Declared(17);
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            Sub2 = SqlFunctions.SqlServer.regexp_substr(x.String, "[0-9]+"),
+            Sub3 = SqlFunctions.SqlServer.regexp_substr(x.String, "[0-9]+", 2),
+            Sub4 = SqlFunctions.SqlServer.regexp_substr(x.String, "[0-9]+", 2, 1),
+            Sub5 = SqlFunctions.SqlServer.regexp_substr(x.String, "[0-9]+", 2, 1, "i"),
+            SubNullStart = SqlFunctions.SqlServer.regexp_substr(x.String, "[0-9]+", null),
+            SubNullOccurrence = SqlFunctions.SqlServer.regexp_substr(x.String, "[0-9]+", 1, null),
+            SubNullMatchType = SqlFunctions.SqlServer.regexp_substr(x.String, "[0-9]+", 1, 1, null),
+
+            Instr2 = SqlFunctions.SqlServer.regexp_instr(x.String, "[0-9]+"),
+            Instr3 = SqlFunctions.SqlServer.regexp_instr(x.String, "[0-9]+", 3),
+            Instr4 = SqlFunctions.SqlServer.regexp_instr(x.String, "[0-9]+", 3, 2),
+            Instr5 = SqlFunctions.SqlServer.regexp_instr(x.String, "[0-9]+", 3, 2, 1),
+            Instr6 = SqlFunctions.SqlServer.regexp_instr(x.String, "[0-9]+", 3, 2, 1, "c"),
+            InstrNullStart = SqlFunctions.SqlServer.regexp_instr(x.String, "[0-9]+", null),
+            InstrNullOccurrence = SqlFunctions.SqlServer.regexp_instr(x.String, "[0-9]+", 1, null),
+            InstrNullReturn = SqlFunctions.SqlServer.regexp_instr(x.String, "[0-9]+", 1, 1, null),
+            InstrNullMatchType = SqlFunctions.SqlServer.regexp_instr(x.String, "[0-9]+", 1, 1, 0, null)
+        }));
+
+        sql.Should().Contain("regexp_substr(somestring, N'[0-9]+')");
+        sql.Should().Contain("regexp_substr(somestring, N'[0-9]+', 2)");
+        sql.Should().Contain("regexp_substr(somestring, N'[0-9]+', 2, 1)");
+        sql.Should().Contain("regexp_substr(somestring, N'[0-9]+', 2, 1, cast(N'i' as varchar(4000)))");
+        sql.Should().Contain("regexp_substr(somestring, N'[0-9]+', null)");
+        sql.Should().Contain("regexp_substr(somestring, N'[0-9]+', 1, null)");
+        sql.Should().Contain("regexp_substr(somestring, N'[0-9]+', 1, 1, cast(null as varchar(4000)))");
+
+        sql.Should().Contain("regexp_instr(somestring, N'[0-9]+')");
+        sql.Should().Contain("regexp_instr(somestring, N'[0-9]+', 3)");
+        sql.Should().Contain("regexp_instr(somestring, N'[0-9]+', 3, 2)");
+        sql.Should().Contain("regexp_instr(somestring, N'[0-9]+', 3, 2, 1)");
+        sql.Should().Contain("regexp_instr(somestring, N'[0-9]+', 3, 2, 1, cast(N'c' as varchar(4000)))");
+        sql.Should().Contain("regexp_instr(somestring, N'[0-9]+', null)");
+        sql.Should().Contain("regexp_instr(somestring, N'[0-9]+', 1, null)");
+        sql.Should().Contain("regexp_instr(somestring, N'[0-9]+', 1, 1, null)");
+        sql.Should().Contain("regexp_instr(somestring, N'[0-9]+', 1, 1, 0, cast(null as varchar(4000)))");
+    }
+
+    /// <summary>
+    /// Both <c>regexp_matches</c> TVF overloads render as a FROM source with their arguments, and the
+    /// row interface carries the observed types and explicit physical column names.
+    /// </summary>
+    [Fact]
+    public void RegexpMatches_ShouldRenderBothOverloadsAndTheRowShape()
+    {
+        using var ctx = Declared(17);
+
+        var plain = SqlOf(ctx, ctx.From(() => SqlFunctions.SqlServer.regexp_matches("a1b2", "[0-9]"))
+            .Select(r => new { r.MatchId, r.StartPosition, r.EndPosition, r.MatchValue, r.SubstringMatches }));
+
+        plain.Should().Contain("regexp_matches(N'a1b2', N'[0-9]')");
+        plain.Should().Contain("match_id");
+        plain.Should().Contain("start_position");
+        plain.Should().Contain("end_position");
+        plain.Should().Contain("match_value");
+        plain.Should().Contain("substring_matches");
+
+        var flagged = SqlOf(ctx, ctx.From(() => SqlFunctions.SqlServer.regexp_matches("aAbB", "a", "i"))
+            .Select(r => r.MatchValue));
+
+        flagged.Should().Contain("regexp_matches(N'aAbB', N'a', cast(N'i' as varchar(4000)))");
+
+        var row = typeof(SqlFunctions.ISqlServerRegexpMatchRow);
+        row.GetProperty(nameof(SqlFunctions.ISqlServerRegexpMatchRow.MatchId))!.PropertyType.Should().Be(typeof(long));
+        row.GetProperty(nameof(SqlFunctions.ISqlServerRegexpMatchRow.StartPosition))!.PropertyType.Should().Be(typeof(int));
+        row.GetProperty(nameof(SqlFunctions.ISqlServerRegexpMatchRow.EndPosition))!.PropertyType.Should().Be(typeof(int));
+        row.GetProperty(nameof(SqlFunctions.ISqlServerRegexpMatchRow.MatchValue))!.PropertyType.Should().Be(typeof(string));
+        row.GetProperty(nameof(SqlFunctions.ISqlServerRegexpMatchRow.SubstringMatches))!.PropertyType.Should().Be(typeof(string));
+
+        row.GetProperty(nameof(SqlFunctions.ISqlServerRegexpMatchRow.MatchId))!
+            .GetCustomAttribute<ColumnAttribute>()!.Name.Should().Be("match_id");
+        row.GetProperty(nameof(SqlFunctions.ISqlServerRegexpMatchRow.StartPosition))!
+            .GetCustomAttribute<ColumnAttribute>()!.Name.Should().Be("start_position");
+        row.GetProperty(nameof(SqlFunctions.ISqlServerRegexpMatchRow.EndPosition))!
+            .GetCustomAttribute<ColumnAttribute>()!.Name.Should().Be("end_position");
+        row.GetProperty(nameof(SqlFunctions.ISqlServerRegexpMatchRow.MatchValue))!
+            .GetCustomAttribute<ColumnAttribute>()!.Name.Should().Be("match_value");
+        row.GetProperty(nameof(SqlFunctions.ISqlServerRegexpMatchRow.SubstringMatches))!
+            .GetCustomAttribute<ColumnAttribute>()!.Name.Should().Be("substring_matches");
+    }
+
+    /// <summary>
+    /// The five fuzzy members render their native call, including the bounded <c>edit_distance</c>; a
+    /// supplied NULL maximum is a typed NULL and stays distinct from the omitted form.
+    /// </summary>
+    [Fact]
+    public void FuzzyFamily_ShouldRenderEveryMemberAndTheBoundedForm()
+    {
+        using var ctx = Declared(17);
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            Distance = SqlFunctions.SqlServer.edit_distance(x.String, "kitten"),
+            Bounded = SqlFunctions.SqlServer.edit_distance(x.String, "kitten", 2),
+            NullBound = SqlFunctions.SqlServer.edit_distance(x.String, "kitten", null),
+            Similarity = SqlFunctions.SqlServer.edit_distance_similarity(x.String, "kitten"),
+            JaroDistance = SqlFunctions.SqlServer.jaro_winkler_distance(x.String, "martha"),
+            JaroSimilarity = SqlFunctions.SqlServer.jaro_winkler_similarity(x.String, "martha")
+        }));
+
+        sql.Should().Contain("edit_distance(somestring, N'kitten')");
+        sql.Should().Contain("edit_distance(somestring, N'kitten', 2)");
+        sql.Should().Contain("edit_distance(somestring, N'kitten', null)");
+        sql.Should().Contain("edit_distance_similarity(somestring, N'kitten')");
+        sql.Should().Contain("jaro_winkler_distance(somestring, N'martha')");
+        sql.Should().Contain("jaro_winkler_similarity(somestring, N'martha')");
+    }
+
+    /// <summary>
+    /// A wider CLR operand for the native <c>int</c> maximum distance would be rendered as a truncating
+    /// SQL cast, so the translator refuses it before any command is prepared; a constant that fits the
+    /// 32-bit range exactly is accepted.
+    /// </summary>
+    [Fact]
+    public void FuzzyMaximum_ShouldRefuseAnUnrepresentableOperandBeforeSql()
+    {
+        using var ctx = Declared(17);
+        var e = ctx.From<IComplexEntity>();
+
+        var wide = 5L;
+        AssertRefused(ctx,
+            e.Select(x => new { V = SqlFunctions.SqlServer.edit_distance(x.String, "kitten", (int?)wide) }),
+            "The edit_distance maximum_distance argument must fit a 32-bit integer; the 'Int64' operand would be truncated.");
+
+        var fractional = 1.5m;
+        AssertRefused(ctx,
+            e.Select(x => new { V = SqlFunctions.SqlServer.edit_distance(x.String, "kitten", (int?)fractional) }),
+            "The edit_distance maximum_distance argument must fit a 32-bit integer; the 'Decimal' operand would be truncated.");
+
+        const long fits = 3;
+        var accepted = SqlOf(ctx,
+            e.Select(x => new { V = SqlFunctions.SqlServer.edit_distance(x.String, "kitten", (int?)fits) }));
+        accepted.Should().Contain("edit_distance(somestring, N'kitten', 3)");
+    }
+
+    /// <summary>
+    /// There is no speculative client-side regex validation: an invalid pattern, flag or position is
+    /// rendered and reaches the engine, which owns the native error (Msg 19308/19303/19301).
+    /// </summary>
+    [Fact]
+    public void RegexScalars_ShouldLeaveInvalidPatternsFlagsAndPositionsToTheEngine()
+    {
+        using var ctx = Declared(17);
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            BadPattern = SqlFunctions.SqlServer.regexp_substr(x.String, "[0-9"),
+            BadFlag = SqlFunctions.SqlServer.regexp_instr(x.String, "[0-9]", 1, 1, 0, "z"),
+            BadStart = SqlFunctions.SqlServer.regexp_substr(x.String, "[0-9]", 0),
+            BadOccurrence = SqlFunctions.SqlServer.regexp_instr(x.String, "[0-9]", 1, 0),
+            BadReturnOption = SqlFunctions.SqlServer.regexp_instr(x.String, "[0-9]", 1, 1, 2)
+        }));
+
+        sql.Should().Contain("regexp_substr(somestring, N'[0-9')");
+        sql.Should().Contain("regexp_instr(somestring, N'[0-9]', 1, 1, 0, cast(N'z' as varchar(4000)))");
+        sql.Should().Contain("regexp_substr(somestring, N'[0-9]', 0)");
+        sql.Should().Contain("regexp_instr(somestring, N'[0-9]', 1, 0)");
+        sql.Should().Contain("regexp_instr(somestring, N'[0-9]', 1, 1, 2)");
+    }
+
+    [Fact]
+    public void DeclaredSixteen_ShouldRefuseEveryRegexAndFuzzyName()
+        => AssertRegexAndFuzzyRefused(Declared(16), "16");
+
+    [Fact]
+    public void UnversionedAndEditionOnly_ShouldRefuseEveryRegexAndFuzzyName()
+    {
+        using var unversioned = Unversioned();
+        AssertRegexAndFuzzyRefused(unversioned, "unspecified");
+
+        using var editionOnly = EditionOnly(SqlServerEngineEdition.SqlDatabase);
+        AssertRegexAndFuzzyRefused(editionOnly, "unspecified");
+
+        using var azure12 = Declared(12, SqlServerEngineEdition.SqlDatabase);
+        AssertRegexAndFuzzyRefused(azure12, "12");
+    }
+
+    [Theory]
+    [InlineData(17)]
+    [InlineData(18)]
+    public void DeclaredSeventeenAndLater_ShouldPermitEveryRegexAndFuzzyName(int major)
+    {
+        using var ctx = Declared(major);
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            Sub = SqlFunctions.SqlServer.regexp_substr(x.String, "[0-9]+", 1, 1, "i"),
+            Instr = SqlFunctions.SqlServer.regexp_instr(x.String, "[0-9]+", 1, 1, 0, "i"),
+            Distance = SqlFunctions.SqlServer.edit_distance(x.String, "kitten", 2),
+            Similarity = SqlFunctions.SqlServer.edit_distance_similarity(x.String, "kitten"),
+            JaroDistance = SqlFunctions.SqlServer.jaro_winkler_distance(x.String, "martha"),
+            JaroSimilarity = SqlFunctions.SqlServer.jaro_winkler_similarity(x.String, "martha")
+        }));
+
+        sql.Should().Contain("regexp_substr(somestring, N'[0-9]+', 1, 1, cast(N'i' as varchar(4000)))");
+        sql.Should().Contain("regexp_instr(somestring, N'[0-9]+', 1, 1, 0, cast(N'i' as varchar(4000)))");
+        sql.Should().Contain("edit_distance(somestring, N'kitten', 2)");
+        sql.Should().Contain("edit_distance_similarity(somestring, N'kitten')");
+        sql.Should().Contain("jaro_winkler_distance(somestring, N'martha')");
+        sql.Should().Contain("jaro_winkler_similarity(somestring, N'martha')");
+
+        SqlOf(ctx, ctx.From(() => SqlFunctions.SqlServer.regexp_matches("a1", "[0-9]", "i"))
+                .Select(r => r.MatchValue))
+            .Should().Contain("regexp_matches(N'a1', N'[0-9]', cast(N'i' as varchar(4000)))");
+    }
+
+    private static void AssertRegexAndFuzzyRefused(SqlServerDataContext ctx, string declared)
+    {
+        var e = ctx.From<IComplexEntity>();
+
+        AssertRefused(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.regexp_substr(x.String, "p") }),
+            $"The REGEXP_SUBSTR function requires SQL Server major version 17 or later; declared major version: {declared}.");
+        AssertRefused(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.regexp_instr(x.String, "p") }),
+            $"The REGEXP_INSTR function requires SQL Server major version 17 or later; declared major version: {declared}.");
+        AssertRefused(ctx, ctx.From(() => SqlFunctions.SqlServer.regexp_matches("a", "p")).Select(r => r.MatchValue),
+            $"The REGEXP_MATCHES function requires SQL Server major version 17 or later; declared major version: {declared}.");
+        AssertRefused(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.edit_distance(x.String, "p") }),
+            $"The EDIT_DISTANCE function requires SQL Server major version 17 or later; declared major version: {declared}.");
+        AssertRefused(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.edit_distance_similarity(x.String, "p") }),
+            $"The EDIT_DISTANCE_SIMILARITY function requires SQL Server major version 17 or later; declared major version: {declared}.");
+        AssertRefused(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.jaro_winkler_distance(x.String, "p") }),
+            $"The JARO_WINKLER_DISTANCE function requires SQL Server major version 17 or later; declared major version: {declared}.");
+        AssertRefused(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.jaro_winkler_similarity(x.String, "p") }),
+            $"The JARO_WINKLER_SIMILARITY function requires SQL Server major version 17 or later; declared major version: {declared}.");
     }
 
     /// <summary>A CLR target outside the closed map: a value struct with no SQL Server destination.</summary>

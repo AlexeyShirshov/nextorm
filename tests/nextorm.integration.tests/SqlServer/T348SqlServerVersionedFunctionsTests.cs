@@ -56,6 +56,10 @@ public sealed class T348SqlServer2025FunctionsTests : IDisposable
 {
     private const string FixtureTable = "t348_u1";
     private const string RegexDatabase = "t348_regex170";
+    private const string RegexLowDatabase = "t348_regex160";
+    private const string FuzzyDatabase = "t348_fuzzy";
+    private const string FuzzyNoPreviewDatabase = "t348_fuzzy_nopreview";
+    private const string FuzzyCollation = "Latin1_General_100_CI_AS";
 
     private const string FixtureDdl =
         "if object_id('t348_u1') is not null drop table t348_u1; "
@@ -389,6 +393,292 @@ public sealed class T348SqlServer2025FunctionsTests : IDisposable
         }
     }
 
+    /// <summary>
+    /// U3: the regex scalars execute on a major-17 engine at <b>both</b> compatibility levels (they are not
+    /// compatibility-gated), over every shipped optional argument: start, occurrence, return option and
+    /// match-type flags, plus the no-match, NULL-operand and supplied-NULL-argument behaviour observed on
+    /// the engine.
+    /// </summary>
+    [Fact]
+    public void RegexScalars_ShouldExecuteAtCompatibility160And170()
+    {
+        var admin = _connectionString;
+
+        foreach (var (database, compat) in new[] { (RegexLowDatabase, 160), (RegexDatabase, 170) })
+        {
+            DropDatabase(admin, database);
+            Execute(admin, $"create database [{database}]");
+            Execute(admin, $"alter database [{database}] set compatibility_level = {compat}");
+
+            var level = ScalarInt(admin, $"select compatibility_level from sys.databases where name = '{database}'");
+            level.Should().Be(compat, "the scalar regex functions must run at both 160 and 170");
+
+            var databaseConnection = new SqlConnectionStringBuilder(admin) { InitialCatalog = database }.ConnectionString;
+            Execute(databaseConnection, FixtureDdl);
+
+            try
+            {
+                using var ctx = new T348V17LiveContext(databaseConnection);
+
+                var row = ctx.From<IT348U1Row>()
+                    .Where(x => x.Id == 1)
+                    .Select(x => new
+                    {
+                        Substr = SqlFunctions.SqlServer.regexp_substr("a1b2c3", "[0-9]+"),
+                        SubstrStart = SqlFunctions.SqlServer.regexp_substr("a1b2c3", "[0-9]+", 4),
+                        SubstrOccurrence = SqlFunctions.SqlServer.regexp_substr("a1b2c3", "[0-9]+", 1, 2),
+                        SubstrFlag = SqlFunctions.SqlServer.regexp_substr("aAaA", "a", 1, 2, "i"),
+                        SubstrNoMatch = SqlFunctions.SqlServer.regexp_substr("abc", "[0-9]+"),
+                        SubstrNullInput = SqlFunctions.SqlServer.regexp_substr((string?)null, "[0-9]+"),
+                        SubstrNullStart = SqlFunctions.SqlServer.regexp_substr("a1b2c3", "[0-9]+", null),
+                        SubstrNullOccurrence = SqlFunctions.SqlServer.regexp_substr("a1b2c3", "[0-9]+", 1, null),
+                        SubstrNullFlag = SqlFunctions.SqlServer.regexp_substr("a1b2c3", "[0-9]+", 1, 1, null),
+
+                        Instr = SqlFunctions.SqlServer.regexp_instr("a1b2c3", "[0-9]+"),
+                        InstrStart = SqlFunctions.SqlServer.regexp_instr("a1b2c3", "[0-9]+", 4),
+                        InstrOccurrence = SqlFunctions.SqlServer.regexp_instr("a1b2c3", "[0-9]+", 1, 2),
+                        InstrReturn = SqlFunctions.SqlServer.regexp_instr("a1b2c3", "[0-9]+", 1, 1, 1),
+                        InstrFlag = SqlFunctions.SqlServer.regexp_instr("aAaA", "a", 1, 2, 0, "c"),
+                        InstrNoMatch = SqlFunctions.SqlServer.regexp_instr("abc", "[0-9]+"),
+                        InstrNullInput = SqlFunctions.SqlServer.regexp_instr((string?)null, "[0-9]+"),
+                        InstrNullStart = SqlFunctions.SqlServer.regexp_instr("a1b2c3", "[0-9]+", null),
+                        InstrNullReturn = SqlFunctions.SqlServer.regexp_instr("a1b2c3", "[0-9]+", 1, 1, null),
+                        InstrNullFlag = SqlFunctions.SqlServer.regexp_instr("a1b2c3", "[0-9]+", 1, 1, 0, null)
+                    })
+                    .Single();
+
+                row.Substr.Should().Be("1");
+                row.SubstrStart.Should().Be("2", "start = 4 skips the first match at position 2");
+                row.SubstrOccurrence.Should().Be("2", "the second match is returned");
+                row.SubstrFlag.Should().Be("A", "the 'i' flag makes the second 'a' match 'A'");
+                row.SubstrNoMatch.Should().BeNull("a no-match regexp_substr is NULL");
+                row.SubstrNullInput.Should().BeNull();
+                row.SubstrNullStart.Should().BeNull("an explicitly NULL start yields NULL");
+                row.SubstrNullOccurrence.Should().BeNull("an explicitly NULL occurrence yields NULL");
+                row.SubstrNullFlag.Should().BeNull("an explicitly NULL match type yields NULL");
+
+                row.Instr.Should().Be(2);
+                row.InstrStart.Should().Be(4);
+                row.InstrOccurrence.Should().Be(4);
+                row.InstrReturn.Should().Be(3, "return_option = 1 gives the position after the match");
+                row.InstrFlag.Should().Be(3, "case-sensitive flags skip the 'A' at position 2");
+                row.InstrNoMatch.Should().Be(0, "a no-match regexp_instr is 0, not NULL");
+                row.InstrNullInput.Should().BeNull();
+                row.InstrNullStart.Should().BeNull();
+                row.InstrNullReturn.Should().Be(2, "a supplied NULL return option behaves like 0");
+                row.InstrNullFlag.Should().BeNull();
+
+                ((object)row.Substr!).Should().BeOfType<string>();
+                ((object)row.Instr!).Should().BeOfType<int>();
+
+                Report($"T348LIVE-2025 regex_scalars compat={level} substr=1/2/2/A/null/null/null/null instr=2/4/4/3/3/0/null/null/2/null outcome=ok");
+            }
+            finally
+            {
+                DropDatabase(admin, database);
+            }
+        }
+    }
+
+    /// <summary>
+    /// U3: <c>regexp_matches</c> executes on the compatibility-170 database with the whole row shape
+    /// (including the full <c>substring_matches</c> JSON text), the flag overload, no-match and NULL-input
+    /// zero rows; its compatibility-level incompatibility is captured separately as an environment fact
+    /// (Msg 208 at 160), not as an application refusal.
+    /// </summary>
+    [Fact]
+    public void RegexpMatches_ShouldExecuteOnCompatibility170AndFailNativelyAt160()
+    {
+        var admin = _connectionString;
+        DropDatabase(admin, RegexDatabase);
+        Execute(admin, $"create database [{RegexDatabase}]");
+        Execute(admin, $"alter database [{RegexDatabase}] set compatibility_level = 170");
+
+        var level = ScalarInt(admin, $"select compatibility_level from sys.databases where name = '{RegexDatabase}'");
+        level.Should().Be(170, "regexp_matches is unusable below compatibility level 170");
+
+        T348V17LiveContext? regexContext = null;
+        try
+        {
+            var databaseConnection = new SqlConnectionStringBuilder(admin) { InitialCatalog = RegexDatabase }.ConnectionString;
+            regexContext = new T348V17LiveContext(databaseConnection);
+
+            var rows = regexContext.From(() => SqlFunctions.SqlServer.regexp_matches("a1b2", "[0-9]"))
+                .Select(r => new { r.MatchId, r.StartPosition, r.EndPosition, r.MatchValue, r.SubstringMatches })
+                .ToList()
+                .OrderBy(r => r.MatchId)
+                .ToList();
+
+            rows.Should().HaveCount(2);
+            rows[0].MatchId.Should().Be(1L);
+            rows[0].StartPosition.Should().Be(2);
+            rows[0].EndPosition.Should().Be(2);
+            rows[0].MatchValue.Should().Be("1");
+            rows[0].SubstringMatches.Should().Be("[{\"value\":\"1\",\"start\":2,\"length\":1}]",
+                "the full native JSON capture text is materialized, never cast or truncated");
+            rows[1].MatchId.Should().Be(2L);
+            rows[1].StartPosition.Should().Be(4);
+            rows[1].EndPosition.Should().Be(4);
+            rows[1].MatchValue.Should().Be("2");
+            rows[1].SubstringMatches.Should().Be("[{\"value\":\"2\",\"start\":4,\"length\":1}]");
+
+            ((object)rows[0].MatchId).Should().BeOfType<long>();
+            ((object)rows[0].StartPosition).Should().BeOfType<int>();
+            ((object)rows[0].EndPosition).Should().BeOfType<int>();
+            ((object)rows[0].MatchValue!).Should().BeOfType<string>();
+            ((object)rows[0].SubstringMatches!).Should().BeOfType<string>();
+
+            var flagged = regexContext.From(() => SqlFunctions.SqlServer.regexp_matches("aAbB", "a", "i"))
+                .Select(r => new { r.MatchId, r.MatchValue })
+                .ToList()
+                .OrderBy(r => r.MatchId)
+                .ToList();
+
+            flagged.Should().HaveCount(2);
+            flagged.Select(r => r.MatchValue).Should().Equal("a", "A");
+
+            regexContext.From(() => SqlFunctions.SqlServer.regexp_matches("abc", "[0-9]"))
+                .Select(r => r.MatchValue)
+                .ToList()
+                .Should().BeEmpty("a no-match regexp_matches returns zero rows");
+
+            regexContext.From(() => SqlFunctions.SqlServer.regexp_matches((string?)null, "a"))
+                .Select(r => r.MatchValue)
+                .ToList()
+                .Should().BeEmpty("a NULL input returns zero rows");
+
+            Report($"T348LIVE-2025 regexp_matches compat={level} rows=2/2/no_match=0/null=0 types=bigint/int/int/varchar/varchar substring_matches=full outcome=ok");
+        }
+        finally
+        {
+            regexContext?.Dispose();
+            DropDatabase(admin, RegexDatabase);
+        }
+
+        // The incompatible environment is a prerequisite fact: at compatibility 160 the same call is
+        // Msg 208. This is not an application-capability refusal and is kept out of the declared-16 gate.
+        DropDatabase(admin, RegexLowDatabase);
+        Execute(admin, $"create database [{RegexLowDatabase}]");
+        Execute(admin, $"alter database [{RegexLowDatabase}] set compatibility_level = 160");
+        try
+        {
+            var lowConnection = new SqlConnectionStringBuilder(admin) { InitialCatalog = RegexLowDatabase }.ConnectionString;
+            AssertSqlError(lowConnection, "select * from regexp_matches('a1b2', '[0-9]')", 208);
+            Report("T348LIVE-2025 regexp_matches compat=160 error=Msg208 outcome=environment_prerequisite");
+        }
+        finally
+        {
+            DropDatabase(admin, RegexLowDatabase);
+        }
+    }
+
+    /// <summary>
+    /// U3: the four fuzzy names execute on a dedicated database with the observed runtime prerequisites —
+    /// compatibility 170, <c>PREVIEW_FEATURES = ON</c> and a Windows collation
+    /// (<c>Latin1_General_100_CI_AS</c> as the database default) — asserting values, NULLs, CLR types and
+    /// the bounded <c>edit_distance</c>. A <c>SQL_*</c> collation (Msg 9847) and a missing preview
+    /// (Msg 195) are captured as environment facts.
+    /// </summary>
+    [Fact]
+    public void FuzzyFamily_ShouldExecuteWithTheObservedPrerequisites()
+    {
+        var admin = _connectionString;
+
+        DropDatabase(admin, FuzzyDatabase);
+        Execute(admin, $"create database [{FuzzyDatabase}] collate {FuzzyCollation}");
+        Execute(admin, $"alter database [{FuzzyDatabase}] set compatibility_level = 170");
+
+        var fuzzyConnection = new SqlConnectionStringBuilder(admin) { InitialCatalog = FuzzyDatabase }.ConnectionString;
+        Execute(fuzzyConnection, "alter database scoped configuration set preview_features = on");
+
+        try
+        {
+            var level = ScalarInt(fuzzyConnection, "select compatibility_level from sys.databases where name = db_name()");
+            level.Should().Be(170, "the fuzzy functions require database compatibility level 170");
+
+            var collation = ScalarString(fuzzyConnection, "select collation_name from sys.databases where name = db_name()");
+            collation.Should().Be(FuzzyCollation, "a Windows collation is required; SQL_* raises Msg 9847");
+
+            var preview = ScalarInt(fuzzyConnection, "select cast(value as int) from sys.database_scoped_configurations where name = 'PREVIEW_FEATURES'");
+            preview.Should().Be(1, "PREVIEW_FEATURES must be explicitly ON");
+
+            var isDefault = ScalarInt(fuzzyConnection, "select is_value_default from sys.database_scoped_configurations where name = 'PREVIEW_FEATURES'");
+            isDefault.Should().Be(0, "the fixture enabled preview features explicitly, not by default");
+
+            var build = ScalarString(admin, "select cast(serverproperty('ProductVersion') as nvarchar(128))");
+            build.Should().StartWith("17.0.", "the tested engine baseline is the major-17 image");
+            _major.Should().Be(17);
+
+            Execute(fuzzyConnection, FixtureDdl);
+            using var ctx = new T348V17LiveContext(fuzzyConnection);
+
+            var row = ctx.From<IT348U1Row>()
+                .Where(x => x.Id == 1)
+                .Select(x => new
+                {
+                    Distance = SqlFunctions.SqlServer.edit_distance("kitten", "sitting"),
+                    BoundedOne = SqlFunctions.SqlServer.edit_distance("kitten", "sitting", 1),
+                    BoundedTwo = SqlFunctions.SqlServer.edit_distance("kitten", "sitting", 2),
+                    SameBounded = SqlFunctions.SqlServer.edit_distance("same", "same", 0),
+                    NullMaximum = SqlFunctions.SqlServer.edit_distance("kitten", "sitting", null),
+                    NullOperand = SqlFunctions.SqlServer.edit_distance("kitten", (string?)null),
+                    ColumnDistance = SqlFunctions.SqlServer.edit_distance(x.Label, "kitten"),
+                    Similarity = SqlFunctions.SqlServer.edit_distance_similarity("kitten", "sitting"),
+                    JaroDistance = SqlFunctions.SqlServer.jaro_winkler_distance("martha", "marhta"),
+                    JaroSimilarity = SqlFunctions.SqlServer.jaro_winkler_similarity("martha", "marhta")
+                })
+                .Single();
+
+            row.Distance.Should().Be(3);
+            row.BoundedOne.Should().Be(2, "the native cap returns maximum_distance + 1 when the distance exceeds it");
+            row.BoundedTwo.Should().Be(3);
+            row.SameBounded.Should().Be(0, "equal strings are 0 even with a 0 cap");
+            row.NullMaximum.Should().BeNull("a supplied NULL maximum is NULL, not the omitted form");
+            row.NullOperand.Should().BeNull();
+            row.ColumnDistance.Should().Be(6, "edit_distance('a1b2c3', 'kitten') on the Windows-collated column");
+            row.Similarity.Should().Be(57);
+            row.JaroDistance.Should().BeApproximately(0.0388888888888862, 1e-12);
+            row.JaroSimilarity.Should().Be(96);
+
+            ((object)row.Distance!).Should().BeOfType<int>();
+            ((object)row.Similarity!).Should().BeOfType<int>();
+            ((object)row.JaroDistance!).Should().BeOfType<double>();
+            ((object)row.JaroSimilarity!).Should().BeOfType<int>();
+
+            var nullColumn = ctx.From<IT348U1Row>()
+                .Where(x => x.Id == 3)
+                .Select(x => SqlFunctions.SqlServer.edit_distance(x.Label, "kitten"))
+                .Single();
+            nullColumn.Should().BeNull("a NULL column operand yields NULL");
+
+            AssertSqlError(fuzzyConnection,
+                "select edit_distance('kitten' collate SQL_Latin1_General_CP1_CI_AS, 'sitting' collate SQL_Latin1_General_CP1_CI_AS) as d",
+                9847);
+
+            Report($"T348LIVE-2025 fuzzy db={FuzzyDatabase} collation={collation} compat={level} preview={preview} build={build} "
+                + "values=3/2/3/0/null/null/6/57/0.0388888888888862/96 outcome=ok");
+
+            // The preview prerequisite is a separate environment fact on a Windows-collated database.
+            DropDatabase(admin, FuzzyNoPreviewDatabase);
+            Execute(admin, $"create database [{FuzzyNoPreviewDatabase}] collate {FuzzyCollation}");
+            Execute(admin, $"alter database [{FuzzyNoPreviewDatabase}] set compatibility_level = 170");
+            try
+            {
+                var noPreview = new SqlConnectionStringBuilder(admin) { InitialCatalog = FuzzyNoPreviewDatabase }.ConnectionString;
+                AssertSqlError(noPreview, "select edit_distance('kitten', 'sitting') as d", 195);
+                Report("T348LIVE-2025 fuzzy preview=0 error=Msg195 outcome=environment_prerequisite");
+            }
+            finally
+            {
+                DropDatabase(admin, FuzzyNoPreviewDatabase);
+            }
+        }
+        finally
+        {
+            DropDatabase(admin, FuzzyDatabase);
+        }
+    }
+
     [Fact]
     public void DeclaredSixteen_ShouldRefuseThe2025NamesBeforeSql_WhileLeftShiftStillExecutes()
     {
@@ -409,6 +699,29 @@ public sealed class T348SqlServer2025FunctionsTests : IDisposable
                 .Select(r => r.Value),
             "The REGEXP_SPLIT_TO_TABLE function requires SQL Server major version 17 or later; declared major version: 16.");
 
+        // U3: the three regex (two scalars and the TVF) and the four fuzzy names refuse by name too.
+        ShouldRefuse(ctx, ctx.From<IT348U1Row>()
+                .Select(x => new { S = SqlFunctions.SqlServer.regexp_substr(x.Label, "[0-9]") }),
+            "The REGEXP_SUBSTR function requires SQL Server major version 17 or later; declared major version: 16.");
+        ShouldRefuse(ctx, ctx.From<IT348U1Row>()
+                .Select(x => new { I = SqlFunctions.SqlServer.regexp_instr(x.Label, "[0-9]") }),
+            "The REGEXP_INSTR function requires SQL Server major version 17 or later; declared major version: 16.");
+        ShouldRefuse(ctx, ctx.From(() => SqlFunctions.SqlServer.regexp_matches("a1", "[0-9]"))
+                .Select(r => r.MatchValue),
+            "The REGEXP_MATCHES function requires SQL Server major version 17 or later; declared major version: 16.");
+        ShouldRefuse(ctx, ctx.From<IT348U1Row>()
+                .Select(x => new { D = SqlFunctions.SqlServer.edit_distance(x.Label, "kitten") }),
+            "The EDIT_DISTANCE function requires SQL Server major version 17 or later; declared major version: 16.");
+        ShouldRefuse(ctx, ctx.From<IT348U1Row>()
+                .Select(x => new { S = SqlFunctions.SqlServer.edit_distance_similarity(x.Label, "kitten") }),
+            "The EDIT_DISTANCE_SIMILARITY function requires SQL Server major version 17 or later; declared major version: 16.");
+        ShouldRefuse(ctx, ctx.From<IT348U1Row>()
+                .Select(x => new { D = SqlFunctions.SqlServer.jaro_winkler_distance(x.Label, "martha") }),
+            "The JARO_WINKLER_DISTANCE function requires SQL Server major version 17 or later; declared major version: 16.");
+        ShouldRefuse(ctx, ctx.From<IT348U1Row>()
+                .Select(x => new { S = SqlFunctions.SqlServer.jaro_winkler_similarity(x.Label, "martha") }),
+            "The JARO_WINKLER_SIMILARITY function requires SQL Server major version 17 or later; declared major version: 16.");
+
         counter.Executions.Should().Be(0, "every refusal is raised before a command is dispatched");
 
         // Sibling positive control: the 2022 name is permitted on the same declared-16 context.
@@ -420,7 +733,7 @@ public sealed class T348SqlServer2025FunctionsTests : IDisposable
         shifted.Should().Be(4);
         counter.Executions.Should().BeGreaterThan(0, "the positive control executed a real command");
 
-        Report($"T348LIVE-2025 declared16 refusals=3 executions_before_control=0 left_shift=4 executions_total={counter.Executions} outcome=ok");
+        Report($"T348LIVE-2025 declared16 refusals=10 executions_before_control=0 left_shift=4 executions_total={counter.Executions} outcome=ok");
     }
 
     private static void ShouldRefuse<T>(IDataContext ctx, QueryCommand<T> command, string message)
@@ -456,6 +769,30 @@ public sealed class T348SqlServer2025FunctionsTests : IDisposable
         using var command = connection.CreateCommand();
         command.CommandText = sql;
         return Convert.ToInt32(command.ExecuteScalar(), CultureInfo.InvariantCulture);
+    }
+
+    private static string ScalarString(string connectionString, string sql)
+    {
+        using var connection = new SqlConnection(connectionString);
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        return Convert.ToString(command.ExecuteScalar(), CultureInfo.InvariantCulture) ?? string.Empty;
+    }
+
+    /// <summary>Asserts the engine's native error number, used for the prerequisite negatives.</summary>
+    private static void AssertSqlError(string connectionString, string sql, int number)
+    {
+        using var connection = new SqlConnection(connectionString);
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = sql;
+
+        var exception = FluentActions.Invoking(() => command.ExecuteScalar())
+            .Should().Throw<SqlException>("the engine owns the native error")
+            .Which;
+
+        exception.Number.Should().Be(number);
     }
 
     private static void DropDatabase(string connectionString, string database)

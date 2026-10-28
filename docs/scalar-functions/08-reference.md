@@ -64,6 +64,13 @@ declared major version in the message.
 | Member | SQL | Result | Requires |
 |---|---|---|---|
 | `regexp_count(input, pattern)` | `regexp_count(input, pattern)` | `int?` — `0` for no match, `NULL` for a NULL input | major version 17 |
+| `regexp_substr(input, pattern[, start[, occurrence[, match_type]]])` | `regexp_substr(input, pattern[, …])` | `string?` — `NULL` for no match or a NULL operand; the match type renders as `cast(… as varchar(4000))`, because the native argument rejects `nvarchar` (Msg 8116) | major version 17; no compatibility-level gate |
+| `regexp_instr(input, pattern[, start[, occurrence[, return_option[, match_type]]]])` | `regexp_instr(input, pattern[, …])` | `int?` — `0` for no match, `NULL` for a NULL operand; a supplied NULL return option behaves like `0` | major version 17; no compatibility-level gate |
+| `regexp_matches(input, pattern[, match_type])` | a `FROM` source, e.g. `from regexp_matches(input, pattern)` | one row per non-overlapping match: `match_id` (`bigint`), `start_position`/`end_position` (`int`), `match_value`, `substring_matches` (the full JSON capture text); no match → zero rows | major version 17 **and** database compatibility level 170 |
+| `edit_distance(input, pattern[, maximum_distance])` | `edit_distance(input, pattern[, maximum_distance])` | `int?`; the capped form returns `maximum_distance + 1` when the true distance exceeds it, a negative cap is uncapped | major 17 + compatibility 170 + `PREVIEW_FEATURES = ON` + Windows collation |
+| `edit_distance_similarity(input, pattern)` | `edit_distance_similarity(input, pattern)` | `int?` in `0..100` | the same fuzzy prerequisites |
+| `jaro_winkler_distance(input, pattern)` | `jaro_winkler_distance(input, pattern)` | `double?` (`float(53)`) | the same fuzzy prerequisites |
+| `jaro_winkler_similarity(input, pattern)` | `jaro_winkler_similarity(input, pattern)` | `int?` in `0..100` | the same fuzzy prerequisites |
 | `left_shift(value, shift)` / `right_shift(value, shift)` | `CASE WHEN value IS NULL OR shift IS NULL THEN CAST(NULL AS <operand type>) ELSE left_shift(cast(value as <operand type>), cast(shift as bigint)) END` | the operand's own type (`byte?`/`short?`/`int?`/`long?`); logical zero-fill shift; typed-NULL guard (a bare `left_shift(NULL, …)` is Msg 8116) | major version 16 |
 | `bit_count(value)` | `CASE WHEN value IS NULL THEN CAST(NULL AS bigint) ELSE bit_count(cast(value as <operand type>)) END` | `long?` (`bigint`) | major version 16 |
 | `get_bit(value, offset)` | `CASE WHEN value IS NULL OR offset IS NULL THEN CAST(NULL AS bit) ELSE get_bit(cast(value as <operand type>), cast(offset as int)) END` | `bool?` (`bit`) | major version 16 |
@@ -77,6 +84,14 @@ and needs no renderer hook: the member, the row shape and the `SupportsTableFunc
 whole route. At **compatibility level 160** on a major-17 engine the function does not exist (Msg 208), so
 the 170 prerequisite is a real gate that nextorm documents and asserts live rather than silently assuming
 (the dialect cannot inspect the database compatibility level).
+
+The regex scalars float above the compatibility level: they execute at 160 and at 170 on a major-17
+engine. `regexp_matches` is the exception among them — at compatibility 160 the engine reports it missing
+(Msg 208), so its 170 prerequisite is the same kind of documented, live-asserted runtime gate. The four
+fuzzy names need **all** of compatibility 170, `PREVIEW_FEATURES = ON` and a Windows collation; on the
+tested build `17.0.5005.3` a `SQL_*` collation is Msg 9847 and a missing preview flag is Msg 195. The
+declared-major-17 flag promises the version gate only — those runtime prerequisites are environment
+facts, asserted live, and no promise is made for future builds.
 
 ## SQL Server TRY_CAST and TRY_CONVERT
 

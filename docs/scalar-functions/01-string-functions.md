@@ -265,6 +265,73 @@ call **before SQL** with `The REGEXP_COUNT function requires SQL Server major ve
 declared major version: 16.` (or `… unspecified.` for an unset version). No database compatibility level
 is required — the function works at compatibility 160 on a major-17 engine.
 
+### SQL Server 2025: the regex scalars and `regexp_matches`
+
+`regexp_substr` returns the first matching substring and `regexp_instr` the one-based match position
+(`0` when there is no match); both take the optional native `start`, `occurrence`, `return_option`
+(`regexp_instr` only) and `match_type` (`c`/`i`/`s`/`m`) arguments. An omitted optional argument and a
+supplied SQL `NULL` are different call shapes — a supplied `NULL` start, occurrence or match type yields
+SQL `NULL`, and a supplied `NULL` return option behaves like `0`. Invalid patterns, flags and positions
+are the engine's native errors (Msg 19308/19303/19301); nextorm never validates them client-side. The
+native match type is a `varchar` argument — an `nvarchar` literal or parameter is Msg 8116 — so the
+renderer emits it as `cast(… as varchar(4000))`.
+
+```csharp
+var matches = dataContext.From<IComplexEntity>()
+    .Select(e => new
+    {
+        Sub = SqlFunctions.SqlServer.regexp_substr(e.String, "[0-9]+", 1, 1, "i"),
+        Pos = SqlFunctions.SqlServer.regexp_instr(e.String, "[0-9]+", 1, 1, 1)
+    })
+    .ToList();
+```
+
+`regexp_matches(input, pattern[, match_type])` is a `FROM` source: one row per non-overlapping match with
+`match_id bigint`, `start_position int`, `end_position int`, `match_value` (`varchar(n)`) and
+`substring_matches` (`varchar(max)`, the engine's JSON capture text, materialized in full and never
+truncated). A string without a match, or a `NULL` input, produces zero rows.
+
+```csharp
+var rows = dataContext
+    .From(() => SqlFunctions.SqlServer.regexp_matches("a1b2", "[0-9]"))
+    .Select(r => new { r.MatchId, r.MatchValue, r.SubstringMatches })
+    .ToList();
+```
+
+All three are **SQL Server 2025 (major version 17) only** and gated like `regexp_count`; the scalars are
+not compatibility-level gated and execute at 160 and 170. `regexp_matches` is different: it needs
+compatibility level **170**, and at 160 the engine reports it missing (Msg 208). That prerequisite is a
+runtime property the dialect cannot inspect, documented and asserted live rather than assumed. SQL
+Server 2022 and earlier refuse every name before SQL.
+
+### SQL Server 2025: fuzzy matching
+
+`edit_distance(input, pattern)` returns the Levenshtein distance as `int?`, `edit_distance_similarity`
+the similarity as `int?` in `0..100`, `jaro_winkler_distance` as `double?` (`float(53)`) and
+`jaro_winkler_similarity` as `int?` in `0..100`; a `NULL` operand yields SQL `NULL`. The bounded
+`edit_distance(input, pattern, maximum_distance)` returns `maximum_distance + 1` when the true distance
+exceeds the cap, and a negative cap is uncapped by the engine; an omitted cap and a supplied `NULL` cap
+differ (the `NULL` yields SQL `NULL`). A CLR operand wider than 32 bits for the cap is refused before
+SQL rather than truncated.
+
+```csharp
+var scores = dataContext.From<IComplexEntity>()
+    .Select(e => new
+    {
+        Distance = SqlFunctions.SqlServer.edit_distance(e.String, "kitten"),
+        Bounded = SqlFunctions.SqlServer.edit_distance(e.String, "kitten", 2),
+        Similar = SqlFunctions.SqlServer.edit_distance_similarity(e.String, "kitten"),
+        Jaro = SqlFunctions.SqlServer.jaro_winkler_similarity(e.String, "martha")
+    })
+    .ToList();
+```
+
+The four names are **SQL Server 2025 (major version 17) only**, and on the tested build
+(`17.0.5005.3`) they additionally require database compatibility level 170, `PREVIEW_FEATURES = ON`
+(off by default) and a Windows collation — a `SQL_*` collation raises Msg 9847, and without the preview
+flag the function is Msg 195. The version flag expresses only the major-version gate; the runtime
+prerequisites are documented and asserted live, and no promise is made for future builds.
+
 ## Cross-provider scalar functions
 
 [`SqlFunctions.Sql`](xref:NextORM.Core.SqlFunctions.Sql) exposes a small library of string and number

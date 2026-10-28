@@ -67,7 +67,11 @@ internal static class SqlServerScalarFunctionTranslator
         nameof(SqlServerFunctions.regexp_count), nameof(SqlServerFunctions.left_shift),
         nameof(SqlServerFunctions.right_shift), nameof(SqlServerFunctions.bit_count),
         nameof(SqlServerFunctions.get_bit), nameof(SqlServerFunctions.set_bit),
-        nameof(SqlServerFunctions.try_cast), nameof(SqlServerFunctions.try_convert)
+        nameof(SqlServerFunctions.try_cast), nameof(SqlServerFunctions.try_convert),
+        nameof(SqlServerFunctions.regexp_substr), nameof(SqlServerFunctions.regexp_instr),
+        nameof(SqlServerFunctions.regexp_matches),
+        nameof(SqlServerFunctions.edit_distance), nameof(SqlServerFunctions.edit_distance_similarity),
+        nameof(SqlServerFunctions.jaro_winkler_distance), nameof(SqlServerFunctions.jaro_winkler_similarity)
     };
 
     /// <summary>
@@ -92,6 +96,16 @@ internal static class SqlServerScalarFunctionTranslator
     private static readonly HashSet<string> TryConversionFunctions = new(StringComparer.Ordinal)
     {
         nameof(SqlServerFunctions.try_cast), nameof(SqlServerFunctions.try_convert)
+    };
+
+    /// <summary>
+    /// The fuzzy functions whose optional trailing <c>maximum_distance</c> is a native <c>int</c>: a wider
+    /// CLR operand (for example a <c>long</c> or <c>decimal</c> column cast to <c>int?</c>) would be
+    /// rendered as a truncating SQL cast, so it is refused before SQL instead.
+    /// </summary>
+    private static readonly HashSet<string> FuzzyMaximumFunctions = new(StringComparer.Ordinal)
+    {
+        nameof(SqlServerFunctions.edit_distance)
     };
 
     /// <summary>The functions whose <c>params</c> array is flattened back into individual arguments.</summary>
@@ -153,6 +167,9 @@ internal static class SqlServerScalarFunctionTranslator
                 visitor.Dialect.SqlServerFunctions?.GetUnsupportedReason(name)
                 ?? $"The {name} function is not supported by this provider.");
 
+        if (FuzzyMaximumFunctions.Contains(name))
+            ValidateFuzzyMaximum(name, node.Arguments);
+
         if (SequenceFunctions.Contains(name))
         {
             EmitSequence(visitor, name, node.Arguments);
@@ -210,6 +227,19 @@ internal static class SqlServerScalarFunctionTranslator
                 && TypeFacts.UnwrapConvert(args[i]) is ConstantExpression { Value: string datePart }
                     ? visitor.RenderStringLiteral(datePart, SqlStringLiteralRole.GrammarToken, SqlStringGrammar.Keyword)
                     : visitor.VisitToString(args[i]);
+        }
+
+        // The native match_type argument of the regex scalars is varchar-only: an nvarchar literal,
+        // NULL or parameter is Msg 8116 ("Argument data type nvarchar is invalid for argument 5"),
+        // while a cast to varchar is accepted for every shape. Keep the value untouched, only its
+        // SQL type (probe `substr_nvarchar`/`substr_cast_varchar`/`substr_var_varchar`). The match
+        // type is the fifth argument of regexp_substr and the sixth of regexp_instr (the fifth there
+        // is the int return option).
+        var matchTypeIndex = name == nameof(SqlServerFunctions.regexp_substr) ? 4 : 5;
+        if ((name is nameof(SqlServerFunctions.regexp_substr) or nameof(SqlServerFunctions.regexp_instr))
+            && args.Count > matchTypeIndex)
+        {
+            rendered[matchTypeIndex] = $"cast({rendered[matchTypeIndex]} as varchar(4000))";
         }
 
         // A non-int integral precision (byte/short/…) would otherwise render with a boxing cast
@@ -275,6 +305,33 @@ internal static class SqlServerScalarFunctionTranslator
             : visitor.Dialect.MakeTryCast(value, targetType);
 
         visitor.Builder!.Append(expression);
+    }
+
+    /// <summary>
+    /// Validates the trailing <c>maximum_distance</c> of <c>edit_distance</c>. The native argument is a
+    /// 32-bit integer, so an operand whose own CLR type is wider (a <c>long</c>/<c>decimal</c> column cast
+    /// to <c>int?</c>) would be silently truncated by the rendered SQL cast; such an operand is refused
+    /// before any command is prepared unless it is a constant that fits the 32-bit range exactly. Narrow
+    /// integral operands widen losslessly and are accepted.
+    /// </summary>
+    private static void ValidateFuzzyMaximum(string name, IReadOnlyList<Expression> args)
+    {
+        if (args.Count < 3)
+            return;
+
+        var operand = TypeFacts.UnwrapConvert(args[2]);
+        var type = Nullable.GetUnderlyingType(operand.Type) ?? operand.Type;
+
+        if (type == typeof(int) || type == typeof(short) || type == typeof(byte)
+            || type == typeof(sbyte) || type == typeof(ushort))
+            return;
+
+        if (operand is ConstantExpression constant && TryDecodeInt64(constant.Value, out var value)
+            && value is >= int.MinValue and <= int.MaxValue)
+            return;
+
+        throw new NotSupportedException(
+            $"The {name} maximum_distance argument must fit a 32-bit integer; the '{type.Name}' operand would be truncated.");
     }
 
     /// <summary>

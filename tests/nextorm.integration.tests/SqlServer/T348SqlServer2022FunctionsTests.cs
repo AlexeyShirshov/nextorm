@@ -85,6 +85,30 @@ public sealed class T348SqlServer2022FunctionsTests : IDisposable
                 .Select(r => r.Value),
             "The REGEXP_SPLIT_TO_TABLE function requires SQL Server major version 17 or later; declared major version: 16.");
 
+        // U3: the regex scalars, the regexp_matches TVF and the four fuzzy names refuse by name on the
+        // real major-16 engine too; none of them reaches the server.
+        ShouldRefuse(ctx, ctx.From<IT348U1Row>()
+                .Select(x => new { S = SqlFunctions.SqlServer.regexp_substr(x.Label, "[0-9]") }),
+            "The REGEXP_SUBSTR function requires SQL Server major version 17 or later; declared major version: 16.");
+        ShouldRefuse(ctx, ctx.From<IT348U1Row>()
+                .Select(x => new { I = SqlFunctions.SqlServer.regexp_instr(x.Label, "[0-9]") }),
+            "The REGEXP_INSTR function requires SQL Server major version 17 or later; declared major version: 16.");
+        ShouldRefuse(ctx, ctx.From(() => SqlFunctions.SqlServer.regexp_matches("a1", "[0-9]"))
+                .Select(r => r.MatchValue),
+            "The REGEXP_MATCHES function requires SQL Server major version 17 or later; declared major version: 16.");
+        ShouldRefuse(ctx, ctx.From<IT348U1Row>()
+                .Select(x => new { D = SqlFunctions.SqlServer.edit_distance(x.Label, "kitten") }),
+            "The EDIT_DISTANCE function requires SQL Server major version 17 or later; declared major version: 16.");
+        ShouldRefuse(ctx, ctx.From<IT348U1Row>()
+                .Select(x => new { S = SqlFunctions.SqlServer.edit_distance_similarity(x.Label, "kitten") }),
+            "The EDIT_DISTANCE_SIMILARITY function requires SQL Server major version 17 or later; declared major version: 16.");
+        ShouldRefuse(ctx, ctx.From<IT348U1Row>()
+                .Select(x => new { D = SqlFunctions.SqlServer.jaro_winkler_distance(x.Label, "martha") }),
+            "The JARO_WINKLER_DISTANCE function requires SQL Server major version 17 or later; declared major version: 16.");
+        ShouldRefuse(ctx, ctx.From<IT348U1Row>()
+                .Select(x => new { S = SqlFunctions.SqlServer.jaro_winkler_similarity(x.Label, "martha") }),
+            "The JARO_WINKLER_SIMILARITY function requires SQL Server major version 17 or later; declared major version: 16.");
+
         counter.Executions.Should().Be(0, "every refusal is raised before a command is dispatched against the real 2022 engine");
 
         var row = ctx.From<IT348U1Row>()
@@ -104,7 +128,7 @@ public sealed class T348SqlServer2022FunctionsTests : IDisposable
         counter.Executions.Should().BeGreaterThan(0, "the positive 2022 control executed a real command");
 
         T348Evidence.Write(
-            $"T348LIVE-2022 major={_major} left_shift=4/-16/null refusals=3 executions_before_control=0 executions_total={counter.Executions} outcome=ok");
+            $"T348LIVE-2022 major={_major} left_shift=4/-16/null refusals=10 executions_before_control=0 executions_total={counter.Executions} outcome=ok");
     }
 
     /// <summary>

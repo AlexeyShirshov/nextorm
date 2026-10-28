@@ -372,14 +372,29 @@ public sealed class SqlServerDialect : SqlDialectBase
 
     /// <summary>
     /// SQL Server exposes <c>string_split</c>, <c>openjson</c>, <c>containstable</c> and
-    /// <c>freetexttable</c> on every supported version, and <c>regexp_split_to_table</c> from 2025
-    /// (declared major version 17) on. The 2025 name is additionally usable only at database
-    /// compatibility level 170, which the dialect cannot inspect; that prerequisite is documented and
-    /// asserted live rather than silently assumed.
+    /// <c>freetexttable</c> on every supported version, and <c>regexp_split_to_table</c>/
+    /// <c>regexp_matches</c> from 2025 (declared major version 17) on. The 2025 names are additionally
+    /// usable only at database compatibility level 170, which the dialect cannot inspect; that
+    /// prerequisite is documented and asserted live rather than silently assumed.
     /// </summary>
     public override bool SupportsTableFunction(string name) =>
         name is "string_split" or "openjson" or "containstable" or "freetexttable"
-        || (name == "regexp_split_to_table" && SupportsSqlServer2025Functions);
+        || ((name is "regexp_split_to_table" or "regexp_matches") && SupportsSqlServer2025Functions);
+
+    /// <summary>
+    /// Rewrites the <c>regexp_matches</c> match-type argument to <c>varchar</c>. The native third
+    /// argument is varchar-only: an nvarchar literal, NULL or parameter is Msg 8116 ("Argument data
+    /// type nvarchar is invalid for argument 3"), while a cast to varchar is accepted for every shape
+    /// (probe <c>matches_nvarchar</c>/<c>cast_lit_matches</c>/<c>cast_param_matches</c>). Only the SQL
+    /// type changes; the value is never validated client-side.
+    /// </summary>
+    public override string WrapTableFunction(string name, string call, IReadOnlyList<string> arguments)
+    {
+        if (name != "regexp_matches" || arguments.Count != 3)
+            return call;
+
+        return $"{name}({arguments[0]}, {arguments[1]}, cast({arguments[2]} as varchar(4000)))";
+    }
 
     /// <summary>SQL Server supports a raw SQL derived table (<c>FROM (&lt;sql&gt;) AS alias</c>).</summary>
     public override bool SupportsRawSqlSource => true;
@@ -1313,6 +1328,10 @@ internal sealed class SqlServerSpecificFunctions : ISqlServerFunctions
             "next_value_for" or "nextval" or
             "try_cast" or "try_convert")
         || (name == "regexp_count" && _dialect.SupportsSqlServer2025Functions)
+        || ((name is "regexp_substr" or "regexp_instr" or "regexp_matches"
+                or "edit_distance" or "edit_distance_similarity"
+                or "jaro_winkler_distance" or "jaro_winkler_similarity")
+            && _dialect.SupportsSqlServer2025Functions)
         || ((name is "left_shift" or "right_shift" or "bit_count" or "get_bit" or "set_bit")
             && _dialect.SupportsSqlServer2022Functions);
 
@@ -1320,6 +1339,13 @@ internal sealed class SqlServerSpecificFunctions : ISqlServerFunctions
     public string? GetUnsupportedReason(string name) => name switch
     {
         "regexp_count" => Unsupported("REGEXP_COUNT", requiredMajor: 17, _dialect.SupportsSqlServer2025Functions),
+        "regexp_substr" => Unsupported("REGEXP_SUBSTR", requiredMajor: 17, _dialect.SupportsSqlServer2025Functions),
+        "regexp_instr" => Unsupported("REGEXP_INSTR", requiredMajor: 17, _dialect.SupportsSqlServer2025Functions),
+        "regexp_matches" => Unsupported("REGEXP_MATCHES", requiredMajor: 17, _dialect.SupportsSqlServer2025Functions),
+        "edit_distance" => Unsupported("EDIT_DISTANCE", requiredMajor: 17, _dialect.SupportsSqlServer2025Functions),
+        "edit_distance_similarity" => Unsupported("EDIT_DISTANCE_SIMILARITY", requiredMajor: 17, _dialect.SupportsSqlServer2025Functions),
+        "jaro_winkler_distance" => Unsupported("JARO_WINKLER_DISTANCE", requiredMajor: 17, _dialect.SupportsSqlServer2025Functions),
+        "jaro_winkler_similarity" => Unsupported("JARO_WINKLER_SIMILARITY", requiredMajor: 17, _dialect.SupportsSqlServer2025Functions),
         "regexp_split_to_table" => Unsupported("REGEXP_SPLIT_TO_TABLE", requiredMajor: 17, _dialect.SupportsSqlServer2025Functions),
         "product" => Unsupported("PRODUCT", requiredMajor: 17, _dialect.SupportsProductAggregate),
         "left_shift" => Unsupported("LEFT_SHIFT", requiredMajor: 16, _dialect.SupportsSqlServer2022Functions),
@@ -1346,6 +1372,14 @@ internal sealed class SqlServerSpecificFunctions : ISqlServerFunctions
         // SQL Server 2025 regex scalar: int count of the non-overlapping matches (0 when none, NULL
         // when the input is NULL).
         "regexp_count" => $"regexp_count({args[0]}, {args[1]})",
+        // SQL Server 2025 regex scalars with the native optional positional arguments; omitted and
+        // supplied-NULL arguments are distinct call shapes and are passed through unchanged.
+        "regexp_substr" or "regexp_instr" => $"{name}({string.Join(", ", args)})",
+        // SQL Server 2025 fuzzy matching; the optional maximum_distance of edit_distance is passed
+        // through as rendered (the translator refuses a wider operand before SQL).
+        "edit_distance" or "edit_distance_similarity"
+            or "jaro_winkler_distance" or "jaro_winkler_similarity" =>
+            $"{name}({string.Join(", ", args)})",
         // Legacy string-only arm: the translator routes the whole bit family through RenderBit, which
         // also knows the operand type. A direct caller of this arm keeps the int operand shape.
         "left_shift" => RenderBit(name, args[0], "int", args[1], null),

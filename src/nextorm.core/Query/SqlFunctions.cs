@@ -240,6 +240,37 @@ public static partial class SqlFunctions
     }
 
     /// <summary>
+    /// Row shape produced by <see cref="SqlServerFunctions.regexp_matches(string?, string?)"/>: SQL Server
+    /// 2025 returns one row per match with <c>match_id bigint</c>, the one-based <c>start_position int</c>
+    /// and <c>end_position int</c>, the matched text as <c>match_value varchar(n)</c> and the capture
+    /// groups as the engine's JSON text in <c>substring_matches varchar(max)</c>. The
+    /// <c>substring_matches</c> column is carried as an opaque string: its length is not fixed by the
+    /// input, so it is never cast or truncated by the provider.
+    /// </summary>
+    public interface ISqlServerRegexpMatchRow
+    {
+        /// <summary>The one-based match number.</summary>
+        [Column("match_id")]
+        long MatchId { get; set; }
+
+        /// <summary>The one-based position of the first character of the match.</summary>
+        [Column("start_position")]
+        int StartPosition { get; set; }
+
+        /// <summary>The one-based position of the last character of the match.</summary>
+        [Column("end_position")]
+        int EndPosition { get; set; }
+
+        /// <summary>The matched text.</summary>
+        [Column("match_value")]
+        string? MatchValue { get; set; }
+
+        /// <summary>The capture groups as the engine's JSON text (<c>varchar(max)</c>), never truncated.</summary>
+        [Column("substring_matches")]
+        string? SubstringMatches { get; set; }
+    }
+
+    /// <summary>
     /// Row shape produced by <see cref="SqlServerFunctions.xml_nodes(string?, string?)"/>: the single
     /// <c>value</c> column holds one XML node selected by the XQuery (an <c>xml</c> value that is
     /// projected further with <c>xml_value</c>/<c>xml_query</c>/<c>xml_exist</c>).

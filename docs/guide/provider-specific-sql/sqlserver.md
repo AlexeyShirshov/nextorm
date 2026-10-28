@@ -381,12 +381,15 @@ major version** on this provider. The gate is version-only: unlike the native JS
 (`SupportsJson`, [#345](https://github.com/AlexeyShirshov/nextorm/issues/345)), which also consults an
 engine-edition allowlist because a few Azure/Fabric products have the type while reporting a lower major
 version, function availability follows the engine major version itself. An edition declaration never
-substitutes for a version here, and an unversioned context refuses all four before SQL.
+substitutes for a version here, and an unversioned context refuses them before SQL.
 
 | Member | SQL | Prerequisite |
 |---|---|---|
 | `SqlFunctions.SqlServer.left_shift` / `right_shift` / `bit_count` / `get_bit` / `set_bit` (one overload set per operand type `byte`/`short`/`int`/`long`) | `CASE WHEN … THEN CAST(NULL AS <operand type>) ELSE left_shift(cast(value as tinyint\|smallint\|int\|bigint), cast(shift as bigint)) END`; `bit_count` → `bigint`, `get_bit` → `bit` | major 16 (SQL Server 2022) |
 | `SqlFunctions.SqlServer.regexp_count(input, pattern)` | `regexp_count(input, pattern)` | major 17 (SQL Server 2025); no compatibility-level gate |
+| `SqlFunctions.SqlServer.regexp_substr(input, pattern[, start[, occurrence[, match_type]]])` / `regexp_instr(input, pattern[, start[, occurrence[, return_option[, match_type]]]])` | the native call; `0` for a no-match `regexp_instr`; the match type is a `varchar` argument and renders as `cast(… as varchar(4000))` (an `nvarchar` argument is Msg 8116) | major 17; no compatibility-level gate |
+| `SqlFunctions.SqlServer.regexp_matches(input, pattern[, match_type])` | a `FROM` source; rows are `match_id bigint`, `start_position`/`end_position int`, `match_value`, `substring_matches` (full JSON capture text) | major 17 **and** database compatibility level 170 |
+| `SqlFunctions.SqlServer.edit_distance(input, pattern[, maximum_distance])` / `edit_distance_similarity` / `jaro_winkler_distance` / `jaro_winkler_similarity` | the native call; the capped `edit_distance` returns `maximum_distance + 1` when the distance exceeds the cap | major 17 **and** compatibility level 170 **and** `PREVIEW_FEATURES = ON` **and** a Windows collation |
 | `SqlFunctions.SqlServer.product(value)` | `product(value)` (aggregate context only — no `OVER`) | major 17 |
 | `SqlFunctions.SqlServer.regexp_split_to_table(input, pattern)` | a `FROM` source; rows are `value` plus the one-based `ordinal bigint` | major 17 **and** database compatibility level 170 |
 
@@ -425,6 +428,14 @@ family is one overload set per operand type, an untyped constant binds to the sm
 (`left_shift((int?)1, 2)`) when a specific SQL type is required. `regexp_split_to_table` is a real gate on
 two axes: at compatibility level 160 a major-17 engine reports the function as missing (Msg 208), so the 170
 prerequisite is asserted live rather than assumed. `product` is offered in the aggregate context only.
+
+The U3 regex scalars and the fuzzy family were executed on the tested engine baseline
+`17.0.5005.3`: `regexp_substr`/`regexp_instr` work at compatibility levels **160 and 170**, while
+`regexp_matches` disappears at 160 (Msg 208) and the four fuzzy names need compatibility 170,
+`PREVIEW_FEATURES = ON` (off by default) and a Windows collation (a `SQL_*` collation is Msg 9847, and a
+missing preview flag is Msg 195). Those are runtime prerequisites the dialect cannot inspect, so they are
+documented and asserted live; the version flag promises the major-version gate only, and no promise is
+made for future builds.
 
 ## T-SQL scalar functions
 
@@ -532,14 +543,14 @@ operand needs a SQL type derived from metadata; an unmapped one is rejected befo
 ## Not yet supported
 
 The rest of the [#282](https://github.com/AlexeyShirshov/nextorm/issues/282) catalogue stays open in
-`1.0.9-rc4` — the residual positions left by this slice: regex `REGEXP_SUBSTR`/`REGEXP_INSTR`/
-`REGEXP_MATCHES`; fuzzy `EDIT_DISTANCE`/`EDIT_DISTANCE_SIMILARITY`/`JARO_WINKLER_DISTANCE`/
-`JARO_WINKLER_SIMILARITY`; bit `RIGHT_SHIFT`/`BIT_COUNT`/`GET_BIT`/`SET_BIT`; conversion
-`TRY_CAST`/`TRY_CONVERT`; aggregate `ANY_VALUE`/`APPROX_COUNT_DISTINCT`/`CHECKSUM_AGG`/`GROUPING_ID`;
-analytic `APPROX_PERCENTILE_CONT`/`APPROX_PERCENTILE_DISC`; system `SESSION_CONTEXT`/
-`SESSION_ID`/`@@ROWCOUNT`/`@@ERROR`/`ERROR_*`. The five functions shipped by the T282 slice are
-`parse`, `try_parse`, `base64_encode`, `base64_decode` and `crypt_gen_random`, and this slice adds the
-four version-gated names above; together they do not close the issue.
+`1.0.9-rc4` — the residual positions left by this slice: aggregate
+`APPROX_COUNT_DISTINCT`/`CHECKSUM_AGG`/`GROUPING_ID`; analytic
+`APPROX_PERCENTILE_CONT`/`APPROX_PERCENTILE_DISC`; and the whole-goal refusals
+`ANY_VALUE`/`SESSION_CONTEXT`/`SESSION_ID`/`@@ROWCOUNT`/`@@ERROR`/`ERROR_*`. The five functions shipped by
+the T282 slice are `parse`, `try_parse`, `base64_encode`, `base64_decode` and `crypt_gen_random`; this
+slice delivers the seven regex and fuzzy names above, the 2022 bit family and `TRY_CAST`/`TRY_CONVERT`.
+Accounting after U3: **17 delivered / 5 delivery names remaining / 11 refusals pending**; together they do
+not close the issue.
 
 `ANY_VALUE` is recorded as **engine-unsupported on the tested SQL Server 2025 build** (17.0.5005.3):
 `Msg 195` in both the aggregate and the `OVER ()` forms, at compatibility levels 160 and 170 and with
