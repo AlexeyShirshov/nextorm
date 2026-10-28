@@ -323,6 +323,11 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     /// <returns>A list containing all result rows.</returns>
     public List<TResult> ToList(params ReadOnlySpan<object?> @params)
     {
+        // #249 / T353: a collection-valued projection is materialized as an entity graph and projected in
+        // memory, so the projected command itself never prepares or executes SQL.
+        if (CollectionSlotCarrier is CollectionSlotCarrier<TResult> carrier)
+            return carrier.ToList(@params);
+
         var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, false, true, CancellationToken.None);
 
         return _dataContext.ToList<TResult>(preparedCommand, @params);

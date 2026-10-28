@@ -29,6 +29,12 @@ public partial class QueryCommand
         internal static void Prepare(QueryCommand cmd, bool dontCalculateHash, CancellationToken cancellationToken)
         {
             if (cmd._dataContext is null) throw new InvalidOperationException("Cannot prepare command in cache");
+
+            // #249 / T353: a collection-valued projection only supports the buffered list/array terminals. Every
+            // other terminal funnels through preparation, so the refusal is raised here — before any SQL is built
+            // and before a plan entry exists — instead of emitting a statement whose rows cannot be projected.
+            if (cmd.CollectionSlotCarrier is CollectionSlotCarrier slotCarrier)
+                throw new NotSupportedException(slotCarrier.UnsupportedTerminal());
             cmd.InvalidatePlanKey();
             cmd.ResolvedQuoteIdentifiers = cmd.QuoteIdentifiers ?? cmd._dataContext.QuoteIdentifiers;
             cmd.ResolvedNamingConvention = cmd.NamingConvention ?? cmd._dataContext.NamingConvention;

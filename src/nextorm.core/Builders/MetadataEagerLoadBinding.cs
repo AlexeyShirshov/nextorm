@@ -469,6 +469,24 @@ internal static class MetadataEagerLoadResolver
     }
 
     /// <summary>
+    /// Whether a relationship is declared for the navigation member (#249 / T353). A projection slot may only be
+    /// recognised on a declared navigation: a scalar collection column (<c>byte[]</c>, an array or range-returning
+    /// SQL function) is an ordinary projected value and must never be taken for, or refused as, a slot.
+    /// </summary>
+    /// <param name="dataProvider">The context that owns the projection.</param>
+    /// <param name="entityType">The projected entity type.</param>
+    /// <param name="property">The projected member.</param>
+    /// <returns><see langword="true"/> when the member is a declared navigation.</returns>
+    internal static bool HasDeclaredRelationship(IDataContext dataProvider, Type entityType, PropertyInfo property)
+    {
+        ArgumentNullException.ThrowIfNull(dataProvider);
+        ArgumentNullException.ThrowIfNull(entityType);
+        ArgumentNullException.ThrowIfNull(property);
+
+        return FindDeclaredRelationship(dataProvider, entityType, property) is not null;
+    }
+
+    /// <summary>
     /// Finds the relationship whose declared navigation is <paramref name="property"/>. The entity's own
     /// metadata is searched first; a navigation inherited from a base type then falls back to the already
     /// registered declaring-type metadata (an auto-built entry is never published by the fallback, so a

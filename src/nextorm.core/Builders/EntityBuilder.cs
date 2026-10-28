@@ -429,6 +429,16 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
 
         ApplyCommandOptions(cmd);
 
+        // #249 / T353: a projection may carry collection-valued slots (a direct navigation member or an adapter
+        // chain terminated by ToList()/ToArray()). They are recognized and validated here — before preparation can
+        // reach the ordinary navigation-projection refusal — and bound to an entity carrier that keeps the public
+        // projected type while executing the entity graph.
+        CollectionSlotBinder.TryBind(
+            this,
+            exp,
+            cmd,
+            selectGroup || _group is not null || GroupingType != NextORM.Core.GroupingType.None || GroupingSets is { Count: > 0 } || GroupByWithTotals);
+
         return cmd;
     }
     /// <summary>
