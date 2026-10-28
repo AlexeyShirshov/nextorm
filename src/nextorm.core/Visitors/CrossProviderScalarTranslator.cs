@@ -79,7 +79,10 @@ internal static class CrossProviderScalarTranslator
         nameof(PostgresFunctions.pg_current_xact_id_if_assigned),
         nameof(PostgresFunctions.pg_snapshot_xmax), nameof(PostgresFunctions.pg_snapshot_xmin),
         nameof(PostgresFunctions.pg_visible_in_snapshot),
-        nameof(PostgresFunctions.pg_xact_commit_timestamp), nameof(PostgresFunctions.pg_xact_status)
+        nameof(PostgresFunctions.pg_xact_commit_timestamp), nameof(PostgresFunctions.pg_xact_status),
+        nameof(PostgresFunctions.array_to_tsvector), nameof(PostgresFunctions.json_to_tsvector),
+        nameof(PostgresFunctions.jsonb_to_tsvector), nameof(PostgresFunctions.get_current_ts_config),
+        nameof(PostgresFunctions.numnode)
     };
 
     /// <summary>

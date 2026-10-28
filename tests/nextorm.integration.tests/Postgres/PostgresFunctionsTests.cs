@@ -3163,6 +3163,51 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
             .Should().Throw<NotSupportedException>().WithMessage("*unnest function is refused*");
     }
 
+    /// <summary>
+    /// The #281 (#347 D3b) full-text constructors, the session text-search configuration and the node
+    /// count against the live server: the <c>tsvector</c> results read back as <see cref="string"/>, the
+    /// <c>regconfig</c> of <c>get_current_ts_config</c> is bridged to text, and a SQL-NULL input yields
+    /// NULL for the strict functions.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void FullTextScalarFamily_ShouldComputeValuesNullsAndClrTypes()
+    {
+        string?[]? nullWords = null;
+        string? nullJson = null;
+        string? nullQuery = null;
+        var words = SqlFunctions.Parameter<string?[]>(0);
+
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                A2T = SqlFunctions.Postgres.array_to_tsvector(words),
+                A2TNull = SqlFunctions.Postgres.array_to_tsvector(nullWords!),
+                Json2Ts = SqlFunctions.Postgres.json_to_tsvector("{\"a\":\"x y\",\"b\":1}", "[\"string\",\"numeric\"]"),
+                Json2TsCfg = SqlFunctions.Postgres.json_to_tsvector("english", "{\"a\":\"x y\"}", "[\"string\"]"),
+                Json2TsNull = SqlFunctions.Postgres.json_to_tsvector(nullJson, "[\"string\"]"),
+                Jsonb2Ts = SqlFunctions.Postgres.jsonb_to_tsvector("{\"a\":\"x y\",\"b\":1}", "[\"string\",\"numeric\"]"),
+                Jsonb2TsCfg = SqlFunctions.Postgres.jsonb_to_tsvector("english", "{\"a\":\"x y\"}", "[\"string\"]"),
+                Current = SqlFunctions.Postgres.get_current_ts_config(),
+                Nodes = SqlFunctions.Postgres.numnode("a & b"),
+                NodesNull = SqlFunctions.Postgres.numnode(nullQuery),
+            })
+            .First(new string?[] { "a", "b" });
+
+        r.A2T.Should().Be("'a' 'b'");
+        r.A2T!.GetType().Should().Be(typeof(string));
+        r.A2TNull.Should().BeNull("a SQL-NULL array stays NULL");
+        r.Json2Ts.Should().Be("'1':4 'x':1 'y':2");
+        r.Json2TsCfg.Should().Be("'x':1 'y':2");
+        r.Json2TsNull.Should().BeNull("a SQL-NULL document stays NULL");
+        r.Jsonb2Ts.Should().Be("'1':4 'x':1 'y':2");
+        r.Jsonb2TsCfg.Should().Be("'x':1 'y':2");
+        r.Current.Should().Be("english", "the fixture database uses the default text-search configuration");
+        r.Nodes.Should().Be(3, "a & b has two lexemes and one operator");
+        r.Nodes!.Value.GetType().Should().Be(typeof(int));
+        r.NodesNull.Should().BeNull("a SQL-NULL tsquery stays NULL");
+    }
+
     private static void Execute(IDataContext ctx, string sql)
     {
         ((DataContext)ctx).EnsureConnectionOpen();

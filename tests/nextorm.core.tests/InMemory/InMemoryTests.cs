@@ -1382,7 +1382,23 @@ public class InMemoryTests
         FluentActions.Invoking(() => _sut.DataProvider
                 .From(() => SqlFunctions.Postgres.unnest<object>(new long[] { 1 }, new long[] { 2 }, new long[] { 3 }, new long[] { 4 }))
                 .Select(r => r))
-            .Should().Throw<NotSupportedException>().WithMessage("*unnest function is refused*");    }
+            .Should().Throw<NotSupportedException>().WithMessage("*unnest function is refused*");
+
+        var fullText = new (string Name, Action Act)[]
+        {
+            ("array_to_tsvector", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.array_to_tsvector(new[] { "a" }) }).ToList()),
+            ("json_to_tsvector", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.json_to_tsvector("{}", "[]") }).ToList()),
+            ("json_to_tsvector", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.json_to_tsvector("english", "{}", "[]") }).ToList()),
+            ("jsonb_to_tsvector", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.jsonb_to_tsvector("{}", "[]") }).ToList()),
+            ("jsonb_to_tsvector", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.jsonb_to_tsvector("english", "{}", "[]") }).ToList()),
+            ("get_current_ts_config", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.get_current_ts_config() }).ToList()),
+            ("numnode", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.numnode("a & b") }).ToList()),
+        };
+
+        foreach (var (name, act) in fullText)
+            act.Should().Throw<NotSupportedException>()
+                .WithMessage($"*{name}*not supported*", "{0} is a SQL-only scalar", name);
+    }
 }
 
 // D178 T12 fixtures: an enum member for the in-memory fail-closed checks.

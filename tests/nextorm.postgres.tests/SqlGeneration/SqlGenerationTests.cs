@@ -3751,6 +3751,32 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void FullTextConstructors_ShouldEmitCastsAndTextResult()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            A2T = SqlFunctions.Postgres.array_to_tsvector(SqlFunctions.Parameter<string?[]>(0)),
+            Json2Ts = SqlFunctions.Postgres.json_to_tsvector("{\"a\":1}", "[\"numeric\"]"),
+            Json2TsCfg = SqlFunctions.Postgres.json_to_tsvector("english", "{\"a\":1}", "[\"string\"]"),
+            Jsonb2Ts = SqlFunctions.Postgres.jsonb_to_tsvector("{\"a\":1}", "[\"numeric\"]"),
+            Jsonb2TsCfg = SqlFunctions.Postgres.jsonb_to_tsvector("english", "{\"a\":1}", "[\"string\"]"),
+            CurrentCfg = SqlFunctions.Postgres.get_current_ts_config(),
+            Nodes = SqlFunctions.Postgres.numnode(SqlFunctions.Parameter<string>(1)),
+        }));
+
+        sql.Should().Contain("cast(array_to_tsvector(@norm_p0) as text)");
+        sql.Should().Contain("cast(json_to_tsvector(cast(E'{\"a\":1}' as json), cast(E'[\"numeric\"]' as jsonb)) as text)");
+        sql.Should().Contain("cast(json_to_tsvector(cast(E'english' as regconfig), cast(E'{\"a\":1}' as json), cast(E'[\"string\"]' as jsonb)) as text)");
+        sql.Should().Contain("cast(jsonb_to_tsvector(cast(E'{\"a\":1}' as jsonb), cast(E'[\"numeric\"]' as jsonb)) as text)");
+        sql.Should().Contain("cast(jsonb_to_tsvector(cast(E'english' as regconfig), cast(E'{\"a\":1}' as jsonb), cast(E'[\"string\"]' as jsonb)) as text)");
+        sql.Should().Contain("cast(get_current_ts_config() as text)");
+        sql.Should().Contain("numnode(cast(@norm_p1 as tsquery))");
+    }
+
+    [Fact]
     public void TrimArray_ShouldEmit()
     {
         using var ctx = PostgresTestContext.Create();

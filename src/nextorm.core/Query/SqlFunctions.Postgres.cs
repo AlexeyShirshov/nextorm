@@ -1710,6 +1710,57 @@ namespace NextORM.Core;
         /// <param name="tsquery">The <c>tsquery</c> whose matches are highlighted.</param>
         public string? ts_headline(string document, string? tsquery) => default!;
 
+        /// <summary>
+        /// Builds a <c>tsvector</c> from <paramref name="words"/> (<c>array_to_tsvector</c>). The result is
+        /// a <c>tsvector</c>, which the driver reads as text. PostgreSQL refuses an array holding a NULL,
+        /// so every element must be a non-NULL lexeme; positions are not assigned.
+        /// </summary>
+        /// <param name="words">The lexemes; an empty array yields an empty <c>tsvector</c>.</param>
+        public string? array_to_tsvector(string?[] words) => default!;
+
+        /// <summary>
+        /// Builds a <c>tsvector</c> from the string and numeric values of the <c>json</c> document that the
+        /// <paramref name="filter"/> selects (<c>json_to_tsvector</c>). The filter is a <c>jsonb</c> array
+        /// of the strings <c>"string"</c>, <c>"numeric"</c>, <c>"boolean"</c>, <c>"key"</c> and
+        /// <c>"all"</c>.
+        /// </summary>
+        /// <param name="json">The JSON document, as text.</param>
+        /// <param name="filter">The <c>jsonb</c> filter array, as text.</param>
+        public string? json_to_tsvector(string? json, string? filter) => default!;
+
+        /// <summary>
+        /// Builds a <c>tsvector</c> from a <c>json</c> document with an explicit text-search
+        /// <paramref name="config"/> (for example <c>english</c>).
+        /// </summary>
+        /// <param name="config">The text-search configuration name (<c>regconfig</c>).</param>
+        /// <param name="json">The JSON document, as text.</param>
+        /// <param name="filter">The <c>jsonb</c> filter array, as text.</param>
+        public string? json_to_tsvector(string? config, string? json, string? filter) => default!;
+
+        /// <summary>Builds a <c>tsvector</c> from a <c>jsonb</c> document (<c>jsonb_to_tsvector</c>).</summary>
+        /// <param name="json">The JSON document, as text.</param>
+        /// <param name="filter">The <c>jsonb</c> filter array, as text.</param>
+        public string? jsonb_to_tsvector(string? json, string? filter) => default!;
+
+        /// <summary>Builds a <c>tsvector</c> from a <c>jsonb</c> document with an explicit text-search config.</summary>
+        /// <param name="config">The text-search configuration name (<c>regconfig</c>).</param>
+        /// <param name="json">The JSON document, as text.</param>
+        /// <param name="filter">The <c>jsonb</c> filter array, as text.</param>
+        public string? jsonb_to_tsvector(string? config, string? json, string? filter) => default!;
+
+        /// <summary>
+        /// The text-search configuration the current session resolves by default
+        /// (<c>get_current_ts_config</c>), e.g. <c>english</c>. The server returns a <c>regconfig</c>,
+        /// which the driver reads as text.
+        /// </summary>
+        public string? get_current_ts_config() => default!;
+
+        /// <summary>
+        /// The number of lexemes and operators in <paramref name="tsquery"/> (<c>numnode</c>).
+        /// </summary>
+        /// <param name="tsquery">The <c>tsquery</c> text, for example <c>a &amp; b</c>.</param>
+        public int? numnode(string? tsquery) => default!;
+
         /// <summary><c>bool_and(property)</c>: true when every non-null value is true. Requires a provider that supports it.</summary>
         public T? bool_and<T>(T? property) => default!;
 

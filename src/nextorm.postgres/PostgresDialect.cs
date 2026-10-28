@@ -1098,7 +1098,9 @@ internal sealed class PostgresScalarFunctions : IScalarFunctions
         "pg_get_userbyid" or "pg_get_viewdef" or "pg_has_role" or
         "pg_current_snapshot" or "pg_current_xact_id" or "pg_current_xact_id_if_assigned" or
         "pg_snapshot_xmax" or "pg_snapshot_xmin" or "pg_visible_in_snapshot" or
-        "pg_xact_commit_timestamp" or "pg_xact_status";
+        "pg_xact_commit_timestamp" or "pg_xact_status" or
+        "array_to_tsvector" or "json_to_tsvector" or "jsonb_to_tsvector" or
+        "get_current_ts_config" or "numnode";
 
     /// <inheritdoc/>
     public string Render(string name, IReadOnlyList<string> args) => name switch
@@ -1198,6 +1200,18 @@ internal sealed class PostgresScalarFunctions : IScalarFunctions
             $"pg_visible_in_snapshot(cast({args[0]} as xid8), cast({args[1]} as pg_snapshot))",
         "pg_xact_commit_timestamp" => $"pg_xact_commit_timestamp(cast({args[0]} as xid))",
         "pg_xact_status" => $"pg_xact_status(cast({args[0]} as xid8))",
+        // The #281 full-text family: the driver carries tsvector/tsquery/regconfig as text, so every
+        // argument of those types is cast (a text parameter resolves to no such overload, measured) and
+        // the regconfig result is cast back to text because no CLR mapping of regconfig exists.
+        "array_to_tsvector" => $"cast(array_to_tsvector({args[0]}) as text)",
+        "json_to_tsvector" => args.Count == 2
+            ? $"cast(json_to_tsvector(cast({args[0]} as json), cast({args[1]} as jsonb)) as text)"
+            : $"cast(json_to_tsvector(cast({args[0]} as regconfig), cast({args[1]} as json), cast({args[2]} as jsonb)) as text)",
+        "jsonb_to_tsvector" => args.Count == 2
+            ? $"cast(jsonb_to_tsvector(cast({args[0]} as jsonb), cast({args[1]} as jsonb)) as text)"
+            : $"cast(jsonb_to_tsvector(cast({args[0]} as regconfig), cast({args[1]} as jsonb), cast({args[2]} as jsonb)) as text)",
+        "get_current_ts_config" => "cast(get_current_ts_config() as text)",
+        "numnode" => $"numnode(cast({args[0]} as tsquery))",
         _ => throw new NotSupportedException($"The {name} function is not supported by PostgreSQL.")
     };
 
