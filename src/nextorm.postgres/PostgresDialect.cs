@@ -429,7 +429,9 @@ public class PostgresDialect : SqlDialectBase
             "(select tli, start_lsn::text as start_lsn, end_lsn::text as end_lsn"
             + $"\n from {call})",
         "pg_get_multixact_members" =>
-            $"(select * from pg_get_multixact_members(cast({arguments[0]} as xid)))",
+            // Same text bridge as the transaction-origin reader: a uint literal renders as an integer,
+            // and PostgreSQL has no integer-to-xid cast (42846).
+            $"(select * from pg_get_multixact_members(cast(cast({arguments[0]} as text) as xid)))",
         "pg_get_object_address" =>
             "(select classid::text as classid, objid::text as objid, objsubid"
             + "\n from pg_get_object_address("
@@ -457,8 +459,11 @@ public class PostgresDialect : SqlDialectBase
             + "\n from pg_wal_summary_contents("
             + $"{arguments[0]}, cast({arguments[1]} as pg_lsn), cast({arguments[2]} as pg_lsn)))",
         "pg_xact_commit_timestamp_origin" =>
+            // The xid travels as text first: a uint literal renders as an integer, and PostgreSQL has
+            // no integer-to-xid cast (42846), while text-to-xid resolves for both the literal and the
+            // xid-bound parameter the driver sends.
             "(select timestamp, roident::text as roident"
-            + $"\n from pg_xact_commit_timestamp_origin(cast({arguments[0]} as xid)))",
+            + $"\n from pg_xact_commit_timestamp_origin(cast(cast({arguments[0]} as text) as xid)))",
         _ => WrapTableFunction(name, call)
     };
 

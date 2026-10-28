@@ -938,7 +938,8 @@ public class CrossProviderScalarSqlGenerationTests
 
         var members = SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_get_multixact_members(SqlFunctions.Parameter<uint>(0)))
             .Select(r => new { r.Xid, r.Mode }));
-        members.Should().Contain("from (select * from pg_get_multixact_members(cast(@norm_p0 as xid))) as \"t1\"");
+        members.Should().Contain(
+            "from (select * from pg_get_multixact_members(cast(cast(@norm_p0 as text) as xid))) as \"t1\"");
         // The projection stays unaliased where the column name already matches the member name
         // case-insensitively (the same convention as pg_get_keywords' "select word, catcode, barelabel").
         members.Should().Contain("select xid, mode");
@@ -1055,7 +1056,7 @@ public class CrossProviderScalarSqlGenerationTests
             .Select(r => new { r.Timestamp, r.RoIdent }));
         origin.Should().Contain(
             "from (select timestamp, roident::text as roident"
-            + "\n from pg_xact_commit_timestamp_origin(cast(@norm_p0 as xid))) as \"t1\"");
+            + "\n from pg_xact_commit_timestamp_origin(cast(cast(@norm_p0 as text) as xid))) as \"t1\"");
         origin.Should().Contain("select timestamp, roident\n");
     }
 }

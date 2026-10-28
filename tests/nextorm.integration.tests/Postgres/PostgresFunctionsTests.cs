@@ -2355,7 +2355,7 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
 
     /// <summary>
     /// The WAL-summary, multixact, object-address and transaction-status readers of #281 as FROM
-    /// sources: the empty WAL-summary set on a server without <c>summarize_wal</c>, a real
+    /// sources: the WAL-summary set (empty only while the server has never summarised), a real
     /// two-member multixact produced by two concurrent share lockers, a resolvable object address and
     /// its all-NULL form when the arguments cannot identify an object, the summarizer's state row, and
     /// the commit-timestamp reader (a row when <c>track_commit_timestamp</c> is on, the server's
@@ -2368,7 +2368,15 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
         var summaries = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_available_wal_summaries())
             .Select(r => new { r.TimelineId, r.StartLsn, r.EndLsn })
             .ToList();
-        summaries.Should().BeEmpty("summarize_wal is off on the fixture, so the server has no summary files");
+        // The fixture starts with summarize_wal off and no summary file; a summary produced earlier in
+        // this class (the WAL-summary reader test) stays on disk, so the empty set is asserted only while
+        // the server reports none, and otherwise the member must mirror the raw function exactly.
+        var summaryFileCount = Scalar((DataContext)_sut.DataProvider, "select count(*) from pg_available_wal_summaries()");
+        if (summaryFileCount == "0")
+            summaries.Should().BeEmpty("summarize_wal is off on the fixture, so the server has no summary files");
+        else
+            summaries.Should().HaveCount(int.Parse(summaryFileCount, System.Globalization.CultureInfo.InvariantCulture));
+        summaries.Should().OnlyContain(r => r.StartLsn != null && r.EndLsn != null && r.TimelineId != null);
 
         Execute(_sut.DataProvider, "drop table if exists t347_multixact_probe");
         Execute(_sut.DataProvider, "create table t347_multixact_probe (id integer primary key, value integer)");
@@ -2431,9 +2439,11 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
             .Select(r => new { r.SummarizedTli, r.SummarizedLsn, r.PendingLsn, r.SummarizerPid })
             .ToList();
         summarizer.Should().ContainSingle("the summarizer state is one row");
-        summarizer[0].SummarizedTli.Should().Be(0, "nothing has been summarized while summarize_wal is off");
-        summarizer[0].SummarizedLsn.Should().Be("0/0");
-        summarizer[0].PendingLsn.Should().Be("0/0");
+        // The state reflects the last run of the summarizer: 0/0 before any summary exists, a real
+        // timeline/LSN pair once a test in this class has produced one. The LSN columns are text.
+        summarizer[0].SummarizedTli.Should().NotBeNull();
+        summarizer[0].SummarizedLsn.Should().MatchRegex("^[0-9A-F]+/[0-9A-F]+$");
+        summarizer[0].PendingLsn.Should().MatchRegex("^[0-9A-F]+/[0-9A-F]+$");
         summarizer[0].SummarizerPid.Should().BeNull("the summarizer process runs only while summarize_wal is on");
 
         var trackCommitTimestamp = Scalar((DataContext)_sut.DataProvider, "select current_setting('track_commit_timestamp')");
@@ -2552,7 +2562,8 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
             .Select(r => new { r.Type, r.Schema, r.Name, r.Identity })
             .ToList();
         missing.Should().ContainSingle("a missing object still yields one row");
-        missing[0].Type.Should().BeNull();
+        // The class (type) is known from the catalog OID; only the identity columns are NULL.
+        missing[0].Type.Should().Be("relation");
         missing[0].Schema.Should().BeNull();
         missing[0].Name.Should().BeNull();
         missing[0].Identity.Should().BeNull();
@@ -2680,11 +2691,34 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
         }
         else
         {
-            FluentActions.Invoking(() => _sut.DataProvider.From(() =>
-                    SqlFunctions.Postgres.pg_xact_commit_timestamp_origin(1u))
-                    .Select(r => new { r.Timestamp, r.RoIdent }).ToList())
-                .Should().Throw<PostgresException>()
-                .WithMessage("*could not get commit timestamp data*");
+            // The bootstrap xid (1) has no commit record: the reader returns one all-NULL row for it,
+            // while an ordinary committed xid raises the documented 55000 because the cluster started
+            // with track_commit_timestamp off (a postmaster setting the test cannot change).
+            var bootstrap = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_xact_commit_timestamp_origin(1u))
+                .Select(r => new { r.Timestamp, r.RoIdent })
+                .ToList();
+            bootstrap.Should().ContainSingle("the reader returns one row for a known xid");
+            bootstrap[0].Timestamp.Should().BeNull();
+            bootstrap[0].RoIdent.Should().BeNull();
+
+            Execute(_sut.DataProvider, "drop table if exists t347_xid_probe");
+            Execute(_sut.DataProvider, "create table t347_xid_probe (id integer)");
+            try
+            {
+                Execute(_sut.DataProvider, "insert into t347_xid_probe values (1)");
+                var xid = Convert.ToUInt32(
+                    Scalar((DataContext)_sut.DataProvider, "select xmin::text from t347_xid_probe where id = 1"),
+                    System.Globalization.CultureInfo.InvariantCulture);
+                FluentActions.Invoking(() => _sut.DataProvider.From(() =>
+                        SqlFunctions.Postgres.pg_xact_commit_timestamp_origin(xid))
+                        .Select(r => new { r.Timestamp, r.RoIdent }).ToList())
+                    .Should().Throw<PostgresException>()
+                    .WithMessage("*could not get commit timestamp data*");
+            }
+            finally
+            {
+                Execute(_sut.DataProvider, "drop table if exists t347_xid_probe");
+            }
         }
     }
 
