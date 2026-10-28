@@ -1456,7 +1456,7 @@ namespace NextORM.Core;
         /// <summary>
         /// The reconstructed <c>SELECT</c> of the view named <paramref name="view"/>
         /// (<c>pg_get_viewdef(text)</c>), where the argument is a view name or a numeric OID in text form
-        /// (rendered through a <c>regclass</c> cast). Gated per name by
+        /// (rendered through a <c>to_regclass</c> cast; an unknown name yields NULL). Gated per name by
         /// <see cref="IScalarFunctions.Supports"/>.
         /// </summary>
         public string? pg_get_viewdef(string? view) => default!;
@@ -1464,14 +1464,15 @@ namespace NextORM.Core;
         /// <summary>
         /// The reconstructed <c>SELECT</c> of the view named <paramref name="view"/>, pretty-printed when
         /// <paramref name="pretty"/> is true (<c>pg_get_viewdef(text, boolean)</c>); the name or OID goes
-        /// through a <c>regclass</c> cast. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// through a <c>to_regclass</c> cast. Gated per name by <see cref="IScalarFunctions.Supports"/>.
         /// </summary>
         public string? pg_get_viewdef(string? view, bool? pretty) => default!;
 
         /// <summary>
         /// The reconstructed <c>SELECT</c> of the view with the given <paramref name="viewOid"/>
         /// (<c>pg_get_viewdef(oid, integer)</c>), pretty-printed when <paramref name="pretty"/> is true.
-        /// The OID is passed in its text form. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// The OID is passed in its text form (<c>to_regclass</c>). Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
         /// </summary>
         public string? pg_get_viewdef(string? viewOid, int? pretty) => default!;
 
@@ -1540,12 +1541,14 @@ namespace NextORM.Core;
         public bool? pg_visible_in_snapshot(string? xid, string? snapshot) => default!;
 
         /// <summary>
-        /// The commit time of the transaction <paramref name="xid"/> (<c>pg_xact_commit_timestamp(xid)</c>),
-        /// or NULL when the time is not known (the setting <c>track_commit_timestamp</c> is off) — the
-        /// documented behaviour instead of a server restart. The <c>xid</c> argument is passed in its
-        /// numeric text form. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// The commit time of the transaction <paramref name="xid"/> (<c>pg_xact_commit_timestamp(xid)</c>).
+        /// The time exists only for a transaction that committed while <c>track_commit_timestamp</c> was
+        /// enabled (a restart-only setting); otherwise the server raises SQLSTATE 55000
+        /// (<c>could not get commit timestamp data</c>). The <c>xid</c> argument is passed in its numeric
+        /// text form (the driver cannot bind an <c>xid</c>, and PostgreSQL has no integer-to-xid cast).
+        /// Gated per name by <see cref="IScalarFunctions.Supports"/>.
         /// </summary>
-        public DateTime? pg_xact_commit_timestamp(uint? xid) => default!;
+        public DateTime? pg_xact_commit_timestamp(string? xid) => default!;
 
         /// <summary>
         /// The status of the transaction <paramref name="xid"/>

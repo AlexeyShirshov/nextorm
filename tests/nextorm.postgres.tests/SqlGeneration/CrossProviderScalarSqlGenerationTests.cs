@@ -607,8 +607,9 @@ public class CrossProviderScalarSqlGenerationTests
     }
 
     /// <summary>
-    /// The view/role/snapshot helpers of #281. The <c>regclass</c> and <c>regrole</c> casts accept both a
-    /// name and a numeric OID, and the snapshot/xid8 results are read as text.
+    /// The view/role/snapshot helpers of #281. <c>to_regclass</c> accepts both a view name and a numeric
+    /// OID (the text-to-<c>regclass</c> cast resolves a name only), <c>regrole</c> accepts both, and the
+    /// snapshot/xid8 results are read as text.
     /// </summary>
     [Fact]
     [Trait("Issue", "281")]
@@ -642,9 +643,9 @@ public class CrossProviderScalarSqlGenerationTests
         }
 
         sql.Should().Contain("pg_get_userbyid(cast(@norm_p0 as oid))");
-        sql.Should().Contain("pg_get_viewdef(cast(@norm_p1 as regclass))");
-        sql.Should().Contain("pg_get_viewdef(cast(@norm_p2 as regclass), true)");
-        sql.Should().Contain("pg_get_viewdef(cast(@norm_p3 as regclass), 2)");
+        sql.Should().Contain("pg_get_viewdef(to_regclass(@norm_p1))");
+        sql.Should().Contain("pg_get_viewdef(to_regclass(@norm_p2), true)");
+        sql.Should().Contain("pg_get_viewdef(to_regclass(@norm_p3), 2)");
         sql.Should().Contain("pg_has_role(cast(@norm_p4 as regrole), E'USAGE')");
         sql.Should().Contain("pg_has_role(cast(@norm_p5 as regrole), cast(@norm_p6 as regrole), E'USAGE')");
         sql.Should().Contain("cast(pg_current_snapshot() as text)");
@@ -669,7 +670,7 @@ public class CrossProviderScalarSqlGenerationTests
             Sxmin = SqlFunctions.Postgres.pg_snapshot_xmin(SqlFunctions.Parameter<string>(1)),
             Vis = SqlFunctions.Postgres.pg_visible_in_snapshot(
                 SqlFunctions.Parameter<string>(2), SqlFunctions.Parameter<string>(3)),
-            Xct = SqlFunctions.Postgres.pg_xact_commit_timestamp(7u),
+            Xct = SqlFunctions.Postgres.pg_xact_commit_timestamp("7"),
             Xs = SqlFunctions.Postgres.pg_xact_status(SqlFunctions.Parameter<string>(4))
         }));
 
@@ -686,7 +687,7 @@ public class CrossProviderScalarSqlGenerationTests
         sql.Should().Contain("cast(pg_snapshot_xmax(cast(@norm_p0 as pg_snapshot)) as text)");
         sql.Should().Contain("cast(pg_snapshot_xmin(cast(@norm_p1 as pg_snapshot)) as text)");
         sql.Should().Contain("pg_visible_in_snapshot(cast(@norm_p2 as xid8), cast(@norm_p3 as pg_snapshot))");
-        sql.Should().Contain("pg_xact_commit_timestamp(cast(7 as xid))");
+        sql.Should().Contain("pg_xact_commit_timestamp(cast(E'7' as xid))");
         sql.Should().Contain("pg_xact_status(cast(@norm_p4 as xid8))");
     }
 

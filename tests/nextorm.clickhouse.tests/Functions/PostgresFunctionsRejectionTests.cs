@@ -107,6 +107,17 @@ public class PostgresFunctionsRejectionTests
         crc32.Should().Throw<NotSupportedException>().WithMessage("The crc32 function is refused:*PostgreSQL 18*");
         crc32c.Should().Throw<NotSupportedException>().WithMessage("The crc32c function is refused:*PostgreSQL 18*");
 
+        // The pg_get_expr / pg_get_constraintdef pair is refused at the member itself: PostgreSQL needs
+        // a pg_node_tree value there and no CLR value of that type exists.
+        FluentActions.Invoking(() => SqlFunctions.Postgres.pg_get_expr("x", "0"))
+            .Should().Throw<NotSupportedException>().WithMessage("The pg_get_expr function is refused:*pg_node_tree*");
+        FluentActions.Invoking(() => SqlFunctions.Postgres.pg_get_expr("x", "0", true))
+            .Should().Throw<NotSupportedException>().WithMessage("The pg_get_expr function is refused:*pg_node_tree*");
+        FluentActions.Invoking(() => SqlFunctions.Postgres.pg_get_constraintdef("0"))
+            .Should().Throw<NotSupportedException>().WithMessage("The pg_get_constraintdef function is refused:*pg_node_tree*");
+        FluentActions.Invoking(() => SqlFunctions.Postgres.pg_get_constraintdef("0", true))
+            .Should().Throw<NotSupportedException>().WithMessage("The pg_get_constraintdef function is refused:*pg_node_tree*");
+
         // The pg_sleep family returns void, so no void call can appear in a projection; the refusal is a
         // member-level throw (its body throws before any SQL could be emitted) and is provider-independent.
         FluentActions.Invoking(() => SqlFunctions.Postgres.pg_sleep(0.0))
@@ -326,6 +337,101 @@ public class PostgresFunctionsRejectionTests
             ("pg_index_column_has_property", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_index_column_has_property("pg_class_oid_index", 1, "orderable") }))),
             ("pg_input_is_valid", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_input_is_valid("123", "integer") }))),
             ("pg_get_serial_sequence", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_get_serial_sequence("pg_class", "oid") }))),
+        };
+
+        foreach (var (name, act) in cases)
+            act.Should().Throw<NotSupportedException>().WithMessage($"*{name}*not supported*");
+    }
+    /// <summary>
+    /// The PostgreSQL function-definition helpers of #281 are PostgreSQL-only on this provider as well:
+    /// each enrolled name is refused during preparation with a message naming it.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void FunctionDefinitionFamily_ShouldThrowBecauseNotSupported()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var cases = new (string Name, Action Act)[]
+        {
+            ("pg_get_function_arguments", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_get_function_arguments("1") }))),
+            ("pg_get_function_identity_arguments", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_get_function_identity_arguments("1") }))),
+            ("pg_get_function_result", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_get_function_result("1") }))),
+            ("pg_get_functiondef", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_get_functiondef("1") }))),
+        };
+
+        foreach (var (name, act) in cases)
+            act.Should().Throw<NotSupportedException>().WithMessage($"*{name}*not supported*");
+    }
+
+    /// <summary>
+    /// The PostgreSQL catalog-definition helpers of #281 (index, partition, rule, statistics, trigger)
+    /// are PostgreSQL-only on this provider as well.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void CatalogDefinitionFamily_ShouldThrowBecauseNotSupported()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var cases = new (string Name, Action Act)[]
+        {
+            ("pg_get_indexdef", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_get_indexdef("1") }))),
+            ("pg_get_partition_constraintdef", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_get_partition_constraintdef("1") }))),
+            ("pg_get_partkeydef", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_get_partkeydef("1") }))),
+            ("pg_get_ruledef", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_get_ruledef("1") }))),
+            ("pg_get_statisticsobjdef", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_get_statisticsobjdef("1") }))),
+            ("pg_get_triggerdef", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_get_triggerdef("1") }))),
+        };
+
+        foreach (var (name, act) in cases)
+            act.Should().Throw<NotSupportedException>().WithMessage($"*{name}*not supported*");
+    }
+
+    /// <summary>
+    /// The PostgreSQL view, role and snapshot helpers of #281 are PostgreSQL-only on this provider too.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void ViewRoleAndSnapshotFamily_ShouldThrowBecauseNotSupported()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var cases = new (string Name, Action Act)[]
+        {
+            ("pg_get_userbyid", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_get_userbyid("1") }))),
+            ("pg_get_viewdef", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_get_viewdef("v") }))),
+            ("pg_has_role", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_has_role("r", "USAGE") }))),
+            ("pg_current_snapshot", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_current_snapshot() }))),
+            ("pg_current_xact_id", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_current_xact_id() }))),
+            ("pg_current_xact_id_if_assigned", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_current_xact_id_if_assigned() }))),
+        };
+
+        foreach (var (name, act) in cases)
+            act.Should().Throw<NotSupportedException>().WithMessage($"*{name}*not supported*");
+    }
+
+    /// <summary>
+    /// The PostgreSQL snapshot-inspection and transaction-status helpers of #281 are PostgreSQL-only on
+    /// this provider too.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void SnapshotInspectionFamily_ShouldThrowBecauseNotSupported()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var cases = new (string Name, Action Act)[]
+        {
+            ("pg_snapshot_xmax", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_snapshot_xmax("1:1:") }))),
+            ("pg_snapshot_xmin", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_snapshot_xmin("1:1:") }))),
+            ("pg_visible_in_snapshot", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_visible_in_snapshot("1", "1:1:") }))),
+            ("pg_xact_commit_timestamp", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_xact_commit_timestamp("7") }))),
+            ("pg_xact_status", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_xact_status("1") }))),
         };
 
         foreach (var (name, act) in cases)

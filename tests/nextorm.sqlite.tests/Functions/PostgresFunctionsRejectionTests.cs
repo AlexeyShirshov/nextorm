@@ -396,7 +396,7 @@ public class PostgresFunctionsRejectionTests
             ("pg_snapshot_xmax", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_snapshot_xmax("1:1:") }))),
             ("pg_snapshot_xmin", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_snapshot_xmin("1:1:") }))),
             ("pg_visible_in_snapshot", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_visible_in_snapshot("1", "1:1:") }))),
-            ("pg_xact_commit_timestamp", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_xact_commit_timestamp(7u) }))),
+            ("pg_xact_commit_timestamp", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_xact_commit_timestamp("7") }))),
             ("pg_xact_status", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.pg_xact_status("1") }))),
         };
 

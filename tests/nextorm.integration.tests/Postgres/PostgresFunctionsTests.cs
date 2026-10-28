@@ -1730,6 +1730,201 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
 
     [Fact]
     [Trait("Issue", "281")]
+    public void CatalogDefinitionFamily_ShouldComputeValuesAndPlanEveryShape()
+    {
+        var ctx = (DataContext)_sut.DataProvider;
+        var nowOid = Scalar(ctx, "select oid from pg_proc where proname = 'now' and pronargs = 0");
+        var indexOid = Scalar(ctx, "select oid from pg_class where relname = 'pg_class_oid_index'");
+        var viewOid = Scalar(ctx, "select oid from pg_class where relname = 'pg_stat_activity'");
+        var ruleOid = Scalar(ctx, "select oid from pg_rewrite where ev_class = 'pg_stat_activity'::regclass limit 1");
+
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Args = SqlFunctions.Postgres.pg_get_function_arguments(nowOid),
+                Identity = SqlFunctions.Postgres.pg_get_function_identity_arguments(nowOid),
+                Result = SqlFunctions.Postgres.pg_get_function_result(nowOid),
+                FunctionDef = SqlFunctions.Postgres.pg_get_functiondef(nowOid),
+                Index1 = SqlFunctions.Postgres.pg_get_indexdef(indexOid),
+                Index3 = SqlFunctions.Postgres.pg_get_indexdef(indexOid, 1, true),
+                Rule1 = SqlFunctions.Postgres.pg_get_ruledef(ruleOid),
+                Rule2 = SqlFunctions.Postgres.pg_get_ruledef(ruleOid, true)
+            })
+            .First();
+
+        r.Args.Should().BeEmpty("now() takes no arguments");
+        r.Identity.Should().BeEmpty();
+        r.Result.Should().Be("timestamp with time zone");
+        r.FunctionDef.Should().StartWith("CREATE OR REPLACE FUNCTION pg_catalog.now()");
+        r.Index1.Should().StartWith("CREATE UNIQUE INDEX pg_class_oid_index ON ");
+        r.Index3.Should().Contain("oid", "column 1 of the oid index is the oid column itself");
+        r.Rule1.Should().StartWith("CREATE RULE \"_RETURN\" AS");
+        r.Rule2.Should().StartWith("CREATE RULE \"_RETURN\" AS");
+
+        ((object)r.Args!).Should().BeOfType<string>();
+        ((object)r.Index1!).Should().BeOfType<string>();
+
+        // The partition, statistics and trigger helpers need objects the fixture does not have; the shapes
+        // are still planned by the server (the query returns no row, it is parsed and planned all the same).
+        var planned = _sut.ComplexEntity.Where(x => x.Id == -1)
+            .Select(x => new
+            {
+                Pcd = SqlFunctions.Postgres.pg_get_partition_constraintdef(viewOid),
+                Pkd = SqlFunctions.Postgres.pg_get_partkeydef(viewOid),
+                Sodb = SqlFunctions.Postgres.pg_get_statisticsobjdef("0"),
+                Td1 = SqlFunctions.Postgres.pg_get_triggerdef("0"),
+                Td2 = SqlFunctions.Postgres.pg_get_triggerdef("0", true)
+            })
+            .ToList();
+        planned.Should().BeEmpty();
+
+        // Measured on the pinned 17.11 server: a non-partitioned relation is not an error, it is a NULL
+        // row — a plain table, a view and a partition leaf all answer NULL, while a partitioned parent
+        // has a key and a partition has a bound. Both directions are asserted, so a NULL from a
+        // mis-rendered call cannot pass for "no key".
+        var notPartitioned = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Pkd = SqlFunctions.Postgres.pg_get_partkeydef(viewOid),
+                Pcd = SqlFunctions.Postgres.pg_get_partition_constraintdef(viewOid)
+            })
+            .First();
+        notPartitioned.Pkd.Should().BeNull("a view has no partition key: the server returns NULL, it does not raise");
+        notPartitioned.Pcd.Should().BeNull("a view has no partition bound: the server returns NULL, it does not raise");
+
+        Execute(ctx, "drop table if exists t347_partition_probe cascade");
+        Execute(ctx, "create table t347_partition_probe (id integer, ts date) partition by range (ts)");
+        try
+        {
+            Execute(ctx, "create table t347_partition_probe_p1 partition of t347_partition_probe"
+                + " for values from ('2020-01-01') to ('2021-01-01')");
+            var parentOid = Scalar(ctx, "select 't347_partition_probe'::regclass::oid");
+            var childOid = Scalar(ctx, "select 't347_partition_probe_p1'::regclass::oid");
+
+            var partition = _sut.ComplexEntity.Where(x => x.Id == 1)
+                .Select(x => new
+                {
+                    Key = SqlFunctions.Postgres.pg_get_partkeydef(parentOid),
+                    Bound = SqlFunctions.Postgres.pg_get_partition_constraintdef(childOid),
+                    ChildKey = SqlFunctions.Postgres.pg_get_partkeydef(childOid)
+                })
+                .First();
+            partition.Key.Should().Be("RANGE (ts)");
+            partition.Bound.Should().Contain("ts >=").And.Contain("ts <");
+            partition.ChildKey.Should().BeNull("a partition leaf has no partition key of its own");
+        }
+        finally
+        {
+            Execute(ctx, "drop table if exists t347_partition_probe cascade");
+        }
+
+        // The other definition helpers answer NULL for an object of the wrong kind as well (measured):
+        // no exception is raised, the row is simply NULL.
+        var wrongKind = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Index = SqlFunctions.Postgres.pg_get_indexdef(viewOid),
+                View = SqlFunctions.Postgres.pg_get_viewdef("pg_class"),
+                Rule = SqlFunctions.Postgres.pg_get_ruledef("0"),
+                Trigger = SqlFunctions.Postgres.pg_get_triggerdef("0"),
+                Stats = SqlFunctions.Postgres.pg_get_statisticsobjdef("0")
+            })
+            .First();
+        wrongKind.Index.Should().BeNull("an index definition needs an index: a relation OID yields NULL");
+        wrongKind.View.Should().BeNull("a table is not a view: pg_get_viewdef yields NULL");
+        wrongKind.Rule.Should().BeNull("OID 0 is not a rule: pg_get_ruledef yields NULL");
+        wrongKind.Trigger.Should().BeNull("OID 0 is not a trigger: pg_get_triggerdef yields NULL");
+        wrongKind.Stats.Should().BeNull("OID 0 is not an extended statistics object: pg_get_statisticsobjdef yields NULL");
+
+        // The pg_node_tree pair refuses at the member, and the live server states the same limitation.
+        FluentActions.Invoking(() => SqlFunctions.Postgres.pg_get_expr("x", "0"))
+            .Should().Throw<NotSupportedException>().WithMessage("*cannot accept a value of type pg_node_tree*");
+        FluentActions.Invoking(() => SqlFunctions.Postgres.pg_get_constraintdef("0"))
+            .Should().Throw<NotSupportedException>().WithMessage("*pg_node_tree*");
+
+        var liveNodeTree = () => Scalar(ctx, "select pg_get_expr('x', 0)");
+        liveNodeTree.Should().Throw<PostgresException>()
+            .WithMessage("*cannot accept a value of type pg_node_tree*");
+    }
+
+    [Fact]
+    [Trait("Issue", "281")]
+    public void ViewRoleAndSnapshotFamily_ShouldComputeValuesAndClrTypes()
+    {
+        var ctx = (DataContext)_sut.DataProvider;
+        var me = Scalar(ctx, "select current_user");
+        var roleOid = Scalar(ctx, "select oid from pg_roles where rolname = current_user");
+        var viewOid = Scalar(ctx, "select oid from pg_class where relname = 'pg_stat_activity'");
+
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                User = SqlFunctions.Postgres.pg_get_userbyid(roleOid),
+                View1 = SqlFunctions.Postgres.pg_get_viewdef("pg_stat_activity"),
+                View2 = SqlFunctions.Postgres.pg_get_viewdef(viewOid, true),
+                View3 = SqlFunctions.Postgres.pg_get_viewdef(viewOid, 2),
+                HasRole2 = SqlFunctions.Postgres.pg_has_role("pg_read_all_stats", "USAGE"),
+                HasRole3 = SqlFunctions.Postgres.pg_has_role(me, me, "USAGE"),
+                Snapshot = SqlFunctions.Postgres.pg_current_snapshot(),
+                XactId = SqlFunctions.Postgres.pg_current_xact_id(),
+                Status = SqlFunctions.Postgres.pg_xact_status(
+                    SqlFunctions.Postgres.pg_current_xact_id())
+            })
+            .First();
+
+        r.User.Should().Be(me);
+        r.View1.Should().Contain("SELECT");
+        r.View2.Should().Contain("SELECT");
+        r.View3.Should().Contain("SELECT");
+        r.HasRole2.Should().BeTrue("a superuser has USAGE on every role");
+        r.HasRole3.Should().BeTrue("a role always has USAGE on itself");
+        r.Snapshot.Should().MatchRegex(@"^\d+:\d+:");
+        r.XactId.Should().MatchRegex(@"^\d+$");
+        r.Status.Should().Be("in progress");
+
+        ((object)r.User!).Should().BeOfType<string>();
+        ((object)r.Snapshot!).Should().BeOfType<string>();
+        ((object)r.XactId!).Should().BeOfType<string>();
+
+        var s = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Xmax = SqlFunctions.Postgres.pg_snapshot_xmax(
+                    SqlFunctions.Postgres.pg_current_snapshot()),
+                Xmin = SqlFunctions.Postgres.pg_snapshot_xmin(
+                    SqlFunctions.Postgres.pg_current_snapshot())
+            })
+            .First();
+        s.Xmax.Should().MatchRegex(@"^\d+$");
+        s.Xmin.Should().MatchRegex(@"^\d+$");
+        Convert.ToUInt64(s.Xmin, System.Globalization.CultureInfo.InvariantCulture)
+            .Should().BeLessThanOrEqualTo(Convert.ToUInt64(s.Xmax, System.Globalization.CultureInfo.InvariantCulture));
+
+        // The xmax transaction of the snapshot is not yet visible in it.
+        var visible = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                V = SqlFunctions.Postgres.pg_visible_in_snapshot(
+                    SqlFunctions.Postgres.pg_snapshot_xmax(SqlFunctions.Postgres.pg_current_snapshot()),
+                    SqlFunctions.Postgres.pg_current_snapshot())
+            })
+            .First();
+        visible.V.Should().BeFalse();
+
+        // track_commit_timestamp is a restart-only setting. Measured on the pinned server with it off:
+        // there is no NULL row, the server raises 55000 "could not get commit timestamp data".
+        var setting = Scalar(ctx, "select setting from pg_settings where name = 'track_commit_timestamp'");
+        var commitTs = () => _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new { V = SqlFunctions.Postgres.pg_xact_commit_timestamp("7") })
+            .First();
+        if (setting == "off")
+            commitTs.Should().Throw<PostgresException>().Which.SqlState.Should().Be("55000");
+        else
+            commitTs().V.Should().NotBeNull();
+    }
+
+    [Fact]
+    [Trait("Issue", "281")]
     public void NumericFamily_ShouldComputeValuesNullsAndClrTypes()
     {
         double? nullDouble = null;

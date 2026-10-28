@@ -1041,11 +1041,13 @@ internal sealed class PostgresScalarFunctions : IScalarFunctions
             ? $"pg_get_triggerdef(cast({args[0]} as oid))"
             : $"pg_get_triggerdef(cast({args[0]} as oid), {args[1]})",
         "pg_get_userbyid" => $"pg_get_userbyid(cast({args[0]} as oid))",
-        // regclass accepts a view name and a numeric OID, so one render serves the (text) and (oid) rows;
-        // the second argument's type (boolean or integer) picks the pretty overload.
+        // to_regclass accepts a view name and a numeric OID in text form; the text -> regclass cast
+        // resolves a name only (a numeric argument raises 42P01), so it cannot serve the (oid) rows.
+        // The second argument's type (boolean or integer) picks the pretty overload; an unknown name
+        // yields NULL.
         "pg_get_viewdef" => args.Count == 1
-            ? $"pg_get_viewdef(cast({args[0]} as regclass))"
-            : $"pg_get_viewdef(cast({args[0]} as regclass), {args[1]})",
+            ? $"pg_get_viewdef(to_regclass({args[0]}))"
+            : $"pg_get_viewdef(to_regclass({args[0]}), {args[1]})",
         // regrole accepts a role name and a numeric OID; the two-argument form's second argument is the
         // privilege text, the three-argument form's is the membership role.
         "pg_has_role" => args.Count == 2
