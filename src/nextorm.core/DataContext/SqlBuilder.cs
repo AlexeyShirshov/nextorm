@@ -2632,7 +2632,8 @@ internal readonly struct SqlBuilder
     // A raw SQL FROM source adds its parameters by property name; a captured variable of the same name
     // in the surrounding query would add a second parameter with that name, which most providers reject
     // at execution. Fail at build time with an actionable message instead.
-    private static void EnsureUniqueParameterNames(List<Parameter> @params)    {
+    private static void EnsureUniqueParameterNames(List<Parameter> @params)
+    {
         for (var i = 0; i < @params.Count; i++)
         {
             for (var j = i + 1; j < @params.Count; j++)

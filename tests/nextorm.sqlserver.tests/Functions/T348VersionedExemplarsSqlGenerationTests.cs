@@ -26,6 +26,9 @@ public class T348VersionedExemplarsSqlGenerationTests
     private sealed class V15Context(string connectionString)
         : SqlServerDataContext(new Version(15, 0), connectionString);
 
+    private sealed class V14Context(string connectionString)
+        : SqlServerDataContext(new Version(14, 0), connectionString);
+
     private sealed class V16Context(string connectionString)
         : SqlServerDataContext(new Version(16, 0), connectionString);
 
@@ -46,6 +49,7 @@ public class T348VersionedExemplarsSqlGenerationTests
 
     private static SqlServerDataContext Declared(int major) => major switch
     {
+        14 => new V14Context(ConnectionString),
         15 => new V15Context(ConnectionString),
         16 => new V16Context(ConnectionString),
         17 => new V17Context(ConnectionString),
@@ -957,6 +961,269 @@ public class T348VersionedExemplarsSqlGenerationTests
 
         public T348UnmappedTarget? Value { get; } = value;
     }
+
+    // ---------------------------------------------------------------------------------------------
+    // U4 — aggregate + analytic family (the five remaining delivery names)
+    // ---------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Every U4 aggregate renders its native spelling in an aggregate context: the approximate
+    /// distinct count stays <c>approx_count_distinct</c> (it is not the exact
+    /// <c>count(distinct ...)</c>), the grouping id flattens both arguments, and the approximate
+    /// percentiles are ordered-set (<c>within group</c>) forms with no <c>OVER</c> expansion.
+    /// </summary>
+    [Theory]
+    [InlineData(16)]
+    [InlineData(17)]
+    [InlineData(18)]
+    public void DeclaredSixteenAndLater_ShouldRenderEveryU4Aggregate(int major)
+    {
+        using var ctx = Declared(major);
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.GroupBy(x => new { x.Int, x.Boolean }).Select(x => new
+        {
+            x.Int,
+            x.Boolean,
+            A = SqlFunctions.SqlServer.approx_count_distinct(x.Int),
+            C = SqlFunctions.SqlServer.checksum_agg(x.Int),
+            G = SqlFunctions.SqlServer.grouping_id(x.Int, x.Boolean),
+            P = SqlFunctions.SqlServer.approx_percentile_cont(0.5, x.Int),
+            D = SqlFunctions.SqlServer.approx_percentile_disc(0.5, x.Int),
+            E = SqlFunctions.Sql.count_distinct(x.Int)
+        }));
+
+        sql.Should().Contain("approx_count_distinct(nullableint)");
+        sql.Should().Contain("checksum_agg(nullableint)");
+        sql.Should().Contain("grouping_id(nullableint, b)");
+        sql.Should().Contain("approx_percentile_cont(0.5) within group (order by nullableint)");
+        sql.Should().Contain("approx_percentile_disc(0.5) within group (order by nullableint)");
+        sql.Should().Contain("count(distinct nullableint)");
+        sql.Should().Contain("group by nullableint, b");
+        sql.Should().NotContain("over (", "the U4 aggregates offer no window form");
+    }
+
+    /// <summary>A NULL operand is rendered as SQL NULL; the aggregate keeps its own spelling.</summary>
+    [Fact]
+    public void U4Aggregates_ShouldRenderNullOperands()
+    {
+        using var ctx = Declared(17);
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.GroupBy(x => new { x.Boolean }).Select(x => new
+        {
+            x.Boolean,
+            A = SqlFunctions.SqlServer.approx_count_distinct((int?)null),
+            C = SqlFunctions.SqlServer.checksum_agg((int?)null),
+            P = SqlFunctions.SqlServer.approx_percentile_cont(0.5, (int?)null),
+            D = SqlFunctions.SqlServer.approx_percentile_disc(0.5, (int?)null)
+        }));
+
+        sql.Should().Contain("approx_count_distinct(null)");
+        sql.Should().Contain("checksum_agg(null)");
+        sql.Should().Contain("approx_percentile_cont(0.5) within group (order by null)");
+        sql.Should().Contain("approx_percentile_disc(0.5) within group (order by null)");
+    }
+
+    /// <summary>The <c>params</c> array is flattened: one SQL argument per grouping expression, never a
+    /// single array argument.</summary>
+    [Fact]
+    public void GroupingId_ShouldFlattenEveryGroupingArgument()
+    {
+        using var ctx = Declared(17);
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.GroupBy(x => new { x.Int, x.Boolean, x.Datetime }).Select(x => new
+        {
+            G = SqlFunctions.SqlServer.grouping_id(x.Int, x.Boolean, x.Datetime)
+        }));
+
+        sql.Should().Contain("grouping_id(nullableint, b, dt)");
+        sql.Should().NotContain("grouping_id((nullableint, b, dt))");
+    }
+
+    /// <summary>GROUPING_ID is legal in the SELECT list, HAVING and ORDER BY of a grouped command.</summary>
+    [Fact]
+    public void GroupingId_ShouldBeAllowedInSelectHavingAndOrderBy()
+    {
+        using var ctx = Declared(17);
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.GroupBy(x => new { x.Int, x.Boolean })
+                .Having(x => SqlFunctions.SqlServer.grouping_id(x.Int, x.Boolean) == 0)
+                .Select(x => new { x.Int, x.Boolean, C = SqlFunctions.Sql.count() }))
+            .Should().Contain("having grouping_id(nullableint, b) = 0");
+
+        SqlOf(ctx, e.GroupBy(x => new { x.Int, x.Boolean })
+                .Select(x => new { x.Int, G = SqlFunctions.SqlServer.grouping_id(x.Int, x.Boolean) })
+                .OrderBy(x => x.G))
+            .Should().Contain("order by grouping_id(nullableint, b)");
+    }
+
+    /// <summary>Without a <c>GROUP BY</c> (or outside the allowed clauses) the call is refused before SQL.</summary>
+    [Fact]
+    public void GroupingId_ShouldRequireAGroupByContext()
+    {
+        using var ctx = Declared(17);
+        var e = ctx.From<IComplexEntity>();
+
+        AssertGroupingRefused(
+            ctx,
+            e.Select(x => new { G = SqlFunctions.SqlServer.grouping_id(x.Int) }),
+            "The GROUPING_ID function requires a GROUP BY context.");
+
+        AssertGroupingRefused(
+            ctx,
+            e.Where(x => SqlFunctions.SqlServer.grouping_id(x.Int) == 0)
+                .GroupBy(x => new { x.Int })
+                .Select(x => new { x.Int, C = SqlFunctions.Sql.count() }),
+            "The GROUPING_ID function requires a GROUP BY context.");
+    }
+
+    /// <summary>An argument outside the grouping list is refused before SQL, like the engine's Msg 8161.</summary>
+    [Fact]
+    public void GroupingId_ShouldRequireEveryArgumentInTheGroupingList()
+    {
+        using var ctx = Declared(17);
+        var e = ctx.From<IComplexEntity>();
+
+        AssertGroupingRefused(
+            ctx,
+            e.GroupBy(x => new { x.Int }).Select(x => new { G = SqlFunctions.SqlServer.grouping_id(x.Boolean) }),
+            "The GROUPING_ID function requires every argument to match a GROUP BY expression.");
+
+        AssertGroupingRefused(
+            ctx,
+            e.GroupBy(x => new { x.Int }).Select(x => new { G = SqlFunctions.SqlServer.grouping_id(x.Int, x.Boolean) }),
+            "The GROUPING_ID function requires every argument to match a GROUP BY expression.");
+    }
+
+    /// <summary>The fraction is a literal, a captured scalar or a query parameter; endpoints stay exact.</summary>
+    [Fact]
+    public void ApproxPercentiles_ShouldRenderLiteralCapturedAndParameterFractions()
+    {
+        using var ctx = Declared(17);
+        var e = ctx.From<IComplexEntity>();
+        var fraction = 0.75;
+
+        var captured = SqlOf(ctx, e.GroupBy(x => new { x.Boolean })
+            .Select(x => new { P = SqlFunctions.SqlServer.approx_percentile_cont(fraction, x.Int) }));
+        captured.Should().Contain("approx_percentile_cont(@fraction) within group (order by nullableint)");
+
+        var parameter = SqlOf(ctx, e.GroupBy(x => new { x.Boolean })
+            .Select(x => new { P = SqlFunctions.SqlServer.approx_percentile_cont(SqlFunctions.Parameter<double>(0), x.Int) }));
+        parameter.Should().Contain("approx_percentile_cont(@norm_p0) within group (order by nullableint)");
+
+        var endpoints = SqlOf(ctx, e.GroupBy(x => new { x.Boolean }).Select(x => new
+        {
+            x.Boolean,
+            L = SqlFunctions.SqlServer.approx_percentile_cont(0, x.Int),
+            H = SqlFunctions.SqlServer.approx_percentile_disc(1, x.Int)
+        }));
+        endpoints.Should().Contain("approx_percentile_cont(0) within group (order by nullableint)");
+        endpoints.Should().Contain("approx_percentile_disc(1) within group (order by nullableint)");
+    }
+
+    /// <summary>NaN/infinite/out-of-range and row-dependent fractions never reach the SQL text.</summary>
+    [Theory]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    [InlineData(double.NegativeInfinity)]
+    [InlineData(1.5)]
+    [InlineData(-0.5)]
+    public void ApproxPercentiles_ShouldRefuseANonFiniteOrOutOfRangeFraction(double fraction)
+    {
+        using var ctx = Declared(17);
+        var e = ctx.From<IComplexEntity>();
+
+        FluentActions.Invoking(() => SqlOf(ctx, e.Select(x => new
+                { P = SqlFunctions.SqlServer.approx_percentile_cont(fraction, x.Int) })))
+            .Should().Throw<ArgumentOutOfRangeException>()
+            .WithMessage("The fraction for approx_percentile_cont on SQL Server must be finite and between 0 and 1 inclusive.*");
+    }
+
+    [Fact]
+    public void ApproxPercentiles_ShouldRefuseARowDependentFraction()
+    {
+        using var ctx = Declared(17);
+        var e = ctx.From<IComplexEntity>();
+
+        FluentActions.Invoking(() => SqlOf(ctx, e.Select(x => new
+                { P = SqlFunctions.SqlServer.approx_percentile_disc((double)x.Int!, x.Int) })))
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("The fraction for approx_percentile_disc on SQL Server must be a constant or a captured scalar.");
+    }
+
+    /// <summary>
+    /// The declared matrix: count-distinct from major 15, both percentiles from major 16, and
+    /// checksum/grouping with no version floor. Version-only: an unversioned or edition-only
+    /// declaration refuses the versioned names and keeps the undated ones.
+    /// </summary>
+    [Fact]
+    public void DeclaredFourteen_ShouldRefuseCountDistinctWithMajorFifteen()
+    {
+        using var ctx = Declared(14);
+        var e = ctx.From<IComplexEntity>();
+
+        AssertRefused(ctx, e.Select(x => new { A = SqlFunctions.SqlServer.approx_count_distinct(x.Int) }),
+            "The APPROX_COUNT_DISTINCT function requires SQL Server major version 15 or later; declared major version: 14.");
+
+        // No version floor: both keep rendering on 14.
+        SqlOf(ctx, e.GroupBy(x => new { x.Int }).Select(x => new
+        {
+            C = SqlFunctions.SqlServer.checksum_agg(x.Int),
+            G = SqlFunctions.SqlServer.grouping_id(x.Int)
+        })).Should().Contain("checksum_agg(nullableint)").And.Contain("grouping_id(nullableint)");
+    }
+
+    [Fact]
+    public void DeclaredFifteen_ShouldPermitCountDistinctAndRefuseBothPercentiles()
+    {
+        using var ctx = Declared(15);
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.GroupBy(x => new { x.Boolean })
+                .Select(x => new { x.Boolean, A = SqlFunctions.SqlServer.approx_count_distinct(x.Int) }))
+            .Should().Contain("approx_count_distinct(nullableint)");
+
+        AssertRefused(ctx, e.GroupBy(x => new { x.Boolean })
+                .Select(x => new { P = SqlFunctions.SqlServer.approx_percentile_cont(0.5, x.Int) }),
+            "The APPROX_PERCENTILE_CONT function requires SQL Server major version 16 or later; declared major version: 15.");
+
+        AssertRefused(ctx, e.GroupBy(x => new { x.Boolean })
+                .Select(x => new { P = SqlFunctions.SqlServer.approx_percentile_disc(0.5, x.Int) }),
+            "The APPROX_PERCENTILE_DISC function requires SQL Server major version 16 or later; declared major version: 15.");
+    }
+
+    [Theory]
+    [InlineData(nameof(Unversioned))]
+    [InlineData("edition-only")]
+    public void UnversionedAndEditionOnly_ShouldRefuseTheVersionedU4NamesAndKeepTheUndatedOnes(string declaration)
+    {
+        using var ctx = declaration == nameof(Unversioned) ? Unversioned() : EditionOnly(SqlServerEngineEdition.SqlDatabase);
+        const string declared = "unspecified";
+        var e = ctx.From<IComplexEntity>();
+
+        AssertRefused(ctx, e.Select(x => new { A = SqlFunctions.SqlServer.approx_count_distinct(x.Int) }),
+            $"The APPROX_COUNT_DISTINCT function requires SQL Server major version 15 or later; declared major version: {declared}.");
+        AssertRefused(ctx, e.GroupBy(x => new { x.Boolean })
+                .Select(x => new { P = SqlFunctions.SqlServer.approx_percentile_cont(0.5, x.Int) }),
+            $"The APPROX_PERCENTILE_CONT function requires SQL Server major version 16 or later; declared major version: {declared}.");
+        AssertRefused(ctx, e.GroupBy(x => new { x.Boolean })
+                .Select(x => new { P = SqlFunctions.SqlServer.approx_percentile_disc(0.5, x.Int) }),
+            $"The APPROX_PERCENTILE_DISC function requires SQL Server major version 16 or later; declared major version: {declared}.");
+
+        SqlOf(ctx, e.GroupBy(x => new { x.Int }).Select(x => new
+        {
+            C = SqlFunctions.SqlServer.checksum_agg(x.Int),
+            G = SqlFunctions.SqlServer.grouping_id(x.Int)
+        })).Should().Contain("checksum_agg(nullableint)").And.Contain("grouping_id(nullableint)");
+    }
+
+    private static void AssertGroupingRefused<T>(IDataContext ctx, QueryCommand<T> command, string message)
+        => FluentActions.Invoking(() => SqlOf(ctx, command))
+            .Should().Throw<BuildSqlCommandException>()
+            .WithMessage(message);
 
     private static void AssertRefused<T>(IDataContext ctx, QueryCommand<T> command, string message)
         => FluentActions.Invoking(() => SqlOf(ctx, command))
