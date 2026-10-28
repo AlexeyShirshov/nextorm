@@ -308,6 +308,16 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     /// <returns>A sequence over the result rows.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public IEnumerable<TResult> ToEnumerable(params object[] @params) => _dataContext!.GetEnumerable(_dataContext.GetPreparedQueryCommand(this, true, true, CancellationToken.None), @params);
+    /// <summary>Executes the command and materializes every row into a list, binding no parameters.</summary>
+    /// <remarks>
+    /// The parameterless form is the expression-tree-usable terminal: the <c>params ReadOnlySpan&lt;object?&gt;</c>
+    /// overload is a ref struct and an expanded <c>params</c> collection, so a query expression tree that ends in
+    /// <c>ToList()</c> cannot reference it (<c>CS8640</c>/<c>CS9226</c>). Both overloads execute the identical
+    /// command; a zero-argument call simply takes this one.
+    /// </remarks>
+    /// <returns>A list containing all result rows.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public List<TResult> ToList() => ToList(ReadOnlySpan<object?>.Empty);
     /// <summary>Executes the command and materializes every row into a list.</summary>
     /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
     /// <returns>A list containing all result rows.</returns>
@@ -350,6 +360,16 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
 
         return result;
     }
+    /// <summary>Executes the command and materializes every row into an array, binding no parameters.</summary>
+    /// <remarks>
+    /// The parameterless form is the expression-tree-usable terminal: the <c>params ReadOnlySpan&lt;object?&gt;</c>
+    /// overload is a ref struct and an expanded <c>params</c> collection, so a query expression tree that ends in
+    /// <c>ToArray()</c> cannot reference it (<c>CS8640</c>/<c>CS9226</c>). Both overloads execute the identical
+    /// command; a zero-argument call simply takes this one.
+    /// </remarks>
+    /// <returns>An array containing all result rows.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public TResult[] ToArray() => ToArray(ReadOnlySpan<object?>.Empty);
     /// <summary>Executes the command and materializes every row into an array.</summary>
     /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
     /// <returns>An array containing all result rows.</returns>
