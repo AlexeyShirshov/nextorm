@@ -52,10 +52,10 @@ internal static class CollectionSlotBinder
         QueryCommand<TResult> command,
         bool groupingComposed)
     {
-        var isNavigation = (Func<PropertyInfo, bool>)(property =>
-            MetadataEagerLoadResolver.HasDeclaredRelationship(builder.DataProvider, typeof(TEntity), property));
+        Func<Type, PropertyInfo, RelationshipKind?> relationshipKind = (parentType, property) =>
+            MetadataEagerLoadResolver.DeclaredRelationshipKind(builder.DataProvider, parentType, property);
 
-        var recognition = CollectionSlotRecognizer.Recognize(projection, isNavigation);
+        var recognition = CollectionSlotRecognizer.Recognize(projection, relationshipKind);
         if (recognition is null)
             return;
 
@@ -75,7 +75,13 @@ internal static class CollectionSlotBinder
                 "falling back to a client-side join.");
         }
 
+        // Validate the whole slot graph — every level, references included — before any builder is copied, any SQL
+        // is built and any plan entry exists. A rejected nested slot therefore produces no statement either.
+        for (var i = 0; i < recognition.Slots.Count; i++)
+            ValidateSlot(builder.DataProvider, recognition.Slots[i]);
+
         var bindSlot = typeof(CollectionSlotBinder).GetMethod(nameof(BindSlot), BindingFlags.NonPublic | BindingFlags.Static)!;
+        var bindReferenceSlot = typeof(CollectionSlotBinder).GetMethod(nameof(BindReferenceSlot), BindingFlags.NonPublic | BindingFlags.Static)!;
         var buildReader = typeof(CollectionSlotBinder).GetMethod(nameof(BuildReader), BindingFlags.NonPublic | BindingFlags.Static)!;
         var readers = new Func<TEntity, object?>[recognition.Slots.Count];
         var entityBuilder = builder;
@@ -84,10 +90,11 @@ internal static class CollectionSlotBinder
         for (var i = 0; i < recognition.Slots.Count; i++)
         {
             var slot = recognition.Slots[i];
+            var key = (slot.IsReference ? "ref:" : "col:") + slot.Path;
 
-            // One eager-load declaration per navigation: the same collection projected into two different CLR
-            // shapes shares the materialized collection and only differs in the conversion.
-            if (boundPaths.TryGetValue(slot.Path, out var alreadyBound))
+            // One eager-load declaration per navigation: the same navigation projected into two different CLR
+            // shapes shares the materialized entity and only differs in the conversion.
+            if (boundPaths.TryGetValue(key, out var alreadyBound))
             {
                 entityBuilder = alreadyBound;
                 readers[i] = (Func<TEntity, object?>)InvokeAfterBinding(
@@ -95,11 +102,12 @@ internal static class CollectionSlotBinder
                 continue;
             }
 
+            var binder = slot.IsReference ? bindReferenceSlot : bindSlot;
             var bound = (BoundSlot<TEntity>)InvokeAfterBinding(
-                bindSlot, [typeof(TEntity), slot.ChildType], [entityBuilder, slot]);
+                binder, [typeof(TEntity), slot.ChildType], [entityBuilder, slot]);
 
             entityBuilder = bound.Builder;
-            boundPaths[slot.Path] = bound.Builder;
+            boundPaths[key] = bound.Builder;
             readers[i] = bound.Reader;
         }
 
@@ -107,31 +115,118 @@ internal static class CollectionSlotBinder
         command.CollectionSlotCarrier = new CollectionSlotCarrier<TEntity, TResult>(entityBuilder, readers, projector);
     }
 
+    /// <summary>
+    /// Validates one slot (and, recursively, its nested slots) against the declared mapping: the navigation must
+    /// exist, declare the cardinality the slot asks for, point at the slot's element type, and carry a many-to-many
+    /// page only where a parent partition exists. Nothing is built or cached here.
+    /// </summary>
+    private static void ValidateSlot(IDataContext provider, CollectionSlotDescriptor slot)
+    {
+        _ = InvokeAfterBinding(
+            typeof(CollectionSlotBinder).GetMethod(nameof(ValidateSlotCore), BindingFlags.NonPublic | BindingFlags.Static)!,
+            [slot.ParentType, slot.ChildType],
+            [provider, slot]);
+
+        for (var i = 0; i < slot.Nested.Count; i++)
+            ValidateSlot(provider, slot.Nested[i]);
+    }
+
+    private static object? ValidateSlotCore<TParent, TChild>(IDataContext provider, CollectionSlotDescriptor slot)
+        where TChild : class
+    {
+        var route = slot.IsReference ? MetadataEagerLoadRoute.Reference : MetadataEagerLoadRoute.Collection;
+        var binding = MetadataEagerLoadResolver.Resolve<TParent, TChild>(
+            provider,
+            Expression.Lambda(slot.Navigation, slot.Root),
+            route,
+            EagerLoadMode.Default,
+            "a collection projection slot");
+
+        if (!slot.IsReference
+            && binding.Relationship.Kind == RelationshipKind.ManyToMany
+            && slot.Operations.OfType<CollectionSlotLimit>().Any())
+        {
+            throw ManyToManyLimit(slot.Path, typeof(TParent), binding.Navigation.Name);
+        }
+
+        return null;
+    }
+
+    private static NotSupportedException ManyToManyLimit(string path, Type parentType, string navigationName)
+        => new(
+            $"The collection projection slot '{path}' applies Limit(...) to the many-to-many relationship " +
+            $"'{parentType.Name}.{navigationName}': a per-parent page across a junction has no parent partition in " +
+            "this release (M:N + Limit). Remove the Limit, or load the relationship with the split many-to-many " +
+            "loader and page the materialized collection yourself.");
+
     private static BoundSlot<TEntity> BindSlot<TEntity, TChild>(EntityBuilder<TEntity> builder, CollectionSlotDescriptor slot)
         where TChild : class
     {
         var collection = Expression.Lambda<Func<TEntity, ICollection<TChild>>>(slot.Navigation, slot.Root);
-        var binding = MetadataEagerLoadResolver.Resolve<TEntity, TChild>(
-            builder.DataProvider, collection, MetadataEagerLoadRoute.Collection, EagerLoadMode.Default, "a collection projection slot");
 
-        if (binding.Relationship.Kind == RelationshipKind.ManyToMany && slot.Operations.OfType<CollectionSlotLimit>().Any())
-        {
-            throw new NotSupportedException(
-                $"The collection projection slot '{slot.Path}' applies Limit(...) to the many-to-many relationship " +
-                $"'{typeof(TEntity).Name}.{binding.Navigation.Name}': a per-parent page across a junction has no " +
-                "parent partition in this release (M:N + Limit). Remove the Limit, or load the relationship with the " +
-                "split many-to-many loader and page the materialized collection yourself.");
-        }
-
-        var bound = slot.IsAdapter
-            ? builder.LoadWith<TChild>(collection, static context => context.From<TChild>())
-            : builder.LoadWith<TChild>(collection);
+        // A nested slot graph is declared on the child builder, so the child query is the level the nested
+        // descriptors are rooted at. A slot without nested descriptors keeps the plain declaration.
+        var bound = slot.Nested.Count > 0
+            ? builder.LoadWith<TChild>(collection, context => BuildChild<TChild>(context, slot))
+            : slot.IsAdapter
+                ? builder.LoadWith<TChild>(collection, static context => context.From<TChild>())
+                : builder.LoadWith<TChild>(collection);
 
         return new BoundSlot<TEntity>
         {
             Builder = bound,
             Reader = CollectionSlotReaderFactory.Build<TEntity, TChild>(slot),
         };
+    }
+
+    /// <summary>
+    /// Binds a projected reference navigation (N:1 / 1:1) to the eager-loading reference route. That route
+    /// resolves at most one full related identity per parent from the raw stitched rows — repeated rows of one
+    /// identity collapse, a second distinct identity throws <see cref="InvalidOperationException"/> naming the
+    /// navigation — and it runs before the carrier projects anything, so no partial result escapes.
+    /// </summary>
+    private static BoundSlot<TEntity> BindReferenceSlot<TEntity, TChild>(EntityBuilder<TEntity> builder, CollectionSlotDescriptor slot)
+        where TChild : class
+    {
+        var reference = Expression.Lambda<Func<TEntity, TChild?>>(slot.Navigation, slot.Root);
+        var bound = builder.LoadWith<TChild>(reference);
+
+        return new BoundSlot<TEntity>
+        {
+            Builder = bound,
+            Reader = CollectionSlotReaderFactory.Build<TEntity, TChild>(slot),
+        };
+    }
+
+    /// <summary>Builds the child-level builder carrying the nested declarations of <paramref name="slot"/>.</summary>
+    private static EntityBuilder<TChild> BuildChild<TChild>(IDataContext context, CollectionSlotDescriptor slot)
+        where TChild : class
+    {
+        var child = context.From<TChild>();
+        for (var i = 0; i < slot.Nested.Count; i++)
+        {
+            child = (EntityBuilder<TChild>)InvokeAfterBinding(
+                typeof(CollectionSlotBinder).GetMethod(nameof(ApplyNested), BindingFlags.NonPublic | BindingFlags.Static)!,
+                [typeof(TChild), slot.Nested[i].ChildType],
+                [child, slot.Nested[i]]);
+        }
+
+        return child;
+    }
+
+    private static EntityBuilder<TParent> ApplyNested<TParent, TChild>(EntityBuilder<TParent> parent, CollectionSlotDescriptor nested)
+        where TChild : class
+    {
+        if (nested.IsReference)
+        {
+            var reference = Expression.Lambda<Func<TParent, TChild?>>(nested.Navigation, nested.Root);
+            return parent.LoadWith<TChild>(reference);
+        }
+
+        var collection = Expression.Lambda<Func<TParent, ICollection<TChild>>>(nested.Navigation, nested.Root);
+        return nested.Nested.Count > 0
+            ? parent.LoadWith<TChild>(collection, context => BuildChild<TChild>(context, nested))
+            : parent.LoadWith<TChild>(collection, static context => context.From<TChild>());
     }
 
     private static Func<TEntity, object?> BuildReader<TEntity, TChild>(CollectionSlotDescriptor slot)
@@ -221,6 +316,14 @@ internal static class CollectionSlotReaderFactory
         where TChild : class
     {
         var root = slot.Root;
+
+        if (slot.IsReference)
+        {
+            // The reference route already materialized the navigation; the reader only reads it.
+            return Expression.Lambda<Func<TEntity, object?>>(
+                Expression.Convert(slot.Navigation, typeof(object)), root).Compile();
+        }
+
         var child = Expression.Parameter(typeof(TChild), "slotChild");
         var navigation = Expression.Lambda<Func<TEntity, IEnumerable<TChild>?>>(slot.Navigation, root).Compile();
 
@@ -228,6 +331,9 @@ internal static class CollectionSlotReaderFactory
         var orderings = new List<(Func<TChild, TEntity, object?> Selector, bool Descending, bool ThenBy)>();
         Func<TEntity, int>? limit = null;
         Func<TChild, TEntity, object?>? select = null;
+        LambdaExpression? selectLambda = null;
+        Func<TChild, object?[]>? nestedReaders = null;
+        Func<TChild, object?[], object?>? selectWithNested = null;
 
         foreach (var operation in slot.Operations)
         {
@@ -247,8 +353,31 @@ internal static class CollectionSlotReaderFactory
 
                 case CollectionSlotSelect projection:
                     select = Compile<TChild, TEntity, object?>(projection.Projection, child, root);
+                    selectLambda = projection.Projection;
                     break;
             }
+        }
+
+        // A nested slot belongs to the child level: its reader runs against the materialized child, and the
+        // Select(...) shape is then projected with those values substituted in. The recursion is the same code
+        // path at every depth, so a nested adapter pipeline applies per its own parent (a Limit(3) inside Subs is
+        // three per Item).
+        if (slot.Nested.Count > 0 && selectLambda is not null)
+        {
+            var readers = new Func<TChild, object?>[slot.Nested.Count];
+            for (var i = 0; i < slot.Nested.Count; i++)
+                readers[i] = BuildNested<TChild>(slot.Nested[i]);
+
+            nestedReaders = childEntity =>
+            {
+                var values = new object?[readers.Length];
+                for (var i = 0; i < readers.Length; i++)
+                    values[i] = readers[i](childEntity);
+
+                return values;
+            };
+
+            selectWithNested = CollectionSlotProjector.Build<TChild, object?>(selectLambda, slot.NestedNodes);
         }
 
         var elementType = slot.ElementType;
@@ -286,10 +415,31 @@ internal static class CollectionSlotReaderFactory
 
             var values = new List<object?>();
             foreach (var item in items)
-                values.Add(select is null ? item : select(item, entity));
+            {
+                if (selectWithNested is not null && nestedReaders is not null)
+                    values.Add(selectWithNested(item, nestedReaders(item)));
+                else
+                    values.Add(select is null ? item : select(item, entity));
+            }
 
             return CollectionSlotShapes.Convert(values, elementType, slotType);
         };
+    }
+
+    /// <summary>Builds the reader of a nested slot against its own parent entity type.</summary>
+    private static Func<TChild, object?> BuildNested<TChild>(CollectionSlotDescriptor nested)
+        where TChild : class
+    {
+        if (nested.IsReference)
+        {
+            return Expression.Lambda<Func<TChild, object?>>(
+                Expression.Convert(nested.Navigation, typeof(object)), nested.Root).Compile();
+        }
+
+        return (Func<TChild, object?>)typeof(CollectionSlotReaderFactory)
+            .GetMethod(nameof(Build), BindingFlags.NonPublic | BindingFlags.Static)!
+            .MakeGenericMethod(typeof(TChild), nested.ChildType)
+            .Invoke(null, [nested])!;
     }
 
     private static Func<TChild, TEntity, TOut> Compile<TChild, TEntity, TOut>(LambdaExpression lambda, ParameterExpression child, ParameterExpression root)
@@ -319,14 +469,23 @@ internal static class CollectionSlotProjector
     internal static Func<TEntity, object?[], TResult> Build<TEntity, TResult>(
         Expression<Func<TEntity, TResult>> projection,
         IReadOnlyList<Expression> nodes)
+        => Build<TEntity, TResult>((LambdaExpression)projection, nodes);
+
+    /// <summary>
+    /// The untyped twin: builds the buffered projector for any single-parameter lambda body (an adapter's
+    /// <c>Select(...)</c> shape, whose parameter type is only known at the call site).
+    /// </summary>
+    internal static Func<TInput, object?[], TOutput> Build<TInput, TOutput>(
+        LambdaExpression lambda,
+        IReadOnlyList<Expression> nodes)
     {
         var values = Expression.Parameter(typeof(object?[]), "slotValues");
         var indices = new Dictionary<Expression, int>(ReferenceEqualityComparer.Instance);
         for (var i = 0; i < nodes.Count; i++)
             indices[nodes[i]] = i;
 
-        var body = new SlotReplacementVisitor(indices, values).Visit(projection.Body)!;
-        return Expression.Lambda<Func<TEntity, object?[], TResult>>(body, projection.Parameters[0], values).Compile();
+        var body = new SlotReplacementVisitor(indices, values).Visit(lambda.Body)!;
+        return Expression.Lambda<Func<TInput, object?[], TOutput>>(body, lambda.Parameters[0], values).Compile();
     }
 
     private sealed class SlotReplacementVisitor(Dictionary<Expression, int> indices, ParameterExpression values) : ExpressionVisitor

@@ -487,6 +487,24 @@ internal static class MetadataEagerLoadResolver
     }
 
     /// <summary>
+    /// Returns the declared relationship kind of <paramref name="property"/> on <paramref name="entityType"/>,
+    /// or <see langword="null"/> when no relationship is declared for it. Used by projection-slot recognition,
+    /// which must tell a collection navigation from a reference one before binding either.
+    /// </summary>
+    /// <param name="dataProvider">The context that owns the query.</param>
+    /// <param name="entityType">The entity that declares the navigation.</param>
+    /// <param name="property">The navigation property.</param>
+    /// <returns>The declared relationship kind, or <see langword="null"/>.</returns>
+    internal static RelationshipKind? DeclaredRelationshipKind(IDataContext dataProvider, Type entityType, PropertyInfo property)
+    {
+        ArgumentNullException.ThrowIfNull(dataProvider);
+        ArgumentNullException.ThrowIfNull(entityType);
+        ArgumentNullException.ThrowIfNull(property);
+
+        return FindDeclaredRelationship(dataProvider, entityType, property)?.Kind;
+    }
+
+    /// <summary>
     /// Finds the relationship whose declared navigation is <paramref name="property"/>. The entity's own
     /// metadata is searched first; a navigation inherited from a base type then falls back to the already
     /// registered declaring-type metadata (an auto-built entry is never published by the fallback, so a

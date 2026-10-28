@@ -18,6 +18,19 @@ internal sealed class CollectionSlotDescriptor
     /// <summary>The destination member's index in the constructor argument list when it is not a property binding.</summary>
     internal int ArgumentIndex { get; set; } = -1;
 
+    /// <summary>
+    /// Whether this slot is a <em>reference</em> edge (N:1 or 1:1) rather than a collection. A reference slot
+    /// observes exactly one related identity per parent through the eager-loading reference route, which is
+    /// where the projection-scoped cardinality guard lives.
+    /// </summary>
+    internal bool IsReference { get; init; }
+
+    /// <summary>
+    /// The entity type the slot's navigation is declared on: the projected entity at depth one, the parent
+    /// slot's element type at every deeper level.
+    /// </summary>
+    internal required Type ParentType { get; init; }
+
     /// <summary>The declared CLR type of the destination (one of the seven supported collection shapes).</summary>
     internal required Type SlotType { get; init; }
 
@@ -39,8 +52,17 @@ internal sealed class CollectionSlotDescriptor
     /// <summary>The adapter operations, in pipeline order. Empty for a direct slot.</summary>
     internal IReadOnlyList<CollectionSlotOperation> Operations { get; init; } = [];
 
-    /// <summary>The nested descriptors of the projection shape, empty at depth one.</summary>
+    /// <summary>
+    /// The nested descriptors of the adapter projection shape, empty when the slot projects its element as-is.
+    /// Each nested slot is rooted at the <c>Select(...)</c> lambda parameter, so it belongs to the child level.
+    /// </summary>
     internal IReadOnlyList<CollectionSlotDescriptor> Nested { get; init; } = [];
+
+    /// <summary>
+    /// The expression nodes the nested descriptors replace inside the <c>Select(...)</c> lambda body,
+    /// aligned with <see cref="Nested"/> by position.
+    /// </summary>
+    internal IReadOnlyList<Expression> NestedNodes { get; init; } = [];
 
     /// <summary>Whether the slot came from an adapter chain rather than a direct navigation member.</summary>
     internal bool IsAdapter => Operations.Count > 0;
@@ -52,7 +74,8 @@ internal sealed class CollectionSlotDescriptor
         {
             var operations = string.Join(",", Operations.Select(static op => op.Fingerprint));
             var nested = string.Join(";", Nested.Select(static slot => slot.Fingerprint));
-            return $"SLOT:{Path}|{Describe(SlotType)}|{Describe(ElementType)}|{operations}|{nested}";
+            var kind = IsReference ? "ref" : "col";
+            return $"SLOT:{ParentType.Name}.{Path}|{kind}|{Describe(SlotType)}|{Describe(ElementType)}|{operations}|{nested}";
         }
     }
 

@@ -33,38 +33,45 @@ internal static class CollectionSlotRecognizer
     /// <typeparam name="TEntity">The entity being projected.</typeparam>
     /// <typeparam name="TResult">The projected shape.</typeparam>
     /// <param name="projection">The projection expression.</param>
-    /// <param name="isNavigation">Whether a member is a declared navigation; a scalar collection column is not.</param>
+    /// <param name="relationshipKind">
+    /// The declared relationship kind of a member navigation, or <see langword="null"/> when the member is not a
+    /// navigation (a scalar collection column is not, and neither is an undeclared property).
+    /// </param>
     /// <returns>The recognition, or <see langword="null"/> for an ordinary scalar projection.</returns>
     internal static CollectionSlotRecognition? Recognize<TEntity, TResult>(
         Expression<Func<TEntity, TResult>> projection,
-        Func<PropertyInfo, bool> isNavigation)
+        Func<Type, PropertyInfo, RelationshipKind?> relationshipKind)
     {
         var root = projection.Parameters[0];
         var slots = new List<CollectionSlotDescriptor>();
         var nodes = new List<Expression>();
 
-        VisitProjection(projection.Body, root, isNavigation, slots, nodes);
+        VisitProjection(projection.Body, root, typeof(TEntity), relationshipKind, slots, nodes);
 
-        return slots.Count == 0 ? null : new CollectionSlotRecognition { Slots = slots, Nodes = nodes };
+        // A reference-only projection is an ordinary entity projection: the implicit-navigation path owns it and
+        // must not change. The carrier and its cardinality guard are projection-scoped to projections that
+        // actually ask for a per-parent collection.
+        return slots.Exists(static slot => !slot.IsReference) ? new CollectionSlotRecognition { Slots = slots, Nodes = nodes } : null;
     }
 
     private static void VisitProjection(
         Expression body,
         ParameterExpression root,
-        Func<PropertyInfo, bool> isNavigation,
+        Type parentType,
+        Func<Type, PropertyInfo, RelationshipKind?> relationshipKind,
         List<CollectionSlotDescriptor> slots,
         List<Expression> nodes)
     {
         switch (body)
         {
             case MemberInitExpression init:
-                VisitProjection(init.NewExpression, root, isNavigation, slots, nodes);
+                VisitProjection(init.NewExpression, root, parentType, relationshipKind, slots, nodes);
                 foreach (var binding in init.Bindings)
                 {
                     if (binding is not MemberAssignment assignment)
                         continue;
 
-                    AddCandidate(assignment.Expression, assignment.Member, -1, MemberType(assignment.Member), root, isNavigation, slots, nodes);
+                    AddCandidate(assignment.Expression, assignment.Member, -1, MemberType(assignment.Member), root, parentType, relationshipKind, slots, nodes);
                 }
 
                 break;
@@ -73,7 +80,7 @@ internal static class CollectionSlotRecognizer
                 for (var i = 0; i < creation.Arguments.Count; i++)
                 {
                     var parameterType = creation.Constructor?.GetParameters()[i].ParameterType ?? creation.Arguments[i].Type;
-                    AddCandidate(creation.Arguments[i], null, i, parameterType, root, isNavigation, slots, nodes);
+                    AddCandidate(creation.Arguments[i], null, i, parameterType, root, parentType, relationshipKind, slots, nodes);
                 }
 
                 break;
@@ -86,11 +93,12 @@ internal static class CollectionSlotRecognizer
         int argumentIndex,
         Type destinationType,
         ParameterExpression root,
-        Func<PropertyInfo, bool> isNavigation,
+        Type parentType,
+        Func<Type, PropertyInfo, RelationshipKind?> relationshipKind,
         List<CollectionSlotDescriptor> slots,
         List<Expression> nodes)
     {
-        if (TryRecognize(expression, root, destinationType, isNavigation, out var slot))
+        if (TryRecognize(expression, root, destinationType, parentType, relationshipKind, out var slot))
         {
             slot.Member = member;
             slot.ArgumentIndex = argumentIndex;
@@ -103,7 +111,7 @@ internal static class CollectionSlotRecognizer
         {
             // Only an expression that carries a *declared navigation* can be a malformed slot; anything else
             // (a scalar array column, a collection-valued SQL function) is an ordinary projected value.
-            if (TryGetRootedNavigation(expression, root) is { } navigation && isNavigation(navigation) && TryGetCollectionElement(expression.Type, out _))
+            if (TryGetRootedNavigation(expression, root) is { } navigation && relationshipKind(parentType, navigation) is not null && TryGetCollectionElement(expression.Type, out _))
             {
                 throw new NotSupportedException(
                     $"The collection projection slot '{Describe(member)}' is expressed as '{expression}', which is not a " +
@@ -114,16 +122,17 @@ internal static class CollectionSlotRecognizer
             return;
         }
 
-        // A child projection that itself carries a collection slot is a nested slot. The descriptor and the
-        // binder are recursive by construction, but nested slots are delivered by their own unit; refusing
-        // here keeps the failure named and pre-SQL instead of silently projecting the child shape inline.
+        // A child projection constructed inline (not through an adapter Select) that itself carries a slot: the
+        // slot's navigation is still rooted at this level, but the destination DTO is built in memory, so the
+        // outer projector cannot address it. Refuse by name instead of silently projecting the child shape.
         var nestedSlots = new List<CollectionSlotDescriptor>();
-        VisitProjection(expression, root, isNavigation, nestedSlots, []);
+        VisitProjection(expression, root, parentType, relationshipKind, nestedSlots, []);
         if (nestedSlots.Count > 0)
         {
             throw new NotSupportedException(
-                "The projection carries a collection slot inside a child projection: nested collection slots are " +
-                "not supported in this release (depth one only). Project the child shape without a collection slot.");
+                "The projection carries a collection slot inside an inline child projection: a nested slot must be " +
+                "declared inside an adapter Select(...) over the navigation element, so that it is rooted at the " +
+                "child entity. Project the child shape without a collection slot.");
         }
     }
 
@@ -131,20 +140,23 @@ internal static class CollectionSlotRecognizer
         Expression expression,
         ParameterExpression root,
         Type destinationType,
-        Func<PropertyInfo, bool> isNavigation,
+        Type parentType,
+        Func<Type, PropertyInfo, RelationshipKind?> relationshipKind,
         out CollectionSlotDescriptor slot)
     {
         slot = null!;
 
-        return TryRecognizeAdapter(expression, root, destinationType, isNavigation, out slot)
-            || TryRecognizeDirect(expression, root, destinationType, isNavigation, out slot);
+        return TryRecognizeAdapter(expression, root, destinationType, parentType, relationshipKind, out slot)
+            || TryRecognizeDirect(expression, root, destinationType, parentType, relationshipKind, out slot)
+            || TryRecognizeReference(expression, root, parentType, relationshipKind, out slot);
     }
 
     private static bool TryRecognizeDirect(
         Expression expression,
         ParameterExpression root,
         Type destinationType,
-        Func<PropertyInfo, bool> isNavigation,
+        Type parentType,
+        Func<Type, PropertyInfo, RelationshipKind?> relationshipKind,
         out CollectionSlotDescriptor slot)
     {
         slot = null!;
@@ -152,7 +164,7 @@ internal static class CollectionSlotRecognizer
         if (expression is not MemberExpression member || !IsRootedAt(member, root))
             return false;
 
-        if (member.Member is not PropertyInfo property || !isNavigation(property))
+        if (member.Member is not PropertyInfo property || relationshipKind(parentType, property) is not (RelationshipKind.OneToMany or RelationshipKind.ManyToMany))
             return false;
 
         if (!TryGetCollectionElement(member.Type, out var elementType))
@@ -166,6 +178,41 @@ internal static class CollectionSlotRecognizer
             SlotType = destinationType,
             ElementType = elementType,
             ChildType = elementType,
+            ParentType = parentType,
+            Navigation = member,
+            Root = root,
+            Path = Describe(member.Member),
+        };
+        return true;
+    }
+
+    /// <summary>
+    /// Recognizes a projected <em>reference</em> navigation (N:1 or 1:1): the projection reads one related
+    /// entity per parent, so the carrier has to materialize it through the eager-loading reference route, whose
+    /// raw-row identity resolution is the projection-scoped cardinality guard.
+    /// </summary>
+    private static bool TryRecognizeReference(
+        Expression expression,
+        ParameterExpression root,
+        Type parentType,
+        Func<Type, PropertyInfo, RelationshipKind?> relationshipKind,
+        out CollectionSlotDescriptor slot)
+    {
+        slot = null!;
+
+        if (expression is not MemberExpression member || member.Expression != root)
+            return false;
+
+        if (member.Member is not PropertyInfo property || relationshipKind(parentType, property) is not (RelationshipKind.ManyToOne or RelationshipKind.OneToOne))
+            return false;
+
+        slot = new CollectionSlotDescriptor
+        {
+            IsReference = true,
+            SlotType = member.Type,
+            ElementType = member.Type,
+            ChildType = member.Type,
+            ParentType = parentType,
             Navigation = member,
             Root = root,
             Path = Describe(member.Member),
@@ -177,7 +224,8 @@ internal static class CollectionSlotRecognizer
         Expression expression,
         ParameterExpression root,
         Type destinationType,
-        Func<PropertyInfo, bool> isNavigation,
+        Type parentType,
+        Func<Type, PropertyInfo, RelationshipKind?> relationshipKind,
         out CollectionSlotDescriptor slot)
     {
         slot = null!;
@@ -232,7 +280,7 @@ internal static class CollectionSlotRecognizer
 
         if (navigation is null
             || navigation.Member is not PropertyInfo navigationProperty
-            || !isNavigation(navigationProperty)
+            || relationshipKind(parentType, navigationProperty) is not (RelationshipKind.OneToMany or RelationshipKind.ManyToMany)
             || !IsRootedAt(navigation, root)
             || !TryGetCollectionElement(navigation.Type, out var childType))
             return false;
@@ -242,15 +290,26 @@ internal static class CollectionSlotRecognizer
         if (!CollectionSlotShapes.IsSupported(destinationType, elementType))
             throw UnsupportedShape(Describe(navigation.Member), destinationType);
 
+        // A slot declared inside the adapter's Select(...) belongs to the child level: its navigation is rooted at
+        // that lambda's parameter, and the binder declares it on the child builder. The recursion is structural, so
+        // any depth is handled by the same code path.
+        var nested = new List<CollectionSlotDescriptor>();
+        var nestedNodes = new List<Expression>();
+        if (operations.OfType<CollectionSlotSelect>().LastOrDefault() is { } select)
+            VisitProjection(select.Projection.Body, select.Projection.Parameters[0], childType, relationshipKind, nested, nestedNodes);
+
         slot = new CollectionSlotDescriptor
         {
             SlotType = destinationType,
             ElementType = elementType,
             ChildType = childType,
+            ParentType = parentType,
             Navigation = navigation,
             Root = root,
             Path = Describe(navigation.Member),
             Operations = operations,
+            Nested = nested,
+            NestedNodes = nestedNodes,
         };
         return true;
     }
