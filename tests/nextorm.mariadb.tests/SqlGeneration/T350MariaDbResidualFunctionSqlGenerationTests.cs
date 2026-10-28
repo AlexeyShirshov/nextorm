@@ -211,7 +211,7 @@ public class T350MariaDbResidualFunctionSqlGenerationTests
         new("133", "WSREP_SYNC_WAIT_UPTO_GTID", "galera", "wsrep_sync_wait_upto_gtid(somestring)", "delivered"),
         // T350 block 2: the residual single-name functions.
         new("96", "FORMAT_PICO_TIME", "date/time", "format_pico_time(id)", "delivered"),
-        new("97", "DECODE_ORACLE", "control flow", "decode(id, id, somestring, somestring)", "delivered"),
+        new("97", "DECODE_ORACLE", "control flow", "decode_oracle(id, id, somestring, somestring)", "delivered"),
         new("99", "DECODE_HISTOGRAM", "information", "decode_histogram(somestring, somestring)", "delivered"),
         new("107", "CRC32C", "numeric", "crc32c(somestring)", "delivered"),
         new("108", "SYS_GUID", "miscellaneous", "sys_guid()", "delivered")

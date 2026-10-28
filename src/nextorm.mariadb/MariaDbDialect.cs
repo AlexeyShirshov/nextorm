@@ -291,12 +291,14 @@ internal sealed class MariaDbNativeFunctions : IMySqlFunctions
         "column_exists" => $"column_exists({args[0]}, {args[1]})",
         "column_check" => $"column_check({args[0]})",
         // T350 block 2: the residual galera and single-name functions. DECODE_ORACLE renders the
-        // vendor's short spelling, `decode(...)`.
+        // vendor's long spelling, `decode_oracle(...)`: the short `decode(...)` resolves to the
+        // two-argument crypto function outside sql_mode=ORACLE (probe t350-decode-oracle-s2, error 1582
+        // for the six-argument form), while DECODE_ORACLE(...) is accepted in default mode.
         "wsrep_last_seen_gtid" => "wsrep_last_seen_gtid()",
         "wsrep_last_written_gtid" => "wsrep_last_written_gtid()",
         "wsrep_sync_wait_upto_gtid" => $"wsrep_sync_wait_upto_gtid({args[0]})",
         "format_pico_time" => $"format_pico_time({args[0]})",
-        "decode_oracle" => $"decode({string.Join(", ", args)})",
+        "decode_oracle" => $"decode_oracle({string.Join(", ", args)})",
         "decode_histogram" => $"decode_histogram({args[0]}, {args[1]})",
         "crc32c" => $"crc32c({args[0]})",
         "sys_guid" => "sys_guid()",

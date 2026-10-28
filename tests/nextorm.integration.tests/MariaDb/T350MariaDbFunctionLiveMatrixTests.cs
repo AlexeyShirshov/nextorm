@@ -23,7 +23,11 @@ namespace NextORM.Integration.Tests;
 /// <param name="RawNullSql">The raw NULL-argument form, or <c>null</c> when NULL is not applicable.</param>
 /// <param name="Translated">The production-path projection of the same name.</param>
 /// <param name="TranslatedNull">The production-path projection of the NULL form.</param>
-/// <param name="ExpectedClr">The CLR type the delivered signature must materialise.</param>
+/// <param name="ExpectedClr">
+/// The CLR type the delivered signature must materialise: the asserted contract is this declared surface
+/// type after materialisation, compared on the production path. A narrower provider wire type is an
+/// observation, declared separately through <c>WireClr</c>.
+/// </param>
 /// <param name="Eq">Value comparison (type-exact unless the case is deliberately non-deterministic).</param>
 /// <param name="NullPolicy"><c>propagates</c>, <c>non-propagating:&lt;expected&gt;</c> or <c>n/a</c>.</param>
 /// <param name="SetupSql">Per-case setup replayed before the raw and the translated observation.</param>
@@ -34,6 +38,19 @@ namespace NextORM.Integration.Tests;
 /// both artifacts, no statement is executed and no comparison is counted, because a precondition failure
 /// is not a value the two paths could disagree on (<c>BINLOG_GTID_POS</c> on the binlog-less stock image).
 /// Returning <c>null</c> means the precondition holds and the row is compared normally.
+/// </param>
+/// <param name="WireClr">
+/// The provider's narrower wire type when the server returns a 32-bit field the delivered signature widens
+/// (MariaDB's <c>int</c> where the shared member is typed for MySQL's <c>BIGINT</c>). The asserted contract
+/// stays the declared surface type the production path materialises; the wire type is the observation, and
+/// declaring it here keeps a future wire-type change visible instead of silently tolerated. The value
+/// equality rule (<see cref="Numeric"/>) already compares the widened number exactly.
+/// </param>
+/// <param name="NotComparableReason">
+/// The reason the row's NULL variant has no comparable form, or <c>null</c> when the NULL variant is compared.
+/// A non-comparable NULL is neither a pass nor a refusal: no translated NULL projection is executed, the raw
+/// NULL observation stays in the oracle artifact, and the row is counted in the <c>notComparable</c> bucket so
+/// the matrix still closes (<c>compared + notComparable + skipped == cases</c>).
 /// </param>
 internal sealed record T350LiveCase(
     string Id,
@@ -48,7 +65,34 @@ internal sealed record T350LiveCase(
     string NullPolicy,
     string? SetupSql = null,
     string? TeardownSql = null,
-    Func<MariaDbDataContext, string?>? Precondition = null);
+    Func<MariaDbDataContext, string?>? Precondition = null,
+    string? WireClr = null,
+    string? NotComparableReason = null)
+{
+    /// <summary>
+    /// The annotation of a row whose provider wire type is narrower than the declared surface type: the
+    /// asserted contract is the materialised surface type, the wire type is the recorded observation and the
+    /// widening is lossless.
+    /// </summary>
+    internal const string NarrowerWireAnnotation =
+        "Narrower provider wire type; lossless widening to the declared CLR contract verified.";
+
+    /// <summary>
+    /// The annotation of a row whose untyped-NULL wire metadata is binary (<c>System.Byte[]</c>) while the
+    /// delivered signature declares <c>System.String</c>: the NULL form has no comparable shape, the non-NULL
+    /// form stays asserted.
+    /// </summary>
+    internal const string NoComparableNullFormAnnotation =
+        "No comparable untyped-NULL form: binary wire metadata produces System.Byte[], incompatible with the " +
+        "declared System.String result. Non-NULL form verified.";
+
+    /// <summary>The annotation recorded with the row when its contract departs from an exact wire type.</summary>
+    internal string? Annotation => WireClr is not null
+        ? NarrowerWireAnnotation
+        : NotComparableReason is not null
+            ? NoComparableNullFormAnnotation
+            : null;
+}
 
 /// <summary>The one-row probe table the translated projections read from, so no case needs its own source.</summary>
 [SqlTable("t350_probe")]
@@ -239,8 +283,11 @@ public sealed class T350MariaDbFunctionLiveMatrixTests : IDisposable
     /// path and flushes one JSONL line per statement to <c>T350_LIVE_ORACLE_PATH</c>; the structural
     /// line-count assertion runs before phase 2 starts, so the oracle is complete before any expectation is
     /// read. Phase 2 then executes each row through the production path on a <see cref="MariaDbDataContext"/>
-    /// and compares value, NULL result and CLR type against the raw record, closing on
-    /// <c>compared == cases</c> with an empty failure list.
+    /// and compares value, NULL result and the declared surface type against the raw record, closing on
+    /// <c>compared + notComparable + skipped == cases</c> with an empty failure list. Two departures from an
+    /// exact signed/type comparison are declared per row rather than loosened globally: a narrower provider
+    /// wire type (<c>WireClr</c>, the value is compared and the materialised type is checked) and a NULL
+    /// variant with no comparable form (<c>NotComparableReason</c>, recorded and counted separately).
     /// </summary>
     [Fact]
     public async Task T350DeliveredNames_ShouldMatchTheRawOraclePerName()
@@ -299,6 +346,7 @@ public sealed class T350MariaDbFunctionLiveMatrixTests : IDisposable
             using var results = T350RawOracle.Open(resultPath, FileMode.Create);
             var failures = new List<string>();
             var compared = 0;
+            var notComparable = 0;
             var nullCompared = 0;
 
             foreach (var @case in cases)
@@ -314,22 +362,35 @@ public sealed class T350MariaDbFunctionLiveMatrixTests : IDisposable
                 var verdict = CompareCase(@case, "primary", raw, translated, expectedNull: false);
                 if (verdict is not null)
                     failures.Add(verdict);
-                compared++;
 
                 object? translatedNull = null;
                 string? nullError = null;
-                if (@case.TranslatedNull is { } nullProjection)
+
+                if (@case.NotComparableReason is { Length: > 0 } reason)
                 {
-                    var attempt = await TryTranslated(ctx, @case, nullProjection);
-                    translatedNull = attempt.Value;
-                    nullError = attempt.Error;
-                    if (@case.RawNullSql is { Length: > 0 })
+                    // The row declares its NULL variant non-comparable: the non-NULL form above stays
+                    // asserted, no translated NULL projection runs, and the row joins its own bucket so the
+                    // matrix still closes over the case table.
+                    notComparable++;
+                    WriteNotComparable(results, server, @case, reason, rawNullById.GetValueOrDefault(@case.Id));
+                }
+                else
+                {
+                    compared++;
+
+                    if (@case.TranslatedNull is { } nullProjection)
                     {
-                        var nullVerdict = CompareCase(
-                            @case, "NULL", rawNullById[@case.Id], attempt, expectedNull: true);
-                        if (nullVerdict is not null)
-                            failures.Add(nullVerdict);
-                        nullCompared++;
+                        var attempt = await TryTranslated(ctx, @case, nullProjection);
+                        translatedNull = attempt.Value;
+                        nullError = attempt.Error;
+                        if (@case.RawNullSql is { Length: > 0 })
+                        {
+                            var nullVerdict = CompareCase(
+                                @case, "NULL", rawNullById[@case.Id], attempt, expectedNull: true);
+                            if (nullVerdict is not null)
+                                failures.Add(nullVerdict);
+                            nullCompared++;
+                        }
                     }
                 }
 
@@ -345,16 +406,23 @@ public sealed class T350MariaDbFunctionLiveMatrixTests : IDisposable
             }
 
             compared.Should().Be(
-                cases.Length - skippedById.Count,
-                "every live case that is not skipped by a server precondition must be compared");
+                cases.Length - skippedById.Count - notComparable,
+                "every live case that is neither skipped by a server precondition nor declared " +
+                "non-comparable must be compared");
+            (compared + notComparable + skippedById.Count).Should().Be(
+                cases.Length,
+                "the matrix closes only when compared + notComparable + skipped equals the case table");
+            notComparable.Should().Be(
+                cases.Count(@case => @case.NotComparableReason is not null),
+                "a case may be counted as non-comparable only when it declares the exclusion");
             cases.Count(@case => @case.Precondition is not null).Should().BeGreaterThanOrEqualTo(
                 skippedById.Count,
                 "a case may only be skipped through a declared server precondition");
             failures.Should().BeEmpty(
                 "every delivered name must match the raw oracle; failures: " + string.Join(" | ", failures));
             Console.WriteLine(
-                $"T350 live matrix: cases={cases.Length} compared={compared} skipped={skippedById.Count} " +
-                $"nullCompared={nullCompared} oracleLines={lines} failures=0");
+                $"T350 live matrix: cases={cases.Length} compared={compared} notComparable={notComparable} " +
+                $"skipped={skippedById.Count} nullCompared={nullCompared} oracleLines={lines} failures=0");
         }
         finally
         {
@@ -391,8 +459,17 @@ public sealed class T350MariaDbFunctionLiveMatrixTests : IDisposable
 
         if (translatedType != @case.ExpectedClr)
             return $"{label}: translated CLR type {translatedType} != delivered signature {@case.ExpectedClr}";
-        if (rawType != @case.ExpectedClr)
+        if (@case.WireClr is { Length: > 0 } wireClr)
+        {
+            // The asserted contract is the declared surface type the production path materialises (checked
+            // above); the narrower wire type is the recorded observation the widening was accepted on.
+            if (rawType != wireClr)
+                return $"{label}: raw provider wire type {rawType} != recorded wire type {wireClr}";
+        }
+        else if (rawType != @case.ExpectedClr)
+        {
             return $"{label}: raw oracle CLR type {rawType} != delivered signature {@case.ExpectedClr}";
+        }
         if (!@case.Eq(raw.Value, translated.Value))
             return $"{label}: translated '{Format(translated.Value)}' [{translatedType}] != " +
                    $"raw '{Format(raw.Value)}' [{rawType}]";
@@ -504,7 +581,8 @@ public sealed class T350MariaDbFunctionLiveMatrixTests : IDisposable
             ["error"] = observation.Error,
             ["durationMs"] = observation.DurationMs,
             ["expectedClr"] = @case.ExpectedClr,
-            ["nullPolicy"] = @case.NullPolicy
+            ["nullPolicy"] = @case.NullPolicy,
+            ["annotation"] = @case.Annotation
         };
 
         if (variant == "translated")
@@ -544,6 +622,37 @@ public sealed class T350MariaDbFunctionLiveMatrixTests : IDisposable
             ["reason"] = reason,
             ["expectedClr"] = @case.ExpectedClr,
             ["nullPolicy"] = @case.NullPolicy
+        }));
+        writer.Flush();
+    }
+
+    /// <summary>
+    /// Writes the one line of a NULL variant the row declares non-comparable: the raw observation made in
+    /// phase 1 is carried as the evidence of the incompatible wire metadata, the reason is recorded, and the
+    /// row is counted in the <c>notComparable</c> bucket — neither a pass nor a refusal.
+    /// </summary>
+    private static void WriteNotComparable(
+        StreamWriter writer,
+        Dictionary<string, object?> server,
+        T350LiveCase @case,
+        string reason,
+        T350LiveObservation? rawNull)
+    {
+        writer.WriteLine(JsonSerializer.Serialize(new Dictionary<string, object?>(server)
+        {
+            ["kind"] = "notComparable",
+            ["id"] = @case.Id,
+            ["name"] = @case.Name,
+            ["family"] = @case.Family,
+            ["variant"] = "NULL",
+            ["sql"] = @case.RawNullSql,
+            ["fieldType"] = rawNull?.FieldType,
+            ["valueType"] = rawNull?.ValueType,
+            ["isDbNull"] = rawNull?.IsNull,
+            ["textValue"] = rawNull?.Text,
+            ["reason"] = reason,
+            ["expectedClr"] = @case.ExpectedClr,
+            ["annotation"] = @case.Annotation
         }));
         writer.Flush();
     }
@@ -1130,6 +1239,9 @@ public sealed class T350MariaDbFunctionLiveMatrixTests : IDisposable
             // previous_value_for), each raw statement taken verbatim from the S1 oracle
             // (.pdca/T350/rv1/probe/t350-oracle-s1.jsonl). Where the oracle probed a NULL form it is the
             // record's NULL form; where it did not, the row carries no NULL claim.
+            // The untyped NULL form is observable on the server but not comparable through the delivered
+            // signature: binary wire metadata (System.Byte[]) cannot materialise as the declared String. The
+            // non-NULL form stays asserted; the exclusion is recorded, never counted as a pass or a refusal.
             new T350LiveCase(
                 "4",
                 "JSON_ARRAY",
@@ -1137,10 +1249,11 @@ public sealed class T350MariaDbFunctionLiveMatrixTests : IDisposable
                 "select json_array(1,2)",
                 "select json_array(null)",
                 ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.json_array(1, 2))),
-                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.json_array((object?)null))),
+                null,
                 "System.String",
                 BytesOrText,
-                "non-propagating:[null]"),
+                "n/a",
+                NotComparableReason: T350LiveCase.NoComparableNullFormAnnotation),
             new T350LiveCase(
                 "5",
                 "JSON_ARRAYAGG",
@@ -1166,7 +1279,8 @@ public sealed class T350MariaDbFunctionLiveMatrixTests : IDisposable
                     Project(ctx, x => SqlFunctions.MySql.json_contains((string?)null, "1", "$.a"))),
                 "System.Int64",
                 Numeric,
-                "propagates"),
+                "propagates",
+                WireClr: "System.Int32"),
             new T350LiveCase(
                 "9",
                 "JSON_CONTAINS_PATH",
@@ -1178,7 +1292,8 @@ public sealed class T350MariaDbFunctionLiveMatrixTests : IDisposable
                 null,
                 "System.Int64",
                 Numeric,
-                "n/a"),
+                "n/a",
+                WireClr: "System.Int32"),
             new T350LiveCase(
                 "10",
                 "JSON_MERGE",
@@ -1227,7 +1342,8 @@ public sealed class T350MariaDbFunctionLiveMatrixTests : IDisposable
                     Project(ctx, x => SqlFunctions.MySql.json_overlaps((string?)null, "{\"a\":1}"))),
                 "System.Int64",
                 Numeric,
-                "propagates"),
+                "propagates",
+                WireClr: "System.Int32"),
             new T350LiveCase(
                 "14",
                 "JSON_PRETTY",
@@ -1261,7 +1377,8 @@ public sealed class T350MariaDbFunctionLiveMatrixTests : IDisposable
                 null,
                 "System.Int64",
                 Numeric,
-                "n/a"),
+                "n/a",
+                WireClr: "System.Int32"),
             new T350LiveCase(
                 "18",
                 "JSON_SEARCH",
@@ -1342,7 +1459,10 @@ public sealed class T350MariaDbFunctionLiveMatrixTests : IDisposable
                 ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.ord((string?)null))),
                 "System.Int64",
                 Numeric,
-                "propagates"),
+                "propagates",
+                WireClr: "System.Int32"),
+            // Same exclusion as JSON_ARRAY above: `quote(null)` is a non-NULL binary (`NULL` as bytes) the
+            // declared String signature cannot materialise; the non-NULL form stays asserted.
             new T350LiveCase(
                 "27",
                 "QUOTE",
@@ -1350,10 +1470,11 @@ public sealed class T350MariaDbFunctionLiveMatrixTests : IDisposable
                 "select quote('a''b')",
                 "select quote(null)",
                 ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.quote("a'b"))),
-                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.quote((string?)null))),
+                null,
                 "System.String",
                 BytesOrText,
-                "non-propagating:NULL"),
+                "n/a",
+                NotComparableReason: T350LiveCase.NoComparableNullFormAnnotation),
             new T350LiveCase(
                 "28",
                 "SOUNDEX",
@@ -1376,7 +1497,8 @@ public sealed class T350MariaDbFunctionLiveMatrixTests : IDisposable
                     Project(ctx, x => SqlFunctions.MySql.strcmp((string?)null, "b"))),
                 "System.Int64",
                 Numeric,
-                "propagates"),
+                "propagates",
+                WireClr: "System.Int32"),
             new T350LiveCase(
                 "30",
                 "TO_BASE64",
@@ -1446,7 +1568,8 @@ public sealed class T350MariaDbFunctionLiveMatrixTests : IDisposable
                 ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.crc32((string?)null))),
                 "System.UInt64",
                 Numeric,
-                "propagates"),
+                "propagates",
+                WireClr: "System.UInt32"),
             new T350LiveCase(
                 "36",
                 "LOG2",
@@ -1493,7 +1616,8 @@ public sealed class T350MariaDbFunctionLiveMatrixTests : IDisposable
                 ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.bit_count((ulong?)null))),
                 "System.Int64",
                 Numeric,
-                "propagates"),
+                "propagates",
+                WireClr: "System.Int32"),
             // The aggregate rows read the two-row fixture the oracle's inline set declares (1, 3), so the
             // reduction has the same known row set on both paths.
             new T350LiveCase(
@@ -1645,7 +1769,8 @@ public sealed class T350MariaDbFunctionLiveMatrixTests : IDisposable
                     Project(ctx, x => SqlFunctions.MySql.microsecond((DateTime?)null))),
                 "System.Int64",
                 Numeric,
-                "propagates"),
+                "propagates",
+                WireClr: "System.Int32"),
             new T350LiveCase(
                 "52",
                 "MONTHNAME",
@@ -1667,7 +1792,8 @@ public sealed class T350MariaDbFunctionLiveMatrixTests : IDisposable
                 ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.period_add(null, 2L))),
                 "System.Int64",
                 Numeric,
-                "propagates"),
+                "propagates",
+                WireClr: "System.Int32"),
             new T350LiveCase(
                 "54",
                 "PERIOD_DIFF",
@@ -1680,7 +1806,8 @@ public sealed class T350MariaDbFunctionLiveMatrixTests : IDisposable
                     Project(ctx, x => SqlFunctions.MySql.period_diff(null, 202401L))),
                 "System.Int64",
                 Numeric,
-                "propagates"),
+                "propagates",
+                WireClr: "System.Int32"),
             new T350LiveCase(
                 "55",
                 "SEC_TO_TIME",
@@ -1787,7 +1914,8 @@ public sealed class T350MariaDbFunctionLiveMatrixTests : IDisposable
                 ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.to_days((DateTime?)null))),
                 "System.Int64",
                 Numeric,
-                "propagates"),
+                "propagates",
+                WireClr: "System.Int32"),
             new T350LiveCase(
                 "64",
                 "TO_SECONDS",
@@ -1811,7 +1939,8 @@ public sealed class T350MariaDbFunctionLiveMatrixTests : IDisposable
                     Project(ctx, x => SqlFunctions.MySql.yearweek((DateTime?)null))),
                 "System.Int64",
                 Numeric,
-                "propagates"),
+                "propagates",
+                WireClr: "System.Int32"),
             // ---------------------------------------------------------------- T350 block 3a: crypto
             new T350LiveCase(
                 "66",
@@ -1875,7 +2004,8 @@ public sealed class T350MariaDbFunctionLiveMatrixTests : IDisposable
                     Project(ctx, x => SqlFunctions.MySql.uncompressed_length((byte[]?)null))),
                 "System.Int64",
                 Numeric,
-                "propagates"),
+                "propagates",
+                WireClr: "System.Int32"),
             new T350LiveCase(
                 "71",
                 "RANDOM_BYTES",
@@ -1970,7 +2100,8 @@ public sealed class T350MariaDbFunctionLiveMatrixTests : IDisposable
                     Project(ctx, x => SqlFunctions.MySql.coercibility((object?)null))),
                 "System.Int64",
                 CoercibilityClass,
-                "non-propagating:6"),
+                "non-propagating:6",
+                WireClr: "System.Int32"),
             new T350LiveCase(
                 "82",
                 "BENCHMARK",
@@ -1981,7 +2112,8 @@ public sealed class T350MariaDbFunctionLiveMatrixTests : IDisposable
                 null,
                 "System.Int64",
                 NonNegative,
-                "n/a"),
+                "n/a",
+                WireClr: "System.Int32"),
             new T350LiveCase(
                 "84",
                 "UUID_SHORT",
@@ -2004,7 +2136,8 @@ public sealed class T350MariaDbFunctionLiveMatrixTests : IDisposable
                 ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.sleep((double?)null))),
                 "System.Int64",
                 NonNegative,
-                "non-propagating:0"),
+                "non-propagating:0",
+                WireClr: "System.Int32"),
             new T350LiveCase(
                 "88",
                 "NAME_CONST",
