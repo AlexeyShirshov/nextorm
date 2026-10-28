@@ -3677,6 +3677,194 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
         empty[0].S.Should().BeNull();
     }
 
+    /// <summary>
+    /// The #281 (#347 D4) group-3 SQL/JSON aggregates on PostgreSQL 17.11. The measured defaults are
+    /// <c>ABSENT ON NULL</c> for <c>json_arrayagg</c> (NULL values dropped, an all-NULL group is
+    /// <c>[]</c>) and <c>NULL ON NULL</c> for <c>json_objectagg</c> (a NULL value stays as JSON
+    /// <c>null</c>); the <c>RETURNING jsonb</c> members read back as strings, an integer key is coerced
+    /// to text, and an empty input still yields one NULL row.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void SqlJsonAggregates_ShouldComputeValuesNullsTypesAndGroups()
+    {
+        // complex_entity: three rows, nullableint NULL,1,1 and requiredstring 'sdf','asdfgoi','34mfs'.
+        var array = _sut.ComplexEntity
+            .Select(x => new
+            {
+                A = SqlFunctions.Postgres.json_arrayagg(x.Int),
+                B = SqlFunctions.Postgres.jsonb_arrayagg(x.Int),
+                C = SqlFunctions.Sql.count()
+            })
+            .First();
+
+        array.C.Should().Be(3);
+        array.A.Should().Be("[1, 1]",
+            "json_arrayagg defaults to ABSENT ON NULL: the NULL nullableint row is dropped");
+        array.B.Should().Be("[1, 1]", "RETURNING jsonb keeps the same default null handling");
+        ((object)array.A!).Should().BeOfType<string>("json is materialised as System.String");
+        ((object)array.B!).Should().BeOfType<string>("jsonb is materialised as System.String");
+
+        // All-NULL input: the default ABSENT ON NULL makes this an empty array, not NULL.
+        var allNull = _sut.ComplexEntity
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                A = SqlFunctions.Postgres.json_arrayagg(x.Int),
+                B = SqlFunctions.Postgres.jsonb_arrayagg(x.Int)
+            })
+            .First();
+        allNull.A.Should().Be("[]", "a group whose only value is NULL is an empty array");
+        allNull.B.Should().Be("[]", "RETURNING jsonb keeps the ABSENT ON NULL default");
+
+        // Object aggregate: the default NULL ON NULL keeps the NULL value of 'sdf'; the key is coerced
+        // to text and the result is json.
+        var obj = _sut.ComplexEntity
+            .Select(x => new
+            {
+                O = SqlFunctions.Postgres.json_objectagg(x.RequiredString, x.Int),
+                B = SqlFunctions.Postgres.jsonb_objectagg(x.RequiredString, x.Int)
+            })
+            .First();
+
+        using (var json = JsonDocument.Parse(obj.O!))
+        {
+            json.RootElement.EnumerateObject().Select(p => p.Name)
+                .Should().BeEquivalentTo(["sdf", "asdfgoi", "34mfs"]);
+            json.RootElement.GetProperty("sdf").ValueKind.Should().Be(
+                JsonValueKind.Null, "json_objectagg defaults to NULL ON NULL");
+            json.RootElement.GetProperty("asdfgoi").GetInt32().Should().Be(1);
+        }
+
+        using (var jsonb = JsonDocument.Parse(obj.B!))
+            jsonb.RootElement.GetProperty("34mfs").GetInt32().Should().Be(1,
+                "RETURNING jsonb keeps the same pairs");
+
+        ((object)obj.O!).Should().BeOfType<string>();
+        ((object)obj.B!).Should().BeOfType<string>();
+
+        // GROUP BY interaction: avg_fixture ni is NULL,1,2,3 with i = 1,2,1,3.
+        var groups = _sut.AvgFixture
+            .GroupBy(x => new { x.I })
+            .Select(x => new
+            {
+                x.I,
+                A = SqlFunctions.Postgres.json_arrayagg(x.NI),
+                O = SqlFunctions.Postgres.json_objectagg(x.Id, x.NI)
+            })
+            .ToList();
+
+        groups.Should().HaveCount(3);
+        groups.Single(g => g.I == 1).A.Should().Be("[2]", "group 1 is ni NULL and 2; the NULL is dropped");
+        groups.Single(g => g.I == 2).A.Should().Be("[1]");
+        groups.Single(g => g.I == 3).A.Should().Be("[3]");
+
+        using (var g1 = JsonDocument.Parse(groups.Single(g => g.I == 1).O!))
+        {
+            g1.RootElement.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo(["1", "3"],
+                "an integer key is coerced to text (measured)");
+            g1.RootElement.GetProperty("1").ValueKind.Should().Be(JsonValueKind.Null,
+                "the NULL value of group 1 is kept as JSON null");
+        }
+
+        // Empty input: every aggregate still produces one row with NULL, count(*) = 0.
+        var empty = _sut.ComplexEntity
+            .Where(x => x.Id > 100)
+            .Select(x => new
+            {
+                A = SqlFunctions.Postgres.json_arrayagg(x.Int),
+                B = SqlFunctions.Postgres.jsonb_arrayagg(x.Int),
+                O = SqlFunctions.Postgres.json_objectagg(x.RequiredString, x.Int),
+                U = SqlFunctions.Postgres.json_objectagg_unique(x.RequiredString, x.Int),
+                J = SqlFunctions.Postgres.jsonb_objectagg(x.RequiredString, x.Int),
+                C = SqlFunctions.Sql.count()
+            })
+            .ToList();
+
+        empty.Should().HaveCount(1, "an aggregate over an empty input still produces one row");
+        empty[0].C.Should().Be(0, "the empty input has no rows: count(*) = 0");
+        empty[0].A.Should().BeNull("json_arrayagg over an empty input is NULL, not []");
+        empty[0].B.Should().BeNull();
+        empty[0].O.Should().BeNull();
+        empty[0].U.Should().BeNull();
+        empty[0].J.Should().BeNull();
+    }
+
+    /// <summary>
+    /// The SQL/JSON object aggregate errors of PostgreSQL 17.11 are server-carried, so the assertions
+    /// name the SQLSTATE: a duplicate key raises <c>22030</c> only through the <c>WITH UNIQUE KEYS</c>
+    /// form (the default <c>WITHOUT UNIQUE KEYS</c> keeps duplicates as-is, measured
+    /// <c>{ "a" : 1, "a" : 2 }</c>), and a NULL key raises <c>22004</c> in both forms.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void SqlJsonAggregateErrors_ShouldRaiseTheMeasuredSqlStates()
+    {
+        var duplicate = () => _sut.ComplexEntity
+            .Select(x => new { O = SqlFunctions.Postgres.json_objectagg_unique("k", x.Int) })
+            .First();
+        duplicate.Should().Throw<PostgresException>()
+            .Which.SqlState.Should().Be("22030", "WITH UNIQUE KEYS rejects the repeated 'k'");
+
+        // The default form keeps the duplicate pairs instead of raising.
+        var kept = _sut.ComplexEntity
+            .Select(x => new { O = SqlFunctions.Postgres.json_objectagg("k", x.Int) })
+            .First();
+        using (var json = JsonDocument.Parse(kept.O!))
+            json.RootElement.EnumerateObject().Should().HaveCount(3,
+                "the default WITHOUT UNIQUE KEYS form keeps every pair");
+
+        // somestring is NULL at id 3: a NULL key raises 22004 in both forms.
+        var nullKey = () => _sut.ComplexEntity
+            .Select(x => new { O = SqlFunctions.Postgres.json_objectagg(x.String, x.Int) })
+            .First();
+        nullKey.Should().Throw<PostgresException>()
+            .Which.SqlState.Should().Be("22004");
+
+        var nullKeyUnique = () => _sut.ComplexEntity
+            .Select(x => new { O = SqlFunctions.Postgres.json_objectagg_unique(x.String, x.Int) })
+            .First();
+        nullKeyUnique.Should().Throw<PostgresException>()
+            .Which.SqlState.Should().Be("22004");
+    }
+
+    /// <summary>
+    /// The <c>grouping</c> grouping function of #281 (#347 D4) inside a native
+    /// <c>GROUP BY ROLLUP</c>: the query builder can emit the ANSI super-aggregate grouping
+    /// (<c>GroupByRollup</c>, <c>SupportsRollup</c>), so the function is delivered. A bit is <c>0</c>
+    /// when the column is grouped in that row and <c>1</c> on the grand total; in a plain
+    /// <c>GROUP BY</c> the same call is legal and always <c>0</c> (measured on 17.11).
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void GroupingOverRollup_ShouldFlagTheSuperAggregateRows()
+    {
+        // complex_entity nullableint is NULL,1,1: two groups (NULL with one row, 1 with two) plus the
+        // grand total over all three rows.
+        var rollup = _sut.ComplexEntity
+            .GroupByRollup(x => new { x.Int })
+            .Select(x => new
+            {
+                x.Int,
+                C = SqlFunctions.Sql.count(),
+                G = SqlFunctions.Postgres.grouping(x.Int)
+            })
+            .ToList();
+
+        rollup.Should().HaveCount(3, "two grouped rows plus the rollup grand total");
+        rollup.Where(r => r.G == 0).Should().HaveCount(2, "the grouped rows are not super-aggregate rows");
+        rollup.Single(r => r.G == 1).C.Should().Be(3, "the grand total aggregates every row");
+        rollup.Single(r => r.G == 1).Int.Should().BeNull("the grand-total row has no grouping value");
+
+        // Control: the same call in a plain GROUP BY is legal and always 0.
+        var plain = _sut.ComplexEntity
+            .GroupBy(x => new { x.Int })
+            .Select(x => new { x.Int, G = SqlFunctions.Postgres.grouping(x.Int) })
+            .ToList();
+        plain.Should().HaveCount(2);
+        plain.Should().OnlyContain(r => r.G == 0);
+    }
+
     private static void Execute(IDataContext ctx, string sql)
     {
         ((DataContext)ctx).EnsureConnectionOpen();

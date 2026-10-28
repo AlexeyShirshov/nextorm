@@ -246,7 +246,10 @@ internal sealed class InMemoryScalarFunctionRewriter : ExpressionVisitor
         nameof(PostgresFunctions.xmlagg), nameof(PostgresFunctions.json_agg_strict),
         nameof(PostgresFunctions.jsonb_agg_strict),
         nameof(PostgresFunctions.json_object_agg_unique),
-        nameof(PostgresFunctions.json_object_agg_unique_strict)
+        nameof(PostgresFunctions.json_object_agg_unique_strict),
+        nameof(PostgresFunctions.json_arrayagg), nameof(PostgresFunctions.jsonb_arrayagg),
+        nameof(PostgresFunctions.json_objectagg), nameof(PostgresFunctions.json_objectagg_unique),
+        nameof(PostgresFunctions.jsonb_objectagg), nameof(PostgresFunctions.grouping)
     };
 
     internal static Expression Rewrite(Expression expression) => new InMemoryScalarFunctionRewriter().Visit(expression)!;

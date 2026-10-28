@@ -1069,7 +1069,9 @@ internal sealed class PostgresStringFormats : IStringFormatFunctions
 /// transaction clock functions, <c>timeofday</c>, <c>isfinite</c>), the UUID extraction functions and
 /// the binary-string family (<c>get_bit</c>/<c>set_bit</c>, <c>get_byte</c>/<c>set_byte</c>,
 /// <c>bit_count</c>), and the #281 aggregates (<c>any_value</c>, <c>xmlagg</c>, the strict JSON array
-/// aggregates and the unique JSON object aggregates), each advertised by its own name.
+/// aggregates, the unique JSON object aggregates, the PostgreSQL 17 SQL/JSON <c>json_arrayagg</c>/
+/// <c>json_objectagg</c> constructs and the <c>grouping</c> grouping function), each advertised by its
+/// own name.
 /// </summary>
 internal sealed class PostgresScalarFunctions : IScalarFunctions
 {
@@ -1118,7 +1120,9 @@ internal sealed class PostgresScalarFunctions : IScalarFunctions
         "ts_rewrite" or "tsquery_phrase" or "tsvector_to_array" or "ts_lexize" or
         "any_value" or
         "xmlagg" or "json_agg_strict" or "jsonb_agg_strict" or
-        "json_object_agg_unique" or "json_object_agg_unique_strict";
+        "json_object_agg_unique" or "json_object_agg_unique_strict" or
+        "json_arrayagg" or "jsonb_arrayagg" or "json_objectagg" or
+        "json_objectagg_unique" or "jsonb_objectagg" or "grouping";
 
     /// <inheritdoc/>
     public string Render(string name, IReadOnlyList<string> args) => name switch
@@ -1272,6 +1276,20 @@ internal sealed class PostgresScalarFunctions : IScalarFunctions
         // The unique object aggregates take ("any", "any") and return json; no cast is needed.
         "json_object_agg_unique" => $"json_object_agg_unique({args[0]}, {args[1]})",
         "json_object_agg_unique_strict" => $"json_object_agg_unique_strict({args[0]}, {args[1]})",
+        // The PostgreSQL 17 SQL/JSON aggregates are parser-level constructs with no pg_proc row. The
+        // builder has no clause slot for an aggregate's internal argument list, so only the forms that
+        // fit a plain call are emitted: the default ABSENT ON NULL / NULL ON NULL behaviour, the
+        // RETURNING jsonb variant under its own member and the WITH UNIQUE KEYS clause as its own
+        // member. The arguments stay uncast: the key is coerced to text by the server (measured) and
+        // the value is any type.
+        "json_arrayagg" => $"json_arrayagg({args[0]})",
+        "jsonb_arrayagg" => $"json_arrayagg({args[0]} returning jsonb)",
+        "json_objectagg" => $"json_objectagg({args[0]} value {args[1]})",
+        "json_objectagg_unique" => $"json_objectagg({args[0]} value {args[1]} with unique keys)",
+        "jsonb_objectagg" => $"json_objectagg({args[0]} value {args[1]} returning jsonb)",
+        // Super-aggregate identity bit: a parser-level grouping function; the argument must be a
+        // grouping expression of the query's own grouping list (42803 otherwise, measured).
+        "grouping" => $"grouping({args[0]})",
         _ => throw new NotSupportedException($"The {name} function is not supported by PostgreSQL.")
     };
 

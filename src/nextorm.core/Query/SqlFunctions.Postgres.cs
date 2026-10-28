@@ -187,6 +187,88 @@ namespace NextORM.Core;
         /// <param name="value">The value stored under the key.</param>
         public string? json_object_agg_unique_strict<TKey, TValue>(TKey? key, TValue? value) => default!;
 
+        /// <summary>
+        /// Aggregates the values of a group into a SQL/JSON array (<c>json_arrayagg</c>, PostgreSQL 17+; a
+        /// parser-level aggregate construct with no <c>pg_proc</c> row). The emitted form is the plain
+        /// <c>json_arrayagg(&lt;arg&gt;)</c>, whose measured default is <c>ABSENT ON NULL</c>: NULL values
+        /// are dropped, a group whose values are all NULL yields <c>[]</c>, and an empty input still
+        /// produces one NULL row. The PostgreSQL grammar also accepts
+        /// <c>[ORDER BY …] [ABSENT|NULL ON NULL] [RETURNING json|jsonb]</c> inside the call, but the
+        /// builder has no clause slot for an aggregate's internal argument list, so those modifiers are
+        /// not exposed: <c>RETURNING jsonb</c> has its own member (<see cref="jsonb_arrayagg{T}"/>) and
+        /// the <c>DISTINCT</c> spelling is a syntax error on 17.11 (<c>42601</c>, measured). The result
+        /// is <c>json</c>, read back as a string.
+        /// </summary>
+        /// <param name="property">The value to aggregate.</param>
+        public string? json_arrayagg<T>(T? property) => default!;
+
+        /// <summary>
+        /// Aggregates the values of a group into a SQL/JSON array of type <c>jsonb</c>
+        /// (<c>json_arrayagg(&lt;arg&gt; RETURNING jsonb)</c>, PostgreSQL 17+; exposed as
+        /// <c>jsonb_arrayagg</c> because PostgreSQL has no <c>jsonb_arrayagg</c> function). The measured
+        /// default is <c>ABSENT ON NULL</c>, so a group whose values are all NULL yields <c>[]</c> and an
+        /// empty input still produces one NULL row. Read back as a string (measured: Npgsql materialises
+        /// the <c>jsonb</c> result as <see cref="string"/>).
+        /// </summary>
+        /// <param name="property">The value to aggregate.</param>
+        public string? jsonb_arrayagg<T>(T? property) => default!;
+
+        /// <summary>
+        /// Aggregates the key/value pairs of a group into a SQL/JSON object (<c>json_objectagg</c>,
+        /// PostgreSQL 17+; a parser-level aggregate construct with no <c>pg_proc</c> row). The emitted
+        /// form is <c>json_objectagg(&lt;key&gt; VALUE &lt;value&gt;)</c>: PostgreSQL 17 admits exactly
+        /// one pair per call — the comma-separated two-pair form is a syntax error (<c>42601</c>) and the
+        /// <c>key : value</c> colon spelling is accepted but not emitted (the <c>VALUE</c> keyword is the
+        /// documented spelling). The measured default is <c>NULL ON NULL</c> (a NULL value is kept as
+        /// JSON <c>null</c>) and duplicate keys are kept as-is; a NULL key raises <c>22004</c>, and an
+        /// empty input yields NULL. Duplicate-key rejection (<c>22030</c>) is the
+        /// <c>WITH UNIQUE KEYS</c> form, exposed as <see cref="json_objectagg_unique{TKey,TValue}"/>;
+        /// <c>ABSENT ON NULL</c> and <c>[ORDER BY …]</c> are not exposed because the builder has no
+        /// clause slot for them. The result is <c>json</c>, read back as a string.
+        /// </summary>
+        /// <param name="key">The object key (any type; PostgreSQL coerces it to text, measured).</param>
+        /// <param name="value">The value stored under the key.</param>
+        public string? json_objectagg<TKey, TValue>(TKey? key, TValue? value) => default!;
+
+        /// <summary>
+        /// Rejects a duplicate key while aggregating the pairs into a SQL/JSON object
+        /// (<c>json_objectagg(&lt;key&gt; VALUE &lt;value&gt; WITH UNIQUE KEYS)</c>, PostgreSQL 17+;
+        /// exposed as <c>json_objectagg_unique</c> for the clause, distinct from the
+        /// <c>json_object_agg_unique</c> function). A duplicate key raises <c>22030</c> and a NULL key
+        /// raises <c>22004</c> — both measured on 17.11. A NULL value is kept as JSON <c>null</c> (the
+        /// measured default <c>NULL ON NULL</c>), and an empty input yields NULL. The result is
+        /// <c>json</c>, read back as a string.
+        /// </summary>
+        /// <param name="key">The object key (any type; PostgreSQL coerces it to text, measured).</param>
+        /// <param name="value">The value stored under the key.</param>
+        public string? json_objectagg_unique<TKey, TValue>(TKey? key, TValue? value) => default!;
+
+        /// <summary>
+        /// Aggregates the pairs into a SQL/JSON object of type <c>jsonb</c>
+        /// (<c>json_objectagg(&lt;key&gt; VALUE &lt;value&gt; RETURNING jsonb)</c>, PostgreSQL 17+;
+        /// exposed as <c>jsonb_objectagg</c> because no such function exists). The measured defaults are
+        /// those of <see cref="json_objectagg{TKey,TValue}"/>: <c>NULL ON NULL</c>, duplicate keys kept,
+        /// a NULL key raises <c>22004</c>, and an empty input yields NULL. Read back as a string.
+        /// </summary>
+        /// <param name="key">The object key (any type; PostgreSQL coerces it to text, measured).</param>
+        /// <param name="value">The value stored under the key.</param>
+        public string? jsonb_objectagg<TKey, TValue>(TKey? key, TValue? value) => default!;
+
+        /// <summary>
+        /// One bit of the super-aggregate identity of the current row (<c>grouping</c>, a parser-level
+        /// grouping function with no <c>pg_proc</c> row): <c>0</c> when <paramref name="column"/> is
+        /// grouped in this row, <c>1</c> when the row is a super-aggregate that aggregated it away.
+        /// The argument must be a grouping expression of the query's own grouping list — anything else
+        /// is <c>42803</c> — and the function is only useful with
+        /// <c>GROUP BY ROLLUP</c>/<c>CUBE</c>/<c>GROUPING SETS</c> (see <c>GroupByRollup</c>,
+        /// <c>GroupByCube</c> and <c>GroupByGroupingSets</c>); in a plain <c>GROUP BY</c> it is legal and
+        /// always <c>0</c>. The zero-argument spelling <c>grouping()</c> is a syntax error
+        /// (<c>42601</c>), and the result is <c>integer</c> (read back as <see cref="int"/>). All
+        /// measured on 17.11.
+        /// </summary>
+        /// <param name="column">A column of the query's grouping list.</param>
+        public int? grouping<T>(T? column) => default!;
+
         /// <summary>Builds a JSON object from alternating key/value arguments (<c>json_build_object</c>).</summary>
         public string json_build_object(params object?[] args) => default!;
 

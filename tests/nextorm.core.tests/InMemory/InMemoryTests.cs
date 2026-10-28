@@ -1470,6 +1470,32 @@ public class InMemoryTests
             act.Should().Throw<NotSupportedException>()
                 .WithMessage($"*{name}*not supported*", "{0} is a SQL-only aggregate", name);
     }
+
+    /// <summary>
+    /// The #281 (#347 D4) group-3 SQL/JSON aggregate constructs (<c>json_arrayagg</c>/
+    /// <c>json_objectagg</c>, their <c>RETURNING jsonb</c> and <c>WITH UNIQUE KEYS</c> variants) and the
+    /// <c>grouping</c> grouping function have no in-memory equivalent: each is SQL-only, so it is
+    /// refused before the projection is compiled instead of evaluating the marker call on the null
+    /// <see cref="SqlFunctions.Postgres"/> surface.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void PostgresSqlJsonAggregatesAndGrouping_ShouldThrow()
+    {
+        var cases = new (string Name, Action Act)[]
+        {
+            ("json_arrayagg", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.json_arrayagg(it.Id) }).ToList()),
+            ("jsonb_arrayagg", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.jsonb_arrayagg(it.Id) }).ToList()),
+            ("json_objectagg", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.json_objectagg(it.Id, it.Id) }).ToList()),
+            ("json_objectagg_unique", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.json_objectagg_unique(it.Id, it.Id) }).ToList()),
+            ("jsonb_objectagg", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.jsonb_objectagg(it.Id, it.Id) }).ToList()),
+            ("grouping", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.grouping(it.Id) }).ToList()),
+        };
+
+        foreach (var (name, act) in cases)
+            act.Should().Throw<NotSupportedException>()
+                .WithMessage($"*{name}*not supported*", "{0} is a SQL-only construct", name);
+    }
 }
 
 // D178 T12 fixtures: an enum member for the in-memory fail-closed checks.

@@ -184,6 +184,8 @@ public class PostgresFunctionsRejectionTests
             "any_value",
             "xmlagg", "json_agg_strict", "jsonb_agg_strict",
             "json_object_agg_unique", "json_object_agg_unique_strict",
+            "json_arrayagg", "jsonb_arrayagg", "json_objectagg", "json_objectagg_unique",
+            "jsonb_objectagg", "grouping",
             "current_schemas", "pg_postmaster_start_time", "pg_current_logfile",
             "pg_conf_load_time", "pg_jit_available", "pg_my_temp_schema",
             "pg_is_other_temp_schema", "pg_notification_queue_usage", "pg_blocking_pids",
@@ -619,6 +621,33 @@ public class PostgresFunctionsRejectionTests
             ("jsonb_agg_strict", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.jsonb_agg_strict(x.Int) }))),
             ("json_object_agg_unique", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.json_object_agg_unique(x.String, x.Int) }))),
             ("json_object_agg_unique_strict", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.json_object_agg_unique_strict(x.String, x.Int) })))
+        };
+
+        foreach (var (name, act) in cases)
+            act.Should().Throw<NotSupportedException>().WithMessage($"*{name}*not supported*");
+    }
+
+    /// <summary>
+    /// The #281 (#347 D4) group-3 SQL/JSON aggregate constructs (<c>json_arrayagg</c>/
+    /// <c>json_objectagg</c>, their <c>RETURNING jsonb</c> and <c>WITH UNIQUE KEYS</c> variants) and the
+    /// <c>grouping</c> grouping function are PostgreSQL-only, so each enrolled name is refused during
+    /// preparation with a message naming it instead of being rendered as SQL this provider cannot execute.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void SqlJsonAggregatesAndGrouping_ShouldThrowBecauseNotSupported()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var cases = new (string Name, Action Act)[]
+        {
+            ("json_arrayagg", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.json_arrayagg(x.Int) }))),
+            ("jsonb_arrayagg", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.jsonb_arrayagg(x.Int) }))),
+            ("json_objectagg", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.json_objectagg(x.String, x.Int) }))),
+            ("json_objectagg_unique", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.json_objectagg_unique(x.String, x.Int) }))),
+            ("jsonb_objectagg", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.jsonb_objectagg(x.String, x.Int) }))),
+            ("grouping", () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.grouping(x.Int) })))
         };
 
         foreach (var (name, act) in cases)

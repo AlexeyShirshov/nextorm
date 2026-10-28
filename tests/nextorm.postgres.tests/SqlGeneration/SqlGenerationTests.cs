@@ -3405,6 +3405,65 @@ public class SqlGenerationTests
         sql.Should().Contain("json_object_agg_unique_strict(somestring, nullableint)");
     }
 
+    /// <summary>
+    /// The #281 (#347 D4) group-3 SQL/JSON aggregates render the forms the builder can express
+    /// faithfully. PostgreSQL 17 admits exactly one <c>key VALUE value</c> pair per
+    /// <c>json_objectagg</c> call (the two-pair comma form is <c>42601</c>, measured), so the pair is
+    /// emitted with the <c>VALUE</c> keyword and no cast (the server coerces the key to text); the
+    /// <c>RETURNING jsonb</c> variants ride their own members, and the <c>WITH UNIQUE KEYS</c> clause is
+    /// its own member too, because an aggregate's internal argument list has no clause slot in the
+    /// builder. Neither <c>ORDER BY</c> nor the <c>ABSENT|NULL ON NULL</c> clause can be expressed, so
+    /// nothing of the sort may appear in the rendered SQL.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void SqlJsonAggregates_ShouldEmitTheExpressibleForms()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            A = SqlFunctions.Postgres.json_arrayagg(x.Int),
+            B = SqlFunctions.Postgres.jsonb_arrayagg(x.Int),
+            C = SqlFunctions.Postgres.json_objectagg(x.String, x.Int),
+            D = SqlFunctions.Postgres.json_objectagg_unique(x.String, x.Int),
+            E = SqlFunctions.Postgres.jsonb_objectagg(x.String, x.Int)
+        }));
+
+        sql.Should().Contain("json_arrayagg(nullableint)");
+        sql.Should().Contain("json_arrayagg(nullableint returning jsonb)");
+        sql.Should().Contain("json_objectagg(somestring value nullableint)");
+        sql.Should().Contain("json_objectagg(somestring value nullableint with unique keys)");
+        sql.Should().Contain("json_objectagg(somestring value nullableint returning jsonb)");
+
+        sql.Should().NotContain("order by", "an aggregate's ORDER BY has no clause slot in the builder");
+        sql.Should().NotContain("on null", "the ABSENT/NULL ON NULL clause has no clause slot in the builder");
+        sql.Should().NotContain("json_objectagg(somestring, nullableint)",
+            "PostgreSQL 17 takes one key VALUE value pair; the comma form is 42601");
+    }
+
+    /// <summary>
+    /// The <c>grouping</c> grouping function renders over the rollup grouping list. The query builder
+    /// can emit the ANSI super-aggregate grouping (<c>GroupByRollup</c> → <c>group by rollup (...)</c>,
+    /// <c>PostgresDialect.SupportsRollup</c> is <c>true</c>), so the function is delivered rather than
+    /// refused; its one argument is the grouping expression itself.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void GroupingOverRollup_ShouldRenderInsideTheSuperAggregateQuery()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e
+            .GroupByRollup(x => new { x.Int })
+            .Select(x => new { x.Int, G = SqlFunctions.Postgres.grouping(x.Int) }));
+
+        sql.Should().Contain("group by rollup (nullableint)");
+        sql.Should().Contain("grouping(nullableint)");
+    }
+
     [Fact]
     public void OrderedSetAggregates_ShouldEmitWithinGroup()
     {
