@@ -17,6 +17,16 @@ internal sealed class SqliteTestProvider : ITestProvider
     public static string DatabasePath { get; } =
         Path.Combine(Path.GetTempPath(), $"nextorm.integration.{Environment.ProcessId}.db");
 
+    /// <summary>
+    /// T358 (#348): one scratch file per process, and xunit runs collections in parallel, so two
+    /// classes can seed at the same time — one holds the writer lock while the other's
+    /// <c>drop table</c>/<c>insert</c> seed runs into <c>SQLITE_BUSY</c> ("database is locked"),
+    /// which then cascades into "no such table" for every test of that class. <c>Default Timeout</c>
+    /// makes the provider wait for the lock instead of failing: the contention is milliseconds of
+    /// seeding, not a deadlock, so waiting is the correct semantic rather than a retry that hides it.
+    /// </summary>
+    public const string ConnectionString = "Data Source='{0}';Default Timeout=30";
+
     public string Name => "sqlite";
     public bool IsAvailable => true;
     public bool SupportsFullJoin => true;
@@ -58,11 +68,11 @@ internal sealed class SqliteTestProvider : ITestProvider
         var builder = new DataContextBuilder();
         if (loggerFactory is not null)
             builder = builder.UseLoggerFactory(loggerFactory);
-        return new SqliteDataContext($"Data Source='{DatabasePath}'", builder);
+        return new SqliteDataContext(string.Format(ConnectionString, DatabasePath), builder);
     }
 
     public IDataContext CreateContext(DataContextBuilder builder)
-        => new SqliteDataContext($"Data Source='{DatabasePath}'", builder);
+        => new SqliteDataContext(string.Format(ConnectionString, DatabasePath), builder);
 
     public void EnsureSeeded()
     {
@@ -75,7 +85,7 @@ internal sealed class SqliteTestProvider : ITestProvider
             if (File.Exists(DatabasePath))
                 File.Delete(DatabasePath);
 
-            using var ctx = new SqliteDataContext($"Data Source='{DatabasePath}'", new DataContextBuilder());
+            using var ctx = new SqliteDataContext(string.Format(ConnectionString, DatabasePath), new DataContextBuilder());
             using var conn = ctx.GetConnection();
             conn.Open();
             using var cmd = conn.CreateCommand();
