@@ -32,6 +32,8 @@
       href: relationships/eager-loading.md
     - name: Постраничная выборка на родителя при жадной загрузке
       href: relationships/eager-loading-per-parent-paging.md
+    - name: Слоты коллекционной проекции
+      href: relationships/collection-projection.md
 - name: Руководство
   items:
     - name: Источники запроса

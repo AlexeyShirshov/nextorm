@@ -367,6 +367,17 @@ Every other terminal evaluates the parent query **only** and does not run eager 
 
 `Any` / `AnyAsync` and `Count` / `CountAsync` are **scalar** terminals: they return a single value and never run eager loading either. `ToCommand()` ignoring the specification is deliberate — it is what lets the child query run without recursing into the parent's loader. Materialize the parents with one of the four stitching terminals when the collections must be filled. A non-list terminal still validates the `LoadWith` set before building its parent-only command: an explicit `Correlated` or a per-parent top-N child is rejected with [`NotSupportedException`](xref:System.NotSupportedException) (no SQL and no plan-cache entry) rather than silently ignoring the unsupported request. The same preparation-time validation covers the declared nested graph, so a cycle or a conflicting nested mode is rejected before the parent-only command is built. The child-query factory must be pure and idempotent; it is invoked at most once per eager-loading specification and context, during the first terminal validation, and the memoized child query is reused during execution.
 
+## Projecting a collection instead of filling one
+
+`LoadWith` fills a navigation on the materialized entity. When the per-parent collection belongs in a projected
+result instead, a projection member can name the declared navigation — `Select(p => new { p.Id, p.Comments })` — or
+adapt it into a per-parent pipeline —
+`p.Comments.AsEntityBuilder<Comment>().Where(..).OrderBy(..).Limit(..).Select(..).ToList()`. That is a **projection**
+surface, not a loader: it materializes through this loader's routes (so the split and single-query modes, the
+statement counts and the identity rules are the ones documented here) and then computes the projected shape in
+memory. It has its own boundaries — no SQL column pruning, a closed adapter operator set and no `Limit` over a
+many-to-many — documented in [Collection-valued projection slots](collection-projection.md).
+
 ## Relationship metadata and `JoinInto`
 
 `LoadWith` does not create or consume navigation metadata; the association is expressed by the two key selectors at each call site. nextorm also has a metadata model for **declared** relationships (`HasMany`/`HasOne` or [`[Relationship]`](xref:NextORM.Core.RelationshipAttribute)) and a single-query loader, [`JoinInto`](relationships.md), which fills one child collection from one `LEFT JOIN` (or `INNER JOIN`) and stitches the denormalized rows back onto the deduplicated parents. Use `JoinInto` when the association is declared as relationship metadata, and `LoadWith` when it is expressed ad hoc by key selectors at the call site; `LoadWith` with `EagerLoadMode.SingleQuery` also reduces to one denormalized query, so the two share the same single-query materialization, assignment contract and ordering guarantees. `JoinInto` is a **fixed** single-query operation: unlike `LoadWith`, it never consults the context default, so a context configured with `UseEagerLoadMode(EagerLoadMode.SplitQuery)`, `Correlated` or `Auto` leaves `JoinInto` on the single-query path. Relationships are still never inferred from conventions or foreign keys. A graph is loaded explicitly: each `LoadWith` call declares one edge, and a nested `LoadWith` inside the child query declares the next level.

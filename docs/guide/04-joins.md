@@ -20,6 +20,12 @@ The right-hand side can be:
   the [`TableAlias`](xref:NextORM.Core.TableAlias) indexer (`t["id"]`).
 * a mapped entity named by its type, without passing a source builder — see [Source-less (type-only) joins](#source-less-type-only-joins);
 
+**A per-parent collection is not a join.** A projection member that names a declared collection navigation —
+`Select(p => new { p.Id, p.Comments })` or its `AsEntityBuilder<T>() … ToList()` adapter — returns each parent's
+collection without a `JOIN`: the graph is loaded by the eager-loading route and the collection is projected in
+memory, so the statement gains no extra select-list columns and the parent rows are not multiplied. See
+[Collection-valued projection slots](../relationships/collection-projection.md).
+
 Two things are important before looking at the examples:
 
 1. **Join arity has a flat arity-chain scope bound of eight tables.** The first join returns
@@ -1094,6 +1100,7 @@ it supports [`Inner`](xref:NextORM.Core.JoinType.Inner), [`Left`](xref:NextORM.C
 - [Query hints](15-query-hints.md) - statement-level hints such as SQL Server `OPTION (RECOMPILE)`.
 - [Relationships and single-query loading (`JoinInto`)](../relationships/relationships.md) - declared relationship metadata and the single-query child-collection loader.
 - [Per-parent paging in eager loading](../relationships/eager-loading-per-parent-paging.md) - applying a child query's own `Take`/`Skip` independently to each parent.
+- [Collection-valued projection slots](../relationships/collection-projection.md) - per-parent collections returned by a projection, without a join and without extra columns.
 - [Provider-specific SQL](provider-specific-sql/overview.md) - the full catalogue of provider-only constructs.
 - [Querying and projections](../engine/index.md)
 

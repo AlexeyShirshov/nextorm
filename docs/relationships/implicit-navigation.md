@@ -30,7 +30,8 @@ empty or inconsistent.
 A navigation query computes a scalar/cardinality or projects one declared reference or collection — it
 never materializes a nested object graph. To fill a nested collection graph (level 2 and deeper), use
 `LoadWith` with a child query that declares its own `LoadWith` (see
-[Nested graphs](eager-loading.md#nested-graphs-level-2-and-deeper)).
+[Nested graphs](eager-loading.md#nested-graphs-level-2-and-deeper)); to return the per-parent collections
+*inside a projected result*, use a [collection-valued projection slot](collection-projection.md).
 
 ## Reference navigation
 
@@ -276,11 +277,12 @@ The adapter is a **query** surface: it answers presence and count inside a query
 already materialized parents is the job of [`LoadWith`](eager-loading.md): its declared-metadata form
 (`LoadWith(navigation)` / `LoadWith(navigation, childQuery)`) reads the same declared relationship this
 page translates and returns entities with the navigation populated (see
-[Declared-metadata form](eager-loading.md#declared-metadata-form)). Collection-valued `Select` slots, the
-`AsEntityBuilder … Select(...).ToList()` adapter composition and standalone collection-projection syntax
-are a **separate surface that is not delivered in this release** (the rest of
-[#249](https://github.com/AlexeyShirshov/nextorm/issues/249) is still DRAFT): they are not a loading
-alternative to `LoadWith` and remain unimplemented, with the prohibitions below unchanged.
+[Declared-metadata form](eager-loading.md#declared-metadata-form)). A collection-valued `Select` slot and the
+`AsEntityBuilder … Where/OrderBy/Limit/Select(...).ToList()` composition are a **separate projection surface**:
+they are delivered, with their own v1 limits, in [Collection-valued projection slots](collection-projection.md)
+— a projection returns the per-parent collections inside the result shape and is not a loading alternative to
+`LoadWith`. The prohibitions below describe the query-construct adapter (`Any`/`Count`/`LongCount`); the
+projection adapter follows the rules of its own page.
 
 ## Providers
 
@@ -327,7 +329,9 @@ client-side evaluation:
   `p.Children.Count(c => ...)`, `p.Children.LongCount(c => ...)`).
 * **Direct LINQ composition** on a collection navigation — `Where`, `OrderBy`/`OrderByDescending`,
   `Select`, `Skip`, `Take`, `Distinct`, `GroupBy`, `GroupJoin`, `SelectMany`, joins, set operations
-  (`Union`/`Except`/`Intersect`) and materialisation (`ToArray`/`ToList`).
+  (`Union`/`Except`/`Intersect`) and materialisation (`ToArray`/`ToList`). Compose them through the
+  `AsEntityBuilder<T>` adapter of a [collection-valued projection slot](collection-projection.md) instead
+  (supported subset only).
 * **Extra terminals** — `First`/`First(predicate)`, `Single`/`SingleOrDefault`, `Last`/`LastOrDefault`,
   `Contains`, `Sum`, `Average` and other aggregates.
 * **Captured or outside markers** — a captured enumerable is not a navigation, and `AsEntityBuilder`
@@ -342,16 +346,19 @@ client-side evaluation:
   source combined with a temp-table/TVP path. Navigation declared **before** the temp-table boundary is
   still expanded into the materialising `CREATE TEMPORARY TABLE ... AS SELECT`; build a navigation over
   the temp-table rows from an explicit join or from the mapped source instead.
-* **Adapter LINQ composition** — chaining query operators after `AsEntityBuilder<T>` is not delivered;
-  only the direct terminals are recognised.
+* **Adapter LINQ composition outside a projection slot** — chaining query operators after
+  `AsEntityBuilder<T>` is not a query construct: as a navigation query the adapter recognises only the direct
+  terminals. The one composition that *is* delivered is the
+  [collection-valued projection slot](collection-projection.md), where the adapter continues into a per-parent
+  `Where`/`OrderBy`/`ThenBy`/`Limit`/`Select` pipeline terminated by `ToList()`/`ToArray()`.
 * **Bare reference-adapter projection** — projecting the reference marker itself
   (`Select(c => new { X = c.Parent!.AsEntityBuilder<Parent>() })`) is not a column and is rejected; use
   the `Any`/`Count`/`LongCount` terminals instead.
 * **Not a loading surface** — the adapter and the composition forms above never fill a navigation.
   Loading a declared navigation is done with [`LoadWith`](eager-loading.md) on the parent query, whose
-  declared-metadata form reads the same declared relationship; collection-valued projection slots,
-  `AsEntityBuilder … Select(...).ToList()` adapter terminals and standalone collection-projection syntax
-  are a separate surface that is not delivered in this release.
+  declared-metadata form reads the same declared relationship. A
+  [collection-valued projection slot](collection-projection.md) is the third, projection-shaped form: it
+  returns the per-parent collection inside the projected result instead of filling the entity's navigation.
 
 ### Composite relationship keys
 
@@ -375,6 +382,7 @@ the explicit join operators; see [Limitations](../advanced/limitations.md) for t
 
 - [Relationships and single-query loading (`JoinInto`)](relationships.md) — declaring the metadata this page builds on.
 - [Nested graphs in eager loading](eager-loading.md#nested-graphs-level-2-and-deeper) — the level 2+ `LoadWith` graph, a different surface from a navigation query.
+- [Collection-valued projection slots](collection-projection.md) — the same adapter as a per-parent projection pipeline.
 - [Per-parent paging in eager loading](eager-loading-per-parent-paging.md) — where a child `Take`/`Skip` is applied independently per parent.
 - [Joins](../guide/04-joins.md) — the explicit join surface.
 - [Subqueries](../guide/07-subqueries.md) — the correlated forms nextorm renders.
