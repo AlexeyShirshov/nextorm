@@ -416,6 +416,18 @@ public class T296bNullableComparisonSqlGenerationTests
         sql.Should().Contain("t2.id = t1.id", "the captured-comparison subquery must stay correlated to the outer row");
         sql.Should().Contain("t3.id = t1.id", "the presence subquery must stay correlated to the outer row");
         sql.Should().Contain($"t2.nullableint = {P}capturedValue", "the captured comparison keeps the total shape's comparison arm");
+        // The total-boolean shape must survive the projection context: both null arms and the
+        // non-null arm stay, so dropping the rewrite cannot pass this pin.
+        sql.Should().Contain($"t2.nullableint is null and {P}capturedValue is null",
+            "the null/null arm keeps the projected comparison two-valued instead of NULL");
+        sql.Should().Contain(
+            $"t2.nullableint is not null and {P}capturedValue is not null and t2.nullableint = {P}capturedValue",
+            "the non-null arm keeps the projected comparison two-valued instead of NULL");
+        // The predicates are SELECT-list projections, so the statement must start with the outer
+        // id followed by the correlated subquery (this dialect renders no projection alias for a
+        // subquery column); a rendering that moved them into WHERE cannot satisfy this.
+        sql.Should().StartWith("select t1.id, exists(select *",
+            "the boolean predicates must stay in the SELECT list, not move into WHERE");
         sql.Should().Contain("t3.nullableint is not null");
         AssertScalarLegalisation(sql, 2);
     }
