@@ -11,6 +11,7 @@ namespace NextORM.Integration.Tests;
 /// eager-loading paths produce on this dialect. Depth three runs the same shared body PostgreSQL and
 /// SQLite run and is covered in both modes below (split 4 statements, single 1).
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class ClickHouseCollectionProjectionIntegrationTests : ProviderTestSuite
 {
     protected override ITestProvider Provider => ClickHouseTestProvider.Instance;

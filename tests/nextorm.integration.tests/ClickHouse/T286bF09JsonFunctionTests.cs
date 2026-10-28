@@ -19,6 +19,7 @@ namespace NextORM.Integration.Tests;
 /// refusals of the two members absent from 25.8 (<c>prettyPrintJSON</c>,
 /// <c>JSONExtractUIntOrDefault</c>).
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class T286bF09JsonFunctionTests : ProviderTestSuite
 {
     [SqlTable("t286b_f09_entity")]

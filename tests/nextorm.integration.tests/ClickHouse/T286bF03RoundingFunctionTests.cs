@@ -16,6 +16,7 @@ namespace NextORM.Integration.Tests;
 /// <c>2.67</c>), the <c>roundToExp2</c> integral and fractional domains, null propagation and the
 /// documented server-side refusals (an empty or non-constant boundary array).
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class T286bF03RoundingFunctionTests : ProviderTestSuite
 {
     [SqlTable("t286b_f03_entity")]

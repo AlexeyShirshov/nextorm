@@ -16,6 +16,7 @@ namespace NextORM.Integration.Tests;
 /// epoch variants with negative and overflow boundaries, DST-aware zone offsets, NULL propagation
 /// and the three deterministic CLR-shape refusals.
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class T286bF04DateTimeFunctionTests : ProviderTestSuite
 {
     [SqlTable("t286b_f04_entity")]

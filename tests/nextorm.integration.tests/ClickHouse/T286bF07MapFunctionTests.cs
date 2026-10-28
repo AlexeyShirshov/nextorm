@@ -16,6 +16,7 @@ namespace NextORM.Integration.Tests;
 /// duplicate-key behaviour (preserved in the tuple array), and the deterministic refusals that never
 /// reach the server.
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class T286bF07MapFunctionTests : ProviderTestSuite
 {
     [SqlTable("t286b_f07_entity")]

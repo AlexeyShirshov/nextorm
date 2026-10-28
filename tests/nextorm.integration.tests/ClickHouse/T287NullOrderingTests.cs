@@ -9,6 +9,7 @@ namespace NextORM.Integration.Tests;
 /// provider default asserted by the control is ClickHouse's own (NULLS LAST for both directions).
 /// The base <see cref="ProviderTestSuite"/> fails closed when the container is unavailable.
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class T287NullOrderingClickHouseTests : ProviderTestSuite
 {
     protected override ITestProvider Provider => ClickHouseTestProvider.Instance;

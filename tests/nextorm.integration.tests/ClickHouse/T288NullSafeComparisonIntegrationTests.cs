@@ -13,6 +13,7 @@ namespace NextORM.Integration.Tests;
 /// unreachable — a missing container must not turn the row into a skip.
 /// </para>
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class T288NullSafeComparisonClickHouseIntegrationTests : ProviderTestSuite
 {
     protected override ITestProvider Provider => ClickHouseTestProvider.Instance;

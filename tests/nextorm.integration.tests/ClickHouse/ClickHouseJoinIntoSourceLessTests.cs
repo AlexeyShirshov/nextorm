@@ -11,6 +11,7 @@ namespace NextORM.Integration.Tests;
 /// no <c>Supports*</c> guard is introduced for <c>JoinInto</c>, mirroring the existing ClickHouse
 /// <c>JoinInto</c> remainder coverage.
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class ClickHouseJoinIntoSourceLessTests : ProviderTestSuite
 {
     protected override ITestProvider Provider => ClickHouseTestProvider.Instance;

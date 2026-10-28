@@ -19,6 +19,7 @@ namespace NextORM.Integration.Tests;
 /// documented server-side refusals (zero operands of <c>gcd</c>/<c>lcm</c>, zero divisors of
 /// <c>intDiv</c>) and NULL propagation are asserted rather than substituted.
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class T286bF02NumericFunctionTests : ProviderTestSuite
 {
     [SqlTable("t286b_f02_entity")]

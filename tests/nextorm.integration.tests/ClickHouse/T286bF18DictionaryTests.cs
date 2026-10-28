@@ -32,6 +32,7 @@ namespace NextORM.Integration.Tests;
 /// the nearest-ancestor accessors, population, hierarchy and the reflexive <c>regionIn</c> relation.
 /// </para>
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class T286bF18DictionaryTests : ProviderTestSuite, IClassFixture<T286bF18RegionFixture>, IAsyncLifetime
 {
     private const string HierarchyDictionary = "t286b_f18_h_dict";
@@ -555,6 +556,7 @@ public sealed class T286bF18RegionFixture : IAsyncLifetime
             var fixtureDirectory = Path.Combine(AppContext.BaseDirectory, "ClickHouse", "Fixtures", "F18");
             var container = new ClickHouseBuilder(Image)
                 .WithEnvironment("TZ", "UTC")
+                .WithResourceEnvelope()
                 .WithResourceMapping(
                     File.ReadAllBytes(Path.Combine(fixtureDirectory, "geobase.xml")),
                     "/etc/clickhouse-server/config.d/geobase.xml")

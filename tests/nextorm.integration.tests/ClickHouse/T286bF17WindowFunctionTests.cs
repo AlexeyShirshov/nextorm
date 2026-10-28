@@ -15,6 +15,7 @@ namespace NextORM.Integration.Tests;
 /// first row of a partition and every negative change yield 0), the always-<c>Float64</c> result, the
 /// NULL rejection for both arguments, and the precise server error identities.
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class T286bF17WindowFunctionTests : ProviderTestSuite
 {
     [SqlTable("t286b_f17_entity")]

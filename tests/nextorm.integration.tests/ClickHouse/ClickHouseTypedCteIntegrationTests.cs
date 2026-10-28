@@ -9,6 +9,7 @@ namespace NextORM.Integration.Tests;
 /// <see cref="CommonTestSuite"/>; the new typed recursion must be refused before any database command,
 /// while an ordinary (non-recursive) typed CTE must keep working end-to-end.
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class ClickHouseTypedCteIntegrationTests : ProviderTestSuite
 {
     protected override ITestProvider Provider => ClickHouseTestProvider.Instance;

@@ -14,6 +14,7 @@ namespace NextORM.Integration.Tests;
 /// documented duplicate-junction rule) without restating the seed.
 /// </para>
 /// </summary>
+[Collection("ClickHouse")]
 [Trait("Category", "T331")]
 public sealed class ClickHouseT331JoinIntoNavigationTests : ProviderTestSuite
 {

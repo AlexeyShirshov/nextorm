@@ -34,6 +34,7 @@ namespace NextORM.Integration.Tests;
 /// skips.
 /// </para>
 /// </summary>
+[Collection("ClickHouse")]
 [Trait("Category", "Diagnostic")]
 public sealed class ClickHouseRetryScenarioTests
 {

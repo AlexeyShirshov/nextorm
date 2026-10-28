@@ -15,6 +15,7 @@ namespace NextORM.Integration.Tests;
 /// <c>Float64</c> type, the nullable column/literal null contract (NULL, never zero), the projection
 /// alias and the boolean-predicate placement.
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class T286ClickHouseMathFunctionTests : ProviderTestSuite
 {
     private static readonly (string Name, double Input, double Expected)[] Cases =

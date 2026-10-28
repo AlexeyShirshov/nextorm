@@ -14,6 +14,7 @@ namespace NextORM.Integration.Tests;
 /// predicate reached the join. When the container is unavailable the constructor reports the reason and
 /// the requirement row stays open — a skip is never a pass.
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class ClickHouseJoinIntoChildWhereIntegrationTests : IDisposable
 {
     private const string Skip = "skip";

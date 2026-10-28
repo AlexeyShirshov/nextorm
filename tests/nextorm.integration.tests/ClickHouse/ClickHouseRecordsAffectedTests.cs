@@ -12,6 +12,7 @@ namespace NextORM.Integration.Tests;
 /// after release, on both the sync and the async path — and pin the genuinely unsupported entry
 /// points with executed guards instead of silent skips.
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class ClickHouseRecordsAffectedTests : ProviderTestSuite
 {
     private const string Table = "ch_records_affected";

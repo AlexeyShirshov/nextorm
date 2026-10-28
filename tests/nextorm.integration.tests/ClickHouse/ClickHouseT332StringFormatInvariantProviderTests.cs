@@ -11,6 +11,7 @@ namespace NextORM.Integration.Tests;
 /// behaviour — the canonical <c>CultureInfo.InvariantCulture</c> static property, the pre-existing constant
 /// and null-provider arms, and the exact refusal — is verified here against a real ClickHouse server.
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class ClickHouseT332StringFormatInvariantProviderTests : ProviderTestSuite
 {
     private const string T332RejectionMessage =

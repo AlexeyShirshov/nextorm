@@ -13,6 +13,7 @@ namespace NextORM.Integration.Tests;
 /// path; nullability, empty/Unicode/binary boundaries and the server-side malformed-input refusals
 /// are asserted rather than substituted.
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class T286bF01StringFunctionTests : ProviderTestSuite
 {
     protected override ITestProvider Provider => ClickHouseTestProvider.Instance;

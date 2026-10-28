@@ -20,6 +20,7 @@ namespace NextORM.Integration.Tests;
 /// All statements are executed through the provider's own connection, so the suite proves the exact
 /// server-side semantics the renderer relies on rather than a portable substitute.
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class ClickHouseExtremeRowNativeSpecificTests : ProviderTestSuite
 {
     protected override ITestProvider Provider => ClickHouseTestProvider.Instance;

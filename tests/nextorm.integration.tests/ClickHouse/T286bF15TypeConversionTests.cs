@@ -19,6 +19,7 @@ namespace NextORM.Integration.Tests;
 /// <c>to*</c>, the little-endian bit patterns of <c>reinterpretAs*</c>, parameter binding, and the
 /// deterministic refusals that never reach the server.
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class T286bF15TypeConversionTests : ProviderTestSuite
 {
     [SqlTable("t286b_f15_entity")]

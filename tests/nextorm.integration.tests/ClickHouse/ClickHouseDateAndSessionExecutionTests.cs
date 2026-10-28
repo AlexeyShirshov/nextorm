@@ -9,6 +9,7 @@ namespace NextORM.Integration.Tests;
 /// server. The dialects render dedicated <c>toXxx</c>/<c>addXxx</c>/<c>dateDiff</c> forms for these
 /// names; the shared suite only exercises the portable subset.
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class ClickHouseDateAndSessionExecutionTests : ProviderTestSuite
 {
     protected override ITestProvider Provider => ClickHouseTestProvider.Instance;

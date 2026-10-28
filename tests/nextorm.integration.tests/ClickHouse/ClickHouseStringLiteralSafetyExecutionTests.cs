@@ -14,6 +14,7 @@ namespace NextORM.Integration.Tests;
 /// escape character omits the clause, a custom one throws the product's
 /// <see cref="NotSupportedException"/>.
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class ClickHouseStringLiteralSafetyExecutionTests : ProviderTestSuite
 {
     private const string ProbeTable = "sls_ch_probe";

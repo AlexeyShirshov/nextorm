@@ -16,6 +16,7 @@ namespace NextORM.Integration.Tests;
 /// lambda bindings (one parameter per array, the <c>arrayEnumerate</c> index idiom), nesting and
 /// captured values, and the deterministic refusals that never reach the server.
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class T286bF08HigherOrderFunctionTests : ProviderTestSuite
 {
     [SqlTable("t286b_f08_entity")]

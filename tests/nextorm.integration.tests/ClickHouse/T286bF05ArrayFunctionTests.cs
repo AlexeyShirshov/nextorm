@@ -16,6 +16,7 @@ namespace NextORM.Integration.Tests;
 /// <c>UNKNOWN_FUNCTION</c> on 25.8) and the #335 control: a captured nullable-element array
 /// <c>{1, null, 3}</c> survives end to end with no <c>0</c> substitution.
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class T286bF05ArrayFunctionTests : ProviderTestSuite
 {
     [SqlTable("t286b_f05_entity")]

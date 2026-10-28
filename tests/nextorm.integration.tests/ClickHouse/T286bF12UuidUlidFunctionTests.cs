@@ -18,8 +18,18 @@ namespace NextORM.Integration.Tests;
 /// <c>DateTime</c> wrap past 2106), the millisecond precision of the vendor format, the UUIDv7 round
 /// trip, and the NULL flow.
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class T286bF12UuidUlidFunctionTests : ProviderTestSuite
 {
+    /// <summary>
+    /// T359 (#349): the fixture table is seeded per test instance. Several tests query
+    /// <c>t286b_f12_entity</c> without seeding it themselves (they relied on a sibling test having
+    /// run first), which only held while a reused container still carried the table; on a fresh
+    /// container the first test in the class failed with <c>Code: 60 UNKNOWN_TABLE</c>. Seeding in the
+    /// constructor removes the order dependency without changing what any test asserts.
+    /// </summary>
+    public T286bF12UuidUlidFunctionTests() => Seed();
+
     private const string SampleUuid = "61f0c404-5cb3-11e7-907b-a6006ad3dba0";
     private const string SampleUuidHex = "61F0C4045CB311E7907BA6006AD3DBA0";
     private const string SampleUlid = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
