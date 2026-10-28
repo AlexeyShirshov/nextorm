@@ -891,6 +891,7 @@ public class CrossProviderScalarSqlGenerationTests
             .Select(r => new { r.DatabaseOid }));
         databases.Should().Contain(
             "from (select pg_tablespace_databases::text as pg_tablespace_databases\n from pg_tablespace_databases(cast(E'1663' as oid))) as \"t1\"");
+        databases.Should().Contain("select pg_tablespace_databases as \"DatabaseOid\"");
 
         var foreignKeys = SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_get_catalog_foreign_keys())
             .Select(r => new { r.FkTable, r.FkColumns, r.PkTable, r.PkColumns, r.IsArray, r.IsOptional }));
@@ -958,12 +959,16 @@ public class CrossProviderScalarSqlGenerationTests
             "from (select summarized_tli, summarized_lsn::text as summarized_lsn,"
             + " pending_lsn::text as pending_lsn, summarizer_pid"
             + "\n from pg_get_wal_summarizer_state()) as \"t1\"");
+        summarizer.Should().Contain(
+            "select summarized_tli as \"SummarizedTli\", summarized_lsn as \"SummarizedLsn\","
+            + " pending_lsn as \"PendingLsn\", summarizer_pid as \"SummarizerPid\"");
 
         var committed = SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.pg_last_committed_xact())
             .Select(r => new { r.Xid, r.Timestamp, r.RoIdent }));
         committed.Should().Contain(
             "from (select xid, timestamp, roident::text as roident"
             + "\n from pg_last_committed_xact()) as \"t1\"");
+        committed.Should().Contain("select xid, timestamp, roident\n");
     }
 
     /// <summary>
@@ -1051,6 +1056,6 @@ public class CrossProviderScalarSqlGenerationTests
         origin.Should().Contain(
             "from (select timestamp, roident::text as roident"
             + "\n from pg_xact_commit_timestamp_origin(cast(@norm_p0 as xid))) as \"t1\"");
-        origin.Should().Contain("select timestamp, roident");
+        origin.Should().Contain("select timestamp, roident\n");
     }
 }

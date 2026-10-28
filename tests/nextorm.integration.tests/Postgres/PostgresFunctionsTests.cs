@@ -2607,18 +2607,35 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
             {
                 Execute(_sut.DataProvider, "select pg_switch_wal()");
                 Execute(_sut.DataProvider, "select pg_switch_wal()");
-                var latest = string.Empty;
-                for (var attempt = 0; attempt < 60 && latest.Length == 0; attempt++)
+                var summaryRanges = string.Empty;
+                for (var attempt = 0; attempt < 60 && summaryRanges.Length == 0; attempt++)
                 {
-                    latest = Scalar(
+                    summaryRanges = Scalar(
                         (DataContext)_sut.DataProvider,
-                        "select tli || '|' || start_lsn::text || '|' || end_lsn::text"
-                        + " from pg_available_wal_summaries() order by tli desc, start_lsn desc limit 1");
+                        "select string_agg(tli || '|' || start_lsn::text || '|' || end_lsn::text, ',' order by start_lsn)"
+                        + " from pg_available_wal_summaries()");
+                    if (summaryRanges.Length == 0)
+                        Thread.Sleep(500);
                 }
 
-                if (latest.Length > 0)
+                string? chosen = null;
+                foreach (var candidate in summaryRanges.Split(',', StringSplitOptions.RemoveEmptyEntries))
                 {
-                    var parts = latest.Split('|');
+                    var candidateParts = candidate.Split('|');
+                    var blockCount = Scalar(
+                        (DataContext)_sut.DataProvider,
+                        "select count(*) from pg_wal_summary_contents("
+                        + $"{candidateParts[0]}, '{candidateParts[1]}'::pg_lsn, '{candidateParts[2]}'::pg_lsn)");
+                    if (blockCount != "0")
+                    {
+                        chosen = candidate;
+                        break;
+                    }
+                }
+
+                if (chosen is not null)
+                {
+                    var parts = chosen.Split('|');
                     var contents = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_wal_summary_contents(
                             long.Parse(parts[0], System.Globalization.CultureInfo.InvariantCulture), parts[1], parts[2]))
                         .Select(r => new { r.RelFileNode, r.RelTablespace, r.RelDatabase, r.RelForkNumber, r.RelBlockNumber, r.IsLimitBlock })
