@@ -529,7 +529,16 @@ internal static class MemberTranslator
                             visitor.Builder!.Append(visitor.AliasProvider!.FindAlias(n)).Append('.');
 
                         if (col.NeedAliasForColumn)
+                        {
                             visitor.Builder!.Append(visitor.Dialect.MakeColumnReference(innerCol.PropertyName!));
+                            // The emitted identifier is the inner source's declared output name, not the
+                            // physical column it reads. Record it so a typed CTE declaration that projects
+                            // this column under another name (a DTO member over a CTE source) aliases it:
+                            // SqlSourceRenderer.MakeColumn consults DerivedColumnName for exactly that
+                            // declaration context. Without the bookkeeping the declaration silently kept
+                            // the source identifier and the outer chain missed it (#350).
+                            visitor.DerivedColumnName = innerCol.PropertyName;
+                        }
                         else
                         {
                             visitor.Builder!.Append(col.Column);
@@ -803,7 +812,13 @@ internal static class MemberTranslator
                             visitor.Builder!.Append(visitor.AliasProvider!.FindAlias(idx)).Append('.');
 
                         if (col.NeedAliasForColumn)
+                        {
                             visitor.Builder!.Append(visitor.Dialect.MakeColumnReference(innerCol.PropertyName!));
+                            // Same bookkeeping as the entity-typed branch above: the reference names the
+                            // inner source's declared output, so a typed CTE declaration that renames it
+                            // must alias the column to the projection member name (#350).
+                            visitor.DerivedColumnName = innerCol.PropertyName;
+                        }
                         else
                             visitor.Builder!.Append(col.Column);
                     }
@@ -1019,7 +1034,14 @@ internal static class MemberTranslator
         }
 
         if (needAliasForColumn)
+        {
             visitor.Builder!.Append(visitor.Dialect.MakeColumnReference(innerCol.PropertyName!));
+
+            // The emitted identifier is the inner source's declared output name, not the physical
+            // column it reads. Record it so a typed CTE declaration projecting this column under
+            // another name (a DTO member over a CTE/column-shape source) emits its own alias (#350).
+            visitor.DerivedColumnName = innerCol.PropertyName;
+        }
         else
             visitor.Builder!.Append(column);
     }
