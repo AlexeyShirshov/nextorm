@@ -2020,6 +2020,47 @@ public class SqlGenerationTests
             .Should().Be("select word, ndoc, nentry\n from ts_stat(@query) as \"t1\"");
     }
 
+    /// <summary>
+    /// The #281 full-text readers of PostgreSQL 17 as FROM sources: <c>ts_debug</c> is wrapped in a
+    /// projection that casts its <c>regdictionary</c>/<c>regdictionary[]</c> columns to
+    /// <c>text</c>/<c>text[]</c> (they have no CLR mapping), while <c>ts_parse</c> and
+    /// <c>ts_token_type</c> keep their bare calls — their text (name) argument form is the one the
+    /// members expose. The live shape is asserted in
+    /// <c>PostgresFunctionsTests.FullTextTokenizerReaders_ShouldExposeRowsSchemaAndClrTypes</c>.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void TableFunction_FullTextTokenizerReaders_ShouldEmitCallsAndProjectDictionaryColumns()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        foreach (var name in new[] { "ts_debug", "ts_parse", "ts_token_type" })
+            PostgresDialect.Instance.SupportsTableFunction(name).Should().BeTrue($"'{name}' is delivered on PostgreSQL");
+
+        var debug = Prepare(ctx, ctx
+            .From(() => SqlFunctions.Postgres.ts_debug(SqlFunctions.Parameter<string>(0)))
+            .Select(r => new { r.Alias, r.Description, r.Token, r.Dictionaries, r.Dictionary, r.Lexemes }));
+
+        Normalize(debug.DbCommand.CommandText)
+            .Should().Be(
+                "select alias, description, token, dictionaries, dictionary, lexemes\n from (select alias, description, token," +
+                " dictionaries::text[] as dictionaries, dictionary::text as dictionary, lexemes\n from ts_debug(@norm_p0)) as \"t1\"");
+
+        var parse = Prepare(ctx, ctx
+            .From(() => SqlFunctions.Postgres.ts_parse(SqlFunctions.Parameter<string>(0), SqlFunctions.Parameter<string>(1)))
+            .Select(r => new { r.Tokid, r.Token }));
+
+        Normalize(parse.DbCommand.CommandText)
+            .Should().Be("select tokid, token\n from ts_parse(@norm_p0, @norm_p1) as \"t1\"");
+
+        var types = Prepare(ctx, ctx
+            .From(() => SqlFunctions.Postgres.ts_token_type(SqlFunctions.Parameter<string>(0)))
+            .Select(r => new { r.Tokid, r.Alias, r.Description }));
+
+        Normalize(types.DbCommand.CommandText)
+            .Should().Be("select tokid, alias, description\n from ts_token_type(@norm_p0) as \"t1\"");
+    }
+
     [Fact]
     public void BuiltInTableFunction_UnsupportedByProvider_ShouldThrow()
     {

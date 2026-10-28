@@ -1411,6 +1411,18 @@ public class InMemoryTests
         foreach (var (name, act) in fullText)
             act.Should().Throw<NotSupportedException>()
                 .WithMessage($"*{name}*not supported*", "{0} is a SQL-only scalar", name);
+
+        // The three full-text tokenizer readers are table-valued sources with no in-memory equivalent.
+        var tokenizerSources = new (string Name, Action Act)[]
+        {
+            ("ts_debug", () => _sut.DataProvider.From(() => SqlFunctions.Postgres.ts_debug("The quick brown")).Select(r => r.Token).ToList()),
+            ("ts_parse", () => _sut.DataProvider.From(() => SqlFunctions.Postgres.ts_parse("default", "foo")).Select(r => r.Token).ToList()),
+            ("ts_token_type", () => _sut.DataProvider.From(() => SqlFunctions.Postgres.ts_token_type("default")).Select(r => r.Alias).ToList()),
+        };
+
+        foreach (var (name, act) in tokenizerSources)
+            act.Should().Throw<NotSupportedException>()
+                .WithMessage("*able-valued function sources are not supported*", "{0} is a table-valued function", name);
     }
 }
 

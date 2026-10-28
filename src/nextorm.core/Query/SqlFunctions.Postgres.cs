@@ -2289,6 +2289,42 @@ namespace NextORM.Core;
         public TvfEntityBuilder<SqlFunctions.ITsStatRow> ts_stat(string? query) => new("ts_stat");
 
         /// <summary>
+        /// <c>ts_debug(document)</c> as a FROM source: one row per tokenizer step of the default
+        /// text-search configuration, with the six documented columns <c>alias</c>, <c>description</c>,
+        /// <c>token</c>, <c>dictionaries</c>, <c>dictionary</c> and <c>lexemes</c> (see
+        /// <see cref="SqlFunctions.ITsDebugRow"/>; measured on PostgreSQL 17). The
+        /// <c>regdictionary</c>/<c>regdictionary[]</c> columns have no CLR mapping and are cast to
+        /// <c>text</c>/<c>text[]</c> in the emitted projection. Only the one-argument
+        /// <c>ts_debug(text)</c> overload is exposed: the document always runs through the session's
+        /// default configuration, while the two-argument <c>ts_debug(regconfig, text)</c> form would need
+        /// a configuration argument the API does not model. An empty or SQL-NULL document yields no rows.
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.ITsDebugRow> ts_debug(string? document) => new("ts_debug");
+
+        /// <summary>
+        /// <c>ts_parse(parser, document)</c> as a FROM source: one row per token the named text-search
+        /// parser extracted, the <c>tokid</c>/<c>token</c> columns (see
+        /// <see cref="SqlFunctions.ITsParseRow"/>). The parser is passed by <em>name</em> (<c>default</c>,
+        /// <c>english</c>, …), so this member always resolves the <c>ts_parse(text, text)</c> overload:
+        /// PostgreSQL has no implicit <c>text</c> to <c>oid</c> cast, and the <c>ts_parse(oid, text)</c>
+        /// form cannot be reached from a string parameter. An unknown name raises
+        /// <c>42704</c> (<c>text search parser "…" does not exist</c>) on the server; an empty or
+        /// SQL-NULL document yields no rows.
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.ITsParseRow> ts_parse(string? parser, string? document) => new("ts_parse");
+
+        /// <summary>
+        /// <c>ts_token_type(parser)</c> as a FROM source: one row per token type the named text-search
+        /// parser recognises, the <c>tokid</c>/<c>alias</c>/<c>description</c> columns (see
+        /// <see cref="SqlFunctions.ITsTokenTypeRow"/>; 23 rows for <c>default</c> on PostgreSQL 17). The
+        /// parser is passed by <em>name</em>, so this member resolves the <c>ts_token_type(text)</c>
+        /// overload; the <c>ts_token_type(oid)</c> form cannot be reached from a string parameter
+        /// (no implicit <c>text</c> to <c>oid</c> cast). An unknown name raises <c>42704</c>, and a
+        /// SQL-NULL parser yields no rows.
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.ITsTokenTypeRow> ts_token_type(string? parser) => new("ts_token_type");
+
+        /// <summary>
         /// <c>pg_control_system()</c> as a FROM source: the single control-file row (see
         /// <see cref="SqlFunctions.IPgControlSystemRow"/>).
         /// </summary>

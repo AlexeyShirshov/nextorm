@@ -370,7 +370,12 @@ public class PostgresDialect : SqlDialectBase
             or "pg_get_wal_summarizer_state" or "pg_identify_object" or "pg_identify_object_as_address"
             or "pg_input_error_info" or "pg_last_committed_xact" or "pg_listening_channels"
             or "pg_options_to_table" or "pg_snapshot_xip" or "pg_tablespace_databases"
-            or "pg_wal_summary_contents" or "pg_xact_commit_timestamp_origin";
+            or "pg_wal_summary_contents" or "pg_xact_commit_timestamp_origin"
+            // The #281 full-text readers of PG17: the tokenizer debugger, the parser's token stream and
+            // the parser's token-type table. All three are fixed-schema record functions; only the text
+            // (name) forms of the parser arguments are exposed, because a text parameter cannot reach
+            // the <c>oid</c> overloads.
+            or "ts_debug" or "ts_parse" or "ts_token_type";
 
     /// <summary>PostgreSQL renders the row-derived schema as the alias column-definition list of the record function.</summary>
     public override bool SupportsResultSchema(TableFunctionSchema placement) => placement == TableFunctionSchema.AliasColumnList;
@@ -509,6 +514,13 @@ public class PostgresDialect : SqlDialectBase
             // xid-bound parameter the driver sends.
             "(select timestamp, roident::text as roident"
             + $"\n from pg_xact_commit_timestamp_origin(cast(cast({arguments[0]} as text) as xid)))",
+        "ts_debug" =>
+            // The two dictionary columns are regdictionary/regdictionary[] — OID-alias types with no
+            // CLR mapping — so they are cast to text/text[] (the same bridge as the regclass/oid
+            // columns of the system-information readers). The token columns need no cast.
+            "(select alias, description, token, dictionaries::text[] as dictionaries,"
+            + " dictionary::text as dictionary, lexemes"
+            + $"\n from ts_debug({arguments[0]}))",
         _ => WrapTableFunction(name, call)
     };
 

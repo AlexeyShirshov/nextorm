@@ -546,6 +546,28 @@ public class PostgresFunctionsRejectionTests
             act.Should().Throw<NotSupportedException>().WithMessage($"*{name} function is refused*");
     }
 
+    /// <summary>
+    /// The PostgreSQL 17 full-text tokenizer readers of #281 (#347 D3b) are PostgreSQL-only query
+    /// sources: this provider refuses each name during preparation with a message naming it, instead of
+    /// rendering SQL it cannot execute.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void FullTextTokenizerTvfs_ShouldThrowBecauseNotSupported()
+    {
+        using var ctx = MySqlTestContext.Create();
+
+        var cases = new (string Name, Action Act)[]
+        {
+            ("ts_debug", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.ts_debug("The quick brown")).Select(r => r.Token))),
+            ("ts_parse", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.ts_parse("default", "foo - bar")).Select(r => r.Token))),
+            ("ts_token_type", () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.ts_token_type("default")).Select(r => r.Alias)))
+        };
+
+        foreach (var (name, act) in cases)
+            act.Should().Throw<NotSupportedException>().WithMessage($"*{name}*not supported*");
+    }
+
     /// <summary>#347 D3a fixture: the caller-declared row shape of the PostgreSQL JSON record readers.</summary>
     public interface IJsonRecordRow
     {

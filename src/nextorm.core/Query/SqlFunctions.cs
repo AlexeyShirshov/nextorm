@@ -326,6 +326,70 @@ public static partial class SqlFunctions
     }
 
     /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.ts_debug(string?)"/>: one tokenizer step of
+    /// the default text-search configuration for the document. The six columns are the documented
+    /// <c>ts_debug</c> result on PostgreSQL 17 — <c>alias</c>, <c>description</c>, <c>token</c>,
+    /// <c>dictionaries</c> (<c>regdictionary[]</c>), <c>dictionary</c> (<c>regdictionary</c>) and
+    /// <c>lexemes</c> (<c>text[]</c>). The two dictionary columns have no CLR mapping and are read as
+    /// text (the emitted projection casts them: <c>dictionaries::text[]</c> and
+    /// <c>dictionary::text</c>), exactly like the <c>regclass</c>/<c>oid</c> columns of the
+    /// system-information readers.
+    /// </summary>
+    public interface ITsDebugRow
+    {
+        /// <summary>The token type alias (<c>asciiword</c>, <c>blank</c>, <c>word</c>, …).</summary>
+        [Column("alias")]
+        string? Alias { get; set; }
+        /// <summary>The human-readable description of the token type.</summary>
+        [Column("description")]
+        string? Description { get; set; }
+        /// <summary>The token text extracted from the document.</summary>
+        [Column("token")]
+        string? Token { get; set; }
+        /// <summary>The dictionaries consulted for the token, as their textual names.</summary>
+        [Column("dictionaries")]
+        string[]? Dictionaries { get; set; }
+        /// <summary>The dictionary that produced the lexemes, as its textual name; NULL when none matched.</summary>
+        [Column("dictionary")]
+        string? Dictionary { get; set; }
+        /// <summary>The lexemes the token normalised to; an empty array when the token is not a word.</summary>
+        [Column("lexemes")]
+        string[]? Lexemes { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.ts_parse(string?, string?)"/>: one token of
+    /// the document as the named text-search parser split it (<c>tokid</c> is the token type id,
+    /// <c>token</c> the token text).
+    /// </summary>
+    public interface ITsParseRow
+    {
+        /// <summary>The token type id of the token.</summary>
+        [Column("tokid")]
+        int? Tokid { get; set; }
+        /// <summary>The token text.</summary>
+        [Column("token")]
+        string? Token { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.ts_token_type(string?)"/>: the token types
+    /// the named text-search parser recognises (<c>tokid</c>, <c>alias</c>, <c>description</c>).
+    /// </summary>
+    public interface ITsTokenTypeRow
+    {
+        /// <summary>The token type id.</summary>
+        [Column("tokid")]
+        int? Tokid { get; set; }
+        /// <summary>The token type alias (<c>asciiword</c>, <c>blank</c>, <c>word</c>, …).</summary>
+        [Column("alias")]
+        string? Alias { get; set; }
+        /// <summary>The human-readable description of the token type.</summary>
+        [Column("description")]
+        string? Description { get; set; }
+    }
+
+    /// <summary>
     /// Row shape produced by <see cref="PostgresFunctions.pg_control_system()"/>: the one
     /// <c>pg_control_system</c> record (control-file version, catalog version, the cluster's system
     /// identifier and the control file's modification time).

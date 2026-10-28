@@ -3332,6 +3332,132 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
         r.LexizeNull.Should().BeNull("a SQL-NULL dictionary stays NULL");
     }
 
+    /// <summary>
+    /// The #281 (#347 D3b) full-text tokenizer readers against the live server: <c>ts_debug</c>
+    /// reports one row per tokenizer step of the default configuration with the six documented columns
+    /// (<c>alias</c>, <c>description</c>, <c>token</c>, <c>dictionaries</c>, <c>dictionary</c>,
+    /// <c>lexemes</c>), the two <c>regdictionary</c> columns read back as text/text[] and a blank token
+    /// carries no dictionary and a NULL lexeme array; <c>ts_parse</c> splits a document into the
+    /// <c>tokid</c>/<c>token</c> stream; <c>ts_token_type</c> lists the parser's 23 token types. Both
+    /// parser readers are exercised through the text (name) overloads, the only ones a string parameter
+    /// can reach: an unknown name is rejected by the server with <c>42704</c>, and an empty or SQL-NULL
+    /// input yields no rows.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void FullTextTokenizerReaders_ShouldExposeRowsSchemaAndClrTypes()
+    {
+        // ts_debug: "The quick brown" tokenizes to three words and the two inter-word blanks.
+        var debug = _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.ts_debug("The quick brown"))
+            .Select(r => new { r.Alias, r.Description, r.Token, r.Dictionaries, r.Dictionary, r.Lexemes })
+            .ToList();
+
+        debug.Should().HaveCount(5, "every word and every blank of the default parser is one row");
+        debug.Select(r => r.Alias).Should().Equal("asciiword", "blank", "asciiword", "blank", "asciiword");
+        debug[0].Description.Should().Be("Word, all ASCII");
+        debug[0].Token.Should().Be("The");
+        debug[0].Dictionaries.Should().Equal("english_stem");
+        debug[0].Dictionary.Should().Be("english_stem");
+        debug[0].Lexemes.Should().BeEmpty("'the' is a stop word of the english_stem dictionary");
+        debug[2].Lexemes.Should().Equal("quick");
+        debug[4].Lexemes.Should().Equal("brown");
+
+        debug[1].Token.Should().Be(" ");
+        debug[1].Dictionaries.Should().BeEmpty("a blank token matches no dictionary");
+        debug[1].Dictionary.Should().BeNull("no dictionary produced the blank token");
+        debug[1].Lexemes.Should().BeNull("a blank token produces no lexeme array");
+
+        ((object)debug[0].Alias!).Should().BeOfType<string>();
+        ((object)debug[0].Token!).Should().BeOfType<string>();
+        ((object)debug[0].Dictionary!).Should().BeOfType<string>("regdictionary is cast to text");
+        ((object)debug[0].Dictionaries!).Should().BeOfType<string[]>("regdictionary[] is cast to text[]");
+        ((object)debug[2].Lexemes!).Should().BeOfType<string[]>("lexemes is a text[] column");
+
+        _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.ts_debug(""))
+            .Select(r => r.Token)
+            .ToList()
+            .Should().BeEmpty("an empty document has no tokens");
+
+        _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.ts_debug((string?)null))
+            .Select(r => r.Token)
+            .ToList()
+            .Should().BeEmpty("a SQL-NULL document yields no rows (strict function)");
+
+        // ts_parse: the text (name) overload — the parser is named, not passed as an OID.
+        var tokens = _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.ts_parse("default", "foo - bar"))
+            .Select(r => new { r.Tokid, r.Token })
+            .ToList();
+
+        tokens.Should().HaveCount(4, "two words and the two blank fragments between them");
+        tokens.Select(t => t.Tokid).Should().Equal(1, 12, 12, 1);
+        tokens.Select(t => t.Token).Should().Equal("foo", " ", "- ", "bar");
+        ((object)tokens[0].Tokid!).Should().BeOfType<int>();
+        ((object)tokens[0].Token!).Should().BeOfType<string>();
+
+        _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.ts_parse("default", ""))
+            .Select(r => r.Token)
+            .ToList()
+            .Should().BeEmpty("an empty document has no tokens");
+
+        _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.ts_parse("default", null))
+            .Select(r => r.Token)
+            .ToList()
+            .Should().BeEmpty("a SQL-NULL document yields no rows");
+
+        _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.ts_parse(null, "foo"))
+            .Select(r => r.Token)
+            .ToList()
+            .Should().BeEmpty("a SQL-NULL parser name yields no rows");
+
+        var unknownParser = () => _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.ts_parse("no_such_parser", "foo"))
+            .Select(r => r.Token)
+            .ToList();
+
+        unknownParser.Should().Throw<PostgresException>()
+            .Which.SqlState.Should().Be("42704", "the text form resolves the parser by name on the server");
+
+        // ts_token_type: the text (name) overload lists the parser's token-type table.
+        var types = _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.ts_token_type("default"))
+            .Select(r => new { r.Tokid, r.Alias, r.Description })
+            .ToList();
+
+        types.Should().HaveCount(23, "the default parser recognises 23 token types on PostgreSQL 17");
+        types.Should().OnlyContain(t => t.Tokid != null && t.Alias != null && t.Description != null);
+        types.Single(t => t.Tokid == 1).Alias.Should().Be("asciiword");
+        types.Single(t => t.Tokid == 1).Description.Should().Be("Word, all ASCII");
+        types.Single(t => t.Tokid == 2).Alias.Should().Be("word");
+        types.Single(t => t.Tokid == 12).Alias.Should().Be("blank");
+        types.Single(t => t.Tokid == 12).Description.Should().Be("Space symbols");
+        types.Min(t => t.Tokid).Should().Be(1);
+        types.Max(t => t.Tokid).Should().Be(23);
+        ((object)types[0].Tokid!).Should().BeOfType<int>();
+        ((object)types[0].Alias!).Should().BeOfType<string>();
+        ((object)types[0].Description!).Should().BeOfType<string>();
+
+        _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.ts_token_type((string?)null))
+            .Select(r => r.Alias)
+            .ToList()
+            .Should().BeEmpty("a SQL-NULL parser name yields no rows");
+
+        var unknownTokenTypeParser = () => _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.ts_token_type("no_such_parser"))
+            .Select(r => r.Alias)
+            .ToList();
+
+        unknownTokenTypeParser.Should().Throw<PostgresException>()
+            .Which.SqlState.Should().Be("42704", "the text form resolves the parser by name on the server");
+    }
+
     private static void Execute(IDataContext ctx, string sql)
     {
         ((DataContext)ctx).EnsureConnectionOpen();
