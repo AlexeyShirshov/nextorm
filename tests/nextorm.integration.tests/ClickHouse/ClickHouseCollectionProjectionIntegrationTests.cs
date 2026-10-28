@@ -8,8 +8,8 @@ namespace NextORM.Integration.Tests;
 /// (its integration class derives from <see cref="ProviderTestSuite"/> directly), so the shared live
 /// bodies are re-pinned here against a real server and the seeded <c>eager_*</c> Memory tables. The
 /// bodies assert values, not "did not throw", and the statement counts are the ones the split/single
-/// eager-loading paths produce on this dialect. Depth three is the contract's PostgreSQL/SQLite
-/// witness and is not part of this class; depth two is covered in both modes.
+/// eager-loading paths produce on this dialect. Depth three runs the same shared body PostgreSQL and
+/// SQLite run and is covered in both modes below (split 4 statements, single 1).
 /// </summary>
 public sealed class ClickHouseCollectionProjectionIntegrationTests : ProviderTestSuite
 {
@@ -59,6 +59,22 @@ public sealed class ClickHouseCollectionProjectionIntegrationTests : ProviderTes
         using var ctx = Provider.CreateContext(new DataContextBuilder().UseEagerLoadMode(EagerLoadMode.SingleQuery));
         CommonTestSuite.RegisterCollectionProjectionLive(ctx);
         CommonTestSuite.Depth2AdapterSingle(ctx);
+    }
+
+    [Fact]
+    public void CollectionProjectionLive_Depth3_Split()
+    {
+        CommonTestSuite.EnsureCollectionProjectionLiveSeeded(_sut);
+        CommonTestSuite.Depth3Split(_sut.DataProvider);
+    }
+
+    [Fact]
+    public void CollectionProjectionLive_Depth3_Single()
+    {
+        CommonTestSuite.EnsureCollectionProjectionLiveSeeded(_sut);
+        using var ctx = Provider.CreateContext(new DataContextBuilder().UseEagerLoadMode(EagerLoadMode.SingleQuery));
+        CommonTestSuite.RegisterCollectionProjectionLive(ctx);
+        CommonTestSuite.Depth3Single(ctx);
     }
 
     [Fact]

@@ -12,12 +12,13 @@ namespace NextORM.Integration.Tests;
 /// dedicated <c>t353m_*</c> tables. It cannot share the <c>eager_*</c> names: other MariaDB classes
 /// drop and recreate those tables in their own constructors, so sharing them would be a race.
 /// <para>
-/// Covered: depth one (direct and adapter, split; values and statement counts), depth two in single
-/// mode with per-level paging and captured rebinding, flat and nested many-to-many, the named
-/// pre-SQL refusals, broken/duplicate/missing reference cardinality and empty-versus-null at every
-/// level. Not covered here: depth three (the contract's witness is PostgreSQL/SQLite) and the
-/// composite-junction slot (its harness owns <c>eager_cj_*</c> per class, the same race), both recorded
-/// in <c>rv1/variants.md</c> instead of being skipped silently.
+/// Covered: depth one (direct and adapter, split and single, values and statement counts), the array and
+/// <c>IReadOnlyCollection</c> destinations, depth two in split and single mode with per-level
+/// filter/order/page and captured rebinding, depth three in both modes, flat and nested many-to-many in
+/// both modes, every named pre-SQL refusal the shared suite carries, broken/duplicate/missing reference
+/// cardinality and empty-versus-null at every level. Not covered here: the composite-junction slot (its
+/// harness owns <c>eager_cj_*</c> per class, the same race), recorded in <c>rv1/variants.md</c> instead of
+/// being skipped silently.
 /// </para>
 /// </summary>
 public sealed class MariaDbCollectionProjectionIntegrationTests : IDisposable
@@ -153,6 +154,54 @@ public sealed class MariaDbCollectionProjectionIntegrationTests : IDisposable
     }
 
     [Fact]
+    public void CollectionProjectionLive_Depth1_Direct_Single()
+    {
+        using var single = new MariaDbDataContext(
+            MariaDbContainer.ConnectionString,
+            new DataContextBuilder().UseEagerLoadMode(EagerLoadMode.SingleQuery));
+        RegisterSingle(single);
+        var counter = new JoinIntoQueryCountingInterceptor();
+        ((DataContext)single).AddInterceptor(counter);
+
+        var rows = single.From<Mdb353Parent>()
+            .Where(p => p.Id == Rich || p.Id == Empty)
+            .OrderBy(p => p.Id)
+            .Select(p => new { p.Id, Items = p.Items })
+            .ToList();
+
+        rows.Select(r => r.Id).Should().Equal(Rich, Empty);
+        rows[0].Items.Select(i => i.Id).Should().Equal(9710, 9711, 9712);
+        rows[1].Items.Should().NotBeNull("an empty collection slot is empty, never null").And.BeEmpty();
+        counter.Executing.Should().Be(1, "single: the inherited mode flattens the slot in one statement");
+    }
+
+    [Fact]
+    public void CollectionProjectionLive_Depth1_Adapter_Shapes()
+    {
+        // Two of the seven CLR shapes live: an array through ToArray() and an IReadOnlyCollection
+        // destination written directly from the navigation.
+        var arrays = Parents(_ctx)
+            .Where(p => p.Id == Rich)
+            .Select(p => new
+            {
+                p.Id,
+                Items = p.Items.AsEntityBuilder<Mdb353Item>().OrderBy(i => i.Id).ToArray(),
+            })
+            .ToList();
+
+        arrays.Single().Items.Should().BeOfType<Mdb353Item[]>()
+            .Which.Select(i => i.Id).Should().Equal(9710, 9711, 9712);
+
+        var readOnly = Parents(_ctx)
+            .Where(p => p.Id == Rich)
+            .Select(p => new Mdb353Shapes { Items = p.Items })
+            .ToList();
+
+        readOnly.Single().Items.Should().BeAssignableTo<IReadOnlyCollection<Mdb353Item>>()
+            .Which.Select(i => i.Id).Should().BeEquivalentTo([9710, 9711, 9712]);
+    }
+
+    [Fact]
     public void CollectionProjectionLive_FlatManyToMany_Direct_Split()
     {
         var counter = Count();
@@ -205,6 +254,141 @@ public sealed class MariaDbCollectionProjectionIntegrationTests : IDisposable
     }
 
     [Fact]
+    public void CollectionProjectionLive_Depth2_Direct_Split()
+    {
+        var counter = Count();
+
+        var rows = Parents(_ctx)
+            .Where(p => p.Id == Rich)
+            .Select(p => new
+            {
+                p.Id,
+                Items = p.Items.AsEntityBuilder<Mdb353Item>()
+                    .Where(i => i.Name != "skip")
+                    .OrderBy(i => i.Name)
+                    .Select(i => new { i.Id, i.Name, Notes = i.Notes })
+                    .ToList(),
+            })
+            .ToList();
+
+        var items = rows.Single().Items;
+        items.Select(i => i.Name).Should().Equal(["alpha", "beta"],
+            "the level-two Where dropped 'skip' and the order is per parent");
+        items.Single(i => i.Id == 9710).Notes.Select(n => n.Id).Should().BeEquivalentTo([9720, 9721]);
+        items.Single(i => i.Id == 9711).Notes.Select(n => n.Id).Should().Equal(9722);
+        counter.Executing.Should().Be(3, "split: parent + items + notes, one statement per level");
+    }
+
+    [Fact]
+    public void CollectionProjectionLive_NestedManyToMany_Split()
+    {
+        var counter = Count();
+
+        var rows = Parents(_ctx)
+            .Where(p => p.Id == Rich)
+            .Select(p => new
+            {
+                p.Id,
+                Items = p.Items.AsEntityBuilder<Mdb353Item>()
+                    .Where(i => i.Name != "skip")
+                    .OrderBy(i => i.Id)
+                    .Select(i => new { i.Id, Tags = i.Tags })
+                    .ToList(),
+            })
+            .ToList();
+
+        var items = rows.Single().Items;
+        items.Single(i => i.Id == 9710).Tags.Select(t => t.Id).Should().BeEquivalentTo([9770, 9771]);
+        items.Single(i => i.Id == 9711).Tags.Select(t => t.Id).Should().Equal(9771);
+        counter.Executing.Should().Be(4, "split nested many-to-many: parent + items + junction + tags");
+    }
+
+    [Fact]
+    public void CollectionProjectionLive_Depth3_Split()
+    {
+        var counter = Count();
+
+        var rows = Parents(_ctx)
+            .Where(p => p.Id == Rich)
+            .Select(p => new
+            {
+                p.Id,
+                Items = p.Items.AsEntityBuilder<Mdb353Item>()
+                    .Where(i => i.Name != "skip")
+                    .OrderBy(i => i.Id)
+                    .Select(i => new
+                    {
+                        i.Id,
+                        Notes = i.Notes.AsEntityBuilder<Mdb353Note>()
+                            .OrderBy(n => n.Id)
+                            .Select(n => new
+                            {
+                                n.Id,
+                                Tips = n.Tips.AsEntityBuilder<Mdb353Tip>()
+                                    .OrderBy(t => t.Id)
+                                    .Select(t => new { t.Id, t.Value })
+                                    .ToList(),
+                            })
+                            .ToList(),
+                    })
+                    .ToList(),
+            })
+            .ToList();
+
+        var items = rows.Single().Items;
+        items.Single(i => i.Id == 9710).Notes.Select(n => n.Id).Should().Equal(9720, 9721);
+        var notes = items.Single(i => i.Id == 9710).Notes;
+        notes.Single(n => n.Id == 9720).Tips.Select(t => t.Id).Should().Equal(9730, 9731);
+        notes.Single(n => n.Id == 9720).Tips.Select(t => t.Value).Should().Equal(9780, 9781);
+        notes.Single(n => n.Id == 9721).Tips.Select(t => t.Id).Should().Equal(9732);
+        items.Single(i => i.Id == 9711).Notes.Single().Tips.Should().NotBeNull().And.BeEmpty();
+        counter.Executing.Should().Be(4, "split: one statement per level of the depth-three graph");
+    }
+
+    [Fact]
+    public void CollectionProjectionLive_Depth3_Single()
+    {
+        using var single = new MariaDbDataContext(
+            MariaDbContainer.ConnectionString,
+            new DataContextBuilder().UseEagerLoadMode(EagerLoadMode.SingleQuery));
+        RegisterSingle(single);
+        var counter = new JoinIntoQueryCountingInterceptor();
+        ((DataContext)single).AddInterceptor(counter);
+
+        var rows = single.From<Mdb353Parent>()
+            .Where(p => p.Id == Rich)
+            .Select(p => new
+            {
+                p.Id,
+                Items = p.Items.AsEntityBuilder<Mdb353Item>()
+                    .Where(i => i.Name != "skip")
+                    .OrderBy(i => i.Id)
+                    .Select(i => new
+                    {
+                        i.Id,
+                        Notes = i.Notes.AsEntityBuilder<Mdb353Note>()
+                            .OrderBy(n => n.Id)
+                            .Select(n => new
+                            {
+                                n.Id,
+                                Tips = n.Tips,
+                            })
+                            .ToList(),
+                    })
+                    .ToList(),
+            })
+            .ToList();
+
+        var notes = rows.Single().Items.Single(i => i.Id == 9710).Notes;
+        // The innermost slot is a direct navigation with no declared OrderBy, so its row order belongs
+        // to the provider. Only the set is contracted here; Depth3_Split asserts the ordered adapter.
+        notes.Single(n => n.Id == 9720).Tips.Select(t => t.Id).Should().BeEquivalentTo([9730, 9731]);
+        notes.Single(n => n.Id == 9721).Tips.Select(t => t.Id).Should().Equal(9732);
+        rows.Single().Items.Single(i => i.Id == 9711).Notes.Single().Tips.Should().NotBeNull().And.BeEmpty();
+        counter.Executing.Should().Be(1, "single inherits through all three levels");
+    }
+
+    [Fact]
     public void CollectionProjectionLive_Refusals_ArePreSql()
     {
         var counter = Count();
@@ -219,16 +403,39 @@ public sealed class MariaDbCollectionProjectionIntegrationTests : IDisposable
             .Select(p => new { p.Id, Items = p.Items.AsEntityBuilder<Mdb353Item>().Select(i => new { i.Id }).Distinct().ToList() });
         Action union = () => navigation
             .Select(p => new { p.Id, Items = p.Items.AsEntityBuilder<Mdb353Item>().Select(i => new { i.Id }).Union(all).ToList() });
+        Action except = () => navigation
+            .Select(p => new { p.Id, Items = p.Items.AsEntityBuilder<Mdb353Item>().Select(i => new { i.Id }).Except(all).ToList() });
+        Action intersect = () => navigation
+            .Select(p => new { p.Id, Items = p.Items.AsEntityBuilder<Mdb353Item>().Select(i => new { i.Id }).Intersect(all).ToList() });
+        Action join = () => navigation
+            .Select(p => new
+            {
+                p.Id,
+                Items = p.Items.AsEntityBuilder<Mdb353Item>()
+                    .Join(_ctx.From<Mdb353Note>(), (i, n) => i.Id == n.ItemId)
+                    .ToList(),
+            });
         Action grouping = () => _ctx.From<Mdb353Parent>()
             .GroupBy(p => p.Id)
             .Select(p => new { p.Id, Items = p.Items });
+        Action terminal = () => navigation
+            .Select(p => new { p.Id, Items = p.Items })
+            .ToEnumerable();
+        Action customSlot = () => navigation
+            .Select(p => new Mdb353ObjectSlot { Id = p.Id, Items = p.Items });
 
         manyToManyLimit.Should().Throw<NotSupportedException>().WithMessage("*M:N + Limit*");
         groupBy.Should().Throw<NotSupportedException>().WithMessage("*applies GroupBy(...) inside its adapter chain*");
         distinct.Should().Throw<NotSupportedException>().WithMessage("*applies Distinct(...) inside its adapter chain*");
         union.Should().Throw<NotSupportedException>().WithMessage("*applies Union(...) inside its adapter chain*");
+        except.Should().Throw<NotSupportedException>().WithMessage("*applies Except(...) inside its adapter chain*");
+        intersect.Should().Throw<NotSupportedException>().WithMessage("*applies Intersect(...) inside its adapter chain*");
+        join.Should().Throw<NotSupportedException>().WithMessage("*applies Join(...) inside its adapter chain*");
         grouping.Should().Throw<NotSupportedException>().WithMessage("*cannot be combined with grouping*");
-        counter.Executing.Should().Be(0);
+        terminal.Should().Throw<NotSupportedException>().WithMessage("*supports only ToList() and ToArray()*");
+        customSlot.Should().Throw<NotSupportedException>()
+            .WithMessage("*only List<T>, T[], IEnumerable<T>, ICollection<T>, IList<T>, IReadOnlyCollection<T> and IReadOnlyList<T>*");
+        counter.Executing.Should().Be(0, "every rejected slot or adapter operation fails before a command exists");
     }
 
     [Fact]
@@ -408,6 +615,20 @@ public sealed class MariaDbCollectionProjectionIntegrationTests : IDisposable
         "create table t353m_tag (id int not null primary key, name varchar(100) null)",
         "create table t353m_link (id int not null primary key, parent_id int not null, child_id int not null)",
     ];
+}
+
+/// <summary>The direct destination shape (<c>IReadOnlyCollection&lt;T&gt;</c>) used by the live shape witness.</summary>
+public sealed class Mdb353Shapes
+{
+    public IReadOnlyCollection<Mdb353Item> Items { get; set; } = [];
+}
+
+/// <summary>A destination outside the seven supported shapes: <c>object</c> must be refused, never substituted.</summary>
+public sealed class Mdb353ObjectSlot
+{
+    public int Id { get; set; }
+
+    public object? Items { get; set; }
 }
 
 [SqlTable("t353m_parent")]
