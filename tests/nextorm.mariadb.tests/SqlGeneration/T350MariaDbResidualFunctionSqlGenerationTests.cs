@@ -518,6 +518,24 @@ public class T350MariaDbResidualFunctionSqlGenerationTests
         }
     }
 
+    /// <summary>
+    /// T350 S11 pin: <c>sformat</c> is the MariaDB variadic shape whose flattened tail is an
+    /// <c>object?[]</c>; with a single value both the registered lead (1) and a wrong one (2) render the
+    /// same fragment, so only a two-value tail can tell them apart. Argument 1 stays the format and
+    /// arguments 2..n follow it in order, each one a separate SQL argument.
+    /// </summary>
+    [Fact]
+    public void SFormat_VariadicLead_ShouldKeepTheFormatAndAppendEveryValueInOrder()
+    {
+        using var ctx = MariaDbTestContext.Create();
+
+        var sql = Plain(ctx, e => e.Select(_ => SqlFunctions.MySql.sformat("<a> <b>", 1, 2)));
+
+        sql.Should().Contain(
+            "sformat(_utf8mb4 X'3c613e203c623e', 1, 2)",
+            "argument 1 is the format ('<a> <b>' through the value policy) and arguments 2..n follow in order");
+    }
+
     [Fact]
     public void EveryDeliveredName_ShouldBeClaimedByItsDialect()
     {
