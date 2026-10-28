@@ -151,7 +151,9 @@ public class MySqlFunctionsSqlGenerationTests
             "sformat", "trim_oracle", "natural_sort_key", "lengthb", "chr",
             "json_loose", "json_array_intersect", "json_key_value",
             "json_object_filter_keys", "json_object_to_array",
-            "encode", "decode", "encrypt", "des_encrypt", "des_decrypt", "old_password"
+            "encode", "decode", "encrypt", "des_encrypt", "des_decrypt", "old_password",
+            "column_create", "column_add", "column_delete", "column_json",
+            "column_list", "column_exists", "column_check"
         ];
         var declared = typeof(MySqlFunctions)
             .GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)

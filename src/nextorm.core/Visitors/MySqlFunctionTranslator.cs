@@ -27,7 +27,10 @@ internal static class MySqlFunctionTranslator
         // remaining ones are the variadic tail.
         [nameof(MySqlFunctions.sformat)] = 1,
         [nameof(MySqlFunctions.json_array_intersect)] = 2,
-        [nameof(MySqlFunctions.json_object_filter_keys)] = 1
+        [nameof(MySqlFunctions.json_object_filter_keys)] = 1,
+        [nameof(MySqlFunctions.column_create)] = 0,
+        [nameof(MySqlFunctions.column_add)] = 1,
+        [nameof(MySqlFunctions.column_delete)] = 1
     };
 
     /// <summary>
@@ -349,6 +352,9 @@ internal static class MySqlFunctionTranslator
         nameof(MySqlFunctions.sformat) => 1,
         nameof(MySqlFunctions.json_array_intersect) => 2,
         nameof(MySqlFunctions.json_object_filter_keys) => 2,
+        nameof(MySqlFunctions.column_create) => 2,
+        nameof(MySqlFunctions.column_add) => 3,
+        nameof(MySqlFunctions.column_delete) => 2,
         _ => 0
     };
 

@@ -198,7 +198,10 @@ internal sealed class MariaDbNativeFunctions : IMySqlFunctions
         "json_loose" or "json_array_intersect" or "json_key_value" or
         "json_object_filter_keys" or "json_object_to_array" or
         // T350 block 2: the residual crypto names of the same baseline.
-        "encode" or "decode" or "encrypt" or "des_encrypt" or "des_decrypt" or "old_password";
+        "encode" or "decode" or "encrypt" or "des_encrypt" or "des_decrypt" or "old_password" or
+        // T350 block 2: the residual dynamic-columns names (COLUMN_GET stays refused).
+        "column_create" or "column_add" or "column_delete" or
+        "column_json" or "column_list" or "column_exists" or "column_check";
 
     private static Version? MinimumVersion(string name) => name switch
     {
@@ -275,6 +278,15 @@ internal sealed class MariaDbNativeFunctions : IMySqlFunctions
         "des_encrypt" => $"des_encrypt({string.Join(", ", args)})",
         "des_decrypt" => $"des_decrypt({string.Join(", ", args)})",
         "old_password" => $"old_password({args[0]})",
+        // T350 block 2: the residual dynamic-columns names. column_create/column_add are variadic pairs,
+        // column_delete a variadic name list; COLUMN_GET needs the refused AS type clause and stays out.
+        "column_create" => $"column_create({string.Join(", ", args)})",
+        "column_add" => $"column_add({string.Join(", ", args)})",
+        "column_delete" => $"column_delete({string.Join(", ", args)})",
+        "column_json" => $"column_json({args[0]})",
+        "column_list" => $"column_list({args[0]})",
+        "column_exists" => $"column_exists({args[0]}, {args[1]})",
+        "column_check" => $"column_check({args[0]})",
         _ => Supports(name)
             ? Inner.Render(name, args)
             : throw new NotSupportedException($"The {name} function is not supported by MariaDB.")

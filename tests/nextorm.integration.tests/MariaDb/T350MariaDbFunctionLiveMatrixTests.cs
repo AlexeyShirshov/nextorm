@@ -714,6 +714,93 @@ public sealed class T350MariaDbFunctionLiveMatrixTests : IDisposable
                 ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.old_password(null))),
                 "System.String",
                 Exact,
+                "propagates"),
+            // ---------------------------------------------------------------- T350 block 2: dynamic columns
+            // The calls are pure over their blobs, so no table state is needed: the "A/B cycle" is the
+            // nested COLUMN_CREATE -> COLUMN_ADD/DELETE expression of each row, observed on both phases.
+            new T350LiveCase(
+                "123",
+                "COLUMN_CREATE",
+                "dynamic columns",
+                "select column_create('a',1)",
+                "select column_create('a',null)",
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.column_create("a", 1))),
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.column_create("a", (object?)null))),
+                "byte[]",
+                Bytes,
+                "non-propagating:blob"),
+            new T350LiveCase(
+                "124",
+                "COLUMN_ADD",
+                "dynamic columns",
+                "select column_add(column_create('a',1),'b',2)",
+                "select column_add(column_create('a',1),'b',null)",
+                ctx => Task.FromResult<object?>(Project(ctx, x =>
+                    SqlFunctions.MySql.column_add(SqlFunctions.MySql.column_create("a", 1), "b", 2))),
+                ctx => Task.FromResult<object?>(Project(ctx, x =>
+                    SqlFunctions.MySql.column_add(SqlFunctions.MySql.column_create("a", 1), "b", (object?)null))),
+                "byte[]",
+                Bytes,
+                "non-propagating:blob"),
+            new T350LiveCase(
+                "125",
+                "COLUMN_DELETE",
+                "dynamic columns",
+                "select column_delete(column_create('a',1,'b',2),'b')",
+                "select column_delete(null,'b')",
+                ctx => Task.FromResult<object?>(Project(ctx, x =>
+                    SqlFunctions.MySql.column_delete(SqlFunctions.MySql.column_create("a", 1, "b", 2), "b"))),
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.column_delete(null, "b"))),
+                "byte[]",
+                Bytes,
+                "propagates"),
+            new T350LiveCase(
+                "127",
+                "COLUMN_JSON",
+                "dynamic columns",
+                "select column_json(column_create('a',1))",
+                "select column_json(null)",
+                ctx => Task.FromResult<object?>(Project(ctx, x =>
+                    SqlFunctions.MySql.column_json(SqlFunctions.MySql.column_create("a", 1)))),
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.column_json(null))),
+                "System.String",
+                Exact,
+                "propagates"),
+            new T350LiveCase(
+                "128",
+                "COLUMN_LIST",
+                "dynamic columns",
+                "select column_list(column_create('a',1))",
+                "select column_list(null)",
+                ctx => Task.FromResult<object?>(Project(ctx, x =>
+                    SqlFunctions.MySql.column_list(SqlFunctions.MySql.column_create("a", 1)))),
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.column_list(null))),
+                "System.String",
+                Exact,
+                "propagates"),
+            new T350LiveCase(
+                "129",
+                "COLUMN_EXISTS",
+                "dynamic columns",
+                "select column_exists(column_create('a',1),'a')",
+                "select column_exists(null,'a')",
+                ctx => Task.FromResult<object?>(Project(ctx, x =>
+                    SqlFunctions.MySql.column_exists(SqlFunctions.MySql.column_create("a", 1), "a"))),
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.column_exists(null, "a"))),
+                "System.Int32",
+                Exact,
+                "propagates"),
+            new T350LiveCase(
+                "130",
+                "COLUMN_CHECK",
+                "dynamic columns",
+                "select column_check(column_create('a',1))",
+                "select column_check(null)",
+                ctx => Task.FromResult<object?>(Project(ctx, x =>
+                    SqlFunctions.MySql.column_check(SqlFunctions.MySql.column_create("a", 1)))),
+                ctx => Task.FromResult<object?>(Project(ctx, x => SqlFunctions.MySql.column_check(null))),
+                "System.Int32",
+                Exact,
                 "propagates")
         ];
 

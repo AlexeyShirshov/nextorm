@@ -192,7 +192,18 @@ public class T350MariaDbResidualFunctionSqlGenerationTests
         new("103", "ENCRYPT", "crypto", "encrypt(somestring, somestring)", "delivered"),
         new("104", "DES_ENCRYPT", "crypto", "des_encrypt(somestring, somestring)", "delivered"),
         new("105", "DES_DECRYPT", "crypto", "des_decrypt(des_encrypt(somestring, somestring), somestring)", "delivered"),
-        new("106", "OLD_PASSWORD", "crypto", "old_password(somestring)", "delivered")
+        new("106", "OLD_PASSWORD", "crypto", "old_password(somestring)", "delivered"),
+        // T350 block 2: the residual dynamic-columns names (COLUMN_GET remains a declared refusal).
+        new("123", "COLUMN_CREATE", "dynamic columns", "column_create(somestring, id)", "delivered"),
+        new("124", "COLUMN_ADD", "dynamic columns",
+            "column_add(column_create(somestring, id), somestring, id)", "delivered"),
+        new("125", "COLUMN_DELETE", "dynamic columns",
+            "column_delete(column_create(somestring, id), somestring)", "delivered"),
+        new("127", "COLUMN_JSON", "dynamic columns", "column_json(column_create(somestring, id))", "delivered"),
+        new("128", "COLUMN_LIST", "dynamic columns", "column_list(column_create(somestring, id))", "delivered"),
+        new("129", "COLUMN_EXISTS", "dynamic columns",
+            "column_exists(column_create(somestring, id), somestring)", "delivered"),
+        new("130", "COLUMN_CHECK", "dynamic columns", "column_check(column_create(somestring, id))", "delivered")
     ];
 
     /// <summary>
@@ -298,7 +309,20 @@ public class T350MariaDbResidualFunctionSqlGenerationTests
             ["DES_ENCRYPT"] = ctx => Plain(ctx, e => e.Select(x => SqlFunctions.MySql.des_encrypt(x.String, x.String))),
             ["DES_DECRYPT"] = ctx => Plain(ctx, e => e.Select(x => SqlFunctions.MySql.des_decrypt(
                 SqlFunctions.MySql.des_encrypt(x.String, x.String), x.String))),
-            ["OLD_PASSWORD"] = ctx => Plain(ctx, e => e.Select(x => SqlFunctions.MySql.old_password(x.String)))
+            ["OLD_PASSWORD"] = ctx => Plain(ctx, e => e.Select(x => SqlFunctions.MySql.old_password(x.String))),
+            ["COLUMN_CREATE"] = ctx => Plain(ctx, e => e.Select(x => SqlFunctions.MySql.column_create(x.String, x.Id))),
+            ["COLUMN_ADD"] = ctx => Plain(ctx, e => e.Select(x =>
+                SqlFunctions.MySql.column_add(SqlFunctions.MySql.column_create(x.String, x.Id), x.String, x.Id))),
+            ["COLUMN_DELETE"] = ctx => Plain(ctx, e => e.Select(x =>
+                SqlFunctions.MySql.column_delete(SqlFunctions.MySql.column_create(x.String, x.Id), x.String))),
+            ["COLUMN_JSON"] = ctx => Plain(ctx, e => e.Select(x =>
+                SqlFunctions.MySql.column_json(SqlFunctions.MySql.column_create(x.String, x.Id)))),
+            ["COLUMN_LIST"] = ctx => Plain(ctx, e => e.Select(x =>
+                SqlFunctions.MySql.column_list(SqlFunctions.MySql.column_create(x.String, x.Id)))),
+            ["COLUMN_EXISTS"] = ctx => Plain(ctx, e => e.Select(x =>
+                SqlFunctions.MySql.column_exists(SqlFunctions.MySql.column_create(x.String, x.Id), x.String))),
+            ["COLUMN_CHECK"] = ctx => Plain(ctx, e => e.Select(x =>
+                SqlFunctions.MySql.column_check(SqlFunctions.MySql.column_create(x.String, x.Id))))
         };
 
     /// <summary>
@@ -393,7 +417,10 @@ public class T350MariaDbResidualFunctionSqlGenerationTests
             "JSON_LOOSE", "JSON_ARRAY_INTERSECT", "JSON_KEY_VALUE",
             "JSON_OBJECT_FILTER_KEYS", "JSON_OBJECT_TO_ARRAY",
             // T350 block 2: the residual crypto names.
-            "ENCODE", "DECODE", "ENCRYPT", "DES_ENCRYPT", "DES_DECRYPT", "OLD_PASSWORD"
+            "ENCODE", "DECODE", "ENCRYPT", "DES_ENCRYPT", "DES_DECRYPT", "OLD_PASSWORD",
+            // T350 block 2: the residual dynamic-columns names.
+            "COLUMN_CREATE", "COLUMN_ADD", "COLUMN_DELETE", "COLUMN_JSON",
+            "COLUMN_LIST", "COLUMN_EXISTS", "COLUMN_CHECK"
         };
 
     /// <summary>
@@ -420,7 +447,7 @@ public class T350MariaDbResidualFunctionSqlGenerationTests
     public void EveryResidualRow_ShouldCarryEitherItsFragmentOrItsRefusal()
     {
         DeliveredCases.Should().HaveCount(
-            94, "75 un-excluded names, the three block-1 members and the sixteen block-2 names");
+            101, "75 un-excluded names, the three block-1 members and the twenty-three block-2 names");
         DeliveredCases.Should().OnlyContain(@case => @case.Behaviour == "delivered");
         DeliveredCases.Select(@case => @case.Id).Should().OnlyHaveUniqueItems("one row per inventory id");
         DeliveredCases.Select(@case => @case.Name).Should().OnlyHaveUniqueItems("one row per canonical name");

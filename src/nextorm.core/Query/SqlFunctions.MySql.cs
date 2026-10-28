@@ -578,6 +578,48 @@ public class MySqlFunctions : CommonFunctions
     public string? old_password(string? value) => default!;
 
     /// <summary>
+    /// <c>column_create(name, value, ...)</c>: the MariaDB dynamic-columns blob built from the given
+    /// name/value pairs. MariaDB-only.
+    /// </summary>
+    public byte[]? column_create(params object?[] keyValues) => default!;
+
+    /// <summary>
+    /// <c>column_add(dynamicColumn, name, value, ...)</c>: the dynamic-columns blob with the given
+    /// name/value pairs added or replaced. MariaDB-only.
+    /// </summary>
+    public byte[]? column_add(byte[]? dynamicColumn, params object?[] keyValues) => default!;
+
+    /// <summary>
+    /// <c>column_delete(dynamicColumn, name, ...)</c>: the dynamic-columns blob with the named columns
+    /// removed. MariaDB-only.
+    /// </summary>
+    public byte[]? column_delete(byte[]? dynamicColumn, params string?[] names) => default!;
+
+    /// <summary>
+    /// <c>column_json(dynamicColumn)</c>: the dynamic-columns blob rendered as a JSON object.
+    /// MariaDB-only.
+    /// </summary>
+    public string? column_json(byte[]? dynamicColumn) => default!;
+
+    /// <summary>
+    /// <c>column_list(dynamicColumn)</c>: the comma-separated names of the dynamic columns, each quoted
+    /// with a backtick. MariaDB-only.
+    /// </summary>
+    public string? column_list(byte[]? dynamicColumn) => default!;
+
+    /// <summary>
+    /// <c>column_exists(dynamicColumn, name)</c>: <c>1</c> when the named dynamic column exists, otherwise
+    /// <c>0</c>. MariaDB-only.
+    /// </summary>
+    public int? column_exists(byte[]? dynamicColumn, string? name) => default!;
+
+    /// <summary>
+    /// <c>column_check(dynamicColumn)</c>: <c>1</c> when the dynamic-columns blob is well formed.
+    /// MariaDB-only.
+    /// </summary>
+    public int? column_check(byte[]? dynamicColumn) => default!;
+
+    /// <summary>
     /// <c>bin(value)</c>: the binary representation of <paramref name="value"/> as an unsigned 64-bit
     /// two's-complement value, without a <c>0b</c> prefix. MySQL-only.
     /// </summary>
