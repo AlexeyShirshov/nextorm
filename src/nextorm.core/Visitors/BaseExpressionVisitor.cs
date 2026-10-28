@@ -74,6 +74,23 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     /// <summary>The name of the column currently being rendered, if any.</summary>
     public string? ColumnName { get => _colName; internal set => _colName = value; }
     /// <summary>
+    /// The identifier a derived or CTE source exposes for the column currently being rendered, when the
+    /// reference was rendered from that source's declared output name instead of a physical column. A
+    /// typed CTE declaration body must alias such a column to its projection member name, because the
+    /// body's output names are what the outer chain resolves (#350). Unlike
+    /// <see cref="ColumnName"/> it is a declaration-only signal and does not affect a final select list,
+    /// where the physical-column bookkeeping keeps its existing alias behaviour.
+    /// <para>
+    /// Scope is **one select-list entry**, because <c>SqlSourceRenderer.MakeColumn</c> builds a fresh
+    /// visitor per entry (<c>SqlBuildContext.CreateColumnVisitor</c> always constructs a new one) and the
+    /// signal is read in the same call that renders the column. It is therefore never carried into the
+    /// next column — pinned by
+    /// <c>T363NamedDtoCteAliasTests.Mixed_body_should_alias_the_renamed_derived_column_only</c>. If
+    /// visitors are ever pooled, this member must be reset with <see cref="ColumnName"/>.
+    /// </para>
+    /// </summary>
+    internal string? DerivedColumnName { get; set; }
+    /// <summary>
     /// Which column of a <see cref="Range{T}"/> pair is currently being rendered, so a
     /// <see cref="RangeColumnsAttribute"/> member is emitted as its lower or upper physical column
     /// rather than as a single column. <see cref="RangeColumnRole.None"/> outside a pair projection.

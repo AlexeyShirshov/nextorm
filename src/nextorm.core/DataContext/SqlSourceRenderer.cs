@@ -1541,7 +1541,16 @@ internal static class SqlSourceRenderer
             || (ctx.ExactProjectionAliases
                 && renameAware
                 && selExp.PropertyName is null
-                && selExp.OutputName is not null);
+                && selExp.OutputName is not null)
+            // A derived/CTE source reference names the source's declared output identifier. A typed CTE
+            // declaration body must expose the projection member name instead, because that is what the
+            // outer chain resolves (#350); the signal is declaration-only, so a final select list and a
+            // legacy declaration keep their existing output names.
+            || (ctx.ExactProjectionAliases
+                && renameAware
+                && visitor.DerivedColumnName is not null
+                && selExp.PropertyName is not null
+                && !string.Equals(visitor.DerivedColumnName, selExp.PropertyName, StringComparison.Ordinal));
 
         return (needAliasForColumn, column);
     }
