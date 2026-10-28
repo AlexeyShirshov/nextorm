@@ -247,7 +247,9 @@ contract» (`.pdca/<task>/rv<k>/manifest.json`, `<task>` — `D<issue>`/kebab-sl
 path-escape, дубли id и плейсхолдерные деревья. Гейт **принят в канонический контракт**
 `pdca-dotnet` (R234-03G закрыт): `scripts/pdca_evidence.py` вместе с harness/tests/fixtures — это
 **источник** в глобальном скилле, а проект запускает свои копии из `.pdca/scripts/`
-(§«Skill workspace»); §«Versioned evidence contract» / §«CHECK completeness gate» требуют **обе**
+(§«Skill workspace»); `.pdca/scripts/**` не версионируется, поэтому на свежем клоне копию берут из
+глобального скилла и кладут в `.pdca/scripts/`; §«Versioned evidence contract» /
+§«CHECK completeness gate» требуют **обе**
 команды. Сам `lint` проверяет и двустороннее покрытие `required_rows` ↔ `rows`;
 `validate_inner_loop.py manifest` остаётся обязательным для формы строк
 (status/evidence/reason/predicate).

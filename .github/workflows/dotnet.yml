@@ -87,10 +87,6 @@ jobs:
           export NEXTORM_BENCH_DB=/tmp/nextorm-bench-gate/test.db
           python3 -m unittest discover -s tools/benchmarks/tests -p 'test_iteration14_gate.py'
           python3 tools/benchmarks/iteration14_gate.py --timeout 1200
-      - name: PDCA evidence pipeline gate
-        run: |
-          python3 -m unittest discover -s .pdca/scripts/tests -p 'test_pdca_evidence.py'
-          python3 .pdca/scripts/tests/pdca_evidence_harness.py negative --output /tmp/nextorm-pdca-evidence-negative
       - name: Coverage report
         run: |
           dotnet tool run reportgenerator \
