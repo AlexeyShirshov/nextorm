@@ -3088,41 +3088,40 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
         trimmed.Text![0].GetType().Should().Be(typeof(string));
 
         // generate_subscripts: the one-based subscripts of the requested dimension. The array is a typed
-        // bigint[] parameter — the documented pattern for an array source argument.
-        var arrayParam = SqlFunctions.Parameter<long[]>(0);
+        // bigint[] parameter — the documented pattern for an array source argument. The marker is inlined in
+        // the expression on purpose: a hoisted local is a captured closure member the planner reads as a
+        // constant with the value `default` (the marker returns null), so the placeholder would arrive as
+        // DBNull (measured: 42804 for the polymorphic anyarray argument, NULL for a tsvector result).
 
         var subscripts = _sut.DataProvider
-            .From(() => SqlFunctions.Postgres.generate_subscripts(arrayParam, 1))
+            .From(() => SqlFunctions.Postgres.generate_subscripts(SqlFunctions.Parameter<long[]>(0), 1))
             .Select(r => r.Value)
             .ToList(new long[] { 10, 20, 30 });
         subscripts.Should().Equal(1, 2, 3);
         subscripts[0].GetType().Should().Be(typeof(int));
 
         _sut.DataProvider
-            .From(() => SqlFunctions.Postgres.generate_subscripts(arrayParam, 1, true))
+            .From(() => SqlFunctions.Postgres.generate_subscripts(SqlFunctions.Parameter<long[]>(0), 1, true))
             .Select(r => r.Value)
             .ToList(new long[] { 10, 20, 30 })
             .Should().Equal([3, 2, 1], "reverse generates the subscripts in descending order");
         _sut.DataProvider
-            .From(() => SqlFunctions.Postgres.generate_subscripts(arrayParam, 1))
+            .From(() => SqlFunctions.Postgres.generate_subscripts(SqlFunctions.Parameter<long[]>(0), 1))
             .Select(r => r.Value)
             .ToList(Array.Empty<long>())
             .Should().BeEmpty("an empty array has no subscripts");
 
         // unnest(array, array): one column per array, the shorter array NULL-padded.
-        var firstArray = SqlFunctions.Parameter<long[]>(0);
-        var secondArray = SqlFunctions.Parameter<string?[]>(1);
         var pairs = _sut.DataProvider
-            .From(() => SqlFunctions.Postgres.unnest(firstArray, secondArray))
+            .From(() => SqlFunctions.Postgres.unnest(SqlFunctions.Parameter<long[]>(0), SqlFunctions.Parameter<string?[]>(1)))
             .Select(r => new { r.Value1, r.Value2 })
             .ToList(new long[] { 1, 2 }, new string?[] { "a" });
         pairs.Select(p => (p.Value1, p.Value2)).Should().Equal((1L, "a"), (2L, (string?)null));
         pairs[0].Value1.GetType().Should().Be(typeof(long));
         pairs[0].Value2!.GetType().Should().Be(typeof(string));
 
-        var thirdArray = SqlFunctions.Parameter<int?[]>(2);
         var triples = _sut.DataProvider
-            .From(() => SqlFunctions.Postgres.unnest(firstArray, secondArray, thirdArray))
+            .From(() => SqlFunctions.Postgres.unnest(SqlFunctions.Parameter<long[]>(0), SqlFunctions.Parameter<string?[]>(1), SqlFunctions.Parameter<int?[]>(2)))
             .Select(r => new { r.Value1, r.Value2, r.Value3 })
             .ToList(new long[] { 1, 2, 3 }, new string?[] { "a" }, new int?[] { 10 });
         triples.Select(t => (t.Value1, t.Value2, t.Value3)).Should().Equal(
@@ -3132,21 +3131,21 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
         triples[0].Value3!.Value.GetType().Should().Be(typeof(int));
 
         _sut.DataProvider
-            .From(() => SqlFunctions.Postgres.unnest(firstArray, secondArray))
+            .From(() => SqlFunctions.Postgres.unnest(SqlFunctions.Parameter<long[]>(0), SqlFunctions.Parameter<string?[]>(1)))
             .Select(r => r.Value1)
             .ToList(Array.Empty<long>(), Array.Empty<string>())
             .Should().BeEmpty("two empty arrays produce no rows");
 
         // unnest(array) WITH ORDINALITY: the ordinality column is bigint, read back as long.
         var ordinal = _sut.DataProvider
-            .From(() => SqlFunctions.Postgres.unnest_with_ordinality(arrayParam))
+            .From(() => SqlFunctions.Postgres.unnest_with_ordinality(SqlFunctions.Parameter<long[]>(0)))
             .Select(r => new { r.Value, r.Ordinality })
             .ToList(new long[] { 10, 20 });
         ordinal.Select(o => (o.Value, o.Ordinality)).Should().Equal((10L, 1L), (20L, 2L));
         ordinal[0].Ordinality.GetType().Should().Be(typeof(long));
 
         var ordinalPairs = _sut.DataProvider
-            .From(() => SqlFunctions.Postgres.unnest_with_ordinality(firstArray, secondArray))
+            .From(() => SqlFunctions.Postgres.unnest_with_ordinality(SqlFunctions.Parameter<long[]>(0), SqlFunctions.Parameter<string?[]>(1)))
             .Select(r => new { r.Value1, r.Value2, r.Ordinality })
             .ToList(new long[] { 1, 2 }, new string?[] { "a" });
         ordinalPairs.Select(o => (o.Value1, o.Value2, o.Ordinality)).Should().Equal(
@@ -3176,12 +3175,11 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
         string?[]? nullWords = null;
         string? nullJson = null;
         string? nullQuery = null;
-        var words = SqlFunctions.Parameter<string?[]>(0);
 
         var r = _sut.ComplexEntity.Where(x => x.Id == 1)
             .Select(x => new
             {
-                A2T = SqlFunctions.Postgres.array_to_tsvector(words),
+                A2T = SqlFunctions.Postgres.array_to_tsvector(SqlFunctions.Parameter<string?[]>(0)),
                 A2TNull = SqlFunctions.Postgres.array_to_tsvector(nullWords!),
                 Json2Ts = SqlFunctions.Postgres.json_to_tsvector("{\"a\":\"x y\",\"b\":1}", "[\"string\",\"numeric\"]"),
                 Json2TsCfg = SqlFunctions.Postgres.json_to_tsvector("english", "{\"a\":\"x y\"}", "[\"string\"]"),
@@ -3192,7 +3190,10 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
                 Nodes = SqlFunctions.Postgres.numnode("a & b"),
                 NodesNull = SqlFunctions.Postgres.numnode(nullQuery),
             })
-            .First(new string?[] { "a", "b" });
+            // The array travels as ONE argument: a bare `string[]` binds to the `params object?[]` slot
+            // by array covariance (normal form), which would spread "a" and "b" into two parameters and
+            // leave p0 bound to the string "a" (measured: the result came back NULL).
+            .First(new object?[] { new string?[] { "a", "b" } });
 
         r.A2T.Should().Be("'a' 'b'");
         r.A2T!.GetType().Should().Be(typeof(string));
