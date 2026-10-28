@@ -650,15 +650,31 @@ public partial class QueryCommand
                     // dynamic-columns-store entity is refused here rather than cached without its
                     // store column, which would poison the shared SelectListCache entry the ordinary
                     // projection-less path builds for the same type.
+                    //
+                    // T356 (#347): the arm also requires at least one mapped property, which is exactly
+                    // the condition under which EntitySelectListBuilder.Build yields columns. The metadata
+                    // cache can hold an auto-registered entry for a scalar CLR type (the raw/bind path
+                    // registers any result type), and such an entry maps no properties: it is not a
+                    // mapped entity. Building from it produced an EMPTY list that was written to
+                    // SelectListCache under the scalar type, so every later identity read of a
+                    // single-column derived source of that type resolved to a zero-column projection
+                    // ("select ... from" with no items / "The prepared select list is empty"). With the
+                    // guard the scalar arm below owns that shape, warm and cold alike.
                     else if (TypeFacts.UnwrapConvert(cmd._exp.Body) is ParameterExpression
                         && cmd._from?.ColumnShape is null
                         && cmd._dataContext!.NeedMapping
                         && cmd._exp.Body.Type == (cmd.ProjectionType ?? srcType)
                         && DataContextCache.Metadata.TryGetValue(cmd._exp.Body.Type, out var identityMeta)
-                        && identityMeta.DynamicColumnsStore is null)
+                        && identityMeta.DynamicColumnsStore is null
+                        && identityMeta.Properties.Count > 0)
                     {
                         var identityType = cmd._exp.Body.Type;
-                        if (!DataContextCache.SelectListCache.TryGetValue(identityType, out var identityColumns))
+                        // An empty entry is never a usable column shape: treat it as a miss so a
+                        // hand-seeded or legacy empty entry cannot shadow the ordinary build. This
+                        // cannot create one, because the arm requires mapped properties and the helper
+                        // emits exactly one column per property.
+                        if (!DataContextCache.SelectListCache.TryGetValue(identityType, out var identityColumns)
+                            || identityColumns.Length == 0)
                         {
                             // Same helper the ordinary projection-less path uses; the per-column plan
                             // hash is folded in below and stored with the entry so a later read of
