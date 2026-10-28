@@ -1481,9 +1481,9 @@ namespace NextORM.Core;
         /// a row-dependent, NaN/infinite or out-of-range fraction is refused before SQL. The sort
         /// expression must be a column, a parameter or a computed expression: SQL Server rejects a NULL
         /// or literal constant <c>ORDER BY</c> inside <c>WITHIN GROUP</c> (Msg 5309), so such a call is
-        /// refused before SQL too. The aggregate is ordered-set only: completing it with <c>OVER</c> is
-        /// refused, the engine's
-        /// own form being <c>WITHIN GROUP</c> without <c>OVER</c>. Requires SQL Server 2022 (major
+        /// refused before SQL too. The aggregate is ordered-set only: there is no <c>OVER</c> overload,
+        /// and the engine's own form is <c>WITHIN GROUP</c> without <c>OVER</c> (Msg 4113 for an
+        /// <c>OVER</c> shape). Requires SQL Server 2022 (major
         /// version 16) and the name-specific <see cref="ISqlDialect.SupportsApproxPercentileCont"/> gate.
         /// </summary>
         /// <typeparam name="T">The sort-input type.</typeparam>
@@ -1501,8 +1501,9 @@ namespace NextORM.Core;
         /// are exact. The fraction must be constant or captured and finite in <c>[0, 1]</c>; a
         /// row-dependent, NaN/infinite or out-of-range fraction is refused before SQL. The sort
         /// expression must be a column, a parameter or a computed expression (a NULL or literal constant
-        /// <c>ORDER BY</c> is Msg 5309 and is refused before SQL). Ordered-set only: completing it with
-        /// <c>OVER</c> is refused. Requires SQL Server 2022 (major version 16) and the name-specific
+        /// <c>ORDER BY</c> is Msg 5309 and is refused before SQL). Ordered-set only: there is no
+        /// <c>OVER</c> overload (the engine raises Msg 4113 for an <c>OVER</c> shape). Requires SQL
+        /// Server 2022 (major version 16) and the name-specific
         /// <see cref="ISqlDialect.SupportsApproxPercentileDisc"/> gate.
         /// </summary>
         /// <typeparam name="T">The sort-input type; a value type, because the discrete result is an input value.</typeparam>

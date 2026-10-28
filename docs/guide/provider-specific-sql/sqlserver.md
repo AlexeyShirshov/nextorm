@@ -447,10 +447,11 @@ there; the approximate percentiles are `double?` and the sort input type respect
 the percentile fraction must be a query-independent literal or captured scalar in `[0, 1]`, a
 row-dependent fraction is refused before SQL, and a literal or NULL `WITHIN GROUP` sort key is refused
 before SQL because the engine answers Msg 5309. `GROUPING_ID`'s grouping-context and grouping-list
-obligations are enforced before execution with zero statements dispatched, and `Over(...)` on either
-approximate percentile is refused — the engine has the `WITHIN GROUP` form only (Msg 4113 for `OVER`;
-`checksum_agg` is the one name whose native `OVER` the engine accepts, but this surface offers the
-aggregate form only). Both percentiles and the distinct count are approximate: the vendor documents a
+obligations are enforced before execution with zero statements dispatched; neither approximate
+percentile has an `OVER` overload (ordered-set, `WITHIN GROUP` only), and an `OVER` shape constructed
+by other means is rejected by the engine with Msg 4113 (`checksum_agg` is the one name whose native
+`OVER` the engine accepts, but this surface offers the aggregate form only). Both percentiles and the
+distinct count are approximate: the vendor documents a
 ≈1.33 % rank error at 99 % confidence for the percentiles, which is a statistical bound, not a
 deterministic tolerance.
 

@@ -186,10 +186,10 @@ scalar.`, and a literal or captured value that is `NaN`, infinite or outside `[0
 A runtime query-parameter fraction renders as a parameter; the engine then enforces the same range
 (Msg 8727).
 
-There is no `OVER` form: completing either member with `Over(...)` is refused before SQL with
-`The APPROX_PERCENTILE_CONT function does not support OVER; use WITHIN GROUP without OVER.`, and the
-engine's own `OVER` attempt is Msg 4113 (`The function 'approx_percentile_cont' is not a valid windowing
-function, and cannot be used with the OVER clause.`).
+Neither member has an `OVER` overload: they are ordered-set aggregates, `WITHIN GROUP` only, so an
+`OVER` form cannot be written through the public surface. If an `OVER` shape is constructed by other
+means, the engine rejects it with Msg 4113 (`The function 'approx_percentile_cont' is not a valid
+windowing function, and cannot be used with the OVER clause.`).
 
 The `ORDER BY` key must be a column, a parameter or a computed expression. SQL Server answers Msg 5309
 (`Windowed functions, aggregates and NEXT VALUE FOR functions do not support constants as ORDER BY

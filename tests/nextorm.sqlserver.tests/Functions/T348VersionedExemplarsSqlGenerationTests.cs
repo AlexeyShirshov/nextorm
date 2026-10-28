@@ -1113,6 +1113,91 @@ public class T348VersionedExemplarsSqlGenerationTests
             "The GROUPING_ID function requires every argument to match a GROUP BY expression.");
     }
 
+    /// <summary>
+    /// W2: in a self-join every alias keeps its own identity in the expression tree — the joined
+    /// projection carries the <c>Item1</c>/<c>Item2</c> (or <c>As</c>) member node, so the
+    /// <see cref="ExpressionPlanEqualityComparer"/> compares the member before it reaches the
+    /// parameter-by-type rule. An argument taken from the other alias is therefore refused before SQL,
+    /// in the SELECT list, <c>HAVING</c> and <c>ORDER BY</c>, with the membership message and no
+    /// statement dispatched — the engine's own Msg 8161 is never reached.
+    /// </summary>
+    [Fact]
+    public void GroupingId_ShouldRefuseAnArgumentFromTheOtherSelfJoinAlias()
+    {
+        using var ctx = Declared(17);
+        var e = ctx.From<IComplexEntity>();
+        const string membershipMessage =
+            "The GROUPING_ID function requires every argument to match a GROUP BY expression.";
+
+        AssertGroupingRefused(
+            ctx,
+            e.Join<IComplexEntity>((a, b) => a.Id == b.Id)
+                .GroupBy(p => new { p.Item1.Int })
+                .Select(p => new { G = SqlFunctions.SqlServer.grouping_id(p.Item2.Int) }),
+            membershipMessage);
+
+        AssertGroupingRefused(
+            ctx,
+            e.Join<IComplexEntity>((a, b) => a.Id == b.Id)
+                .GroupBy(p => new { p.Item1.Int })
+                .Having(p => SqlFunctions.SqlServer.grouping_id(p.Item2.Int) == 0)
+                .Select(p => new { p.Item1.Int, C = SqlFunctions.Sql.count() }),
+            membershipMessage);
+
+        AssertGroupingRefused(
+            ctx,
+            e.Join<IComplexEntity>((a, b) => a.Id == b.Id)
+                .GroupBy(p => new { p.Item1.Int })
+                .OrderBy(p => SqlFunctions.SqlServer.grouping_id(p.Item2.Int))
+                .Select(p => new { p.Item1.Int, G = SqlFunctions.SqlServer.grouping_id(p.Item1.Int) }),
+            membershipMessage);
+
+        // The same swap through an explicit alias projection and through a raw-table source (the alias
+        // is carried by a member / a TableAlias method-call object either way).
+        AssertGroupingRefused(
+            ctx,
+            e.Join<IComplexEntity>((a, b) => a.Id == b.Id)
+                .As(p => new { L = p.Item1, R = p.Item2 })
+                .GroupBy(p => new { p.L.Int })
+                .Select(p => new { G = SqlFunctions.SqlServer.grouping_id(p.R.Int) }),
+            membershipMessage);
+
+        AssertGroupingRefused(
+            ctx,
+            ctx.From("complex_entity")
+                .Join(ctx.From("complex_entity"), (a, b) => a["id"].AsInt == b["id"].AsInt)
+                .GroupBy(p => new { V = p.Item1["nullableint"].AsInt })
+                .Select(p => new { G = SqlFunctions.SqlServer.grouping_id(p.Item2["nullableint"].AsInt) }),
+            membershipMessage);
+    }
+
+    /// <summary>
+    /// W2 positive controls: the grouped alias itself, a two-source <c>GROUP BY a.X, b.X</c> and a
+    /// plain single-source grouping all pass the same matcher (the rule does not over-reject a valid
+    /// grouping).
+    /// </summary>
+    [Fact]
+    public void GroupingId_ShouldAcceptEveryValidGroupingAlias()
+    {
+        using var ctx = Declared(17);
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.GroupBy(x => new { x.Int })
+                .Select(x => new { G = SqlFunctions.SqlServer.grouping_id(x.Int) }))
+            .Should().Contain("grouping_id(nullableint)");
+
+        var selfJoin = SqlOf(ctx, e.Join<IComplexEntity>((a, b) => a.Id == b.Id)
+            .GroupBy(p => new { p.Item1.Int })
+            .Select(p => new { G = SqlFunctions.SqlServer.grouping_id(p.Item1.Int) }));
+        selfJoin.Should().Contain("grouping_id(t1.nullableint)")
+            .And.Contain("group by t1.nullableint");
+
+        SqlOf(ctx, e.Join<IComplexEntity>((a, b) => a.Id == b.Id)
+                .GroupBy(p => new { A = p.Item1.Int, B = p.Item2.Int })
+                .Select(p => new { G = SqlFunctions.SqlServer.grouping_id(p.Item1.Int, p.Item2.Int) }))
+            .Should().Contain("grouping_id(t1.nullableint, t2.nullableint)");
+    }
+
     /// <summary>The fraction is a literal, a captured scalar or a query parameter; endpoints stay exact.</summary>
     [Fact]
     public void ApproxPercentiles_ShouldRenderLiteralCapturedAndParameterFractions()

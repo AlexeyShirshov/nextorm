@@ -101,7 +101,8 @@ facts, asserted live, and no promise is made for future builds.
 The U4 aggregates extend the same version-only contract. `APPROX_COUNT_DISTINCT` needs major 15 and
 the two approximate percentiles need major 16; `CHECKSUM_AGG` and `GROUPING_ID` have no version floor
 and render in every SQL Server declaration, including an unversioned one. The percentiles are
-ordered-set aggregates: `WITHIN GROUP (ORDER BY …)` only, so `Over(...)` is refused before SQL, and a
+ordered-set aggregates: `WITHIN GROUP (ORDER BY …)` only, so there is no `OVER` overload and an `OVER`
+shape constructed by other means is rejected by the engine, and a
 literal or NULL sort key is refused too because the engine answers Msg 5309 (`Windowed functions,
 aggregates and NEXT VALUE FOR functions do not support constants as ORDER BY clause expressions`); a
 captured scalar becomes a parameter and executes. A constant NULL operand of `approx_count_distinct` or

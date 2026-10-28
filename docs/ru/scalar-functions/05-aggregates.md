@@ -189,10 +189,10 @@ scalar.`, а литерал или захваченное значение `NaN`
 Дробь — рантайм-параметр запроса рендерится как параметр; тогда тот же диапазон проверяет движок
 (Msg 8727).
 
-Формы `OVER` нет: дополнение любого из членов через `Over(...)` отклоняется до SQL с
-`The APPROX_PERCENTILE_CONT function does not support OVER; use WITHIN GROUP without OVER.`, а
-собственная попытка `OVER` у движка — Msg 4113 (`The function 'approx_percentile_cont' is not a valid
-windowing function, and cannot be used with the OVER clause.`).
+Перегрузки `OVER` нет ни у одного из членов: это упорядоченные (ordered-set) агрегаты, только
+`WITHIN GROUP`, поэтому форму `OVER` через публичный интерфейс записать нельзя. Если форма `OVER` всё
+же будет сконструирована другим способом, движок отвергнет её с Msg 4113 (`The function
+'approx_percentile_cont' is not a valid windowing function, and cannot be used with the OVER clause.`).
 
 Ключ `ORDER BY` должен быть столбцом, параметром или вычисляемым выражением. SQL Server отвечает
 Msg 5309 (`Windowed functions, aggregates and NEXT VALUE FOR functions do not support constants as ORDER
