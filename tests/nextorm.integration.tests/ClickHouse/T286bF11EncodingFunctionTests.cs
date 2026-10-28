@@ -17,6 +17,7 @@ namespace NextORM.Integration.Tests;
 /// two-dimensional Hilbert/Morton inverse, the NULL flow of the nullable members, and the server
 /// refusal of a <c>Nullable</c> argument for the array-returning members.
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class T286bF11EncodingFunctionTests : ProviderTestSuite
 {
     [SqlTable("t286b_f11_entity")]

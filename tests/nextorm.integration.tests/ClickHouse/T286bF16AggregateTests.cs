@@ -18,6 +18,7 @@ namespace NextORM.Integration.Tests;
 /// <c>exponentialTimeDecayed*</c> family, the grouping/empty-input/NULL contracts, the declared CLR
 /// shapes, the vendor-absent names on this build, and the three state-returning refusals.
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class T286bF16AggregateTests : ProviderTestSuite
 {
     [SqlTable("t286b_f16_agg")]

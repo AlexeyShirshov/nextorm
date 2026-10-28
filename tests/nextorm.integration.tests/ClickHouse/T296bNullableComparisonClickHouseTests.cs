@@ -14,6 +14,7 @@ namespace NextORM.Integration.Tests;
 /// <c>JOIN ON</c> shapes are asserted as preparation-time refusals, and one fact proves that refusal
 /// precedes any connection or command creation.
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class T296bNullableComparisonClickHouseTests : IDisposable
 {
     private readonly IDataContext _ctx;

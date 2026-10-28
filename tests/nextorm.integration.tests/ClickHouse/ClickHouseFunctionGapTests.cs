@@ -9,6 +9,7 @@ namespace NextORM.Integration.Tests;
 /// ClickHouse server: the UTF-8/regexp/split strings, the date format/parse helpers, the array set
 /// operations, the map family, the hashes and <c>generateULID</c>.
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class ClickHouseFunctionGapTests : ProviderTestSuite
 {
     protected override ITestProvider Provider => ClickHouseTestProvider.Instance;

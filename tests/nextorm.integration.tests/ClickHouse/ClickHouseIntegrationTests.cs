@@ -15,6 +15,7 @@ namespace NextORM.Integration.Tests;
 /// portable equivalent (the <c>-If</c> combinators, <c>argMin</c>/<c>argMax</c>) or render
 /// differently per provider.
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class ClickHouseIntegrationTests : ProviderTestSuite
 {
     protected override ITestProvider Provider => ClickHouseTestProvider.Instance;

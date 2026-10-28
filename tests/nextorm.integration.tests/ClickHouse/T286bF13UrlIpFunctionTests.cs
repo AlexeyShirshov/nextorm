@@ -18,6 +18,7 @@ namespace NextORM.Integration.Tests;
 /// <c>OrDefault</c>/<c>OrNull</c> distinction, the CIDR clamping boundaries, the NULL matrix, and the
 /// deterministic <c>TLD_LIST_NOT_FOUND</c> fact of the custom-list members.
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class T286bF13UrlIpFunctionTests : ProviderTestSuite
 {
     private const string SampleUrl = "http://example.com/path?query=value&param=123#fragment";

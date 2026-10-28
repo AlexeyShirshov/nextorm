@@ -16,6 +16,7 @@ namespace NextORM.Integration.Tests;
 /// refusals (<c>untuple</c>, heterogeneous name/value pairs, Nullable Hamming components) never reach
 /// the server.
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class T286bF06TupleFunctionTests : ProviderTestSuite
 {
     [SqlTable("t286b_f06_entity")]

@@ -27,5 +27,9 @@ internal sealed class DatabaseContainers : IAsyncLifetime
         await MySqlContainer.DisposeContainerAsync().ConfigureAwait(false);
         await MariaDbContainer.DisposeContainerAsync().ConfigureAwait(false);
         await ClickHouseContainer.DisposeContainerAsync().ConfigureAwait(false);
+        // T359 (#349): the T348 2022 arm runs inside the same process as the 2025 one, so its
+        // container has to be released here as well; without this it stayed Up after every full run
+        // (observed for 7 h on the measurement host) and held ~1.5 GB of the shared VM between runs.
+        await SqlServer2022Container.DisposeContainerAsync().ConfigureAwait(false);
     }
 }

@@ -11,6 +11,7 @@ namespace NextORM.Integration.Tests;
 /// and a repeated same-identity row is tolerated and collapses to one child. This is runtime
 /// (materialization) evidence over the eager fixtures, not a SQL-generation or capability-flag check.
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class ClickHouseJoinIntoOneToOneTests : ProviderTestSuite
 {
     protected override ITestProvider Provider => ClickHouseTestProvider.Instance;

@@ -17,6 +17,7 @@ namespace NextORM.Integration.Tests;
 /// results and their out-of-range rejection, the string Hamming form, the NULL matrix, and the fact
 /// that ClickHouse has no <c>&amp;</c>/<c>|</c>/<c>^</c>/<c>~</c> bit operators.
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class T286bF14BitFunctionTests : ProviderTestSuite
 {
     [SqlTable("t286b_f14_entity")]

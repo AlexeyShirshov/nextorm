@@ -17,6 +17,7 @@ namespace NextORM.Integration.Tests;
 /// rendered call must actually run and return the documented value, which also pins the
 /// result types the row reader materialises.
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class ClickHouseFunctionExecutionTests : ProviderTestSuite
 {
     protected override ITestProvider Provider => ClickHouseTestProvider.Instance;

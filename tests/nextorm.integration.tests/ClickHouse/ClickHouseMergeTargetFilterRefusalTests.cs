@@ -13,6 +13,7 @@ namespace NextORM.Integration.Tests;
 /// provider. A <see cref="IQueryInterceptor"/> counts every command lifecycle event, which proves the
 /// refusal is a metadata decision with zero command invocation reads/writes.
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class ClickHouseMergeTargetFilterRefusalTests : ProviderTestSuite
 {
     protected override ITestProvider Provider => ClickHouseTestProvider.Instance;

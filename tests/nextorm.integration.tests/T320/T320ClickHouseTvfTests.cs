@@ -41,6 +41,7 @@ internal static class T320ChIntegrationTvf
 /// data, the correlated APPLY is rejected by name, and a capture change on the same cached plan instance
 /// changes the row set — all observed as data, not as "no exception".
 /// </summary>
+[Collection("ClickHouse")]
 [Trait("Category", "T320")]
 public sealed class T320ClickHouseTvfTests(ITestOutputHelper output) : ProviderTestSuite
 {

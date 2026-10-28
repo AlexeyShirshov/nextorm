@@ -27,6 +27,7 @@ namespace NextORM.Integration.Tests;
 /// <c>ClickHouseFunctionExecutionTests.ArrayExcept_ShouldRefuseBeforeTouchingTheServer</c>.
 /// </para>
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class ClickHouseArrayExceptLiveTests : ProviderTestSuite
 {
     [SqlTable("t351_array_except")]

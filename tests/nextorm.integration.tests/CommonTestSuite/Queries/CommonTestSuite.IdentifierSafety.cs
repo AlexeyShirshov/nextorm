@@ -36,6 +36,7 @@ public abstract partial class CommonTestSuite
 /// Re-pins the shared identifier-safety case for ClickHouse, which (like MariaDB) has no
 /// <see cref="CommonTestSuite"/>-derived integration class and uses its own container harness.
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class ClickHouseIdentifierSafetyTests : ProviderTestSuite
 {
     protected override ITestProvider Provider => ClickHouseTestProvider.Instance;

@@ -12,6 +12,7 @@ namespace NextORM.Integration.Tests;
 /// dialect, so the §4 categorization hides no delivered member and implements none of the
 /// out-of-scope external-I/O surface.
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class T286bF19TableFunctionBoundaryTests : ProviderTestSuite
 {
     private static readonly string[] DeliveredTableFunctions =

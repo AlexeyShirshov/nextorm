@@ -11,6 +11,7 @@ namespace NextORM.Integration.Tests;
 /// <c>Array(Tuple(...))</c>. Unlike the in-memory unit tests in <c>nextorm.clickhouse.tests</c>, these
 /// run against the real server, so the driver binding and the server expansion are exercised end to end.
 /// </summary>
+[Collection("ClickHouse")]
 [Trait("D162", "Conformance")]
 public sealed class ClickHouseTableValuedParameterTests : ProviderTestSuite
 {

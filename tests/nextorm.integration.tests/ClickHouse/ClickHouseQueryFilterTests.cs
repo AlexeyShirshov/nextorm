@@ -8,6 +8,7 @@ namespace NextORM.Integration.Tests;
 /// <see cref="CommonTestSuite"/> (Memory has no mutation/identity support), so the filter-relevant
 /// SELECT and INSERT-validation cases are re-pinned here against the container-backed provider.
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class ClickHouseQueryFilterTests : ProviderTestSuite
 {
     protected override ITestProvider Provider => ClickHouseTestProvider.Instance;

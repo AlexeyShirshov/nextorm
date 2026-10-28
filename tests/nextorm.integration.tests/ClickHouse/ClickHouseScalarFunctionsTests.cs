@@ -13,6 +13,7 @@ namespace NextORM.Integration.Tests;
 /// (<see cref="ClickHouseDialect.ScalarFunctions"/>): every accepted name, every render arm, the
 /// negative/edge contracts, and a live execution per function family.
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class ClickHouseScalarFunctionsTests : ProviderTestSuite
 {
     private static readonly string[] SupportedNames =

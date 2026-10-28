@@ -19,6 +19,7 @@ namespace NextORM.Integration.Tests;
 /// result, and the deterministic refusals of the two members that exist in no ClickHouse version
 /// (<c>ngramSimHashArg</c>, <c>wordShingleSimHashArg</c>).
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class T286bF10HashFunctionTests : ProviderTestSuite
 {
     [SqlTable("t286b_f10_entity")]
