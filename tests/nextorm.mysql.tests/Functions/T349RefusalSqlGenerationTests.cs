@@ -118,7 +118,9 @@ public class T349RefusalSqlGenerationTests
     {
         var capability = MariaDbDialect.Instance.MySqlFunctions!;
 
-        capability.Supports("json_pretty").Should().BeFalse("MariaDB has JSON_DETAILED instead");
+        // #284 (T350 S1) proved JSON_PRETTY accepted on MariaDB 11.4.13, so it is delivered there now;
+        // the remaining names in this fact are still refused.
+        capability.Supports("json_pretty").Should().BeTrue("#284 delivered JSON_PRETTY on MariaDB 11.4");
         capability.Supports("member_of").Should().BeFalse("MEMBER OF has no MariaDB spelling");
         capability.Supports("json_table").Should().BeFalse("JSON_TABLE is a table construct");
         capability.Supports("json_storage_free").Should().BeFalse("MariaDB has no binary-JSON free count");
