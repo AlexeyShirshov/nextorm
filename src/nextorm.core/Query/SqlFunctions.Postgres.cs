@@ -1818,6 +1818,59 @@ namespace NextORM.Core;
         /// <param name="weights">The accepted weights, each one of <c>A</c>, <c>B</c>, <c>C</c> or <c>D</c>.</param>
         public string? ts_filter(string? tsvector, string?[] weights) => default!;
 
+        /// <summary>
+        /// Rewrites <paramref name="query"/> with the rules returned by the SQL query
+        /// <paramref name="select"/> (<c>ts_rewrite</c>); that query must return a target <c>tsquery</c>
+        /// and a substitute <c>tsquery</c>. The result is a <c>tsquery</c>, which the driver reads as text.
+        /// </summary>
+        /// <param name="query">The <c>tsquery</c> text to rewrite.</param>
+        /// <param name="select">A SQL query returning the rewrite pairs, for example
+        /// <c>select 'a'::tsquery, 'c'::tsquery</c>.</param>
+        public string? ts_rewrite(string? query, string? select) => default!;
+
+        /// <summary>
+        /// Replaces every occurrence of <paramref name="target"/> in <paramref name="query"/> with
+        /// <paramref name="substitute"/> (<c>ts_rewrite</c>). The result is a <c>tsquery</c>, which the
+        /// driver reads as text.
+        /// </summary>
+        /// <param name="query">The <c>tsquery</c> text to rewrite.</param>
+        /// <param name="target">The <c>tsquery</c> to replace.</param>
+        /// <param name="substitute">The replacement <c>tsquery</c>.</param>
+        public string? ts_rewrite(string? query, string? target, string? substitute) => default!;
+
+        /// <summary>
+        /// Builds the phrase query <paramref name="query1"/> followed by <paramref name="query2"/>
+        /// (<c>tsquery_phrase</c>), for example <c>'a' &lt;-&gt; 'b'</c>. The result is a <c>tsquery</c>,
+        /// which the driver reads as text.
+        /// </summary>
+        /// <param name="query1">The first <c>tsquery</c> text.</param>
+        /// <param name="query2">The second <c>tsquery</c> text.</param>
+        public string? tsquery_phrase(string? query1, string? query2) => default!;
+
+        /// <summary>
+        /// Builds the phrase query with <paramref name="distance"/> between the operands
+        /// (<c>tsquery_phrase</c>), for example <c>'a' &lt;3&gt; 'b'</c>; the default distance is 1.
+        /// </summary>
+        /// <param name="query1">The first <c>tsquery</c> text.</param>
+        /// <param name="query2">The second <c>tsquery</c> text.</param>
+        /// <param name="distance">The number of positions between the operands.</param>
+        public string? tsquery_phrase(string? query1, string? query2, int? distance) => default!;
+
+        /// <summary>
+        /// The lexemes of <paramref name="tsvector"/> as a <c>text[]</c> (<c>tsvector_to_array</c>), in
+        /// the vector's stored order.
+        /// </summary>
+        /// <param name="tsvector">The <c>tsvector</c> text.</param>
+        public string?[] tsvector_to_array(string? tsvector) => default!;
+
+        /// <summary>
+        /// Normalizes <paramref name="token"/> with the text-search dictionary <paramref name="dictionary"/>
+        /// (<c>ts_lexize</c>). Returns the lexemes as a <c>text[]</c>; a stop word yields an empty array.
+        /// </summary>
+        /// <param name="dictionary">The dictionary name (<c>regdictionary</c>), for example <c>english_stem</c>.</param>
+        /// <param name="token">The token to normalize.</param>
+        public string?[] ts_lexize(string? dictionary, string? token) => default!;
+
         /// <summary><c>bool_and(property)</c>: true when every non-null value is true. Requires a provider that supports it.</summary>
         public T? bool_and<T>(T? property) => default!;
 

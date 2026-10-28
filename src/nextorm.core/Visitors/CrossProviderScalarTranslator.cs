@@ -84,7 +84,9 @@ internal static class CrossProviderScalarTranslator
         nameof(PostgresFunctions.jsonb_to_tsvector), nameof(PostgresFunctions.get_current_ts_config),
         nameof(PostgresFunctions.numnode), nameof(PostgresFunctions.querytree),
         nameof(PostgresFunctions.setweight), nameof(PostgresFunctions.strip),
-        nameof(PostgresFunctions.ts_delete), nameof(PostgresFunctions.ts_filter)
+        nameof(PostgresFunctions.ts_delete), nameof(PostgresFunctions.ts_filter),
+        nameof(PostgresFunctions.ts_rewrite), nameof(PostgresFunctions.tsquery_phrase),
+        nameof(PostgresFunctions.tsvector_to_array), nameof(PostgresFunctions.ts_lexize)
     };
 
     /// <summary>

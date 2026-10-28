@@ -1101,7 +1101,8 @@ internal sealed class PostgresScalarFunctions : IScalarFunctions
         "pg_xact_commit_timestamp" or "pg_xact_status" or
         "array_to_tsvector" or "json_to_tsvector" or "jsonb_to_tsvector" or
         "get_current_ts_config" or "numnode" or
-        "querytree" or "setweight" or "strip" or "ts_delete" or "ts_filter";
+        "querytree" or "setweight" or "strip" or "ts_delete" or "ts_filter" or
+        "ts_rewrite" or "tsquery_phrase" or "tsvector_to_array" or "ts_lexize";
 
     /// <inheritdoc/>
     public string Render(string name, IReadOnlyList<string> args) => name switch
@@ -1225,6 +1226,24 @@ internal sealed class PostgresScalarFunctions : IScalarFunctions
         // ts_delete(tsvector, text); a cast to either single type would break the other.
         "ts_delete" => $"cast(ts_delete(cast({args[0]} as tsvector), {args[1]}) as text)",
         "ts_filter" => $"cast(ts_filter(cast({args[0]} as tsvector), cast({args[1]} as \"char\"[])) as text)",
+        // ts_rewrite(tsquery, text) and ts_rewrite(tsquery, tsquery, tsquery) are distinct overloads. The
+        // two-argument form's second argument is the rewrite-table SQL as text, so it stays uncast and its
+        // declared text type selects that overload (measured: PREPARE p(text,text), no cast). The
+        // three-argument form needs every operand cast: text parameters match no tsquery overload
+        // (measured: "function ts_rewrite(text, text, text) does not exist").
+        "ts_rewrite" => args.Count == 2
+            ? $"cast(ts_rewrite(cast({args[0]} as tsquery), {args[1]}) as text)"
+            : $"cast(ts_rewrite(cast({args[0]} as tsquery), cast({args[1]} as tsquery), cast({args[2]} as tsquery)) as text)",
+        // tsquery_phrase(tsquery, tsquery[, integer]): the integer distance parameter resolves the
+        // three-argument overload by its declared type, so it is left uncast (measured: PREPARE
+        // p(text,text,int), no cast; the two-argument call resolves the phrase overload).
+        "tsquery_phrase" => args.Count == 2
+            ? $"cast(tsquery_phrase(cast({args[0]} as tsquery), cast({args[1]} as tsquery)) as text)"
+            : $"cast(tsquery_phrase(cast({args[0]} as tsquery), cast({args[1]} as tsquery), {args[2]}) as text)",
+        // text[] results need no bridge; the tsvector argument is cast like every other one.
+        "tsvector_to_array" => $"tsvector_to_array(cast({args[0]} as tsvector))",
+        // regdictionary is carried as text, so the dictionary argument is cast; the token is already text.
+        "ts_lexize" => $"ts_lexize(cast({args[0]} as regdictionary), {args[1]})",
         _ => throw new NotSupportedException($"The {name} function is not supported by PostgreSQL.")
     };
 

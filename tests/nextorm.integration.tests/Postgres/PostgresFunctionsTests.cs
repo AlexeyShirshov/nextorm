@@ -3263,6 +3263,75 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
         r.StrippedNull.Should().BeNull("a SQL-NULL tsvector stays NULL");
     }
 
+    /// <summary>
+    /// The #281 (#347 D3b) full-text rewrite, phrase, vector-to-array and dictionary-normalization
+    /// scalars against the live server: <c>ts_rewrite</c> accepts both the rewrite-table text form and
+    /// the three-<c>tsquery</c> form, <c>tsquery_phrase</c> both the default and the explicit distance,
+    /// <c>tsvector_to_array</c> returns the lexemes as <c>text[]</c>, and <c>ts_lexize</c> a stem or an
+    /// empty array for a stop word. Every <c>tsquery</c> result reads back as <see cref="string"/>, the
+    /// arrays as <see cref="string"/> elements, and a SQL-NULL argument yields NULL (all strict).
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void FullTextRewritePhraseAndArrayFamily_ShouldComputeValuesNullsAndClrTypes()
+    {
+        string? nullQuery = null;
+        string? nullVector = null;
+        string? nullDictionary = null;
+        int? nullDistance = null;
+
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Rewritten = SqlFunctions.Postgres.ts_rewrite(
+                    SqlFunctions.Parameter<string>(0), SqlFunctions.Parameter<string>(1)),
+                RewrittenPair = SqlFunctions.Postgres.ts_rewrite(
+                    SqlFunctions.Parameter<string>(2), SqlFunctions.Parameter<string>(3),
+                    SqlFunctions.Parameter<string>(4)),
+                Phrase = SqlFunctions.Postgres.tsquery_phrase(
+                    SqlFunctions.Parameter<string>(5), SqlFunctions.Parameter<string>(6)),
+                PhraseDistance = SqlFunctions.Postgres.tsquery_phrase(
+                    SqlFunctions.Parameter<string>(7), SqlFunctions.Parameter<string>(8),
+                    SqlFunctions.Parameter<int>(9)),
+                Lexemes = SqlFunctions.Postgres.tsvector_to_array(SqlFunctions.Parameter<string>(10)),
+                Stemmed = SqlFunctions.Postgres.ts_lexize(
+                    SqlFunctions.Parameter<string>(11), SqlFunctions.Parameter<string>(12)),
+                StopWord = SqlFunctions.Postgres.ts_lexize(
+                    SqlFunctions.Parameter<string>(13), SqlFunctions.Parameter<string>(14)),
+                RewrittenNull = SqlFunctions.Postgres.ts_rewrite(
+                    nullQuery, "select 'a'::tsquery, 'c'::tsquery"),
+                PhraseNull = SqlFunctions.Postgres.tsquery_phrase(nullQuery, "b"),
+                DistanceNull = SqlFunctions.Postgres.tsquery_phrase("a", "b", nullDistance),
+                LexemesNull = SqlFunctions.Postgres.tsvector_to_array(nullVector),
+                LexizeNull = SqlFunctions.Postgres.ts_lexize(nullDictionary, "stars"),
+            })
+            .First(new object?[]
+            {
+                "a & b", "select 'a'::tsquery as t, 'c'::tsquery as s",
+                "a & b", "a", "c | d",
+                "a", "b",
+                "a", "b", 3,
+                "a:1 b:2",
+                "english_stem", "stars",
+                "english_stem", "the",
+            });
+
+        r.Rewritten.Should().Be("'b' & 'c'");
+        r.Rewritten!.GetType().Should().Be(typeof(string));
+        r.RewrittenPair.Should().Be("'b' & ( 'c' | 'd' )");
+        r.Phrase.Should().Be("'a' <-> 'b'");
+        r.PhraseDistance.Should().Be("'a' <3> 'b'");
+        r.Lexemes.Should().Equal("a", "b");
+        r.Lexemes![0]!.GetType().Should().Be(typeof(string));
+        r.Stemmed.Should().Equal("star");
+        r.StopWord.Should().BeEmpty("the is a stop word of the english_stem dictionary");
+        r.RewrittenNull.Should().BeNull("a SQL-NULL tsquery stays NULL");
+        r.PhraseNull.Should().BeNull("a SQL-NULL tsquery stays NULL");
+        r.DistanceNull.Should().BeNull("a SQL-NULL distance stays NULL");
+        r.LexemesNull.Should().BeNull("a SQL-NULL tsvector stays NULL");
+        r.LexizeNull.Should().BeNull("a SQL-NULL dictionary stays NULL");
+    }
+
     private static void Execute(IDataContext ctx, string sql)
     {
         ((DataContext)ctx).EnsureConnectionOpen();

@@ -1400,6 +1400,12 @@ public class InMemoryTests
             ("ts_delete", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.ts_delete("'a':1", "a") }).ToList()),
             ("ts_delete", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.ts_delete("'a':1", new[] { "a" }) }).ToList()),
             ("ts_filter", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.ts_filter("'a':1A", new[] { "A" }) }).ToList()),
+            ("ts_rewrite", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.ts_rewrite("a & b", "select 'a'::tsquery, 'c'::tsquery") }).ToList()),
+            ("ts_rewrite", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.ts_rewrite("a & b", "a", "c") }).ToList()),
+            ("tsquery_phrase", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.tsquery_phrase("a", "b") }).ToList()),
+            ("tsquery_phrase", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.tsquery_phrase("a", "b", 3) }).ToList()),
+            ("tsvector_to_array", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.tsvector_to_array("'a':1") }).ToList()),
+            ("ts_lexize", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.ts_lexize("english_stem", "stars") }).ToList()),
         };
 
         foreach (var (name, act) in fullText)

@@ -3803,6 +3803,32 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void FullTextRewritePhraseAndArrayFamily_ShouldEmitCasts()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            Rewritten = SqlFunctions.Postgres.ts_rewrite(SqlFunctions.Parameter<string>(0), SqlFunctions.Parameter<string>(1)),
+            RewrittenPair = SqlFunctions.Postgres.ts_rewrite(
+                SqlFunctions.Parameter<string>(2), SqlFunctions.Parameter<string>(3), SqlFunctions.Parameter<string>(4)),
+            Phrase = SqlFunctions.Postgres.tsquery_phrase(SqlFunctions.Parameter<string>(5), SqlFunctions.Parameter<string>(6)),
+            PhraseDistance = SqlFunctions.Postgres.tsquery_phrase(
+                SqlFunctions.Parameter<string>(7), SqlFunctions.Parameter<string>(8), SqlFunctions.Parameter<int>(9)),
+            Lexemes = SqlFunctions.Postgres.tsvector_to_array(SqlFunctions.Parameter<string>(10)),
+            Stemmed = SqlFunctions.Postgres.ts_lexize(SqlFunctions.Parameter<string>(11), SqlFunctions.Parameter<string>(12)),
+        }));
+
+        sql.Should().Contain("cast(ts_rewrite(cast(@norm_p0 as tsquery), @norm_p1) as text)");
+        sql.Should().Contain("cast(ts_rewrite(cast(@norm_p2 as tsquery), cast(@norm_p3 as tsquery), cast(@norm_p4 as tsquery)) as text)");
+        sql.Should().Contain("cast(tsquery_phrase(cast(@norm_p5 as tsquery), cast(@norm_p6 as tsquery)) as text)");
+        sql.Should().Contain("cast(tsquery_phrase(cast(@norm_p7 as tsquery), cast(@norm_p8 as tsquery), @norm_p9) as text)");
+        sql.Should().Contain("tsvector_to_array(cast(@norm_p10 as tsvector))");
+        sql.Should().Contain("ts_lexize(cast(@norm_p11 as regdictionary), @norm_p12)");
+    }
+
+    [Fact]
     public void TrimArray_ShouldEmit()
     {
         using var ctx = PostgresTestContext.Create();
