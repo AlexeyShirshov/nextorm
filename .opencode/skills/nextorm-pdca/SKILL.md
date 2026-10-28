@@ -1,6 +1,6 @@
 ---
 name: nextorm-pdca
-description: "Проектный оверлей nextorm к глобальному PDCA-скиллу `pdca-dotnet`: инварианты дизайна (Plan), nextorm-специфика аудита (регистры, toolchain, перф-приёмка cached path) и гигиена планов (Act). Загружать вместе с `pdca-dotnet`, до фазы PLAN, когда цикл ведётся в этом репозитории — вместе они дают полный контракт."
+description: "nextorm overlay for the global `pdca-dotnet` cycle: design invariants for PLAN, audit registers and toolchain for CHECK, cached-path performance acceptance, and plan hygiene for ACT. Load together with `pdca-dotnet` before PLAN whenever a PDCA cycle runs in this repository."
 ---
 
 # nextorm: PDCA-оверлей (Plan/Check)
@@ -12,16 +12,23 @@ description: "Проектный оверлей nextorm к глобальном�
 
 ## Политика агентов
 
-- `nextorm-code-auditor`, `nextorm-design-engineer`, `nextorm-*-perf-analyst`
-  **НЕ вызываются как агенты**: их предметные инструкции встроены ниже в фазы Plan/Check.
+- Предметные агенты (`nextorm-design-engineer`, `nextorm-code-auditor`,
+  `nextorm-db-perf-analyst`, `nextorm-inmemory-perf-analyst`) существуют для интерактивной
+  работы. В цикле их **не диспатчат** и не читают: у `pdca-planner` чтение закрыто (`"*": deny`),
+  у `pdca-check` оно ограничено `.pdca/**`/`TestResults/**`, а `task` не выдан ни одному из них.
+  Поэтому нужные инварианты и процедура аудита **встроены текстом** ниже в PLAN/CHECK.
 - Встраивание **не отменяет** общий §CHECK глобального `pdca-dotnet`: воркфлоу CHECK (шаги 1–13),
   **загрузка скиллов аудита** (шаг 1, список — §CHECK контракта) и **обязательный скан
   suppression/slop со счётчиками и ratio** (шаг 4), а также per-finding вывод (шаг 8), выполняются
   в полном объёме. Оверлей ниже — только проектное **дополнение** к ним, а не сокращённая замена.
-- Записи в регистры (`docs/specs/design/*`) и правки кода/конфигов делает `coder`
+- Записи в регистры (`docs/specs/design/*`) и правки кода/конфигов делает `pdca-executor`
   в фазе Do, не оркестратор.
 
 ## PLAN: nextorm-инварианты (из nextorm-design-engineer)
+
+Встроено текстом намеренно: `pdca-planner` (`"*": deny`) и `pdca-check` (scoped read)
+не читают `.opencode/agents/*.md` — ссылка вместо текста до них не доходит. Правишь
+инварианты — синхронизируй `.opencode/agents/nextorm-design-engineer.md`.
 
 Приоритетнее generic-советов; ограничивают fix, а не только review.
 
@@ -41,9 +48,9 @@ description: "Проектный оверлей nextorm к глобальном�
    `docs/**`, и `docs/ru/**` в том же изменении (AGENTS.md).
 6. **Build discipline задаёт fix.** `TreatWarningsAsErrors=true`, nullable, CRLF,
    CPM (`Version` только в `Directory.Packages.props`). Изменение с warning — не fix.
-7. **Известные факты архитектуры не репортить заново:** `DbContext` — тонкий фасад
+7. **Известные факты архитектуры не репортить заново:** `DataContext` — тонкий фасад
    над `QueryExecutor`/`QueryPlanner`/`DbConnectionManager`/`ContextEnvironment`/
-   `QueryCache`; `InMemoryContext` делегирует фасад `InMemoryQueryExecutor`;
+   `QueryCache`; `InMemoryDataContext` делегирует фасад `InMemoryQueryExecutor`;
    `ISqlDialect` — намеренно 97-членный композит (F12). Длины файлов читать из
    текущего дерева.
 8. **Ничего не выносится за текущий milestone.** Если unit/фаза не решается целиком в
@@ -66,23 +73,23 @@ description: "Проектный оверлей nextorm к глобальном�
     target: "Ns.Type" }); return r`), батч — одним `execute` (`Promise.all`); если его нет в каталоге
     Code Mode, сначала `search({ query: "roslyn" })`. Для текста (доки,
     комментарии, строковые литералы, имена SQL) — `rg`/`git grep` с ограничением по исходникам
-     (`rg -n --glob '*.cs' "<lit>" src tests`). **Никогда `grep -r`/`grep -rn`/`find`** по дереву: они
-     игнорируют `.gitignore` и читают `bin/`/`obj/`/`TestResults/` (≈1.3 GB артефактов под `src`/`tests`),
-     т.е. ~1 GB диска на один вызов. См. `AGENTS.md` → «Searching text».
+    (`rg -n --glob '*.cs' "<lit>" src tests`). **Никогда `grep -r`/`grep -rn`/`find`** по дереву: они
+    игнорируют `.gitignore` и читают `bin/`/`obj/`/`TestResults/` (≈1.3 GB артефактов под `src`/`tests`),
+    т.е. ~1 GB диска на один вызов. См. `AGENTS.md` → «Searching text».
 11. **Недоказуемый критерий — GAP, а не `ready`.** Критерий, чьё решающее evidence невоспроизводимо из
-    закоммиченных/декларируемых источников (напр. «красное» плечо red↔green есть только в
-    отклонённом/незакоммиченном артефакте, или probe не исполняется против baseline), — это gap:
-    `planner` **переопределяет оракул** (или задача остаётся gap'ом), а не тащит его в DO как
-    «in-cycle prerequisite». Получаемость решающего probe **демонстрируется до фиксации плана**.
+   закоммиченных/декларируемых источников (напр. «красное» плечо red↔green есть только в
+   отклонённом/незакоммиченном артефакте, или probe не исполняется против baseline), — это gap:
+   `planner` **переопределяет оракул** (или задача остаётся gap'ом), а не тащит его в DO как
+   «in-cycle prerequisite». Получаемость решающего probe **демонстрируется до фиксации плана**.
 12. **Повторный заход после терминального `incomplete`/STOP** не перезапускает провалившийся критерий
-    без изменений: прежняя терминальная причина — обязательный вход PLAN; `planner` либо показывает,
-    что доказательство теперь получаемо (новое evidence/починенный харнесс), либо переформулирует
-    критерий (переопределяет оракул).
+   без изменений: прежняя терминальная причина — обязательный вход PLAN; `planner` либо показывает,
+   что доказательство теперь получаемо (новое evidence/починенный харнесс), либо переформулирует
+   критерий (переопределяет оракул).
 
 Выход Plan: severity (🔴/🟡/ℹ️), `file:line`, one-line fix, применимый инвариант
-(1–10); split **fix now** vs **deferred с триггером** (deferred остаётся в текущем
-milestone, см. инвариант 8); lens-префикс
-(`[SRP]`/`[OCP]`/`[LSP]`/`[ISP]`/`[DIP]`/`[DRY]`/`[TYPE]`/`[PERF]`).
+(1–12); split **fix now** vs **deferred с триггером** (deferred остаётся в текущем
+milestone, см. инвариант 8);
+lens-префикс (`[SRP]`/`[OCP]`/`[LSP]`/`[ISP]`/`[DIP]`/`[DRY]`/`[TYPE]`/`[PERF]`).
 
 При изменении пути исполнения PLAN фиксирует **variant matrix** (оси: тип/`null`/отсутствующий ctor/
 проекция/провайдер/флаги; каждая строка — `тест` / `guard` / `deferred + триггер`) и план **branch**-дельты
@@ -118,9 +125,9 @@ PLAN/CHECK вправе **добавлять** строки, но не удал�
   переименованные страницы и записи `toc.yml` с обеих сторон (EN+RU); «дырку» в
   нумерации (например, `30 → 32`) оставлять нельзя.
 
-## DO: применение фиксов (coder)
+## DO: применение фиксов (pdca-executor)
 
-Фиксы (из PLAN-ревью, из design/type/perf-линз или из CHECK loop-back) применяет `coder` по
+Фиксы (из PLAN-ревью, из design/type/perf-линз или из CHECK loop-back) применяет `pdca-executor` по
 общему «Coder editing discipline» (`pdca-dotnet` §Delegation), с nextorm-конкретикой:
 
 - **Одна ось за шаг**, затем сборка+тесты — не паковать несвязанные рефакторы.
@@ -128,19 +135,21 @@ PLAN/CHECK вправе **добавлять** строки, но не удал�
   (`TreatWarningsAsErrors=true`); изменение с warning — не фикс.
 - **CRLF всегда.** После правки любого файла: `perl -pi -e 's/\r?\n/\r\n/g' <file>`;
   LF-only/смешанные окончания не оставлять.
-- **Тесты до «готово»:** `dotnet test tests/<project> -c Debug`; интеграционные — по
-  `.opencode/skills/running-integration-tests/SKILL.md` (без `DOCKER_HOST` прогон со
-  `Skipped: 376` — это не pass).
 - **CPM:** версии только в `Directory.Packages.props`.
+- **Тесты до «готово»:** `dotnet test tests/<project> -c Debug`; интеграционные — по
+  `.opencode/skills/running-integration-tests/SKILL.md` (суита fail-closed: без
+  `DOCKER_HOST` контейнерные провайдеры **падают**, а не скипаются — такой прогон
+  не evidence).
 - **Никаких `git push`/коммитов** без явной просьбы (AGENTS.md).
 - **BDN-артефакты трекаются:** после бенчмарка вернуть `benchmarks/BenchmarkDotNet.Artifacts`.
-- **Без бенчмарк-выводов** (дельты <~20% — шум); числа — на perf-аналитика (`task`).
+- **Без бенчмарк-выводов** (дельты <~20% — шум); числа — на perf-аналитика (через субагента).
 
 ## CHECK: nextorm-аудит ⊇ общее ревью (nextorm-code-auditor + dotnet-code-review-agent)
 
 Аудитор — суперсет: сначала общий ревью-проход, затем аудит smells/API. Оба такта
-идут в **Gather** (DeepSeek + команды); **судит сводку `check` (GPT-6 Sol)** в такте 2
-(§CHECK контракта `pdca-dotnet`). Дифф режется по файлам/чанкам и ревьюится отдельно.
+идут в **Gather** (исполнительская модель + команды); судит сводку `check`
+(medium-tier, §CHECK контракта `pdca-dotnet`) в такте 2. Дифф режется по
+файлам/чанкам и ревьюится отдельно.
 Встраивание — это перенос **содержания**, а не понижение планки: проектные скиллы аудита
 (шаг 1) и измеримые счётчики/ratio (шаг 4) обязательны при любой модели `check` (см. ниже).
 Молча принимать «всё ОК» от слабого `check` запрещено.
@@ -155,16 +164,17 @@ Critical/Warning/Suggestion + роутинг специалистам:
 - **Архитектура:** несоответствие DI-лайфтаймов, нарушения слоёв, тесная связность,
   отсутствующие абстракции.
 - **Perf red flags:** аллокации на горячем пути, LINQ в тесных циклах, неограниченный
-  рост коллекций, N+1, отсутствие `AsNoTracking()` на read-only запросах.
+  рост коллекций, N+1.
 - **Security red flags:** SQL-инъекции (конкатенация/сырой SQL без параметров),
   отсутствие валидации ввода, hardcoded секреты, небезопасная десериализация,
   отсутствие авторизации.
 - **Тесты:** есть ли тесты на изменённые пути; какие типы тестов нужны.
 - **Роутинг** при глубоком анализе: async/`ValueTask`/pipelines → `dotnet-async-performance-specialist`;
   гонки/дедлоки → `dotnet-csharp-concurrency-specialist`; профилирование/GC →
-  `dotnet-performance-analyst`; OWASP/крипто/секреты → `security-auditor`.
+  `dotnet-performance-analyst`; OWASP/крипто/секреты → `pdca-security-auditor`
+  (`dotnet-security-reviewer` — для .NET-специфики).
 
-Аудит smells/API (из `nextorm-code-auditor`). Регистры (правки — через `coder`):
+Аудит smells/API (из `nextorm-code-auditor`). Регистры (правки — через `pdca-executor`):
 
 - `docs/specs/design/code-smells-review.md` — подавления warning, корректность
   `IDisposable`, LINQ на горячем пути, god classes, cache hash keys, optional `null`.
@@ -184,10 +194,10 @@ Critical/Warning/Suggestion + роутинг специалистам:
   CHECK не имеет права закрывать цикл «на слово»: незакрытая строка variant matrix, отсутствие
   счётчиков/ratio или невыполненный шаг 1 — это **loop-back CHECK → PLAN/DO**, а не запись «done».
 - **Автор ≠ заверитель регистра (nextorm).** Запись в `docs/specs/design/code-smells-review.md` /
-  `docs/specs/design/API-NAMING-REVIEW.md` делает `coder`, но **заверяет** её независимый
+  `docs/specs/design/API-NAMING-REVIEW.md` делает `pdca-executor`, но **заверяет** её независимый
   read-only поток CHECK: по каждому новому утверждению открывает указанный `file:line` и сверяет с
   кодом; расхождение или само-переоценка (`deferred`/`acceptable` без опоры на код) — **находка**.
-  Общий принцип «author ≠ certifier» — в `pdca-dotnet` §CHECK.
+  Общий принцип «non-author» — в `pdca-dotnet` §CHECK.
 - Не переоткрывать `Отмечено, но менять не рекомендуется` / `Исключения (по решению
   автора)` / «Чистые категории».
 - Optional-`null` референс: `TempTableExtensions.cs`
@@ -197,11 +207,12 @@ Critical/Warning/Suggestion + роутинг специалистам:
   (`dotnet_diagnostic.<ID>.severity`), `TreatWarningsAsErrors=true` → включённое
   правило валит сборку (gate: `dotnet build nextorm.slnx -c Release` = 0/0); inert
   Sonar `S*` без пакета `SonarAnalyzer` — мёртвые записи; `slopwatch` не установлен
-  локально (`.config/dotnet-tools.json` — только coverage/reportgenerator/docfx) —
-  либо поставь, либо скажи, что сканировал вручную; public surface ещё не заперт
-  (нет `PublicAPI.Shipped/Unshipped.txt`, ApiCompat, API-approval); baseline XML-doc
-  и 109 недокументированных public-типов — Appendix A `API-NAMING-REVIEW.md`; любой
-  public rename доходит и до `docs/**`, и до `docs/ru/**`.
+  локально (`.config/dotnet-tools.json` — coverage/reportgenerator/docfx/dotnet-stryker) —
+  либо поставь, либо скажи, что сканировал вручную; mutation testing — `dotnet-stryker`;
+  public surface ещё не заперт (нет `PublicAPI.Shipped/Unshipped.txt`, ApiCompat,
+  API-approval); baseline XML-doc и недокументированные public-типы — Appendix A
+  `API-NAMING-REVIEW.md` (число берётся из реестра, не хардкодится); любой public
+  rename доходит и до `docs/**`, и до `docs/ru/**`.
 - Границы: править только два регистра; renames/analyzer-policy — в Do; out of scope:
   profiling (`nextorm-*-perf-analyst`), security, ASP.NET/HTTP, дизайн-рефакторинг
   сверх smell-отчёта.
@@ -271,6 +282,11 @@ executor / материализацию и выполнение запросов
 dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=acceptance
 ```
 
+- **Чья это предметная область.** In-memory (`InMemoryDataContext`, LINQ по спискам,
+  `InMemoryBenchmark*`) — `nextorm-inmemory-perf-analyst`; ADO (`DataContext`, plan
+  cache/`Prepare()`, `QueryExecutor`, SQL builders, `SqliteBenchmark*`) —
+  `nextorm-db-perf-analyst`. Симптом на обоих контекстах — начинать с того, что
+  первым на горячем пути, и назвать допущение.
 - Приёмка обязательна для query-path изменений (план/cache/executor/материализация).
   Для in-memory execution набор напрямую покрывает только агрегаты `Count`/`GroupBy`;
   прочие in-memory изменения требуют дополнительных релевантных бенчмарков помимо набора.
@@ -305,7 +321,7 @@ non-determinism disclaimer.
   Частично реализованный план (остались отложенные фазы/провайдеры) сохраняется.
 - **Связанный issue закрывается в автономном режиме с автокомитом.** Если пользователь явно
   запросил автономную работу с автокоммитом (`pdca-dotnet` §Autonomous mode → «Auto-commit»),
-  то, когда вся задача завершена (все её циклы/срезы), `coder` сразу после ACT-коммита закрывает
+  то, когда вся задача завершена (все её циклы/срезы), `pdca-executor` сразу после ACT-коммита закрывает
   её связанный GitHub-issue: `gh issue close <N> --repo <owner/repo> --comment "<итог + ссылка на
   проверку>"`, где `<N>` — из статус-файла/префикса коммита (`#N`). При сплите или оставшихся
   срезах issue остаётся открытым (инвариант 8), остаток идёт в статус-файл и финальный отчёт.
@@ -319,7 +335,7 @@ non-determinism disclaimer.
   `docs/**` — остаётся только текст-label, чтобы не оставлять битых относительных
   ссылок. Инлайновые упоминания в исторических записях (audit/status/release) — это
   исторические артефакты, переписывать прозу не нужно.
-- `rm` и правки регистров делает `coder` в фазе Do/ACT; CRLF сохраняется.
+- `rm` и правки регистров делает `pdca-executor` в фазе Do/ACT; CRLF сохраняется.
 - **Milestone при сплите не меняется.** Частично реализованный план сохраняется (см. выше),
   а его оставшиеся фазы/провайдеры остаются в **текущем** milestone: новые issue/срезы
   наследуют milestone исходной задачи. Создавать issue с будущим milestone или переносить туда

@@ -1,6 +1,6 @@
 ---
 name: running-integration-tests
-description: Run nextorm's xunit v3 integration tests (tests/nextorm.integration.tests) against PostgreSQL, SQL Server, MySQL, ClickHouse and SQLite via Testcontainers. Use when running, filtering or debugging integration tests, or when Testcontainers/Podman/Docker connection fails — DOCKER_HOST, podman socket, container startup, skipped provider tests.
+description: Run nextorm's xunit v3 integration tests (tests/nextorm.integration.tests) against PostgreSQL, SQL Server, MySQL, ClickHouse and SQLite via Testcontainers. Use when running, filtering or debugging integration tests, or when Testcontainers/Podman/Docker connection fails — DOCKER_HOST, podman socket, container startup, providers failing without DOCKER_HOST.
 ---
 
 # Running nextorm integration tests
@@ -97,6 +97,6 @@ DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.so
 ## Troubleshooting
 
 - `podman: command not found` in WSL → expected. Use the socket and/or `podman.exe`; do not try to install Podman inside WSL.
-- Testcontainers hangs or fails to connect → confirm the machine is running (`podman.exe machine list`, expect `Currently running`) and the socket exists: `ls -l /mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock`. Start Podman Desktop if it is missing.
+- Testcontainers hangs or fails to connect → confirm the machine is running (`podman.exe machine list`, expect `Currently running`) and the socket exists: `ls -l /mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock`. Start the machine with `"/mnt/c/Program Files/RedHat/Podman/podman.exe" machine start` (Podman Desktop may be closed).
 - Sanity-check the socket without Testcontainers:
   `curl -s --unix-socket /mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock http://d/v1.40/_ping` → `OK`.
