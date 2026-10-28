@@ -53,6 +53,15 @@ internal interface IEagerLoadNodeSpec
     IEagerLoadNodeSource ResolveChildNodeSource(IDataContext context);
 
     /// <summary>
+    /// The number of flattened projection items this declaration <b>alone</b> occupies in a single-query
+    /// result row, its descendants excluded: one child item for a one-to-many or reference declaration, the
+    /// link item followed by the child item (<see cref="IJoinIntoManyToManySpec.ItemCount"/>) for a
+    /// many-to-many declaration. The single-query row layout and the stitcher's per-node stride both derive
+    /// from this number, so a wide slice can never be strided as a narrow one.
+    /// </summary>
+    int OwnItemCount => 1;
+
+    /// <summary>
     /// The number of flattened projection items this declaration's subtree contributes to a single
     /// denormalized result set: this node plus every descendant. It lays out the nested columns of the
     /// single-query join chain and fails closed before a graph exceeds the projection arity. Resolving the
@@ -1050,6 +1059,10 @@ internal sealed class EagerLoadSpec<TEntity, TChild, TKey> : IEagerLoadSpec<TEnt
                 throw new InvalidOperationException(
                     $"The declared eager-load node '{node.ShapeKey}' cannot be stitched from a single result set.");
 
+            // A node's own slice starts one item after its parent's: the child item for a one-to-many or
+            // nested declaration, the link item for a many-to-many declaration (which reads the child from
+            // the next column of its own slice). The stride then advances over the whole slice plus the
+            // descendants' subtrees, so a wide many-to-many slice never shifts a later sibling.
             descendant.StitchSingleQuery(children, rows, columns, childColumn, column, context);
             column += node.SubtreeItemCount(context);
         }
@@ -1426,7 +1439,9 @@ internal static class EntityBuilderEagerLoading
         ArgumentNullException.ThrowIfNull(spec);
         ArgumentNullException.ThrowIfNull(context);
 
-        var count = 1;
+        // The node's own physical arity (one item, or link + child for a many-to-many declaration), then
+        // every descendant's subtree exactly once.
+        var count = spec.OwnItemCount;
         var children = spec.ResolveChildNodeSource(context).EagerLoadNodeSpecs;
         if (children is { Count: > 0 })
         {

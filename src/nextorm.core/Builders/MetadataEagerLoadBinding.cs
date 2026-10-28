@@ -598,6 +598,9 @@ internal sealed class MetadataEagerLoadSpec<TEntity, TChild> : IEagerLoadSpec<TE
 {
     private readonly Func<IDataContext, EntityBuilder<TChild>> _childQuery;
     private readonly ConditionalWeakTable<IDataContext, Lazy<EntityBuilder<TChild>>> _resolvedChildren = new();
+    // The many-to-many single-query layout (link readers plus assignment) built while planning, so the
+    // stitcher can reuse the flat declaration's link-aware assignment contract instead of rebuilding it.
+    private readonly ConditionalWeakTable<IDataContext, IJoinIntoManyToManySpec> _manyToManyLayouts = new();
     private readonly MetadataEagerLoadKeyPlan<TEntity, TChild> _keyPlan;
     private readonly Expression<Func<TEntity, ICollection<TChild>>>? _collectionExpression;
     private readonly EagerLoadSpec<TEntity, TChild, object>? _collection;
@@ -669,6 +672,15 @@ internal sealed class MetadataEagerLoadSpec<TEntity, TChild> : IEagerLoadSpec<TE
 
     /// <inheritdoc/>
     public EagerLoadMode RequestedMode => Binding.RequestedMode;
+
+    /// <summary>
+    /// One child item for a one-to-many or reference declaration; the link item followed by the child item
+    /// for a many-to-many declaration (<see cref="IJoinIntoManyToManySpec.ItemCount"/>), because the
+    /// single-query row projects the derived link (SQL) or the junction entity (in memory) first.
+    /// </summary>
+    public int OwnItemCount => Binding.Relationship.Kind == RelationshipKind.ManyToMany
+        ? IJoinIntoManyToManySpec.ItemCount
+        : 1;
 
     /// <inheritdoc/>
     public string ShapeKey => Binding.ShapeKey;
@@ -954,7 +966,47 @@ internal sealed class MetadataEagerLoadSpec<TEntity, TChild> : IEagerLoadSpec<TE
             WithEagerOrdering(childJoin, child.Sorting, child.FilterScope),
         };
 
+        _manyToManyLayouts.AddOrUpdate(context, manyToMany);
         return new SingleQueryBuild(manyToMany, joins, manyToMany.GetItemTypes(context.NeedMapping));
+    }
+
+    /// <summary>
+    /// Single-result-set assembly of a many-to-many declaration: the row carries the parent item, the link
+    /// item and the child item, in that order (the declaration's own slice starts at the link). Assignment
+    /// reuses the flat many-to-many declaration's link-aware contract, so a repeated junction row keeps its
+    /// occurrence, a dangling link contributes nothing, and a child never lands under a parent it was not
+    /// linked to. A non-many-to-many declaration never reaches this method.
+    /// </summary>
+    private void StitchManyToManyCore(
+        IReadOnlyList<TEntity> parents,
+        IReadOnlyList<object?> rows,
+        IReadOnlyList<PropertyInfo> columns,
+        int parentColumn,
+        int childColumn,
+        IDataContext context)
+    {
+        if (!_manyToManyLayouts.TryGetValue(context, out var layout))
+            throw new InvalidOperationException(
+                $"The many-to-many declaration '{typeof(TEntity).Name}.{Binding.Navigation.Name}' was stitched " +
+                "without its single-query link layout: the query must be prepared before its rows are assembled.");
+
+        var linkRows = new List<JoinIntoManyToManyRow<TEntity>>(rows.Count);
+        for (var i = 0; i < rows.Count; i++)
+        {
+            var row = rows[i];
+            if (row is null)
+                continue;
+
+            if (columns[parentColumn].GetValue(row) is not TEntity parent)
+                continue;
+
+            linkRows.Add(new JoinIntoManyToManyRow<TEntity>(
+                parent,
+                columns[childColumn].GetValue(row),
+                columns[childColumn + 1].GetValue(row)));
+        }
+
+        layout.AssignChildrenFromLinks(parents, linkRows);
     }
 
     private static Expression<Func<TEntity, TChild, bool>> BuildManyToManyPredicate(Expression<Func<TChild, bool>>? condition)
@@ -1059,6 +1111,15 @@ internal sealed class MetadataEagerLoadSpec<TEntity, TChild> : IEagerLoadSpec<TE
             }
 
             AssignReferencesFromRows(parents, pairs);
+            return;
+        }
+
+        // A many-to-many declaration projects its link item before the child, so the general collection
+        // route (which groups by the child's own parent foreign key) cannot assign it: the link carries the
+        // pairing. Route it through the link-aware contract the flat declaration uses.
+        if (Binding.Relationship.Kind == RelationshipKind.ManyToMany)
+        {
+            StitchManyToManyCore(parents, rows, columns, parentColumn, childColumn, context);
             return;
         }
 
