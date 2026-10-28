@@ -103,16 +103,63 @@ public sealed class ClickHouseTransientClassifierTests
     }
 
     [Fact]
-    public void Classify_ShouldFailClosed_ForABareHttpIoException()
+    public void Classify_ShouldReportTransportResponseReset_ForTheMeasuredPostResponseResetShape()
     {
-        // Measured live (D0b / DEF-328-04): an RST after a partial response surfaces as a bare
-        // HttpIOException — no HttpRequestException, no SocketException — with no attributable code.
+        // Measured live by the T362 probe (rv1/probe-shapes.log): an RST after a partial response
+        // surfaces on the ADO surface as a bare HttpIOException carrying
+        // HttpRequestError.ResponseEnded — no HttpRequestException wrapper, no inner chain. The typed
+        // signal comes from the HTTP layer one level below the driver, so it is retryable.
         var failure = new HttpIOException(HttpRequestError.ResponseEnded, "The response ended prematurely.");
 
         var classification = ClickHouseTransientClassifier.Classify(failure, CancellationToken.None);
 
-        classification.Kind.Should().Be(ClickHouseFailureKind.UnknownShape);
-        classification.IsRetryable.Should().BeFalse();
+        classification.Kind.Should().Be(ClickHouseFailureKind.TransportResponseReset);
+        classification.ReasonCode.Should().Be("transport_response_reset");
+        classification.IsRetryable.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Classify_ShouldFailClosed_ForABareHttpIoExceptionWithoutTheMeasuredRequestError()
+    {
+        // Split from the single fail-closed test T362 replaced: only ResponseEnded is the measured
+        // reset signal. Unknown was never observed, and ConnectionError is NOT what the measured
+        // post-response reset produced, so neither may be retried on speculation.
+        var shapes = new (string Name, Exception Failure)[]
+        {
+            ("bare HttpIOException(Unknown)", new HttpIOException(HttpRequestError.Unknown, "The response ended prematurely.")),
+            ("bare HttpIOException(ConnectionError)", new HttpIOException(HttpRequestError.ConnectionError, "The response ended prematurely.")),
+        };
+
+        foreach (var (name, failure) in shapes)
+        {
+            var classification = ClickHouseTransientClassifier.Classify(failure, CancellationToken.None);
+
+            classification.Kind.Should().Be(
+                ClickHouseFailureKind.UnknownShape,
+                $"{name} does not carry the measured ResponseEnded signal");
+            classification.IsRetryable.Should().BeFalse($"{name} must never be retried");
+        }
+    }
+
+    [Fact]
+    public void Classify_ShouldFailClosed_ForAResponseEndedIOExceptionThatIsNotTheBareMeasuredShape()
+    {
+        var shapes = new (string Name, Exception Failure)[]
+        {
+            ("wrapped in an unknown type", new InvalidOperationException("wrapper", new HttpIOException(HttpRequestError.ResponseEnded, "The response ended prematurely."))),
+            ("wrapped in an AggregateException", new AggregateException(new HttpIOException(HttpRequestError.ResponseEnded, "The response ended prematurely."))),
+            ("wrapped in an HttpRequestException", new HttpRequestException("wrapper", new HttpIOException(HttpRequestError.ResponseEnded, "The response ended prematurely."))),
+        };
+
+        foreach (var (name, failure) in shapes)
+        {
+            var classification = ClickHouseTransientClassifier.Classify(failure, CancellationToken.None);
+
+            classification.Kind.Should().Be(
+                ClickHouseFailureKind.UnknownShape,
+                $"{name} is not the measured bare reset shape, so the typed signal is unproven");
+            classification.IsRetryable.Should().BeFalse($"{name} must never be retried");
+        }
     }
 
     [Fact]
@@ -164,6 +211,27 @@ public sealed class ClickHouseTransientClassifierTests
         classification.Kind.Should().Be(ClickHouseFailureKind.ServerError);
         classification.ReasonCode.Should().Be("server_error");
         classification.IsRetryable.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Classify_ShouldLetEveryExclusionWinOverTheMeasuredResponseResetShape()
+    {
+        var reset = new HttpIOException(HttpRequestError.ResponseEnded, "The response ended prematurely.");
+
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        ClickHouseTransientClassifier.Classify(reset, cancellation.Token).Kind
+            .Should().Be(ClickHouseFailureKind.CallerCancelled, "caller cancellation is checked before any shape match");
+
+        ClickHouseTransientClassifier.Classify(new TestDbException("server failure", reset), CancellationToken.None).Kind
+            .Should().Be(ClickHouseFailureKind.ServerError, "a DbException anywhere in the chain is a server error, never a reset");
+
+        var assertionFailure = new HttpIOException(
+            HttpRequestError.ResponseEnded,
+            "The response ended prematurely.",
+            CaptureFluentAssertionsFailure());
+        ClickHouseTransientClassifier.Classify(assertionFailure, CancellationToken.None).Kind
+            .Should().Be(ClickHouseFailureKind.AssertionFailure, "an assertion failure wrapped in a reset is still an assertion failure");
     }
 
     [Fact]
@@ -271,6 +339,11 @@ public sealed class ClickHouseTransientClassifierTests
     {
         public TestDbException(string message)
             : base(message, 216)
+        {
+        }
+
+        public TestDbException(string message, Exception innerException)
+            : base(message, innerException)
         {
         }
     }

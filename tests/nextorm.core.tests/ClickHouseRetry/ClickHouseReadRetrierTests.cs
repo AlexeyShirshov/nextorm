@@ -230,13 +230,14 @@ public sealed class ClickHouseReadRetrierTests
     [Fact]
     public async Task ExecuteAsync_ShouldNotRetryAndPreserveTheOriginalFailClosedShapes()
     {
-        // V18 / DEF-328-04: a reset-shaped fault has no typed signal in driver 1.4.0. Each of these
-        // forms must fail closed — one invocation, no record, no backoff — and the original exception
-        // instance must surface unchanged.
+        // V18 / DEF-328-04 (pre-response half) and every reset-shaped form that carries no typed
+        // signal: each must fail closed — one invocation, no record, no backoff — and the original
+        // exception instance must surface unchanged. The post-response reset is no longer in this list:
+        // it carries HttpRequestError.ResponseEnded from the HTTP layer and is retried (test below).
         var shapes = new (string Name, Exception Failure)[]
         {
             ("ClickHouseServerException with ErrorCode -1", new ClickHouseServerException("Code: -1.", "select 42", -1)),
-            ("bare HttpIOException", new HttpIOException(HttpRequestError.ResponseEnded, "The response ended prematurely.")),
+            ("bare HttpIOException without the measured request error", new HttpIOException(HttpRequestError.Unknown, "The response ended prematurely.")),
             ("HttpRequestException without a socket signal", new HttpRequestException("reset")),
         };
 
@@ -262,6 +263,41 @@ public sealed class ClickHouseReadRetrierTests
             invocations.Should().Be(1, $"{name} must never be retried");
             records.Should().BeEmpty($"{name} must not emit a retry record");
         }
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ShouldRetryTheMeasuredResponseReset_AndReturnTheRecoveredValue()
+    {
+        // T362: the post-response reset carries a typed signal from the HTTP layer
+        // (HttpIOException + ResponseEnded), so it is the second retryable shape. The end-to-end
+        // socket proof lives in ClickHouseResponseResetTests; this pins the retrier's own decision.
+        var records = new List<ClickHouseRetryAttemptRecord>();
+        var delays = new List<TimeSpan>();
+        var invocations = 0;
+        var reset = new HttpIOException(HttpRequestError.ResponseEnded, "The response ended prematurely.");
+        var retrier = new ClickHouseReadRetrier(records.Add, (backoff, _) =>
+        {
+            delays.Add(backoff);
+            return Task.CompletedTask;
+        });
+
+        var result = await retrier.ExecuteAsync(
+            Operation,
+            _ =>
+            {
+                invocations++;
+                return invocations == 1 ? Task.FromException<string>(reset) : Task.FromResult("recovered");
+            },
+            CancellationToken.None);
+
+        result.Should().Be("recovered");
+        invocations.Should().Be(2);
+        delays.Should().ContainSingle().Which.Should().Be(TimeSpan.FromSeconds(1));
+        records.Should().HaveCount(2);
+        records[0].ReasonCode.Should().Be("transport_response_reset");
+        records[0].ScheduledRetry.Should().BeTrue();
+        records[1].Succeeded.Should().BeTrue();
+        records[1].ScheduledRetry.Should().BeFalse();
     }
 
     [Fact]

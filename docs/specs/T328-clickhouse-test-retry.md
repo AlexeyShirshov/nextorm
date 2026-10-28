@@ -219,6 +219,17 @@ classification and retry genuine server errors. Reset-shaped faults therefore st
 or `UnknownShape`, execute exactly once, and preserve the original exception
 (`DEF-328-04`, follow-up #338).
 
+> **Update 2026-10-28 (T362):** the first sentence above is only half true, and the split is now
+> measured. A post-response RST surfaces as a **bare `HttpIOException` carrying
+> `HttpRequestError.ResponseEnded`** — a typed signal produced by the HTTP layer *below* the driver,
+> not by the driver — so it **is** retried (new `ClickHouseFailureKind.TransportResponseReset`).
+> A pre-response RST is `ClickHouseServerException`/`ErrorCode = -1`/no inner chain and was measured
+> to be **identical** to the driver's own empty-body HTTP 503 path (same type, code and message), so
+> it stays fail-closed. Both shapes and the raw evidence:
+> `.pdca/T362/rv1/probe-shapes.md`, `.pdca/T362/rv1/probe-driver-shapes.log`; the reproducible form
+> is `tests/nextorm.core.tests/ClickHouseRetry/ClickHouseResponseResetTests.cs`. The consequence for
+> §9 is recorded there.
+
 ## 6. Lifecycle
 
 Implemented by `ClickHouseReadRetrier.ExecuteAsync`.
@@ -345,6 +356,13 @@ each probe asserts its facts first and then fails so that the runner records a g
 The following obligations are **BLOCKED-by-driver**, not waived:
 
 **BLOCKED-by-driver: AC01 reset half; AC09 reset half; V02; reset half of EV01/EV02/EV06 (DEF-328-04). Trigger: driver exposes a typed reset signal.**
+
+> **Update 2026-10-28 (T362, #338 option A):** the **post-response** half is no longer blocked and is
+> delivered — `HttpIOException`/`ResponseEnded` is a typed signal from the HTTP layer, and it is now
+> retried for audited read-only operations. The **pre-response** half remains fail-closed with a
+> measured reason (identical to the driver's empty-body HTTP 503 surface) instead of an assumed one.
+> This paragraph is the historical T328 verdict and is left in place; the current policy is the
+> classifier's XML doc and `tests/nextorm.core.tests/ClickHouseRetry/ClickHouseResponseResetTests.cs`.
 
 - Driver limitation record: `.pdca/T328/rv3/def-328-04-driver-binding.md`.
 - Follow-up issue: **#338** — `https://github.com/AlexeyShirshov/nextorm/issues/338`

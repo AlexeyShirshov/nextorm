@@ -34,6 +34,17 @@ internal readonly record struct ClickHouseRetryAttemptRecord(
 /// The retrier never wraps, transforms or disposes the caller's result: the value of <c>T</c> is
 /// returned unchanged (V13).
 /// </para>
+/// <para>
+/// Partial-result safety (T362 AC-04) is what makes retrying a response reset legitimate: a failed
+/// attempt's value is never handed to the caller. A faulted attempt has no value at all — the fault is
+/// the only thing it can hand over — so the retrier returns only the awaited value of the attempt that
+/// succeeded, and never merges, appends to, or reuses anything a failed attempt produced. The retried
+/// delegate is invoked again from scratch, so it must build its result per invocation rather than
+/// accumulate into a buffer shared across attempts. This is not hypothetical: the T362 probe measured
+/// the driver delivering a partial row to the reader *before* the truncated response surfaced as
+/// <see cref="System.Net.Http.HttpIOException"/>/<c>ResponseEnded</c>, so a shared buffer would report
+/// a failed attempt's rows as a fresh result.
+/// </para>
 /// </summary>
 internal sealed class ClickHouseReadRetrier
 {
@@ -71,7 +82,7 @@ internal sealed class ClickHouseReadRetrier
     }
 
     /// <summary>Executes <paramref name="read"/> at most twice, retrying only a positive
-    /// client-timeout/connection-reset classification.</summary>
+    /// client-HTTP-timeout or typed response-ended-reset classification.</summary>
     internal async Task<T> ExecuteAsync<T>(
         ClickHouseReadOperation operation,
         Func<CancellationToken, Task<T>> read,
