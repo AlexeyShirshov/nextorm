@@ -459,6 +459,43 @@ public sealed class DialectCapabilityContractTests
     }
 
     /// <summary>
+    /// T348 (#282) M4: the SQL Server aggregates are provider opt-ins on top of a closed base default.
+    /// A dialect that is not the SQL Server dialect must keep all five name-specific aggregate flags
+    /// false, so defaulting any base member to <c>true</c> cannot silently enable a T-SQL-only
+    /// aggregate on another provider.
+    /// </summary>
+    [Fact]
+    [Trait("PDCA", "T348")]
+    public void SqlServerAggregateCapabilities_ShouldStayClosedOnEveryNonSqlServerDialect()
+    {
+        var dialects = AllDialects().ToList();
+        var nonSqlServer = dialects
+            .Where(d => d.GetType().Assembly.GetName().Name != "nextorm.sqlserver")
+            .ToList();
+
+        dialects.Should().Contain(
+            d => d.GetType().Assembly.GetName().Name == "nextorm.sqlserver",
+            "the SQL Server dialect must be loaded, otherwise the exclusion proves nothing");
+        nonSqlServer.Should().NotBeEmpty("the other provider dialects must be loaded");
+
+        foreach (var dialect in nonSqlServer)
+        {
+            var name = dialect.GetType().Name;
+
+            dialect.SupportsApproxCountDistinctAggregate.Should().BeFalse(
+                $"{name} must not claim the APPROX_COUNT_DISTINCT aggregate");
+            dialect.SupportsChecksumAggregate.Should().BeFalse(
+                $"{name} must not claim the CHECKSUM_AGG aggregate");
+            dialect.SupportsGroupingIdAggregate.Should().BeFalse(
+                $"{name} must not claim the GROUPING_ID aggregate");
+            dialect.SupportsApproxPercentileCont.Should().BeFalse(
+                $"{name} must not claim the APPROX_PERCENTILE_CONT aggregate");
+            dialect.SupportsApproxPercentileDisc.Should().BeFalse(
+                $"{name} must not claim the APPROX_PERCENTILE_DISC aggregate");
+        }
+    }
+
+    /// <summary>
     /// T219 (#219): the T-SQL identity members are gated by
     /// <see cref="ISqlServerFunctions.SupportsSessionIdentity"/>, and the flag is an opt-in: only the SQL
     /// Server dialect reports <c>true</c>. A dialect that never exposes the surface has no

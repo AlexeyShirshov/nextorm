@@ -41,9 +41,13 @@ public sealed class SqlServerDialectBranchCoverage3Tests : ProviderTestSuite
         + "(4, null, null, 'four', 2)";
 
     /// <summary>
-    /// The complete SQL Server-only function inventory of <c>SqlServerSpecificFunctions.Supports</c>
-    /// (<c>src/nextorm.sqlserver/SqlServerDialect.cs:1173-1259</c>), read through the live context's
-    /// public <see cref="ISqlServerFunctions"/> surface: 81 T-SQL function names.
+    /// The historical 81-name subset of the SQL Server-only function inventory of
+    /// <c>SqlServerSpecificFunctions.Supports</c> (the pre-T348 tree,
+    /// <c>src/nextorm.sqlserver/SqlServerDialect.cs:1173-1259</c>; the method now lives at
+    /// <c>:1340-1370</c>), read through the live context's public <see cref="ISqlServerFunctions"/>
+    /// surface. This array is a subset, not the current surface: T348 added 15 version-gated names on
+    /// top of these 81, each covered by its own tests, so the array and its count stay at the
+    /// historical 81.
     /// </summary>
     private static readonly string[] SqlServerFunctionNames =
     [
