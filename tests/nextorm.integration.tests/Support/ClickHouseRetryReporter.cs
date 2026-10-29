@@ -119,6 +119,10 @@ internal sealed class ClickHouseRetryReporter : IRunnerReporter
                 {
                     Console.WriteLine(line);
                 }
+
+                // r2 (S1-RELIABILITY): the fixture-only retry budget is reported next to the read
+                // ledger, so a spent retry is always visible in the run output.
+                Console.WriteLine(ClickHouseFixtureRetry.Summary());
             }
             catch (Exception exception)
             {

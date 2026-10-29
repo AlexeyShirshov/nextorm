@@ -10,7 +10,13 @@ namespace NextORM.Integration.Tests;
 /// removes coverage instead of turning a test red — and a skip is easy to miss in the run summary.
 /// This test makes every change to the matrix a deliberate edit of the pinned table below.
 /// </para>
+/// <para>
+/// The class carried no collection attribute, so it ran in parallel with every ClickHouse test class
+/// while instantiating <c>ClickHouseTestProvider</c> contexts. It now joins the shared ClickHouse
+/// collection, per the convention documented on <see cref="ClickHouseCollectionDefinition"/>.
+/// </para>
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class ProviderCapabilityContractTests
 {
     private static readonly ITestProvider[] AllProviders =

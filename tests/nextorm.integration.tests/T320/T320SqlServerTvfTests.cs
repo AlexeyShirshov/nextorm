@@ -20,6 +20,7 @@ internal static class T320SsIntegrationTvf
 /// correlation and row multiplication are observed as data, not as "no exception".
 /// </summary>
 [Trait("Category", "T320")]
+[Collection("T320 tvf plan identity")]
 public sealed class T320SqlServerTvfTests(ITestOutputHelper output) : ProviderTestSuite
 {
     protected override ITestProvider Provider => SqlServerTestProvider.Instance;

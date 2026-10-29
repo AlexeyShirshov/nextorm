@@ -71,6 +71,7 @@ internal static class T320SqIntegrationTvf
 /// APPLY/LATERAL), and a capture change on the same cached plan instance changes the row set.
 /// </summary>
 [Trait("Category", "T320")]
+[Collection("T320 tvf plan identity")]
 public sealed class T320SqliteTvfTests(ITestOutputHelper output) : ProviderTestSuite
 {
     protected override ITestProvider Provider => SqliteTestProvider.Instance;

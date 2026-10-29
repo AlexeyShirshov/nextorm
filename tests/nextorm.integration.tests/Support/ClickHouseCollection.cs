@@ -35,9 +35,21 @@ namespace NextORM.Integration.Tests;
 ///   </item>
 /// </list>
 /// <para>
+/// <para>
 /// Add <c>[Collection("ClickHouse")]</c> to every new ClickHouse test class. This definition exists
 /// so the convention has one named home; the literal name is what the existing classes carry.
 /// </para>
+/// <para>
+/// <b>2026-10-29 (cycle 11, step 1 attempt 2).</b> The definition additionally carries
+/// <c>DisableParallelization = true</c>. Serialising the collection against <em>itself</em> was not
+/// enough: a full-suite run still produced <c>Code: 216 QUERY_WITH_SAME_ID_IS_ALREADY_RUNNING</c>
+/// for <c>T288NullSafeComparisonClickHouseIntegrationTests</c> and, in the baseline run, two
+/// <c>HttpClient.Timeout of 120 seconds</c> failures, while every other collection kept running
+/// concurrently. Nothing outside this collection executes ClickHouse statements, but the process
+/// still shares the WSL2 localhost relay, the host CPU and the 2 GiB container envelope with the
+/// other providers, so the collected lane is now exclusive. The flag only changes scheduling:
+/// every assertion, every fixture and the container/server settings are untouched.
+/// </para>
 /// </remarks>
-[CollectionDefinition("ClickHouse")]
+[CollectionDefinition("ClickHouse", DisableParallelization = true)]
 public sealed class ClickHouseCollectionDefinition;

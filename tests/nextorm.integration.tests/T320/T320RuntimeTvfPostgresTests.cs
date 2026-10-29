@@ -70,6 +70,7 @@ internal static class T320PgTvf
 /// correlation and row multiplication are observed as data, not as "no exception".
 /// </summary>
 [Trait("Category", "T320")]
+[Collection("T320 tvf plan identity")]
 public sealed class T320RuntimeTvfPostgresTests(ITestOutputHelper output) : ProviderTestSuite
 {
     protected override ITestProvider Provider => PostgresTestProvider.Instance;

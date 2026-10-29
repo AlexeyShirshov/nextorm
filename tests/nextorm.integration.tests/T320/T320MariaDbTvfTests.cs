@@ -66,6 +66,7 @@ internal static class T320MaIntegrationTvf
 /// and both shapes are exercised live, expanding the correlated documents to the expected 4 and 5 rows.
 /// </summary>
 [Trait("Category", "T320")]
+[Collection("T320 tvf plan identity")]
 public sealed class T320MariaDbTvfTests : IDisposable
 {
     /// <summary>The declared image, mirroring <c>MariaDbContainer</c>'s default.</summary>

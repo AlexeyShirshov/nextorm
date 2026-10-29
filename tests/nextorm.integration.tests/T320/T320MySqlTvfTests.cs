@@ -64,6 +64,7 @@ internal static class T320MyIntegrationTvf
 /// observed as data, not as "no exception".
 /// </summary>
 [Trait("Category", "T320")]
+[Collection("T320 tvf plan identity")]
 public sealed class T320MySqlTvfTests(ITestOutputHelper output) : ProviderTestSuite
 {
     protected override ITestProvider Provider => MySqlTestProvider.Instance;

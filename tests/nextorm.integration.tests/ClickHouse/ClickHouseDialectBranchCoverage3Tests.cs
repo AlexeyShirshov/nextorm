@@ -3,12 +3,13 @@ using System.ComponentModel.DataAnnotations.Schema;
 using FluentAssertions;
 using NextORM.ClickHouse;
 using NextORM.Core;
+using NextORM.Tests.Shared.ClickHouseRetry;
 
 namespace NextORM.Integration.Tests;
 
 /// <summary>
 /// ClickHouse dialect branch coverage (cycle 3, cluster D2) executed against a live Testcontainers
-/// server. Every fact runs over the class-owned <c>ch3_marker</c> Memory table, created, seeded and
+/// server. Every fact runs over the class-owned <c>ch3_marker_v2</c> Memory table, created, seeded and
 /// dropped by the class, so no assertion depends on the shared seed totals.
 ///
 /// <para>
@@ -40,12 +41,29 @@ public sealed class ClickHouseDialectBranchCoverage3Tests : ProviderTestSuite
 {
     protected override ITestProvider Provider => ClickHouseTestProvider.Instance;
 
+    private static readonly object MarkerGate = new();
+
+    private static int _markerReady;
+
+    /// <summary>
+    /// The marker table. The <c>_v2</c> suffix is the schema identity: the engine changed to
+    /// <c>ReplacingMergeTree</c> for deduplicated reads, and a versioned name guarantees that a table
+    /// created by an earlier schema (for example the old <c>Memory</c> engine) is never inherited by
+    /// <c>if not exists</c> and never read. <c>if not exists</c> keeps the statement safe to repeat.
+    /// </summary>
     private const string CreateTableSql =
-        "create table ch3_marker (id Int32, dt Nullable(DateTime), num Int32, label Nullable(String), "
-        + "grp Nullable(Int32), nums Array(Int32), other Array(Int32)) engine = Memory";
+        "create table if not exists ch3_marker_v2 (id Int32, dt Nullable(DateTime), num Int32, label Nullable(String), "
+        + "grp Nullable(Int32), nums Array(Int32), other Array(Int32)) "
+        + "engine = ReplacingMergeTree order by (id)";
+
+    /// <summary>The exact marker ids the facts read; the fixture verifies this set, not a row count.</summary>
+    private static readonly int[] MarkerIds = [1, 2, 3, 4];
+
+    /// <summary>The four marker rows the facts read.</summary>
+    private const int MarkerRowCount = 4;
 
     private const string SeedSql =
-        "insert into ch3_marker (id, dt, num, label, grp, nums, other) values "
+        "insert into ch3_marker_v2 (id, dt, num, label, grp, nums, other) values "
         + "(1, '2023-05-17 13:45:30', 10, 'one', 1, [3, 1, 2], [1, 9]), "
         + "(2, '2023-01-02 00:00:00', 20, 'two', 1, [10, 20], []), "
         + "(3, '2024-03-04 05:06:07', 30, 'three', 2, [5], [5, 6]), "
@@ -68,54 +86,49 @@ public sealed class ClickHouseDialectBranchCoverage3Tests : ProviderTestSuite
     [InlineData("string_upper_utf8")]
     public void ScalarFunctions_DialectBranches_ShouldReadLiveValues(string fn)
     {
-        CreateMarker();
-        try
+        EnsureMarker();
         {
             switch (fn)
             {
                 case "stdev_samp":
                     // sample standard deviation of 10, 20, 30, 40 = sqrt(500 / 3)
-                    _sut.DataProvider.From<Ch3Marker>()
+                    _sut.DataProvider.From<Ch3Marker>().Final()
                         .Select(x => SqlFunctions.Sql.stdev((double)x.Num))
                         .First().Should().BeApproximately(12.909944487358056, 1e-6);
                     break;
                 case "stdev_pop":
-                    _sut.DataProvider.From<Ch3Marker>()
+                    _sut.DataProvider.From<Ch3Marker>().Final()
                         .Select(x => SqlFunctions.Sql.stdevp((double)x.Num))
                         .First().Should().BeApproximately(11.180339887498949, 1e-6);
                     break;
                 case "var_samp":
-                    _sut.DataProvider.From<Ch3Marker>()
+                    _sut.DataProvider.From<Ch3Marker>().Final()
                         .Select(x => SqlFunctions.Sql.var((double)x.Num))
                         .First().Should().BeApproximately(166.66666666666666, 1e-6);
                     break;
                 case "var_pop":
-                    _sut.DataProvider.From<Ch3Marker>()
+                    _sut.DataProvider.From<Ch3Marker>().Final()
                         .Select(x => SqlFunctions.Sql.varp((double)x.Num))
                         .First().Should().BeApproximately(125.0, 1e-6);
                     break;
                 case "date_trunc_month":
-                    _sut.DataProvider.From<Ch3Marker>().Where(x => x.Id == 1)
+                    _sut.DataProvider.From<Ch3Marker>().Final().Where(x => x.Id == 1)
                         .Select(x => SqlFunctions.Sql.date_trunc("month", x.Dt))
                         .First().Should().Be(new DateTime(2023, 5, 1));
                     break;
                 case "date_part_year":
-                    _sut.DataProvider.From<Ch3Marker>().Where(x => x.Id == 1)
+                    _sut.DataProvider.From<Ch3Marker>().Final().Where(x => x.Id == 1)
                         .Select(x => SqlFunctions.Sql.extract("year", x.Dt))
                         .First().Should().Be(2023);
                     break;
                 case "string_upper_utf8":
-                    _sut.DataProvider.From<Ch3Marker>().Where(x => x.Id == 1)
+                    _sut.DataProvider.From<Ch3Marker>().Final().Where(x => x.Id == 1)
                         .Select(x => SqlFunctions.ClickHouse.upper_utf8(x.Label))
                         .First().Should().Be("ONE");
                     break;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(fn), fn, "Unknown scalar branch case.");
             }
-        }
-        finally
-        {
-            DropMarker();
         }
     }
 
@@ -127,10 +140,9 @@ public sealed class ClickHouseDialectBranchCoverage3Tests : ProviderTestSuite
     [InlineData("iif")]
     public void NumericFunctions_DialectBranches_ShouldReadLiveValues(string fn)
     {
-        CreateMarker();
-        try
+        EnsureMarker();
         {
-            var e = _sut.DataProvider.From<Ch3Marker>().Where(x => x.Id == 1);
+            var e = _sut.DataProvider.From<Ch3Marker>().Final().Where(x => x.Id == 1);
 
             switch (fn)
             {
@@ -149,10 +161,6 @@ public sealed class ClickHouseDialectBranchCoverage3Tests : ProviderTestSuite
                 default:
                     throw new ArgumentOutOfRangeException(nameof(fn), fn, "Unknown numeric branch case.");
             }
-        }
-        finally
-        {
-            DropMarker();
         }
     }
 
@@ -174,10 +182,9 @@ public sealed class ClickHouseDialectBranchCoverage3Tests : ProviderTestSuite
     [InlineData("part_minute")]
     public void DatePartFunctions_DialectBranches_ShouldReadLiveValues(string fn)
     {
-        CreateMarker();
-        try
+        EnsureMarker();
         {
-            var e = _sut.DataProvider.From<Ch3Marker>().Where(x => x.Id == 1);
+            var e = _sut.DataProvider.From<Ch3Marker>().Final().Where(x => x.Id == 1);
 
             switch (fn)
             {
@@ -209,10 +216,6 @@ public sealed class ClickHouseDialectBranchCoverage3Tests : ProviderTestSuite
                     throw new ArgumentOutOfRangeException(nameof(fn), fn, "Unknown date-part branch case.");
             }
         }
-        finally
-        {
-            DropMarker();
-        }
     }
 
     /// <summary>
@@ -232,10 +235,9 @@ public sealed class ClickHouseDialectBranchCoverage3Tests : ProviderTestSuite
     [InlineData("xx_hash64")]
     public void ArrayAndStringFunctions_DialectBranches_ShouldReadLiveValues(string fn)
     {
-        CreateMarker();
-        try
+        EnsureMarker();
         {
-            var e = _sut.DataProvider.From<Ch3Marker>().Where(x => x.Id == 1);
+            var e = _sut.DataProvider.From<Ch3Marker>().Final().Where(x => x.Id == 1);
 
             switch (fn)
             {
@@ -270,20 +272,15 @@ public sealed class ClickHouseDialectBranchCoverage3Tests : ProviderTestSuite
                     throw new ArgumentOutOfRangeException(nameof(fn), fn, "Unknown array/string branch case.");
             }
         }
-        finally
-        {
-            DropMarker();
-        }
     }
 
     /// <summary>The grouped aggregate renders one row per group with its own count.</summary>
     [Fact]
     public void GroupByWithAggregate_ShouldReturnOneRowPerGroup()
     {
-        CreateMarker();
-        try
+        EnsureMarker();
         {
-            var groups = _sut.DataProvider.From<Ch3Marker>()
+            var groups = _sut.DataProvider.From<Ch3Marker>().Final()
                 .Where(x => x.Grp != null)
                 .GroupBy(x => x.Grp)
                 .Select(x => new { x.Grp, C = SqlFunctions.Sql.count() })
@@ -294,20 +291,15 @@ public sealed class ClickHouseDialectBranchCoverage3Tests : ProviderTestSuite
             groups.Single(g => g.Grp == 1).C.Should().Be(2);
             groups.Single(g => g.Grp == 2).C.Should().Be(1);
         }
-        finally
-        {
-            DropMarker();
-        }
     }
 
     /// <summary>The paged select renders <c>limit 2 offset 1</c> and returns the requested window.</summary>
     [Fact]
     public void PagedSelect_WithOrderBy_ShouldReturnTheRequestedPage()
     {
-        CreateMarker();
-        try
+        EnsureMarker();
         {
-            var page = _sut.DataProvider.From<Ch3Marker>()
+            var page = _sut.DataProvider.From<Ch3Marker>().Final()
                 .OrderBy(x => x.Id)
                 .Offset(1)
                 .Limit(2)
@@ -316,20 +308,15 @@ public sealed class ClickHouseDialectBranchCoverage3Tests : ProviderTestSuite
 
             page.Should().Equal(2, 3);
         }
-        finally
-        {
-            DropMarker();
-        }
     }
 
     /// <summary>The <c>LIMIT n BY expr</c> clause keeps one marker row per group.</summary>
     [Fact]
     public void LimitBy_ShouldKeepOneRowPerGroup()
     {
-        CreateMarker();
-        try
+        EnsureMarker();
         {
-            var rows = _sut.DataProvider.From<Ch3Marker>()
+            var rows = _sut.DataProvider.From<Ch3Marker>().Final()
                 .Where(x => x.Grp != null)
                 .OrderBy(x => x.Id)
                 .LimitBy(1, x => x.Grp)
@@ -337,10 +324,6 @@ public sealed class ClickHouseDialectBranchCoverage3Tests : ProviderTestSuite
                 .ToList();
 
             rows.Should().BeEquivalentTo(new[] { 1, 3 });
-        }
-        finally
-        {
-            DropMarker();
         }
     }
 
@@ -352,17 +335,66 @@ public sealed class ClickHouseDialectBranchCoverage3Tests : ProviderTestSuite
         command.ExecuteNonQuery();
     }
 
-    private void CreateMarker()
+    /// <summary>
+    /// One-time fixture setup. The class facts only read, so the marker rows are created and seeded once
+    /// per process instead of once per test, and the per-test <c>drop table</c> cleanup is gone: the
+    /// cleanup DDL was the statement observed stalling for the full 120 s client timeout, and removing it
+    /// removes the need to wait for it at all. The remaining setup steps are idempotent and go through
+    /// <see cref="ClickHouseFixtureRetry"/>, the fixture-only retry path with one retry per operation and
+    /// one for the whole suite.
+    /// </summary>
+    private void EnsureMarker()
     {
-        Execute("drop table if exists ch3_marker");
-        Execute(CreateTableSql);
-        Execute(SeedSql);
+        if (Volatile.Read(ref _markerReady) == 1)
+            return;
+
+        lock (MarkerGate)
+        {
+            if (_markerReady == 1)
+                return;
+
+            // One idempotent operation: every statement below is safe to repeat, and the seed is
+            // re-derived from the server state on each attempt, so an attempt whose answer was lost
+            // cannot double-seed. The drop is gone — with `create table if not exists` plus the
+            // row-count guard it had no job left, and it was the statement observed stalling.
+            ClickHouseFixtureRetry.Execute(nameof(ClickHouseDialectBranchCoverage3Tests) + ".marker", () =>
+            {
+                Execute(CreateTableSql);
+
+                // The row count is only a fast path. A repeated insert is safe at the data level:
+                // the engine is ReplacingMergeTree keyed on `id`, so two inserts of the same four rows
+                // collapse to four rows under FINAL, even when the first insert is still executing
+                // server-side after a lost answer.
+                var rows = ScalarLong("select count() from ch3_marker_v2");
+                if (rows < MarkerRowCount)
+                    Execute(SeedSql);
+
+                var ids = _sut.DataProvider.From<Ch3Marker>().Final()
+                    .Select(x => x.Id)
+                    .ToList()
+                    .OrderBy(id => id)
+                    .ToArray();
+
+                ids.Should().Equal(MarkerIds,
+                    "the fixture verifies the exact marker id set after deduplication, so neither a " +
+                    "repeated insert nor a row left by an earlier run can change what the facts read");
+            });
+
+            Volatile.Write(ref _markerReady, 1);
+        }
     }
 
-    private void DropMarker() => Execute("drop table if exists ch3_marker");
+    /// <summary>Reads one scalar from the class context (fixture bookkeeping only).</summary>
+    private long ScalarLong(string sql)
+    {
+        var context = (DataContext)_sut.DataProvider;
+        context.EnsureConnectionOpen();
+        using var command = context.CreateCommand(sql);
+        return Convert.ToInt64(command.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture);
+    }
 
     /// <summary>The class-owned marker table: nullable date/text/group plus two integer arrays.</summary>
-    [SqlTable("ch3_marker")]
+    [SqlTable("ch3_marker_v2")]
     public sealed class Ch3Marker
     {
         [Key]
