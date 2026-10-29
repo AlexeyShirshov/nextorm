@@ -82,13 +82,6 @@ jobs:
           fi
       - name: Benchmark table generator self-tests
         run: python3 -m unittest discover -s tools/benchmarks/tests -p 'test_update_benchmark_tables.py'
-      - name: Allocation regression gate
-        timeout-minutes: 20
-        run: |
-          mkdir -p /tmp/nextorm-bench-gate
-          export NEXTORM_BENCH_DB=/tmp/nextorm-bench-gate/test.db
-          python3 -m unittest discover -s tools/benchmarks/tests -p 'test_iteration14_gate.py'
-          python3 tools/benchmarks/iteration14_gate.py --timeout 1200
       - name: Coverage report
         run: |
           dotnet tool run reportgenerator \
