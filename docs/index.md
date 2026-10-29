@@ -119,7 +119,7 @@ Nextorm uses protocol-level libraries (for example, SqlClient for Microsoft SQL 
 
 ## Status
 
-The current status (1.0.9-rc3) is a prof of concept.
+The current status (1.0.9-rc4) is a prof of concept.
 
 ## Installation
 
@@ -148,6 +148,93 @@ They differ in cost, lifetime and thread-safety rules. Which one to use, what ea
 its limitations are covered in the [plan cache and reuse guide](engine/03-plan-cache-and-reuse.md).
 
 ## Releases
+
+### 1.0.9-rc4
+
+- [Примеры: типизированные CTE и именованные алиасы во всех join](https://github.com/AlexeyShirshov/nextorm/issues/231)
+- [SQL Server live-scope скаляры: открыты 7 исключений `#182` (`CURRENT_REQUEST_ID`, `XACT_STATE`, `SCOPE_IDENTITY`, …)](https://github.com/AlexeyShirshov/nextorm/issues/248)
+- [Metadata-driven SQL loading: `LoadWith` для всех связей и неявные проекции коллекций](https://github.com/AlexeyShirshov/nextorm/issues/249)
+- [Составные связи: публичное объявление, SQL-навигации и metadata-driven `LoadWith`](https://github.com/AlexeyShirshov/nextorm/issues/251)
+- [ClickHouse: `array_except` больше не рендерится как несуществующий `arrayExcept`](https://github.com/AlexeyShirshov/nextorm/issues/252)
+- [ClickHouse: `bit_length`/`octet_length` объявлены как `int?`, но возвращают `UInt64` (`InvalidCastException`)](https://github.com/AlexeyShirshov/nextorm/issues/253)
+- [ClickHouse: `md5`/`sha1`/`sha256`/`sha512` больше не декодируются как lossy UTF-8 строки](https://github.com/AlexeyShirshov/nextorm/issues/254)
+- [ClickHouse: `date_diff` объявлен как `int?`, но возвращает `Int64` (`InvalidCastException`)](https://github.com/AlexeyShirshov/nextorm/issues/255)
+- [ClickHouse: `date_add("century", n, …)` больше не даёт неверную дату](https://github.com/AlexeyShirshov/nextorm/issues/256)
+- [ClickHouse: `map_filter`/`map_apply`/`map_all`/`map_exists`/`map_sort` рендерят допустимый тип аргумента](https://github.com/AlexeyShirshov/nextorm/issues/257)
+- [SQL Server: `quotename(value, quote_character)` больше не рендерит незакрытый строковый литерал](https://github.com/AlexeyShirshov/nextorm/issues/258)
+- [SQL Server: результат `timefromparts` (`time`) материализуется в `TimeSpan`](https://github.com/AlexeyShirshov/nextorm/issues/259)
+- [PostgreSQL 17: `array_reverse`/`array_sort`/`uuidv7` больше не рекламируются — серверных функций нет](https://github.com/AlexeyShirshov/nextorm/issues/260)
+- [PostgreSQL: `sha256(byte[])` больше не биндит массив как целочисленный параметр](https://github.com/AlexeyShirshov/nextorm/issues/261)
+- [PostgreSQL: `log(base, x)` рендерится в существующую серверную перегрузку](https://github.com/AlexeyShirshov/nextorm/issues/262)
+- [PostgreSQL: `json_get(object?, key)` больше не даёт неоднозначный `unknown -> unknown`](https://github.com/AlexeyShirshov/nextorm/issues/263)
+- [PostgreSQL: `make_interval` с месяцами материализуется в `TimeSpan`](https://github.com/AlexeyShirshov/nextorm/issues/264)
+- [SQL Server: composable DML `OUTPUT` — `INSERT`/`UPDATE`/`DELETE`/`MERGE` output как queryable-источник](https://github.com/AlexeyShirshov/nextorm/issues/266)
+- [ClickHouse: функции, возвращающие массивы, объявляют типы элементов, которые реально отдаёт драйвер](https://github.com/AlexeyShirshov/nextorm/issues/276)
+- [ClickHouse: higher-order функции над array-колонкой больше не падают с «variable x is not defined»](https://github.com/AlexeyShirshov/nextorm/issues/277)
+- [SQLite: `soundex` больше не рекламируется — серверной функции нет](https://github.com/AlexeyShirshov/nextorm/issues/278)
+- [Коррелированный `LongCount()` возвращает счёт по строке, а не 1](https://github.com/AlexeyShirshov/nextorm/issues/279)
+- [MariaDB: `months_between`/`to_date`/`to_number` (и `uuid_v4`) больше не рекламируются на 11.4](https://github.com/AlexeyShirshov/nextorm/issues/280)
+- [Пробелы функций PostgreSQL — оставшийся каталог built-in функций](https://github.com/AlexeyShirshov/nextorm/issues/281)
+- [Пробелы функций SQL Server — оставшийся каталог built-in функций](https://github.com/AlexeyShirshov/nextorm/issues/282)
+- [Пробелы функций MySQL — оставшийся каталог built-in функций](https://github.com/AlexeyShirshov/nextorm/issues/283)
+- [Пробелы функций MariaDB — оставшийся каталог built-in функций](https://github.com/AlexeyShirshov/nextorm/issues/284)
+- [Пробелы функций SQLite — оставшийся каталог built-in функций](https://github.com/AlexeyShirshov/nextorm/issues/285)
+- [Пробелы функций ClickHouse — оставшийся каталог built-in функций](https://github.com/AlexeyShirshov/nextorm/issues/286)
+- [`ORDER BY NULLS FIRST/LAST` — переносимое размещение NULL](https://github.com/AlexeyShirshov/nextorm/issues/287)
+- [`IS [NOT] DISTINCT FROM` — NULL-безопасное сравнение](https://github.com/AlexeyShirshov/nextorm/issues/288)
+- [Savepoints — `SAVEPOINT` / `ROLLBACK TO` / `RELEASE` в `ITransactionManager`](https://github.com/AlexeyShirshov/nextorm/issues/289)
+- [`ToUpper`/`ToLower(CultureInfo.InvariantCulture)` больше не отклоняются, когда аргумент — не константа](https://github.com/AlexeyShirshov/nextorm/issues/290)
+- [`Avg`/`avg_over` над целочисленной колонкой больше не усекают среднее до целого](https://github.com/AlexeyShirshov/nextorm/issues/291)
+- [`Stdev`/`Stdevp`/`Var`/`Varp` больше не падают на выборке из 0/1 строки: реальный `Nullable<T>` над NULL-агрегатом](https://github.com/AlexeyShirshov/nextorm/issues/292)
+- [`EF.Functions.Like` больше не проскакивает мимо EF-гарда](https://github.com/AlexeyShirshov/nextorm/issues/293)
+- [Derived source с не-анонимной проекцией даёт контекстную диагностику вместо «Select must return new anonymous type»](https://github.com/AlexeyShirshov/nextorm/issues/294)
+- [`is <type>` (`TypeBinaryExpression`) транслируется, а не превращается в голое условие](https://github.com/AlexeyShirshov/nextorm/issues/295)
+- [`nullable == null` / `!= null` больше не рендерится как `col = null` (тихие нули)](https://github.com/AlexeyShirshov/nextorm/issues/296)
+- [SQL Server: `WithTies()` с ненулевым `OFFSET` больше не рендерит невалидный T-SQL](https://github.com/AlexeyShirshov/nextorm/issues/298)
+- [PostgreSQL: апостроф в inline-литерале экранируется (`it''s`)](https://github.com/AlexeyShirshov/nextorm/issues/299)
+- [Core: `From(scalar set-operation command).ToList()` больше не падает с «Cannot get ctor from System.Int32»](https://github.com/AlexeyShirshov/nextorm/issues/300)
+- [MERGE: expression-based назначения по колонкам в `ThenUpdate`/`ThenInsert`](https://github.com/AlexeyShirshov/nextorm/issues/301)
+- [Core: агрегатный терминал внутри `WHERE` даёт коррелированный подзапрос вместо `InvalidOperationException`](https://github.com/AlexeyShirshov/nextorm/issues/303)
+- [Core: коррелированный переход по reference-навигации больше не падает с «variable 'navigation0' … is not defined»](https://github.com/AlexeyShirshov/nextorm/issues/304)
+- [Bulk insert: закрыт остаток linq2db `BulkCopyOptions`](https://github.com/AlexeyShirshov/nextorm/issues/305)
+- [SQLite: `Select(x => x)` больше не рендерит обрезанный `selec`](https://github.com/AlexeyShirshov/nextorm/issues/306)
+- [Core: проекция `ValueTuple.Create` больше не течёт сырым `ArgumentException`](https://github.com/AlexeyShirshov/nextorm/issues/307)
+- [ClickHouse: `Settings(…)` + скалярный `First()` больше не ставят `SETTINGS` перед `LIMIT 1` (Code 62)](https://github.com/AlexeyShirshov/nextorm/issues/308)
+- [`JoinInto` больше не теряет `Where`, объявленный на дочернем источнике](https://github.com/AlexeyShirshov/nextorm/issues/309)
+- [Core: неалиасенный скалярный derived source больше не рендерит голое `c0`](https://github.com/AlexeyShirshov/nextorm/issues/312)
+- [Core: голая скалярная проекция enum больше не обходит fail-closed гард (`Cannot get ctor from System.DayOfWeek`)](https://github.com/AlexeyShirshov/nextorm/issues/313)
+- [Core: projection-form `range_union` над парой range даёт документированный `NotSupportedException`](https://github.com/AlexeyShirshov/nextorm/issues/314)
+- [Core: `SelectWhereMax` по raw `From("table")` даёт mapped-source гард вместо вводящей в заблуждение диагностики](https://github.com/AlexeyShirshov/nextorm/issues/315)
+- [Core: plan cache учитывает `JoinExpression.ApplySource` — APPLY-запросы одной формы больше не переиспользуют чужой SQL](https://github.com/AlexeyShirshov/nextorm/issues/316)
+- [TVF: runtime-фабрики `TvfEntityBuilder` и единый lambda API](https://github.com/AlexeyShirshov/nextorm/issues/320)
+- [Join aliases: source-less join может нести алиас (`.Join<T>((l, r) => …, Alias.X)`)](https://github.com/AlexeyShirshov/nextorm/issues/322)
+- [`SelectGroup`: автоматическая группировка из одной проекции](https://github.com/AlexeyShirshov/nextorm/issues/323)
+- [Core: коррелированный `CrossApply`/`OuterApply` после join разрешён](https://github.com/AlexeyShirshov/nextorm/issues/324)
+- [MySQL: нативная колонка JSON для `[JsonColumn]`](https://github.com/AlexeyShirshov/nextorm/issues/325)
+- [SQL Server 2025 / Azure SQL: нативная колонка `json` для `[JsonColumn]`](https://github.com/AlexeyShirshov/nextorm/issues/326)
+- [SQL literals: режимы backslash для MySQL/MariaDB/ClickHouse и кросс-провайдерная обработка NUL](https://github.com/AlexeyShirshov/nextorm/issues/327)
+- [ClickHouse integration: 120-секундные `HttpClient`-таймауты под давлением памяти хоста](https://github.com/AlexeyShirshov/nextorm/issues/328)
+- [ClickHouse extreme-row parity тест больше не падает детерминированно](https://github.com/AlexeyShirshov/nextorm/issues/329)
+- [`JoinInto`: перегрузки без явного источника (`.JoinInto<TChild>((p, c) => …, p => p.Children)`)](https://github.com/AlexeyShirshov/nextorm/issues/330)
+- [`JoinInto`: форма по навигации без источника и предиката (metadata-driven ON)](https://github.com/AlexeyShirshov/nextorm/issues/331)
+- [`string.Format(CultureInfo.InvariantCulture)` — сиблинг `#290`](https://github.com/AlexeyShirshov/nextorm/issues/332)
+- [Core: prepared command — кэш команды per-connection (по умолчанию) + `PrepareOptions`; `DbCommand` и `LastRowCount` вне API](https://github.com/AlexeyShirshov/nextorm/issues/333)
+- [ClickHouse: связанные nullable-массивы больше не заменяют NULL-элементы значениями по умолчанию](https://github.com/AlexeyShirshov/nextorm/issues/335)
+- [ClickHouse: nullable string-массивы больше не падают с Code 349](https://github.com/AlexeyShirshov/nextorm/issues/336)
+- [ClickHouse: `Array(Nullable(Decimal))` материализуется в `decimal?[]`](https://github.com/AlexeyShirshov/nextorm/issues/337)
+- [ClickHouse: `ErrorCode -1` больше не транспортный сигнал — reset, connection-refused и безкодовые HTTP-ошибки различаются](https://github.com/AlexeyShirshov/nextorm/issues/338)
+- [Тесты: process-wide кэши больше не делают прогон чувствительным к порядку и параллелизму](https://github.com/AlexeyShirshov/nextorm/issues/339)
+- [`TimeOnly`-проекции материализуются](https://github.com/AlexeyShirshov/nextorm/issues/340)
+- [Тестовый тулинг: `dotnet-stryker` 5.0.0 скоупит мутации под Microsoft.Testing.Platform](https://github.com/AlexeyShirshov/nextorm/issues/341)
+- [`TimedDictionaryEvictionTests` больше не зависит от порядка прогона](https://github.com/AlexeyShirshov/nextorm/issues/342)
+- [Join receiver + runtime TVF factory body: дизайнерский отказ вместо сырого `InvalidOperationException`](https://github.com/AlexeyShirshov/nextorm/issues/343)
+- [Azure SQL DB/MI/Fabric: определена нативная возможность `json` (engine edition)](https://github.com/AlexeyShirshov/nextorm/issues/345)
+- [SQL Server batch capture: два captured read в одном batch больше не перетекают значением фильтра](https://github.com/AlexeyShirshov/nextorm/issues/346)
+- [SQLite: пред-отменённый `ExecuteRawAsync` больше не оставляет следующий запрос с обрезанным текстом команды](https://github.com/AlexeyShirshov/nextorm/issues/347)
+- [Тесты: SQLite integration provider больше не делит один scratch-файл на процесс (`SQLITE_BUSY`)](https://github.com/AlexeyShirshov/nextorm/issues/348)
+- [Тесты: полный интеграционный прогон больше не теряет ClickHouse-тесты на 120-секундных таймаутах и Code 216](https://github.com/AlexeyShirshov/nextorm/issues/349)
+- [Core: CTE над named-DTO проекцией больше не теряет алиас колонки по имени свойства (42703)](https://github.com/AlexeyShirshov/nextorm/issues/350)
+- Принятые ограничения (закрыты как `not_planned`): [застой ClickHouse-запроса на полный 120-секундный `HttpClient`-таймаут без обращения к серверу](https://github.com/AlexeyShirshov/nextorm/issues/351) — серверная сторона чистая (ни одного запроса дольше 200 мс, трафик в окне застоя падает), клиентская половина шкалы недоступна (обход ретранслятора невозможен), вердикт `undetermined` — финальный STOP диагностики; #328/#329/#338/#349 закрыли измеримые причины этого класса.
 
 ### 1.0.9-rc3
 
