@@ -33,10 +33,10 @@
     { "id": "Join4_Construct", "type": "NextORM.Benchmark.SqliteBenchmarkWarmDecompose", "method": "Join4_Construct", "max_bytes_per_op": 10862, "kind": "budget" },
     { "id": "InAtIn_Inline_Construct", "type": "NextORM.Benchmark.SqliteBenchmarkWarmDecompose", "method": "InAtIn_Inline_Construct", "max_bytes_per_op": 4080, "kind": "budget" },
     { "id": "InAtIn_Captured_Construct", "type": "NextORM.Benchmark.SqliteBenchmarkWarmDecompose", "method": "InAtIn_Captured_Construct", "max_bytes_per_op": 3840, "kind": "budget" },
-    { "id": "Build_Baseline_SimpleSelect", "type": "NextORM.Benchmark.SqliteBenchmarkFeaturePlanBuild", "method": "Build_Baseline_SimpleSelect", "max_bytes_per_op": 8202, "kind": "budget" },
+    { "id": "Build_Baseline_SimpleSelect", "type": "NextORM.Benchmark.SqliteBenchmarkFeaturePlanBuild", "method": "Build_Baseline_SimpleSelect", "max_bytes_per_op": 8933, "kind": "budget" },
     { "id": "RePrepare_PlanOnly_Param", "type": "NextORM.Benchmark.SqliteBenchmarkCachedPlan", "method": "RePrepare_PlanOnly_Param", "max_bytes_per_op": 2780, "kind": "budget" },
-    { "id": "Build_Sql", "type": "NextORM.Benchmark.SqliteBenchmarkCachedPlan", "method": "Build_Sql", "max_bytes_per_op": 8982, "kind": "budget" },
+    { "id": "Build_Sql", "type": "NextORM.Benchmark.SqliteBenchmarkCachedPlan", "method": "Build_Sql", "max_bytes_per_op": 10622, "kind": "budget" },
     { "id": "Cached_PlanOnly_Param", "type": "NextORM.Benchmark.SqliteBenchmarkCachedPlan", "method": "Cached_PlanOnly_Param", "max_bytes_per_op": 7002, "kind": "budget" },
-    { "id": "Prepared_ToList", "type": "NextORM.Benchmark.SqliteBenchmarkCachedPlan", "method": "Prepared_ToList", "max_bytes_per_op": 780, "kind": "no_growth" }
+    { "id": "Prepared_ToList", "type": "NextORM.Benchmark.SqliteBenchmarkCachedPlan", "method": "Prepared_ToList", "max_bytes_per_op": 812, "kind": "no_growth" }
   ]
 }

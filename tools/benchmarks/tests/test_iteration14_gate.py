@@ -52,6 +52,14 @@ def _rows_by_type():
     return by_type
 
 
+def _budget(method):
+    """The pinned budget of *method*, so a re-pin never leaves a stale literal behind."""
+    for row in MANIFEST["rows"]:
+        if row["method"] == method:
+            return row["max_bytes_per_op"]
+    raise AssertionError(f"no manifest row for {method}")
+
+
 def build_reports(tmpdir, bytes_per_op=None):
     """Write one synthetic BDN JSON report per manifest type.
 
@@ -202,7 +210,7 @@ class Iteration14GateTests(unittest.TestCase):
         self.assertIn("Cte_Warm_Reused/Default", output)
 
     def test_prepared_tolist_rejects_growth(self):
-        build_reports(self.tmp, {("Prepared_ToList", "InProcessEmitToolchain"): 781})
+        build_reports(self.tmp, {("Prepared_ToList", "InProcessEmitToolchain"): _budget("Prepared_ToList") + 1})
         code, output = run_gate(self.tmp)
         self.assertEqual(code, 1)
         self.assertIn("Prepared_ToList/InProcessEmitToolchain", output)
@@ -309,11 +317,12 @@ class Iteration14GateTests(unittest.TestCase):
         self.assertIn("missing job Cte_Construct/InProcessEmitToolchain", output)
 
     def test_inprocess_over_budget_returns_nonzero(self):
-        build_reports(self.tmp, {("Build_Sql", "InProcessEmitToolchain"): 9000})
+        budget = _budget("Build_Sql")
+        build_reports(self.tmp, {("Build_Sql", "InProcessEmitToolchain"): budget + 18})
         code, output = run_gate(self.tmp)
         self.assertEqual(code, 1)
         self.assertIn("over budget Build_Sql/InProcessEmitToolchain", output)
-        self.assertIn("9000.00 B/op > 8982", output)
+        self.assertIn(f"{budget + 18}.00 B/op > {budget}", output)
 
     def test_no_reports_found_fails(self):
         code, output = run_gate(self.tmp)
