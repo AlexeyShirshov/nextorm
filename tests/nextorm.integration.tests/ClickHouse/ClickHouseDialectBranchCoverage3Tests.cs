@@ -3,7 +3,6 @@ using System.ComponentModel.DataAnnotations.Schema;
 using FluentAssertions;
 using NextORM.ClickHouse;
 using NextORM.Core;
-using NextORM.Tests.Shared.ClickHouseRetry;
 
 namespace NextORM.Integration.Tests;
 
@@ -339,9 +338,9 @@ public sealed class ClickHouseDialectBranchCoverage3Tests : ProviderTestSuite
     /// One-time fixture setup. The class facts only read, so the marker rows are created and seeded once
     /// per process instead of once per test, and the per-test <c>drop table</c> cleanup is gone: the
     /// cleanup DDL was the statement observed stalling for the full 120 s client timeout, and removing it
-    /// removes the need to wait for it at all. The remaining setup steps are idempotent and go through
-    /// <see cref="ClickHouseFixtureRetry"/>, the fixture-only retry path with one retry per operation and
-    /// one for the whole suite.
+    /// removes the need to wait for it at all. The remaining setup steps are idempotent: <c>create table
+    /// if not exists</c> plus the row-count guard, and a repeated insert collapses to the same four rows
+    /// because the engine is ReplacingMergeTree keyed on <c>id</c>.
     /// </summary>
     private void EnsureMarker()
     {
@@ -354,31 +353,28 @@ public sealed class ClickHouseDialectBranchCoverage3Tests : ProviderTestSuite
                 return;
 
             // One idempotent operation: every statement below is safe to repeat, and the seed is
-            // re-derived from the server state on each attempt, so an attempt whose answer was lost
-            // cannot double-seed. The drop is gone — with `create table if not exists` plus the
+            // re-derived from the server state, so an earlier run whose answer was lost cannot
+            // double-seed. The drop is gone — with `create table if not exists` plus the
             // row-count guard it had no job left, and it was the statement observed stalling.
-            ClickHouseFixtureRetry.Execute(nameof(ClickHouseDialectBranchCoverage3Tests) + ".marker", () =>
-            {
-                Execute(CreateTableSql);
+            Execute(CreateTableSql);
 
-                // The row count is only a fast path. A repeated insert is safe at the data level:
-                // the engine is ReplacingMergeTree keyed on `id`, so two inserts of the same four rows
-                // collapse to four rows under FINAL, even when the first insert is still executing
-                // server-side after a lost answer.
-                var rows = ScalarLong("select count() from ch3_marker_v2");
-                if (rows < MarkerRowCount)
-                    Execute(SeedSql);
+            // The row count is only a fast path. A repeated insert is safe at the data level:
+            // the engine is ReplacingMergeTree keyed on `id`, so two inserts of the same four rows
+            // collapse to four rows under FINAL, even when the first insert is still executing
+            // server-side after a lost answer.
+            var rows = ScalarLong("select count() from ch3_marker_v2");
+            if (rows < MarkerRowCount)
+                Execute(SeedSql);
 
-                var ids = _sut.DataProvider.From<Ch3Marker>().Final()
-                    .Select(x => x.Id)
-                    .ToList()
-                    .OrderBy(id => id)
-                    .ToArray();
+            var ids = _sut.DataProvider.From<Ch3Marker>().Final()
+                .Select(x => x.Id)
+                .ToList()
+                .OrderBy(id => id)
+                .ToArray();
 
-                ids.Should().Equal(MarkerIds,
-                    "the fixture verifies the exact marker id set after deduplication, so neither a " +
-                    "repeated insert nor a row left by an earlier run can change what the facts read");
-            });
+            ids.Should().Equal(MarkerIds,
+                "the fixture verifies the exact marker id set after deduplication, so neither a " +
+                "repeated insert nor a row left by an earlier run can change what the facts read");
 
             Volatile.Write(ref _markerReady, 1);
         }

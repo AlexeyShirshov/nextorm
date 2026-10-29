@@ -2,7 +2,6 @@ using System.Globalization;
 using System.Linq.Expressions;
 using FluentAssertions;
 using NextORM.Core;
-using NextORM.Tests.Shared.ClickHouseRetry;
 
 namespace NextORM.Integration.Tests;
 
@@ -26,13 +25,7 @@ public sealed class ClickHouseT332StringFormatInvariantProviderTests : ProviderT
             .Where(e => e.Id == 1)
             .Select(e => string.Format(CultureInfo.InvariantCulture, "{0}-{1}", e.String, e.RequiredString));
 
-        var value = await ClickHouseReadRetry.ExecuteAsync(
-            ClickHouseReadOperation.Audited(
-                ClickHouseTestIdentity.CurrentTestDisplayName(),
-                "ClickHouseT332StringFormatInvariantProviderTests.T332StringFormat_StaticPropertyInvariantProvider_ShouldExecute#1",
-                ClickHouseReadCategory.PointRead),
-            token => query.FirstAsync(token),
-            TestContext.Current.CancellationToken);
+        var value = await query.FirstAsync(TestContext.Current.CancellationToken);
 
         value.Should().Be("dadfasd-sdf");
     }
@@ -44,13 +37,7 @@ public sealed class ClickHouseT332StringFormatInvariantProviderTests : ProviderT
             .Where(e => e.Id == 1)
             .Select(T332ConstantProviderCase("{0}-{1}"));
 
-        var value = await ClickHouseReadRetry.ExecuteAsync(
-            ClickHouseReadOperation.Audited(
-                ClickHouseTestIdentity.CurrentTestDisplayName(),
-                "ClickHouseT332StringFormatInvariantProviderTests.T332StringFormat_ConstantInvariantProvider_ShouldExecute#1",
-                ClickHouseReadCategory.PointRead),
-            token => query.FirstAsync(token),
-            TestContext.Current.CancellationToken);
+        var value = await query.FirstAsync(TestContext.Current.CancellationToken);
 
         value.Should().Be("dadfasd-sdf");
     }
@@ -66,13 +53,7 @@ public sealed class ClickHouseT332StringFormatInvariantProviderTests : ProviderT
                 NoProvider = string.Format("{0}-{1}", e.String, e.RequiredString)
             });
 
-        var value = await ClickHouseReadRetry.ExecuteAsync(
-            ClickHouseReadOperation.Audited(
-                ClickHouseTestIdentity.CurrentTestDisplayName(),
-                "ClickHouseT332StringFormatInvariantProviderTests.T332StringFormat_NullProvider_ShouldKeepBehavingLikeTheProviderlessOverload#1",
-                ClickHouseReadCategory.PointRead),
-            token => query.FirstAsync(token),
-            TestContext.Current.CancellationToken);
+        var value = await query.FirstAsync(TestContext.Current.CancellationToken);
 
         value.LiteralNull.Should().Be(value.NoProvider);
     }

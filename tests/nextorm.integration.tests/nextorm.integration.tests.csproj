@@ -46,11 +46,4 @@
                       ReferenceOutputAssembly="false" />
   </ItemGroup>
 
-  <!-- #328 (T328 D1): the ClickHouse timeout/retry helpers are shared with the DB-free core unit
-       tests, so the sources live under tests/Shared (outside every project directory) and each
-       consumer compiles them explicitly. The types are internal to the consuming assembly. -->
-  <ItemGroup>
-    <Compile Include="..\Shared\ClickHouseRetry\**\*.cs" Link="ClickHouseRetry\%(RecursiveDir)%(Filename)%(Extension)" />
-  </ItemGroup>
-
 </Project>

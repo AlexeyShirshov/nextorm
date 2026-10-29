@@ -7,7 +7,6 @@ using ClickHouse.Driver.ADO;
 using FluentAssertions;
 using NextORM.ClickHouse;
 using NextORM.Core;
-using NextORM.Tests.Shared.ClickHouseRetry;
 
 namespace NextORM.Integration.Tests;
 
@@ -37,13 +36,7 @@ public sealed class ClickHouseFunctionExecutionTests : ProviderTestSuite
                 Lower = SqlFunctions.ClickHouse.lower_utf8("ПРИВЕТ")
             });
 
-        var r = await ClickHouseReadRetry.ExecuteAsync(
-            ClickHouseReadOperation.Audited(
-                ClickHouseTestIdentity.CurrentTestDisplayName(),
-                "ClickHouseFunctionExecutionTests.Utf8StringFunctions_ShouldExecute#1",
-                ClickHouseReadCategory.PointRead),
-            token => query.FirstAsync(token),
-            TestContext.Current.CancellationToken);
+        var r = await query.FirstAsync(TestContext.Current.CancellationToken);
 
         r.L.Should().Be("abc");
         r.R.Should().Be("def");
@@ -68,13 +61,7 @@ public sealed class ClickHouseFunctionExecutionTests : ProviderTestSuite
                 TBC = SqlFunctions.ClickHouse.trim_both("xxabcxx", "x")
             });
 
-        var r = await ClickHouseReadRetry.ExecuteAsync(
-            ClickHouseReadOperation.Audited(
-                ClickHouseTestIdentity.CurrentTestDisplayName(),
-                "ClickHouseFunctionExecutionTests.TrimFunctions_ShouldExecute_WithAndWithoutCharacters#1",
-                ClickHouseReadCategory.PointRead),
-            token => query.FirstAsync(token),
-            TestContext.Current.CancellationToken);
+        var r = await query.FirstAsync(TestContext.Current.CancellationToken);
 
         r.TL.Should().Be("x  ");
         r.TR.Should().Be("  x");
@@ -98,13 +85,7 @@ public sealed class ClickHouseFunctionExecutionTests : ProviderTestSuite
                 EA = SqlFunctions.ClickHouse.extract_all("a1b2", "[0-9]")
             });
 
-        var r = await ClickHouseReadRetry.ExecuteAsync(
-            ClickHouseReadOperation.Audited(
-                ClickHouseTestIdentity.CurrentTestDisplayName(),
-                "ClickHouseFunctionExecutionTests.RegexpFunctions_ShouldExecute#1",
-                ClickHouseReadCategory.PointRead),
-            token => query.FirstAsync(token),
-            TestContext.Current.CancellationToken);
+        var r = await query.FirstAsync(TestContext.Current.CancellationToken);
 
         r.One.Should().Be("xbcabc");
         r.All.Should().Be("xbcxbc");
@@ -126,13 +107,7 @@ public sealed class ClickHouseFunctionExecutionTests : ProviderTestSuite
                 C = SqlFunctions.ClickHouse.array_string_concat(SqlFunctions.ClickHouse.split_by_string(",", "a,b,c"), string.Empty)
             });
 
-        var r = await ClickHouseReadRetry.ExecuteAsync(
-            ClickHouseReadOperation.Audited(
-                ClickHouseTestIdentity.CurrentTestDisplayName(),
-                "ClickHouseFunctionExecutionTests.SplitFunctions_ShouldExecute#1",
-                ClickHouseReadCategory.PointRead),
-            token => query.FirstAsync(token),
-            TestContext.Current.CancellationToken);
+        var r = await query.FirstAsync(TestContext.Current.CancellationToken);
 
         r.S.Should().Be("a|b|c");
         r.R.Should().HaveCount(3);
@@ -157,13 +132,7 @@ public sealed class ClickHouseFunctionExecutionTests : ProviderTestSuite
                 Y = SqlFunctions.ClickHouse.yesterday()
             });
 
-        var r = await ClickHouseReadRetry.ExecuteAsync(
-            ClickHouseReadOperation.Audited(
-                ClickHouseTestIdentity.CurrentTestDisplayName(),
-                "ClickHouseFunctionExecutionTests.DateTimeFunctions_ShouldExecute#1",
-                ClickHouseReadCategory.PointRead),
-            token => query.FirstAsync(token),
-            TestContext.Current.CancellationToken);
+        var r = await query.FirstAsync(TestContext.Current.CancellationToken);
 
         r.F.Should().Be("2023/01/02");
         r.Ftz.Should().Be("2023");
@@ -195,13 +164,7 @@ public sealed class ClickHouseFunctionExecutionTests : ProviderTestSuite
                 Distinct = SqlFunctions.ClickHouse.array_string_concat(SqlFunctions.ClickHouse.array_distinct(x.Nums), ",")
             });
 
-        var r = await ClickHouseReadRetry.ExecuteAsync(
-            ClickHouseReadOperation.Audited(
-                ClickHouseTestIdentity.CurrentTestDisplayName(),
-                "ClickHouseFunctionExecutionTests.ArraySetFunctions_ShouldExecute#1",
-                ClickHouseReadCategory.PointRead),
-            token => query.FirstAsync(token),
-            TestContext.Current.CancellationToken);
+        var r = await query.FirstAsync(TestContext.Current.CancellationToken);
 
         r.Concat.Should().Be(6);
         r.Uniq.Should().Be(3);
@@ -231,13 +194,7 @@ public sealed class ClickHouseFunctionExecutionTests : ProviderTestSuite
                 Three = SqlFunctions.ClickHouse.array_string_concat(SqlFunctions.ClickHouse.range(1, 7, 2), ",")
             });
 
-        var r = await ClickHouseReadRetry.ExecuteAsync(
-            ClickHouseReadOperation.Audited(
-                ClickHouseTestIdentity.CurrentTestDisplayName(),
-                "ClickHouseFunctionExecutionTests.ArrayRangeArity_ShouldExecute#1",
-                ClickHouseReadCategory.PointRead),
-            token => query.FirstAsync(token),
-            TestContext.Current.CancellationToken);
+        var r = await query.FirstAsync(TestContext.Current.CancellationToken);
 
         r.One.Should().Be("0,1,2");
         r.Two.Should().Be("1,2,3");
@@ -267,13 +224,7 @@ public sealed class ClickHouseFunctionExecutionTests : ProviderTestSuite
                     SqlFunctions.ClickHouse.map(Tuple.Create("b", 2L))))),
             });
 
-        var r = await ClickHouseReadRetry.ExecuteAsync(
-            ClickHouseReadOperation.Audited(
-                ClickHouseTestIdentity.CurrentTestDisplayName(),
-                "ClickHouseFunctionExecutionTests.MapFunctions_ShouldExecute#1",
-                ClickHouseReadCategory.PointRead),
-            token => query.FirstAsync(token),
-            TestContext.Current.CancellationToken);
+        var r = await query.FirstAsync(TestContext.Current.CancellationToken);
 
         r.Keys.Should().Be(2);
         r.Values.Should().Be(1);
@@ -1113,13 +1064,7 @@ public sealed class ClickHouseFunctionExecutionTests : ProviderTestSuite
                 Murmur3128 = SqlFunctions.ClickHouse.murmur_hash3_128("abc")
             });
 
-        var r = await ClickHouseReadRetry.ExecuteAsync(
-            ClickHouseReadOperation.Audited(
-                ClickHouseTestIdentity.CurrentTestDisplayName(),
-                "ClickHouseFunctionExecutionTests.HashFunctions_ShouldExecute#1",
-                ClickHouseReadCategory.PointRead),
-            token => query.FirstAsync(token),
-            TestContext.Current.CancellationToken);
+        var r = await query.FirstAsync(TestContext.Current.CancellationToken);
 
         // T254: the six string-returning digests are lowercase hexadecimal, never the raw FixedString
         // bytes: the exact length per function and the lowercase alphabet are the contract.
@@ -1153,13 +1098,7 @@ public sealed class ClickHouseFunctionExecutionTests : ProviderTestSuite
                 Pi = SqlFunctions.Sql.pi()
             });
 
-        var r = await ClickHouseReadRetry.ExecuteAsync(
-            ClickHouseReadOperation.Audited(
-                ClickHouseTestIdentity.CurrentTestDisplayName(),
-                "ClickHouseFunctionExecutionTests.UlidAndLengthFunctions_ShouldExecute#1",
-                ClickHouseReadCategory.PointRead),
-            token => query.FirstAsync(token),
-            TestContext.Current.CancellationToken);
+        var r = await query.FirstAsync(TestContext.Current.CancellationToken);
 
         r.Ulid.Should().HaveLength(26);
         r.Degrees.Should().BeApproximately(180.0, 1e-9);

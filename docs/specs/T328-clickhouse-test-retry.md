@@ -1,5 +1,12 @@
 # T328 — ClickHouse test timeout and bounded retry
 
+> **SUPERSEDED 2026-10-29.** The retry/classification test harness described below was removed on
+> the project owner's decision ("do not work around it"): `tests/Shared/ClickHouseRetry/**`, the
+> core unit tests, `ClickHouseRetryScenarioTests`, `ClickHouseRetryReporter` and `FaultProxy` are
+> gone, and the previously enrolled reads call the provider directly. The measured driver facts in
+> §2 and the blocked obligation `DEF-328-04` / #338 below remain valid knowledge; only the
+> implemented workaround is retired.
+
 Internal specification of the ClickHouse test-infrastructure change delivered for issue **#328**.
 It documents the implemented behaviour of the shipped code and the evidence produced for plan
 revision **r3** / evidence revision **rv3**; every code claim below was checked against the

@@ -1,6 +1,5 @@
 using FluentAssertions;
 using NextORM.Core;
-using NextORM.Tests.Shared.ClickHouseRetry;
 
 namespace NextORM.Integration.Tests;
 
@@ -42,13 +41,7 @@ public sealed class ClickHouseHashAndFormatTests : ProviderTestSuite
                 SameXx = SqlFunctions.ClickHouse.xx_hash64("abc") == SqlFunctions.ClickHouse.xx_hash64("abc")
             });
 
-        var r = await ClickHouseReadRetry.ExecuteAsync(
-            ClickHouseReadOperation.Audited(
-                ClickHouseTestIdentity.CurrentTestDisplayName(),
-                "ClickHouseHashAndFormatTests.HashFamily_ShouldExecute#1",
-                ClickHouseReadCategory.PointRead),
-            token => query.FirstAsync(token),
-            TestContext.Current.CancellationToken);
+        var r = await query.FirstAsync(TestContext.Current.CancellationToken);
 
 
         r.Xx32.Should().NotBe(0);
@@ -92,13 +85,7 @@ public sealed class ClickHouseHashAndFormatTests : ProviderTestSuite
                 Radians = SqlFunctions.Sql.radians(180.0),
             });
 
-        var r = await ClickHouseReadRetry.ExecuteAsync(
-            ClickHouseReadOperation.Audited(
-                ClickHouseTestIdentity.CurrentTestDisplayName(),
-                "ClickHouseHashAndFormatTests.TrimAndFormatFamily_ShouldExecute#1",
-                ClickHouseReadCategory.PointRead),
-            token => query.FirstAsync(token),
-            TestContext.Current.CancellationToken);
+        var r = await query.FirstAsync(TestContext.Current.CancellationToken);
 
 
         r.Left.Should().Be("abcxx");

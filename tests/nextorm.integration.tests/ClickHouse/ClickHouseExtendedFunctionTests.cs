@@ -1,7 +1,6 @@
 using System.Linq.Expressions;
 using FluentAssertions;
 using NextORM.Core;
-using NextORM.Tests.Shared.ClickHouseRetry;
 
 namespace NextORM.Integration.Tests;
 
@@ -59,13 +58,7 @@ public sealed class ClickHouseExtendedFunctionTests : ProviderTestSuite
                 VisitRaw = SqlFunctions.ClickHouse.visit_param_extract_raw("{\"p\":\"v\"}", "p")
             });
 
-        var r = await ClickHouseReadRetry.ExecuteAsync(
-            ClickHouseReadOperation.Audited(
-                ClickHouseTestIdentity.CurrentTestDisplayName(),
-                "ClickHouseExtendedFunctionTests.JsonExtraction_ShouldExecute#1",
-                ClickHouseReadCategory.PointRead),
-            token => query.FirstAsync(token),
-            TestContext.Current.CancellationToken);
+        var r = await query.FirstAsync(TestContext.Current.CancellationToken);
 
         r.S.Should().Be("x");
         r.I.Should().Be(1);
@@ -130,13 +123,7 @@ public sealed class ClickHouseExtendedFunctionTests : ProviderTestSuite
                 SymDiff = SqlFunctions.ClickHouse.array_symmetric_difference(new[] { 3, 1, 2 }, new[] { 1, 9 })
             });
 
-        var r = await ClickHouseReadRetry.ExecuteAsync(
-            ClickHouseReadOperation.Audited(
-                ClickHouseTestIdentity.CurrentTestDisplayName(),
-                "ClickHouseExtendedFunctionTests.ArrayLibrary_ShouldExecute#1",
-                ClickHouseReadCategory.PointRead),
-            token => query.FirstAsync(token),
-            TestContext.Current.CancellationToken);
+        var r = await query.FirstAsync(TestContext.Current.CancellationToken);
 
         r.Len.Should().Be(3);
         r.Has.Should().BeTrue();
@@ -280,13 +267,7 @@ public sealed class ClickHouseExtendedFunctionTests : ProviderTestSuite
                 Yesterday = SqlFunctions.ClickHouse.yesterday()
             });
 
-        var r = await ClickHouseReadRetry.ExecuteAsync(
-            ClickHouseReadOperation.Audited(
-                ClickHouseTestIdentity.CurrentTestDisplayName(),
-                "ClickHouseExtendedFunctionTests.ToDateFamily_ShouldExecute#1",
-                ClickHouseReadCategory.PointRead),
-            token => query.FirstAsync(token),
-            TestContext.Current.CancellationToken);
+        var r = await query.FirstAsync(TestContext.Current.CancellationToken);
 
         r.D.Should().Be(new DateTime(2023, 5, 17));
         r.Dt.Should().Be(value);
@@ -335,13 +316,7 @@ public sealed class ClickHouseExtendedFunctionTests : ProviderTestSuite
                 SplitWs = SqlFunctions.ClickHouse.split_by_whitespace("a b  c")
             });
 
-        var r = await ClickHouseReadRetry.ExecuteAsync(
-            ClickHouseReadOperation.Audited(
-                ClickHouseTestIdentity.CurrentTestDisplayName(),
-                "ClickHouseExtendedFunctionTests.Utf8AndRegexpStrings_ShouldExecute#1",
-                ClickHouseReadCategory.PointRead),
-            token => query.FirstAsync(token),
-            TestContext.Current.CancellationToken);
+        var r = await query.FirstAsync(TestContext.Current.CancellationToken);
 
         r.Lower.Should().Be("привет");
         r.Upper.Should().Be("ПРИВЕТ");
@@ -378,13 +353,7 @@ public sealed class ClickHouseExtendedFunctionTests : ProviderTestSuite
                 SequenceMatch = SqlFunctions.ClickHouse.sequence_match("(?1)(?2)", x.Datetime, true, true)
             });
 
-        var r = await ClickHouseReadRetry.ExecuteAsync(
-            ClickHouseReadOperation.Audited(
-                ClickHouseTestIdentity.CurrentTestDisplayName(),
-                "ClickHouseExtendedFunctionTests.Aggregates_ShouldExecute#1",
-                ClickHouseReadCategory.ScalarAggregate),
-            token => query.FirstAsync(token),
-            TestContext.Current.CancellationToken);
+        var r = await query.FirstAsync(TestContext.Current.CancellationToken);
 
         r.ArgMin.Should().BeGreaterThan(0);
         r.ArgMax.Should().BeGreaterThan(0);
@@ -438,13 +407,7 @@ public sealed class ClickHouseExtendedFunctionTests : ProviderTestSuite
                 Lead3 = SqlFunctions.ClickHouse.lead_in_frame(x.Id, 1, 0L).Over()
             });
 
-        var lag = await ClickHouseReadRetry.ExecuteAsync(
-            ClickHouseReadOperation.Audited(
-                ClickHouseTestIdentity.CurrentTestDisplayName(),
-                "ClickHouseExtendedFunctionTests.ConditionalAndWindowHelpers_ShouldExecute#1",
-                ClickHouseReadCategory.MaterialisedListRead),
-            token => query.ToListAsync(token),
-            TestContext.Current.CancellationToken);
+        var lag = await query.ToListAsync(TestContext.Current.CancellationToken);
 
         lag.Should().HaveCount(3);
         lag[2].Lag.Should().Be(2);
@@ -464,13 +427,7 @@ public sealed class ClickHouseExtendedFunctionTests : ProviderTestSuite
                 TopKWeighted = SqlFunctions.ClickHouse.top_k_weighted(2, (int)x.Int!, x.Id)
             });
 
-        var r = await ClickHouseReadRetry.ExecuteAsync(
-            ClickHouseReadOperation.Audited(
-                ClickHouseTestIdentity.CurrentTestDisplayName(),
-                "ClickHouseExtendedFunctionTests.ArrayAndRankingAggregates_ShouldExecute#1",
-                ClickHouseReadCategory.ScalarAggregate),
-            token => query.FirstAsync(token),
-            TestContext.Current.CancellationToken);
+        var r = await query.FirstAsync(TestContext.Current.CancellationToken);
 
         // Both non-null rows carry Int == 1, so the unordered groupArray result is [1, 1].
         r.Grouped.Should().Equal(1, 1);
@@ -493,13 +450,7 @@ public sealed class ClickHouseExtendedFunctionTests : ProviderTestSuite
                 BitXor = SqlFunctions.Postgres.bit_xor((int)x.Id)
             });
 
-        var r = await ClickHouseReadRetry.ExecuteAsync(
-            ClickHouseReadOperation.Audited(
-                ClickHouseTestIdentity.CurrentTestDisplayName(),
-                "ClickHouseExtendedFunctionTests.StatisticalAndBitAggregates_ShouldExecute#1",
-                ClickHouseReadCategory.ScalarAggregate),
-            token => query.FirstAsync(token),
-            TestContext.Current.CancellationToken);
+        var r = await query.FirstAsync(TestContext.Current.CancellationToken);
 
         r.Corr.Should().BeApproximately(1.0, 1e-12);
         r.CovarPop.Should().BeApproximately(2.0 / 3.0, 1e-12);
@@ -598,13 +549,7 @@ public sealed class ClickHouseExtendedFunctionTests : ProviderTestSuite
             .Where(x => x.Id == 1)
             .Select(x => SqlFunctions.ClickHouse.array_filter(v => v > 1, x.Nums));
 
-        var nums = await ClickHouseReadRetry.ExecuteAsync(
-            ClickHouseReadOperation.Audited(
-                ClickHouseTestIdentity.CurrentTestDisplayName(),
-                "ClickHouseExtendedFunctionTests.T277_ArrayFilter_Column_BareProjection#1",
-                ClickHouseReadCategory.PointRead),
-            token => query.FirstAsync(token),
-            TestContext.Current.CancellationToken);
+        var nums = await query.FirstAsync(TestContext.Current.CancellationToken);
 
         nums.Should().Equal(3, 2);
     }
@@ -618,13 +563,7 @@ public sealed class ClickHouseExtendedFunctionTests : ProviderTestSuite
             .Where(x => x.Id == 1)
             .Select(x => SqlFunctions.ClickHouse.array_filter(v => v > x.Id, x.Nums));
 
-        var nums = await ClickHouseReadRetry.ExecuteAsync(
-            ClickHouseReadOperation.Audited(
-                ClickHouseTestIdentity.CurrentTestDisplayName(),
-                "ClickHouseExtendedFunctionTests.T277_ArrayFilter_Column_CorrelatedBody#1",
-                ClickHouseReadCategory.PointRead),
-            token => query.FirstAsync(token),
-            TestContext.Current.CancellationToken);
+        var nums = await query.FirstAsync(TestContext.Current.CancellationToken);
 
         nums.Should().Equal(3, 2);
     }
@@ -643,13 +582,7 @@ public sealed class ClickHouseExtendedFunctionTests : ProviderTestSuite
             .Where(x => x.Id == 3)
             .Select(x => SqlFunctions.ClickHouse.array_filter(v => v > 1, x.Nums));
 
-        var emptySource = await ClickHouseReadRetry.ExecuteAsync(
-            ClickHouseReadOperation.Audited(
-                ClickHouseTestIdentity.CurrentTestDisplayName(),
-                "ClickHouseExtendedFunctionTests.T277_ArrayFilter_NegativeControls#1",
-                ClickHouseReadCategory.PointRead),
-            token => query.FirstAsync(token),
-            TestContext.Current.CancellationToken);
+        var emptySource = await query.FirstAsync(TestContext.Current.CancellationToken);
 
         emptySource.Should().BeEmpty("entity 3 carries an empty nums array");
     }
@@ -834,13 +767,7 @@ public sealed class ClickHouseExtendedFunctionTests : ProviderTestSuite
     {
         var query = _sut.ArrayEntity.Where(x => x.Id == 1).Select(projection);
 
-        return ClickHouseReadRetry.ExecuteAsync(
-            ClickHouseReadOperation.Audited(
-                ClickHouseTestIdentity.CurrentTestDisplayName(),
-                "ClickHouseExtendedFunctionTests.T277_HigherOrder_SourceMatrix#1",
-                ClickHouseReadCategory.PointRead),
-            token => query.FirstAsync(token),
-            TestContext.Current.CancellationToken);
+        return query.FirstAsync(TestContext.Current.CancellationToken);
     }
 
     private long IntCell(Expression<Func<IArrayEntity, int>> projection) =>

@@ -1,6 +1,5 @@
 using FluentAssertions;
 using NextORM.Core;
-using NextORM.Tests.Shared.ClickHouseRetry;
 
 namespace NextORM.Integration.Tests;
 
@@ -25,13 +24,7 @@ public sealed class ClickHouseTypedCteIntegrationTests : ProviderTestSuite
 
         var query = ctx.From(recent).Select(r => new { r.Id, r.RequiredString });
 
-        var rows = await ClickHouseReadRetry.ExecuteAsync(
-            ClickHouseReadOperation.Audited(
-                ClickHouseTestIdentity.CurrentTestDisplayName(),
-                "ClickHouseTypedCteIntegrationTests.TypedCte_Ordinary_ShouldStillReturnData#1",
-                ClickHouseReadCategory.MaterialisedListRead),
-            token => query.ToListAsync(token),
-            TestContext.Current.CancellationToken);
+        var rows = await query.ToListAsync(TestContext.Current.CancellationToken);
 
         rows.Select(r => r.Id).OrderBy(id => id).Should().Equal(1, 2, 3);
     }
