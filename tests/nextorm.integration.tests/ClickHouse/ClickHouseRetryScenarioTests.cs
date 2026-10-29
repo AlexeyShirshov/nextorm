@@ -33,6 +33,12 @@ namespace NextORM.Integration.Tests;
 /// <c>NEXTORM_SKIP_PROVIDERS</c>: an unavailable server fails closed, and only an explicit opt-out
 /// skips.
 /// </para>
+/// <para>
+/// The class is opt-in twice over. The trait keeps it out of the canonical suite, and
+/// <c>NEXTORM_CLICKHOUSE_PROBE=1</c> is required on top of it: a bare <c>dotnet test</c> — the shape CI
+/// uses for the coverage gates — applies no trait filter, and seven probes fail by design, so without
+/// the switch a diagnostic measurement would turn every ordinary invocation red.
+/// </para>
 /// </summary>
 [Collection("ClickHouse")]
 [Trait("Category", "Diagnostic")]
@@ -63,8 +69,20 @@ public sealed class ClickHouseRetryScenarioTests
     /// <summary>The polling interval used while waiting for that registration.</summary>
     private static readonly TimeSpan QueryRegistrationPollInterval = TimeSpan.FromMilliseconds(50);
 
+    /// <summary>
+    /// The opt-in switch for the whole probe class. A bare <c>dotnet test</c> (the shape CI uses for the
+    /// coverage gates) applies no trait filter, so without an explicit switch seven by-design failures
+    /// would run in every ordinary test invocation and turn it red.
+    /// </summary>
+    private const string ProbeEnvironmentVariable = "NEXTORM_CLICKHOUSE_PROBE";
+
     public ClickHouseRetryScenarioTests()
     {
+        Assert.SkipUnless(
+            Environment.GetEnvironmentVariable(ProbeEnvironmentVariable) == "1",
+            $"Set {ProbeEnvironmentVariable}=1 to run the T328 ClickHouse retry probes: seven of the nine " +
+            "fail by design, so they are opt-in only.");
+
         if (ClickHouseTestProvider.Instance.IsAvailable)
             return;
 

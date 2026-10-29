@@ -576,8 +576,9 @@ public sealed class T348SqlServer2025FunctionsTests : IDisposable
     /// U3: the four fuzzy names execute on a dedicated database with the observed runtime prerequisites —
     /// compatibility 170, <c>PREVIEW_FEATURES = ON</c> and a Windows collation
     /// (<c>Latin1_General_100_CI_AS</c> as the database default) — asserting values, NULLs, CLR types and
-    /// the bounded <c>edit_distance</c>. A <c>SQL_*</c> collation (Msg 9847) and a missing preview
-    /// (Msg 195) are captured as environment facts.
+    /// the bounded <c>edit_distance</c>. A <c>SQL_*</c> collation (Msg 9847) and the preview prerequisite
+    /// (Msg 195 on a build that still gates the family, or plain execution on a later build of the same
+    /// image) are captured as environment facts.
     /// </summary>
     [Fact]
     public void FuzzyFamily_ShouldExecuteWithTheObservedPrerequisites()
@@ -658,15 +659,37 @@ public sealed class T348SqlServer2025FunctionsTests : IDisposable
             Report($"T348LIVE-2025 fuzzy db={FuzzyDatabase} collation={collation} compat={level} preview={preview} build={build} "
                 + "values=3/2/3/0/null/null/6/57/0.0388888888888862/96 outcome=ok");
 
-            // The preview prerequisite is a separate environment fact on a Windows-collated database.
+            // The preview prerequisite is a separate environment fact on a Windows-collated database. A
+            // build that still gates the fuzzy family behind PREVIEW_FEATURES refuses with Msg 195; a
+            // later build of the same floating image executes it without the switch. Both are engine
+            // facts, so this arm records which one the server exhibits instead of pinning the older one
+            // (17.0.5035.5 on mcr.microsoft.com/mssql/server:2025-latest executes it).
             DropDatabase(admin, FuzzyNoPreviewDatabase);
             Execute(admin, $"create database [{FuzzyNoPreviewDatabase}] collate {FuzzyCollation}");
             Execute(admin, $"alter database [{FuzzyNoPreviewDatabase}] set compatibility_level = 170");
             try
             {
                 var noPreview = new SqlConnectionStringBuilder(admin) { InitialCatalog = FuzzyNoPreviewDatabase }.ConnectionString;
-                AssertSqlError(noPreview, "select edit_distance('kitten', 'sitting') as d", 195);
-                Report("T348LIVE-2025 fuzzy preview=0 error=Msg195 outcome=environment_prerequisite");
+                var (noPreviewValue, noPreviewRefusal) = TryScalar(
+                    noPreview,
+                    "select edit_distance('kitten', 'sitting') as d");
+
+                if (noPreviewRefusal is not null)
+                {
+                    noPreviewRefusal.Number.Should().Be(
+                        195,
+                        "a server that requires PREVIEW_FEATURES can only refuse the fuzzy family with Msg 195");
+                    Report($"T348LIVE-2025 fuzzy preview=0 error=Msg195 build={build} outcome=environment_prerequisite");
+                }
+                else
+                {
+                    Convert.ToInt32(noPreviewValue, CultureInfo.InvariantCulture).Should().Be(
+                        3,
+                        "a build that no longer gates edit_distance behind PREVIEW_FEATURES still returns the native distance");
+                    Report(
+                        $"T348LIVE-2025 fuzzy preview=0 executes distance=3 build={build} " +
+                        "outcome=preview_not_required_in_this_build");
+                }
             }
             finally
             {
@@ -1121,6 +1144,28 @@ public sealed class T348SqlServer2025FunctionsTests : IDisposable
         using var command = connection.CreateCommand();
         command.CommandText = sql;
         return Convert.ToString(command.ExecuteScalar(), CultureInfo.InvariantCulture) ?? string.Empty;
+    }
+
+    /// <summary>
+    /// Runs a scalar probe that may legitimately either execute or be refused by the engine, so an
+    /// environment fact is recorded instead of being pinned to one server build's behaviour. Any
+    /// exception other than the engine's own <see cref="SqlException"/> still fails the test.
+    /// </summary>
+    private static (object? Value, SqlException? Refusal) TryScalar(string connectionString, string sql)
+    {
+        using var connection = new SqlConnection(connectionString);
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = sql;
+
+        try
+        {
+            return (command.ExecuteScalar(), null);
+        }
+        catch (SqlException refusal)
+        {
+            return (null, refusal);
+        }
     }
 
     /// <summary>Asserts the engine's native error number, used for the prerequisite negatives.</summary>

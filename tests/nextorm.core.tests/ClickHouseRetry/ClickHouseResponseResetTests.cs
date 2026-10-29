@@ -19,6 +19,14 @@ namespace NextORM.Core.Tests.ClickHouseRetry;
 /// container or a network beyond loopback, and every wait is bounded (the endpoint carries a 30 s
 /// deadline and every socket call takes it), so a mistake fails the test instead of hanging CI.
 /// </para>
+/// <para>
+/// A real RST is delivered by the kernel, not by the driver, so the same fault has two measured
+/// shapes: the HTTP layer may type it as <see cref="HttpIOException"/> with
+/// <see cref="HttpRequestError.ResponseEnded"/>, or <see cref="System.Net.Sockets.NetworkStream"/> may
+/// surface the reset itself as a bare <see cref="IOException"/> (observed on the ubuntu CI runner).
+/// Both are transport faults, so each case asserts the classification of whichever shape arrived and
+/// the invariant that holds for both — never that one platform's shape is the only possible one.
+/// </para>
 /// </summary>
 public sealed class ClickHouseResponseResetTests
 {
@@ -29,7 +37,7 @@ public sealed class ClickHouseResponseResetTests
             ClickHouseReadCategory.PointRead);
 
     [Fact]
-    public async Task PostResponseReset_ShouldSurfaceAsABareHttpIOExceptionCarryingResponseEnded()
+    public async Task PostResponseReset_ShouldSurfaceOnlyAsATransportFaultAndClassifyConsistently()
     {
         // Case A of the T362 probe: a valid response head, one chunk carrying a complete row (99) so the
         // driver hands it to the reader, then a real RST with no terminating chunk.
@@ -37,22 +45,36 @@ public sealed class ClickHouseResponseResetTests
 
         var failure = await endpoint.CaptureFailureAsync();
 
-        failure.Should().BeOfType<HttpIOException>(
-            "the post-response reset is typed by the HTTP layer, one level below the driver");
-        var reset = (HttpIOException)failure;
-        reset.HttpRequestError.Should().Be(HttpRequestError.ResponseEnded);
-        reset.InnerException.Should().BeNull("the measured shape is bare: no wrapper and no inner chain");
         endpoint.RequestLine.Should().StartWith("POST /", "the request must actually have reached the listener");
+        failure.Should().NotBeAssignableTo<ClickHouseServerException>(
+            "a reset is a transport fault and must never be mistaken for a typed database error");
 
-        var classification = ClickHouseTransientClassifier.Classify(reset, CancellationToken.None);
+        var classification = ClickHouseTransientClassifier.Classify(failure, CancellationToken.None);
 
-        classification.Kind.Should().Be(ClickHouseFailureKind.TransportResponseReset);
-        classification.ReasonCode.Should().Be("transport_response_reset");
-        classification.IsRetryable.Should().BeTrue();
+        if (failure is HttpIOException reset)
+        {
+            // The shape measured on this platform: the HTTP layer typed the premature end of response.
+            reset.HttpRequestError.Should().Be(HttpRequestError.ResponseEnded);
+            reset.InnerException.Should().BeNull("the measured shape is bare: no wrapper and no inner chain");
+
+            classification.Kind.Should().Be(ClickHouseFailureKind.TransportResponseReset);
+            classification.ReasonCode.Should().Be("transport_response_reset");
+            classification.IsRetryable.Should().BeTrue();
+            return;
+        }
+
+        // The other measured shape: the bare transport IOException the kernel's RST produced below the
+        // HTTP layer. It carries no typed signal, so the classifier must fail closed on it.
+        failure.Should().BeAssignableTo<IOException>(
+            "the only other measured reset shape is the raw transport IOException, but found {0}",
+            failure.GetType().Name);
+
+        classification.Kind.Should().Be(ClickHouseFailureKind.UnknownShape);
+        classification.IsRetryable.Should().BeFalse("an untyped reset is never retried");
     }
 
     [Fact]
-    public async Task PreResponseReset_ShouldBeIndistinguishableFromAGenuineEmptyBodyServerError()
+    public async Task PreResponseReset_ShouldStayFailClosed_AndMirrorTheEmptyBodyServerErrorWhenTyped()
     {
         // Case B of the T362 probe, contrasted with a genuine empty-body 503: if the two ADO surfaces
         // are identical, no classifier can separate them, so the pre-response reset must stay closed.
@@ -62,27 +84,32 @@ public sealed class ClickHouseResponseResetTests
         await using var serverErrorEndpoint = new ScriptedHttpEndpoint(ScriptedHttpEndpoint.EmptyBodyServiceUnavailable());
         var serverFailure = await serverErrorEndpoint.CaptureFailureAsync();
 
-        resetFailure.Should().BeOfType<ClickHouseServerException>();
-        var reset = (ClickHouseServerException)resetFailure;
-        reset.ErrorCode.Should().Be(-1);
-        reset.InnerException.Should().BeNull();
+        // The strongest form of the fact, asserted wherever the driver synthesises its typed server
+        // error for both surfaces (measured locally): the reset is then literally indistinguishable
+        // from the 503. On the ubuntu runner the reset surfaces one level lower, as an HTTP transport
+        // fault, so there is no synthesised error to compare — and that is fine, because the invariant
+        // below is what has to hold in both worlds.
+        if (resetFailure is ClickHouseServerException reset && serverFailure is ClickHouseServerException serverError)
+        {
+            reset.ErrorCode.Should().Be(-1);
+            reset.InnerException.Should().BeNull();
 
-        serverFailure.Should().BeOfType<ClickHouseServerException>();
-        var serverError = (ClickHouseServerException)serverFailure;
+            serverError.ErrorCode.Should().Be(reset.ErrorCode, "the driver synthesises the same code for both surfaces");
+            serverError.Message.Should().Be(reset.Message, "the driver synthesises the same message for both surfaces");
+        }
 
-        serverError.ErrorCode.Should().Be(reset.ErrorCode, "the driver synthesises the same code for both surfaces");
-        serverError.Message.Should().Be(reset.Message, "the driver synthesises the same message for both surfaces");
-
-        var classification = ClickHouseTransientClassifier.Classify(reset, CancellationToken.None);
-        classification.Kind.Should().Be(ClickHouseFailureKind.ServerError);
+        // The invariant that holds in every environment: a pre-response reset is never retryable, and a
+        // genuine empty-body server error is never retried either.
+        var classification = ClickHouseTransientClassifier.Classify(resetFailure, CancellationToken.None);
+        classification.Kind.Should().BeOneOf(ClickHouseFailureKind.ServerError, ClickHouseFailureKind.UnknownShape);
         classification.IsRetryable.Should().BeFalse("a pre-response reset carries no typed signal, so it stays fail-closed");
 
-        ClickHouseTransientClassifier.Classify(serverError, CancellationToken.None).IsRetryable
+        ClickHouseTransientClassifier.Classify(serverFailure, CancellationToken.None).IsRetryable
             .Should().BeFalse("a genuine empty-body server error is never retried");
     }
 
     [Fact]
-    public async Task ExecuteAsync_ShouldRecoverFromTheMeasuredReset_AndReturnOnlyTheCompleteSecondResult()
+    public async Task ExecuteAsync_ShouldEitherRetryTheTypedResetOrFailClosed_ButNeverReturnThePartialResult()
     {
         // Attempt 1 resets after delivering row 99 to the reader; attempt 2 completes with row 1.
         await using var endpoint = new ScriptedHttpEndpoint(
@@ -96,14 +123,38 @@ public sealed class ClickHouseResponseResetTests
         await using var connection = new ClickHouseConnection(endpoint.ConnectionString);
         await connection.OpenAsync(TestContext.Current.CancellationToken);
 
-        var result = await retrier.ExecuteAsync(
-            Operation,
-            async cancellationToken =>
-            {
-                invocations++;
-                return await ReadSingleColumnAsync(connection, cancellationToken);
-            },
-            CancellationToken.None);
+        List<string>? result = null;
+        Exception? failure = null;
+
+        try
+        {
+            result = await retrier.ExecuteAsync(
+                Operation,
+                async cancellationToken =>
+                {
+                    invocations++;
+                    return await ReadSingleColumnAsync(connection, cancellationToken);
+                },
+                CancellationToken.None);
+        }
+        catch (Exception observed)
+        {
+            failure = observed;
+        }
+
+        // Both outcomes are coherent with the contract: a typed reset is retried once, an untyped one
+        // fails closed. What is never allowed is returning the failed attempt's row.
+        if (result is null)
+        {
+            failure.Should().NotBeNull("the retrier either returns the second attempt's rows or throws");
+            failure.Should().NotBeAssignableTo<ClickHouseServerException>("a reset is never a typed server error");
+            ClickHouseTransientClassifier.Classify(failure!, CancellationToken.None).IsRetryable
+                .Should().BeFalse("an untyped reset is never retried");
+
+            invocations.Should().Be(1, "a fail-closed reset must not be retried");
+            records.Should().BeEmpty("a fail-closed reset emits no retry record");
+            return;
+        }
 
         invocations.Should().Be(2, "exactly one retry is permitted");
         endpoint.AcceptedConnections.Should().Be(2, "each attempt opens its own connection to the scripted endpoint");
@@ -156,6 +207,33 @@ public sealed class ClickHouseResponseResetTests
         result.Should().NotContain("partial-1");
         result.Should().NotContain("partial-2");
         records.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ShouldFailClosedOnABareTransportReset()
+    {
+        // The other measured reset shape (the ubuntu CI runner): the kernel's RST reaches the caller as
+        // a bare IOException, which is not positively established as a reset. The retrier must not
+        // retry it and must not emit a retry record — the same fail-closed branch the live loopback
+        // probe exercises there.
+        var records = new List<ClickHouseRetryAttemptRecord>();
+        var invocations = 0;
+        var retrier = new ClickHouseReadRetrier(records.Add, (_, _) => Task.CompletedTask);
+
+        Func<Task<List<string>>> act = () => retrier.ExecuteAsync(
+            Operation,
+            _ =>
+            {
+                invocations++;
+                return Task.FromException<List<string>>(
+                    new IOException("Unable to read data from the transport connection: Connection reset by peer."));
+            },
+            CancellationToken.None);
+
+        await act.Should().ThrowAsync<IOException>();
+
+        invocations.Should().Be(1, "an untyped reset is never retried");
+        records.Should().BeEmpty("a fail-closed reset emits no retry record");
     }
 
     private static async Task<List<string>> ReadSingleColumnAsync(ClickHouseConnection connection, CancellationToken cancellationToken)

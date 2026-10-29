@@ -49,11 +49,13 @@ jobs:
       - name: Test with coverage
         run: |
           mkdir -p tests/coverage
-          dotnet tool run dotnet-coverage collect -s coverage.settings.xml -f cobertura -o tests/coverage/coverage.cobertura.xml "dotnet test --no-build --verbosity normal"
+          # The opt-in diagnostic harnesses (Trait Category=Diagnostic) fail by design and are excluded
+          # by the canonical command; a bare `dotnet test` would run them and turn every build red.
+          dotnet tool run dotnet-coverage collect -s coverage.settings.xml -f cobertura -o tests/coverage/coverage.cobertura.xml "dotnet test --no-build --verbosity normal --filter-not-trait Category=Diagnostic"
       - name: Integration coverage (dedicated gate)
         run: |
           mkdir -p tests/coverage
-          dotnet tool run dotnet-coverage collect -s coverage.integration.settings.xml -f cobertura -o tests/coverage/integration.cobertura.xml "dotnet test tests/nextorm.integration.tests --no-build --verbosity normal"
+          dotnet tool run dotnet-coverage collect -s coverage.integration.settings.xml -f cobertura -o tests/coverage/integration.cobertura.xml "dotnet test tests/nextorm.integration.tests --no-build --verbosity normal --filter-not-trait Category=Diagnostic"
           # The in-memory provider is unit-only by policy (AGENTS.md "Tests"), so its paths are outside
           # what the integration suite can or should cover; excluded from this gate's denominator only.
           dotnet tool run reportgenerator \
