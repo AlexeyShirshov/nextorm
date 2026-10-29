@@ -1,3 +1,5 @@
+using System.Data.Common;
+using System.Linq.Expressions;
 using FluentAssertions;
 using NextORM.Core;
 
@@ -31,16 +33,16 @@ public class SqlServerFunctionsSqlGenerationTests
             F2 = SqlFunctions.SqlServer.format(x.Id, "N", "en-US")
         }));
 
-        sql.Should().Contain("patindex('%a%', somestring)");
+        sql.Should().Contain("patindex(N'%a%', somestring)");
         sql.Should().Contain("quotename(somestring)");
-        sql.Should().Contain("quotename(somestring, '[')");
+        sql.Should().Contain("quotename(somestring, N'[')");
         sql.Should().Contain("soundex(somestring)");
-        sql.Should().Contain("difference(somestring, 'abc')");
-        sql.Should().Contain("string_escape(somestring, 'json')");
+        sql.Should().Contain("difference(somestring, N'abc')");
+        sql.Should().Contain("string_escape(somestring, N'json')");
         sql.Should().Contain("unicode(somestring)");
         sql.Should().Contain("nchar(65)");
-        sql.Should().Contain("format(id, 'N')");
-        sql.Should().Contain("format(id, 'N', 'en-US')");
+        sql.Should().Contain("format(id, N'N')");
+        sql.Should().Contain("format(id, N'N', N'en-US')");
     }
 
     [Fact]
@@ -97,7 +99,7 @@ public class SqlServerFunctionsSqlGenerationTests
             N = SqlFunctions.SqlServer.newsequentialid()
         }));
 
-        sql.Should().Contain("hashbytes('SHA2_256'");
+        sql.Should().Contain("hashbytes(N'SHA2_256'");
         sql.Should().Contain("newsequentialid()");
     }
 
@@ -114,9 +116,9 @@ public class SqlServerFunctionsSqlGenerationTests
             O = SqlFunctions.SqlServer.json_object("k", x.Id, "k2", "v2")
         }));
 
-        sql.Should().Contain("json_array('a', id, 'b')");
+        sql.Should().Contain("json_array(N'a', id, N'b')");
         sql.Should().Contain("json_array()");
-        sql.Should().Contain("json_object('k' : id, 'k2' : 'v2')");
+        sql.Should().Contain("json_object(N'k' : id, N'k2' : N'v2')");
     }
 
     [Fact]
@@ -147,8 +149,8 @@ public class SqlServerFunctionsSqlGenerationTests
             P = SqlFunctions.SqlServer.json_path_exists(x.String, "$.x")
         }));
 
-        sql.Should().Contain("cast(case when json_contains(somestring, 'a', '$.x') = 1 then 1 else 0 end as bit)");
-        sql.Should().Contain("cast(case when json_path_exists(somestring, '$.x') = 1 then 1 else 0 end as bit)");
+        sql.Should().Contain("cast(case when json_contains(somestring, N'a', N'$.x') = 1 then 1 else 0 end as bit)");
+        sql.Should().Contain("cast(case when json_path_exists(somestring, N'$.x') = 1 then 1 else 0 end as bit)");
     }
 
     [Fact]
@@ -158,7 +160,7 @@ public class SqlServerFunctionsSqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Where(x => SqlFunctions.SqlServer.json_path_exists(x.String, "$.x")).Select(x => new { x.Id }))
-            .Should().Contain("where json_path_exists(somestring, '$.x') = 1");
+            .Should().Contain("where json_path_exists(somestring, N'$.x') = 1");
     }
 
     [Fact]
@@ -187,9 +189,9 @@ public class SqlServerFunctionsSqlGenerationTests
         sql.Should().Contain("sysdatetime()");
         sql.Should().Contain("sysdatetimeoffset()");
         sql.Should().Contain("sysutcdatetime()");
-        sql.Should().Contain("switchoffset(sysdatetimeoffset(), '-08:00')");
+        sql.Should().Contain("switchoffset(sysdatetimeoffset(), N'-08:00')");
         sql.Should().Contain("switchoffset(sysdatetimeoffset(), 480)");
-        sql.Should().Contain("todatetimeoffset(dt, '+02:00')");
+        sql.Should().Contain("todatetimeoffset(dt, N'+02:00')");
         sql.Should().Contain("todatetimeoffset(dt, -120)");
         sql.Should().Contain("timefromparts(1, 2, 3, 4, 7)");
         sql.Should().Contain("smalldatetimefromparts(2020, 1, 2, 3, 4)");
@@ -345,7 +347,7 @@ public class SqlServerFunctionsSqlGenerationTests
         sql.Should().Contain("rand()");
         sql.Should().Contain("rand(0)");
         sql.Should().Contain("rand(-7)");
-        sql.Should().Contain("stuff(somestring, 2, 3, 'xy')");
+        sql.Should().Contain("stuff(somestring, 2, 3, N'xy')");
     }
 
     [Fact]
@@ -372,14 +374,14 @@ public class SqlServerFunctionsSqlGenerationTests
             Sd = SqlFunctions.SqlServer.stats_date(x.Int, 1)
         }));
 
-        sql.Should().Contain("col_length('t', somestring)");
+        sql.Should().Contain("col_length(N't', somestring)");
         sql.Should().Contain("col_name(nullableint, 1)");
-        sql.Should().Contain("ident_incr('t')");
-        sql.Should().Contain("ident_seed('t')");
+        sql.Should().Contain("ident_incr(N't')");
+        sql.Should().Contain("ident_seed(N't')");
         sql.Should().Contain("index_col(somestring, 1, 2)");
         sql.Should().Contain("object_definition(nullableint)");
         sql.Should().Contain("object_id(somestring)");
-        sql.Should().Contain("object_id(somestring, 'U')");
+        sql.Should().Contain("object_id(somestring, N'U')");
         sql.Should().Contain("object_name(nullableint)");
         sql.Should().Contain("object_name(nullableint, 1)");
         sql.Should().Contain("object_schema_name(nullableint)");
@@ -410,15 +412,15 @@ public class SqlServerFunctionsSqlGenerationTests
         }));
 
         sql.Should().Contain("db_id()");
-        sql.Should().Contain("db_id('db')");
+        sql.Should().Contain("db_id(N'db')");
         sql.Should().Contain("db_name()");
         sql.Should().Contain("db_name(1)");
         sql.Should().Contain("original_db_name()");
         sql.Should().Contain("schema_id()");
-        sql.Should().Contain("schema_id('s')");
+        sql.Should().Contain("schema_id(N's')");
         sql.Should().Contain("schema_name()");
         sql.Should().Contain("schema_name(1)");
-        sql.Should().Contain("type_id('t')");
+        sql.Should().Contain("type_id(N't')");
         sql.Should().Contain("type_name(1)");
     }
 
@@ -438,10 +440,10 @@ public class SqlServerFunctionsSqlGenerationTests
             Fn = SqlFunctions.SqlServer.file_name(1)
         }));
 
-        sql.Should().Contain("filegroup_id('fg')");
+        sql.Should().Contain("filegroup_id(N'fg')");
         sql.Should().Contain("filegroup_name(1)");
-        sql.Should().Contain("file_id('f')");
-        sql.Should().Contain("file_idex('f')");
+        sql.Should().Contain("file_id(N'f')");
+        sql.Should().Contain("file_idex(N'f')");
         sql.Should().Contain("file_name(1)");
     }
 
@@ -467,8 +469,8 @@ public class SqlServerFunctionsSqlGenerationTests
         sql.Should().Contain("current_timezone()");
         sql.Should().Contain("current_timezone_id()");
         sql.Should().Contain("getansinull()");
-        sql.Should().Contain("getansinull('db')");
-        sql.Should().Contain("parsename('a.b.c.d', 1)");
+        sql.Should().Contain("getansinull(N'db')");
+        sql.Should().Contain("parsename(N'a.b.c.d', 1)");
         sql.Should().Contain("publishingservername()");
         // ISDATE/ISNUMERIC return SQL int, so they must not be materialised as a bit predicate.
         sql.Should().Contain("isdate(somestring)");
@@ -512,9 +514,9 @@ public class SqlServerFunctionsSqlGenerationTests
             Id1 = SqlFunctions.SqlServer.formatmessage(50001, x.String)
         }));
 
-        sql.Should().Contain("formatmessage('plain')");
-        sql.Should().Contain("formatmessage('hello %s', somestring)");
-        sql.Should().Contain("formatmessage('a %s b %d', somestring, nullableint)");
+        sql.Should().Contain("formatmessage(N'plain')");
+        sql.Should().Contain("formatmessage(N'hello %s', somestring)");
+        sql.Should().Contain("formatmessage(N'a %s b %d', somestring, nullableint)");
         sql.Should().Contain("formatmessage(50001)");
         sql.Should().Contain("formatmessage(50001, somestring)");
     }
@@ -533,8 +535,8 @@ public class SqlServerFunctionsSqlGenerationTests
                 "a11", "a12", "a13", "a14", "a15", "a16", "a17", "a18", "a19", "a20")
         }));
 
-        sql.Should().Contain("formatmessage('m', 'a1', 'a2'");
-        sql.Should().Contain("'a20'");
+        sql.Should().Contain("formatmessage(N'm', N'a1', N'a2'");
+        sql.Should().Contain("N'a20'");
     }
 
     [Fact]
@@ -588,6 +590,56 @@ public class SqlServerFunctionsSqlGenerationTests
     }
 
     [Fact]
+    [Trait("Issue", "248")]
+    public void LiveScopeScalars_ShouldEmitNativeSpellings()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Where(x => x.Id == 1).Select(x => new
+        {
+            Request = SqlFunctions.SqlServer.current_request_id(),
+            Transaction = SqlFunctions.SqlServer.current_transaction_id(),
+            State = SqlFunctions.SqlServer.xact_state(),
+            Current = SqlFunctions.SqlServer.ident_current("t"),
+            RowVersion = SqlFunctions.SqlServer.min_active_rowversion(),
+            Rows = SqlFunctions.SqlServer.rowcount_big(),
+            Identity = SqlFunctions.SqlServer.scope_identity()
+        }));
+
+        sql.Should().Contain("current_request_id()");
+        sql.Should().Contain("current_transaction_id()");
+        sql.Should().Contain("xact_state()");
+        sql.Should().MatchRegex(@"ident_current\(N?'t'\)");
+        sql.Should().Contain("min_active_rowversion()");
+        sql.Should().Contain("rowcount_big()");
+        sql.Should().Contain("scope_identity()");
+    }
+
+    [Fact]
+    [Trait("Issue", "248")]
+    public void LiveScopeScalars_ShouldReturnNativeTypes()
+    {
+        // CURRENT_REQUEST_ID is smallint, CURRENT_TRANSACTION_ID is bigint, XACT_STATE and
+        // ROWCOUNT_BIG are int/bigint, IDENT_CURRENT and SCOPE_IDENTITY are numeric(38,0) (decimal
+        // in ADO.NET, never int), MIN_ACTIVE_ROWVERSION is binary(8).
+        typeof(SqlServerFunctions).GetMethod(nameof(SqlServerFunctions.current_request_id))!.ReturnType
+            .Should().Be(typeof(short?));
+        typeof(SqlServerFunctions).GetMethod(nameof(SqlServerFunctions.current_transaction_id))!.ReturnType
+            .Should().Be(typeof(long?));
+        typeof(SqlServerFunctions).GetMethod(nameof(SqlServerFunctions.xact_state))!.ReturnType
+            .Should().Be(typeof(short));
+        typeof(SqlServerFunctions).GetMethod(nameof(SqlServerFunctions.ident_current))!.ReturnType
+            .Should().Be(typeof(decimal?));
+        typeof(SqlServerFunctions).GetMethod(nameof(SqlServerFunctions.min_active_rowversion))!.ReturnType
+            .Should().Be(typeof(byte[]));
+        typeof(SqlServerFunctions).GetMethod(nameof(SqlServerFunctions.rowcount_big))!.ReturnType
+            .Should().Be(typeof(long));
+        typeof(SqlServerFunctions).GetMethod(nameof(SqlServerFunctions.scope_identity))!.ReturnType
+            .Should().Be(typeof(decimal?));
+    }
+
+    [Fact]
     public void Functions_ShouldBeGated()
     {
         // The SQL Server renderer reports exactly the SQL Server-only names.
@@ -610,6 +662,13 @@ public class SqlServerFunctionsSqlGenerationTests
         functions.Supports("str").Should().BeTrue();
         functions.Supports("next_value_for").Should().BeTrue();
         functions.Supports("nextval").Should().BeTrue();
+        functions.Supports("current_request_id").Should().BeTrue();
+        functions.Supports("current_transaction_id").Should().BeTrue();
+        functions.Supports("xact_state").Should().BeTrue();
+        functions.Supports("ident_current").Should().BeTrue();
+        functions.Supports("min_active_rowversion").Should().BeTrue();
+        functions.Supports("rowcount_big").Should().BeTrue();
+        functions.Supports("scope_identity").Should().BeTrue();
         functions.Supports("log10").Should().BeFalse();
 
         functions.Render("next_value_for", ["[s]"]).Should().Be("next value for [s]");
@@ -764,6 +823,229 @@ public class SqlServerFunctionsSqlGenerationTests
             .Should().Be(typeof(long));
         typeof(SqlServerFunctions).GetMethod(nameof(SqlServerFunctions.nextval))!.ReturnType
             .Should().Be(typeof(long));
+    }
+
+    // --- #258: QUOTENAME(value, quote) must escape inline string literals. The second argument is a
+    // --- string VALUE, so its apostrophe is doubled exactly like any other inline literal — it is not
+    // --- a hand-rolled delimiter concatenation. These assertions name the exact function expression so
+    // --- the malformed three-apostrophe argument can never satisfy them.
+
+    [Fact]
+    [Trait("Issue", "258")]
+    public void Quotename_ApostropheLiteral_ShouldBeEscaped()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Where(x => x.Id == 1).Select(x => new
+        {
+            Q = SqlFunctions.SqlServer.quotename("abc", "'")
+        }));
+
+        sql.Should().Contain("quotename(N'abc', N'''')",
+            "the apostrophe delimiter is an inline string value whose apostrophe is doubled, not the malformed three-apostrophe argument");
+    }
+
+    [Fact]
+    [Trait("Issue", "258")]
+    public void Quotename_ApostropheValue_ShouldBeEscaped()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            Q = SqlFunctions.SqlServer.quotename("O'Brien", "'")
+        }));
+
+        sql.Should().Contain("quotename(N'O''Brien', N'''')",
+            "the apostrophe inside the value is doubled, and the delimiter argument is doubled as well");
+        sql.Should().NotContain("quotename('O'Brien'",
+            "the raw value with a single embedded apostrophe terminates the literal early and must never be emitted");
+    }
+
+    [Fact]
+    [Trait("Issue", "258")]
+    public void Quotename_QuoteCharacterVariants_ShouldRenderCorrectArguments()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        // Each delimiter is a one-character string VALUE: only its apostrophe (when it is one) is
+        // doubled; every other character is emitted verbatim and leaves the delimiter choice to the server.
+        var cases = new (string Expected, string Sql)[]
+        {
+            ("quotename(N'abc', N'''')", SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.quotename("abc", "'") }))),
+            ("quotename(N'abc', N'\"')", SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.quotename("abc", "\"") }))),
+            ("quotename(N'abc', N'[')", SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.quotename("abc", "[") }))),
+            ("quotename(N'abc', N']')", SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.quotename("abc", "]") }))),
+            ("quotename(N'abc', N'(')", SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.quotename("abc", "(") }))),
+            ("quotename(N'abc', N')')", SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.quotename("abc", ")") }))),
+            ("quotename(N'abc', N'<')", SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.quotename("abc", "<") }))),
+            ("quotename(N'abc', N'>')", SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.quotename("abc", ">") }))),
+            ("quotename(N'abc', N'`')", SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.quotename("abc", "`") }))),
+            ("quotename(N'abc', N'{')", SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.quotename("abc", "{") }))),
+            ("quotename(N'abc', N'}')", SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.quotename("abc", "}") }))),
+            ("quotename(N'abc')", SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.quotename("abc") })))
+        };
+
+        foreach (var (expected, sql) in cases)
+            sql.Should().Contain(expected);
+    }
+
+    [Fact]
+    [Trait("Issue", "258")]
+    public void Quotename_NullAndInvalidArguments_ShouldPreserveNativeSemantics()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        // Rendering/binding only: the server semantics of the non-delimiter forms are deferred (the
+        // capability gate forwards them unchanged), so no client-side validation is invented here.
+        var sql = SqlOf(ctx, e.Where(x => x.Id == 1).Select(x => new
+        {
+            NullValue = SqlFunctions.SqlServer.quotename(null, "'"),
+            NullQuote = SqlFunctions.SqlServer.quotename("abc", null),
+            EmptyValue = SqlFunctions.SqlServer.quotename("", "'"),
+            SingleChar = SqlFunctions.SqlServer.quotename("abc", "x"),
+            MultiChar = SqlFunctions.SqlServer.quotename("abc", "aa"),
+            EmptyQuote = SqlFunctions.SqlServer.quotename("abc", "")
+        }));
+
+        sql.Should().Contain("quotename(null, N'''')", "a null value stays SQL null");
+        sql.Should().Contain("quotename(N'abc', null)", "a null delimiter stays SQL null, not the default bracket");
+        sql.Should().Contain("quotename(N'', N'''')", "an empty value is a paired-delimiter case, not null");
+        sql.Should().Contain("quotename(N'abc', N'x')");
+        sql.Should().Contain("quotename(N'abc', N'aa')");
+        sql.Should().Contain("quotename(N'abc', N'')");
+        sql.Should().NotContain("'null'", "a null argument must never become the text 'null'");
+    }
+
+    [Fact]
+    [Trait("Issue", "258")]
+    public void Quotename_ParameterizedArguments_ShouldPreserveBindings()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var id = 1L;
+        var value = "O'Brien";
+        var quote = "'";
+
+        QueryCommand<string?> Command() => ctx.From<IComplexEntity>()
+            .Where(x => x.Id == id)
+            .OrderBy(x => x.Id)
+            .Select(x => SqlFunctions.SqlServer.quotename(value, quote));
+
+        var first = (DbPreparedQueryCommand<string?>)ctx.GetPreparedQueryCommand(Command(), false, true, CancellationToken.None);
+        var firstSql = Normalize(first.DbCommand.CommandText);
+        var firstParams = first.DbCommand.Parameters.Cast<DbParameter>().ToDictionary(p => p.ParameterName);
+
+        firstSql.Should().Contain("quotename(@value, @quote)");
+        firstSql.Should().NotContain("O''Brien", "the value is bound, never spliced into the statement");
+        firstParams["value"].Value.Should().Be("O'Brien");
+        firstParams["quote"].Value.Should().Be("'");
+
+        // The ORDER BY keeps this shape off the positional refresh recipe, so the cache hit re-renders the
+        // parameter-extraction pass with ParamMode = true: a literal emitted on that pass would either
+        // corrupt the command or null-reference the absent builder.
+        value = "O'Brien's";
+        quote = "[";
+        var second = (DbPreparedQueryCommand<string?>)ctx.GetPreparedQueryCommand(Command(), false, true, CancellationToken.None);
+        second.Should().BeSameAs(first, "the second execution must hit the cached plan");
+        Normalize(second.DbCommand.CommandText).Should().Be(firstSql, "parameter mode must not splice or re-render values");
+        var secondParams = second.DbCommand.Parameters.Cast<DbParameter>().ToDictionary(p => p.ParameterName);
+        secondParams["value"].Value.Should().Be("O'Brien's", "the bound value stays raw; escaping is a SQL-literal concern only");
+        secondParams["quote"].Value.Should().Be("[");
+
+        // A null capture binds as a null parameter, never as the text 'null'.
+        string? nullValue = null;
+        var nullQuote = "'";
+        var nullPrepared = (DbPreparedQueryCommand<string?>)ctx.GetPreparedQueryCommand(
+            ctx.From<IComplexEntity>().Where(x => x.Id == id).Select(x => SqlFunctions.SqlServer.quotename(nullValue, nullQuote)),
+            false, false, CancellationToken.None);
+        Normalize(nullPrepared.DbCommand.CommandText).Should().Contain("quotename(@nullValue, @nullQuote)");
+        var nullParams = nullPrepared.DbCommand.Parameters.Cast<DbParameter>().ToDictionary(p => p.ParameterName);
+        (nullParams["nullValue"].Value is null || nullParams["nullValue"].Value is DBNull)
+            .Should().BeTrue("a null capture binds as a null/DBNull parameter");
+    }
+
+    [Fact]
+    [Trait("Issue", "258")]
+    public void Quotename_NonConstantQuoteCharacter_ShouldRemainAnExpression()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Where(x => x.Id == 1).Select(x => new
+        {
+            Q = SqlFunctions.SqlServer.quotename("abc", x.String)
+        }));
+
+        sql.Should().Contain("quotename(N'abc', somestring)",
+            "a column delimiter is forwarded as a SQL expression, never quoted as an identifier or evaluated client-side");
+        sql.Should().NotContain("quotename('abc', 'somestring')");
+    }
+
+    [Fact]
+    [Trait("Issue", "258")]
+    public void Quotename_InputLengthBoundaries_ShouldPreserveArguments()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+        const string Value128 =
+            "aaaaaaaaaaaaaaaa" + "aaaaaaaaaaaaaaaa" + "aaaaaaaaaaaaaaaa" + "aaaaaaaaaaaaaaaa" +
+            "aaaaaaaaaaaaaaaa" + "aaaaaaaaaaaaaaaa" + "aaaaaaaaaaaaaaaa" + "aaaaaaaaaaaaaaaa";
+        const string Value129 = Value128 + "a";
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            At128 = SqlFunctions.SqlServer.quotename(Value128, "'"),
+            At129 = SqlFunctions.SqlServer.quotename(Value129, "'")
+        }));
+
+        sql.Should().Contain("quotename(N'" + Value128 + "', N'''')", "no client-side truncation at the 128-character boundary");
+        sql.Should().Contain("quotename(N'" + Value129 + "', N'''')", "the 129-character input is forwarded unchanged; the server decides");
+    }
+
+    [Fact]
+    [Trait("Issue", "258")]
+    public void InlineGuidLiteral_ShouldRemainQuoted()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        // The string/Guid branch of the shared emitter is one arm: a Guid constant must keep the canonical
+        // 'D' formatting and stay enclosed in single quotes after the escaping substitution.
+        var guid = Guid.Parse("00112233-4455-6677-8899-aabbccddeeff");
+        var body = Expression.Constant(guid, typeof(Guid));
+        var projection = Expression.Lambda<Func<IComplexEntity, Guid>>(
+            body, Expression.Parameter(typeof(IComplexEntity), "x"));
+
+        var sql = SqlOf(ctx, ctx.From<IComplexEntity>().Select(projection));
+
+        sql.Should().Contain("'00112233-4455-6677-8899-aabbccddeeff'");
+    }
+
+    [Fact]
+    public void T282_DecimalParse_ShouldUseTheFixedEnUsCaseForm()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Where(x => x.Id == 1).Select(x => new
+        {
+            Parsed = SqlFunctions.SqlServer.parse(x.String),
+            ParsedNull = SqlFunctions.SqlServer.parse(null),
+            Tried = SqlFunctions.SqlServer.try_parse(x.String),
+            TriedNull = SqlFunctions.SqlServer.try_parse(null)
+        }));
+
+        sql.Should().Contain("CASE WHEN somestring IS NULL THEN CAST(NULL AS decimal(38,18)) ELSE PARSE(somestring AS decimal(38,18) USING N'en-US') END");
+        sql.Should().Contain("CASE WHEN CAST(NULL AS nvarchar(4000)) IS NULL THEN CAST(NULL AS decimal(38,18)) ELSE PARSE(CAST(NULL AS nvarchar(4000)) AS decimal(38,18) USING N'en-US') END");
+        sql.Should().Contain("CASE WHEN somestring IS NULL THEN CAST(NULL AS decimal(38,18)) ELSE TRY_PARSE(somestring AS decimal(38,18) USING N'en-US') END");
+        sql.Should().Contain("CASE WHEN CAST(NULL AS nvarchar(4000)) IS NULL THEN CAST(NULL AS decimal(38,18)) ELSE TRY_PARSE(CAST(NULL AS nvarchar(4000)) AS decimal(38,18) USING N'en-US') END");
+
+        // The culture is a grammar literal, never a bound parameter.
+        sql.Should().NotMatchRegex(@"USING\s+@\w+");
+        sql.Should().NotContain("culture");
     }
 
     private static void AssertUnsupported(Action act, string pattern)

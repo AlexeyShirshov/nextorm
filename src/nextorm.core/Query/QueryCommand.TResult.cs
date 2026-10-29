@@ -67,14 +67,28 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
         ResultType = typeof(TResult);
     }
     /// <summary>
-    /// 
+    /// Prepares the command so it can be executed repeatedly, typically with different parameter values.
     /// </summary>
-    /// <param name="nonStreamUsing">true, if optimized for buffered or scalar value results; false for non-buffered (stream) using, when result is IEnumerable or IAsyncEnumerable</param>
-    /// <param name="cancellationToken"></param>
-    /// <returns></returns>
-    public IPreparedQueryCommand<TResult> Prepare(bool nonStreamUsing = true, CancellationToken cancellationToken = default)
+    /// <param name="options">
+    /// How the prepared command reuses its underlying command and whether rows are streamed. The default
+    /// value prepares a buffered command whose underlying command is reused per connection.
+    /// </param>
+    /// <param name="cancellationToken">A token to cancel preparation.</param>
+    /// <returns>The prepared query command.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="options"/> carries a <see cref="PreparedCommandCache"/> value that is not defined.
+    /// </exception>
+    public IPreparedQueryCommand<TResult> Prepare(PrepareOptions options = default, CancellationToken cancellationToken = default)
     {
-        return _dataContext!.GetPreparedQueryCommand(this, !nonStreamUsing, false, cancellationToken);
+        if (!Enum.IsDefined(options.Cache))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(options),
+                options.Cache,
+                "The prepared-command cache policy is not a defined PreparedCommandCache value; use PreparedCommandCache.Connection or PreparedCommandCache.None.");
+        }
+
+        return _dataContext!.GetPreparedQueryCommand(this, options.Streaming, false, options.Cache, cancellationToken);
     }
     /// <summary>
     /// Prepares the command and returns an async enumerator over its rows.
@@ -294,11 +308,26 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     /// <returns>A sequence over the result rows.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public IEnumerable<TResult> ToEnumerable(params object[] @params) => _dataContext!.GetEnumerable(_dataContext.GetPreparedQueryCommand(this, true, true, CancellationToken.None), @params);
+    /// <summary>Executes the command and materializes every row into a list, binding no parameters.</summary>
+    /// <remarks>
+    /// The parameterless form is the expression-tree-usable terminal: the <c>params ReadOnlySpan&lt;object?&gt;</c>
+    /// overload is a ref struct and an expanded <c>params</c> collection, so a query expression tree that ends in
+    /// <c>ToList()</c> cannot reference it (<c>CS8640</c>/<c>CS9226</c>). Both overloads execute the identical
+    /// command; a zero-argument call simply takes this one.
+    /// </remarks>
+    /// <returns>A list containing all result rows.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public List<TResult> ToList() => ToList(ReadOnlySpan<object?>.Empty);
     /// <summary>Executes the command and materializes every row into a list.</summary>
     /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
     /// <returns>A list containing all result rows.</returns>
     public List<TResult> ToList(params ReadOnlySpan<object?> @params)
     {
+        // #249 / T353: a collection-valued projection is materialized as an entity graph and projected in
+        // memory, so the projected command itself never prepares or executes SQL.
+        if (CollectionSlotCarrier is CollectionSlotCarrier<TResult> carrier)
+            return carrier.ToList(@params);
+
         var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, false, true, CancellationToken.None);
 
         return _dataContext.ToList<TResult>(preparedCommand, @params);
@@ -336,6 +365,16 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
 
         return result;
     }
+    /// <summary>Executes the command and materializes every row into an array, binding no parameters.</summary>
+    /// <remarks>
+    /// The parameterless form is the expression-tree-usable terminal: the <c>params ReadOnlySpan&lt;object?&gt;</c>
+    /// overload is a ref struct and an expanded <c>params</c> collection, so a query expression tree that ends in
+    /// <c>ToArray()</c> cannot reference it (<c>CS8640</c>/<c>CS9226</c>). Both overloads execute the identical
+    /// command; a zero-argument call simply takes this one.
+    /// </remarks>
+    /// <returns>An array containing all result rows.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public TResult[] ToArray() => ToArray(ReadOnlySpan<object?>.Empty);
     /// <summary>Executes the command and materializes every row into an array.</summary>
     /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
     /// <returns>An array containing all result rows.</returns>
@@ -674,9 +713,18 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
         {
             var sorting = _sorting[i];
             var flipped = sorting.ColumnIndex is int columnIndex
-                ? new Sorting(columnIndex)
-                : new Sorting(sorting.SortExpression!);
+                ? new Sorting(columnIndex, sorting.NullsPosition)
+                : new Sorting(sorting.SortExpression!, sorting.NullsPosition);
             flipped.Direction = sorting.Direction == OrderDirection.Asc ? OrderDirection.Desc : OrderDirection.Asc;
+            // The reversed order must stay logically equivalent: flipping the direction flips which end
+            // the NULL group occupies, so an explicit placement swaps too. Default stays Default (the
+            // provider default is direction-aware on its own).
+            flipped.NullsPosition = sorting.NullsPosition switch
+            {
+                NullsPosition.First => NullsPosition.Last,
+                NullsPosition.Last => NullsPosition.First,
+                _ => NullsPosition.Default,
+            };
             flipped.PreparedExpression = sorting.PreparedExpression;
             reversed[i] = flipped;
         }
@@ -777,6 +825,203 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     /// <returns>A new command carrying the added sort.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public QueryCommand<TResult> OrderByDescending(Expression<Func<TResult, object?>> orderExp) => OrderBy(orderExp, OrderDirection.Desc);
+    /// <summary>
+    /// Returns a clone of this command with <paramref name="orderExp"/> appended to its sort order in the
+    /// ascending direction and the requested NULL placement. Appending never replaces the existing keys.
+    /// </summary>
+    /// <param name="orderExp">The key selector over the projected result.</param>
+    /// <param name="nullsPosition">Where SQL <c>NULL</c> values are placed for this key.</param>
+    /// <returns>A new command carrying the added sort.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="nullsPosition"/> is not a defined <see cref="NullsPosition"/> member.</exception>
+    public QueryCommand<TResult> OrderBy(Expression<Func<TResult, object?>> orderExp, NullsPosition nullsPosition)
+        => OrderBy(orderExp, OrderDirection.Asc, nullsPosition);
+    /// <summary>
+    /// Returns a clone of this command with <paramref name="orderExp"/> appended to its sort order in the
+    /// given direction and the requested NULL placement. Appending never replaces the existing keys.
+    /// </summary>
+    /// <param name="orderExp">The key selector over the projected result.</param>
+    /// <param name="direction">The sort direction.</param>
+    /// <param name="nullsPosition">Where SQL <c>NULL</c> values are placed for this key.</param>
+    /// <returns>A new command carrying the added sort.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="nullsPosition"/> is not a defined <see cref="NullsPosition"/> member.</exception>
+    public QueryCommand<TResult> OrderBy(Expression<Func<TResult, object?>> orderExp, OrderDirection direction, NullsPosition nullsPosition)
+        => AppendOrdering(orderExp ?? throw new ArgumentNullException(nameof(orderExp)), null, direction, nullsPosition);
+    /// <summary>
+    /// Returns a clone of this command with <paramref name="orderExp"/> appended to its sort order in the
+    /// descending direction and the requested NULL placement.
+    /// </summary>
+    /// <param name="orderExp">The key selector over the projected result.</param>
+    /// <param name="nullsPosition">Where SQL <c>NULL</c> values are placed for this key.</param>
+    /// <returns>A new command carrying the added sort.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="nullsPosition"/> is not a defined <see cref="NullsPosition"/> member.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public QueryCommand<TResult> OrderByDescending(Expression<Func<TResult, object?>> orderExp, NullsPosition nullsPosition)
+        => OrderBy(orderExp, OrderDirection.Desc, nullsPosition);
+    /// <summary>
+    /// Returns a clone of this command with the 1-based projected column appended to its sort order in the
+    /// ascending direction and the requested NULL placement.
+    /// </summary>
+    /// <param name="columnIndex">The 1-based index of the projected column to sort by; must be greater than zero.</param>
+    /// <param name="nullsPosition">Where SQL <c>NULL</c> values are placed for this key.</param>
+    /// <returns>A new command carrying the added sort.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="nullsPosition"/> is not a defined <see cref="NullsPosition"/> member.</exception>
+    public QueryCommand<TResult> OrderBy(int columnIndex, NullsPosition nullsPosition)
+        => OrderBy(columnIndex, OrderDirection.Asc, nullsPosition);
+    /// <summary>
+    /// Returns a clone of this command with the 1-based projected column appended to its sort order in the
+    /// given direction and the requested NULL placement.
+    /// </summary>
+    /// <param name="columnIndex">The 1-based index of the projected column to sort by; must be greater than zero.</param>
+    /// <param name="direction">The sort direction.</param>
+    /// <param name="nullsPosition">Where SQL <c>NULL</c> values are placed for this key.</param>
+    /// <returns>A new command carrying the added sort.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="nullsPosition"/> is not a defined <see cref="NullsPosition"/> member.</exception>
+    public QueryCommand<TResult> OrderBy(int columnIndex, OrderDirection direction, NullsPosition nullsPosition)
+    {
+        if (columnIndex < 1) throw new ArgumentException("Column index must be greater than zero", nameof(columnIndex));
+
+        return AppendOrdering(expression: null, columnIndex, direction, nullsPosition);
+    }
+    /// <summary>
+    /// Returns a clone of this command with the 1-based projected column appended to its sort order in the
+    /// descending direction and the requested NULL placement.
+    /// </summary>
+    /// <param name="columnIndex">The 1-based index of the projected column to sort by; must be greater than zero.</param>
+    /// <param name="nullsPosition">Where SQL <c>NULL</c> values are placed for this key.</param>
+    /// <returns>A new command carrying the added sort.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="nullsPosition"/> is not a defined <see cref="NullsPosition"/> member.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public QueryCommand<TResult> OrderByDescending(int columnIndex, NullsPosition nullsPosition)
+        => OrderBy(columnIndex, OrderDirection.Desc, nullsPosition);
+    /// <summary>
+    /// Returns a clone of this command with <paramref name="orderExp"/> appended to its sort order in the
+    /// ascending direction. Unlike a second <c>OrderBy</c>, this states explicitly that the key is a
+    /// secondary one; both append to the same key list, so the resulting order is identical.
+    /// </summary>
+    /// <param name="orderExp">The key selector over the projected result.</param>
+    /// <returns>A new command carrying the added sort.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public QueryCommand<TResult> ThenBy(Expression<Func<TResult, object?>> orderExp) => OrderBy(orderExp);
+    /// <summary>
+    /// Returns a clone of this command with <paramref name="orderExp"/> appended to its sort order in the
+    /// given direction. The key is appended after every existing key, never replaces one.
+    /// </summary>
+    /// <param name="orderExp">The key selector over the projected result.</param>
+    /// <param name="direction">The sort direction.</param>
+    /// <returns>A new command carrying the added sort.</returns>
+    public QueryCommand<TResult> ThenBy(Expression<Func<TResult, object?>> orderExp, OrderDirection direction)
+        => OrderBy(orderExp, direction);
+    /// <summary>
+    /// Returns a clone of this command with <paramref name="orderExp"/> appended to its sort order in the
+    /// ascending direction and the requested NULL placement.
+    /// </summary>
+    /// <param name="orderExp">The key selector over the projected result.</param>
+    /// <param name="nullsPosition">Where SQL <c>NULL</c> values are placed for this key.</param>
+    /// <returns>A new command carrying the added sort.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="nullsPosition"/> is not a defined <see cref="NullsPosition"/> member.</exception>
+    public QueryCommand<TResult> ThenBy(Expression<Func<TResult, object?>> orderExp, NullsPosition nullsPosition)
+        => OrderBy(orderExp, nullsPosition);
+    /// <summary>
+    /// Returns a clone of this command with <paramref name="orderExp"/> appended to its sort order in the
+    /// given direction and the requested NULL placement.
+    /// </summary>
+    /// <param name="orderExp">The key selector over the projected result.</param>
+    /// <param name="direction">The sort direction.</param>
+    /// <param name="nullsPosition">Where SQL <c>NULL</c> values are placed for this key.</param>
+    /// <returns>A new command carrying the added sort.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="nullsPosition"/> is not a defined <see cref="NullsPosition"/> member.</exception>
+    public QueryCommand<TResult> ThenBy(Expression<Func<TResult, object?>> orderExp, OrderDirection direction, NullsPosition nullsPosition)
+        => OrderBy(orderExp, direction, nullsPosition);
+    /// <summary>
+    /// Returns a clone of this command with <paramref name="orderExp"/> appended to its sort order in the
+    /// descending direction.
+    /// </summary>
+    /// <param name="orderExp">The key selector over the projected result.</param>
+    /// <returns>A new command carrying the added sort.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public QueryCommand<TResult> ThenByDescending(Expression<Func<TResult, object?>> orderExp) => OrderByDescending(orderExp);
+    /// <summary>
+    /// Returns a clone of this command with <paramref name="orderExp"/> appended to its sort order in the
+    /// descending direction and the requested NULL placement.
+    /// </summary>
+    /// <param name="orderExp">The key selector over the projected result.</param>
+    /// <param name="nullsPosition">Where SQL <c>NULL</c> values are placed for this key.</param>
+    /// <returns>A new command carrying the added sort.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="nullsPosition"/> is not a defined <see cref="NullsPosition"/> member.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public QueryCommand<TResult> ThenByDescending(Expression<Func<TResult, object?>> orderExp, NullsPosition nullsPosition)
+        => OrderByDescending(orderExp, nullsPosition);
+    /// <summary>
+    /// Returns a clone of this command with the 1-based projected column appended to its sort order in the
+    /// ascending direction. The key is appended after every existing key.
+    /// </summary>
+    /// <param name="columnIndex">The 1-based index of the projected column to sort by; must be greater than zero.</param>
+    /// <returns>A new command carrying the added sort.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public QueryCommand<TResult> ThenBy(int columnIndex) => OrderBy(columnIndex);
+    /// <summary>
+    /// Returns a clone of this command with the 1-based projected column appended to its sort order in the
+    /// given direction.
+    /// </summary>
+    /// <param name="columnIndex">The 1-based index of the projected column to sort by; must be greater than zero.</param>
+    /// <param name="direction">The sort direction.</param>
+    /// <returns>A new command carrying the added sort.</returns>
+    public QueryCommand<TResult> ThenBy(int columnIndex, OrderDirection direction) => OrderBy(columnIndex, direction);
+    /// <summary>
+    /// Returns a clone of this command with the 1-based projected column appended to its sort order in the
+    /// ascending direction and the requested NULL placement.
+    /// </summary>
+    /// <param name="columnIndex">The 1-based index of the projected column to sort by; must be greater than zero.</param>
+    /// <param name="nullsPosition">Where SQL <c>NULL</c> values are placed for this key.</param>
+    /// <returns>A new command carrying the added sort.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="nullsPosition"/> is not a defined <see cref="NullsPosition"/> member.</exception>
+    public QueryCommand<TResult> ThenBy(int columnIndex, NullsPosition nullsPosition) => OrderBy(columnIndex, nullsPosition);
+    /// <summary>
+    /// Returns a clone of this command with the 1-based projected column appended to its sort order in the
+    /// given direction and the requested NULL placement.
+    /// </summary>
+    /// <param name="columnIndex">The 1-based index of the projected column to sort by; must be greater than zero.</param>
+    /// <param name="direction">The sort direction.</param>
+    /// <param name="nullsPosition">Where SQL <c>NULL</c> values are placed for this key.</param>
+    /// <returns>A new command carrying the added sort.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="nullsPosition"/> is not a defined <see cref="NullsPosition"/> member.</exception>
+    public QueryCommand<TResult> ThenBy(int columnIndex, OrderDirection direction, NullsPosition nullsPosition)
+        => OrderBy(columnIndex, direction, nullsPosition);
+    /// <summary>
+    /// Returns a clone of this command with the 1-based projected column appended to its sort order in the
+    /// descending direction.
+    /// </summary>
+    /// <param name="columnIndex">The 1-based index of the projected column to sort by; must be greater than zero.</param>
+    /// <returns>A new command carrying the added sort.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public QueryCommand<TResult> ThenByDescending(int columnIndex) => OrderByDescending(columnIndex);
+    /// <summary>
+    /// Returns a clone of this command with the 1-based projected column appended to its sort order in the
+    /// descending direction and the requested NULL placement.
+    /// </summary>
+    /// <param name="columnIndex">The 1-based index of the projected column to sort by; must be greater than zero.</param>
+    /// <param name="nullsPosition">Where SQL <c>NULL</c> values are placed for this key.</param>
+    /// <returns>A new command carrying the added sort.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="nullsPosition"/> is not a defined <see cref="NullsPosition"/> member.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public QueryCommand<TResult> ThenByDescending(int columnIndex, NullsPosition nullsPosition)
+        => OrderByDescending(columnIndex, nullsPosition);
+    /// <summary>
+    /// Appends one sort key to this command's ordering and returns the prepared clone. Shared by the
+    /// additive placement overloads and the <c>ThenBy</c> family; the existing <c>OrderBy</c> overloads
+    /// keep their own bodies so their behavior is unchanged.
+    /// </summary>
+    private QueryCommand<TResult> AppendOrdering(Expression? expression, int? columnIndex, OrderDirection direction, NullsPosition nullsPosition)
+    {
+        var sorting = expression is not null
+            ? new Sorting(expression, nullsPosition) { Direction = direction }
+            : new Sorting(columnIndex!.Value, nullsPosition) { Direction = direction };
+        var cmd = new QueryCommand<TResult>(_dataContext, this, forCache: false);
+        cmd._sorting = _sorting is null ? [sorting] : [.. _sorting, sorting];
+        CopyTo(cmd, true);
+        cmd.ResetPreparationPreservingFrom();
+        return cmd;
+    }
     /// <summary>
     /// Returns a clone of this command with the maximum number of returned rows set. Unlike the
     /// builder-level limit this applies after the projection, so a grouped/aggregated query does not

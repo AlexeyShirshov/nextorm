@@ -132,7 +132,7 @@ public class SqlGenerationTests
         Normalize(ctx.CreateInsertBuilder<DynamicColumnsEntity>()
             .Values(DynamicWriteEntity())
             .ToSql())
-            .Should().Contain("(id, `alpha`, `mid`, `zeta`) values (@p0, @p1, @p2, @p3)");
+            .Should().Contain("(id, `alpha`, `mid`, `zeta`) values (@p0, _utf8mb4 X'61', @p2, @p3)");
     }
 
     [Fact]
@@ -144,7 +144,7 @@ public class SqlGenerationTests
             .Set(DynamicWriteEntity())
             .Where(x => x.Id == 1)
             .ToSql())
-            .Should().Contain("set `alpha` = @p0, `mid` = @p1, `zeta` = @p2 where id = 1");
+            .Should().Contain("set `alpha` = _utf8mb4 X'61', `mid` = @p1, `zeta` = @p2 where id = 1");
     }
 
     [Fact]
@@ -159,7 +159,7 @@ public class SqlGenerationTests
             .WhenNotMatchedInsert()
             .ToSql());
 
-        sql.Should().Contain("(id, `alpha`, `mid`, `zeta`) values (@p0, @p1, @p2, @p3)");
+        sql.Should().Contain("(id, `alpha`, `mid`, `zeta`) values (@p0, _utf8mb4 X'61', @p2, @p3)");
         // MySQL's upsert match is implicit (ON DUPLICATE KEY), so the dynamic keys must appear only in the
         // insert list and the update assignments, never as a match key.
         sql.Should().Contain("on duplicate key update `alpha` = values(`alpha`), `mid` = values(`mid`), `zeta` = values(`zeta`)");
@@ -175,7 +175,7 @@ public class SqlGenerationTests
         ctx.CreateInsertBuilder<IMergeEntity>()
             .Values(new MergeEntity { Id = 1, Name = "a", Age = 5, Total = 9 })
             .ToSql()
-            .Should().Be("insert into merge_entity (id, name, age) values (@p0, @p1, @p2)");
+            .Should().Be("insert into merge_entity (id, name, age) values (@p0, _utf8mb4 X'61', @p2)");
     }
 
     [Fact]
@@ -276,7 +276,8 @@ public class SqlGenerationTests
 
         var act = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Sql.percentile_cont(0.5, x.Id).Over() }));
 
-        act.Should().Throw<NotSupportedException>().WithMessage("*percentile*");
+        act.Should().Throw<NotSupportedException>()
+            .WithMessage("The percentile_cont function is not supported by MySQL.");
     }
 
     [Fact]
@@ -292,9 +293,9 @@ public class SqlGenerationTests
             Updated = SqlFunctions.SqlServer.json_modify(x.String, "$.id", "1")
         }));
 
-        sql.Should().Contain("json_unquote(json_extract(somestring, '$.id'))");
-        sql.Should().Contain("json_extract(somestring, '$.name')");
-        sql.Should().Contain("json_set(somestring, '$.id', '1')");
+        sql.Should().Contain("json_unquote(json_extract(somestring, _utf8mb4 X'242e6964'))");
+        sql.Should().Contain("json_extract(somestring, _utf8mb4 X'242e6e616d65')");
+        sql.Should().Contain("json_set(somestring, _utf8mb4 X'242e6964', _utf8mb4 X'31')");
     }
 
     [Fact]
@@ -401,23 +402,23 @@ public class SqlGenerationTests
         var source = "a,b";
         var pattern = ",";
 
-        var arrayElements = () => SqlOf(ctx, ctx.FromTableFunction(() => SqlFunctions.Postgres.jsonb_array_elements(json))
+        var arrayElements = () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.jsonb_array_elements(json))
             .Select(r => new { r.Value }));
         arrayElements.Should().Throw<NotSupportedException>().WithMessage("*jsonb_array_elements*");
 
-        var each = () => SqlOf(ctx, ctx.FromTableFunction(() => SqlFunctions.Postgres.jsonb_each(json))
+        var each = () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.jsonb_each(json))
             .Select(r => new { r.Key }));
         each.Should().Throw<NotSupportedException>().WithMessage("*jsonb_each*");
 
-        var split = () => SqlOf(ctx, ctx.FromTableFunction(() => SqlFunctions.Postgres.regexp_split_to_table(source, pattern))
+        var split = () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.regexp_split_to_table(source, pattern))
             .Select(r => new { r.Value }));
         split.Should().Throw<NotSupportedException>().WithMessage("*regexp_split_to_table*");
 
-        var record = () => SqlOf(ctx, ctx.FromTableFunction(() => SqlFunctions.Postgres.jsonb_to_record<int>(json))
+        var record = () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.jsonb_to_record<int>(json))
             .Select(r => new { V = r }));
         record.Should().Throw<NotSupportedException>().WithMessage("*jsonb_to_record*");
 
-        var values = () => SqlOf(ctx, ctx.FromTableFunction(() => SqlFunctions.ClickHouse.values<int>("(1)"))
+        var values = () => SqlOf(ctx, ctx.From(() => SqlFunctions.ClickHouse.values<int>("(1)"))
             .Select(r => new { V = r }));
         values.Should().Throw<NotSupportedException>().WithMessage("*values*");
     }
@@ -448,7 +449,7 @@ public class SqlGenerationTests
         var sql = SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Sql.iif(x.Id > 0L, "yes", "no") }));
 
         sql.Should().Contain("if(");
-        sql.Should().Contain("'yes', 'no')");
+        sql.Should().Contain("_utf8mb4 X'796573', _utf8mb4 X'6e6f')");
     }
 
     [Fact]
@@ -833,7 +834,8 @@ public class SqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Select(x => SqlFunctions.Sql.string_agg(x.String, ",")))
-            .Should().Contain("group_concat(somestring separator ',')");
+            .Should().Contain("group_concat(somestring separator ',')",
+                "the SEPARATOR grammar accepts a text-literal token, not the value hex spelling");
     }
 
     [Fact]
@@ -843,10 +845,10 @@ public class SqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Where(x => SqlFunctions.Sql.contains(x.String, "foo")).Select(x => new { x.Id }))
-            .Should().Contain("where (match(somestring) against('foo' in boolean mode) > 0)");
+            .Should().Contain("where (match(somestring) against(_utf8mb4 X'666f6f' in boolean mode) > 0)");
 
         SqlOf(ctx, e.Where(x => SqlFunctions.Sql.freetext(x.String, "foo")).Select(x => new { x.Id }))
-            .Should().Contain("where (match(somestring) against('foo') > 0)");
+            .Should().Contain("where (match(somestring) against(_utf8mb4 X'666f6f') > 0)");
     }
 
     [Fact]
@@ -872,11 +874,11 @@ public class SqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Select(x => new { V = x.String!.IndexOf("b") }))
-            .Should().Contain("case when (instr(somestring, 'b')) = 0 then -1 else (instr(somestring, 'b')) - 1 end");
+            .Should().Contain("case when (instr(somestring, _utf8mb4 X'62')) = 0 then -1 else (instr(somestring, _utf8mb4 X'62')) - 1 end");
         SqlOf(ctx, e.Select(x => new { V = x.String!.IndexOf("b", 1) }))
-            .Should().Contain("case when (locate('b', somestring, 1 + 1)) = 0 then -1 else (locate('b', somestring, 1 + 1)) - 1 end");
+            .Should().Contain("case when (locate(_utf8mb4 X'62', somestring, 1 + 1)) = 0 then -1 else (locate(_utf8mb4 X'62', somestring, 1 + 1)) - 1 end");
         SqlOf(ctx, e.Select(x => new { V = x.String!.LastIndexOf("b") }))
-            .Should().Contain("case when (instr(reverse(somestring), reverse('b'))) = 0 then -1 else char_length(somestring) - (instr(reverse(somestring), reverse('b'))) - (char_length('b')) + 1 end");
+            .Should().Contain("case when (instr(reverse(somestring), reverse(_utf8mb4 X'62'))) = 0 then -1 else char_length(somestring) - (instr(reverse(somestring), reverse(_utf8mb4 X'62'))) - (char_length(_utf8mb4 X'62')) + 1 end");
     }
 
     [Fact]
@@ -886,9 +888,9 @@ public class SqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Select(x => new { V = x.String!.PadLeft(5, '0') }))
-            .Should().Contain("case when char_length(somestring) >= (5) then somestring else concat(repeat('0', (5) - char_length(somestring)), somestring) end");
+            .Should().Contain("case when char_length(somestring) >= (5) then somestring else concat(repeat(_utf8mb4 X'30', (5) - char_length(somestring)), somestring) end");
         SqlOf(ctx, e.Select(x => new { V = x.String!.PadRight(5) }))
-            .Should().Contain("case when char_length(somestring) >= (5) then somestring else concat(somestring, repeat(' ', (5) - char_length(somestring))) end");
+            .Should().Contain("case when char_length(somestring) >= (5) then somestring else concat(somestring, repeat(_utf8mb4 X'20', (5) - char_length(somestring))) end");
     }
 
     [Fact]
@@ -902,9 +904,9 @@ public class SqlGenerationTests
         SqlOf(ctx, e.Select(x => new { V = x.String!.Remove(2, 1) }))
             .Should().Contain("insert(somestring, 2 + 1, 1, '')");
         SqlOf(ctx, e.Select(x => new { V = x.String!.Insert(2, "x") }))
-            .Should().Contain("insert(somestring, 2 + 1, 0, 'x')");
+            .Should().Contain("insert(somestring, 2 + 1, 0, _utf8mb4 X'78')");
         SqlOf(ctx, e.Select(x => new { V = new string('*', 4) }))
-            .Should().Contain("repeat('*', 4)");
+            .Should().Contain("repeat(_utf8mb4 X'2a', 4)");
     }
 
     [Fact]
@@ -1188,8 +1190,8 @@ public class SqlGenerationTests
 
     private static class JsonTableTvf
     {
-        [SqlTableFunction("json_table", CallClause = ", '$[*]' columns(id int path '$.id', name varchar(50) path '$.name')")]
-        public static IQueryable<IJsonTableRow> JsonTable(string doc) => throw new NotSupportedException();
+        public static TvfEntityBuilder<IJsonTableRow> JsonTable(string doc) => new(
+            "json_table", null, null, ", '$[*]' columns(id int path '$.id', name varchar(50) path '$.name')", Array.Empty<int>(), TableFunctionSchema.None);
     }
 
     [Fact]
@@ -1199,7 +1201,7 @@ public class SqlGenerationTests
         var doc = "[]";
 
         var command = Prepare(ctx, ctx
-            .FromTableFunction(() => JsonTableTvf.JsonTable(doc))
+            .From(() => JsonTableTvf.JsonTable(doc))
             .Select(r => new { r.Id, r.Name }));
 
         Normalize(command.DbCommand.CommandText).Should()
@@ -1351,7 +1353,7 @@ public class SqlGenerationTests
 
         var sql = SqlOf(ctx, e.Where(x => Tuple.Create(x.Id, x.String) == Tuple.Create(1L, "a")).Select(x => new { x.Id }));
 
-        sql.Should().Contain("where (id, somestring) = (1, 'a')");
+        sql.Should().Contain("where (id, somestring) = (1, _utf8mb4 X'61')");
     }
 
     [Fact]
@@ -1363,7 +1365,7 @@ public class SqlGenerationTests
         // MySQL spells SQL "<>" as "!="; the row comparison stays a flat "(a, b)".
         var sql = SqlOf(ctx, e.Where(x => Tuple.Create(x.Id, x.String) != Tuple.Create(2L, "b")).Select(x => new { x.Id }));
 
-        sql.Should().Contain("where (id, somestring) != (2, 'b')");
+        sql.Should().Contain("where (id, somestring) != (2, _utf8mb4 X'62')");
     }
 
     [Fact]
@@ -1377,9 +1379,9 @@ public class SqlGenerationTests
                         || (Tuple.Create(x.Id, x.String) == Tuple.Create(2L, "b")))
             .Select(x => new { x.Id }));
 
-        sql.Should().Contain("(id, somestring) = (1, 'a')");
+        sql.Should().Contain("(id, somestring) = (1, _utf8mb4 X'61')");
         sql.Should().Contain(" or ");
-        sql.Should().Contain("(id, somestring) = (2, 'b')");
+        sql.Should().Contain("(id, somestring) = (2, _utf8mb4 X'62')");
     }
 
     [Fact]
@@ -1482,7 +1484,7 @@ public class SqlGenerationTests
             .Where(x => new Tuple<long, string?>(x.Id, x.String) == new Tuple<long, string>(1L, "a"))
             .Select(x => new { x.Id }));
 
-        sql.Should().Contain("where (id, somestring) = (1, 'a')");
+        sql.Should().Contain("where (id, somestring) = (1, _utf8mb4 X'61')");
     }
 
     [Fact]
@@ -1497,7 +1499,7 @@ public class SqlGenerationTests
 
         // MySQL/MariaDB spell the SQL-standard inequality "<>" as "!="; the engine emits "!=" for every
         // NotEqual, so the assertion pins the actual emitted token (matching RawSourceBindingSqlGenerationTests).
-        sql.Should().Contain("where (id, somestring) != (2, 'b')");
+        sql.Should().Contain("where (id, somestring) != (2, _utf8mb4 X'62')");
     }
 
     [Fact]
@@ -1554,7 +1556,32 @@ public class SqlGenerationTests
             .Where(x => (object)Tuple.Create(x.Id, x.String) == (object)Tuple.Create(1L, "a"))
             .Select(x => new { x.Id }));
 
-        sql.Should().Contain("where (id, somestring) = (1, 'a')");
+        sql.Should().Contain("where (id, somestring) = (1, _utf8mb4 X'61')");
     }
 
+    [Fact]
+    public void T292_VariabilityAggregateNames_ShouldRenderProviderSpelling()
+    {
+        using var ctx = MySqlTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        // T292 (#292): the eight variability facade forms keep their mysql spelling with the
+        // structurally nullable result; the DISTINCT forms keep the SQL DISTINCT keyword.
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.stdev((double)x.Id)))
+            .Should().Contain("stddev_samp(");
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.stdev_distinct((double)x.Id)))
+            .Should().Contain("stddev_samp(distinct ");
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.stdevp((double)x.Id)))
+            .Should().Contain("stddev_pop(");
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.stdevp_distinct((double)x.Id)))
+            .Should().Contain("stddev_pop(distinct ");
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.var((double)x.Id)))
+            .Should().Contain("var_samp(");
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.var_distinct((double)x.Id)))
+            .Should().Contain("var_samp(distinct ");
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.varp((double)x.Id)))
+            .Should().Contain("var_pop(");
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.varp_distinct((double)x.Id)))
+            .Should().Contain("var_pop(distinct ");
+    }
 }

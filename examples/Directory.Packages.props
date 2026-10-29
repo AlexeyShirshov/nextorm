@@ -12,7 +12,7 @@
       double as a real consumer of what ships on nuget.org. Bump this after a release is published,
       to the version that was actually pushed (the git tag without the leading v).
     -->
-    <NextOrmVersion>1.0.9-rc2</NextOrmVersion>
+    <NextOrmVersion>1.0.9-rc3</NextOrmVersion>
     <!-- Mirrors the `linq2db` version pinned in the repository-wide Directory.Packages.props. -->
     <Linq2DbVersion>6.5.0</Linq2DbVersion>
   </PropertyGroup>

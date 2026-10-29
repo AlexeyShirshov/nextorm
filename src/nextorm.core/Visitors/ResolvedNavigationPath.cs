@@ -20,43 +20,98 @@ internal enum NavigationDirection
 }
 
 /// <summary>
-/// One resolved foreign-key/principal-key leg of a navigation hop: for a single-column relationship the
-/// only pair, and for a many-to-many relationship one of the two junction legs.
+/// One resolved foreign-key/principal-key leg of a navigation hop: the ordered component lists of a
+/// single-column relationship (one pair) or of one junction leg of a many-to-many relationship. The
+/// component at position <c>i</c> of <see cref="ForeignKeys"/> pairs with the component at position
+/// <c>i</c> of <see cref="PrincipalKeys"/>; the full ordered lists are the identity.
 /// </summary>
 internal sealed class ResolvedNavigationLeg
 {
-    /// <summary>Creates a leg from its resolved mapped members.</summary>
-    /// <param name="foreignKey">The dependent-side foreign-key member.</param>
-    /// <param name="principalKey">The principal-side key member.</param>
-    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    internal ResolvedNavigationLeg(IPropertyMetadata foreignKey, IPropertyMetadata principalKey)
+    /// <summary>Creates a leg from its ordered resolved mapped-member lists.</summary>
+    /// <param name="foreignKeys">The ordered dependent-side foreign-key components.</param>
+    /// <param name="principalKeys">The ordered principal-side key components.</param>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/> or contains a <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">A list is empty or the lists have different arities.</exception>
+    internal ResolvedNavigationLeg(IReadOnlyList<IPropertyMetadata> foreignKeys, IReadOnlyList<IPropertyMetadata> principalKeys)
     {
-        ArgumentNullException.ThrowIfNull(foreignKey);
-        ArgumentNullException.ThrowIfNull(principalKey);
+        ArgumentNullException.ThrowIfNull(foreignKeys);
+        ArgumentNullException.ThrowIfNull(principalKeys);
 
-        ForeignKey = foreignKey;
-        PrincipalKey = principalKey;
+        if (foreignKeys.Count == 0)
+            throw new ArgumentException("A navigation leg must have at least one foreign-key component.", nameof(foreignKeys));
+
+        if (foreignKeys.Count != principalKeys.Count)
+            throw new ArgumentException(
+                "A navigation leg's foreign-key and principal-key lists must have the same arity.",
+                nameof(principalKeys));
+
+        for (var i = 0; i < foreignKeys.Count; i++)
+        {
+            ArgumentNullException.ThrowIfNull(foreignKeys[i]);
+            ArgumentNullException.ThrowIfNull(principalKeys[i]);
+        }
+
+        // Copy into a read-only wrapper so the snapshot cannot be mutated through a downcast.
+        ForeignKeys = Array.AsReadOnly<IPropertyMetadata>([.. foreignKeys]);
+        PrincipalKeys = Array.AsReadOnly<IPropertyMetadata>([.. principalKeys]);
     }
 
-    /// <summary>The dependent-side foreign-key member.</summary>
-    internal IPropertyMetadata ForeignKey { get; }
+    /// <summary>
+    /// Compatibility constructor for the single-column form, kept for callers/tests that build a
+    /// one-component leg directly. Production resolution always uses the ordered-list constructor.
+    /// </summary>
+    /// <param name="foreignKey">The only dependent-side foreign-key member.</param>
+    /// <param name="principalKey">The only principal-side key member.</param>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
+    internal ResolvedNavigationLeg(IPropertyMetadata foreignKey, IPropertyMetadata principalKey)
+        : this([foreignKey], [principalKey])
+    {
+    }
 
-    /// <summary>The principal-side key member.</summary>
-    internal IPropertyMetadata PrincipalKey { get; }
+    /// <summary>The ordered dependent-side foreign-key components.</summary>
+    internal IReadOnlyList<IPropertyMetadata> ForeignKeys { get; }
 
-    /// <summary>Compares the leg's mapped-member identity without hashing.</summary>
+    /// <summary>The ordered principal-side key components.</summary>
+    internal IReadOnlyList<IPropertyMetadata> PrincipalKeys { get; }
+
+    /// <summary>The number of key components in the leg.</summary>
+    internal int Arity => ForeignKeys.Count;
+
+    /// <summary>Compares the leg's full ordered mapped-member identity without hashing.</summary>
     /// <param name="other">The leg to compare with.</param>
-    /// <returns><see langword="true"/> when both members are the same mapped properties.</returns>
+    /// <returns><see langword="true"/> when every ordered component is the same mapped property.</returns>
     internal bool SameIdentity(ResolvedNavigationLeg other)
     {
         ArgumentNullException.ThrowIfNull(other);
-        return SameProperty(ForeignKey, other.ForeignKey) && SameProperty(PrincipalKey, other.PrincipalKey);
+
+        if (ForeignKeys.Count != other.ForeignKeys.Count)
+            return false;
+
+        for (var i = 0; i < ForeignKeys.Count; i++)
+        {
+            if (!SameProperty(ForeignKeys[i], other.ForeignKeys[i])
+                || !SameProperty(PrincipalKeys[i], other.PrincipalKeys[i]))
+                return false;
+        }
+
+        return true;
     }
 
-    /// <summary>Hashes the leg's mapped-member identity consistently with <see cref="SameIdentity"/>.</summary>
-    /// <returns>A hash code over the mapped-member identity.</returns>
+    /// <summary>Hashes the leg's full ordered mapped-member identity consistently with <see cref="SameIdentity"/>.</summary>
+    /// <returns>A hash code over every ordered component.</returns>
     internal int IdentityHashCode()
-        => HashCode.Combine(PropertyHash(ForeignKey), PropertyHash(PrincipalKey));
+    {
+        var hash = new HashCode();
+        hash.Add(ForeignKeys.Count);
+
+        for (var i = 0; i < ForeignKeys.Count; i++)
+        {
+            hash.Add(PropertyHash(ForeignKeys[i]));
+            hash.Add(PropertyHash(PrincipalKeys[i]));
+        }
+
+        return hash.ToHashCode();
+    }
 
     private static bool SameProperty(IPropertyMetadata left, IPropertyMetadata right)
         => left.PropertyInfo.Equals(right.PropertyInfo)

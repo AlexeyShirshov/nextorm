@@ -83,6 +83,12 @@ ctx.From<ISimpleEntity>().Offset(10).OrderBy(x => x.Id).Select(x => x.Id);
 // ... order by id offset 10 rows
 ```
 
+`WITH TIES` is supported only in the no-offset `TOP(n) WITH TIES` form. A positive `OFFSET` together
+with `WithTies()` — for example `Page(5, 3).WithTies()` or `Offset(3).Limit(5).WithTies()` — throws
+`NotSupportedException` during preparation, before any SQL is rendered, sent or cached: T-SQL accepts
+`WITH TIES` only in `TOP`, not in `OFFSET … FETCH … ONLY`. Use `WithTies()` without an `OFFSET`, or
+ordinary paging without ties.
+
 ## Aggregates and scalar functions
 
 ```csharp
@@ -93,6 +99,19 @@ var std   = ctx.From<IComplexEntity>().Select(x => SqlFunctions.Sql.stdev((doubl
 `count_big` / `count_big_distinct` render `count_big(...)`; plain `count`/`count_distinct` render
 `count(...)`. `stdev`, `stdevp`, `var` and `varp` keep their names (SQL Server provides them natively).
 `Math.Round`, `Math.Truncate`, `len`, `datepart`, `getdate` and `isnull` are all emitted as shown above.
+The variability aggregates follow the shared cardinality contract: `Stdev`/`Var` are `null` for zero or
+one contributing value, `Stdevp`/`Varp` are `null` for zero and `0.0` for one, and two or more values keep
+SQL Server's native formulas. The nullable result reaches the caller as `null` instead of throwing on a
+non-nullable `double`, so the same query returns the same shape here and on the other providers.
+
+BASE64 requires SQL Server 2025: `SqlFunctions.Sql.base64_encode` and `base64_decode` render
+`BASE64_ENCODE`/`BASE64_DECODE` there, with no compatibility-level or preview flag. `base64_decode`
+accepts `varchar` input, so cast an `nvarchar` column. `crypt_gen_random` and the decimal
+`parse`/`try_parse` (`decimal(38,18)`, fixed `en-US`) are available on the same server. nextorm does
+not probe the server version, so on an older server the emitted function fails with the server's own
+"not a recognized function" error.
+
+
 
 SQL Server 2022+ also opts into `greatest`/`least` (standard syntax) and `SqlFunctions.Sql.date_trunc`, which
 renders `datetrunc(part, value)` with the plural ANSI parts folded to the singular T-SQL spellings
@@ -114,7 +133,7 @@ SQL Server 2017+ opts into `SqlFunctions.Sql.string_agg` →
 ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)): `SqlFunctions.SqlServer.json_value`, `SqlFunctions.SqlServer.json_query`, `SqlFunctions.SqlServer.json_modify` and
 `SqlFunctions.SqlServer.isjson` render their T-SQL names over a text column, using a JSONPath string (`'$.name'`);
 the PostgreSQL `json`/`jsonb` surface still throws. A typed `OPENJSON ... WITH (...)` rowset is declared with a
-`[SqlTableFunction("openjson", WithClause = "...")]` wrapper (see the table-valued-functions guide). The full-text predicates `SqlFunctions.Sql.contains` and
+`TvfEntityBuilder<T>` factory whose `withClause` carries the clause body (see the table-valued-functions guide). The full-text predicates `SqlFunctions.Sql.contains` and
 `SqlFunctions.Sql.freetext` ([`SupportsFullText`](xref:NextORM.Core.ISqlDialect.SupportsFullText)) render as T-SQL `contains(...)`/`freetext(...)` and require a
 full-text index on the column. `SqlFunctions.Sql.iif(condition, whenTrue, whenFalse)` renders `iif(...)`
 ([`Iif`](xref:NextORM.Core.ISqlDialect.Iif), spelled through [`IIifRenderer.Render`](xref:NextORM.Core.IIifRenderer.Render(System.String,System.String,System.String))) and
@@ -140,7 +159,13 @@ ANSI key words and `current_schema()`/`current_database()`/`version()` as `schem
 SQL Server renders the window percentiles `SqlFunctions.Sql.percentile_cont(fraction, property).Over()` and
 `percentile_disc(...)` as `percentile_cont(fraction) within group (order by property) over (...)`
 ([`SupportsPercentileWindow`](xref:NextORM.Core.ISqlDialect.SupportsPercentileWindow)); it has no exact ordered-set
-aggregate form. The arbitrary-value aggregate `any_agg` (`ANY_VALUE`) is **not** enabled: T-SQL exposes
+aggregate form. The median is the same native composition:
+`SqlFunctions.SqlServer.median(value).Over(...)` renders
+`percentile_cont(0.5) within group (order by value) over (...)`, one row per input row (not one row per
+group); only a partition-only `OVER` is supported, so a window `ORDER BY` or a frame is refused, and the
+call must be completed with `Over(...)`. The generic `SqlFunctions.SqlServer.percentile` has no distinct
+native spelling and throws `NotSupportedException`. Fractions are `double` values in `[0, 1]`, not
+percentages, and are validated before rendering. The arbitrary-value aggregate `any_agg` (`ANY_VALUE`) is **not** enabled: T-SQL exposes
 `ANY_VALUE` only on SQL Server 2025 / Fabric, which the version-agnostic dialect cannot assume.
 The XML data-type methods `SqlFunctions.SqlServer.xml_value(xml, xpath, sqlType)`,
 `xml_query(xml, xpath)` and `xml_exist(xml, xpath)`
@@ -171,11 +196,15 @@ by every other provider:
 - **String/conversion:** `stuff` and `str`; `isdate`/`isnumeric` return the native T-SQL `int` (1/0),
   not `bit`; `formatmessage` accepts a format string or a `sys.messages` id and at most 20 arguments.
 
-Seven names that report live, mutable connection-, session- or statement-scope state are intentionally
-not exposed: `CURRENT_REQUEST_ID`, `CURRENT_TRANSACTION_ID`, `XACT_STATE`, `IDENT_CURRENT`,
-`MIN_ACTIVE_ROWVERSION`, `ROWCOUNT_BIG` and `SCOPE_IDENTITY`. Stable configuration and identity constants
-of the same scope (`CURRENT_TIMEZONE`/`CURRENT_TIMEZONE_ID`, `SERVER_NAME`, `HOST_ID`, `HOST_NAME`,
-`APP_NAME`, `SUSER_NAME`, `ORIGINAL_LOGIN`) are shipped. See the
+The seven names that report live, mutable connection-, session- or statement-scope state are exposed
+as-is: `CURRENT_REQUEST_ID`, `CURRENT_TRANSACTION_ID`, `XACT_STATE`, `IDENT_CURRENT`,
+`MIN_ACTIVE_ROWVERSION`, `ROWCOUNT_BIG` and `SCOPE_IDENTITY`. Live mutable state is **not** an exclusion
+criterion: the native SQL Server semantics are shipped with their caveats, and nextorm promises no
+per-row stability, no connection continuity between queries and no identity-retrieval guarantee — a
+separate `SCOPE_IDENTITY`/`IDENT_CURRENT` call is not a last-insert API, use `ReturningIdentity<TKey>()`
+instead. Stable configuration and identity constants of the same scope (`CURRENT_TIMEZONE`/
+`CURRENT_TIMEZONE_ID`, `SERVER_NAME`, `HOST_ID`, `HOST_NAME`, `APP_NAME`, `SUSER_NAME`, `ORIGINAL_LOGIN`)
+stay on the same surface. See the
 [T-SQL scalar functions guide](../guide/provider-specific-sql/sqlserver.md#t-sql-scalar-functions).
 
 ## Recursive CTEs and `maxRecursion`
@@ -286,6 +315,87 @@ The returned stream owns the reader and the per-call command until it is dispose
 
 SQL Server also supports the multi-column `ToDataReader`/`ToDataReaderAsync` terminal: it hands the same sequential-access command over as a caller-owned `DbDataReader`, so the caller can read every column and row (or several LOB columns in order) without materialising the result. SQLite supports it too, but via a buffered, locator-free reader (no `rowid`, no `SequentialAccess`, so no chunked LOB); MySQL/MariaDB, ClickHouse and the in-memory provider have no sequential-access support and reject it.
 
+## Bulk insert
+
+`CreateBulkInsertBuilder` writes through the native `SqlBulkCopy` path when `Mode` is `Auto` (the default) and
+every requested option is compatible; `Native` refuses by name instead of falling back, and `Portable` writes
+`INSERT ... VALUES` (the only path for `Returning*`).
+
+- `MaxBatchSize` maps to `SqlBulkCopy.BatchSize`; unset stays the driver default (`0`, one batch).
+- `KeepIdentity` maps to `SqlBulkCopyOptions.KeepIdentity`; the portable statement is wrapped with
+  `SET IDENTITY_INSERT ... ON/OFF` instead.
+- `CheckConstraints`/`TableLock`/`KeepNulls`/`FireTriggers` map to the matching `SqlBulkCopyOptions` flags;
+  `false` is honoured by not requesting the flag, and `KeepNulls=false` is accepted only for a
+  default-equivalent shape.
+- The typed group carries the internal transaction:
+  `SqlServer(new SqlServerBulkInsertOptions { UseInternalTransaction = true })` sets
+  `SqlBulkCopyOptions.UseInternalTransaction` for the driver batch. It cannot be combined with an external
+  context transaction, covers only the current driver batch when several are used, and is refused on the
+  portable path.
+- `Timeout` is one whole-invocation budget: the remaining time becomes `BulkCopyTimeout` (minimum 1 s), and an
+  expired budget surfaces as `TimeoutException`; the caller's cancellation always wins.
+- `DatabaseName` renders as part of the multipart name; `ServerName` is refused (a bulk insert never reroutes
+  to another server).
+
+The set is buffered in a `DataTable` before the copy, because `SqlBulkCopy` needs column type metadata; a chunk
+limit splits driver batches but not that buffer. See [Bulk insert](../guide/22-bulk-insert.md).
+
+## Native `json` column (SQL Server 2025)
+
+SQL Server 2025 (17.x) introduced a **distinct built-in `json` type**: the server reports it as `json`
+in the column metadata, it is not an alias of `nvarchar`, and it works under every database
+compatibility level. nextorm does not detect it — the capability is a pure function of the server
+version and engine edition you declare, so SQL generation never depends on the connection, the
+compatibility level or a metadata round-trip.
+
+| Context construction | `SupportsJson` | `[JsonColumn]` storage on a `json` column |
+|---|---|---|
+| `new SqlServerDataContext(connectionString, builder)` — default, unversioned | `false` | text only: `Auto`/`Text` write `nvarchar`, `Native` throws `NotSupportedException` |
+| `new SqlServerDataContext(new Version(16, 0), connectionString)` — SQL Server 2016–2022 | `false` | same as the unversioned context: text only, `Native` refused before any command runs |
+| `new SqlServerDataContext(new Version(17, 0), connectionString)` — SQL Server 2025+ | `true` | `json`: `Auto`/`Text`/`Native` all resolve to the same text converter |
+| `new SqlServerDataContext(SqlServerEngineEdition.SqlDatabase, connectionString)` — Azure SQL Database | `true` | edition-derived: the engine reports major version 12, so the edition must be declared (`Auto`/`Text`/`Native` resolve to the same text converter). Unit-only: no live Azure instance was available |
+| `…AzureSqlManagedInstance` / `…MicrosoftFabricSqlDatabase` — Azure SQL Managed Instance / Fabric SQL database | `true` | same as above; Fabric **SQL database** is edition 12 — edition 11 ("Azure Synapse serverless SQL pool, or Microsoft Fabric") does **not** enable it. Unit-only |
+
+The edition is a **caller declaration**: nextorm never reads `SERVERPROPERTY('EngineEdition')`, so SQL
+generation stays a pure function of the declared state. A concrete context type owns one immutable
+`(version, edition)` declaration — the plan cache is keyed by the context type — and a conflicting
+declaration throws `InvalidOperationException` before any command runs. Declaring the capability does
+not migrate an `nvarchar` column to `json`, and `Auto` keeps the text transport.
+
+```csharp
+// Version-first constructor: the declared version opens the version-gated capabilities.
+using var dataContext = new SqlServerDataContext(new Version(17, 0), connectionString);
+```
+
+`(Version, DbConnection)` is the second overload, for a caller-owned connection. A context type owns one
+immutable `(version, engine edition)` declaration — the plan cache is keyed by the context type — so
+constructing the *same* type with a conflicting declaration of either component (a different version, a
+different engine edition, or unversioned and then declared) throws `InvalidOperationException` before any
+command runs; derive a distinct `SqlServerDataContext` subclass per declaration.
+
+### Transport and limits
+
+* The representation is the ordinary CLR `string`: parameters are inferred as `nvarchar`, there is no
+  DOM parameter, no `SqlDbType.Json` and no double serialisation.
+* On a context whose gate is open — by declared major version 17+, or by a declared Azure/Fabric SQL
+  database edition — `Auto`, `Text` and `Native` resolve to the same converter, so an existing
+  `nvarchar`-backed `[JsonColumn]` stays byte-for-byte identical when the version or the edition
+  argument is added.
+* A native `json` column stores **object and array documents only**. Scalar roots (string, number,
+  boolean) and the JSON `null` document are rejected by the **server** with error **13609** — use
+  `Text` storage for those payloads. This is a server limitation, not a library refusal, and nextorm
+  adds no client-side validation for it.
+* JSON `null` in text storage is the four-character text `null` (`DATALENGTH` 8 in `nvarchar`), which
+  stays distinct from SQL `NULL`.
+
+### Migration
+
+nextorm does not generate column DDL, so switching a column from `nvarchar(max)` to `json` is a schema
+change you make in the database — for example `alter table t alter column payload json` in a release
+step. The library side keeps working either way: the same `[JsonColumn]` mapping writes the same text
+to either column type, and `Auto` never retargets an existing mapping on its own. Declaring an engine
+edition is equally a library-side declaration: it never alters a column.
+
 ## Provider differences
 
 | Aspect | SQL Server |
@@ -315,12 +425,14 @@ SQL Server also supports the multi-column `ToDataReader`/`ToDataReaderAsync` ter
 | Regular expressions | `regexp_like(value, pattern, 'c'/'i')` / `regexp_replace(value, pattern, replacement, 1, 0, 'c'/'i')` (SQL Server 2025+; `regexp_like` additionally needs database compatibility level 170) |
 | Locking table hints | `with (hint, ...)` after the source, after its alias when aliased ([`WithTableHint`](xref:NextORM.Core.FromOptions.WithTableHint(System.String[]))) |
 | Row locking | `ForUpdate`/`ForShare` render `with (updlock)`/`with (holdlock)` on **every** physical `FROM`/`JOIN` source (behavior change: previously the primary source only); [`FromOptions.ForUpdate`](xref:NextORM.Core.FromOptions.ForUpdate)/[`JoinOptions.ForUpdate`](xref:NextORM.Core.JoinOptions.ForUpdate) target one source ([`Lock`](xref:NextORM.Core.ISqlDialect.Lock), [`ILockRenderer.UsesTableHints`](xref:NextORM.Core.ILockRenderer.UsesTableHints)); a [`LockWaitMode`](xref:NextORM.Core.LockWaitMode) adds `nowait`/`readpast` (`with (updlock, nowait)`/`with (updlock, readpast)`) |
-| Native bulk copy | `SqlBulkCopy`; [`BulkInsertOptions`](xref:NextORM.Core.BulkInsertOptions) `CheckConstraints`/`TableLock`/`KeepNulls`/`FireTriggers` map to `SqlBulkCopyOptions` (see [Bulk insert](../guide/22-bulk-insert.md#sql-server-bulk-copy-options)) |
+| Native bulk copy | `SqlBulkCopy`; [`BulkInsertOptions`](xref:NextORM.Core.BulkInsertOptions) `CheckConstraints`/`TableLock`/`KeepNulls`/`FireTriggers` map to `SqlBulkCopyOptions`, and [`SqlServerBulkInsertOptions.UseInternalTransaction`](xref:NextORM.Core.SqlServerBulkInsertOptions.UseInternalTransaction) sets the internal-transaction flag (see [Bulk insert](../guide/22-bulk-insert.md#sql-server-bulk-copy-options)) |
 | Session/info functions | `current_user`, `session_user`, `schema_name()`, `db_name()`, `@@version` |
 | T-SQL clock/offset/`*FROMPARTS` | `sysdatetime` / `sysdatetimeoffset` / `sysutcdatetime` / `switchoffset` / `todatetimeoffset` / `timefromparts` / `smalldatetimefromparts` / `datetimefromparts` / `datetime2fromparts` / `datetimeoffsetfromparts` (per-name gated) |
 | T-SQL binary/checksum/other | `checksum` / `binary_checksum` / `compress` / `decompress` / `rand` / `stuff` / `str` / `isdate` / `isnumeric` / `formatmessage` (per-name gated) |
 | T-SQL metadata | `col_length` / `col_name` / `object_id` / `object_name` / `db_id` / `db_name` / `schema_id` / `schema_name` / `type_id` / `type_name` / `file_id` / `file_name` / `current_timezone` / `parsename` / `stats_date` and the rest of the A-D families (per-name gated) |
 | Window percentiles | `percentile_cont`/`percentile_disc` as `... within group (order by x) over (...)` (SQL Server 2012+) |
+| Median (analytic) | `SqlFunctions.SqlServer.median(v).Over(...)` → `percentile_cont(0.5) within group (order by v) over (...)`: one row per input row; partition-only `OVER` (`ORDER BY`/frame refused) |
+| Generic percentile | not supported: `SqlFunctions.SqlServer.percentile` throws `NotSupportedException` |
 | Arbitrary-value aggregate | not supported (`ANY_VALUE` is SQL Server 2025 / Fabric only) |
 | JSON output | whole result set as one JSON document, terminal `for json path` / `for json auto` ([`ForJson`](xref:NextORM.Core.QueryCommand`1.ForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean,System.Object[]))) |
 | XML output | whole result set as one XML document, terminal `for xml raw/auto/explicit/path` ([`ForXml`](xref:NextORM.Core.QueryCommand`1.ForXml(NextORM.Core.ForXmlMode,System.String,System.String,System.Boolean,System.Object[]))) |

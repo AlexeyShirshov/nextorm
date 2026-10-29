@@ -43,6 +43,12 @@ internal readonly struct SqlBuilder
         var entityType = cmd.EntityType;
         ArgumentNullException.ThrowIfNull(entityType);
 
+        // The eleven refused SQL Server functions are rejected at the command boundary, before any
+        // clause is rendered: the diagnostic names the member and the reason, and arguments are never
+        // visited (they would be evaluated by a later translation step). A subquery is preflighted by
+        // its own MakeSelect, so the walk stops at nested lambdas.
+        SqlServerFunctionRefusals.ValidateCommand(cmd);
+
         // A SelectWhereMax/SelectWhereMin command is lowered to a portable window-function derived
         // table (see MakeExtremeRowSelect) instead of the plain single-statement rendering below.
         if (cmd.ExtremeRow is not null)
@@ -59,16 +65,45 @@ internal readonly struct SqlBuilder
         // not emit a WITH of its own (see CteHoister); only the root of the render emits it.
         var ctes = _ctx.SuppressCtes ? null : cmd.Ctes;
 
+        // Unsupported ClickHouse ON null predicates are refused here, at the earliest point of the
+        // render that sees this command's join tree and before the first SQL character is written.
+        // The check cannot live inside MakeJoin: by the time a join is rendered the FROM clause is
+        // already in `sqlBuilder`, so the guard would fire after a partial statement was assembled.
+        // Every nested statement (a CTE body, a UNION branch, a derived source, a correlated subquery)
+        // reaches this same entry point and is therefore validated on its own join tree.
+        SqlSourceRenderer.ValidateClickHouseJoinOnPredicates(in _ctx, cmd);
+
         var sqlBuilder = _ctx.ParamMode ? null : StringBuilderPool.Shared.Get();
         var selectBuilder = _ctx.ParamMode ? null : StringBuilderPool.Shared.Get();
         string? topStmt = null;
         string? withClause = null;
         string? maxRecursionStmt = null;
 
+        // The statement-level recorder of planner-owned parameter occurrences (D4b-1). It is created only
+        // when the render is producing a template (the planner attached a capture); it is fed by the
+        // clause renderers that append parameter-bearing fragments to `sqlBuilder` at the current end,
+        // and the two leading inserts below relocate those spans to their final statement offsets.
+        var capture = _ctx.Capture;
+        var root = capture is null ? null : new SqlParameterTemplateRecorder();
+
+        // Select-list expressions are rendered into their own builder (SqlSourceRenderer.MakeColumn) and
+        // inserted at the head of the statement afterwards. Their placeholder occurrences therefore live
+        // in the column fragment's recorder, not in `root`; they are merged at their final statement
+        // offsets after both head insertions (select list, then WITH) have been relocated. Without this
+        // a captured value used only as a projected column has no template occurrence and the
+        // MySQL-family execution specialization cannot lower it.
+        List<(int Offset, SqlParameterTemplateRecorder Recorder)>? selectFragments = capture is null ? null : [];
+
         // Only the source entries this command adds may satisfy its own alias lookups. Without the
         // boundary a nested command over the same entity type as a sibling (or as the outer query)
         // resolves to that earlier alias (e.g. "from x as 't3' where t2.id = ...").
         _ctx.ColumnsProvider.PushSourceScope();
+
+        // #324: record which projection this frame renders, so a SELECT projection item and the same
+        // left row used as a correlated-APPLY source resolve through one frame-local slot map (and a
+        // frame that belongs to another command keeps its existing type/occurrence resolution).
+        if (_ctx.ColumnsProvider is IOuterSlotSourceRegistry slotFrames)
+            slotFrames.BindFrameProjection(cmd.EntityType is { } frameType && typeof(IProjection).IsAssignableFrom(frameType) ? frameType : null);
 
         try
         {
@@ -229,13 +264,39 @@ internal readonly struct SqlBuilder
                         throw new NotSupportedException("The PREWHERE clause is not supported by this SQL dialect");
 
                     if (!_ctx.ParamMode) sqlBuilder!.Append(SqlText.NewLine).Append(Kw(" prewhere "));
-                    SqlSourceRenderer.MakeWhere(in _ctx, sqlBuilder, entityType, cmd.PreparedPreWhere, 0, dontNeedAlias);
+                    SqlSourceRenderer.MakeWhere(in _ctx, sqlBuilder, entityType, cmd.PreparedPreWhere, 0, dontNeedAlias, root);
                 }
+
+                // A key-less constant projection has no group, so a validated row-independent HAVING is a
+                // pre-group filter and belongs in the WHERE position of that statement. Every other mode
+                // (including the legacy ungrouped HAVING, which stays dropped) keeps its WHERE rendering.
+                var preGroupHaving = IsConstantProjection(cmd) ? cmd.PreparedHaving ?? cmd.Having : null;
+
                 if (cmd.PreparedCondition is not null)
                 {
                     if (!_ctx.ParamMode) sqlBuilder!.Append(SqlText.NewLine).Append(Kw(" where "));
-                    SqlSourceRenderer.MakeWhere(in _ctx, sqlBuilder, entityType, cmd.PreparedCondition, 0, dontNeedAlias);
+
+                    if (preGroupHaving is null)
+                    {
+                        SqlSourceRenderer.MakeWhere(in _ctx, sqlBuilder, entityType, cmd.PreparedCondition, 0, dontNeedAlias, root);
+                    }
+                    else
+                    {
+                        AppendParenthesisedCondition(sqlBuilder, entityType, cmd.PreparedCondition, dontNeedAlias, root);
+                        if (!_ctx.ParamMode) sqlBuilder!.Append(Kw(" and "));
+                        AppendParenthesisedCondition(sqlBuilder, entityType, preGroupHaving, dontNeedAlias, root);
+                    }
                 }
+                else if (preGroupHaving is not null)
+                {
+                    if (!_ctx.ParamMode) sqlBuilder!.Append(SqlText.NewLine).Append(Kw(" where "));
+                    AppendParenthesisedCondition(sqlBuilder, entityType, preGroupHaving, dontNeedAlias, root);
+                }
+
+                // The SQL Server GROUPING_ID function is only valid in the SELECT list, HAVING or
+                // ORDER BY of a grouped command, and every argument must be a grouping expression.
+                // The server reports Msg 8161, but the library refuses before execution.
+                ValidateGroupingId(cmd);
 
                 var grouping = cmd.GroupingList;
                 if (grouping?.Length > 0)
@@ -317,8 +378,19 @@ internal readonly struct SqlBuilder
                     if (having is not null)
                     {
                         if (!_ctx.ParamMode) sqlBuilder!.Append(SqlText.NewLine).Append(Kw(" having "));
-                        SqlSourceRenderer.MakeWhere(in _ctx, sqlBuilder, entityType, having, 0, dontNeedAlias);
+                        SqlSourceRenderer.MakeWhere(in _ctx, sqlBuilder, entityType, having, 0, dontNeedAlias, root);
                     }
+                }
+                else if (cmd.IsSelectGroup
+                    && cmd.SelectGroupMode == SelectGroupMode.GlobalAggregate
+                    && (cmd.PreparedHaving ?? cmd.Having) is { } globalHaving)
+                {
+                    // A global aggregate groups the whole source: there is no GROUP BY list, and HAVING
+                    // filters the single aggregate row (`select sum(amount) from t having sum(amount) > @p`).
+                    // The branch is gated on IsSelectGroup, so a legacy ungrouped HAVING keeps its
+                    // historical behaviour of not being rendered at all.
+                    if (!_ctx.ParamMode) sqlBuilder!.Append(SqlText.NewLine).Append(Kw(" having "));
+                    SqlSourceRenderer.MakeWhere(in _ctx, sqlBuilder, entityType, globalHaving, 0, dontNeedAlias, root);
                 }
 
                 var windows = cmd.Windows;
@@ -369,6 +441,8 @@ internal readonly struct SqlBuilder
                 var sortingList = cmd.Sorting;
                 if (sortingList is not null)
                 {
+                    EnsureNullPlacementIsRenderable(cmd, sortingList);
+
                     if (!_ctx.ParamMode) sqlBuilder!.Append(SqlText.NewLine).Append(Kw(" order by "));
 
                     for (var (i, cnt) = (0, sortingList.Length); i < cnt; i++)
@@ -376,23 +450,62 @@ internal readonly struct SqlBuilder
                         var sorting = sortingList[i];
                         if (sorting.PreparedExpression is not null)
                         {
-                            var sortingSql = SqlSourceRenderer.MakeSort(in _ctx, entityType, sorting.PreparedExpression, 0, dontNeedAlias);
                             if (!_ctx.ParamMode)
                             {
-                                sqlBuilder!.Append(sortingSql);
-                                if (sorting.Direction == OrderDirection.Desc)
-                                    sqlBuilder.Append(Kw(" desc"));
+                                var sortingSql = SqlSourceRenderer.MakeSort(in _ctx, entityType, sorting.PreparedExpression, 0, dontNeedAlias);
+                                if (sorting.NullsPosition == NullsPosition.Default)
+                                {
+                                    sqlBuilder!.Append(sortingSql);
+                                    if (sorting.Direction == OrderDirection.Desc)
+                                        sqlBuilder.Append(Kw(" desc"));
+                                }
+                                else
+                                {
+                                    // The dialect decides between native NULLS FIRST/LAST and the CASE
+                                    // emulation; the key fragment is already qualified and quoted.
+                                    sqlBuilder!.Append(_ctx.Dialect.RenderOrderBy(sortingSql, sorting.Direction, sorting.NullsPosition));
+                                }
 
                                 sqlBuilder.Append(", ");
                             }
+                            else
+                            {
+                                // Parameter mode mirrors the emitted occurrences: the CASE emulation repeats
+                                // the key, so it is walked twice; Default and native placement walk it once.
+                                var occurrences = sorting.NullsPosition != NullsPosition.Default && !_ctx.Dialect.SupportsNullsOrdering ? 2 : 1;
+                                for (var n = 0; n < occurrences; n++)
+                                    SqlSourceRenderer.MakeSort(in _ctx, entityType, sorting.PreparedExpression, 0, dontNeedAlias);
+                            }
                         }
-                        else if (!_ctx.ParamMode && sorting.ColumnIndex.HasValue)
+                        else if (sorting.ColumnIndex.HasValue)
                         {
-                            sqlBuilder!.Append(sorting.ColumnIndex);
-                            if (sorting.Direction == OrderDirection.Desc)
-                                sqlBuilder.Append(Kw(" desc"));
+                            if (!_ctx.ParamMode)
+                            {
+                                if (sorting.NullsPosition == NullsPosition.Default)
+                                {
+                                    sqlBuilder!.Append(sorting.ColumnIndex);
+                                    if (sorting.Direction == OrderDirection.Desc)
+                                        sqlBuilder.Append(Kw(" desc"));
+                                }
+                                else
+                                {
+                                    // An ordinal cannot carry a CASE (that would test the literal ordinal), so
+                                    // the actual selected key expression is resolved first.
+                                    var sortKey = ResolveSortKeyExpression(cmd, entityType, in sorting);
+                                    var sortingSql = SqlSourceRenderer.MakeSort(in _ctx, entityType, sortKey, 0, dontNeedAlias);
+                                    sqlBuilder!.Append(_ctx.Dialect.RenderOrderBy(sortingSql, sorting.Direction, sorting.NullsPosition));
+                                }
 
-                            sqlBuilder.Append(", ");
+                                sqlBuilder.Append(", ");
+                            }
+                            else if (sorting.NullsPosition != NullsPosition.Default && !_ctx.Dialect.SupportsNullsOrdering)
+                            {
+                                // The CASE emulation repeats the resolved key, so the parameter walk visits
+                                // it twice (the plain ordinal path visits nothing).
+                                var sortKey = ResolveSortKeyExpression(cmd, entityType, in sorting);
+                                SqlSourceRenderer.MakeSort(in _ctx, entityType, sortKey, 0, dontNeedAlias);
+                                SqlSourceRenderer.MakeSort(in _ctx, entityType, sortKey, 0, dontNeedAlias);
+                            }
                         }
                     }
 
@@ -429,6 +542,12 @@ internal readonly struct SqlBuilder
                     }
                 }
 
+                if (!pageApplied && !_ctx.ParamMode && !cmd.Paging.IsEmpty)
+                {
+                    sqlBuilder!.Append(SqlText.NewLine);
+                    _ctx.Dialect.MakePage(cmd.Paging, sqlBuilder, _ctx.KeywordCase);
+                }
+
                 if (cmd.Settings is { Count: > 0 } settings)
                 {
                     if (!_ctx.Dialect.SupportsSettings)
@@ -439,12 +558,6 @@ internal readonly struct SqlBuilder
                         sqlBuilder!.Append(SqlText.NewLine);
                         sqlBuilder.Append(_ctx.Dialect.MakeSettings(settings, _ctx.KeywordCase));
                     }
-                }
-
-                if (!pageApplied && !_ctx.ParamMode && !cmd.Paging.IsEmpty)
-                {
-                    sqlBuilder!.Append(SqlText.NewLine);
-                    _ctx.Dialect.MakePage(cmd.Paging, sqlBuilder, _ctx.KeywordCase);
                 }
             }
             else if (!_ctx.ParamMode && sqlBuilder!.Length > 0)
@@ -500,7 +613,9 @@ internal readonly struct SqlBuilder
                 }
                 // SQL Server renders the limit as TOP(n); DISTINCT has to precede it
                 // ("select distinct top(n) ..."), so the flag is emitted before the select-list branch.
-                else if (cmd.IsDistinct)
+                // A key-less constant projection is rendered through DISTINCT without mutating the
+                // command's own IsDistinct (which is source state and part of the plan key).
+                else if (cmd.IsDistinct || IsConstantProjection(cmd))
                     selectBuilder.Append(Kw("distinct "));
             }
             if (cmd.IgnoreColumns || selectList is null)
@@ -545,18 +660,31 @@ internal readonly struct SqlBuilder
                         continue;
                     }
 
-                    var (needAliasForColumn, column) = SqlSourceRenderer.MakeColumn(in _ctx, item, entityType, !needAlias, renameAware: true);
+                    var (needAliasForColumn, column) = SqlSourceRenderer.MakeColumn(in _ctx, item, entityType, !needAlias, renameAware: true, selectList: true);
 
                     if (!_ctx.ParamMode)
                     {
+                        var columnOffset = selectBuilder!.Length;
+                        if (selectFragments is not null
+                            && _ctx.Capture is { } selectCapture
+                            && selectCapture.TryGetFragment(column, out var columnRecorder))
+                        {
+                            selectFragments.Add((columnOffset, columnRecorder));
+                        }
+
                         selectBuilder!.Append(column);
 
-                        if (needAliasForColumn)
+                        if (needAliasForColumn
+                            || (_ctx.RequireDerivedScalarOutputName && item.PropertyName is null && item.OutputName is not null))
                         {
                             // A generated output name (an unaliased computed scalar) is an alias only for
-                            // a typed-CTE declaration body; anywhere else the column keeps its implicit
-                            // name (the alias text was null before, and MakeColumnAlias emits nothing).
-                            var alias = item.PropertyName ?? (_ctx.ExactProjectionAliases ? item.OutputName : null);
+                            // a typed-CTE declaration body and for a boundary an enclosing query addresses
+                            // by identifier (a derived subquery or a CTAS source): those consumers reference
+                            // the generated name, so it must be declared exactly once. Anywhere else the
+                            // column keeps its implicit name (the alias text was null before, and
+                            // MakeColumnAlias emits nothing).
+                            var alias = item.PropertyName
+                                ?? ((_ctx.ExactProjectionAliases || _ctx.RequireDerivedScalarOutputName) ? item.OutputName : null);
                             selectBuilder.Append(_ctx.Dialect.MakeColumnAlias(alias, _ctx.KeywordCase));
                         }
 
@@ -577,14 +705,45 @@ internal readonly struct SqlBuilder
             string? r = null;
             if (!_ctx.ParamMode)
             {
+                // An empty (non-null) prepared select list only truncates the render when the projection
+                // shape itself has no output columns to render: a whole-object read (a bare source
+                // parameter, optionally converted), a zero-argument construction or a zero-binding
+                // member init. That is the one case where no later stage has a diagnostic to raise, so
+                // the renderer fails closed with the typed build exception instead of emitting the
+                // malformed "selec" head. Any other empty list means column classification failed for a
+                // projection that does declare output: the row mapper or the JSON projection validation
+                // owns that diagnostic and this check must not pre-empt it. A null list means
+                // "wildcard" (the arm above); IgnoreColumns keeps its wildcard too.
+                if (!cmd.IgnoreColumns
+                    && selectList is { Length: 0 }
+                    && IsColumnlessProjection(cmd.ProjectionExpression))
+                    throw new BuildSqlCommandException(
+                        "The prepared select list is empty: the projection resolved no columns to render. Use a mapped source or specify an explicit Select with named columns.");
+
                 selectBuilder!.Length -= 2;
                 if (selectInto is not null)
                     selectBuilder.Append(selectInto);
 
-                sqlBuilder!.Insert(0, selectBuilder!.ToString());
+                var selectLength = selectBuilder.Length;
+                var selectText = selectBuilder.ToString();
+                sqlBuilder!.Insert(0, selectText);
+                root?.RelocateInsertion(0, selectLength);
 
                 if (withClause is not null)
+                {
                     sqlBuilder!.Insert(0, withClause);
+                    root?.RelocateInsertion(0, withClause.Length);
+                }
+
+                // The select-list fragments are now at their final offsets: the select text starts at 0
+                // and the WITH clause (when present) precedes it. Their occurrences are merged without
+                // moving the cursor (the recorded length already spans the finished statement).
+                if (root is not null && selectFragments is { Count: > 0 })
+                {
+                    var statementOffset = withClause?.Length ?? 0;
+                    foreach (var (offset, recorder) in selectFragments)
+                        root.AppendOccurrences(recorder, statementOffset + offset);
+                }
 
                 // FOR JSON / FOR XML come after ORDER BY but before the trailing OPTION clause.
                 if (cmd.ForJsonClause is not null && cmd.ForXmlClause is not null)
@@ -615,7 +774,14 @@ internal readonly struct SqlBuilder
                     // The dialect owns the final placement. It also receives the CTE maxrecursion
                     // option so a dialect that must coalesce it into one trailing OPTION clause
                     // (SQL Server) can do so instead of the caller appending a second clause.
-                    r = _ctx.Dialect.RenderQueryHints(sqlBuilder!.ToString(), hints, maxRecursionStmt, _ctx.KeywordCase);
+                    var composed = sqlBuilder!.ToString();
+                    r = _ctx.Dialect.RenderQueryHints(composed, hints, maxRecursionStmt, _ctx.KeywordCase);
+
+                    // A dialect that rewrites the statement (rather than only appending) can move the
+                    // recorded spans anywhere, so the capture is dropped instead of producing a wrong
+                    // template; the emitted SQL and the parameter list are unaffected.
+                    if (capture is not null && !string.Equals(r, composed, StringComparison.Ordinal))
+                        capture.NotifyUnresolved();
                 }
                 else
                 {
@@ -624,6 +790,9 @@ internal readonly struct SqlBuilder
 
                     r = sqlBuilder!.ToString();
                 }
+
+                if (capture is not null && root is not null && r is not null)
+                    capture.RegisterFragment(r, root);
             }
 
             if (!_ctx.ParamMode && cmd.From?.RawSqlSource is not null)
@@ -764,6 +933,33 @@ internal readonly struct SqlBuilder
 
             for (var i = 0; i < sorting.Length; i++)
             {
+                var nullsPosition = NullsOrderingRenderer.Validate(sorting[i].NullsPosition);
+
+                if (nullsPosition != NullsPosition.Default)
+                {
+                    var sortKey = ResolveSortKeyExpression(cmd, entityType, in sorting[i]);
+                    if (builder is not null)
+                    {
+                        if (i == 0)
+                            builder.Append(wrotePartition ? Kw(" order by ") : Kw("order by "));
+                        else
+                            builder.Append(", ");
+
+                        var sort = SqlSourceRenderer.MakeSort(in _ctx, entityType, sortKey, 0);
+                        builder.Append(_ctx.Dialect.RenderOrderBy(sort, sorting[i].Direction, nullsPosition));
+                    }
+                    else
+                    {
+                        // Mirror the emitted key occurrences: native placement emits the key once, the
+                        // CASE emulation twice.
+                        var occurrences = _ctx.Dialect.SupportsNullsOrdering ? 1 : 2;
+                        for (var n = 0; n < occurrences; n++)
+                            SqlSourceRenderer.MakeSort(in _ctx, entityType, sortKey, 0);
+                    }
+
+                    continue;
+                }
+
                 if (builder is not null)
                 {
                     if (i == 0)
@@ -858,13 +1054,7 @@ internal readonly struct SqlBuilder
                         SqlSourceRenderer.MakeColumn(in _ctx, entityColumns[i], entityType, dontNeedAlias: false, renameAware: true);
 
                     if (!cmd.PerParentPagingEmbedded && cmd.Sorting is { Length: > 0 } sorting)
-                    {
-                        for (var i = 0; i < sorting.Length; i++)
-                        {
-                            if (sorting[i].PreparedExpression is { } prepared)
-                                SqlSourceRenderer.MakeSort(in _ctx, entityType, prepared, 0);
-                        }
-                    }
+                        WalkOrderByParameters(cmd, entityType, sorting);
                 }
 
                 result = outer?.ToString();
@@ -1249,7 +1439,7 @@ internal readonly struct SqlBuilder
     private static SelectExpression[] BuildExtremeRowEntitySelectList(Type entityType)
     {
         if (!DataContextCache.Metadata.TryGetValue(entityType, out var entityMeta))
-            throw new BuildSqlCommandException("SelectWhereMax/SelectWhereMin requires a mapped entity source.");
+            throw new BuildSqlCommandException(ExtremeRowCompatibility.MappedEntitySourceMessage);
 
         var (columns, _) = EntitySelectListBuilder.Build(entityType, entityMeta, CancellationToken.None);
         return columns;
@@ -1357,13 +1547,7 @@ internal readonly struct SqlBuilder
                     }
 
                     if (cmd.Sorting is { Length: > 0 } sorting)
-                    {
-                        for (var i = 0; i < sorting.Length; i++)
-                        {
-                            if (sorting[i].PreparedExpression is { } prepared)
-                                SqlSourceRenderer.MakeSort(in _ctx, entityType, prepared, 0);
-                        }
-                    }
+                        WalkOrderByParameters(cmd, entityType, sorting);
                 }
 
                 result = outer?.ToString();
@@ -1382,9 +1566,116 @@ internal readonly struct SqlBuilder
     }
 
     /// <summary>
+    /// Validates the requested NULL placements and fails closed on shapes where the portable <c>CASE</c>
+    /// emulation would repeat an ordering key illegally. Called from both the SQL and the parameter pass,
+    /// so an unsupported shape is rejected before anything is executed. A dialect with native
+    /// <c>NULLS FIRST</c>/<c>NULLS LAST</c> never repeats the key and is not restricted.
+    /// </summary>
+    /// <param name="cmd">The command whose ordering is about to be rendered.</param>
+    /// <param name="sortingList">Its sort keys.</param>
+    /// <exception cref="BuildSqlCommandException">An explicit placement meets a DISTINCT or LIMIT BY shape that cannot carry the emulation.</exception>
+    private void EnsureNullPlacementIsRenderable(QueryCommand cmd, Sorting[] sortingList)
+    {
+        var hasExplicitPlacement = false;
+        for (var i = 0; i < sortingList.Length; i++)
+        {
+            NullsOrderingRenderer.Validate(sortingList[i].NullsPosition);
+            if (sortingList[i].NullsPosition != NullsPosition.Default)
+                hasExplicitPlacement = true;
+        }
+
+        if (!hasExplicitPlacement || _ctx.Dialect.SupportsNullsOrdering)
+            return;
+
+        // The emulation emits `CASE WHEN <key> ... END ASC, <key>`, so the ordering key is repeated. A
+        // DISTINCT query requires every ORDER BY expression to be in the select list, which the CASE
+        // prefix is not (SQL Server and PostgreSQL both reject it), and LIMIT BY evaluates its own
+        // ordering keys. Both would change semantics or fail at execution, so they fail closed instead.
+        if (cmd.IsDistinct || cmd.DistinctOn is not null)
+            throw new BuildSqlCommandException(
+                "Explicit NULL placement cannot be emulated on a DISTINCT query: the emulation repeats the ordering " +
+                "key inside a CASE expression, which DISTINCT does not permit. Use the provider default or a provider " +
+                "with native NULLS FIRST/NULLS LAST support.");
+
+        if (cmd.LimitBy is not null)
+            throw new BuildSqlCommandException(
+                "Explicit NULL placement cannot be emulated together with LIMIT BY: the emulation repeats the ordering " +
+                "key, which LIMIT BY does not permit. Use the provider default or a provider with native NULLS " +
+                "FIRST/NULLS LAST support.");
+    }
+
+    /// <summary>
+    /// Resolves the real SQL key behind a sort entry. A prepared expression is used as-is; a column index
+    /// is resolved to the expression of the selected column (<c>ORDER BY &lt;ordinal&gt;</c> cannot be
+    /// wrapped in a CASE, which would test the literal ordinal). An unresolvable index fails closed rather
+    /// than silently dropping the requested placement.
+    /// </summary>
+    /// <param name="cmd">The command whose select list resolves an ordinal key.</param>
+    /// <param name="entityType">The entity type the column visitor renders against.</param>
+    /// <param name="sorting">The sort entry.</param>
+    /// <returns>The key expression to render.</returns>
+    /// <exception cref="BuildSqlCommandException">The entry has neither a prepared expression nor a resolvable selected column.</exception>
+    private Expression ResolveSortKeyExpression(QueryCommand cmd, Type entityType, in Sorting sorting)
+    {
+        if (sorting.PreparedExpression is { } prepared)
+            return prepared;
+
+        if (sorting.ColumnIndex is int columnIndex)
+        {
+            var selectList = cmd.SelectList;
+            if (selectList is null || columnIndex < 1 || columnIndex > selectList.Length)
+                throw new BuildSqlCommandException(
+                    $"The ORDER BY column index {columnIndex} does not resolve to a selected column, so an explicit " +
+                    "NULL placement cannot be rendered for it.");
+
+            var column = selectList[columnIndex - 1];
+            if (column.Expression is { } expression)
+                return expression is LambdaExpression { Parameters.Count: 1 } lambda ? lambda.Body : expression;
+
+            if (column.PropertyInfo is { } property)
+                return Expression.Property(Expression.Parameter(entityType, "e"), property);
+
+            throw new BuildSqlCommandException(
+                $"The ORDER BY column index {columnIndex} has no renderable key expression, so an explicit NULL " +
+                "placement cannot be rendered for it.");
+        }
+
+        throw new BuildSqlCommandException("An ORDER BY key must carry either a prepared expression or a column index.");
+    }
+
+    /// <summary>
+    /// Walks the parameters of an <see cref="AppendOrderBy"/> ordering in the same occurrence order as the
+    /// SQL pass: an explicit placement that the dialect emulates with CASE repeats the key, so its
+    /// expression is walked twice; native placement and the default path walk it once. The plain ordinal
+    /// path contributes no parameters.
+    /// </summary>
+    /// <param name="cmd">The command whose select list resolves an ordinal key.</param>
+    /// <param name="entityType">The entity type the column visitor renders against.</param>
+    /// <param name="sorting">The sort keys being rendered.</param>
+    private void WalkOrderByParameters(QueryCommand cmd, Type entityType, Sorting[] sorting)
+    {
+        for (var i = 0; i < sorting.Length; i++)
+        {
+            if (sorting[i].NullsPosition != NullsPosition.Default)
+            {
+                var key = ResolveSortKeyExpression(cmd, entityType, in sorting[i]);
+                var occurrences = _ctx.Dialect.SupportsNullsOrdering ? 1 : 2;
+                for (var n = 0; n < occurrences; n++)
+                    SqlSourceRenderer.MakeSort(in _ctx, entityType, key, 0);
+            }
+            else if (sorting[i].PreparedExpression is { } prepared)
+            {
+                SqlSourceRenderer.MakeSort(in _ctx, entityType, prepared, 0);
+            }
+        }
+    }
+
+    /// <summary>
     /// Renders the <c>order by</c> of the surviving rows on the outer statement. Mirrors the plain
     /// select-list ordering: a prepared expression is rendered through the column visitor, an ordinal
-    /// is emitted verbatim. A parameter-mode caller walks the expressions separately.
+    /// is emitted verbatim. A parameter-mode caller walks the expressions separately. An explicit NULL
+    /// placement routes through the dialect renderer (native or CASE emulation); the default placement
+    /// keeps the plain direction-only rendering byte-for-byte.
     /// </summary>
     private void AppendOrderBy(QueryCommand cmd, Type entityType, StringBuilder target)
     {
@@ -1395,6 +1686,14 @@ internal readonly struct SqlBuilder
         for (var i = 0; i < sorting.Length; i++)
         {
             if (i > 0) target.Append(", ");
+
+            if (sorting[i].NullsPosition != NullsPosition.Default)
+            {
+                var key = ResolveSortKeyExpression(cmd, entityType, in sorting[i]);
+                var keySql = SqlSourceRenderer.MakeSort(in _ctx, entityType, key, 0);
+                target.Append(_ctx.Dialect.RenderOrderBy(keySql, sorting[i].Direction, sorting[i].NullsPosition));
+                continue;
+            }
 
             if (sorting[i].PreparedExpression is { } prepared)
                 target.Append(SqlSourceRenderer.MakeSort(in _ctx, entityType, prepared, 0));
@@ -1508,6 +1807,45 @@ internal readonly struct SqlBuilder
 
         if (cmd.From is null || cmd.From.SubQuery is not null)
             throw new BuildSqlCommandException("SelectWhereMax/SelectWhereMin requires a single physical-table source.");
+    }
+
+    /// <summary>
+    /// Whether a projection declares no output column at all, so an empty prepared select list is its
+    /// complete rendering rather than a failed column classification: a whole-object read of the source
+    /// (a bare parameter expression, optionally converted) or a construction / member init with no
+    /// members. The empty-select-list guard uses it to fail closed instead of rendering the truncated
+    /// "selec" head, while leaving a projection that does declare output to its later diagnostic.
+    /// </summary>
+    private static bool IsColumnlessProjection(LambdaExpression? projection)
+        => projection?.Body is { } body
+            && (TypeFacts.UnwrapConvert(body) is ParameterExpression
+                || body is NewExpression { Arguments.Count: 0 }
+                || body is MemberInitExpression { Bindings.Count: 0 });
+
+    /// <summary>
+    /// Whether the command is a key-less constant projection: no inferred grouping key and no aggregate,
+    /// so every output is row-independent and the statement renders as <c>select distinct ...</c>.
+    /// </summary>
+    private static bool IsConstantProjection(QueryCommand cmd)
+        => cmd.IsSelectGroup && cmd.SelectGroupMode == SelectGroupMode.ConstantProjection;
+
+    /// <summary>
+    /// Renders one predicate of a composed <c>WHERE</c> clause inside parentheses. Used only by the
+    /// key-less constant-projection path, where the projection's own filter and a pre-group <c>HAVING</c>
+    /// share the one <c>WHERE</c>: the wrapping stops a top-level <c>OR</c> in either predicate from
+    /// changing the composed meaning, and the parenthesised rendering walks the parameters in the same
+    /// order as the SQL pass (nothing is emitted in parameter mode).
+    /// </summary>
+    private void AppendParenthesisedCondition(
+        StringBuilder? target,
+        Type entityType,
+        Expression condition,
+        bool dontNeedAlias,
+        SqlParameterTemplateRecorder? recorder)
+    {
+        if (!_ctx.ParamMode) target!.Append('(');
+        SqlSourceRenderer.MakeWhere(in _ctx, target, entityType, condition, 0, dontNeedAlias, recorder);
+        if (!_ctx.ParamMode) target!.Append(')');
     }
 
     /// <summary>
@@ -2189,6 +2527,180 @@ internal readonly struct SqlBuilder
         {
             StringBuilderPool.Shared.Return(spec);
         }
+    }
+
+    private const string GroupingIdContextMessage =
+        "The GROUPING_ID function requires a GROUP BY context.";
+
+    private const string GroupingIdArgumentMessage =
+        "The GROUPING_ID function requires every argument to match a GROUP BY expression.";
+
+    /// <summary>
+    /// Enforces the SQL Server <c>GROUPING_ID</c> grouping-context obligation before SQL is built and
+    /// therefore before execution. The allowed placements are the SELECT list, <c>HAVING</c> and
+    /// <c>ORDER BY</c> of a command that has a non-empty <see cref="QueryCommand.GroupingList"/>; the
+    /// WHERE/PREWHERE, JOIN <c>ON</c> and GROUP BY clauses reject the call. Each flattened argument must
+    /// match a grouping expression under the existing
+    /// <see cref="ExpressionPlanEqualityComparer"/> (the prepared clauses use different parameter
+    /// instances, so identity cannot be used). The engine would report Msg 8161 for both violations;
+    /// the stable pre-execution messages are the library's contract.
+    /// </summary>
+    private void ValidateGroupingId(QueryCommand cmd)
+    {
+        // The validation is a SQL Server concern; other dialects refuse the member through their
+        // capability gate before this point.
+        if (!_ctx.Dialect.SupportsGroupingIdAggregate)
+            return;
+
+        if (ContainsGroupingId(cmd.PreparedCondition ?? cmd.Condition)
+            || ContainsGroupingId(cmd.PreparedPreWhere ?? cmd.PreWhere)
+            || ContainsGroupingIdInJoins(cmd.Joins)
+            || ContainsGroupingIdInGroupingList(cmd.GroupingList))
+            throw new BuildSqlCommandException(GroupingIdContextMessage);
+
+        var calls = new List<MethodCallExpression>();
+        if (cmd.SelectList is { } selectList)
+        {
+            for (var i = 0; i < selectList.Length; i++)
+                CollectGroupingIdCalls(selectList[i].Expression, calls);
+        }
+
+        CollectGroupingIdCalls(cmd.PreparedHaving ?? cmd.Having, calls);
+
+        if (cmd.Sorting is { } sorting)
+        {
+            for (var i = 0; i < sorting.Length; i++)
+                CollectGroupingIdCalls(sorting[i].PreparedExpression ?? sorting[i].SortExpression, calls);
+        }
+
+        if (calls.Count == 0)
+            return;
+
+        var grouping = cmd.GroupingList;
+        if (grouping is null || grouping.Length == 0)
+            throw new BuildSqlCommandException(GroupingIdContextMessage);
+
+        var comparer = cmd.GetExpressionPlanEqualityComparer();
+
+        for (var c = 0; c < calls.Count; c++)
+        {
+            var call = calls[c];
+
+            if (ArgumentFlattener.IsRuntimeArray(call.Arguments, 0))
+                throw new BuildSqlCommandException(GroupingIdArgumentMessage);
+
+            var arguments = ArgumentFlattener.Flatten(call.Arguments, 0);
+            if (arguments.Count == 0)
+                throw new BuildSqlCommandException(GroupingIdArgumentMessage);
+
+            for (var a = 0; a < arguments.Count; a++)
+            {
+                var argument = UnwrapGroupingExpression(arguments[a]);
+                var matched = false;
+
+                for (var g = 0; g < grouping.Length; g++)
+                {
+                    if (grouping[g].Expression is not { } key)
+                        continue;
+
+                    if (comparer.Equals(argument, UnwrapGroupingExpression(key)))
+                    {
+                        matched = true;
+                        break;
+                    }
+                }
+
+                if (!matched)
+                    throw new BuildSqlCommandException(GroupingIdArgumentMessage);
+            }
+        }
+    }
+
+    private static bool ContainsGroupingIdInJoins(JoinExpression[]? joins)
+    {
+        if (joins is null)
+            return false;
+
+        for (var i = 0; i < joins.Length; i++)
+        {
+            if (ContainsGroupingId(joins[i].JoinCondition))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool ContainsGroupingIdInGroupingList(SelectExpression[]? grouping)
+    {
+        if (grouping is null)
+            return false;
+
+        for (var i = 0; i < grouping.Length; i++)
+        {
+            if (ContainsGroupingId(grouping[i].Expression))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool ContainsGroupingId(Expression? expression)
+    {
+        if (expression is null)
+            return false;
+
+        var collector = new GroupingIdCallCollector();
+        collector.Visit(UnwrapClauseLambda(expression));
+        return collector.Calls.Count > 0;
+    }
+
+    private static void CollectGroupingIdCalls(Expression? expression, List<MethodCallExpression> calls)
+    {
+        if (expression is null)
+            return;
+
+        var collector = new GroupingIdCallCollector();
+        collector.Visit(UnwrapClauseLambda(expression));
+        calls.AddRange(collector.Calls);
+    }
+
+    /// <summary>Unwraps the quote/lambda wrapper of a prepared clause (HAVING, PREWHERE) and of a sort key.</summary>
+    private static Expression UnwrapClauseLambda(Expression expression)
+    {
+        if (expression is UnaryExpression { NodeType: ExpressionType.Quote } quote)
+            expression = quote.Operand;
+
+        return expression is LambdaExpression lambda ? lambda.Body : expression;
+    }
+
+    /// <summary>
+    /// Unwraps the object boxing of a <c>params object?[]</c> element and any lambda wrapper, so the
+    /// plan-equality comparer sees the grouping expression itself.
+    /// </summary>
+    private static Expression UnwrapGroupingExpression(Expression expression)
+        => TypeFacts.UnwrapConvert(UnwrapClauseLambda(TypeFacts.UnwrapConvert(expression)));
+
+    /// <summary>
+    /// Collects <c>GROUPING_ID</c> calls inside one clause. Nested lambdas mark another command's
+    /// scope (a subquery is validated by its own <c>MakeSelect</c>), so the walk stops at them.
+    /// </summary>
+    private sealed class GroupingIdCallCollector : ExpressionVisitor
+    {
+        internal List<MethodCallExpression> Calls { get; } = [];
+
+        protected override Expression VisitMethodCall(MethodCallExpression node)
+        {
+            if (node.Method.DeclaringType == typeof(SqlServerFunctions)
+                && node.Method.Name == nameof(SqlServerFunctions.grouping_id))
+            {
+                Calls.Add(node);
+                return node;
+            }
+
+            return base.VisitMethodCall(node);
+        }
+
+        protected override Expression VisitLambda<T>(Expression<T> node) => node;
     }
 
     // A raw SQL FROM source adds its parameters by property name; a captured variable of the same name

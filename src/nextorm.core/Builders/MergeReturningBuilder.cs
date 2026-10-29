@@ -21,13 +21,31 @@ public sealed class MergeReturningBuilder<TEntity, TResult>
         MergeBuilder<TEntity> merge,
         IReadOnlyList<IPropertyMetadata> returningColumns,
         SelectExpression[] selectList,
-        bool oneColumn)
+        bool oneColumn,
+        System.Linq.Expressions.LambdaExpression? projection = null)
     {
         _merge = merge;
         _returningColumns = returningColumns;
         _selectList = selectList;
         _oneColumn = oneColumn;
+        Projection = projection;
     }
+
+    /// <summary>The context the merge executes on.</summary>
+    internal IDataContext DataContext => _merge.DataContext;
+
+    /// <summary>
+    /// The selector that defines the returned columns, or <see langword="null"/> when none was captured.
+    /// Used to shape a SQL Server batch capture read so its returned columns are typed like the
+    /// <c>OUTPUT</c> projection.
+    /// </summary>
+    internal System.Linq.Expressions.LambdaExpression? Projection { get; }
+
+    /// <summary>The mapped columns the merge returns through <c>OUTPUT</c>/<c>RETURNING</c>.</summary>
+    internal IReadOnlyList<IPropertyMetadata> ReturningColumns => _returningColumns;
+
+    /// <summary>Builds the <c>MERGE</c> command that is captured into a batch table variable.</summary>
+    internal MergeCommand BuildMutationCommand() => BuildCommand();
 
     /// <summary>Executes the merge and returns the single merged row.</summary>
     /// <returns>The materialized row.</returns>

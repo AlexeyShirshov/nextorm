@@ -60,6 +60,7 @@ internal static class MemberTranslator
             return false;
 
         // Nullable<T>.Value is a CLR-only wrapper: the underlying expression is rendered as is.
+        // Nullable<T>.Value is a CLR-only wrapper: the underlying expression is rendered as is.
         if (declaringType is not null
             && node.Member.Name == nameof(Nullable<int>.Value)
             && Nullable.GetUnderlyingType(declaringType) is not null)
@@ -67,6 +68,15 @@ internal static class MemberTranslator
             visitor.Visit(node.Expression);
             return true;
         }
+
+        // Nullable<T>.HasValue on a mapped column is the IS [NOT] NULL presence predicate, in the
+        // approved predicate/boolean-SELECT positions only. A captured value's own HasValue has no
+        // query parameter in its receiver chain and keeps its ordinary evaluation; .Value and every
+        // unrelated member are untouched.
+        if (declaringType is not null
+            && node.Member.Name == nameof(Nullable<int>.HasValue)
+            && Nullable.GetUnderlyingType(declaringType) is not null)
+            return TryRenderPresence(visitor, node, negated: false);
 
         if (declaringType == typeof(string) && node.Member.Name == nameof(string.Length))
         {
@@ -285,6 +295,81 @@ internal static class MemberTranslator
         return new ResolvedConverter(resolved, Nullable.GetUnderlyingType(pi.PropertyType) ?? pi.PropertyType);
     }
 
+    /// <summary>
+    /// Renders a mapped <c>Nullable&lt;T&gt;.HasValue</c> access as the <c>IS [NOT] NULL</c> presence
+    /// predicate (the negated form renders <c>IS NULL</c> directly), in an approved context only. The
+    /// receiver has to be row-dependent (a query column); a captured value's presence is left to its
+    /// ordinary evaluation, and the member is rejected outside the approved positions so ORDER BY /
+    /// GROUP BY / window / LIMIT BY keep their previous translation.
+    /// </summary>
+    internal static bool TryRenderPresence(BaseExpressionVisitor visitor, MemberExpression node, bool negated)
+    {
+        if (!visitor.NullSafePredicateEnabled)
+            return false;
+
+        if (!TypeFacts.IsPresenceMember(node))
+            return false;
+
+        if (node.Expression is not { } receiver || !receiver.Has<ParameterExpression>())
+            return false;
+
+        visitor.NeedAliasForColumn = true;
+
+        if (visitor.IsParamMode)
+        {
+            // Nothing is emitted, but the receiver is still walked so its captured values (if any)
+            // are collected exactly as in the SQL pass.
+            visitor.Visit(receiver);
+            return true;
+        }
+
+        visitor.Visit(receiver);
+        visitor.Builder!.Append(visitor.Kw(negated ? " is null" : " is not null"));
+        return true;
+    }
+
+    /// <summary>
+    /// Resolves the expression-derived provider type of the captured parameter of a null-safe
+    /// comparison: the compared column's converter provider type (or nullable-unwrapped mapped type)
+    /// plus its declared decimal precision/scale, falling back to the captured operand's own declared
+    /// type when the column side is not a mapped member. No value is read and no closure is evaluated,
+    /// so the type never depends on a runtime <c>null</c>.
+    /// </summary>
+    internal static ParameterTypeInfo? ResolveParameterType(BaseExpressionVisitor visitor, Expression dbOperand, Expression capturedOperand)
+    {
+        dbOperand = TypeFacts.UnwrapConvert(dbOperand);
+        capturedOperand = TypeFacts.UnwrapConvert(capturedOperand);
+
+        Type? providerType = null;
+        int? precision = null;
+        int? scale = null;
+
+        if (dbOperand is MemberExpression { Member: PropertyInfo pi })
+        {
+            IPropertyMetadata? property = null;
+            if (pi.DeclaringType is not null && DataContextCache.Metadata.TryGetValue(pi.DeclaringType, out var byDeclaring))
+                property = FindProperty(byDeclaring, pi);
+
+            property ??= FindProperty(visitor.EntityType, pi);
+
+            if (property is not null)
+            {
+                IPropertyValueConverter? converter = property.Converter;
+                if (converter is IJsonColumnConverter json)
+                    converter = json.Resolve(visitor.Dialect);
+
+                providerType = converter?.ProviderType
+                    ?? Nullable.GetUnderlyingType(pi.PropertyType) ?? pi.PropertyType;
+                precision = property.DecimalPrecision;
+                scale = property.DecimalScale;
+            }
+        }
+
+        providerType ??= Nullable.GetUnderlyingType(capturedOperand.Type) ?? capturedOperand.Type;
+
+        return ParameterTypeInfo.FromProviderType(providerType, precision, scale);
+    }
+
     internal static string? ResolveCollation(BaseExpressionVisitor visitor, Type entityType, MemberInfo member)
     {
         if (member is not PropertyInfo pi)
@@ -330,7 +415,8 @@ internal static class MemberTranslator
         visitor.NeedAliasForColumn = true;
     }
 
-    internal static Expression? VisitMember(BaseExpressionVisitor visitor, MemberExpression node)    {
+    internal static Expression? VisitMember(BaseExpressionVisitor visitor, MemberExpression node)
+    {
         if (TryTranslate(visitor, node))
             return node;
 
@@ -351,10 +437,36 @@ internal static class MemberTranslator
             return node;
         }
 
-        if (node.Expression?.Type == visitor.EntityType)
+        // #324: an outer-reference marker (`OuterRefMarker<T>(idx).Ref.Member`) is never a column of the
+        // rendered source, even when the marker's `Ref` CLR type is the same entity as the source it is
+        // rendered over (for example `Person` joined to `Person`). Resolving it first keeps the
+        // entity-column branch below from claiming it and emitting a bare identifier that would silently
+        // bind to the inner source. The translator resolves the exact join-projection alias — through the
+        // frame-local owner/slot map for a bound APPLY reference — and fails closed when it cannot.
+        if (TryTranslateProjectionOuterReference(visitor, node))
+            return node;
+
+        // A projection-item access (p.ItemN.Member) whose item type equals the command's own entity type
+        // would normally be taken for a direct access to the source. When the projection repeats that
+        // type (a nested eager-load path that ends at the query-root type), the direct access resolves
+        // the projection parameter itself and drops the slot's alias, emitting a bare column that makes
+        // the join ambiguous. Only that repeated-root shape is routed through the occurrence-aware
+        // projection branch below; every non-repeated shape keeps the existing path and SQL.
+        var repeatedRootProjectionItemAccess =
+            node.Expression is MemberExpression { Expression: ParameterExpression { Type: var slotOwner }, Member: var slotMember }
+            && slotOwner.IsAssignableTo(typeof(IProjection))
+            && ProjectionAliasCache.GetOccurrence(slotOwner, ProjectionAliasCache.GetMemberPosition(slotMember)) is not null;
+
+        if (!repeatedRootProjectionItemAccess && node.Expression?.Type == visitor.EntityType)
         {
             if (node.Expression!.Type!.IsAssignableTo(typeof(IProjection)))
             {
+                // #324: a bare projection item (`q.Item3`) that addresses an APPLY/derived slot is the
+                // value of that source, so it must name the derived table's exposed column; the
+                // projection member's own name is not a column of the derived source.
+                if (!visitor.IsParamMode && TryRenderBoundSlotValue(visitor, node))
+                    return node;
+
                 if (!visitor.IsParamMode)
                     visitor.Builder!.Append(node.Member.Name).Append('.');
 
@@ -417,7 +529,16 @@ internal static class MemberTranslator
                             visitor.Builder!.Append(visitor.AliasProvider!.FindAlias(n)).Append('.');
 
                         if (col.NeedAliasForColumn)
+                        {
                             visitor.Builder!.Append(visitor.Dialect.MakeColumnReference(innerCol.PropertyName!));
+                            // The emitted identifier is the inner source's declared output name, not the
+                            // physical column it reads. Record it so a typed CTE declaration that projects
+                            // this column under another name (a DTO member over a CTE source) aliases it:
+                            // SqlSourceRenderer.MakeColumn consults DerivedColumnName for exactly that
+                            // declaration context. Without the bookkeeping the declaration silently kept
+                            // the source identifier and the outer chain missed it (#350).
+                            visitor.DerivedColumnName = innerCol.PropertyName;
+                        }
                         else
                         {
                             visitor.Builder!.Append(col.Column);
@@ -453,10 +574,8 @@ internal static class MemberTranslator
             }
 
             var parameterName = visitor.Options.ParameterNamePrefix + node.Member.Name;
-            visitor.TryAddCapturedParameter(parameterName, ((Func<object>)del)(), node);
-
-            if (!visitor.IsParamMode)
-                visitor.Builder!.Append(visitor.Dialect.MakeParam(parameterName));
+            var captured = visitor.TryAddCapturedParameter(parameterName, ((Func<object>)del)(), node);
+            visitor.EmitParameter(captured);
 
             return node;
         }
@@ -466,8 +585,13 @@ internal static class MemberTranslator
             {
                 var memberAccessExp = (MemberExpression)visitor.QueryProvider.OuterReferences![idx];
                 string? tableAliasForColumn = null;
+                var boundReference = GetOuterReferenceBinding(visitor, idx);
 
-                if (memberAccessExp!.Type!.TryGetProjectionDimension(out _))
+                // #324: a bound APPLY reference resolves through its exact owner/slot occurrence. The
+                // legacy type/arithmetic fallbacks below apply only to unbound references.
+                if (boundReference is { } binding)
+                    tableAliasForColumn = ResolveBoundOuterAlias(visitor, binding, idx);
+                else if (memberAccessExp!.Type!.TryGetProjectionDimension(out _))
                 {
                     var aliasVisitor = new AliasFromProjectionVisitor();
                     aliasVisitor.Visit(node.Expression);
@@ -476,22 +600,29 @@ internal static class MemberTranslator
                 else
                     tableAliasForColumn = AliasResolver.GetOuterAliasFromParam(visitor, (ParameterExpression)memberAccessExp.Expression!, false);
 
-                visitor.Builder!.Append(tableAliasForColumn).Append('.');
-
                 var colName = memberAccessExp.Member.GetPropertyColumnName(
                     visitor.Options.NamingConvention,
                     (memberAccessExp.Expression as ParameterExpression)?.Type);
                 if (!string.IsNullOrEmpty(colName))
                 {
-                        visitor.AppendIdentifier(colName);
-                        visitor.ColumnName = colName;
-                        return node;
+                    visitor.Builder!.Append(tableAliasForColumn).Append('.');
+                    visitor.AppendIdentifier(colName);
+                    visitor.ColumnName = colName;
+                    return node;
+                }
+
+                // #324: a bare projection item (`p.Item3`) over a scalar APPLY/derived slot has no
+                // mapped column of its own — the slot denotes the derived source's single exposed
+                // column. Rendering the projection member name would emit an unaddressable fragment.
+                if (boundReference is { } slotBinding
+                    && TryGetBoundSingleSlotColumn(visitor, slotBinding) is { } slotColumn)
+                {
+                    visitor.Builder!.Append(tableAliasForColumn).Append('.');
+                    AppendDerivedColumn(visitor, slotColumn.Command, slotColumn.Column);
+                    visitor.ColumnName = slotColumn.Column.PropertyName;
+                    return node;
                 }
             }
-        }
-        else if (TryTranslateProjectionOuterReference(visitor, node))
-        {
-            return node;
         }
         else if (node.Expression.Type == typeof(TableColumn))
         {
@@ -571,10 +702,8 @@ internal static class MemberTranslator
                     }
                     // var value = 1;
                     var parameterName = visitor.Options.ParameterNamePrefix + node.Member.Name;
-                    visitor.TryAddCapturedParameter(parameterName, ((Func<object?, object>)del)(twoTypeVisitor.Target2!.Value), node);
-
-                    if (!visitor.IsParamMode)
-                        visitor.Builder!.Append(visitor.Dialect.MakeParam(parameterName));
+                    var captured = visitor.TryAddCapturedParameter(parameterName, ((Func<object?, object>)del)(twoTypeVisitor.Target2!.Value), node);
+                    visitor.EmitParameter(captured);
 
                     return node;
                 }
@@ -604,12 +733,12 @@ internal static class MemberTranslator
                         var position = ProjectionAliasCache.GetMemberPosition(propExp.Member);
                         var paramIdx = ProjectionAliasCache.GetOccurrence(lambdaParameter.Type, position);
 
-                        var sourceIdx = ResolveProjectionItemAliasIndex(
-                            visitor.ColumnsProvider,
-                            node.Expression.Type,
-                            paramIdx,
+                        var sourceIdx = ResolveProjectionItemSourceIndex(
+                            visitor,
                             lambdaParameter,
-                            visitor.IncludeNestedSources);
+                            propExp.Member,
+                            node.Expression.Type,
+                            paramIdx);
 
                         tableAliasForColumn = visitor.AliasProvider!.FindAlias(sourceIdx);
                     }
@@ -683,7 +812,13 @@ internal static class MemberTranslator
                             visitor.Builder!.Append(visitor.AliasProvider!.FindAlias(idx)).Append('.');
 
                         if (col.NeedAliasForColumn)
+                        {
                             visitor.Builder!.Append(visitor.Dialect.MakeColumnReference(innerCol.PropertyName!));
+                            // Same bookkeeping as the entity-typed branch above: the reference names the
+                            // inner source's declared output, so a typed CTE declaration that renames it
+                            // must alias the column to the projection member name (#350).
+                            visitor.DerivedColumnName = innerCol.PropertyName;
+                        }
                         else
                             visitor.Builder!.Append(col.Column);
                     }
@@ -727,18 +862,32 @@ internal static class MemberTranslator
         {
             isProjectionItem = true;
             slot = ProjectionAliasCache.GetMemberPosition(itemAccess.Member);
-            found = visitor.ColumnsProvider.FindInScopeQueryCommand(projectionParameter, fromProjection: false);
 
-            // The projection-parameter lookup only matches an identity CTE shape, which exposes
-            // slot-tagged columns. A plain derived query is registered by its item type instead, so
-            // fall back to the type-based lookup (and drop the slot) when the parameter lookup misses
-            // or its columns are not slot-tagged. Without this, an ordinary p.ItemN.Member reference
-            // over a derived source loses its projected-name translation and emits the physical column.
-            if (found is not { Command.SelectList: { } projectionColumns }
-                || !projectionColumns.Any(col => col.ProjectionItem?.Slot == slot && col.PropertyName == node.Member.Name))
+            // #324: a projection item that addresses a bound APPLY/derived slot of the active frame is
+            // resolved through that slot's exact registration and derived shape. The type lookups below
+            // would resolve the first same-typed source, which is a plain join whenever the applied slot
+            // carries the same CLR type; the derived table then exposes property-name aliases that a
+            // physical-column fallback cannot name.
+            if (ResolveBoundDerivedSlotSource(visitor, projectionParameter.Type, slot + 1) is { } boundSource)
             {
-                found = visitor.ColumnsProvider.FindInScopeQueryCommand(node.Expression!.Type);
+                found = boundSource;
                 slot = -1;
+            }
+            else
+            {
+                found = visitor.ColumnsProvider.FindInScopeQueryCommand(projectionParameter, fromProjection: false);
+
+                // The projection-parameter lookup only matches an identity CTE shape, which exposes
+                // slot-tagged columns. A plain derived query is registered by its item type instead, so
+                // fall back to the type-based lookup (and drop the slot) when the parameter lookup misses
+                // or its columns are not slot-tagged. Without this, an ordinary p.ItemN.Member reference
+                // over a derived source loses its projected-name translation and emits the physical column.
+                if (found is not { Command.SelectList: { } projectionColumns }
+                    || !projectionColumns.Any(col => col.ProjectionItem?.Slot == slot && col.PropertyName == node.Member.Name))
+                {
+                    found = visitor.ColumnsProvider.FindInScopeQueryCommand(node.Expression!.Type);
+                    slot = -1;
+                }
             }
         }
         else
@@ -797,6 +946,79 @@ internal static class MemberTranslator
             return true;
         }
 
+        if (!visitor.IsParamMode)
+        {
+            if (!hasTableAliasForColumn && !visitor.DontNeedAlias)
+                visitor.Builder!.Append(visitor.AliasProvider!.FindAlias(found.Value.Index)).Append('.');
+
+            AppendDerivedColumn(visitor, innerQuery, innerCol);
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Renders a bare projection item (<c>p.ItemN</c>) that denotes the whole value of a single-column
+    /// APPLY/derived slot: the slot's own projection aliases that value, so the reference must use the
+    /// derived source's exposed identifier instead of the projection member's name (which is not a
+    /// column of the derived source). Only a frame bound to this projection by a correlated APPLY
+    /// answers, and only a derived source with exactly one readable column; every other shape keeps
+    /// its previous translation.
+    /// </summary>
+    /// <returns><see langword="true"/> when the item was rendered as the derived slot's column.</returns>
+    private static bool TryRenderBoundSlotValue(BaseExpressionVisitor visitor, MemberExpression node)
+    {
+        if (node.Expression is not ParameterExpression projectionParameter
+            || ProjectionAliasCache.GetMemberSlot(node.Member) is not int slot)
+            return false;
+
+        if (visitor.SourceProvider is not IOuterSlotSourceRegistry registry
+            || registry.ResolveProjectionSlotSourceIndex(projectionParameter.Type, slot) is not int sourceIndex)
+            return false;
+
+        // A plain physical-table slot has no derived projection to name; leave it to the mapped-column
+        // path. A multi-column derived source is not a scalar value, so it is not claimed either.
+        if (registry.FindSourceCommand(sourceIndex) is not { SelectList: { Length: 1 } shape } slotCommand)
+            return false;
+
+        var alias = visitor.AliasProvider?.FindAlias(sourceIndex);
+        if (string.IsNullOrEmpty(alias))
+            return false;
+
+        visitor.Builder!.Append(alias).Append('.');
+        AppendDerivedColumn(visitor, slotCommand, shape[0]);
+        visitor.ColumnName = shape[0].PropertyName;
+        return true;
+    }
+
+    /// <summary>
+    /// Resolves a projection item slot through the frame-local correlated-APPLY map of the active render
+    /// frame (#324): the exact registration index and the derived command registered for it. Returns
+    /// <see langword="null"/> when the frame is not bound to <paramref name="projectionType"/> by an
+    /// APPLY, so every other query keeps its existing type/occurrence resolution. A bound slot always
+    /// answers with its exact index, even when the source is a plain table (no command): the caller
+    /// must not fall back to a same-typed join of the other shape.
+    /// </summary>
+    private static (int Index, QueryCommand? Command)? ResolveBoundDerivedSlotSource(
+        BaseExpressionVisitor visitor,
+        Type projectionType,
+        int slot)
+    {
+        if (visitor.SourceProvider is not IOuterSlotSourceRegistry registry
+            || registry.ResolveProjectionSlotSourceIndex(projectionType, slot) is not int sourceIndex)
+            return null;
+
+        return (sourceIndex, registry.FindSourceCommand(sourceIndex));
+    }
+
+    /// <summary>
+    /// Renders the identifier a derived source exposes for <paramref name="innerCol"/>: its projected
+    /// property name when the derived select aliases the column, the rendered column otherwise. The
+    /// derived source's own shape decides, so a consumer never re-derives a name from the underlying
+    /// physical column.
+    /// </summary>
+    private static void AppendDerivedColumn(BaseExpressionVisitor visitor, QueryCommand innerQuery, SelectExpression innerCol)
+    {
         visitor.ColumnsProvider.PushSourceScope();
         string column;
         bool needAliasForColumn;
@@ -811,18 +1033,17 @@ internal static class MemberTranslator
             visitor.ColumnsProvider.PopSourceScope();
         }
 
-        if (!visitor.IsParamMode)
+        if (needAliasForColumn)
         {
-            if (!hasTableAliasForColumn && !visitor.DontNeedAlias)
-                visitor.Builder!.Append(visitor.AliasProvider!.FindAlias(found.Value.Index)).Append('.');
+            visitor.Builder!.Append(visitor.Dialect.MakeColumnReference(innerCol.PropertyName!));
 
-            if (needAliasForColumn)
-                visitor.Builder!.Append(visitor.Dialect.MakeColumnReference(innerCol.PropertyName!));
-            else
-                visitor.Builder!.Append(column);
+            // The emitted identifier is the inner source's declared output name, not the physical
+            // column it reads. Record it so a typed CTE declaration projecting this column under
+            // another name (a DTO member over a CTE/column-shape source) emits its own alias (#350).
+            visitor.DerivedColumnName = innerCol.PropertyName;
         }
-
-        return true;
+        else
+            visitor.Builder!.Append(column);
     }
 
     /// <summary>
@@ -923,13 +1144,48 @@ internal static class MemberTranslator
     }
 
     /// <summary>
+    /// Resolves the alias index of one projection item (<c>p.ItemN.Member</c>, or a generated alias
+    /// member such as <c>p.Buyer.Member</c>).
+    /// <para>
+    /// A command whose active render frame belongs to this projection <em>and</em> carries a
+    /// correlated-APPLY binding resolves the member through that frame's registration order — the same
+    /// frame-local map <see cref="ResolveBoundOuterAlias"/> uses for the correlation — so the SELECT
+    /// projection and the APPLY's outer reference always select the same physical source (#324, AC05).
+    /// A bound frame that cannot address the slot fails closed in the columns provider instead of
+    /// borrowing another alias.
+    /// </para>
+    /// <para>
+    /// Every other command keeps the existing type + occurrence resolution (see
+    /// <see cref="ResolveProjectionItemAliasIndex(IColumnsProvider, Type, int?, ParameterExpression, bool)"/>).
+    /// </para>
+    /// </summary>
+    private static int ResolveProjectionItemSourceIndex(
+        BaseExpressionVisitor visitor,
+        ParameterExpression projectionParameter,
+        MemberInfo member,
+        Type itemType,
+        int? occurrence)
+    {
+        if (ProjectionAliasCache.GetMemberSlot(member) is int slot
+            && visitor.SourceProvider is IOuterSlotSourceRegistry frameSlots
+            && frameSlots.ResolveProjectionSlotSourceIndex(projectionParameter.Type, slot) is int frameSourceIndex)
+            return frameSourceIndex;
+
+        return ResolveProjectionItemAliasIndex(
+            visitor.ColumnsProvider,
+            itemType,
+            occurrence,
+            projectionParameter,
+            visitor.IncludeNestedSources);
+    }
+
+    /// <summary>
     /// Resolves the alias index of a projection-item member access (<c>p.ItemN.Member</c>). The item
     /// type is the primary lookup. Over a derived/CTE source the item type may not be a registered
     /// source while the projection shape is; only the identity (whole-projection) joined-returning shape
     /// registers that way, so the projection-parameter fallback is gated on the source command carrying
-    /// <see cref="QueryCommand.IdentitySlotAliases"/>. Every other miss fails closed with the same
-    /// <see cref="InvalidOperationException"/> the previous <c>AliasResolver.GetAliasFromParam</c> call
-    /// produced, rather than silently emitting an unqualified column.
+    /// <see cref="QueryCommand.IdentitySlotAliases"/>. Every other miss fails closed with a named
+    /// <see cref="InvalidOperationException"/> rather than silently emitting an unqualified column.
     /// </summary>
     internal static int ResolveProjectionItemAliasIndex(
         IColumnsProvider columnsProvider,
@@ -946,7 +1202,8 @@ internal static class MemberTranslator
                 sourceIdx = columnsProvider.FindAlias(projectionParameter, false, includeOuterScopes: false, includeNestedSources: includeNestedSources);
         }
 
-        return sourceIdx ?? throw new InvalidOperationException();
+        return sourceIdx ?? throw new InvalidOperationException(
+            $"No source in the active render frame matches the projection item '{itemType}' (occurrence {itemOccurrence?.ToString() ?? "first"}). The projection cannot be translated to a table alias, and no unqualified column is emitted because it would be ambiguous.");
     }
 
     /// <summary>
@@ -977,6 +1234,41 @@ internal static class MemberTranslator
             || idx < 0 || idx >= outerReferences.Count)
             return false;
 
+        // #324: a bound APPLY reference is authoritative — resolve the exact owner/slot occurrence of
+        // the active render frame and never fall back to the legacy ItemN -&gt; tN arithmetic or to a
+        // type-based guess. A missing occurrence fails closed below.
+        if (GetOuterReferenceBinding(visitor, idx) is { } binding)
+        {
+            if (outerReferences[idx] is not MemberExpression { Expression: ParameterExpression owner }
+                || !ReferenceEquals(owner, binding.Owner))
+                throw new InvalidOperationException(BoundOuterReferenceMessage(idx, binding.Slot));
+
+            if (!visitor.IsParamMode)
+            {
+                visitor.Builder!.Append(ResolveBoundOuterAlias(visitor, binding, idx)).Append('.');
+
+                // #324: an APPLY/derived slot exposes its own projection identity. The physical column
+                // of the underlying table is not a column of the derived table, so a member of a derived
+                // slot is rendered through the derived shape; a member the shape does not expose fails
+                // closed with the bound-reference diagnostic instead of naming a column that does not
+                // exist in scope.
+                if (ResolveBoundSlotCommand(visitor, binding.Owner, binding.Slot) is { } derivedSlot)
+                {
+                    var exposedColumn = FindDerivedSlotColumn(derivedSlot, node.Member)
+                        ?? throw new InvalidOperationException(BoundOuterReferenceMessage(idx, binding.Slot));
+
+                    AppendDerivedColumn(visitor, derivedSlot, exposedColumn);
+                    visitor.ColumnName = exposedColumn.PropertyName ?? colName;
+                    return true;
+                }
+
+                visitor.AppendIdentifier(colName);
+            }
+
+            visitor.ColumnName = colName;
+            return true;
+        }
+
         if (outerReferences[idx] is not MemberExpression { Expression: ParameterExpression projectionParam } stored
             || !projectionParam.Type.TryGetProjectionDimension(out _))
             return false;
@@ -995,6 +1287,71 @@ internal static class MemberTranslator
         visitor.ColumnName = colName;
         return true;
     }
+
+    /// <summary>
+    /// Returns the occurrence binding (#324) of the outer reference registered at
+    /// <paramref name="index"/>, or <see langword="null"/> for a legacy unbound reference. Only the
+    /// command that owns the render's outer-reference list carries the parallel binding table.
+    /// </summary>
+    private static OuterReferenceBinding? GetOuterReferenceBinding(BaseExpressionVisitor visitor, int index)
+        => visitor.QueryProvider is QueryCommand command ? command.GetOuterReferenceBinding(index) : null;
+
+    /// <summary>
+    /// Resolves the derived command registered for a bound APPLY left-row slot, or
+    /// <see langword="null"/> when the slot is a plain physical table (or no active frame registered
+    /// the occurrence). The lookup is exact — owner occurrence plus one-based slot — and never falls
+    /// back to a type-based guess.
+    /// </summary>
+    private static QueryCommand? ResolveBoundSlotCommand(
+        BaseExpressionVisitor visitor,
+        ParameterExpression owner,
+        int slot)
+        => visitor.SourceProvider is IOuterSlotSourceRegistry registry
+            && registry.FindOuterSlotSource(owner, slot) is int sourceIndex
+            ? registry.FindSourceCommand(sourceIndex)
+            : null;
+
+    /// <summary>
+    /// Resolves a bound APPLY/derived slot that is a scalar: its derived command exposes exactly one
+    /// readable column, and that column is the value of the whole slot. Returns <see langword="null"/>
+    /// for a plain-table slot or a multi-column derived source, so the caller keeps its mapped-column
+    /// path.
+    /// </summary>
+    private static (QueryCommand Command, SelectExpression Column)? TryGetBoundSingleSlotColumn(
+        BaseExpressionVisitor visitor,
+        OuterReferenceBinding binding)
+        => ResolveBoundSlotCommand(visitor, binding.Owner, binding.Slot) is { SelectList: { Length: 1 } shape } command
+            ? (command, shape[0])
+            : null;
+
+    /// <summary>
+    /// Finds the derived-shape column a bound APPLY slot exposes for <paramref name="member"/>. The
+    /// derived command's own select list is authoritative: a member it does not expose is unmappable
+    /// through this slot and fails closed in the caller.
+    /// </summary>
+    private static SelectExpression? FindDerivedSlotColumn(QueryCommand command, MemberInfo member)
+        => command.SelectList?.FirstOrDefault(col => string.Equals(col.PropertyName, member.Name, StringComparison.Ordinal));
+
+    /// <summary>
+    /// Resolves the alias of a <em>bound</em> APPLY outer reference through its exact owner parameter and
+    /// one-based left-row slot in the active render frame. The reference is authoritative: an
+    /// unresolvable occurrence is a named failure, never a silent <c>.Column</c> or a wrong alias.
+    /// </summary>
+    private static string ResolveBoundOuterAlias(BaseExpressionVisitor visitor, OuterReferenceBinding binding, int index)
+    {
+        if (visitor.SourceProvider is IOuterSlotSourceRegistry registry
+            && registry.FindOuterSlotSource(binding.Owner, binding.Slot) is int sourceIndex)
+        {
+            var alias = visitor.AliasProvider?.FindAlias(sourceIndex);
+            if (!string.IsNullOrEmpty(alias))
+                return alias;
+        }
+
+        throw new InvalidOperationException(BoundOuterReferenceMessage(index, binding.Slot));
+    }
+
+    private static string BoundOuterReferenceMessage(int index, int slot)
+        => $"The correlated CROSS/OUTER APPLY outer reference '{index}' (left-row slot {slot}) cannot be resolved to a source occurrence of the active render frame. A bound reference must name one of the left row's FROM/join sources that are already in scope; no alias was emitted because a missing or wrong alias would silently change the query.";
 
     internal static Expression? VisitIndex(BaseExpressionVisitor visitor, IndexExpression node)
     {
@@ -1020,7 +1377,8 @@ internal static class MemberTranslator
                     "use First/FirstOrDefault or move the check to the application.");
 
             var sqlBuilder = new SqlBuilder(visitor.Options);
-            var sql = sqlBuilder.MakeSelect(innerQuery);
+            var innerSql = sqlBuilder.MakeSelect(innerQuery);
+            var sql = innerSql;
 
             // #148-B r3: ClickHouse decorrelates a correlated scalar subquery by a join, so an empty
             // match yields SQL NULL instead of the aggregate's identity (an empty count would be 0).
@@ -1031,7 +1389,10 @@ internal static class MemberTranslator
 
                 if (!visitor.IsParamMode)
                 {
-                    visitor.Builder!.Append(sql).Append(')');
+                    // Every wrapper embeds the subquery unchanged, so its occurrences are relocated
+                    // through the inner text rather than through the wrapped statement.
+                    visitor.AppendTransformed(sql!, innerSql!);
+                    visitor.Builder!.Append(')');
                 }
 
             return node;

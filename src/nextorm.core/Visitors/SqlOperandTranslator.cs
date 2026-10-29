@@ -81,10 +81,13 @@ internal static class SqlOperandTranslator
 
         var value = InValuesEvaluator.Evaluate(arrayExp, visitor.QueryProvider);
         var name = visitor.ParameterProvider.GetParamName();
-        visitor.Params.Add(new Parameter(name, value));
+        var parameter = new Parameter(name, value);
+        visitor.Params.Add(parameter);
 
-        if (!visitor.IsParamMode)
-            visitor.Builder!.Append(visitor.Dialect.MakeParam(name));
+        // The single emission funnel: the placeholder text and its position are unchanged, and the
+        // occurrence is recorded for the prepared statement's template. In parameter-extraction mode
+        // nothing is appended and the parameter list is untouched.
+        visitor.EmitParameter(parameter);
     }
 
     /// <summary>
@@ -144,7 +147,7 @@ internal static class SqlOperandTranslator
             if (!SqlLiteral.TryGetConstantString(separatorArg, out var separatorChar))
                 throw new NotSupportedException("The string.Split separator character must be a constant.");
 
-            separator = SqlLiteral.ToSqlStringLiteral(separatorChar);
+            separator = visitor.RenderStringLiteral(separatorChar);
         }
         else
         {

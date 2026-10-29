@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Text;
 using Microsoft.Extensions.Logging;
 
 namespace NextORM.Core;
@@ -165,10 +166,13 @@ internal static class NormSqlTranslator
             // Reuse the cached norm_pN table instead of string.Format (same names, no boxing
             // and no composite-formatting pass on the SQL-build path).
             var paramName = NormParam.GetName(paramIdx);
-            visitor.Params.Add(new Parameter(paramName, null));
+            var parameter = new Parameter(paramName, null);
+            visitor.Params.Add(parameter);
             if (!visitor.IsParamMode)
             {
-                visitor.Builder!.Append(visitor.Dialect.MakeParam(paramName));
+                // The single emission funnel: identical placeholder text and position, plus the
+                // recorded occurrence. The alias flag stays a render-mode concern.
+                visitor.EmitParameter(parameter);
                 // A projected parameter is addressed by its projected member name (an outer query
                 // re-resolves it, and the native FOR JSON fast-path takes the JSON property name from
                 // the SQL alias), so the select item must carry its exact alias like the scalar and
@@ -209,8 +213,37 @@ internal static class NormSqlTranslator
         // PostgresFunctions) distinct from the CommonFunctions window percentile (same method name).
         if ((node.Method.DeclaringType == typeof(CommonFunctions)
                 || node.Method.DeclaringType == typeof(ClickHouseFunctions))
-            && WindowSql.MapWindowFunctionName(node.Method.Name) is { } windowFunction)
+            && WindowSql.MapWindowFunctionName(node.Method.Name) is { } windowFunction
+            && !AdvancedAggregateTranslator.IsAggregateOverWindowName(node))
             throw new NotSupportedException($"The window function {windowFunction} must be completed with Over(...).");
+
+        // The residual percentile members live on a provider surface; only the median is native (the
+        // percentile member is refused by the aggregate translator, which keeps the provider-named
+        // refusal in one place). The median has no window spelling of its own, so the message names the
+        // native composition it becomes. The generic percentile is refused outright with the actual
+        // provider's name, before the missing-Over shape check.
+        if (node.Method.DeclaringType == typeof(MySqlFunctions)
+            && node.Method.Name == nameof(MySqlFunctions.percentile))
+            throw new NotSupportedException(
+                $"The percentile function is not supported by {AdvancedAggregateTranslator.ProviderLabel(visitor.Dialect)}.");
+
+        // ClickHouse spellings that the dialect does not expose as a native name are refused with the
+        // provider's name rather than falling through to a name-table lookup.
+        if (node.Method.DeclaringType == typeof(ClickHouseFunctions)
+            && node.Method.Name == nameof(ClickHouseFunctions.percentile))
+            throw new NotSupportedException("The percentile function is not supported by ClickHouse.");
+
+        if ((node.Method.DeclaringType == typeof(SqlServerFunctions)
+                || node.Method.DeclaringType == typeof(MySqlFunctions))
+            && node.Method.Name == nameof(SqlServerFunctions.median))
+        {
+            if (!visitor.Dialect.SupportsPercentileWindow)
+                throw new NotSupportedException(
+                    $"The median function is not supported by {AdvancedAggregateTranslator.ProviderLabel(visitor.Dialect)}.");
+
+            throw new NotSupportedException(
+                "The window function percentile_cont must be completed with Over(...).");
+        }
 
         // The ClickHouse-native functions are probed first: their names can collide with a
         // cross-provider built-in (for example extract, md5) that is matched by name only.
@@ -297,7 +330,11 @@ internal static class NormSqlTranslator
 
             if (!visitor.IsParamMode)
             {
-                visitor.Builder!.Append(visitor.Dialect.MakeSubqueryPredicate(predicateKeyword, sql!, visitor.IsPredicateContext));
+                // The dialect wraps the subquery unchanged, so its occurrences keep their offsets inside
+                // the wrapper; they are tracked as a transformed fragment of this visitor.
+                visitor.AppendTransformed(
+                    visitor.Dialect.MakeSubqueryPredicate(predicateKeyword, sql!, visitor.IsPredicateContext),
+                    sql!);
             }
 
             return;
@@ -387,21 +424,24 @@ internal static class NormSqlTranslator
             if (countFilter is not null
                 && visitor.Dialect.AggregateFilterStyle == AggregateFilterStyle.IfCombinator)
             {
-                var combinatorStart = visitor.IsParamMode ? 0 : visitor.Builder!.Length;
+                var combinatorBuilder = visitor.IsParamMode ? null : visitor.Builder!;
+                var combinatorStart = combinatorBuilder?.Length ?? 0;
+                var combinatorMark = visitor.IsParamMode
+                    ? (SqlParameterMark?)null
+                    : visitor.Recorder?.MarkAt(combinatorStart);
                 AggregateFilter.AppendCombinator(visitor, AggregateFilter.CombinatorName(visitor.Dialect, "count"), value: null, countFilter);
 
-                if (!visitor.IsParamMode && visitor.Dialect.WrapsCountResult)
-                {
-                    var builder = visitor.Builder!;
-                    var rendered = builder.ToString(combinatorStart, builder.Length - combinatorStart);
-                    builder.Length = combinatorStart;
-                    builder.Append(visitor.Dialect.WrapCount(rendered, countBig));
-                }
+                if (combinatorBuilder is not null && visitor.Dialect.WrapsCountResult)
+                    AppendCountWrap(visitor, combinatorBuilder, combinatorStart, combinatorMark, countBig);
 
                 return;
             }
 
-            var countStart = visitor.IsParamMode ? 0 : visitor.Builder!.Length;
+            var countBuilder = visitor.IsParamMode ? null : visitor.Builder!;
+            var countStart = countBuilder?.Length ?? 0;
+            var countMark = visitor.IsParamMode
+                ? (SqlParameterMark?)null
+                : visitor.Recorder?.MarkAt(countStart);
 
             if (!visitor.IsParamMode) visitor.Builder!.Append(visitor.Dialect.MakeCount(node.Method.Name.EndsWith("distinct", StringComparison.Ordinal), countBig));
 
@@ -427,7 +467,8 @@ internal static class NormSqlTranslator
                         subVisitor.Visit(argExp);
                         if (!visitor.IsParamMode) visitor.Builder!.Append(subVisitor.ToString()).Append(", ");
                     }
-                    if (!visitor.IsParamMode) visitor.Builder!.Length -= 2;
+
+                    if (countBuilder is not null) TrimTrailingSeparator(visitor, countBuilder);
                 }
             }
 
@@ -435,13 +476,8 @@ internal static class NormSqlTranslator
 
             if (countFilter is not null) AggregateFilter.Append(visitor, countFilter);
 
-            if (!visitor.IsParamMode && visitor.Dialect.WrapsCountResult)
-            {
-                var builder = visitor.Builder!;
-                var rendered = builder.ToString(countStart, builder.Length - countStart);
-                builder.Length = countStart;
-                builder.Append(visitor.Dialect.WrapCount(rendered, countBig));
-            }
+            if (countBuilder is not null && visitor.Dialect.WrapsCountResult)
+                AppendCountWrap(visitor, countBuilder, countStart, countMark, countBig);
 
             return;
         }
@@ -475,7 +511,7 @@ internal static class NormSqlTranslator
 
             if (!visitor.IsParamMode)
             {
-                if (last > 0) visitor.Builder!.Length -= 2;
+                if (last > 0) TrimTrailingSeparator(visitor, visitor.Builder!);
                 visitor.Builder!.Append(')');
             }
 
@@ -507,9 +543,32 @@ internal static class NormSqlTranslator
             {
                 if (!visitor.IsParamMode) visitor.NeedAliasForColumn = true;
                 var combinatorName = node.Method.Name.Replace("_distinct", string.Empty);
-                AggregateFilter.AppendCombinator(visitor, AggregateFilter.CombinatorName(visitor.Dialect, combinatorName), args[0], aggregateFilter);
+                var average = IsAverage(node.Method.Name);
+
+                var combinatorBuilder = visitor.IsParamMode ? null : visitor.Builder!;
+                var combinatorStart = combinatorBuilder?.Length ?? 0;
+                var combinatorMark = visitor.IsParamMode ? null : visitor.Recorder?.MarkAt(combinatorStart);
+                string? averageArgument = null;
+                string? averagePredicate = null;
+
+                AggregateFilter.AppendCombinator(visitor, AggregateFilter.CombinatorName(visitor.Dialect, combinatorName), args[0], aggregateFilter,
+                    average ? rendered => visitor.Dialect.MakeAverageArgument(rendered, args[0].Type) : null,
+                    average ? (argument, predicate) =>
+                    {
+                        averageArgument = argument;
+                        averagePredicate = predicate;
+                    } : null);
+
+                if (combinatorBuilder is not null && averageArgument is not null && visitor.Dialect.WrapsAverageResult)
+                    AppendAverageWrap(visitor, combinatorBuilder, combinatorStart, combinatorMark, averageArgument, averagePredicate);
+
                 return;
             }
+
+            var averageBuilder = visitor.IsParamMode ? null : visitor.Builder!;
+            var averageStart = averageBuilder?.Length ?? 0;
+            var averageMark = visitor.IsParamMode ? null : visitor.Recorder?.MarkAt(averageStart);
+            string? renderedAverageArgument = null;
 
             if (!visitor.IsParamMode)
             {
@@ -525,21 +584,36 @@ internal static class NormSqlTranslator
                 var argExp = args[i];
                 using var subVisitor = new BaseExpressionVisitor(visitor.Options with { Dim = 0 });
                 subVisitor.Visit(argExp);
-                if (!visitor.IsParamMode) visitor.Builder!.Append(subVisitor.ToString()).Append(", ");
+                if (!visitor.IsParamMode)
+                {
+                    // The AVG argument policy runs on the rendered argument, so a dialect that has to
+                    // widen an integral argument does it inside the parentheses (after `distinct`)
+                    // rather than around the aggregate result.
+                    var rendered = subVisitor.ToString();
+                    if (IsAverage(node.Method.Name))
+                        renderedAverageArgument = rendered = visitor.Dialect.MakeAverageArgument(rendered, argExp.Type);
+                    visitor.Builder!.Append(rendered).Append(", ");
+                }
             }
 
             if (!visitor.IsParamMode)
             {
-                if (last > 0) visitor.Builder!.Length -= 2;
+                if (last > 0) TrimTrailingSeparator(visitor, visitor.Builder!);
                 visitor.Builder!.Append(')');
             }
 
             if (aggregateFilter is not null) AggregateFilter.Append(visitor, aggregateFilter);
 
+            if (averageBuilder is not null && renderedAverageArgument is not null && visitor.Dialect.WrapsAverageResult)
+                AppendAverageWrap(visitor, averageBuilder, averageStart, averageMark, renderedAverageArgument);
+
             return;
         }
 
         if (BuiltinFunctionTranslator.TryTranslate(visitor, node))
+            return;
+
+        if (PortableBinaryFunctionTranslator.TryTranslate(visitor, node))
             return;
 
         if (SqlServerScalarFunctionTranslator.TryTranslate(visitor, node))
@@ -590,7 +664,76 @@ internal static class NormSqlTranslator
         if (DictionarySqlTranslator.TryTranslate(visitor, node))
             return;
 
+        if (NullSafeComparisonTranslator.TryTranslate(visitor, node))
+            return;
+
         throw new NotImplementedException();
+    }
+
+    /// <summary>
+    /// Wraps the count expression that was just rendered after <paramref name="start"/> with the dialect's
+    /// result cast. The wrapper embeds the rendered text unchanged, so the parameter recorder is rewound
+    /// to the checkpoint and the detached occurrences are relocated behind the wrapper prefix
+    /// (<c>toInt32(</c>/<c>toInt64(</c>), never left at their truncated positions.
+    /// </summary>
+    private static void AppendCountWrap(
+        BaseExpressionVisitor visitor,
+        StringBuilder builder,
+        int start,
+        SqlParameterMark? mark,
+        bool countBig)
+    {
+        var rendered = builder.ToString(start, builder.Length - start);
+        builder.Length = start;
+        var fragment = mark is { } checkpoint ? visitor.Recorder!.RewindTo(checkpoint) : null;
+        var fragments = fragment is { OccurrenceCount: > 0 }
+            ? new[] { new SqlParameterTrackedFragment(rendered, null, fragment) }
+            : Array.Empty<SqlParameterTrackedFragment>();
+        SqlParameterFragmentRelocation.AppendComposed(
+            builder,
+            visitor.Recorder,
+            visitor.Dialect.WrapCount(rendered, countBig),
+            fragments);
+    }
+
+    /// <summary>
+    /// Wraps the AVG expression rendered after <paramref name="start"/> with the dialect's eligibility
+    /// guard (ClickHouse turns an empty/all-NULL input into SQL NULL with an <c>if(count(...)=0, ...)</c>
+    /// wrapper). The wrapper embeds the rendered text unchanged, so the parameter recorder is rewound to
+    /// the checkpoint and the detached occurrences are relocated behind the wrapper prefix.
+    /// </summary>
+    private static void AppendAverageWrap(
+        BaseExpressionVisitor visitor,
+        StringBuilder builder,
+        int start,
+        SqlParameterMark? mark,
+        string argument,
+        string? filterPredicate = null)
+    {
+        var rendered = builder.ToString(start, builder.Length - start);
+        builder.Length = start;
+        var fragment = mark is { } checkpoint ? visitor.Recorder!.RewindTo(checkpoint) : null;
+        var fragments = fragment is { OccurrenceCount: > 0 }
+            ? new[] { new SqlParameterTrackedFragment(rendered, null, fragment) }
+            : Array.Empty<SqlParameterTrackedFragment>();
+        SqlParameterFragmentRelocation.AppendComposed(
+            builder,
+            visitor.Recorder,
+            visitor.Dialect.MakeAverageResult(rendered, argument, filterPredicate),
+            fragments);
+    }
+
+    /// <summary>
+    /// Trims the trailing <c>", "</c> separator of an argument list. The recorder is first advanced over
+    /// the text it has not accounted for yet, then rewound over the separator, which carries no
+    /// occurrence; a trim that would cut through a placeholder throws instead of misplacing it.
+    /// </summary>
+    private static void TrimTrailingSeparator(BaseExpressionVisitor visitor, StringBuilder builder)
+    {
+        var recorder = visitor.Recorder;
+        recorder?.AdvanceTo(builder.Length);
+        builder.Length -= 2;
+        recorder?.TrimTo(builder.Length);
     }
 
     /// <summary>
@@ -601,4 +744,8 @@ internal static class NormSqlTranslator
         => args.Count == withFilterCount && AggregateFilter.IsFilterExpression(args[args.Count - 1])
             ? args[args.Count - 1]
             : null;
+
+    /// <summary>True for the two AVG spellings that share the argument-rendering policy.</summary>
+    private static bool IsAverage(string methodName)
+        => methodName is nameof(CommonFunctions.avg) or nameof(CommonFunctions.avg_distinct);
 }

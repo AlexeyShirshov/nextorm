@@ -11,6 +11,7 @@ namespace NextORM.Integration.Tests;
 /// query-local <c>join_use_nulls=1</c> (never session/global), an explicit conflict is rejected before
 /// execution, and a dangling foreign key materializes SQL <c>NULL</c> instead of the column default.
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class ClickHouseImplicitNavigationTests : ProviderTestSuite
 {
     protected override ITestProvider Provider => ClickHouseTestProvider.Instance;

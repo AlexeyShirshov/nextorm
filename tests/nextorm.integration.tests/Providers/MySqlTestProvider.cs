@@ -49,6 +49,9 @@ internal sealed class MySqlTestProvider : ITestProvider
     /// <summary>The provider binds table-valued parameters (native SQL Server UDTT or JSON/array emulation).</summary>
     public bool SupportsTableValuedParameters => true;
     public bool SupportsTransactions => true;
+
+    /// <summary>Savepoints are available inside a transaction on this provider.</summary>
+    public bool SupportsSavepoints => true;
     public bool SupportsRegex => true;
     public bool SupportsLobStreaming => false;
     public string TableValuedFunctionSkipReason => "The shared table-valued function test uses SQLite's json_each; MySQL exposes JSON rows through JSON_TABLE with a different shape.";
@@ -62,7 +65,7 @@ internal sealed class MySqlTestProvider : ITestProvider
 
     public string SkipReason => MySqlContainer.Failure ?? "MySQL is not available.";
 
-    public IDataContext CreateContext() => CreateContext(null);
+    public IDataContext CreateContext() => CreateContext((Microsoft.Extensions.Logging.ILoggerFactory?)null);
 
     public IDataContext CreateContext(Microsoft.Extensions.Logging.ILoggerFactory? loggerFactory)
     {
@@ -71,6 +74,9 @@ internal sealed class MySqlTestProvider : ITestProvider
             builder = builder.UseLoggerFactory(loggerFactory);
         return new MySqlDataContext(MySqlContainer.ConnectionString, builder);
     }
+
+    public IDataContext CreateContext(DataContextBuilder builder)
+        => new MySqlDataContext(MySqlContainer.ConnectionString, builder);
 
     public void EnsureSeeded()
     {
@@ -123,10 +129,15 @@ internal sealed class MySqlTestProvider : ITestProvider
         "drop table if exists extrema_entity",
         "drop table if exists orders",
         "drop table if exists person",
+        "drop table if exists avg_fixture",
 
         "create table simple_entity (id int not null primary key)",
 
         "insert into simple_entity (id) values (1),(2),(3),(4),(5),(6),(7),(8),(9),(10)",
+
+        // T291 (#291): AVG fixture, identical rows on every provider (values 1,2,1,3 / null,1,2,3).
+        "create table avg_fixture (id int not null primary key, b tinyint unsigned not null, s smallint not null, i int not null, l bigint not null, nb tinyint unsigned null, ns smallint null, ni int null, nl bigint null)",
+        "insert into avg_fixture (id, b, s, i, l, nb, ns, ni, nl) values (1, 1, 1, 1, 1, null, null, null, null), (2, 2, 2, 2, 2, 1, 1, 1, 1), (3, 1, 1, 1, 1, 2, 2, 2, 2), (4, 3, 3, 3, 3, 3, 3, 3, 3)",
 
         """
         create table complex_entity
@@ -257,8 +268,8 @@ internal sealed class MySqlTestProvider : ITestProvider
         create table eager_composite_child
         (
             id int not null primary key,
-            tenant int not null,
-            parent_id int not null,
+            tenant int null,
+            parent_id int null,
             sort_key int not null
         )
         """,

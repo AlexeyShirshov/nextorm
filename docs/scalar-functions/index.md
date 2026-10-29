@@ -15,8 +15,12 @@ The dispatch lives in [`BaseExpressionVisitor`](xref:NextORM.Core.BaseExpression
 Two rules apply throughout:
 
 * a **captured** value (a local or parameter) becomes a query **parameter**, not a literal;
-* a **constant** is inlined. For `Contains`/`StartsWith`/`EndsWith` that also means `%`, `_` and `\` in a
-  constant are escaped and an `escape '\'` clause is emitted.
+* a **constant** is inlined in the provider's own string-literal form. For `Contains`/`StartsWith`/`EndsWith`
+  that also means `%`, `_` and `\` in a constant are escaped before rendering.
+
+The `ESCAPE` clause of the rendered `LIKE` pattern is provider-dependent: ClickHouse emits none (and fails
+closed on a custom escape character), MySQL/MariaDB emit the operand as a mode-independent hex token, and
+the remaining providers keep the clause.
 
 The built-in translations are attempted **before** any [`[SqlFunction]`](../guide/12-user-defined-functions.md)
 mapping, so a user-defined attribute cannot change the behaviour of `string`/`Math`/`DateTime` members.
@@ -24,11 +28,13 @@ mapping, so a user-defined attribute cannot change the behaviour of `string`/`Ma
 Cross-provider helpers live on [`SqlFunctions.Sql`](xref:NextORM.Core.SqlFunctions.Sql). Functions that only one provider supports are grouped
 under a provider-specific surface: [`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres) (PostgreSQL: native arrays, native JSON, the extended
 scalar library, the PostgreSQL-only aggregates and the `generate_series`/`unnest` table functions),
-[`SqlServer`](xref:NextORM.Core.SqlFunctions.SqlServer) (SQL Server: the JSON-as-text functions and `string_split`/`openjson`) and
+[`SqlServer`](xref:NextORM.Core.SqlFunctions.SqlServer) (SQL Server: the JSON-as-text functions, the version-gated 2022/2025 scalars such as `left_shift` and `regexp_count`, the `product` aggregate, and `string_split`/`openjson`/`regexp_split_to_table`) and
 [`ClickHouse`](xref:NextORM.Core.SqlFunctions.ClickHouse) (ClickHouse: `arg_min`/`arg_max`, the `-If` combinator, the string-JSON
 `JSONExtract*` family, the flat-JSON `visitParamExtract*` fast path, the JSONPath scalars
 `json_value`/`json_query`/`json_exists` and the dictionary functions
-`dict_get`/`dict_get_or_default`/`dict_has`/`dict_get_hierarchy`/`dict_get_children`/`dict_is_in`). Calling one of them on a
+`dict_get`/`dict_get_or_default`/`dict_has`/`dict_get_hierarchy`/`dict_get_children`/`dict_is_in`), and
+[`Sqlite`](xref:NextORM.Core.SqlFunctions.Sqlite) (SQLite: the core scalars, JSON1 and the `total` aggregate,
+the date/math helpers and the full-text query surface). Calling one of them on a
 provider that does not opt in throws `NotSupportedException`.
 
 ## See also

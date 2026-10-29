@@ -34,7 +34,7 @@ public class ColumnCollationSqlGenerationTests
         var e = ctx.From<ICollatedEntity>();
 
         SqlOf(ctx, e.Where(x => x.Name == "a").Select(x => new { x.Id }))
-            .Should().Contain("name collate utf8mb4_bin = 'a'");
+            .Should().Contain("name collate utf8mb4_bin = _utf8mb4 X'61'");
     }
 
     [Fact]

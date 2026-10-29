@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-labelledby="t d">
+  <title id="t">NextORM</title>
+  <desc id="d">NextORM package icon: letter N with a forward chevron on a dark rounded square.</desc>
+  <defs>
+    <linearGradient id="mark" x1="0" y1="0" x2="0.9" y2="1">
+      <stop offset="0" stop-color="#f8fafc"/>
+      <stop offset="1" stop-color="#818cf8"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#7c3aed" stop-opacity="0.6"/>
+      <stop offset="1" stop-color="#7c3aed" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="128" height="128" rx="28" fill="#0b1220"/>
+  <circle cx="104" cy="24" r="64" fill="url(#glow)"/>
+  <rect x="0.75" y="0.75" width="126.5" height="126.5" rx="27.5" fill="none" stroke="#2b3a55" stroke-width="1.5"/>
+
+  <text x="49" y="90" text-anchor="middle" font-family="Inter, Segoe UI, Ubuntu, DejaVu Sans, sans-serif" font-size="80" font-weight="700" letter-spacing="-4" fill="url(#mark)">N</text>
+  <path d="M80 48 L99 64 L80 80" fill="none" stroke="#22d3ee" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

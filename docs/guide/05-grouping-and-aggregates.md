@@ -24,9 +24,9 @@ predicate. They are named exactly as follows:
 |---|---|---|---|
 | `count()` | `int` | `count_distinct(...)` | `int` |
 | `count_big()` | `long` | `count_big_distinct(...)` | `long` |
-| `min(x)` | same as `x` | `avg_distinct(x)` | same as `x` |
+| `min(x)` | same as `x` | `avg_distinct(x)` | same as `avg(x)` |
 | `max(x)` | same as `x` | `sum_distinct(x)` | same as `x` |
-| `avg(x)` | same as `x` | `stdev_distinct(x)` | same as `x` |
+| `avg(x)` | `double?` / `float?` / `decimal?` (by input type) | `stdev_distinct(x)` | same as `x` |
 | `sum(x)` | same as `x` | `stdevp_distinct(x)` | same as `x` |
 | `stdev(x)` | same as `x` | `var_distinct(x)` | same as `x` |
 | `stdevp(x)` | same as `x` | `varp_distinct(x)` | same as `x` |
@@ -40,6 +40,43 @@ The common aggregates also have convenience terminals on `EntityBuilder<T>`: [`C
 `Avg(x)`, `Sum(x)`, `Stdev(x)`, `Stdevp(x)`, `Var(x)` and `Varp(x)`, each with an `...Async` twin and
 an overload that accepts positional parameters. `count`, `count_big`, `count_distinct` and
 `count_big_distinct` have no entity terminal and are used through ``
+
+## AVG result types and argument policy
+
+`avg` does not return its input type: an integral column produces a fractional result, so `avg` over
+`[1, 2]` is `1.5` instead of the integral value earlier versions returned (`2`; `1` on SQL Server,
+where native integer `AVG` truncates). The result is nullable on every provider, so an empty or
+all-`NULL` input yields `null` rather than an unguarded read.
+
+| Input | `avg(x)` result |
+|---|---|
+| `byte`, `sbyte`, `short`, `ushort`, `int`, `uint`, `long`, `ulong` and their nullable forms | `double?` |
+| `float`, `float?` | `float?` |
+| `double`, `double?` | `double?` |
+| `decimal`, `decimal?` | `decimal?` |
+
+The argument policy is per provider. SQL Server evaluates `AVG` over a non-floating argument as an
+integer, so the argument is widened *inside* the aggregate; the other dialects keep the native
+argument. The policy applies to `avg`, `avg_distinct` and the windowed `avg_over` alike:
+
+| Provider | Rendered argument |
+|---|---|
+| SQLite, PostgreSQL, MySQL, MariaDB, ClickHouse | `avg(id)` |
+| SQL Server | `avg(cast(id as float))` |
+
+The nullable result and the widening are an intentional source break, not a binary-compatible
+change:
+
+```csharp
+int average = dataContext.From<ISimpleEntity>().Avg(e => e.Id);        // does not compile
+var average = dataContext.From<ISimpleEntity>().Avg(e => e.Id);        // double?
+var direct  = dataContext.From<ISimpleEntity>().Select(e => SqlFunctions.Sql.avg(e.Id)).First(); // double?
+```
+
+Explicit generic arguments that named the old truncating form (`Avg<TEntity, TResult>` with an
+integral `TResult`, `avg<T>(...)`) no longer compile either; let overload resolution pick the
+declaration from the selector type and read the value through `double?` (or `float?`/`decimal?` for
+those inputs).
 
 ## GroupBy
 
@@ -158,6 +195,79 @@ Output:
 Note that `NULL` ordering differs between providers (PostgreSQL sorts `NULL`s first on a descending
 sort, SQLite last), which is why the sort example excludes the `NULL` group.
 
+## Grouping inferred from the projection: SelectGroup
+
+`SelectGroup` takes the same projection lambda as `Select`, but instead of requiring an explicit
+`GroupBy` it infers the grouping keys from that projection. Every row-dependent expression that
+contains no aggregate becomes a key; the aggregate calls fold each group. The projection keeps its
+exact shape - there is no client-side grouping, no dynamic type and no reflection-emit merging of a
+flat result type. This is the issue's quarterly example:
+
+```csharp
+ctx.From<Product>()
+   .SelectGroup(p => new
+   {
+       ProductID        = p.Item1.ProductId,
+       ProductName      = p.Item3.Name,
+       SalesQuarter     = SqlFunctions.Sql.date_trunc("quarter", p.Item2.OrderDate),
+       QuarterlyRevenue = SqlFunctions.Sql.sum(p.Item1.LineTotal),
+       QuarterlyQty     = SqlFunctions.Sql.sum(p.Item1.OrderQty),
+   });
+```
+
+`ProductID`, `ProductName` and the whole `date_trunc('quarter', OrderDate)` call become `GROUP BY`
+keys, while the two `sum` calls stay aggregates. Results and SQL are equivalent to the explicit
+`GroupBy(...).Select(...)` form with the same keys.
+
+Inference rules:
+
+* **Maximal row-dependent subexpressions.** The analyzer collects the largest aggregate-free
+  subexpression of each output that depends on the current row, instead of descending to individual
+  columns.
+* **First-appearance order.** Keys are emitted in the order their expressions first appear in the
+  projection, which makes the rendered `GROUP BY` deterministic.
+* **Constants and captured values are not keys.** A literal or a captured local neither groups nor
+  shifts the key order.
+* **Duplicates collapse structurally.** Two structurally equal key expressions produce one key.
+* **A whole scalar function stays one key.** `date_trunc('quarter', OrderDate)` is the key; the raw
+  `OrderDate` is not added beside it.
+* **Subexpression granularity is preserved.** `sum(Amount) + Adjustment` infers `Adjustment`;
+  `sum(Amount) + Price * Qty` infers `Price * Qty`, not `Price` and `Qty` separately.
+* **Aggregate calls are opaque.** The arguments of an aggregate, its `DISTINCT` input and its
+  `FILTER` predicate never leak into the grouping keys.
+* **The projection is preserved.** The original projection is rendered as written; no key is
+  rewritten, no value is folded on the client and the result shape is unchanged.
+
+Degenerate projections resolve without inventing a grouping:
+
+* **Keys without aggregates** return the unique key combinations through `GROUP BY`; it is not a
+  row-by-row select.
+* **Aggregates without keys** is a global aggregation: no `GROUP BY`, exactly one row, and the
+  provider's existing empty-input behaviour for `count`, `sum` and `NULL` is preserved.
+* **A row-independent projection without aggregates** is DISTINCT-like: each distinct value is
+  returned once and an empty source returns zero rows instead of an invalid empty `GROUP BY`.
+
+`Having` and an expression `OrderBy` are validated against the inferred keys: every row expression
+they mention must be covered by an inferred key, be an aggregate, or be a captured/constant value.
+An uncovered row member throws `QueryPreparationException` before the command reaches the database -
+the grouping is never widened silently and functional dependencies are not inferred. A captured
+threshold is therefore valid, a bare outer-row column is not. An `OrderBy` by ordinal keeps its
+existing bounds validation and adds no keys. `Where` stays a pre-group filter and takes no part in
+inference.
+
+The following combinations throw `QueryPreparationException`:
+
+* an existing explicit `GroupBy`, `GroupByRollup`, `GroupByCube`, `GroupByGroupingSets` or
+  `WithTotals` - the two grouping mechanisms are never merged or overridden;
+* window functions in the projection, `Having` or an expression `OrderBy`;
+* scalar or correlated subqueries in those expressions, including inside aggregate arguments and
+  inside a `FILTER` predicate. That rejection is unconditional and independent of key inference; a
+  subquery in `Where` remains supported.
+
+The in-memory provider executes the inferred grouping within its existing aggregate surface: the
+supported aggregates behave as they do for an explicit `GroupBy`, while provider-surface scalar
+functions and custom functions are rejected explicitly instead of being evaluated in process.
+
 ## ROLLUP and CUBE
 
 `GroupByRollup(...)` and `GroupByCube(...)` attach the ANSI super-aggregate modifiers. `ROLLUP` adds
@@ -271,8 +381,10 @@ Output:
 |-----|
 | 55 |
 
-`avg` keeps the fractional part on SQLite and PostgreSQL; SQL Server evaluates `AVG` over an integer
-column as an integer. Every aggregate also has an entity terminal that forwards to the same function:
+`avg` returns a fractional nullable result for every numeric input (see
+[AVG result types and argument policy](#avg-result-types-and-argument-policy)), so `[1, 2]` is `1.5`
+on every provider, SQL Server included. Every aggregate also has an entity terminal that forwards to
+the same function:
 `Sum`, `Avg`, `Min` and `Max` are equivalent to `Select(...)` followed by `First()`, and `Count()` to
 `Select(e => SqlFunctions.Sql.count()).First()`:
 
@@ -373,7 +485,7 @@ Output:
 
 | Avg |
 |-----|
-| 6 |
+| 5.5 |
 
 Output:
 
@@ -458,6 +570,26 @@ Projecting through `double` avoids the lossy integer conversion:
 var variance = dataContext.From<ISimpleEntity>().Select(x => SqlFunctions.Sql.varp((double)x.Id)).First();
 ```
 
+### Nullable results and cardinality
+
+The four variability families are structurally nullable: `Stdev`, `Stdevp`, `Var` and `Varp`, and
+the eight `Sql.stdev*`/`Sql.var*` facade forms, return `T?`. Cardinality counts the contributing
+non-null values after `DISTINCT`:
+
+| Contributing values | `Stdev` / `Var` (sample) | `Stdevp` / `Varp` (population) |
+|---|---|---|
+| 0 | `null` | `null` |
+| 1 | `null` | `0.0` |
+| 2 or more | the established formula | the established formula |
+
+A defined zero stays zero: two or more identical values fold to `0.0`, and a one-row population
+result is `0.0`. Only an undefined result is `null` — it is never replaced by an invented zero.
+
+Because the result is now a real `Nullable<T>` instead of an annotation on a plain `double`, the
+change is source-breaking for callers that assign the terminal to a non-nullable `int`/`double`.
+Keep the nullable result (`double?`) or unwrap it explicitly. Use `?? 0` only where zero genuinely
+means "no spread": it re-introduces the invented zero for the undefined case.
+
 ## Boolean, bitwise, statistical and ordered-set aggregates
 
 Beyond `count`/`min`/`max`/`sum`/`avg`/`stdev`/`var`, [`Sql`](xref:NextORM.Core.SqlFunctions.Sql) exposes several aggregate families,
@@ -483,7 +615,7 @@ its own dialect capability; PostgreSQL and ClickHouse opt into different subsets
 | Last row | `SqlFunctions.ClickHouse.any_last(x)` | `anyLast(x)` | [`SupportsAnyAggregates`](xref:NextORM.Core.ISqlDialect.SupportsAnyAggregates) | ClickHouse |
 | Filtered aggregate | `SqlFunctions.Sql.count(() => p)`, `sum(x, () => p)`, `avg(x, () => p)`, `min(x, () => p)`, `max(x, () => p)` | `count(*) filter (where p)`, ... / `countIf(p)`, `sumIf(x, p)`, ... | [`AggregateFilterStyle`](xref:NextORM.Core.ISqlDialect.AggregateFilterStyle) | PostgreSQL (9.4+), SQLite (ANSI `FILTER`), ClickHouse (`-If`) |
 | Sequence / funnel | `SqlFunctions.ClickHouse.window_funnel(window, ts, c1, c2)` , `sequence_match(pattern, ts, c1, c2)`, `retention(c1, c2)` | `toInt32(windowFunnel(window)(ts, c1, c2))`, `toInt32(sequenceMatch(pattern)(ts, c1, c2))`, `retention(c1, c2)` | [`SequenceAggregates`](xref:NextORM.Core.ISqlDialect.SequenceAggregates) | ClickHouse |
-| Ordered-set | `SqlFunctions.Postgres.percentile_cont(fraction, () => x)`, `percentile_disc(fraction, () => x)`, `mode(() => x)` | `percentile_cont(f) within group (order by x)`, ... | [`SupportsOrderedAggregates`](xref:NextORM.Core.ISqlDialect.SupportsOrderedAggregates) | PostgreSQL |
+| Ordered-set | `SqlFunctions.Postgres.percentile_cont(fraction, () => x)`, `percentile_disc(fraction, () => x)`, `median(() => x)`, `mode(() => x)` | `percentile_cont(f) within group (order by x)`, `percentile_cont(0.5) within group (order by x)`, ... | [`SupportsOrderedAggregates`](xref:NextORM.Core.ISqlDialect.SupportsOrderedAggregates) (`mode`), [`SupportsOrderedPercentiles`](xref:NextORM.Core.ISqlDialect.SupportsOrderedPercentiles) (percentiles, `median`) | PostgreSQL |
 
 MariaDB does **not** support `any_agg`: it has no `ANY_VALUE` in 10.4–12.x (the SQL-2023 `T626` feature
 is still pending, targeted for 13.2), so [`SupportsAnyValueAggregate`](xref:NextORM.Core.ISqlDialect.SupportsAnyValueAggregate) is `false` and the call is rejected with `NotSupportedException`.
@@ -531,11 +663,22 @@ The ordered-set aggregates take the ordering key as a quoted lambda that closes 
 parameter; the key becomes `order by <key>`. Calling one on a provider without the capability throws
 `NotSupportedException`.
 
+On PostgreSQL the median is not a server function: `SqlFunctions.Postgres.median(() => x)` renders
+`percentile_cont(0.5) within group (order by x)` and is an **aggregate** (one row per group), gated by
+[`SupportsOrderedPercentiles`](xref:NextORM.Core.ISqlDialect.SupportsOrderedPercentiles). The continuous
+forms interpolate and return `double precision`, so `percentile_cont` and `median` require a floating-point
+sort expression — an integer/numeric key is refused with
+`The percentile_cont function on PostgreSQL requires a floating-point sort expression.` —
+while `percentile_disc` keeps the sort expression's type. A fraction is a `double` in `[0, 1]`, not a
+percentage; it must be finite and constant (a literal or a captured variable), and a row-dependent fraction
+is refused at SQL generation. The generic `SqlFunctions.Postgres.percentile(fraction, () => x)` is refused:
+it never becomes an alias of the continuous form.
+
 The ClickHouse sequence/funnel aggregates take the conditions as inline boolean expressions (the
 `timestamp` column first). `window_funnel` returns the longest consecutive chain in a sliding window,
 `sequence_match` returns `1`/`0` for the pattern; both materialise as a CLR `int` (the dialect casts
-the native unsigned result with `toInt32(...)`). `retention` returns a `UInt8` mask as an array,
-materialised as `byte[]` (project it directly or use it inside another array function):
+the native unsigned result with `toInt32(...)`). `retention` returns a `UInt8` mask that the dialect
+normalises to the declared `int[]` (project it directly or use it inside another array function):
 
 ```csharp
 var funnel = dataContext.From<IEventEntity>()
@@ -553,9 +696,17 @@ var funnel = dataContext.From<IEventEntity>()
 -- ClickHouse
 select toInt32(windowFunnel(600)(ts, (event = 1), (event = 2))) as `Level`,
        toInt32(sequenceMatch('(?1).*(?2)')(ts, (event = 1), (event = 2))) as `Matched`,
-       arrayStringConcat(retention((event = 1), (event = 2)), ',') as `Mask`
+       arrayStringConcat(cast(retention((event = 1), (event = 2)) as Array(Int32)), ',') as `Mask`
  from event_entity
 ```
+
+Array-returning aggregates follow the **declared CLR element type**, not the server-inferred one:
+`top_k`/`top_k_weighted`/`group_array`/`group_uniq_array` declare a nullable element type when the input is
+nullable (`int?[]` → `Array(Nullable(Int32))`), while `retention` stays `int[]` and `array_map`/`range`
+follow their own declared types (`int[]`, `long[]`). Nullability describes the **result type** only:
+ClickHouse still elides `NULL` aggregate **inputs**, so `group_array`/`group_uniq_array` over a nullable
+column omit the nulls instead of retaining them — the declared element type is nullable, the aggregate does
+not keep nulls.
 
 ## Filtered aggregates
 
@@ -609,12 +760,12 @@ See [Scalar functions](../scalar-functions/05-aggregates.md#aggregate-filter) fo
 | Provider | `count_big` | Aggregate names | Integer `AVG` | `var` / `varp` |
 |---|---|---|---|---|
 | SQLite | emits `count(*)` (already 64-bit) | kept as written; `stdev`/`var` come from the custom aggregates registered by the provider | fractional (5.5 stays 5.5) | supported through those custom aggregates |
-| SQL Server | emits `count_big(...)` | kept as written; `stdev`/`var` are native | integer (5.5 becomes 5) | native |
+| SQL Server | emits `count_big(...)` | kept as written; `stdev`/`var` are native | fractional; the argument is widened (`avg(cast(id as float))`) | native |
 | PostgreSQL | emits `count(*)` (already 64-bit) | `stdev` → `stddev`, `stdevp` → `stddev_pop`, `var` → `variance`, `varp` → `var_pop` | fractional | native |
 | MySQL | emits `count(*)` (already 64-bit) | `stdev` → `stddev_samp`, `stdevp` → `stddev_pop`, `var` → `var_samp`, `varp` → `var_pop` | fractional | native (`var_samp` / `var_pop`) |
 | MariaDB | emits `count(*)` (already 64-bit) | same mapping as MySQL (`stddev_samp` / `stddev_pop` / `var_samp` / `var_pop`) | fractional | native (`var_samp` / `var_pop`) |
 | ClickHouse | casts `count`/`count_distinct` (and the filtered `countIf`) to `toInt32(...)` and `count_big`/`count_big_distinct` to `toInt64(...)` (native `UInt64` is not materialisable) | `stdev` → `stddevSamp`, `stdevp` → `stddevPop`, `var` → `varSamp`, `varp` → `varPop`, `covar_*` → `covarPop`/`covarSamp`, `bit_*` → `groupBit*`, an aggregate filter → the `<fn>If` combinator (`sumIf`, `countIf`) | fractional | `varSamp` / `varPop` |
-| In-memory | not covered by the in-memory test suite | not covered | not covered | not covered |
+| In-memory | not covered by the in-memory test suite | not covered | fractional (`double?` for integral inputs) | not covered |
 
 Group ordering is not defined by SQL; assert by group key, not by position. PostgreSQL and SQLite
 differ on `NULL` ordering (PostgreSQL first, SQLite last).

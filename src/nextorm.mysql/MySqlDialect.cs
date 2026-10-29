@@ -16,6 +16,12 @@ public class MySqlDialect : SqlDialectBase
     /// <summary>Gets the shared MySQL dialect instance.</summary>
     public static readonly MySqlDialect Instance = new();
 
+    /// <summary>
+    /// MySQL supports <c>SAVEPOINT</c>/<c>ROLLBACK TO SAVEPOINT</c>/<c>RELEASE SAVEPOINT</c>; MariaDB
+    /// inherits this value from its MySQL dialect base.
+    /// </summary>
+    public override bool SupportsSavepoints => true;
+
     /// <summary>A MySQL derived table (subquery in FROM) must have an alias.</summary>
     public override bool RequireSubqueryAlias => true;
 
@@ -40,12 +46,14 @@ public class MySqlDialect : SqlDialectBase
     public override bool SupportsColumnDefault => true;
 
     /// <summary>
-    /// MySQL is not marked as having a native bulk path: <c>MySqlBulkCopy</c> goes through
-    /// <c>LOAD DATA LOCAL INFILE</c>, which requires <c>AllowLoadLocalInfile=true</c> on the connection
-    /// and a matching server setting, so the portable <c>INSERT ... VALUES</c> path is used instead (it
-    /// also returns keys and supports <c>INSERT IGNORE</c>).
+    /// MySQL has a native bulk path: <c>MySqlBulkCopy</c> loads through <c>LOAD DATA LOCAL INFILE</c>,
+    /// which requires <c>AllowLoadLocalInfile=true</c> on the connection and <c>local_infile</c> enabled
+    /// on the server. Both are read-only preflight checks: a missing permission is never changed by
+    /// nextorm, the portable <c>INSERT ... VALUES</c> path is used in <see cref="BulkInsertMode.Auto"/>,
+    /// and <see cref="BulkInsertMode.Native"/> refuses by name instead of replaying through the portable
+    /// path after a failed load.
     /// </summary>
-    public override bool SupportsBulkCopy => false;
+    public override bool SupportsBulkCopy => true;
 
     /// <summary>MySQL/MariaDB batches through <c>MySqlBatch</c>.</summary>
     public override bool SupportsBatch => true;
@@ -97,10 +105,19 @@ public class MySqlDialect : SqlDialectBase
     /// <inheritdoc/>
     public override string MakeUpsertValueReference(string column, KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, "values(") + column + ")";
 
-    // MySQL 8.0.14+ (and MariaDB 10.3+) spell the APPLY surface as an ANSI lateral join, which is
-    // the SqlDialectBase default.
+    // MySQL 8.0.14+ spells the APPLY surface as an ANSI lateral join, which is the SqlDialectBase
+    // default. MySQL only: MariaDB rejects the generated lateral syntax, so MariaDbDialect overrides
+    // this to false rather than inheriting it.
     /// <inheritdoc/>
     public override bool SupportsApply => true;
+
+    /// <summary>
+    /// MySQL and MariaDB correlate a table function in <c>FROM</c> with the tables that precede it
+    /// implicitly, so a bounded correlated <c>JSON_TABLE</c> APPLY renders the function itself as the join
+    /// source. The derived wrapper cannot be used: MySQL rejects an outer reference inside a table function
+    /// under <c>LATERAL</c> and MariaDB has no <c>LATERAL</c> keyword at all.
+    /// </summary>
+    public override bool SupportsDirectApplyTableFunction => true;
 
     /// <summary>MySQL/MariaDB support a raw SQL derived table (<c>FROM (&lt;sql&gt;) AS alias</c>).</summary>
     public override bool SupportsRawSqlSource => true;
@@ -172,6 +189,9 @@ public class MySqlDialect : SqlDialectBase
     /// <summary>MySQL renders the portable <c>iif</c> as <c>if(condition, whenTrue, whenFalse)</c>.</summary>
     public override IIifRenderer Iif => MySqlIifRenderer.Instance;
 
+    /// <summary>MySQL (and MariaDB) render the null-safe comparison over the native <c>&lt;=&gt;</c> equality primitive.</summary>
+    public override INullSafeComparisonRenderer? NullSafeComparison => MySqlNullSafeComparisonRenderer.Instance;
+
     /// <summary>MySQL 8.0+ (and MariaDB 10.2+) support the ANSI <c>percent_rank</c>/<c>cume_dist</c> window functions.</summary>
     public override bool SupportsPercentRankCumeDist => true;
 
@@ -212,6 +232,37 @@ public class MySqlDialect : SqlDialectBase
 
     /// <summary>MySQL and MariaDB (through the inherited dialect) render the native MySQL function surface.</summary>
     public override IMySqlFunctions MySqlFunctions => MySqlNativeFunctions.Instance;
+
+    /// <summary>MySQL encodes base64 through <c>TO_BASE64</c>; its CRLF wrapping is stripped explicitly.</summary>
+    public override bool SupportsBase64Encode => true;
+
+    /// <inheritdoc/>
+    public override string MakeBase64Encode(string value) =>
+        $"CAST(REPLACE(REPLACE(TO_BASE64({TypedNull(value, "BINARY")}), CHAR(13), ''), CHAR(10), '') AS CHAR)";
+
+    /// <summary>MySQL decodes base64 through <c>FROM_BASE64</c>.</summary>
+    public override bool SupportsBase64Decode => true;
+
+    /// <inheritdoc/>
+    public override string MakeBase64Decode(string value) =>
+        $"FROM_BASE64({TypedNull(value, "CHAR")})";
+
+    /// <summary>MySQL generates random bytes through <c>RANDOM_BYTES</c>.</summary>
+    public override bool SupportsCryptGenRandom => true;
+
+    /// <inheritdoc/>
+    public override string MakeCryptGenRandom(string length)
+    {
+        var argument = TypedNull(length, "SIGNED");
+        return $"CASE WHEN {argument} IS NULL THEN CAST(NULL AS BINARY) ELSE RANDOM_BYTES({argument}) END";
+    }
+
+    /// <summary>
+    /// Replaces the bare <c>null</c> token of a literal NULL argument with the provider's typed NULL,
+    /// so the function keeps the SQL input type instead of receiving an untyped literal.
+    /// </summary>
+    private static string TypedNull(string value, string sqlType) =>
+        value == "null" ? $"CAST(NULL AS {sqlType})" : value;
 
     /// <inheritdoc/>
     public override string MakeTextJsonFunction(string name, IReadOnlyList<string> args) => name switch
@@ -502,12 +553,6 @@ public class MySqlDialect : SqlDialectBase
         _ => name
     };
 
-    // MySQL treats the backslash as a string-literal escape too, so the escape character of a LIKE
-    // predicate has to be written as a doubled backslash ('\\' rather than '\').
-    /// <inheritdoc/>
-    public override string MakeLikeEscape(string escapeChar, KeywordCase keywordCase = KeywordCase.Lower) =>
-        Kw(keywordCase, " escape '") + escapeChar.Replace("\\", "\\\\").Replace("'", "''") + "'";
-
     // MySQL's ~ yields an unsigned 64-bit value, which overflows the signed CLR integer the
     // projection expects; -(x) - 1 keeps the two's-complement result signed.
     /// <inheritdoc/>
@@ -771,8 +816,9 @@ internal sealed class MySqlScalarFunctions : IScalarFunctions
 /// <summary>
 /// Renders the MySQL/MariaDB-only functions of <see cref="MySqlFunctions"/> natively. Every member of
 /// the surface maps to a full-name swap (MySQL and MariaDB share the spellings), so the renderer reports
-/// the whole family and fails for anything else. Declared non-sealed so that
-/// <c>NextORM.MariaDb</c> can derive its renderer and add the MariaDB-only names.
+/// the whole family and fails for anything else. <c>NextORM.MariaDb</c> does not derive from this type:
+/// <c>MariaDbNativeFunctions</c> composes it as its <c>Inner</c> renderer, adds the MariaDB-only names and
+/// excludes the names MariaDB does not implement.
 /// </summary>
 internal class MySqlNativeFunctions : IMySqlFunctions
 {
@@ -786,7 +832,26 @@ internal class MySqlNativeFunctions : IMySqlFunctions
         "json_set" or "json_insert" or "json_replace" or "json_remove" or
         "json_merge_patch" or "json_merge_preserve" or "json_array_append" or "json_array_insert" or
         "json_depth" or "json_keys" or "json_length" or "json_type" or
-        "uuid_to_bin" or "bin_to_uuid";
+        "json_storage_free" or
+        "json_array" or "json_arrayagg" or "json_arrow" or "json_arrow_text" or
+        "json_contains" or "json_contains_path" or "json_merge" or "json_object" or
+        "json_objectagg" or "json_overlaps" or "json_pretty" or "json_quote" or
+        "json_schema_valid" or "json_schema_validation_report" or "json_search" or
+        "json_storage_size" or "member_of" or
+        "uuid_to_bin" or "bin_to_uuid" or
+        "bin" or "export_set" or "hex" or "make_set" or "oct" or "ord" or "quote" or
+        "soundex" or "strcmp" or "to_base64" or "from_base64" or "unhex" or "weight_string" or
+        "conv" or "crc32" or "log2" or "rand" or "truncate" or
+        "bit_count" or "bit_and" or "bit_or" or "bit_xor" or
+        "adddate" or "addtime" or "convert_tz" or "dayname" or "from_days" or "get_format" or
+        "makedate" or "maketime" or "microsecond" or "monthname" or "period_add" or "period_diff" or
+        "sec_to_time" or "subdate" or "subtime" or "time" or "time_format" or "time_to_sec" or
+        "timediff" or "timestamp" or "to_days" or "to_seconds" or "yearweek" or
+        "aes_encrypt" or "aes_decrypt" or "compress" or "uncompress" or "uncompressed_length" or
+        "random_bytes" or "validate_password_strength" or "statement_digest" or "statement_digest_text" or
+        "found_rows" or "last_insert_id" or "row_count" or "current_role" or "charset" or "collation" or
+        "coercibility" or "benchmark" or "icu_version" or
+        "uuid_short" or "is_uuid" or "sleep" or "grouping" or "name_const" or "column_default";
 
     /// <inheritdoc/>
     public string Render(string name, IReadOnlyList<string> args) => name switch
@@ -817,9 +882,129 @@ internal class MySqlNativeFunctions : IMySqlFunctions
         "json_keys" => $"json_keys({args[0]})",
         "json_length" => $"json_length({args[0]})",
         "json_type" => $"json_type({args[0]})",
+        "json_storage_free" => $"json_storage_free({args[0]})",
+        "json_array" => $"json_array({string.Join(", ", args)})",
+        "json_arrayagg" => $"json_arrayagg({args[0]})",
+        "json_arrow" => $"{args[0]} -> {args[1]}",
+        "json_arrow_text" => $"{args[0]} ->> {args[1]}",
+        "json_contains" => $"json_contains({string.Join(", ", args)})",
+        "json_contains_path" => $"json_contains_path({string.Join(", ", args)})",
+        "json_merge" => $"json_merge({string.Join(", ", args)})",
+        "json_object" => $"json_object({string.Join(", ", args)})",
+        "json_objectagg" => $"json_objectagg({args[0]}, {args[1]})",
+        "json_overlaps" => $"json_overlaps({args[0]}, {args[1]})",
+        "json_pretty" => $"json_pretty({args[0]})",
+        "json_quote" => $"json_quote({args[0]})",
+        "json_schema_valid" => $"json_schema_valid({args[0]}, {args[1]})",
+        "json_schema_validation_report" => $"json_schema_validation_report({args[0]}, {args[1]})",
+        "json_search" => $"json_search({string.Join(", ", args)})",
+        "json_storage_size" => $"json_storage_size({args[0]})",
+        "member_of" => $"{args[0]} MEMBER OF ({args[1]})",
         "uuid_to_bin" => $"uuid_to_bin({args[0]})",
         "bin_to_uuid" => $"bin_to_uuid({args[0]})",
+        "bin" => $"bin({args[0]})",
+        "export_set" => $"export_set({string.Join(", ", args)})",
+        "hex" => $"hex({args[0]})",
+        "make_set" => $"make_set({string.Join(", ", args)})",
+        "oct" => $"oct({args[0]})",
+        "ord" => $"ord({args[0]})",
+        "quote" => $"quote({args[0]})",
+        "soundex" => $"soundex({args[0]})",
+        "strcmp" => $"strcmp({args[0]}, {args[1]})",
+        "to_base64" => $"to_base64({args[0]})",
+        "from_base64" => $"from_base64({args[0]})",
+        "unhex" => $"unhex({args[0]})",
+        // The cast and length tokens are supplied by the translator from validated constants; the enum
+        // is never rendered as a value.
+        "weight_string" => args.Count == 3
+            ? $"weight_string({args[0]} as {args[1]}({args[2]}))"
+            : $"weight_string({args[0]})",
+        "conv" => $"conv({args[0]}, {args[1]}, {args[2]})",
+        "crc32" => $"crc32({args[0]})",
+        "log2" => $"log2({args[0]})",
+        "rand" => args.Count == 0 ? "rand()" : $"rand({args[0]})",
+        "truncate" => $"truncate({args[0]}, {args[1]})",
+        "bit_count" => $"bit_count({args[0]})",
+        "bit_and" => $"bit_and({args[0]})",
+        "bit_or" => $"bit_or({args[0]})",
+        "bit_xor" => $"bit_xor({args[0]})",
+        "adddate" => $"adddate({args[0]}, {args[1]})",
+        "addtime" => $"addtime({args[0]}, {args[1]})",
+        "convert_tz" => $"convert_tz({args[0]}, {args[1]}, {args[2]})",
+        "dayname" => $"dayname({args[0]})",
+        "from_days" => $"from_days({args[0]})",
+        // The family keyword and the quoted format literal are supplied by the translator from
+        // validated constants; neither reaches the generic value renderer.
+        "get_format" => $"get_format({args[0]}, {args[1]})",
+        "makedate" => $"makedate({args[0]}, {args[1]})",
+        "maketime" => $"maketime({args[0]}, {args[1]}, {args[2]})",
+        "microsecond" => $"microsecond({args[0]})",
+        "monthname" => $"monthname({args[0]})",
+        "period_add" => $"period_add({args[0]}, {args[1]})",
+        "period_diff" => $"period_diff({args[0]}, {args[1]})",
+        "sec_to_time" => $"sec_to_time({args[0]})",
+        "subdate" => $"subdate({args[0]}, {args[1]})",
+        "subtime" => $"subtime({args[0]}, {args[1]})",
+        "time" => $"time({args[0]})",
+        "time_format" => $"time_format({args[0]}, {args[1]})",
+        "time_to_sec" => $"time_to_sec({args[0]})",
+        "timediff" => $"timediff({args[0]}, {args[1]})",
+        "timestamp" => args.Count == 2
+            ? $"timestamp({args[0]}, {args[1]})"
+            : $"timestamp({args[0]})",
+        "to_days" => $"to_days({args[0]})",
+        "to_seconds" => $"to_seconds({args[0]})",
+        "yearweek" => args.Count == 2
+            ? $"yearweek({args[0]}, {args[1]})"
+            : $"yearweek({args[0]})",
+        "aes_encrypt" => $"aes_encrypt({string.Join(", ", args)})",
+        "aes_decrypt" => $"aes_decrypt({string.Join(", ", args)})",
+        "compress" => $"compress({args[0]})",
+        "uncompress" => $"uncompress({args[0]})",
+        "uncompressed_length" => $"uncompressed_length({args[0]})",
+        "random_bytes" => $"random_bytes({args[0]})",
+        "validate_password_strength" => $"validate_password_strength({args[0]})",
+        "statement_digest" => $"statement_digest({args[0]})",
+        "statement_digest_text" => $"statement_digest_text({args[0]})",
+        "found_rows" => "found_rows()",
+        "last_insert_id" => args.Count == 0 ? "last_insert_id()" : $"last_insert_id({args[0]})",
+        "row_count" => "row_count()",
+        "current_role" => "current_role()",
+        "charset" => $"charset({args[0]})",
+        "collation" => $"collation({args[0]})",
+        "coercibility" => $"coercibility({args[0]})",
+        "benchmark" => $"benchmark({args[0]}, {args[1]})",
+        "icu_version" => "icu_version()",
+        "uuid_short" => "uuid_short()",
+        "is_uuid" => $"is_uuid({args[0]})",
+        "sleep" => $"sleep({args[0]})",
+        "grouping" => $"grouping({string.Join(", ", args)})",
+        "name_const" => $"name_const({args[0]}, {args[1]})",
+        "column_default" => $"default({args[0]})",
         _ => throw new NotSupportedException($"The {name} function is not supported by MySQL/MariaDB.")
     };
 }
 
+
+/// <summary>
+/// Renders the explicit null-safe comparison helpers on MySQL and MariaDB, which share the
+/// null-safe equality operator <c>&lt;=&gt;</c>: <c>a &lt;=&gt; b</c> for not-distinct and its logical
+/// complement <c>NOT (a &lt;=&gt; b)</c> for distinct. Both forms are two-valued (1/0), so the result is
+/// a plain value and needs no scalar legalisation. MariaDB inherits this renderer unchanged.
+/// </summary>
+internal sealed class MySqlNullSafeComparisonRenderer : INullSafeComparisonRenderer
+{
+    internal static readonly MySqlNullSafeComparisonRenderer Instance = new();
+
+    /// <inheritdoc/>
+    public NullSafeComparisonDisposition DistinctDisposition => NullSafeComparisonDisposition.Native;
+
+    /// <inheritdoc/>
+    public NullSafeComparisonDisposition NotDistinctDisposition => NullSafeComparisonDisposition.Native;
+
+    /// <inheritdoc/>
+    public string RenderDistinct(string left, string right) => $"(not ({left} <=> {right}))";
+
+    /// <inheritdoc/>
+    public string RenderNotDistinct(string left, string right) => $"({left} <=> {right})";
+}

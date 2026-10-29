@@ -19,6 +19,13 @@ public sealed class SqlitePreparationShapeCoverageTests : ProviderTestSuite
 {
     protected override ITestProvider Provider => SqliteTestProvider.Instance;
 
+    /// <summary>
+    /// #294 frozen derived-source refusal: a derived source read without an outer projection whose
+    /// projected columns need re-translation. The restriction is the projection's expression shape,
+    /// not the anonymity of the result type.
+    /// </summary>
+    private const string DerivedShapeMessage = "Cannot materialize this derived source without an explicit outer Select: its projected columns cannot be reused safely (row-member expressions require re-translation). Add an outer Select, for example Select(x => x.Id). This restriction applies to anonymous types and DTOs alike.";
+
     /// <summary>Proves the seeded <c>simple_entity</c> table is live before a shape assertion.</summary>
     private void SeedIsLive() => _sut.SimpleEntityAsClass.Count().Should().Be(10);
 
@@ -334,6 +341,8 @@ public sealed class SqlitePreparationShapeCoverageTests : ProviderTestSuite
     [Fact]
     public void NonAnonymousDerivedSource_ShouldBeRejectedWhileAnonymousRuns()
     {
+        // "Anonymous plus consumer Select": the outer projection supplies the shape, so the derived
+        // source is read successfully.
         var live = _sut.DataProvider
             .From(_sut.SimpleEntityAsClass.Where(x => x.Id > 8).Select(x => new { x.Id }))
             .Select(x => x.Id)
@@ -341,15 +350,128 @@ public sealed class SqlitePreparationShapeCoverageTests : ProviderTestSuite
 
         live.Should().Equal(9, 10);
 
-        // A member-init DTO projection as a derived source is not an anonymous type, so it has no
-        // reusable derived column shape and the preparer rejects it (a constructor DTO projection is
-        // recorded separately as a D1 candidate at the same site).
+        // "Bare derived read" (the contrasting form): the same derived source is read without an outer
+        // Select. A member-init DTO projection is not an anonymous type, but that is not the
+        // discriminator — its projected member is a row-member expression that the enclosing command
+        // would have to re-translate against the derived source, so preparation refuses it with the
+        // derived-shape message (#294).
         FluentActions
             .Invoking(() => _sut.DataProvider
                 .From(_sut.SimpleEntityAsClass.Where(x => x.Id > 8).Select(x => new PreparationIdRow { Id = x.Id }))
                 .ToList())
             .Should().Throw<QueryPreparationException>()
-            .WithMessage("*Select must return new anonymous type*");
+            .WithMessage(DerivedShapeMessage);
+    }
+
+    /// <summary>
+    /// #294: the bare anonymous plain-member form fails on the same expression-shape rule as the DTO
+    /// form above — anonymity is not the discriminator, a projected row-member need re-translation is.
+    /// </summary>
+    [Fact]
+    public void AnonymousPlainMemberBareDerivedSource_ShouldBeRejectedWithDerivedShapeMessage()
+    {
+        SeedIsLive();
+
+        FluentActions
+            .Invoking(() => _sut.DataProvider
+                .From(_sut.SimpleEntityAsClass.Where(x => x.Id > 8).Select(x => new { x.Id }))
+                .ToList())
+            .Should().Throw<QueryPreparationException>()
+            .WithMessage(DerivedShapeMessage);
+    }
+
+    /// <summary>
+    /// #294: a constructor DTO derived-source projection is named, yet a bare read of it is refused
+    /// with the same derived-shape message; DTO projection support on a direct read (see
+    /// <c>PrepareColumns</c> coverage) does not imply bare derived-read support.
+    /// </summary>
+    [Fact]
+    public void ConstructorDtoBareDerivedSource_ShouldBeRejectedWithDerivedShapeMessage()
+    {
+        SeedIsLive();
+
+        FluentActions
+            .Invoking(() => _sut.DataProvider
+                .From(_sut.SimpleEntityAsClass.Where(x => x.Id > 8).Select(x => new PreparationCtorRow(x.Id)))
+                .ToList())
+            .Should().Throw<QueryPreparationException>()
+            .WithMessage(DerivedShapeMessage);
+    }
+
+    /// <summary>
+    /// #294 accepted-path control: the documented anonymous-plus-outer-<c>Select</c> form keeps running.
+    /// </summary>
+    [Fact]
+    public void ConsumerSelectOverAnonymousDerivedSource_ShouldRun()
+    {
+        SeedIsLive();
+
+        _sut.DataProvider
+            .From(_sut.SimpleEntityAsClass.Where(x => x.Id > 8).Select(x => new { x.Id }))
+            .Select(x => x.Id)
+            .ToList()
+            .Should().Equal(9, 10);
+    }
+
+    /// <summary>
+    /// #294 accepted-path control: a computed inner column is read through the outer projection.
+    /// The bare single-column (scalar) derived read — the other accepted control — stays covered by the
+    /// retained <c>PreparerBranchCoverage6Tests.PrepareColumns_DerivedScalarPassThrough_ShouldReuseTheSingleColumn</c>.
+    /// It is deliberately not duplicated here: a second projection-less scalar derived source in one
+    /// process shares the result-type-keyed <c>DataContextCache.SelectListCache</c> entry, and the cache
+    /// hit skips the pass-through branch (including <c>OneColumn</c>) for the other source.
+    /// </summary>
+    [Fact]
+    public void ConsumerSelectOverComputedDerivedSource_ShouldRun()
+    {
+        SeedIsLive();
+
+        _sut.DataProvider
+            .From(_sut.SimpleEntityAsClass.Where(x => x.Id > 8).Select(x => new { Id = x.Id, Twice = x.Id * 2 }))
+            .Select(x => x.Twice)
+            .ToList()
+            .Should().Equal(18, 20);
+    }
+
+    /// <summary>
+    /// #294 accepted-path control: a member-init DTO inner projection is read through an outer
+    /// <c>Select</c> (scalar and row forms) — the rewrite the refusal message points at.
+    /// </summary>
+    [Fact]
+    public void ConsumerSelectOverMemberInitDtoDerivedSource_ShouldRun()
+    {
+        SeedIsLive();
+
+        _sut.DataProvider
+            .From(_sut.SimpleEntityAsClass.Where(x => x.Id > 8).Select(x => new PreparationIdRow { Id = x.Id }))
+            .Select(x => x.Id)
+            .ToList()
+            .Should().Equal(9, 10);
+
+        _sut.DataProvider
+            .From(_sut.SimpleEntityAsClass.Where(x => x.Id > 8).Select(x => new PreparationIdRow { Id = x.Id }))
+            .Select(x => new { x.Id })
+            .ToList()
+            .Select(r => r.Id)
+            .Should().Equal(9, 10);
+    }
+
+    /// <summary>
+    /// #294 accepted-path control: a positional-record inner projection is read through an outer
+    /// <c>Select</c>. A plain constructor-only class projection is not addressed here: it is refused
+    /// at rendering on the base revision too (`Cannot find inner column Id`), so it is a pre-existing
+    /// limitation recorded in the cycle evidence, not an accepted shape and not touched by #294.
+    /// </summary>
+    [Fact]
+    public void ConsumerSelectOverRecordDerivedSource_ShouldRun()
+    {
+        SeedIsLive();
+
+        _sut.DataProvider
+            .From(_sut.SimpleEntityAsClass.Where(x => x.Id > 8).Select(x => new PreparationRecordRow(x.Id)))
+            .Select(x => x.Id)
+            .ToList()
+            .Should().Equal(9, 10);
     }
 
     [Fact]
@@ -384,6 +506,15 @@ public sealed class SqlitePreparationShapeCoverageTests : ProviderTestSuite
     {
         public int Id { get; set; }
     }
+
+    /// <summary>Constructor derived-source DTO: named projection whose argument is a row-member expression.</summary>
+    public sealed class PreparationCtorRow(int id)
+    {
+        public int Id { get; } = id;
+    }
+
+    /// <summary>Positional-record derived-source projection: constructor argument is a row-member expression.</summary>
+    public sealed record PreparationRecordRow(int Id);
 
     /// <summary>
     /// Reads the seeded <c>complex_entity</c> table but exposes its text column as a bare JSON DOM

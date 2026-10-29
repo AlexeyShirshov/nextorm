@@ -63,6 +63,12 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     private IReadOnlyList<string>? _hints;
     private List<QueryCommand>? _referencedQueries;
     private List<Expression>? _outerRefs;
+    // Parallel to _outerRefs (#324): one entry per outer reference, null for a legacy unbound
+    // reference. It is preparation/runtime metadata and never participates in the plan-cache key.
+    private List<OuterReferenceBinding?>? _outerRefBindings;
+    // The APPLY left-row owners currently being prepared on this command (#324): the lambda parameter
+    // and the number of addressable slots of its left prefix. Scoped, not persisted, not copied.
+    private List<(ParameterExpression Owner, int Slots)>? _applyLeftOwners;
     private JoinExpression[]? _joins;
     /// <summary>The prepared projection columns after <c>PrepareCommand</c>, or <c>null</c> before preparation.</summary>
     protected SelectExpression[]? _selectList;
@@ -282,6 +288,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         _sorting = definition.Sorting;
         _groupExp = definition.Group;
         _having = definition.Having;
+        IsSelectGroup = definition.IsSelectGroup;
         Logger = definition.Logger;
         IsDistinct = definition.IsDistinct;
         GroupByWithTotals = definition.GroupByWithTotals;
@@ -333,6 +340,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         _sorting = source._sorting;
         _groupExp = forCache ? null : source._groupExp;
         _having = source._having;
+        IsSelectGroup = source.IsSelectGroup;
         Logger = source.Logger;
         IsDistinct = source.IsDistinct;
         GroupByWithTotals = source.GroupByWithTotals;
@@ -424,6 +432,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
             Sorting = _sorting,
             Group = group,
             Having = _having,
+            IsSelectGroup = IsSelectGroup,
             Logger = Logger,
             IsDistinct = IsDistinct,
             GroupByWithTotals = GroupByWithTotals,
@@ -515,6 +524,22 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     public SelectExpression[]? SelectList => _selectList;
     /// <summary>The prepared <c>GROUP BY</c> columns, or <c>null</c> when the query has no grouping.</summary>
     public SelectExpression[]? GroupingList => _groupingList;
+    /// <summary>
+    /// The grouping keys inferred from a <c>SelectGroup</c> projection during preparation, or
+    /// <c>null</c> before preparation (and for every command that is not a <c>SelectGroup</c> command).
+    /// </summary>
+    internal IReadOnlyList<Expression>? SelectGroupKeys { get; set; }
+    /// <summary>
+    /// The ordered raw scalar-output expressions of the <c>SelectGroup</c> projection, as derived during
+    /// preparation (the expressions the grouping keys and the mode were inferred from), or <c>null</c>
+    /// before preparation (and for every command that is not a <c>SelectGroup</c> command).
+    /// </summary>
+    internal IReadOnlyList<Expression>? SelectGroupOutputs { get; set; }
+    /// <summary>
+    /// The execution mode the <c>SelectGroup</c> projection analysis resolved during preparation
+    /// (<see cref="NextORM.Core.SelectGroupMode.None"/> for a command that is not a <c>SelectGroup</c>).
+    /// </summary>
+    internal SelectGroupMode SelectGroupMode { get; set; }
     /// <summary>The entity type the command reads from, or <c>null</c> for a command without a source type.</summary>
     public Type? EntityType => _srcType;
     /// <summary>Whether the command has been prepared and its cached plan hashes are current.</summary>
@@ -612,6 +637,12 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// the property on the generic command type.
     /// </summary>
     public bool IsDistinct { get; internal set; }
+    /// <summary>
+    /// Whether the projection was declared through <c>SelectGroup</c>: the grouping keys are inferred
+    /// from the projection's scalar outputs instead of a <see cref="GroupBy"/> lambda. Part of the plan
+    /// key, so a <c>SelectGroup</c> plan never shares an entry with an equivalent explicit form.
+    /// </summary>
+    internal bool IsSelectGroup { get; set; }
     /// <summary>
     /// Whether the grouping carries the <c>WITH TOTALS</c> modifier (ClickHouse). Only meaningful when
     /// the command has a grouping list; a dialect that does not support it rejects the command when its
@@ -1084,6 +1115,9 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         _isPrepared = false;
         _selectList = null;
         _groupingList = null;
+        SelectGroupKeys = null;
+        SelectGroupOutputs = null;
+        SelectGroupMode = NextORM.Core.SelectGroupMode.None;
         _limitByColumns = null;
         _distinctOnColumns = null;
         _extremeRowColumns = null;
@@ -1111,6 +1145,10 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         // reset/prepare cycle, changing the plan key and growing the registry without bound.
         _referencedQueries = null;
         _outerRefs = null;
+        // The per-preparation occurrence bindings (#324) are rebuilt from the JOIN structure on the
+        // next preparation, exactly like the outer references they are paired with.
+        _outerRefBindings = null;
+        _applyLeftOwners = null;
         ReferencedQueriesPlanHash = 0;
         // The JSON-only preparation state is per-preparation: a re-prepared or derived command must not
         // retain a stale captured descriptor (or remain in JSON shape mode) from a previous JSON stream.
@@ -1202,8 +1240,127 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         var idx = outerRefs.Count;
 
         outerRefs.Add(node);
+        // Keep the binding table index-aligned with the reference list once it exists.
+        _outerRefBindings?.Add(null);
 
         return idx;
+    }
+
+    /// <summary>
+    /// Registers a correlated APPLY outer reference together with its immutable occurrence binding
+    /// (#324) and returns its index. The index pairing with <see cref="OuterReferences"/> is identical
+    /// to <see cref="AddOuterReference"/>; the binding only records an owner parameter instance and a
+    /// one-based left-row slot, never an alias or render index.
+    /// </summary>
+    /// <param name="node">The expression that references the APPLY's left row.</param>
+    /// <param name="owner">The APPLY lambda parameter instance that owns the referenced left row.</param>
+    /// <param name="slot">The one-based slot among the owner's FROM plus preceding ordered joins.</param>
+    /// <returns>The zero-based index of the reference in the command's outer-reference list.</returns>
+    internal int AddBoundOuterReference(Expression node, ParameterExpression owner, int slot)
+    {
+        if (OuterRegistry is QueryCommand root) return root.AddBoundOuterReference(node, owner, slot);
+        if (OuterRegistry is not null)
+            throw new InvalidOperationException(
+                "A correlated APPLY occurrence binding can only be registered on a QueryCommand outer registry.");
+
+        var outerRefs = _outerRefs ??= [];
+        var idx = outerRefs.Count;
+        outerRefs.Add(node);
+
+        var bindings = _outerRefBindings;
+        if (bindings is null)
+        {
+            // The table starts at the first bound reference; earlier legacy references stay unbound.
+            bindings = new List<OuterReferenceBinding?>(idx + 1);
+            for (var i = 0; i < idx; i++)
+                bindings.Add(null);
+            _outerRefBindings = bindings;
+        }
+
+        bindings.Add(new OuterReferenceBinding(owner, slot));
+        return idx;
+    }
+
+    /// <summary>
+    /// Returns the occurrence binding of the outer reference registered at <paramref name="index"/>, or
+    /// <see langword="null"/> for a legacy unbound reference (scalar subquery or single-entity APPLY).
+    /// </summary>
+    /// <param name="index">The zero-based index into <see cref="OuterReferences"/>.</param>
+    internal OuterReferenceBinding? GetOuterReferenceBinding(int index)
+    {
+        if (OuterRegistry is QueryCommand root) return root.GetOuterReferenceBinding(index);
+        return _outerRefBindings is { } bindings && (uint)index < (uint)bindings.Count ? bindings[index] : null;
+    }
+
+    /// <summary>
+    /// Records that <paramref name="owner"/> is the left row of a correlated APPLY whose addressable
+    /// prefix has <paramref name="slots"/> sources (FROM plus the joins that precede it). The scope is
+    /// disposed after the applied query has been built; it is preparation-transient state and is never
+    /// copied or cached.
+    /// </summary>
+    /// <param name="owner">The APPLY lambda parameter.</param>
+    /// <param name="slots">The number of addressable left-prefix slots.</param>
+    /// <returns>A scope that removes the registration when disposed.</returns>
+    internal ApplyLeftOwnerScope PushApplyLeftOwner(ParameterExpression owner, int slots)
+    {
+        (_applyLeftOwners ??= []).Add((owner, slots));
+        return new ApplyLeftOwnerScope(this, owner, slots);
+    }
+
+    /// <summary>
+    /// Returns the number of left-prefix slots of <paramref name="owner"/> when this command is
+    /// currently building that APPLY's applied query, or <see langword="false"/> for any other
+    /// parameter (a legacy single-entity APPLY, a scalar-subquery parameter, or a truly outer one).
+    /// </summary>
+    /// <param name="owner">The parameter a member access is rooted at.</param>
+    /// <param name="slots">The number of addressable left-prefix slots.</param>
+    internal bool TryGetApplyLeftSlotCount(ParameterExpression owner, out int slots)
+    {
+        if (_applyLeftOwners is { Count: > 0 } owners)
+        {
+            for (var i = owners.Count - 1; i >= 0; i--)
+            {
+                if (ReferenceEquals(owners[i].Owner, owner))
+                {
+                    slots = owners[i].Slots;
+                    return true;
+                }
+            }
+        }
+
+        slots = 0;
+        return false;
+    }
+
+    /// <summary>Scoped registration of one APPLY left-row owner (see <see cref="PushApplyLeftOwner"/>).</summary>
+    internal readonly struct ApplyLeftOwnerScope : IDisposable
+    {
+        private readonly QueryCommand _command;
+        private readonly ParameterExpression _owner;
+        private readonly int _slots;
+
+        internal ApplyLeftOwnerScope(QueryCommand command, ParameterExpression owner, int slots)
+        {
+            _command = command;
+            _owner = owner;
+            _slots = slots;
+        }
+
+        /// <inheritdoc/>
+        public void Dispose()
+        {
+            if (_command._applyLeftOwners is not { Count: > 0 } owners)
+                return;
+
+            for (var i = owners.Count - 1; i >= 0; i--)
+            {
+                if (ReferenceEquals(owners[i].Owner, _owner) && owners[i].Slots == _slots)
+                {
+                    owners.RemoveAt(i);
+                    break;
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -1224,3 +1381,15 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         => throw new NotSupportedException("Only a typed query command can be executed for JoinInto stitching.");
 
 }
+
+
+/// <summary>
+/// Immutable per-preparation binding of one correlated outer reference to a slot of its APPLY's left
+/// row (#324). <see cref="Owner"/> is the APPLY lambda parameter instance (occurrence identity, never
+/// the parameter name or CLR type) and <see cref="Slot"/> is the one-based position of the referenced
+/// source among the owner's FROM plus preceding ordered joins. No alias or render index is stored, so
+/// this value never becomes a plan-cache key input; it is rebuilt on every preparation.
+/// </summary>
+/// <param name="Owner">The APPLY lambda parameter instance that owns the referenced left row.</param>
+/// <param name="Slot">The one-based left-row slot (FROM is 1, the first preceding join is 2, ...).</param>
+internal readonly record struct OuterReferenceBinding(ParameterExpression Owner, int Slot);

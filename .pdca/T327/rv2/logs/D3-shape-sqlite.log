@@ -1,0 +1,7 @@
+xUnit.net v3 In-Process Runner v4.0.1+8ed8aa354c (64-bit .NET 10.0.12)
+  Discovering: nextorm.sqlite.tests
+  Discovered:  nextorm.sqlite.tests
+  Starting:    nextorm.sqlite.tests
+  Finished:    nextorm.sqlite.tests (ID = '2a3650a103d925b0b623c4b0d15b6335e598e3d9c14bd95ccb08f4188a79cd56')
+=== TEST EXECUTION SUMMARY ===
+   nextorm.sqlite.tests  Total: 25, Errors: 0, Failed: 0, Skipped: 0, Not Run: 0, Time: 0.366s

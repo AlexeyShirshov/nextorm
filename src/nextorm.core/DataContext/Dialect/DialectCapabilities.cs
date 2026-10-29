@@ -16,6 +16,77 @@ public interface IIifRenderer
 }
 
 /// <summary>
+/// How one form of the explicit null-safe comparison (<c>is distinct from</c> /
+/// <c>is not distinct from</c>) can be rendered by a dialect.
+/// </summary>
+public enum NullSafeComparisonDisposition
+{
+    /// <summary>The dialect cannot render this form; calling the helper is rejected.</summary>
+    Unsupported = 0,
+    /// <summary>The provider has a native spelling for this form.</summary>
+    Native = 1,
+    /// <summary>The form is expressed portably over the provider's ordinary equality primitives.</summary>
+    Emulated = 2,
+}
+
+/// <summary>
+/// A dialect's renderer for the explicit null-safe comparison helpers
+/// (<see cref="CommonFunctions.is_distinct_from{T}(T, T)"/> and
+/// <see cref="CommonFunctions.is_not_distinct_from{T}(T, T)"/>). Each form carries its own
+/// disposition, so a provider can support one form and reject the other, and every disposition other
+/// than <see cref="NullSafeComparisonDisposition.Unsupported"/> has its rendering on the same object.
+/// </summary>
+/// <remarks>
+/// The capability is absent by default: <see cref="ISqlDialect.NullSafeComparison"/> returns
+/// <see langword="null"/> for a provider that has not opted in, and the translator then rejects the
+/// helper with an exception naming the provider and the form instead of emitting SQL the provider
+/// cannot execute. Both renderings return a two-valued predicate; the caller lowers it to a scalar
+/// value through <see cref="ISqlDialect.MakeBooleanPredicate(string, bool)"/>.
+/// </remarks>
+public interface INullSafeComparisonRenderer
+{
+    /// <summary>How the <c>is distinct from</c> form is expressed; the default rejects it.</summary>
+    NullSafeComparisonDisposition DistinctDisposition => NullSafeComparisonDisposition.Unsupported;
+
+    /// <summary>How the <c>is not distinct from</c> form is expressed; the default rejects it.</summary>
+    NullSafeComparisonDisposition NotDistinctDisposition => NullSafeComparisonDisposition.Unsupported;
+
+    /// <summary>True when <see cref="DistinctDisposition"/> is not <see cref="NullSafeComparisonDisposition.Unsupported"/>.</summary>
+    bool SupportsDistinct => DistinctDisposition != NullSafeComparisonDisposition.Unsupported;
+
+    /// <summary>True when <see cref="NotDistinctDisposition"/> is not <see cref="NullSafeComparisonDisposition.Unsupported"/>.</summary>
+    bool SupportsNotDistinct => NotDistinctDisposition != NullSafeComparisonDisposition.Unsupported;
+
+    /// <summary>
+    /// True when the provider cannot bind a captured comparison operand without an explicit SQL type,
+    /// so every captured operand of the helper must resolve one from the compared column's metadata
+    /// (converter/provider mapping first) or from the CLR-type mapping. When neither yields a mapping
+    /// the helper is rejected before execution instead of emitting an untyped comparison operand.
+    /// SQL Server opts in; the default is <see langword="false"/>, which keeps the provider's
+    /// value-based parameter inference.
+    /// </summary>
+    bool RequiresTypedNullOperands => false;
+
+    /// <summary>
+    /// Renders <c>left is distinct from right</c> over the already-rendered operands. Reached only
+    /// when <see cref="SupportsDistinct"/> is true.
+    /// </summary>
+    /// <param name="left">The already-rendered left operand.</param>
+    /// <param name="right">The already-rendered right operand.</param>
+    /// <returns>The two-valued predicate.</returns>
+    string RenderDistinct(string left, string right);
+
+    /// <summary>
+    /// Renders <c>left is not distinct from right</c> over the already-rendered operands. Reached only
+    /// when <see cref="SupportsNotDistinct"/> is true.
+    /// </summary>
+    /// <param name="left">The already-rendered left operand.</param>
+    /// <param name="right">The already-rendered right operand.</param>
+    /// <returns>The two-valued predicate.</returns>
+    string RenderNotDistinct(string left, string right);
+}
+
+/// <summary>
 /// A dialect's session/information function surface (<c>current_user</c>, <c>session_user</c>,
 /// <c>current_schema</c>, <c>current_database</c>, <c>version</c>). The predicate and the renderer live
 /// on one object, so a name the dialect reports as supported always has a rendering; a provider that
@@ -167,6 +238,33 @@ public interface ITopKAggregateRenderer
 
     /// <summary>Renders the weighted top-K aggregate <paramref name="name"/> over <paramref name="k"/>, <paramref name="value"/> and <paramref name="weight"/>.</summary>
     string RenderWeighted(string name, string k, string value, string weight);
+}
+
+/// <summary>
+/// A dialect's renderer for the ClickHouse aggregate catalogue that has no cross-provider spelling
+/// (the statistical/probability aggregates, the parameterised quantile algorithms, the array- and
+/// tuple-returning aggregates, the sequence aggregates and the time-series grid aggregates). The
+/// object's presence is the capability, so a name the dialect reports as supported always has a
+/// rendering; every other provider fails closed instead of emitting invalid SQL.
+/// </summary>
+public interface IClickHouseAggregateRenderer
+{
+    /// <summary>True when the aggregate <paramref name="name"/> can be rendered.</summary>
+    bool Supports(string name);
+
+    /// <summary>
+    /// Renders the aggregate <paramref name="name"/> over the already-rendered
+    /// <paramref name="arguments"/>; <paramref name="resultType"/> is the declared CLR result type,
+    /// used to normalise the native result (signed/int/array/tuple casts).
+    /// </summary>
+    string Render(string name, IReadOnlyList<string> arguments, Type resultType);
+
+    /// <summary>
+    /// Renders the parameterised aggregate <paramref name="name"/> in the two-parenthesis form
+    /// <c>name(parameters)(arguments)</c>; <paramref name="resultType"/> is the declared CLR result
+    /// type, used to normalise the native result.
+    /// </summary>
+    string RenderParameterised(string name, IReadOnlyList<string> parameters, IReadOnlyList<string> arguments, Type resultType);
 }
 
 /// <summary>
@@ -668,6 +766,18 @@ public interface IScalarFunctions
     /// <see cref="CommonFunctions"/> member (for example <c>lpad</c>, <c>concat_ws</c>).
     /// </summary>
     string Render(string name, IReadOnlyList<string> args);
+
+    /// <summary>
+    /// The reason the scalar function <paramref name="name"/> is unavailable on this dialect's
+    /// declared state (for example a function that requires a later server version), or
+    /// <see langword="null"/> when the name is supported, is unknown to the dialect, or the dialect
+    /// has no version-specific answer. The caller shows this reason instead of its generic "not
+    /// supported" message, so a version-gated name fails closed with the required and the declared
+    /// version. Declared as a default interface method returning <see langword="null"/> so an external
+    /// <see cref="IScalarFunctions"/> written before the member existed keeps its previous behaviour.
+    /// </summary>
+    /// <param name="name">The CLR method name of the <see cref="CommonFunctions"/> member.</param>
+    string? GetUnsupportedReason(string name) => null;
 }
 
 /// <summary>
@@ -727,6 +837,38 @@ public interface ISqlServerFunctions
     /// <see cref="SqlServerFunctions"/> member (for example <c>patindex</c>, <c>json_object</c>).
     /// </summary>
     string Render(string name, IReadOnlyList<string> args);
+
+    /// <summary>
+    /// The reason the SQL Server-only function <paramref name="name"/> is unavailable on this
+    /// dialect's declared state (for example a function that requires a later major version), or
+    /// <see langword="null"/> when the name is supported or the dialect has no version-specific
+    /// answer. The caller shows this reason instead of its generic "not supported" message, so a
+    /// version-gated name fails closed with the required and the declared major version. Declared as
+    /// a default interface method returning <see langword="null"/> so an external
+    /// <see cref="ISqlServerFunctions"/> written before the member existed keeps its previous
+    /// behaviour.
+    /// </summary>
+    /// <param name="name">The CLR method name of the <see cref="SqlServerFunctions"/> member.</param>
+    string? GetUnsupportedReason(string name) => null;
+
+    /// <summary>
+    /// Renders a SQL Server bit-manipulation call (<c>LEFT_SHIFT</c>, <c>RIGHT_SHIFT</c>,
+    /// <c>BIT_COUNT</c>, <c>GET_BIT</c>, <c>SET_BIT</c>). The SQL depends on the operand's own type, so
+    /// the caller passes the T-SQL operand type (<c>tinyint</c>/<c>smallint</c>/<c>int</c>/<c>bigint</c>)
+    /// rather than expecting the string-only <see cref="Render"/> to guess it: the operand and the
+    /// shift/offset are cast inside the call and a NULL argument yields a typed NULL of the result type,
+    /// because a bare <c>left_shift(null, …)</c> is Msg 8116. Declared as a default interface method so
+    /// an external <see cref="ISqlServerFunctions"/> written before the member existed keeps compiling
+    /// and rejects the family explicitly instead of emitting SQL it cannot render.
+    /// </summary>
+    /// <param name="name">The CLR method name of the <see cref="SqlServerFunctions"/> member.</param>
+    /// <param name="operand">The rendered operand expression.</param>
+    /// <param name="operandType">The T-SQL type of the operand.</param>
+    /// <param name="amount">The rendered shift or bit-offset expression, or <see langword="null"/>.</param>
+    /// <param name="value">The rendered <c>SET_BIT</c> bit value, or <see langword="null"/> when omitted.</param>
+    /// <returns>The complete T-SQL expression.</returns>
+    string RenderBit(string name, string operand, string operandType, string? amount, string? value) =>
+        throw new NotSupportedException($"The {name} function is not supported by this provider.");
 
     /// <summary>
     /// True when the dialect also exposes the SQL Server session/server identity functions

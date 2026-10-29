@@ -20,6 +20,11 @@ internal static class WindowSql
         nameof(CommonFunctions.lead) => "lead",
         nameof(ClickHouseFunctions.lag_in_frame) => "lagInFrame",
         nameof(ClickHouseFunctions.lead_in_frame) => "leadInFrame",
+        nameof(ClickHouseFunctions.non_negative_derivative) => "nonNegativeDerivative",
+        nameof(ClickHouseFunctions.exponential_time_decayed_sum) => "exponentialTimeDecayedSum",
+        nameof(ClickHouseFunctions.exponential_time_decayed_max) => "exponentialTimeDecayedMax",
+        nameof(ClickHouseFunctions.exponential_time_decayed_count) => "exponentialTimeDecayedCount",
+        nameof(ClickHouseFunctions.exponential_time_decayed_avg) => "exponentialTimeDecayedAvg",
         nameof(CommonFunctions.first_value) => "first_value",
         nameof(CommonFunctions.last_value) => "last_value",
         nameof(CommonFunctions.nth_value) => "nth_value",
@@ -33,6 +38,20 @@ internal static class WindowSql
         nameof(CommonFunctions.max_over) => "max",
         nameof(CommonFunctions.count_over) => "count",
         _ => null
+    };
+
+    /// <summary>
+    /// Maps a window-function method name to the number of leading <em>parameters</em> rendered in a
+    /// first parenthesis pair (<c>name(parameters)(arguments)</c>). Only the ClickHouse
+    /// <c>exponentialTimeDecayed*</c> family takes one; every other window function has none.
+    /// </summary>
+    internal static int MapWindowParameterCount(string methodName) => methodName switch
+    {
+        nameof(ClickHouseFunctions.exponential_time_decayed_sum) => 1,
+        nameof(ClickHouseFunctions.exponential_time_decayed_max) => 1,
+        nameof(ClickHouseFunctions.exponential_time_decayed_count) => 1,
+        nameof(ClickHouseFunctions.exponential_time_decayed_avg) => 1,
+        _ => 0
     };
 
     /// <summary>

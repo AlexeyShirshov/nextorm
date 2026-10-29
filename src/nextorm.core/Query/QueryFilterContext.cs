@@ -99,10 +99,8 @@ internal static class QueryFilterContextAccessor
                 ex);
         }
 
-        visitor.TryAddCapturedParameter(parameterName, value, node);
-
-        if (!visitor.IsParamMode)
-            visitor.Builder!.Append(visitor.Dialect.MakeParam(parameterName));
+        var captured = visitor.TryAddCapturedParameter(parameterName, value, node);
+        visitor.EmitParameter(captured);
 
         return true;
     }

@@ -1,8 +1,10 @@
 # Массовая вставка (bulk)
 
 `CreateBulkInsertBuilder<TEntity>()` записывает весь набор одним явным вызовом, без change tracking. Где у
-провайдера есть нативный bulk API, он и используется — бинарный `COPY` в PostgreSQL и `SqlBulkCopy` в
-SQL Server; иначе набор пишется параметризованным `INSERT ... VALUES`, при необходимости — чанками.
+провайдера есть нативный bulk API, он может использоваться — бинарный `COPY` в PostgreSQL, `SqlBulkCopy` в
+SQL Server, `MySqlBulkCopy` в MySQL/MariaDB и `InsertBinaryAsync` в ClickHouse; иначе набор пишется
+параметризованным `INSERT ... VALUES`, при необходимости — чанками. Какой путь выполняется, выбирает
+[режим выполнения](#режимы-выполнения), а не один только провайдер.
 
 Массовая вставка работает поверх обычного маппинга; объявление ключа, identity и computed-колонок — в
 [Изменении данных (INSERT)](17-insert-statement.md).
@@ -47,7 +49,7 @@ var orders = new[]
     new Order { CustomerId = 3, Total = 30m },
 };
 
-// нативный COPY в PostgreSQL; портируемый INSERT ... VALUES на остальных провайдерах
+// Auto в PostgreSQL берёт нативный COPY; у остальных провайдеров путь определяется опциями
 var written = ctx.CreateBulkInsertBuilder<IOrder>().Values(orders).BulkInsert();
 // written == 3
 ```
@@ -59,6 +61,33 @@ var written = ctx.CreateBulkInsertBuilder<IOrder>().Values(orders).BulkInsert();
 фильтрам цели до записи (`QueryFilterException` при нарушении). Синхронный источник проверяется целиком
 до первого батча; асинхронный — по мере потока, поэтому при нарушении в поздней строке ранее записанные
 строки остаются. См. [INSERT и MERGE (проверка)](../advanced/query-filters.md#insert-и-merge-проверка).
+
+## Режимы выполнения
+
+[`BulkInsertMode`](xref:NextORM.Core.BulkInsertMode) выбирает путь. [`Mode`](xref:NextORM.Core.BulkInsertOptions.Mode)
+по умолчанию `Auto` у всех провайдеров:
+
+| Режим | Поведение |
+|---|---|
+| `Auto` (по умолчанию) | Предпочитает нативный bulk-путь провайдера, если тот может выполнить все заданные опции и все предварительные условия; иначе берёт портируемый путь `INSERT ... VALUES`, и только если тот тоже выполняет запрос. |
+| `Native` | Использует нативный bulk-путь и никогда не откатывается: отсутствующее предусловие, невыразимая нативным путём опция или неподдерживаемый адрес назначения бросают `NotSupportedException` с указанием причины — до чтения источника и до записи строки. |
+| `Portable` | Явно выбирает параметризованный путь `INSERT ... VALUES`. Нативная опция отклоняется по имени, а не игнорируется, и запись не становится нативной неявно. |
+
+```csharp
+// оставить SQL-батч даже там, где доступна нативная загрузка
+var written = ctx.CreateBulkInsertBuilder<IOrder>(o => o.Mode(BulkInsertMode.Portable))
+    .Values(orders)
+    .BulkInsert();
+```
+
+`Returning*` всегда пишет через портируемый путь, потому что нативные bulk API не возвращают строки;
+запрос `Mode.Native` вместе с возвращающим терминалом отклоняется, а не понижается молча.
+
+> **Совместимость:** Auto may switch existing MySQL/MariaDB/ClickHouse calls to native; Portable restores SQL-batch selection. Previously ignored unsupported options now validate strictly.
+>
+> По-русски: `Auto` может перевести существующие вызовы MySQL/MariaDB/ClickHouse на нативный путь;
+> `Portable` возвращает выбор SQL-батча. Ранее игнорировавшиеся неподдерживаемые опции теперь
+> валидируются строго.
 
 ## Источники-стримы
 
@@ -94,8 +123,10 @@ await ctx.CreateBulkInsertBuilder<IOrder>()
 
 | Путь | Стримит построчно | Буфер |
 |---|---|---|
-| PostgreSQL нативный `COPY` | да — каждая строка пишется по мере чтения, набор не буферизуется | нет; лимиты чанка игнорируются |
-| SQL Server `SqlBulkCopy` | нет — набор сначала буферизуется в `DataTable`, так как `SqlBulkCopy` нужны метаданные типов колонок | весь набор; лимит чанка его не режет |
+| PostgreSQL нативный `COPY` | да — каждая строка пишется по мере чтения, набор не буферизуется | нет; лимит чанка запускает новый importer на каждый ограниченный чанк |
+| SQL Server `SqlBulkCopy` | нет — набор сначала буферизуется в `DataTable`, так как `SqlBulkCopy` нужны метаданные типов колонок | весь набор; `MaxBatchSize` задаёт `BatchSize` драйвера, но не режет буфер |
+| MySQL/MariaDB нативный `MySqlBulkCopy` | по чанкам — источник читается ограниченными чанками, каждый чанк загружается один раз | один чанк (`MaxBatchSize`, по умолчанию 10 000 строк) |
+| ClickHouse нативный `InsertBinaryAsync` | по чанкам — адаптер вычитывает чанк, дожидается всех вызовов драйвера, затем берёт следующий | один чанк (`MaxBatchSize`, по умолчанию 10 000 строк) |
 | Портативный `INSERT ... VALUES` | по батчам — строки набираются в буфер до лимита чанка или до конца, затем батч пишется, а буфер переиспользуется | задаётся `MaxBatchSize`/`MaxParameters`/`MaxSqlLength` |
 
 Буфер настраивает только портативный путь — см.
@@ -121,9 +152,52 @@ var written = ctx.CreateBulkInsertBuilder<IOrder>(o => o.Table("archive", "order
 ```
 
 Override имеет приоритет над маппингом `[SqlTable]`/`Table(...)`, naming convention к нему не
-применяется, а необязательная схема квотируется отдельно от таблицы. Работает и на нативном пути
-(`COPY`/`SqlBulkCopy`), и на портируемом `INSERT ... VALUES`, и сочетается с `Returning*` и
-`KeepIdentity`.
+применяется, а необязательная схема квотируется отдельно от таблицы. Работает и на нативном, и на
+портируемом пути `INSERT ... VALUES`.
+
+### Части адреса назначения
+
+Таблицу, схему и базу можно задавать и независимо, не повторяя таблицу: `Schema(name)`, `Database(name)` и
+`Server(name)` задают `SchemaName`, `DatabaseName` и `ServerName`.
+
+```csharp
+// оставить замапленную таблицу и переопределить только её схему
+var written = ctx.CreateBulkInsertBuilder<IOrder>(o => o.Schema("archive"))
+    .Values(orders)
+    .BulkInsert();
+```
+
+- Запрос **только схемы** сохраняет замапленную (или переопределённую `Table(...)`) таблицу и меняет лишь
+  часть схемы.
+- `TableSchema` и `SchemaName` — два псевдонима одной части: равные значения схлопываются в неё, а
+  различающиеся — **ошибка аргумента**, возникающая до чтения строк.
+- Каждая часть квотируется отдельно, поэтому квалифицированное имя никогда не превращается в один
+  идентификатор с точками.
+- **`DatabaseName` зависит от диалекта.** PostgreSQL адресует только текущую базу соединения: её
+  именование — no-op, а другая база отклоняется по имени. MySQL/MariaDB и ClickHouse адресуют другую базу
+  как квалификацию, SQL Server рендерит её как часть многочастного имени. Диалект, который не умеет
+  выразить другую базу, отклоняет запрос, а не отбрасывает часть.
+- **`ServerName` недоступен и отклоняется**: bulk-вставка никогда не перенаправляется на другой сервер.
+  Используйте соединение с нужным сервером. Перенаправление не реализовано и не обещается.
+
+## Локальные временные таблицы
+
+`TargetKind(BulkInsertTargetKind.LocalTemporary)` пишет во временную таблицу, которая уже существует на
+собственном соединении контекста и, где у провайдера есть сессия, в той же сессии. nextorm никогда не
+создаёт и не удаляет таблицу и не открывает неявную транзакцию.
+
+```csharp
+var written = ctx.CreateBulkInsertBuilder<IOrder>(o => o
+        .TargetKind(BulkInsertTargetKind.LocalTemporary)
+        .Table("#orders_stage"))
+    .Values(orders)
+    .BulkInsert();
+```
+
+Временная таблица живёт во временном хранилище текущей сессии, поэтому запрос, противоречащий этому,
+отклоняется по имени: `DatabaseName` вместе с локальной временной целью, квалификатор схемы в SQL Server
+(`#temp` его не принимает), безсессионная вставка ClickHouse (`UseSession=false`) и параллелизм ClickHouse
+больше единицы. Создание, изменение и удаление временной таблицы — вне области.
 
 ## Получение сгенерированных ключей
 
@@ -173,9 +247,12 @@ var idByCustomer = ctx.CreateBulkInsertBuilder<IOrder>()
 var orderIdForCustomer2 = idByCustomer[2];
 ```
 
-`Returning*` требует провайдер с `RETURNING`/`OUTPUT`: PostgreSQL и SQLite 3.35+ (через `RETURNING`)
-и SQL Server (через `OUTPUT`). MySQL, MariaDB и ClickHouse отклоняют его явным
-`NotSupportedException` — там ключи читаются обычным `CreateInsertBuilder`.
+`Returning*` требует провайдер с `RETURNING`/`OUTPUT`: PostgreSQL и SQLite 3.35+ (через `RETURNING`),
+SQL Server (через `OUTPUT`) и MariaDB (через `RETURNING`, когда диалект привязан к версии сервера 13.0+).
+MySQL и ClickHouse отклоняют его на bulk-пути явным `NotSupportedException` — там ключи читаются обычным
+`CreateInsertBuilder`. В MariaDB bulk `Returning*` поддерживается начиная с 13.0+, а ниже (незаданная или
+более старая версия) отклоняется по имени; живая сертификация идёт на `mariadb:11.4`, то есть покрывает
+ветку отказа, а ветка 13.0+ сертифицирована офлайн только по рендерингу SQL `INSERT ... RETURNING`.
 
 ## Ограничение батча и прогресс
 
@@ -195,13 +272,15 @@ await ctx.CreateBulkInsertBuilder<IOrder>(o => o
 ```
 
 Чанки пишутся отдельными `INSERT`; nextorm **не** оборачивает их в транзакцию — если нужна
-атомарность, начните транзакцию сами.
+атомарность, начните транзакцию сами. Каждая запись ожидается (awaited) до чтения следующего чанка, и
+nextorm освобождает только созданные им ресурсы — никогда источник, соединение или объект вызывающего.
 
-Колбэк `NotifyAfter` выполняется inline — после зафиксированного чанка на портируемом пути или на
-нативном тике прогресса провайдера (`SqlBulkCopy.NotifyAfter` в SQL Server, цикл записи в
-PostgreSQL). Держите его быстрым и не бросающим: исключение из колбэка пробрасывается наружу, а уже
-записанные строки остаются закоммиченными (nextorm транзакцию не открывает); блокирующийся колбэк
-останавливает вызов до своего возврата.
+Колбэк `NotifyAfter` выполняется inline и только **после завершения батча** (записанного батча на
+портируемом пути, завершённого чанка загрузки в MySQL/MariaDB/ClickHouse, тика `SqlBulkCopy.NotifyAfter`
+в SQL Server, завершённого чанка/importer в PostgreSQL). Он не вызывается на каждую строку и никогда не
+опережает запись. Держите его быстрым и не бросающим: исключение из колбэка пробрасывается наружу, а уже
+записанные строки остаются на месте; блокирующийся колбэк останавливает вызов до своего возврата. nextorm
+не даёт обещаний rollback, throughput или per-row commit.
 
 Его второй аргумент — `CancellationToken`. Передайте источник через `ProgressCancellationTokenSource`,
 чтобы кооперативный колбэк мог остановиться досрочно — writer бросит `OperationCanceledException`,
@@ -221,11 +300,32 @@ await ctx.CreateBulkInsertBuilder<IOrder>(o => o
 > он лишь позволяет колбэку, который его соблюдает, остановиться досрочно. nextorm никогда не отменяет
 > и не освобождает источник.
 
+## Таймаут
+
+`Timeout(TimeSpan)` задаёт **один** бюджет на весь вызов, отсчитываемый от входа в выполнение. Он
+покрывает получение соединения, настройку, перечисление источника, все батчи, работу драйвера и
+колбэки прогресса; он никогда не сбрасывается на батч, поэтому медленный источник и медленный драйвер
+делят один дедлайн.
+
+```csharp
+var written = await ctx.CreateBulkInsertBuilder<IOrder>(o => o.Timeout(TimeSpan.FromMinutes(2)))
+    .Values(ordersStream)
+    .BulkInsertAsync(cancellationToken);
+```
+
+- Бюджет, равный нулю или меньший, — ошибка аргумента.
+- Истёкший бюджет сообщается как `TimeoutException`.
+- `CancellationToken` вызывающего всегда побеждает: отмена пользователем проявляется как
+  `OperationCanceledException`, а не как таймаут, даже когда события гоняются.
+- `Timeout` — единственная поверхность таймаута: прежняя опция `TimeoutSeconds` и метод builder
+  `Timeout(int)` **удалены без shims**, поэтому переходите на `TimeSpan`
+  (`Timeout(TimeSpan.FromSeconds(30))`). Бюджет теперь действует на всех путях, а не только на нативном
+  SQL Server, и прежнее ограничение PostgreSQL «таймаут не поддерживается» больше не существует.
+
 ## Явные значения identity и пропуск дублей
 
-`KeepIdentity` записывает значения identity из сущностей (`OVERRIDING SYSTEM VALUE` в PostgreSQL,
-`SET IDENTITY_INSERT ... ON/OFF` в SQL Server). `IgnoreDuplicates` пропускает строки, нарушающие
-уникальность, вместо падения всей записи.
+`KeepIdentity` записывает значения identity из сущностей, а не позволяет серверу их генерировать.
+`IgnoreDuplicates` пропускает строки, нарушающие уникальность, вместо падения всей записи.
 
 ```csharp
 // явные id
@@ -246,16 +346,32 @@ var written = ctx.CreateBulkInsertBuilder<IOrder>(o => o.KeepIdentity().IgnoreDu
 // written == 1
 ```
 
-`IgnoreDuplicates` доступен в PostgreSQL (`ON CONFLICT DO NOTHING`), SQLite (`INSERT OR IGNORE`) и
-MySQL/MariaDB (`INSERT IGNORE`); на SQL Server он отклоняется, а в ClickHouse это no-op (уникальности
-нет, поэтому пишутся все строки).
+`KeepIdentity` выполняется по провайдерам, на том пути, который это умеет:
 
-> `KeepIdentity()` игнорируется, если в маппинге сущности нет identity-колонки:
-> явные значения для не-identity ключей всё равно пишутся, но форма включения identity
-> (`SET IDENTITY_INSERT`, `OVERRIDING SYSTEM VALUE`) не эмитится — поэтому таблица без identity
-> никогда не падает с ошибкой SQL Server 8106. Проверка идёт по метаданным сущности-донора, а не по
-> фактической целевой таблице: при перенацеливании через `Table(...)` ответственность за identity-форму
-> целевой таблицы лежит на вызывающем.
+| Провайдер | `KeepIdentity=true` |
+|---|---|
+| SQL Server | нативный `SqlBulkCopyOptions.KeepIdentity`; портируемое утверждение оборачивается в `SET IDENTITY_INSERT ... ON/OFF` |
+| PostgreSQL | нативный `COPY` с явной identity-колонкой в списке колонок; портируемое утверждение добавляет `OVERRIDING SYSTEM VALUE` |
+| MySQL / MariaDB | явная identity-колонка на обоих путях под scoped-режимом `NO_AUTO_VALUE_ON_ZERO`, поэтому явный `0` записывается, а не заменяется сгенерированным значением |
+| ClickHouse | явное значение в нативной вставке; записываемы только обычные колонки и колонки `DEFAULT` — замапленная колонка ALIAS или MATERIALIZED отклоняется по имени |
+| SQLite | явная identity-колонка в портируемом утверждении |
+
+`IgnoreDuplicates` использует ту форму, которая есть у выбранного пути:
+
+| Провайдер | `IgnoreDuplicates=true` |
+|---|---|
+| SQL Server | отклоняется по имени (формы ignore нет ни на одном пути) |
+| PostgreSQL | `ON CONFLICT DO NOTHING` (портируемо) |
+| SQLite | `INSERT OR IGNORE` (портируемо) |
+| MySQL / MariaDB | `INSERT IGNORE` (портируемо) или `ConflictOption.Ignore` на нативной загрузке |
+| ClickHouse | отклоняется по имени: уникальности нет, и обычная вставка записала бы все строки |
+
+> `KeepIdentity()` **не даёт эффекта**, если в маппинге сущности нет identity-колонки: явные значения для
+> не-identity ключей всё равно пишутся, но форма включения identity (`SET IDENTITY_INSERT`,
+> `OVERRIDING SYSTEM VALUE`, guard нулевого режима MySQL) не эмитится — поэтому таблица без identity никогда
+> не падает с ошибкой SQL Server 8106, и выбор пути не меняется. Проверка идёт по метаданным
+> сущности-донора, а не по фактической целевой таблице: при перенацеливании через `Table(...)`
+> ответственность за identity-форму целевой таблицы лежит на вызывающем.
 
 ## Опции bulk copy в SQL Server
 
@@ -280,10 +396,62 @@ var written = ctx.CreateBulkInsertBuilder<IOrder>(o => o
 | `FireTriggers` | `FireTriggers()` | запускать `INSERT`-триггеры для копируемых строк |
 
 `null` и `false` равнозначны: флаг не выставляется, поведение записи не меняется. Запрос флага на пути,
-который его не выражает, бросает `NotSupportedException` с перечислением флагов (а не игнорирует их
-молча) — это касается `COPY` PostgreSQL, портируемого `INSERT ... VALUES` в MySQL/MariaDB/SQLite/ClickHouse
-и самого SQL Server, когда `Returning*` или `KeepIdentity` переключает запись на портируемый путь
-(поэтому `KeepIdentity` и bulk-copy флаги не комбинируются).
+который его не выражает, бросает `NotSupportedException` с перечислением всех offending-флагов (а не
+игнорирует их молча) — `COPY` PostgreSQL, MySQL/MariaDB, ClickHouse и портируемый `INSERT ... VALUES`
+отклоняют `TableLock=true` и `FireTriggers=true`, а `CheckConstraints=false` принимают только SQL Server
+(нативный путь), MariaDB и SQLite (scoped-контроль сессии).
+
+`KeepNulls=false` означает «применить DEFAULT целевой колонки вместо явного NULL». Он принимается только
+для **default-equivalent формы** — каждая записываемая колонка nullable, а её SQL-default равен NULL или
+отсутствует — и иначе отклоняется по имени на любом пути, поэтому он не бывает принят и молча
+проигнорирован.
+
+### `SqlServer(SqlServerBulkInsertOptions)`
+
+Специфичные для SQL Server нативные опции живут в типизированной группе, поэтому их нельзя спутать с
+портируемыми:
+
+```csharp
+var written = ctx.CreateBulkInsertBuilder<IOrder>(o => o.SqlServer(new SqlServerBulkInsertOptions
+    {
+        UseInternalTransaction = true,
+    }))
+    .Values(orders)
+    .BulkInsert();
+```
+
+| Поле | Действие |
+|---|---|
+| `UseInternalTransaction` | `SqlBulkCopy` выполняет собственную транзакцию вокруг **батча драйвера** (`SqlBulkCopyOptions.UseInternalTransaction`). Незаданное/`false` значение не выставляет флаг. Это не гарантия на всю загрузку: при нескольких батчах драйвера покрыт только текущий. Комбинация с внешней транзакцией контекста отклоняется по имени до чтения источника. Портируемый путь отклоняет `true`. |
+
+Пустая группа (все значения `null`) не создаёт запроса. Заданное поле **чужой** группы отклоняется, когда
+целевой провайдер известен, — включая явный `false`. Default-equivalent значение на своём провайдере
+принимается по **результату**, а не по наличию флага драйвера.
+
+### `ClickHouse(ClickHouseBulkInsertOptions)`
+
+Нативные опции ClickHouse — вторая типизированная группа, применяемая к `InsertBinaryAsync`:
+
+```csharp
+var written = await ctx.CreateBulkInsertBuilder<IOrder>(o => o.ClickHouse(new ClickHouseBulkInsertOptions
+    {
+        MaxDegreeOfParallelism = 4,
+    }))
+    .Values(ordersStream)
+    .BulkInsertAsync(cancellationToken);
+```
+
+| Поле | Действие |
+|---|---|
+| `MaxDegreeOfParallelism` | Параллелизм, запрашиваемый нативной вставкой (`null` сохраняет настроенное значение по умолчанию). Сессия и параллелизм больше единицы противоречат друг другу и отклоняются по имени. Портируемое утверждение пишет один поток, поэтому принимает `null`/`1` как один и тот же результат, а значение больше единицы отклоняет по имени. Неположительное значение — ошибка аргумента на любом пути. |
+| `UseSession` | `null` сохраняет настроенную сессию, `true` требует фактический session id, `false` явно запрашивает безсессионную нетемпоральную вставку. На портируемом пути запрос выполняется, только если соединение контекста уже несёт эту сессию, и иначе отклоняется по имени. |
+
+Пустая группа не создаёт запроса. Группа отклоняется, если передана другому провайдеру.
+
+Класс `ClickHouseBulkCopy` из `ClickHouse.Driver` 1.4.0 **не** устарел — устарел только его метод
+`InitAsync`, — поэтому причиной использования `InsertBinaryAsync` является не класс: бинарный API вставки
+даёт копию настроек на конкретную вставку и контракт session/parallelism выше, и работает через
+собственный клиент контекста.
 
 ## Просмотр SQL
 
@@ -310,19 +478,29 @@ ctx.CreateBulkInsertBuilder<IOrder>(o => o.MaxBatchSize(1_000).IgnoreDuplicates(
 
 | Опция | Метод builder | Действие |
 |---|---|---|
-| `MaxBatchSize` | `MaxBatchSize(rows)` | дробление портируемого пути (по умолчанию — одно утверждение) |
-| `MaxParameters` | `MaxParameters(count)` | параметров на утверждение |
-| `MaxSqlLength` | `MaxSqlLength(chars)` | примерная длина SQL на утверждение |
+| `Mode` | `Mode(BulkInsertMode)` | путь выполнения: `Auto` (по умолчанию), `Native`, `Portable` |
+| `TargetKind` | `TargetKind(BulkInsertTargetKind)` | `Regular` (по умолчанию) или `LocalTemporary` |
+| `MaxBatchSize` | `MaxBatchSize(rows)` | строк на утверждение/батч на портируемом пути; размер чанка на нативных путях MySQL/MariaDB/ClickHouse; `SqlBulkCopy.BatchSize` в SQL Server; новый importer на чанк в PostgreSQL |
+| `MaxParameters` | `MaxParameters(count)` | параметров на утверждение (портируемый путь) |
+| `MaxSqlLength` | `MaxSqlLength(chars)` | примерная длина SQL на утверждение (портируемый путь) |
 | `TableName` / `TableSchema` | `Table(name)` / `Table(schema, name)` | переопределение целевой таблицы, при желании schema-квалифицированной |
-| `KeepIdentity` | `KeepIdentity()` | запись явных значений identity (`OVERRIDING SYSTEM VALUE` в PostgreSQL, `SET IDENTITY_INSERT ... ON/OFF` в SQL Server); игнорируется, если у сущности нет identity-колонки |
-| `IgnoreDuplicates` | `IgnoreDuplicates()` | пропуск строк, нарушающих уникальность |
-| `CheckConstraints` | `CheckConstraints()` | проверять ограничения CHECK/FOREIGN KEY; только нативный путь SQL Server |
+| `SchemaName` | `Schema(schema)` | переопределение только схемы при сохранении замапленной/явной таблицы |
+| `DatabaseName` | `Database(database)` | часть базы там, где диалект умеет адресовать другую базу |
+| `ServerName` | `Server(server)` | **отклоняется**: bulk-вставка никогда не перенаправляется на другой сервер |
+| `KeepIdentity` | `KeepIdentity()` | явные значения identity на пути, который это умеет; без эффекта, если у сущности нет identity-колонки |
+| `IgnoreDuplicates` | `IgnoreDuplicates()` | пропуск строк, нарушающих уникальность, где есть форма ignore |
+| `CheckConstraints` | `CheckConstraints()` | проверять ограничения CHECK/FOREIGN KEY; `false` — только там, где есть scoped-контроль |
 | `TableLock` | `TableLock()` | табличная bulk-блокировка; только нативный путь SQL Server |
-| `KeepNulls` | `KeepNulls()` | писать явные `NULL` вместо `DEFAULT`; только нативный путь SQL Server |
+| `KeepNulls` | `KeepNulls()` | `true`: явные `NULL`; `false`: только default-equivalent формы |
 | `FireTriggers` | `FireTriggers()` | запускать `INSERT`-триггеры; только нативный путь SQL Server |
-| `TimeoutSeconds` | `Timeout(seconds)` | таймаут команды; только нативный путь SQL Server |
-| `Progress` / `NotifyEvery` | `NotifyAfter(rows, onRows)` | прогресс с накопленным числом записанных строк |
+| `Timeout` | `Timeout(TimeSpan)` | один бюджет на весь вызов для всех путей |
+| `SqlServer` | `SqlServer(SqlServerBulkInsertOptions)` | нативная группа SQL Server (`UseInternalTransaction`) |
+| `ClickHouse` | `ClickHouse(ClickHouseBulkInsertOptions)` | нативная группа ClickHouse (`MaxDegreeOfParallelism`, `UseSession`) |
+| `Progress` / `NotifyEvery` | `NotifyAfter(rows, onRows)` | прогресс с накопленным числом записанных строк, после завершённых батчей |
 | `ProgressCancellationTokenSource` | `ProgressCancellationTokenSource(source)` | токен, передаваемый в колбэк прогресса |
+
+Опция, которую выбранный провайдер/путь не может выполнить, отклоняется `NotSupportedException` с её
+именем — до чтения источника; ни одна опция не принимается и не отбрасывается молча.
 
 На возвращаемом builder:
 
@@ -335,15 +513,29 @@ ctx.CreateBulkInsertBuilder<IOrder>(o => o.MaxBatchSize(1_000).IgnoreDuplicates(
 
 ## Поддержка провайдеров
 
-| Провайдер | Нативный bulk | Override цели | `Returning` | `IgnoreDuplicates` | `KeepIdentity` | Bulk-copy флаги |
+| Провайдер | Путь `Auto`/`Native` | Квалификация цели | `Returning` | `IgnoreDuplicates` | `KeepIdentity` | Bulk-copy флаги |
 |---|---|---|---|---|---|---|
-| PostgreSQL | бинарный `COPY` | `schema.table` | `RETURNING` (портируемо) | `ON CONFLICT DO NOTHING` | `OVERRIDING SYSTEM VALUE` | — (отклоняются) |
-| SQL Server | `SqlBulkCopy` | `schema.table` | `OUTPUT` (портируемо) | — (отклоняется) | `SET IDENTITY_INSERT` | `CheckConstraints`/`TableLock`/`KeepNulls`/`FireTriggers` |
-| MySQL | — (портируемо) | `db.table` | — | `INSERT IGNORE` | явные значения | — (отклоняются) |
-| MariaDB | — (портируемо) | `db.table` | — | `INSERT IGNORE` | явные значения | — (отклоняются) |
-| SQLite | — (портируемо) | `schema.table` | `RETURNING` (портируемо) | `INSERT OR IGNORE` | явные значения | — (отклоняются) |
-| ClickHouse | — (портируемо) | `db.table` | — | no-op (нет уникальности) | — | — (отклоняются) |
+| PostgreSQL | бинарный `COPY` | `schema.table`; `DatabaseName` — только текущая база | `RETURNING` (портируемо) | `ON CONFLICT DO NOTHING` | `OVERRIDING SYSTEM VALUE` (портируемо) / явный список колонок `COPY` | — (отклоняются) |
+| SQL Server | `SqlBulkCopy` | `database.schema.table` | `OUTPUT` (портируемо) | — (отклоняется) | `SqlBulkCopyOptions.KeepIdentity` / `SET IDENTITY_INSERT` | `CheckConstraints`/`TableLock`/`KeepNulls`/`FireTriggers` |
+| MySQL | `MySqlBulkCopy` (`LOAD DATA LOCAL INFILE`) | `db.table` | — (отклоняется) | `ConflictOption.Ignore` / `INSERT IGNORE` | явная колонка + guard нулевого режима | — (отклоняются) |
+| MariaDB | `MySqlBulkCopy` (`LOAD DATA LOCAL INFILE`) | `db.table` | — (отклоняется) | `ConflictOption.Ignore` / `INSERT IGNORE` | явная колонка + guard нулевого режима | — (отклоняются) |
+| SQLite | — (только портируемый; `Native` отклоняется) | `schema.table` | `RETURNING` (портируемо) | `INSERT OR IGNORE` | явная колонка | — (отклоняются) |
+| ClickHouse | `InsertBinaryAsync` | `db.table` | — (отклоняется) | — (отклоняется) | явное значение, только записываемые колонки | — (отклоняются) |
 | In-memory | — | — | — | — | `NotSupportedException` (только чтение) | — (только чтение) |
+
+## Предварительные условия драйверов
+
+`Auto` берёт нативный путь, только если выполнены все условия ниже; `Native` отклоняет по имени;
+портируемому пути ни одно из них не нужно. Отсутствующее условие никогда не исправляется втихую — nextorm
+не меняет ни настройку драйвера, ни серверную переменную, ни строку подключения.
+
+| Провайдер | Что нужно для нативного пути |
+|---|---|
+| SQL Server | соединение `Microsoft.Data.SqlClient` `SqlConnection`; внутренняя транзакция включается явно через `SqlServer(new SqlServerBulkInsertOptions { UseInternalTransaction = true })` и несовместима с внешней транзакцией контекста |
+| PostgreSQL | соединение `Npgsql`; бинарный importer `COPY` пишет на этом соединении, а конечный `MaxBatchSize` запускает по одному importer на ограниченный чанк (завершается при успехе, освобождается при ошибке или отмене) |
+| MySQL / MariaDB | соединение MySqlConnector с `AllowLoadLocalInfile=true` **и** серверная переменная `@@GLOBAL.local_infile=1`. Клиентская опция читается из строки подключения, серверная — read-only preflight-запросом (`select @@global.local_infile`); nextorm не включает ни то, ни другое. Без них нативный путь недоступен: `Auto` откатывается, только если портируемый путь выполняет весь запрос, а `Native` отклоняет по имени |
+| ClickHouse | клиент `ClickHouse.Driver` (`ClickHouseClient`/`ClickHouseDataSource` — перегрузки `UseClickHouse`), потому что `InsertBinaryAsync` требует его; настройки клиента копируются для вставки, а запрос сессии разрешается по фактическому session id. Параллелизм больше единицы нельзя сочетать с сессией (одна конкурентная команда на сессию) |
+| SQLite | ничего: нативного bulk API нет, поэтому каждая запись идёт портируемым путём на собственном соединении контекста, а запрос `Mode.Native` отклоняется. Сертифицированная конфигурация — файловая база (живой набор использует её, а не межпроцессный сервер) |
 
 ## См. также
 

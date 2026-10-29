@@ -125,6 +125,60 @@ public class AliasJoinWhereTests
         }
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // #322: a `Where` written before/after the source-less alias form must be rebased exactly like the
+    // source-explicit form — onto the base slot (retained source) and onto the joined slot (t2)
+    // respectively; the source-less form must not re-root the predicate onto the first item.
+    // ---------------------------------------------------------------------------------------------
+
+    [Fact]
+    public void Where_on_base_before_a_source_less_alias_join_keeps_the_base_slot()
+    {
+        var (path, ctx, sql) = CreateContext();
+        try
+        {
+            var rows = ctx.From<Order>(b => b.Table("orders"))
+                .Where(o => o.Id == 1)
+                .Join<Person>((a, b) => a.BuyerId == b.Id, Alias.Buyer)
+                .Select(p => p.Buyer.Id)
+                .ToList();
+
+            rows.Should().Equal(10);
+
+            var last = sql.Statements[^1];
+            last.Should().Contain("where Id = 1");
+            last.Should().Contain("join person as 't2'");
+            last.Should().Contain("select t2.Id");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Where_after_a_source_less_alias_join_targets_the_joined_slot()
+    {
+        var (path, ctx, sql) = CreateContext();
+        try
+        {
+            var rows = ctx.From<Order>(b => b.Table("orders"))
+                .Join<Person>((a, b) => a.BuyerId == b.Id, Alias.Buyer)
+                .Where(p => p.Buyer.Id == 20)
+                .Select(p => p.Item1.Id)
+                .ToList();
+
+            rows.Should().Equal(2);
+            sql.Statements[^1].Should().Contain("t2.Id");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
     private static (string Path, SqliteDataContext Context, SqlRecordingInterceptor Sql) CreateContext()
     {
         var path = Path.Combine(Path.GetTempPath(), $"nextorm-alias-where-{Guid.NewGuid():N}.db");

@@ -14,6 +14,15 @@ internal static class MariaDbTestContext
     public static IDataContext Create() =>
         new MariaDbDataContext(PlaceholderConnectionString, new DataContextBuilder());
 
+    /// <summary>
+    /// Creates a context that records command executions, for the refusal tests: the capability gate must
+    /// throw while the command is prepared, before any SQL reaches a connection.
+    /// </summary>
+    /// <param name="interceptor">The interceptor that counts executions.</param>
+    /// <returns>A recording MariaDB context over the placeholder connection string.</returns>
+    public static IDataContext Create(IQueryInterceptor interceptor) =>
+        new MariaDbDataContext(PlaceholderConnectionString, new DataContextBuilder().AddInterceptor(interceptor));
+
     public static IDataContext CreateQuoted() =>
         new MariaDbDataContext(PlaceholderConnectionString, new DataContextBuilder().UseQuotedIdentifiers());
 

@@ -167,8 +167,15 @@ public sealed class BulkInsertBuilder<TEntity>
     /// <exception cref="NotSupportedException">The context is read-only, or the provider cannot express a requested form.</exception>
     public int BulkInsert()
     {
+        EnsureSyncSource();
+        ValidateTarget();
+
+        // One monotonic budget from execution entry (A06): the whole-set validation of a synchronous source
+        // runs inside it, so a slow source cannot buy the write a fresh budget.
+        using var budget = BulkInsertDeadline.Start(_options.Timeout, CancellationToken.None);
         var rows = ValidateAndMaterializeSync();
         var command = BuildCommand(ProjectSync(rows), null);
+        command.EffectiveTimeout = RemainingBudget(budget);
         return Execute(command);
     }
 
@@ -180,6 +187,7 @@ public sealed class BulkInsertBuilder<TEntity>
     public Task<int> BulkInsertAsync(CancellationToken cancellationToken = default)
     {
         EnsureSourceSet();
+        ValidateTarget();
 
         if (_asyncSource is not null)
         {
@@ -189,9 +197,32 @@ public sealed class BulkInsertBuilder<TEntity>
             return ExecuteAsync(streamed, cancellationToken);
         }
 
-        var rows = ValidateAndMaterializeSync();
-        var command = BuildCommand(ProjectSync(rows), null);
+        // Mirror of the synchronous terminal: the buffering of the supplied enumeration is charged to the
+        // same budget the executor receives the remainder of.
+        BulkInsertCommand command;
+        var budget = BulkInsertDeadline.Start(_options.Timeout, cancellationToken);
+        try
+        {
+            var rows = ValidateAndMaterializeSync();
+            command = BuildCommand(ProjectSync(rows), null);
+            command.EffectiveTimeout = RemainingBudget(budget);
+        }
+        finally
+        {
+            budget.Dispose();
+        }
+
         return ExecuteAsync(command, cancellationToken);
+    }
+
+    // The budget the executor may still spend: what is left of the deadline started at terminal entry. An
+    // exhausted budget is a timeout before the first write, never a partial run with a fresh allowance.
+    private static TimeSpan? RemainingBudget(BulkInsertDeadline budget)
+    {
+        if (budget.Remaining is not { } remaining)
+            return null;
+
+        return remaining <= TimeSpan.Zero ? throw budget.TimedOut() : remaining;
     }
 
     // The synchronous source is buffered so the whole set can be validated before any SQL is sent. An
@@ -407,7 +438,7 @@ public sealed class BulkInsertBuilder<TEntity>
             batch,
             CreateProgressCallback(),
             _options.NotifyEvery,
-            _options.TimeoutSeconds,
+            _options,
             _options.TableSchema,
             bulkCopy);
     }
@@ -450,8 +481,87 @@ public sealed class BulkInsertBuilder<TEntity>
         return new PortableBulkInsertExecutor(RequireMutationExecutor()).BulkInsertAsync(command, cancellationToken);
     }
 
+    /// <summary>
+    /// Resolves the target provider and the execution path and validates the whole request before any
+    /// source row is read: provider-scoped option groups, the destination, the target kind, native-only
+    /// options and the bulk-copy flags. Every refusal is a <see cref="NotSupportedException"/> raised before
+    /// the source is enumerated, so an unsupported combination never writes a partial batch.
+    /// </summary>
+    /// <param name="portableRequired">Whether the terminal always writes through the portable path (a returning terminal).</param>
+    /// <exception cref="NotSupportedException">The request cannot be honoured by the resolved provider/path.</exception>
+    internal void ValidateTarget(bool portableRequired = false)
+    {
+        var db = _dataContext as DataContext;
+        var provider = BulkInsertProviders.From(db?.Dialect);
+
+        _options.ValidateForProvider(provider);
+        _ = BulkInsertDestination.From(_options);
+
+        if (portableRequired && _options.Mode == BulkInsertMode.Native)
+            throw new NotSupportedException(
+                "Bulk insert Mode.Native was requested, but a RETURNING/OUTPUT terminal always writes through the portable INSERT ... VALUES path. Use Mode.Auto or Mode.Portable.");
+
+        var useNative = !portableRequired && UseNative(db);
+        _options.ValidateTargetKind(provider);
+        _options.ValidateNativeOnlyOptions(useNative);
+        _options.ValidateBulkCopyFlags(provider, useNative);
+    }
+
     private bool UseNative(DataContext? db)
-        => db is not null && db.Dialect.SupportsBulkCopy && !_options.IgnoreDuplicates && !_keepIdentity;
+    {
+        // Capability plus option compatibility, decided once here for every provider: a provider supplies
+        // only its capability flags (SupportsBulkCopy on the dialect, IBulkInsertNativeOptions on the
+        // context), so the selection logic is never duplicated per provider. A request is native-eligible
+        // when the provider's native path can honour every supplied option; any other request takes the
+        // portable path in Auto and is refused by name in Native.
+        var provider = BulkInsertProviders.From(db?.Dialect);
+        var capable = db is not null && db.Dialect.SupportsBulkCopy;
+        var incompatible = NativeIncompatibleOptions(db);
+
+        if (_options.Mode == BulkInsertMode.Native)
+        {
+            if (!capable)
+                throw new NotSupportedException(
+                    $"Bulk insert Mode.Native was requested, but {BulkInsertProviders.Describe(provider)} has no native bulk path. "
+                    + "Use Mode.Auto to let nextorm pick a compatible path, or Mode.Portable to request the parameterised INSERT path.");
+
+            if (incompatible.Count > 0)
+                throw new NotSupportedException(
+                    $"Bulk insert Mode.Native was requested, but the native bulk path on {BulkInsertProviders.Describe(provider)} cannot express the option(s) "
+                    + string.Join(", ", incompatible)
+                    + ". Use Mode.Auto to let nextorm select the portable INSERT ... VALUES path, or Mode.Portable to request it explicitly.");
+
+            return true;
+        }
+
+        if (_options.Mode == BulkInsertMode.Portable)
+            return false;
+
+        // Auto: prefer the native path only when it can honour every supplied option, otherwise the
+        // portable path (which either honours the option or refuses it by name before any row is read).
+        return capable && incompatible.Count == 0;
+    }
+
+    /// <summary>
+    /// Lists the supplied options the resolved provider's native path cannot honour. The capability comes
+    /// from the provider context (<see cref="IBulkInsertNativeOptions"/>), never from this builder's
+    /// knowledge of a specific provider.
+    /// </summary>
+    /// <param name="db">The database context the write runs on, or <see langword="null"/> for a non-SQL context.</param>
+    /// <returns>The option names, empty when the native path can honour the whole request.</returns>
+    private List<string> NativeIncompatibleOptions(DataContext? db)
+    {
+        var native = db as IBulkInsertNativeOptions;
+        var incompatible = new List<string>(2);
+
+        if (_keepIdentity && native?.SupportsNativeKeepIdentity != true)
+            incompatible.Add("KeepIdentity=true");
+
+        if (_options.IgnoreDuplicates && native?.SupportsNativeIgnoreDuplicates != true)
+            incompatible.Add("IgnoreDuplicates=true");
+
+        return incompatible;
+    }
 
     private static bool HasIdentityColumn(IEntityMetadata metadata)
     {

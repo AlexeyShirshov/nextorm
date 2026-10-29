@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Linq.Expressions;
 using System.Reflection;
@@ -509,7 +509,8 @@ public class EntityMetadataBuilder<T>
     /// Declares the principal side of a one-to-many relationship: a collection navigation on this
     /// entity and the foreign-key property on the related (dependent) type. The principal key is taken
     /// from this entity's key metadata; it is resolved lazily and must exist by the time the keys are
-    /// read.
+    /// read. The selector may select a scalar property or a flat anonymous object; the components keep
+    /// the selector order.
     /// </summary>
     /// <typeparam name="TChild">The dependent entity type.</typeparam>
     /// <typeparam name="TKey">The property type shared by the foreign key and the principal key.</typeparam>
@@ -523,15 +524,39 @@ public class EntityMetadataBuilder<T>
         Expression<Func<TChild, TKey>> foreignKey)
         where TChild : class
     {
-        ArgumentNullException.ThrowIfNull(navigation);
-        ArgumentNullException.ThrowIfNull(foreignKey);
+        var navigationProperty = ResolveCollectionNavigation(navigation, typeof(TChild), nameof(navigation));
+        var relationshipName = RelationshipName(typeof(T), navigationProperty);
+        var foreignKeys = ParseKeySelector(foreignKey, typeof(TChild), nameof(foreignKey), relationshipName);
 
-        var navigationProperty = ResolveSelectedProperty(navigation, nameof(navigation));
-        if (!typeof(IEnumerable<TChild>).IsAssignableFrom(navigationProperty.PropertyType))
-            throw new NotSupportedException($"The navigation '{typeof(T).Name}.{navigationProperty.Name}' must be a collection of {typeof(TChild).Name}.");
+        _relationships.Add(RelationshipDeclaration.Create(typeof(T), typeof(TChild), isCollection: true, navigationProperty, foreignKeys, principalKeys: null));
 
-        var foreignKeyProperty = ResolveSelectedProperty(foreignKey, nameof(foreignKey));
-        _relationships.Add(RelationshipDeclaration.Create(typeof(T), typeof(TChild), isCollection: true, navigationProperty, foreignKeyProperty, principalKey: null));
+        return this;
+    }
+
+    /// <summary>
+    /// Declares a one-to-many relationship with an explicit principal key: a collection navigation on
+    /// this entity, the foreign-key components on the dependent type and the principal-key components
+    /// on this entity.
+    /// </summary>
+    /// <typeparam name="TChild">The dependent entity type.</typeparam>
+    /// <param name="navigation">Selects the collection navigation on this entity, for example <c>p =&gt; p.Children</c>.</param>
+    /// <param name="foreignKey">Selects the foreign-key components on <typeparamref name="TChild"/>, for example <c>c =&gt; new { c.TenantId, c.ParentId }</c>.</param>
+    /// <param name="principalKey">Selects the principal-key components on this entity, for example <c>p =&gt; new { p.TenantId, p.Id }</c>.</param>
+    /// <returns>This builder, for chaining.</returns>
+    /// <exception cref="ArgumentNullException">A selector is <see langword="null"/>.</exception>
+    /// <exception cref="NotSupportedException">A selector is not a supported key selector, or the navigation is not a collection of <typeparamref name="TChild"/>.</exception>
+    public EntityMetadataBuilder<T> HasMany<TChild>(
+        Expression<Func<T, ICollection<TChild>>> navigation,
+        Expression<Func<TChild, object?>> foreignKey,
+        Expression<Func<T, object?>> principalKey)
+        where TChild : class
+    {
+        var navigationProperty = ResolveCollectionNavigation(navigation, typeof(TChild), nameof(navigation));
+        var relationshipName = RelationshipName(typeof(T), navigationProperty);
+        var foreignKeys = ParseKeySelector(foreignKey, typeof(TChild), nameof(foreignKey), relationshipName);
+        var principalKeys = ParseKeySelector(principalKey, typeof(T), nameof(principalKey), relationshipName);
+
+        _relationships.Add(RelationshipDeclaration.Create(typeof(T), typeof(TChild), isCollection: true, navigationProperty, foreignKeys, principalKeys));
 
         return this;
     }
@@ -553,12 +578,59 @@ public class EntityMetadataBuilder<T>
         Expression<Func<T, TKey>> principalKey)
         where TChild : class
     {
-        ArgumentNullException.ThrowIfNull(foreignKey);
-        ArgumentNullException.ThrowIfNull(principalKey);
+        var relationshipName = RelationshipName(typeof(T), null);
+        var foreignKeys = ParseKeySelector(foreignKey, typeof(TChild), nameof(foreignKey), relationshipName);
+        var principalKeys = ParseKeySelector(principalKey, typeof(T), nameof(principalKey), relationshipName);
 
-        var foreignKeyProperty = ResolveSelectedProperty(foreignKey, nameof(foreignKey));
-        var principalKeyProperty = ResolveSelectedProperty(principalKey, nameof(principalKey));
-        _relationships.Add(RelationshipDeclaration.CreateFallback(typeof(T), typeof(TChild), isCollection: true, foreignKeyProperty, principalKeyProperty));
+        _relationships.Add(RelationshipDeclaration.CreateFallback(typeof(T), typeof(TChild), isCollection: true, foreignKeys, principalKeys));
+
+        return this;
+    }
+
+    /// <summary>
+    /// Declares a one-to-many relationship without a navigation and with an explicit principal key: the
+    /// foreign-key components are selected on the dependent type and the principal-key components on
+    /// this entity.
+    /// </summary>
+    /// <typeparam name="TChild">The dependent entity type.</typeparam>
+    /// <param name="foreignKey">Selects the foreign-key components on <typeparamref name="TChild"/>.</param>
+    /// <param name="principalKey">Selects the principal-key components on this entity.</param>
+    /// <returns>This builder, for chaining.</returns>
+    /// <exception cref="ArgumentNullException">A selector is <see langword="null"/>.</exception>
+    /// <exception cref="NotSupportedException">A selector is not a supported key selector.</exception>
+    // Lower priority than the legacy scalar overload: an object-typed selector call must keep
+    // binding to the legacy signature, which forwards into the same shared parser.
+    [OverloadResolutionPriority(-1)]
+    public EntityMetadataBuilder<T> HasMany<TChild>(
+        Expression<Func<TChild, object?>> foreignKey,
+        Expression<Func<T, object?>> principalKey)
+        where TChild : class
+    {
+        var relationshipName = RelationshipName(typeof(T), null);
+        var foreignKeys = ParseKeySelector(foreignKey, typeof(TChild), nameof(foreignKey), relationshipName);
+        var principalKeys = ParseKeySelector(principalKey, typeof(T), nameof(principalKey), relationshipName);
+
+        _relationships.Add(RelationshipDeclaration.CreateFallback(typeof(T), typeof(TChild), isCollection: true, foreignKeys, principalKeys));
+
+        return this;
+    }
+
+    /// <summary>
+    /// Declares a one-to-many relationship without a navigation, a foreign key and the default
+    /// principal key: the principal key is the full key of this entity, in entity-metadata order.
+    /// </summary>
+    /// <typeparam name="TChild">The dependent entity type.</typeparam>
+    /// <param name="foreignKey">Selects the foreign-key components on <typeparamref name="TChild"/>.</param>
+    /// <returns>This builder, for chaining.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="foreignKey"/> is <see langword="null"/>.</exception>
+    /// <exception cref="NotSupportedException">The selector is not a supported key selector, or its arity does not match the full principal key.</exception>
+    public EntityMetadataBuilder<T> HasMany<TChild>(Expression<Func<TChild, object?>> foreignKey)
+        where TChild : class
+    {
+        var relationshipName = RelationshipName(typeof(T), null);
+        var foreignKeys = ParseKeySelector(foreignKey, typeof(TChild), nameof(foreignKey), relationshipName);
+
+        _relationships.Add(RelationshipDeclaration.CreateFallback(typeof(T), typeof(TChild), isCollection: true, foreignKeys, principalKeys: null));
 
         return this;
     }
@@ -580,15 +652,39 @@ public class EntityMetadataBuilder<T>
         Expression<Func<T, TKey>> foreignKey)
         where TChild : class
     {
-        ArgumentNullException.ThrowIfNull(navigation);
-        ArgumentNullException.ThrowIfNull(foreignKey);
+        var navigationProperty = ResolveReferenceNavigation(navigation, nameof(navigation));
+        var relationshipName = RelationshipName(typeof(T), navigationProperty);
+        var foreignKeys = ParseKeySelector(foreignKey, typeof(T), nameof(foreignKey), relationshipName);
 
-        var navigationProperty = ResolveSelectedProperty(navigation, nameof(navigation));
-        if (navigationProperty.PropertyType == typeof(string) || navigationProperty.PropertyType.IsValueType)
-            throw new NotSupportedException($"The navigation '{typeof(T).Name}.{navigationProperty.Name}' must be a reference-typed property.");
+        _relationships.Add(RelationshipDeclaration.Create(typeof(T), typeof(TChild), isCollection: false, navigationProperty, foreignKeys, principalKeys: null));
 
-        var foreignKeyProperty = ResolveSelectedProperty(foreignKey, nameof(foreignKey));
-        _relationships.Add(RelationshipDeclaration.Create(typeof(T), typeof(TChild), isCollection: false, navigationProperty, foreignKeyProperty, principalKey: null));
+        return this;
+    }
+
+    /// <summary>
+    /// Declares a many-to-one relationship with an explicit principal key: a reference navigation on
+    /// this entity, the foreign-key components on this entity and the principal-key components on the
+    /// related (principal) type.
+    /// </summary>
+    /// <typeparam name="TChild">The principal entity type.</typeparam>
+    /// <param name="navigation">Selects the reference navigation on this entity, for example <c>c =&gt; c.Parent</c>.</param>
+    /// <param name="foreignKey">Selects the foreign-key components on this entity, for example <c>c =&gt; new { c.TenantId, c.ParentId }</c>.</param>
+    /// <param name="principalKey">Selects the principal-key components on <typeparamref name="TChild"/>, for example <c>p =&gt; new { p.TenantId, p.Id }</c>.</param>
+    /// <returns>This builder, for chaining.</returns>
+    /// <exception cref="ArgumentNullException">A selector is <see langword="null"/>.</exception>
+    /// <exception cref="NotSupportedException">A selector is not a supported key selector, or the navigation is a value type or <see cref="string"/>.</exception>
+    public EntityMetadataBuilder<T> HasOne<TChild>(
+        Expression<Func<T, TChild?>> navigation,
+        Expression<Func<T, object?>> foreignKey,
+        Expression<Func<TChild, object?>> principalKey)
+        where TChild : class
+    {
+        var navigationProperty = ResolveReferenceNavigation(navigation, nameof(navigation));
+        var relationshipName = RelationshipName(typeof(T), navigationProperty);
+        var foreignKeys = ParseKeySelector(foreignKey, typeof(T), nameof(foreignKey), relationshipName);
+        var principalKeys = ParseKeySelector(principalKey, typeof(TChild), nameof(principalKey), relationshipName);
+
+        _relationships.Add(RelationshipDeclaration.Create(typeof(T), typeof(TChild), isCollection: false, navigationProperty, foreignKeys, principalKeys));
 
         return this;
     }
@@ -610,12 +706,60 @@ public class EntityMetadataBuilder<T>
         Expression<Func<TChild, TKey>> principalKey)
         where TChild : class
     {
-        ArgumentNullException.ThrowIfNull(foreignKey);
-        ArgumentNullException.ThrowIfNull(principalKey);
+        var relationshipName = RelationshipName(typeof(T), null);
+        var foreignKeys = ParseKeySelector(foreignKey, typeof(T), nameof(foreignKey), relationshipName);
+        var principalKeys = ParseKeySelector(principalKey, typeof(TChild), nameof(principalKey), relationshipName);
 
-        var foreignKeyProperty = ResolveSelectedProperty(foreignKey, nameof(foreignKey));
-        var principalKeyProperty = ResolveSelectedProperty(principalKey, nameof(principalKey));
-        _relationships.Add(RelationshipDeclaration.CreateFallback(typeof(T), typeof(TChild), isCollection: false, foreignKeyProperty, principalKeyProperty));
+        _relationships.Add(RelationshipDeclaration.CreateFallback(typeof(T), typeof(TChild), isCollection: false, foreignKeys, principalKeys));
+
+        return this;
+    }
+
+    /// <summary>
+    /// Declares a many-to-one relationship without a navigation and with an explicit principal key: the
+    /// foreign-key components are selected on this entity and the principal-key components on the
+    /// related (principal) type.
+    /// </summary>
+    /// <typeparam name="TChild">The principal entity type.</typeparam>
+    /// <param name="foreignKey">Selects the foreign-key components on this entity.</param>
+    /// <param name="principalKey">Selects the principal-key components on <typeparamref name="TChild"/>.</param>
+    /// <returns>This builder, for chaining.</returns>
+    /// <exception cref="ArgumentNullException">A selector is <see langword="null"/>.</exception>
+    /// <exception cref="NotSupportedException">A selector is not a supported key selector.</exception>
+    // Lower priority than the legacy scalar overload: an object-typed selector call must keep
+    // binding to the legacy signature, which forwards into the same shared parser.
+    [OverloadResolutionPriority(-1)]
+    public EntityMetadataBuilder<T> HasOne<TChild>(
+        Expression<Func<T, object?>> foreignKey,
+        Expression<Func<TChild, object?>> principalKey)
+        where TChild : class
+    {
+        var relationshipName = RelationshipName(typeof(T), null);
+        var foreignKeys = ParseKeySelector(foreignKey, typeof(T), nameof(foreignKey), relationshipName);
+        var principalKeys = ParseKeySelector(principalKey, typeof(TChild), nameof(principalKey), relationshipName);
+
+        _relationships.Add(RelationshipDeclaration.CreateFallback(typeof(T), typeof(TChild), isCollection: false, foreignKeys, principalKeys));
+
+        return this;
+    }
+
+    /// <summary>
+    /// Declares a many-to-one relationship without a navigation, a foreign key and the default
+    /// principal key: the principal key is the full key of <typeparamref name="TChild"/>, in
+    /// entity-metadata order.
+    /// </summary>
+    /// <typeparam name="TChild">The principal entity type.</typeparam>
+    /// <param name="foreignKey">Selects the foreign-key components on this entity.</param>
+    /// <returns>This builder, for chaining.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="foreignKey"/> is <see langword="null"/>.</exception>
+    /// <exception cref="NotSupportedException">The selector is not a supported key selector, or its arity does not match the full principal key.</exception>
+    public EntityMetadataBuilder<T> HasOne<TChild>(Expression<Func<T, object?>> foreignKey)
+        where TChild : class
+    {
+        var relationshipName = RelationshipName(typeof(T), null);
+        var foreignKeys = ParseKeySelector(foreignKey, typeof(T), nameof(foreignKey), relationshipName);
+
+        _relationships.Add(RelationshipDeclaration.CreateFallback(typeof(T), typeof(TChild), isCollection: false, foreignKeys, principalKeys: null));
 
         return this;
     }
@@ -645,17 +789,70 @@ public class EntityMetadataBuilder<T>
         Expression<Func<TChild, TKey>> childForeignKey)
         where TChild : class
     {
-        ArgumentNullException.ThrowIfNull(navigation);
-        ArgumentNullException.ThrowIfNull(parentKey);
-        ArgumentNullException.ThrowIfNull(childForeignKey);
+        var navigationProperty = ResolveReferenceNavigation(navigation, nameof(navigation));
+        var relationshipName = RelationshipName(typeof(T), navigationProperty);
+        var principalKeys = ParseKeySelector(parentKey, typeof(T), nameof(parentKey), relationshipName);
+        var foreignKeys = ParseKeySelector(childForeignKey, typeof(TChild), nameof(childForeignKey), relationshipName);
 
-        var navigationProperty = ResolveSelectedProperty(navigation, nameof(navigation));
-        if (navigationProperty.PropertyType == typeof(string) || navigationProperty.PropertyType.IsValueType)
-            throw new NotSupportedException($"The navigation '{typeof(T).Name}.{navigationProperty.Name}' must be a reference-typed property.");
+        _relationships.Add(RelationshipDeclaration.CreateOneToOne(typeof(T), typeof(TChild), navigationProperty, foreignKeys, principalKeys));
 
-        var parentKeyProperty = ResolveSelectedProperty(parentKey, nameof(parentKey));
-        var childForeignKeyProperty = ResolveSelectedProperty(childForeignKey, nameof(childForeignKey));
-        _relationships.Add(RelationshipDeclaration.CreateOneToOne(typeof(T), typeof(TChild), navigationProperty, childForeignKeyProperty, parentKeyProperty));
+        return this;
+    }
+
+    /// <summary>
+    /// Declares a one-to-one relationship with explicit key components: a reference navigation on this
+    /// (principal) entity, the principal-key components on this entity and the foreign-key components
+    /// on the related (dependent) type. Uniqueness of the foreign key remains a declaration-time
+    /// trust; the core does not inspect the schema.
+    /// </summary>
+    /// <typeparam name="TChild">The related (dependent) entity type.</typeparam>
+    /// <param name="navigation">Selects the reference navigation on this entity, for example <c>p =&gt; p.Profile</c>.</param>
+    /// <param name="parentKey">Selects the principal-key components on this entity, for example <c>p =&gt; new { p.TenantId, p.Id }</c>.</param>
+    /// <param name="childForeignKey">Selects the foreign-key components on <typeparamref name="TChild"/>, for example <c>c =&gt; new { c.TenantId, c.OwnerId }</c>.</param>
+    /// <returns>This builder, for chaining.</returns>
+    /// <exception cref="ArgumentNullException">A selector is <see langword="null"/>.</exception>
+    /// <exception cref="NotSupportedException">A selector is not a supported key selector, or the navigation is a value type or <see cref="string"/>.</exception>
+    // Lower priority than the legacy scalar overload: an object-typed selector call must keep
+    // binding to the legacy signature, which forwards into the same shared parser.
+    [OverloadResolutionPriority(-1)]
+    public EntityMetadataBuilder<T> HasOneToOne<TChild>(
+        Expression<Func<T, TChild?>> navigation,
+        Expression<Func<T, object?>> parentKey,
+        Expression<Func<TChild, object?>> childForeignKey)
+        where TChild : class
+    {
+        var navigationProperty = ResolveReferenceNavigation(navigation, nameof(navigation));
+        var relationshipName = RelationshipName(typeof(T), navigationProperty);
+        var principalKeys = ParseKeySelector(parentKey, typeof(T), nameof(parentKey), relationshipName);
+        var foreignKeys = ParseKeySelector(childForeignKey, typeof(TChild), nameof(childForeignKey), relationshipName);
+
+        _relationships.Add(RelationshipDeclaration.CreateOneToOne(typeof(T), typeof(TChild), navigationProperty, foreignKeys, principalKeys));
+
+        return this;
+    }
+
+    /// <summary>
+    /// Declares a one-to-one relationship without an explicit principal key: a reference navigation on
+    /// this (principal) entity and the foreign-key components on the related (dependent) type. The
+    /// principal key is the full key of this entity, in entity-metadata order.
+    /// </summary>
+    /// <typeparam name="TChild">The related (dependent) entity type.</typeparam>
+    /// <typeparam name="TKey">The property type of the child foreign key.</typeparam>
+    /// <param name="navigation">Selects the reference navigation on this entity, for example <c>p =&gt; p.Profile</c>.</param>
+    /// <param name="childForeignKey">Selects the foreign-key component(s) on <typeparamref name="TChild"/>, for example <c>c =&gt; new { c.TenantId, c.OwnerId }</c>.</param>
+    /// <returns>This builder, for chaining.</returns>
+    /// <exception cref="ArgumentNullException">A selector is <see langword="null"/>.</exception>
+    /// <exception cref="NotSupportedException">A selector is not a supported key selector, or the navigation is a value type or <see cref="string"/>.</exception>
+    public EntityMetadataBuilder<T> HasOneToOne<TChild, TKey>(
+        Expression<Func<T, TChild?>> navigation,
+        Expression<Func<TChild, TKey>> childForeignKey)
+        where TChild : class
+    {
+        var navigationProperty = ResolveReferenceNavigation(navigation, nameof(navigation));
+        var relationshipName = RelationshipName(typeof(T), navigationProperty);
+        var foreignKeys = ParseKeySelector(childForeignKey, typeof(TChild), nameof(childForeignKey), relationshipName);
+
+        _relationships.Add(RelationshipDeclaration.CreateOneToOne(typeof(T), typeof(TChild), navigationProperty, foreignKeys, principalKeys: null));
 
         return this;
     }
@@ -688,36 +885,158 @@ public class EntityMetadataBuilder<T>
         where TChild : class
         where TJunction : class
     {
-        ArgumentNullException.ThrowIfNull(navigation);
-        ArgumentNullException.ThrowIfNull(parentKey);
-        ArgumentNullException.ThrowIfNull(junctionParentForeignKey);
-        ArgumentNullException.ThrowIfNull(childKey);
-        ArgumentNullException.ThrowIfNull(junctionChildForeignKey);
+        var navigationProperty = ResolveCollectionNavigation(navigation, typeof(TChild), nameof(navigation));
+        var relationshipName = RelationshipName(typeof(T), navigationProperty);
+        var parentKeys = ParseKeySelector(parentKey, typeof(T), nameof(parentKey), relationshipName);
+        var junctionParentForeignKeys = ParseKeySelector(junctionParentForeignKey, typeof(TJunction), nameof(junctionParentForeignKey), relationshipName);
+        var childKeys = ParseKeySelector(childKey, typeof(TChild), nameof(childKey), relationshipName);
+        var junctionChildForeignKeys = ParseKeySelector(junctionChildForeignKey, typeof(TJunction), nameof(junctionChildForeignKey), relationshipName);
 
-        var navigationProperty = ResolveSelectedProperty(navigation, nameof(navigation));
-        if (!typeof(IEnumerable<TChild>).IsAssignableFrom(navigationProperty.PropertyType))
-            throw new NotSupportedException($"The navigation '{typeof(T).Name}.{navigationProperty.Name}' must be a collection of {typeof(TChild).Name}.");
-
-        var parentKeyProperty = ResolveSelectedProperty(parentKey, nameof(parentKey));
-        var junctionParentForeignKeyProperty = ResolveSelectedProperty(junctionParentForeignKey, nameof(junctionParentForeignKey));
-        var childKeyProperty = ResolveSelectedProperty(childKey, nameof(childKey));
-        var junctionChildForeignKeyProperty = ResolveSelectedProperty(junctionChildForeignKey, nameof(junctionChildForeignKey));
-
-        RelationshipResolver.ValidateJunctionKeyType(typeof(T).Name, nameof(parentKey), parentKeyProperty, nameof(junctionParentForeignKey), junctionParentForeignKeyProperty);
-        RelationshipResolver.ValidateJunctionKeyType(typeof(T).Name, nameof(childKey), childKeyProperty, nameof(junctionChildForeignKey), junctionChildForeignKeyProperty);
+        ValidateJunctionKeyTypes(typeof(T).Name, nameof(parentKey), parentKeys, nameof(junctionParentForeignKey), junctionParentForeignKeys);
+        ValidateJunctionKeyTypes(typeof(T).Name, nameof(childKey), childKeys, nameof(junctionChildForeignKey), junctionChildForeignKeys);
 
         _relationships.Add(RelationshipDeclaration.CreateManyToMany(
             typeof(T),
             typeof(TChild),
             typeof(TJunction),
             navigationProperty,
-            parentKeyProperty,
-            junctionParentForeignKeyProperty,
-            childKeyProperty,
-            junctionChildForeignKeyProperty));
+            parentKeys,
+            junctionParentForeignKeys,
+            childKeys,
+            junctionChildForeignKeys));
 
         return this;
     }
+
+    /// <summary>
+    /// Declares a many-to-many relationship with explicit key components on both legs: a collection
+    /// navigation on this entity, the parent-side key on this entity, the junction foreign key that
+    /// references it, the child-side key on the related type and the junction foreign key that
+    /// references that. Each pair must have the same number of components and matching positional
+    /// types.
+    /// </summary>
+    /// <typeparam name="TChild">The child entity type.</typeparam>
+    /// <typeparam name="TJunction">The junction (link) entity type.</typeparam>
+    /// <param name="navigation">Selects the collection navigation on this entity, for example <c>p =&gt; p.Children</c>.</param>
+    /// <param name="parentKey">Selects the parent-side key components on this entity.</param>
+    /// <param name="junctionParentForeignKey">Selects the junction components that reference <paramref name="parentKey"/>.</param>
+    /// <param name="childKey">Selects the child-side key components on <typeparamref name="TChild"/>.</param>
+    /// <param name="junctionChildForeignKey">Selects the junction components that reference <paramref name="childKey"/>.</param>
+    /// <returns>This builder, for chaining.</returns>
+    /// <exception cref="ArgumentNullException">A selector is <see langword="null"/>.</exception>
+    /// <exception cref="NotSupportedException">A selector is not a supported key selector, the navigation is not a collection of <typeparamref name="TChild"/>, or a key leg does not match its junction foreign key's arity or types.</exception>
+    public EntityMetadataBuilder<T> HasManyThrough<TChild, TJunction>(
+        Expression<Func<T, IEnumerable<TChild>>> navigation,
+        Expression<Func<T, object?>> parentKey,
+        Expression<Func<TJunction, object?>> junctionParentForeignKey,
+        Expression<Func<TChild, object?>> childKey,
+        Expression<Func<TJunction, object?>> junctionChildForeignKey)
+        where TChild : class
+        where TJunction : class
+    {
+        var navigationProperty = ResolveCollectionNavigation(navigation, typeof(TChild), nameof(navigation));
+        var relationshipName = RelationshipName(typeof(T), navigationProperty);
+        var parentKeys = ParseKeySelector(parentKey, typeof(T), nameof(parentKey), relationshipName);
+        var junctionParentForeignKeys = ParseKeySelector(junctionParentForeignKey, typeof(TJunction), nameof(junctionParentForeignKey), relationshipName);
+        var childKeys = ParseKeySelector(childKey, typeof(TChild), nameof(childKey), relationshipName);
+        var junctionChildForeignKeys = ParseKeySelector(junctionChildForeignKey, typeof(TJunction), nameof(junctionChildForeignKey), relationshipName);
+
+        ValidateJunctionKeyTypes(typeof(T).Name, nameof(parentKey), parentKeys, nameof(junctionParentForeignKey), junctionParentForeignKeys);
+        ValidateJunctionKeyTypes(typeof(T).Name, nameof(childKey), childKeys, nameof(junctionChildForeignKey), junctionChildForeignKeys);
+
+        _relationships.Add(RelationshipDeclaration.CreateManyToMany(
+            typeof(T),
+            typeof(TChild),
+            typeof(TJunction),
+            navigationProperty,
+            parentKeys,
+            junctionParentForeignKeys,
+            childKeys,
+            junctionChildForeignKeys));
+
+        return this;
+    }
+
+    /// <summary>
+    /// Declares a many-to-many relationship with the default full principal keys on both sides: a
+    /// collection navigation on this entity, the junction foreign key that references this entity's
+    /// full key and the junction foreign key that references the related type's full key. Both keys are
+    /// taken from entity metadata in property order.
+    /// </summary>
+    /// <typeparam name="TChild">The child entity type.</typeparam>
+    /// <typeparam name="TJunction">The junction (link) entity type.</typeparam>
+    /// <param name="navigation">Selects the collection navigation on this entity, for example <c>p =&gt; p.Children</c>.</param>
+    /// <param name="junctionParentForeignKey">Selects the junction components that reference this entity's key.</param>
+    /// <param name="junctionChildForeignKey">Selects the junction components that reference the related type's key.</param>
+    /// <returns>This builder, for chaining.</returns>
+    /// <exception cref="ArgumentNullException">A selector is <see langword="null"/>.</exception>
+    /// <exception cref="NotSupportedException">A selector is not a supported key selector, the navigation is not a collection of <typeparamref name="TChild"/>, or a default key's arity does not match its junction foreign key.</exception>
+    public EntityMetadataBuilder<T> HasManyThrough<TChild, TJunction>(
+        Expression<Func<T, IEnumerable<TChild>>> navigation,
+        Expression<Func<TJunction, object?>> junctionParentForeignKey,
+        Expression<Func<TJunction, object?>> junctionChildForeignKey)
+        where TChild : class
+        where TJunction : class
+    {
+        var navigationProperty = ResolveCollectionNavigation(navigation, typeof(TChild), nameof(navigation));
+        var relationshipName = RelationshipName(typeof(T), navigationProperty);
+        var junctionParentForeignKeys = ParseKeySelector(junctionParentForeignKey, typeof(TJunction), nameof(junctionParentForeignKey), relationshipName);
+        var junctionChildForeignKeys = ParseKeySelector(junctionChildForeignKey, typeof(TJunction), nameof(junctionChildForeignKey), relationshipName);
+
+        _relationships.Add(RelationshipDeclaration.CreateManyToManyDefaults(
+            typeof(T),
+            typeof(TChild),
+            typeof(TJunction),
+            navigationProperty,
+            junctionParentForeignKeys,
+            junctionChildForeignKeys));
+
+        return this;
+    }
+
+    private static PropertyInfo ResolveCollectionNavigation(LambdaExpression? navigation, Type childType, string parameterName)
+    {
+        ArgumentNullException.ThrowIfNull(navigation, parameterName);
+
+        var navigationProperty = ResolveSelectedProperty(navigation, parameterName);
+        var collectionType = typeof(IEnumerable<>).MakeGenericType(childType);
+        if (!collectionType.IsAssignableFrom(navigationProperty.PropertyType))
+            throw new NotSupportedException($"The navigation '{typeof(T).Name}.{navigationProperty.Name}' must be a collection of {childType.Name}.");
+
+        return navigationProperty;
+    }
+
+    private static PropertyInfo ResolveReferenceNavigation(LambdaExpression? navigation, string parameterName)
+    {
+        ArgumentNullException.ThrowIfNull(navigation, parameterName);
+
+        var navigationProperty = ResolveSelectedProperty(navigation, parameterName);
+        if (navigationProperty.PropertyType == typeof(string) || navigationProperty.PropertyType.IsValueType)
+            throw new NotSupportedException($"The navigation '{typeof(T).Name}.{navigationProperty.Name}' must be a reference-typed property.");
+
+        return navigationProperty;
+    }
+
+    private static IReadOnlyList<PropertyInfo> ParseKeySelector(LambdaExpression? selector, Type entityType, string selectorName, string relationshipName)
+        => RelationshipKeySelectorParser.Parse(selector, entityType, selectorName, relationshipName);
+
+    private static void ValidateJunctionKeyTypes(
+        string entityName,
+        string keyName,
+        IReadOnlyList<PropertyInfo> keys,
+        string foreignKeyName,
+        IReadOnlyList<PropertyInfo> foreignKeys)
+    {
+        if (keys.Count != foreignKeys.Count)
+            throw new NotSupportedException(
+                $"The many-to-many relationship declared on '{entityName}' has {keys.Count} {keyName} component(s) but {foreignKeys.Count} {foreignKeyName} component(s); the two sides of a junction leg must have the same arity.");
+
+        for (var i = 0; i < keys.Count; i++)
+            RelationshipResolver.ValidateJunctionKeyType(entityName, keyName, keys[i], foreignKeyName, foreignKeys[i], i, keys.Count);
+    }
+
+    private static string RelationshipName(Type declaringType, PropertyInfo? navigation)
+        => navigation is null ? declaringType.Name : $"{declaringType.Name}.{navigation.Name}";
 
     /// <summary>
     /// Declares an anonymous global query filter that is applied to every query in which the entity
@@ -822,14 +1141,23 @@ public class EntityMetadataBuilder<T>
     }
 
     // Fluent declarations come first, so a fluent relationship wins over an attribute on the same
-    // navigation; the first declaration for a navigation property wins.
+    // navigation; the first declaration for a navigation property wins. A shadowed attribute is not
+    // parsed or validated: the fluent declaration owns that navigation entirely.
     private List<IRelationshipMetadata> BuildRelationships(bool includeFluent)
     {
         var declarations = new List<RelationshipDeclaration>();
+        var declaredNavigations = new HashSet<PropertyInfo>();
         if (includeFluent)
-            declarations.AddRange(_relationships);
+        {
+            for (var i = 0; i < _relationships.Count; i++)
+            {
+                declarations.Add(_relationships[i]);
+                if (_relationships[i].Navigation is { } navigation)
+                    declaredNavigations.Add(navigation);
+            }
+        }
 
-        AddAttributeDeclarations(typeof(T), declarations);
+        AddAttributeDeclarations(typeof(T), declarations, declaredNavigations);
 
         var result = new List<IRelationshipMetadata>(declarations.Count);
         var seen = new HashSet<PropertyInfo>();
@@ -845,8 +1173,8 @@ public class EntityMetadataBuilder<T>
                 declaration.RelatedType,
                 declaration.Navigation,
                 declaration.IsCollection,
-                declaration.ForeignKey,
-                declaration.PrincipalKey,
+                declaration.ForeignKeys,
+                declaration.PrincipalKeys,
                 declaration.DependentType,
                 declaration.PrincipalType,
                 declaration.Junction));
@@ -867,36 +1195,106 @@ public class EntityMetadataBuilder<T>
         return navigationProperties;
     }
 
-    private static void AddAttributeDeclarations(Type entityType, List<RelationshipDeclaration> declarations)
+    private static void AddAttributeDeclarations(Type entityType, List<RelationshipDeclaration> declarations, HashSet<PropertyInfo> declaredNavigations)
     {
         var properties = entityType.GetProperties(BindingFlags.FlattenHierarchy | BindingFlags.Public | BindingFlags.Instance);
         for (var i = 0; i < properties.Length; i++)
         {
             var property = properties[i];
+            if (declaredNavigations.Contains(property))
+                continue;
+
             var attribute = property.GetCustomAttribute<RelationshipAttribute>(true);
             if (attribute is null)
                 continue;
 
-            if (string.IsNullOrWhiteSpace(attribute.ForeignKey))
-                throw new NotSupportedException($"The {nameof(RelationshipAttribute)} on '{entityType.Name}.{property.Name}' must name the foreign-key property in {nameof(RelationshipAttribute.ForeignKey)}.");
+            var navigationName = $"{entityType.Name}.{property.Name}";
+            ValidateAttributeForeignKeyForm(attribute, navigationName);
 
             if (TryGetCollectionElementType(property.PropertyType, out var elementType))
             {
-                var foreignKey = elementType.GetProperty(attribute.ForeignKey, BindingFlags.Public | BindingFlags.Instance | BindingFlags.FlattenHierarchy)
-                    ?? throw new NotSupportedException($"The {nameof(RelationshipAttribute)} on '{entityType.Name}.{property.Name}' refers to the foreign key '{attribute.ForeignKey}' which was not found on {elementType.Name}.");
-                declarations.Add(RelationshipDeclaration.Create(entityType, elementType, isCollection: true, property, foreignKey, principalKey: null));
+                var foreignKeys = ResolveAttributeMembers(elementType, attribute, foreignKeyRole: true, navigationName);
+                var principalKeys = attribute.PrincipalKeys is null
+                    ? null
+                    : ResolveAttributeMembers(entityType, attribute, foreignKeyRole: false, navigationName);
+                ValidateAttributeArity(navigationName, foreignKeys, principalKeys);
+                declarations.Add(RelationshipDeclaration.Create(entityType, elementType, isCollection: true, property, foreignKeys, principalKeys));
             }
             else
             {
                 var relatedType = property.PropertyType;
                 if (relatedType == typeof(string) || relatedType.IsValueType)
-                    throw new NotSupportedException($"The {nameof(RelationshipAttribute)} on '{entityType.Name}.{property.Name}' must be placed on a collection or a reference-typed navigation.");
+                    throw new NotSupportedException($"The {nameof(RelationshipAttribute)} on '{navigationName}' must be placed on a collection or a reference-typed navigation.");
 
-                var foreignKey = entityType.GetProperty(attribute.ForeignKey, BindingFlags.Public | BindingFlags.Instance | BindingFlags.FlattenHierarchy)
-                    ?? throw new NotSupportedException($"The {nameof(RelationshipAttribute)} on '{entityType.Name}.{property.Name}' refers to the foreign key '{attribute.ForeignKey}' which was not found on {entityType.Name}.");
-                declarations.Add(RelationshipDeclaration.Create(entityType, relatedType, isCollection: false, property, foreignKey, principalKey: null));
+                var foreignKeys = ResolveAttributeMembers(entityType, attribute, foreignKeyRole: true, navigationName);
+                var principalKeys = attribute.PrincipalKeys is null
+                    ? null
+                    : ResolveAttributeMembers(relatedType, attribute, foreignKeyRole: false, navigationName);
+                ValidateAttributeArity(navigationName, foreignKeys, principalKeys);
+                declarations.Add(RelationshipDeclaration.Create(entityType, relatedType, isCollection: false, property, foreignKeys, principalKeys));
             }
         }
+    }
+
+    private static void ValidateAttributeForeignKeyForm(RelationshipAttribute attribute, string navigationName)
+    {
+        var hasLegacyForeignKey = !string.IsNullOrWhiteSpace(attribute.ForeignKey);
+        var hasForeignKeyArray = attribute.ForeignKeys is not null;
+
+        if (hasLegacyForeignKey && hasForeignKeyArray)
+            throw new NotSupportedException(
+                $"The {nameof(RelationshipAttribute)} on '{navigationName}' sets both {nameof(RelationshipAttribute.ForeignKey)} and {nameof(RelationshipAttribute.ForeignKeys)}; declare exactly one foreign-key form.");
+
+        if (!hasLegacyForeignKey && !hasForeignKeyArray)
+            throw new NotSupportedException(
+                $"The {nameof(RelationshipAttribute)} on '{navigationName}' must name the foreign-key property in {nameof(RelationshipAttribute.ForeignKey)} or {nameof(RelationshipAttribute.ForeignKeys)}.");
+
+        if (attribute.ForeignKeys is { Length: 0 })
+            throw new NotSupportedException(
+                $"The {nameof(RelationshipAttribute)} on '{navigationName}' declares an empty {nameof(RelationshipAttribute.ForeignKeys)} array; name at least one member or omit the property.");
+
+        if (attribute.PrincipalKeys is { Length: 0 })
+            throw new NotSupportedException(
+                $"The {nameof(RelationshipAttribute)} on '{navigationName}' declares an empty {nameof(RelationshipAttribute.PrincipalKeys)} array; omit the property to use the full principal key.");
+    }
+
+    private static IReadOnlyList<PropertyInfo> ResolveAttributeMembers(Type owner, RelationshipAttribute attribute, bool foreignKeyRole, string navigationName)
+    {
+        var role = foreignKeyRole ? "foreign key" : "principal key";
+        if (foreignKeyRole && attribute.ForeignKeys is null)
+            return new[] { ResolveAttributeMember(owner, attribute.ForeignKey!, role, position: 1, count: 1, navigationName) };
+
+        var names = foreignKeyRole ? attribute.ForeignKeys! : attribute.PrincipalKeys!;
+        var resolved = new PropertyInfo[names.Length];
+        var seen = new HashSet<PropertyInfo>(names.Length);
+        for (var i = 0; i < names.Length; i++)
+        {
+            var member = ResolveAttributeMember(owner, names[i], role, i + 1, names.Length, navigationName);
+            if (!seen.Add(member))
+                throw new NotSupportedException(
+                    $"The {nameof(RelationshipAttribute)} on '{navigationName}' repeats the {role} '{member.Name}' at position {i + 1} of {names.Length}.");
+            resolved[i] = member;
+        }
+
+        return resolved;
+    }
+
+    private static PropertyInfo ResolveAttributeMember(Type owner, string name, string role, int position, int count, string navigationName)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            throw new NotSupportedException(
+                $"The {nameof(RelationshipAttribute)} on '{navigationName}' has an empty {role} name at position {position} of {count}.");
+
+        return owner.GetProperty(name, BindingFlags.Public | BindingFlags.Instance | BindingFlags.FlattenHierarchy)
+            ?? throw new NotSupportedException(
+                $"The {nameof(RelationshipAttribute)} on '{navigationName}' refers to the {role} '{name}' at position {position} of {count}, which was not found on {owner.Name}.");
+    }
+
+    private static void ValidateAttributeArity(string navigationName, IReadOnlyList<PropertyInfo> foreignKeys, IReadOnlyList<PropertyInfo>? principalKeys)
+    {
+        if (principalKeys is not null && principalKeys.Count != foreignKeys.Count)
+            throw new NotSupportedException(
+                $"The {nameof(RelationshipAttribute)} on '{navigationName}' declares {foreignKeys.Count} foreign-key component(s) but {principalKeys.Count} principal-key component(s); the arities must match.");
     }
 
     private static bool TryGetCollectionElementType(Type type, out Type elementType)
@@ -954,48 +1352,64 @@ public class EntityMetadataBuilder<T>
         public required Type RelatedType { get; init; }
         public required bool IsCollection { get; init; }
         public required PropertyInfo? Navigation { get; init; }
-        public required PropertyInfo ForeignKey { get; init; }
-        public PropertyInfo? PrincipalKey { get; init; }
+        public required IReadOnlyList<PropertyInfo>? ForeignKeys { get; init; }
+        public IReadOnlyList<PropertyInfo>? PrincipalKeys { get; init; }
         public required Type DependentType { get; init; }
         public required Type PrincipalType { get; init; }
         public RelationshipJunctionDeclaration? Junction { get; init; }
 
-        public static RelationshipDeclaration Create(Type declaringType, Type relatedType, bool isCollection, PropertyInfo navigation, PropertyInfo foreignKey, PropertyInfo? principalKey)
+        public static RelationshipDeclaration Create(
+            Type declaringType,
+            Type relatedType,
+            bool isCollection,
+            PropertyInfo navigation,
+            IReadOnlyList<PropertyInfo> foreignKeys,
+            IReadOnlyList<PropertyInfo>? principalKeys)
             => new()
             {
                 Kind = isCollection ? RelationshipKind.OneToMany : RelationshipKind.ManyToOne,
                 RelatedType = relatedType,
                 IsCollection = isCollection,
                 Navigation = navigation,
-                ForeignKey = foreignKey,
-                PrincipalKey = principalKey,
+                ForeignKeys = foreignKeys,
+                PrincipalKeys = principalKeys,
                 DependentType = isCollection ? relatedType : declaringType,
                 PrincipalType = isCollection ? declaringType : relatedType,
             };
 
-        public static RelationshipDeclaration CreateOneToOne(Type declaringType, Type relatedType, PropertyInfo navigation, PropertyInfo foreignKey, PropertyInfo principalKey)
+        public static RelationshipDeclaration CreateOneToOne(
+            Type declaringType,
+            Type relatedType,
+            PropertyInfo navigation,
+            IReadOnlyList<PropertyInfo> foreignKeys,
+            IReadOnlyList<PropertyInfo>? principalKeys)
             => new()
             {
                 Kind = RelationshipKind.OneToOne,
                 RelatedType = relatedType,
                 IsCollection = false,
                 Navigation = navigation,
-                ForeignKey = foreignKey,
-                PrincipalKey = principalKey,
+                ForeignKeys = foreignKeys,
+                PrincipalKeys = principalKeys,
                 // The foreign key lives on the related type; the declaring type holds the principal key.
                 DependentType = relatedType,
                 PrincipalType = declaringType,
             };
 
-        public static RelationshipDeclaration CreateFallback(Type declaringType, Type relatedType, bool isCollection, PropertyInfo foreignKey, PropertyInfo principalKey)
+        public static RelationshipDeclaration CreateFallback(
+            Type declaringType,
+            Type relatedType,
+            bool isCollection,
+            IReadOnlyList<PropertyInfo> foreignKeys,
+            IReadOnlyList<PropertyInfo>? principalKeys)
             => new()
             {
                 Kind = isCollection ? RelationshipKind.OneToMany : RelationshipKind.ManyToOne,
                 RelatedType = relatedType,
                 IsCollection = isCollection,
                 Navigation = null,
-                ForeignKey = foreignKey,
-                PrincipalKey = principalKey,
+                ForeignKeys = foreignKeys,
+                PrincipalKeys = principalKeys,
                 DependentType = isCollection ? relatedType : declaringType,
                 PrincipalType = isCollection ? declaringType : relatedType,
             };
@@ -1005,10 +1419,10 @@ public class EntityMetadataBuilder<T>
             Type relatedType,
             Type junctionType,
             PropertyInfo navigation,
-            PropertyInfo parentKey,
-            PropertyInfo junctionParentForeignKey,
-            PropertyInfo childKey,
-            PropertyInfo junctionChildForeignKey)
+            IReadOnlyList<PropertyInfo> parentKeys,
+            IReadOnlyList<PropertyInfo> junctionParentForeignKeys,
+            IReadOnlyList<PropertyInfo> childKeys,
+            IReadOnlyList<PropertyInfo> junctionChildForeignKeys)
             => new()
             {
                 Kind = RelationshipKind.ManyToMany,
@@ -1017,17 +1431,44 @@ public class EntityMetadataBuilder<T>
                 Navigation = navigation,
                 // The exposed foreign key is the child-side key; the parent-side key is the principal key.
                 // The junction's own foreign keys live in the junction descriptor.
-                ForeignKey = childKey,
-                PrincipalKey = parentKey,
+                ForeignKeys = childKeys,
+                PrincipalKeys = parentKeys,
                 DependentType = relatedType,
                 PrincipalType = declaringType,
                 Junction = new RelationshipJunctionDeclaration
                 {
                     JunctionType = junctionType,
-                    ParentKey = [parentKey],
-                    ChildKey = [childKey],
-                    JunctionParentForeignKey = [junctionParentForeignKey],
-                    JunctionChildForeignKey = [junctionChildForeignKey],
+                    ParentKey = parentKeys,
+                    ChildKey = childKeys,
+                    JunctionParentForeignKey = junctionParentForeignKeys,
+                    JunctionChildForeignKey = junctionChildForeignKeys,
+                },
+            };
+
+        public static RelationshipDeclaration CreateManyToManyDefaults(
+            Type declaringType,
+            Type relatedType,
+            Type junctionType,
+            PropertyInfo navigation,
+            IReadOnlyList<PropertyInfo> junctionParentForeignKeys,
+            IReadOnlyList<PropertyInfo> junctionChildForeignKeys)
+            => new()
+            {
+                Kind = RelationshipKind.ManyToMany,
+                RelatedType = relatedType,
+                IsCollection = true,
+                Navigation = navigation,
+                ForeignKeys = null,
+                PrincipalKeys = null,
+                DependentType = relatedType,
+                PrincipalType = declaringType,
+                Junction = new RelationshipJunctionDeclaration
+                {
+                    JunctionType = junctionType,
+                    ParentKey = null,
+                    ChildKey = null,
+                    JunctionParentForeignKey = junctionParentForeignKeys,
+                    JunctionChildForeignKey = junctionChildForeignKeys,
                 },
             };
     }

@@ -20,6 +20,7 @@ namespace NextORM.Integration.Tests;
 /// All statements are executed through the provider's own connection, so the suite proves the exact
 /// server-side semantics the renderer relies on rather than a portable substitute.
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class ClickHouseExtremeRowNativeSpecificTests : ProviderTestSuite
 {
     protected override ITestProvider Provider => ClickHouseTestProvider.Instance;
@@ -124,7 +125,14 @@ public sealed class ClickHouseExtremeRowNativeSpecificTests : ProviderTestSuite
         => context.From<ExtremeRowParityEntity>();
 
     private static PortableClickHouseDataContext Portable()
-        => new(ClickHouseContainer.ConnectionString, new DataContextBuilder());
+    {
+        // Ternary tests may reach Portable() before the lazy _sut initialization has run
+        // Provider.EnsureSeeded(); seed explicitly first so the portable oracle always observes the
+        // same Memory fixture tables as the native path instead of the reused server's pre-seed
+        // state (#329). Idempotent: the shared provider seeds once per process.
+        ClickHouseTestProvider.Instance.EnsureSeeded();
+        return new(ClickHouseContainer.ConnectionString, new DataContextBuilder());
+    }
 
     private static (int Id, int? Category, int? Amount, int? TieBreak, string? Label, int? N) Whole(
         ExtremeRowParityEntity e)

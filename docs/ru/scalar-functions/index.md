@@ -16,8 +16,13 @@ nextorm распознаёт фиксированный набор членов 
 
 * **захваченное** значение (локальная переменная или параметр) становится **параметром** запроса, а не
   литералом;
-* **константа** встраивается. Для `Contains`/`StartsWith`/`EndsWith` это также означает, что `%`, `_` и `\`
-  в константе экранируются и генерируется предложение `escape '\'`.
+* **константа** встраивается в собственной строковой форме литерала провайдера. Для
+  `Contains`/`StartsWith`/`EndsWith` это также означает, что `%`, `_` и `\` в константе экранируются перед
+  рендерингом.
+
+Предложение `ESCAPE` у сгенерированного шаблона `LIKE` зависит от провайдера: ClickHouse его не генерирует
+(и отказывает при пользовательском символе экранирования), MySQL/MariaDB передают операнд как независимый
+от режима hex-токен, остальные провайдеры сохраняют предложение.
 
 Встроенные преобразования применяются **до** любого сопоставления
 [`[SqlFunction]`](../guide/12-user-defined-functions.md), поэтому пользовательский атрибут не может изменить
@@ -26,11 +31,14 @@ nextorm распознаёт фиксированный набор членов 
 Кросс-провайдерные помощники находятся в [`SqlFunctions.Sql`](xref:NextORM.Core.SqlFunctions.Sql). Функции, которые поддерживает только один
 провайдер, сгруппированы в отдельную провайдерную поверхность: [`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres) (PostgreSQL: нативные
 массивы, нативный JSON, расширенная библиотека скалярных функций, PG-only агрегаты и табличные
-функции `generate_series`/`unnest`), [`SqlServer`](xref:NextORM.Core.SqlFunctions.SqlServer) (SQL Server: JSON-как-текст и
-`string_split`/`openjson`) и [`ClickHouse`](xref:NextORM.Core.SqlFunctions.ClickHouse) (ClickHouse: `arg_min`/`arg_max`, комбинатор `-If`,
+функции `generate_series`/`unnest`), [`SqlServer`](xref:NextORM.Core.SqlFunctions.SqlServer) (SQL Server: JSON-как-текст,
+версионно-зависимые скаляры 2022/2025, такие как `left_shift` и `regexp_count`, агрегат `product` и
+`string_split`/`openjson`/`regexp_split_to_table`), [`ClickHouse`](xref:NextORM.Core.SqlFunctions.ClickHouse) (ClickHouse: `arg_min`/`arg_max`, комбинатор `-If`,
 семейство строкового JSON `JSONExtract*`, быстрый разбор плоского JSON `visitParamExtract*`,
 JSONPath-скаляры `json_value`/`json_query`/`json_exists` и функции
-словарей `dict_get`/`dict_get_or_default`/`dict_has`/`dict_get_hierarchy`/`dict_get_children`/`dict_is_in`).
+словарей `dict_get`/`dict_get_or_default`/`dict_has`/`dict_get_hierarchy`/`dict_get_children`/`dict_is_in`) и
+[`Sqlite`](xref:NextORM.Core.SqlFunctions.Sqlite) (SQLite: функции ядра, JSON1 и агрегат `total`, функции дат и
+математики, поверхность полнотекстового поиска).
 Вызов любой из них на провайдере, который не opt-in, бросает `NotSupportedException`.
 
 ## См. также

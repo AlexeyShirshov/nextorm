@@ -71,7 +71,7 @@ ctx.CreateMergeBuilder<IDest>()
 merge into dest as target using (values (@p0, @p1)) as source (id, name) on target.id = source.id when matched then update set target.name = source.name when not matched then insert (id, name) values (source.id, source.name) when not matched by source then delete;
 ```
 
-`ThenUpdate()`/`ThenInsert()` без селектора пишут все подходящие колонки; явный селектор (`x => new { x.Name }`) ограничивает набор, а значения берутся из одноимённых колонок строки-источника. Селектор не может назвать генерируемую базой колонку, а matched-ветка не может переписать ключ совпадения. `ThenDelete()` на matched-ветке и `WhenNotMatchedBySource().ThenDelete()` позволяют merge удалять строки — отличие от key upsert. `ThenDoNothing()` оставляет строку-кандидат без изменений; доступно только на PostgreSQL, так как в SQL Server действия `DO NOTHING` нет.
+`ThenUpdate()`/`ThenInsert()` без селектора пишут все подходящие колонки; явный набор присваиваний ограничивает записываемые колонки — см. [Присваивания колонок](#присваивания-колонок-выражения). Селектор не может назвать генерируемую базой колонку, а matched-ветка не может переписать ключ совпадения. `ThenDelete()` на matched-ветке и `WhenNotMatchedBySource().ThenDelete()` позволяют merge удалять строки — отличие от key upsert. `ThenDoNothing()` оставляет строку-кандидат без изменений; доступно только на PostgreSQL, так как в SQL Server действия `DO NOTHING` нет.
 
 `On(condition)` заменяет матч по ключу произвольным условием совпадения (`ON <condition>`). Билдер ветки тоже принимает условие (`WhenMatched(condition)`, `WhenNotMatched(condition)`, `WhenNotMatchedBySource(condition)`), которое рендерится как `WHEN ... AND <condition>`; ветка срабатывает, только если условие истинно. Условия используют форму с двумя параметрами `(target, source)` — существующая строка это первый параметр лямбды, входящая строка-источник — второй, например `On((t, s) => t.Id == s.Id && s.Age > 0)`. В SQL Server условие `WHEN NOT MATCHED BY SOURCE` может ссылаться только на строку target.
 
@@ -138,6 +138,113 @@ merge into dest as target using (values (@p0, @p1)) as source (id, name) on targ
 поэтому `.Returning()` там бросает `NotSupportedException`; SQLite и ClickHouse по-прежнему отклоняют
 полный `MERGE` (а для самой инструкции общего `MERGE` сервер должен быть PostgreSQL 15+).
 
+### Захват слитых строк (только в батче)
+
+Fluent `OutputInto`/`OutputIntoThenOutput` на билдере `MERGE` **нет**. Единственная форма захвата —
+батчевая: `BatchBuilder.OutputIntoTableVariable(mergeTerminal, "@t", definitions)` рендерит
+`DECLARE @t TABLE (...); MERGE ... OUTPUT ... INTO @t (...)` одной инструкцией, а следующая инструкция
+того же батча читает захваченные строки через `FromOutput<TResult>`/`FromOutputTable`. См.
+[Захват в рамках батча](17-insert-statement.md#захват-в-рамках-батча-batchbuilderoutputintotablevariable).
+
+`$action` — **первая** захваченная колонка: захват всегда рендерит `OUTPUT $action, inserted.<col>...`,
+и её получает первая колонка из `columnDefinitions` вызывающего — как бы она ни называлась (`action`,
+`verb`, …); возвращённые колонки заполняют остальные объявленные колонки в порядке проекции.
+
+Остальные ограничения формы на SQL Server не меняются: полный `MERGE` требует SQL Server (или
+PostgreSQL 15+, где захвата нет); `THEN DO NOTHING` в SQL Server отсутствует; условие
+`WHEN NOT MATCHED BY SOURCE` может ссылаться только на строку target; matched-ветка не может
+переписать ключ совпадения; генерируемая базой колонка не может быть целью присваивания.
+
+## Присваивания колонок (выражения)
+
+Обе формы принимают явный набор присваиваний вместо правила по умолчанию «каждая не-ключевая колонка — из одноимённой колонки источника». Селектор обязан быть анонимным инициализатором или типизированным инициализатором, присваиваемым сущности; голый член, пустой инициализатор или тело, не являющееся инициализатором, отклоняются с `ArgumentException` (параметр `assignments`) до построения любого SQL.
+
+Перегрузки различаются арностью лямбды — три формы обновления и одна форма вставки рядом с вариантом без аргументов:
+
+```csharp
+// key upsert, на MergeBuilder<TEntity>
+public MergeBuilder<TEntity> WhenMatchedUpdate();
+public MergeBuilder<TEntity> WhenMatchedUpdate(Expression<Func<TEntity, TEntity, object?>> assignments);         // target, source
+public MergeBuilder<TEntity> WhenMatchedUpdate(Expression<Func<TEntity, TEntity, TEntity, object?>> assignments); // target, source, excluded
+public MergeBuilder<TEntity> WhenNotMatchedInsert();
+public MergeBuilder<TEntity> WhenNotMatchedInsert(Expression<Func<TEntity, object?>> assignments);                 // только source
+
+// полный MERGE, на построителях веток
+public MergeBuilder<TEntity> ThenUpdate();
+public MergeBuilder<TEntity> ThenUpdate(Expression<Func<TEntity, TEntity, object?>> assignments);
+public MergeBuilder<TEntity> ThenUpdate(Expression<Func<TEntity, TEntity, TEntity, object?>> assignments);
+public MergeBuilder<TEntity> ThenInsert(Expression<Func<TEntity, object?>> assignments);                          // только source
+```
+
+Инициализатор связывается **по имени члена**: каждый член инициализатора — это отображённое CLR-свойство назначения (`Name`, а не имя колонки в базе), а правая часть — значение, записываемое в это назначение. Записываются только присутствующие члены: пропущенная колонка сохраняет значение по умолчанию в базе при вставке и текущее значение при обновлении, неявного «скопируй все остальные колонки из источника» нет. Правая часть привязана к роли того **параметра лямбды, на котором она написана**, и никогда не выводится из совпадения имён членов: в `new { Name = source.Name }` чтение относится к роли source, хотя назначение тоже называется `Name`.
+
+```csharp
+// key upsert
+ctx.CreateMergeBuilder<IDest>()
+    .Using(new Dest { Id = 1, Name = "a", Age = 5 })
+    .OnKeys()
+    .WhenMatchedUpdate((target, source) => new { Name = source.Name, Age = target.Age + 1 })
+    .WhenNotMatchedInsert(source => new { Id = source.Id, Name = source.Name })
+    .Merge();
+
+// полный MERGE: те же перегрузки на действиях веток
+ctx.CreateMergeBuilder<IDest>()
+    .Using(source)
+    .OnKeys()
+    .WhenMatched().ThenUpdate((target, source) => new { Name = source.Name, Age = target.Age + 1 })
+    .WhenNotMatched().ThenInsert(source => new { Id = source.Id, Name = source.Name })
+    .Merge();
+```
+
+Слева всегда отображённая колонка назначения; записываются только назначенные колонки. Identity-, computed- и ключевые назначения отклоняются с `NotSupportedException`, как и неизвестные или повторяющиеся назначения.
+
+### Роли
+
+Параметры лямбды — это роли, разрешаемые по позиции, а не по имени:
+
+| Роль | Позиция | Смысл | Во что рендерится |
+|---|---|---|---|
+| target | 1-я | строка цели в состоянии до обновления | алиас цели (полный `MERGE`) или цитируемая ссылка на таблицу (нативный key upsert) |
+| source | 2-я | исходная входная строка, переданная в `Using` | `source.<col>` (полный `MERGE`); параметр инструкции, прочитанный из единственной материализованной входной строки (нативный key upsert) |
+| excluded | 3-я | строка, которую провайдер предлагает для вставки | `excluded.<col>` (PostgreSQL, SQLite) или `VALUES(<col>)` (MySQL, MariaDB) |
+
+* Третий параметр необязателен. Объявить его, не читая, — значит не добавить роль; это допускается.
+* Использованная роль `excluded` отклоняется на форме без предлагаемой строки (полный `MERGE`, key-upsert `MERGE` в SQL Server) с `NotSupportedException`, называющим роль.
+* На нативном key upsert чтение роли **source** — в update-ветке или в выражении INSERT — требует ровно одной материализованной входной строки; батч или источник-запрос, использующий эту роль, отклоняется до выполнения (`... requires one materialized source row ...`). Объявленная, но неиспользованная роль source этот guard не вызывает.
+* Выражение **INSERT** на key upsert должно присваивать каждый конфликтный ключ напрямую из его одноимённого свойства исходной строки (`Id = source.Id`). Константа, преобразованное выражение или другое свойство отклоняются с `ArgumentException` и называют ключ. Insert-форма полного `MERGE` от этого правила освобождена.
+* Присваивание **INSERT** видит только строку source. `ThenInsert`/`WhenNotMatchedInsert` принимают одно-параметрическую лямбду, поэтому правая часть, называющая вторую роль, — ошибка компиляции, а не тихая подстановка.
+
+`excluded` — не синоним `source`, и разница наблюдаема. На нативном key upsert возьмём строку цели с `Count = 10`, входную строку с `Count = 3` и insert-присваивание `Count = source.Count * 2` (провайдер предлагает `Count = 6`):
+
+| Присваивание в update | Читает | Сохранённое значение |
+|---|---|---|
+| `new { Count = target.Count + source.Count }` | цель до обновления + оригинальный вход | `13` (`10 + 3`) |
+| `new { Count = target.Count + excluded.Count }` | цель до обновления + предлагаемая строка | `16` (`10 + 6`) |
+
+Предлагаемая строка — та, которую вставил бы сам движок: она несёт значения после insert-преобразования и, там где движок их определяет, нативные значения по умолчанию и эффекты триггеров, — именно поэтому она отличается от оригинального входа. nextorm никогда не синтезирует, не пересчитывает и не проецирует эту строку, и единой кросс-движковой гарантии по генерируемым колонкам или триггерам нет: в `excluded` лежит ровно то, что предоставляет нативная форма (см. таблицу провайдеров ниже).
+
+### Параметры и неподдерживаемые формы
+
+* Каждая константа и замыкание в правой части присваивания становятся **именованным параметром инструкции** (`@p0`, `$p0`, ...), а не встроенным литералом; CLR `null` остаётся null-значением параметра. Поддерживаемые скалярные выражения остаются в SQL (`target.Age + 1`), а серверная функция без параметров не вычисляется на клиенте.
+* Одна последовательность параметров на инструкцию покрывает условия, правые части присваиваний и строки `VALUES`; повторное выполнение снова связывает текущие значения замыканий/источника.
+* Правая часть, не являющаяся одно-строчным скалярным выражением — вложенный запрос, агрегат, лямбда, объектный граф ссылочного типа — отклоняется с `NotSupportedException`: `MERGE assignment for '<property>' cannot translate expression '<nodeKind>'.`
+* Провайдеры без рендеринга присваиваний вообще (ClickHouse, in-memory-контекст) отказывают fail-closed: `Provider '<provider>' does not support MERGE assignment expressions.` Key upsert без аргументов в in-memory продолжает работать.
+* При активном фильтре цели выражение `INSERT` отклоняется до выполнения на **каждой** поддерживаемой форме присваиваний и у каждого провайдера — планируемая строка строится из выражений, и проверить её против фильтра до выполнения инструкции нельзя. `IgnoreFilters()` явно отключает это поведение (см. [Изоляция цели записи](../advanced/query-filters.md#изоляция-цели-записи)).
+
+### Миграция с удалённого селектора колонок
+
+Старый одно-параметрический селектор обновления (`ThenUpdate(x => new { x.Name })`, `WhenMatchedUpdate(x => new { x.Name })`, `WhenMatched().ThenUpdate(x => new { x.Name })`) **удалён**; это намеренное ломающее изменение. Замена явно читает роль source:
+
+```csharp
+// было (не компилируется)
+.WhenMatched().ThenUpdate(x => new { x.Name })
+
+// стало
+.WhenMatched().ThenUpdate((target, source) => new { Name = source.Name })
+```
+
+`ThenInsert(x => new { x.Name })` по-прежнему компилируется — та же сигнатура теперь читается как присваивание `Name = source.Name`. Тело-голый-член (`ThenInsert(x => x.Name)`), пустой инициализатор или тело, не являющееся инициализатором, отклоняются во время выполнения с `ArgumentException` (параметр `assignments`): набор присваиваний insert обязан быть инициализатором.
+
 ## Просмотр SQL
 
 [`ToSql()`](xref:NextORM.Core.MergeBuilder`1.ToSql) рендерит параметризованный SQL, который выполнил бы `Merge()`, не открывая соединение:
@@ -158,19 +265,19 @@ insert into simple_entity (id, name) values (@p0, @p1) on conflict (id) do updat
 
 ## Сводка по провайдерам
 
-| Провайдер | Key upsert | Полный `MERGE` | `RETURNING`/`OUTPUT` | Примечание |
-|---|---|---|---|---|
-| SQL Server | `MERGE ... USING (VALUES ...)` | да | `OUTPUT inserted.<col>` (key upsert и полный) | все ветки, включая `WHEN NOT MATCHED BY SOURCE` |
-| PostgreSQL | `ON CONFLICT ... DO UPDATE` | да (сервер 15+) | `RETURNING` (key upsert 9.5+, полный 17+) | `DO NOTHING`; без `BY SOURCE` |
-| SQLite | `ON CONFLICT ... DO UPDATE` | — | `RETURNING` (key upsert, 3.35+) | только key upsert |
-| MySQL | `ON DUPLICATE KEY UPDATE` | — | — | только key upsert; нет `RETURNING` |
-| MariaDB | `ON DUPLICATE KEY UPDATE` | — | — | только key upsert; `RETURNING` не используется для `ON DUPLICATE KEY` |
-| In-memory | применяется к зарегистрированной последовательности | — | — | только key upsert, без SQL |
-| ClickHouse | `NotSupportedException` | `NotSupportedException` | `NotSupportedException` | движкового upsert нет |
+| Провайдер | Key upsert | Полный `MERGE` | Присваивания | `RETURNING`/`OUTPUT` | Примечание |
+|---|---|---|---|---|---|
+| SQL Server | `MERGE ... USING (VALUES ...)` | да | target + source (предлагаемой строки нет) | `OUTPUT inserted.<col>` (key upsert и полный); батчевый захват пишет `$action` и returning-колонки в табличную переменную | все ветки, включая `WHEN NOT MATCHED BY SOURCE` |
+| PostgreSQL | `ON CONFLICT ... DO UPDATE` | да (сервер 15+) | target + source + `excluded` | `RETURNING` (key upsert 9.5+, полный 17+) | `DO NOTHING`; без `BY SOURCE` |
+| SQLite | `ON CONFLICT ... DO UPDATE` | — | target + source + `excluded` | `RETURNING` (key upsert, 3.35+) | только key upsert |
+| MySQL | `ON DUPLICATE KEY UPDATE` | — | target + source + `VALUES(<col>)` | — | только key upsert; нет `RETURNING` |
+| MariaDB | `ON DUPLICATE KEY UPDATE` | — | target + source + `VALUES(<col>)` | — | только key upsert; `RETURNING` не используется для `ON DUPLICATE KEY` |
+| In-memory | применяется к зарегистрированной последовательности | — | — (`NotSupportedException`; upsert без аргументов продолжает применяться) | — | только key upsert, без SQL |
+| ClickHouse | `NotSupportedException` | `NotSupportedException` | `NotSupportedException` | `NotSupportedException` | движкового upsert нет |
 
 ## Примечания и ограничения
 
-* **Значения — параметры.** Значение источника никогда не встраивается в SQL; константы становятся именованными параметрами (`@p0`, `$p0`, ...) и переносятся вместе со строками `VALUES`, как в `INSERT`.
+* **Значения — параметры.** Значение источника никогда не встраивается в SQL; константы становятся именованными параметрами (`@p0`, `$p0`, ...) и переносятся вместе со строками `VALUES`, как в `INSERT`. Правая часть присваивания подчиняется тому же правилу: её константы и замыкания — связанные параметры всей инструкции, а не каждой затронутой строки.
 * **Ветки выполняются в порядке объявления.** SQL Server и PostgreSQL вычисляют клаузы `WHEN` сверху вниз; к строке применяется первая подходящая клауза.
 * **Условие `WHEN NOT MATCHED BY SOURCE` на SQL Server — только по target.** `MERGE` в SQL Server не предоставляет в этой клаузе алиас источника, поэтому условие может ссылаться только на строку target.
 * **Источник — серверный запрос.** `Using(ctx.From<T>().Where(...))` / `Using(QueryCommand<T>)` принимает только форма полного `MERGE`; key-upsert-провайдеры откатываются к батчу `VALUES`.

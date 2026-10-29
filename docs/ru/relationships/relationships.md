@@ -6,9 +6,11 @@
 
 ## Обзор
 
-nextorm разрешает граф из **объявленных** метаданных, а не по конвенции маппера: сущность без объявленных связей мапится в точности как раньше, а навигационное свойство исключается из маппинга колонок только если участвует в объявленной связи. Эта страница описывает модель метаданных и [`JoinInto`](xref:NextORM.Core.EntityBuilder`1) — явный однозапросный загрузчик связей. Неявные навигационные запросы поддерживаются для **объявленных** связей — ссылочная навигация как скалярная цепочка или проверка присутствия, коллекционная — через ровно четыре прямых терминала (см. [Неявные навигационные запросы](implicit-navigation.md)) — а не выводятся по конвенции. Навигация **после** границы temp-table/TVP **недоступна (fail-closed)**, а табличный параметр — только параметр (query-root отсутствует).
+nextorm разрешает граф из **объявленных** метаданных, а не по конвенции маппера: сущность без объявленных связей мапится в точности как раньше, а навигационное свойство исключается из маппинга колонок только если участвует в объявленной связи. Эта страница описывает модель метаданных и [`JoinInto`](xref:NextORM.Core.EntityBuilder`1) — явный однозапросный загрузчик связей. Неявные навигационные запросы поддерживаются для **объявленных** связей — ссылочная навигация как скалярная цепочка или проверка присутствия, ссылочный переход внутри коррелированного предиката или скалярного подзапроса, коллекционная — через ровно четыре прямых терминала (см. [Неявные навигационные запросы](implicit-navigation.md)) — а не выводятся по конвенции. Форма с коррелированным предикатом соединяет переход на внешней команде, а вложенная читает присоединённый псевдоним (`LEFT JOIN` плюс коррелированный `EXISTS`/скалярный подзапрос, без `APPLY`); это предикатная/скалярная поверхность, а не коррелированная жадная загрузка, которая остаётся зарезервированной и отвергается (`EagerLoadMode.Correlated`). Навигация **после** границы temp-table/TVP **недоступна (fail-closed)**, а табличный параметр — только параметр (query-root отсутствует).
 
-`JoinInto` и [`LoadWith`](eager-loading.md) — два способа заполнить родительскую коллекцию, и они делят один контракт присваивания: `JoinInto` — один денормализованный запрос по всем родителям, а `LoadWith` по умолчанию — split-запрос с одним дополнительным дочерним statement'ом на чанк ключей (либо один денормализованный запрос, если билдер передаёт `EagerLoadMode.SingleQuery` в `LoadWith`). `JoinInto` заполняет **одну** объявленную навигацию; многоуровневый (второй уровень и глубже) граф выражается вложением дочерних `LoadWith`, где каждый уровень выполняется в едином режиме на весь граф (см. [Вложенные графы](eager-loading.md#вложенные-графы-второй-уровень-и-глубже)).
+`JoinInto` и [`LoadWith`](eager-loading.md) — два способа заполнить родительскую коллекцию, и они делят один контракт присваивания: `JoinInto` — один денормализованный запрос по всем родителям, а `LoadWith` по умолчанию — split-запрос с одним дополнительным дочерним statement'ом на чанк ключей (либо один денормализованный запрос, если билдер передаёт `EagerLoadMode.SingleQuery` в `LoadWith`). `JoinInto` заполняет **одну** объявленную навигацию; многоуровневый (второй уровень и глубже) граф выражается вложением дочерних `LoadWith`, где каждый уровень выполняется в едином режиме на весь граф (см. [Вложенные графы](eager-loading.md#вложенные-графы-второй-уровень-и-глубже)). Есть и **третья** форма: коллекции на родителя возвращаются внутри спроецированного результата, а не заполняют сущность — прямой член `Select(p => new { p.Id, p.Comments })` и адаптер `AsEntityBuilder<T>() … ToList()`; см. [Слоты коллекционной проекции](collection-projection.md).
+
+`LoadWith` читает те же объявленные метаданные, когда используется без селекторов ключей: коллекционные и ссылочные перегрузки `LoadWith(navigation)` / `LoadWith(navigation, childQuery)` берут упорядоченные компоненты ключа навигации из её объявления — один предикат на компонент, компонент в позиции `i` одной стороны против компонента в позиции `i` другой — вместо обязательных явных селекторов; перегрузка с явными ключами остаётся формой для пары сущностей без объявленной связи (см. [Форма с объявленными метаданными](eager-loading.md#форма-с-объявленными-метаданными)). Поэтому объявление — единственный источник для обоих загрузчиков: `HasMany`, `HasOne`, `HasOneToOne`, `HasManyThrough` и `[Relationship]` — единственный источник связи, и ни один загрузчик не выводит её из конвенции.
 
 ## Объявление связи
 
@@ -28,19 +30,85 @@ Dependent-сторона объявляет навигацию-ссылку и �
 ctx.From<OrderItem>(b => b.HasOne(i => i.Order, i => i.OrderId));
 ```
 
-Principal-ключ берётся из существующих метаданных ключа principal-типа (`[Key]`, [`EntityPropertyBuilder<T>.Key()`](xref:NextORM.Core.EntityPropertyBuilder`1) или конвенция `Id`/`<TypeName>Id`), поэтому обе стороны сходятся в пару one-to-many/many-to-one. Четыре перегрузки объявления:
+Principal-ключ берётся из существующих метаданных ключа principal-типа (`[Key]`, [`EntityPropertyBuilder<T>.Key()`](xref:NextORM.Core.EntityPropertyBuilder`1) или конвенция `Id`/`<TypeName>Id`), поэтому обе стороны сходятся в пару one-to-many/many-to-one. Principal-ключ по умолчанию — **весь** ключ в порядке метаданных сущности: каждый компонент ключа, а не только первый.
+
+`HasMany`, `HasOne`, `HasOneToOne` и `HasManyThrough` предоставляют десять перегрузок объявления (A–J). Все десять используют один парсер селекторов и строят один и тот же внутренний дескриптор связи; шесть существующих сигнатур не изменены и продолжают работать. Сигнатуры десяти перегрузок:
 
 ```csharp
-public EntityMetadataBuilder<T> HasMany<TChild, TKey>(
+// A — 1:N, навигация + явный внешний ключ + явный principal-ключ
+public EntityMetadataBuilder<T> HasMany<TChild>(
     Expression<Func<T, ICollection<TChild>>> navigation,
-    Expression<Func<TChild, TKey>> foreignKey);
+    Expression<Func<TChild, object?>> foreignKey,
+    Expression<Func<T, object?>> principalKey) where TChild : class;
 
-public EntityMetadataBuilder<T> HasOne<TChild, TKey>(
+// B — 1:N, без навигации, явный внешний ключ + явный principal-ключ
+public EntityMetadataBuilder<T> HasMany<TChild>(
+    Expression<Func<TChild, object?>> foreignKey,
+    Expression<Func<T, object?>> principalKey) where TChild : class;
+
+// C — N:1, навигация + явный внешний ключ + явный principal-ключ
+public EntityMetadataBuilder<T> HasOne<TChild>(
     Expression<Func<T, TChild?>> navigation,
-    Expression<Func<T, TKey>> foreignKey);
+    Expression<Func<T, object?>> foreignKey,
+    Expression<Func<TChild, object?>> principalKey) where TChild : class;
+
+// D — N:1, без навигации, явный внешний ключ + явный principal-ключ
+public EntityMetadataBuilder<T> HasOne<TChild>(
+    Expression<Func<T, object?>> foreignKey,
+    Expression<Func<TChild, object?>> principalKey) where TChild : class;
+
+// E — 1:1, навигация + явный parent-ключ + явный внешний ключ ребёнка
+public EntityMetadataBuilder<T> HasOneToOne<TChild>(
+    Expression<Func<T, TChild?>> navigation,
+    Expression<Func<T, object?>> parentKey,
+    Expression<Func<TChild, object?>> childForeignKey) where TChild : class;
+
+// F — M:N, навигация + все четыре списка ключей явно
+public EntityMetadataBuilder<T> HasManyThrough<TChild, TJunction>(
+    Expression<Func<T, IEnumerable<TChild>>> navigation,
+    Expression<Func<T, object?>> parentKey,
+    Expression<Func<TJunction, object?>> junctionParentForeignKey,
+    Expression<Func<TChild, object?>> childKey,
+    Expression<Func<TJunction, object?>> junctionChildForeignKey)
+    where TChild : class where TJunction : class;
+
+// G — 1:N, без навигации; principal = полный ключ T
+public EntityMetadataBuilder<T> HasMany<TChild>(
+    Expression<Func<TChild, object?>> foreignKey) where TChild : class;
+
+// H — N:1, без навигации; principal = полный ключ TChild
+public EntityMetadataBuilder<T> HasOne<TChild>(
+    Expression<Func<T, object?>> foreignKey) where TChild : class;
+
+// I — 1:1 только с внешним ключом ребёнка; parent-ключ = полный ключ T
+public EntityMetadataBuilder<T> HasOneToOne<TChild, TKey>(
+    Expression<Func<T, TChild?>> navigation,
+    Expression<Func<TChild, TKey>> childForeignKey) where TChild : class;
+
+// J — M:N только с двумя внешними ключами junction; оба ключа сущностей = полные ключи
+public EntityMetadataBuilder<T> HasManyThrough<TChild, TJunction>(
+    Expression<Func<T, IEnumerable<TChild>>> navigation,
+    Expression<Func<TJunction, object?>> junctionParentForeignKey,
+    Expression<Func<TJunction, object?>> junctionChildForeignKey)
+    where TChild : class where TJunction : class;
 ```
 
-У каждой есть **fallback-перегрузка только по ключам** (`HasMany<TChild, TKey>(foreignKey, principalKey)` / `HasOne<TChild, TKey>(foreignKey, principalKey)`) для сущности, у которой связь не смоделирована навигационным свойством; она объявляет метаданные, не привязывая навигацию.
+Когда какая форма нужна: **A, C, E и I** выводят `TChild` из навигации; **I** дополнительно выводит `TKey` из внешнего ключа ребёнка, поэтому составной анонимный ключ не требует явного аргумента типа. Key-only формы **B, D, G и H** не могут вывести `TChild` из нетипизированной лямбды — вызывайте их с явным `<TChild>` (типизированная переменная селектора всё ещё может дать вывод, но публичная форма — явная). **F и J** требуют явных `<TChild, TJunction>`: `TJunction` встречается только в нетипизированных лямбдах, а C# не позволяет задать часть generic-аргументов. Используйте **A–F**, когда ключ должен быть явным — другой порядок компонентов, non-key свойство principal или обратная роль; **G–J** — когда principal-ключом является полный первичный ключ. Чтобы настроить только одну сторону many-to-many, используйте **F** со всеми четырьмя списками; частично упорядоченной перегрузки нет.
+
+#### Упорядоченные селекторы ключей
+
+Каждый селектор ключа — fluent или атрибутный — разрешается одним общим парсером, поэтому все объявления принимают ровно одни и те же формы:
+
+- прямой скалярный mapped-свойство-доступ — `c => c.ParentId`;
+- плоский анонимный объект из прямых скалярных mapped-свойств — `c => new { c.TenantId, c.ParentId }`.
+
+**Порядок — это контракт.** Компоненты сопоставляются **позиционно** между сторонами: первый компонент внешнего ключа пары с первым компонентом principal-ключа, второй со вторым и так далее. Они никогда не сопоставляются по имени, не сортируются по метаданным ключа и не сопоставляются по типу. Псевдонимы анонимных членов игнорируются: `new { Parent = c.ParentId }` выбирает `ParentId`. Boxing и nullable-преобразования вокруг отдельного компонента разворачиваются до сравнения нижележащих mapped CLR-типов.
+
+`null`-селектор (или селектор без тела) бросает `ArgumentNullException` с именем параметра. Структурные отказы бросают `NotSupportedException` с именем связи, позицией и количеством компонентов: доступ к полю, вложенный путь члена, вычисление, вызов метода, доступ по индексу, инициализатор массива или коллекции, tuple-литерал, конструирование DTO или объекта (`new Dto { ... }`), вложенный анонимный объект, пустой анонимный объект и повторно выбранное свойство.
+
+#### Principal-ключ по умолчанию и явный
+
+Перегрузка без параметра `principalKey` использует **весь** первичный ключ principal-сущности в порядке метаданных сущности — члены с `IsKey` в том порядке, в каком их перечисляет `IEntityMetadata.Properties`. **Fallback на первый ключ отсутствует**, как и сопоставление по имени: внешний ключ, выбирающий меньше компонентов, чем полный principal-ключ, — это ошибка арности при разрешении метаданных, а не молчаливое использование первого ключа. Явный principal-ключ может выбирать mapped **non-key** свойства (альтернативный логический ключ) и любой порядок компонентов; списки всё равно должны иметь одинаковую длину и совпадающий nullable-unwrapped тип в каждой позиции. `HasManyThrough` применяет то же правило к обеим ногам: ключ сущности и ссылающийся на него внешний ключ junction должны иметь одинаковое количество компонентов и одинаковые позиционные типы.
 
 Первая регистрация для типа побеждает, как у фильтра запросов: последующая конфигурация `From<T>(...)` того же типа игнорируется. Свойство, участвующее в объявленной связи, исключается из [`IEntityMetadata.Properties`](xref:NextORM.Core.IEntityMetadata) и доступно только через [`IEntityMetadata.Relationships`](xref:NextORM.Core.IEntityMetadata); его маппинг как колонки бросает `InvalidOperationException`. Члены, не входящие в объявленную связь (включая ссылочный член без объявления), по-прежнему мапятся как колонки.
 
@@ -58,7 +126,36 @@ public sealed class Order
 }
 ```
 
-`ForeignKey` называет свойство внешнего ключа на зависимой стороне; вид выводится из формы навигации, как и во fluent API. Атрибут и fluent-объявление на **одной и той же** навигации дают одну модель, и при наличии обоих побеждает fluent-объявление.
+`ForeignKey` называет единственное свойство внешнего ключа на зависимой стороне; вид выводится из формы навигации, как и во fluent API. Составная связь использует два массива:
+
+```csharp
+public sealed class Order
+{
+    public int TenantId { get; set; }
+    public int Id { get; set; }
+
+    [Relationship(
+        ForeignKeys = new[] { nameof(OrderItem.TenantId), nameof(OrderItem.OrderId) },
+        PrincipalKeys = new[] { nameof(Order.TenantId), nameof(Order.Id) })]
+    public ICollection<OrderItem> Items { get; set; } = new List<OrderItem>();
+}
+```
+
+Ровно одна из форм — `ForeignKey` или `ForeignKeys` — должна быть задана. `ForeignKeys` — **упорядоченный** список; сопоставление компонентов позиционное, поэтому имена на двух сторонах могут различаться. `PrincipalKeys` опционален: если он не задан, principal-ключом является весь ключ principal-сущности в порядке метаданных, а явный список может выбирать mapped non-key свойства. Каждое имя должно называть mapped-свойство; пустая или отсутствующая форма внешнего ключа, пустой массив, дубликат имени, отсутствующий или unmapped член, несовпадение арности или позиционных типов отклоняются с `NotSupportedException` при разрешении метаданных. Атрибут объявляет только связи one-to-many и many-to-one — one-to-one и many-to-many доступны только через fluent API.
+
+Атрибут и fluent-объявление на **одной и той же** навигации дают одну модель, и при наличии обоих побеждает fluent-объявление; затенённый атрибут не валидируется. `[Relationship]` и fluent-перегрузки используют один язык селекторов и один набор правил валидации.
+
+### Момент валидации
+
+Валидация выполняется поэтапно:
+
+- **При объявлении** — `null`-селектор бросает `ArgumentNullException`, а синтаксис селектора (только скалярное свойство или плоский анонимный объект) проверяется общим парсером.
+- **При разрешении метаданных связи** — всё, что требует другого типа: разрешение mapped-свойств, полный principal-ключ по умолчанию, арность, дубликаты компонентов и позиционные nullable-unwrapped типы. Порядок регистрации не важен: `From<T>()` не валидирует заранее cross-reference, который ещё не зарегистрирован, и связанный тип может быть сконфигурирован позже.
+- **До SQL и до кэшированного плана** — связь валидируется при первом использовании, и валидация завершается **до генерации любого SQL** и **до вставки плана в кэш планов**. Невалидное или частично разрешённое объявление никогда не порождает SQL и никогда не кэширует план; исправление объявления после этого не блокируется закэшированной ошибкой.
+
+Та же структурная валидация применяется к вручную предоставленным [`IRelationshipMetadata`](xref:NextORM.Core.IRelationshipMetadata) и junction-спискам: минимум один компонент в каждом списке, равная арность на каждой ноге, отсутствие дубликатов компонентов, разрешение каждого компонента по семантической идентичности mapped-члена в сконфигурированное mapped-свойство и попарно совпадающие nullable-unwrapped CLR-типы. Пользовательский экземпляр метаданных свойства не обязан быть тем же объектом, что и сконфигурированный; валидный escape-hatch mapping — включая явный non-key principal-ключ — продолжает работать, а malformed-список бросает `NotSupportedException` до SQL и до вставки в кэш.
+
+`Inverse` участвует только в demand-time валидации: прямой навигации inverse не нужен, а несвязанное объявление не падает. Когда запрошенной операции inverse действительно нужен, отсутствующий inverse разрешается в `null`, а **неоднозначный** — две разные навигации с одним каноническим mapping — бросает `NotSupportedException` с именами обоих конфликтующих кандидатов.
 
 ## Загрузка через `JoinInto`
 
@@ -72,41 +169,185 @@ var orders = ctx.From<Order>()
     .ToList();
 ```
 
-Три перегрузки:
+### Перегрузки
+
+`JoinInto` существует в трёх семействах. Два из них различаются одним аргументом — дочерний источник либо передаётся как `EntityBuilder<TChild>`, либо разрешается из mapping'а `TChild` — и принимают явный предикат `(родитель, ребёнок) => …` как условие соединения; оба заполняют одни и те же навигации и делят один контракт, поэтому выбирайте по тому, есть ли у вас дочерний источник на руках. Третье семейство принимает только навигацию и выводит условие соединения из объявленных метаданных связи: см. [Соединения по метаданным](#соединения-по-метаданным).
+
+#### Без источника
+
+Пять форм без источника не принимают дочерний билдер — дочерним источником служит mapping `TChild`:
 
 ```csharp
-// LEFT (по умолчанию)
+// коллекция, LEFT (по умолчанию)
 public EntityBuilder<TEntity> JoinInto<TChild>(
-    EntityBuilder<TChild> child,
-    Expression<Func<TEntity, TChild, bool>> predicate,
-    Expression<Func<TEntity, ICollection<TChild>>> collection);
-
-// явный вид соединения: только Inner или Left
-public EntityBuilder<TEntity> JoinInto<TChild>(
-    EntityBuilder<TChild> child,
     Expression<Func<TEntity, TChild, bool>> predicate,
     Expression<Func<TEntity, ICollection<TChild>>> collection,
-    JoinType joinType);
+    Action<JoinOptions>? options = null);
 
-// fallback без объявленных метаданных: явные parent/child-ключи (всегда LEFT)
+// коллекция, явный вид соединения: только Inner или Left
+public EntityBuilder<TEntity> JoinInto<TChild>(
+    Expression<Func<TEntity, TChild, bool>> predicate,
+    Expression<Func<TEntity, ICollection<TChild>>> collection,
+    JoinType joinType,
+    Action<JoinOptions>? options = null);
+
+// ссылка, LEFT (по умолчанию)
+public EntityBuilder<TEntity> JoinInto<TChild>(
+    Expression<Func<TEntity, TChild, bool>> predicate,
+    Expression<Func<TEntity, TChild?>> navigation,
+    Action<JoinOptions>? options = null)
+    where TChild : class;
+
+// ссылка, явный вид соединения
+public EntityBuilder<TEntity> JoinInto<TChild>(
+    Expression<Func<TEntity, TChild, bool>> predicate,
+    Expression<Func<TEntity, TChild?>> navigation,
+    JoinType joinType,
+    Action<JoinOptions>? options = null)
+    where TChild : class;
+
+// fallback без объявленных метаданных: явные parent/child-ключи, всегда LEFT
 public EntityBuilder<TEntity> JoinInto<TChild, TKey>(
-    EntityBuilder<TChild> child,
     Expression<Func<TEntity, TChild, bool>> predicate,
     Expression<Func<TEntity, ICollection<TChild>>> collection,
     Expression<Func<TEntity, TKey>> parentKey,
-    Expression<Func<TChild, TKey>> childKey)
+    Expression<Func<TChild, TKey>> childKey,
+    Action<JoinOptions>? options = null)
     where TKey : notnull;
 ```
 
-Первые две разрешают parent/child-ключи из объявленной связи; третья симметрична fallback'у [`LoadWith`](eager-loading.md) для пары без метаданных связи:
+Те же пять форм в виде вызовов:
 
 ```csharp
+// 1. коллекция, LEFT
+var orders = ctx.From<Order>()
+    .JoinInto<OrderItem>((o, i) => o.Id == i.OrderId, o => o.Items)
+    .ToList();
+
+// 2. коллекция, явный вид
+var orders = ctx.From<Order>()
+    .JoinInto<OrderItem>((o, i) => o.Id == i.OrderId, o => o.Items, JoinType.Inner)
+    .ToList();
+
+// 3. ссылка, LEFT — TChild : class
+var orders = ctx.From<Order>()
+    .JoinInto<Invoice>((o, i) => o.Id == i.OrderId, o => o.Invoice)
+    .ToList();
+
+// 4. ссылка, явный вид — TChild : class
+var orders = ctx.From<Order>()
+    .JoinInto<Invoice>((o, i) => o.Id == i.OrderId, o => o.Invoice, JoinType.Left)
+    .ToList();
+
+// 5. явные ключи — всегда LEFT
+var orders = ctx.From<Order>()
+    .JoinInto<OrderItem, int>((o, i) => o.Id == i.OrderId, o => o.Items, o => o.Id, i => i.OrderId)
+    .ToList();
+```
+
+Указывайте аргумент типа ребёнка явно, как выше: вывод из лямбды-предиката не является документированным контрактом. Две формы **по ссылке** требуют ссылочного типа ребёнка (`where TChild : class`); форма **по ключам** требует non-nullable типа ключа и **всегда `LEFT`** — это единственный вид соединения, который открывает её сигнатура. Формы по коллекции и по ссылке разрешают ключи из объявленной связи, а форма по ключам симметрична fallback'у [`LoadWith`](eager-loading.md) для пары сущностей без метаданных связи.
+
+#### С явным источником
+
+Семейство с явным источником — те же пять форм с дочерним источником первым аргументом:
+
+```csharp
+var orders = ctx.From<Order>()
+    .JoinInto(ctx.From<OrderItem>(), (o, i) => o.Id == i.OrderId, o => o.Items)
+    .ToList();
+
+var orders = ctx.From<Order>()
+    .JoinInto(ctx.From<OrderItem>(), (o, i) => o.Id == i.OrderId, o => o.Items, JoinType.Inner)
+    .ToList();
+
+var orders = ctx.From<Order>()
+    .JoinInto(ctx.From<Invoice>(), (o, i) => o.Id == i.OrderId, o => o.Invoice)
+    .ToList();
+
+var orders = ctx.From<Order>()
+    .JoinInto(ctx.From<Invoice>(), (o, i) => o.Id == i.OrderId, o => o.Invoice, JoinType.Left,
+        j => j.SuppressCartesianWarning())
+    .ToList();
+
 var orders = ctx.From<Order>()
     .JoinInto(ctx.From<OrderItem>(), (o, i) => o.Id == i.OrderId, o => o.Items, o => o.Id, i => i.OrderId)
     .ToList();
 ```
 
-`JoinInto` по умолчанию — **`LEFT`**: родитель без детей сохраняется с пустой коллекцией. Явная перегрузка принимает только [`JoinType.Inner`](xref:NextORM.Core.JoinType) и [`JoinType.Left`](xref:NextORM.Core.JoinType); `Inner` отбрасывает бездетных родителей.
+Вызов без источника — **в точности** этот вызов с голым источником `ctx.From<TChild>()`: форма без источника сама разрешает этот источник и затем делегирует, передавая предикат, вид соединения и опции без изменений. SQL, план и результаты совпадают, поэтому для голого источника оба семейства взаимозаменяемы. Оставляйте явную форму, когда дочерний источник — не простой mapping сущности: например, сырое имя таблицы или CTE существует только на дочернем билдере.
+
+`JoinInto` по умолчанию — **`LEFT`**: родитель без детей сохраняется с пустой коллекцией. Перегрузки с явным видом соединения принимают только [`JoinType.Inner`](xref:NextORM.Core.JoinType) и [`JoinType.Left`](xref:NextORM.Core.JoinType); `Inner` отбрасывает бездетных родителей.
+
+### Разрешение и ошибки
+
+Дочерний источник разрешается один раз, в момент объявления соединения:
+
+- **сконфигурированный mapping** побеждает конвенцию — если `From<Child>(…)` уже сконфигурировал mapping ребёнка (например, имя таблицы), форма без источника соединяет именно его, в точности как голый явный `ctx.From<Child>()`;
+- **неразрешимый** тип ребёнка падает **на вызове `JoinInto(...)`**, с тем же типом исключения и тем же сообщением, что и сам `From<TChild>()`; билдер не возвращается, поэтому ошибка не всплывает позже на `ToList()`;
+- **`null`-предикат** бросает `ArgumentNullException` с `paramName: "predicate"` **до** разрешения дочернего источника и **до** вызова лямбды опций, поэтому ни сломанный mapping ребёнка, ни бросающая лямбда не могут замаскировать ошибку аргумента;
+- **`null`-селектор навигации или ключа** ведёт себя в точности как в форме с явным источником: те же проверки в том же порядке, те же исключения.
+
+Форма без источника не добавляет второго пути разрешения и никакого fallback'а на таблицу; всё, что эта страница говорит о ключах, материализации, пагинации, `Where` и терминалах, относится к обоим семействам.
+
+### Опции
+
+Каждая из десяти форм принимает завершающий аргумент `Action<JoinOptions>? options`. Лямбда выполняется **ровно один раз** на вызов `JoinInto`, а исключение, брошенное внутри неё, пробрасывается без изменений. Если аргумент опущен или равен `null`, лямбда не вызывается вовсе. Объект опций не сохраняется: его значения копируются в результирующее соединение.
+
+```csharp
+var orders = ctx.From<Order>()
+    .JoinInto<OrderItem>((o, i) => o.Id == i.OrderId, o => o.Items, JoinType.Left,
+        j => j.SuppressCartesianWarning())
+    .ToList();
+```
+
+Тот же параметр несёт локальные конфигурации связи, описанные ниже, — [`JoinOptions.OneToOne`](xref:NextORM.Core.JoinOptions) и `JoinOptions.ManyToMany` — и [модификаторы соединения](#модификаторы-соединения) нижележащего join'а.
+
+### Фильтры дочернего набора
+
+«Без источника» описывает **источник**, а не фильтр: дочерний источник — это mapping `TChild`, и он не несёт условия. Ни одно из семейств сегодня не применяет фильтр **дочернего источника** к соединению — дочерний билдер с `Where` не добавляет условия к соединению, а в `ON` попадает только предикат `(родитель, ребёнок) => …`. Фильтрация дочернего источника отслеживается как **#309**.
+
+Чтобы сузить дочерний набор, пишите условие в предикат, который *и есть* условие `ON`: `(o, i) => o.Id == i.OrderId && i.Active` соединяет только подходящих активных детей. При `Left` родитель, у которого все дети отфильтрованы, сохраняется с пустой коллекцией; при `Inner` он исключается. Не читайте `Where` на дочернем источнике как эквивалент этого предиката: сегодня соединение его игнорирует.
+
+### Соединения по метаданным
+
+Семейство «сначала навигация» принимает **только навигацию**. Условие `ON` синтезируется из объявленных метаданных связи, поэтому вызывающий код никогда не повторяет ключи:
+
+```csharp
+// навигация-ссылка (one-to-one) — TChild : class, всегда LEFT
+public EntityBuilder<TEntity> JoinInto<TChild>(
+    Expression<Func<TEntity, TChild?>> navigation,
+    Expression<Func<TEntity, TChild, bool>>? filter = null,
+    Action<JoinOptions>? options = null)
+    where TChild : class;
+
+// навигация-коллекция (one-to-many или many-to-many) — всегда LEFT
+public EntityBuilder<TEntity> JoinInto<TChild>(
+    Expression<Func<TEntity, ICollection<TChild>>> collection,
+    Expression<Func<TEntity, TChild, bool>>? filter = null,
+    Action<JoinOptions>? options = null);
+```
+
+```csharp
+var orders = ctx.From<Order>()
+    .JoinInto(o => o.Invoice)                     // ссылка: заполняет Order.Invoice
+    .ToList();
+
+var orders = ctx.From<Order>()
+    .JoinInto(o => o.Items)                       // коллекция: заполняет Order.Items
+    .ToList();
+
+var orders = ctx.From<Order>()
+    .JoinInto(o => o.Items, (o, i) => i.Active)   // дополнительный фильтр, всё ещё LEFT join
+    .ToList();
+```
+
+**Вывод типа.** Тип ребёнка берётся из навигации, поэтому явный аргумент типа не пишется. Одиночная навигация-ссылка связывается с формой **ссылки** и присваивает этот член; объявленный `ICollection<T>` связывается с формой **коллекции** и заполняет его. **Конкретная** коллекция (`List<T>`, `HashSet<T>`, любая другая реализация `ICollection<T>`) тоже направляется в форму коллекции: при обычном разрешении перегрузок для конкретного типа победила бы форма ссылки, поэтому перегрузка-коллекция несёт явный приоритет разрешения перегрузок. Это осознанное правило данного API, а не случайность связывания.
+
+**`ON`.** По одному равенству на каждый объявленный компонент ключа, соединённые в порядке объявления, читаются из [`IRelationshipMetadata`](xref:NextORM.Core.IRelationshipMetadata): `parent.<PrincipalKey[i]> == child.<ForeignKey[i]>`. Составной ключ даёт все компоненты, позиционно; по имени столбца ничего не сопоставляется, а principal-ключ по умолчанию никогда не сводится к первому компоненту. Навигация many-to-many сохраняет синтез через junction: ребро «родитель→junction» покомпонентно сопоставляет ключ родителя с внешним ключом junction на родителя, ребро «junction→ребёнок» — ключ ребёнка с внешним ключом junction на ребёнка, а необязательный фильтр добавляется к этому ребру «ребёнок».
+
+**Второй аргумент — это фильтр, а не повторение ключей.** Если он задан, он становится ещё одним конъюнктом **внутри того же `ON`**; он никогда не заменяет равенство по объявленным ключам и никогда не переносится в `WHERE`. Если аргумент опущен или равен `null`, дополнительного ограничения нет. Поскольку это `LEFT`-соединения, ссылка, единственный кандидат которой отфильтрован, остаётся `null`, коллекция, все дети которой отфильтрованы, остаётся пустой, а строка родителя сохраняется в обоих случаях. Повторять ключи не нужно, поэтому обычное применение — произвольное условие на ребёнка: `(o, i) => i.Active` сужает детей, а объявленные ключи по-прежнему определяют, какому родителю они принадлежат.
+
+**Граница с десятью формами с предикатом.** Пять исходных перегрузок `JoinInto` и пять их source-less аналогов **не изменены**: они сохраняют свои сигнатуры, явные виды соединения и семантику «предикат = `ON`» — предикат вызывающего `(родитель, ребёнок) => …` остаётся всем условием соединения, и ни один объявленный ключ в него не синтезируется. Описанная здесь семантика метаданных относится **только** к двум формам «сначала навигация»; ни одна прежняя форма не была переделана. Выбирайте формы «сначала навигация», когда связь объявлена и ключи должны приходить из метаданных; оставляйте формы с предикатом, когда условие соединения действительно ваше (необъявленная пара, дополнительная корреляция, явный выбор `Inner`/`Left`).
 
 ### One-to-one (ссылка)
 
@@ -191,7 +432,7 @@ select t1.id, t1.title, t2.parent_key, t2.child_key, t2.occurrence, t3.id, t3.na
 
 Когда в запросе две и более навигации-коллекции (one-to-one исключается), подготовка один раз на план выдаёт предупреждение `JoinInto.MultipleCollections`, потому что промежуточное число строк умножается в декартово произведение. Передайте `JoinOptions.SuppressCartesianWarning()` через лямбду опций `JoinInto` (`j => j.SuppressCartesianWarning()`), чтобы его заглушить; предупреждение информационное и не меняет результат.
 
-Junction, у которого внешний ключ родителя и/или ребёнка охватывает несколько **компонентов**, полностью поддержан: соединение и секционирование occurrence используют каждый объявленный компонент, поэтому изменение любого компонента (не только первого) меняет связанного ребёнка, а повторные occurrence junction остаются различимыми. Диспетчер single-query ([`EagerLoadMode.SingleQuery`](eager-loading.md)) такую junction тоже обрабатывает. Списки компонентов должны приходить из метаданных связи — fluent-помощники объявления ниже принимают один ключевой столбец. Many-to-many `JoinInto` занимает **два** слота проекции, поэтому считается вдвойне против предела арности.
+Junction, у которого внешний ключ родителя и/или ребёнка охватывает несколько **компонентов**, полностью поддержан: соединение и секционирование occurrence используют каждый объявленный компонент, поэтому изменение любого компонента (не только первого) меняет связанного ребёнка, а повторные occurrence junction остаются различимыми. Диспетчер single-query ([`EagerLoadMode.SingleQuery`](eager-loading.md)) такую junction тоже обрабатывает. Объявляйте компоненты составными fluent-перегрузками (A–J) или через `ForeignKeys`/`PrincipalKeys` атрибута; legacy-форма `ForeignKey` остаётся для одного компонента. Many-to-many `JoinInto` занимает **два** слота проекции, поэтому считается вдвойне против предела арности.
 
 ## Один round trip
 
@@ -242,6 +483,8 @@ public sealed class Order
 
 `Where` до `JoinInto` фильтрует родительский источник. Предикат, переданный в `JoinInto`, — это `ON`-условие: он только сопоставляет строки и никогда не убирает `LEFT`-родителя.
 
+`JoinInto` добавляет предикат `Where` дочернего источника в условие `ON`, сохраняя родителей без совпавших дочерних записей при LEFT-соединении; неподдерживаемые модификаторы дочернего запроса вызывают `NotSupportedException` до выполнения запроса. Производный (`As`) дочерний источник поддерживается, когда его единственный модификатор — собственный `Where`; любой другой модификатор на нём или внутри него отклоняется.
+
 ## Пагинация родителей
 
 `Limit`/`Offset` (`Take`/`Page`) ограничивают **родителей**, а не денормализованные строки. На SQL-провайдере родительский источник выбирается в подзапросе с лимитом, а соединение оборачивается вокруг него, поэтому пагинация родителя не обрезает его детей. У in-memory провайдера лимит применяется к дедуплицированному списку родителей.
@@ -270,7 +513,7 @@ select t1.id, t1.name, t2.id, t2.order_id, t2.name
 - [`ToList()`](xref:NextORM.Core.EntityBuilderExtensions.ToList``1(NextORM.Core.EntityBuilder{``0},System.ReadOnlySpan{System.Object})) и [`ToListAsync()`](xref:NextORM.Core.EntityBuilderExtensions.ToListAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])).
 - `ToArray()` и `ToArrayAsync()`.
 
-[`ToCommand()`](xref:NextORM.Core.EntityBuilder`1.ToCommand) сохраняет соединение, но возвращает только **денормализованные** строки `(родитель, ребёнок)`, поэтому прямое перечисление может повторить родителя по разу на каждого совпавшего ребёнка. Любой другой терминал, построенный на родительской команде — `First`, `Count`, `Any`, `ToHashSet`, `ToEnumerable`, `ToAsyncEnumerable`, [`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},System.Boolean,System.Threading.CancellationToken)) — исключает соединение и возвращает **только родителей**, не заполняя коллекции. Проекция `Select` или производный источник `As` отклоняются с [`NotSupportedException`](xref:System.NotSupportedException): `Select` сохранил бы соединение без сшивания (повторяя родителей и никогда не группируя детей), а `As` потерял бы метаданные сшивания. Материализуйте через `ToList`/`ToListAsync`, когда коллекции должны быть заполнены.
+[`ToCommand()`](xref:NextORM.Core.EntityBuilder`1.ToCommand) сохраняет соединение, но возвращает только **денормализованные** строки `(родитель, ребёнок)`, поэтому прямое перечисление может повторить родителя по разу на каждого совпавшего ребёнка. Любой другой терминал, построенный на родительской команде — `First`, `Count`, `Any`, `ToHashSet`, `ToEnumerable`, `ToAsyncEnumerable`, [`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},NextORM.Core.PrepareOptions,System.Threading.CancellationToken)) — исключает соединение и возвращает **только родителей**, не заполняя коллекции. Проекция `Select` или производный источник `As` отклоняются с [`NotSupportedException`](xref:System.NotSupportedException): `Select` сохранил бы соединение без сшивания (повторяя родителей и никогда не группируя детей), а `As` потерял бы метаданные сшивания. Материализуйте через `ToList`/`ToListAsync`, когда коллекции должны быть заполнены.
 
 ## Паритет in-memory
 
@@ -289,17 +532,18 @@ select t1.id, t1.name, t2.id, t2.order_id, t2.name
 - read-only член коллекции, равный `null` в рантайме;
 - более семи дочерних коллекций в одном запросе (предел арности проекции).
 
-**Арность** ключа не входит в эти границы: связь many-to-many под [`EagerLoadMode.SingleQuery`](eager-loading.md) и составной principal-, внешний или junction-ключ связи поддержаны на явном пути `JoinInto`, который соединяет и группирует по каждому объявленному компоненту (см. [Many-to-many через junction](#many-to-many-через-junction)). Списки компонентов должны приходить из метаданных связи, потому что fluent-помощники объявления принимают один ключевой столбец.
+**Арность** ключа не входит в эти границы: связь many-to-many под [`EagerLoadMode.SingleQuery`](eager-loading.md) и составной principal-, внешний или junction-ключ связи поддержаны на явном пути `JoinInto`, который соединяет и группирует по каждому объявленному компоненту (см. [Many-to-many через junction](#many-to-many-через-junction)). Списки компонентов приходят из метаданных связи: объявляйте их составными fluent-перегрузками (A–J) или через `ForeignKeys`/`PrincipalKeys`, и `JoinInto` использует каждый компонент по порядку.
 
-Сами метаданные связи тоже «падают закрыто»: FK-свойство, не сопоставленное на зависимом типе, principal-тип без ключа или несовпадение типов FK/principal-ключа бросают `NotSupportedException` при разрешении ключей.
+Сами метаданные связи тоже «падают закрыто»: FK-свойство, не сопоставленное на зависимом типе, principal-тип без ключа, пустой или продублированный список компонентов, несовпадение арности между сторонами (включая одноколоночный внешний ключ против составного principal-ключа по умолчанию), `null`-компонент, компонент без CLR-члена или несовпадение типов FK/principal-ключа (после разворачивания nullable) бросают `NotSupportedException` при разрешении ключей — до генерации любого SQL и до вставки плана в кэш планов. Та же структурная валидация применяется к вручную предоставленным [`IRelationshipMetadata`](xref:NextORM.Core.IRelationshipMetadata) (см. [Момент валидации](#момент-валидации)).
 
 ## Метаданные связей
 
-Модель метаданных раскрывается через [`IEntityMetadata.Relationships`](xref:NextORM.Core.IEntityMetadata); каждый элемент — [`IRelationshipMetadata`](xref:NextORM.Core.IRelationshipMetadata) с [`Kind`](xref:NextORM.Core.IRelationshipMetadata) ([`RelationshipKind`](xref:NextORM.Core.RelationshipKind)), `DeclaringType`, `RelatedType`, `Navigation`, `IsCollection`, `ForeignKey`, `PrincipalKey` и `Inverse`. `Inverse` указывает на метаданные другой стороны, когда обе стороны объявлены и сходятся по внешнему ключу и типам; иначе он `null` — он никогда не выводится. `Inverse` разрешается **лениво при первом чтении и кэшируется**: зарегистрируйте связанный тип (и объявляющий тип) до чтения, потому что чтение, выполненное до регистрации другой стороны, закэширует `null` и не будет обновлено позднейшей регистрацией.
+Модель метаданных раскрывается через [`IEntityMetadata.Relationships`](xref:NextORM.Core.IEntityMetadata); каждый элемент — [`IRelationshipMetadata`](xref:NextORM.Core.IRelationshipMetadata) с [`Kind`](xref:NextORM.Core.IRelationshipMetadata) ([`RelationshipKind`](xref:NextORM.Core.RelationshipKind)), `DeclaringType`, `RelatedType`, `Navigation`, `IsCollection`, `ForeignKey`, `PrincipalKey` и `Inverse`. `ForeignKey` и `PrincipalKey` — упорядоченные списки компонентов `IReadOnlyList<IPropertyMetadata>`: порядок — это порядок объявления (или, для principal-ключа по умолчанию, порядок метаданных сущности), и компонент в позиции `i` одной стороны пары с компонентом в позиции `i` другой. `Inverse` указывает на метаданные другой стороны, когда обе стороны объявлены и сходятся по **полному упорядоченному** внешнему ключу и типам; иначе он `null` — он никогда не выводится. `Inverse` разрешается **лениво при первом чтении и кэшируется**: зарегистрируйте связанный тип (и объявляющий тип) до чтения, потому что чтение, выполненное до регистрации другой стороны, закэширует `null` и не будет обновлено позднейшей регистрацией. Две разные навигации с одним каноническим mapping делают inverse неоднозначным, и его чтение бросает `NotSupportedException` с именами обоих кандидатов. Составная связь объявляется через публичные объявления — составные перегрузки `HasMany`/`HasOne`/`HasOneToOne`/`HasManyThrough` или `[Relationship(ForeignKeys = …, PrincipalKeys = …)]` — и как [`JoinInto`](xref:NextORM.Core.EntityBuilder`1), так и [`LoadWith`](eager-loading.md#форма-с-объявленными-метаданными) по метаданным используют каждый объявленный компонент в порядке позиций; объявление из одного компонента сохраняет одноколоночную форму.
 
 ## См. также
 
 - [Жадная загрузка дочерних коллекций (`LoadWith`)](eager-loading.md) — альтернативный загрузчик: split-query по умолчанию, single-query через `EagerLoadMode.SingleQuery`.
+- [Слоты коллекционной проекции](collection-projection.md) — та же объявленная связь, возвращаемая коллекцией на родителя внутри проекции.
 - [Соединения](../guide/04-joins.md) — явная поверхность соединений.
 - [Сущности и метаданные](../getting-started/03-entities-and-metadata.md) — ключи и маппинг колонок.
 

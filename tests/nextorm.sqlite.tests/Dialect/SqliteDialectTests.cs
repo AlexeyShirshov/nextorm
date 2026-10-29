@@ -97,6 +97,7 @@ public class SqliteDialectTests
         Dialect.SupportsIntersectExceptAll.Should().BeFalse();
         Dialect.SupportsSequentialAccess.Should().BeTrue();
         Dialect.LobLocatorColumn.Should().Be("rowid");
+        Dialect.SupportsSavepoints.Should().BeTrue();
         Dialect.SupportsApply.Should().BeFalse();
         Dialect.SupportsQueryHints.Should().BeFalse();
         Dialect.SupportsDateArithmetic.Should().BeTrue();
@@ -154,6 +155,12 @@ public class SqliteDialectTests
         functions.Supports("acos").Should().BeTrue();
         functions.Supports("timediff").Should().BeTrue();
         functions.Supports("nonsense").Should().BeFalse();
+
+        // #278: the shipped engine has no soundex (SQLITE_SOUNDEX is not compiled in), so the hook must
+        // not advertise it; the #285 total aggregate and the neighbouring scalars keep their support.
+        functions.Supports("soundex").Should().BeFalse();
+        functions.Supports("unicode").Should().BeTrue();
+        functions.Supports("total").Should().BeTrue();
 
         functions.Render("json_get", ["a", "b"]).Should().Be("(a -> b)");
         functions.Render("json_get_text", ["a", "b"]).Should().Be("(a ->> b)");

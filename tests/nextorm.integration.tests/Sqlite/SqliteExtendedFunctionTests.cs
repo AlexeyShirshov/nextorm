@@ -449,6 +449,171 @@ public sealed class SqliteExtendedFunctionTests : ProviderTestSuite
             .WithMessage("*DateTimeOffset.Ticks is not supported in a server-side query*");
     }
 
+    // ---- T313 (#313): bare scalar projections of enum-typed values on live SQLite ----
+
+    private const string T313DayOfWeekMessage =
+        "DateTimeOffset.DayOfWeek is not supported in a server-side query: it has no SQL translation " +
+        "and evaluating it on the client would capture the client clock or time zone. " +
+        "Translate it explicitly or project a supported date part instead.";
+
+    private const string T313EnumMessage =
+        "Enum scalar projections without a value converter are not supported in a server-side query.";
+
+    private static void ExecuteT313(IDataContext ctx, string sql)
+    {
+        var dataContext = (DataContext)ctx;
+        dataContext.EnsureConnectionOpen();
+        using var cmd = dataContext.CreateCommand(sql);
+        cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>
+    /// The missing D1a live control: a bare <see cref="DayOfWeek"/> scalar projection must fail during
+    /// preparation with the frozen guard message and never reach the database (the connection is never
+    /// asked to run the statement, so the refusal precedes SQL execution).
+    /// </summary>
+    [Fact]
+    public void T313_BareDayOfWeekScalar_ShouldBeRefusedBeforeSql()
+    {
+        var value = new DateTimeOffset(2023, 5, 17, 13, 45, 30, TimeSpan.FromHours(2));
+        var ctx = _sut.DataProvider;
+
+        FluentActions.Invoking(() => _sut.SimpleEntity
+                .Where(x => x.Id == 1)
+                .Select(x => value.DayOfWeek)
+                .ToList())
+            .Should().Throw<NotSupportedException>()
+            .WithMessage(T313DayOfWeekMessage);
+
+        FluentActions.Invoking(() => _sut.SimpleEntity
+                .Where(x => x.Id == 1)
+                .Select(x => value.DayOfWeek)
+                .First())
+            .Should().Throw<NotSupportedException>()
+            .WithMessage(T313DayOfWeekMessage);
+
+        FluentActions.Invoking(() => ctx.GetPreparedQueryCommand(
+                _sut.SimpleEntity.Where(x => x.Id == 1).Select(x => value.DayOfWeek),
+                false, false, CancellationToken.None))
+            .Should().Throw<NotSupportedException>()
+            .WithMessage(T313DayOfWeekMessage);
+    }
+
+    /// <summary>
+    /// The <see cref="DateTimeOffset"/> controls keep their frozen messages on the live path too:
+    /// anonymous projection, DTO, bare scalar parts and a predicate.
+    /// </summary>
+    [Fact]
+    public void T313_DateTimeOffsetMemberControls_ShouldKeepFrozenMessages()
+    {
+        var value = new DateTimeOffset(2023, 5, 17, 13, 45, 30, TimeSpan.FromHours(2));
+
+        FluentActions.Invoking(() => _sut.SimpleEntity
+                .Where(x => x.Id == 1)
+                .Select(x => new { D = value.DayOfWeek })
+                .ToList())
+            .Should().Throw<NotSupportedException>()
+            .WithMessage(T313DayOfWeekMessage);
+
+        FluentActions.Invoking(() => _sut.SimpleEntity
+                .Where(x => x.Id == 1)
+                .Select(x => new T313SqliteDayDto { Day = value.DayOfWeek })
+                .ToList())
+            .Should().Throw<NotSupportedException>()
+            .WithMessage(T313DayOfWeekMessage);
+
+        FluentActions.Invoking(() => _sut.SimpleEntity
+                .Where(x => x.Id == 1 && value.DayOfWeek == DayOfWeek.Wednesday)
+                .Select(x => x.Id)
+                .ToList())
+            .Should().Throw<NotSupportedException>()
+            .WithMessage(T313DayOfWeekMessage);
+    }
+
+    /// <summary>Supported <see cref="DateTimeOffset"/> parts still execute against the database.</summary>
+    [Fact]
+    public void T313_SupportedDateTimeOffsetParts_ShouldStillExecute()
+    {
+        var value = new DateTimeOffset(2023, 5, 17, 13, 45, 30, TimeSpan.Zero);
+
+        var r = _sut.SimpleEntity
+            .Where(x => x.Id == 1)
+            .Select(x => new { value.Year, value.Month, value.Day, value.DayOfYear })
+            .First();
+
+        r.Year.Should().Be(2023);
+        r.Month.Should().Be(5);
+        r.Day.Should().Be(17);
+        r.DayOfYear.Should().Be(137);
+    }
+
+    /// <summary>
+    /// A bare and a nullable bare enum scalar are refused during preparation, before any statement is
+    /// sent, while the converted enum below reads real rows.
+    /// </summary>
+    [Fact]
+    public void T313_EnumScalarRefusals_ShouldFailBeforeSql()
+    {
+        var bare = _sut.DataProvider.From<T313BareEnumProbe>().Select(x => x.State);
+        FluentActions.Invoking(() => _sut.DataProvider
+                .GetPreparedQueryCommand(bare, false, false, CancellationToken.None))
+            .Should().Throw<NotSupportedException>()
+            .WithMessage(T313EnumMessage);
+
+        var nullable = _sut.DataProvider.From<T313BareEnumProbe>().Select(x => x.MaybeState);
+        FluentActions.Invoking(() => _sut.DataProvider
+                .GetPreparedQueryCommand(nullable, false, false, CancellationToken.None))
+            .Should().Throw<NotSupportedException>()
+            .WithMessage(T313EnumMessage);
+
+        var aggregate = () => { _ = _sut.DataProvider.From<T313BareEnumProbe>().Max(x => x.State); };
+        aggregate.Should().Throw<NotSupportedException>().WithMessage(T313EnumMessage);
+    }
+
+    /// <summary>
+    /// A converter-mapped enum scalar and the whole-entity/DTO shapes keep working against real SQLite
+    /// rows: the refusal is scalar-only and the converter boundary is authoritative.
+    /// </summary>
+    [Fact]
+    public void T313_ConvertedEnumScalar_ShouldExecuteAgainstSqlite()
+    {
+        var ctx = _sut.DataProvider;
+        ExecuteT313(ctx, "drop table if exists t313_enum_probe");
+        ExecuteT313(ctx, "create table t313_enum_probe (id integer primary key, state text not null)");
+
+        try
+        {
+            ctx.CreateInsertBuilder<T313EnumProbe>()
+                .Values(new T313EnumProbe { Id = 1, State = T313SqliteState.Active })
+                .Insert();
+            ctx.CreateInsertBuilder<T313EnumProbe>()
+                .Values(new T313EnumProbe { Id = 2, State = T313SqliteState.Closed })
+                .Insert();
+
+            ctx.From<T313EnumProbe>()
+                .OrderBy(x => x.Id)
+                .Select(x => x.State)
+                .ToList()
+                .Should().Equal(T313SqliteState.Active, T313SqliteState.Closed);
+
+            var dto = ctx.From<T313EnumProbe>()
+                .OrderBy(x => x.Id)
+                .Select(x => new T313SqliteStateDto { Id = x.Id, State = x.State })
+                .ToList();
+            dto.Should().HaveCount(2);
+            dto[1].State.Should().Be(T313SqliteState.Closed);
+
+            ctx.From<T313EnumProbe>()
+                .OrderBy(x => x.Id)
+                .ToList()
+                .Should().HaveCount(2);
+        }
+        finally
+        {
+            ExecuteT313(ctx, "drop table if exists t313_enum_probe");
+        }
+    }
+
     /// <summary>
     /// <c>new string(char, n)</c> is rendered as the dialect's repetition: a constant character with a
     /// constant count and with a column-derived count both execute.
@@ -1159,6 +1324,50 @@ public sealed class SqliteExtendedFunctionTests : ProviderTestSuite
         ids.Should().HaveCount(2, "maintenance never removes indexed rows");
     }
 
+    /// <summary>
+    /// The SQLite <c>total()</c> aggregate (#285) keeps its native semantics: integers, fractions,
+    /// negatives and duplicates add up, nulls are ignored, an all-null group and an empty set both return a
+    /// single <c>0.0</c> instead of null, a large integer is summed in floating point instead of overflowing
+    /// like <c>sum</c>, numeric text is coerced by SQLite itself and a parameterised argument binds.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "285")]
+    public void TotalAggregate_ShouldUseNativeSemantics()
+    {
+        _sut.DataProvider.From(() => SqlFunctions.Sqlite.json_each("[2, 2, -1, 0]"))
+            .Select(x => SqlFunctions.Sqlite.total(x.Value)).First()
+            .Should().Be(3.0);
+
+        _sut.DataProvider.From(() => SqlFunctions.Sqlite.json_each("[0.5, 0.25]"))
+            .Select(x => SqlFunctions.Sqlite.total(x.Value)).First()
+            .Should().Be(0.75);
+
+        _sut.DataProvider.From(() => SqlFunctions.Sqlite.json_each("[1, null, 3]"))
+            .Select(x => SqlFunctions.Sqlite.total(x.Value)).First()
+            .Should().Be(4.0, "null values are ignored, not treated as zero-sum rows");
+
+        _sut.DataProvider.From(() => SqlFunctions.Sqlite.json_each("[null, null]"))
+            .Select(x => SqlFunctions.Sqlite.total(x.Value)).First()
+            .Should().Be(0.0, "an all-null group yields 0.0, never null");
+
+        _sut.DataProvider.From(() => SqlFunctions.Sqlite.json_each("[]"))
+            .Select(x => SqlFunctions.Sqlite.total(x.Value)).First()
+            .Should().Be(0.0, "an empty set still returns one aggregate row");
+
+        _sut.DataProvider.From(() => SqlFunctions.Sqlite.json_each("[\"1\", \"2\", \"3.5\", \"x\"]"))
+            .Select(x => SqlFunctions.Sqlite.total(x.Value)).First()
+            .Should().Be(6.5, "numeric text is coerced natively and non-numeric text contributes 0.0");
+
+        _sut.DataProvider.From(() => SqlFunctions.Sqlite.json_each("[9223372036854775807, 9223372036854775807]"))
+            .Select(x => SqlFunctions.Sqlite.total(x.Value)).First()
+            .Should().BeGreaterThan(long.MaxValue, "total sums in floating point instead of overflowing like sum");
+
+        var offset = 0.5;
+        _sut.SimpleEntity
+            .Select(x => SqlFunctions.Sqlite.total(x.Id + offset)).First()
+            .Should().Be(60.0, "a parameterised argument keeps the binding and still aggregates natively");
+    }
+
     [SqlTable("sx5_fts")]
     private sealed class Sx5Fts
     {
@@ -1204,5 +1413,55 @@ public sealed class SqliteExtendedFunctionTests : ProviderTestSuite
         One = 1,
         Two = 2,
         Three = 3
+    }
+
+    /// <summary>T313: an enum stored as its converter's text representation.</summary>
+    public enum T313SqliteState
+    {
+        Unknown = 0,
+        Active = 3,
+        Closed = 9
+    }
+
+    /// <summary>T313: the converted-enum probe table used by the live scalar/shape controls.</summary>
+    [SqlTable("t313_enum_probe")]
+    public sealed class T313EnumProbe
+    {
+        [Key]
+        [Column("id")]
+        public long Id { get; set; }
+
+        [Column("state")]
+        [ValueConverter(typeof(EnumToStringConverter<T313SqliteState>))]
+        public T313SqliteState State { get; set; }
+    }
+
+    /// <summary>T313: a mapped entity whose enum columns have no converter (refusal is pre-SQL).</summary>
+    [SqlTable("t313_bare_enum_probe")]
+    public sealed class T313BareEnumProbe
+    {
+        [Key]
+        [Column("id")]
+        public long Id { get; set; }
+
+        [Column("state")]
+        public T313SqliteState State { get; set; }
+
+        [Column("maybe_state")]
+        public T313SqliteState? MaybeState { get; set; }
+    }
+
+    /// <summary>T313: a DTO carrying a <see cref="DayOfWeek"/> member (the guard must reach it).</summary>
+    public sealed class T313SqliteDayDto
+    {
+        public DayOfWeek Day { get; set; }
+    }
+
+    /// <summary>T313: a DTO carrying a converted enum member.</summary>
+    public sealed class T313SqliteStateDto
+    {
+        public long Id { get; set; }
+
+        public T313SqliteState State { get; set; }
     }
 }

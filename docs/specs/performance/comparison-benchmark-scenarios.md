@@ -128,7 +128,7 @@ Branch: `1.0.9-rc2`.
 ## 8. Доки
 
 - `docs/comparisons/benchmarks.md` + `docs/ru/comparisons/benchmarks.md`: новые строки/таблицы (projection, aggregates, paging, streaming, JSON/CSV cross-library).
-- `docs/specs/comparison/linq2db-comparison.md` + `docs/specs/ru/comparison/linq2db-comparison.md`: утверждение о бенчмаркнутых сценариях уточнено — исторический полный набор отделён от новых tier-1 результатов (см. раздел «Benchmarked performance»).
+- `docs/comparisons/capabilities.md` + `docs/ru/comparisons/capabilities.md`: утверждение о бенчмаркнутых сценариях уточнено — исторический полный набор отделён от новых tier-1 результатов (см. раздел «Where Nextorm leads»).
 - `docs/comparisons/capabilities.md` / `capability-matrix.md` — только если формулировка о потоковых терминалах меняется.
 - Публичные страницы не ссылаются на внутренние `docs/specs/**`; отчёты — на retained BDN artifacts / публичные страницы.
 - Provenance отчётов: `benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmark{Projection,Aggregates,Paging,Streaming,WriteJson,Csv}-report-github.md` (свежие прогоны D188 N=2, 2026-10-09); числа в публичной странице `docs/comparisons/benchmarks.md` взяты из них без пересчёта.
@@ -153,4 +153,4 @@ Branch: `1.0.9-rc2`.
 - `benchmarks/nextorm.benchmark/Infrastructure/BenchmarkRowSink.cs`, `BenchmarkSerializationSink.cs`, `BenchmarkComparisonValidation.cs`
 - `benchmarks/nextorm.benchmark/Infrastructure/Linq2DbDataContext.cs`, `EFDataContext.cs`, `TestDataContext.cs`, `BenchDb.cs`, `NextormConfig.cs`
 - `docs/comparisons/benchmarks.md`, `docs/specs/performance/benchmark-report.md`, `docs/specs/performance/acceptance-benchmarks.md`
-- `docs/specs/comparison/linq2db-comparison.md` (раздел «Benchmarked performance»), `docs/specs/ru/comparison/linq2db-comparison.md`
+- `docs/comparisons/capabilities.md` + `docs/ru/comparisons/capabilities.md` (раздел «Where Nextorm leads»)

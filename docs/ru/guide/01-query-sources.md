@@ -12,7 +12,7 @@
 | Сырой фрагмент SQL | [`FromSql`](xref:NextORM.Core.DataContextExtensions.FromSql(NextORM.Core.IDataContext,System.String,System.Object)) — [Сырой SQL](14-raw-sql.md) |
 | Типизированный CTE | [`From(Cte<TResult>)`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,NextORM.Core.Cte{``0})), [`From(CteReference<TResult>)`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,NextORM.Core.CteReference{``0})), объявленный через [`With`](xref:NextORM.Core.DataContextExtensions.With(NextORM.Core.IDataContext,System.String,NextORM.Core.QueryCommand)) / [`WithRecursive`](xref:NextORM.Core.DataContextExtensions.WithRecursive(NextORM.Core.IDataContext,System.String,NextORM.Core.QueryCommand,System.Nullable{System.Int32})) — [CTE](10-cte.md) |
 | Ленивая временная таблица | [`From(TempTableSource<TResult>)`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,NextORM.Core.TempTableSource{``0})) — [`AsTempTable`](20-create-table-as.md) |
-| Табличная функция | [`FromTableFunction<T>`](xref:NextORM.Core.DataContextExtensions.FromTableFunction``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{``0}}})) — [Табличные функции](13-table-valued-functions.md) |
+| Табличная функция (runtime-фабрика) | [`From(() => ...)`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{NextORM.Core.EntityBuilder{``0}}})) — [Табличные функции](13-table-valued-functions.md) |
 
 Каждый источник также принимает колбэк `FromOptions` ([`FromOptions`](xref:NextORM.Core.FromOptions)) для модификаторов уровня источника, таких как `TABLESAMPLE`/`SAMPLE` и хинты таблиц/индексов (см. [Сэмплирование таблицы](#сэмплирование-таблицы-tablesample) ниже). Аддитивные форвардеры `CreateQueryBuilder*` зеркалят эти перегрузки один-к-одному (см. [Справочник API](../advanced/api-reference.md)). Переопределения, меняющие рендер источника уже выбранной сущности, описаны в [Переопределении источника для запроса](#переопределение-источника-для-запроса).
 
@@ -44,15 +44,63 @@ select id
 | 9 |
 | 10 |
 
+Создание производного источника и его материализация — два разных шага. `From(inner)` составляет
+производную таблицу; чтобы прочитать её строки, нужен **внешний `Select`**, потому что внешний запрос
+может адресовать только выходные столбцы, объявленные внутренним `SELECT`. «Голое» чтение
+`From(inner).ToList()` допускается только тогда, когда внутренняя проекция уже состоит из разрешённых
+ссылок на столбцы (столбец сущности, переименованный спроецированный член, вычисляемый скаляр, читаемый
+по своему выходному имени). Проекция, члены которой являются выражениями над членом строки, —
+анонимная `new { it.Id }` или DTO `new Dto { Id = it.Id }` — так переиспользована быть не может и
+отклоняется на этапе подготовки с `QueryPreparationException`; ограничение относится к **форме
+выражения** внутренней проекции, а не к CLR-типу результата. Добавьте внешний выбор
+(`From(inner).Select(it => it.Id)`, как выше), чтобы прочитать такой источник. Этот вариант работает с
+DTO, создаваемыми через инициализатор членов, и позиционными записями; для проверенной проекции класса,
+создаваемого только через конструктор, существует ранее выявленная ошибка
+(`Cannot find inner column Id`), поэтому используйте одну из этих поддерживаемых форм. См.
+[Ограничения](../advanced/limitations.md#ограничения). Разделение
+«построение/материализация» описано в [Подзапросах](07-subqueries.md#подзапрос-как-источник-from).
+
+Производный источник может также проецировать вычисляемый скаляр вместо именованного члена.
+Внешний запрос обращается к этому значению по выходному столбцу, который объявляет производный
+список выборки, поэтому его можно сортировать, фильтровать и проецировать как любой другой столбец:
+
+```csharp
+var inner = dataContext.From<SimpleEntity>()
+    .Where(it => it.Id <= 2)
+    .Select(it => it.Id * 2);
+
+var rows = dataContext.From(inner)
+    .OrderBy(x => x)
+    .Select(x => x * 3)
+    .ToList();
+```
+
+```sql
+-- SQLite
+select (c0 * 3)
+ from (select (id * 2) as 'c0'
+ from simple_entity
+ where (id <= 2)) as 't1'
+ order by t1.c0
+```
+
+Вывод: `6`, `12`.
+
+> Сгенерированное имя выходного столбца в примере (`c0`) — это то, как отрендеренный SQL
+> экспонирует вычисляемый столбец; публичным соглашением об именовании оно не является. Читайте
+> значение через построитель (как выше), а не по жёстко записанному написанию, которое зависит от
+> провайдера и может измениться.
+
 ## Табличная функция в качестве источника
 
-`dataContext.FromTableFunction(() => ...)` использует табличную функцию как источник `FROM`. Встроенные
+`dataContext.From(() => ...)` использует runtime-фабрику табличной функции как источник `FROM`: lambda несёт
+вызов фабрики и её аргументы (см. [Табличные функции](13-table-valued-functions.md)). Встроенные
 помощники покрывают распространённые функции, возвращающие набор; `SqlFunctions.Postgres.unnest`
 разворачивает массив PostgreSQL в одну строку на элемент:
 
 ```csharp
 var elements = dataContext
-    .FromTableFunction(() => SqlFunctions.Postgres.unnest(SqlFunctions.Parameter<long[]>(0)))
+    .From(() => SqlFunctions.Postgres.unnest(SqlFunctions.Parameter<long[]>(0)))
     .Select(r => r.Value)
     .ToList(new long[] { 1, 2, 3 });
 ```
@@ -69,14 +117,14 @@ select unnest as "Value"
 using static NextORM.Core.SqlFunctions;
 
 var elements = dataContext
-    .FromTableFunction(() => Postgres.unnest(Parameter<long[]>(0)))
+    .From(() => Postgres.unnest(Parameter<long[]>(0)))
     .Select(r => r.Value)
     .ToList(new long[] { 1, 2, 3 });
 ```
 
 `SqlFunctions.Postgres.generate_series(start, stop)` аналогично генерирует числовую последовательность.
 Встроенные помощники включаются провайдером ([`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect.SupportsTableFunction(System.String))), а
-пользовательская функция объявляется через `[SqlTableFunction]`; см.
+пользовательская функция объявляется как фабрика `TvfEntityBuilder<T>`; см.
 [Табличные функции](13-table-valued-functions.md).
 
 ## Сэмплирование таблицы (`TABLESAMPLE`)

@@ -803,7 +803,7 @@ public class SqlGenerationTests
 
         var sql = SqlOf(ctx, e.Select(x => new { V = x.Id > 1 ? "big" : "small" }));
 
-        sql.Should().Contain("case when (id > 1) then 'big' else 'small' end");
+        sql.Should().Contain("case when (id > 1) then E'big' else E'small' end");
         sql.Should().Contain("as \"V\"");
     }
 
@@ -815,7 +815,7 @@ public class SqlGenerationTests
 
         var sql = SqlOf(ctx, e.Select(x => new { V = x.Boolean == true ? (x.Int == null ? "a" : "b") : "c" }));
 
-        sql.Should().Contain("case when b = true then case when nullableint is null then 'a' else 'b' end else 'c' end");
+        sql.Should().Contain("case when b = true then case when nullableint is null then E'a' else E'b' end else E'c' end");
     }
 
     [Fact]
@@ -849,7 +849,7 @@ public class SqlGenerationTests
 
         var sql = SqlOf(ctx, e.Select(SwitchOfId("other", (1L, "one"), (2L, "two"))));
 
-        sql.Should().Contain("case when id = 1 then 'one' when id = 2 then 'two' else 'other' end");
+        sql.Should().Contain("case when id = 1 then E'one' when id = 2 then E'two' else E'other' end");
     }
 
     [Fact]
@@ -914,7 +914,7 @@ public class SqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Where(x => x.String!.Contains("df")).Select(x => new { x.Id }))
-            .Should().Contain("somestring like '%df%'");
+            .Should().Contain("somestring like E'%df%'");
     }
 
     [Fact]
@@ -924,7 +924,7 @@ public class SqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Where(x => x.String!.Contains("a%b_c")).Select(x => new { x.Id }))
-            .Should().Contain("somestring like '%a\\%b\\_c%' escape '\\'");
+            .Should().Contain("somestring like E'%a\\\\%b\\\\_c%' escape E'\\\\'");
     }
 
     [Fact]
@@ -964,7 +964,7 @@ public class SqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Select(x => new { V = x.String!.Replace("a", "b") }))
-            .Should().Contain("replace(somestring, 'a', 'b')");
+            .Should().Contain("replace(somestring, E'a', E'b')");
     }
 
     [Fact]
@@ -984,7 +984,7 @@ public class SqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Where(x => SqlFunctions.Sql.like(x.String, "%a%")).Select(x => new { x.Id }))
-            .Should().Contain("somestring like '%a%'");
+            .Should().Contain("somestring like E'%a%'");
     }
 
     [Fact]
@@ -1295,7 +1295,7 @@ public class SqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Select(x => new { S = SqlFunctions.Postgres.array_to_string(SqlFunctions.Parameter<long[]>(0), ",") }))
-            .Should().Contain("array_to_string(@norm_p0, ',')");
+            .Should().Contain("array_to_string(@norm_p0, E',')");
     }
 
     [Fact]
@@ -1341,7 +1341,7 @@ public class SqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.json_build_object("id", x.Id, "s", x.String) }))
-            .Should().Contain("json_build_object('id', id, 's', somestring) as \"V\"");
+            .Should().Contain("json_build_object(E'id', id, E's', somestring) as \"V\"");
     }
 
     [Fact]
@@ -1363,7 +1363,7 @@ public class SqlGenerationTests
             .Where(x => SqlFunctions.Postgres.json_get(SqlFunctions.Parameter<JsonDocument>(0), "name") == "x")
             .Select(x => new { x.Id }));
 
-        Normalize(command.DbCommand.CommandText).Should().Contain("@norm_p0 -> 'name'");
+        Normalize(command.DbCommand.CommandText).Should().Contain("cast(@norm_p0 as jsonb) -> cast(E'name' as text)");
         command.DbCommandParams.Cast<DbParameter>().Should().ContainSingle()
             .Which.ParameterName.Should().Be("norm_p0");
     }
@@ -1378,7 +1378,7 @@ public class SqlGenerationTests
             .Where(x => SqlFunctions.Postgres.json_get_text(SqlFunctions.Parameter<JsonDocument>(0), 0) == "x")
             .Select(x => new { x.Id }));
 
-        Normalize(command.DbCommand.CommandText).Should().Contain("@norm_p0 ->> 0");
+        Normalize(command.DbCommand.CommandText).Should().Contain("cast(@norm_p0 as jsonb) ->> cast(0 as integer)");
     }
 
     [Fact]
@@ -1392,7 +1392,7 @@ public class SqlGenerationTests
             .Where(x => SqlFunctions.Postgres.json_get_path(SqlFunctions.Parameter<JsonDocument>(0), path) == "x")
             .Select(x => new { x.Id }));
 
-        Normalize(command.DbCommand.CommandText).Should().Contain("@norm_p0 #> @p0");
+        Normalize(command.DbCommand.CommandText).Should().Contain("cast(@norm_p0 as jsonb) #> cast(@p0 as text[])");
         command.DbCommandParams.Cast<DbParameter>().Should().Contain(p => p.ParameterName == "p0");
     }
 
@@ -1411,7 +1411,7 @@ public class SqlGenerationTests
 
         var sql = Normalize(command.DbCommand.CommandText);
         sql.Should().Contain("@norm_p0 @> @norm_p1");
-        sql.Should().Contain("@norm_p2 ? 'key'");
+        sql.Should().Contain("@norm_p2 ? E'key'");
         sql.Should().Contain("@norm_p3 ?| @p0");
         sql.Should().Contain("@norm_p4 ?& @p1");
     }
@@ -1426,7 +1426,7 @@ public class SqlGenerationTests
             .Where(x => SqlFunctions.Postgres.json_exists(SqlFunctions.Postgres.json_cast(SqlFunctions.Parameter<string>(0)), "key"))
             .Select(x => new { x.Id }));
 
-        Normalize(command.DbCommand.CommandText).Should().Contain("cast(@norm_p0 as jsonb) ? 'key'");
+        Normalize(command.DbCommand.CommandText).Should().Contain("cast(@norm_p0 as jsonb) ? E'key'");
     }
 
     [Fact]
@@ -1544,7 +1544,7 @@ public class SqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Select(x => SqlFunctions.Sql.string_agg(x.String, ",")))
-            .Should().Contain("string_agg(somestring, ',')");
+            .Should().Contain("string_agg(somestring, E',')");
         // array_agg produces an array column; the row reader materialises it as T[].
         SqlOf(ctx, e.Select(x => SqlFunctions.Postgres.array_agg(x.Id)))
             .Should().Contain("array_agg(id)");
@@ -1624,7 +1624,7 @@ public class SqlGenerationTests
         var sql = SqlOf(ctx, e.Where(x => Tuple.Create(x.Id, x.String) == Tuple.Create(1L, "a"))
             .Select(x => new { x.Id }));
 
-        sql.Should().Contain("ROW(id, somestring) = ROW(1, 'a')");
+        sql.Should().Contain("ROW(id, somestring) = ROW(1, E'a')");
     }
 
     [Fact]
@@ -1652,7 +1652,7 @@ public class SqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Select(x => SqlFunctions.Sql.string_agg(x.String, ",", () => x.Id > 0L)))
-            .Should().Contain("string_agg(somestring, ',') filter (where (id > 0))");
+            .Should().Contain("string_agg(somestring, E',') filter (where (id > 0))");
     }
 
     [Fact]
@@ -1663,7 +1663,7 @@ public class SqlGenerationTests
         var stop = 3L;
 
         var command = Prepare(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.Postgres.generate_series(start, stop))
+            .From(() => SqlFunctions.Postgres.generate_series(start, stop))
             .Select(r => new { r.Value }));
 
         Normalize(command.DbCommand.CommandText)
@@ -1676,11 +1676,79 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
 
         var command = Prepare(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.Postgres.unnest(SqlFunctions.Parameter<long[]>(0)))
+            .From(() => SqlFunctions.Postgres.unnest(SqlFunctions.Parameter<long[]>(0)))
             .Select(r => new { r.Value }));
 
         Normalize(command.DbCommand.CommandText)
             .Should().Be("select unnest as \"Value\"\n from (select unnest\n from unnest(@norm_p0)) as \"t1\"");
+    }
+
+    [Fact]
+    public void TableFunction_UnnestTwoArrays_ShouldRenameBothColumns()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var command = Prepare(ctx, ctx
+            .From(() => SqlFunctions.Postgres.unnest(
+                SqlFunctions.Parameter<long[]>(0), SqlFunctions.Parameter<string[]>(1)))
+            .Select(r => new { r.Value1, r.Value2 }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Be("select value1, value2\n from (select value1, value2\n from rows from (unnest(@norm_p0), unnest(@norm_p1)) as u(value1, value2)) as \"t1\"");
+    }
+
+    [Fact]
+    public void TableFunction_UnnestThreeArrays_ShouldRenameAllColumns()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var command = Prepare(ctx, ctx
+            .From(() => SqlFunctions.Postgres.unnest(
+                SqlFunctions.Parameter<long[]>(0), SqlFunctions.Parameter<string[]>(1), SqlFunctions.Parameter<int[]>(2)))
+            .Select(r => new { r.Value1, r.Value2, r.Value3 }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Be("select value1, value2, value3\n from (select value1, value2, value3\n from rows from (unnest(@norm_p0), unnest(@norm_p1), unnest(@norm_p2)) as u(value1, value2, value3)) as \"t1\"");
+    }
+
+    [Fact]
+    public void TableFunction_UnnestWithOrdinality_ShouldProjectValueAndOrdinality()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var command = Prepare(ctx, ctx
+            .From(() => SqlFunctions.Postgres.unnest_with_ordinality(SqlFunctions.Parameter<long[]>(0)))
+            .Select(r => new { r.Value, r.Ordinality }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Be("select value, ordinality\n from (select value, ordinality\n from rows from (unnest(@norm_p0)) with ordinality as u(value, ordinality)) as \"t1\"");
+    }
+
+    [Fact]
+    public void TableFunction_UnnestTwoArraysWithOrdinality_ShouldProjectBothColumnsAndOrdinality()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var command = Prepare(ctx, ctx
+            .From(() => SqlFunctions.Postgres.unnest_with_ordinality(
+                SqlFunctions.Parameter<long[]>(0), SqlFunctions.Parameter<string[]>(1)))
+            .Select(r => new { r.Value1, r.Value2, r.Ordinality }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Be("select value1, value2, ordinality\n from (select value1, value2, ordinality\n from rows from (unnest(@norm_p0), unnest(@norm_p1)) with ordinality as u(value1, value2, ordinality)) as \"t1\"");
+    }
+
+    [Fact]
+    public void TableFunction_GenerateSubscripts_ShouldEmitCall()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var command = Prepare(ctx, ctx
+            .From(() => SqlFunctions.Postgres.generate_subscripts(SqlFunctions.Parameter<long[]>(0), 1))
+            .Select(r => new { r.Value }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Be("select generate_subscripts as \"Value\"\n from (select generate_subscripts\n from generate_subscripts(@norm_p0, 1)) as \"t1\"");
     }
 
     [Fact]
@@ -1691,7 +1759,7 @@ public class SqlGenerationTests
         var pattern = "\\d";
 
         var command = Prepare(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.Postgres.regexp_matches(source, pattern))
+            .From(() => SqlFunctions.Postgres.regexp_matches(source, pattern))
             .Select(r => new { r.Matches }));
 
         Normalize(command.DbCommand.CommandText)
@@ -1706,7 +1774,7 @@ public class SqlGenerationTests
         var pattern = ",";
 
         var command = Prepare(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.Postgres.regexp_split_to_table(source, pattern))
+            .From(() => SqlFunctions.Postgres.regexp_split_to_table(source, pattern))
             .Select(r => new { r.Value }));
 
         Normalize(command.DbCommand.CommandText)
@@ -1719,7 +1787,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
 
         var command = Prepare(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.Postgres.jsonb_array_elements(SqlFunctions.Parameter<JsonDocument>(0)))
+            .From(() => SqlFunctions.Postgres.jsonb_array_elements(SqlFunctions.Parameter<JsonDocument>(0)))
             .Select(r => new { r.Value }));
 
         Normalize(command.DbCommand.CommandText)
@@ -1732,7 +1800,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
 
         var command = Prepare(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.Postgres.jsonb_array_elements_text(SqlFunctions.Parameter<JsonDocument>(0)))
+            .From(() => SqlFunctions.Postgres.jsonb_array_elements_text(SqlFunctions.Parameter<JsonDocument>(0)))
             .Select(r => new { r.Value }));
 
         Normalize(command.DbCommand.CommandText)
@@ -1745,7 +1813,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
 
         var command = Prepare(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.Postgres.jsonb_each(SqlFunctions.Parameter<JsonDocument>(0)))
+            .From(() => SqlFunctions.Postgres.jsonb_each(SqlFunctions.Parameter<JsonDocument>(0)))
             .Select(r => new { r.Key, r.Value }));
 
         Normalize(command.DbCommand.CommandText)
@@ -1758,7 +1826,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
 
         var command = Prepare(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.Postgres.jsonb_each_text(SqlFunctions.Parameter<JsonDocument>(0)))
+            .From(() => SqlFunctions.Postgres.jsonb_each_text(SqlFunctions.Parameter<JsonDocument>(0)))
             .Select(r => new { r.Key, r.Value }));
 
         Normalize(command.DbCommand.CommandText)
@@ -1771,7 +1839,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
 
         var command = Prepare(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.Postgres.jsonb_to_record<IDynamicRecordRow>(SqlFunctions.Parameter<JsonDocument>(0)))
+            .From(() => SqlFunctions.Postgres.jsonb_to_record<IDynamicRecordRow>(SqlFunctions.Parameter<JsonDocument>(0)))
             .Select(r => new { r.A, r.B }));
 
         Normalize(command.DbCommand.CommandText)
@@ -1784,7 +1852,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
 
         var command = Prepare(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.Postgres.jsonb_to_recordset<IDynamicRecordRow>(SqlFunctions.Parameter<JsonDocument>(0)))
+            .From(() => SqlFunctions.Postgres.jsonb_to_recordset<IDynamicRecordRow>(SqlFunctions.Parameter<JsonDocument>(0)))
             .Select(r => new { r.A, r.B }));
 
         Normalize(command.DbCommand.CommandText)
@@ -1797,7 +1865,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
 
         var act = () => SqlOf(ctx, ctx
-            .FromTableFunction(() => MismatchedTvf.Values("a integer", "(1)"))
+            .From(() => MismatchedTvf.Values("a integer", "(1)"))
             .Select(r => new { r.A }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*LeadingArgument*");
@@ -1809,7 +1877,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
 
         var act = () => SqlOf(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.ClickHouse.values<IDynamicRecordRow>("(1, 'x')"))
+            .From(() => SqlFunctions.ClickHouse.values<IDynamicRecordRow>("(1, 'x')"))
             .Select(r => new { r.A }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*values*");
@@ -1821,7 +1889,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
 
         var command = Prepare(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.Postgres.jsonb_object_keys(SqlFunctions.Parameter<JsonDocument>(0)))
+            .From(() => SqlFunctions.Postgres.jsonb_object_keys(SqlFunctions.Parameter<JsonDocument>(0)))
             .Select(r => new { r.Key }));
 
         Normalize(command.DbCommand.CommandText)
@@ -1835,7 +1903,7 @@ public class SqlGenerationTests
         var path = "$.a";
 
         var command = Prepare(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.Postgres.jsonb_path_query(
+            .From(() => SqlFunctions.Postgres.jsonb_path_query(
                 SqlFunctions.Parameter<JsonDocument>(0),
                 SqlFunctions.Postgres.jsonpath(path)))
             .Select(r => new { r.Value }));
@@ -1845,17 +1913,152 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void TableFunction_JsonArrayElements_ShouldCastDocumentAndProjectValue()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var command = Prepare(ctx, ctx
+            .From(() => SqlFunctions.Postgres.json_array_elements("[1,{\"a\":2}]"))
+            .Select(r => new { r.Value }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Be("select value\n from json_array_elements(cast(E'[1,{\"a\":2}]' as json)) as \"t1\"");
+    }
+
+    [Fact]
+    public void TableFunction_JsonArrayElementsText_ShouldCastDocumentAndProjectValue()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var command = Prepare(ctx, ctx
+            .From(() => SqlFunctions.Postgres.json_array_elements_text("[1,\"a\",null]"))
+            .Select(r => new { r.Value }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Be("select value\n from json_array_elements_text(cast(E'[1,\"a\",null]' as json)) as \"t1\"");
+    }
+
+    [Fact]
+    public void TableFunction_JsonEach_ShouldCastDocumentAndProjectKeyAndValue()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var command = Prepare(ctx, ctx
+            .From(() => SqlFunctions.Postgres.json_each("{\"a\":1,\"b\":{\"c\":2}}"))
+            .Select(r => new { r.Key, r.Value }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Be("select key, value\n from json_each(cast(E'{\"a\":1,\"b\":{\"c\":2}}' as json)) as \"t1\"");
+    }
+
+    [Fact]
+    public void TableFunction_JsonEachText_ShouldCastDocumentAndProjectKeyAndValue()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var command = Prepare(ctx, ctx
+            .From(() => SqlFunctions.Postgres.json_each_text("{\"a\":1,\"b\":2}"))
+            .Select(r => new { r.Key, r.Value }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Be("select key, value\n from json_each_text(cast(E'{\"a\":1,\"b\":2}' as json)) as \"t1\"");
+    }
+
+    [Fact]
+    public void TableFunction_JsonbPathQueryTz_ShouldCastArgumentsAndRestoreFunctionColumn()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var path = "$.d.datetime()";
+        var vars = "{}";
+
+        var command = Prepare(ctx, ctx
+            .From(() => SqlFunctions.Postgres.jsonb_path_query_tz(
+                SqlFunctions.Parameter<string>(0), path, vars, false))
+            .Select(r => new { r.Value }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Be("select jsonb_path_query_tz as \"Value\"\n from (select jsonb_path_query_tz\n from jsonb_path_query_tz(cast(@norm_p0 as jsonb), cast(@path as jsonpath), cast(@vars as jsonb), false)) as \"t1\"");
+    }
+
+    [Fact]
+    public void TableFunction_JsonToRecord_ShouldRenderAliasColumnList()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var command = Prepare(ctx, ctx
+            .From(() => SqlFunctions.Postgres.json_to_record<IDynamicRecordRow>(SqlFunctions.Parameter<string>(0)))
+            .Select(r => new { r.A, r.B }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Be("select a, b\n from json_to_record(cast(@norm_p0 as json)) as \"t1\"(a integer, b text)");
+    }
+
+    [Fact]
+    public void TableFunction_JsonToRecordset_ShouldRenderAliasColumnList()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var command = Prepare(ctx, ctx
+            .From(() => SqlFunctions.Postgres.json_to_recordset<IDynamicRecordRow>(SqlFunctions.Parameter<string>(0)))
+            .Select(r => new { r.A, r.B }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Be("select a, b\n from json_to_recordset(cast(@norm_p0 as json)) as \"t1\"(a integer, b text)");
+    }
+
+    [Fact]
     public void TableFunction_TsStat_ShouldEmitCall()
     {
         using var ctx = PostgresTestContext.Create();
         var query = "select to_tsvector('a b')";
 
         var command = Prepare(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.Postgres.ts_stat(query))
+            .From(() => SqlFunctions.Postgres.ts_stat(query))
             .Select(r => new { r.Word, r.Ndoc, r.Nentry }));
 
         Normalize(command.DbCommand.CommandText)
             .Should().Be("select word, ndoc, nentry\n from ts_stat(@query) as \"t1\"");
+    }
+
+    /// <summary>
+    /// The #281 full-text readers of PostgreSQL 17 as FROM sources: <c>ts_debug</c> is wrapped in a
+    /// projection that casts its <c>regdictionary</c>/<c>regdictionary[]</c> columns to
+    /// <c>text</c>/<c>text[]</c> (they have no CLR mapping), while <c>ts_parse</c> and
+    /// <c>ts_token_type</c> keep their bare calls — their text (name) argument form is the one the
+    /// members expose. The live shape is asserted in
+    /// <c>PostgresFunctionsTests.FullTextTokenizerReaders_ShouldExposeRowsSchemaAndClrTypes</c>.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void TableFunction_FullTextTokenizerReaders_ShouldEmitCallsAndProjectDictionaryColumns()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        foreach (var name in new[] { "ts_debug", "ts_parse", "ts_token_type" })
+            PostgresDialect.Instance.SupportsTableFunction(name).Should().BeTrue($"'{name}' is delivered on PostgreSQL");
+
+        var debug = Prepare(ctx, ctx
+            .From(() => SqlFunctions.Postgres.ts_debug(SqlFunctions.Parameter<string>(0)))
+            .Select(r => new { r.Alias, r.Description, r.Token, r.Dictionaries, r.Dictionary, r.Lexemes }));
+
+        Normalize(debug.DbCommand.CommandText)
+            .Should().Be(
+                "select alias, description, token, dictionaries, dictionary, lexemes\n from (select alias, description, token," +
+                " dictionaries::text[] as dictionaries, dictionary::text as dictionary, lexemes\n from ts_debug(@norm_p0)) as \"t1\"");
+
+        var parse = Prepare(ctx, ctx
+            .From(() => SqlFunctions.Postgres.ts_parse(SqlFunctions.Parameter<string>(0), SqlFunctions.Parameter<string>(1)))
+            .Select(r => new { r.Tokid, r.Token }));
+
+        Normalize(parse.DbCommand.CommandText)
+            .Should().Be("select tokid, token\n from ts_parse(@norm_p0, @norm_p1) as \"t1\"");
+
+        var types = Prepare(ctx, ctx
+            .From(() => SqlFunctions.Postgres.ts_token_type(SqlFunctions.Parameter<string>(0)))
+            .Select(r => new { r.Tokid, r.Alias, r.Description }));
+
+        Normalize(types.DbCommand.CommandText)
+            .Should().Be("select tokid, alias, description\n from ts_token_type(@norm_p0) as \"t1\"");
     }
 
     [Fact]
@@ -1864,7 +2067,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var csv = "a,b";
 
-        var act = () => SqlOf(ctx, ctx.FromTableFunction(() => SqlFunctions.SqlServer.string_split(csv, ","))
+        var act = () => SqlOf(ctx, ctx.From(() => SqlFunctions.SqlServer.string_split(csv, ","))
             .Select(r => new { r.Value }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*string_split*");
@@ -1876,7 +2079,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
 
         var act = () => SqlOf(ctx, ctx
-            .FromTableFunction(() => SqlFunctions.SqlServer.containstable<int>("docs", "body", "cat"))
+            .From(() => SqlFunctions.SqlServer.containstable<int>("docs", "body", "cat"))
             .Select(r => new { r.Key }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*containstable*");
@@ -1903,13 +2106,13 @@ public class SqlGenerationTests
 
         var source = name switch
         {
-            "url" => ctx.FromTableFunction(() => SqlFunctions.ClickHouse.url<ISimpleEntity>(location, format, structure)),
-            "s3" => ctx.FromTableFunction(() => SqlFunctions.ClickHouse.s3<ISimpleEntity>(location, format, structure)),
-            "file" => ctx.FromTableFunction(() => SqlFunctions.ClickHouse.file<ISimpleEntity>(location, format, structure)),
-            "remote" => ctx.FromTableFunction(() => SqlFunctions.ClickHouse.remote<ISimpleEntity>(addresses, database, table)),
-            "remoteSecure" => ctx.FromTableFunction(() => SqlFunctions.ClickHouse.remote_secure<ISimpleEntity>(addresses, database, table)),
-            "cluster" => ctx.FromTableFunction(() => SqlFunctions.ClickHouse.cluster<ISimpleEntity>(cluster, database, table)),
-            "clusterAllReplicas" => ctx.FromTableFunction(() => SqlFunctions.ClickHouse.cluster_all_replicas<ISimpleEntity>(cluster, database, table)),
+            "url" => ctx.From(() => SqlFunctions.ClickHouse.url<ISimpleEntity>(location, format, structure)),
+            "s3" => ctx.From(() => SqlFunctions.ClickHouse.s3<ISimpleEntity>(location, format, structure)),
+            "file" => ctx.From(() => SqlFunctions.ClickHouse.file<ISimpleEntity>(location, format, structure)),
+            "remote" => ctx.From(() => SqlFunctions.ClickHouse.remote<ISimpleEntity>(addresses, database, table)),
+            "remoteSecure" => ctx.From(() => SqlFunctions.ClickHouse.remote_secure<ISimpleEntity>(addresses, database, table)),
+            "cluster" => ctx.From(() => SqlFunctions.ClickHouse.cluster<ISimpleEntity>(cluster, database, table)),
+            "clusterAllReplicas" => ctx.From(() => SqlFunctions.ClickHouse.cluster_all_replicas<ISimpleEntity>(cluster, database, table)),
             _ => throw new ArgumentOutOfRangeException(nameof(name), name, "Unknown ClickHouse server table function.")
         };
 
@@ -2384,12 +2587,17 @@ public class SqlGenerationTests
 
         var sql = SqlOf(ctx, e.Select(x => new
         {
-            U = SqlFunctions.Sql.gen_random_uuid(),
-            V7 = SqlFunctions.Sql.uuidv7()
+            U = SqlFunctions.Sql.gen_random_uuid()
         }));
 
         sql.Should().Contain("gen_random_uuid()");
-        sql.Should().Contain("uuidv7()");
+
+        // T260 (#260): uuidv7() exists only from PostgreSQL 18, so an unversioned context refuses it
+        // instead of emitting SQL the server rejects; the explicit-18 native rendering is covered by
+        // T260PostgresFunctionCapabilityTests.
+        var v7 = () => SqlOf(ctx, e.Select(x => new { V7 = SqlFunctions.Sql.uuidv7() }));
+        v7.Should().Throw<NotSupportedException>()
+            .WithMessage("The uuidv7 function is not supported by this provider.");
     }
 
     [Fact]
@@ -2409,7 +2617,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var count = 3L;
 
-        var act = () => SqlOf(ctx, ctx.FromTableFunction(() => SqlFunctions.ClickHouse.numbers(count))
+        var act = () => SqlOf(ctx, ctx.From(() => SqlFunctions.ClickHouse.numbers(count))
             .Select(r => new { r.Value }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*numbers*");
@@ -2421,7 +2629,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var count = 3L;
 
-        var act = () => SqlOf(ctx, ctx.FromTableFunction(() => SqlFunctions.ClickHouse.zeros(count))
+        var act = () => SqlOf(ctx, ctx.From(() => SqlFunctions.ClickHouse.zeros(count))
             .Select(r => new { r.Value }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*zeros*");
@@ -2432,7 +2640,7 @@ public class SqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        var act = () => SqlOf(ctx, ctx.FromTableFunction(() => SqlFunctions.ClickHouse.generate_random())
+        var act = () => SqlOf(ctx, ctx.From(() => SqlFunctions.ClickHouse.generate_random())
             .Select(r => new { r.Id }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*generateRandom*");
@@ -2518,7 +2726,7 @@ public class SqlGenerationTests
         var sql = SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Sql.iif(x.Id > 0L, "yes", "no") }));
 
         sql.Should().Contain("case when");
-        sql.Should().Contain("then 'yes' else 'no' end");
+        sql.Should().Contain("then E'yes' else E'no' end");
     }
 
     [Fact]
@@ -2966,20 +3174,16 @@ public class SqlGenerationTests
 
     private static class Tvf
     {
-        [SqlTableFunction("all_rows")]
-        public static IQueryable<ITvfRow> AllRows() => throw new NotSupportedException();
+        public static TvfEntityBuilder<ITvfRow> AllRows() => new("all_rows");
 
-        [SqlTableFunction("rows_by_id")]
-        public static IQueryable<ITvfRow> ById(long id) => throw new NotSupportedException();
+        public static TvfEntityBuilder<ITvfRow> ById(long id) => new("rows_by_id");
 
-        [SqlTableFunction("rows_between", Schema = "app")]
-        public static IQueryable<ITvfRow> Between(long lo, long hi) => throw new NotSupportedException();
+        public static TvfEntityBuilder<ITvfRow> Between(long lo, long hi) => new("rows_between", "app");
     }
 
     private static class MismatchedTvf
     {
-        [SqlTableFunction("user_values", ResultSchema = TableFunctionSchema.LeadingArgument)]
-        public static IQueryable<IDynamicRecordRow> Values(string structure, string tuples) => throw new NotSupportedException();
+        public static TvfEntityBuilder<IDynamicRecordRow> Values(string structure, string tuples) => new("user_values", null, null, null, Array.Empty<int>(), TableFunctionSchema.LeadingArgument);
     }
 
     [Fact]
@@ -2987,7 +3191,7 @@ public class SqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        SqlOf(ctx, ctx.FromTableFunction(() => Tvf.AllRows()).Select(r => new { r.Id }))
+        SqlOf(ctx, ctx.From(() => Tvf.AllRows()).Select(r => new { r.Id }))
             .Should().Be("select id\n from all_rows() as \"t1\"");
     }
 
@@ -2997,7 +3201,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var id = 5L;
 
-        var command = Prepare(ctx, ctx.FromTableFunction(() => Tvf.ById(id)).Select(r => new { r.Id }));
+        var command = Prepare(ctx, ctx.From(() => Tvf.ById(id)).Select(r => new { r.Id }));
 
         Normalize(command.DbCommand.CommandText).Should().Be("select id\n from rows_by_id(@id) as \"t1\"");
         command.DbCommandParams.Cast<DbParameter>().Should().ContainSingle()
@@ -3011,7 +3215,7 @@ public class SqlGenerationTests
         var lo = 1L;
         var hi = 3L;
 
-        var command = Prepare(ctx, ctx.FromTableFunction(() => Tvf.Between(lo, hi)).Select(r => new { r.Id }));
+        var command = Prepare(ctx, ctx.From(() => Tvf.Between(lo, hi)).Select(r => new { r.Id }));
 
         Normalize(command.DbCommand.CommandText).Should().Be("select id\n from app.rows_between(@lo, @hi) as \"t1\"");
         command.DbCommandParams.Cast<DbParameter>().Select(p => p.ParameterName)
@@ -3025,7 +3229,7 @@ public class SqlGenerationTests
         var complex = ctx.From<IComplexEntity>();
 
         var sql = SqlOf(ctx, ctx
-            .FromTableFunction(() => Tvf.AllRows())
+            .From(() => Tvf.AllRows())
             .Join(complex, (r, c) => r.Id == c.Id)
             .Select(p => new { p.Item1.Value, p.Item2.String }));
 
@@ -3039,7 +3243,7 @@ public class SqlGenerationTests
         var simple = ctx.From<ISimpleEntity>();
 
         var sql = SqlOf(ctx, simple
-            .Join(ctx.FromTableFunction(() => Tvf.AllRows()), (s, r) => r.Id == s.Id)
+            .Join(ctx.From(() => Tvf.AllRows()), (s, r) => r.Id == s.Id)
             .Select(p => new { p.Item1.Id, p.Item2.Value }));
 
         sql.Should().Be("select t1.id, t2.value\n from simple_entity as \"t1\"\n join all_rows() as \"t2\" on t2.id = cast(t1.id as bigint)");
@@ -3052,7 +3256,7 @@ public class SqlGenerationTests
         var simple = ctx.From<ISimpleEntity>();
 
         var sql = SqlOf(ctx, simple
-            .CrossApply(ctx.FromTableFunction(() => Tvf.AllRows()))
+            .CrossApply(ctx.From(() => Tvf.AllRows()))
             .Select(p => new { p.Item1.Id, p.Item2.Value }));
 
         sql.Should().Be("select t1.id, t2.value\n from simple_entity as \"t1\"\n cross join lateral all_rows() as \"t2\"");
@@ -3065,7 +3269,7 @@ public class SqlGenerationTests
         var simple = ctx.From<ISimpleEntity>();
 
         var sql = SqlOf(ctx, simple
-            .CrossApply(s => ctx.FromTableFunction(() => Tvf.ById(s.Id)))
+            .CrossApply(s => ctx.From(() => Tvf.ById(s.Id)))
             .Select(p => new { p.Item1.Id, p.Item2.Value }));
 
         sql.Should().Be("select t1.id, t3.value\n from simple_entity as \"t1\"\n cross join lateral (select t2.id, t2.value\n from rows_by_id(cast(t1.id as bigint)) as \"t2\") as \"t3\"");
@@ -3123,7 +3327,10 @@ public class SqlGenerationTests
             F = SqlFunctions.Postgres.regr_r2(x.Id, x.Id),
             G = SqlFunctions.Postgres.regr_count(x.Id, x.Id),
             H = SqlFunctions.Postgres.regr_avgx(x.Id, x.Id),
-            I = SqlFunctions.Postgres.regr_avgy(x.Id, x.Id)
+            I = SqlFunctions.Postgres.regr_avgy(x.Id, x.Id),
+            J = SqlFunctions.Postgres.regr_sxx(x.Id, x.Id),
+            K = SqlFunctions.Postgres.regr_sxy(x.Id, x.Id),
+            L = SqlFunctions.Postgres.regr_syy(x.Id, x.Id)
         }));
 
         sql.Should().Contain("corr(id, id)");
@@ -3135,6 +3342,126 @@ public class SqlGenerationTests
         sql.Should().Contain("regr_count(id, id)");
         sql.Should().Contain("regr_avgx(id, id)");
         sql.Should().Contain("regr_avgy(id, id)");
+        sql.Should().Contain("regr_sxx(id, id)");
+        sql.Should().Contain("regr_sxy(id, id)");
+        sql.Should().Contain("regr_syy(id, id)");
+    }
+
+    /// <summary>
+    /// The PostgreSQL 17 <c>any_value</c> aggregate of #281 (#347 D4) is <c>anyelement → anyelement</c>,
+    /// so it is rendered as the bare native aggregate over a column (no cast: an untyped constant would
+    /// have no target type) and refuses a result shape the row materialiser cannot read back.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void AnyValueAggregate_ShouldEmitAndRefuseNonScalarResults()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.any_value(x.Int) }));
+
+        sql.Should().Contain("any_value(nullableint)");
+        sql.Should().NotContain("cast(", "anyelement takes the column's own type, so no cast is emitted");
+
+        // The aggregate is polymorphic: the CLR result type is the only read-back contract, so a shape
+        // outside the single-column set is refused before any SQL or parameter is produced.
+        var act = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.any_value<object>(x) }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*any_value*polymorphic*");
+    }
+
+    /// <summary>
+    /// The #281 (#347 D4) group-2 aggregates render natively and, for <c>xmlagg</c>, in the only form
+    /// PostgreSQL has: <c>xmlagg(xml)</c>. The operand is cast to <c>xml</c> because there is no
+    /// <c>xmlagg(text)</c>/<c>xmlagg(integer)</c> overload (measured <c>42883</c>), so the rendered call
+    /// is the one that resolves; the JSON aggregates take their arguments uncast (<c>anyelement</c> and
+    /// <c>"any"</c>).
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void XmlAndStrictJsonAggregates_ShouldEmitResolvableForms()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            X = SqlFunctions.Postgres.xmlagg(x.String),
+            A = SqlFunctions.Postgres.json_agg_strict(x.Int),
+            B = SqlFunctions.Postgres.jsonb_agg_strict(x.Int),
+            U = SqlFunctions.Postgres.json_object_agg_unique(x.String, x.Int),
+            S = SqlFunctions.Postgres.json_object_agg_unique_strict(x.String, x.Int)
+        }));
+
+        // xmlagg has exactly one overload, xmlagg(xml) -> xml, so the operand is cast and the emitted
+        // call is the resolvable one: the uncast form was measured as 42883 "function xmlagg(text)".
+        sql.Should().Contain("xmlagg(cast(somestring as xml))");
+        sql.Should().NotContain("xmlagg(somestring)", "xmlagg has no text overload: the uncast call is 42883");
+
+        sql.Should().Contain("json_agg_strict(nullableint)");
+        sql.Should().Contain("jsonb_agg_strict(nullableint)");
+        sql.Should().Contain("json_object_agg_unique(somestring, nullableint)");
+        sql.Should().Contain("json_object_agg_unique_strict(somestring, nullableint)");
+    }
+
+    /// <summary>
+    /// The #281 (#347 D4) group-3 SQL/JSON aggregates render the forms the builder can express
+    /// faithfully. PostgreSQL 17 admits exactly one <c>key VALUE value</c> pair per
+    /// <c>json_objectagg</c> call (the two-pair comma form is <c>42601</c>, measured), so the pair is
+    /// emitted with the <c>VALUE</c> keyword and no cast (the server coerces the key to text); the
+    /// <c>RETURNING jsonb</c> variants ride their own members, and the <c>WITH UNIQUE KEYS</c> clause is
+    /// its own member too, because an aggregate's internal argument list has no clause slot in the
+    /// builder. Neither <c>ORDER BY</c> nor the <c>ABSENT|NULL ON NULL</c> clause can be expressed, so
+    /// nothing of the sort may appear in the rendered SQL.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void SqlJsonAggregates_ShouldEmitTheExpressibleForms()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            A = SqlFunctions.Postgres.json_arrayagg(x.Int),
+            B = SqlFunctions.Postgres.jsonb_arrayagg(x.Int),
+            C = SqlFunctions.Postgres.json_objectagg(x.String, x.Int),
+            D = SqlFunctions.Postgres.json_objectagg_unique(x.String, x.Int),
+            E = SqlFunctions.Postgres.jsonb_objectagg(x.String, x.Int)
+        }));
+
+        sql.Should().Contain("json_arrayagg(nullableint)");
+        sql.Should().Contain("json_arrayagg(nullableint returning jsonb)");
+        sql.Should().Contain("json_objectagg(somestring value nullableint)");
+        sql.Should().Contain("json_objectagg(somestring value nullableint with unique keys)");
+        sql.Should().Contain("json_objectagg(somestring value nullableint returning jsonb)");
+
+        sql.Should().NotContain("order by", "an aggregate's ORDER BY has no clause slot in the builder");
+        sql.Should().NotContain("on null", "the ABSENT/NULL ON NULL clause has no clause slot in the builder");
+        sql.Should().NotContain("json_objectagg(somestring, nullableint)",
+            "PostgreSQL 17 takes one key VALUE value pair; the comma form is 42601");
+    }
+
+    /// <summary>
+    /// The <c>grouping</c> grouping function renders over the rollup grouping list. The query builder
+    /// can emit the ANSI super-aggregate grouping (<c>GroupByRollup</c> → <c>group by rollup (...)</c>,
+    /// <c>PostgresDialect.SupportsRollup</c> is <c>true</c>), so the function is delivered rather than
+    /// refused; its one argument is the grouping expression itself.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void GroupingOverRollup_ShouldRenderInsideTheSuperAggregateQuery()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e
+            .GroupByRollup(x => new { x.Int })
+            .Select(x => new { x.Int, G = SqlFunctions.Postgres.grouping(x.Int) }));
+
+        sql.Should().Contain("group by rollup (nullableint)");
+        sql.Should().Contain("grouping(nullableint)");
     }
 
     [Fact]
@@ -3145,12 +3472,12 @@ public class SqlGenerationTests
 
         var sql = SqlOf(ctx, e.Select(x => new
         {
-            A = SqlFunctions.Postgres.percentile_cont(0.5, () => x.Id),
+            A = SqlFunctions.Postgres.percentile_cont(0.5, () => (double)x.Id),
             B = SqlFunctions.Postgres.percentile_disc(0.5, () => x.Id),
             C = SqlFunctions.Postgres.mode(() => x.String)
         }));
 
-        sql.Should().Contain("percentile_cont(0.5) within group (order by id)");
+        sql.Should().Contain("percentile_cont(0.5) within group (order by cast(id as double precision))");
         sql.Should().Contain("percentile_disc(0.5) within group (order by id)");
         sql.Should().Contain("mode() within group (order by somestring)");
     }
@@ -3212,8 +3539,8 @@ public class SqlGenerationTests
             C = SqlFunctions.Postgres.sha256(SqlFunctions.Parameter<byte[]>(1))
         }));
 
-        sql.Should().Contain("digest('abc', 'sha256')");
-        sql.Should().Contain("digest(@norm_p0, 'sha1')");
+        sql.Should().Contain("digest(E'abc', E'sha256')");
+        sql.Should().Contain("digest(@norm_p0, E'sha1')");
         sql.Should().Contain("sha256(@norm_p1)");
     }
 
@@ -3223,8 +3550,57 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
+        // PostgreSQL only has log(numeric, numeric); both operands are cast to select it.
         SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.log(2.0, x.Int) }))
-            .Should().Contain("log(2, cast(nullableint as double precision))");
+            .Should().Contain("log((2)::numeric, (cast(nullableint as double precision))::numeric)");
+    }
+
+    [Fact]
+    public void ExtendedLogFunction_ShouldCastLiteralOperandShapesToNumeric()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            Ints = SqlFunctions.Postgres.log(2, 8),
+            Longs = SqlFunctions.Postgres.log(2L, 8L),
+            Doubles = SqlFunctions.Postgres.log(2.0, 8.0),
+            Converted = SqlFunctions.Postgres.log((double?)2m, (double?)8m)
+        }));
+
+        // Integral operands are widened to double precision by the facade, then cast to numeric.
+        sql.Should().Contain(
+            "log((cast(2 as double precision))::numeric, (cast(8 as double precision))::numeric) as \"Ints\"");
+        sql.Should().Contain(
+            "log((cast(2 as double precision))::numeric, (cast(8 as double precision))::numeric) as \"Longs\"");
+        // double and explicitly converted decimal operands are already double precision.
+        sql.Should().Contain("log((2)::numeric, (8)::numeric) as \"Doubles\"");
+        sql.Should().Contain("log((2)::numeric, (8)::numeric) as \"Converted\"");
+    }
+
+    [Fact]
+    public void ExtendedLogFunction_ShouldCastParameterOperandsToNumeric()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            Doubles = SqlFunctions.Postgres.log(
+                SqlFunctions.Parameter<double?>(0), SqlFunctions.Parameter<double?>(1)),
+            Ints = SqlFunctions.Postgres.log(
+                SqlFunctions.Parameter<int>(0), SqlFunctions.Parameter<int>(1)),
+            Longs = SqlFunctions.Postgres.log(
+                SqlFunctions.Parameter<long>(0), SqlFunctions.Parameter<long>(1))
+        }));
+
+        sql.Should().Contain("log((@norm_p0)::numeric, (@norm_p1)::numeric) as \"Doubles\"");
+        // Integral parameters are widened to double precision before the numeric cast.
+        sql.Should().Contain(
+            "log((cast(@norm_p0 as double precision))::numeric, (cast(@norm_p1 as double precision))::numeric) as \"Ints\"");
+        sql.Should().Contain(
+            "log((cast(@norm_p0 as double precision))::numeric, (cast(@norm_p1 as double precision))::numeric) as \"Longs\"");
     }
 
     [Fact]
@@ -3251,19 +3627,19 @@ public class SqlGenerationTests
             N = SqlFunctions.Postgres.md5(x.String)
         }));
 
-        sql.Should().Contain("split_part(somestring, ',', 1)");
-        sql.Should().Contain("strpos(somestring, 'a')");
+        sql.Should().Contain("split_part(somestring, E',', 1)");
+        sql.Should().Contain("strpos(somestring, E'a')");
         sql.Should().Contain("left(somestring, 2)");
         sql.Should().Contain("right(somestring, 2)");
-        sql.Should().Contain("lpad(somestring, 5, '0')");
-        sql.Should().Contain("rpad(somestring, 5, '0')");
+        sql.Should().Contain("lpad(somestring, 5, E'0')");
+        sql.Should().Contain("rpad(somestring, 5, E'0')");
         sql.Should().Contain("repeat(somestring, 3)");
         sql.Should().Contain("reverse(somestring)");
         sql.Should().Contain("initcap(somestring)");
-        sql.Should().Contain("translate(somestring, 'a', 'b')");
-        sql.Should().Contain("overlay(somestring, 'XX', 2, 2)");
-        sql.Should().Contain("concat_ws(',', somestring, id)");
-        sql.Should().Contain("format('%s', somestring)");
+        sql.Should().Contain("translate(somestring, E'a', E'b')");
+        sql.Should().Contain("overlay(somestring, E'XX', 2, 2)");
+        sql.Should().Contain("concat_ws(E',', somestring, id)");
+        sql.Should().Contain("format(E'%s', somestring)");
         sql.Should().Contain("md5(somestring)");
     }
 
@@ -3283,11 +3659,11 @@ public class SqlGenerationTests
                 E = SqlFunctions.Postgres.regexp_instr(x.String, "a")
             }));
 
-        sql.Should().Contain("regexp_replace(somestring, 'a', 'b')");
-        sql.Should().Contain("regexp_like(somestring, '^a')");
-        sql.Should().Contain("regexp_split_to_array(somestring, ',')");
-        sql.Should().Contain("regexp_count(somestring, 'a')");
-        sql.Should().Contain("regexp_instr(somestring, 'a')");
+        sql.Should().Contain("regexp_replace(somestring, E'a', E'b')");
+        sql.Should().Contain("regexp_like(somestring, E'^a')");
+        sql.Should().Contain("regexp_split_to_array(somestring, E',')");
+        sql.Should().Contain("regexp_count(somestring, E'a')");
+        sql.Should().Contain("regexp_instr(somestring, E'a')");
     }
 
     [Fact]
@@ -3312,11 +3688,11 @@ public class SqlGenerationTests
             }));
 
         sql.Should().Contain("justify_days(@norm_p0)");
-        sql.Should().Contain("to_char(dt, 'YYYY')");
-        sql.Should().Contain("to_date('2020-01-01', 'YYYY-MM-DD')");
-        sql.Should().Contain("to_number('1', '999')");
+        sql.Should().Contain("to_char(dt, E'YYYY')");
+        sql.Should().Contain("to_date(E'2020-01-01', E'YYYY-MM-DD')");
+        sql.Should().Contain("to_number(E'1', E'999')");
         sql.Should().Contain("to_timestamp(0)");
-        sql.Should().Contain("timezone('UTC', dt)");
+        sql.Should().Contain("timezone(E'UTC', dt)");
         sql.Should().Contain("current_date");
         sql.Should().Contain("current_time");
         sql.Should().Contain("localtime");
@@ -3368,8 +3744,8 @@ public class SqlGenerationTests
             B = SqlFunctions.Postgres.regexp_substr(x.String, "\\d+", "i")
         }));
 
-        sql.Should().Contain("regexp_substr(somestring, '\\d+')");
-        sql.Should().Contain("regexp_substr(somestring, '\\d+', 'i')");
+        sql.Should().Contain("regexp_substr(somestring, E'\\\\d+')");
+        sql.Should().Contain("regexp_substr(somestring, E'\\\\d+', E'i')");
     }
 
     [Fact]
@@ -3401,7 +3777,7 @@ public class SqlGenerationTests
         }));
 
         sql.Should().Contain("age(dt, dt)");
-        sql.Should().Contain("date_bin(cast('1 hour' as interval), dt, dt)");
+        sql.Should().Contain("date_bin(cast(E'1 hour' as interval), dt, dt)");
     }
 
     [Fact]
@@ -3417,9 +3793,9 @@ public class SqlGenerationTests
             C = SqlFunctions.Postgres.set_config("app.name", "1", false)
         }));
 
-        sql.Should().Contain("current_setting('app.name')");
-        sql.Should().Contain("current_setting('app.name', true)");
-        sql.Should().Contain("set_config('app.name', '1', false)");
+        sql.Should().Contain("current_setting(E'app.name')");
+        sql.Should().Contain("current_setting(E'app.name', true)");
+        sql.Should().Contain("set_config(E'app.name', E'1', false)");
     }
 
     [Fact]
@@ -3436,9 +3812,9 @@ public class SqlGenerationTests
             D = SqlFunctions.Postgres.lastval()
         }));
 
-        sql.Should().Contain("nextval(cast('my_seq' as regclass))");
-        sql.Should().Contain("setval(cast('my_seq' as regclass), 5)");
-        sql.Should().Contain("currval(cast('my_seq' as regclass))");
+        sql.Should().Contain("nextval(cast(E'my_seq' as regclass))");
+        sql.Should().Contain("setval(cast(E'my_seq' as regclass), 5)");
+        sql.Should().Contain("currval(cast(E'my_seq' as regclass))");
         sql.Should().Contain("lastval()");
     }
 
@@ -3454,7 +3830,7 @@ public class SqlGenerationTests
             B = SqlFunctions.Postgres.jsonb_array(1, 2)
         }));
 
-        sql.Should().Contain("json_array(1, true, 'x')");
+        sql.Should().Contain("json_array(1, true, E'x')");
         sql.Should().Contain("json_array(1, 2 returning jsonb)");
     }
 
@@ -3471,9 +3847,9 @@ public class SqlGenerationTests
             C = SqlFunctions.Postgres.json_exists(SqlFunctions.Parameter<JsonDocument>(2), "$.c", true)
         }));
 
-        sql.Should().Contain("json_value(@norm_p0, cast('$.a' as jsonpath))");
-        sql.Should().Contain("json_query(@norm_p1, cast('$.b' as jsonpath))");
-        sql.Should().Contain("json_exists(@norm_p2, cast('$.c' as jsonpath))");
+        sql.Should().Contain("json_value(@norm_p0, cast(E'$.a' as jsonpath))");
+        sql.Should().Contain("json_query(@norm_p1, cast(E'$.b' as jsonpath))");
+        sql.Should().Contain("json_exists(@norm_p2, cast(E'$.c' as jsonpath))");
     }
 
     [Fact]
@@ -3506,8 +3882,6 @@ public class SqlGenerationTests
             .Where(x => SqlFunctions.Postgres.array_replace(SqlFunctions.Parameter<long[]>(5), x.Id, x.Id) != null)
             .Where(x => SqlFunctions.Postgres.array_fill(x.Id, 2, 3) != null)
             .Where(x => SqlFunctions.Postgres.array_positions(SqlFunctions.Parameter<long[]>(7), x.Id) != null)
-            .Where(x => SqlFunctions.Postgres.array_reverse(SqlFunctions.Parameter<long[]>(8)) != null)
-            .Where(x => SqlFunctions.Postgres.array_sort(SqlFunctions.Parameter<long[]>(9)) != null)
             .Where(x => SqlFunctions.Postgres.string_to_array(x.String, ",") != null)
             .Select(x => new
             {
@@ -3522,9 +3896,7 @@ public class SqlGenerationTests
         sql.Should().Contain("array_fill(id, @");
         sql.Should().Contain("array_dims(@norm_p6)");
         sql.Should().Contain("array_positions(@norm_p7, id)");
-        sql.Should().Contain("array_reverse(@norm_p8)");
-        sql.Should().Contain("array_sort(@norm_p9)");
-        sql.Should().Contain("string_to_array(somestring, ',')");
+        sql.Should().Contain("string_to_array(somestring, E',')");
     }
 
     [Fact]
@@ -3543,17 +3915,109 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void FullTextConstructors_ShouldEmitCastsAndTextResult()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            A2T = SqlFunctions.Postgres.array_to_tsvector(SqlFunctions.Parameter<string?[]>(0)),
+            Json2Ts = SqlFunctions.Postgres.json_to_tsvector("{\"a\":1}", "[\"numeric\"]"),
+            Json2TsCfg = SqlFunctions.Postgres.json_to_tsvector("english", "{\"a\":1}", "[\"string\"]"),
+            Jsonb2Ts = SqlFunctions.Postgres.jsonb_to_tsvector("{\"a\":1}", "[\"numeric\"]"),
+            Jsonb2TsCfg = SqlFunctions.Postgres.jsonb_to_tsvector("english", "{\"a\":1}", "[\"string\"]"),
+            CurrentCfg = SqlFunctions.Postgres.get_current_ts_config(),
+            Nodes = SqlFunctions.Postgres.numnode(SqlFunctions.Parameter<string>(1)),
+        }));
+
+        sql.Should().Contain("cast(array_to_tsvector(@norm_p0) as text)");
+        sql.Should().Contain("cast(json_to_tsvector(cast(E'{\"a\":1}' as json), cast(E'[\"numeric\"]' as jsonb)) as text)");
+        sql.Should().Contain("cast(json_to_tsvector(cast(E'english' as regconfig), cast(E'{\"a\":1}' as json), cast(E'[\"string\"]' as jsonb)) as text)");
+        sql.Should().Contain("cast(jsonb_to_tsvector(cast(E'{\"a\":1}' as jsonb), cast(E'[\"numeric\"]' as jsonb)) as text)");
+        sql.Should().Contain("cast(jsonb_to_tsvector(cast(E'english' as regconfig), cast(E'{\"a\":1}' as jsonb), cast(E'[\"string\"]' as jsonb)) as text)");
+        sql.Should().Contain("cast(get_current_ts_config() as text)");
+        sql.Should().Contain("numnode(cast(@norm_p1 as tsquery))");
+    }
+
+    [Fact]
+    public void FullTextQueryTreeAndVectorFamily_ShouldEmitCastsAndTextResult()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            Tree = SqlFunctions.Postgres.querytree(SqlFunctions.Parameter<string>(0)),
+            Weighted = SqlFunctions.Postgres.setweight(SqlFunctions.Parameter<string>(1), SqlFunctions.Parameter<string>(2)),
+            WeightedLex = SqlFunctions.Postgres.setweight(SqlFunctions.Parameter<string>(3), SqlFunctions.Parameter<string>(4), SqlFunctions.Parameter<string?[]>(5)),
+            Stripped = SqlFunctions.Postgres.strip(SqlFunctions.Parameter<string>(6)),
+            Deleted = SqlFunctions.Postgres.ts_delete(SqlFunctions.Parameter<string>(7), SqlFunctions.Parameter<string>(8)),
+            DeletedMany = SqlFunctions.Postgres.ts_delete(SqlFunctions.Parameter<string>(9), SqlFunctions.Parameter<string?[]>(10)),
+            Filtered = SqlFunctions.Postgres.ts_filter(SqlFunctions.Parameter<string>(11), SqlFunctions.Parameter<string?[]>(12)),
+        }));
+
+        sql.Should().Contain("querytree(cast(@norm_p0 as tsquery))");
+        sql.Should().Contain("cast(setweight(cast(@norm_p1 as tsvector), cast(@norm_p2 as \"char\")) as text)");
+        sql.Should().Contain("cast(setweight(cast(@norm_p3 as tsvector), cast(@norm_p4 as \"char\"), cast(@norm_p5 as text[])) as text)");
+        sql.Should().Contain("cast(strip(cast(@norm_p6 as tsvector)) as text)");
+        sql.Should().Contain("cast(ts_delete(cast(@norm_p7 as tsvector), @norm_p8) as text)");
+        sql.Should().Contain("cast(ts_delete(cast(@norm_p9 as tsvector), @norm_p10) as text)");
+        sql.Should().Contain("cast(ts_filter(cast(@norm_p11 as tsvector), cast(@norm_p12 as \"char\"[])) as text)");
+    }
+
+    [Fact]
+    public void FullTextRewritePhraseAndArrayFamily_ShouldEmitCasts()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            Rewritten = SqlFunctions.Postgres.ts_rewrite(SqlFunctions.Parameter<string>(0), SqlFunctions.Parameter<string>(1)),
+            RewrittenPair = SqlFunctions.Postgres.ts_rewrite(
+                SqlFunctions.Parameter<string>(2), SqlFunctions.Parameter<string>(3), SqlFunctions.Parameter<string>(4)),
+            Phrase = SqlFunctions.Postgres.tsquery_phrase(SqlFunctions.Parameter<string>(5), SqlFunctions.Parameter<string>(6)),
+            PhraseDistance = SqlFunctions.Postgres.tsquery_phrase(
+                SqlFunctions.Parameter<string>(7), SqlFunctions.Parameter<string>(8), SqlFunctions.Parameter<int>(9)),
+            Lexemes = SqlFunctions.Postgres.tsvector_to_array(SqlFunctions.Parameter<string>(10)),
+            Stemmed = SqlFunctions.Postgres.ts_lexize(SqlFunctions.Parameter<string>(11), SqlFunctions.Parameter<string>(12)),
+        }));
+
+        sql.Should().Contain("cast(ts_rewrite(cast(@norm_p0 as tsquery), @norm_p1) as text)");
+        sql.Should().Contain("cast(ts_rewrite(cast(@norm_p2 as tsquery), cast(@norm_p3 as tsquery), cast(@norm_p4 as tsquery)) as text)");
+        sql.Should().Contain("cast(tsquery_phrase(cast(@norm_p5 as tsquery), cast(@norm_p6 as tsquery)) as text)");
+        sql.Should().Contain("cast(tsquery_phrase(cast(@norm_p7 as tsquery), cast(@norm_p8 as tsquery), @norm_p9) as text)");
+        sql.Should().Contain("tsvector_to_array(cast(@norm_p10 as tsvector))");
+        sql.Should().Contain("ts_lexize(cast(@norm_p11 as regdictionary), @norm_p12)");
+    }
+
+    [Fact]
+    public void TrimArray_ShouldEmit()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            T = SqlFunctions.Postgres.trim_array(SqlFunctions.Parameter<long[]>(0), 2)
+        }));
+
+        sql.Should().Contain("trim_array(@norm_p0, 2)");
+    }
+
+    [Fact]
     public void StringJoinAndSplit_ShouldUseArrayToStringAndStringToArray()
     {
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Select(x => new { V = string.Join(",", x.String!.Split(',')) }))
-            .Should().Contain("array_to_string(string_to_array(somestring, ','), ',')");
+            .Should().Contain("array_to_string(string_to_array(somestring, E','), E',')");
 
         // A Split result is an array operand for the other array functions too.
         SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.array_position(x.String!.Split(','), "a") }))
-            .Should().Contain("array_position(string_to_array(somestring, ','), 'a')");
+            .Should().Contain("array_position(string_to_array(somestring, E','), E'a')");
     }
 
     [Fact]
@@ -3594,7 +4058,7 @@ public class SqlGenerationTests
         sql.Should().Contain("jsonb_insert(@norm_p1, @");
         sql.Should().Contain("jsonb_strip_nulls(@norm_p2)");
         sql.Should().Contain("jsonb_pretty(@norm_p3)");
-        sql.Should().Contain("(@norm_p4 - 'a')");
+        sql.Should().Contain("(@norm_p4 - E'a')");
         sql.Should().Contain("(@norm_p5 - 0)");
         sql.Should().Contain("row_to_json(@norm_p6)");
         sql.Should().Contain("array_to_json(@norm_p7)");
@@ -3615,10 +4079,10 @@ public class SqlGenerationTests
             D = SqlFunctions.Postgres.jsonb_path_query_array(SqlFunctions.Parameter<JsonDocument>(3), "$.a")
         }));
 
-        sql.Should().Contain("jsonb_path_exists(@norm_p0, cast('$.a' as jsonpath))");
-        sql.Should().Contain("jsonb_path_match(@norm_p1, cast('$.a == 1' as jsonpath))");
-        sql.Should().Contain("jsonb_path_query_first(@norm_p2, cast('$.a' as jsonpath))");
-        sql.Should().Contain("jsonb_path_query_array(@norm_p3, cast('$.a' as jsonpath))");
+        sql.Should().Contain("jsonb_path_exists(@norm_p0, cast(E'$.a' as jsonpath))");
+        sql.Should().Contain("jsonb_path_match(@norm_p1, cast(E'$.a == 1' as jsonpath))");
+        sql.Should().Contain("jsonb_path_query_first(@norm_p2, cast(E'$.a' as jsonpath))");
+        sql.Should().Contain("jsonb_path_query_array(@norm_p3, cast(E'$.a' as jsonpath))");
     }
 
     [Fact]
@@ -3628,10 +4092,10 @@ public class SqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Where(x => SqlFunctions.Sql.contains(x.String, "foo")).Select(x => new { x.Id }))
-            .Should().Contain("where to_tsvector(somestring) @@ plainto_tsquery('foo')");
+            .Should().Contain("where to_tsvector(somestring) @@ plainto_tsquery(E'foo')");
 
         SqlOf(ctx, e.Where(x => SqlFunctions.Sql.freetext(x.String, "foo")).Select(x => new { x.Id }))
-            .Should().Contain("where to_tsvector(somestring) @@ websearch_to_tsquery('foo')");
+            .Should().Contain("where to_tsvector(somestring) @@ websearch_to_tsquery(E'foo')");
     }
 
     [Fact]
@@ -3641,11 +4105,11 @@ public class SqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Select(x => new { V = x.String!.IndexOf("b") }))
-            .Should().Contain("case when (strpos(somestring, 'b')) = 0 then -1 else (strpos(somestring, 'b')) - 1 end");
+            .Should().Contain("case when (strpos(somestring, E'b')) = 0 then -1 else (strpos(somestring, E'b')) - 1 end");
         SqlOf(ctx, e.Select(x => new { V = x.String!.IndexOf("b", 1) }))
-            .Should().Contain("strpos(substring(somestring, 1 + 1, length(somestring) - (1)), 'b')");
+            .Should().Contain("strpos(substring(somestring, 1 + 1, length(somestring) - (1)), E'b')");
         SqlOf(ctx, e.Select(x => new { V = x.String!.LastIndexOf("b") }))
-            .Should().Contain("case when (strpos(reverse(somestring), reverse('b'))) = 0 then -1 else length(somestring) - (strpos(reverse(somestring), reverse('b'))) - (length('b')) + 1 end");
+            .Should().Contain("case when (strpos(reverse(somestring), reverse(E'b'))) = 0 then -1 else length(somestring) - (strpos(reverse(somestring), reverse(E'b'))) - (length(E'b')) + 1 end");
     }
 
     [Fact]
@@ -3655,9 +4119,9 @@ public class SqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Select(x => new { V = x.String!.PadLeft(5, '0') }))
-            .Should().Contain("case when length(somestring) >= (5) then somestring else repeat('0', (5) - length(somestring))||somestring end");
+            .Should().Contain("case when length(somestring) >= (5) then somestring else repeat(E'0', (5) - length(somestring))||somestring end");
         SqlOf(ctx, e.Select(x => new { V = x.String!.PadRight(5) }))
-            .Should().Contain("case when length(somestring) >= (5) then somestring else somestring||repeat(' ', (5) - length(somestring)) end");
+            .Should().Contain("case when length(somestring) >= (5) then somestring else somestring||repeat(E' ', (5) - length(somestring)) end");
     }
 
     [Fact]
@@ -3671,9 +4135,9 @@ public class SqlGenerationTests
         SqlOf(ctx, e.Select(x => new { V = x.String!.Remove(2, 1) }))
             .Should().Contain("overlay(somestring placing '' from 2 + 1 for 1)");
         SqlOf(ctx, e.Select(x => new { V = x.String!.Insert(2, "x") }))
-            .Should().Contain("overlay(somestring placing 'x' from 2 + 1 for 0)");
+            .Should().Contain("overlay(somestring placing E'x' from 2 + 1 for 0)");
         SqlOf(ctx, e.Select(x => new { V = new string('*', 4) }))
-            .Should().Contain("repeat('*', 4)");
+            .Should().Contain("repeat(E'*', 4)");
     }
 
     [Fact]
@@ -4218,7 +4682,7 @@ public class SqlGenerationTests
                 SqlFunctions.Postgres.to_tsquery("cat"))
         }));
 
-        sql.Should().Contain("ts_rank(to_tsvector(somestring), to_tsquery('cat'))");
+        sql.Should().Contain("ts_rank(to_tsvector(somestring), to_tsquery(E'cat'))");
     }
 
     [Fact]
@@ -4234,7 +4698,7 @@ public class SqlGenerationTests
                 SqlFunctions.Postgres.to_tsquery("cat"))
         }));
 
-        sql.Should().Contain("ts_rank_cd(to_tsvector(somestring), to_tsquery('cat'))");
+        sql.Should().Contain("ts_rank_cd(to_tsvector(somestring), to_tsquery(E'cat'))");
     }
 
     [Fact]
@@ -4249,7 +4713,7 @@ public class SqlGenerationTests
                 SqlFunctions.Postgres.websearch_to_tsquery("cat & dog")))
             .Select(x => new { x.Id }));
 
-        sql.Should().Contain("(to_tsvector(somestring) @@ websearch_to_tsquery('cat & dog'))");
+        sql.Should().Contain("(to_tsvector(somestring) @@ websearch_to_tsquery(E'cat & dog'))");
     }
 
     [Fact]
@@ -4265,9 +4729,9 @@ public class SqlGenerationTests
             T = SqlFunctions.Postgres.to_tsquery("a & b")
         }));
 
-        sql.Should().Contain("plainto_tsquery('a b')");
-        sql.Should().Contain("phraseto_tsquery('a b')");
-        sql.Should().Contain("to_tsquery('a & b')");
+        sql.Should().Contain("plainto_tsquery(E'a b')");
+        sql.Should().Contain("phraseto_tsquery(E'a b')");
+        sql.Should().Contain("to_tsquery(E'a & b')");
     }
 
     [Fact]
@@ -4281,7 +4745,7 @@ public class SqlGenerationTests
             Head = SqlFunctions.Postgres.ts_headline(x.String!, SqlFunctions.Postgres.to_tsquery("cat"))
         }));
 
-        sql.Should().Contain("ts_headline(somestring, to_tsquery('cat'))");
+        sql.Should().Contain("ts_headline(somestring, to_tsquery(E'cat'))");
     }
 
     [Fact]
@@ -4621,7 +5085,7 @@ public class SqlGenerationTests
         SqlOf(ctx, e.Select(x => new { R = SqlFunctions.Postgres.int4range(1, 10) }))
             .Should().Contain("int4range(1, 10)");
         SqlOf(ctx, e.Select(x => new { R = SqlFunctions.Postgres.int4range(1, 10, "[]") }))
-            .Should().Contain("int4range(1, 10, '[]')");
+            .Should().Contain("int4range(1, 10, E'[]')");
         SqlOf(ctx, e.Select(x => new { R = SqlFunctions.Postgres.int4range(null, null) }))
             .Should().Contain("int4range(null, null)");
         SqlOf(ctx, e.Select(x => new { R = SqlFunctions.Postgres.empty_range<int>() }))
@@ -5128,5 +5592,30 @@ public class SqlGenerationTests
         var act = () => SqlOf(ctx, derived.SelectWhereMax(x => x.Id, x => x.Id));
 
         act.Should().Throw<BuildSqlCommandException>().WithMessage("*single physical-table source*");
+    }
+    [Fact]
+    public void T292_VariabilityAggregateNames_ShouldRenderProviderSpelling()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        // T292 (#292): the eight variability facade forms keep their postgres spelling with the
+        // structurally nullable result; the DISTINCT forms keep the SQL DISTINCT keyword.
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.stdev((double)x.Id)))
+            .Should().Contain("stddev(");
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.stdev_distinct((double)x.Id)))
+            .Should().Contain("stddev(distinct ");
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.stdevp((double)x.Id)))
+            .Should().Contain("stddev_pop(");
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.stdevp_distinct((double)x.Id)))
+            .Should().Contain("stddev_pop(distinct ");
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.var((double)x.Id)))
+            .Should().Contain("variance(");
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.var_distinct((double)x.Id)))
+            .Should().Contain("variance(distinct ");
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.varp((double)x.Id)))
+            .Should().Contain("var_pop(");
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.varp_distinct((double)x.Id)))
+            .Should().Contain("var_pop(distinct ");
     }
 }

@@ -1,8 +1,7 @@
 ---
-description: Decision-maker and judge for nextorm — роль «brains» из скилла two-tier-workflow. Рассуждает только по evidence-файлам, собранным `nextorm-scout`, и тексту задания; по дизайну НЕ может читать продуктовый код, искать по репо или запускать команды (слепой арбитр). Выдаёт вердикты, планы, ранжирование и оценки по рубрике с явными ссылками на использованные улики. Use for any decision that must not be contaminated by raw code browsing — judging several implementations of the same feature against acceptance criteria, ranking options, choosing an approach. Triggers on "brains", "мозги", "вынеси вердикт", "суди по рубрике", "сравни и реши", "judge".
+description: Decision-maker and judge for nextorm — роль «решения» (слепой арбитр). Рассуждает только по evidence-файлам, собранным `nextorm-scout`, и тексту задания; по дизайну НЕ может читать продуктовый код, искать по репо или запускать команды (слепой арбитр). Выдаёт вердикты, планы, ранжирование и оценки по рубрике с явными ссылками на использованные улики. Use for any decision that must not be contaminated by raw code browsing — judging several implementations of the same feature against acceptance criteria, ranking options, choosing an approach. Triggers on "brains", "мозги", "вынеси вердикт", "суди по рубрике", "сравни и реши", "judge".
 mode: subagent
-model: opencode/gpt-6.1-sol
-variant: high
+# tier: medium
 temperature: 0.1
 permission:
   read:
@@ -18,7 +17,6 @@ permission:
   webfetch: deny
   websearch: deny
   skill: deny
-  todowrite: deny
 ---
 
 # nextorm-brains (роль «решения»)

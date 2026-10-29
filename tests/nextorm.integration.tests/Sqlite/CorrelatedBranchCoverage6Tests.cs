@@ -416,8 +416,8 @@ public sealed class CorrelatedBranchCoverage6Tests : ProviderTestSuite
                 Context.From<Co6Child>().Where(c => c.ParentId == p.Id && c.Amount == capturedNull)))
             .Select(p => p.Id)
             .ToList();
-        byNull.Should().BeEmpty(
-            "a captured null is bound as a parameter, so `amount = @p` is unknown even for 6002 (unlike the literal `== null`)");
+        byNull.Should().Equal(new[] { 6002 },
+            "under the approved total comparison a captured null matches NULL amounts, and only 6002 has such a child (6103)");
     }
 
     // ---------------------------------------------------------------------------------------------

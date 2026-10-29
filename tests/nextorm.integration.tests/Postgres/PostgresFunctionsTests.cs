@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json;
 using FluentAssertions;
 using NextORM.Core;
@@ -230,6 +232,82 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
         r.Pi.Should().BeApproximately(Math.PI, 1e-12);
         r.Random.Should().BeInRange(0.0, 1.0);
     }
+
+    [Fact]
+    public void ExtendedLogFunction_TwoArgumentParameters_ShouldCompute()
+    {
+        LogViaParameters(2.0, 8.0).Should().BeApproximately(3.0, 1e-12);
+        LogViaParameters(10.0, 100.0).Should().BeApproximately(2.0, 1e-12);
+        LogViaParameters(4.0, 8.0).Should().BeApproximately(1.5, 1e-12);
+    }
+
+    [Fact]
+    public void ExtendedLogFunction_NullOperands_ShouldReturnNull()
+    {
+        LogViaParameters(null, 8.0).Should().BeNull();
+        LogViaParameters(2.0, null).Should().BeNull();
+        LogViaParameters(null, null).Should().BeNull();
+    }
+
+    [Fact]
+    public void ExtendedLogFunction_LiteralAndConvertedOperands_ShouldCompute()
+    {
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Ints = SqlFunctions.Postgres.log(2, 8),
+                Longs = SqlFunctions.Postgres.log(2L, 8L),
+                Converted = SqlFunctions.Postgres.log((double?)2m, (double?)8m),
+                ColumnAndLiteral = SqlFunctions.Postgres.log(2.0, x.Double)
+            })
+            .First();
+
+        r.Ints.Should().BeApproximately(3.0, 1e-12);
+        r.Longs.Should().BeApproximately(3.0, 1e-12);
+        r.Converted.Should().BeApproximately(3.0, 1e-12);
+        // complex_entity row 1 stores 5 in the double precision column: log base 2 of 5.
+        r.ColumnAndLiteral.Should().BeApproximately(Math.Log(5.0, 2.0), 1e-12);
+    }
+
+    [Fact]
+    public void ExtendedLogFunction_IntegralParameters_ShouldCompute()
+    {
+        LogViaIntParameters(2, 8).Should().BeApproximately(3.0, 1e-12);
+        LogViaLongParameters(10L, 100L).Should().BeApproximately(2.0, 1e-12);
+    }
+
+    private double? LogViaIntParameters(int baseValue, int x) =>
+        _sut.ComplexEntity.Where(e => e.Id == 1)
+            .Select(e => new
+            {
+                Log = SqlFunctions.Postgres.log(
+                    SqlFunctions.Parameter<int>(0),
+                    SqlFunctions.Parameter<int>(1))
+            })
+            .First(baseValue, x)
+            .Log;
+
+    private double? LogViaLongParameters(long baseValue, long x) =>
+        _sut.ComplexEntity.Where(e => e.Id == 1)
+            .Select(e => new
+            {
+                Log = SqlFunctions.Postgres.log(
+                    SqlFunctions.Parameter<long>(0),
+                    SqlFunctions.Parameter<long>(1))
+            })
+            .First(baseValue, x)
+            .Log;
+
+    private double? LogViaParameters(double? baseValue, double? x) =>
+        _sut.ComplexEntity.Where(e => e.Id == 1)
+            .Select(e => new
+            {
+                Log = SqlFunctions.Postgres.log(
+                    SqlFunctions.Parameter<double?>(0),
+                    SqlFunctions.Parameter<double?>(1))
+            })
+            .First(baseValue, x)
+            .Log;
 
     [Fact]
     public void ExtendedStringFunctions_ShouldTransform()
@@ -639,6 +717,99 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
     }
 
     [Fact]
+    [Trait("Issue", "281")]
+    public void NumericScaleFunctions_ShouldReportAndTrimScale()
+    {
+        decimal? typedNull = null;
+
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Scale = SqlFunctions.Postgres.scale(12.3400m),
+                MinScale = SqlFunctions.Postgres.min_scale(12.3400m),
+                Trimmed = SqlFunctions.Postgres.trim_scale(12.3400m),
+                ScaleZero = SqlFunctions.Postgres.scale(0.0000m),
+                MinScaleZero = SqlFunctions.Postgres.min_scale(0.0000m),
+                TrimmedZero = SqlFunctions.Postgres.trim_scale(0.0000m),
+                ScaleNegative = SqlFunctions.Postgres.scale(-12.3400m),
+                MinScaleNegative = SqlFunctions.Postgres.min_scale(-12.3400m),
+                TrimmedNegative = SqlFunctions.Postgres.trim_scale(-12.3400m),
+                ScaleUnchanged = SqlFunctions.Postgres.scale(12.3456m),
+                MinScaleUnchanged = SqlFunctions.Postgres.min_scale(12.3456m),
+                TrimmedUnchanged = SqlFunctions.Postgres.trim_scale(12.3456m),
+                ScaleNull = SqlFunctions.Postgres.scale(typedNull),
+                MinScaleNull = SqlFunctions.Postgres.min_scale(typedNull),
+                TrimmedNull = SqlFunctions.Postgres.trim_scale(typedNull)
+            })
+            .First();
+
+        r.Scale.Should().Be(4);
+        ((object)r.Scale!).Should().BeOfType<int>();
+        r.MinScale.Should().Be(2);
+        ((object)r.MinScale!).Should().BeOfType<int>();
+        r.Trimmed.Should().Be(12.34m);
+        ((object)r.Trimmed!).Should().BeOfType<decimal>();
+        DecimalScale(r.Trimmed!.Value).Should().Be(2);
+
+        r.ScaleZero.Should().Be(4);
+        r.MinScaleZero.Should().Be(0);
+        r.TrimmedZero.Should().Be(0m);
+        DecimalScale(r.TrimmedZero!.Value).Should().Be(0);
+
+        r.ScaleNegative.Should().Be(4);
+        r.MinScaleNegative.Should().Be(2);
+        r.TrimmedNegative.Should().Be(-12.34m);
+        DecimalScale(r.TrimmedNegative!.Value).Should().Be(2);
+
+        r.ScaleUnchanged.Should().Be(4);
+        r.MinScaleUnchanged.Should().Be(4);
+        r.TrimmedUnchanged.Should().Be(12.3456m);
+        DecimalScale(r.TrimmedUnchanged!.Value).Should().Be(4);
+
+        r.ScaleNull.Should().BeNull();
+        r.MinScaleNull.Should().BeNull();
+        r.TrimmedNull.Should().BeNull();
+    }
+
+    [Fact]
+    [Trait("Issue", "281")]
+    public void NumericScaleFunctions_ShouldWorkOnNullableColumnProjections()
+    {
+        var r = _sut.ComplexEntity.Where(x => x.Id == 2)
+            .Select(x => new
+            {
+                Scale = SqlFunctions.Postgres.scale(x.Numeric),
+                MinScale = SqlFunctions.Postgres.min_scale(x.Numeric),
+                Trimmed = SqlFunctions.Postgres.trim_scale(x.Numeric)
+            })
+            .First();
+
+        r.Scale.Should().Be(0);
+        r.MinScale.Should().Be(0);
+        r.Trimmed.Should().Be(6m);
+        DecimalScale(r.Trimmed!.Value).Should().Be(0);
+    }
+
+    [Fact]
+    [Trait("Issue", "281")]
+    public void NumericScaleFunctions_ShouldPreserveParameterScale()
+    {
+        var r = _sut.SimpleEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Scale = SqlFunctions.Postgres.scale(SqlFunctions.Parameter<decimal>(0)),
+                MinScale = SqlFunctions.Postgres.min_scale(SqlFunctions.Parameter<decimal>(0)),
+                Trimmed = SqlFunctions.Postgres.trim_scale(SqlFunctions.Parameter<decimal>(0))
+            })
+            .First(12.3400m);
+
+        r.Scale.Should().Be(4);
+        r.MinScale.Should().Be(2);
+        r.Trimmed.Should().Be(12.34m);
+        DecimalScale(r.Trimmed!.Value).Should().Be(2);
+    }
+
+    [Fact]
     public void CurrentSettingAndSetConfig_ShouldReadAndWrite()
     {
         var r = _sut.SimpleEntity.Where(x => x.Id == 1)
@@ -803,6 +974,12 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
                 .ToList())
             .Should().Throw<NotSupportedException>()
             .WithMessage("*The empty range cannot be expressed over a pair of columns*");
+
+        FluentActions.Invoking(() => ctx.From<CommonTestSuite.IRangeProbe>()
+                .Select(x => SqlFunctions.Postgres.range_union(x.During, new Range<int>(1, 10)))
+                .ToList())
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("The PostgreSQL range function 'range_union' returns a range and cannot be expressed over a pair of columns. Use a provider with a native range type (PostgreSQL) or a range-returning projection.");
 
         FluentActions.Invoking(() => ctx.From<CommonTestSuite.IRangeProbe>()
                 .Where(x => SqlFunctions.Postgres.overlaps(x.During, Array.Empty<Range<int>>()))
@@ -1024,4 +1201,2691 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
             .Should().Throw<NotSupportedException>()
             .WithMessage("The GLOBAL IN predicate is not supported by this provider.");
     }
+
+    [SqlTable("inline_literal_probe")]
+    internal interface IInlineLiteralProbe
+    {
+        [Key]
+        [Column("id")]
+        int Id { get; set; }
+
+        [Column("value")]
+        string? Value { get; set; }
+    }
+
+    /// <summary>
+    /// #299: an inline string literal containing an apostrophe must reach PostgreSQL as one valid
+    /// string literal. The probe table is owned by this test (created and dropped here); rows are
+    /// inserted through bound parameters, while the WHERE values are genuine inline constants, so the
+    /// literal renderer is what the server sees. The decoy proves the match is exact and the hostile
+    /// value proves the corrected literal cannot terminate the statement or broaden the result.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "299")]
+    public void InlineStringLiteralRoundTrip()
+    {
+        var ctx = _sut.DataProvider;
+        Execute(ctx, "drop table if exists inline_literal_probe");
+        Execute(ctx, "create table inline_literal_probe (id integer primary key, value varchar(100))");
+
+        try
+        {
+            ctx.CreateInsertBuilder<IInlineLiteralProbe>()
+                .Value(x => x.Id, 1)
+                .Value(x => x.Value, "it's (a) test")
+                .Insert();
+            ctx.CreateInsertBuilder<IInlineLiteralProbe>()
+                .Value(x => x.Id, 2)
+                .Value(x => x.Value, "it's (a) test!")
+                .Insert();
+            ctx.CreateInsertBuilder<IInlineLiteralProbe>()
+                .Value(x => x.Id, 3)
+                .Value(x => x.Value, "it's; --")
+                .Insert();
+            ctx.CreateInsertBuilder<IInlineLiteralProbe>()
+                .Value(x => x.Id, 4)
+                .Value(x => x.Value, "plain")
+                .Insert();
+
+            ctx.From<IInlineLiteralProbe>()
+                .Where(x => x.Value == "it's (a) test")
+                .Select(x => x.Id)
+                .ToList()
+                .Should().Equal(new[] { 1 }, "the apostrophe literal must match its row exactly, not the longer decoy");
+
+            ctx.From<IInlineLiteralProbe>()
+                .Where(x => x.Value == "it's; --")
+                .Select(x => x.Id)
+                .ToList()
+                .Should().Equal(new[] { 3 }, "the semicolon and comment marker stay inside the literal and never broaden the result");
+
+            // The hostile value left the table usable: rows are still there and a bound parameter still selects.
+            ctx.From<IInlineLiteralProbe>()
+                .Select(x => x.Id)
+                .ToList()
+                .Should().HaveCount(4);
+
+            var decoy = "it's (a) test!";
+            ctx.From<IInlineLiteralProbe>()
+                .Where(x => x.Value == decoy)
+                .Select(x => x.Id)
+                .ToList()
+                .Should().Equal(2);
+        }
+        finally
+        {
+            Execute(ctx, "drop table if exists inline_literal_probe");
+        }
+    }
+
+    [Fact]
+    [Trait("Issue", "281")]
+    public void StringFamily_ShouldComputeValuesNullsAndClrTypes()
+    {
+        string? nullText = null;
+        byte[]? nullBytes = null;
+
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Btrim1 = SqlFunctions.Postgres.btrim("  ab  "),
+                Btrim2 = SqlFunctions.Postgres.btrim("xxabyy", "xy"),
+                BtrimBytes = SqlFunctions.Postgres.btrim(
+                    SqlFunctions.Postgres.convert_to("xxabxx", "UTF8"),
+                    SqlFunctions.Postgres.convert_to("x", "UTF8")),
+                Ltrim2 = SqlFunctions.Postgres.ltrim("xxab", "x"),
+                LtrimBytes = SqlFunctions.Postgres.ltrim(
+                    SqlFunctions.Postgres.convert_to("xxab", "UTF8"),
+                    SqlFunctions.Postgres.convert_to("x", "UTF8")),
+                Rtrim2 = SqlFunctions.Postgres.rtrim("abxx", "x"),
+                RtrimBytes = SqlFunctions.Postgres.rtrim(
+                    SqlFunctions.Postgres.convert_to("abxx", "UTF8"),
+                    SqlFunctions.Postgres.convert_to("x", "UTF8")),
+                StartsWith = SqlFunctions.Postgres.starts_with("dadfasd", "dad"),
+                ParseIdent = SqlFunctions.Postgres.parse_ident("a.b", false),
+                QuoteIdent = SqlFunctions.Postgres.quote_ident("a b"),
+                QuoteIdentPlain = SqlFunctions.Postgres.quote_ident("test"),
+                QuoteLiteral = SqlFunctions.Postgres.quote_literal(x.String),
+                QuoteNullable = SqlFunctions.Postgres.quote_nullable(x.String),
+                ToAscii = SqlFunctions.Postgres.to_ascii("abc", "LATIN1"),
+                ToAscii2 = SqlFunctions.Postgres.to_ascii("abc", "LATIN2"),
+                ToAsciiInt = SqlFunctions.Postgres.to_ascii("abc", 8),
+                HexNeg = SqlFunctions.Postgres.to_hex(-1),
+                HexLong = SqlFunctions.Postgres.to_hex(255L),
+                Oct = SqlFunctions.Postgres.to_oct(8),
+                OctLong = SqlFunctions.Postgres.to_oct(8L),
+                Bin = SqlFunctions.Postgres.to_bin(5),
+                BinLong = SqlFunctions.Postgres.to_bin(5L),
+                ConvertFrom = SqlFunctions.Postgres.convert_from(
+                    SqlFunctions.Postgres.convert_to("abc", "UTF8"), "UTF8"),
+                ConvertTo = SqlFunctions.Postgres.convert_to("abc", "UTF8"),
+                Encode = SqlFunctions.Postgres.encode(
+                    SqlFunctions.Postgres.convert_to("abc", "UTF8"), "hex"),
+                Decode = SqlFunctions.Postgres.decode("616263", "hex"),
+                NormalizeNfc = SqlFunctions.Postgres.normalize("abc", "NFC"),
+                NormalizeNfd = SqlFunctions.Postgres.normalize("\u00E9", "NFD"),
+                Unistr = SqlFunctions.Postgres.unistr("a\\0441"),
+                Match = SqlFunctions.Postgres.regexp_match("dadfasd", "(d)(a)"),
+                MatchFlags = SqlFunctions.Postgres.regexp_match("DADFASD", "(d)(a)", "i"),
+                NoMatch = SqlFunctions.Postgres.regexp_match("dadfasd", "zzz"),
+                NoGroup = SqlFunctions.Postgres.regexp_match("dadfasd", "da")
+            })
+            .First();
+
+        r.Btrim1.Should().Be("ab");
+        r.Btrim2.Should().Be("ab");
+        r.BtrimBytes.Should().Equal("ab"u8.ToArray());
+        r.Ltrim2.Should().Be("ab");
+        r.LtrimBytes.Should().Equal("ab"u8.ToArray());
+        r.Rtrim2.Should().Be("ab");
+        r.RtrimBytes.Should().Equal("ab"u8.ToArray());
+        r.StartsWith.Should().BeTrue();
+        r.ParseIdent.Should().Equal("a", "b");
+        r.QuoteIdent.Should().Be("\"a b\"");
+        r.QuoteIdentPlain.Should().Be("test");
+        r.QuoteLiteral.Should().Be("'dadfasd'");
+        r.QuoteNullable.Should().Be("'dadfasd'");
+        r.ToAscii.Should().Be("abc");
+        r.ToAscii2.Should().Be("abc");
+        r.ToAsciiInt.Should().Be("abc");
+        r.HexNeg.Should().Be("ffffffff");
+        r.HexLong.Should().Be("ff");
+        r.Oct.Should().Be("10");
+        r.OctLong.Should().Be("10");
+        r.Bin.Should().Be("101");
+        r.BinLong.Should().Be("101");
+        r.ConvertFrom.Should().Be("abc");
+        r.ConvertTo.Should().Equal("abc"u8.ToArray());
+        r.Encode.Should().Be("616263");
+        r.Decode.Should().Equal("abc"u8.ToArray());
+        r.NormalizeNfc.Should().Be("abc");
+        r.NormalizeNfd.Should().Be("e\u0301");
+        r.Unistr.Should().Be("a\u0441");
+        r.Match.Should().Equal("d", "a");
+        r.MatchFlags.Should().Equal("D", "A");
+        r.NoMatch.Should().BeNull();
+        r.NoGroup.Should().Equal("da");
+
+        // Exact CLR types: the mapped result type is part of the contract, not just the value.
+        ((object)r.Btrim1!).Should().BeOfType<string>();
+        ((object)r.BtrimBytes!).Should().BeOfType<byte[]>();
+        ((object)r.StartsWith!).Should().BeOfType<bool>();
+        ((object)r.ParseIdent!).Should().BeOfType<string[]>();
+        ((object)r.QuoteIdent!).Should().BeOfType<string>();
+        ((object)r.ToAscii!).Should().BeOfType<string>();
+        ((object)r.ToAsciiInt!).Should().BeOfType<string>();
+        ((object)r.HexNeg!).Should().BeOfType<string>();
+        ((object)r.ConvertTo!).Should().BeOfType<byte[]>();
+        ((object)r.Decode!).Should().BeOfType<byte[]>();
+        ((object)r.NormalizeNfd!).Should().BeOfType<string>();
+        ((object)r.Unistr!).Should().BeOfType<string>();
+        ((object)r.Match!).Should().BeOfType<string[]>();
+
+        // NULL cases: the string column of row 3 and the bytea column of row 2 are NULL.
+        var strings = _sut.ComplexEntity.Where(x => x.Id == 3)
+            .Select(x => new
+            {
+                Btrim1 = SqlFunctions.Postgres.btrim(x.String),
+                Btrim2 = SqlFunctions.Postgres.btrim(x.String, "xy"),
+                Ltrim2 = SqlFunctions.Postgres.ltrim(x.String, "xy"),
+                Rtrim2 = SqlFunctions.Postgres.rtrim(x.String, "xy"),
+                StartsWith = SqlFunctions.Postgres.starts_with(x.String, "dad"),
+                ParseIdent = SqlFunctions.Postgres.parse_ident(x.String, false),
+                QuoteIdent = SqlFunctions.Postgres.quote_ident(x.String),
+                QuoteLiteral = SqlFunctions.Postgres.quote_literal(x.String),
+                ToAscii = SqlFunctions.Postgres.to_ascii(x.String, "LATIN1"),
+                Encode = SqlFunctions.Postgres.encode(nullBytes, "hex"),
+                ConvertFromNull = SqlFunctions.Postgres.convert_from(nullBytes, "UTF8"),
+                ConvertToNull = SqlFunctions.Postgres.convert_to(nullText, "UTF8"),
+                DecodeNull = SqlFunctions.Postgres.decode(nullText, "hex"),
+                Normalize = SqlFunctions.Postgres.normalize(x.String, "NFD"),
+                Unistr = SqlFunctions.Postgres.unistr(x.String),
+                Match = SqlFunctions.Postgres.regexp_match(x.String, "(d)(a)"),
+                MatchFlags = SqlFunctions.Postgres.regexp_match(x.String, "(d)(a)", "i"),
+                QuoteNullable = SqlFunctions.Postgres.quote_nullable(x.String)
+            })
+            .First();
+
+        strings.Btrim1.Should().BeNull();
+        strings.Btrim2.Should().BeNull();
+        strings.Ltrim2.Should().BeNull();
+        strings.Rtrim2.Should().BeNull();
+        strings.StartsWith.Should().BeNull();
+        strings.ParseIdent.Should().BeNull();
+        strings.QuoteIdent.Should().BeNull();
+        strings.QuoteLiteral.Should().BeNull();
+        strings.ToAscii.Should().BeNull();
+        strings.Encode.Should().BeNull();
+        strings.ConvertFromNull.Should().BeNull();
+        strings.ConvertToNull.Should().BeNull();
+        strings.DecodeNull.Should().BeNull();
+        strings.Normalize.Should().BeNull();
+        strings.Unistr.Should().BeNull();
+        strings.Match.Should().BeNull();
+        strings.MatchFlags.Should().BeNull();
+        // Non-strict by definition: quote_nullable(NULL) is the literal text NULL, not a NULL value.
+        strings.QuoteNullable.Should().Be("NULL");
+
+        // The to_hex/to_oct/to_bin NULL argument must be typed: a bare NULL literal is ambiguous
+        // between the integer and bigint overloads, so the column of row 1 (NULL) carries the type.
+        var intNulls = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                ToHex = SqlFunctions.Postgres.to_hex(x.Int),
+                ToOct = SqlFunctions.Postgres.to_oct(x.Int),
+                ToBin = SqlFunctions.Postgres.to_bin(x.Int)
+            })
+            .First();
+        intNulls.ToHex.Should().BeNull();
+        intNulls.ToOct.Should().BeNull();
+        intNulls.ToBin.Should().BeNull();
+
+        var bytes = _sut.BinaryEntity.Where(x => x.Id == 2)
+            .Select(x => new
+            {
+                Btrim = SqlFunctions.Postgres.btrim(x.Data, x.Data),
+                Ltrim = SqlFunctions.Postgres.ltrim(x.Data, x.Data),
+                Rtrim = SqlFunctions.Postgres.rtrim(x.Data, x.Data),
+                ConvertFrom = SqlFunctions.Postgres.convert_from(x.Data, "UTF8")
+            })
+            .First();
+
+        bytes.Btrim.Should().BeNull();
+        bytes.Ltrim.Should().BeNull();
+        bytes.Rtrim.Should().BeNull();
+        bytes.ConvertFrom.Should().BeNull();
+
+        // string_to_table is a set-returning function: one row per fragment.
+        var fragments = _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.string_to_table("a,b,c", ","))
+            .Select(row => row.Value)
+            .ToList();
+        fragments.Should().Equal("a", "b", "c");
+
+        var withNullString = _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.string_to_table("a,,c", ",", ""))
+            .Select(row => row.Value)
+            .ToList();
+        withNullString.Should().HaveCount(3);
+        withNullString[0].Should().Be("a");
+        withNullString[1].Should().BeNull();
+        withNullString[2].Should().Be("c");
+    }
+
+    /// <summary>
+    /// The documented <c>to_ascii(text, integer)</c> form takes a PostgreSQL encoding <em>code</em>
+    /// (<c>8</c> = <c>LATIN1</c>, verified live with <c>pg_encoding_to_char</c>). The code is validated by
+    /// the server, not by nextorm: a Windows codepage number such as <c>1252</c> is not an encoding code,
+    /// so the emitted statement reaches PostgreSQL and fails there with <c>42704</c>.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void ToAsciiIntegerCode_ShouldReachTheServerAndValidateTheCode()
+    {
+        var valid = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new { V = SqlFunctions.Postgres.to_ascii("abc", 8) })
+            .First();
+        valid.V.Should().Be("abc");
+
+        var invalid = () => _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new { V = SqlFunctions.Postgres.to_ascii("abc", 1252) })
+            .First();
+
+        invalid.Should().Throw<PostgresException>()
+            .Which.SqlState.Should().Be("42704", "1252 is a Windows codepage, not a PostgreSQL encoding code");
+    }
+
+    /// <summary>
+    /// The session/system-information members of #281 against the live server: live values, the NULL
+    /// cases (no log collector; strict functions on a NULL argument), the server-side validation of the
+    /// log format and the exact CLR types.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void SystemInfoSessionFamily_ShouldComputeValuesNullsAndClrTypes()
+    {
+        var r = _sut.ComplexEntity.Where(x => x.Id == 2)
+            .Select(x => new
+            {
+                Cr = SqlFunctions.Postgres.current_role(),
+                Cd = SqlFunctions.Postgres.current_catalog(),
+                CsFalse = SqlFunctions.Postgres.current_schemas(false),
+                CsTrue = SqlFunctions.Postgres.current_schemas(true),
+                Pst = SqlFunctions.Postgres.pg_postmaster_start_time(),
+                Cl = SqlFunctions.Postgres.pg_current_logfile(),
+                ClFmt = SqlFunctions.Postgres.pg_current_logfile("stderr"),
+                Cfg = SqlFunctions.Postgres.pg_conf_load_time(),
+                Jit = SqlFunctions.Postgres.pg_jit_available(),
+                Mts = SqlFunctions.Postgres.pg_my_temp_schema(),
+                Iots = SqlFunctions.Postgres.pg_is_other_temp_schema("0"),
+                Nqu = SqlFunctions.Postgres.pg_notification_queue_usage(),
+                Bp = SqlFunctions.Postgres.pg_blocking_pids(x.Int),
+                Sbp = SqlFunctions.Postgres.pg_safe_snapshot_blocking_pids(x.Int),
+                Td = SqlFunctions.Postgres.pg_trigger_depth()
+            })
+            .First();
+
+        var now = DateTime.UtcNow;
+        // `current_role` / `current_catalog` are bare keywords: compare them with the server's own report
+        // for this very session instead of pinning the fixture's user/database names.
+        r.Cr.Should().Be(Scalar((DataContext)_sut.DataProvider, "select current_role"),
+            "the member renders the bare current_role keyword");
+        r.Cd.Should().Be(Scalar((DataContext)_sut.DataProvider, "select current_catalog"),
+            "the member renders the bare current_catalog keyword");
+        r.CsFalse.Should().Contain("public").And.NotContain("pg_catalog");
+        r.CsTrue.Should().Contain("pg_catalog");
+        r.Pst.Should().NotBeNull().And.BeBefore(now);
+        // No log collector is configured for the fixture server, so both log-file forms yield NULL.
+        r.Cl.Should().BeNull();
+        r.ClFmt.Should().BeNull();
+        r.Cfg.Should().NotBeNull().And.BeBefore(now);
+        r.Jit.Should().NotBeNull();
+        // The physical backend session is pooled and other tests create temporary tables on it, so this
+        // session may already own a temporary schema and the oid is not necessarily "0". Assert the
+        // member against the server's own report for this very session (same DataContext, same
+        // connection) instead of pinning an isolation-dependent constant.
+        var tempSchema = Scalar((DataContext)_sut.DataProvider, "select cast(pg_my_temp_schema() as text)");
+        r.Mts.Should().Be(tempSchema, "the member projects this session's own temporary schema oid as text");
+        r.Iots.Should().BeFalse();
+        r.Nqu.Should().Be(0.0);
+        r.Nqu!.Value.Should().BeInRange(0.0, 1.0);
+        // pid 1 is not a waiting session, so neither blocking list has an entry.
+        r.Bp.Should().BeEmpty();
+        r.Sbp.Should().BeEmpty();
+        r.Td.Should().Be(0, "the projection runs outside any trigger");
+
+        // Exact CLR types.
+        ((object)r.Cr!).Should().BeOfType<string>();
+        ((object)r.Cd!).Should().BeOfType<string>();
+        ((object)r.CsFalse!).Should().BeOfType<string[]>();
+        ((object)r.CsTrue!).Should().BeOfType<string[]>();
+        ((object)r.Pst!).Should().BeOfType<DateTime>();
+        ((object)r.Cfg!).Should().BeOfType<DateTime>();
+        ((object)r.Jit!).Should().BeOfType<bool>();
+        ((object)r.Mts!).Should().BeOfType<string>();
+        ((object)r.Iots!).Should().BeOfType<bool>();
+        ((object)r.Nqu!).Should().BeOfType<double>();
+        ((object)r.Bp!).Should().BeOfType<int[]>();
+        ((object)r.Sbp!).Should().BeOfType<int[]>();
+        ((object)r.Td!).Should().BeOfType<int>();
+
+        // NULL argument: row 1 has a NULL nullableint, and the blocking-pid functions are strict.
+        var nulls = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Bp = SqlFunctions.Postgres.pg_blocking_pids(x.Int),
+                Sbp = SqlFunctions.Postgres.pg_safe_snapshot_blocking_pids(x.Int)
+            })
+            .First();
+        nulls.Bp.Should().BeNull();
+        nulls.Sbp.Should().BeNull();
+
+        // The log-format argument is validated by the server, not by nextorm.
+        var badFormat = () => _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new { V = SqlFunctions.Postgres.pg_current_logfile("text") })
+            .First();
+        badFormat.Should().Throw<PostgresException>()
+            .Which.Message.Should().Contain("log format");
+    }
+
+    /// <summary>
+    /// The catalog-visibility helpers of #281 against the live server. The OIDs are resolved with raw
+    /// SQL first and bound as parameters, which also proves that the renderer's <c>cast(.. as oid)</c>
+    /// is load-bearing: PostgreSQL has no <c>pg_*_is_visible(text)</c> overload. An OID that names no
+    /// object yields NULL, not false, and a NULL argument is NULL (the functions are strict).
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void CatalogVisibilityFamily_ShouldReportVisibilityNullsAndClrTypes()
+    {
+        var ctx = (DataContext)_sut.DataProvider;
+        var oid0 = Scalar(ctx, "select oid from pg_collation where collname = 'default'");
+        var oid1 = "0";
+        var oid2 = Scalar(ctx, "select oid from pg_proc where proname = 'pg_sleep' and pronargs = 1");
+        var oid3 = "0";
+        var oid4 = Scalar(ctx, "select oid from pg_operator where oprname = '+' and oprleft = 'int4'::regtype and oprright = 'int4'::regtype and oprnamespace = 'pg_catalog'::regnamespace");
+        var oid5 = "0";
+        var oid6 = "0";
+        var oid7 = "1259";
+        var oid8 = Scalar(ctx, "select oid from pg_ts_config where cfgname = 'english'");
+        var oid9 = Scalar(ctx, "select oid from pg_ts_dict where dictname = 'simple' and dictnamespace = 'pg_catalog'::regnamespace");
+        var oid10 = Scalar(ctx, "select oid from pg_ts_parser where prsname = 'default'");
+        var oid11 = Scalar(ctx, "select oid from pg_ts_template where tmplname = 'simple'");
+
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                C0 = SqlFunctions.Postgres.pg_collation_is_visible(oid0),
+                C1 = SqlFunctions.Postgres.pg_conversion_is_visible(oid1),
+                C2 = SqlFunctions.Postgres.pg_function_is_visible(oid2),
+                C3 = SqlFunctions.Postgres.pg_opclass_is_visible(oid3),
+                C4 = SqlFunctions.Postgres.pg_operator_is_visible(oid4),
+                C5 = SqlFunctions.Postgres.pg_opfamily_is_visible(oid5),
+                C6 = SqlFunctions.Postgres.pg_statistics_obj_is_visible(oid6),
+                C7 = SqlFunctions.Postgres.pg_table_is_visible(oid7),
+                C8 = SqlFunctions.Postgres.pg_ts_config_is_visible(oid8),
+                C9 = SqlFunctions.Postgres.pg_ts_dict_is_visible(oid9),
+                C10 = SqlFunctions.Postgres.pg_ts_parser_is_visible(oid10),
+                C11 = SqlFunctions.Postgres.pg_ts_template_is_visible(oid11),
+                Missing = SqlFunctions.Postgres.pg_collation_is_visible("0"),
+                NullArg = SqlFunctions.Postgres.pg_collation_is_visible(null)
+            })
+            .First();
+
+        // A real, visible catalog object of each kind: collation, function, operator, table, text search.
+        r.C0.Should().BeTrue("the default collation is visible");
+        r.C2.Should().BeTrue("a pg_catalog function is visible");
+        r.C4.Should().BeTrue("the int4 + operator is visible");
+        r.C7.Should().BeTrue("pg_class is visible");
+        r.C8.Should().BeTrue("the english text-search configuration is visible");
+        r.C9.Should().BeTrue("the simple text-search dictionary is visible");
+        r.C10.Should().BeTrue("the default text-search parser is visible");
+        r.C11.Should().BeTrue("the simple text-search template is visible");
+
+        // OID 0 names no object: the helpers return NULL (not false) for it.
+        r.C1.Should().BeNull();
+        r.C3.Should().BeNull();
+        r.C5.Should().BeNull();
+        r.C6.Should().BeNull();
+        r.Missing.Should().BeNull();
+        r.NullArg.Should().BeNull();
+
+        // Exact CLR type: nullable boolean, the same for every name.
+        ((object)r.C0!).Should().BeOfType<bool>();
+        ((object)r.C7!).Should().BeOfType<bool>();
+
+    }
+
+    /// <summary>
+    /// The encoding, catalog-format and index-property helpers of #281 against the live server: values,
+    /// the NULL and error cases measured on 17.11 (<c>pg_char_to_encoding</c> returns -1 for an unknown
+    /// name, the empty string for the default tablespace, NULL for an unrecognised property) and the
+    /// exact CLR types.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void EncodingAndCatalogFormatFamily_ShouldComputeValuesNullsAndClrTypes()
+    {
+        var ctx = (DataContext)_sut.DataProvider;
+        var typeOid = Scalar(ctx, "select oid from pg_type where typname = 'int4' and typnamespace = 'pg_catalog'::regnamespace");
+        var amOid = Scalar(ctx, "select oid from pg_am where amname = 'btree'");
+        var classOid = "1259";
+
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Tiv = SqlFunctions.Postgres.pg_type_is_visible(typeOid),
+                Cte = SqlFunctions.Postgres.pg_char_to_encoding("UTF8"),
+                CteUnknown = SqlFunctions.Postgres.pg_char_to_encoding("nonesuch"),
+                Etc = SqlFunctions.Postgres.pg_encoding_to_char(6),
+                Bt = SqlFunctions.Postgres.pg_basetype("integer"),
+                Bta = SqlFunctions.Postgres.pg_basetype("integer[]"),
+                Do = SqlFunctions.Postgres.pg_describe_object(classOid, classOid, 0),
+                Tl = SqlFunctions.Postgres.pg_tablespace_location("0"),
+                Sgf = SqlFunctions.Postgres.pg_settings_get_flags("work_mem"),
+                SgfEmpty = SqlFunctions.Postgres.pg_settings_get_flags("shared_buffers"),
+                SgfUnknown = SqlFunctions.Postgres.pg_settings_get_flags("nonesuch"),
+                Ihp = SqlFunctions.Postgres.pg_index_has_property("pg_class_oid_index", "clusterable"),
+                IhpUnknown = SqlFunctions.Postgres.pg_index_has_property("pg_class_oid_index", "nonesuch"),
+                Iahp = SqlFunctions.Postgres.pg_indexam_has_property(amOid, "can_order"),
+                Ichp = SqlFunctions.Postgres.pg_index_column_has_property("pg_class_oid_index", 1, "orderable"),
+                Iiv = SqlFunctions.Postgres.pg_input_is_valid("123", "integer"),
+                IivBad = SqlFunctions.Postgres.pg_input_is_valid("abc", "integer"),
+                Gss = SqlFunctions.Postgres.pg_get_serial_sequence("pg_class", "oid"),
+                MissingType = SqlFunctions.Postgres.pg_type_is_visible("0"),
+                NullInput = SqlFunctions.Postgres.pg_input_is_valid(null, "integer"),
+                NullAm = SqlFunctions.Postgres.pg_indexam_has_property(null, "can_order")
+            })
+            .First();
+
+        r.Tiv.Should().BeTrue("int4 is a visible catalog type");
+        r.Cte.Should().Be(6, "UTF8 is encoding code 6");
+        r.CteUnknown.Should().Be(-1, "an unknown encoding name yields -1, not an error");
+        r.Etc.Should().Be("UTF8");
+        r.Bt.Should().Be("integer");
+        r.Bta.Should().Be("integer[]", "the base type of an array is its element type");
+        r.Do.Should().Be("table pg_class");
+        r.Tl.Should().BeEmpty("the default tablespace has the empty location");
+        r.Sgf.Should().Equal("EXPLAIN");
+        r.SgfEmpty.Should().BeEmpty();
+        r.SgfUnknown.Should().BeNull();
+        r.Ihp.Should().BeTrue();
+        r.IhpUnknown.Should().BeNull("an unrecognised property yields NULL, not false");
+        r.Iahp.Should().BeTrue();
+        r.Ichp.Should().BeTrue();
+        r.Iiv.Should().BeTrue();
+        r.IivBad.Should().BeFalse();
+        r.Gss.Should().BeNull("pg_class.oid is not a serial column");
+        r.MissingType.Should().BeNull();
+        r.NullInput.Should().BeNull();
+        r.NullAm.Should().BeNull();
+
+        // Exact CLR types.
+        ((object)r.Tiv!).Should().BeOfType<bool>();
+        ((object)r.Cte!).Should().BeOfType<int>();
+        ((object)r.Etc!).Should().BeOfType<string>();
+        ((object)r.Bt!).Should().BeOfType<string>();
+        ((object)r.Do!).Should().BeOfType<string>();
+        ((object)r.Tl!).Should().BeOfType<string>();
+        ((object)r.Sgf!).Should().BeOfType<string[]>();
+        ((object)r.Ihp!).Should().BeOfType<bool>();
+        ((object)r.Iiv!).Should().BeOfType<bool>();
+
+        // Two error cases: an unknown type name is a server error in both helpers.
+        var badBaseType = () => _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new { V = SqlFunctions.Postgres.pg_basetype("nonesuch") })
+            .First();
+        badBaseType.Should().Throw<PostgresException>().Which.SqlState.Should().Be("42704");
+
+        var badInputType = () => _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new { V = SqlFunctions.Postgres.pg_input_is_valid("1", "nosuchtype") })
+            .First();
+        badInputType.Should().Throw<PostgresException>().Which.SqlState.Should().Be("42704");
+    }
+
+    [Fact]
+    [Trait("Issue", "281")]
+    public void CatalogDefinitionFamily_ShouldComputeValuesAndPlanEveryShape()
+    {
+        var ctx = (DataContext)_sut.DataProvider;
+        var nowOid = Scalar(ctx, "select oid from pg_proc where proname = 'now' and pronargs = 0");
+        var indexOid = Scalar(ctx, "select oid from pg_class where relname = 'pg_class_oid_index'");
+        var viewOid = Scalar(ctx, "select oid from pg_class where relname = 'pg_stat_activity'");
+        var ruleOid = Scalar(ctx, "select oid from pg_rewrite where ev_class = 'pg_stat_activity'::regclass limit 1");
+
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Args = SqlFunctions.Postgres.pg_get_function_arguments(nowOid),
+                Identity = SqlFunctions.Postgres.pg_get_function_identity_arguments(nowOid),
+                Result = SqlFunctions.Postgres.pg_get_function_result(nowOid),
+                FunctionDef = SqlFunctions.Postgres.pg_get_functiondef(nowOid),
+                Index1 = SqlFunctions.Postgres.pg_get_indexdef(indexOid),
+                Index3 = SqlFunctions.Postgres.pg_get_indexdef(indexOid, 1, true),
+                Rule1 = SqlFunctions.Postgres.pg_get_ruledef(ruleOid),
+                Rule2 = SqlFunctions.Postgres.pg_get_ruledef(ruleOid, true)
+            })
+            .First();
+
+        r.Args.Should().BeEmpty("now() takes no arguments");
+        r.Identity.Should().BeEmpty();
+        r.Result.Should().Be("timestamp with time zone");
+        r.FunctionDef.Should().StartWith("CREATE OR REPLACE FUNCTION pg_catalog.now()");
+        r.Index1.Should().StartWith("CREATE UNIQUE INDEX pg_class_oid_index ON ");
+        r.Index3.Should().Contain("oid", "column 1 of the oid index is the oid column itself");
+        r.Rule1.Should().StartWith("CREATE RULE \"_RETURN\" AS");
+        r.Rule2.Should().StartWith("CREATE RULE \"_RETURN\" AS");
+
+        ((object)r.Args!).Should().BeOfType<string>();
+        ((object)r.Index1!).Should().BeOfType<string>();
+
+        // The partition, statistics and trigger helpers need objects the fixture does not have; the shapes
+        // are still planned by the server (the query returns no row, it is parsed and planned all the same).
+        var planned = _sut.ComplexEntity.Where(x => x.Id == -1)
+            .Select(x => new
+            {
+                Pcd = SqlFunctions.Postgres.pg_get_partition_constraintdef(viewOid),
+                Pkd = SqlFunctions.Postgres.pg_get_partkeydef(viewOid),
+                Sodb = SqlFunctions.Postgres.pg_get_statisticsobjdef("0"),
+                Td1 = SqlFunctions.Postgres.pg_get_triggerdef("0"),
+                Td2 = SqlFunctions.Postgres.pg_get_triggerdef("0", true)
+            })
+            .ToList();
+        planned.Should().BeEmpty();
+
+        // Measured on the pinned 17.11 server: a non-partitioned relation is not an error, it is a NULL
+        // row — a plain table, a view and a partition leaf all answer NULL, while a partitioned parent
+        // has a key and a partition has a bound. Both directions are asserted, so a NULL from a
+        // mis-rendered call cannot pass for "no key".
+        var notPartitioned = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Pkd = SqlFunctions.Postgres.pg_get_partkeydef(viewOid),
+                Pcd = SqlFunctions.Postgres.pg_get_partition_constraintdef(viewOid)
+            })
+            .First();
+        notPartitioned.Pkd.Should().BeNull("a view has no partition key: the server returns NULL, it does not raise");
+        notPartitioned.Pcd.Should().BeNull("a view has no partition bound: the server returns NULL, it does not raise");
+
+        Execute(ctx, "drop table if exists t347_partition_probe cascade");
+        Execute(ctx, "create table t347_partition_probe (id integer, ts date) partition by range (ts)");
+        try
+        {
+            Execute(ctx, "create table t347_partition_probe_p1 partition of t347_partition_probe"
+                + " for values from ('2020-01-01') to ('2021-01-01')");
+            var parentOid = Scalar(ctx, "select 't347_partition_probe'::regclass::oid");
+            var childOid = Scalar(ctx, "select 't347_partition_probe_p1'::regclass::oid");
+
+            var partition = _sut.ComplexEntity.Where(x => x.Id == 1)
+                .Select(x => new
+                {
+                    Key = SqlFunctions.Postgres.pg_get_partkeydef(parentOid),
+                    Bound = SqlFunctions.Postgres.pg_get_partition_constraintdef(childOid),
+                    ChildKey = SqlFunctions.Postgres.pg_get_partkeydef(childOid)
+                })
+                .First();
+            partition.Key.Should().Be("RANGE (ts)");
+            partition.Bound.Should().Contain("ts >=").And.Contain("ts <");
+            partition.ChildKey.Should().BeNull("a partition leaf has no partition key of its own");
+        }
+        finally
+        {
+            Execute(ctx, "drop table if exists t347_partition_probe cascade");
+        }
+
+        // The other definition helpers answer NULL for an object of the wrong kind as well (measured):
+        // no exception is raised, the row is simply NULL.
+        var wrongKind = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Index = SqlFunctions.Postgres.pg_get_indexdef(viewOid),
+                View = SqlFunctions.Postgres.pg_get_viewdef("pg_class"),
+                Rule = SqlFunctions.Postgres.pg_get_ruledef("0"),
+                Trigger = SqlFunctions.Postgres.pg_get_triggerdef("0"),
+                Stats = SqlFunctions.Postgres.pg_get_statisticsobjdef("0")
+            })
+            .First();
+        wrongKind.Index.Should().BeNull("an index definition needs an index: a relation OID yields NULL");
+        wrongKind.View.Should().BeNull("a table is not a view: pg_get_viewdef yields NULL");
+        wrongKind.Rule.Should().BeNull("OID 0 is not a rule: pg_get_ruledef yields NULL");
+        wrongKind.Trigger.Should().BeNull("OID 0 is not a trigger: pg_get_triggerdef yields NULL");
+        wrongKind.Stats.Should().BeNull("OID 0 is not an extended statistics object: pg_get_statisticsobjdef yields NULL");
+
+        // The pg_node_tree pair refuses at the member, and the live server states the same limitation.
+        FluentActions.Invoking(() => SqlFunctions.Postgres.pg_get_expr("x", "0"))
+            .Should().Throw<NotSupportedException>().WithMessage("*cannot accept a value of type pg_node_tree*");
+        FluentActions.Invoking(() => SqlFunctions.Postgres.pg_get_constraintdef("0"))
+            .Should().Throw<NotSupportedException>().WithMessage("*pg_node_tree*");
+
+        var liveNodeTree = () => Scalar(ctx, "select pg_get_expr('x', 0)");
+        liveNodeTree.Should().Throw<PostgresException>()
+            .WithMessage("*cannot accept a value of type pg_node_tree*");
+    }
+
+    [Fact]
+    [Trait("Issue", "281")]
+    public void ViewRoleAndSnapshotFamily_ShouldComputeValuesAndClrTypes()
+    {
+        var ctx = (DataContext)_sut.DataProvider;
+        var me = Scalar(ctx, "select current_user");
+        var roleOid = Scalar(ctx, "select oid from pg_roles where rolname = current_user");
+        var viewOid = Scalar(ctx, "select oid from pg_class where relname = 'pg_stat_activity'");
+
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                User = SqlFunctions.Postgres.pg_get_userbyid(roleOid),
+                View1 = SqlFunctions.Postgres.pg_get_viewdef("pg_stat_activity"),
+                View2 = SqlFunctions.Postgres.pg_get_viewdef(viewOid, true),
+                View3 = SqlFunctions.Postgres.pg_get_viewdef(viewOid, 2),
+                HasRole2 = SqlFunctions.Postgres.pg_has_role("pg_read_all_stats", "USAGE"),
+                HasRole3 = SqlFunctions.Postgres.pg_has_role(me, me, "USAGE"),
+                Snapshot = SqlFunctions.Postgres.pg_current_snapshot(),
+                XactId = SqlFunctions.Postgres.pg_current_xact_id(),
+                Status = SqlFunctions.Postgres.pg_xact_status(
+                    SqlFunctions.Postgres.pg_current_xact_id())
+            })
+            .First();
+
+        r.User.Should().Be(me);
+        r.View1.Should().Contain("SELECT");
+        r.View2.Should().Contain("SELECT");
+        r.View3.Should().Contain("SELECT");
+        r.HasRole2.Should().BeTrue("a superuser has USAGE on every role");
+        r.HasRole3.Should().BeTrue("a role always has USAGE on itself");
+        r.Snapshot.Should().MatchRegex(@"^\d+:\d+:");
+        r.XactId.Should().MatchRegex(@"^\d+$");
+        r.Status.Should().Be("in progress");
+
+        ((object)r.User!).Should().BeOfType<string>();
+        ((object)r.Snapshot!).Should().BeOfType<string>();
+        ((object)r.XactId!).Should().BeOfType<string>();
+
+        var s = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Xmax = SqlFunctions.Postgres.pg_snapshot_xmax(
+                    SqlFunctions.Postgres.pg_current_snapshot()),
+                Xmin = SqlFunctions.Postgres.pg_snapshot_xmin(
+                    SqlFunctions.Postgres.pg_current_snapshot())
+            })
+            .First();
+        s.Xmax.Should().MatchRegex(@"^\d+$");
+        s.Xmin.Should().MatchRegex(@"^\d+$");
+        Convert.ToUInt64(s.Xmin, System.Globalization.CultureInfo.InvariantCulture)
+            .Should().BeLessThanOrEqualTo(Convert.ToUInt64(s.Xmax, System.Globalization.CultureInfo.InvariantCulture));
+
+        // The xmax transaction of the snapshot is not yet visible in it.
+        var visible = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                V = SqlFunctions.Postgres.pg_visible_in_snapshot(
+                    SqlFunctions.Postgres.pg_snapshot_xmax(SqlFunctions.Postgres.pg_current_snapshot()),
+                    SqlFunctions.Postgres.pg_current_snapshot())
+            })
+            .First();
+        visible.V.Should().BeFalse();
+
+        // track_commit_timestamp is a restart-only setting. Measured on the pinned server with it off:
+        // there is no NULL row, the server raises 55000 "could not get commit timestamp data".
+        var setting = Scalar(ctx, "select setting from pg_settings where name = 'track_commit_timestamp'");
+        var commitTs = () => _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new { V = SqlFunctions.Postgres.pg_xact_commit_timestamp("7") })
+            .First();
+        if (setting == "off")
+            commitTs.Should().Throw<PostgresException>().Which.SqlState.Should().Be("55000");
+        else
+            commitTs().V.Should().NotBeNull();
+    }
+
+    [Fact]
+    [Trait("Issue", "281")]
+    public void NumericFamily_ShouldComputeValuesNullsAndClrTypes()
+    {
+        double? nullDouble = null;
+        decimal? nullDecimal = null;
+
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Div = SqlFunctions.Postgres.div(7m, 2m),
+                DivNegative = SqlFunctions.Postgres.div(-7m, 2m),
+                Erf = SqlFunctions.Postgres.erf(0.0),
+                Erfc = SqlFunctions.Postgres.erfc(0.0),
+                RandomNormal = SqlFunctions.Postgres.random_normal(0.0, 0.0),
+                Acosd = SqlFunctions.Postgres.acosd(1.0),
+                Asind = SqlFunctions.Postgres.asind(1.0),
+                Atand = SqlFunctions.Postgres.atand(1.0),
+                Atan2d = SqlFunctions.Postgres.atan2d(1.0, 1.0),
+                Cosd = SqlFunctions.Postgres.cosd(60.0),
+                Cotd = SqlFunctions.Postgres.cotd(45.0),
+                Sind = SqlFunctions.Postgres.sind(30.0),
+                Tand = SqlFunctions.Postgres.tand(45.0),
+                DivNull = SqlFunctions.Postgres.div(nullDecimal, 2m),
+                ErfNull = SqlFunctions.Postgres.erf(nullDouble),
+                ErfcNull = SqlFunctions.Postgres.erfc(nullDouble),
+                RandomNormalNull = SqlFunctions.Postgres.random_normal(nullDouble, 1.0),
+                AcosdNull = SqlFunctions.Postgres.acosd(nullDouble),
+                AsindNull = SqlFunctions.Postgres.asind(nullDouble),
+                AtandNull = SqlFunctions.Postgres.atand(nullDouble),
+                Atan2dNull = SqlFunctions.Postgres.atan2d(nullDouble, 1.0),
+                CosdNull = SqlFunctions.Postgres.cosd(nullDouble),
+                CotdNull = SqlFunctions.Postgres.cotd(nullDouble),
+                SindNull = SqlFunctions.Postgres.sind(nullDouble),
+                TandNull = SqlFunctions.Postgres.tand(nullDouble)
+            })
+            .First();
+
+        r.Div.Should().Be(3m);
+        ((object)r.Div!).Should().BeOfType<decimal>();
+        r.DivNegative.Should().Be(-3m);
+        r.Erf.Should().Be(0.0);
+        r.Erfc.Should().Be(1.0);
+        // A zero standard deviation makes the volatile function deterministic: it returns the mean.
+        r.RandomNormal.Should().Be(0.0);
+        r.Acosd.Should().Be(0.0);
+        r.Asind.Should().Be(90.0);
+        r.Atand.Should().Be(45.0);
+        r.Atan2d.Should().Be(45.0);
+        r.Cosd.Should().Be(0.5);
+        r.Cotd.Should().Be(1.0);
+        r.Sind.Should().Be(0.5);
+        r.Tand.Should().Be(1.0);
+
+        ((object)r.Erf!).Should().BeOfType<double>();
+        ((object)r.Erfc!).Should().BeOfType<double>();
+        ((object)r.RandomNormal!).Should().BeOfType<double>();
+        ((object)r.Acosd!).Should().BeOfType<double>();
+        ((object)r.Asind!).Should().BeOfType<double>();
+        ((object)r.Atand!).Should().BeOfType<double>();
+        ((object)r.Atan2d!).Should().BeOfType<double>();
+        ((object)r.Cosd!).Should().BeOfType<double>();
+        ((object)r.Cotd!).Should().BeOfType<double>();
+        ((object)r.Sind!).Should().BeOfType<double>();
+        ((object)r.Tand!).Should().BeOfType<double>();
+
+        r.DivNull.Should().BeNull();
+        r.ErfNull.Should().BeNull();
+        r.ErfcNull.Should().BeNull();
+        r.RandomNormalNull.Should().BeNull();
+        r.AcosdNull.Should().BeNull();
+        r.AsindNull.Should().BeNull();
+        r.AtandNull.Should().BeNull();
+        r.Atan2dNull.Should().BeNull();
+        r.CosdNull.Should().BeNull();
+        r.CotdNull.Should().BeNull();
+        r.SindNull.Should().BeNull();
+        r.TandNull.Should().BeNull();
+    }
+
+    [Fact]
+    [Trait("Issue", "281")]
+    public void DateTimeFamily_ShouldComputeValuesNullsAndClrTypes()
+    {
+        var date = new DateOnly(2024, 1, 1);
+        var day = TimeSpan.FromDays(1);
+
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Ds = SqlFunctions.Postgres.date_subtract(x.Datetime, day),
+                Ds3 = SqlFunctions.Postgres.date_subtract(x.Datetime, day, "UTC"),
+                Ji = SqlFunctions.Postgres.justify_interval(TimeSpan.FromHours(25)),
+                Mt = SqlFunctions.Postgres.make_timestamptz(2024, 1, 2, 3, 4, 5.5),
+                Mt3 = SqlFunctions.Postgres.make_timestamptz(2024, 1, 2, 3, 4, 5.5, "UTC"),
+                Ct = SqlFunctions.Postgres.clock_timestamp(),
+                St = SqlFunctions.Postgres.statement_timestamp(),
+                Tt = SqlFunctions.Postgres.transaction_timestamp(),
+                Tod = SqlFunctions.Postgres.timeofday(),
+                IsfDate = SqlFunctions.Postgres.isfinite(date),
+                IsfTs = SqlFunctions.Postgres.isfinite(x.Datetime),
+                IsfInterval = SqlFunctions.Postgres.isfinite(day)
+            })
+            .First();
+
+        // dt of row 1 is 2023-01-01 10:00:00; the interval form subtracts one day.
+        r.Ds.Should().Be(new DateTime(2022, 12, 31, 10, 0, 0));
+        r.Ds3.Should().Be(new DateTime(2022, 12, 31, 10, 0, 0));
+        r.Ji.Should().Be(TimeSpan.FromDays(1) + TimeSpan.FromHours(1));
+        r.Mt.Should().Be(new DateTime(2024, 1, 2, 3, 4, 5).AddMilliseconds(500));
+        r.Mt3.Should().Be(new DateTime(2024, 1, 2, 3, 4, 5).AddMilliseconds(500));
+        r.Ct.Should().NotBeNull();
+        r.St.Should().NotBeNull();
+        r.Tt.Should().NotBeNull();
+        // transaction_timestamp() is the transaction-start clock and statement_timestamp() the
+        // statement-start clock; in an implicit (autocommit) transaction the server sets them at
+        // slightly different instants, so only their proximity is guaranteed — an exact equality
+        // holds inside a single explicit transaction block, not here.
+        r.St.Should().BeCloseTo(r.Tt!.Value, TimeSpan.FromSeconds(5),
+            "the statement and transaction clocks are both taken at the start of this statement");
+        r.Ct.Should().BeCloseTo(r.St!.Value, TimeSpan.FromMinutes(5));
+        r.Tod.Should().Contain("UTC");
+        r.IsfDate.Should().BeTrue();
+        r.IsfTs.Should().BeTrue();
+        r.IsfInterval.Should().BeTrue();
+
+        // Exact CLR types.
+        ((object)r.Ds!).Should().BeOfType<DateTime>();
+        ((object)r.Ds3!).Should().BeOfType<DateTime>();
+        ((object)r.Ji!).Should().BeOfType<TimeSpan>();
+        ((object)r.Mt!).Should().BeOfType<DateTime>();
+        ((object)r.Ct!).Should().BeOfType<DateTime>();
+        ((object)r.St!).Should().BeOfType<DateTime>();
+        ((object)r.Tt!).Should().BeOfType<DateTime>();
+        ((object)r.Tod!).Should().BeOfType<string>();
+        ((object)r.IsfDate!).Should().BeOfType<bool>();
+        ((object)r.IsfTs!).Should().BeOfType<bool>();
+        ((object)r.IsfInterval!).Should().BeOfType<bool>();
+
+        // NULL row: row 3 has a NULL string, and the CASE guard turns every projection into NULL. This
+        // is the only way to obtain a NULL from the no-argument, non-strict-by-nature timestamp
+        // functions; the strict members are checked through the same row.
+        var nulls = _sut.ComplexEntity.Where(x => x.Id == 3)
+            .Select(x => new
+            {
+                Ds = x.String == null ? null : SqlFunctions.Postgres.date_subtract(x.Datetime, day),
+                Ds3 = x.String == null ? null : SqlFunctions.Postgres.date_subtract(x.Datetime, day, "UTC"),
+                Ji = x.String == null ? null : SqlFunctions.Postgres.justify_interval(TimeSpan.FromHours(25)),
+                Mt = x.String == null ? null : SqlFunctions.Postgres.make_timestamptz(2024, 1, 2, 3, 4, 5.5),
+                Mt3 = x.String == null ? null : SqlFunctions.Postgres.make_timestamptz(2024, 1, 2, 3, 4, 5.5, "UTC"),
+                Ct = x.String == null ? null : SqlFunctions.Postgres.clock_timestamp(),
+                St = x.String == null ? null : SqlFunctions.Postgres.statement_timestamp(),
+                Tt = x.String == null ? null : SqlFunctions.Postgres.transaction_timestamp(),
+                Tod = x.String == null ? null : SqlFunctions.Postgres.timeofday(),
+                IsfDate = x.String == null ? null : SqlFunctions.Postgres.isfinite(date),
+                IsfTs = x.String == null ? null : SqlFunctions.Postgres.isfinite(x.Datetime),
+                IsfInterval = x.String == null ? null : SqlFunctions.Postgres.isfinite(day)
+            })
+            .First();
+
+        nulls.Ds.Should().BeNull();
+        nulls.Ds3.Should().BeNull();
+        nulls.Ji.Should().BeNull();
+        nulls.Mt.Should().BeNull();
+        nulls.Mt3.Should().BeNull();
+        nulls.Ct.Should().BeNull();
+        nulls.St.Should().BeNull();
+        nulls.Tt.Should().BeNull();
+        nulls.Tod.Should().BeNull();
+        nulls.IsfDate.Should().BeNull();
+        nulls.IsfTs.Should().BeNull();
+        nulls.IsfInterval.Should().BeNull();
+    }
+
+    [Fact]
+    [Trait("Issue", "281")]
+    public void UuidFamily_ShouldComputeValuesNullsAndClrTypes()
+    {
+        var v1 = Guid.Parse("a0eebc99-9c0b-11d1-9c9b-00c04fd430c8");
+        var v4 = Guid.Parse("3f2504e0-4f89-41d3-9a0c-0305e82c3301");
+        var nil = Guid.Empty;
+
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                V1Version = SqlFunctions.Postgres.uuid_extract_version(v1),
+                V1Timestamp = SqlFunctions.Postgres.uuid_extract_timestamp(v1),
+                V4Version = SqlFunctions.Postgres.uuid_extract_version(v4),
+                V4Timestamp = SqlFunctions.Postgres.uuid_extract_timestamp(v4),
+                NilVersion = SqlFunctions.Postgres.uuid_extract_version(nil),
+                NilTimestamp = SqlFunctions.Postgres.uuid_extract_timestamp(nil)
+            })
+            .First();
+
+        r.V1Version.Should().Be((short)1);
+        r.V1Timestamp.Should().Be(new DateTime(1998, 2, 2, 20, 23, 12, 902).AddTicks(8_760));
+        r.V4Version.Should().Be((short)4);
+        r.V4Timestamp.Should().BeNull("a version 4 UUID carries no timestamp");
+        r.NilVersion.Should().BeNull("the nil UUID has no version");
+        r.NilTimestamp.Should().BeNull("the nil UUID has no timestamp");
+
+        // Exact CLR types.
+        ((object)r.V1Version!).Should().BeOfType<short>();
+        ((object)r.V4Version!).Should().BeOfType<short>();
+        ((object)r.V1Timestamp!).Should().BeOfType<DateTime>();
+    }
+
+    [Fact]
+    [Trait("Issue", "281")]
+    public void BinaryStringFamily_ShouldComputeValuesNullsAndClrTypes()
+    {
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Bit = SqlFunctions.Postgres.get_bit(SqlFunctions.Postgres.decode("a1", "hex"), 0L),
+                BitSet = SqlFunctions.Postgres.set_bit(SqlFunctions.Postgres.decode("a1", "hex"), 0L, 0),
+                Byte = SqlFunctions.Postgres.get_byte(SqlFunctions.Postgres.decode("a1", "hex"), 0),
+                ByteSet = SqlFunctions.Postgres.set_byte(SqlFunctions.Postgres.decode("a1", "hex"), 0, 255),
+                Count = SqlFunctions.Postgres.bit_count(SqlFunctions.Postgres.decode("a1", "hex"))
+            })
+            .First();
+
+        // 0xA1 = 1010 0001: bit 0 is 1, the byte is 161, three bits are set.
+        r.Bit.Should().Be(1);
+        r.BitSet.Should().Equal(new byte[] { 0xA0 });
+        r.Byte.Should().Be(161);
+        r.ByteSet.Should().Equal(new byte[] { 0xFF });
+        r.Count.Should().Be(3L);
+
+        // Exact CLR types.
+        ((object)r.Bit!).Should().BeOfType<int>();
+        ((object)r.BitSet!).Should().BeOfType<byte[]>();
+        ((object)r.Byte!).Should().BeOfType<int>();
+        ((object)r.ByteSet!).Should().BeOfType<byte[]>();
+        ((object)r.Count!).Should().BeOfType<long>();
+
+        // NULL row: the binary entity's row 2 carries a NULL bytea column.
+        var nulls = _sut.BinaryEntity.Where(x => x.Id == 2)
+            .Select(x => new
+            {
+                Bit = SqlFunctions.Postgres.get_bit(x.Data, 0L),
+                BitSet = SqlFunctions.Postgres.set_bit(x.Data, 0L, 0),
+                Byte = SqlFunctions.Postgres.get_byte(x.Data, 0),
+                ByteSet = SqlFunctions.Postgres.set_byte(x.Data, 0, 255),
+                Count = SqlFunctions.Postgres.bit_count(x.Data)
+            })
+            .First();
+
+        nulls.Bit.Should().BeNull();
+        nulls.BitSet.Should().BeNull();
+        nulls.Byte.Should().BeNull();
+        nulls.ByteSet.Should().BeNull();
+        nulls.Count.Should().BeNull();
+    }
+
+    [Fact]
+    [Trait("Issue", "281")]
+    public void RefusedMembers_ShouldFailDuringPreparation()
+    {
+        var casefold = () => _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new { V = SqlFunctions.Postgres.casefold(x.String) }).First();
+        var gamma = () => _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new { V = SqlFunctions.Postgres.gamma(1.5) }).First();
+        var tgamma = () => _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new { V = SqlFunctions.Postgres.tgamma(1.5) }).First();
+        var lgamma = () => _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new { V = SqlFunctions.Postgres.lgamma(1.5) }).First();
+        var toAsciiOneArg = () => _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new { V = SqlFunctions.Postgres.to_ascii(x.String) }).First();
+        var crc32 = () => _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new { V = SqlFunctions.Postgres.crc32(SqlFunctions.Postgres.decode(x.String, "hex")) }).First();
+        var crc32c = () => _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new { V = SqlFunctions.Postgres.crc32c(SqlFunctions.Postgres.decode(x.String, "hex")) }).First();
+
+        casefold.Should().Throw<NotSupportedException>().WithMessage("The casefold function is refused:*PostgreSQL 18*");
+        gamma.Should().Throw<NotSupportedException>().WithMessage("The gamma function is refused:*17.11*");
+        tgamma.Should().Throw<NotSupportedException>().WithMessage("The tgamma function is refused:*17.11*");
+        lgamma.Should().Throw<NotSupportedException>().WithMessage("The lgamma function is refused:*17.11*");
+        toAsciiOneArg.Should().Throw<NotSupportedException>()
+            .WithMessage("The one-argument to_ascii function is refused:*LATIN1, LATIN2, LATIN9 and WIN1250*0A000*to_ascii(value, encoding)*");
+        crc32.Should().Throw<NotSupportedException>().WithMessage("The crc32 function is refused:*PostgreSQL 18*");
+        crc32c.Should().Throw<NotSupportedException>().WithMessage("The crc32c function is refused:*PostgreSQL 18*");
+
+        // pg_sleep* returns void, so it cannot appear in a projection; the refusal is a member-level
+        // throw (no SQL, no wait). pg_sleep_until gets a past target so nothing would ever sleep.
+        FluentActions.Invoking(() => SqlFunctions.Postgres.pg_sleep(0.0))
+            .Should().Throw<NotSupportedException>().WithMessage("The pg_sleep function is refused:*void*");
+        FluentActions.Invoking(() => SqlFunctions.Postgres.pg_sleep_for(TimeSpan.Zero))
+            .Should().Throw<NotSupportedException>().WithMessage("The pg_sleep_for function is refused:*void*");
+        FluentActions.Invoking(() => SqlFunctions.Postgres.pg_sleep_until(DateTime.UnixEpoch))
+            .Should().Throw<NotSupportedException>().WithMessage("The pg_sleep_until function is refused:*void*");
+
+        // Positive control: the delivered sibling shapes render and execute.
+        _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new { V = SqlFunctions.Postgres.erfc(0.0) })
+            .First().V.Should().Be(1.0);
+        _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new { V = SqlFunctions.Postgres.to_ascii(x.String, "LATIN1") })
+            .First().V.Should().Be("dadfasd");
+    }
+
+    /// <summary>
+    /// The control-file and keyword readers of #281 as FROM sources: the row schema, the cardinality of
+    /// each single-row record function, the exact CLR type of every projection the row mapper cannot
+    /// read from the server type directly (<c>pg_lsn</c>/<c>oid</c>/<c>"char"</c> are text, <c>xid</c>
+    /// is <see cref="uint"/>), and the keyword table's contents.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void SystemInfoControlAndKeywordReaders_ShouldExposeRowsAndClrTypes()
+    {
+        var system = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_control_system())
+            .Select(r => new { r.PgControlVersion, r.CatalogVersionNo, r.SystemIdentifier, r.PgControlLastModified })
+            .ToList();
+        system.Should().ContainSingle("pg_control_system() returns exactly one row");
+        var sc = system[0];
+        sc.PgControlVersion.Should().Be(1700, "the pinned server is PostgreSQL 17");
+        sc.CatalogVersionNo.Should().BePositive();
+        sc.SystemIdentifier.Should().BePositive();
+        sc.PgControlLastModified.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromDays(2));
+        ((object)sc.PgControlVersion!).Should().BeOfType<int>();
+        ((object)sc.SystemIdentifier!).Should().BeOfType<long>();
+        ((object)sc.PgControlLastModified!).Should().BeOfType<DateTime>();
+
+        var init = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_control_init())
+            .Select(r => new
+            {
+                r.MaxDataAlignment,
+                r.DatabaseBlockSize,
+                r.MaxIdentifierLength,
+                r.Float8PassByValue,
+                r.DataPageChecksumVersion
+            })
+            .ToList();
+        init.Should().ContainSingle("pg_control_init() returns exactly one row");
+        var ci = init[0];
+        ci.MaxDataAlignment.Should().Be(8);
+        ci.DatabaseBlockSize.Should().Be(8192);
+        ci.MaxIdentifierLength.Should().Be(64);
+        ci.Float8PassByValue.Should().BeTrue();
+        ci.DataPageChecksumVersion.Should().Be(0, "the fixture cluster is initialised without page checksums");
+        ((object)ci.DatabaseBlockSize!).Should().BeOfType<int>();
+        ((object)ci.Float8PassByValue!).Should().BeOfType<bool>();
+
+        var recovery = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_control_recovery())
+            .Select(r => new
+            {
+                r.MinRecoveryEndLsn,
+                r.MinRecoveryEndTimeline,
+                r.BackupStartLsn,
+                r.BackupEndLsn,
+                r.EndOfBackupRecordRequired
+            })
+            .ToList();
+        recovery.Should().ContainSingle("pg_control_recovery() returns exactly one row");
+        var cr = recovery[0];
+        cr.MinRecoveryEndLsn.Should().Be("0/0");
+        cr.MinRecoveryEndTimeline.Should().Be(0);
+        cr.BackupStartLsn.Should().Be("0/0");
+        cr.BackupEndLsn.Should().Be("0/0");
+        cr.EndOfBackupRecordRequired.Should().BeFalse("the fixture server is not in an exclusive backup");
+        ((object)cr.MinRecoveryEndLsn!).Should().BeOfType<string>("pg_lsn has no CLR mapping and is read as text");
+        ((object)cr.EndOfBackupRecordRequired!).Should().BeOfType<bool>();
+
+        var checkpoint = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_control_checkpoint())
+            .Select(r => new
+            {
+                r.CheckpointLsn,
+                r.RedoLsn,
+                r.RedoWalFile,
+                r.TimelineId,
+                r.PrevTimelineId,
+                r.FullPageWrites,
+                r.NextXid,
+                r.NextOid,
+                r.NextMultixactId,
+                r.OldestXid,
+                r.OldestXidDbId,
+                r.OldestActiveXid,
+                r.OldestMultiXid,
+                r.OldestMultiDbId,
+                r.OldestCommitTsXid,
+                r.NewestCommitTsXid,
+                r.CheckpointTime
+            })
+            .ToList();
+        checkpoint.Should().ContainSingle("pg_control_checkpoint() returns exactly one row");
+        var cc = checkpoint[0];
+        cc.CheckpointLsn.Should().MatchRegex("^[0-9A-F]+/[0-9A-F]+$");
+        cc.RedoLsn.Should().MatchRegex("^[0-9A-F]+/[0-9A-F]+$");
+        cc.RedoWalFile.Should().MatchRegex("^[0-9A-F]{24}$");
+        cc.TimelineId.Should().Be(1);
+        cc.PrevTimelineId.Should().Be(1);
+        cc.FullPageWrites.Should().Be(
+            Scalar((DataContext)_sut.DataProvider, "select current_setting('full_page_writes')") == "on",
+            "the column reports the server's own full_page_writes setting");
+        cc.NextXid.Should().MatchRegex(@"^\d+:\d+$");
+        cc.NextOid.Should().MatchRegex(@"^\d+$");
+        cc.NextMultixactId.Should().BePositive();
+        cc.OldestXid.Should().BePositive();
+        cc.OldestXidDbId.Should().MatchRegex(@"^\d+$", "the oid column is read as its text form");
+        cc.OldestActiveXid.Should().BeLessThan(
+            uint.Parse(cc.NextXid!.Split(':')[1], System.Globalization.CultureInfo.InvariantCulture),
+            "the oldest active xid, 0 when none was active, precedes the next transaction id");
+        cc.OldestXid.Should().BeLessThan(
+            uint.Parse(cc.NextXid!.Split(':')[1], System.Globalization.CultureInfo.InvariantCulture));
+        cc.OldestMultiXid.Should().BePositive();
+        // track_commit_timestamp is off on the pinned server, so no xid carries a commit timestamp.
+        cc.OldestCommitTsXid.Should().Be(0);
+        cc.NewestCommitTsXid.Should().Be(0);
+        cc.CheckpointTime.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromDays(2));
+        ((object)cc.CheckpointLsn!).Should().BeOfType<string>();
+        ((object)cc.NextOid!).Should().BeOfType<string>();
+        ((object)cc.NextMultixactId!).Should().BeOfType<uint>("xid is exposed as UInt32 by the driver");
+        ((object)cc.OldestXid!).Should().BeOfType<uint>();
+        ((object)cc.CheckpointTime!).Should().BeOfType<DateTime>();
+
+        var keywords = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_get_keywords())
+            .Select(r => new { r.Word, r.CatCode, r.BareLabel, r.CatDesc })
+            .ToList();
+        keywords.Should().HaveCountGreaterThan(400, "the PG17 keyword table is far larger than the SQL standard list");
+        var select = keywords.Single(k => k.Word == "select");
+        select.CatCode.Should().Be("R");
+        select.BareLabel.Should().BeTrue();
+        select.CatDesc.Should().Be("reserved");
+        ((object)select.CatCode!).Should().BeOfType<string>("the internal \"char\" category code is read as text");
+        ((object)select.BareLabel!).Should().BeOfType<bool>();
+        keywords.Single(k => k.Word == "all").CatCode.Should().Be("R");
+    }
+
+    /// <summary>
+    /// The WAL-summary, multixact, object-address and transaction-status readers of #281 as FROM
+    /// sources: the WAL-summary set (empty only while the server has never summarised), a real
+    /// two-member multixact produced by two concurrent share lockers, a resolvable object address and
+    /// its all-NULL form when the arguments cannot identify an object, the summarizer's state row, and
+    /// the commit-timestamp reader (a row when <c>track_commit_timestamp</c> is on, the server's
+    /// documented error when it is off).
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void SystemInfoWalAndXactReaders_ShouldExposeRowsAndClrTypes()
+    {
+        var summaries = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_available_wal_summaries())
+            .Select(r => new { r.TimelineId, r.StartLsn, r.EndLsn })
+            .ToList();
+        // The fixture starts with summarize_wal off and no summary file; a summary produced earlier in
+        // this class (the WAL-summary reader test) stays on disk, so the empty set is asserted only while
+        // the server reports none, and otherwise the member must mirror the raw function exactly.
+        var summaryFileCount = Scalar((DataContext)_sut.DataProvider, "select count(*) from pg_available_wal_summaries()");
+        if (summaryFileCount == "0")
+            summaries.Should().BeEmpty("summarize_wal is off on the fixture, so the server has no summary files");
+        else
+            summaries.Should().HaveCount(int.Parse(summaryFileCount, System.Globalization.CultureInfo.InvariantCulture));
+        summaries.Should().OnlyContain(r => r.StartLsn != null && r.EndLsn != null && r.TimelineId != null);
+
+        Execute(_sut.DataProvider, "drop table if exists t347_multixact_probe");
+        Execute(_sut.DataProvider, "create table t347_multixact_probe (id integer primary key, value integer)");
+        Execute(_sut.DataProvider, "insert into t347_multixact_probe values (1, 1)");
+        try
+        {
+            using var locker1 = new NpgsqlConnection(PostgresContainer.ConnectionString);
+            using var locker2 = new NpgsqlConnection(PostgresContainer.ConnectionString);
+            locker1.Open();
+            locker2.Open();
+            using var tx1 = locker1.BeginTransaction();
+            using var tx2 = locker2.BeginTransaction();
+            using (var cmd = new NpgsqlCommand("select * from t347_multixact_probe where id = 1 for share", locker1, tx1))
+                cmd.ExecuteNonQuery();
+            using (var cmd = new NpgsqlCommand("select * from t347_multixact_probe where id = 1 for share", locker2, tx2))
+                cmd.ExecuteNonQuery();
+
+            var multixactId = Convert.ToUInt32(
+                Scalar((DataContext)_sut.DataProvider, "select xmax::text from t347_multixact_probe where id = 1"),
+                System.Globalization.CultureInfo.InvariantCulture);
+            multixactId.Should().BePositive("the two share lockers created a multixact");
+
+            var members = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_get_multixact_members(multixactId))
+                .Select(r => new { r.Xid, r.Mode })
+                .ToList();
+            members.Should().HaveCount(2, "both share lockers are members of the multixact");
+            members.Should().OnlyContain(m => m.Mode == "sh");
+            members.Should().OnlyContain(m => m.Xid != null);
+            ((object)members[0].Xid!).Should().BeOfType<uint>();
+
+            tx1.Rollback();
+            tx2.Rollback();
+        }
+        finally
+        {
+            Execute(_sut.DataProvider, "drop table if exists t347_multixact_probe");
+        }
+
+        var objectNames = new[] { "pg_class" };
+        var noObjectArgs = Array.Empty<string>();
+        var address = _sut.DataProvider.From(() =>
+                SqlFunctions.Postgres.pg_get_object_address("table", objectNames, noObjectArgs))
+            .Select(r => new { r.ClassId, r.ObjId, r.ObjSubId })
+            .ToList();
+        address.Should().ContainSingle("the object address is one row");
+        address[0].ClassId.Should().Be("1259", "pg_class lives in pg_class, OID 1259");
+        address[0].ObjId.Should().Be("1259");
+        address[0].ObjSubId.Should().Be(0);
+        ((object)address[0].ClassId!).Should().BeOfType<string>("oid has no CLR mapping and is read as text");
+
+        var unresolved = _sut.DataProvider.From(() =>
+                SqlFunctions.Postgres.pg_get_object_address("table", objectNames, null!))
+            .Select(r => new { r.ClassId, r.ObjId, r.ObjSubId })
+            .ToList();
+        unresolved.Should().ContainSingle("a null object_args yields one all-NULL row");
+        unresolved[0].ClassId.Should().BeNull();
+        unresolved[0].ObjId.Should().BeNull();
+
+        var summarizer = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_get_wal_summarizer_state())
+            .Select(r => new { r.SummarizedTli, r.SummarizedLsn, r.PendingLsn, r.SummarizerPid })
+            .ToList();
+        summarizer.Should().ContainSingle("the summarizer state is one row");
+        // The state reflects the last run of the summarizer: 0/0 before any summary exists, a real
+        // timeline/LSN pair once a test in this class has produced one. The LSN columns are text.
+        summarizer[0].SummarizedTli.Should().NotBeNull();
+        summarizer[0].SummarizedLsn.Should().MatchRegex("^[0-9A-F]+/[0-9A-F]+$");
+        summarizer[0].PendingLsn.Should().MatchRegex("^[0-9A-F]+/[0-9A-F]+$");
+        summarizer[0].SummarizerPid.Should().BeNull("the summarizer process runs only while summarize_wal is on");
+
+        var trackCommitTimestamp = Scalar((DataContext)_sut.DataProvider, "select current_setting('track_commit_timestamp')");
+        if (trackCommitTimestamp == "on")
+        {
+            var last = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_last_committed_xact())
+                .Select(r => new { r.Xid, r.Timestamp, r.RoIdent })
+                .ToList();
+            last.Should().ContainSingle("one transaction has a recorded commit timestamp");
+            last[0].Timestamp.Should().NotBeNull();
+            ((object)last[0].Xid!).Should().BeOfType<uint>();
+        }
+        else
+        {
+            FluentActions.Invoking(() => _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_last_committed_xact())
+                    .Select(r => new { r.Xid }).ToList())
+                .Should().Throw<PostgresException>()
+                .WithMessage("*could not get commit timestamp data*");
+        }
+    }
+
+    /// <summary>
+    /// The single-column and catalog-inspection readers of #281 as FROM sources: the restored
+    /// function-named column, the empty sets the fixture really returns, the value rows the server
+    /// produces for a literal snapshot and a real storage-option array, and the exact CLR types the
+    /// projections declare (the <c>oid</c>/<c>xid8</c> columns are text, the two column lists are
+    /// <c>string[]</c>).
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void SystemInfoSingleColumnAndCatalogReaders_ShouldExposeRowsAndClrTypes()
+    {
+        var channels = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_listening_channels())
+            .Select(r => new { r.Channel })
+            .ToList();
+        channels.Should().BeEmpty("the fixture has not issued LISTEN on this connection");
+        Execute(_sut.DataProvider, "listen t347_probe_channel");
+        var listened = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_listening_channels())
+            .Select(r => new { r.Channel })
+            .ToList();
+        Execute(_sut.DataProvider, "unlisten *");
+        listened.Should().ContainSingle("LISTEN was issued on the same connection")
+            .Which.Channel.Should().Be("t347_probe_channel");
+        ((object)listened[0].Channel!).Should().BeOfType<string>();
+
+        var xip = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_snapshot_xip("10:20:10,12"))
+            .Select(r => new { r.Xid })
+            .ToList();
+        xip.Select(r => r.Xid).Should().Equal(new[] { "10", "12" }, "the in-progress ids of the literal snapshot");
+        ((object)xip[0].Xid!).Should().BeOfType<string>("xid8 has no CLR mapping and is read as text");
+
+        var xipEmpty = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_snapshot_xip("10:20:"))
+            .Select(r => new { r.Xid })
+            .ToList();
+        xipEmpty.Should().BeEmpty("a snapshot with an empty in-progress list returns no rows");
+
+        var databases = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_tablespace_databases("1663"))
+            .Select(r => new { r.DatabaseOid })
+            .ToList();
+        databases.Should().HaveCount(3, "the pg_default tablespace holds template0, template1 and postgres");
+        databases.Should().OnlyContain(r => r.DatabaseOid != null && r.DatabaseOid.All(char.IsAsciiDigit));
+        var noTablespace = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_tablespace_databases("0"))
+            .Select(r => new { r.DatabaseOid })
+            .ToList();
+        noTablespace.Should().BeEmpty("OID 0 is not a tablespace, so the function returns no rows");
+
+        var foreignKeys = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_get_catalog_foreign_keys())
+            .Select(r => new { r.FkTable, r.FkColumns, r.PkTable, r.PkColumns, r.IsArray, r.IsOptional })
+            .ToList();
+        foreignKeys.Should().HaveCountGreaterThan(100, "the catalog declares many foreign keys");
+        var relationReference = foreignKeys.First(k => k.FkTable == "pg_class" && k.PkTable == "pg_class");
+        relationReference.FkColumns.Should().NotBeNull().And.HaveCount(1);
+        ((object)relationReference.FkColumns!).Should().BeOfType<string[]>("text[] maps to a string array");
+        relationReference.IsArray.Should().BeFalse();
+        relationReference.IsOptional.Should().BeTrue("pg_class.reltoastrelid/relrewrite may be zero");
+        foreignKeys.Should().OnlyContain(k => k.FkTable != null && k.PkTable != null);
+
+        var optionArray = new[] { "fillfactor=70", "autovacuum_enabled=off" };
+        var options = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_options_to_table(optionArray))
+            .Select(r => new { r.OptionName, r.OptionValue })
+            .ToList();
+        options.Should().HaveCount(2);
+        options[0].OptionName.Should().Be("fillfactor");
+        options[0].OptionValue.Should().Be("70");
+        options[1].OptionName.Should().Be("autovacuum_enabled");
+        options[1].OptionValue.Should().Be("off");
+        ((object)options[0].OptionName!).Should().BeOfType<string>();
+
+        var emptyOptions = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_options_to_table(null!))
+            .Select(r => new { r.OptionName })
+            .ToList();
+        emptyOptions.Should().BeEmpty("a NULL option array yields no rows");
+    }
+
+    /// <summary>
+    /// The object-identity and input-error readers of #281 as FROM sources: the identity of
+    /// <c>pg_class</c> (a real catalog relation), its machine-readable address with the two text arrays,
+    /// the all-NULL row a non-existent object produces, and the soft input-error report for a valid and an
+    /// invalid value.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void SystemInfoObjectIdentityAndInputReaders_ShouldExposeRowsAndClrTypes()
+    {
+        var identity = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_identify_object("1259", "1259", 0))
+            .Select(r => new { r.Type, r.Schema, r.Name, r.Identity })
+            .ToList();
+        identity.Should().ContainSingle("pg_class is one object");
+        identity[0].Type.Should().Be("table");
+        identity[0].Schema.Should().Be("pg_catalog");
+        identity[0].Name.Should().Be("pg_class");
+        identity[0].Identity.Should().Be("pg_catalog.pg_class");
+        ((object)identity[0].Type!).Should().BeOfType<string>();
+
+        var missing = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_identify_object("1259", "0", 0))
+            .Select(r => new { r.Type, r.Schema, r.Name, r.Identity })
+            .ToList();
+        missing.Should().ContainSingle("a missing object still yields one row");
+        // The class (type) is known from the catalog OID; only the identity columns are NULL.
+        missing[0].Type.Should().Be("relation");
+        missing[0].Schema.Should().BeNull();
+        missing[0].Name.Should().BeNull();
+        missing[0].Identity.Should().BeNull();
+
+        var address = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_identify_object_as_address("1259", "1259", 0))
+            .Select(r => new { r.Type, r.ObjectNames, r.ObjectArgs })
+            .ToList();
+        address.Should().ContainSingle();
+        address[0].Type.Should().Be("table");
+        address[0].ObjectNames.Should().Equal("pg_catalog", "pg_class");
+        address[0].ObjectArgs.Should().BeEmpty("a relation address needs no positional arguments");
+        ((object)address[0].ObjectNames!).Should().BeOfType<string[]>("text[] maps to a string array");
+
+        var valid = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_input_error_info("42", "integer"))
+            .Select(r => new { r.Message, r.Detail, r.Hint, r.SqlErrorCode })
+            .ToList();
+        valid.Should().ContainSingle("a parsable value yields one row");
+        valid[0].Message.Should().BeNull();
+        valid[0].Detail.Should().BeNull();
+        valid[0].Hint.Should().BeNull();
+        valid[0].SqlErrorCode.Should().BeNull();
+
+        var invalid = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_input_error_info("abc", "integer"))
+            .Select(r => new { r.Message, r.Detail, r.Hint, r.SqlErrorCode })
+            .ToList();
+        invalid.Should().ContainSingle();
+        invalid[0].Message.Should().Be("invalid input syntax for type integer: \"abc\"");
+        invalid[0].SqlErrorCode.Should().Be("22P02", "a malformed integer raises the invalid-text-representation SQLSTATE");
+        ((object)invalid[0].SqlErrorCode!).Should().BeOfType<string>();
+    }
+
+    /// <summary>
+    /// The WAL-summary and transaction-origin readers of #281 as FROM sources. WAL summarization is off on
+    /// the fixture, so the test turns it on (<c>summarize_wal</c> is a SIGHUP setting), switches two WAL
+    /// segments and reads the produced summary through the member: the three <c>oid</c> columns come back as
+    /// text while <c>relforknumber</c>/<c>relblocknumber</c>/<c>is_limit_block</c> keep their
+    /// <c>short</c>/<c>long</c>/<c>bool</c> CLR types. When no summary is produced within the budget, the
+    /// reader's documented missing-file error is asserted. The commit-timestamp origin reader follows the
+    /// fixture setting: a row when <c>track_commit_timestamp</c> is on, the documented 55000 when it is off.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void SystemInfoWalSummaryAndXactOriginReaders_ShouldExposeRowsAndClrTypes()
+    {
+        var summarizeContext = Scalar((DataContext)_sut.DataProvider, "select context from pg_settings where name = 'summarize_wal'");
+        var produced = false;
+        if (summarizeContext is "sighup" or "user")
+        {
+            Execute(_sut.DataProvider, "alter system set summarize_wal = on");
+            Execute(_sut.DataProvider, "select pg_reload_conf()");
+            try
+            {
+                Execute(_sut.DataProvider, "select pg_switch_wal()");
+                Execute(_sut.DataProvider, "select pg_switch_wal()");
+                var summaryRanges = string.Empty;
+                for (var attempt = 0; attempt < 60 && summaryRanges.Length == 0; attempt++)
+                {
+                    summaryRanges = Scalar(
+                        (DataContext)_sut.DataProvider,
+                        "select string_agg(tli || '|' || start_lsn::text || '|' || end_lsn::text, ',' order by start_lsn)"
+                        + " from pg_available_wal_summaries()");
+                    if (summaryRanges.Length == 0)
+                        Thread.Sleep(500);
+                }
+
+                string? chosen = null;
+                foreach (var candidate in summaryRanges.Split(',', StringSplitOptions.RemoveEmptyEntries))
+                {
+                    var candidateParts = candidate.Split('|');
+                    var blockCount = Scalar(
+                        (DataContext)_sut.DataProvider,
+                        "select count(*) from pg_wal_summary_contents("
+                        + $"{candidateParts[0]}, '{candidateParts[1]}'::pg_lsn, '{candidateParts[2]}'::pg_lsn)");
+                    if (blockCount != "0")
+                    {
+                        chosen = candidate;
+                        break;
+                    }
+                }
+
+                if (chosen is not null)
+                {
+                    var parts = chosen.Split('|');
+                    var contents = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_wal_summary_contents(
+                            long.Parse(parts[0], System.Globalization.CultureInfo.InvariantCulture), parts[1], parts[2]))
+                        .Select(r => new { r.RelFileNode, r.RelTablespace, r.RelDatabase, r.RelForkNumber, r.RelBlockNumber, r.IsLimitBlock })
+                        .ToList();
+                    contents.Should().NotBeEmpty("a produced WAL summary has content rows");
+                    contents.Should().OnlyContain(r => r.RelFileNode != null && r.RelTablespace != null && r.RelDatabase != null);
+                    contents.Should().OnlyContain(r => r.RelForkNumber != null && r.RelBlockNumber != null && r.IsLimitBlock != null);
+                    ((object)contents[0].RelFileNode!).Should().BeOfType<string>("oid has no CLR mapping and is read as text");
+                    ((object)contents[0].RelForkNumber!).Should().BeOfType<short>("int2 maps to short");
+                    ((object)contents[0].RelBlockNumber!).Should().BeOfType<long>("int8 maps to long");
+                    ((object)contents[0].IsLimitBlock!).Should().BeOfType<bool>();
+                    produced = true;
+                }
+            }
+            finally
+            {
+                Execute(_sut.DataProvider, "alter system reset summarize_wal");
+                Execute(_sut.DataProvider, "select pg_reload_conf()");
+            }
+        }
+
+        if (!produced)
+        {
+            FluentActions.Invoking(() => _sut.DataProvider.From(() =>
+                    SqlFunctions.Postgres.pg_wal_summary_contents(1, "0/0", "0/0"))
+                    .Select(r => new { r.RelFileNode }).ToList())
+                .Should().Throw<PostgresException>()
+                .WithMessage("*could not open file*summary*");
+        }
+
+        var trackCommitTimestamp = Scalar((DataContext)_sut.DataProvider, "select current_setting('track_commit_timestamp')");
+        if (trackCommitTimestamp == "on")
+        {
+            var origin = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_xact_commit_timestamp_origin(1u))
+                .Select(r => new { r.Timestamp, r.RoIdent })
+                .ToList();
+            origin.Count.Should().BeLessThanOrEqualTo(1, "the reader returns at most one row");
+            if (origin.Count == 1)
+            {
+                ((object)origin[0].RoIdent!).Should().BeOfType<string>("oid has no CLR mapping and is read as text");
+            }
+        }
+        else
+        {
+            // The bootstrap xid (1) has no commit record: the reader returns one all-NULL row for it,
+            // while an ordinary committed xid raises the documented 55000 because the cluster started
+            // with track_commit_timestamp off (a postmaster setting the test cannot change).
+            var bootstrap = _sut.DataProvider.From(() => SqlFunctions.Postgres.pg_xact_commit_timestamp_origin(1u))
+                .Select(r => new { r.Timestamp, r.RoIdent })
+                .ToList();
+            bootstrap.Should().ContainSingle("the reader returns one row for a known xid");
+            bootstrap[0].Timestamp.Should().BeNull();
+            bootstrap[0].RoIdent.Should().BeNull();
+
+            Execute(_sut.DataProvider, "drop table if exists t347_xid_probe");
+            Execute(_sut.DataProvider, "create table t347_xid_probe (id integer)");
+            try
+            {
+                Execute(_sut.DataProvider, "insert into t347_xid_probe values (1)");
+                var xid = Convert.ToUInt32(
+                    Scalar((DataContext)_sut.DataProvider, "select xmin::text from t347_xid_probe where id = 1"),
+                    System.Globalization.CultureInfo.InvariantCulture);
+                FluentActions.Invoking(() => _sut.DataProvider.From(() =>
+                        SqlFunctions.Postgres.pg_xact_commit_timestamp_origin(xid))
+                        .Select(r => new { r.Timestamp, r.RoIdent }).ToList())
+                    .Should().Throw<PostgresException>()
+                    .WithMessage("*could not get commit timestamp data*");
+            }
+            finally
+            {
+                Execute(_sut.DataProvider, "drop table if exists t347_xid_probe");
+            }
+        }
+    }
+
+    /// <summary>
+    /// The PostgreSQL 17 SQL/JSON constructors and the JSON path/extraction helpers of #281 (#347 D3a)
+    /// against the live server: the value each one produces, the exact CLR type the driver materialises
+    /// (<c>json</c>/<c>jsonb</c>/<c>text</c> results all read back as <see cref="string"/>), the
+    /// <c>pg_typeof</c> measurement of every result type, the NULL cases (absent path, JSON null, SQL
+    /// NULL document), the <c>jsonb_set_lax</c> null-value treatments, and the time-zone-dependent
+    /// <c>.datetime()</c> path that only the <c>_tz</c> variants accept.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void JsonConstructorAndPathFamily_ShouldComputeValuesNullsAndClrTypes()
+    {
+        var r = _sut.SimpleEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                J = SqlFunctions.Postgres.json("{\"a\":1}"),
+                JT = SqlFunctions.Postgres.pg_typeof(SqlFunctions.Postgres.json("{\"a\":1}")),
+                Sc = SqlFunctions.Postgres.json_scalar("abc"),
+                ScInt = SqlFunctions.Postgres.json_scalar(5),
+                ScNull = SqlFunctions.Postgres.json_scalar<string>(null),
+                ScT = SqlFunctions.Postgres.pg_typeof(SqlFunctions.Postgres.json_scalar(1)),
+                Ser = SqlFunctions.Postgres.json_serialize("{\"a\":1}"),
+                SerT = SqlFunctions.Postgres.pg_typeof(SqlFunctions.Postgres.json_serialize("{\"a\":1}"))
+            })
+            .First();
+
+        r.J.Should().Be("{\"a\":1}");
+        r.J!.GetType().Should().Be(typeof(string));
+        r.JT.Should().Be("json");
+        r.Sc.Should().Be("\"abc\"");
+        r.ScInt.Should().Be("5");
+        r.ScNull.Should().BeNull("json_scalar(null) is SQL NULL");
+        r.ScT.Should().Be("json");
+        r.Ser.Should().Be("{\"a\":1}");
+        r.SerT.Should().Be("text", "json_serialize(... RETURNING text) is text, unlike json(...)");
+
+        // The constructors parse their argument: invalid JSON text is rejected by the server.
+        FluentActions.Invoking(() => _sut.SimpleEntity.Where(x => x.Id == 1)
+                .Select(x => new { V = SqlFunctions.Postgres.json_serialize("abc") }).First())
+            .Should().Throw<PostgresException>()
+            .Which.SqlState.Should().Be("22P02", "FORMAT JSON makes the server parse the argument as JSON");
+
+        string[] path = ["a", "b"];
+        string[] single = ["a"];
+        string[] missing = ["zz"];
+
+        var p = _sut.SimpleEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Je = SqlFunctions.Postgres.json_extract_path("{\"a\":{\"b\":2}}", path),
+                Jet = SqlFunctions.Postgres.json_extract_path_text("{\"a\":{\"b\":2}}", path),
+                JetJsonNull = SqlFunctions.Postgres.json_extract_path_text("{\"a\":null}", single),
+                JetMissing = SqlFunctions.Postgres.json_extract_path_text("{\"a\":1}", missing),
+                JeEmptyPath = SqlFunctions.Postgres.json_extract_path("{\"a\":1}", Array.Empty<string>()),
+                JeT = SqlFunctions.Postgres.pg_typeof(SqlFunctions.Postgres.json_extract_path("{\"a\":1}", single)),
+                Jbe = SqlFunctions.Postgres.jsonb_extract_path("{\"a\":{\"b\":2}}", path),
+                Jbet = SqlFunctions.Postgres.jsonb_extract_path_text("{\"a\":{\"b\":2}}", path),
+                JbeMissing = SqlFunctions.Postgres.jsonb_extract_path_text("{\"a\":1}", missing),
+                JbeT = SqlFunctions.Postgres.pg_typeof(SqlFunctions.Postgres.jsonb_extract_path("{\"a\":1}", single)),
+                JbetT = SqlFunctions.Postgres.pg_typeof(SqlFunctions.Postgres.jsonb_extract_path_text("{\"a\":1}", single))
+            })
+            .First();
+
+        p.Je.Should().Be("2");
+        p.Jet.Should().Be("2");
+        p.JetJsonNull.Should().BeNull("a JSON null element reads back as SQL NULL from the _text form");
+        p.JetMissing.Should().BeNull("an absent path yields SQL NULL");
+        p.JeEmptyPath.Should().Be("{\"a\":1}", "an empty path returns the document itself");
+        p.JeT.Should().Be("json");
+        p.Jbe.Should().Be("2");
+        p.Jbet.Should().Be("2");
+        p.JbeMissing.Should().BeNull();
+        p.JbeT.Should().Be("jsonb");
+        p.JbetT.Should().Be("text");
+
+        string[] other = ["b"];
+
+        var s = _sut.SimpleEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Replace = SqlFunctions.Postgres.jsonb_set_lax("{\"a\":1}", single, "2", true, "use_json_null"),
+                Delete = SqlFunctions.Postgres.jsonb_set_lax("{\"a\":1}", single, (string?)null, true, "delete_key"),
+                NullAdd = SqlFunctions.Postgres.jsonb_set_lax("{\"a\":1}", other, (string?)null, true, "use_json_null"),
+                ReturnTarget = SqlFunctions.Postgres.jsonb_set_lax("{\"a\":1}", other, (string?)null, true, "return_target"),
+                NoCreate = SqlFunctions.Postgres.jsonb_set_lax("{\"a\":1}", other, "2", false, "use_json_null"),
+                NullDocument = SqlFunctions.Postgres.jsonb_set_lax((string?)null, single, "1", true, "use_json_null")
+            })
+            .First();
+
+        s.Replace.Should().Be("{\"a\": 2}");
+        s.Delete.Should().Be("{}", "delete_key removes the target key when the new value is SQL NULL");
+        s.NullAdd.Should().Be("{\"a\": 1, \"b\": null}", "use_json_null adds the key with a JSON null");
+        s.ReturnTarget.Should().Be("{\"a\": 1}", "return_target leaves the document unchanged");
+        s.NoCreate.Should().Be("{\"a\": 1}", "create_if_missing = false does not add the key");
+        s.NullDocument.Should().BeNull();
+
+        // An unknown null-value treatment is validated by the server, not silently accepted.
+        FluentActions.Invoking(() => _sut.SimpleEntity.Where(x => x.Id == 1)
+                .Select(x => new { V = SqlFunctions.Postgres.jsonb_set_lax("{\"a\":1}", single, (string?)null, true, "bogus") })
+                .First())
+            .Should().Throw<PostgresException>()
+            .WithMessage("*null_value_treatment must be*");
+
+        string timeZonePath = """$.d.datetime() < "2021-01-01".datetime()""";
+        string dateTimePath = "$.d.datetime()";
+
+        var tz = _sut.SimpleEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Exists = SqlFunctions.Postgres.jsonb_path_exists_tz("{\"d\":\"2020-06-01T00:00:00Z\"}", timeZonePath, "{}", false),
+                Match = SqlFunctions.Postgres.jsonb_path_match_tz("{\"d\":\"2020-06-01T00:00:00Z\"}", timeZonePath, "{}", false),
+                Arr = SqlFunctions.Postgres.jsonb_path_query_array_tz("{\"d\":\"2020-06-01T00:00:00Z\"}", dateTimePath, "{}", false),
+                First = SqlFunctions.Postgres.jsonb_path_query_first_tz("{\"d\":\"2020-06-01T00:00:00Z\"}", dateTimePath, "{}", false),
+                FirstMissing = SqlFunctions.Postgres.jsonb_path_query_first_tz("{\"a\":1}", "$.zz", "{}", false),
+                ArrMissing = SqlFunctions.Postgres.jsonb_path_query_array_tz("{\"a\":1}", "$.zz", "{}", false),
+                ExistsNullDocument = SqlFunctions.Postgres.jsonb_path_exists_tz((string?)null, "$", "{}", false)
+            })
+            .First();
+
+        tz.Exists.Should().BeTrue();
+        tz.Match.Should().BeTrue();
+        tz.Arr.Should().Be("[\"2020-06-01T00:00:00+00:00\"]");
+        tz.First.Should().Be("\"2020-06-01T00:00:00+00:00\"");
+        tz.FirstMissing.Should().BeNull();
+        tz.ArrMissing.Should().Be("[]", "the array form of an empty match set is an empty array, not NULL");
+        tz.ExistsNullDocument.Should().BeNull();
+
+        // The non-_tz sibling cannot evaluate a time-zone-dependent path; the _tz form above can.
+        FluentActions.Invoking(() => _sut.SimpleEntity.Where(x => x.Id == 1)
+                .Select(x => new { V = SqlFunctions.Postgres.jsonb_path_exists("{\"d\":\"2020-06-01T00:00:00Z\"}", timeZonePath) })
+                .First())
+            .Should().Throw<PostgresException>()
+            .WithMessage("*without time zone usage*");
+    }
+
+    private static string Scalar(DataContext ctx, string sql)
+    {
+        ctx.EnsureConnectionOpen();
+        using var cmd = ctx.CreateCommand(sql);
+        return Convert.ToString(cmd.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture)!;
+    }
+
+    /// <summary>
+    /// The PostgreSQL 17 JSON reader table functions of #281 (#347 D3a) against the live server: one row
+    /// per element/property/match, the row schema and cardinality of <c>json_array_elements</c> and
+    /// <c>json_each</c>, the exact CLR type (<c>json</c>/<c>jsonb</c> values read back as
+    /// <see cref="string"/>), the empty-array/empty-object inputs, the SQL-NULL document, the
+    /// time-zone-dependent <c>.datetime()</c> path that only the <c>_tz</c> variant accepts, the
+    /// caller-declared row of the two <c>record</c> readers, and the refused <c>populate_record</c> family
+    /// with <c>json_table</c> (preparation throws with its reason while the sibling reader still renders).
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void JsonReaderTvfs_ShouldExposeRowsSchemaAndClrTypes()
+    {
+        var dateTimePath = "$.d.datetime()";
+        var timeZonePath = """$.d.datetime() < "2021-01-01".datetime()""";
+
+        // json_array_elements: one row per element; the single `value` column is json, read as string.
+        var elements = _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.json_array_elements("[1,{\"a\":2}]"))
+            .Select(r => r.Value)
+            .ToList();
+        elements.Should().Equal("1", "{\"a\":2}");
+        elements[0]!.GetType().Should().Be(typeof(string));
+        elements[1]!.GetType().Should().Be(typeof(string));
+
+        _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.json_array_elements("[]"))
+            .Select(r => r.Value)
+            .ToList()
+            .Should().BeEmpty("an empty JSON array has no elements");
+        _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.json_array_elements((string?)null))
+            .Select(r => r.Value)
+            .ToList()
+            .Should().BeEmpty("a NULL document produces no rows");
+
+        // json_array_elements_text: text values; a JSON null element reads back as a NULL value.
+        var texts = _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.json_array_elements_text("[1,\"a\",null]"))
+            .Select(r => r.Value)
+            .ToList();
+        texts.Should().Equal("1", "a", null);
+        texts[1]!.GetType().Should().Be(typeof(string));
+
+        _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.json_array_elements_text("[]"))
+            .Select(r => r.Value)
+            .ToList()
+            .Should().BeEmpty();
+
+        // json_each: two columns (key text, value json) on PostgreSQL 17, one row per property.
+        var each = _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.json_each("{\"a\":1,\"b\":{\"c\":2}}"))
+            .OrderBy(r => r.Key)
+            .Select(r => new { r.Key, r.Value })
+            .ToList();
+        each.Should().HaveCount(2, "the object has two top-level properties");
+        each.Select(r => (r.Key, r.Value)).Should().Equal(("a", "1"), ("b", "{\"c\":2}"));
+        each[0].Value!.GetType().Should().Be(typeof(string));
+        each[1].Value!.GetType().Should().Be(typeof(string));
+
+        _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.json_each("{}"))
+            .Select(r => r.Key)
+            .ToList()
+            .Should().BeEmpty("an empty JSON object has no properties");
+        _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.json_each((string?)null))
+            .Select(r => r.Key)
+            .ToList()
+            .Should().BeEmpty("a NULL document produces no rows");
+
+        var eachText = _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.json_each_text("{\"a\":1,\"b\":{\"c\":2}}"))
+            .OrderBy(r => r.Key)
+            .Select(r => new { r.Key, r.Value })
+            .ToList();
+        eachText.Select(r => (r.Key, r.Value)).Should().Equal(("a", "1"), ("b", "{\"c\":2}"));
+        eachText[0].Value!.GetType().Should().Be(typeof(string));
+
+        // jsonb_path_query_tz: a time-zone-dependent .datetime() path is accepted and returns the instant.
+        var matches = _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.jsonb_path_query_tz(
+                "{\"d\":\"2020-06-01T00:00:00Z\"}", dateTimePath, "{}", false))
+            .Select(r => r.Value)
+            .ToList();
+        matches.Should().Equal("\"2020-06-01T00:00:00+00:00\"");
+        matches[0]!.GetType().Should().Be(typeof(string));
+
+        _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.jsonb_path_query_tz("{\"a\":1}", "$.zz", "{}", false))
+            .Select(r => r.Value)
+            .ToList()
+            .Should().BeEmpty("a path with no match selects no rows");
+        _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.jsonb_path_query_tz((string?)null, "$", "{}", false))
+            .Select(r => r.Value)
+            .ToList()
+            .Should().BeEmpty("a NULL document selects no rows");
+
+        // The non-_tz sibling cannot evaluate the same time-zone-dependent path: comparing two .datetime()
+        // values needs the session time zone, which only the _tz variant uses.
+        var tzPredicate = _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.jsonb_path_query_tz(
+                "{\"d\":\"2020-06-01T00:00:00Z\"}", timeZonePath, "{}", false))
+            .Select(r => r.Value)
+            .ToList();
+        tzPredicate.Should().Equal(new[] { "true" }, "the instant precedes 2021-01-01");
+
+        FluentActions.Invoking(() => _sut.DataProvider
+                .From(() => SqlFunctions.Postgres.jsonb_path_query(
+                    "{\"d\":\"2020-06-01T00:00:00Z\"}", SqlFunctions.Postgres.jsonpath(timeZonePath)))
+                .Select(r => r.Value)
+                .ToList())
+            .Should().Throw<PostgresException>()
+            .WithMessage("*without time zone usage*");
+
+        // json_to_record / json_to_recordset: the caller-declared column definition list shapes the row.
+        var record = _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.json_to_record<IJsonRecordRow>("{\"a\":1,\"b\":\"x\",\"c\":true}"))
+            .Select(r => new { r.A, r.B })
+            .First();
+        (record.A, record.B).Should().Be((1, "x"));
+        record.A.GetType().Should().Be(typeof(int));
+        record.B!.GetType().Should().Be(typeof(string));
+
+        var missing = _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.json_to_record<IJsonRecordRow>("{\"a\":1}"))
+            .Select(r => new { r.A, r.B })
+            .First();
+        (missing.A, missing.B).Should().Be((1, (string?)null), "an absent property leaves the column NULL");
+
+        var recordset = _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.json_to_recordset<IJsonRecordRow>("[{\"a\":1},{\"a\":2,\"b\":\"y\"}]"))
+            .OrderBy(r => r.A)
+            .Select(r => new { r.A, r.B })
+            .ToList();
+        recordset.Select(r => (r.A, r.B)).Should().Equal((1, (string?)null), (2, "y"));
+
+        _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.json_to_recordset<IJsonRecordRow>("[]"))
+            .Select(r => r.A)
+            .ToList()
+            .Should().BeEmpty("an empty JSON array has no rows");
+
+        // Refusals: the anyelement base row and the json_table COLUMNS placement cannot be expressed, so the
+        // source is refused while it is composed — nothing is sent to the server. json_to_record above is the
+        // positive control that the sibling record reader renders and executes.
+        FluentActions.Invoking(() => _sut.DataProvider
+                .From(() => SqlFunctions.Postgres.json_populate_record<IJsonRecordRow>(null, "{\"a\":1}", false))
+                .Select(r => r.A).ToList())
+            .Should().Throw<NotSupportedException>().WithMessage("*json_populate_record function is refused*");
+        FluentActions.Invoking(() => _sut.DataProvider
+                .From(() => SqlFunctions.Postgres.json_populate_recordset<IJsonRecordRow>(null, "[{\"a\":1}]", false))
+                .Select(r => r.A).ToList())
+            .Should().Throw<NotSupportedException>().WithMessage("*json_populate_recordset function is refused*");
+        FluentActions.Invoking(() => _sut.DataProvider
+                .From(() => SqlFunctions.Postgres.jsonb_populate_record<IJsonRecordRow>(null, "{\"a\":1}"))
+                .Select(r => r.A).ToList())
+            .Should().Throw<NotSupportedException>().WithMessage("*jsonb_populate_record function is refused*");
+        FluentActions.Invoking(() => _sut.DataProvider
+                .From(() => SqlFunctions.Postgres.jsonb_populate_recordset<IJsonRecordRow>(null, "[{\"a\":1}]"))
+                .Select(r => r.A).ToList())
+            .Should().Throw<NotSupportedException>().WithMessage("*jsonb_populate_recordset function is refused*");
+        FluentActions.Invoking(() => _sut.DataProvider
+                .From(() => SqlFunctions.Postgres.json_table<IJsonRecordRow>("[{\"a\":1}]", "$[*]"))
+                .Select(r => r.A).ToList())
+            .Should().Throw<NotSupportedException>().WithMessage("*json_table function is refused*");
+        FluentActions.Invoking(() => _sut.SimpleEntity.Where(x => x.Id == 1)
+                .Select(x => new { V = SqlFunctions.Postgres.jsonb_populate_record_valid(null, "{}") })
+                .First())
+            .Should().Throw<NotSupportedException>().WithMessage("*jsonb_populate_record_valid function is refused*");
+    }
+
+    /// <summary>
+    /// #347 D3a fixture: the caller-declared row shape of the PostgreSQL <c>json_to_record</c>/
+    /// <c>json_to_recordset</c> readers.
+    /// </summary>
+    public interface IJsonRecordRow
+    {
+        /// <summary>The <c>a</c> column.</summary>
+        [Column("a")]
+        int A { get; set; }
+
+        /// <summary>The <c>b</c> column.</summary>
+        [Column("b")]
+        string? B { get; set; }
+    }
+
+    /// <summary>
+    /// The #281 (#347 D3b) array sources and scalar against the live server: <c>trim_array</c> keeps the
+    /// element type and the SQL-NULL/empty-array behaviour, <c>generate_subscripts</c> yields the one-based
+    /// subscripts of a dimension (and nothing for an empty or NULL array), and the multi-array /
+    /// <c>WITH ORDINALITY</c> <c>unnest</c> forms expose one column per admitted array with NULL padding of
+    /// the shorter arrays and a <c>bigint</c> ordinality read back as <see cref="long"/>. The four-array
+    /// arity is refused at preparation while the three-array sibling still renders and executes.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void ArrayTrimSubscriptsAndUnnestForms_ShouldExposeValuesAndClrTypes()
+    {
+        var trimmed = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Two = SqlFunctions.Postgres.trim_array(new long[] { 1, 2, 3, 4 }, 2),
+                All = SqlFunctions.Postgres.trim_array(new long[] { 1, 2 }, 2),
+                None = SqlFunctions.Postgres.trim_array(new long[] { 1, 2 }, 0),
+                Text = SqlFunctions.Postgres.trim_array(new[] { "a", "b", "c" }, 1),
+            })
+            .First();
+
+        trimmed.Two.Should().Equal(1L, 2L);
+        trimmed.Two![0].GetType().Should().Be(typeof(long));
+        trimmed.All.Should().BeEmpty("trim_array removes the last n elements, here both of them");
+        trimmed.None.Should().Equal(1L, 2L);
+        // A SQL-NULL array cannot be produced through the public API: an inline null literal (or a null
+        // parameter value) reaches the polymorphic anyarray argument untyped (42804), and the array
+        // translator evaluates a nested array-typed call client-side. The NULL behaviour itself is
+        // measured live in the D3b probe (`19-d3b-probe.log`, section B: `null::int[]` -> NULL,
+        // `pg_typeof` still integer[]).
+        trimmed.Text.Should().Equal("a", "b");
+        trimmed.Text![0].GetType().Should().Be(typeof(string));
+
+        // generate_subscripts: the one-based subscripts of the requested dimension. The array is a typed
+        // bigint[] parameter — the documented pattern for an array source argument. The marker is inlined in
+        // the expression on purpose: a hoisted local is a captured closure member the planner reads as a
+        // constant with the value `default` (the marker returns null), so the placeholder would arrive as
+        // DBNull (measured: 42804 for the polymorphic anyarray argument, NULL for a tsvector result).
+
+        var subscripts = _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.generate_subscripts(SqlFunctions.Parameter<long[]>(0), 1))
+            .Select(r => r.Value)
+            .ToList(new long[] { 10, 20, 30 });
+        subscripts.Should().Equal(1, 2, 3);
+        subscripts[0].GetType().Should().Be(typeof(int));
+
+        _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.generate_subscripts(SqlFunctions.Parameter<long[]>(0), 1, true))
+            .Select(r => r.Value)
+            .ToList(new long[] { 10, 20, 30 })
+            .Should().Equal([3, 2, 1], "reverse generates the subscripts in descending order");
+        _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.generate_subscripts(SqlFunctions.Parameter<long[]>(0), 1))
+            .Select(r => r.Value)
+            .ToList(Array.Empty<long>())
+            .Should().BeEmpty("an empty array has no subscripts");
+
+        // unnest(array, array): one column per array, the shorter array NULL-padded.
+        var pairs = _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.unnest(SqlFunctions.Parameter<long[]>(0), SqlFunctions.Parameter<string?[]>(1)))
+            .Select(r => new { r.Value1, r.Value2 })
+            .ToList(new long[] { 1, 2 }, new string?[] { "a" });
+        pairs.Select(p => (p.Value1, p.Value2)).Should().Equal((1L, "a"), (2L, (string?)null));
+        pairs[0].Value1.GetType().Should().Be(typeof(long));
+        pairs[0].Value2!.GetType().Should().Be(typeof(string));
+
+        var triples = _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.unnest(SqlFunctions.Parameter<long[]>(0), SqlFunctions.Parameter<string?[]>(1), SqlFunctions.Parameter<int?[]>(2)))
+            .Select(r => new { r.Value1, r.Value2, r.Value3 })
+            .ToList(new long[] { 1, 2, 3 }, new string?[] { "a" }, new int?[] { 10 });
+        triples.Select(t => (t.Value1, t.Value2, t.Value3)).Should().Equal(
+            (1L, "a", (int?)10),
+            (2L, (string?)null, (int?)null),
+            (3L, (string?)null, (int?)null));
+        triples[0].Value3!.Value.GetType().Should().Be(typeof(int));
+
+        _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.unnest(SqlFunctions.Parameter<long[]>(0), SqlFunctions.Parameter<string?[]>(1)))
+            .Select(r => r.Value1)
+            .ToList(Array.Empty<long>(), Array.Empty<string>())
+            .Should().BeEmpty("two empty arrays produce no rows");
+
+        // unnest(array) WITH ORDINALITY: the ordinality column is bigint, read back as long.
+        var ordinal = _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.unnest_with_ordinality(SqlFunctions.Parameter<long[]>(0)))
+            .Select(r => new { r.Value, r.Ordinality })
+            .ToList(new long[] { 10, 20 });
+        ordinal.Select(o => (o.Value, o.Ordinality)).Should().Equal((10L, 1L), (20L, 2L));
+        ordinal[0].Ordinality.GetType().Should().Be(typeof(long));
+
+        var ordinalPairs = _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.unnest_with_ordinality(SqlFunctions.Parameter<long[]>(0), SqlFunctions.Parameter<string?[]>(1)))
+            .Select(r => new { r.Value1, r.Value2, r.Ordinality })
+            .ToList(new long[] { 1, 2 }, new string?[] { "a" });
+        ordinalPairs.Select(o => (o.Value1, o.Value2, o.Ordinality)).Should().Equal(
+            (1L, "a", 1L),
+            (2L, (string?)null, 2L));
+        ordinalPairs[1].Ordinality.GetType().Should().Be(typeof(long));
+
+        // The four-array arity is refused while the source is composed; nothing is sent to the server and
+        // the three-array form above is the positive control that the sibling arity executes.
+        FluentActions.Invoking(() => _sut.DataProvider
+                .From(() => SqlFunctions.Postgres.unnest<object>(
+                    new long[] { 1 }, new long[] { 2 }, new long[] { 3 }, new long[] { 4 }))
+                .Select(r => r).ToList())
+            .Should().Throw<NotSupportedException>().WithMessage("*unnest function is refused*");
+    }
+
+    /// <summary>
+    /// The #281 (#347 D3b) full-text constructors, the session text-search configuration and the node
+    /// count against the live server: the <c>tsvector</c> results read back as <see cref="string"/>, the
+    /// <c>regconfig</c> of <c>get_current_ts_config</c> is bridged to text, and a SQL-NULL input yields
+    /// NULL for the strict functions.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void FullTextScalarFamily_ShouldComputeValuesNullsAndClrTypes()
+    {
+        string?[]? nullWords = null;
+        string? nullJson = null;
+        string? nullQuery = null;
+
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                A2T = SqlFunctions.Postgres.array_to_tsvector(SqlFunctions.Parameter<string?[]>(0)),
+                A2TNull = SqlFunctions.Postgres.array_to_tsvector(nullWords!),
+                Json2Ts = SqlFunctions.Postgres.json_to_tsvector("{\"a\":\"x y\",\"b\":1}", "[\"string\",\"numeric\"]"),
+                Json2TsCfg = SqlFunctions.Postgres.json_to_tsvector("english", "{\"a\":\"x y\"}", "[\"string\"]"),
+                Json2TsNull = SqlFunctions.Postgres.json_to_tsvector(nullJson, "[\"string\"]"),
+                Jsonb2Ts = SqlFunctions.Postgres.jsonb_to_tsvector("{\"a\":\"x y\",\"b\":1}", "[\"string\",\"numeric\"]"),
+                Jsonb2TsCfg = SqlFunctions.Postgres.jsonb_to_tsvector("english", "{\"a\":\"x y\"}", "[\"string\"]"),
+                Current = SqlFunctions.Postgres.get_current_ts_config(),
+                Nodes = SqlFunctions.Postgres.numnode("a & b"),
+                NodesNull = SqlFunctions.Postgres.numnode(nullQuery),
+            })
+            // The array travels as ONE argument: a bare `string[]` binds to the `params object?[]` slot
+            // by array covariance (normal form), which would spread "a" and "b" into two parameters and
+            // leave p0 bound to the string "a" (measured: the result came back NULL).
+            .First(new object?[] { new string?[] { "a", "b" } });
+
+        r.A2T.Should().Be("'a' 'b'");
+        r.A2T!.GetType().Should().Be(typeof(string));
+        r.A2TNull.Should().BeNull("a SQL-NULL array stays NULL");
+        r.Json2Ts.Should().Be("'1':4 'x':1 'y':2");
+        r.Json2TsCfg.Should().Be("'x':1 'y':2");
+        r.Json2TsNull.Should().BeNull("a SQL-NULL document stays NULL");
+        r.Jsonb2Ts.Should().Be("'1':4 'x':1 'y':2");
+        r.Jsonb2TsCfg.Should().Be("'x':1 'y':2");
+        r.Current.Should().Be("english", "the fixture database uses the default text-search configuration");
+        r.Nodes.Should().Be(3, "a & b has two lexemes and one operator");
+        r.Nodes!.Value.GetType().Should().Be(typeof(int));
+        r.NodesNull.Should().BeNull("a SQL-NULL tsquery stays NULL");
+    }
+
+    /// <summary>
+    /// The #281 (#347 D3b) full-text query-tree and vector-rewriting scalars against the live server:
+    /// <c>querytree</c> renders the parsed tree as text, <c>setweight</c> applies a weight to every
+    /// lexeme or only to the listed ones, <c>strip</c> drops positions, <c>ts_delete</c> accepts both the
+    /// single-lexeme and the array overload, and <c>ts_filter</c> keeps only the requested weights. Every
+    /// <c>tsvector</c> result reads back as <see cref="string"/> and a SQL-NULL input stays NULL.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void FullTextQueryAndVectorFamily_ShouldComputeValuesNullsAndClrTypes()
+    {
+        string? nullVector = null;
+
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Tree = SqlFunctions.Postgres.querytree(SqlFunctions.Parameter<string>(0)),
+                Weighted = SqlFunctions.Postgres.setweight(
+                    SqlFunctions.Parameter<string>(1), SqlFunctions.Parameter<string>(2)),
+                WeightedLex = SqlFunctions.Postgres.setweight(
+                    SqlFunctions.Parameter<string>(3), SqlFunctions.Parameter<string>(4),
+                    SqlFunctions.Parameter<string?[]>(5)),
+                Stripped = SqlFunctions.Postgres.strip(SqlFunctions.Parameter<string>(6)),
+                Deleted = SqlFunctions.Postgres.ts_delete(
+                    SqlFunctions.Parameter<string>(7), SqlFunctions.Parameter<string>(8)),
+                DeletedMany = SqlFunctions.Postgres.ts_delete(
+                    SqlFunctions.Parameter<string>(9), SqlFunctions.Parameter<string?[]>(10)),
+                Filtered = SqlFunctions.Postgres.ts_filter(
+                    SqlFunctions.Parameter<string>(11), SqlFunctions.Parameter<string?[]>(12)),
+                StrippedNull = SqlFunctions.Postgres.strip(nullVector),
+            })
+            .First(new object?[]
+            {
+                "a & b",
+                "'a':1 'b':2", "A",
+                "'a':1 'b':2", "A", new string?[] { "a" },
+                "'a':1A 'b':2B",
+                "'a':1 'b':2 'c':3", "b",
+                "'a':1 'b':2 'c':3", new string?[] { "b" },
+                "'a':1A 'b':2B 'c':3C", new string?[] { "A", "C" },
+            });
+
+        r.Tree.Should().Be("'a' & 'b'");
+        r.Weighted.Should().Be("'a':1A 'b':2A");
+        r.Weighted!.GetType().Should().Be(typeof(string));
+        r.WeightedLex.Should().Be("'a':1A 'b':2");
+        r.Stripped.Should().Be("'a' 'b'");
+        r.Deleted.Should().Be("'a':1 'c':3");
+        r.DeletedMany.Should().Be("'a':1 'c':3");
+        r.Filtered.Should().Be("'a':1A 'c':3C");
+        r.Filtered!.GetType().Should().Be(typeof(string));
+        r.StrippedNull.Should().BeNull("a SQL-NULL tsvector stays NULL");
+    }
+
+    /// <summary>
+    /// The #281 (#347 D3b) full-text rewrite, phrase, vector-to-array and dictionary-normalization
+    /// scalars against the live server: <c>ts_rewrite</c> accepts both the rewrite-table text form and
+    /// the three-<c>tsquery</c> form, <c>tsquery_phrase</c> both the default and the explicit distance,
+    /// <c>tsvector_to_array</c> returns the lexemes as <c>text[]</c>, and <c>ts_lexize</c> a stem or an
+    /// empty array for a stop word. Every <c>tsquery</c> result reads back as <see cref="string"/>, the
+    /// arrays as <see cref="string"/> elements, and a SQL-NULL argument yields NULL (all strict).
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void FullTextRewritePhraseAndArrayFamily_ShouldComputeValuesNullsAndClrTypes()
+    {
+        string? nullQuery = null;
+        string? nullVector = null;
+        string? nullDictionary = null;
+        int? nullDistance = null;
+
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Rewritten = SqlFunctions.Postgres.ts_rewrite(
+                    SqlFunctions.Parameter<string>(0), SqlFunctions.Parameter<string>(1)),
+                RewrittenPair = SqlFunctions.Postgres.ts_rewrite(
+                    SqlFunctions.Parameter<string>(2), SqlFunctions.Parameter<string>(3),
+                    SqlFunctions.Parameter<string>(4)),
+                Phrase = SqlFunctions.Postgres.tsquery_phrase(
+                    SqlFunctions.Parameter<string>(5), SqlFunctions.Parameter<string>(6)),
+                PhraseDistance = SqlFunctions.Postgres.tsquery_phrase(
+                    SqlFunctions.Parameter<string>(7), SqlFunctions.Parameter<string>(8),
+                    SqlFunctions.Parameter<int>(9)),
+                Lexemes = SqlFunctions.Postgres.tsvector_to_array(SqlFunctions.Parameter<string>(10)),
+                Stemmed = SqlFunctions.Postgres.ts_lexize(
+                    SqlFunctions.Parameter<string>(11), SqlFunctions.Parameter<string>(12)),
+                StopWord = SqlFunctions.Postgres.ts_lexize(
+                    SqlFunctions.Parameter<string>(13), SqlFunctions.Parameter<string>(14)),
+                RewrittenNull = SqlFunctions.Postgres.ts_rewrite(
+                    nullQuery, "select 'a'::tsquery, 'c'::tsquery"),
+                PhraseNull = SqlFunctions.Postgres.tsquery_phrase(nullQuery, "b"),
+                DistanceNull = SqlFunctions.Postgres.tsquery_phrase("a", "b", nullDistance),
+                LexemesNull = SqlFunctions.Postgres.tsvector_to_array(nullVector),
+                LexizeNull = SqlFunctions.Postgres.ts_lexize(nullDictionary, "stars"),
+            })
+            .First(new object?[]
+            {
+                "a & b", "select 'a'::tsquery as t, 'c'::tsquery as s",
+                "a & b", "a", "c | d",
+                "a", "b",
+                "a", "b", 3,
+                "a:1 b:2",
+                "english_stem", "stars",
+                "english_stem", "the",
+            });
+
+        r.Rewritten.Should().Be("'b' & 'c'");
+        r.Rewritten!.GetType().Should().Be(typeof(string));
+        r.RewrittenPair.Should().Be("'b' & ( 'c' | 'd' )");
+        r.Phrase.Should().Be("'a' <-> 'b'");
+        r.PhraseDistance.Should().Be("'a' <3> 'b'");
+        r.Lexemes.Should().Equal("a", "b");
+        r.Lexemes![0]!.GetType().Should().Be(typeof(string));
+        r.Stemmed.Should().Equal("star");
+        r.StopWord.Should().BeEmpty("the is a stop word of the english_stem dictionary");
+        r.RewrittenNull.Should().BeNull("a SQL-NULL tsquery stays NULL");
+        r.PhraseNull.Should().BeNull("a SQL-NULL tsquery stays NULL");
+        r.DistanceNull.Should().BeNull("a SQL-NULL distance stays NULL");
+        r.LexemesNull.Should().BeNull("a SQL-NULL tsvector stays NULL");
+        r.LexizeNull.Should().BeNull("a SQL-NULL dictionary stays NULL");
+    }
+
+    /// <summary>
+    /// The #281 (#347 D3b) full-text tokenizer readers against the live server: <c>ts_debug</c>
+    /// reports one row per tokenizer step of the default configuration with the six documented columns
+    /// (<c>alias</c>, <c>description</c>, <c>token</c>, <c>dictionaries</c>, <c>dictionary</c>,
+    /// <c>lexemes</c>), the two <c>regdictionary</c> columns read back as text/text[] and a blank token
+    /// carries no dictionary and a NULL lexeme array; <c>ts_parse</c> splits a document into the
+    /// <c>tokid</c>/<c>token</c> stream; <c>ts_token_type</c> lists the parser's 23 token types. Both
+    /// parser readers are exercised through the text (name) overloads, the only ones a string parameter
+    /// can reach: an unknown name is rejected by the server with <c>42704</c>, and an empty or SQL-NULL
+    /// input yields no rows.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void FullTextTokenizerReaders_ShouldExposeRowsSchemaAndClrTypes()
+    {
+        // ts_debug: "The quick brown" tokenizes to three words and the two inter-word blanks.
+        var debug = _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.ts_debug("The quick brown"))
+            .Select(r => new { r.Alias, r.Description, r.Token, r.Dictionaries, r.Dictionary, r.Lexemes })
+            .ToList();
+
+        debug.Should().HaveCount(5, "every word and every blank of the default parser is one row");
+        debug.Select(r => r.Alias).Should().Equal("asciiword", "blank", "asciiword", "blank", "asciiword");
+        debug[0].Description.Should().Be("Word, all ASCII");
+        debug[0].Token.Should().Be("The");
+        debug[0].Dictionaries.Should().Equal("english_stem");
+        debug[0].Dictionary.Should().Be("english_stem");
+        debug[0].Lexemes.Should().BeEmpty("'the' is a stop word of the english_stem dictionary");
+        debug[2].Lexemes.Should().Equal("quick");
+        debug[4].Lexemes.Should().Equal("brown");
+
+        debug[1].Token.Should().Be(" ");
+        debug[1].Dictionaries.Should().BeEmpty("a blank token matches no dictionary");
+        debug[1].Dictionary.Should().BeNull("no dictionary produced the blank token");
+        debug[1].Lexemes.Should().BeNull("a blank token produces no lexeme array");
+
+        ((object)debug[0].Alias!).Should().BeOfType<string>();
+        ((object)debug[0].Token!).Should().BeOfType<string>();
+        ((object)debug[0].Dictionary!).Should().BeOfType<string>("regdictionary is cast to text");
+        ((object)debug[0].Dictionaries!).Should().BeOfType<string[]>("regdictionary[] is cast to text[]");
+        ((object)debug[2].Lexemes!).Should().BeOfType<string[]>("lexemes is a text[] column");
+
+        _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.ts_debug(""))
+            .Select(r => r.Token)
+            .ToList()
+            .Should().BeEmpty("an empty document has no tokens");
+
+        _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.ts_debug((string?)null))
+            .Select(r => r.Token)
+            .ToList()
+            .Should().BeEmpty("a SQL-NULL document yields no rows (strict function)");
+
+        // ts_parse: the text (name) overload — the parser is named, not passed as an OID.
+        var tokens = _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.ts_parse("default", "foo - bar"))
+            .Select(r => new { r.Tokid, r.Token })
+            .ToList();
+
+        tokens.Should().HaveCount(4, "two words and the two blank fragments between them");
+        tokens.Select(t => t.Tokid).Should().Equal(1, 12, 12, 1);
+        tokens.Select(t => t.Token).Should().Equal("foo", " ", "- ", "bar");
+        ((object)tokens[0].Tokid!).Should().BeOfType<int>();
+        ((object)tokens[0].Token!).Should().BeOfType<string>();
+
+        _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.ts_parse("default", ""))
+            .Select(r => r.Token)
+            .ToList()
+            .Should().BeEmpty("an empty document has no tokens");
+
+        _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.ts_parse("default", null))
+            .Select(r => r.Token)
+            .ToList()
+            .Should().BeEmpty("a SQL-NULL document yields no rows");
+
+        _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.ts_parse(null, "foo"))
+            .Select(r => r.Token)
+            .ToList()
+            .Should().BeEmpty("a SQL-NULL parser name yields no rows");
+
+        var unknownParser = () => _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.ts_parse("no_such_parser", "foo"))
+            .Select(r => r.Token)
+            .ToList();
+
+        unknownParser.Should().Throw<PostgresException>()
+            .Which.SqlState.Should().Be("42704", "the text form resolves the parser by name on the server");
+
+        // ts_token_type: the text (name) overload lists the parser's token-type table.
+        var types = _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.ts_token_type("default"))
+            .Select(r => new { r.Tokid, r.Alias, r.Description })
+            .ToList();
+
+        types.Should().HaveCount(23, "the default parser recognises 23 token types on PostgreSQL 17");
+        types.Should().OnlyContain(t => t.Tokid != null && t.Alias != null && t.Description != null);
+        types.Single(t => t.Tokid == 1).Alias.Should().Be("asciiword");
+        types.Single(t => t.Tokid == 1).Description.Should().Be("Word, all ASCII");
+        types.Single(t => t.Tokid == 2).Alias.Should().Be("word");
+        types.Single(t => t.Tokid == 12).Alias.Should().Be("blank");
+        types.Single(t => t.Tokid == 12).Description.Should().Be("Space symbols");
+        types.Min(t => t.Tokid).Should().Be(1);
+        types.Max(t => t.Tokid).Should().Be(23);
+        ((object)types[0].Tokid!).Should().BeOfType<int>();
+        ((object)types[0].Alias!).Should().BeOfType<string>();
+        ((object)types[0].Description!).Should().BeOfType<string>();
+
+        _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.ts_token_type((string?)null))
+            .Select(r => r.Alias)
+            .ToList()
+            .Should().BeEmpty("a SQL-NULL parser name yields no rows");
+
+        var unknownTokenTypeParser = () => _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.ts_token_type("no_such_parser"))
+            .Select(r => r.Alias)
+            .ToList();
+
+        unknownTokenTypeParser.Should().Throw<PostgresException>()
+            .Which.SqlState.Should().Be("42704", "the text form resolves the parser by name on the server");
+    }
+
+    /// <summary>
+    /// #281 (#347 D4) group 1: <c>any_value</c> and the three regression sums against PostgreSQL 17.
+    /// The aggregate is arbitrary by definition, so a multi-value group asserts membership while a
+    /// single-non-NULL group asserts the exact value; the all-NULL group and the empty input prove the
+    /// NULL/single-row contract, and the CLR types prove the materialisation (<c>int?</c> for
+    /// <c>anyelement</c>, <c>double?</c> for the sums).
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void AnyValueAndRegressionSums_ShouldComputeValuesNullsTypesAndGroups()
+    {
+        // complex_entity: ids 1..3, nullableint NULL,1,1 — so any_value sees the single non-NULL value 1,
+        // and the sums over (id, id) are sum(i^2) - sum(i)^2/3 = 14 - 12 = 2 in every direction.
+        var whole = _sut.ComplexEntity
+            .Select(x => new
+            {
+                AnyNullableInt = SqlFunctions.Postgres.any_value(x.Int),
+                AnyString = SqlFunctions.Postgres.any_value(x.String),
+                Sxx = SqlFunctions.Postgres.regr_sxx((double)x.Id, (double)x.Id),
+                Sxy = SqlFunctions.Postgres.regr_sxy((double)x.Id, (double)x.Id),
+                Syy = SqlFunctions.Postgres.regr_syy((double)x.Id, (double)x.Id)
+            })
+            .First();
+
+        whole.AnyNullableInt.Should().Be(1, "1 is the only non-NULL value of the group");
+        ((object)whole.AnyNullableInt!).Should().BeOfType<int>(
+            "anyelement carries the argument's own CLR type (int? at the API level)");
+        whole.AnyString.Should().BeOneOf(
+            ["dadfasd", "xxx"], "any_value may return any value of the group");
+        ((object)whole.AnyString!).Should().BeOfType<string>();
+
+        whole.Sxx.Should().BeApproximately(2.0, 1e-12);
+        whole.Sxy.Should().BeApproximately(2.0, 1e-12);
+        whole.Syy.Should().BeApproximately(2.0, 1e-12);
+        ((object)whole.Sxx!).Should().BeOfType<double>();
+        ((object)whole.Sxy!).Should().BeOfType<double>();
+        ((object)whole.Syy!).Should().BeOfType<double>();
+
+        // All-NULL group: avg_fixture row 1 seeds NULL in every nullable column; a group of NULLs is NULL.
+        var allNull = _sut.AvgFixture
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Any = SqlFunctions.Postgres.any_value(x.NI),
+                Sxx = SqlFunctions.Postgres.regr_sxx((double?)x.NI, (double?)x.NI)
+            })
+            .FirstOrDefault();
+
+        allNull.Should().NotBeNull("an aggregate always yields one row");
+        allNull!.Any.Should().BeNull();
+        allNull.Sxx.Should().BeNull("no (Y, X) pair has both arguments non-null");
+
+        // Empty input: the aggregate still yields exactly one row — any_value and the sums are NULL,
+        // and count(*) over that empty input is 0 (the row count is not zero, the counted rows are).
+        var empty = _sut.AvgFixture
+            .Where(x => x.Id > 100)
+            .Select(x => new
+            {
+                Any = SqlFunctions.Postgres.any_value(x.NI),
+                Count = SqlFunctions.Sql.count(),
+                Sxx = SqlFunctions.Postgres.regr_sxx((double?)x.NI, (double?)x.NI)
+            })
+            .ToList();
+
+        empty.Should().HaveCount(1, "an aggregate over an empty input still produces one row");
+        empty[0].Count.Should().Be(0, "the empty input has no rows: count(*) = 0");
+        empty[0].Any.Should().BeNull();
+        empty[0].Sxx.Should().BeNull();
+
+        // GROUP BY interaction: avg_fixture i = 1,2,1,3 with ni = NULL,1,2,3 — group i=1 is the only
+        // group with more than one row, so it is the only one whose sum of squares is non-zero.
+        var groups = _sut.AvgFixture
+            .GroupBy(x => new { x.I })
+            .Select(x => new
+            {
+                x.I,
+                Any = SqlFunctions.Postgres.any_value(x.NI),
+                Sxx = SqlFunctions.Postgres.regr_sxx((double)x.Id, (double)x.Id)
+            })
+            .ToList();
+
+        groups.Should().HaveCount(3);
+        groups.Single(g => g.I == 1).Any.Should().Be(2, "NULL is ignored, so 2 is the only non-NULL value");
+        groups.Single(g => g.I == 1).Sxx.Should().BeApproximately(2.0, 1e-12, "ids 1 and 3: (1+9) - 16/2");
+        groups.Single(g => g.I == 2).Any.Should().Be(1);
+        groups.Single(g => g.I == 2).Sxx.Should().Be(0.0, "a single pair is a zero sum of squares");
+        groups.Single(g => g.I == 3).Any.Should().Be(3);
+        groups.Single(g => g.I == 3).Sxx.Should().Be(0.0, "a single pair is a zero sum of squares");
+    }
+
+    /// <summary>
+    /// The #281 (#347 D4) group-2 aggregates on PostgreSQL 17.11: <c>xmlagg</c> is rendered in its only
+    /// resolvable form <c>xmlagg(xml)</c> and its <c>xml</c> result arrives as a string;
+    /// <c>json_agg_strict</c>/<c>jsonb_agg_strict</c> drop the NULL values, so an all-NULL group is
+    /// <c>[]</c>; <c>json_object_agg_unique</c> keeps a NULL value and its strict twin drops the pair;
+    /// and an empty input still yields one NULL row for all five names.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void XmlAndStrictJsonAggregates_ShouldComputeValuesNullsTypesAndGroups()
+    {
+        // complex_entity: three rows, nullableint NULL,1,1 and somestring 'dadfasd','xxx',NULL.
+        // The XML operand is derived per row, so the concatenation order may vary: all permutations are
+        // accepted, but exactly one '<a/>' (the NULL nullableint row) is required and no separator is
+        // inserted between the documents (measured: <a/><b>x</b> for ('<a/>','<b>x</b>')).
+        var xml = _sut.ComplexEntity
+            .Select(x => new
+            {
+                V = SqlFunctions.Postgres.xmlagg(x.Int == null ? "<a/>" : "<b/>"),
+                C = SqlFunctions.Sql.count()
+            })
+            .First();
+
+        xml.C.Should().Be(3);
+        xml.V.Should().BeOneOf(
+            ["<a/><b/><b/>", "<b/><a/><b/>", "<b/><b/><a/>"],
+            "xmlagg concatenates the documents with no separator; the row order is not guaranteed");
+        ((object)xml.V!).Should().BeOfType<string>(
+            "Npgsql materialises the xml result as System.String (measured)");
+
+        // A group whose only operand is NULL: xmlagg over NULL is NULL.
+        var xmlNull = _sut.ComplexEntity
+            .Where(x => x.Id == 3)
+            .Select(x => new { V = SqlFunctions.Postgres.xmlagg(x.String) })
+            .First();
+
+        xmlNull.V.Should().BeNull("the group's only operand is NULL (somestring is NULL at id 3)");
+
+        // Populated group: the strict array aggregates skip NULL values, so NULL,1,1 becomes [1, 1];
+        // the unique object aggregate keeps the NULL value, its strict twin drops that pair.
+        var json = _sut.ComplexEntity
+            .Select(x => new
+            {
+                A = SqlFunctions.Postgres.json_agg_strict(x.Int),
+                B = SqlFunctions.Postgres.jsonb_agg_strict(x.Int),
+                U = SqlFunctions.Postgres.json_object_agg_unique(x.RequiredString, x.Int),
+                S = SqlFunctions.Postgres.json_object_agg_unique_strict(x.RequiredString, x.Int)
+            })
+            .First();
+
+        json.A.Should().Be("[1, 1]", "json_agg_strict ignores the NULL nullableint row");
+        json.B.Should().Be("[1, 1]");
+        ((object)json.A!).Should().BeOfType<string>("json is materialised as System.String");
+        ((object)json.B!).Should().BeOfType<string>("jsonb is materialised as System.String");
+
+        using (var unique = JsonDocument.Parse(json.U!))
+        {
+            unique.RootElement.EnumerateObject().Select(p => p.Name)
+                .Should().BeEquivalentTo(["sdf", "asdfgoi", "34mfs"]);
+            unique.RootElement.GetProperty("sdf").ValueKind.Should().Be(
+                JsonValueKind.Null, "json_object_agg_unique keeps a NULL value instead of dropping the pair");
+            unique.RootElement.GetProperty("asdfgoi").GetInt32().Should().Be(1);
+        }
+
+        using (var strict = JsonDocument.Parse(json.S!))
+        {
+            strict.RootElement.EnumerateObject().Select(p => p.Name)
+                .Should().BeEquivalentTo(["asdfgoi", "34mfs"], "the strict twin drops the NULL-valued pair");
+        }
+
+        // All-NULL group: the strict array aggregates yield [] (not NULL) — measured on 17.11.
+        var allNull = _sut.ComplexEntity
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                A = SqlFunctions.Postgres.json_agg_strict(x.Int),
+                B = SqlFunctions.Postgres.jsonb_agg_strict(x.Int),
+                U = SqlFunctions.Postgres.json_object_agg_unique(x.RequiredString, x.Int),
+                S = SqlFunctions.Postgres.json_object_agg_unique_strict(x.RequiredString, x.Int)
+            })
+            .First();
+
+        allNull.A.Should().Be("[]", "a group whose values are all NULL is an empty array, not NULL");
+        allNull.B.Should().Be("[]");
+
+        using (var uniqueNull = JsonDocument.Parse(allNull.U!))
+        {
+            uniqueNull.RootElement.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo(["sdf"]);
+            uniqueNull.RootElement.GetProperty("sdf").ValueKind.Should().Be(JsonValueKind.Null);
+        }
+
+        using (var strictNull = JsonDocument.Parse(allNull.S!))
+            strictNull.RootElement.EnumerateObject().Should().BeEmpty(
+                "the only pair has a NULL value, so the strict twin keeps no pair");
+
+        // GROUP BY interaction: avg_fixture ni is NULL,1,2,3 with i = 1,2,1,3, so group 1 keeps ni = 2.
+        var groups = _sut.AvgFixture
+            .GroupBy(x => new { x.I })
+            .Select(x => new { x.I, J = SqlFunctions.Postgres.json_agg_strict(x.NI) })
+            .ToList();
+
+        groups.Should().HaveCount(3);
+        groups.Single(g => g.I == 1).J.Should().Be("[2]", "group 1 is ni NULL and 2; the NULL is skipped");
+        groups.Single(g => g.I == 2).J.Should().Be("[1]");
+        groups.Single(g => g.I == 3).J.Should().Be("[3]");
+
+        // Empty input: every aggregate still yields one row, all five values are NULL, and count(*) is 0.
+        var empty = _sut.ComplexEntity
+            .Where(x => x.Id > 100)
+            .Select(x => new
+            {
+                X = SqlFunctions.Postgres.xmlagg(x.String),
+                A = SqlFunctions.Postgres.json_agg_strict(x.Int),
+                B = SqlFunctions.Postgres.jsonb_agg_strict(x.Int),
+                U = SqlFunctions.Postgres.json_object_agg_unique(x.RequiredString, x.Int),
+                S = SqlFunctions.Postgres.json_object_agg_unique_strict(x.RequiredString, x.Int),
+                C = SqlFunctions.Sql.count()
+            })
+            .ToList();
+
+        empty.Should().HaveCount(1, "an aggregate over an empty input still produces one row");
+        empty[0].C.Should().Be(0, "the empty input has no rows: count(*) = 0");
+        empty[0].X.Should().BeNull();
+        empty[0].A.Should().BeNull("json_agg_strict over an empty input is NULL, not []");
+        empty[0].B.Should().BeNull();
+        empty[0].U.Should().BeNull();
+        empty[0].S.Should().BeNull();
+    }
+
+    /// <summary>
+    /// The #281 (#347 D4) group-3 SQL/JSON aggregates on PostgreSQL 17.11. The measured defaults are
+    /// <c>ABSENT ON NULL</c> for <c>json_arrayagg</c> (NULL values dropped, an all-NULL group is
+    /// <c>[]</c>) and <c>NULL ON NULL</c> for <c>json_objectagg</c> (a NULL value stays as JSON
+    /// <c>null</c>); the <c>RETURNING jsonb</c> members read back as strings, an integer key is coerced
+    /// to text, and an empty input still yields one NULL row.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void SqlJsonAggregates_ShouldComputeValuesNullsTypesAndGroups()
+    {
+        // complex_entity: three rows, nullableint NULL,1,1 and requiredstring 'sdf','asdfgoi','34mfs'.
+        var array = _sut.ComplexEntity
+            .Select(x => new
+            {
+                A = SqlFunctions.Postgres.json_arrayagg(x.Int),
+                B = SqlFunctions.Postgres.jsonb_arrayagg(x.Int),
+                C = SqlFunctions.Sql.count()
+            })
+            .First();
+
+        array.C.Should().Be(3);
+        array.A.Should().Be("[1, 1]",
+            "json_arrayagg defaults to ABSENT ON NULL: the NULL nullableint row is dropped");
+        array.B.Should().Be("[1, 1]", "RETURNING jsonb keeps the same default null handling");
+        ((object)array.A!).Should().BeOfType<string>("json is materialised as System.String");
+        ((object)array.B!).Should().BeOfType<string>("jsonb is materialised as System.String");
+
+        // All-NULL input: the default ABSENT ON NULL makes this an empty array, not NULL.
+        var allNull = _sut.ComplexEntity
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                A = SqlFunctions.Postgres.json_arrayagg(x.Int),
+                B = SqlFunctions.Postgres.jsonb_arrayagg(x.Int)
+            })
+            .First();
+        allNull.A.Should().Be("[]", "a group whose only value is NULL is an empty array");
+        allNull.B.Should().Be("[]", "RETURNING jsonb keeps the ABSENT ON NULL default");
+
+        // Object aggregate: the default NULL ON NULL keeps the NULL value of 'sdf'; the key is coerced
+        // to text and the result is json.
+        var obj = _sut.ComplexEntity
+            .Select(x => new
+            {
+                O = SqlFunctions.Postgres.json_objectagg(x.RequiredString, x.Int),
+                B = SqlFunctions.Postgres.jsonb_objectagg(x.RequiredString, x.Int)
+            })
+            .First();
+
+        using (var json = JsonDocument.Parse(obj.O!))
+        {
+            json.RootElement.EnumerateObject().Select(p => p.Name)
+                .Should().BeEquivalentTo(["sdf", "asdfgoi", "34mfs"]);
+            json.RootElement.GetProperty("sdf").ValueKind.Should().Be(
+                JsonValueKind.Null, "json_objectagg defaults to NULL ON NULL");
+            json.RootElement.GetProperty("asdfgoi").GetInt32().Should().Be(1);
+        }
+
+        using (var jsonb = JsonDocument.Parse(obj.B!))
+            jsonb.RootElement.GetProperty("34mfs").GetInt32().Should().Be(1,
+                "RETURNING jsonb keeps the same pairs");
+
+        ((object)obj.O!).Should().BeOfType<string>();
+        ((object)obj.B!).Should().BeOfType<string>();
+
+        // GROUP BY interaction: avg_fixture ni is NULL,1,2,3 with i = 1,2,1,3.
+        var groups = _sut.AvgFixture
+            .GroupBy(x => new { x.I })
+            .Select(x => new
+            {
+                x.I,
+                A = SqlFunctions.Postgres.json_arrayagg(x.NI),
+                O = SqlFunctions.Postgres.json_objectagg(x.Id, x.NI)
+            })
+            .ToList();
+
+        groups.Should().HaveCount(3);
+        groups.Single(g => g.I == 1).A.Should().Be("[2]", "group 1 is ni NULL and 2; the NULL is dropped");
+        groups.Single(g => g.I == 2).A.Should().Be("[1]");
+        groups.Single(g => g.I == 3).A.Should().Be("[3]");
+
+        using (var g1 = JsonDocument.Parse(groups.Single(g => g.I == 1).O!))
+        {
+            g1.RootElement.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo(["1", "3"],
+                "an integer key is coerced to text (measured)");
+            g1.RootElement.GetProperty("1").ValueKind.Should().Be(JsonValueKind.Null,
+                "the NULL value of group 1 is kept as JSON null");
+        }
+
+        // Empty input: every aggregate still produces one row with NULL, count(*) = 0.
+        var empty = _sut.ComplexEntity
+            .Where(x => x.Id > 100)
+            .Select(x => new
+            {
+                A = SqlFunctions.Postgres.json_arrayagg(x.Int),
+                B = SqlFunctions.Postgres.jsonb_arrayagg(x.Int),
+                O = SqlFunctions.Postgres.json_objectagg(x.RequiredString, x.Int),
+                U = SqlFunctions.Postgres.json_objectagg_unique(x.RequiredString, x.Int),
+                J = SqlFunctions.Postgres.jsonb_objectagg(x.RequiredString, x.Int),
+                C = SqlFunctions.Sql.count()
+            })
+            .ToList();
+
+        empty.Should().HaveCount(1, "an aggregate over an empty input still produces one row");
+        empty[0].C.Should().Be(0, "the empty input has no rows: count(*) = 0");
+        empty[0].A.Should().BeNull("json_arrayagg over an empty input is NULL, not []");
+        empty[0].B.Should().BeNull();
+        empty[0].O.Should().BeNull();
+        empty[0].U.Should().BeNull();
+        empty[0].J.Should().BeNull();
+    }
+
+    /// <summary>
+    /// The SQL/JSON object aggregate errors of PostgreSQL 17.11 are server-carried, so the assertions
+    /// name the SQLSTATE: a duplicate key raises <c>22030</c> only through the <c>WITH UNIQUE KEYS</c>
+    /// form (the default <c>WITHOUT UNIQUE KEYS</c> keeps duplicates as-is, measured
+    /// <c>{ "a" : 1, "a" : 2 }</c>), and a NULL key raises <c>22004</c> in both forms.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void SqlJsonAggregateErrors_ShouldRaiseTheMeasuredSqlStates()
+    {
+        var duplicate = () => _sut.ComplexEntity
+            .Select(x => new { O = SqlFunctions.Postgres.json_objectagg_unique("k", x.Int) })
+            .First();
+        duplicate.Should().Throw<PostgresException>()
+            .Which.SqlState.Should().Be("22030", "WITH UNIQUE KEYS rejects the repeated 'k'");
+
+        // The default form keeps the duplicate pairs instead of raising.
+        var kept = _sut.ComplexEntity
+            .Select(x => new { O = SqlFunctions.Postgres.json_objectagg("k", x.Int) })
+            .First();
+        using (var json = JsonDocument.Parse(kept.O!))
+            json.RootElement.EnumerateObject().Should().HaveCount(3,
+                "the default WITHOUT UNIQUE KEYS form keeps every pair");
+
+        // somestring is NULL at id 3: a NULL key raises 22004 in both forms.
+        var nullKey = () => _sut.ComplexEntity
+            .Select(x => new { O = SqlFunctions.Postgres.json_objectagg(x.String, x.Int) })
+            .First();
+        nullKey.Should().Throw<PostgresException>()
+            .Which.SqlState.Should().Be("22004");
+
+        var nullKeyUnique = () => _sut.ComplexEntity
+            .Select(x => new { O = SqlFunctions.Postgres.json_objectagg_unique(x.String, x.Int) })
+            .First();
+        nullKeyUnique.Should().Throw<PostgresException>()
+            .Which.SqlState.Should().Be("22004");
+    }
+
+    /// <summary>
+    /// The <c>grouping</c> grouping function of #281 (#347 D4) inside a native
+    /// <c>GROUP BY ROLLUP</c>: the query builder can emit the ANSI super-aggregate grouping
+    /// (<c>GroupByRollup</c>, <c>SupportsRollup</c>), so the function is delivered. A bit is <c>0</c>
+    /// when the column is grouped in that row and <c>1</c> on the grand total; in a plain
+    /// <c>GROUP BY</c> the same call is legal and always <c>0</c> (measured on 17.11).
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void GroupingOverRollup_ShouldFlagTheSuperAggregateRows()
+    {
+        // complex_entity nullableint is NULL,1,1: two groups (NULL with one row, 1 with two) plus the
+        // grand total over all three rows.
+        var rollup = _sut.ComplexEntity
+            .GroupByRollup(x => new { x.Int })
+            .Select(x => new
+            {
+                x.Int,
+                C = SqlFunctions.Sql.count(),
+                G = SqlFunctions.Postgres.grouping(x.Int)
+            })
+            .ToList();
+
+        rollup.Should().HaveCount(3, "two grouped rows plus the rollup grand total");
+        rollup.Where(r => r.G == 0).Should().HaveCount(2, "the grouped rows are not super-aggregate rows");
+        rollup.Single(r => r.G == 1).C.Should().Be(3, "the grand total aggregates every row");
+        rollup.Single(r => r.G == 1).Int.Should().BeNull("the grand-total row has no grouping value");
+
+        // Control: the same call in a plain GROUP BY is legal and always 0.
+        var plain = _sut.ComplexEntity
+            .GroupBy(x => new { x.Int })
+            .Select(x => new { x.Int, G = SqlFunctions.Postgres.grouping(x.Int) })
+            .ToList();
+        plain.Should().HaveCount(2);
+        plain.Should().OnlyContain(r => r.G == 0);
+    }
+
+    private static void Execute(IDataContext ctx, string sql)
+    {
+        ((DataContext)ctx).EnsureConnectionOpen();
+        using var cmd = ((DataContext)ctx).CreateCommand(sql);
+        cmd.ExecuteNonQuery();
+    }
+
+    private static int DecimalScale(decimal value) => (decimal.GetBits(value)[3] >> 16) & 0xFF;
 }

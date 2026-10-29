@@ -50,6 +50,46 @@ public interface IComplexEntity
     string RequiredString { get; set; }
 }
 
+/// <summary>
+/// T291 (#291) AVG fixture: four deterministic rows whose non-nullable integral columns hold
+/// <c>1, 2, 1, 3</c> and whose nullable twins hold <c>NULL, 1, 2, 3</c>. The value sequence is chosen so
+/// every frozen AVG scenario is expressible by filtering on <see cref="Id"/>:
+/// <c>id &lt;= 2</c> is the ordinary <c>[1,2]</c> pair, <c>id &lt;= 3</c> is the DISTINCT
+/// <c>[1,1,2]</c> triple (ordinary control <c>4/3</c>), <c>id = 1</c> is the one-row case and
+/// <see cref="Id"/> <c>!= 3</c> is the ascending <c>[1,2,3]</c> window partition.
+/// </summary>
+[SqlTable("avg_fixture")]
+public interface IAvgFixture
+{
+    [Key]
+    [Column("id")]
+    int Id { get; set; }
+
+    [Column("b")]
+    byte B { get; set; }
+
+    [Column("s")]
+    short S { get; set; }
+
+    [Column("i")]
+    int I { get; set; }
+
+    [Column("l")]
+    long L { get; set; }
+
+    [Column("nb")]
+    byte? NB { get; set; }
+
+    [Column("ns")]
+    short? NS { get; set; }
+
+    [Column("ni")]
+    int? NI { get; set; }
+
+    [Column("nl")]
+    long? NL { get; set; }
+}
+
 [SqlTable("binary_entity")]
 public class BinaryEntity
 {

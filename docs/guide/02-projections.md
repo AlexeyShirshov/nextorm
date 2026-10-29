@@ -184,6 +184,16 @@ Output:
 | 9 |
 | 10 |
 
+A DTO projection is a direct-read projection: it binds the mapped columns of the entity you query.
+It does not change the rule for a **derived** source read without an outer `Select` — a DTO used as
+the *inner* projection of `From(query)` is refused exactly like the anonymous form when its members
+have to be re-translated, because the restriction is the projection's expression shape, not the type
+being anonymous. Name the columns with an outer `Select` when the DTO is the inner projection (see
+[Subqueries](07-subqueries.md#subquery-as-a-from-source)). This rewrite works with member-init DTO and
+positional-record projections; the tested constructor-only class projection has a known pre-existing
+failure (`Cannot find inner column Id`), so use one of those supported forms instead.
+See [Limitations](../advanced/limitations.md#limitations).
+
 ## Record
 
 Positional records are projected by their constructor too:
@@ -246,6 +256,8 @@ Output:
 | 8 |
 | 9 |
 | 10 |
+
+`Tuple.Create` is the row-value constructor surface: it renders a tuple column where the provider supports row values, and remains subject to the provider and context restrictions (for example, SQLite accepts it only as a comparison operand, not as a `SELECT` projection). A `ValueTuple` is different: a top-level generic `ValueTuple.Create(...)` factory call and an explicit `new ValueTuple<...>(...)` construction are **not supported projections**. Both are rejected during query preparation with a `NotSupportedException` that names the projection type and the `Select` position, before any SQL is rendered or a database is touched — not as a row-materializer failure. Project an explicit DTO or anonymous shape instead; nested tuple members keep their own existing restrictions.
 
 ## Member initialiser
 
@@ -324,6 +336,44 @@ Output:
 
 When that single column is a `byte[]` or `string`, it can be read as a stream instead of being materialised: `ToStream`/`ToTextReader` (and their async forms) open the provider's LOB accessors for that one column — see [Streaming large objects](28-large-objects.md).
 
+An **enum-typed** column is the one scalar shape that needs a value converter: a bare `enum` or
+nullable-enum projection without one (`Select(it => it.State)`, `Select(it => it.MaybeState)`) is
+refused during preparation with `NotSupportedException` — "Enum scalar projections without a value
+converter are not supported in a server-side query." — instead of falling through to row
+materialization. Map the column through a converter (see
+[Value converters and JSON columns](../infrastructure/03-value-converters.md)) and its scalar
+projection behaves like any other converted column. The refusal applies to server-side query
+preparation only: the in-memory provider materializes the projection from the source objects, so an
+enum scalar keeps working there.
+
+## Whole-entity projection
+
+A mapped single source can be projected as a whole entity with `Select(it => it)`. The statement
+reuses the entity's ordinary mapped column selection, so it renders the explicit mapped columns —
+never `*` — and materialises the rows like a projection-less read of the same source:
+
+```csharp
+var rows = await dataContext.From<SimpleEntity>()
+    .Where(it => it.Id < 3)
+    .Select(it => it)
+    .ToListAsync();
+```
+
+```sql
+select id
+ from simple_entity where (id < 3)
+```
+
+An entity with several columns renders every mapped column in its declared order. The rendered text
+is the same `CommandText` the query produces through `ToCommand()`, so the identity form is not a
+separate projection pipeline: it resolves through the same entity select list and its cache entry.
+
+Whole-object shapes that are not a mapped identity fail closed during preparation instead of
+rendering a malformed statement. A conversion of the row to an unrelated type
+(`Select(it => (object)it)`) is refused with `DataContextException`, and a prepared select list that
+resolved no columns at all is rejected with
+[`BuildSqlCommandException`](xref:NextORM.Core.BuildSqlCommandException) before anything is rendered.
+
 ## Nested entity and calculated columns over a projection
 
 A [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) can itself be used as the source of another query with
@@ -354,6 +404,63 @@ select id, Calc
  from (select id, (somestring + somestring) as [Calc]
  from complex_entity) as [t1]
 ```
+
+The enclosing `Select` is what makes such a read work: the outer query addresses the derived
+`SELECT`'s output columns, so a named or computed inner column is reused as-is. Reading the same inner
+query without an outer projection (`dataContext.From(inner).ToList()`) is accepted only when every
+inner column is already such a resolved reference; a projection built from row-member expressions (an
+anonymous `new { it.Id }` or a DTO `new Dto { Id = it.Id }`) is refused during preparation with a
+`QueryPreparationException` and must be read through an outer `Select`. That is an expression-shape
+restriction, not an anonymous-type requirement — see
+[Subqueries](07-subqueries.md#subquery-as-a-from-source).
+
+## Collection-valued projection
+
+A projection member can name a **declared** collection navigation and receive that parent's collection in the
+result — a *collection-valued slot*. The direct form projects the member as-is; the adapter form lifts it into a
+per-parent pipeline:
+
+```csharp
+// direct: the whole per-parent collection
+var posts = ctx.From<Post>()
+    .OrderBy(p => p.Id)
+    .Select(p => new { p.Id, p.Comments })
+    .ToList();
+
+// adapter: filter, order and page each parent's collection before projecting it
+var pageSize = 2;
+var digest = ctx.From<Post>()
+    .OrderBy(p => p.Id)
+    .Select(p => new
+    {
+        p.Id,
+        Recent = p.Comments
+            .AsEntityBuilder<Comment>()
+            .Where(c => c.Active)
+            .OrderBy(c => c.CreatedAt)
+            .ThenBy(c => c.Id, OrderDirection.Desc)
+            .Limit(pageSize)
+            .Select(c => new CommentRow { Id = c.Id, CreatedAt = c.CreatedAt })
+            .ToList(),
+    })
+    .ToList();
+```
+
+- **The relationship must be declared** (`HasMany`/`HasManyThrough`/`[Relationship]`); both one-to-many and
+  many-to-many slots are supported, and slots nest through the adapter's `Select(...)` to any depth with per-level
+  filtering, ordering and paging.
+- **Materialization is the eager loading's.** The entity graph is loaded with the ordinary split (default) or
+  single-query route — two statements for a depth-one one-to-many slot, one statement in single-query mode — and the
+  projected shape is then computed **in memory over the materialized entities**. There is no SQL column pruning in
+  this release.
+- **Seven destination shapes** are accepted: `List<T>`, `T[]`, `IEnumerable<T>`, `ICollection<T>`, `IList<T>`,
+  `IReadOnlyCollection<T>`, `IReadOnlyList<T>`. Any other shape fails closed.
+- **The adapter is what makes the parameterless terminals matter.** `EntityBuilder<TEntity>.ToList()`/`ToArray()`
+  and `QueryCommand<TResult>.ToList()`/`ToArray()` exist as parameterless overloads so the chain is expressible in an
+  expression tree (the `params ReadOnlySpan<object?>` twins cannot be referenced from one).
+
+The operator set, the pre-SQL refusals, the cardinality rule for a projected reference and the v1 limits are
+documented in [Collection-valued projection slots](../relationships/collection-projection.md).
 
 ## Named join aliases
 

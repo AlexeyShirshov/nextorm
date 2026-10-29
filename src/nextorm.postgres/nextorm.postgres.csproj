@@ -3,7 +3,8 @@
   <PropertyGroup>
     <PackageId>nextorm.postgres</PackageId>
     <Title>Nextorm PostgreSQL provider</Title>
-    <Description>PostgreSQL provider for Nextorm</Description>
+    <Description>PostgreSQL provider for Nextorm, a zero-SQL ORM for .NET: adds the PostgreSQL dialect (native DISTINCT ON fast paths, COPY bulk insert, version-gated syntax) and UsePostgres() over Npgsql.</Description>
+    <PackageTags>$(PackageTags);postgresql;postgres;npgsql</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>
@@ -12,6 +13,12 @@
 
   <ItemGroup>
     <PackageReference Include="Npgsql" />
+  </ItemGroup>
+
+  <!-- The unit tests drive the native COPY importer lifecycle (bounded chunks, Complete, disposal)
+       through the provider's internal seam, mirroring the SQL Server provider's test exposure. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="nextorm.postgres.tests" />
   </ItemGroup>
 
   <ItemGroup>

@@ -10,6 +10,7 @@ namespace NextORM.Integration.Tests;
 /// session/server identity functions execute on the real server and materialize their declared CLR
 /// types; the native server values are cross-checked on the same held connection.
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class ClickHouseSpecificTests : ProviderTestSuite
 {
     protected override ITestProvider Provider => ClickHouseTestProvider.Instance;

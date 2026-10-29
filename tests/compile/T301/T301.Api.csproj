@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Compiler fixture for #301 (T301). Deliberately NOT part of nextorm.slnx: the
+    RemovedUpdateSelector case must fail to compile by design, so it can never be a
+    solution build member. Each case is selected with -p:ApiCase=<name>; the shared
+    properties (net10.0, implicit usings, nullable, warnings-as-errors) come from the
+    repository Directory.Build.props, and no package is referenced (no CPM edit).
+  -->
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <ApiCase Condition="'$(ApiCase)' == ''">Positive</ApiCase>
+    <AssemblyName>T301.Api.$(ApiCase)</AssemblyName>
+    <RootNamespace>T301.Api</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\nextorm.core\nextorm.core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="Positive.cs" Condition="'$(ApiCase)' == 'Positive'" />
+    <Compile Include="RemovedUpdateSelector.cs" Condition="'$(ApiCase)' == 'RemovedUpdateSelector'" />
+  </ItemGroup>
+
+</Project>

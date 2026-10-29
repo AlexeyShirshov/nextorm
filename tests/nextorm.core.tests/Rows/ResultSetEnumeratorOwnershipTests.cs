@@ -22,7 +22,7 @@ public class ResultSetEnumeratorOwnershipTests
     {
         var command = new TrackingDbCommand();
         var enumerator = new ResultSetEnumerator<int>(Prepared(command));
-        enumerator.OwnCommand();
+        enumerator.OwnCommand(command);
 
         enumerator.Dispose();
         enumerator.Dispose();
@@ -35,7 +35,7 @@ public class ResultSetEnumeratorOwnershipTests
     {
         var command = new TrackingDbCommand();
         var enumerator = new ResultSetEnumerator<int>(Prepared(command));
-        enumerator.OwnCommand();
+        enumerator.OwnCommand(command);
 
         await enumerator.DisposeAsync();
         await enumerator.DisposeAsync();
@@ -48,7 +48,7 @@ public class ResultSetEnumeratorOwnershipTests
     {
         var command = new TrackingDbCommand();
         var enumerator = new ResultSetEnumerator<int>(Prepared(command));
-        enumerator.OwnCommand();
+        enumerator.OwnCommand(command);
 
         enumerator.Dispose();
         await enumerator.DisposeAsync();

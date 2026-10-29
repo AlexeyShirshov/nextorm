@@ -190,10 +190,60 @@ public class InMemorySqliteFunctionsTests
     public void Fts5MatchTable_ShouldThrow()
     {
         var act = () => _sut.DataProvider
-            .FromTableFunction(() => SqlFunctions.Sqlite.MatchTable<SimpleEntity>("docs_fts", "foo"))
+            .From(() => SqlFunctions.Sqlite.MatchTable<SimpleEntity>("docs_fts", "foo"))
             .Select(r => new { r.Id })
             .ToList();
 
         act.Should().Throw<NotSupportedException>();
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // #278: soundex is advertised nowhere on SQLite because the shipped engine has no such function.
+    // The in-memory provider never evaluates it either: it refuses every argument shape with the
+    // shared provider message, and a rejected evaluation leaves no cached path behind.
+    // ---------------------------------------------------------------------------------------------
+
+    private const string SoundexRefusal = "The SQLite function 'soundex' is not supported by this provider.";
+
+    private sealed class SoundexRow
+    {
+        [System.ComponentModel.DataAnnotations.Key]
+        public int Id { get; set; }
+
+        public string? Name { get; set; }
+    }
+
+    [Fact]
+    [Trait("Issue", "278")]
+    public void Soundex_ShouldRemainRejected()
+    {
+        _sut.DataProvider.From<SoundexRow>().WithData([new SoundexRow { Id = 1, Name = "Robert" }]);
+        var rows = _sut.DataProvider.From<SoundexRow>();
+        string? typedNull = null;
+
+        var column = () => rows.Select(it => new { V = SqlFunctions.Sqlite.soundex(it.Name) }).ToList();
+        var literal = () => rows.Select(it => new { V = SqlFunctions.Sqlite.soundex("Robert") }).ToList();
+        var nullArgument = () => rows.Select(it => new { V = SqlFunctions.Sqlite.soundex(typedNull) }).ToList();
+
+        column.Should().Throw<NotSupportedException>().WithMessage(SoundexRefusal);
+        literal.Should().Throw<NotSupportedException>().WithMessage(SoundexRefusal);
+        nullArgument.Should().Throw<NotSupportedException>().WithMessage(SoundexRefusal);
+    }
+
+    [Fact]
+    [Trait("Issue", "278")]
+    public void Soundex_RepeatedExecutionShouldRemainRejected()
+    {
+        _sut.DataProvider.From<SoundexRow>().WithData([new SoundexRow { Id = 1, Name = "Robert" }]);
+        var command = _sut.DataProvider.From<SoundexRow>()
+            .Select(it => new { V = SqlFunctions.Sqlite.soundex(it.Name) });
+
+        // The same query instance twice: the refusal is not a first-call-only effect and never falls
+        // back to the CLR marker (which would fault on the null SqlFunctions.Sqlite surface).
+        var first = () => command.ToList();
+        var second = () => command.ToList();
+
+        first.Should().Throw<NotSupportedException>().WithMessage(SoundexRefusal);
+        second.Should().Throw<NotSupportedException>().WithMessage(SoundexRefusal);
     }
 }

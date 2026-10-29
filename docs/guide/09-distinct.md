@@ -254,6 +254,13 @@ select t1.id, t1.label
  where score is not null order by "score" desc limit 1) as "t1"
 ```
 
+**Mapped source.** The projection-less overloads return whole entity rows, so their source must be a
+mapped entity type (`From<TEntity>()`, or another source that carries entity metadata). A name-addressed
+raw source such as `From("orders")` has no mapped columns to materialise, so preparation rejects it with
+`BuildSqlCommandException` ("SelectWhereMax/SelectWhereMin requires a mapped entity source.") instead of a
+misleading projection error. For a raw named source use the projected overloads above — the projection
+supplies the result shape — wherever the dialect supports the operation.
+
 **NULL semantics.** `null` comparison values are ignored, so they never win the extremum and never
 appear in a result. A group whose comparison value is always `null` yields no rows at all, and the
 global form returns nothing when every value is `null`.

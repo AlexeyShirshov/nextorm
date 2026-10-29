@@ -179,10 +179,14 @@ ctx.CreateMergeBuilder<IOrder>()
     .Using(order)                                     // сущность, батч или серверный запрос
     .OnKeys()
     .WhenMatched((t, s) => t.Version == s.Version)
-    .ThenUpdate(o => new { o.Status })
+    .ThenUpdate((t, s) => new { Status = s.Status })
     .WhenNotMatched().ThenInsert()
     .Merge();
 ```
+
+Перегрузка с выражениями-присваиваниями заменила прежний селектор списка столбцов: каждое присваивание
+в анонимном инициализаторе называет назначение и явную правую часть, поэтому
+`ThenUpdate(o => new { o.Status })` мигрирует в `ThenUpdate((t, s) => new { Status = s.Status })`.
 
 ```sql
 -- SQL Server

@@ -83,6 +83,11 @@ internal static class MySqlContainer
                 }
 
                 var container = new MySqlBuilder(DefaultImage)
+                    // The native MySqlBulkCopy path loads through LOAD DATA LOCAL INFILE, which MySQL 8.4
+                    // disables by default. The server prerequisite is part of this fixture (nextorm still
+                    // only reads it), so the T305 native cells run against a real LOAD instead of only
+                    // certifying the refusal arm.
+                    .WithCommand("--local-infile=1")
                     .WithReuse(true)
                     .WithLabel(ReuseLabel, "nextorm-mysql")
                     .Build();

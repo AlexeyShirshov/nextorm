@@ -164,6 +164,26 @@ var count = dataContext.From(
     .Count();
 ```
 
+### Прямое чтение одного скалярного столбца
+
+Когда обе стороны проецируют один скалярный столбец, `From(cmd)` материализует строки напрямую, а не
+объекты, и `UnionAll` сохраняет дубликаты:
+
+```csharp
+var left = dataContext.From<ISimpleEntity>().Where(it => it.Id <= 2).Select(it => it.Id);
+var right = dataContext.From<ISimpleEntity>().Where(it => it.Id >= 2 && it.Id <= 3).Select(it => it.Id);
+
+var rows = dataContext.From(left.UnionAll(right)).ToList(); // 1, 2, 2, 3
+```
+
+Результат одинаков независимо от того, пуст ли process-wide кэш select-list для типа или он уже был
+заполнен более ранним скалярным чтением. Раньше закэшированная проекция переиспользовалась для
+производного источника; при прогретом кэше чтение падало с `QueryPreparationException: Cannot get ctor
+from System.Int32`, тогда как холодное чтение работало. Теперь производное чтение строит собственную
+одностолбцовую форму и не читает и не перезаписывает эту запись кэша. Производный источник более чем
+с одним столбцом по-прежнему требует явного внешнего `Select` (см.
+[Подзапросы](07-subqueries.md#подзапрос-как-источник-from)).
+
 ## Различия между провайдерами
 
 | Провайдер | `union` / `union all` | `intersect` / `except` | `intersect all` / `except all` |

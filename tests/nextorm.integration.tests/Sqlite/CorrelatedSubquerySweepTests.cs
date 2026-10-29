@@ -39,6 +39,8 @@ public sealed class CorrelatedSubquerySweepTests : ProviderTestSuite
         rows.Should().HaveCount(3);
         rows[0].Count.Should().Be(1);
         rows[2].Count.Should().Be(3);
+        rows.Select(r => r.LongCount).Should().Equal(1L, 2L, 3L);
+        rows[2].LongCount.Should().Be(3L);
         rows[2].LongCount.Should().BeGreaterThan(0);
         rows[2].Sum.Should().Be(6);
         rows[2].Min.Should().Be(1);
@@ -47,6 +49,26 @@ public sealed class CorrelatedSubquerySweepTests : ProviderTestSuite
         rows[2].AnyPred.Should().BeTrue();
         rows[2].All.Should().BeTrue();
         rows[1].First.Should().Be(2);
+    }
+
+    /// <summary>
+    /// #279: a correlated <c>LongCount()</c> whose inner predicate matches no rows returns <c>0L</c> per
+    /// outer row (the aggregate's identity), never an entity value or a skipped row.
+    /// </summary>
+    [Fact]
+    public void CorrelatedLongCount_ShouldReturnZeroWhenNoRowsMatch()
+    {
+        var rows = _sut.ComplexEntity
+            .OrderBy(x => x.Id)
+            .Select(x => new
+            {
+                x.Id,
+                LongCount = _sut.SimpleEntity.Where(s => s.Id > x.Id + 100).LongCount()
+            })
+            .ToList();
+
+        rows.Should().HaveCount(3);
+        rows.Select(r => r.LongCount).Should().Equal(0L, 0L, 0L);
     }
 
     [Fact]

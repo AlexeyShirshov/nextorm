@@ -64,11 +64,18 @@ public partial class QueryCommand
         dst.EagerLoadMode = EagerLoadMode;
         dst.ResolvedEagerLoadMode = ResolvedEagerLoadMode;
         dst.EagerLoadShape = EagerLoadShape;
+        // The collection-slot graph shape participates in the plan key too (QueryPlanEqualityComparer), so the
+        // cached clone must carry it or GetCacheVersion's recomputed hash would differ from the frozen one.
+        dst.CollectionSlotShape = CollectionSlotShape;
         dst.HasPerParentEagerTopN = HasPerParentEagerTopN;
         // Outer references participate in the plan key (QueryPlanEqualityComparer), so the cached
         // clone must carry them; otherwise the hash captured at construction would not match the
         // recomputed hash in QueryPlan.GetCacheVersion and the Debug.Assert would fail.
         dst._outerRefs = _outerRefs;
+        // The occurrence bindings travel with the outer references so a cached clone keeps the metadata
+        // needed to render its markers. They are runtime metadata only: neither is part of the plan key
+        // (QueryPlanEqualityComparer reads OuterReferences, never the binding side table).
+        dst._outerRefBindings = _outerRefBindings;
         dst.OuterRegistry = OuterRegistry;
 
         dst.ResultType = ResultType;
@@ -84,6 +91,15 @@ public partial class QueryCommand
         dst.GroupingType = GroupingType;
         dst.GroupingSets = GroupingSets;
         dst.GroupByWithTotals = GroupByWithTotals;
+        dst.IsSelectGroup = IsSelectGroup;
+        // The inferred SelectGroup state is derived at preparation, but `_isPrepared` travels with the
+        // clone, so the planner never re-derives it (`if (!IsPrepared) PrepareCommand(...)`). The mode
+        // is read by the renderer (DISTINCT for a constant projection, the global HAVING arm), the
+        // grouping list carries the inferred keys, and the raw keys/outputs are what a reset would
+        // re-derive from — all of them must therefore travel like the grouping list itself.
+        dst.SelectGroupMode = SelectGroupMode;
+        dst.SelectGroupKeys = SelectGroupKeys;
+        dst.SelectGroupOutputs = SelectGroupOutputs;
         dst.LimitBy = LimitBy;
         dst._limitByColumns = _limitByColumns;
         dst.DistinctOn = DistinctOn;
@@ -123,12 +139,11 @@ public partial class QueryCommand
         dst.ForJsonClause = ForJsonClause;
         dst.ForXmlClause = ForXmlClause;
 
-        dst._queryPlanComparer = _queryPlanComparer;
-        dst._fromExpressionPlanComparer = _fromExpressionPlanComparer;
-        dst._expressionPlanComparer = _expressionPlanComparer;
-        dst._selectExpressionPlanComparer = _selectExpressionPlanComparer;
-        dst._joinExpressionPlanComparer = _joinExpressionPlanComparer;
-        dst._sortingExpressionPlanComparer = _sortingExpressionPlanComparer;
+        // The six lazily-created plan comparers are deliberately not copied: a comparer resolves
+        // ReferencedQueries through the command it was constructed with, so sharing one between command
+        // instances lets a reset/"discarded preparation" command hash through a foreign registry whose
+        // ReferencedQueries is null (DEF-T327-05 NullReferenceException in VisitIndex). Every command
+        // creates its own from the lazy getters.
         dst._unionType = _unionType;
 
         if (copyAll)
@@ -210,6 +225,7 @@ public partial class QueryCommand
     {
         var clone = (QueryCommand)((ICloneable)this).Clone();
         clone._outerRefs = null;
+        clone._outerRefBindings = null;
         clone._referencedQueries = null;
         clone.OuterRegistry = null;
         clone.ReferencedQueriesPlanHash = 0;

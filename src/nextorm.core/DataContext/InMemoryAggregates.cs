@@ -67,6 +67,18 @@ internal static class InMemoryAggregates
 
     public static bool IsAggregate(string name) => AggregateNames.Contains(name);
 
+    /// <summary>
+    /// True when the call carries an aggregate FILTER: a trailing argument declared as
+    /// <c>Expression&lt;Func&lt;bool&gt;&gt;</c>. The compiler wraps such a lambda in an
+    /// <see cref="ExpressionType.Quote"/> node, so the declaring parameter type is the reliable signal
+    /// (a <c>Parameters.Count == 0</c> test on the argument alone never matches a compiler-built tree).
+    /// Scoped deliberately to the <c>SelectGroup</c> guard: the legacy grouped fold keeps its historical
+    /// narrow test, so pre-existing in-memory grouped queries keep ignoring a FILTER as they always did.
+    /// </summary>
+    public static bool HasAggregateFilter(MethodCallExpression node)
+        => node.Arguments.Count > 0
+            && node.Method.GetParameters()[^1].ParameterType == typeof(Expression<Func<bool>>);
+
     /// <summary>Compiles the value selector as <c>Func&lt;TEntity, TValue&gt;</c> (unboxed fold).</summary>
     public static Delegate CompileSelector<TEntity>(Expression body, ParameterExpression parameter, Type valueType)
     {
@@ -199,20 +211,27 @@ internal static class InMemoryAggregates
         if (count2 == 0)
         {
             // SQL SUM over an empty set is NULL; the CLR default (0) is the closest mapping and what
-            // callers of a non-nullable TResult expect. MIN/MAX/AVG/STDEV/VAR stay default.
+            // callers of a non-nullable TResult expect. MIN/MAX/AVG stay default, and so do the four
+            // variability families, whose results are structurally nullable: n = 0 is undefined.
             return normalized == nameof(CommonFunctions.sum)
                 ? (TResult)Convert.ChangeType(0d, resultType, CultureInfo.InvariantCulture)
                 : default;
         }
+
+        // The sample flavours are undefined for a single contributing value (n - 1 = 0); return the
+        // undefined result before the conversion below, which cannot carry a null. The population
+        // flavours stay defined and fold to zero, exactly as the SQL providers do.
+        if (count2 < 2 && (normalized is nameof(CommonFunctions.var) or nameof(CommonFunctions.stdev)))
+            return default;
 
         var centre = sumSquares - (sum * sum / count2);
         var result = normalized switch
         {
             nameof(CommonFunctions.sum) => sum,
             nameof(CommonFunctions.avg) => sum / count2,
-            nameof(CommonFunctions.var) => count2 < 2 ? 0 : centre / (count2 - 1),
+            nameof(CommonFunctions.var) => centre / (count2 - 1),
             nameof(CommonFunctions.varp) => centre / count2,
-            nameof(CommonFunctions.stdev) => count2 < 2 ? 0 : Math.Sqrt(centre / (count2 - 1)),
+            nameof(CommonFunctions.stdev) => Math.Sqrt(centre / (count2 - 1)),
             nameof(CommonFunctions.stdevp) => Math.Sqrt(centre / count2),
             _ => throw new NotSupportedException($"Aggregate '{name}' is not supported by the in-memory provider."),
         };

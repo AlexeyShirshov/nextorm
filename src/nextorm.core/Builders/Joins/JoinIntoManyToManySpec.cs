@@ -29,6 +29,15 @@ internal interface IJoinIntoManyToManySpec
     IReadOnlyList<PropertyInfo> JunctionChildForeignKeys { get; }
 
     /// <summary>
+    /// The number of flattened projection items one many-to-many declaration occupies in a single-query
+    /// result row: the link item followed by the child item. <see cref="GetItemTypes(bool)"/> always returns
+    /// exactly this many types (only the link item's identity -- the derived <c>JoinIntoLink</c> on SQL, the
+    /// junction entity in memory -- is path-dependent), so the row layout and the stitcher's slice stride
+    /// cannot disagree.
+    /// </summary>
+    const int ItemCount = 2;
+
+    /// <summary>
     /// The projection item types the declaration contributes for the given provider path: the derived
     /// <see cref="JoinIntoLink{TParentKey,TChildKey}"/> followed by the child on a SQL provider; the
     /// junction entity followed by the child on the in-memory provider.
@@ -53,6 +62,13 @@ internal interface IJoinIntoManyToManySpec
     /// Groups and assigns the many-to-many child collections from rows that carry both the link item
     /// and the child. Unlike the direct declaration it preserves duplicate <c>(parent, child)</c>
     /// junction rows as distinct elements and drops a row whose child (or link) item is null.
+    /// <para>
+    /// The child query's own <c>Limit</c>/<c>Offset</c>/<c>Page</c> is applied to the <b>surviving
+    /// occurrences</b> of every parent before they are assigned: the page is trimmed from each parent's
+    /// ordered occurrence list after a dangling link and a cartesian repeat of one junction row have been
+    /// discarded, so neither consumes a slot. The occurrences are counted in row order, which is the child
+    /// query's own ordering. A declaration whose child carries no page assigns every occurrence.
+    /// </para>
     /// </summary>
     /// <typeparam name="TParent">The parent entity type.</typeparam>
     /// <param name="parents">The deduplicated parents in first-occurrence order.</param>
@@ -485,6 +501,12 @@ internal sealed class JoinIntoManyToManySpec<TEntity, TChild> : IJoinIntoSpec<TE
             children.Add(child);
         }
 
+        // The per-parent page is applied here, after a dangling link and a cartesian repeat have been
+        // discarded and while the occurrences still carry the statement's child ordering, so a discarded
+        // row never consumes a slot and the page is counted in surviving junction occurrences. The page
+        // comes from the child query of this declaration; a paging-free child leaves every list untouched.
+        MetadataManyToManyAssignment.ApplyPage(grouped, Child.Paging);
+
         _eager.Assign((IReadOnlyList<TEntity>)(object)parents, grouped);
     }
 
@@ -551,6 +573,12 @@ internal sealed class JoinIntoManyToManySpec<TEntity, TChild> : IJoinIntoSpec<TE
     /// <param name="joinType">The join kind.</param>
     /// <param name="options">The per-join options applied to both edges.</param>
     /// <param name="dataContext">The context the derived junction source is bound to.</param>
+    /// <param name="allowChildOrderingAndPaging">
+    /// When <see langword="true"/>, the child's own <c>OrderBy</c> and <c>Limit</c>/<c>Offset</c>/<c>Page</c>
+    /// are accepted: the metadata single-query route renders the ordering as its eager ordering metadata and
+    /// applies the page to the stitched surviving occurrences instead of folding it into the join predicate.
+    /// The public <c>JoinInto</c> declarations keep the default and reject both.
+    /// </param>
     /// <returns>The specification, the parent-to-link join and the link-to-child join.</returns>
     internal static (JoinIntoManyToManySpec<TEntity, TChild> Spec, JoinExpression LinkJoin, JoinExpression ChildJoin) Create(
         EntityBuilder<TChild> child,
@@ -559,8 +587,16 @@ internal sealed class JoinIntoManyToManySpec<TEntity, TChild> : IJoinIntoSpec<TE
         IRelationshipMetadata relationship,
         JoinType joinType,
         JoinOptions options,
-        IDataContext dataContext)
+        IDataContext dataContext,
+        bool allowChildOrderingAndPaging = false)
     {
+        // Fold the child's own Where into the caller predicate exactly once, before the specification
+        // captures it: the composed predicate then reaches spec.Predicate (and the direct assignment
+        // inside it), the link-to-child join condition and its original condition. The child edge is
+        // rebuilt from spec.Predicate on the in-memory path, so normalizing here — never again at the
+        // edge construction below — keeps every representation on the same single fold.
+        predicate = EntityBuilder<TEntity>.FoldJoinIntoChildPredicate(child, predicate, allowChildOrderingAndPaging);
+
         var isSql = dataContext.NeedMapping;
         var spec = new JoinIntoManyToManySpec<TEntity, TChild>(child, predicate, collection, relationship, joinType, isSql);
         var junction = relationship.Junction!;

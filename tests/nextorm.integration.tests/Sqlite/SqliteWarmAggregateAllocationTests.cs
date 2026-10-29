@@ -258,11 +258,11 @@ public sealed class SqliteWarmAggregateAllocationTests : IDisposable
         // Stage C setup — exactly the benchmark's prepared arms, built once, outside every measured loop.
         var countCommand = _rows.Select(e => SqlFunctions.Sql.count());
         countCommand.SingleRow = true;
-        _preparedCount = countCommand.Prepare(true, TestContext.Current.CancellationToken);
+        _preparedCount = countCommand.Prepare(default, TestContext.Current.CancellationToken);
 
         var sumCommand = _rows.Select(e => SqlFunctions.Sql.sum(e.Id));
         sumCommand.SingleRow = true;
-        _preparedSum = sumCommand.Prepare(true, TestContext.Current.CancellationToken);
+        _preparedSum = sumCommand.Prepare(default, TestContext.Current.CancellationToken);
 
         var harnessSeries = MeasureSeries(NoOp);
 

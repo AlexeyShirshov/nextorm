@@ -127,7 +127,7 @@ sequences/settings, TVP and the aggregate families have dedicated nextorm APIs b
 | Bulk copy + `SqlBulkCopyOptions` | yes | yes | `SqlServerDialect.cs:55` | `SqlServerBulkCopy` |
 | Stored procedures | yes | yes | `SqlServerDialect.cs:61` | `QueryProc`/`ExecuteProc` |
 | Window percentiles (`WITHIN GROUP ... OVER`) | yes | partial | `SqlServerDialect.cs:365` | 2012+ windows; no `GROUPS`/`EXCLUDE`; `NTH_VALUE` absent |
-| Provider scalar-function breadth | yes | yes | `SqlFunctions.SqlServer.cs` (827 lines); 61 pinned T-SQL scalars audited = 51 covered + 10 excluded ([#182](https://github.com/AlexeyShirshov/nextorm/issues/182)) | `SqlFn.cs` 295 KB, 156 `[Sql.Function]` declarations |
+| Provider scalar-function breadth | yes | yes | `SqlFunctions.SqlServer.cs` (881 lines); 61 pinned T-SQL scalars audited = 61 covered + 0 excluded ([#182](https://github.com/AlexeyShirshov/nextorm/issues/182) pinned 51 + 10; [#219](https://github.com/AlexeyShirshov/nextorm/issues/219) and [#248](https://github.com/AlexeyShirshov/nextorm/issues/248) opened the rest) | `SqlFn.cs` 295 KB, 156 `[Sql.Function]` declarations |
 | Sequences (`NEXT VALUE FOR`) | yes | yes | `SqlFunctions.SqlServer.cs:339,346` (`next_value_for`/`nextval`, [#218](https://github.com/AlexeyShirshov/nextorm/issues/218)) | `SqlFn.cs` `NextValueFor` (`[Sql.Extension(ProviderName.SqlServer, "NEXT VALUE FOR {sequence_name}", ...)]`) |
 | Row locking (`ForUpdate`/`ForShare`, `LockWaitMode` → `with (updlock)`/`with (holdlock)`, `nowait`/`readpast`) | yes | yes | `FromOptions.ForUpdate/ForShare` (`DataContext/FromOptions.cs:182-214`); `docs/connecting-providers/sqlserver.md:317` ([#216](https://github.com/AlexeyShirshov/nextorm/issues/216)) | `SqlServerHints.generated.cs` (`WithUpdLock`/`WithHoldLock`/`WithNoLock`/`WithRowLock`/`WithPagLock`/`WithTabLock`/…, table + in-scope) |
 | Session/server identity (`@@SERVERNAME`, `HOST_ID`, `HOST_NAME`, `APP_NAME`, `SUSER_NAME`, `ORIGINAL_LOGIN`) | yes (6, gated by `ISqlServerFunctions.SupportsSessionIdentity`) | yes (`SqlFn.cs` declares the same T-SQL state functions) | `SqlFunctions.SqlServer.cs:23,30,39,46,53,60`; `SqlServerDialect.cs:773,1037`; `DialectCapabilities.cs:739` | `SqlFn.cs` `[Sql.Function]` declarations |
@@ -135,11 +135,13 @@ sequences/settings, TVP and the aggregate families have dedicated nextorm APIs b
 
 Net: **parity on the audited T-SQL scalar catalogue, with linq2db still wider overall** — issue
 [#182](https://github.com/AlexeyShirshov/nextorm/issues/182) reconciled 61 pinned linq2db v6.5.0
-`SqlFn.cs` entries against nextorm: **51 covered + 10 excluded**, where the excluded set is live,
-mutable connection/session/statement-scope state rather than per-row query scalars.
-[#219](https://github.com/AlexeyShirshov/nextorm/issues/219) later opened the identity subset
-(`@@SERVERNAME`, `HOST_ID`, `HOST_NAME`, `APP_NAME`, `SUSER_NAME`, `ORIGINAL_LOGIN`), leaving the rest
-tracked in [#248](https://github.com/AlexeyShirshov/nextorm/issues/248). Within the reconciled
+`SqlFn.cs` entries against nextorm: **61 covered + 0 excluded** ([#182](https://github.com/AlexeyShirshov/nextorm/issues/182)
+pinned 51 covered + 10 excluded, where the excluded set was live, mutable connection/session/statement-scope
+state rather than per-row query scalars). [#219](https://github.com/AlexeyShirshov/nextorm/issues/219) opened the
+identity subset (`@@SERVERNAME`, `HOST_ID`, `HOST_NAME`, `APP_NAME`, `SUSER_NAME`, `ORIGINAL_LOGIN`) and
+[#248](https://github.com/AlexeyShirshov/nextorm/issues/248) the remaining seven live-scope names
+(`CURRENT_REQUEST_ID`, `CURRENT_TRANSACTION_ID`, `XACT_STATE`, `IDENT_CURRENT`, `MIN_ACTIVE_ROWVERSION`,
+`ROWCOUNT_BIG`, `SCOPE_IDENTITY`) as-is, with native semantics and their caveats. Within the reconciled
 set the FROMPARTS family is 6 total / 5 newly added and the date family is 13 total / 10 newly added.
 nextorm leads on first-class builders for `PIVOT`/`UNPIVOT`, `FOR JSON`/`FOR XML`, XML methods,
 `OPENJSON`/`STRING_SPLIT`, and 2025 regex.

@@ -16,7 +16,7 @@ public sealed class QueryCacheControlsCollection;
 /// never mutate the sticky <see cref="QueryCommand.Cache"/> flag (see AGENTS.md).
 /// </summary>
 [Collection("Query cache controls")]
-public class QueryCacheControlsTests
+public class QueryCacheControlsTests : IDisposable
 {
     private sealed class ClearMarker;
     private sealed class SlidingExpirationMarker;
@@ -189,4 +189,13 @@ public class QueryCacheControlsTests
             DataContextCache.Clear();
         }
     }
+
+    /// <summary>
+    /// Every test here populates the process-wide <see cref="DataContextCache"/> (metadata, select lists,
+    /// expressions) under the default zero window, which marks the entries permanently untimed. xUnit
+    /// disposes a fresh instance after each test, so clearing here hands the next test — and, in this
+    /// collection, <see cref="TimedDictionaryEvictionTests"/> — an empty cache. Without it the eviction
+    /// test's aging hook cannot age a leftover entry and the suite becomes order-dependent (#328, C02).
+    /// </summary>
+    public void Dispose() => DataContextCache.Clear();
 }

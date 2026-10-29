@@ -11,7 +11,10 @@ generated statement rather than a client-side operation:
 
 * [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1) exposes `OrderBy(Expression<Func<TEntity, object?>>, OrderDirection)`,
   `OrderBy(expr)`, `OrderByDescending(expr)` and the ordinal overloads `OrderBy(int)`,
-  `OrderBy(int, OrderDirection)`, `OrderByDescending(int)`.
+  `OrderBy(int, OrderDirection)`, `OrderByDescending(int)`, plus the explicit NULL-placement overloads
+  `OrderBy(expr, NullsPosition)` / `OrderBy(expr, OrderDirection, NullsPosition)` /
+  `OrderByDescending(expr, NullsPosition)` and the `ThenBy`/`ThenByDescending` family (see
+  [NULL ordering and placement](#null-ordering-and-placement)).
 * [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1) also exposes `Limit(int)`, `Offset(int)` and `Page(int limit, int offset)`.
 * After [`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), the returned [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) mirrors the builder surface: the expression
   overloads `OrderBy(expr)`, `OrderBy(expr, OrderDirection)` and `OrderByDescending(expr)`, the ordinal
@@ -120,17 +123,95 @@ same bounds as the builder methods (non-negative). `OrderBy(int)`/`OrderByDescen
 1-based ordinal of an output column, so `.Select(it => it.Id).OrderByDescending(1)` continues to work. A
 sort member that is not part of the projection is rejected while the query is prepared.
 
-## NULL ordering
+## NULL ordering and placement
 
-nextorm does not emit `NULLS FIRST` / `NULLS LAST`; null placement is whatever the provider does by
-default:
+Every ordering key accepts an explicit NULL placement through [`NullsPosition`](xref:NextORM.Core.NullsPosition):
+
+| Member | Value | Meaning |
+|---|---|---|
+| [`Default`](xref:NextORM.Core.NullsPosition.Default) | `0` | emit no clause and keep the provider default (the value of every call that passes no placement) |
+| [`First`](xref:NextORM.Core.NullsPosition.First) | `1` | `NULL` values sort before every non-null value, whatever the direction |
+| [`Last`](xref:NextORM.Core.NullsPosition.Last) | `2` | `NULL` values sort after every non-null value, whatever the direction |
+
+Placement is **independent of direction**: `First` keeps the `NULL` group first in an ascending and in a
+descending key, and the direction only orders the non-null values.
+
+### Overloads
+
+Each form below exists on [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1) and, after
+[`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), on [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1):
+
+* `OrderBy(expr, NullsPosition)`, `OrderBy(expr, OrderDirection, NullsPosition)` and
+  `OrderByDescending(expr, NullsPosition)`;
+* the secondary-key family `ThenBy(expr)`, `ThenBy(expr, OrderDirection)`,
+  `ThenBy(expr, NullsPosition)`, `ThenBy(expr, OrderDirection, NullsPosition)`,
+  `ThenByDescending(expr)` and `ThenByDescending(expr, NullsPosition)`;
+* the same families over a 1-based output column index: `OrderBy(int, NullsPosition)`,
+  `OrderBy(int, OrderDirection, NullsPosition)`, `OrderByDescending(int, NullsPosition)`, `ThenBy(int)`,
+  `ThenBy(int, OrderDirection)`, `ThenBy(int, NullsPosition)`, `ThenBy(int, OrderDirection, NullsPosition)`,
+  `ThenByDescending(int)` and `ThenByDescending(int, NullsPosition)`.
+
+`ThenBy` appends a key exactly like a second `OrderBy`; the name only states the intent. Each key carries
+its own direction and placement, so mixed secondary keys are legal:
+
+```csharp
+var rows = await dataContext.From<ComplexEntity>()
+    .OrderBy(it => it.Int, NullsPosition.Last)
+    .ThenBy(it => it.Id, OrderDirection.Desc, NullsPosition.First)
+    .Select(it => new { it.Id })
+    .ToListAsync();
+```
+
+```sql
+-- SQLite
+select id
+ from complex_entity order by nullableint NULLS LAST, id desc NULLS FIRST
+```
+
+```sql
+-- SQL Server
+select id
+ from complex_entity order by CASE WHEN nullableint IS NULL THEN 1 ELSE 0 END ASC, nullableint, CASE WHEN id IS NULL THEN 0 ELSE 1 END ASC, id desc
+```
+
+An ordinal key is resolved to the expression of the selected column before the placement is applied, so the
+emulated form tests the real key (`CASE WHEN nullableint IS NULL …`) and never the literal ordinal
+(`CASE WHEN 1 IS NULL …`); an index that does not resolve to a selected column fails closed.
+
+### Per-provider rendering
+
+SQLite, PostgreSQL and ClickHouse understand the native modifier
+([`SupportsNullsOrdering`](xref:NextORM.Core.ISqlDialect.SupportsNullsOrdering) is `true`). SQL Server, MySQL
+and MariaDB have no `NULLS FIRST`/`NULLS LAST` syntax and get the portable emulation, whose rank prefix is
+**always ascending** — even for a descending key — with only the key carrying the requested direction:
+
+| Provider | `ASC` / `First` | `DESC` / `Last` |
+|---|---|---|
+| SQLite, PostgreSQL, ClickHouse | `k NULLS FIRST` | `k desc NULLS LAST` |
+| SQL Server, MySQL, MariaDB | `CASE WHEN k IS NULL THEN 0 ELSE 1 END ASC, k` | `CASE WHEN k IS NULL THEN 1 ELSE 0 END ASC, k desc` |
+
+`k` is the qualified, quoted key SQL. On the emulating providers a parameterized key occurs **twice** in the
+statement (`CASE WHEN (k * @factor) IS NULL … END ASC, (k * @factor)`) and both occurrences bind to the one
+parameter the command carries; the native form emits the key once.
+
+### Provider defaults
+
+`NullsPosition.Default` emits no clause, so the placement is the provider's own — and it differs per provider
+and per direction:
 
 | Provider | `ASC` | `DESC` |
 |---|---|---|
 | SQLite | nulls first | nulls last |
 | SQL Server | nulls first | nulls last |
+| MySQL | nulls first | nulls last |
+| MariaDB | nulls first | nulls last |
 | PostgreSQL | nulls last | nulls first |
+| ClickHouse | **nulls last** | **nulls last** |
 | In-memory | nulls first | nulls last |
+
+ClickHouse (25.8) sorts `NULL` last in **both** directions, so unlike every other SQL provider a `DESC` key
+does not move the `NULL` group to the front. Do not rely on a cross-provider null order in shared queries —
+request `NullsPosition.First`/`Last` when the placement is part of the result.
 
 ```csharp
 var rows = await dataContext.From<ComplexEntity>()
@@ -139,8 +220,23 @@ var rows = await dataContext.From<ComplexEntity>()
     .ToListAsync();
 ```
 
-On PostgreSQL the row with a `null` `nullableint` (id `1`) is first; on SQL Server it is last. Do not
-rely on a cross-provider null order in shared queries.
+With this default the row holding a `null` `nullableint` (id `1`) is first on PostgreSQL and last on SQL
+Server.
+
+### Fail-closed shapes
+
+The `CASE` emulation repeats the ordering key, so on SQL Server, MySQL and MariaDB an explicit placement is
+rejected with `BuildSqlCommandException` — before any statement is sent — where the statement cannot legally
+carry the repeated key: a `DISTINCT`/`DISTINCT ON` query (every `ORDER BY` expression must be in the select
+list) and a ClickHouse-style `LIMIT BY`. The placement is never silently dropped. The native providers
+(SQLite, PostgreSQL, ClickHouse) repeat nothing and are not restricted: `DISTINCT`, `DISTINCT ON` and
+`LIMIT BY` keep the native modifier. See [Limitations](../advanced/limitations.md).
+
+### In-memory
+
+The in-memory provider honours the same explicit placement with the same semantics and matches the SQL
+result oracle cell by cell. It compares with the CLR default comparer, so strings follow the CLR comparison
+(`Comparer<string>.Default`), **not** the database collation.
 
 ## Limit and Offset
 
@@ -256,6 +352,12 @@ throw `NotSupportedException`. Combining it with `DISTINCT`/`DISTINCT ON` is rej
 generation with `BuildSqlCommandException`; the `WithTies()` fluent call itself does not validate the
 combination.
 
+On SQL Server the modifier is supported only in the no-offset `TOP(n) WITH TIES` form. A positive
+`OFFSET` together with `WithTies()` — `Page(5, 3).WithTies()` or `Offset(3).Limit(5).WithTies()` —
+throws `NotSupportedException` while the query is prepared, before any SQL is rendered, sent or cached:
+T-SQL accepts `WITH TIES` only in `TOP`, not in `OFFSET … FETCH … ONLY`. Use `WithTies()` without an
+`OFFSET`, or ordinary paging without ties.
+
 ## First, FirstOrDefault, Single, SingleOrDefault
 
 The single-row terminals are available in synchronous and asynchronous forms:
@@ -339,13 +441,13 @@ row data, so the projection is discarded and only existence is tested.
 
 | Provider | Behaviour |
 |---|---|
-| SQLite | `LIMIT` / `OFFSET`; offset without limit emits `limit -1 offset n`; nulls sort as the smallest value. |
-| SQL Server | `TOP(n)` when there is no offset; `OFFSET n ROWS` / `FETCH NEXT n ROWS ONLY` otherwise, with an injected `ORDER BY`; nulls sort as the smallest value. |
-| PostgreSQL | `LIMIT` / `OFFSET`; nulls sort as the largest value. |
-| MySQL | `LIMIT` / `OFFSET`; offset without limit emits `limit 18446744073709551615 offset n`; nulls sort as the smallest value (first ascending). |
+| SQLite | `LIMIT` / `OFFSET`; offset without limit emits `limit -1 offset n`; nulls sort as the smallest value by default, explicit placement is native (`NULLS FIRST`/`NULLS LAST`). |
+| SQL Server | `TOP(n)` when there is no offset; `OFFSET n ROWS` / `FETCH NEXT n ROWS ONLY` otherwise, with an injected `ORDER BY`; nulls sort as the smallest value by default, explicit placement is emulated with a `CASE` prefix. |
+| PostgreSQL | `LIMIT` / `OFFSET`; nulls sort as the largest value by default, explicit placement is native (`NULLS FIRST`/`NULLS LAST`). |
+| MySQL | `LIMIT` / `OFFSET`; offset without limit emits `limit 18446744073709551615 offset n`; nulls sort as the smallest value (first ascending) by default, explicit placement is emulated with a `CASE` prefix. |
 | MariaDB | Same as MySQL. |
-| ClickHouse | `LIMIT` / `OFFSET`; offset without limit emits `limit 18446744073709551615 offset n`. |
-| In-memory | [`OrderBy`](xref:NextORM.Core.EntityBuilder`1.OrderBy(System.Int32)) / [`OrderByDescending`](xref:NextORM.Core.EntityBuilder`1.OrderByDescending(System.Int32)) run through LINQ; nulls sort first ascending (the CLR default comparer). |
+| ClickHouse | `LIMIT` / `OFFSET`; offset without limit emits `limit 18446744073709551615 offset n`; nulls sort last in **both** directions by default, explicit placement is native (`NULLS FIRST`/`NULLS LAST`). |
+| In-memory | [`OrderBy`](xref:NextORM.Core.EntityBuilder`1.OrderBy(System.Int32)) / [`OrderByDescending`](xref:NextORM.Core.EntityBuilder`1.OrderByDescending(System.Int32)) run through LINQ; nulls sort first ascending (the CLR default comparer), and an explicit placement is honoured in process. |
 
 ## See also
 

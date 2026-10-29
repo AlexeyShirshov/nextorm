@@ -11,13 +11,21 @@
 
 * **SQL Server** имеет две независимые поверхности. [`ForJson`](xref:NextORM.Core.QueryCommand`1.ForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean,System.Object[])) выполняет запрос и
   возвращает весь набор строк одним JSON-документом (`FOR JSON PATH`/`FOR JSON AUTO`), а [`SqlServer`](xref:NextORM.Core.SqlFunctions.SqlServer) предоставляет текстовые JSON-функции
-  (`json_value`, `json_query`, `json_modify`, `isjson`) и табличную функцию `openjson`.
-* **PostgreSQL** имеет нативные типы `json`/`jsonb` (единственный провайдер с ними) и поверхность
-  функций/операторов на `SqlFunctions.Postgres`: конструирование, агрегация, доступ, вложенность и
+  (`json_value`, `json_query`, `json_modify`, `isjson`) и табличную функцию `openjson`. Кроме того, в
+  SQL Server 2025 (17.x) есть отдельный нативный тип колонки `json`, доступный для `[JsonColumn]` только
+  через явный гейт версии — см. [Нативный `json` в SQL Server 2025+](#нативный-json-в-sql-server-2025).
+* **PostgreSQL** имеет нативные типы `json`/`jsonb` и единственную поверхность функций/операторов
+  `json`/`jsonb` (`SqlFunctions.Postgres`): конструирование, агрегация, доступ, вложенность и
   JSONPath.
-* **MySQL и MariaDB** хранят JSON в текстовых колонках и предоставляют ту же поверхность текстовых
-  JSON-функций, что и SQL Server ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)),
-  через семейство `JSON_EXTRACT`/`JSON_UNQUOTE`/`JSON_SET`.
+* **MySQL и MariaDB** предоставляют ту же поверхность текстовых JSON-функций, что и SQL Server
+  ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)), через семейство
+  `JSON_EXTRACT`/`JSON_UNQUOTE`/`JSON_SET`. Их JSON-*колонки* — не одно и то же: в MySQL 8 есть
+  настоящий тип `json` (сервер валидирует, нормализует и сообщает его как `json`), а `JSON` в MariaDB —
+  это псевдоним `LONGTEXT` плюс CHECK `json_valid()` (сообщается как `longtext`). Обе используются через
+  **текстовый транспорт** — свойство `[JsonColumn]` сериализуется в текст, который разбирает сервер, —
+  потому что ни у одного из провайдеров нет привязываемого нативного представления JSON, и
+  `JsonColumnStorage.Native` для них отклоняется (см.
+  [Отобразить CLR-объект на нативную JSON-колонку](#отобразить-clr-объект-на-нативную-json-колонку)).
 * **ClickHouse** отображает извлекающие функции строкового JSON (`JSONExtractString`, `JSONExtractInt`,
   `JSONExtractFloat`, `JSONExtractBool`, `JSONExtractRaw`, `JSONHas`, `JSONLength`, `JSONType`) — плюс
   возвращающие массивы `JSONExtractKeys`/`JSONExtractArrayRaw` (проецируются как `string[]`) и
@@ -59,10 +67,10 @@
 
 | Провайдер | Вывод `ForJson` | Нативные `json`/`jsonb` | Текстовые JSON-функции | `openjson` как `FROM` |
 |---|---|---|---|---|
-| SQL Server | Поддерживается ([`SupportsForJson`](xref:NextORM.Core.ISqlDialect.SupportsForJson)) | Нет — JSON хранится в `nvarchar` | Поддерживаются ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)) | Поддерживается |
+| SQL Server | Поддерживается ([`SupportsForJson`](xref:NextORM.Core.ISqlDialect.SupportsForJson)) | `json` в 2025+ ([`SupportsJson`](xref:NextORM.Core.ISqlDialect.SupportsJson)), включается объявленной major-версией 17+ или редакцией движка Azure/Fabric SQL database; только корни-объекты и массивы. Иначе JSON хранится в `nvarchar` | Поддерживаются ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)) | Поддерживается |
 | PostgreSQL | Нет | Поддерживаются ([`SupportsJson`](xref:NextORM.Core.ISqlDialect.SupportsJson)) | Нет | Нет |
 | SQLite | Нет | Нет | Нет (JSON1 через `SqlFunctions.Sqlite`) | Нет |
-| MySQL / MariaDB | Нет | Не отображаются | Поддерживаются ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)) | Нет |
+| MySQL / MariaDB | Нет | Настоящая колонка `json` (MySQL) / `JSON` = псевдоним `LONGTEXT` + CHECK `json_valid()` (MariaDB); обе — через **текстовое** хранение, `Native` отклоняется | Поддерживаются ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)) | Нет |
 | ClickHouse | Нет | Нативный `JSON` ([`SupportsJson`](xref:NextORM.Core.ISqlDialect.SupportsJson); корень-объект, через `[JsonColumn]`/`JsonObject`/`JsonDocument`/`JsonElement`) | Строковый JSON + JSONPath-скаляры + функции нативного JSON (`JSONAllPaths`/`JSONAllPathsWithTypes`/`toJSONString`; [`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract)) | Нет |
 | In-memory | Не применимо (нет SQL) | Не применимо | Не применимо | Не применимо |
 
@@ -119,12 +127,13 @@ NULL для пустого результата `FOR JSON`). Тот же сер�
 
 ### Читать JSON, хранящийся в текстовой колонке
 
-Ни в SQL Server, ни в MySQL/MariaDB нет нативного типа JSON: JSON хранится в обычной текстовой колонке
-и обрабатывается текстовыми функциями
+До SQL Server 2025, а также в MySQL/MariaDB нет привязываемого нативного *представления* JSON: JSON хранится
+в обычной текстовой колонке и обрабатывается текстовыми функциями
 ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)). Путь — это строка JSONPath
 (`'$.name'`); `json_value` возвращает скаляр, `json_query` — фрагмент объекта/массива, а `json_modify`
 — изменённую копию. В MySQL/MariaDB те же выражения рендерятся как `json_unquote(json_extract(...))`,
-`json_extract(...)` и `json_set(...)`:
+`json_extract(...)` и `json_set(...)`. В SQL Server 2025 эти же функции работают и поверх колонки
+`nvarchar`, и поверх нативного типа `json` (см. [Нативный `json` в SQL Server 2025+](#нативный-json-в-sql-server-2025)):
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
@@ -158,10 +167,46 @@ select id
  from complex_entity where (isjson(somestring)) = 1
 ```
 
+### Нативный `json` в SQL Server 2025+
+
+В SQL Server 2025 (17.x) есть **отдельный встроенный тип `json`** — не псевдоним `nvarchar` — и он же есть
+в движках Azure SQL, построенных на том же релизе. nextorm достигает его тем же отображением `[JsonColumn]`,
+но гейт — это **объявленное** состояние: контекст, построенный с `Version(17, 0)` или выше, **либо** с
+явной редакцией движка `SqlServerEngineEdition` — `SqlDatabase` (5), `AzureSqlManagedInstance` (8) или
+`MicrosoftFabricSqlDatabase` (12). Конструктор по умолчанию (без версии) остаётся текстовым, поэтому уже
+существующее отображение на `nvarchar` не меняется незаметно для вас:
+
+```csharp
+// Azure SQL Database / база данных SQL в Microsoft Fabric: объявите редакцию движка, а не выдуманную major-версию.
+using var azure = new SqlServerDataContext(SqlServerEngineEdition.SqlDatabase, connectionString);
+
+// Конструктор «версия первой»: объявленная major-версия открывает возможности, зависящие от версии.
+using var dataContext = new SqlServerDataContext(new Version(17, 0), connectionString);
+
+[JsonColumn(Storage = JsonColumnStorage.Native)]   // Auto и Text здесь столь же допустимы
+public Address Address { get; set; } = new();
+```
+
+Представление остаётся обычной CLR-строкой `string`: параметры выводятся как `nvarchar`, DOM-параметра нет,
+`SqlDbType.Json` не выставляется, двойной сериализации нет. В контексте с открытым гейтом `Auto`, `Text` и
+`Native` разрешаются в один и тот же текстовый конвертер, поэтому сохраняемые байты идентичны текстовому
+хранению — различается тип колонки, а не конвертер. Нативная колонка добавляет ограничение **сервера**: она
+хранит только документы-объекты и массивы, а скалярные корни (строка, число, булево) и документ JSON `null`
+отклоняет ошибкой сервера **13609** — для таких полезных нагрузок используйте текстовое хранение. Это
+отклонение сервера, возникающее при выполнении; собственных клиентских правил nextorm не добавляет.
+
+Редакция 11 («Azure Synapse serverless SQL pool, или Microsoft Fabric») **не** даёт возможности по
+редакции; её дают только 5, 8 и 12. nextorm никогда не опрашивает `SERVERPROPERTY('EngineEdition')` —
+редакция является объявлением, неизменяемым для типа контекста, и генерация SQL зависит только от
+объявленного состояния. Azure SQL Database, Managed Instance и база данных SQL в Microsoft Fabric
+проверены **только модульными тестами**: живого экземпляра Azure/Fabric для этой проверки не было, и
+утверждение не распространяется на каждую нагрузку Fabric. nextorm также не генерирует DDL колонок,
+поэтому перевод существующей колонки в `json` остаётся решением по развёртыванию/миграции.
+
 ### Развернуть JSON в строки через `openjson`
 
 `SqlFunctions.SqlServer.openjson(json)` — табличная функция (SQL Server 2016+), используемая через
-[`FromTableFunction`](xref:NextORM.Core.DataContextExtensions.FromTableFunction``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{``0}}})). Её
+[`From`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{NextORM.Core.EntityBuilder{``0}}})) с вызовом фабрики. Её
 схема по умолчанию выдаёт свойства JSON-объекта или элементы JSON-массива в виде
 [`SqlFunctions.IOpenJsonRow`](xref:NextORM.Core.SqlFunctions.IOpenJsonRow) (`Key`/`Value`/`Type`):
 
@@ -169,7 +214,7 @@ select id
 var json = """{"a":1,"b":2}""";
 
 var entries = dataContext
-    .FromTableFunction(() => SqlFunctions.SqlServer.openjson(json))
+    .From(() => SqlFunctions.SqlServer.openjson(json))
     .Select(r => new { r.Key, r.Value, r.Type })
     .ToList();
 ```
@@ -179,8 +224,9 @@ select [key] as [Key], value, type
  from openjson(@json) as [t1]
 ```
 
-Для типизированной проекции объявите собственный `[SqlTableFunction("openjson")]`-враппер, форма строки
-которого совпадает с предложением `WITH (...)`; nextorm только генерирует вызов и не создаёт функцию.
+Для типизированной проекции объявите собственную фабрику `TvfEntityBuilder<T>`, форма строки которой
+совпадает с предложением `WITH (...)`, и передайте тело предложения как `withClause`; nextorm только
+генерирует вызов и не создаёт функцию.
 `SqlFunctions.SqlServer.string_split` устроен так же для строки с разделителем. Обе функции включаются
 через [`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect.SupportsTableFunction(System.String)), поэтому их генерирует только SQL Server.
 
@@ -207,8 +253,14 @@ select id
  from complex_entity where ((@norm_p0 ->> 'name') = 'Alice')
 ```
 
-Обычная JSON-строка привязывается как `text`; разберите её явно через
-`SqlFunctions.Postgres.json_cast(value)` (`cast(value as jsonb)`).
+Привязка параметров провайдером не меняется: обычная строка с JSON по-прежнему привязывается как `text`.
+Исключение — шесть аксессоров `json_get`, `json_get_text`, `json_get_path` и `json_get_path_text` (обе
+перегрузки: по строковому ключу и по целочисленному индексу): они применяют **контекстную SQL-типизацию** —
+сырое клиентское значение документа (литерал, захваченное значение или явный параметр) разбирается как
+`jsonb` в сгенерированном SQL, а правый операнд типизируется по перегрузке (`text` для строкового ключа,
+`integer` для индекса, `text[]` для пути). Нативные колонки `json`/`jsonb` и серверные JSON-выражения
+**не** приводятся и сохраняют типы операнда и результата. Для всех остальных JSON-функций разбирайте
+строку явно через `SqlFunctions.Postgres.json_cast(value)` (`cast(value as jsonb)`).
 
 ### Отобразить CLR-объект на нативную JSON-колонку
 
@@ -230,8 +282,20 @@ public sealed class Customer
 ```
 
 Отображение покрывает свойство, а не схему: nextorm не генерирует DDL колонки, поэтому колонка `jsonb`
-уже должна существовать в таблице. Fluent-форма `JsonColumn(o => ...)` и настройки сериализатора —
+уже должна существовать в таблице (то же верно для нативной колонки `json` в SQL Server — см.
+[Нативный `json` в SQL Server 2025+](#нативный-json-в-sql-server-2025)). Fluent-форма `JsonColumn(o => ...)` и настройки сериализатора —
 в разделе [Конвертеры значений](../infrastructure/03-value-converters.md#json-колонки).
+
+В **MySQL и MariaDB** тот же атрибут сохраняет **текстовое** хранение: у этих провайдеров есть JSON
+*колонка*, но нет привязываемого нативного *представления* JSON (`MySqlConnector` отклоняет параметры
+`JsonElement`, `JsonDocument` и `JsonNode`, `MySqlDbType.JSON` принимает только строки, а колонка `json`
+всегда читается как `string`). Это полноценное поддерживаемое хранение, а не отказ от JSON-колонок:
+таблица MySQL 8 может объявить колонку как `json` — сервер валидирует и нормализует документ, — а
+таблица MariaDB может объявить её как `JSON`, что сервер сообщает как `longtext` с CHECK `json_valid()`.
+Явный `JsonColumnStorage.Native` на обоих движках завершается отказом с `NotSupportedException`,
+называющим диалект (`MySqlDialect`/`MariaDbDialect`), до выполнения любой команды; используйте `Auto`
+(текст) или `Text`. Учтите также, что MySQL сравнивает документ `json` как типизированное значение —
+строковый операнд ему не равен, — и nextorm не обещает трансляцию сравнения для такой колонки.
 
 «Голые» CLR-типы JSON обрабатываются на границе иначе, чем отображённая колонка:
 
@@ -244,8 +308,13 @@ public sealed class Customer
   *скалярная* проекция `JsonDocument`/`JsonElement` в эту поддержку не входят — отображайте их через
   `[JsonColumn]` или проецируйте в именованной форме. Параметр `JsonNode` по-прежнему привязывается как
   `jsonb`.
-* Обычная `string` отображается на `text`; используйте `SqlFunctions.Postgres.json_cast(value)`, чтобы
-  разобрать её как `jsonb`.
+* Обычная `string` отображается на `text`. Шесть аксессоров выше (`json_get`, `json_get_text`,
+  `json_get_path`, `json_get_path_text`, перегрузки по строковому ключу и по индексу) по-прежнему
+  принимают сырую строку документа — литерал, захваченное значение или явный параметр, — потому что
+  применяют контекстную SQL-типизацию и разбирают её как `jsonb` в сгенерированном SQL, типизируя
+  ключ/индекс/путь как `text`/`integer`/`text[]`. Нативная колонка `json`/`jsonb` или серверное
+  JSON-выражение остаются без приведения, поэтому их типы операнда и результата не меняются. Для любой
+  другой JSON-функции разбирайте строку через `SqlFunctions.Postgres.json_cast(value)`.
 
 На ClickHouse тот же раздел описывает нативную колонку `JSON`, чей физический тип — `JSON` и чей
 корень — **объект**: она принимает JSON-объекты в корне и отклоняет массивы и скалярные корни.
@@ -342,9 +411,19 @@ var groups = dataContext.From<IComplexEntity>()
 | `SqlFunctions.Postgres.jsonb_path_exists(json, path)` / `jsonb_path_match(json, path)` | `jsonb_path_exists(json, cast(path as jsonpath))` / `jsonb_path_match(...)` |
 | `SqlFunctions.Postgres.jsonb_path_query_first(json, path)` / `jsonb_path_query_array(json, path)` | `jsonb_path_query_first(...)` / `jsonb_path_query_array(...)` |
 
+Четыре аксессора выше применяют **контекстную SQL-типизацию**: сырое клиентское значение документа
+(литерал, захваченное значение или явный параметр) разбирается как `jsonb`, поэтому
+`json_get("{\"a\":1}", "a")` отрисует `cast('{"a":1}' as jsonb) -> cast('a' as text)`, а нативная колонка
+`json`/`jsonb` или серверное JSON-выражение выводятся без приведения (`doc -> cast('a' as text)`), сохраняя
+типы операнда и результата. Ключ/индекс/путь всегда типизируется по перегрузке: `cast(<key> as text)`,
+`cast(<index> as integer)`, `cast(<path> as text[])` — литеральный ключ встраивается как
+`cast('a' as text)`. Сама привязка параметров не меняется: обычный параметр-`string` по-прежнему
+привязывается как `text`.
+
 Операнд `path`/`keys` — это `string[]`, привязываемый одним параметром-массивом, поэтому
-`json_get_path(json, new[] { "a", "b" })` отрисует `json #> @p0`. Функции JSONPath принимают путь
-обычной строкой и приводят его к `jsonpath`.
+`json_get_path(json, new[] { "a", "b" })` отрисует `json #> cast(@p0 as text[])`. Функции JSONPath
+принимают путь обычной строкой и приводят его к `jsonpath`; `JSON_EXISTS`, `jsonpath` и соседние
+JSON-функции сохраняют собственное независимое поведение.
 
 ```csharp
 var path = new[] { "a", "b" };
@@ -408,7 +487,7 @@ select json_value(jsonb_build_object('a', 1), cast('$.a' as jsonpath)) as "Value
 | Прочитать поле из JSON-значения | `json_value(col, '$.x')` | `col ->> 'x'` |
 | Проверить, что значение — JSON | `isjson(col)` | значение уже типизировано как `json`/`jsonb` колонкой |
 | Фильтр по содержимому JSON | `json_value(col, '$.x') = ...` | `col @> ...`, `col ? 'x'`, `col #> ...` |
-| Развернуть JSON в строки | `openjson(...)` как источник `FROM` | встроенного помощника нет; объявите `[SqlTableFunction]`-враппер |
+| Развернуть JSON в строки | `openjson(...)` как источник `FROM` | встроенного помощника нет; объявите фабрику `TvfEntityBuilder<T>` |
 
 ## Ограничения
 
@@ -452,7 +531,13 @@ select json_value(jsonb_build_object('a', 1), cast('$.a' as jsonpath)) as "Value
   и запись (insert, update и `RETURNING`), а параметр `JsonDocument`/`JsonElement`/`JsonNode`
   привязывается как `jsonb`. ClickHouse отображает `[JsonColumn]` `Auto`/`Native` и «голые»
   `JsonObject`/`JsonDocument`/`JsonElement` с корнем-объектом на нативную колонку `JSON` с корнем-объектом.
-  JSON в SQL Server и MySQL/MariaDB всегда текст.
+  SQL Server отображает `[JsonColumn]` `Auto`/`Native` на нативный тип `json` **только в контексте,
+  объявившем major-версию 17 или выше либо редакцию движка Azure/Fabric SQL database**, и только для
+  документов-объектов/массивов — скалярный
+  корень и документ JSON `null` отклоняет сервер с ошибкой 13609, поэтому таким полезным нагрузкам нужен
+  `Text`. В контексте до 2025 без объявленной редакции, эквивалентной версии 17, JSON в SQL Server всегда текст; JSON-колонки MySQL/MariaDB
+  достигаются текстовым транспортом на обоих движках (`Auto`/`Text`), а `Native` отклоняется с
+  `NotSupportedException`, называющим диалект.
 
 ## См. также
 

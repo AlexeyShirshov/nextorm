@@ -119,16 +119,34 @@ cast error on first execution instead of at mapping-build time.
 
 `[JsonColumn]` stores any serializable CLR object as JSON. The **storage** is chosen by the dialect:
 
-- `JsonColumnStorage.Auto` (default) uses the provider's native JSON type where it has one
-  (PostgreSQL `jsonb`, ClickHouse object-rooted `JSON`) and a text column otherwise;
-- `JsonColumnStorage.Native` forces the native type (PostgreSQL `jsonb` or ClickHouse `JSON`);
+- `JsonColumnStorage.Auto` (default) uses the provider's native JSON representation where the provider
+  has one (PostgreSQL `jsonb`, ClickHouse object-rooted `JSON`, SQL Server's `json` on a context
+  declaring major version 17+ or an Azure/Fabric SQL database engine edition) and a text column
+  otherwise;
+- `JsonColumnStorage.Native` requires that native **representation** — not merely a server-side JSON
+  column — and throws a dialect-named `NotSupportedException` where the provider has none (MySQL,
+  MariaDB, SQLite) or where the declared state does not reach it (SQL Server without a major-version-17
+  declaration and without a capable engine edition, including the default unversioned construction);
 - `JsonColumnStorage.Text` forces a text column.
 
-The native provider representation is `JsonElement` on PostgreSQL and `JsonObject` on ClickHouse.
+The native provider representation is `JsonElement` on PostgreSQL, `JsonObject` on ClickHouse and the
+plain CLR `string` on SQL Server 2025+ (`json` columns are transported as text there: parameters stay
+`nvarchar`, no DOM value is bound and nothing is serialized twice).
 ClickHouse's native `JSON` is object-rooted, so a model that does not serialize to a JSON object throws
 `NotSupportedException` — use `Text` for array/scalar roots. The legacy ClickHouse `Object('json')`
 alias is not supported by this integration; see
 [JSON support](../guide/16-json.md#map-a-clr-object-to-a-native-json-column).
+
+**A JSON column type is not a native representation.** MySQL 8 has a real `json` column and MariaDB's
+`JSON` is a `LONGTEXT` alias with a `json_valid()` CHECK, but `MySqlConnector` cannot bind
+`JsonElement`/`JsonDocument`/`JsonNode` parameters (`MySqlDbType.JSON` accepts strings only) and always
+reads a `json` column back as `string`. Both engines are therefore supported through the **text**
+storage — `Auto` and `Text` both produce the JSON text the server parses — and `Native` is refused
+before any command runs. SQL Server is the mirror case: 2016–2022 have no native type and keep JSON in
+`nvarchar`, while 2025+ do have a distinct `json` type — reached only when the context declares a major
+version 17+ or a capable Azure/Fabric engine edition, and transported as text through the same
+converter, so `Auto`, `Text` and `Native` store identical bytes. A native `json` column accepts object/array documents only; the scalar
+roots and the JSON `null` document are rejected by the server (error 13609) and need `Text` storage.
 
 ```csharp
 public sealed class Address
@@ -255,8 +273,8 @@ must be readable and bindable.
 | Provider | Native JSON | Text storage | Enum-as-string |
 |---|---|---|---|
 | PostgreSQL | `jsonb` (read/written as `JsonElement`) | `text` | `text` |
-| SQL Server | — (`nvarchar(max)`) | `nvarchar(max)` | `nvarchar` |
-| MySQL / MariaDB | — (`longtext`) | `longtext` | `longtext` |
+| SQL Server | `json` on 2025+ with a declared major version 17+ or an Azure/Fabric SQL database engine edition (transported as `string`; object/array roots only), otherwise `—` | `nvarchar(max)` | `nvarchar` |
+| MySQL / MariaDB | — (real `json` column on MySQL 8 / `JSON` = `LONGTEXT` + `json_valid()` on MariaDB, both reached through text) | `longtext` | `longtext` |
 | SQLite | — (`TEXT`) | `TEXT` | `TEXT` |
 | ClickHouse | `JSON` (read/written as `JsonObject`, object-rooted) | `String` | `String` |
 | In-memory | CLR value | CLR value | CLR value |

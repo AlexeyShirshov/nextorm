@@ -32,6 +32,8 @@
       href: relationships/eager-loading.md
     - name: Постраничная выборка на родителя при жадной загрузке
       href: relationships/eager-loading-per-parent-paging.md
+    - name: Слоты коллекционной проекции
+      href: relationships/collection-projection.md
 - name: Руководство
   items:
     - name: Источники запроса
@@ -60,6 +62,8 @@
       href: guide/12-user-defined-functions.md
     - name: Табличные функции
       href: guide/13-table-valued-functions.md
+    - name: Схемы результата табличных функций
+      href: guide/13-tvf-result-schemas.md
     - name: Сырой SQL
       href: guide/14-raw-sql.md
     - name: Хинты запросов
@@ -146,6 +150,8 @@
       href: scalar-functions/09-system-functions.md
     - name: Последовательности и генераторы UUID
       href: scalar-functions/10-sequences.md
+- name: Культуронезависимое форматирование строк
+  href: string-format-invariant-provider.md
 - name: Подключение провайдеров
   items:
     - name: Обзор провайдеров

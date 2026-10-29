@@ -21,6 +21,12 @@
   читаются через индексатор [`TableAlias`](xref:NextORM.Core.TableAlias) (`t["id"]`).
 * сопоставленную сущность, названную типом, без передачи построителя источника — см. [Соединения без явного источника (по типу)](#соединения-без-явного-источника-по-типу);
 
+**Коллекция на родителя — это не соединение.** Член проекции, называющий объявленную коллекционную навигацию, —
+`Select(p => new { p.Id, p.Comments })` или её адаптер `AsEntityBuilder<T>() … ToList()` — возвращает коллекцию
+каждого родителя без `JOIN`: граф загружается маршрутом жадной загрузки, а коллекция проецируется в памяти,
+поэтому в инструкции не появляется дополнительных колонок списка выборки, а строки родителей не размножаются.
+См. [Слоты коллекционной проекции](../relationships/collection-projection.md).
+
 Прежде чем перейти к примерам, важно понять две вещи:
 
 1. **У арности соединений есть граница плоской цепочки в восемь таблиц.** Первое соединение
@@ -325,6 +331,47 @@ extension-метода соединения-псевдонима; `.WithAlias` �
 получила собственный типизированный построитель; это выбор гранулярности построителя, а не
 проверенный способ устранения `NORMGEN007`.
 
+### Псевдонимы без явного источника
+
+Четыре условных оператора принимают маркер и в форме без явного источника. Присоединяемый источник
+создаётся из контекста данных самого получателя, поэтому вызов — это условие плюс маркер, а после
+маркера может идти необязательный колбэк опций соединения:
+
+```csharp
+var rows = await dataContext.From<Order>(b => b.Table("orders"))
+    .Join<Person>((o, p) => o.BuyerId == p.Id, Alias.Buyer)            // слот 2, опции опущены
+    .Join<Person>((p, a) => p.Item2.Id == a.Id, Alias.Approver)        // слот 3, опции опущены
+    .Select(p => new { Buyer = p.Buyer.Id, Approver = p.Approver.Id })
+    .ToListAsync();
+```
+
+```sql
+select t2.id as 'Buyer', t3.id as 'Approver'
+ from orders as 't1'
+ join person as 't2' on t1.buyerid = t2.id
+ join person as 't3' on t2.id = t3.id
+```
+
+`Join<TJoin>((left, right) => ..., Alias.X[, options])` — и та же форма для `LeftJoin`, `RightJoin` и
+`FullJoin` — это вся поверхность псевдонимов без явного источника. Она же **единственная**
+поверхность псевдонимов, принимающая опции: `(condition, marker, Action<JoinOptions> options)`
+допускает опущенный аргумент, явный `null` или колбэк — первые два означают «без опций», а
+переданный колбэк вызывается ровно один раз за вызов с той же семантикой хинта, блокировки и связи,
+что и у позиционных перегрузок соединения. Маркер означает то же, что и везде: он именует новый слот
+(`Alias.Buyer` в слоте 2 — это и `p.Item2`), цепочка продолжается на сгенерированном получателе
+`AliasJoin_<suffix>`, а шаги без источника, с явным источником и позиционные свободно смешиваются в
+одной цепочке.
+
+Получатели — те же, что у формы с маркером: корневой `EntityBuilder<T>` и
+`JoinedEntityBuilder<T1..Tn>` арностей 2–7, то есть соединение-псевдоним попадает в слоты со 2-го по
+8-й. Две границы самой формы без источника не меняются: `CrossJoin`, `CrossApply` и `OuterApply` не
+принимают условия, поэтому формы без источника у них нет (их формы с псевдонимом по-прежнему требуют
+явный источник), а источник-сырая таблица не разрешается по типу. Границы провайдеров тоже не
+меняются: in-memory провайдер бросает `NotSupportedException` на любом псевдониме, а MySQL/MariaDB
+отклоняют `FullJoin` в **каждой** форме — без источника, с явным источником и позиционной — с
+`NotSupportedException`, называющим неподдерживаемый `Full join`, ещё до рендеринга SQL, поэтому
+неподдерживаемый оператор никогда не пропускается молча.
+
 ### Именование корневого источника (`.WithAlias`)
 
 Корневой источник занимает слот 1, поэтому его можно именовать цепочным `.WithAlias(Alias.X)` на
@@ -332,7 +379,7 @@ extension-метода соединения-псевдонима; `.WithAlias` �
 добавляет ни источник, ни слот — и работает для любого семейства корневых источников: `From<T>`
 (mapped-сущность), `From("table")` и `CreateQueryBuilder("table")` (источник [`TableAlias`](xref:NextORM.Core.TableAlias)),
 `FromSql`, типизированный [`Cte<T>`](xref:NextORM.Core.Cte`1), ленивая временная таблица,
-`FromTableFunction<T>`, `From(QueryCommand<T>)` и forwarder'ы `CreateQueryBuilder*`. Физический
+`From(() => ...)` (runtime-фабрика табличной функции), `From(QueryCommand<T>)` и forwarder'ы `CreateQueryBuilder*`. Физический
 источник сохраняется: производный корень (`FromSql`, `From(query)`, `From(builder)`) остаётся
 производной таблицей с псевдонимом `t1`, а mapped-сущность по-прежнему читает свою физическую
 таблицу. `Where`, `OrderBy`, `GroupBy`, `Having` и paging, применённые до `.WithAlias`, переносятся на
@@ -460,7 +507,9 @@ var sql = dataContext.From<ISimpleEntity>()
 терминальный построитель всё равно наследует члены generic-базы `EntityBuilder<Projection<T1..T8>>`, поэтому
 дальнейший join без источника (как и дальнейший join с явным источником) *компилируется*,
 рассматривая накопленную восьмитабличную проекцию как `Item1`. Используйте `As`/`From(query)`,
-чтобы назвать проекцию, когда плоская цепочка больше не подходит.
+чтобы назвать проекцию, когда плоская цепочка больше не подходит. Те же четыре оператора принимают и
+маркер `Alias.<Name>` — с необязательными опциями соединения после него — на каждом из этих
+получателей; см. [Псевдонимы без явного источника](#псевдонимы-без-явного-источника).
 
 ## Перекрёстное соединение
 
@@ -489,11 +538,17 @@ select count(*)
 таблица `QueryCommand<T>`, необработанная таблица или табличная функция, — но без условия `ON`:
 
 * [`CrossApply`](xref:NextORM.Core.EntityBuilder`1.CrossApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions})) оставляет только те строки левой стороны, для которых применяемый источник возвращает
-  хотя бы одну строку (SQL Server `CROSS APPLY`, PostgreSQL/MySQL/MariaDB `CROSS JOIN LATERAL`, либо
+  хотя бы одну строку (SQL Server `CROSS APPLY`, PostgreSQL/MySQL 8.0.14+ `CROSS JOIN LATERAL`, либо
   обычный `CROSS JOIN` для простой таблицы — `LATERAL` допустим только перед подзапросом или функцией);
 * [`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions})) дополнительно сохраняет строки левой стороны с пустым применяемым источником, заполняя
-  правую сторону значением `NULL` (SQL Server `OUTER APPLY`, PostgreSQL/MySQL/MariaDB
+  правую сторону значением `NULL` (SQL Server `OUTER APPLY`, PostgreSQL/MySQL 8.0.14+
   `LEFT JOIN LATERAL ... ON true`, либо обычный `LEFT JOIN ... ON true` для простой таблицы).
+
+**В MariaDB 11.4 нет lateral-производной таблицы**, поэтому `MariaDbDialect` возвращает
+`SupportsApply == false` и **оба** оператора [`CrossApply`](xref:NextORM.Core.EntityBuilder`1.CrossApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions})) и [`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions})) отклоняются с
+`NotSupportedException` во время подготовки команды — до того как SQL попадёт на сервер (см.
+[Ограничения](../advanced/limitations.md)). Тот же флаг равен `false` в SQLite и ClickHouse, а провайдер
+in-memory не поддерживает `APPLY` вовсе.
 
 ```csharp
 var rows = await dataContext.From<ISimpleEntity>()
@@ -507,7 +562,7 @@ var rows = await dataContext.From<ISimpleEntity>()
 select t1.id, t2.somestring
  from simple_entity as [t1]
  cross apply complex_entity as [t2]
--- PostgreSQL / MySQL / MariaDB
+-- PostgreSQL / MySQL 8.0.14+
 select t1.id, t2.somestring
  from simple_entity as t1
  cross join complex_entity as t2
@@ -532,7 +587,7 @@ var rows = dataContext.From<ISimpleEntity>()
  from simple_entity as [t1]
  outer apply (select id, somestring
  from complex_entity where ...) as [t2]
--- PostgreSQL / MySQL / MariaDB
+-- PostgreSQL / MySQL 8.0.14+
 ...
  from simple_entity as t1
  left join lateral (select ...) as t2 on true
@@ -559,7 +614,7 @@ var rows = await dataContext.From<ISimpleEntity>()
  from simple_entity as [t1]
  cross apply (select ...
  from complex_entity as [t2] where t2.id = t1.id) as [t3]
--- PostgreSQL / MySQL / MariaDB
+-- PostgreSQL / MySQL 8.0.14+
 ...
  from simple_entity as t1
  cross join lateral (select ...) as t3
@@ -569,38 +624,137 @@ var rows = await dataContext.From<ISimpleEntity>()
 левой стороны (здесь `s.Id`) становится внешней ссылкой и разрешается в псевдоним левой таблицы.
 [`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions})) дополнительно сохраняет строки левой стороны с пустым применяемым источником, заполняя их `NULL`.
 
-Корреляция требует lateral-источника: диалекты с `SupportsApply == false` (SQLite, ClickHouse) отклоняют
-коррелированный apply через `NotSupportedException`, как и in-memory-провайдер. Коррелированный apply
-не может ссылаться на проекцию соединения — применяйте его к источнику из одной сущности.
+Корреляция требует lateral-источника: диалекты с `SupportsApply == false` — SQLite, ClickHouse и
+MariaDB 11.4 — отклоняют каждый `CrossApply`/`OuterApply` с `NotSupportedException` во время подготовки
+команды, до рендеринга SQL на исполнение; провайдер in-memory отклоняет их так же. Коррелированный apply
+может и следовать за соединением — см. [Коррелированный APPLY после соединения](#коррелированный-apply-после-соединения).
 
-### APPLY по табличной функции
+### Коррелированный APPLY после соединения
 
-Применяемый источник может быть табличной функцией (см. [Табличные функции](13-table-valued-functions.md)):
-[`FromTableFunction`](xref:NextORM.Core.DataContextExtensions.FromTableFunction``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{``0}}})) возвращает `EntityBuilder<T>`, поэтому передаётся точно так же, как сущность. Некоррелированная функция применяется напрямую:
+`CrossApply`/`OuterApply` принимают коррелированный источник на получателе, у которого уже есть
+присоединённые источники. Форма доступна на плоских получателях `JoinedEntityBuilder<T1..Tn>` (результат
+из **3–8 источников всего**, то есть 2–7 предшествующих плюс применяемый) и на сгенерированных
+alias-получателях, с обеими формами лямбды — `EntityBuilder<T>` (сущность целиком) и `QueryCommand<T>`
+(производный запрос с проекцией). Рукописные перегрузки принимают необязательный `Action<JoinOptions>`
+после лямбды; на alias-получателе форма с маркером добавляет `Alias.<Name>` последним аргументом и опций
+не принимает, а позиционный переход добавляет безымянный `ItemN` и принимает необязательный колбэк опций.
+
+Применяемый источник — **следующий слот** той же плоской проекции, а не вложенный в предыдущий элемент,
+поэтому при двух присоединённых источниках результат читается как `p.Item1`, `p.Item2`, `p.Item3`:
 
 ```csharp
-var rows = dataContext.From<ISimpleEntity>()
-    .CrossApply(dataContext.FromTableFunction(() => Tvf.AllRows()))
-    .Select(p => new { p.Item1.Id, p.Item2.Value })
-    .ToList();
+var rows = await dataContext.From<Order>(b => b.Table("orders"))
+    .Join(dataContext.From<Person>(b => b.Table("person")), (o, buyer) => o.BuyerId == buyer.Id)
+    .CrossApply((Projection<Order, Person> p) => dataContext.From<OrderLine>(b => b.Table("order_lines"))
+        .Where(l => l.OrderId == p.Item1.Id && l.CreatedBy == p.Item2.Id)
+        .Select(l => new { l.Id, l.Total }))
+    .Select(p => new { OrderId = p.Item1.Id, Buyer = p.Item2.Name, Total = p.Item3.Total })
+    .ToListAsync();
 ```
 
 ```sql
 -- SQL Server
-select t1.id, t2.value
- from simple_entity as [t1]
- cross apply all_rows() as [t2]
--- PostgreSQL / MySQL / MariaDB
-select t1.id, t2.value
- from simple_entity as t1
- cross join lateral all_rows() as t2
+select t1.id as 'OrderId', t2.name as 'Buyer', t4.total as 'Total'
+ from orders as [t1]
+ join person as [t2] on t1.buyerid = t2.id
+ cross apply (select t3.id, t3.total
+ from order_lines as [t3]
+ where (t3.orderid = t1.id and t3.createdby = t2.id)) as [t4]
+-- PostgreSQL / MySQL 8.0.14+
+select t1.id as "OrderId", t2.name as "Buyer", t4.total as "Total"
+ from orders as t1
+ join person as t2 on t1.buyerid = t2.id
+ cross join lateral (select t3.id, t3.total
+ from order_lines as t3
+ where (t3.orderid = t1.id and t3.createdby = t2.id)) as t4
 ```
 
-Корреляция функции со строкой левой стороны передаёт столбец этой строки аргументом функции; вызов тогда оборачивается в lateral-производную таблицу:
+`CrossApply` сохраняет строку родителя, только если применяемый источник вернул хотя бы одну строку,
+поэтому заказ без совпавшей строки исчезает. [`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions})) сохраняет его: строка родителя остаётся,
+применяемые колонки приходят как SQL `NULL`, а проекция сущности целиком материализуется как `null`:
+
+```csharp
+var rows = await dataContext.From<Order>(b => b.Table("orders"))
+    .Join(dataContext.From<Person>(b => b.Table("person")), (o, buyer) => o.BuyerId == buyer.Id)
+    .OuterApply((Projection<Order, Person> p) => dataContext.From<OrderLine>(b => b.Table("order_lines"))
+        .Where(l => l.OrderId == p.Item1.Id))
+    .Select(p => new { OrderId = p.Item1.Id, Line = p.Item3 })
+    .ToListAsync(); // заказ без строк сохраняется, Line == null
+```
+
+```sql
+-- SQL Server
+select t1.id as 'OrderId', t4.id, t4.order_id, t4.created_by, t4.total
+ from orders as [t1]
+ join person as [t2] on t1.buyerid = t2.id
+ outer apply (select t3.id, t3.order_id, t3.created_by, t3.total
+ from order_lines as [t3]
+ where t3.orderid = t1.id) as [t4]
+-- PostgreSQL / MySQL 8.0.14+
+...
+ left join lateral (select ...) as t4 on true
+```
+
+Корреляция привязывается к **точному вхождению предшествующего источника**, а не к CLR-типу: после
+self-join или когда применяемое тело использует тот же CLR-тип, что и более ранний источник, `p.Item2`
+по-прежнему адресует второе вхождение, а `p.Item1` — базовое. Именованный слот адресует то же вхождение
+(`p.Buyer` — это `p.Item2`), а сгенерированный alias-APPLY добавляет один плоский слот, сохраняя обе
+идентичности:
+
+```csharp
+var people = dataContext.From<Person>(b => b.Table("person"));
+
+var rows = await dataContext.From<Order>(b => b.Table("orders"))
+    .WithAlias(Alias.Order)
+    .Join<Person>(people, (o, buyer) => o.Order.BuyerId == buyer.Id, Alias.Buyer)
+    .OuterApply(p => people.Where(x => x.Id == p.Order.ApproverId), Alias.Approver)
+    .Select(p => new { OrderId = p.Order.Id, Approver = p.Approver.Name })
+    .ToListAsync();
+```
+
+Применяемый источник может быть и телом runtime-фабрики табличной функции, с той же адресацией слотов:
+вызов фабрики — это применяемый источник, член внешней строки в его аргументе остаётся ссылкой на колонку
+того слота, который он называет (`p.Item1` — это `FROM` данной команды), а применённая строка становится
+следующим плоским слотом:
+
+```csharp
+var rows = await dataContext.From<Order>(b => b.Table("orders"))
+    .Join(dataContext.From<Person>(b => b.Table("person")), (o, buyer) => o.BuyerId == buyer.Id)
+    .CrossApply((Projection<Order, Person> p) => Tvf.ById(p.Item1.Id))
+    .Select(p => new { OrderId = p.Item1.Id, Buyer = p.Item2.Name, Line = p.Item3.Id })
+    .ToListAsync();
+// SQL Server: cross apply (select t3.id from rows_by_id(t1.id) as [t3]) as [t4]
+```
+
+**Составное** тело функции — вызов фабрики, за которым идут операторы builder'а, например `.Where(...)`, —
+как применяемый источник не поддерживается: оно отклоняется с `NotSupportedException` при построении
+запроса, до компиляции и исполнения, а сообщение называет композицию и обе поддерживаемые формы. Для такой
+формы используйте производный запрос:
+
+```csharp
+// отклоняется: применяемый источник — составная цепочка функции
+joined.CrossApply((Projection<Order, Person> p) => Tvf.ById(p.Item1.Id).Where(r => r.Id > 0));
+
+// поддерживается: производный запрос с корреляцией и дополнительными операторами
+joined.CrossApply((Projection<Order, Person> p) => dataContext.From<OrderLine>(b => b.Table("order_lines"))
+    .Where(l => l.OrderId == p.Item1.Id && l.Total > 0)
+    .Select(l => new { l.Id, l.Total }));
+```
+
+Плоская цепочка ограничена обычными **восемью источниками всего** (`Projection<T1..T8>`). Девятый
+коррелированный источник отклоняется с `NotSupportedException` во время подготовки запроса — до
+вычисления применяемого источника — вместо вложения проекции. Спроецируйте накопленное соединение в
+именованный тип через `As` (или начните с `From(query)`), когда цепочка больше не помещается.
+
+### APPLY по табличной функции
+
+Применяемый источник может быть runtime-фабрикой табличной функции (см.
+[Табличные функции](13-table-valued-functions.md)): тело коррелированной lambda — это вызов фабрики,
+поэтому аргументы функции сохраняют свои выражения, а член внешней строки остаётся ссылкой на колонку.
 
 ```csharp
 var rows = dataContext.From<ISimpleEntity>()
-    .CrossApply(s => dataContext.FromTableFunction(() => Tvf.ById(s.Id)))
+    .CrossApply(s => Tvf.ById(s.Id))
     .Select(p => new { p.Item1.Id, p.Item2.Value })
     .ToList();
 ```
@@ -611,14 +765,42 @@ select t1.id, t3.value
  from simple_entity as [t1]
  cross apply (select t2.id, t2.value
  from rows_by_id(cast(t1.id as bigint)) as [t2]) as [t3]
--- PostgreSQL / MySQL / MariaDB
+-- PostgreSQL / MySQL 8.0.14+
 select t1.id, t3.value
- from simple_entity as t1
+ from simple_entity as "t1"
  cross join lateral (select t2.id, t2.value
- from rows_by_id(cast(t1.id as bigint)) as t2) as t3
+ from rows_by_id(cast(t1.id as bigint)) as "t2") as "t3"
 ```
 
-Как и любой коррелированный apply, коррелированная форма функции требует lateral-источника и отклоняется с `NotSupportedException` в SQLite/ClickHouse и в in-memory-провайдере; некоррелированная форма подчиняется правилам источника конкретного провайдера (`CROSS APPLY` в SQL Server, `CROSS JOIN LATERAL` в PostgreSQL/MySQL/MariaDB).
+Некоррелированная функция передаётся с пустым списком параметров и применяется один раз:
+
+```csharp
+var rows = dataContext.From<ISimpleEntity>()
+    .CrossApply(() => Tvf.AllRows())
+    .Select(p => new { p.Item1.Id, p.Item2.Value })
+    .ToList();
+```
+
+```sql
+-- SQL Server
+select t1.id, t2.value
+ from simple_entity as [t1]
+ cross apply all_rows() as [t2]
+-- PostgreSQL / MySQL 8.0.14+
+select t1.id, t2.value
+ from simple_entity as t1
+ cross join lateral all_rows() as t2
+```
+
+Коррелированный `JSON_TABLE` в MySQL/MariaDB рендерится как сам источник соединения — без производной
+обёртки и без ключевого слова `LATERAL` (в MariaDB его нет, а MySQL отклоняет внешнюю ссылку внутри
+табличной функции под `LATERAL`): `join json_table(t1.children_json, '$[*]' columns(...)) as jt`, или
+`left join json_table(...) as jt on true` для `OuterApply`.
+
+Как и любой коррелированный apply, коррелированная форма функции требует lateral-источника и отклоняется с
+`NotSupportedException` в SQLite, ClickHouse, MariaDB 11.4 (единственная выразимая там форма — прямая
+`JSON_TABLE` выше) и в in-memory-провайдере; некоррелированная форма подчиняется правилам источника
+конкретного провайдера (`CROSS APPLY` в SQL Server, `CROSS JOIN LATERAL` в PostgreSQL/MySQL 8.0.14+).
 
 ## Соединение с подзапросом
 
@@ -728,7 +910,7 @@ var mixed = dataContext
 Соединение с необработанной таблицей (`TableAlias`) теперь учитывает явно заданный источник на
 присоединяемом построителе. Если присоединяемая сторона — это необработанный SQL (`FromSql`),
 переопределение таблицы (`b => b.Table("...")` / `WithTableName`), производный запрос
-(`From(query)`), табличная функция (`FromTableFunction`) или типизированный CTE (`Cte<T>`), в
+(`From(query)`), табличная функция (`From(() => ...)`) или типизированный CTE (`Cte<T>`), в
 качестве `FROM` соединения используется именно этот источник, а не метаданные сущности. Для обычной
 сопоставленной сущности без явного источника сохраняется запасной путь через метаданные.
 `SemiJoin`/`AntiJoin` не затрагиваются: присоединяемый тип по-прежнему разрешается через метаданные
@@ -924,7 +1106,8 @@ select t1.id
 | SQLite | `as 't1'` | выдаётся всегда (в самом SQLite необязателен) | поддержаны left/right/full | не поддерживается (`NotSupportedException`) |
 | SQL Server | `as [t1]` | обязателен | поддержаны left/right/full | `CROSS APPLY` / `OUTER APPLY` |
 | PostgreSQL | `as "t1"` | обязателен | поддержаны left/right/full | `CROSS JOIN LATERAL` / `LEFT JOIN LATERAL ... ON true` (простые таблицы: `CROSS JOIN` / `LEFT JOIN ... ON true`) |
-| MySQL / MariaDB | `as \`t1\`` | обязателен | поддержаны left/right (без full) | `CROSS JOIN LATERAL` / `LEFT JOIN LATERAL ... ON true` (простые таблицы: `CROSS JOIN` / `LEFT JOIN ... ON true`) |
+| MySQL 8.0.14+ | `as \`t1\`` | обязателен | поддержаны left/right (без full) | `CROSS JOIN LATERAL` / `LEFT JOIN LATERAL ... ON true` (простые таблицы: `CROSS JOIN` / `LEFT JOIN ... ON true`) |
+| MariaDB 11.4 | `as \`t1\`` | обязателен | поддержаны left/right (без full) | не поддерживается (`NotSupportedException`, оба вида отклоняются до исполнения SQL) |
 | ClickHouse | `as \`t1\`` | обязателен | поддержаны left/right/full | не поддерживается (`NotSupportedException`) |
 | In-memory | неприменимо (выполнение через делегаты) | неприменимо | поддержаны inner/left/right/full/cross; APPLY и источники в виде табличных функций — нет | не поддерживается (включая коррелированный apply) |
 
@@ -942,6 +1125,7 @@ select t1.id
 - [Хинты запросов](15-query-hints.md) - хинты уровня инструкции, например SQL Server `OPTION (RECOMPILE)`.
 - [Связи и однозапросная загрузка (`JoinInto`)](../relationships/relationships.md) - объявленные метаданные связей и однозапросный загрузчик дочерней коллекции.
 - [Постраничная выборка на родителя при жадной загрузке](../relationships/eager-loading-per-parent-paging.md) - применение собственных `Take`/`Skip` дочернего запроса независимо к каждому родителю.
+- [Слоты коллекционной проекции](../relationships/collection-projection.md) - коллекции на родителя, возвращаемые проекцией, без соединения и без дополнительных колонок.
 - [Специфичный для провайдеров SQL](provider-specific-sql/overview.md) - полный каталог конструкций, доступных только у отдельных провайдеров.
 - [Запросы и проекции](../engine/index.md)
 

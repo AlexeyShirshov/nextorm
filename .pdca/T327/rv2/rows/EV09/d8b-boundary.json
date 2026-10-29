@@ -1,0 +1,173 @@
+{
+  "row": "EV09",
+  "unit": "D8b",
+  "acceptance": "AC09",
+  "checkout": "/home/alex/sources/nextorm-worktrees/rc4/t327",
+  "branch": "collection/rc4/task-14-1",
+  "head": "475bfc8e0d9f5fd859a61d3228fcdb78dee99355",
+  "status": "blocked - boundary red",
+  "boundary_execution": {
+    "command_id": "C-LIVE-BOUNDARY",
+    "pinned_argv_in_rv2_commands_json": false,
+    "note": "rv2/commands.json contains no C-LIVE-BOUNDARY entry; the canonical full-suite invocation from .opencode/skills/running-integration-tests/SKILL.md was used, serialized under the collection container lease.",
+    "wrapper_argv": [
+      "flock",
+      "/tmp/opencode/nextorm-container-lease.lock",
+      "-c",
+      "/tmp/opencode/t327-d8b-full.sh"
+    ],
+    "argv": [
+      "dotnet",
+      "run",
+      "--project",
+      "tests/nextorm.integration.tests",
+      "-c",
+      "Debug",
+      "--no-build",
+      "--",
+      "-noColor",
+      "-notrait",
+      "Category=Diagnostic"
+    ],
+    "cwd": "/home/alex/sources/nextorm-worktrees/rc4/t327",
+    "phase": "DO",
+    "environment": {
+      "DOCKER_HOST": "unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock",
+      "NEXTORM_SKIP_PROVIDERS": "absent",
+      "NEXTORM_POSTGRES_CONNECTION": "absent",
+      "NEXTORM_SQLSERVER_CONNECTION": "absent",
+      "NEXTORM_MYSQL_CONNECTION": "absent",
+      "NEXTORM_CLICKHOUSE_CONNECTION": "absent"
+    },
+    "runs": 1,
+    "build": {
+      "argv": ["dotnet", "build", "tests/nextorm.integration.tests", "-c", "Debug"],
+      "exit": 0,
+      "warnings": 0,
+      "errors": 0,
+      "log": ".pdca/T327/rv2/logs/D8b-build-integration.log"
+    },
+    "exit": 1,
+    "counts": {
+      "total": 5352,
+      "passed": 5148,
+      "failed": 7,
+      "skipped": 197,
+      "errors": 0,
+      "not_run": 0,
+      "duration_seconds": 99.816
+    },
+    "summary_line": "nextorm.integration.tests  Total: 5352, Errors: 0, Failed: 7, Skipped: 197, Not Run: 0, Time: 99.816s",
+    "log": ".pdca/T327/rv2/logs/D8b-full-boundary.log"
+  },
+  "skip_budget": {
+    "command": "python3 .pdca/scripts/check-integration-skip-budget.py --log .pdca/T327/rv2/logs/D8b-full-boundary.log",
+    "exit": 0,
+    "result": "OK: 197 skips match the pinned budget",
+    "pinned_total": 197,
+    "actual_total": 197,
+    "delta": 0,
+    "per_reason_delta": {},
+    "budget_updated": false,
+    "d8a_classes_added_skips": 0,
+    "log": ".pdca/T327/rv2/logs/D8b-skip-budget.log"
+  },
+  "failures": [
+    {
+      "test": "NextORM.Integration.Tests.MySqlSpecificTests.StringAgg_ShouldConcatenateGroupValues",
+      "provider": "mysql",
+      "failure_site": "tests/nextorm.integration.tests/MySql/MySqlSpecificTests.cs:134",
+      "observed": "MySqlConnector.MySqlException: You have an error in your SQL syntax ... near '_utf8mb4 X'2c')",
+      "classification": "product-regression-D4",
+      "defect_key": "DEF-T327-03",
+      "cause": "The GROUP_CONCAT delimiter was recorded as an ordinary value occurrence and the MySQL specialization lowered its placeholder to a charset-introduced hex expression (src/nextorm.core/DataContext/Cache/DbPreparedQueryCommand.cs:407); MySQL's SEPARATOR grammar accepts a string token, not an expression, so the statement no longer parses.",
+      "cause_sites": [
+        "src/nextorm.mysql/MySqlDialect.cs:236",
+        "src/nextorm.core/DataContext/Cache/DbPreparedQueryCommand.cs:407"
+      ]
+    },
+    {
+      "test": "NextORM.Integration.Tests.ClickHouseExtendedFunctionTests.ArrayLibrary_ShouldExecute",
+      "provider": "clickhouse",
+      "failure_site": "tests/nextorm.integration.tests/ClickHouse/ClickHouseExtendedFunctionTests.cs:74",
+      "observed": "System.ArgumentOutOfRangeException: The recorded length 4 cannot shrink to 0. (Parameter 'emittedLength')",
+      "classification": "product-regression-D4",
+      "defect_key": "DEF-T327-04",
+      "cause": "The ClickHouse array-function translator renders an argument into the shared builder and then rewinds the builder (ClickHouseNativeFunctionTranslator.Capture, builder.Length = start), while the D4 template recorder has already advanced past that fragment; the next AdvanceTo computes a smaller absolute length and the recorder throws.",
+      "cause_sites": [
+        "src/nextorm.core/DataContext/Cache/SqlParameterTemplateRecorder.cs:177",
+        "src/nextorm.core/Visitors/ClickHouseNativeFunctionTranslator.cs:262",
+        "src/nextorm.core/DataContext/SqlSourceRenderer.cs:1181"
+      ]
+    },
+    {
+      "test": "NextORM.Integration.Tests.PostgresJsonAccessExecutionTests.T263_R31_Apostrophes_InValueAndKey_ShouldRoundTrip",
+      "provider": "postgres",
+      "failure_site": "tests/nextorm.integration.tests/Postgres/PostgresJsonAccessExecutionTests.cs:789",
+      "observed": "SQL now renders E'{\"k\\'ey\":\"it\\'s\"}' (backslash-escaped apostrophes); the assertion expects doubled apostrophes.",
+      "classification": "stale-expectation-declared-representation",
+      "defect_key": "DEF-T327-06",
+      "behavior_ok": true,
+      "note": "row.Json and row.Text pass; only the SQL-shape assertion is stale. PostgreSQL value/JSON literals are declared as explicit E'...' with backslash escapes (src/nextorm.core/Visitors/SqlStringLiteralPolicy.cs:75, RenderPostgres) and the D7 shape test pins that form (tests/nextorm.postgres.tests/SqlGeneration/InlineStringLiteralSqlGenerationTests.cs InlineApostrophe_ShouldDoubleTheEmbeddedQuote asserts E'it\\'s (a) test')."
+    },
+    {
+      "test": "NextORM.Integration.Tests.PostgresSpecificTests.T261_SqlControls_ShouldBindWholeByteArray",
+      "provider": "postgres",
+      "failure_site": "tests/nextorm.integration.tests/Postgres/PostgresSpecificTests.cs:518",
+      "observed": "Expected SQL to contain \"digest(@norm_p0, 'sha256')\" but the statement renders digest(@norm_p0, E'sha256').",
+      "classification": "stale-expectation-declared-representation",
+      "defect_key": "DEF-T327-06",
+      "behavior_ok": true,
+      "note": "Only the exact-spelling assertion at line 518 fails; the looser 'sha256' assertions at lines 508/516 still pass. E'sha256' is the declared PostgreSQL value spelling."
+    },
+    {
+      "test": "NextORM.Integration.Tests.SqlServerIntegrationTests.CrossProviderScalarFunctions_NumericAndLength_ShouldCompute",
+      "provider": "sqlserver",
+      "failure_site": "tests/nextorm.integration.tests/CommonTestSuite/Functions/CommonTestSuite.CrossProviderScalarFunctions.cs:76",
+      "observed": "Expected r.Bl (bit_length(\"abc\")) to be 24, found 48.",
+      "classification": "stale-expectation-declared-representation",
+      "defect_key": "DEF-T327-06",
+      "behavior_ok": true,
+      "note": "SQL Server string literals are declared as N'...' (src/nextorm.core/Visitors/SqlStringLiteralPolicy.cs:73); datalength(N'abc') is 6 bytes, so the provider-native bit_length is 48. Nothing else changed."
+    },
+    {
+      "test": "NextORM.Integration.Tests.SqlServerExtendedFunctionTests.CompressionAndTimeZoneFunctions_ShouldExecute",
+      "provider": "sqlserver",
+      "failure_site": "tests/nextorm.integration.tests/SqlServer/SqlServerExtendedFunctionTests.cs:58",
+      "observed": "decompress(compress(\"abc\")) returned {0x61,0x00,0x62,0x00,0x63,0x00} (UTF-16 bytes) instead of {0x61,0x62,0x63}.",
+      "classification": "stale-expectation-declared-representation",
+      "defect_key": "DEF-T327-06",
+      "behavior_ok": true,
+      "note": "Consequence of the declared N'...' spelling: COMPRESS receives an nvarchar and DECOMPRESS returns its UTF-16 bytes. The round-trip is still exact for the transport; the expected byte array must follow the N-literal representation."
+    },
+    {
+      "test": "NextORM.Integration.Tests.CorrelatedSubquerySweepTests.CorrelatedOrderingAndGrouping_ShouldExecute",
+      "provider": "sqlite",
+      "failure_site": "tests/nextorm.integration.tests/Sqlite/CorrelatedSubquerySweepTests.cs:85",
+      "observed": "System.NullReferenceException at ExpressionPlanEqualityComparer.Visitor.VisitIndex (src/nextorm.core/Query/ExpressionPlanEqualityComparer.cs:814)",
+      "classification": "pre-existing-unrelated",
+      "defect_key": "DEF-T327-05",
+      "note": "ExpressionPlanEqualityComparer.cs is untouched on this branch (git log 52297fa8..HEAD for the file is empty); the failure occurs while hashing a sorting expression before any literal rendering, and no frame in the stack belongs to a changed file."
+    }
+  ],
+  "provider_counts_derivable_from_log": {
+    "note": "The xunit v3 console reporter prints only [FAIL]/[SKIP] lines and one aggregate summary; per-provider selected/passed counts are not printed and were not obtained by re-running.",
+    "SqlServer": {"failures": 2, "skips": 48},
+    "Postgres": {"failures": 2, "skips": 26},
+    "Mysql": {"failures": 1, "skips": 80},
+    "Clickhouse": {"failures": 1, "skips": 0},
+    "Sqlite": {"failures": 1, "skips": 43},
+    "MariaDB": {"failures": 0, "skips": 0}
+  },
+  "d8a_classes_in_full_run": {
+    "failed": [],
+    "note": "No StringLiteralSafety class produced a [FAIL] or [SKIP] line in the full run; the MariaDB and MySQL 12-cell matrices carry zero skips, consistent with the D8a targeted 12/12."
+  },
+  "closed_by_d8b": [],
+  "not_closed": [
+    "EV09 live boundary: red (7 failures, 2 product regressions, 4 stale expectations under the declared representation, 1 pre-existing unrelated failure)",
+    "EV02/EV03/EV04/EV05/EV06/EV07/EV08 live halves: their targeted D8a cells are green, but the full fail-closed boundary is not green",
+    "EV10 (performance) and EV11 (transport final) remain open; EV-FINAL remains D11"
+  ],
+  "next_action": "DO -> PLAN for DEF-T327-03/DEF-T327-04; decide DEF-T327-06 expectations; then repeat the single full boundary once"
+}

@@ -139,6 +139,12 @@ projected shape (a single member, an anonymous type or a member-init). `Single()
 touched no row or more than one. `Returning` is only available on the predicate form: the key form
 (`Update(entity)`) does not expose it.
 
+To capture the updated rows for a later statement of the same batch instead of returning them to the
+client, register a batch-scoped capture — the `inserted.*` columns **are** the captured rows — and
+compose a query over it with `FromOutput<TResult>`/`FromOutputTable`: see
+[Batch-scoped capture](17-insert-statement.md#batch-scoped-capture-batchbuilderoutputintotablevariable).
+SQL Server only.
+
 ## Updating from a join
 
 [`CreateUpdateJoinBuilder()`](xref:NextORM.Core.DataContextExtensions.CreateUpdateJoinBuilder``2(NextORM.Core.JoinedEntityBuilder{``0,``1}))

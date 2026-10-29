@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging;
 using System.Collections;
 using System.Data;
 using System.Data.Common;
@@ -86,6 +86,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             providedConnection,
             new LoggingOptions(_environment.Logger, LogSensitiveData: _environment.LogSensitiveData),
             () => Dialect.SupportsTransactions,
+            () => Dialect.SupportsSavepoints,
             _interceptors);
 
         // Bound once: parameter creation is handed to the execution/planning layers as a delegate
@@ -107,7 +108,8 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             new LoggingOptions(_environment.Logger, LogSensitiveData: _environment.LogSensitiveData, LogParams: _environment.LogParams),
             () => _disposed,
             () => _connectionManager.CurrentTransaction,
-            _interceptors);
+            _interceptors,
+            GetDialect);
 
         // The planning axis gets the provider hooks as delegates and invokes them lazily: calling the
         // abstract/virtual members here would run derived code before the derived constructor.
@@ -115,9 +117,8 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             this,
             GetDialect,
             GetType(),
-            new ProviderHooks(MapColumn, _createParam, CreateCommand),
-            new LoggingOptions(_environment.Logger, _environment.ResultSetEnumeratorLogger, _environment.LogSensitiveData, QueryFilterLogger: _environment.QueryFilterLogger),
-            _interceptors);
+            new ProviderHooks(MapColumn, _createParam, _createParamSimple),
+            new LoggingOptions(_environment.Logger, _environment.ResultSetEnumeratorLogger, _environment.LogSensitiveData, QueryFilterLogger: _environment.QueryFilterLogger));
     }
 
     /// <summary>
@@ -267,7 +268,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     public DbConnection GetConnection() => _connectionManager.GetConnection();
 
     // Transaction axis (ITransactionManager). Implemented explicitly so the concrete context does not
-    // grow six public members; callers reach them through the ITransactionManager role, as documented.
+    // grow twelve public members; callers reach them through the ITransactionManager role, as documented.
     DbTransaction? ITransactionManager.CurrentTransaction => _connectionManager.CurrentTransaction;
 
     DbTransaction ITransactionManager.BeginTransaction() => _connectionManager.BeginTransaction();
@@ -279,6 +280,18 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     Task<DbTransaction> ITransactionManager.BeginTransactionAsync(IsolationLevel isolationLevel, CancellationToken cancellationToken) => _connectionManager.BeginTransactionAsync(isolationLevel, cancellationToken);
 
     void ITransactionManager.UseTransaction(DbTransaction? transaction) => _connectionManager.UseTransaction(transaction);
+
+    void ITransactionManager.CreateSavepoint(string name) => _connectionManager.CreateSavepoint(name);
+
+    Task ITransactionManager.CreateSavepointAsync(string name, CancellationToken cancellationToken) => _connectionManager.CreateSavepointAsync(name, cancellationToken);
+
+    void ITransactionManager.RollbackToSavepoint(string name) => _connectionManager.RollbackToSavepoint(name);
+
+    Task ITransactionManager.RollbackToSavepointAsync(string name, CancellationToken cancellationToken) => _connectionManager.RollbackToSavepointAsync(name, cancellationToken);
+
+    void ITransactionManager.ReleaseSavepoint(string name) => _connectionManager.ReleaseSavepoint(name);
+
+    Task ITransactionManager.ReleaseSavepointAsync(string name, CancellationToken cancellationToken) => _connectionManager.ReleaseSavepointAsync(name, cancellationToken);
 
     /// <summary>Creates the provider-specific connection. Called only when no connection was supplied.</summary>
     protected abstract DbConnection CreateDbConnection(string? connectionString);
@@ -321,7 +334,21 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// <param name="cancellationToken">Token used to cancel preparation.</param>
     /// <returns>The prepared command, ready to execute.</returns>
     public IPreparedQueryCommand<TResult> GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, CancellationToken cancellationToken)
-        => GetPreparedQueryCommand(queryCommand, createEnumerator, storeInCache, streamingRows: false, cancellationToken);
+        => GetPreparedQueryCommand(queryCommand, createEnumerator, storeInCache, PreparedCommandCache.Connection, streamingRows: false, cancellationToken);
+
+    /// <summary>
+    /// Prepares <paramref name="queryCommand"/> against the current dialect with an explicit command-reuse
+    /// policy, optionally building a streaming enumerator and storing the plan in the cache.
+    /// </summary>
+    /// <typeparam name="TResult">The projected result type.</typeparam>
+    /// <param name="queryCommand">The command to prepare.</param>
+    /// <param name="createEnumerator">When <see langword="true"/>, compiles a streaming row enumerator as part of preparation.</param>
+    /// <param name="storeInCache">When <see langword="true"/> (and <see cref="QueryCacheEnabled"/> is set), stores the prepared command in the plan cache.</param>
+    /// <param name="cache">The command-reuse policy the prepared command is built with.</param>
+    /// <param name="cancellationToken">Token used to cancel preparation.</param>
+    /// <returns>The prepared command, ready to execute.</returns>
+    public IPreparedQueryCommand<TResult> GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, PreparedCommandCache cache, CancellationToken cancellationToken)
+        => GetPreparedQueryCommand(queryCommand, createEnumerator, storeInCache, cache, streamingRows: false, cancellationToken);
 
     /// <summary>
     /// Prepares the command for the <c>ToAsyncEnumerable</c> terminal. This is the only preparation
@@ -329,21 +356,56 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// member to sequential access; every other terminal keeps the buffered path and rejects the shape.
     /// </summary>
     internal IPreparedQueryCommand<TResult> GetStreamingRowsQueryCommand<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
-        => GetPreparedQueryCommand(queryCommand, createEnumerator: true, storeInCache: true, streamingRows: true, cancellationToken);
+        => GetPreparedQueryCommand(queryCommand, createEnumerator: true, storeInCache: true, cache: PreparedCommandCache.Connection, streamingRows: true, cancellationToken);
 
-    private IPreparedQueryCommand<TResult> GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, bool streamingRows, CancellationToken cancellationToken)
+    private IPreparedQueryCommand<TResult> GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, PreparedCommandCache cache, bool streamingRows, CancellationToken cancellationToken)
     {
+        RequireNoBatchOutputSource(queryCommand);
+
         // The check is allocation-free and false for every ordinary query, so the common preparation
         // path only pays a few branches.
         if (queryCommand.HasTemporaryTableSource())
         {
             var tempTables = new List<ITempTableSource>();
             queryCommand.CollectTempTableSources(tempTables);
-            return GetPreparedTemporaryTableCommand(queryCommand, tempTables, createEnumerator, cancellationToken);
+            return GetPreparedTemporaryTableCommand(queryCommand, tempTables, createEnumerator, cache, cancellationToken);
         }
 
-        return _planner.GetPreparedQueryCommand(queryCommand, createEnumerator, storeInCache && QueryCacheEnabled, false, streamingRows, cancellationToken);
+        // A policy of None must never read or write the plan cache: the call-local storeInCache is cleared
+        // here (never on QueryCommand, whose Cache flag is shared and sticky).
+        return _planner.GetPreparedQueryCommand(queryCommand, createEnumerator, (storeInCache && cache != PreparedCommandCache.None) && QueryCacheEnabled, cache, false, streamingRows, cancellationToken);
     }
+
+    /// <summary>
+    /// A batch capture source is a table variable that only exists inside the batch that declared and
+    /// populated it (<c>DECLARE @t TABLE (...); DML OUTPUT ... INTO @t</c>). Rendering or executing a
+    /// command that reads it on its own would emit a <c>select ... from @t</c> with no declaration, so
+    /// the standalone path refuses it before any SQL is produced. The same command is legal when it is
+    /// composed into its owning batch through <see cref="BatchBuilder.Query{TResult}"/> or
+    /// <see cref="BatchBuilder.AddQuery{TResult}"/>, which render it with the declaring statements.
+    /// </summary>
+    /// <param name="queryCommand">The command about to be prepared on its own.</param>
+    /// <exception cref="NotSupportedException">The command reads a batch output source.</exception>
+    private static void RequireNoBatchOutputSource(QueryCommand queryCommand)
+    {
+        if (ReadsBatchOutputSource(queryCommand.From))
+            ThrowStandaloneBatchOutputSource();
+
+        if (queryCommand.Joins is { Length: > 0 } joins)
+        {
+            for (var i = 0; i < joins.Length; i++)
+            {
+                if (ReadsBatchOutputSource(joins[i].From))
+                    ThrowStandaloneBatchOutputSource();
+            }
+        }
+    }
+
+    private static bool ReadsBatchOutputSource(FromExpression? from) => from is { IsTableVariableSource: true };
+
+    private static void ThrowStandaloneBatchOutputSource()
+        => throw new NotSupportedException(
+            "A batch output source is a table variable captured by OUTPUT ... INTO inside its owning batch; it cannot be read by a standalone query. Compose it into the same batch with BatchBuilder.Query(...) or AddQuery(...) (batch output source).");
 
     /// <summary>
     /// Streams a query's projected rows as JSON to a caller-owned stream, without a row mapper. The
@@ -418,7 +480,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             nativeCmd.ForJsonClause = new ForJsonClause(ForJsonMode.Path, null, IncludeNullValues: !options.IgnoreNull);
 
             var nativePrepared = (DbPreparedQueryCommand<TResult>)GetPreparedQueryCommand(
-                nativeCmd, createEnumerator: false, storeInCache: false, streamingRows: false, cancellationToken);
+                nativeCmd, createEnumerator: false, storeInCache: false, cache: PreparedCommandCache.Connection, streamingRows: false, cancellationToken);
 
             var nativePlan = JsonShapePlan.Build(nativeCmd.SelectList, nativeCmd.OneColumn, options, nativeCmd.JsonShape);
             if (JsonNativeStream.IsEligible(nativePlan, options))
@@ -427,7 +489,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
 
         var cmd = CloneForJsonStream(queryCommand, tempSource);
         var prepared = (DbPreparedQueryCommand<TResult>)GetPreparedQueryCommand(
-            cmd, createEnumerator: false, storeInCache: false, streamingRows: false, cancellationToken);
+            cmd, createEnumerator: false, storeInCache: false, cache: PreparedCommandCache.Connection, streamingRows: false, cancellationToken);
 
         var plan = JsonShapePlan.Build(cmd.SelectList, cmd.OneColumn, options, cmd.JsonShape);
         return (prepared, _jsonRowWriters.GetOrBuild(plan), plan, false);
@@ -459,13 +521,14 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         QueryCommand<TResult> queryCommand,
         List<ITempTableSource> tempTables,
         bool createEnumerator,
+        PreparedCommandCache cache,
         CancellationToken cancellationToken)
     {
         // storeInCache: false is what keeps the read plan out of the plan cache (the source query's
         // captured parameters must be re-rendered on every execution). Setting Cache = false here
         // would leak: for `Any` the command is the context-shared AnyCommand, so it would disable
         // plan caching for every later query on that context.
-        var prepared = (DbPreparedQueryCommand<TResult>)_planner.GetPreparedQueryCommand(queryCommand, createEnumerator, false, cancellationToken);
+        var prepared = (DbPreparedQueryCommand<TResult>)_planner.GetPreparedQueryCommand(queryCommand, createEnumerator, false, cache, cancellationToken);
 
         prepared.PendingBatch = BuildTemporaryTableBatch(queryCommand, tempTables);
         return prepared;
@@ -500,7 +563,13 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         if (terminalName is not null && queryCommand.HasTemporaryTableSource())
             throw new NotSupportedException(LazyTemporaryTableMessage(terminalName));
 
-        return (DbPreparedQueryCommand<TResult>)_planner.GetPreparedQueryCommand(queryCommand, false, false, true, cancellationToken);
+        // Execution-local, not connection-cached: this plan is prepared with storeInCache: false, so no
+        // cached plan publishes it and nothing would ever call IDbCommandHolder.ResetConnection for it. A
+        // Connection-policy command would therefore be retained by the per-connection state and never be
+        // disposed. The streaming terminal owns exactly one execution, so the command is minted per
+        // execution and disposed exactly once when the reader's CommandReaderOwner releases its lease
+        // (PreparedCommandCache.None, AC03).
+        return (DbPreparedQueryCommand<TResult>)_planner.GetPreparedQueryCommand(queryCommand, false, false, PreparedCommandCache.None, true, cancellationToken);
     }
 
     // The plain (non-LOB) multi-column reader seam: unlike PrepareLobCommand it demands neither
@@ -578,10 +647,17 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         if (queryCommand.HasTemporaryTableSource())
             throw new NotSupportedException(LazyTemporaryTableMessage(terminalName));
 
+        // Execution-local, not connection-cached: the plan is prepared with storeInCache: false, so no
+        // cached plan publishes this prepared command and nothing would ever call
+        // IDbCommandHolder.ResetConnection for it — a Connection-policy command would be retained by the
+        // per-connection state and never disposed. The reader terminal owns exactly one execution, so the
+        // command is minted per execution and disposed exactly once when the reader's CommandReaderOwner
+        // releases its lease (PreparedCommandCache.None, AC03).
         return (DbPreparedQueryCommand<TResult>)_planner.GetPreparedQueryCommand(
             queryCommand,
             createEnumerator: false,
             storeInCache: false,
+            cache: PreparedCommandCache.None,
             sequentialAccess: sequentialAccess,
             streamingRowsRequested: false,
             suppressLobLocator: suppressLobLocator,
@@ -729,11 +805,27 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         => CreateProcedureParameter(parameter);
 
     /// <summary>
+    /// The refusal a <see cref="TimeOnly"/> projection raises for this provider, or <see langword="null"/>
+    /// when the provider has a verified native time-of-day reader.
+    /// <para>
+    /// A context that does not override this refuses the projection: an unverified reader arm is never
+    /// assumed to work, and the refusal is raised while the row mapper is composed and again in the scalar
+    /// terminal, so a provider cannot end up "supported" because a driver happened to hand back a
+    /// <see cref="TimeOnly"/>.
+    /// </para>
+    /// </summary>
+    protected virtual string? TimeOnlyProjectionRefusal => TimeOnlyProjectionReader.GenericRefusal;
+
+    // QueryExecutor lives outside the context type hierarchy, so it reaches the protected policy through
+    // this internal seam, which still virtual-dispatches to the provider override.
+    internal string? TimeOnlyProjectionRefusalValue => TimeOnlyProjectionRefusal;
+
+    /// <summary>
     /// Maps a projected column to a reader accessor. Providers whose reader does not widen CLR
     /// types (SqlClient throws when a typed getter does not match the field type, for example an
     /// int column projected as long) can override this to read the value and convert it.
     /// </summary>
-    public virtual Expression MapColumnExpression(SelectExpression column, Expression param) => RowMapperFactory.MapColumn(column, param, Dialect.SupportsNativeDuration, Dialect);
+    public virtual Expression MapColumnExpression(SelectExpression column, Expression param) => RowMapperFactory.MapColumn(column, param, Dialect.SupportsNativeDuration, Dialect, TimeOnlyProjectionRefusal);
 
     /// <summary>
     /// Maps a projected column when the reader's actual field (storage) type is known. The CSV terminal
@@ -1099,7 +1191,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             ?? throw new InvalidOperationException("BulkInsert is synchronous but the source is async; use BulkInsertAsync instead.");
 
         return BulkInsertRows(
-            SqlMutationBuilder.RenderTableReference(Dialect, QuoteIdentifiers, command.TableName, command.TableSchema, command.IsTableNameAuto, command.EntityType, NamingConvention),
+            SqlMutationBuilder.RenderBulkTarget(Dialect, QuoteIdentifiers, command, NamingConvention),
             ResolveBulkColumnNames(command.Columns),
             command.Columns,
             rows,
@@ -1115,7 +1207,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         var rows = command.AsyncRows ?? new SyncToAsyncEnumerable<object?[]>(command.SyncRows!);
 
         return await BulkInsertRowsAsync(
-            SqlMutationBuilder.RenderTableReference(Dialect, QuoteIdentifiers, command.TableName, command.TableSchema, command.IsTableNameAuto, command.EntityType, NamingConvention),
+            SqlMutationBuilder.RenderBulkTarget(Dialect, QuoteIdentifiers, command, NamingConvention),
             ResolveBulkColumnNames(command.Columns),
             command.Columns,
             rows,
@@ -1187,13 +1279,13 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     private (string Sql, List<Parameter> Parameters) BuildInsertSql(InsertCommand command)
         => BuildInsertSql(command, new DefaultParameterProvider(), string.Empty);
 
-    private (string Sql, List<Parameter> Parameters) BuildInsertSql(InsertCommand command, IParameterProvider parameterProvider, string parameterNamePrefix)
+    private (string Sql, List<Parameter> Parameters) BuildInsertSql(InsertCommand command, IParameterProvider parameterProvider, string parameterNamePrefix, MutationRenderKind renderKind = MutationRenderKind.AdHoc, OutputIntoClause? captureInto = null)
     {
         if (command.Source is null)
-            return SqlMutationBuilder.MakeInsert(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, parameterProvider: parameterProvider);
+            return SqlMutationBuilder.MakeInsert(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, parameterProvider: parameterProvider, renderKind: renderKind, captureInto: captureInto);
 
         var (withSql, sourceSql, sourceParameters, maxRecursionStmt) = _planner.RenderSource(command.Source, parameterProvider, null, null, parameterNamePrefix);
-        var (insertSql, parameters) = SqlMutationBuilder.MakeInsert(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, sourceSql, sourceParameters, parameterProvider);
+        var (insertSql, parameters) = SqlMutationBuilder.MakeInsert(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, sourceSql, sourceParameters, parameterProvider, renderKind, captureInto);
 
         // A data-modifying CTE (or a hoisted read CTE) must precede INSERT, not sit inside the SELECT; the
         // recursion limit is a statement tail, so it is appended after the whole INSERT ... SELECT.
@@ -1203,22 +1295,25 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     private (string Sql, List<Parameter> Parameters) BuildUpdateSql(UpdateCommand command)
         => BuildUpdateSql(command, new DefaultParameterProvider(), new List<Parameter>(), string.Empty);
 
-    private (string Sql, List<Parameter> Parameters) BuildUpdateSql(UpdateCommand command, IParameterProvider provider, List<Parameter> parameters, string parameterNamePrefix)
+    private (string Sql, List<Parameter> Parameters) BuildUpdateSql(UpdateCommand command, IParameterProvider provider, List<Parameter> parameters, string parameterNamePrefix, MutationRenderKind renderKind = MutationRenderKind.AdHoc, OutputIntoClause? captureInto = null)
     {
         if (!Dialect.SupportsUpdate)
             throw new NotSupportedException(
                 $"{GetType().Name} does not support UPDATE: the provider has no synchronous single-statement UPDATE form.");
 
         // One parameter provider for the whole statement: the SET list, the predicate and the key
-        // values must not restart parameter numbering, or their names would collide.
-        var (setSql, _) = _planner.RenderAssignments(command, provider, parameters, parameterNamePrefix);
+        // values must not restart parameter numbering, or their names would collide. One lowering too:
+        // the fragments and the statement must accumulate their lowered occurrences on the same instance,
+        // so the statement-level projection sees the whole statement (D4g).
+        var lowering = MutationParameterLowering.For(Dialect, renderKind);
+        var (setSql, _) = _planner.RenderAssignments(command, provider, parameters, parameterNamePrefix, lowering);
 
         // The source's prepared condition carries the target entity's global filter (injected during
         // preparation) and, for the predicate form, the user's WHERE. It is rendered in both forms: the
         // key form ANDs it to the key equalities so the row must match the key and the filter.
-        var (whereSql, _) = _planner.RenderPredicate(command.Source, provider, parameters, parameterNamePrefix);
+        var (whereSql, _) = _planner.RenderPredicate(command.Source, provider, parameters, parameterNamePrefix, lowering);
 
-        return SqlMutationBuilder.MakeUpdate(Dialect, QuoteIdentifiers, NamingConvention, command, setSql, parameters, whereSql, provider, KeywordCase);
+        return SqlMutationBuilder.MakeUpdate(Dialect, QuoteIdentifiers, NamingConvention, command, setSql, parameters, whereSql, provider, KeywordCase, renderKind, lowering, captureInto);
     }
 
     private (string Sql, List<Parameter> Parameters) BuildMutationSql(MutationCommand command)
@@ -1240,34 +1335,83 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         };
     }
 
-    private (string Sql, List<Parameter> Parameters) BuildMergeSql(MergeCommand command)
+    private (string Sql, List<Parameter> Parameters) BuildMergeSql(MergeCommand command, MutationRenderKind renderKind = MutationRenderKind.AdHoc, OutputIntoClause? captureInto = null, IParameterProvider? parameterProvider = null)
     {
         if (command.Branches is null)
         {
             // A filtered SQL Server key upsert (SupportsMerge) is routed through the same filtered MERGE
             // renderer as the full-MERGE form: the target predicate is rendered into its ON. Every other
             // dialect has already refused in the builder's capability guard, so there is no filter here.
+            var hasAssignments = command.KeyUpdateAssignments is not null || command.KeyInsertAssignments is not null;
             IParameterProvider? keyProvider = null;
             List<Parameter>? keyAccumulator = null;
             string? keyFilterSql = null;
-            if (Dialect.SupportsMerge && command.Registry is { } keyRegistry)
+            if (parameterProvider is not null
+                || hasAssignments
+                || (Dialect.SupportsMerge && command.Registry is not null))
             {
-                keyProvider = new DefaultParameterProvider();
+                // A batch step continues the batch-wide parameter sequence; a standalone render still
+                // starts a fresh one, so its SQL and names are unchanged.
+                keyProvider = parameterProvider ?? new DefaultParameterProvider();
                 keyAccumulator = [];
-                keyFilterSql = _planner.RenderMergeTargetFilter(command.EntityType, command.FilterScope, keyRegistry, keyProvider, keyAccumulator, QuoteIdentifiers, NamingConvention, KeywordCase);
+            }
+
+            if (Dialect.SupportsMerge && command.Registry is { } keyRegistry)
+                keyFilterSql = _planner.RenderMergeTargetFilter(command.EntityType, command.FilterScope, keyRegistry, keyProvider!, keyAccumulator!, QuoteIdentifiers, NamingConvention, KeywordCase);
+
+            MergeAssignmentFragment? keyUpdateFragment = null;
+            MergeAssignmentFragment? keyInsertFragment = null;
+            if (hasAssignments)
+            {
+                if (keyProvider is null || keyAccumulator is null || command.Registry is null)
+                    throw new BuildSqlCommandException("A key-upsert expression requires an assignment render context.");
+
+                // The native upsert reads the target table and (on a provider that has one) the proposed row;
+                // SQL Server renders the key upsert as a general MERGE, so its source is a real relation and
+                // its target is the MERGE alias. The original input row is always bound as parameters.
+                var native = !Dialect.SupportsMerge;
+                var renderInfo = new MergeAssignmentRenderInfo
+                {
+                    Form = native ? MergeAssignmentForm.NativeUpsert : MergeAssignmentForm.FullMerge,
+                    ProviderName = Dialect.GetType().Name,
+                    FormName = "key-upsert",
+                    TargetReference = native ? QuotedMergeTableReference(command) : "target",
+                    QualifyTarget = !native && Dialect.SupportsMergeTargetQualification,
+                    // A native upsert exposes the proposed row under both provider spellings: ON CONFLICT's
+                    // excluded.<column> and ON DUPLICATE KEY UPDATE's VALUES(<column>) (the dialect's own
+                    // MakeUpsertValueReference decides which). A provider with neither has no proposed row.
+                    SupportsExcluded = native && (Dialect.SupportsOnConflict || Dialect.SupportsOnDuplicateKey),
+                    SourceRow = command.SourceRow,
+                    Metadata = ResolveMergeMetadata(command.EntityType),
+                    Dialect = Dialect,
+                    QuoteIdentifiers = QuoteIdentifiers,
+                    NamingConvention = NamingConvention,
+                };
+
+                if (command.KeyUpdateAssignments is { } updateAssignments)
+                {
+                    keyUpdateFragment = _planner.RenderMergeAssignments(updateAssignments, renderInfo.WithKind(MergeAssignmentFragmentKind.UpdateSet), command.EntityType, command.Registry, keyProvider, keyAccumulator, QuoteIdentifiers, NamingConvention, KeywordCase);
+                }
+
+                if (command.KeyInsertAssignments is { } insertAssignments)
+                {
+                    keyInsertFragment = _planner.RenderMergeAssignments(insertAssignments, renderInfo.WithKind(MergeAssignmentFragmentKind.Insert), command.EntityType, command.Registry, keyProvider, keyAccumulator, QuoteIdentifiers, NamingConvention, KeywordCase);
+                }
             }
 
             if (command.Source is null)
-                return SqlMutationBuilder.MakeMerge(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, keyProvider, null, null, keyAccumulator, null, null, keyFilterSql, this);
+                return SqlMutationBuilder.MakeMerge(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, keyProvider, null, null, keyAccumulator, null, null, keyFilterSql, this, renderKind, keyUpdateFragment: keyUpdateFragment, keyInsertFragment: keyInsertFragment, captureInto: captureInto);
 
             var (withInsert, sourceInsert, sourceInsertParameters, keyMaxRecursionStmt) = _planner.RenderSource(command.Source);
-            var (insertSql, insertParameters) = SqlMutationBuilder.MakeMerge(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, keyProvider, sourceInsert, sourceInsertParameters, keyAccumulator, null, null, keyFilterSql, this);
+            var (insertSql, insertParameters) = SqlMutationBuilder.MakeMerge(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, keyProvider, sourceInsert, sourceInsertParameters, keyAccumulator, null, null, keyFilterSql, this, renderKind, keyUpdateFragment: keyUpdateFragment, keyInsertFragment: keyInsertFragment, captureInto: captureInto);
             return (AppendMaxRecursionStmt(withInsert is null ? insertSql : withInsert + insertSql, keyMaxRecursionStmt), insertParameters);
         }
 
         // Full MERGE: render the search conditions into the same accumulator the VALUES rows use, so their
         // autogenerated @pN names do not collide. Conditions are rendered first; the rows continue the sequence.
-        var provider = new DefaultParameterProvider();
+        // A batch step passes its shared provider, so the names continue the batch-wide sequence instead of
+        // restarting at @p0 and colliding with the earlier steps' values.
+        var provider = parameterProvider ?? new DefaultParameterProvider();
         var accumulator = new List<Parameter>();
         var quoteIdentifiers = command.Source?.ResolvedQuoteIdentifiers ?? QuoteIdentifiers;
         var namingConvention = command.Source?.ResolvedNamingConvention ?? NamingConvention;
@@ -1293,19 +1437,71 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             branchConditions[i] = _planner.RenderMergeCondition(condition, command.EntityType, registry, provider, accumulator, quoteIdentifiers, namingConvention, keywordCase);
         }
 
+        // Explicit branch assignments are rendered after the conditions and before the VALUES rows, so the
+        // statement keeps one parameter sequence. A full MERGE reads the target alias and the source
+        // relation; it has no proposed-row (excluded) reference.
+        MergeAssignmentFragment?[]? branchAssignments = null;
+        for (var i = 0; i < command.Branches.Count; i++)
+        {
+            if (command.Branches[i].Assignments is not { } assignments)
+                continue;
+
+            branchAssignments ??= new MergeAssignmentFragment?[command.Branches.Count];
+            branchAssignments[i] = _planner.RenderMergeAssignments(
+                assignments,
+                MergeBranchAssignmentInfo(command.EntityType, command.Branches[i]),
+                command.EntityType,
+                registry,
+                provider,
+                accumulator,
+                quoteIdentifiers,
+                namingConvention,
+                keywordCase);
+        }
+
         if (command.Source is null)
         {
-            var (sql, parameters) = SqlMutationBuilder.MakeMerge(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, provider, null, null, accumulator, matchConditionSql, branchConditions, targetFilterSql, this);
+            var (sql, parameters) = SqlMutationBuilder.MakeMerge(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, provider, null, null, accumulator, matchConditionSql, branchConditions, targetFilterSql, this, renderKind, branchAssignments, captureInto: captureInto);
             return (sql, parameters);
         }
 
         var (withSql, sourceSql, _, maxRecursionStmt) = _planner.RenderSource(command.Source, provider, accumulator);
         // The source parameters already sit in the shared accumulator, so MakeMerge must not re-add them;
         // passing them again would duplicate every @pN.
-        var (fullSql, fullParameters) = SqlMutationBuilder.MakeMerge(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, provider, sourceSql, null, accumulator, matchConditionSql, branchConditions, targetFilterSql, this);
+        var (fullSql, fullParameters) = SqlMutationBuilder.MakeMerge(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, provider, sourceSql, null, accumulator, matchConditionSql, branchConditions, targetFilterSql, this, renderKind, branchAssignments, captureInto: captureInto);
         // MERGE is terminated with ';' (SQL Server): OPTION goes before that terminator, not after it.
         return (AppendMaxRecursionStmt(withSql is null ? fullSql : withSql + fullSql, maxRecursionStmt), fullParameters);
     }
+
+    // The SQL that names the merge target table of a native upsert, quoted exactly like the statement's own
+    // table reference so a target-role read and the INSERT target cannot diverge.
+    private string QuotedMergeTableReference(MergeCommand command)
+    {
+        var table = SqlMutationBuilder.ResolveTableName(command.TableName, command.IsTableNameAuto, command.EntityType, NamingConvention);
+        return QuoteIdentifiers ? Dialect.QuoteIdentifier(table) : table;
+    }
+
+    // The target entity metadata used to resolve an assignment right-hand-side member to its mapped column.
+    private static IEntityMetadata? ResolveMergeMetadata(Type entityType)
+        => DataContextCache.Metadata.TryGetValue(entityType, out var metadata) ? metadata : null;
+
+    // The render info of one full-MERGE branch assignment set.
+    private MergeAssignmentRenderInfo MergeBranchAssignmentInfo(Type entityType, MergeBranch branch)
+        => new()
+        {
+            Form = MergeAssignmentForm.FullMerge,
+            Kind = branch.Action == MergeActionKind.Insert ? MergeAssignmentFragmentKind.Insert : MergeAssignmentFragmentKind.UpdateSet,
+            ProviderName = Dialect.GetType().Name,
+            FormName = "MERGE",
+            TargetReference = "target",
+            QualifyTarget = Dialect.SupportsMergeTargetQualification,
+            SupportsExcluded = false,
+            SourceRow = null,
+            Metadata = ResolveMergeMetadata(entityType),
+            Dialect = Dialect,
+            QuoteIdentifiers = QuoteIdentifiers,
+            NamingConvention = NamingConvention,
+        };
 
     private (string Sql, List<Parameter> Parameters) BuildTruncateSql(TruncateCommand command)
     {
@@ -1417,6 +1613,20 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
                 // Statement-local: the option must stay inside this step's string, before the batch joins steps.
                 sql = AppendMaxRecursionStmt(ctasSql, maxRecursionStmt);
             }
+            else if (step.Capture is { } capture)
+            {
+                var captureInto = new OutputIntoClause(
+                    capture.VariableName,
+                    capture.ColumnDefinitions,
+                    capture.Mutation.ReturningColumns ?? Array.Empty<IPropertyMetadata>());
+                (sql, var captureParameters) = BuildBatchMutationSql(capture.Mutation, provider, BatchParameterPrefix(i), captureInto);
+                accumulator.AddRange(captureParameters);
+                // One statement string: the declaration and the DML (with its OUTPUT ... INTO) run
+                // together, and the follow-up query of the batch reads the variable. No automatic
+                // read-back is appended here — the composed query replaces it.
+                sql = SqlKeywords.Of(KeywordCase, "declare ") + capture.VariableName
+                    + SqlKeywords.Of(KeywordCase, " table (") + capture.ColumnDefinitions + "); " + sql;
+            }
             else if (step.Mutation is { } mutation)
             {
                 (sql, var mutationParameters) = BuildBatchMutationSql(mutation, provider, BatchParameterPrefix(i));
@@ -1500,29 +1710,34 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     private (string Sql, List<Parameter> Parameters) BuildDeleteSql(DeleteCommand command)
         => BuildDeleteSql(command, new DefaultParameterProvider(), string.Empty);
 
-    private (string Sql, List<Parameter> Parameters) BuildDeleteSql(DeleteCommand command, IParameterProvider provider, string parameterNamePrefix)
+    private (string Sql, List<Parameter> Parameters) BuildDeleteSql(DeleteCommand command, IParameterProvider provider, string parameterNamePrefix, MutationRenderKind renderKind = MutationRenderKind.AdHoc, OutputIntoClause? captureInto = null)
     {
         if (!Dialect.SupportsDelete)
             throw new NotSupportedException(
                 $"{GetType().Name} does not support DELETE: the provider has no synchronous single-statement DELETE form (use its ALTER TABLE ... DELETE mutation directly).");
 
+        // One lowering for the WHERE fragment and the key values, so the statement-level projection sees
+        // every lowered occurrence of the statement (D4g).
+        var lowering = MutationParameterLowering.For(Dialect, renderKind);
+
         if (command.Condition is null)
-            return SqlMutationBuilder.MakeDelete(Dialect, QuoteIdentifiers, NamingConvention, command, null, [], KeywordCase, provider);
+            return SqlMutationBuilder.MakeDelete(Dialect, QuoteIdentifiers, NamingConvention, command, null, [], KeywordCase, provider, renderKind, lowering, captureInto);
 
         var parameters = new List<Parameter>();
-        var (whereSql, _) = _planner.RenderPredicate(command.Condition, provider, parameters, parameterNamePrefix);
-        return SqlMutationBuilder.MakeDelete(Dialect, QuoteIdentifiers, NamingConvention, command, whereSql, parameters, KeywordCase, provider);
+        var (whereSql, _) = _planner.RenderPredicate(command.Condition, provider, parameters, parameterNamePrefix, lowering);
+        return SqlMutationBuilder.MakeDelete(Dialect, QuoteIdentifiers, NamingConvention, command, whereSql, parameters, KeywordCase, provider, renderKind, lowering, captureInto);
     }
 
     // Renders a side-effecting DML step of a batch with the batch's shared parameter provider, so its
     // placeholder names continue the batch-wide sequence and cannot collide with the other steps'. The
     // captured-member prefix keeps two DML steps that capture the same variable from colliding.
-    private (string Sql, List<Parameter> Parameters) BuildBatchMutationSql(MutationCommand command, IParameterProvider provider, string parameterNamePrefix)
+    private (string Sql, List<Parameter> Parameters) BuildBatchMutationSql(MutationCommand command, IParameterProvider provider, string parameterNamePrefix, OutputIntoClause? captureInto = null)
         => command switch
         {
-            InsertCommand insert => BuildInsertSql(insert, provider, parameterNamePrefix),
-            UpdateCommand update => BuildUpdateSql(update, provider, new List<Parameter>(), parameterNamePrefix),
-            DeleteCommand delete => BuildDeleteSql(delete, provider, parameterNamePrefix),
+            InsertCommand insert => BuildInsertSql(insert, provider, parameterNamePrefix, MutationRenderKind.Batch, captureInto),
+            UpdateCommand update => BuildUpdateSql(update, provider, new List<Parameter>(), parameterNamePrefix, MutationRenderKind.Batch, captureInto),
+            MergeCommand merge => BuildMergeSql(merge, MutationRenderKind.Batch, captureInto, provider),
+            DeleteCommand delete => BuildDeleteSql(delete, provider, parameterNamePrefix, MutationRenderKind.Batch, captureInto),
             TruncateCommand truncate => BuildTruncateSql(truncate),
             _ => throw new NotSupportedException($"The mutation {command.GetType().Name} cannot be added to a batch."),
         };
@@ -1548,12 +1763,15 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     private void EnsureReturningSupported(MutationCommand command)
     {
         // A single-table UPDATE may have its own RETURNING gate (MariaDB 13.0+) distinct from the
-        // INSERT/DELETE form, so the command shape participates in the capability check.
+        // INSERT/DELETE form, so the command shape participates in the capability check. The portable bulk
+        // INSERT carries its own gate too: MariaDB honours bulk RETURNING at 13.0+ while its single-row
+        // insert/delete form stays refused at every version.
         var supported = Dialect.SupportsReturning || Dialect.SupportsOutput
-            || (command is UpdateCommand && Dialect.SupportsUpdateReturning);
+            || (command is UpdateCommand && Dialect.SupportsUpdateReturning)
+            || (command is InsertCommand { IsBulkReturning: true } && SqlDialectBase.BulkInsertReturningSupported(Dialect));
         if (!supported)
             throw new NotSupportedException(
-                $"{GetType().Name} cannot return written rows: the provider has no RETURNING or OUTPUT form.");
+                $"{GetType().Name} cannot return written rows: the provider has no RETURNING or OUTPUT form for a Returning() request.");
     }
 
     // An interface/abstract TResult cannot be materialized as a whole (no constructor). Reject it with a

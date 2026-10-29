@@ -16,6 +16,15 @@ namespace NextORM.Core;
 internal static class ExtremeRowCompatibility
 {
     /// <summary>
+    /// The user-visible contract for a projection-less <c>SelectWhereMax</c>/<c>SelectWhereMin</c> over
+    /// a source without mapped entity metadata: the whole-row result has no columns to materialise.
+    /// Shared by the preparation guard (<c>QueryPreparer</c>) and the render-time guard
+    /// (<c>SqlBuilder</c>) so both throw sites report the same message.
+    /// </summary>
+    internal const string MappedEntitySourceMessage =
+        "SelectWhereMax/SelectWhereMin requires a mapped entity source.";
+
+    /// <summary>
     /// Throws a <see cref="BuildSqlCommandException"/> for every modifier carried by
     /// <paramref name="cmd"/> that the extreme-row lowering cannot express. State-only: it reads the
     /// command, never the SQL text, so it is safe in both the SQL and the parameter pass.

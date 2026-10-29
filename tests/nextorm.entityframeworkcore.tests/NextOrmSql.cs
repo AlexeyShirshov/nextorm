@@ -13,6 +13,6 @@ internal static class NextOrmSql
         var prepared = (DbPreparedQueryCommand<TResult>)
             context.GetPreparedQueryCommand(command, false, false, CancellationToken.None);
 
-        return prepared.DbCommand.CommandText.Replace("\r\n", "\n");
+        return prepared.SqlStmt!.Replace("\r\n", "\n");
     }
 }

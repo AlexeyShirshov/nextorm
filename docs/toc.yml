@@ -12,6 +12,8 @@
   href: infrastructure/
 - name: Scalar functions
   href: scalar-functions/
+- name: Culture-invariant string formatting
+  href: string-format-invariant-provider.md
 - name: Connecting providers
   href: connecting-providers/
 - name: Comparisons

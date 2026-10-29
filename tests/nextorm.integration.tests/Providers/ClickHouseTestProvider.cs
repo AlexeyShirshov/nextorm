@@ -51,13 +51,16 @@ internal sealed class ClickHouseTestProvider : ITestProvider
     /// <summary>ClickHouse emulates a table parameter with a native array expanded server-side with <c>arrayJoin(@p)</c>.</summary>
     public bool SupportsTableValuedParameters => true;
     public bool SupportsTransactions => false;
+
+    /// <summary>ClickHouse has no transaction, so it can never expose a savepoint.</summary>
+    public bool SupportsSavepoints => false;
     public bool SupportsRegex => true;
     public bool SupportsLobStreaming => false;
     public string TableValuedFunctionSkipReason => "The shared table-valued function test uses SQLite's json_each; no portable equivalent is configured for ClickHouse.";
 
     public string SkipReason => ClickHouseContainer.Failure ?? "ClickHouse is not available.";
 
-    public IDataContext CreateContext() => CreateContext(null);
+    public IDataContext CreateContext() => CreateContext((Microsoft.Extensions.Logging.ILoggerFactory?)null);
 
     public IDataContext CreateContext(Microsoft.Extensions.Logging.ILoggerFactory? loggerFactory)
     {
@@ -66,6 +69,9 @@ internal sealed class ClickHouseTestProvider : ITestProvider
             builder = builder.UseLoggerFactory(loggerFactory);
         return new ClickHouseDataContext(ClickHouseContainer.ConnectionString, builder);
     }
+
+    public IDataContext CreateContext(DataContextBuilder builder)
+        => new ClickHouseDataContext(ClickHouseContainer.ConnectionString, builder);
 
     public void EnsureSeeded()
     {
@@ -103,6 +109,24 @@ internal sealed class ClickHouseTestProvider : ITestProvider
         create table simple_entity (id Int32) engine = Memory
         """,
         "insert into simple_entity (id) values (1),(2),(3),(4),(5),(6),(7),(8),(9),(10)",
+
+        // T291 (#291): AVG fixture, identical rows on every provider (values 1,2,1,3 / null,1,2,3).
+        "drop table if exists avg_fixture",
+        """
+        create table avg_fixture
+        (
+            id Int32,
+            b UInt8,
+            s Int16,
+            i Int32,
+            l Int64,
+            nb Nullable(UInt8),
+            ns Nullable(Int16),
+            ni Nullable(Int32),
+            nl Nullable(Int64)
+        ) engine = Memory
+        """,
+        "insert into avg_fixture (id, b, s, i, l, nb, ns, ni, nl) values (1, 1, 1, 1, 1, null, null, null, null), (2, 2, 2, 2, 2, 1, 1, 1, 1), (3, 1, 1, 1, 1, 2, 2, 2, 2), (4, 3, 3, 3, 3, 3, 3, 3, 3)",
 
         """
         create table wide_entity (id Int32, regionid UInt64, note String) engine = Memory

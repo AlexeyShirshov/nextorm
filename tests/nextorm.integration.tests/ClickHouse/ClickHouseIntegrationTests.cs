@@ -15,6 +15,7 @@ namespace NextORM.Integration.Tests;
 /// portable equivalent (the <c>-If</c> combinators, <c>argMin</c>/<c>argMax</c>) or render
 /// differently per provider.
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class ClickHouseIntegrationTests : ProviderTestSuite
 {
     protected override ITestProvider Provider => ClickHouseTestProvider.Instance;
@@ -301,7 +302,7 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
     public void NumbersTableFunction_ShouldReturnThreeRows()
     {
         var rows = _sut.DataProvider
-            .FromTableFunction(() => SqlFunctions.ClickHouse.numbers(3))
+            .From(() => SqlFunctions.ClickHouse.numbers(3))
             .Select(r => new { r.Value })
             .ToList();
 
@@ -313,7 +314,7 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
     public void ZerosTableFunction_ShouldReturnThreeRows()
     {
         var rows = _sut.DataProvider
-            .FromTableFunction(() => SqlFunctions.ClickHouse.zeros(3))
+            .From(() => SqlFunctions.ClickHouse.zeros(3))
             .Select(r => new { r.Value })
             .ToList();
 
@@ -325,7 +326,7 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
     public void GenerateRandomTableFunction_ShouldReturnRequestedRows()
     {
         var rows = _sut.DataProvider
-            .FromTableFunction(() => SqlFunctions.ClickHouse.generate_random())
+            .From(() => SqlFunctions.ClickHouse.generate_random())
             .Page(3, 0)
             .Select(r => new { r.Id, r.Value, r.Name })
             .ToList();
@@ -1013,8 +1014,9 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
     [Fact]
     public void ArrayScalarFunctions_ShouldReturnValues()
     {
-        // The five functions return arrays, which the row reader cannot materialise yet, so each is
-        // wrapped in a scalar-returning array function (length/arrayStringConcat) inside the query.
+        // The untargeted array functions still return element types the row reader cannot
+        // materialise as the declared array (arrayCumSum/arraySlice/arrayPushBack/arrayEnumerate),
+        // so each is wrapped in a scalar-returning array function (length/arrayStringConcat).
         // array_entity id = 1 has nums = [3, 1, 2].
         var r = _sut.ArrayEntity
             .Where(x => x.Id == 1)
@@ -2000,7 +2002,7 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
     public void Values_WithDeclaredSchema_ShouldReturnRows()
     {
         var rows = _sut.DataProvider
-            .FromTableFunction(() => SqlFunctions.ClickHouse.values<IDynamicValuesRow>("(1, 'x'), (2, 'y')"))
+            .From(() => SqlFunctions.ClickHouse.values<IDynamicValuesRow>("(1, 'x'), (2, 'y')"))
             .OrderBy(r => r.A)
             .Select(r => new { r.A, r.B })
             .ToList();

@@ -29,6 +29,12 @@ public partial class QueryCommand
         internal static void Prepare(QueryCommand cmd, bool dontCalculateHash, CancellationToken cancellationToken)
         {
             if (cmd._dataContext is null) throw new InvalidOperationException("Cannot prepare command in cache");
+
+            // #249 / T353: a collection-valued projection only supports the buffered list/array terminals. Every
+            // other terminal funnels through preparation, so the refusal is raised here — before any SQL is built
+            // and before a plan entry exists — instead of emitting a statement whose rows cannot be projected.
+            if (cmd.CollectionSlotCarrier is CollectionSlotCarrier slotCarrier)
+                throw new NotSupportedException(slotCarrier.UnsupportedTerminal());
             cmd.InvalidatePlanKey();
             cmd.ResolvedQuoteIdentifiers = cmd.QuoteIdentifiers ?? cmd._dataContext.QuoteIdentifiers;
             cmd.ResolvedNamingConvention = cmd.NamingConvention ?? cmd._dataContext.NamingConvention;
@@ -96,6 +102,19 @@ public partial class QueryCommand
             PrepareFrom(from, dontCalculateHash, cancellationToken, cmd);
             from = AttachPrimarySourceLock(cmd, from);
             var joinPlanHash = PrepareJoin(cmd, dontCalculateHash, cancellationToken);
+            // #323 D1: a SelectGroup command infers its grouping keys from the raw projection before
+            // the columns are prepared. The analysis also rejects unsupported shapes and validates
+            // HAVING/ORDER BY against the inferred keys, so an invalid shape never reaches SQL building.
+            if (cmd.IsSelectGroup)
+            {
+                var projection = cmd._exp ?? throw new QueryPreparationException("SelectGroup requires a projection.");
+                var (selectGroupKeys, selectGroupOutputs, selectGroupMode) = SelectGroupExpressionAnalyzer.Analyze(
+                    projection, cmd._having, cmd._sorting, cancellationToken);
+                cmd.SelectGroupKeys = selectGroupKeys;
+                cmd.SelectGroupOutputs = selectGroupOutputs;
+                cmd.SelectGroupMode = selectGroupMode;
+            }
+
             var (selectList, columnsPlanHash) = PrepareColumns(cmd, dontCalculateHash, srcType, cancellationToken);
             // #148-B D5/A7: reject an unlifted non-nullable value scalar read through a reference
             // navigation, naming the path and result type instead of materializing a silent default.
@@ -567,6 +586,28 @@ public partial class QueryCommand
                     // (Stream/TextReader) is not one of the scalar types in IsSingleColumnProjection.
                     var bodyIsStreaming = TableAliasAccessors.IsStreaming(cmd._exp.Body);
 
+                    // Ordered pre-classification guards (§T313, #313). The column-shape branches below
+                    // decide how a body becomes a select list; a body that matches none of them falls
+                    // through to complex row materialization, where an enum result type surfaces as a
+                    // CLR constructor failure. Both guards therefore run before the classification chain
+                    // and never reach it: first the DateTimeOffset fail-closed guard shared with the
+                    // projection visitor (a bare Select(x => value.DayOfWeek) never visits its receiver
+                    // chain), then the enum scalar refusal, which is bypassed by a value converter.
+                    //
+                    // These two guards apply only when NeedMapping is true: mapping a row back from columns
+                    // is what a bare enum / untranslated DateTimeOffset scalar body cannot survive, while
+                    // the in-memory provider materializes its projections itself and evaluating such a
+                    // member client-side is a supported behaviour there (plan revision r2).
+                    if (cmd._dataContext!.NeedMapping)
+                    {
+                        MemberTranslator.ThrowIfUnsupportedDateTimeOffsetAccess(cmd._exp.Body);
+
+                        if (bodyConverter is null
+                            && (Nullable.GetUnderlyingType(cmd._exp.Body.Type) ?? cmd._exp.Body.Type).IsEnum)
+                            throw new NotSupportedException(
+                                "Enum scalar projections without a value converter are not supported in a server-side query.");
+                    }
+
                     // A whole-projection (identity) read over a column-shape source
                     // (a data-modifying CTE or an equivalent derived shape) reuses that slot-tagged shape
                     // instead of falling through with no columns. TryBuildProjectionSelectList's reuse
@@ -595,6 +636,64 @@ public partial class QueryCommand
                         if (!cmd._dontCache && !noHash) unchecked
                         {
                             columnsPlanHash = columnsPlanHash * 13 + scalarShape[0].PlanHashCode;
+                        }
+                    }
+                    // A whole-projection (identity) read over a mapped single physical source
+                    // (From<T>().Select(x => x)) reuses the ordinary entity column selection and its
+                    // cache instead of falling through with no columns (#306). The column-shape arms
+                    // above keep precedence: a typed-CTE/derived source is resolved from its own
+                    // defining select list, and this arm is reached only when there is no ColumnShape.
+                    // A joined projection item is a member read and stays in the branch below, so a
+                    // bare parameter body can only mean the source itself. The projected type must be
+                    // exactly the source/entity type: a whole-object conversion to an unrelated type
+                    // (`(object)x`) is not an identity projection and must not become one. A
+                    // dynamic-columns-store entity is refused here rather than cached without its
+                    // store column, which would poison the shared SelectListCache entry the ordinary
+                    // projection-less path builds for the same type.
+                    //
+                    // T356 (#347): the arm also requires at least one mapped property, which is exactly
+                    // the condition under which EntitySelectListBuilder.Build yields columns. The metadata
+                    // cache can hold an auto-registered entry for a scalar CLR type (the raw/bind path
+                    // registers any result type), and such an entry maps no properties: it is not a
+                    // mapped entity. Building from it produced an EMPTY list that was written to
+                    // SelectListCache under the scalar type, so every later identity read of a
+                    // single-column derived source of that type resolved to a zero-column projection
+                    // ("select ... from" with no items / "The prepared select list is empty"). With the
+                    // guard the scalar arm below owns that shape, warm and cold alike.
+                    else if (TypeFacts.UnwrapConvert(cmd._exp.Body) is ParameterExpression
+                        && cmd._from?.ColumnShape is null
+                        && cmd._dataContext!.NeedMapping
+                        && cmd._exp.Body.Type == (cmd.ProjectionType ?? srcType)
+                        && DataContextCache.Metadata.TryGetValue(cmd._exp.Body.Type, out var identityMeta)
+                        && identityMeta.DynamicColumnsStore is null
+                        && identityMeta.Properties.Count > 0)
+                    {
+                        var identityType = cmd._exp.Body.Type;
+                        // An empty entry is never a usable column shape: treat it as a miss so a
+                        // hand-seeded or legacy empty entry cannot shadow the ordinary build. This
+                        // cannot create one, because the arm requires mapped properties and the helper
+                        // emits exactly one column per property.
+                        if (!DataContextCache.SelectListCache.TryGetValue(identityType, out var identityColumns)
+                            || identityColumns.Length == 0)
+                        {
+                            // Same helper the ordinary projection-less path uses; the per-column plan
+                            // hash is folded in below and stored with the entry so a later read of
+                            // either shape sees the identical cached metadata.
+                            var (identityBuiltColumns, _) = EntitySelectListBuilder.Build(identityType, identityMeta, cancellationToken);
+                            identityColumns = identityBuiltColumns;
+                            if (!cmd._dontCache && !noHash)
+                            {
+                                for (var i = 0; i < identityColumns.Length; i++)
+                                    identityColumns[i].PlanHashCode = cmd.GetSelectExpressionPlanEqualityComparer().GetHashCode(identityColumns[i]);
+                                DataContextCache.SelectListCache[identityType] = identityColumns;
+                            }
+                        }
+
+                        selectList = identityColumns;
+                        if (!cmd._dontCache && !noHash) unchecked
+                        {
+                            for (var i = 0; i < selectList.Length; i++)
+                                columnsPlanHash = columnsPlanHash * 13 + selectList[i].PlanHashCode;
                         }
                     }
                     else if (TryGetDirectEntityItem(cmd, out var directItemType, out var directSlot, out var directMemberName, out var directItemExpression))
@@ -651,6 +750,26 @@ public partial class QueryCommand
 
                             selectList = [directColumn];
                         }
+                    }
+                    // A top-level generic ValueTuple.Create factory call is the same unsupported
+                    // projection as the explicit ValueTuple constructor below: no classification
+                    // branch produces a select list for it, so without this guard it reaches row
+                    // materialization and leaks the raw constructor-arity ArgumentException. Refuse it
+                    // during preparation, before dialect dispatch. The guard is top-level only (a
+                    // nested factory inside an anonymous/DTO member keeps its existing diagnostic) and
+                    // mapping-only (the in-memory provider evaluates projections client-side and keeps
+                    // its measured baseline).
+                    else if (cmd._dataContext!.NeedMapping
+                        && cmd._exp.Body is MethodCallExpression valueTupleFactory
+                        && valueTupleFactory.Method is { IsStatic: true } valueTupleFactoryMethod
+                        && valueTupleFactoryMethod.Name == nameof(ValueTuple.Create)
+                        && valueTupleFactoryMethod.DeclaringType == typeof(ValueTuple)
+                        && valueTupleFactoryMethod.IsGenericMethod
+                        && valueTupleFactoryMethod.GetGenericArguments().Length is >= 1 and <= 8
+                        && IsValueTupleFactoryResult(valueTupleFactory.Type))
+                    {
+                        throw new NotSupportedException(
+                            $"The ValueTuple projection '{valueTupleFactory.Type}' at Select position 0 is not supported; project an explicit type or use Tuple.Create.");
                     }
                     else if (cmd._exp.Body is NewExpression ctor && !TypeFacts.IsSingleColumnProjection(ctor.Type))
                     {
@@ -824,6 +943,18 @@ public partial class QueryCommand
                         throw new NotSupportedException(
                             $"The bare top-level scalar projection '{domMember.Type}' at Select position 0 is not supported; project it inside a named shape (for example Select(x => new {{ x.Doc }}) or a DTO) instead.");
                     }
+                    // A bare projection of a range-returning PostgreSQL function over a mapped
+                    // [RangeColumns] pair has no scalar SQL form and no projection shape, so without this
+                    // guard the select list stays empty and the row mapper fails with the opaque
+                    // "Incorrect number of arguments for constructor". Reject it during preparation with
+                    // the same diagnostic the rendering guards produce. The check is metadata-only (no
+                    // visitor construction, no cache mutation) and only classifies the existing
+                    // RangeReturning set; anonymous projections and predicates keep their earlier
+                    // translator path unchanged.
+                    else if (RangeColumnsSqlTranslator.IsRangeReturningOverPair(cmd._exp.Body, srcType, out var rangeReturningName))
+                    {
+                        RangeColumnsSqlTranslator.ThrowRangeReturningOverPair(rangeReturningName!);
+                    }
                     // Final invariant: a structural direct-projection read (Select(p => p.ItemN)) that no
                     // earlier branch handled and whose item is not a mapped entity must fail closed. The
                     // scalar/tuple/DOM branches above run first, so this guard never masks a supported
@@ -875,100 +1006,179 @@ public partial class QueryCommand
                     }
                     else if (cmd._dataContext!.NeedMapping)
                     {
-                        DataContextCache.Metadata.TryGetValue(srcType, out var entityMeta);
-                        if (entityMeta is not null
-                            && entityMeta.DynamicColumnsStore is not null
-                            && cmd.Joins is { Length: > 0 })
-                            throw new NotSupportedException("A dynamic-columns store is only supported for a query over a single physical source; the query has joins.");
-
-                        if (/*!CacheList || */!DataContextCache.SelectListCache.TryGetValue(srcType, out selectList))
+                        // T300 (#300): a single-column scalar derived source (a member projection,
+                        // a computed scalar exposed by the derived boundary, or a set-operation
+                        // command) materialises as a scalar. This branch runs BEFORE the process-wide
+                        // SelectListCache read below: that entry can have been created by an earlier
+                        // scalar read for object materialisation, and reusing it left OneColumn false,
+                        // which produced "Cannot get ctor from System.Int32" only on the warm path.
+                        // The branch therefore neither reads nor writes SelectListCache.
+                        if (cmd._from?.ColumnShape is null
+                            && cmd._from?.SubQuery?.SelectList is { Length: 1 } scalarDerivedShape
+                            && (cmd.ProjectionType ?? srcType) == srcType
+                            && TypeFacts.IsSingleColumnProjection(srcType)
+                            && scalarDerivedShape[0].PropertyType == srcType)
                         {
-                            if (entityMeta is not null)
+                            var scalarDerivedColumn = scalarDerivedShape[0];
+                            if (scalarDerivedColumn.PropertyName is null && scalarDerivedColumn.OutputName is null)
                             {
-                                // The projection is built by the shared helper (also used by raw-command
-                                // mapping); the helper throws on cancellation and never returns a partial
-                                // list, so its Completed element is always true (the former incomplete
-                                // handling here is gone). The per-column plan hash is folded in here so the
-                                // cached column shape stays identical to the previous inline build.
-                                var (columns, _) = EntitySelectListBuilder.Build(srcType, entityMeta, cancellationToken);
-                                selectList = columns;
-
-                                if (entityMeta.DynamicColumnsStore is { } dynamicStore)
-                                {
-                                    var withStore = new SelectExpression[selectList.Length + 1];
-                                    selectList.CopyTo(withStore, 0);
-                                    withStore[selectList.Length] = new SelectExpression(typeof(Dictionary<string, object?>))
-                                    {
-                                        Index = selectList.Length,
-                                        PropertyName = dynamicStore.PropertyInfo.Name,
-                                        PropertyInfo = dynamicStore.PropertyInfo,
-                                        IsDynamicColumnsStore = true,
-                                    };
-                                    selectList = withStore;
-                                }
-
-                                if (!cmd._dontCache && !noHash)
-                                    for (var i = 0; i < selectList.Length; i++) unchecked
-                                        {
-                                            selectList[i].PlanHashCode = cmd.GetSelectExpressionPlanEqualityComparer().GetHashCode(selectList[i]);
-                                            columnsPlanHash = columnsPlanHash * 13 + selectList[i].PlanHashCode;
-                                        }
+                                throw new QueryPreparationException(
+                                    "Cannot materialize scalar derived source: its single output column has no usable SQL name. " +
+                                    "Project to a named property, for example Select(v => new { Value = v }).");
                             }
 
-                            // Additive fallback: a metadata-less derived source read without a projection
-                            // still has to expose the derived subquery's own projection columns, exactly
-                            // as the column-shape (typed CTE) branches reuse ColumnShape. This is what
-                            // lets the intermediate command built by From(EntityBuilder<TShape>) for a
-                            // typed PIVOT/UNPIVOT result (a no-projection read of a derived shape with no
-                            // entity metadata) prepare. The block runs only where this branch previously
-                            // threw, so every query that prepares today keeps its existing path, SQL and
-                            // plan key. It never writes SelectListCache (a metadata-less shape key would
-                            // collide across different subqueries), never touches _dontCache and never
-                            // mutates the source command.
-                            if (!(selectList?.Length > 0)
-                                && cmd._from?.ColumnShape is null
-                                && cmd._from?.SubQuery?.SelectList is { Length: > 0 } derivedShape
-                                && TryGetReusableDerivedShape(derivedShape, out var reusableShape))
+                            cmd.OneColumn = true;
+                            var scalarPassThrough = DerivedPassThroughColumn(scalarDerivedColumn);
+                            // The identifier the inner projection actually emits decides the consumer's
+                            // reference. A pure, unconverted column reference is emitted bare, so the
+                            // derived table exposes the member's physical column name — which may differ
+                            // from the member name only by case (PostgreSQL and ClickHouse resolve quoted
+                            // identifiers case-sensitively, so "Id" is not "id"). A converted or computed
+                            // projection is aliased to the stored member name by the shared alias rule
+                            // (SqlSourceRenderer.MakeColumn marks a cast with NeedAliasForColumn), so the
+                            // member name is the identifier and must be kept. DerivedPassThroughColumn
+                            // already applies the same emission rule to SqlFunctions.Column references.
+                            if (scalarDerivedColumn.PropertyName is { } scalarPropertyName
+                                && TryGetUnconvertedColumnMember(scalarDerivedColumn, out var scalarProperty))
                             {
-                                if (reusableShape.Length == 1
-                                    && TypeFacts.IsSingleColumnProjection(reusableShape[0].PropertyType))
-                                {
-                                    // A single scalar column stands for the whole row, mirroring the
-                                    // scalar reuse branch.
-                                    cmd.OneColumn = true;
-                                    selectList = [DerivedPassThroughColumn(reusableShape[0])];
-                                }
-                                else
-                                {
-                                    // The derived table passes its source's projection through,
-                                    // mirroring the identity reuse branch. Each column is cloned so the
-                                    // consumer references the derived table's own output identifiers
-                                    // instead of re-rendering the inner defining expression (which would
-                                    // re-alias the underlying source column the derived table no longer
-                                    // exposes).
-                                    selectList = Array.ConvertAll(reusableShape, DerivedPassThroughColumn);
-                                }
-
-                                if (!cmd._dontCache && !noHash) unchecked
-                                {
-                                    for (var i = 0; i < selectList.Length; i++)
-                                        columnsPlanHash = columnsPlanHash * 13 + selectList[i].PlanHashCode;
-                                }
+                                var physicalName = scalarProperty.GetPropertyColumnName(cmd.NamingConvention);
+                                if (physicalName.Length > 0
+                                    && !string.Equals(physicalName, scalarPropertyName, StringComparison.Ordinal)
+                                    && string.Equals(physicalName, scalarPropertyName, StringComparison.OrdinalIgnoreCase))
+                                    scalarPassThrough.OutputName = physicalName;
                             }
 
-                            if (!(selectList?.Length > 0))
-                                throw new QueryPreparationException("Select must return new anonymous type");
-
-                            DataContextCache.SelectListCache[srcType] = selectList;
+                            selectList = [scalarPassThrough];
+                            if (!cmd._dontCache && !noHash) unchecked
+                            {
+                                columnsPlanHash = columnsPlanHash * 13 + scalarDerivedColumn.PlanHashCode;
+                            }
                         }
-                        else if (!cmd._dontCache && !noHash)
+                        else
                         {
-                            for (var (i, cnt) = (0, selectList.Length); i < cnt; i++) unchecked
-                                {
-                                    var selExp = selectList[i];
+                            DataContextCache.Metadata.TryGetValue(srcType, out var entityMeta);
+                            if (entityMeta is not null
+                                && entityMeta.DynamicColumnsStore is not null
+                                && cmd.Joins is { Length: > 0 })
+                                throw new NotSupportedException("A dynamic-columns store is only supported for a query over a single physical source; the query has joins.");
 
-                                    columnsPlanHash = columnsPlanHash * 13 + selExp.PlanHashCode;
+                            if (/*!CacheList || */!DataContextCache.SelectListCache.TryGetValue(srcType, out selectList))
+                            {
+                                if (entityMeta is not null)
+                                {
+                                    // The projection is built by the shared helper (also used by raw-command
+                                    // mapping); the helper throws on cancellation and never returns a partial
+                                    // list, so its Completed element is always true (the former incomplete
+                                    // handling here is gone). The per-column plan hash is folded in here so the
+                                    // cached column shape stays identical to the previous inline build.
+                                    var (columns, _) = EntitySelectListBuilder.Build(srcType, entityMeta, cancellationToken);
+                                    selectList = columns;
+
+                                    if (entityMeta.DynamicColumnsStore is { } dynamicStore)
+                                    {
+                                        var withStore = new SelectExpression[selectList.Length + 1];
+                                        selectList.CopyTo(withStore, 0);
+                                        withStore[selectList.Length] = new SelectExpression(typeof(Dictionary<string, object?>))
+                                        {
+                                            Index = selectList.Length,
+                                            PropertyName = dynamicStore.PropertyInfo.Name,
+                                            PropertyInfo = dynamicStore.PropertyInfo,
+                                            IsDynamicColumnsStore = true,
+                                        };
+                                        selectList = withStore;
+                                    }
+
+                                    if (!cmd._dontCache && !noHash)
+                                        for (var i = 0; i < selectList.Length; i++) unchecked
+                                            {
+                                                selectList[i].PlanHashCode = cmd.GetSelectExpressionPlanEqualityComparer().GetHashCode(selectList[i]);
+                                                columnsPlanHash = columnsPlanHash * 13 + selectList[i].PlanHashCode;
+                                            }
                                 }
+
+                                // Additive fallback: a metadata-less derived source read without a projection
+                                // still has to expose the derived subquery's own projection columns, exactly
+                                // as the column-shape (typed CTE) branches reuse ColumnShape. This is what
+                                // lets the intermediate command built by From(EntityBuilder<TShape>) for a
+                                // typed PIVOT/UNPIVOT result (a no-projection read of a derived shape with no
+                                // entity metadata) prepare. The block runs only where this branch previously
+                                // threw, so every query that prepares today keeps its existing path, SQL and
+                                // plan key. It never writes SelectListCache (a metadata-less shape key would
+                                // collide across different subqueries), never touches _dontCache and never
+                                // mutates the source command.
+                                if (!(selectList?.Length > 0)
+                                    && cmd._from?.ColumnShape is null
+                                    && cmd._from?.SubQuery?.SelectList is { Length: > 0 } derivedShape
+                                    && TryGetReusableDerivedShape(derivedShape, out var reusableShape))
+                                {
+                                    if (reusableShape.Length == 1
+                                        && TypeFacts.IsSingleColumnProjection(reusableShape[0].PropertyType))
+                                    {
+                                        // A single scalar column stands for the whole row, mirroring the
+                                        // scalar reuse branch.
+                                        cmd.OneColumn = true;
+                                        selectList = [DerivedPassThroughColumn(reusableShape[0])];
+                                    }
+                                    else
+                                    {
+                                        // The derived table passes its source's projection through,
+                                        // mirroring the identity reuse branch. Each column is cloned so the
+                                        // consumer references the derived table's own output identifiers
+                                        // instead of re-rendering the inner defining expression (which would
+                                        // re-alias the underlying source column the derived table no longer
+                                        // exposes).
+                                        selectList = Array.ConvertAll(reusableShape, DerivedPassThroughColumn);
+                                    }
+
+                                    if (!cmd._dontCache && !noHash) unchecked
+                                    {
+                                        for (var i = 0; i < selectList.Length; i++)
+                                            columnsPlanHash = columnsPlanHash * 13 + selectList[i].PlanHashCode;
+                                    }
+                                }
+
+                                // #315: a projection-less extreme-row query returns whole entity rows, so the
+                                // source must carry mapped metadata. Without it the whole-row shape yields no
+                                // columns and the generic anonymous-projection error below would misreport the
+                                // contract; report the mapped-source requirement instead. The explicitly
+                                // projected overloads supply _exp and never reach this branch.
+                                var unmappedExtremeRowSource = cmd.ExtremeRow is not null
+                                    && cmd._exp is null
+                                    && cmd._dataContext!.NeedMapping
+                                    && cmd._srcType is not null
+                                    && (entityMeta is null || entityMeta.Properties.Count == 0);
+                                if (unmappedExtremeRowSource)
+                                    throw new BuildSqlCommandException(ExtremeRowCompatibility.MappedEntitySourceMessage);
+
+                                if (!(selectList?.Length > 0))
+                                {
+                                    // #294: this guard is a projection-SHAPE restriction, not an
+                                    // anonymous-type requirement. A derived source whose own select list
+                                    // exists but cannot be passed through (TryGetReusableDerivedShape
+                                    // refused it: a projected member needs re-translation against the
+                                    // derived source) is reported with the derived diagnostic and the
+                                    // outer-Select rewrite; every other unmapped source is reported with
+                                    // the no-mapped-columns message. Only the message is selected here —
+                                    // the refusal predicate, the fallback gates above and the recursion
+                                    // guard in the helper are unchanged, and no translation is re-run.
+                                    var derivedSourceUnreusable = cmd._from?.ColumnShape is null
+                                        && cmd._from?.SubQuery?.SelectList is { Length: > 0 };
+                                    throw new QueryPreparationException(derivedSourceUnreusable
+                                        ? "Cannot materialize this derived source without an explicit outer Select: its projected columns cannot be reused safely (row-member expressions require re-translation). Add an outer Select, for example Select(x => x.Id). This restriction applies to anonymous types and DTOs alike."
+                                        : "Cannot materialize this source because it has no mapped columns or reusable projection. Use a mapped source or specify an explicit Select with named columns.");
+                                }
+
+                                DataContextCache.SelectListCache[srcType] = selectList;
+                            }
+                            else if (!cmd._dontCache && !noHash)
+                            {
+                                for (var (i, cnt) = (0, selectList.Length); i < cnt; i++) unchecked
+                                    {
+                                        var selExp = selectList[i];
+
+                                        columnsPlanHash = columnsPlanHash * 13 + selExp.PlanHashCode;
+                                    }
+                            }
                         }
                     }
                 }
@@ -1521,11 +1731,14 @@ public partial class QueryCommand
         /// <returns>A consumer-side column referencing the derived source's output identifier.</returns>
         private static SelectExpression DerivedPassThroughColumn(SelectExpression src)
         {
-            // Mirror MakeColumn's alias decision exactly: a column whose defining expression references
-            // the source column named exactly like its target member is emitted without an alias, so the
-            // derived table exposes that bare column name; every other shape exposes the target member
-            // name through the alias MakeColumn emits. PropertyName participates in the identifier only
-            // when an alias is actually emitted, so a case-sensitive server still resolves the bare name.
+            // Mirror the select-list alias rule the derived boundary actually rendered
+            // (SqlBuildContext.RequireDerivedScalarOutputName, read where SqlBuilder appends the alias).
+            // A named projection exposes the alias MakeColumn emits: the target member name, except for a
+            // column-valued expression that already reads the source column named like the member
+            // (emitted bare, so the physical/declared column name is the identifier). An unaliased
+            // computed scalar has no member name: the boundary declares its generated OutputName, and
+            // that is exactly the identifier the consumer must reference. Predicting anything else here
+            // would make the consumer address a column the derived table does not expose.
             var outputName = src.PropertyName is { } propertyName
                 ? TryGetColumnIdentifier(src.Expression, out var columnIdentifier)
                     && string.Equals(columnIdentifier, propertyName, StringComparison.OrdinalIgnoreCase)
@@ -1573,6 +1786,41 @@ public partial class QueryCommand
                 return true;
             }
 
+            return false;
+        }
+
+        /// <summary>
+        /// Resolves the member of an unaliased pure column reference: a projection the derived boundary
+        /// emits bare, so the identifier it exposes is the member's physical column name. Returns
+        /// <see langword="false"/> for a converted or computed projection, which the boundary aliases to
+        /// the stored member name; re-addressing the underlying column spelling there would reference an
+        /// identifier the derived table does not expose (PostgreSQL and ClickHouse reject it). The member
+        /// is taken from the stored expression without unwrapping conversions precisely so that a cast
+        /// (a converted scalar such as <c>Select(v =&gt; (int?)v.Id)</c>) is not mistaken for a bare
+        /// column reference.
+        /// </summary>
+        private static bool TryGetUnconvertedColumnMember(SelectExpression column, out MemberInfo member)
+        {
+            if (column.Expression is LambdaExpression lambda)
+                return TryGetUnconvertedMember(lambda.Body, out member);
+
+            if (column.Expression is { } expression)
+                return TryGetUnconvertedMember(expression, out member);
+
+            // No stored expression: a mapped entity column selected directly is emitted bare as well.
+            member = column.PropertyInfo!;
+            return column.PropertyInfo is not null;
+        }
+
+        private static bool TryGetUnconvertedMember(Expression expression, out MemberInfo member)
+        {
+            if (expression is MemberExpression memberExpression)
+            {
+                member = memberExpression.Member;
+                return true;
+            }
+
+            member = null!;
             return false;
         }
 
@@ -1766,6 +2014,16 @@ public partial class QueryCommand
             itemExpression = body;
             return true;
         }
+
+        /// <summary>
+        /// True for the result type of a top-level <see cref="ValueTuple.Create"/> factory call at every
+        /// factory arity (1..8). <see cref="TypeFacts.IsValueTupleType"/> recognizes arities 1..7; the
+        /// 8-argument factory returns the 8-element <c>Rest</c> form, which that helper deliberately
+        /// excludes, so the shape is recognized explicitly here.
+        /// </summary>
+        private static bool IsValueTupleFactoryResult(Type type) =>
+            TypeFacts.IsValueTupleType(type)
+            || (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(ValueTuple<,,,,,,,>));
 
         /// <summary>
         /// Recognizes the direct whole-entity projection of a joined projection item and confirms the
@@ -2076,25 +2334,44 @@ public partial class QueryCommand
                         // left-hand row in scope, so its column references become outer references of
                         // this command; the built command is installed as the join source and rendered
                         // like any other derived table by the apply clause.
-                        var applyVisitor = new CorrelatedQueryExpressionVisitor(cmd._dataContext!, cmd, cancellationToken, cmd._dataContext!.Logger);
-                        using var outerScope = applyVisitor.PushOuter(applySource.Parameters[0]);
-
-                        if (XmlNodesExpression.TryCreate(applySource, applyVisitor, out var xmlNodes))
+                        //
+                        // #324: the addressable left row is this command's FROM plus exactly the joins
+                        // that precede this one — never the applied source and never a later join. The
+                        // slots are rebuilt for every preparation from the actual prefix; the binding
+                        // side table is per-preparation metadata and never a plan-key input.
+                        QueryCommand.ApplyLeftOwnerScope? applyOwnerScope = null;
+                        if (join.ApplyLeftSlots is { Count: > 0 })
                         {
-                            // The xml.nodes() rowset is not a derived query: its source is the
-                            // outer row's XML column. Register the row-shape metadata (as
-                            // FromTableFunction does for its row type) and install the special
-                            // FROM source; the apply clause renders it as <col>.nodes(...) as [alias]([col]).
-                            cmd._dataContext!.From<SqlFunctions.IXmlNodesRow>();
-                            join.SetFrom(new FromExpression(xmlNodes!));
+                            join.ApplyLeftSlots = JoinExpression.CreateApplyLeftSlots(applySource.Parameters[0], idx + 1);
+                            applyOwnerScope = cmd.PushApplyLeftOwner(applySource.Parameters[0], idx + 1);
                         }
-                        else
+
+                        try
                         {
-                            var applyCommand = applyVisitor.BuildQueryCommand(applySource.Body);
-                            if (!applyCommand.IsPrepared)
-                                applyCommand.PrepareCommand(noHash, cancellationToken);
-                            TransferNestedFilterSkips(applyCommand, cmd);
-                            join.SetFrom(new FromExpression(applyCommand));
+                            var applyVisitor = new CorrelatedQueryExpressionVisitor(cmd._dataContext!, cmd, cancellationToken, cmd._dataContext!.Logger);
+                            using var outerScope = applyVisitor.PushOuter(applySource.Parameters[0]);
+
+                            if (XmlNodesExpression.TryCreate(applySource, applyVisitor, out var xmlNodes))
+                            {
+                                // The xml.nodes() rowset is not a derived query: its source is the
+                                // outer row's XML column. Register the row-shape metadata (as the
+                                // runtime table-function lowering does) and install the special
+                                // FROM source; the apply clause renders it as <col>.nodes(...) as [alias]([col]).
+                                cmd._dataContext!.From<SqlFunctions.IXmlNodesRow>();
+                                join.SetFrom(new FromExpression(xmlNodes!));
+                            }
+                            else
+                            {
+                                var applyCommand = applyVisitor.BuildQueryCommand(applySource.Body);
+                                if (!applyCommand.IsPrepared)
+                                    applyCommand.PrepareCommand(noHash, cancellationToken);
+                                TransferNestedFilterSkips(applyCommand, cmd);
+                                join.SetFrom(new FromExpression(applyCommand));
+                            }
+                        }
+                        finally
+                        {
+                            applyOwnerScope?.Dispose();
                         }
                     }
                     else
@@ -3564,19 +3841,49 @@ public partial class QueryCommand
             {
                 var columns = BuildKeyColumns(cmd._groupExp, "GROUP BY", cancellationToken);
                 groupingList = columns;
-
-                for (var idx = 0; idx < columns.Length; idx++)
+                groupingPlanHash = ApplyKeyColumnPlanHashes(cmd, columns, noHash, groupingPlanHash, cancellationToken);
+            }
+            else if (cmd.IsSelectGroup && groupingList is null)
+            {
+                switch (cmd.SelectGroupMode)
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
-
-                    var selExp = columns[idx];
-                    if (!noHash)
-                        selExp.PlanHashCode = cmd.GetSelectExpressionPlanEqualityComparer().GetHashCode(selExp);
-
-                    if (!cmd._dontCache && !noHash) unchecked
+                    case SelectGroupMode.Keyed:
+                        var keys = cmd.SelectGroupKeys
+                            ?? throw new QueryPreparationException("SelectGroup projection analysis is missing.");
+                        var columns = new SelectExpression[keys.Count];
+                        for (var idx = 0; idx < columns.Length; idx++)
                         {
-                            groupingPlanHash = groupingPlanHash * 13 + selExp.PlanHashCode;
+                            cancellationToken.ThrowIfCancellationRequested();
+
+                            var key = keys[idx];
+                            columns[idx] = new SelectExpression(key.Type)
+                            {
+                                Index = idx,
+                                PropertyName = $"sg_key_{idx}",
+                                Expression = key,
+                            };
                         }
+
+                        groupingList = columns;
+                        groupingPlanHash = ApplyKeyColumnPlanHashes(cmd, columns, noHash, groupingPlanHash, cancellationToken);
+                        break;
+
+                    case SelectGroupMode.GlobalAggregate:
+                        // No keys: the whole source is one group, so the statement carries no GROUP BY
+                        // list and a HAVING renders as a global filter over the aggregate projection
+                        // (DataContext/SqlBuilder.cs). There are no keys to validate the predicate
+                        // against, so the analyzer already refused every row-dependent HAVING shape;
+                        // only aggregate calls and row-independent expressions reach the renderer.
+                        break;
+
+                    case SelectGroupMode.ConstantProjection:
+                        // No keys and no aggregates: the projection references no row, the statement
+                        // renders `select distinct ...` and a validated row-independent HAVING is a
+                        // pre-group filter, rendered in the WHERE position (DataContext/SqlBuilder.cs).
+                        break;
+
+                    default:
+                        throw new QueryPreparationException("SelectGroup projection analysis is missing.");
                 }
             }
 
@@ -3599,6 +3906,35 @@ public partial class QueryCommand
             }
 
             return (groupingList, groupingPlanHash);
+        }
+
+        /// <summary>
+        /// Computes each key column's plan hash and folds it into the grouping hash with the shared
+        /// <c>* 13 + PlanHashCode</c> math. Used by the explicit <c>GROUP BY</c> branch and the
+        /// <c>SelectGroup</c> keyed branch so the two cannot drift.
+        /// </summary>
+        private static int ApplyKeyColumnPlanHashes(
+            QueryCommand cmd,
+            SelectExpression[] columns,
+            bool noHash,
+            int groupingPlanHash,
+            CancellationToken cancellationToken)
+        {
+            for (var idx = 0; idx < columns.Length; idx++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var selExp = columns[idx];
+                if (!noHash)
+                    selExp.PlanHashCode = cmd.GetSelectExpressionPlanEqualityComparer().GetHashCode(selExp);
+
+                if (!cmd._dontCache && !noHash) unchecked
+                    {
+                        groupingPlanHash = groupingPlanHash * 13 + selExp.PlanHashCode;
+                    }
+            }
+
+            return groupingPlanHash;
         }
 
         /// <summary>
@@ -3666,6 +4002,7 @@ public partial class QueryCommand
         internal int? CommandTimeout;
         internal EagerLoadMode? EagerLoadMode;
         internal EagerLoadShape EagerLoadShape;
+        internal CollectionSlotShape CollectionSlotShape;
         // Effective (override ?? context) forms of the settings an apply overwrites via Resolved*:
         // two contexts of the same type with different defaults must never share a candidate.
         internal bool EffectiveQuoteIdentifiers;
@@ -3741,6 +4078,7 @@ public partial class QueryCommand
             if (CommandTimeout != other.CommandTimeout) return false;
             if (EagerLoadMode != other.EagerLoadMode) return false;
             if (!EagerLoadShape.Equals(other.EagerLoadShape)) return false;
+            if (!CollectionSlotShape.Equals(other.CollectionSlotShape)) return false;
 
             // Effective (override ?? context) settings that an apply overwrites through Resolved*.
             if (EffectiveQuoteIdentifiers != other.EffectiveQuoteIdentifiers) return false;
@@ -4003,6 +4341,7 @@ public partial class QueryCommand
             CommandTimeout = cmd.CommandTimeout,
             EagerLoadMode = cmd.EagerLoadMode,
             EagerLoadShape = cmd.EagerLoadShape,
+            CollectionSlotShape = cmd.CollectionSlotShape,
             EffectiveQuoteIdentifiers = cmd.QuoteIdentifiers ?? cmd._dataContext?.QuoteIdentifiers ?? false,
             EffectiveNamingConvention = cmd.NamingConvention ?? cmd._dataContext?.NamingConvention,
             EffectiveKeywordCase = cmd.KeywordCase ?? cmd._dataContext?.KeywordCase ?? default,
@@ -4311,6 +4650,7 @@ public partial class QueryCommand
             hash.Add(shape.EffectiveKeywordCase);
             hash.Add(shape.EffectiveCommandTimeout);
             hash.Add(shape.ContextEagerLoadMode);
+            shape.CollectionSlotShape.AddTo(ref hash);
             hash.Add(shape.Tag);
             foreach (var hint in shape.Hints ?? []) hash.Add(hint);
             foreach (var hint in shape.TableHints ?? []) hash.Add(hint);

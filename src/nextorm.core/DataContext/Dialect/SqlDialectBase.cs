@@ -39,6 +39,8 @@ public abstract class SqlDialectBase : ISqlDialect
     /// <inheritdoc/>
     public virtual bool SupportsApplyOnPlainTable => false;
     /// <inheritdoc/>
+    public virtual bool SupportsDirectApplyTableFunction => false;
+    /// <inheritdoc/>
     public virtual bool SupportsJoinStrictness => false;
     /// <inheritdoc/>
     public virtual bool SupportsGlobalJoin => false;
@@ -66,6 +68,8 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual bool SupportsArrays => false;
     /// <inheritdoc/>
     public virtual bool SupportsArrayFunctions => false;
+    /// <inheritdoc/>
+    public virtual bool SupportsArrayFunction(string name) => true;
     /// <inheritdoc/>
     public virtual bool SupportsTupleFunctions => Tuple is not null;
 
@@ -112,8 +116,33 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual bool SupportsNthValue => false;
     /// <summary>Defaults to <c>false</c>; SQL Server and MariaDB opt into the window percentile functions.</summary>
     public virtual bool SupportsPercentileWindow => false;
+    /// <summary>Defaults to <c>false</c>; PostgreSQL opts into the ordered-set percentile/median form.</summary>
+    public virtual bool SupportsOrderedPercentiles => false;
     /// <summary>Defaults to <c>false</c>; PostgreSQL, MySQL, MariaDB, ClickHouse and SQLite opt into named windows.</summary>
     public virtual bool SupportsNamedWindows => false;
+    /// <summary>
+    /// True when the dialect understands the native <c>NULLS FIRST</c>/<c>NULLS LAST</c> modifier; the safe
+    /// default is <c>false</c>, which selects the portable <c>CASE</c> emulation from
+    /// <see cref="RenderOrderBy"/>. SQLite, PostgreSQL and ClickHouse opt in.
+    /// </summary>
+    public virtual bool SupportsNullsOrdering => false;
+    /// <summary>
+    /// Renders one logical <c>ORDER BY</c> item with an explicit NULL placement. The default emulates the
+    /// placement with a <c>CASE</c> rank key whose prefix is always ascending; providers that opt into
+    /// <see cref="SupportsNullsOrdering"/> override it with the native form.
+    /// </summary>
+    /// <param name="expressionSql">The already-qualified, already-quoted key SQL.</param>
+    /// <param name="direction">The requested key direction.</param>
+    /// <param name="nullsPosition">The explicit NULL placement.</param>
+    /// <returns>The rendered ordering item.</returns>
+    public virtual string RenderOrderBy(string expressionSql, OrderDirection direction, NullsPosition nullsPosition)
+        => NullsOrderingRenderer.Render(expressionSql, direction, nullsPosition);
+    /// <summary>
+    /// The renderer for the explicit null-safe comparison helpers, or <see langword="null"/> when the
+    /// provider has not opted in. The safe default is <see langword="null"/>, which makes the
+    /// translator reject both helper forms with an exception naming the provider and the form.
+    /// </summary>
+    public virtual INullSafeComparisonRenderer? NullSafeComparison => null;
     /// <summary>Defaults to <c>false</c>; PostgreSQL, ClickHouse and SQLite opt into the <c>GROUPS</c> frame unit.</summary>
     public virtual bool SupportsWindowFrameGroups => false;
     /// <summary>Defaults to <c>false</c>; PostgreSQL and SQLite opt into the frame <c>EXCLUDE</c> clause.</summary>
@@ -166,6 +195,28 @@ public abstract class SqlDialectBase : ISqlDialect
     /// <summary>Defaults to <c>null</c>; only SQL Server exposes the T-SQL-only scalar-function renderer.</summary>
     public virtual ISqlServerFunctions? SqlServerFunctions => null;
 
+    /// <summary>Defaults to <c>false</c>; SQL Server, PostgreSQL, MySQL and MariaDB opt in.</summary>
+    public virtual bool SupportsBase64Encode => false;
+
+    /// <summary>Defaults to the unsupported-provider exception; reached only when <see cref="SupportsBase64Encode"/> is true.</summary>
+    public virtual string MakeBase64Encode(string value) =>
+        throw new NotSupportedException("The base64_encode function is not supported by this provider.");
+
+    /// <summary>Defaults to <c>false</c>; SQL Server, PostgreSQL, MySQL and MariaDB opt in.</summary>
+    public virtual bool SupportsBase64Decode => false;
+
+    /// <summary>Defaults to the unsupported-provider exception; reached only when <see cref="SupportsBase64Decode"/> is true.</summary>
+    public virtual string MakeBase64Decode(string value) =>
+        throw new NotSupportedException("The base64_decode function is not supported by this provider.");
+
+    /// <summary>Defaults to <c>false</c>; SQL Server, PostgreSQL, MySQL and MariaDB opt in.</summary>
+    public virtual bool SupportsCryptGenRandom => false;
+
+    /// <summary>Defaults to the unsupported-provider exception; reached only when <see cref="SupportsCryptGenRandom"/> is true.</summary>
+    public virtual string MakeCryptGenRandom(string length) =>
+        throw new NotSupportedException("The crypt_gen_random function is not supported by this provider.");
+
+
     /// <inheritdoc/>
     public virtual bool SupportsBooleanAggregates => false;
     /// <inheritdoc/>
@@ -191,8 +242,35 @@ public abstract class SqlDialectBase : ISqlDialect
     /// <summary>Defaults to <c>false</c>; MySQL/MariaDB and ClickHouse opt into the arbitrary-value aggregate.</summary>
     public virtual bool SupportsAnyValueAggregate => false;
 
+    /// <inheritdoc/>
+    public virtual bool SupportsSqlServer2025Functions => false;
+
+    /// <inheritdoc/>
+    public virtual bool SupportsSqlServer2022Functions => false;
+
+    /// <inheritdoc/>
+    public virtual bool SupportsProductAggregate => false;
+
+    /// <summary>Defaults to <c>false</c>; SQL Server from major version 15 opts into <c>APPROX_COUNT_DISTINCT</c>.</summary>
+    public virtual bool SupportsApproxCountDistinctAggregate => false;
+
+    /// <summary>Defaults to <c>false</c>; SQL Server opts into <c>CHECKSUM_AGG</c>.</summary>
+    public virtual bool SupportsChecksumAggregate => false;
+
+    /// <summary>Defaults to <c>false</c>; SQL Server opts into <c>GROUPING_ID</c>.</summary>
+    public virtual bool SupportsGroupingIdAggregate => false;
+
+    /// <summary>Defaults to <c>false</c>; SQL Server from major version 16 opts into <c>APPROX_PERCENTILE_CONT</c>.</summary>
+    public virtual bool SupportsApproxPercentileCont => false;
+
+    /// <summary>Defaults to <c>false</c>; SQL Server from major version 16 opts into <c>APPROX_PERCENTILE_DISC</c>.</summary>
+    public virtual bool SupportsApproxPercentileDisc => false;
+
     /// <summary>Defaults to <c>null</c>; ClickHouse opts into the <c>windowFunnel</c>/<c>retention</c>/<c>sequenceMatch</c> aggregates.</summary>
     public virtual ISequenceAggregateRenderer? SequenceAggregates => null;
+
+    /// <summary>Defaults to <c>null</c>; ClickHouse opts into the ClickHouse-only aggregate catalogue (statistical, quantile-algorithm, array/tuple and time-series aggregates).</summary>
+    public virtual IClickHouseAggregateRenderer? ClickHouseAggregates => null;
 
     /// <summary>Defaults to <c>false</c>; ClickHouse opts into the string-JSON <c>JSONExtract*</c> family and the native-JSON functions.</summary>
     public virtual bool SupportsJsonExtract => false;
@@ -229,6 +307,16 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual string? LobLocatorColumn => null;
     /// <inheritdoc/>
     public virtual bool SupportsTransactions => true;
+
+    /// <summary>
+    /// True when the provider supports savepoints inside an ADO.NET transaction; the fail-closed
+    /// default is <c>false</c>, so a dialect opts in with an override. The member exists on the base
+    /// class as well as on <see cref="ISqlDialect"/> because a class member declared in a derived type
+    /// does not implement — and is not re-mapped to — an interface default member: without this
+    /// <c>virtual</c> member a third-party dialect deriving from this base and declaring
+    /// <c>SupportsSavepoints => true</c> would still read <c>false</c> through <see cref="ISqlDialect"/>.
+    /// </summary>
+    public virtual bool SupportsSavepoints => false;
 
     /// <summary>Defaults to <c>null</c>; ClickHouse exposes the <c>LIMIT n BY expr</c> renderer.</summary>
     public virtual ILimitByRenderer? LimitBy => null;
@@ -458,6 +546,23 @@ public abstract class SqlDialectBase : ISqlDialect
         _ => type.Name
     };
 
+    /// <summary>
+    /// The rejecting default of <see cref="ISqlDialect.MakeTryCast"/>: only a dialect with a closed
+    /// conversion map (SQL Server) may answer, so no provider silently renders a cast through
+    /// <see cref="MakeTypeName"/>'s open name fall-back.
+    /// </summary>
+    /// <exception cref="NotSupportedException">Always: the provider has no <c>TRY_CAST</c>.</exception>
+    public virtual string MakeTryCast(string expression, Type targetType) =>
+        throw new NotSupportedException("The TRY_CAST function is not supported by this provider.");
+
+    /// <summary>
+    /// The rejecting default of <see cref="ISqlDialect.MakeTryConvert"/>; see
+    /// <see cref="MakeTryCast"/> for why the conversion cannot reuse <see cref="MakeTypeName"/>.
+    /// </summary>
+    /// <exception cref="NotSupportedException">Always: the provider has no <c>TRY_CONVERT</c>.</exception>
+    public virtual string MakeTryConvert(string expression, Type targetType, string? style) =>
+        throw new NotSupportedException("The TRY_CONVERT function is not supported by this provider.");
+
     /// <inheritdoc/>
     public virtual string MakeBool(bool v) => v ? "1" : "0";
     /// <inheritdoc/>
@@ -471,6 +576,16 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual string MakeCase(string caseExpression, bool isBooleanResult, bool asPredicate, KeywordCase keywordCase = KeywordCase.Lower) => caseExpression;
     /// <inheritdoc/>
     public virtual string MakeAggregate(string name) => name;
+
+    /// <inheritdoc/>
+    public virtual string MakeAverageArgument(string argument, Type inputType) => argument;
+
+    /// <inheritdoc/>
+    public virtual bool WrapsAverageResult => false;
+
+    /// <inheritdoc/>
+    public virtual string MakeAverageResult(string aggregate, string argument, string? filterPredicate = null, string? windowClause = null)
+        => aggregate;
 
     // Scalar function defaults are ANSI/portable; a dialect overrides only where it deviates
     // (SQL Server len/datepart, SQLite strftime/datetime, PostgreSQL/ SQLite natural log, ...).
@@ -546,6 +661,8 @@ public abstract class SqlDialectBase : ISqlDialect
     /// Quotes <paramref name="value"/> as a SQL string literal. <paramref name="escapeBackslash"/> selects
     /// the dialects whose string syntax treats a backslash as an escape (MySQL/MariaDB, ClickHouse) and so
     /// has to double it; PostgreSQL (with <c>standard_conforming_strings</c>) and SQLite leave it as-is.
+    /// Retained for external dialects and subclasses; the built-in providers resolve their spelling
+    /// through the internal string-literal policy instead.
     /// </summary>
     protected static string QuoteStringLiteral(string value, bool escapeBackslash = false) =>
         "'" + (escapeBackslash ? value.Replace("\\", "\\\\") : value).Replace("'", "''") + "'";
@@ -608,8 +725,11 @@ public abstract class SqlDialectBase : ISqlDialect
         throw new NotSupportedException("Ordinal string comparison is not supported by this provider.");
     /// <inheritdoc/>
     public virtual bool SupportsOrdinalLike => SupportsOrdinalComparison;
+    // Grammar token: the LIKE escape operand goes through the provider policy, which picks a spelling
+    // that stays valid in every session mode (PostgreSQL E'…', the MySQL family _utf8mb4 X'…').
     /// <inheritdoc/>
-    public virtual string MakeLikeEscape(string escapeChar, KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, " escape ") + SqlLiteral.ToSqlStringLiteral(escapeChar);
+    public virtual string MakeLikeEscape(string escapeChar, KeywordCase keywordCase = KeywordCase.Lower) =>
+        Kw(keywordCase, " escape ") + SqlStringLiteralPolicies.For(this).Render(escapeChar, SqlStringLiteralRole.GrammarToken, SqlStringGrammar.LikeEscape);
     /// <inheritdoc/>
     public virtual string MakeOnesComplement(string operand) => $"~({operand})";
     // Dialects with a boolean type can use the predicate unchanged as a scalar.
@@ -764,6 +884,8 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual string MakeArrayAgg(string value) => $"array_agg({value})";
     /// <inheritdoc/>
     public virtual string MakeArrayFunction(string name, string call) => call;
+    /// <inheritdoc/>
+    public virtual string MakeArrayResult(string name, string call, Type resultType) => call;
 
     /// <inheritdoc/>
     public virtual string MakeWithinGroup(string aggregate, string orderBy, KeywordCase keywordCase = KeywordCase.Lower) => aggregate + Kw(keywordCase, " within group (order by ") + orderBy + ")";
@@ -774,8 +896,8 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual string MakeFunction(string name, string? schema)
         => string.IsNullOrEmpty(schema) ? name : $"{schema}.{name}";
 
-    // Built-in SqlFunctions.Sql table functions are provider-specific; user-defined [SqlTableFunction]
-    // functions are emitted verbatim and never consult this.
+    // Built-in SqlFunctions.Sql table functions are provider-specific; user-defined runtime
+    // table-function factories are emitted verbatim and never consult this.
     /// <inheritdoc/>
     public virtual bool SupportsTableFunction(string name) => false;
 
@@ -888,6 +1010,23 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual bool SupportsReturning => false;
     /// <summary>Defaults to <see cref="SupportsReturning"/>; MariaDB gates <c>UPDATE ... RETURNING</c> on server version 13.0+.</summary>
     public virtual bool SupportsUpdateReturning => SupportsReturning;
+    /// <summary>
+    /// Whether the portable bulk <c>INSERT ... VALUES</c> path can append <c>RETURNING</c> for a
+    /// <c>Returning*</c> terminal. Defaults to <see cref="SupportsReturning"/>; MariaDB gates that one
+    /// terminal on server version 13.0+ while single-row insert/delete <c>RETURNING</c> stays refused.
+    /// Internal on purpose: it is a capability of the bulk executor, not of the public dialect surface.
+    /// </summary>
+    internal virtual bool SupportsBulkInsertReturning => SupportsReturning;
+
+    /// <summary>
+    /// Reads <see cref="SupportsBulkInsertReturning"/> through a reference typed as the public
+    /// <see cref="ISqlDialect"/>. A dialect that does not derive from this base has no bulk-only gate and
+    /// answers <see cref="ISqlDialect.SupportsReturning"/>'s <c>false</c>.
+    /// </summary>
+    /// <param name="dialect">The active dialect.</param>
+    /// <returns>Whether the portable bulk path may render <c>RETURNING</c>.</returns>
+    internal static bool BulkInsertReturningSupported(ISqlDialect dialect) =>
+        dialect is SqlDialectBase dialectBase && dialectBase.SupportsBulkInsertReturning;
     /// <summary>Defaults to <c>false</c>; SQL Server opts into the <c>OUTPUT</c> clause.</summary>
     public virtual bool SupportsOutput => false;
     /// <summary>Defaults to <c>false</c>; MySQL/MariaDB opt into <c>LAST_INSERT_ID()</c>.</summary>

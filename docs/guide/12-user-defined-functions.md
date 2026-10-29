@@ -18,6 +18,7 @@ public sealed class SqlFunctionAttribute : Attribute
     public SqlFunctionAttribute(string name);
     public string? Name { get; set; }     // defaults to the CLR method name
     public string? Schema { get; set; }   // optional schema/owner prefix
+    public bool IsAggregate { get; set; } // defaults to false: a scalar function
 }
 ```
 
@@ -120,6 +121,36 @@ var value = dataContext.From<IComplexEntity>()
 select Lower(somestring) as 'V'
  from complex_entity
 ```
+
+## Marking a mapped function as an aggregate
+
+`IsAggregate` declares that the mapped function folds the rows of a group instead of returning a
+scalar. It defaults to `false`:
+
+```csharp
+[SqlFunction("my_sum", IsAggregate = true)]
+public static decimal MySum(decimal value) => throw new NotSupportedException();
+```
+
+`IsAggregate = true` makes the call an opaque aggregate boundary for `SelectGroup`: its arguments,
+its `DISTINCT` input and its `FILTER` predicate never become grouping keys, and a projection without
+any row-dependent member becomes a global aggregate. A scalar function - no attribute, or
+`IsAggregate = false` - may instead be inferred as a whole grouping key.
+
+The effective annotation is **either** the method's own attribute **or**, when the method carries
+none, the declaring type's attribute - never a merge of the two. A method attribute therefore
+replaces the type attribute entirely: `[SqlFunction("f")]` on a method of a type annotated
+`[SqlFunction(IsAggregate = true)]` makes that method scalar, and neither `Name` nor `Schema` is
+inherited from the type.
+
+Recognition is by method and declaring type, never by CLR name: a user-defined function named `sum`
+is rendered under its declared SQL name and is never treated as the built-in aggregate, while the
+same method marked `IsAggregate = true` is a user-defined aggregate boundary.
+
+The annotation only classifies the call. It does not promise that the function exists in the target
+database, that the dialect supports `FILTER`, or that the in-memory provider can evaluate it:
+unsupported functions are rejected there explicitly rather than executed because their name matches
+a built-in.
 
 ## Captured argument becomes a parameter
 

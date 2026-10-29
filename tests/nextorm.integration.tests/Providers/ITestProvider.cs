@@ -21,9 +21,10 @@ public interface ITestProvider
     bool SupportsFullJoin { get; }
 
     /// <summary>
-    /// True when AVG over an integer column keeps the fractional result. PostgreSQL and SQLite
-    /// return a fractional value, while a SQL Server integer AVG is itself an integer, so the
-    /// shared assertion does not apply there.
+    /// True when AVG over an integer column keeps the fractional result. SQLite, PostgreSQL, MySQL
+    /// and ClickHouse return a fractional value natively; since T291 (#291) SQL Server widens the
+    /// argument to <c>float</c> inside the aggregate instead of truncating the result, so the
+    /// shared fractional assertion applies there too.
     /// </summary>
     bool SupportsFractionalAverage { get; }
 
@@ -137,6 +138,15 @@ public interface ITestProvider
     bool SupportsTransactions { get; }
 
     /// <summary>
+    /// True when the provider supports savepoints inside an ADO.NET transaction: create, roll back to
+    /// and release a named point. SQLite, PostgreSQL, SQL Server and MySQL (and therefore MariaDB,
+    /// which is not part of this harness) do; ClickHouse has no transaction at all, so every shared
+    /// savepoint fact is skipped there. The shared facts assert this flag equals
+    /// <see cref="ISqlDialect.SupportsSavepoints"/> for the same provider.
+    /// </summary>
+    bool SupportsSavepoints { get; }
+
+    /// <summary>
     /// True when the provider can translate a constant-pattern <c>Regex.IsMatch</c>/<c>Regex.Replace</c>
     /// into native SQL. PostgreSQL, MySQL/MariaDB, ClickHouse, SQLite and SQL Server 2025+ can.
     /// </summary>
@@ -198,6 +208,13 @@ public interface ITestProvider
     void EnsureSeeded();
 
     IDataContext CreateContext();
+
+    /// <summary>
+    /// Creates a context from an explicit builder, so a fact can select context-wide options the shared
+    /// harness default does not set (today: <c>UseEagerLoadMode</c>). The provider owns the connection
+    /// string; the caller owns the builder. A provider that cannot honour a builder leaves the default.
+    /// </summary>
+    IDataContext CreateContext(DataContextBuilder builder);
 
     /// <summary>
     /// Creates a context that routes its diagnostics through <paramref name="loggerFactory"/>. Providers

@@ -44,6 +44,11 @@ public sealed record QueryDefinition
     public LambdaExpression? Group { get; init; }
     /// <summary>Optional <c>HAVING</c> lambda.</summary>
     public LambdaExpression? Having { get; init; }
+    /// <summary>
+    /// Whether the projection was declared through <c>SelectGroup</c>, so the grouping keys are inferred
+    /// from the projection's scalar outputs instead of a <see cref="Group"/> lambda.
+    /// </summary>
+    internal bool IsSelectGroup { get; init; }
     /// <summary>Optional logger used by the command.</summary>
     public ILogger? Logger { get; init; }
     /// <summary>Whether the query was marked <c>DISTINCT</c>.</summary>

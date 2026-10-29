@@ -12,7 +12,7 @@ A query begins with a source, and [`From`](xref:NextORM.Core.DataContextExtensio
 | Raw SQL fragment | [`FromSql`](xref:NextORM.Core.DataContextExtensions.FromSql(NextORM.Core.IDataContext,System.String,System.Object)) — [Raw SQL](14-raw-sql.md#compositing-raw-sql-as-a-from-source) |
 | Typed CTE | [`From(Cte<TResult>)`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,NextORM.Core.Cte{``0})), [`From(CteReference<TResult>)`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,NextORM.Core.CteReference{``0})), declared with [`With`](xref:NextORM.Core.DataContextExtensions.With(NextORM.Core.IDataContext,System.String,NextORM.Core.QueryCommand)) / [`WithRecursive`](xref:NextORM.Core.DataContextExtensions.WithRecursive(NextORM.Core.IDataContext,System.String,NextORM.Core.QueryCommand,System.Nullable{System.Int32})) — [CTEs](10-cte.md) |
 | Lazy temporary table | [`From(TempTableSource<TResult>)`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,NextORM.Core.TempTableSource{``0})) — [`AsTempTable`](20-create-table-as.md) |
-| Table-valued function | [`FromTableFunction<T>`](xref:NextORM.Core.DataContextExtensions.FromTableFunction``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{``0}}})) — [Table-valued functions](13-table-valued-functions.md) |
+| Table-valued function (runtime factory) | [`From(() => ...)`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{NextORM.Core.EntityBuilder{``0}}})) — [Table-valued functions](13-table-valued-functions.md) |
 
 Every source also accepts a `FromOptions` callback ([`FromOptions`](xref:NextORM.Core.FromOptions)) for per-source modifiers such as `TABLESAMPLE`/`SAMPLE` and table/index hints (see [Table sampling](#table-sampling-tablesample) below). The additive `CreateQueryBuilder*` forwarders mirror these overloads one-to-one (see the [API reference](../advanced/api-reference.md)). Overrides that change the rendered source of an already-chosen entity are described in [Per-query source overrides](#per-query-source-overrides).
 
@@ -44,15 +44,62 @@ Output:
 | 9 |
 | 10 |
 
+Constructing a derived source and materializing it are two different steps. `From(inner)` composes the
+derived table; reading its rows requires an **outer `Select`**, because the enclosing query can only
+address the output columns the derived `SELECT` declares. A bare `From(inner).ToList()` is accepted only
+when the inner projection is already a set of resolved column references (a mapped column, a renamed
+projected member, a computed scalar read through its output name). A projection whose members are
+row-member expressions — an anonymous `new { it.Id }` or a DTO `new Dto { Id = it.Id }` — cannot be
+reused that way and is refused during preparation with a `QueryPreparationException`; the rule is the
+**expression shape** of the inner projection, not the CLR type of its result. Add the outer selection
+(`From(inner).Select(it => it.Id)`, as above) to read such a source.
+This rewrite works with member-init DTO and positional-record projections; the tested
+constructor-only class projection has a known pre-existing failure
+(`Cannot find inner column Id`), so use one of those supported forms instead. See
+[Limitations](../advanced/limitations.md#limitations). See
+[Subqueries](07-subqueries.md#subquery-as-a-from-source) for the construction/materialization split.
+
+A derived source may also project a computed scalar instead of a named member. The enclosing query
+addresses that value through the output column the derived select list exposes, so it can be ordered,
+filtered and projected like any other column:
+
+```csharp
+var inner = dataContext.From<SimpleEntity>()
+    .Where(it => it.Id <= 2)
+    .Select(it => it.Id * 2);
+
+var rows = dataContext.From(inner)
+    .OrderBy(x => x)
+    .Select(x => x * 3)
+    .ToList();
+```
+
+```sql
+-- SQLite
+select (c0 * 3)
+ from (select (id * 2) as 'c0'
+ from simple_entity
+ where (id <= 2)) as 't1'
+ order by t1.c0
+```
+
+Output: `6`, `12`.
+
+> The generated output name in the sample (`c0` here) is how the rendered SQL exposes the computed
+> column; it is not a public naming contract. Read the value through the builder (as above) instead of
+> hard-coding the rendered spelling, which is provider-specific and may change.
+
 ## Table function as source
 
-`dataContext.FromTableFunction(() => ...)` uses a table-valued function as the `FROM` source. The
-built-in helpers cover the common set-returning functions; `SqlFunctions.Postgres.unnest` flattens a
-PostgreSQL array into one row per element:
+`dataContext.From(() => ...)` uses a runtime table-valued-function factory as the `FROM` source: the
+lambda carries the factory call and its arguments (see
+[Table-valued functions](13-table-valued-functions.md)). The built-in helpers cover the common
+set-returning functions; `SqlFunctions.Postgres.unnest` flattens a PostgreSQL array into one row per
+element:
 
 ```csharp
 var elements = dataContext
-    .FromTableFunction(() => SqlFunctions.Postgres.unnest(SqlFunctions.Parameter<long[]>(0)))
+    .From(() => SqlFunctions.Postgres.unnest(SqlFunctions.Parameter<long[]>(0)))
     .Select(r => r.Value)
     .ToList(new long[] { 1, 2, 3 });
 ```
@@ -69,14 +116,14 @@ If the fully qualified `SqlFunctions.*` names feel too verbose, import the surfa
 using static NextORM.Core.SqlFunctions;
 
 var elements = dataContext
-    .FromTableFunction(() => Postgres.unnest(Parameter<long[]>(0)))
+    .From(() => Postgres.unnest(Parameter<long[]>(0)))
     .Select(r => r.Value)
     .ToList(new long[] { 1, 2, 3 });
 ```
 
 `SqlFunctions.Postgres.generate_series(start, stop)` generates a numeric series the same way. The
 built-ins are gated by the provider ([`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect.SupportsTableFunction(System.String))),
-and a user-defined function is declared with `[SqlTableFunction]`; see
+and a custom function is declared as a `TvfEntityBuilder<T>` factory; see
 [Table-valued functions](13-table-valued-functions.md).
 
 ## Table sampling (`TABLESAMPLE`)

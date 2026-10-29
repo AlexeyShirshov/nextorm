@@ -12,10 +12,11 @@ against:
 Nextorm is a **query builder and mapper without change tracking**: it covers the analytic query surface and an
 explicit write surface, generates provider-portable SQL, and is benchmarked on the shipped scenarios.
 
-The comparison has three parts:
+The comparison has four parts:
 
-- **[Capabilities](capabilities.md)** — a category-level matrix: what each library supports and where it
+- **[Capabilities](capabilities.md)** — one construct-level matrix: what each library supports and where it
   does not.
+- **[Provider features](provider-features.md)** — per-engine API breadth against linq2db.
 - **[Benchmarks](benchmarks.md)** — the shipped SQLite scenarios, with links to the full BenchmarkDotNet
   reports.
 - **[Feature benchmarks (2026-10-17)](feature-benchmarks-2026-10-17.md)** — a warm-path-only, tiered
@@ -27,7 +28,7 @@ The comparison has three parts:
 - **partial** — supported with a named limitation, or implementable but not implemented yet.
 - **no** — not supported.
 
-Marks are judgement calls against the **public documentation** of each library, as of **2026-09-26**. Where a
+Marks are judgement calls against the **public documentation** of each library, as of **2026-10-04**. Where a
 competitor has an open tracking issue for a gap, it is linked. A Nextorm cell names a restriction imposed by
 the database engine when one exists; that does not lower the mark. This is a summary — the [guide](../engine/index.md)
 and the [API reference](../advanced/api-reference.md) are authoritative for Nextorm, and each competitor's own
@@ -58,26 +59,27 @@ Across the shared surface Nextorm matches or exceeds the three libraries, and on
   captured-collection lookup and an optional mapped entity type.
 - **Configurable SQL output**: opt-in identifier quoting, naming conventions and keyword casing,
   overridable per command — whereas linq2db quotes by default and fixes names in its mapping schema.
-- **Benchmarked performance**: fastest on every measured scenario with the smallest allocations on the
-  prepared path, and ahead of regular linq2db and EF Core on the warm path (see [Benchmarks](benchmarks.md)).
+- **Benchmarked performance**: fastest on every end-to-end scenario, fastest on every prepared feature
+  (with the smallest allocations on all but the IN-list), and ahead of regular linq2db and EF Core on
+  the warm path (see [Benchmarks](benchmarks.md)).
 
 ## Growth points
 
 The honest balance to the section above — the in-scope work still ahead, kept separate from the deliberate
 boundaries:
 
-- **Warm-path performance**: the implicit plan cache still trails Dapper by roughly 1.15–1.6× on CTE,
-  recursive CTE, 4-table join and captured IN-list (inline IN-list is level), and its allocations stay
+- **Warm-path performance**: the implicit plan cache still trails Dapper by roughly 1.32–1.75× on the
+  4-table join, CTE, recursive CTE and IN-list (inline as well as captured), and its allocations stay
   above the prepared path; closing that gap is ongoing (see [Benchmarks](benchmarks.md)).
 - **EF Core integration**: the `ToNextOrm` adapter translates only a bounded operator subset —
-  `Select`/`SelectMany`, `Include`/navigations, `Join`/`GroupJoin`, `GroupBy`,
+  `Select`, `Include`/navigations, `Join`, `GroupBy`,
   `EF.Property`/`EF.Functions`, `AsSplitQuery`, raw-SQL roots and subqueries are not translated — and the
   MariaDB shared-connection and ClickHouse no-EF-adapter slices remain open (see
   [EF Core integration](../advanced/integration-efcore.md)).
 - **Eager loading and relationships**: `LoadWith` eager loading covers finite nested graphs (level 2+,
   with a single graph-wide mode and per-level ordering/top-N) in split and expressible single-query;
-  `JoinInto` still rejects composite keys, composite many-to-many junction selectors and many-to-many
-  under a single query.
+  `JoinInto` joins and groups on every declared key component, composite foreign, principal and junction
+  keys included, while loading a many-to-many graph in a single eager-loading query remains out of scope.
 - **Deeper query forms**: `SelectMany`/`GroupJoin` are not translated on the SQL providers, `APPLY`/`LATERAL`
   cannot take a join projection, and in-memory correlation stops at depth one.
 - **Dynamic SQL assembly**: building SQL at runtime stays outside the builder surface.
@@ -88,7 +90,13 @@ boundaries:
 
 Relationship modelling, change tracking/`SaveChanges`, migrations and database-first scaffolding are
 **deliberate boundaries**, not growth points — they are listed in
-[Limitations and out-of-scope features](../advanced/limitations.md).
+[Limitations and out-of-scope features](../advanced/limitations.md). Two composition boundaries are of the
+same kind: a correlated `APPLY` extends an existing join chain but stops at eight total sources, and the
+in-memory provider stops correlated subqueries at depth one, while every SQL provider nests them
+arbitrarily. `APPLY`/`LATERAL` itself needs a lateral source: MariaDB 11.4, SQLite and ClickHouse refuse it
+before execution, and the in-memory provider does not support it. These are API-shape and provider
+boundaries, not missing SQL capabilities — the supported forms are covered by the
+[capabilities](capabilities.md) matrix and the guide.
 
 ## Summary
 

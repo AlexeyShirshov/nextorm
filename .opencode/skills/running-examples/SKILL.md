@@ -1,6 +1,6 @@
 ---
 name: running-examples
-description: Run nextorm's runnable examples under examples/ (postgres aviasales, mssql adventureworks, clickhouse analytics) against real datasets with Testcontainers/Podman. Use when running, debugging or re-verifying the examples, when provisioning fails, or on OOM/container errors — DOCKER_HOST, dataset cache, expected OK/FAIL counts.
+description: Run nextorm's runnable examples under examples/ (postgres aviasales, mssql adventureworks, clickhouse analytics) against real datasets with Testcontainers/Podman. Use when running, debugging or re-verifying the examples, when provisioning fails, on OOM/disk thrash during a cold load, or when the OK/FAIL summary is off — dataset cache, named volumes, --benchmark.
 ---
 
 # Running nextorm examples
@@ -44,7 +44,6 @@ Interactive runs can take 2.5–4 minutes (container start + load), so **run the
 poll the log** instead of blocking the shell:
 
 ```bash
-cd /home/alex/sources/nextorm
 setsid env DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock \
   dotnet examples/nextorm.examples.<name>/bin/linux/Debug/net10.0/nextorm.examples.<name>.dll \
   > /tmp/opencode/<name>.log 2>&1 < /dev/null & disown
@@ -66,7 +65,6 @@ has a `Nextorm_*` baseline and a `Linq2Db_*` arm; `Incremental` on ClickHouse is
 `--filter '*Name*'` forwards a BenchmarkDotNet filter:
 
 ```bash
-cd /home/alex/sources/nextorm
 DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock \
   dotnet examples/nextorm.examples.postgres.aviasales/bin/linux/Debug/net10.0/nextorm.examples.postgres.aviasales.dll \
   --benchmark --filter '*AircraftDelayChains*'
@@ -94,11 +92,10 @@ reprovisions) or remove the volume manually through the Podman socket.
 
 ## Expected results (last verified against Testcontainers)
 
-| Example | Result (matched in both arms) | Documented `FAIL`s |
-|---|---|---|
-| postgres aviasales | **11/11** | — |
-| mssql adventureworks | **11/11** | — |
-| clickhouse analytics | **10/11** | `Incremental`: the nextorm arm throws (`uniqMerge` has no LINQ surface); the linq2db arm runs it |
+Compare the run's summary against the table in `examples/VERIFICATION.md` — that file is
+the single source for the current matched counts. The one documented `FAIL` is
+`Incremental` on ClickHouse: the nextorm arm throws (`uniqMerge` has no LINQ surface),
+while the linq2db arm runs it.
 
 A `[FAIL]` is expected only for documented engine gaps (`NotSupportedException`,
 `QueryPreparationException`, `LinqToDBException`); the `Program` catches those, but **any other exception
@@ -115,7 +112,7 @@ it before running to compare, and update it after every run (results, per-query 
   (841 MB archive, ~3.5 GB TSV, then merges) is heavy. This happens only on the first (cold) run; the
   loaded data then lives in a named volume and warm runs skip it. Before a cold ClickHouse run free
   memory: `dotnet build-server shutdown`,
-  `curl -sS --unix-socket $DOCKER_HOST -X POST http://localhost/containers/prune`, kill stray
+  `curl -sS --unix-socket "${DOCKER_HOST#unix://}" -X POST http://localhost/containers/prune`, kill stray
   `nextorm.examples` processes, then run detached with `setsid`.
 - **Concurrent work in the same tree** can break the build or `git clean` untracked files; retry the
   build until `0 Error` and keep any temporary probe files in `/tmp`, not the repo.

@@ -70,6 +70,12 @@ internal static class PredicateTranslator
     /// </summary>
     private static Expression VisitNot(BaseExpressionVisitor visitor, UnaryExpression node)
     {
+        // #296: !HasValue on a mapped nullable column renders the approved direct IS NULL form, not
+        // `not (<receiver> is not null)`. Outside the approved positions it falls through unchanged.
+        if (TypeFacts.UnwrapConvert(node.Operand) is MemberExpression presenceReceiver
+            && MemberTranslator.TryRenderPresence(visitor, presenceReceiver, negated: true))
+            return node;
+
         if (visitor.IsParamMode)
         {
             // Nothing is emitted, but the operand is still walked so captured constants are collected.
@@ -354,7 +360,7 @@ internal static class PredicateTranslator
         if (!visitor.IsParamMode
             && node.Type == typeof(bool)
             && node.NodeType is ExpressionType.Equal or ExpressionType.NotEqual
-            && (node.Left is ConstantExpression { Value: null } || node.Right is ConstantExpression { Value: null }))
+            && (TypeFacts.IsNullLiteral(node.Left) || TypeFacts.IsNullLiteral(node.Right)))
         {
             using var nullLeftVisitor = visitor.Clone();
             nullLeftVisitor.Visit(node.Left);
@@ -371,11 +377,24 @@ internal static class PredicateTranslator
                 // A dialect without a boolean type (SQL Server) cannot use a bare predicate in a select
                 // list, so the value context is materialised as a bit scalar; a condition context keeps
                 // the predicate as-is (asPredicate = true is a no-op for such a dialect).
-                var presence = $"{nullLeft}{(node.NodeType == ExpressionType.Equal ? visitor.Kw(" is ") : visitor.Kw(" is not "))}{nullRight}";
+                // `is` accepts only `<operand> is null`, so a null literal on the left is emitted last;
+                // the operand rendering itself is unchanged, only its position in the predicate.
+                var presenceOp = node.NodeType == ExpressionType.Equal ? visitor.Kw(" is ") : visitor.Kw(" is not ");
+                var presence = nullLeft == visitor.Kw("null") && nullRight != visitor.Kw("null")
+                    ? $"{nullRight}{presenceOp}{nullLeft}"
+                    : $"{nullLeft}{presenceOp}{nullRight}";
                 visitor.Builder!.Append(visitor.Dialect.MakeBooleanPredicate(presence, visitor.IsPredicateContext));
                 return node;
             }
         }
+
+        // #296: a comparison against a captured nullable/string value is a total Boolean predicate in
+        // the approved positions (WHERE/Exists/ON and a boolean SELECT projection): a runtime NULL
+        // then follows the C# truth table instead of SQL UNKNOWN. Literal comparisons keep their
+        // existing null-aware form above; column-to-column comparisons and the ordering operators are
+        // never rewritten.
+        if (TryRenderCapturedNullableComparison(visitor, node))
+            return node;
 
         visitor.NeedAliasForColumn = true;
 
@@ -406,9 +425,26 @@ internal static class PredicateTranslator
         // predicate first, otherwise the emitted <c>and</c>/<c>or</c> is rejected (SQL Server).
         if (!visitor.IsParamMode && node.NodeType is ExpressionType.AndAlso or ExpressionType.OrElse)
         {
+            var logicalOperator = node.NodeType == ExpressionType.AndAlso
+                ? visitor.Kw(" and ")
+                : visitor.Kw(" or ");
+
+            // A logical value in a value context (a select-list projection, e.g. a composite reference
+            // presence check) is not a condition: a dialect without a boolean type has no infix form
+            // for it, so the whole expression is rendered as a predicate and materialised by the
+            // dialect (T-SQL: cast(case when ... then 1 else 0 end as bit)). On a dialect with a
+            // boolean type MakeBooleanPredicate is identity, so the emitted SQL is unchanged.
+            if (!visitor.IsPredicateContext)
+            {
+                visitor.Builder!.Append(visitor.Dialect.MakeBooleanPredicate(
+                    $"({RenderPredicate(visitor, node.Left)}{logicalOperator}{RenderPredicate(visitor, node.Right)})",
+                    asPredicate: false));
+                return node;
+            }
+
             visitor.Builder!.Append('(');
             AppendCondition(visitor, node.Left);
-            visitor.Builder!.Append(node.NodeType == ExpressionType.AndAlso ? visitor.Kw(" and ") : visitor.Kw(" or "));
+            visitor.Builder!.Append(logicalOperator);
             AppendCondition(visitor, node.Right);
             visitor.Builder!.Append(')');
             return node;
@@ -451,7 +487,7 @@ internal static class PredicateTranslator
         if (!visitor.IsParamMode)
             visitor.Builder!.Append('(');
 
-        visitor.VisitComparisonOperand(node.Left, rightConverter);
+        visitor.VisitComparisonOperand(isComparison ? NaturalComparisonLiteral(node.Left) : node.Left, rightConverter);
 
         if (!visitor.IsParamMode)
         {
@@ -507,7 +543,7 @@ internal static class PredicateTranslator
             }
         }
 
-        visitor.VisitComparisonOperand(node.Right, leftConverter);
+        visitor.VisitComparisonOperand(isComparison ? NaturalComparisonLiteral(node.Right) : node.Right, leftConverter);
 
         if (!visitor.IsParamMode)
             visitor.Builder!.Append(')');
@@ -515,6 +551,156 @@ internal static class PredicateTranslator
         visitor.DurationUnitContext = previousDurationUnit;
 
         return node;
+    }
+
+    /// <summary>
+    /// Renders an integral literal lifted to a floating type at its natural literal type. When the
+    /// opposite operand of a comparison is a nullable floating value, the C# compiler wraps the
+    /// literal in a conversion chain (<c>Convert(Convert(1, Double), Nullable&lt;double&gt;)</c>);
+    /// after an integral AVG was declared <c>double?</c>, <c>Avg(...) &gt; 1</c> has exactly that
+    /// shape. SQL promotes the integer literal to the floating operand itself, so the explicit
+    /// <c>cast(1 as double)</c> carries no information and the redundant cast is not emitted. Only
+    /// an exactly representable integral value is unwrapped, so no rounding is introduced; a
+    /// decimal target and every non-literal operand keep their previous rendering.
+    /// </summary>
+    private static Expression NaturalComparisonLiteral(Expression operand)
+    {
+        if (operand is UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked, Method: null } lifted
+            && lifted.Type is { IsGenericType: true } liftedType
+            && liftedType.GetGenericTypeDefinition() == typeof(Nullable<>)
+            && lifted.Operand is UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked, Method: null } conversion
+            && conversion.Operand is ConstantExpression literal
+            && IsExactIntegralFloatingLiteral(literal, conversion.Type))
+        {
+            return literal;
+        }
+
+        return operand;
+    }
+
+    /// <summary>
+    /// True when <paramref name="literal"/> is an integral constant that <paramref name="target"/>
+    /// represents without any value change: every integral value is exact in <see cref="double"/>
+    /// up to 2^53 and in <see cref="float"/> up to 2^24. The decimal round trip checks the actual
+    /// target representation, so a large <c>long</c> literal keeps its explicit cast.
+    /// </summary>
+    private static bool IsExactIntegralFloatingLiteral(ConstantExpression literal, Type target)
+    {
+        if (target != typeof(double) && target != typeof(float))
+            return false;
+
+        if (literal.Type != typeof(byte) && literal.Type != typeof(sbyte)
+            && literal.Type != typeof(short) && literal.Type != typeof(ushort)
+            && literal.Type != typeof(int) && literal.Type != typeof(uint)
+            && literal.Type != typeof(long) && literal.Type != typeof(ulong))
+            return false;
+
+        if (literal.Value is null)
+            return false;
+
+        var value = Convert.ToDecimal(literal.Value);
+        return target == typeof(double)
+            ? (decimal)(double)value == value
+            : (decimal)(float)value == value;
+    }
+
+    /// <summary>
+    /// Renders a comparison of a row-dependent expression with a captured nullable/string value as a
+    /// total Boolean predicate: equality has the approved two-arm form and inequality the three-arm
+    /// complement, so the result follows the C# null-equality truth table instead of SQL
+    /// <c>UNKNOWN</c> (which drops null rows from an inequality). Only in the approved positions, only
+    /// for <c>==</c>/<c>!=</c>, only when exactly one side is a captured nullable/string operand and
+    /// the other side references the query. The captured value is registered through the existing
+    /// comparison-operand machinery and reused for every occurrence (one logical parameter, never an
+    /// inlined value, never a branch on the runtime value).
+    /// </summary>
+    /// <returns><see langword="true"/> when the comparison was rendered here.</returns>
+    internal static bool TryRenderCapturedNullableComparison(BaseExpressionVisitor visitor, BinaryExpression node)
+    {
+        if (node.Type != typeof(bool)
+            || node.NodeType is not (ExpressionType.Equal or ExpressionType.NotEqual)
+            || !visitor.NullSafePredicateEnabled
+            || TypeFacts.IsNullLiteral(node.Left)
+            || TypeFacts.IsNullLiteral(node.Right))
+            return false;
+
+        var leftCaptured = TypeFacts.IsCapturedNullableOrStringOperand(node.Left);
+        var rightCaptured = TypeFacts.IsCapturedNullableOrStringOperand(node.Right);
+
+        // Neither side is captured (an ordinary column comparison) or both are (no row-dependent side).
+        if (leftCaptured == rightCaptured)
+            return false;
+
+        var dbOperand = leftCaptured ? node.Right : node.Left;
+        var capturedOperand = leftCaptured ? node.Left : node.Right;
+
+        // The other side must actually read the query, so a captured value is never compared with a
+        // constant/another captured value under the null-safe shape.
+        if (!dbOperand.Has<ParameterExpression>())
+            return false;
+
+        var dbConverter = MemberTranslator.ResolveConverter(visitor, dbOperand);
+        var capturedConverter = MemberTranslator.ResolveConverter(visitor, capturedOperand);
+
+        visitor.NeedAliasForColumn = true;
+
+        var previousParameterType = visitor.ParameterTypeContext;
+        if (MemberTranslator.ResolveParameterType(visitor, dbOperand, capturedOperand) is { } parameterType)
+            visitor.ParameterTypeContext = parameterType;
+
+        try
+        {
+            if (visitor.IsParamMode)
+            {
+                // Mirror the SQL pass: the same operands are visited in the same canonical order
+                // (row-dependent side first), so the extracted parameter list is identical. Repeats
+                // are deduplicated by the captured-parameter registration.
+                visitor.VisitComparisonOperand(dbOperand, capturedConverter);
+                visitor.VisitComparisonOperand(capturedOperand, dbConverter);
+                return true;
+            }
+
+            var isEqual = node.NodeType == ExpressionType.Equal;
+            var builder = visitor.Builder!;
+
+            // The whole total predicate is parenthesised so it composes safely inside &&/||.
+            builder.Append('(');
+
+            builder.Append('(');
+            visitor.VisitComparisonOperand(dbOperand, capturedConverter);
+            builder.Append(visitor.Kw(" is null")).Append(visitor.Kw(" and "));
+            visitor.VisitComparisonOperand(capturedOperand, dbConverter);
+            builder.Append(visitor.Kw(isEqual ? " is null" : " is not null"));
+            builder.Append(')').Append(visitor.Kw(" or "));
+
+            if (!isEqual)
+            {
+                // (a is not null and p is null) — only the inequality complement has this arm.
+                builder.Append('(');
+                visitor.VisitComparisonOperand(dbOperand, capturedConverter);
+                builder.Append(visitor.Kw(" is not null")).Append(visitor.Kw(" and "));
+                visitor.VisitComparisonOperand(capturedOperand, dbConverter);
+                builder.Append(visitor.Kw(" is null"));
+                builder.Append(')').Append(visitor.Kw(" or "));
+            }
+
+            builder.Append('(');
+            visitor.VisitComparisonOperand(dbOperand, capturedConverter);
+            builder.Append(visitor.Kw(" is not null")).Append(visitor.Kw(" and "));
+            visitor.VisitComparisonOperand(capturedOperand, dbConverter);
+            builder.Append(visitor.Kw(" is not null")).Append(visitor.Kw(" and "));
+            visitor.VisitComparisonOperand(dbOperand, capturedConverter);
+            builder.Append(isEqual ? " = " : " != ");
+            visitor.VisitComparisonOperand(capturedOperand, dbConverter);
+            builder.Append(')');
+
+            builder.Append(')');
+            return true;
+        }
+        finally
+        {
+            visitor.ParameterTypeContext = previousParameterType;
+        }
     }
 
 }

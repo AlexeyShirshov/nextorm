@@ -119,6 +119,16 @@ JSON-функции или параметры, чьё значение во вр
 извлечение, вложенность и агрегацию: `jsonb_build_object`, `jsonb_agg`, `json_get_text`,
 `json_cast`, операторы `->`, `->>`.
 
+Четыре аксессора `json_get`, `json_get_text`, `json_get_path` и `json_get_path_text` (перегрузки по
+строковому ключу и по индексу) применяют **контекстную SQL-типизацию**: сырое клиентское значение документа
+(литерал, захваченное значение или явный параметр) разбирается как `jsonb` в сгенерированном SQL —
+`json_get("{\"a\":1}", "a")` отрисует `cast('{"a":1}' as jsonb) -> cast('a' as text)`, — а нативная колонка
+`json`/`jsonb` или серверное JSON-выражение выводятся без приведения (`doc -> cast('a' as text)`), поэтому
+типы операнда и результата сохраняются. Ключ/индекс/путь типизируется по перегрузке как
+`text`/`integer`/`text[]`. Привязка параметров провайдером не меняется: обычный параметр-`string`
+по-прежнему привязывается как `text`, а `JSON_EXISTS`/`jsonpath` и соседние JSON-функции сохраняют
+собственное поведение.
+
 ```csharp
 var json = dataContext.From<IComplexEntity>()
     .Select(e => SqlFunctions.Postgres.jsonb_agg(e.String))
@@ -138,6 +148,14 @@ select jsonb_agg(somestring)
 * `percentile_cont`/`percentile_disc` — упорядоченные агрегаты, рендерятся как
   `percentile_cont(f) within group (order by x)` ([`SupportsOrderedAggregates`](xref:NextORM.Core.ISqlDialect.SupportsOrderedAggregates),
   [`MakeWithinGroup`](xref:NextORM.Core.ISqlDialect.MakeWithinGroup(System.String,System.String,NextORM.Core.KeywordCase))); `mode()` — упорядоченный агрегат mode;
+* `median(() => x)` — та же поверхность с фиксированной дробью `0.5`
+  (`percentile_cont(0.5) within group (order by x)`, [`SupportsOrderedPercentiles`](xref:NextORM.Core.ISqlDialect.SupportsOrderedPercentiles)):
+  в PostgreSQL нет функции `median`, и эта форма — **агрегат** (одна строка на группу), а не оконная
+  функция, поэтому `OVER` она не принимает;
+* непрерывные формы интерполируют и возвращают `double precision`, поэтому `percentile_cont`/`median`
+  требуют выражения сортировки с плавающей точкой (целочисленный/`numeric` ключ отклоняется);
+  `percentile_disc` сохраняет тип сортировки. Дроби — это `double` в `[0, 1]`, конечные и
+  константные/захваченные, проверяются до рендеринга; общий `percentile` отклоняется;
 * `bool_and`/`bool_or`/`every`, семейство регрессии `regr_*` и `bit_and`/`bit_or`/`bit_xor` есть только
   у PostgreSQL, и остальные диалекты их отклоняют;
 * `array_agg` и поверхность строковых/массивных агрегатов гейтятся
@@ -180,6 +198,14 @@ select id, ts_rank(to_tsvector(somestring), to_tsquery('cat'))
 Native-поверхность реализована только в PostgreSQL; остальные провайдеры отклоняют её на этапе
 построения SQL.
 
+Дополнения `#281` расширяют ту же поверхность: конструкторы вектора и запроса `array_to_tsvector`,
+`json_to_tsvector` и `jsonb_to_tsvector`; члены проверки и перезаписи `numnode`, `querytree`,
+`setweight`, `strip`, `ts_delete`, `ts_filter`, `ts_rewrite` и `tsquery_phrase`; пару преобразования и
+лексирования `tsvector_to_array` и `ts_lexize`; и читатели токенизатора `ts_debug`, `ts_parse` и
+`ts_token_type` как `FROM`-источники. Их SQL-формы, интерфейсы строк и мост `cast(... as text)`
+перечислены в разделе
+[Строковые функции › Полнотекстовый поиск (PostgreSQL, #281)](../../scalar-functions/01-string-functions.md#полнотекстовый-поиск-postgresql-281).
+
 ## Расширенные скаляры и regexp
 
 Поверхность [`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres) добавляет `pg_typeof`, `num_nulls`/
@@ -189,7 +215,105 @@ Native-поверхность реализована только в PostgreSQL;
 (`to_char`/`to_date`/`to_number`/`to_timestamp`/`timezone`/`make_interval`/`justify_*`) и
 конструкторы массивов, всё гейтится `SupportsExtendedScalarFunctions`.
 
+Остаточный строковый каталог #281 живёт на той же поверхности `Postgres`, один член на серверную
+перегрузку: `btrim` (одноаргументная, с набором символов и формы `bytea`), двухаргументные и
+`bytea`-формы `ltrim`/`rtrim`, `starts_with`, `parse_ident`, перегрузки `text` у
+`quote_ident`/`quote_literal`/`quote_nullable`, `to_ascii(value, encoding)` (кодировка текстом или её
+кодом PostgreSQL),
+`to_hex`/`to_oct`/`to_bin` (целые и `bigint`), `convert_from`/`convert_to`, `encode`/`decode`,
+`normalize`, `unistr`, `regexp_match` (два и три аргумента) и возвращающая набор строк
+`string_to_table`. Каждое из этих имён гейтится **отдельно** через
+[`IScalarFunctions.Supports`](xref:NextORM.Core.IScalarFunctions.Supports(System.String)), а не общим
+флагом семейства: провайдер, не реализующий интерфейс, закрывается отказом `NotSupportedException`, и
+SQL PostgreSQL до него не доходит. `normalize` принимает форму как голое ключевое слово грамматики
+(`NFC`/`NFD`/`NFKC`/`NFKD`), `regexp_match` возвращает NULL, когда совпадения нет, а `to_hex` пишет
+отрицательный `int` в дополнительном коде (`-1` → `ffffffff`). Члены, которые не могут исполниться
+на закреплённом PostgreSQL 17.11 — `casefold`, одноаргументная `to_ascii` и перегрузки `quote_*` с
+`anyelement`, — отклоняются во время подготовки запроса; проверенные причины собраны в таблице
+отказов в статье [Строковые функции](../../scalar-functions/01-string-functions.md#проверенные-отказы).
+
+Остаточное семейство даты/времени #281 подчиняется тому же правилу: `date_subtract` (двухаргументная
+форма с `interval` и зонированная трёхаргументная форма, обе возвращают `timestamp with time zone`),
+`justify_interval`, `make_timestamptz` (с зоной и без), часы
+`clock_timestamp`/`statement_timestamp`/`transaction_timestamp`, `timeofday` и `isfinite` над
+`date`, `timestamp` и `interval`. `clock_timestamp` вычисляется на каждую строку,
+`statement_timestamp`/`transaction_timestamp` фиксируются на запрос/транзакцию, а `justify_interval`
+возвращает `interval` и потому следует описанной ниже обработке interval провайдера. Каждое имя
+гейтится **отдельно** через `IScalarFunctions.Supports` и закрывается отказом `NotSupportedException`
+на провайдере без этого интерфейса; `pg_sleep`/`pg_sleep_for`/`pg_sleep_until` отклонены, потому что
+каждый возвращает `void` и достоверного результата выражения не существует, — строки отказов в статье
+[Дата и время](../../scalar-functions/03-date-and-time.md#расширенные-дата-и-время-postgresql).
+
+Извлечение данных из UUID тоже есть только в PostgreSQL: `uuid_extract_timestamp` даёт `timestamptz`
+(NULL для UUID версии 4 или nil-UUID), а `uuid_extract_version` — `smallint` (NULL для nil-UUID); оба
+гейтятся по имени через `IScalarFunctions.Supports` с тем же отказом при отсутствии интерфейса — см.
+[Последовательности и генераторы UUID](../../scalar-functions/10-sequences.md#генераторы-uuid).
+
+Рядом с `encode`/`decode` бинарно-строковое семейство добавляет `get_bit`/`set_bit` (номера бит
+считаются от младшего бита первого байта), `get_byte`/`set_byte` (нумерация байт с нуля) и
+`bit_count` (установленные биты как `bigint`); каждое имя гейтится отдельно через
+`IScalarFunctions.Supports` и так же закрывается отказом. Формы над типом `bit` не имеют
+CLR-отображения и отклоняются, а `crc32`/`crc32c` — функции PostgreSQL 18, отклонённые на
+закреплённом 17.11; обе причины собраны в таблице отказов статьи
+[Строковые функции](../../scalar-functions/01-string-functions.md#проверенные-отказы).
+
+На пути смэппированных колонок правило длительности определяется **возвращённым** interval, а не именем
+функции: `make_interval`, нормализация `justify_*` и `age` одинаково отклоняют результат с ненулевой
+месячной составляющей (любого знака) через `InvalidCastException` с указанием календарных месяцев, а
+результат с нулевыми месяцами конвертируют точно.
+
 См. [Скалярные функции](../../scalar-functions/index.md).
+
+## Функции числового масштаба
+
+`SqlFunctions.Postgres.scale`/`min_scale`/`trim_scale` описывают и нормализуют масштаб значения
+`numeric`. Каждое имя гейтится **отдельно** через
+[`IScalarFunctions.Supports`](xref:NextORM.Core.IScalarFunctions.Supports(System.String)), а не общим
+флагом семейства, и любой другой провайдер отклоняет вызов `NotSupportedException`, поэтому SQL
+PostgreSQL не попадает на сервер, который его не исполняет.
+
+| C# | SQL | Возвращает |
+|---|---|---|
+| `SqlFunctions.Postgres.scale(decimal? value)` | `scale(value)` | `int?` — цифры дробной части, включая хвостовые нули |
+| `SqlFunctions.Postgres.min_scale(decimal? value)` | `min_scale(value)` | `int?` — цифры дробной части без хвостовых нулей |
+| `SqlFunctions.Postgres.trim_scale(decimal? value)` | `trim_scale(value)` | `decimal?` — значение без хвостовых нулей |
+
+`scale` есть во всех поддерживаемых версиях PostgreSQL; `min_scale`/`trim_scale` требуют PostgreSQL 13
+или новее. NULL-аргумент даёт NULL для всех трёх. `trim_scale` удаляет только хвостовые нули: в
+отличие от `round`/`trunc` она не округляет и не меняет значимые цифры, поэтому `trim_scale(12.3400)`
+равно `12.34` (масштаб decimal 2), а `trim_scale(12.3456)` возвращается без изменений с масштабом 4.
+Значение проходит через numeric-ридер Npgsql, поэтому возвращённый decimal сохраняет серверный масштаб.
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .Select(e => new
+    {
+        Scale = SqlFunctions.Postgres.scale(e.Numeric),
+        MinScale = SqlFunctions.Postgres.min_scale(e.Numeric),
+        Trimmed = SqlFunctions.Postgres.trim_scale(e.Numeric)
+    })
+    .ToList();
+```
+
+Рядом с помощниками масштаба `SqlFunctions.Postgres` выставляет остаточное числовое семейство: `div`
+(деление `numeric` с усечением, поэтому `div(7, 2)` равно `3`, а `div(-7, 2)` равно `-3`),
+`erf`/`erfc`, двухаргументную `random_normal(mean, stddev)` и градусную тригонометрию
+`acosd`/`asind`/`atand`/`atan2d`/`cosd`/`cotd`/`sind`/`tand`, которая принимает и возвращает
+градусы. Каждое из этих имён — как и три помощника масштаба — гейтится отдельно через
+`IScalarFunctions.Supports`, поэтому любой другой провайдер отклоняет вызов `NotSupportedException`.
+`gamma`/`tgamma`/`lgamma` отклонены, потому что их нет в закреплённом PostgreSQL 17.11; проверенные
+причины этого и отклонённых строковых членов перечислены в таблицах отказов статей о скалярных
+функциях.
+
+См. [Математические функции](../../scalar-functions/02-math-functions.md#числовой-масштаб-postgresql).
+
+## Null-safe-сравнение
+
+PostgreSQL имеет операторы ANSI нативно, поэтому оба помощника отображаются один-к-одному, а результат —
+обычный boolean: `SqlFunctions.Sql.is_not_distinct_from(a, b)` рендерит `(a is not distinct from b)`, а
+`is_distinct_from(a, b)` — `(a is distinct from b)`. Оба двузначны, поэтому скалярной легализации не
+нужно; обычные `==`/`!=` сохраняют семантику SQL NULL. См.
+[Null-safe-сравнение](../../scalar-functions/04-conditionals-and-conversion.md#null-safe-сравнение-is-not-distinct-from).
 
 ## `DISTINCT ON`
 
@@ -216,7 +340,7 @@ select distinct on (somestring) id, somestring
 ## Функции, возвращающие наборы
 
 Функции PostgreSQL, возвращающие набор, доступны как табличные функции через
-[`FromTableFunction`](xref:NextORM.Core.DataContextExtensions.FromTableFunction``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{``0}}})):
+[`From`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{NextORM.Core.EntityBuilder{``0}}})) с вызовом runtime-фабрики:
 
 | `SqlFunctions.Postgres.*` | Колонки SQL | Row-shape |
 | --- | --- | --- |
@@ -382,7 +506,7 @@ select a, b
   по `FieldCount`/`ColumnNames` без материализации, а [`ToDataReader`](../28-large-objects.md) отдаёт
   их как `DbDataReader`;
 * `jsonb_each` / `jsonb_each_text` / `jsonb_object_keys` разворачивают JSON-объект в строки
-  ключ/значение — см. [Динамическая схема результата](../13-table-valued-functions.md#dynamic-result-schema).
+  ключ/значение — см. [Динамическая схема результата](../13-tvf-result-schemas.md#dynamic-result-schema).
 
 Варианты `json_populate_record(set)` (заполняющие переданную вызывающим базовую запись, а не
 свободный список колонок) остаются вне области охвата. См.

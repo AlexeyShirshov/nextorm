@@ -52,7 +52,7 @@ internal sealed class InMemoryQueryExecutor : IQueryExecutor, IRowReaderFactory
         var cacheEntry = AsInMemoryCommand(preparedQueryCommand);
 
         await using var ee = cacheEntry.CreateEnumerator(cacheEntry.QueryCommand, cacheEntry, @params, CancellationToken.None)!;
-        var l = new List<TResult>(cacheEntry.LastRowCount);
+        var l = new List<TResult>();
 
         var offset = cacheEntry.QueryCommand.Paging.Offset;
         var limit = cacheEntry.QueryCommand.Paging.Limit;
@@ -69,8 +69,6 @@ internal sealed class InMemoryQueryExecutor : IQueryExecutor, IRowReaderFactory
                 break;
         }
 
-        cacheEntry.LastRowCount = l.Count;
-
         return l;
     }
 
@@ -79,7 +77,7 @@ internal sealed class InMemoryQueryExecutor : IQueryExecutor, IRowReaderFactory
         var cacheEntry = AsInMemoryCommand(preparedQueryCommand);
 
         using var ee = (IEnumerator<TResult>)cacheEntry.CreateEnumerator(cacheEntry.QueryCommand, cacheEntry, ToParams(@params), CancellationToken.None)!;
-        var l = new List<TResult>(cacheEntry.LastRowCount);
+        var l = new List<TResult>();
 
         var offset = cacheEntry.QueryCommand.Paging.Offset;
         var limit = cacheEntry.QueryCommand.Paging.Limit;
@@ -95,8 +93,6 @@ internal sealed class InMemoryQueryExecutor : IQueryExecutor, IRowReaderFactory
             if (limit > 0 && ++rowCnt >= limit)
                 break;
         }
-
-        cacheEntry.LastRowCount = l.Count;
 
         return l;
     }

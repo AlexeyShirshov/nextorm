@@ -12,6 +12,7 @@ namespace NextORM.Integration.Tests;
 /// <see cref="ClickHouseContainer"/> harness), so the shared direct-entity facts are re-pinned here
 /// against a real ClickHouse server.
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class ClickHouseJoinWholeEntityIntegrationTests : IDisposable
 {
     private readonly IDataContext _ctx;

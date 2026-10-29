@@ -17,6 +17,8 @@ public sealed class SortingExpressionPlanEqualityComparer(IQueryRegistry queryPr
     {
         if (x.Direction != y.Direction) return false;
 
+        if (x.NullsPosition != y.NullsPosition) return false;
+
         if (x.ColumnIndex != y.ColumnIndex) return false;
 
         if (!_queryProvider.GetExpressionPlanEqualityComparer().Equals(x.PreparedExpression, y.PreparedExpression)) return false;
@@ -27,6 +29,8 @@ public sealed class SortingExpressionPlanEqualityComparer(IQueryRegistry queryPr
     public bool ValueEquals(in Sorting x, in Sorting y)
     {
         if (x.Direction != y.Direction) return false;
+
+        if (x.NullsPosition != y.NullsPosition) return false;
 
         if (x.ColumnIndex != y.ColumnIndex) return false;
 
@@ -45,6 +49,8 @@ public sealed class SortingExpressionPlanEqualityComparer(IQueryRegistry queryPr
 
             hash.Add(obj.Direction);
 
+            hash.Add(obj.NullsPosition);
+
             hash.Add(obj.ColumnIndex);
 
             hash.Add(obj.PreparedExpression, _queryProvider.GetExpressionPlanEqualityComparer());
@@ -60,6 +66,8 @@ public sealed class SortingExpressionPlanEqualityComparer(IQueryRegistry queryPr
             var hash = new XxHash32();
 
             hash.Add(obj.Direction);
+
+            hash.Add(obj.NullsPosition);
 
             hash.Add(obj.ColumnIndex);
 

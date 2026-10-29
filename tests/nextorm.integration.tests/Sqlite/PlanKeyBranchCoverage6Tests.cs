@@ -43,7 +43,7 @@ namespace NextORM.Integration.Tests;
 /// hint, CTE and member-init binding axes only.
 /// </para>
 /// </summary>
-[Collection("Sqlite")]
+[Collection("Query plan cache")]
 public sealed class PlanKeyBranchCoverage6Tests : ProviderTestSuite
 {
     protected override ITestProvider Provider => SqliteTestProvider.Instance;

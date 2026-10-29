@@ -45,7 +45,7 @@ namespace NextORM.Integration.Tests;
 /// with a proven neighbour instead of risking an unproven form in the inner loop.
 /// </para>
 /// </summary>
-[Collection("Sqlite")]
+[Collection("Query plan cache")]
 public sealed class PreparationDifferentialBranchCoverage4Tests : ProviderTestSuite
 {
     protected override ITestProvider Provider => SqliteTestProvider.Instance;

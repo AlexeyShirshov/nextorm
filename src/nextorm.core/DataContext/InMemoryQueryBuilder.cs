@@ -19,8 +19,14 @@ namespace NextORM.Core;
 /// </summary>
 internal static class InMemoryQueryBuilder
 {
-    public static IPreparedQueryCommand<TResult> GetPreparedQueryCommand<TResult>(InMemoryDataContext context, QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, CancellationToken cancellationToken)
+    public static IPreparedQueryCommand<TResult> GetPreparedQueryCommand<TResult>(InMemoryDataContext context, QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, PreparedCommandCache cache, CancellationToken cancellationToken)
     {
+        // The command-reuse policy travels as this call's parameter only: None means a command per
+        // execution, so the in-memory plan cache is neither read nor filled. QueryCommand.Cache (shared,
+        // sticky) is never touched.
+        if (cache == PreparedCommandCache.None)
+            storeInCache = false;
+
         QueryPlan? queryPlan = null;
         IPreparedQueryCommand<TResult>? planCache = null;
 
@@ -92,7 +98,7 @@ internal static class InMemoryQueryBuilder
 
     private static InMemoryPreparedQueryCommand<TResult> GetCacheEntry<TResult>(InMemoryDataContext context, QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
     {
-        return (InMemoryPreparedQueryCommand<TResult>)GetPreparedQueryCommand(context, queryCommand, false, true, cancellationToken);
+        return (InMemoryPreparedQueryCommand<TResult>)GetPreparedQueryCommand(context, queryCommand, false, true, PreparedCommandCache.Connection, cancellationToken);
     }
 
     public static CreateEnumeratorDelegate<TResult> BuildCreateEnumeratorDelegate<TResult>(InMemoryDataContext context, QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
@@ -327,6 +333,11 @@ internal static class InMemoryQueryBuilder
             // current context data once per enumerator, so the descriptor is never baked into a plan.
             if (queryCommand.JunctionChildFilter is { } junctionChildFilter)
                 data = ApplyJunctionChildFilter(context, data!, junctionChildFilter);
+
+            // IsSelectGroup comes first: its modes do not populate GroupBy, and the grouped evaluator
+            // would reject a key-less mode or replay a keyed one through the wrong shape.
+            if (queryCommand.IsSelectGroup)
+                return InMemoryGrouping.CreateSelectGroupEnumerator<TResult, TEntity>(context, queryCommand, cacheEntry, data!, @params);
 
             if (queryCommand.GroupBy is not null)
                 return InMemoryGrouping.CreateGroupedEnumerator<TResult, TEntity>(context, queryCommand, cacheEntry, data!, @params);

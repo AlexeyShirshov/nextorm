@@ -23,9 +23,10 @@ docs/obj/
 __pycache__/
 *.pyc
 
-# PDCA cycle workspace: cycle evidence stays local, while the cycle status files
-# (.pdca/status/<task>-<N>.md, the source of truth for plan and progress) are
-# versioned, as are the scripts CI and the skills execute.
+# PDCA cycle workspace: everything here is local working material (evidence,
+# helper scripts, per-cycle scratch), so the whole tree is ignored. Only the
+# cycle status files (.pdca/status/<task>-<N>.md, the source of truth for plan
+# and progress) are versioned.
 /.pdca/*
-!/.pdca/scripts/
+/.pdca/scripts/
 !/.pdca/status/

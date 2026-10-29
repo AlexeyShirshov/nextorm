@@ -20,6 +20,13 @@ public class PostgresDialect : SqlDialectBase
     // The first PostgreSQL release with the ANSI aggregate FILTER clause (SQL:2003 T612, 9.4).
     private static readonly Version AggregatesFilterMinVersion = new(9, 4);
 
+    // PostgreSQL 18 introduced array_sort() and uuidv7(); array_reverse() does not exist in any
+    // current PostgreSQL release.
+    private static readonly Version ArraySortMinVersion = new(18, 0);
+
+    /// <summary>PostgreSQL supports <c>SAVEPOINT</c>/<c>ROLLBACK TO SAVEPOINT</c>/<c>RELEASE SAVEPOINT</c>.</summary>
+    public override bool SupportsSavepoints => true;
+
     /// <summary>
     /// Gets the shared PostgreSQL dialect instance. Subclassing the dialect does not change this
     /// instance; a derived dialect is created through the public constructors instead.
@@ -27,10 +34,13 @@ public class PostgresDialect : SqlDialectBase
     public static readonly PostgresDialect Instance = new();
 
     private readonly Version? _version;
+    private readonly PostgresUuidGenerators _uuidGenerators;
 
     /// <summary>
     /// Creates an unversioned PostgreSQL dialect: every supported form (including the ANSI aggregate
-    /// <c>FILTER</c> clause) is emitted. Equivalent to the shared <see cref="Instance"/>.
+    /// <c>FILTER</c> clause) is emitted. The version-gated functions of PostgreSQL 18
+    /// (<c>array_sort</c>, <c>uuidv7</c>) are refused, and <c>array_reverse</c> is always refused
+    /// because no current PostgreSQL release provides it. Equivalent to the shared <see cref="Instance"/>.
     /// </summary>
     /// <remarks>
     /// The constructor is public so an external assembly can derive a custom dialect from
@@ -38,18 +48,27 @@ public class PostgresDialect : SqlDialectBase
     /// </remarks>
     public PostgresDialect()
     {
+        _uuidGenerators = PostgresUuidGenerators.Instance;
     }
 
     /// <summary>
     /// Creates a PostgreSQL dialect for <paramref name="serverVersion"/>. A version below 9.4 gates off
-    /// the ANSI aggregate <c>FILTER</c> clause; <see langword="null"/> is the unversioned form.
+    /// the ANSI aggregate <c>FILTER</c> clause; <c>array_sort</c> and <c>uuidv7</c> render only from an
+    /// explicit 18. A <c>null</c> version is the unversioned form, which refuses those two and
+    /// <c>array_reverse</c> (never available).
     /// </summary>
     /// <param name="serverVersion">The PostgreSQL server version, or <see langword="null"/> for unset.</param>
     /// <remarks>
     /// The constructor is public so an external assembly can derive a custom dialect from
     /// <see cref="PostgresDialect"/>; passing <see langword="null"/> equals the parameterless form.
     /// </remarks>
-    public PostgresDialect(Version? serverVersion) => _version = serverVersion;
+    public PostgresDialect(Version? serverVersion)
+    {
+        _version = serverVersion;
+        _uuidGenerators = serverVersion is null
+            ? PostgresUuidGenerators.Instance
+            : new PostgresUuidGenerators(serverVersion);
+    }
 
     /// <inheritdoc/>
     public override string ConcatStringOperator => "||";
@@ -68,6 +87,13 @@ public class PostgresDialect : SqlDialectBase
 
     /// <summary>Npgsql exposes streaming <c>GetStream</c>/<c>GetTextReader</c> accessors for LOB columns.</summary>
     public override bool SupportsSequentialAccess => true;
+
+    /// <summary>PostgreSQL renders the native <c>NULLS FIRST</c>/<c>NULLS LAST</c> ordering modifier.</summary>
+    public override bool SupportsNullsOrdering => true;
+
+    /// <inheritdoc/>
+    public override string RenderOrderBy(string expressionSql, OrderDirection direction, NullsPosition nullsPosition)
+        => NullsOrderingRenderer.RenderNative(expressionSql, direction, nullsPosition);
 
     /// <summary>PostgreSQL allows a data-modifying statement (<c>INSERT ... RETURNING</c>) as a CTE body.</summary>
     public override bool SupportsDataModifyingCtes => true;
@@ -296,6 +322,19 @@ public class PostgresDialect : SqlDialectBase
     /// <inheritdoc/>
     public override bool SupportsArrays => true;
 
+    /// <summary>
+    /// Per-name availability of the PostgreSQL array functions: <c>array_reverse</c> is not available in
+    /// any current PostgreSQL release, and <c>array_sort</c> arrived in PostgreSQL 18, so it needs an
+    /// explicit 18+ version (an unset version refuses it). Every other name keeps the family default.
+    /// </summary>
+    /// <param name="name">The SQL name of the array function, without schema qualification.</param>
+    public override bool SupportsArrayFunction(string name) => name switch
+    {
+        "array_reverse" => false,
+        "array_sort" => _version is not null && _version >= ArraySortMinVersion,
+        _ => base.SupportsArrayFunction(name)
+    };
+
     // PostgreSQL has native range types (int4range/int8range/numrange/tsrange/tstzrange/daterange).
     /// <inheritdoc/>
     public override bool SupportsRanges => true;
@@ -306,11 +345,37 @@ public class PostgresDialect : SqlDialectBase
     /// <inheritdoc/>
     public override bool SupportsTableFunction(string name) =>
         name is "generate_series" or "unnest"
-            or "regexp_matches" or "regexp_split_to_table"
+            or "regexp_matches" or "regexp_split_to_table" or "string_to_table"
             or "jsonb_array_elements" or "jsonb_array_elements_text"
             or "jsonb_each" or "jsonb_each_text" or "jsonb_object_keys"
             or "jsonb_path_query" or "ts_stat"
-            or "jsonb_to_record" or "jsonb_to_recordset";
+            or "jsonb_to_record" or "jsonb_to_recordset"
+            // The #281 array sources of PG17: the multi-array and WITH ORDINALITY forms of unnest (three
+            // and two admitted arities, rendered as ROWS FROM) and the single-column generate_subscripts.
+            or "unnest_with_ordinality" or "generate_subscripts"
+            // The #281 JSON readers of PG17: the two array readers, the two object readers, the
+            // time-zone-aware JSONPath query and the two <c>record</c> readers with a caller-declared
+            // column definition list. The non-<c>b</c> readers take the payload as JSON text and are
+            // cast in the call; the populate_record family stays refused (an anyelement base row).
+            or "json_array_elements" or "json_array_elements_text"
+            or "json_each" or "json_each_text"
+            or "jsonb_path_query_tz"
+            or "json_to_record" or "json_to_recordset"
+            // The #281 system-information readers: 17 record/table-shaped functions plus the three
+            // single-column ones. Every name is a PostgreSQL built-in of PG17's system-information
+            // chapter; the row shapes are pinned by local row interfaces in SqlFunctions.
+            or "pg_available_wal_summaries" or "pg_control_checkpoint" or "pg_control_init"
+            or "pg_control_recovery" or "pg_control_system" or "pg_get_catalog_foreign_keys"
+            or "pg_get_keywords" or "pg_get_multixact_members" or "pg_get_object_address"
+            or "pg_get_wal_summarizer_state" or "pg_identify_object" or "pg_identify_object_as_address"
+            or "pg_input_error_info" or "pg_last_committed_xact" or "pg_listening_channels"
+            or "pg_options_to_table" or "pg_snapshot_xip" or "pg_tablespace_databases"
+            or "pg_wal_summary_contents" or "pg_xact_commit_timestamp_origin"
+            // The #281 full-text readers of PG17: the tokenizer debugger, the parser's token stream and
+            // the parser's token-type table. All three are fixed-schema record functions; only the text
+            // (name) forms of the parser arguments are exposed, because a text parameter cannot reach
+            // the <c>oid</c> overloads.
+            or "ts_debug" or "ts_parse" or "ts_token_type";
 
     /// <summary>PostgreSQL renders the row-derived schema as the alias column-definition list of the record function.</summary>
     public override bool SupportsResultSchema(TableFunctionSchema placement) => placement == TableFunctionSchema.AliasColumnList;
@@ -334,10 +399,130 @@ public class PostgresDialect : SqlDialectBase
     /// their names and are emitted unchanged.
     /// </summary>
     public override string WrapTableFunction(string name, string call) =>
-        name is "generate_series" or "unnest" or "regexp_matches" or "regexp_split_to_table"
+        name is "generate_series" or "unnest" or "regexp_matches" or "regexp_split_to_table" or "string_to_table"
             or "jsonb_object_keys" or "jsonb_path_query"
+            or "pg_listening_channels" or "generate_subscripts"
             ? $"(select {name}\n from {call})"
             : call;
+
+    /// <summary>
+    /// PostgreSQL renders the record/table-valued system-information readers of #281 with an explicit
+    /// projection that keeps every documented column name while converting the types the row mapper
+    /// cannot read: <c>pg_lsn</c>, <c>oid</c>, <c>regclass</c> and <c>xid8</c> columns become text (the
+    /// scalar family casts its <c>oid</c>/<c>pg_lsn</c>/<c>xid8</c> results the same way) and the internal
+    /// <c>"char"</c> keyword-category code becomes text. The argument casts are load-bearing for the same
+    /// reason as in the scalar family: an <c>oid</c>, <c>xid</c>, <c>pg_lsn</c> or <c>pg_snapshot</c>
+    /// argument does not resolve from a text parameter. A function whose columns and arguments are all
+    /// mappable is left alone and keeps its bare call.
+    /// </summary>
+    public override string WrapTableFunction(string name, string call, IReadOnlyList<string> arguments) => name switch
+    {
+        // The multi-array and WITH ORDINALITY forms of unnest are FROM-clause grammar: the server names
+        // every output column `unnest` (measured: two such columns, ambiguous by name), so the rows are
+        // built with ROWS FROM and the columns renamed through its alias column list, then restored in a
+        // one-column-per-array subquery. ROWS FROM keeps PostgreSQL's NULL padding of the shorter arrays.
+        // The arity is fixed by the overloads (one, two and three arrays); four or more are refused before
+        // rendering, so this arm never sees them.
+        "unnest" when arguments.Count >= 2 =>
+            "(select " + string.Join(", ", Enumerable.Range(1, arguments.Count).Select(i => $"value{i}"))
+            + "\n from rows from (" + string.Join(", ", arguments.Select(a => $"unnest({a})"))
+            + ") as u("
+            + string.Join(", ", Enumerable.Range(1, arguments.Count).Select(i => $"value{i}")) + "))",
+        "unnest_with_ordinality" when arguments.Count == 1 =>
+            "(select value, ordinality\n from rows from (unnest(" + arguments[0]
+            + ")) with ordinality as u(value, ordinality))",
+        "unnest_with_ordinality" =>
+            "(select " + string.Join(", ", Enumerable.Range(1, arguments.Count).Select(i => $"value{i}"))
+            + ", ordinality\n from rows from (" + string.Join(", ", arguments.Select(a => $"unnest({a})"))
+            + ") with ordinality as u("
+            + string.Join(", ", Enumerable.Range(1, arguments.Count).Select(i => $"value{i}"))
+            + ", ordinality))",
+        "json_array_elements" or "json_array_elements_text" or "json_each" or "json_each_text"
+            or "json_to_record" or "json_to_recordset" =>
+            // The non-b JSON readers take a json value; a text parameter does not resolve the overload
+            // (json_array_elements(text) does not exist), so the document argument is cast — harmless for
+            // an inline JSON literal, load-bearing for a bound parameter.
+            $"{name}(cast({arguments[0]} as json))",
+        "jsonb_path_query_tz" =>
+            // A scalar set-returning function names its only column after the function, but aliasing the
+            // call in FROM renames that column to the alias, so the match column is restored in a
+            // one-column subquery. The document/path/vars arguments are cast: a text parameter resolves to
+            // none of jsonb/jsonpath.
+            "(select jsonb_path_query_tz\n from jsonb_path_query_tz("
+            + $"cast({arguments[0]} as jsonb), cast({arguments[1]} as jsonpath),"
+            + $" cast({arguments[2]} as jsonb), {arguments[3]}))",
+        "pg_control_recovery" =>
+            "(select min_recovery_end_lsn::text as min_recovery_end_lsn, min_recovery_end_timeline,"
+            + " backup_start_lsn::text as backup_start_lsn, backup_end_lsn::text as backup_end_lsn,"
+            + " end_of_backup_record_required"
+            + $"\n from {call})",
+        "pg_control_checkpoint" =>
+            "(select checkpoint_lsn::text as checkpoint_lsn, redo_lsn::text as redo_lsn, redo_wal_file,"
+            + " timeline_id, prev_timeline_id, full_page_writes, next_xid, next_oid::text as next_oid,"
+            + " next_multixact_id, next_multi_offset, oldest_xid, oldest_xid_dbid::text as oldest_xid_dbid,"
+            + " oldest_active_xid, oldest_multi_xid, oldest_multi_dbid::text as oldest_multi_dbid,"
+            + " oldest_commit_ts_xid, newest_commit_ts_xid, checkpoint_time"
+            + $"\n from {call})",
+        "pg_get_keywords" =>
+            "(select word, catcode::text as catcode, barelabel, catdesc, baredesc"
+            + $"\n from {call})",
+        "pg_snapshot_xip" =>
+            "(select pg_snapshot_xip::text as pg_snapshot_xip"
+            + $"\n from pg_snapshot_xip(cast({arguments[0]} as pg_snapshot)))",
+        "pg_tablespace_databases" =>
+            "(select pg_tablespace_databases::text as pg_tablespace_databases"
+            + $"\n from pg_tablespace_databases(cast({arguments[0]} as oid)))",
+        "pg_get_catalog_foreign_keys" =>
+            "(select fktable::text as fktable, fkcols, pktable::text as pktable, pkcols, is_array, is_opt"
+            + $"\n from {call})",
+        "pg_available_wal_summaries" =>
+            "(select tli, start_lsn::text as start_lsn, end_lsn::text as end_lsn"
+            + $"\n from {call})",
+        "pg_get_multixact_members" =>
+            // Same text bridge as the transaction-origin reader: a uint literal renders as an integer,
+            // and PostgreSQL has no integer-to-xid cast (42846).
+            $"(select * from pg_get_multixact_members(cast(cast({arguments[0]} as text) as xid)))",
+        "pg_get_object_address" =>
+            "(select classid::text as classid, objid::text as objid, objsubid"
+            + "\n from pg_get_object_address("
+            + string.Join(", ", new[]
+            {
+                arguments[0],
+                $"cast({arguments[1]} as text[])",
+                $"cast({arguments[2]} as text[])"
+            })
+            + "))",
+        "pg_get_wal_summarizer_state" =>
+            "(select summarized_tli, summarized_lsn::text as summarized_lsn,"
+            + " pending_lsn::text as pending_lsn, summarizer_pid"
+            + $"\n from {call})",
+        "pg_last_committed_xact" =>
+            "(select xid, timestamp, roident::text as roident"
+            + $"\n from {call})",
+        "pg_identify_object" =>
+            $"(select * from pg_identify_object(cast({arguments[0]} as oid), cast({arguments[1]} as oid), {arguments[2]}))",
+        "pg_identify_object_as_address" =>
+            $"(select * from pg_identify_object_as_address(cast({arguments[0]} as oid), cast({arguments[1]} as oid), {arguments[2]}))",
+        "pg_wal_summary_contents" =>
+            "(select relfilenode::text as relfilenode, reltablespace::text as reltablespace,"
+            + " reldatabase::text as reldatabase, relforknumber, relblocknumber, is_limit_block"
+            + "\n from pg_wal_summary_contents("
+            + $"{arguments[0]}, cast({arguments[1]} as pg_lsn), cast({arguments[2]} as pg_lsn)))",
+        "pg_xact_commit_timestamp_origin" =>
+            // The xid travels as text first: a uint literal renders as an integer, and PostgreSQL has
+            // no integer-to-xid cast (42846), while text-to-xid resolves for both the literal and the
+            // xid-bound parameter the driver sends.
+            "(select timestamp, roident::text as roident"
+            + $"\n from pg_xact_commit_timestamp_origin(cast(cast({arguments[0]} as text) as xid)))",
+        "ts_debug" =>
+            // The two dictionary columns are regdictionary/regdictionary[] — OID-alias types with no
+            // CLR mapping — so they are cast to text/text[] (the same bridge as the regclass/oid
+            // columns of the system-information readers). The token columns need no cast.
+            "(select alias, description, token, dictionaries::text[] as dictionaries,"
+            + " dictionary::text as dictionary, lexemes"
+            + $"\n from ts_debug({arguments[0]}))",
+        _ => WrapTableFunction(name, call)
+    };
 
     // PostgreSQL has native json/jsonb types and the associated functions/operators.
     /// <inheritdoc/>
@@ -370,6 +555,9 @@ public class PostgresDialect : SqlDialectBase
 
     /// <summary>PostgreSQL 11+ supports the <c>GROUPS</c> window frame unit.</summary>
     public override bool SupportsWindowFrameGroups => true;
+
+    /// <summary>PostgreSQL renders both null-safe comparison forms natively (<c>IS [NOT] DISTINCT FROM</c>).</summary>
+    public override INullSafeComparisonRenderer? NullSafeComparison => PostgresNullSafeComparisonRenderer.Instance;
 
     /// <summary>PostgreSQL supports the frame <c>EXCLUDE CURRENT ROW</c>/<c>GROUP</c>/<c>TIES</c>/<c>NO OTHERS</c> clause.</summary>
     public override bool SupportsWindowFrameExclusion => true;
@@ -468,10 +656,43 @@ public class PostgresDialect : SqlDialectBase
     public override ISessionInfoFunctions SessionInfoFunctions => PostgresSessionInfoFunctions.Instance;
 
     /// <summary>PostgreSQL renders both UUID generators through the core functions.</summary>
-    public override IUuidGenerators UuidGenerators => PostgresUuidGenerators.Instance;
+    public override IUuidGenerators UuidGenerators => _uuidGenerators;
 
     /// <summary>PostgreSQL renders every cross-provider scalar function natively (<c>space</c> as <c>repeat(' ', n)</c>).</summary>
     public override IScalarFunctions ScalarFunctions => PostgresScalarFunctions.Instance;
+
+    /// <summary>PostgreSQL encodes base64 through the core <c>encode</c> function.</summary>
+    public override bool SupportsBase64Encode => true;
+
+    /// <inheritdoc/>
+    public override string MakeBase64Encode(string value) =>
+        $"replace(encode({TypedNull(value, "bytea")}, 'base64'), E'\\n', '')";
+
+    /// <summary>PostgreSQL decodes base64 through the core <c>decode</c> function.</summary>
+    public override bool SupportsBase64Decode => true;
+
+    /// <inheritdoc/>
+    public override string MakeBase64Decode(string value) =>
+        $"decode({TypedNull(value, "text")}, 'base64')";
+
+    /// <summary>PostgreSQL generates random bytes through <c>pgcrypto</c>'s <c>gen_random_bytes</c>.</summary>
+    public override bool SupportsCryptGenRandom => true;
+
+    /// <inheritdoc/>
+    public override string MakeCryptGenRandom(string length)
+    {
+        var argument = TypedNull(length, "integer");
+        return $"CASE WHEN {argument} IS NULL THEN CAST(NULL AS bytea) ELSE gen_random_bytes({argument}) END";
+    }
+
+    /// <summary>
+    /// Replaces the bare <c>null</c> token of a literal NULL argument with the provider's typed NULL,
+    /// so the function resolves the expected binary/text/integer input type instead of the
+    /// polymorphic <c>unknown</c> literal.
+    /// </summary>
+    private static string TypedNull(string value, string sqlType) =>
+        value == "null" ? $"CAST(NULL AS {sqlType})" : value;
+
 
     /// <inheritdoc/>
     public override bool SupportsBooleanAggregates => true;
@@ -483,6 +704,8 @@ public class PostgresDialect : SqlDialectBase
     public override bool SupportsRegressionAggregates => true;
     /// <inheritdoc/>
     public override bool SupportsOrderedAggregates => true;
+    /// <inheritdoc/>
+    public override bool SupportsOrderedPercentiles => true;
 
     /// <inheritdoc/>
     public override string MakeAggregate(string name) => name switch
@@ -494,12 +717,18 @@ public class PostgresDialect : SqlDialectBase
         _ => name
     };
 
-    // PostgreSQL's log() is base 10; the natural logarithm (Math.Log) is ln().
-    /// <inheritdoc/>
+    /// <summary>
+    /// PostgreSQL's <c>log()</c> is base 10; the natural logarithm (<c>Math.Log</c>) is
+    /// <c>ln()</c>. The two-argument form only exists as <c>log(numeric, numeric)</c>, so both operands
+    /// are cast to <c>numeric</c>.
+    /// </summary>
     public override string MakeMathFunction(string name, IReadOnlyList<string> args) =>
-        name == "log" && args.Count == 1
-            ? $"ln({args[0]})"
-            : base.MakeMathFunction(name, args);
+        name switch
+        {
+            "log" when args.Count == 1 => $"ln({args[0]})",
+            "log" when args.Count == 2 => $"log(({args[0]})::numeric, ({args[1]})::numeric)",
+            _ => base.MakeMathFunction(name, args)
+        };
 
     /// <summary>
     /// PostgreSQL's two-argument <c>round</c> only accepts <c>numeric</c>, so a double precision/real
@@ -554,11 +783,11 @@ public class PostgresDialect : SqlDialectBase
 
     /// <inheritdoc/>
     public override string MakeRegexMatch(string value, string pattern, bool ignoreCase) =>
-        $"{value} {(ignoreCase ? "~*" : "~")} {QuoteStringLiteral(pattern)}";
+        $"{value} {(ignoreCase ? "~*" : "~")} {SqlStringLiteralPolicy.Postgres.Render(pattern, SqlStringLiteralRole.RegexPattern)}";
 
     /// <inheritdoc/>
     public override string MakeRegexReplace(string value, string pattern, string replacement, bool ignoreCase) =>
-        $"regexp_replace({value}, {QuoteStringLiteral(pattern)}, {QuoteStringLiteral(replacement)}, {(ignoreCase ? "'gi'" : "'g'")})";
+        $"regexp_replace({value}, {SqlStringLiteralPolicy.Postgres.Render(pattern, SqlStringLiteralRole.RegexPattern)}, {SqlStringLiteralPolicy.Postgres.Render(replacement, SqlStringLiteralRole.RegexReplacement)}, {(ignoreCase ? "'gi'" : "'g'")})";
 
     /// <inheritdoc/>
     public override void MakePage(Paging paging, StringBuilder sqlBuilder, KeywordCase keywordCase = KeywordCase.Lower)
@@ -658,16 +887,39 @@ internal sealed class PostgresSessionInfoFunctions : ISessionInfoFunctions
     };
 }
 
+/// <summary>
+/// Renders <c>gen_random_uuid</c> (available since PostgreSQL 13) and <c>uuidv7</c> (PostgreSQL 18+).
+/// <c>uuidv7</c> is enabled only for an explicit version at or above 18; an unversioned dialect refuses
+/// it in both <see cref="Supports"/> and <see cref="Render"/> instead of emitting SQL the server rejects.
+/// </summary>
 internal sealed class PostgresUuidGenerators : IUuidGenerators
 {
-    public static readonly PostgresUuidGenerators Instance = new();
+    public static readonly PostgresUuidGenerators Instance = new(null);
 
-    public bool Supports(string name) => name is "gen_random_uuid" or "uuidv7";
+    // uuidv7() arrived in PostgreSQL 18.
+    private static readonly Version UuidV7MinVersion = new(18, 0);
+
+    private readonly Version? _version;
+
+    /// <summary>Creates the generator surface for <paramref name="serverVersion"/>; unset refuses <c>uuidv7</c>.</summary>
+    /// <param name="serverVersion">The PostgreSQL server version, or <see langword="null"/> for unset.</param>
+    public PostgresUuidGenerators(Version? serverVersion) => _version = serverVersion;
+
+    private bool IsUuidV7Enabled => _version is not null && _version >= UuidV7MinVersion;
+
+    public bool Supports(string name) => name switch
+    {
+        "gen_random_uuid" => true,
+        "uuidv7" => IsUuidV7Enabled,
+        _ => false
+    };
 
     public string Render(string name) => name switch
     {
         "gen_random_uuid" => "gen_random_uuid()",
-        "uuidv7" => "uuidv7()",
+        "uuidv7" when IsUuidV7Enabled => "uuidv7()",
+        "uuidv7" => throw new NotSupportedException(
+            "The uuidv7 function is not supported by this provider."),
         _ => throw new NotSupportedException($"The {name} UUID generator function is not supported by PostgreSQL.")
     };
 }
@@ -806,7 +1058,20 @@ internal sealed class PostgresStringFormats : IStringFormatFunctions
 /// Renders the cross-provider scalar functions of <see cref="CommonFunctions"/> on PostgreSQL, where
 /// every name has a native spelling (<c>left</c>/<c>right</c>, <c>lpad</c>/<c>rpad</c>, <c>repeat</c>/
 /// <c>reverse</c>, <c>concat_ws</c>, <c>translate</c>, <c>ascii</c>, <c>chr</c>). <c>space</c> has no
-/// native function and is rendered as <c>repeat(' ', n)</c>.
+/// native function and is rendered as <c>repeat(' ', n)</c>. Also renders the PostgreSQL numeric-scale
+/// members <c>scale</c>/<c>min_scale</c>/<c>trim_scale</c>, the residual string family
+/// (<c>btrim</c>/<c>ltrim</c>/<c>rtrim</c> with a character set, <c>starts_with</c>, <c>parse_ident</c>,
+/// <c>quote_ident</c>/<c>quote_literal</c>/<c>quote_nullable</c>, <c>to_ascii</c>, <c>to_hex</c>/
+/// <c>to_oct</c>/<c>to_bin</c>, <c>convert_from</c>/<c>convert_to</c>, <c>encode</c>/<c>decode</c>,
+/// <c>normalize</c>, <c>unistr</c>, <c>regexp_match</c>), the residual numeric family (<c>div</c>,
+/// <c>erf</c>/<c>erfc</c>, <c>random_normal</c> and the degree-based trigonometry), the residual
+/// date/time family (<c>date_subtract</c>, <c>justify_interval</c>, <c>make_timestamptz</c>, the
+/// transaction clock functions, <c>timeofday</c>, <c>isfinite</c>), the UUID extraction functions and
+/// the binary-string family (<c>get_bit</c>/<c>set_bit</c>, <c>get_byte</c>/<c>set_byte</c>,
+/// <c>bit_count</c>), and the #281 aggregates (<c>any_value</c>, <c>xmlagg</c>, the strict JSON array
+/// aggregates, the unique JSON object aggregates, the PostgreSQL 17 SQL/JSON <c>json_arrayagg</c>/
+/// <c>json_objectagg</c> constructs and the <c>grouping</c> grouping function), each advertised by its
+/// own name.
 /// </summary>
 internal sealed class PostgresScalarFunctions : IScalarFunctions
 {
@@ -816,7 +1081,48 @@ internal sealed class PostgresScalarFunctions : IScalarFunctions
     public bool Supports(string name) => name is
         "left" or "right" or "lpad" or "rpad" or "repeat" or "reverse" or "space" or
         "concat_ws" or "translate" or "ascii" or "char" or
-        "bit_length" or "octet_length" or "cot" or "degrees" or "radians" or "pi";
+        "bit_length" or "octet_length" or "cot" or "degrees" or "radians" or "pi" or
+        "scale" or "min_scale" or "trim_scale" or
+        "btrim" or "ltrim" or "rtrim" or "starts_with" or "parse_ident" or "quote_ident" or
+        "quote_literal" or "quote_nullable" or "to_ascii" or "to_hex" or "to_oct" or "to_bin" or
+        "convert_from" or "convert_to" or "encode" or "decode" or "normalize" or "unistr" or
+        "regexp_match" or
+        "div" or "erf" or "erfc" or "random_normal" or
+        "acosd" or "asind" or "atand" or "atan2d" or "cosd" or "cotd" or "sind" or "tand" or
+        "date_subtract" or "justify_interval" or "make_timestamptz" or
+        "clock_timestamp" or "statement_timestamp" or "transaction_timestamp" or "timeofday" or
+        "isfinite" or
+        "uuid_extract_timestamp" or "uuid_extract_version" or
+        "get_bit" or "set_bit" or "get_byte" or "set_byte" or "bit_count" or
+        "current_schemas" or "pg_postmaster_start_time" or "pg_current_logfile" or
+        "pg_conf_load_time" or "pg_jit_available" or "pg_my_temp_schema" or
+        "pg_is_other_temp_schema" or "pg_notification_queue_usage" or
+        "pg_blocking_pids" or "pg_safe_snapshot_blocking_pids" or "pg_trigger_depth" or
+        "pg_collation_is_visible" or "pg_conversion_is_visible" or "pg_function_is_visible" or
+        "pg_opclass_is_visible" or "pg_operator_is_visible" or "pg_opfamily_is_visible" or
+        "pg_statistics_obj_is_visible" or "pg_table_is_visible" or "pg_ts_config_is_visible" or
+        "pg_ts_dict_is_visible" or "pg_ts_parser_is_visible" or "pg_ts_template_is_visible" or
+        "pg_type_is_visible" or "pg_char_to_encoding" or "pg_encoding_to_char" or "pg_basetype" or
+        "pg_describe_object" or "pg_tablespace_location" or "pg_settings_get_flags" or
+        "pg_index_has_property" or "pg_indexam_has_property" or "pg_index_column_has_property" or
+        "pg_input_is_valid" or "pg_get_serial_sequence" or
+        "pg_get_function_arguments" or "pg_get_function_identity_arguments" or
+        "pg_get_function_result" or "pg_get_functiondef" or
+        "pg_get_indexdef" or "pg_get_partition_constraintdef" or "pg_get_partkeydef" or
+        "pg_get_ruledef" or "pg_get_statisticsobjdef" or "pg_get_triggerdef" or
+        "pg_get_userbyid" or "pg_get_viewdef" or "pg_has_role" or
+        "pg_current_snapshot" or "pg_current_xact_id" or "pg_current_xact_id_if_assigned" or
+        "pg_snapshot_xmax" or "pg_snapshot_xmin" or "pg_visible_in_snapshot" or
+        "pg_xact_commit_timestamp" or "pg_xact_status" or
+        "array_to_tsvector" or "json_to_tsvector" or "jsonb_to_tsvector" or
+        "get_current_ts_config" or "numnode" or
+        "querytree" or "setweight" or "strip" or "ts_delete" or "ts_filter" or
+        "ts_rewrite" or "tsquery_phrase" or "tsvector_to_array" or "ts_lexize" or
+        "any_value" or
+        "xmlagg" or "json_agg_strict" or "jsonb_agg_strict" or
+        "json_object_agg_unique" or "json_object_agg_unique_strict" or
+        "json_arrayagg" or "jsonb_arrayagg" or "json_objectagg" or
+        "json_objectagg_unique" or "jsonb_objectagg" or "grouping";
 
     /// <inheritdoc/>
     public string Render(string name, IReadOnlyList<string> args) => name switch
@@ -838,8 +1144,176 @@ internal sealed class PostgresScalarFunctions : IScalarFunctions
         "degrees" => $"degrees({args[0]})",
         "radians" => $"radians({args[0]})",
         "pi" => "pi()",
+        "scale" => $"scale({args[0]})",
+        "min_scale" => $"min_scale({args[0]})",
+        "trim_scale" => $"trim_scale({args[0]})",
+        // pg_my_temp_schema returns oid, which the driver cannot read as a string; cast to text as
+        // pg_typeof does (see ExtendedScalarFunctionTranslator.EmitPgTypeOf).
+        "pg_my_temp_schema" => "cast(pg_my_temp_schema() as text)",
+        "btrim" or "ltrim" or "rtrim" or "starts_with" or "parse_ident" or "quote_ident" or
+            "quote_literal" or "quote_nullable" or "to_ascii" or "to_hex" or "to_oct" or "to_bin" or
+            "convert_from" or "convert_to" or "encode" or "decode" or "normalize" or "unistr" or
+            "regexp_match" or "div" or "erf" or "erfc" or "random_normal" or
+            "acosd" or "asind" or "atand" or "atan2d" or "cosd" or "cotd" or "sind" or "tand" or
+            "date_subtract" or "justify_interval" or "make_timestamptz" or
+            "clock_timestamp" or "statement_timestamp" or "transaction_timestamp" or "timeofday" or
+            "isfinite" or "uuid_extract_timestamp" or "uuid_extract_version" or
+            "get_bit" or "set_bit" or "get_byte" or "set_byte" or "bit_count" or
+            "current_schemas" or "pg_postmaster_start_time" or "pg_current_logfile" or
+            "pg_conf_load_time" or "pg_jit_available" or
+            "pg_notification_queue_usage" or "pg_blocking_pids" or
+            "pg_safe_snapshot_blocking_pids" or "pg_trigger_depth" or
+            "pg_char_to_encoding" or "pg_encoding_to_char" or "pg_settings_get_flags" or
+            "pg_index_has_property" or "pg_index_column_has_property" or "pg_input_is_valid" or
+            "pg_get_serial_sequence"
+            => $"{name}({string.Join(", ", args)})",
+        // oid-typed arguments: a text parameter does not resolve to the oid overload (measured:
+        // "function pg_table_is_visible(text) does not exist"), so the argument is cast, like the
+        // regclass argument of nextval/currval.
+        "pg_is_other_temp_schema" or "pg_collation_is_visible" or "pg_conversion_is_visible" or
+            "pg_function_is_visible" or "pg_opclass_is_visible" or "pg_operator_is_visible" or
+            "pg_opfamily_is_visible" or "pg_statistics_obj_is_visible" or "pg_table_is_visible" or
+            "pg_ts_config_is_visible" or "pg_ts_dict_is_visible" or "pg_ts_parser_is_visible" or
+            "pg_ts_template_is_visible" or "pg_type_is_visible"
+            => $"{name}(cast({args[0]} as oid))",
+        "pg_tablespace_location" => $"pg_tablespace_location(cast({args[0]} as oid))",
+        "pg_indexam_has_property" => $"pg_indexam_has_property(cast({args[0]} as oid), {args[1]})",
+        "pg_describe_object" =>
+            $"pg_describe_object(cast({args[0]} as oid), cast({args[1]} as oid), {args[2]})",
+        // regtype argument and regtype result: the driver cannot read a regtype, so the result is cast
+        // to text (as pg_typeof does) and the text argument is cast to regtype to resolve the overload.
+        "pg_basetype" => $"cast(pg_basetype(cast({args[0]} as regtype)) as text)",
+        // pg_get_*_def/arguments take an oid; a text parameter does not resolve to the oid overload.
+        "pg_get_function_arguments" or "pg_get_function_identity_arguments" or
+            "pg_get_function_result" or "pg_get_functiondef" or
+            "pg_get_partition_constraintdef" or "pg_get_partkeydef" or "pg_get_statisticsobjdef"
+            => $"{name}(cast({args[0]} as oid))",
+        // The same name has both a one-argument and a boolean-column form, so the arity picks the shape.
+        "pg_get_indexdef" => args.Count == 1
+            ? $"pg_get_indexdef(cast({args[0]} as oid))"
+            : $"pg_get_indexdef(cast({args[0]} as oid), {args[1]}, {args[2]})",
+        "pg_get_ruledef" => args.Count == 1
+            ? $"pg_get_ruledef(cast({args[0]} as oid))"
+            : $"pg_get_ruledef(cast({args[0]} as oid), {args[1]})",
+        "pg_get_triggerdef" => args.Count == 1
+            ? $"pg_get_triggerdef(cast({args[0]} as oid))"
+            : $"pg_get_triggerdef(cast({args[0]} as oid), {args[1]})",
+        "pg_get_userbyid" => $"pg_get_userbyid(cast({args[0]} as oid))",
+        // to_regclass accepts a view name and a numeric OID in text form; the text -> regclass cast
+        // resolves a name only (a numeric argument raises 42P01), so it cannot serve the (oid) rows.
+        // The second argument's type (boolean or integer) picks the pretty overload; an unknown name
+        // yields NULL.
+        "pg_get_viewdef" => args.Count == 1
+            ? $"pg_get_viewdef(to_regclass({args[0]}))"
+            : $"pg_get_viewdef(to_regclass({args[0]}), {args[1]})",
+        // regrole accepts a role name and a numeric OID; the two-argument form's second argument is the
+        // privilege text, the three-argument form's is the membership role.
+        "pg_has_role" => args.Count == 2
+            ? $"pg_has_role(cast({args[0]} as regrole), {args[1]})"
+            : $"pg_has_role(cast({args[0]} as regrole), cast({args[1]} as regrole), {args[2]})",
+        // pg_snapshot and xid8 have no CLR mapping; the textual form is the only one the driver can read.
+        "pg_current_snapshot" => "cast(pg_current_snapshot() as text)",
+        "pg_current_xact_id" => "cast(pg_current_xact_id() as text)",
+        "pg_current_xact_id_if_assigned" => "cast(pg_current_xact_id_if_assigned() as text)",
+        // xid8 and pg_snapshot arguments are given in the textual form these members return.
+        "pg_snapshot_xmax" => $"cast(pg_snapshot_xmax(cast({args[0]} as pg_snapshot)) as text)",
+        "pg_snapshot_xmin" => $"cast(pg_snapshot_xmin(cast({args[0]} as pg_snapshot)) as text)",
+        "pg_visible_in_snapshot" =>
+            $"pg_visible_in_snapshot(cast({args[0]} as xid8), cast({args[1]} as pg_snapshot))",
+        "pg_xact_commit_timestamp" => $"pg_xact_commit_timestamp(cast({args[0]} as xid))",
+        "pg_xact_status" => $"pg_xact_status(cast({args[0]} as xid8))",
+        // The #281 full-text family: the driver carries tsvector/tsquery/regconfig as text, so every
+        // argument of those types is cast (a text parameter resolves to no such overload, measured) and
+        // the regconfig result is cast back to text because no CLR mapping of regconfig exists.
+        "array_to_tsvector" => $"cast(array_to_tsvector({args[0]}) as text)",
+        "json_to_tsvector" => args.Count == 2
+            ? $"cast(json_to_tsvector(cast({args[0]} as json), cast({args[1]} as jsonb)) as text)"
+            : $"cast(json_to_tsvector(cast({args[0]} as regconfig), cast({args[1]} as json), cast({args[2]} as jsonb)) as text)",
+        "jsonb_to_tsvector" => args.Count == 2
+            ? $"cast(jsonb_to_tsvector(cast({args[0]} as jsonb), cast({args[1]} as jsonb)) as text)"
+            : $"cast(jsonb_to_tsvector(cast({args[0]} as regconfig), cast({args[1]} as jsonb), cast({args[2]} as jsonb)) as text)",
+        "get_current_ts_config" => "cast(get_current_ts_config() as text)",
+        "numnode" => $"numnode(cast({args[0]} as tsquery))",
+        // tsquery and text results need no bridge; every tsvector result is cast back to text, and the
+        // `"char"` weight arguments are cast because a text parameter does not resolve those overloads.
+        "querytree" => $"querytree(cast({args[0]} as tsquery))",
+        "setweight" => args.Count == 2
+            ? $"cast(setweight(cast({args[0]} as tsvector), cast({args[1]} as \"char\")) as text)"
+            : $"cast(setweight(cast({args[0]} as tsvector), cast({args[1]} as \"char\"), cast({args[2]} as text[])) as text)",
+        "strip" => $"cast(strip(cast({args[0]} as tsvector)) as text)",
+        // Measured on 17.11 (PREPARE, no cast in the call): args[1] is left uncast so the parameter's declared
+        // type picks the ts_delete overload — text[] selects ts_delete(tsvector, text[]), text selects
+        // ts_delete(tsvector, text); a cast to either single type would break the other.
+        "ts_delete" => $"cast(ts_delete(cast({args[0]} as tsvector), {args[1]}) as text)",
+        "ts_filter" => $"cast(ts_filter(cast({args[0]} as tsvector), cast({args[1]} as \"char\"[])) as text)",
+        // ts_rewrite(tsquery, text) and ts_rewrite(tsquery, tsquery, tsquery) are distinct overloads. The
+        // two-argument form's second argument is the rewrite-table SQL as text, so it stays uncast and its
+        // declared text type selects that overload (measured: PREPARE p(text,text), no cast). The
+        // three-argument form needs every operand cast: text parameters match no tsquery overload
+        // (measured: "function ts_rewrite(text, text, text) does not exist").
+        "ts_rewrite" => args.Count == 2
+            ? $"cast(ts_rewrite(cast({args[0]} as tsquery), {args[1]}) as text)"
+            : $"cast(ts_rewrite(cast({args[0]} as tsquery), cast({args[1]} as tsquery), cast({args[2]} as tsquery)) as text)",
+        // tsquery_phrase(tsquery, tsquery[, integer]): the integer distance parameter resolves the
+        // three-argument overload by its declared type, so it is left uncast (measured: PREPARE
+        // p(text,text,int), no cast; the two-argument call resolves the phrase overload).
+        "tsquery_phrase" => args.Count == 2
+            ? $"cast(tsquery_phrase(cast({args[0]} as tsquery), cast({args[1]} as tsquery)) as text)"
+            : $"cast(tsquery_phrase(cast({args[0]} as tsquery), cast({args[1]} as tsquery), {args[2]}) as text)",
+        // text[] results need no bridge; the tsvector argument is cast like every other one.
+        "tsvector_to_array" => $"tsvector_to_array(cast({args[0]} as tsvector))",
+        // regdictionary is carried as text, so the dictionary argument is cast; the token is already text.
+        "ts_lexize" => $"ts_lexize(cast({args[0]} as regdictionary), {args[1]})",
+        // A pg_proc aggregate whose argument and result are anyelement: the argument is a column or a
+        // typed parameter, so no cast is needed (an untyped constant has no target type to cast to).
+        "any_value" => $"any_value({args[0]})",
+        // xmlagg has one overload, xmlagg(xml) -> xml (measured: xmlagg(text) is 42883), so the operand
+        // is cast to xml; the xml result needs no bridge — the driver reads it as a string.
+        "xmlagg" => $"xmlagg(cast({args[0]} as xml))",
+        // The strict array aggregates take anyelement and skip NULL inputs; no cast is needed.
+        "json_agg_strict" => $"json_agg_strict({args[0]})",
+        "jsonb_agg_strict" => $"jsonb_agg_strict({args[0]})",
+        // The unique object aggregates take ("any", "any") and return json; no cast is needed.
+        "json_object_agg_unique" => $"json_object_agg_unique({args[0]}, {args[1]})",
+        "json_object_agg_unique_strict" => $"json_object_agg_unique_strict({args[0]}, {args[1]})",
+        // The PostgreSQL 17 SQL/JSON aggregates are parser-level constructs with no pg_proc row. The
+        // builder has no clause slot for an aggregate's internal argument list, so only the forms that
+        // fit a plain call are emitted: the default ABSENT ON NULL / NULL ON NULL behaviour, the
+        // RETURNING jsonb variant under its own member and the WITH UNIQUE KEYS clause as its own
+        // member. The arguments stay uncast: the key is coerced to text by the server (measured) and
+        // the value is any type.
+        "json_arrayagg" => $"json_arrayagg({args[0]})",
+        "jsonb_arrayagg" => $"json_arrayagg({args[0]} returning jsonb)",
+        "json_objectagg" => $"json_objectagg({args[0]} value {args[1]})",
+        "json_objectagg_unique" => $"json_objectagg({args[0]} value {args[1]} with unique keys)",
+        "jsonb_objectagg" => $"json_objectagg({args[0]} value {args[1]} returning jsonb)",
+        // Super-aggregate identity bit: a parser-level grouping function; the argument must be a
+        // grouping expression of the query's own grouping list (42803 otherwise, measured).
+        "grouping" => $"grouping({args[0]})",
         _ => throw new NotSupportedException($"The {name} function is not supported by PostgreSQL.")
     };
 
     private static string Pad(IReadOnlyList<string> args) => args.Count == 3 ? args[2] : "' '";
+}
+
+/// <summary>
+/// Renders the explicit null-safe comparison helpers on PostgreSQL, which has the ANSI spellings as
+/// native operators: <c>a IS NOT DISTINCT FROM b</c> and <c>a IS DISTINCT FROM b</c>. Both are
+/// two-valued, so the result is a plain boolean and needs no scalar legalisation.
+/// </summary>
+internal sealed class PostgresNullSafeComparisonRenderer : INullSafeComparisonRenderer
+{
+    internal static readonly PostgresNullSafeComparisonRenderer Instance = new();
+
+    /// <inheritdoc/>
+    public NullSafeComparisonDisposition DistinctDisposition => NullSafeComparisonDisposition.Native;
+
+    /// <inheritdoc/>
+    public NullSafeComparisonDisposition NotDistinctDisposition => NullSafeComparisonDisposition.Native;
+
+    /// <inheritdoc/>
+    public string RenderDistinct(string left, string right) => $"({left} is distinct from {right})";
+
+    /// <inheritdoc/>
+    public string RenderNotDistinct(string left, string right) => $"({left} is not distinct from {right})";
 }

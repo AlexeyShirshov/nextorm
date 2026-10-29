@@ -493,4 +493,389 @@ public sealed class SqlServerFunctionExecutionTests : ProviderTestSuite
         Reject(() => _sut.SimpleEntity.Select(x => SqlFunctions.Postgres.percentile_cont(0.5, () => (double)x.Id)).First(),
             "The ordered-set aggregates (percentile_cont/percentile_disc/mode) are not supported by this provider.");
     }
+
+    /// <summary>
+    /// #258: QUOTENAME(value, quote) over the real server. The expected matrix is written out
+    /// independently of the production escaping helper: every delimiter is a one-character string whose
+    /// apostrophe (when it is the delimiter) is doubled, and the server decides the native result —
+    /// including the null results for a null argument and for a value longer than sysname.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "258")]
+    public void Quotename_LiteralParameterAndNullVariants_ShouldExecute()
+    {
+        var value128 = new string('a', 128);
+        var value129 = new string('a', 129);
+        var paramValue = "O'Brien";
+        var paramQuote = "'";
+        string? nullParam = null;
+
+        var r = _sut.SimpleEntity
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Apostrophe = SqlFunctions.SqlServer.quotename("abc", "'"),
+                ApostropheInValue = SqlFunctions.SqlServer.quotename("O'Brien", "'"),
+                DoubleQuote = SqlFunctions.SqlServer.quotename("abc", "\""),
+                Bracket = SqlFunctions.SqlServer.quotename("abc", "["),
+                RightBracket = SqlFunctions.SqlServer.quotename("abc", "]"),
+                Parenthesis = SqlFunctions.SqlServer.quotename("abc", "("),
+                RightParenthesis = SqlFunctions.SqlServer.quotename("abc", ")"),
+                Angle = SqlFunctions.SqlServer.quotename("abc", "<"),
+                RightAngle = SqlFunctions.SqlServer.quotename("abc", ">"),
+                Brace = SqlFunctions.SqlServer.quotename("abc", "{"),
+                RightBrace = SqlFunctions.SqlServer.quotename("abc", "}"),
+                Backtick = SqlFunctions.SqlServer.quotename("abc", "`"),
+                EscapedBracketValue = SqlFunctions.SqlServer.quotename("abc[]def"),
+                OneArgument = SqlFunctions.SqlServer.quotename("abc"),
+                EmptyValue = SqlFunctions.SqlServer.quotename("", "["),
+                NullValue = SqlFunctions.SqlServer.quotename(null, "'"),
+                NullQuote = SqlFunctions.SqlServer.quotename("abc", null),
+                At128 = SqlFunctions.SqlServer.quotename(value128, "["),
+                At129 = SqlFunctions.SqlServer.quotename(value129, "["),
+                Param = SqlFunctions.SqlServer.quotename(paramValue, paramQuote),
+                NullParam = SqlFunctions.SqlServer.quotename(nullParam, "'")
+            })
+            .First();
+
+        r.Apostrophe.Should().Be("'abc'");
+        r.ApostropheInValue.Should().Be("'O''Brien'");
+        r.DoubleQuote.Should().Be("\"abc\"");
+        r.Bracket.Should().Be("[abc]");
+        r.RightBracket.Should().Be("[abc]");
+        r.Parenthesis.Should().Be("(abc)");
+        r.RightParenthesis.Should().Be("(abc)");
+        r.Angle.Should().Be("<abc>");
+        r.RightAngle.Should().Be("<abc>");
+        r.Brace.Should().Be("{abc}");
+        r.RightBrace.Should().Be("{abc}");
+        r.Backtick.Should().Be("`abc`");
+        r.EscapedBracketValue.Should().Be("[abc[]]def]");
+        r.OneArgument.Should().Be("[abc]");
+        r.EmptyValue.Should().Be("[]");
+        r.NullValue.Should().BeNull();
+        r.NullQuote.Should().BeNull();
+        r.At128.Should().Be("[" + value128 + "]");
+        r.At129.Should().BeNull("an input longer than sysname returns NULL natively, with no client truncation");
+        r.Param.Should().Be("'O''Brien'");
+        r.NullParam.Should().BeNull();
+    }
+
+    // ------------------------------------------------------------------ #259: SQL Server time materialisation
+    //
+    // SqlClient returns a native TimeSpan for a `time`/`timefromparts` field while a mapped duration
+    // column stays bigint and reaches the same column mapper, so the facts below cover both sides of
+    // that split against a live server: the native precision matrix, the NULL propagation, the
+    // physical `time` columns, sync/async parity, the raw ADO.NET scalar, and the unchanged signed
+    // bigint duration path.
+
+    /// <summary>01:02:03.004 — the issue's <c>timefromparts(1, 2, 3, 4, 3)</c> value, in ticks.</summary>
+    private const long FractionalTicks = 37_230_040_000L;
+
+    /// <summary>01:02:03.0000004 — the <c>timefromparts(…, 4, 7)</c> value, in 100 ns ticks.</summary>
+    private const long TimefrompartsTickTicks = 37_230_000_004L;
+
+    /// <summary>01:02:03.0040004 — the <c>time(7)</c> column value, which keeps the 100 ns digit.</summary>
+    private const long SeededTime7Ticks = 37_230_040_004L;
+
+    [Fact]
+    [Trait("Issue", "259")]
+    public void Timefromparts_materialises_TimeSpan_precision_matrix()
+    {
+        var r = _sut.SimpleEntity
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Milli = SqlFunctions.SqlServer.timefromparts(1, 2, 3, 4, 3),
+                Tick = SqlFunctions.SqlServer.timefromparts(1, 2, 3, 4, 7),
+                Seconds = SqlFunctions.SqlServer.timefromparts(1, 2, 3, 0, 0)
+            })
+            .First();
+
+        r.Milli.Should().Be(TimeSpan.FromTicks(FractionalTicks));
+        r.Milli!.Value.Ticks.Should().Be(FractionalTicks);
+        r.Tick.Should().Be(TimeSpan.FromTicks(TimefrompartsTickTicks));
+        r.Tick!.Value.Ticks.Should().Be(TimefrompartsTickTicks);
+        r.Seconds.Should().Be(new TimeSpan(1, 2, 3));
+    }
+
+    [Fact]
+    [Trait("Issue", "259")]
+    public void Timefromparts_null_arguments_materialise_null()
+    {
+        var r = _sut.SimpleEntity
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                NullHour = SqlFunctions.SqlServer.timefromparts(null, 2, 3, 4, 3),
+                NullMinute = SqlFunctions.SqlServer.timefromparts(1, null, 3, 4, 3),
+                NullSeconds = SqlFunctions.SqlServer.timefromparts(1, 2, null, 4, 3),
+                NullFractions = SqlFunctions.SqlServer.timefromparts(1, 2, 3, null, 3),
+                Control = SqlFunctions.SqlServer.timefromparts(1, 2, 3, 4, 3)
+            })
+            .First();
+
+        r.NullHour.Should().BeNull();
+        r.NullMinute.Should().BeNull();
+        r.NullSeconds.Should().BeNull();
+        r.NullFractions.Should().BeNull();
+        r.Control.Should().Be(TimeSpan.FromTicks(FractionalTicks));
+    }
+
+    [Fact]
+    [Trait("Issue", "259")]
+    public void Time_columns_materialise_nullable_and_required_TimeSpan()
+    {
+        var ctx = _sut.DataProvider;
+        var table = CreateTimeTable(ctx);
+
+        try
+        {
+            var rows = ctx.From(table)
+                .Select(e => new
+                {
+                    Id = SqlFunctions.Column<int>(e, "id"),
+                    T = SqlFunctions.Column<TimeSpan>(e, "t"),
+                    T3 = SqlFunctions.Column<TimeSpan>(e, "t3"),
+                    T7 = SqlFunctions.Column<TimeSpan>(e, "t7"),
+                    Tn = SqlFunctions.Column<TimeSpan?>(e, "tn"),
+                    T3n = SqlFunctions.Column<TimeSpan?>(e, "t3n"),
+                    T7n = SqlFunctions.Column<TimeSpan?>(e, "t7n")
+                })
+                .ToList()
+                .OrderBy(x => x.Id)
+                .ToList();
+
+            rows.Should().HaveCount(2);
+
+            var seeded = rows[0];
+            seeded.T.Ticks.Should().Be(FractionalTicks);
+            seeded.T3.Ticks.Should().Be(FractionalTicks, "time(3) truncates .0040004 to .004");
+            seeded.T7.Ticks.Should().Be(SeededTime7Ticks, "time(7) keeps the 100 ns tick");
+            seeded.Tn.Should().BeNull();
+            seeded.T3n.Should().BeNull();
+            seeded.T7n.Should().BeNull();
+
+            var midnight = rows[1];
+            midnight.T.Should().Be(TimeSpan.Zero);
+            midnight.T3.Should().Be(TimeSpan.Zero);
+            midnight.T7.Should().Be(TimeSpan.Zero);
+            midnight.Tn.Should().BeNull();
+            midnight.T3n.Should().BeNull();
+            midnight.T7n.Should().BeNull();
+        }
+        finally
+        {
+            Execute(ctx, $"drop table if exists {table}");
+        }
+    }
+
+    [Fact]
+    [Trait("Issue", "259")]
+    public async Task Timefromparts_sync_and_async_materialisation_agree()
+    {
+        var sync = _sut.SimpleEntity
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Milli = SqlFunctions.SqlServer.timefromparts(1, 2, 3, 4, 3),
+                Tick = SqlFunctions.SqlServer.timefromparts(1, 2, 3, 4, 7)
+            })
+            .ToList();
+
+        var async = await _sut.SimpleEntity
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Milli = SqlFunctions.SqlServer.timefromparts(1, 2, 3, 4, 3),
+                Tick = SqlFunctions.SqlServer.timefromparts(1, 2, 3, 4, 7)
+            })
+            .ToListAsync();
+
+        sync.Should().ContainSingle();
+        async.Should().ContainSingle();
+        sync[0].Milli.Should().Be(TimeSpan.FromTicks(FractionalTicks));
+        async[0].Milli.Should().Be(sync[0].Milli);
+        sync[0].Tick.Should().Be(TimeSpan.FromTicks(TimefrompartsTickTicks));
+        async[0].Tick.Should().Be(sync[0].Tick);
+    }
+
+    /// <summary>
+    /// Labelled raw: the ADO.NET scalar path reads the driver's native <see cref="TimeSpan"/> directly.
+    /// This does not exercise the row-mapper branch the other cases cover.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "259")]
+    public void Raw_time_scalar_remains_supported()
+    {
+        var ctx = _sut.DataProvider;
+
+        using var result = ctx.ExecuteRaw("select cast('01:02:03.004' as time(3)) as t");
+
+        result.Read<TimeSpan>().Should().Equal(TimeSpan.FromTicks(FractionalTicks));
+    }
+
+    /// <summary>
+    /// The integer-backed duration path is unchanged: a <c>bigint</c> read as a <see cref="TimeSpan"/>
+    /// keeps its sign and its beyond-24 h range because it is never reinterpreted as a time-of-day.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "259")]
+    public void Bigint_duration_projection_retains_signed_unbounded_values()
+    {
+        var ctx = _sut.DataProvider;
+        var table = CreateTimeTable(ctx);
+
+        try
+        {
+            var rows = ctx.From(table)
+                .Select(e => new
+                {
+                    Id = SqlFunctions.Column<int>(e, "id"),
+                    Dur = SqlFunctions.Column<TimeSpan>(e, "dur")
+                })
+                .ToList()
+                .OrderBy(x => x.Id)
+                .ToList();
+
+            rows.Should().HaveCount(2);
+            rows[0].Dur.Ticks.Should().Be(-37_230_040_000L, "a negative duration keeps its sign");
+            rows[0].Dur.Should().Be(TimeSpan.FromTicks(-37_230_040_000L));
+            rows[1].Dur.Ticks.Should().Be(900_610_000_000L, "25:01:01 is a valid TimeSpan beyond 24 h");
+            rows[1].Dur.Should().Be(TimeSpan.FromTicks(900_610_000_000L));
+            rows[1].Dur.Should().BeGreaterThan(TimeSpan.FromDays(1));
+        }
+        finally
+        {
+            Execute(ctx, $"drop table if exists {table}");
+        }
+    }
+
+    /// <summary>
+    /// Creates the T259 test-owned table and seeds the two rows the time and duration cases read: the
+    /// fractional/precision matrix with NULL nullable columns, and a 25:01:01 bigint duration.
+    /// </summary>
+    private static string CreateTimeTable(IDataContext ctx)
+    {
+        var table = "t259_time_" + Guid.NewGuid().ToString("N")[..8];
+
+        Execute(ctx, $"create table {table} (" +
+            "id int not null, " +
+            "t time not null, " +
+            "t3 time(3) not null, " +
+            "t7 time(7) not null, " +
+            "tn time null, " +
+            "t3n time(3) null, " +
+            "t7n time(7) null, " +
+            "dur bigint not null)");
+
+        Execute(ctx, $"insert into {table} (id, t, t3, t7, tn, t3n, t7n, dur) values " +
+            "(1, '01:02:03.004', '01:02:03.004', '01:02:03.0040004', null, null, null, -37230040000), " +
+            "(2, '00:00:00', '00:00:00', '00:00:00.0000000', null, null, null, 900610000000)");
+
+        return table;
+    }
+
+    /// <summary>
+    /// The connection/statement-scope names (#248) report native state without a per-row guarantee:
+    /// <c>IDENT_CURRENT</c> is read after a two-row seed, <c>SCOPE_IDENTITY</c> only inside the batch
+    /// that performed the <c>INSERT</c>, and <c>ROWCOUNT_BIG</c> after the previous command of the
+    /// same batch. The identity column starts at 1, so the values are deterministic.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "248")]
+    public void LiveConnectionStateFunctions_ShouldReadNativeValues()
+    {
+        var ctx = _sut.DataProvider;
+        Execute(ctx, "drop table if exists ss_fn_state");
+        Execute(ctx, "create table ss_fn_state (id int identity(1,1) primary key, note nvarchar(20) null)");
+        try
+        {
+            Execute(ctx, "insert into ss_fn_state (note) values (N'a'), (N'b')");
+            Scalar(ctx, "select ident_current('ss_fn_state')")
+                .Should().Be(2m, "IDENT_CURRENT reports the last identity the table generated, in any session");
+
+            Scalar(ctx, "set nocount on; insert into ss_fn_state (note) values (N'c'); select scope_identity();")
+                .Should().Be(3m, "SCOPE_IDENTITY is visible only in the same batch as the INSERT");
+
+            Scalar(ctx, "set nocount on; insert into ss_fn_state (note) values (N'd'), (N'e'), (N'f'); select rowcount_big();")
+                .Should().Be(3L, "ROWCOUNT_BIG reports the rows affected by the previous command of the batch");
+        }
+        finally
+        {
+            Execute(ctx, "drop table if exists ss_fn_state");
+        }
+    }
+
+    /// <summary>
+    /// Inside an explicit, committable transaction the native state is <c>CURRENT_TRANSACTION_ID</c>
+    /// non-null and <c>XACT_STATE()</c> = 1; the transaction is rolled back so nothing is left behind.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "248")]
+    public void LiveTransactionStateFunctions_ShouldReadNativeValues()
+    {
+        var ctx = _sut.DataProvider;
+
+        using var transaction = ((ITransactionManager)ctx).BeginTransaction();
+        var r = _sut.SimpleEntity
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                TransactionId = SqlFunctions.SqlServer.current_transaction_id(),
+                State = SqlFunctions.SqlServer.xact_state()
+            })
+            .First();
+
+        r.TransactionId.Should().NotBeNull("the query runs inside an explicit transaction");
+        r.TransactionId.Value.Should().BeGreaterThan(0);
+        r.State.Should().Be(1, "an active and committable transaction is xact_state 1");
+
+        transaction.Rollback();
+    }
+
+    /// <summary>
+    /// <c>CURRENT_REQUEST_ID</c> returns the smallint request id of the current session, or SQL NULL
+    /// outside a request; only the type/range is deterministic, so both native outcomes are accepted.
+    /// <c>MIN_ACTIVE_ROWVERSION</c> is the native <c>binary(8)</c> value, not a numeric counter.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "248")]
+    public void LiveRequestAndRowVersionFunctions_ShouldReadNativeValues()
+    {
+        var request = _sut.SimpleEntity
+            .Where(x => x.Id == 1)
+            .Select(x => new { RequestId = SqlFunctions.SqlServer.current_request_id() })
+            .First();
+
+        if (request.RequestId is { } requestId)
+            requestId.Should().BeGreaterThanOrEqualTo((short)0);
+        else
+            request.RequestId.Should().BeNull("outside a request scope the server returns NULL");
+
+        var rowVersion = _sut.SimpleEntity
+            .Where(x => x.Id == 1)
+            .Select(x => new { Version = SqlFunctions.SqlServer.min_active_rowversion() })
+            .First()
+            .Version;
+
+        rowVersion.Should().NotBeNull("MIN_ACTIVE_ROWVERSION returns the native binary(8) value");
+        rowVersion.Should().HaveCount(8, "the native return type is binary(8)");
+    }
+
+    private static void Execute(IDataContext ctx, string sql)
+    {
+        var context = (DataContext)ctx;
+        context.EnsureConnectionOpen();
+        using var command = context.CreateCommand(sql);
+        command.ExecuteNonQuery();
+    }
+
+    private static object? Scalar(IDataContext ctx, string sql)
+    {
+        var context = (DataContext)ctx;
+        context.EnsureConnectionOpen();
+        using var command = context.CreateCommand(sql);
+        return command.ExecuteScalar();
+    }
 }

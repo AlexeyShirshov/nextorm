@@ -55,6 +55,15 @@ internal static class SqliteFunctionTranslator
 
         var name = node.Method.Name;
 
+        // The percentile family has no native SQLite spelling (the shipped build reports
+        // ENABLE_PERCENTILE=0) and this library does not emulate it: the refusal must name SQLite and must
+        // fire before the generic per-name capability message, and no window/aggregate rewrite follows.
+        if (name == nameof(SqliteFunctions.median))
+            throw new NotSupportedException("The median function is not supported by SQLite.");
+
+        if (name == nameof(SqliteFunctions.percentile))
+            throw new NotSupportedException("The percentile function is not supported by SQLite.");
+
         if (visitor.Dialect.SqliteFunctions is not { } functions || !functions.Supports(name))
             throw new NotSupportedException($"The SQLite function '{name}' is not supported by this provider.");
 

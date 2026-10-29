@@ -406,7 +406,10 @@ public class EagerLoadingModeTests
         typeof(EntityBuilder<>).GetMethods().Should().NotContain(m => m.Name == "AsSingleQuery");
         typeof(JoinedEntityBuilder<,>).GetMethods().Should().NotContain(m => m.Name == "AsSingleQuery");
 
-        var loadWith = typeof(EntityBuilder<>).GetMethods().Single(m => m.Name == "LoadWith");
+        // The additive metadata-driven overloads are covered by T249's own binding suite; this row
+        // pins the legacy five-parameter signature and its optional mode.
+        var loadWith = typeof(EntityBuilder<>).GetMethods()
+            .Single(m => m.Name == "LoadWith" && m.GetParameters().Length == 5);
         var parameters = loadWith.GetParameters();
         parameters.Should().HaveCount(5);
         parameters[^1].ParameterType.Should().Be(typeof(EagerLoadMode));
@@ -414,7 +417,8 @@ public class EagerLoadingModeTests
         parameters[^1].HasDefaultValue.Should().BeTrue();
         parameters[^1].DefaultValue.Should().Be(EagerLoadMode.Default);
 
-        var inherited = typeof(JoinedEntityBuilder<,>).GetMethod("LoadWith");
+        var inherited = typeof(JoinedEntityBuilder<,>).GetMethods()
+            .Single(m => m.Name == "LoadWith" && m.GetParameters().Length == 5);
         inherited.Should().NotBeNull("derived builders inherit LoadWith");
         inherited!.DeclaringType.Should().NotBeNull();
         inherited.DeclaringType!.IsGenericType.Should().BeTrue();

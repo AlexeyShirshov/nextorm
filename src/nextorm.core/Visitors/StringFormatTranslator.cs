@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Linq.Expressions;
+using System.Reflection;
 
 namespace NextORM.Core;
 
@@ -87,7 +88,7 @@ internal static class StringFormatTranslator
             var part = parts[i];
             if (part.Literal is not null)
             {
-                pieces.Add(SqlLiteral.ToSqlStringLiteral(part.Literal));
+                pieces.Add(visitor.RenderStringLiteral(part.Literal));
                 continue;
             }
 
@@ -154,7 +155,13 @@ internal static class StringFormatTranslator
     private static string ApplyAlignment(BaseExpressionVisitor visitor, string rendered, int alignment)
     {
         var width = Math.Abs(alignment);
-        return visitor.Dialect.MakePad(rendered, width.ToString(CultureInfo.InvariantCulture), SqlLiteral.ToSqlStringLiteral(" "), left: alignment > 0);
+        // grammar token: the padding character is a function argument downstream
+        // (lpad/rpad/repeat/replicate), so an expression is legal on every padding provider.
+        return visitor.Dialect.MakePad(
+            rendered,
+            width.ToString(CultureInfo.InvariantCulture),
+            visitor.RenderStringLiteral(" ", SqlStringLiteralRole.GrammarToken, SqlStringGrammar.PaddingCharacter),
+            left: alignment > 0);
     }
 
     private static IStringFormatFunctions RequireFormats(BaseExpressionVisitor visitor) =>
@@ -191,6 +198,12 @@ internal static class StringFormatTranslator
             return;
 
         if (provider is ConstantExpression { Value: CultureInfo culture } && ReferenceEquals(culture, CultureInfo.InvariantCulture))
+            return;
+
+        // The natural C# spelling, CultureInfo.InvariantCulture, binds a static property access. It is
+        // recognised structurally by declaring type and member identity only — the getter is never executed.
+        if (provider is MemberExpression { Expression: null, Member: PropertyInfo { Name: nameof(CultureInfo.InvariantCulture) } property }
+            && property.DeclaringType == typeof(CultureInfo))
             return;
 
         throw new NotSupportedException("string.Format is only supported with CultureInfo.InvariantCulture; the current/other cultures have no portable SQL form.");

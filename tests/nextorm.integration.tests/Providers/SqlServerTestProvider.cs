@@ -22,8 +22,9 @@ internal sealed class SqlServerTestProvider : ITestProvider
 
     public bool SupportsFullJoin => true;
 
-    // T-SQL evaluates AVG over an integer column as an integer, so 5.5 becomes 5.
-    public bool SupportsFractionalAverage => false;
+    // T291 (#291): the dialect widens an integral AVG argument to float inside the aggregate
+    // (avg(cast(i as float))), so the fractional mean survives (5.5, not 5).
+    public bool SupportsFractionalAverage => true;
 
     // SQL Server has no INTERSECT ALL / EXCEPT ALL.
     public bool SupportsIntersectExceptAll => false;
@@ -48,6 +49,9 @@ internal sealed class SqlServerTestProvider : ITestProvider
     /// <summary>The provider binds table-valued parameters (native SQL Server UDTT or JSON/array emulation).</summary>
     public bool SupportsTableValuedParameters => true;
     public bool SupportsTransactions => true;
+
+    /// <summary>Savepoints are available inside a transaction on this provider.</summary>
+    public bool SupportsSavepoints => true;
     public bool SupportsRegex => true;
     public bool SupportsLobStreaming => true;
     public bool SupportsLobDataReader => true;
@@ -58,7 +62,7 @@ internal sealed class SqlServerTestProvider : ITestProvider
 
     public string SkipReason => SqlServerContainer.Failure ?? "SQL Server is not available.";
 
-    public IDataContext CreateContext() => CreateContext(null);
+    public IDataContext CreateContext() => CreateContext((Microsoft.Extensions.Logging.ILoggerFactory?)null);
 
     public IDataContext CreateContext(Microsoft.Extensions.Logging.ILoggerFactory? loggerFactory)
     {
@@ -67,6 +71,9 @@ internal sealed class SqlServerTestProvider : ITestProvider
             builder = builder.UseLoggerFactory(loggerFactory);
         return new SqlServerDataContext(SqlServerContainer.ConnectionString, builder);
     }
+
+    public IDataContext CreateContext(DataContextBuilder builder)
+        => new SqlServerDataContext(SqlServerContainer.ConnectionString, builder);
 
     public void EnsureSeeded()
     {
@@ -116,10 +123,30 @@ internal sealed class SqlServerTestProvider : ITestProvider
         drop table if exists extrema_entity;
         drop table if exists orders;
         drop table if exists person;
+        drop table if exists avg_fixture;
 
         create table simple_entity (id int not null primary key);
 
         insert into simple_entity (id) values (1),(2),(3),(4),(5),(6),(7),(8),(9),(10);
+
+        -- T291 (#291): AVG fixture, identical rows on every provider (values 1,2,1,3 / null,1,2,3).
+        create table avg_fixture
+        (
+            id int not null primary key,
+            b tinyint not null,
+            s smallint not null,
+            i int not null,
+            l bigint not null,
+            nb tinyint null,
+            ns smallint null,
+            ni int null,
+            nl bigint null
+        );
+        insert into avg_fixture (id, b, s, i, l, nb, ns, ni, nl) values
+            (1, 1, 1, 1, 1, null, null, null, null),
+            (2, 2, 2, 2, 2, 1, 1, 1, 1),
+            (3, 1, 1, 1, 1, 2, 2, 2, 2),
+            (4, 3, 3, 3, 3, 3, 3, 3, 3);
 
         drop table if exists pivot_entity;
 
@@ -256,8 +283,8 @@ internal sealed class SqlServerTestProvider : ITestProvider
         create table eager_composite_child
         (
             id int not null primary key,
-            tenant int not null,
-            parent_id int not null,
+            tenant int null,
+            parent_id int null,
             sort_key int not null
         );
 

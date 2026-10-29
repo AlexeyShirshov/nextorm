@@ -1,8 +1,8 @@
 ---
-description: Database/ADO provider performance for nextorm — DbContext role interfaces, plan cache and Prepare(), query executor, row materialization, SQL builders, and the SqliteBenchmark* suite. Use when optimizing or measuring nextorm's database contexts (SQLite/Postgres/SQL Server/MySQL/ClickHouse). Can apply fixes.
+description: Database/ADO provider performance for nextorm — DataContext role interfaces, plan cache and Prepare(), query executor, row materialization, SQL builders, and the SqliteBenchmark* suite. Use when optimizing or measuring nextorm's database contexts (SQLite/Postgres/SQL Server/MySQL/ClickHouse). Can apply fixes.
 mode: subagent
+# tier: cheap
 temperature: 0.1
-variant: max
 permission:
   edit: allow
 ---
@@ -14,7 +14,7 @@ explain, and apply the minimal fix when the evidence supports it.
 
 ## Scope: the database context
 
-- `src/nextorm.core/DataContext/DbContext.cs` is a facade; the work lives in
+- `src/nextorm.core/DataContext/DataContext.cs` is a facade; the work lives in
   `DataContext/Roles/`: `IQueryExecutor` (terminals), `IQueryMaterializer`,
   `IQueryPlanner`, `IQueryCache`, `IConnectionManager`, `IContextEnvironment`,
   `IRowReaderFactory`.
@@ -26,7 +26,7 @@ explain, and apply the minimal fix when the evidence supports it.
 - SQL generation: `DataContext/SqlBuilder.cs`, `Query/QueryCommand*.cs`,
   `Visitors/BaseExpressionVisitor.cs`, `Dialect/ISqlDialect.cs` +
   `SqlDialectBase.cs` (provider SQL behind `Make*`/`Render*`).
-- Parameter binding: `ParamList.cs`, `DbContext.GetParamName` (cached `norm_pN`).
+- Parameter binding: `ParamList.cs`, `IParameterProvider.GetParamName` (cached `norm_pN`).
 
 ## Benchmarks
 

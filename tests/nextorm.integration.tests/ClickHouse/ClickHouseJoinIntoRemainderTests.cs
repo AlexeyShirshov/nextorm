@@ -10,6 +10,7 @@ namespace NextORM.Integration.Tests;
 /// rejecting the many-to-many declaration; once lifted, one denormalized round trip must stitch the
 /// many-to-many tags and the LoadWith notes.
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class ClickHouseJoinIntoRemainderTests : ProviderTestSuite
 {
     protected override ITestProvider Provider => ClickHouseTestProvider.Instance;

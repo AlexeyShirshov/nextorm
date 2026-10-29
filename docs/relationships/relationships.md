@@ -6,9 +6,11 @@
 
 ## Overview
 
-nextorm resolves a graph from **declared** metadata, not from a mapper convention: an entity without declared relationships is mapped exactly as before, and a navigation property is excluded from the column mapping only when it participates in a declared relationship. This page covers the metadata model and [`JoinInto`](xref:NextORM.Core.EntityBuilder`1), the explicit single-query relationship loader. Implicit navigation queries are supported for **declared** relationships — a reference navigation as a scalar chain or a presence check, and a collection navigation through exactly four direct terminals (see [Implicit navigation queries](implicit-navigation.md)) — not inferred by convention. Navigation **after** a temp-table/TVP boundary is **not available (fail-closed)**, and a table-valued parameter is parameter-only (no query root).
+nextorm resolves a graph from **declared** metadata, not from a mapper convention: an entity without declared relationships is mapped exactly as before, and a navigation property is excluded from the column mapping only when it participates in a declared relationship. This page covers the metadata model and [`JoinInto`](xref:NextORM.Core.EntityBuilder`1), the explicit single-query relationship loader. Implicit navigation queries are supported for **declared** relationships — a reference navigation as a scalar chain or a presence check, a reference hop used inside a correlated predicate or scalar subquery, and a collection navigation through exactly four direct terminals (see [Implicit navigation queries](implicit-navigation.md)) — not inferred by convention. The correlated-predicate form joins the hop on the outer command and reads the joined alias from the nested one (`LEFT JOIN` plus a correlated `EXISTS`/scalar subquery, no `APPLY`); it is a predicate/scalar surface, not correlated eager loading, which stays reserved and rejected (`EagerLoadMode.Correlated`). Navigation **after** a temp-table/TVP boundary is **not available (fail-closed)**, and a table-valued parameter is parameter-only (no query root).
 
-`JoinInto` and [`LoadWith`](eager-loading.md) are two ways to fill a parent collection and share one assignment contract: `JoinInto` is one denormalized query over all parents, and `LoadWith` defaults to a split query with one extra child statement per key chunk (or one denormalized query when the builder passes `EagerLoadMode.SingleQuery` to `LoadWith`). `JoinInto` fills **one** declared navigation; a multi-level (level 2+) graph is expressed by nesting `LoadWith` child queries, where each level runs in one graph-wide mode (see [Nested graphs](eager-loading.md#nested-graphs-level-2-and-deeper)).
+`JoinInto` and [`LoadWith`](eager-loading.md) are two ways to fill a parent collection and share one assignment contract: `JoinInto` is one denormalized query over all parents, and `LoadWith` defaults to a split query with one extra child statement per key chunk (or one denormalized query when the builder passes `EagerLoadMode.SingleQuery` to `LoadWith`). `JoinInto` fills **one** declared navigation; a multi-level (level 2+) graph is expressed by nesting `LoadWith` child queries, where each level runs in one graph-wide mode (see [Nested graphs](eager-loading.md#nested-graphs-level-2-and-deeper)). A **third** form returns the per-parent collections inside a projected result instead of filling the entity — the direct `Select(p => new { p.Id, p.Comments })` member and the `AsEntityBuilder<T>() … ToList()` adapter — documented in [Collection-valued projection slots](collection-projection.md).
+
+`LoadWith` reads the same declared metadata when it is used without key selectors: the collection and reference `LoadWith(navigation)` / `LoadWith(navigation, childQuery)` overloads take the navigation's ordered key components from its declaration — one predicate per component, the component at position `i` on one side against the component at position `i` on the other — instead of requiring explicit selectors; the explicit-key overload remains the form for an entity pair with no declared relationship (see [Declared-metadata form](eager-loading.md#declared-metadata-form)). The declaration is therefore the single producer for both loaders: `HasMany`, `HasOne`, `HasOneToOne`, `HasManyThrough` and `[Relationship]` are the only source of a relationship, and neither loader infers one from a convention.
 
 ## Declaring a relationship
 
@@ -28,19 +30,85 @@ The dependent side declares the reference navigation and the foreign key on **it
 ctx.From<OrderItem>(b => b.HasOne(i => i.Order, i => i.OrderId));
 ```
 
-The principal key is taken from the existing key metadata of the principal type (`[Key]`, [`EntityPropertyBuilder<T>.Key()`](xref:NextORM.Core.EntityPropertyBuilder`1), or the `Id`/`<TypeName>Id` convention), so the two sides converge as a one-to-many/many-to-one pair. The four declaration overloads are:
+The principal key is taken from the existing key metadata of the principal type (`[Key]`, [`EntityPropertyBuilder<T>.Key()`](xref:NextORM.Core.EntityPropertyBuilder`1), or the `Id`/`<TypeName>Id` convention), so the two sides converge as a one-to-many/many-to-one pair. The default principal key is the **whole** key in entity-metadata order — every key component, never only the first one.
+
+`HasMany`, `HasOne`, `HasOneToOne` and `HasManyThrough` expose ten declaration overloads (A–J). All ten share one selector parser and build the same internal relationship descriptor; the six existing signatures are unchanged and keep working. The ten signatures are:
 
 ```csharp
-public EntityMetadataBuilder<T> HasMany<TChild, TKey>(
+// A — 1:N, navigation + explicit foreign key + explicit principal key
+public EntityMetadataBuilder<T> HasMany<TChild>(
     Expression<Func<T, ICollection<TChild>>> navigation,
-    Expression<Func<TChild, TKey>> foreignKey);
+    Expression<Func<TChild, object?>> foreignKey,
+    Expression<Func<T, object?>> principalKey) where TChild : class;
 
-public EntityMetadataBuilder<T> HasOne<TChild, TKey>(
+// B — 1:N, no navigation, explicit foreign key + explicit principal key
+public EntityMetadataBuilder<T> HasMany<TChild>(
+    Expression<Func<TChild, object?>> foreignKey,
+    Expression<Func<T, object?>> principalKey) where TChild : class;
+
+// C — N:1, navigation + explicit foreign key + explicit principal key
+public EntityMetadataBuilder<T> HasOne<TChild>(
     Expression<Func<T, TChild?>> navigation,
-    Expression<Func<T, TKey>> foreignKey);
+    Expression<Func<T, object?>> foreignKey,
+    Expression<Func<TChild, object?>> principalKey) where TChild : class;
+
+// D — N:1, no navigation, explicit foreign key + explicit principal key
+public EntityMetadataBuilder<T> HasOne<TChild>(
+    Expression<Func<T, object?>> foreignKey,
+    Expression<Func<TChild, object?>> principalKey) where TChild : class;
+
+// E — 1:1, navigation + explicit parent key + explicit child foreign key
+public EntityMetadataBuilder<T> HasOneToOne<TChild>(
+    Expression<Func<T, TChild?>> navigation,
+    Expression<Func<T, object?>> parentKey,
+    Expression<Func<TChild, object?>> childForeignKey) where TChild : class;
+
+// F — M:N, navigation + all four explicit key lists
+public EntityMetadataBuilder<T> HasManyThrough<TChild, TJunction>(
+    Expression<Func<T, IEnumerable<TChild>>> navigation,
+    Expression<Func<T, object?>> parentKey,
+    Expression<Func<TJunction, object?>> junctionParentForeignKey,
+    Expression<Func<TChild, object?>> childKey,
+    Expression<Func<TJunction, object?>> junctionChildForeignKey)
+    where TChild : class where TJunction : class;
+
+// G — 1:N, no navigation; principal = the full key of T
+public EntityMetadataBuilder<T> HasMany<TChild>(
+    Expression<Func<TChild, object?>> foreignKey) where TChild : class;
+
+// H — N:1, no navigation; principal = the full key of TChild
+public EntityMetadataBuilder<T> HasOne<TChild>(
+    Expression<Func<T, object?>> foreignKey) where TChild : class;
+
+// I — 1:1 with the child foreign key only; parent key = the full key of T
+public EntityMetadataBuilder<T> HasOneToOne<TChild, TKey>(
+    Expression<Func<T, TChild?>> navigation,
+    Expression<Func<TChild, TKey>> childForeignKey) where TChild : class;
+
+// J — M:N with the two junction foreign keys only; both entity keys = full keys
+public EntityMetadataBuilder<T> HasManyThrough<TChild, TJunction>(
+    Expression<Func<T, IEnumerable<TChild>>> navigation,
+    Expression<Func<TJunction, object?>> junctionParentForeignKey,
+    Expression<Func<TJunction, object?>> junctionChildForeignKey)
+    where TChild : class where TJunction : class;
 ```
 
-Each also has a **key-only fallback** overload (`HasMany<TChild, TKey>(foreignKey, principalKey)` / `HasOne<TChild, TKey>(foreignKey, principalKey)`) for an entity whose relationship is not modelled as a navigation property; it declares the metadata without attaching a navigation.
+When each form is required: **A, C, E and I** infer `TChild` from the navigation; **I** additionally infers `TKey` from the child foreign key, so a composite anonymous key needs no explicit type argument. The key-only forms **B, D, G and H** cannot infer `TChild` from an untyped lambda — call them with an explicit `<TChild>` (a typed selector variable can still infer it, but the public form is explicit). **F and J** require explicit `<TChild, TJunction>`: `TJunction` appears only inside untyped lambdas, and C# cannot supply a partial generic-argument list. Use **A–F** when the key must be explicit — a different component order, a non-key principal property, or a reversed role; use **G–J** when the full primary key is the principal key. To customise only one side of a many-to-many relationship use **F** with all four lists; there is no partially ordered overload.
+
+#### Ordered key selectors
+
+Every key selector — fluent or attribute — is resolved by one shared parser, so all declarations accept exactly the same forms:
+
+- a direct scalar mapped property — `c => c.ParentId`;
+- a flat anonymous object of direct scalar mapped properties — `c => new { c.TenantId, c.ParentId }`.
+
+The **order is the contract**. Components are paired **positionally** between the two sides: the first foreign-key component pairs with the first principal-key component, the second with the second, and so on. They are never matched by name, sorted by key metadata, or matched by type. Anonymous-member aliases are ignored: `new { Parent = c.ParentId }` selects `ParentId`. Boxing and nullable conversions around a single component are unwrapped before the underlying mapped CLR types are compared.
+
+A `null` selector (or a selector without a body) throws `ArgumentNullException` naming the parameter. Structural rejections throw `NotSupportedException` naming the relationship, the component position and the component count: field access, a nested member path, a computation, a method call, an index access, an array or collection initializer, a tuple literal, DTO or object construction (`new Dto { ... }`), a nested anonymous object, an empty anonymous object, and the same property selected twice.
+
+#### Default and explicit principal keys
+
+An overload without a `principalKey` parameter uses the **whole** primary key of the principal entity in entity-metadata order — the members flagged `IsKey` in the order `IEntityMetadata.Properties` lists them. There is **no first-key fallback** and **no name matching**: a foreign key that selects fewer components than the full principal key is an arity error when the metadata is resolved, not a silent use of the first key. An explicit principal key may select mapped **non-key** properties (an alternate logical key) and any component order; the two lists must still have the same length and a matching nullable-unwrapped type at every position. `HasManyThrough` applies the same rule to both legs: each entity key and the junction foreign key that references it must have the same component count and the same positional types.
 
 The first registration for a type wins, like a query filter: a later `From<T>(...)` configuration for the same type is ignored. A property that participates in a declared relationship is excluded from [`IEntityMetadata.Properties`](xref:NextORM.Core.IEntityMetadata) and is reachable only through [`IEntityMetadata.Relationships`](xref:NextORM.Core.IEntityMetadata); mapping it as a column throws `InvalidOperationException`. Members that are not part of a declared relationship (including a reference-typed member with no declaration) are still mapped as columns as before.
 
@@ -58,7 +126,36 @@ public sealed class Order
 }
 ```
 
-`ForeignKey` names the foreign-key property on the dependent side; the kind is inferred from the navigation shape, exactly as for the fluent API. The attribute and a fluent declaration on the **same** navigation produce the same model, and the fluent declaration wins when both are present.
+`ForeignKey` names the single foreign-key property on the dependent side; the kind is inferred from the navigation shape, exactly as for the fluent API. A composite relationship uses the two arrays instead:
+
+```csharp
+public sealed class Order
+{
+    public int TenantId { get; set; }
+    public int Id { get; set; }
+
+    [Relationship(
+        ForeignKeys = new[] { nameof(OrderItem.TenantId), nameof(OrderItem.OrderId) },
+        PrincipalKeys = new[] { nameof(Order.TenantId), nameof(Order.Id) })]
+    public ICollection<OrderItem> Items { get; set; } = new List<OrderItem>();
+}
+```
+
+Exactly one of `ForeignKey` and `ForeignKeys` must be set. `ForeignKeys` is an **ordered** list; the component pairing is positional, so the names on the two sides may differ. `PrincipalKeys` is optional: when omitted, the principal key is the whole key of the principal entity in entity-metadata order, and an explicit list may select mapped non-key properties. Every name must name a mapped property; an empty or missing foreign-key form, an empty array, a duplicate name, an unmapped or missing member, an arity mismatch, or a positional type mismatch is rejected with `NotSupportedException` when the metadata is resolved. The attribute declares one-to-many and many-to-one relationships only — one-to-one and many-to-many are fluent-only.
+
+The attribute and a fluent declaration on the **same** navigation produce the same model, and the fluent declaration wins when both are present; a shadowed attribute is not validated. `[Relationship]` and the fluent overloads share one selector language and one set of validation rules.
+
+### Validation timing
+
+Validation is staged:
+
+- **At declaration** — a `null` selector throws `ArgumentNullException`, and the selector syntax (scalar property or flat anonymous object only) is checked by the shared parser.
+- **When the relationship metadata is resolved** — everything that needs the other type: mapped-property resolution, the default full principal key, arity, duplicate components and positional nullable-unwrapped types. Registration order does not matter: `From<T>()` does not eagerly validate a cross-reference that is not registered yet, and the related type may be configured later.
+- **Before SQL and before a cached plan** — a relationship is validated when it is first consumed, and validation completes **before any SQL is generated** and **before a plan is inserted into the plan cache**. An invalid or partially resolved declaration never produces SQL and never caches a plan; correcting the declaration afterwards is not defeated by a cached failure.
+
+The same structural validation applies to manually supplied [`IRelationshipMetadata`](xref:NextORM.Core.IRelationshipMetadata) and junction lists: at least one component per list, equal arity on every leg, no duplicate components, every component resolving by semantic mapped-member identity to a configured mapped property, and pairwise nullable-unwrapped CLR types. A custom property-metadata instance does not have to be the same object as the configured one; a valid escape-hatch mapping — including an explicit non-key principal key — keeps working, while a malformed list throws `NotSupportedException` before SQL and before a cache insert.
+
+`Inverse` participates in demand-time validation only: a direct navigation needs no inverse, and an unrelated declaration does not fail. When the requested operation needs the inverse, an absent inverse resolves to `null`, while an **ambiguous** one — two different navigation properties exposing the same canonical mapping — throws `NotSupportedException` naming both conflicting candidates.
 
 ## Loading with `JoinInto`
 
@@ -72,41 +169,185 @@ var orders = ctx.From<Order>()
     .ToList();
 ```
 
-The three overloads are:
+### Overloads
+
+`JoinInto` comes in three families. Two of them differ by one argument — the child source is either supplied as an `EntityBuilder<TChild>` or resolved from the mapping of `TChild` — and take an explicit `(parent, child) => …` predicate as the join condition; both fill the same navigations and share one contract, so choose by whether you have a child source in hand. The third family takes a navigation only and derives the join condition from the declared relationship metadata: see [Metadata-driven joins](#metadata-driven-joins).
+
+#### Source-less
+
+The five source-less forms take no child builder — the child source is the mapping of `TChild`:
 
 ```csharp
-// LEFT (the default)
+// collection, LEFT (the default)
 public EntityBuilder<TEntity> JoinInto<TChild>(
-    EntityBuilder<TChild> child,
-    Expression<Func<TEntity, TChild, bool>> predicate,
-    Expression<Func<TEntity, ICollection<TChild>>> collection);
-
-// explicit join kind: Inner or Left only
-public EntityBuilder<TEntity> JoinInto<TChild>(
-    EntityBuilder<TChild> child,
     Expression<Func<TEntity, TChild, bool>> predicate,
     Expression<Func<TEntity, ICollection<TChild>>> collection,
-    JoinType joinType);
+    Action<JoinOptions>? options = null);
 
-// fallback without declared metadata: explicit parent/child keys (always LEFT)
+// collection, explicit join kind: Inner or Left only
+public EntityBuilder<TEntity> JoinInto<TChild>(
+    Expression<Func<TEntity, TChild, bool>> predicate,
+    Expression<Func<TEntity, ICollection<TChild>>> collection,
+    JoinType joinType,
+    Action<JoinOptions>? options = null);
+
+// reference, LEFT (the default)
+public EntityBuilder<TEntity> JoinInto<TChild>(
+    Expression<Func<TEntity, TChild, bool>> predicate,
+    Expression<Func<TEntity, TChild?>> navigation,
+    Action<JoinOptions>? options = null)
+    where TChild : class;
+
+// reference, explicit join kind
+public EntityBuilder<TEntity> JoinInto<TChild>(
+    Expression<Func<TEntity, TChild, bool>> predicate,
+    Expression<Func<TEntity, TChild?>> navigation,
+    JoinType joinType,
+    Action<JoinOptions>? options = null)
+    where TChild : class;
+
+// fallback without declared metadata: explicit parent/child keys, always LEFT
 public EntityBuilder<TEntity> JoinInto<TChild, TKey>(
-    EntityBuilder<TChild> child,
     Expression<Func<TEntity, TChild, bool>> predicate,
     Expression<Func<TEntity, ICollection<TChild>>> collection,
     Expression<Func<TEntity, TKey>> parentKey,
-    Expression<Func<TChild, TKey>> childKey)
+    Expression<Func<TChild, TKey>> childKey,
+    Action<JoinOptions>? options = null)
     where TKey : notnull;
 ```
 
-The first two resolve the parent/child keys from the declared relationship; the third is symmetrical to the [`LoadWith`](eager-loading.md) fallback for an entity pair without relationship metadata:
+The same five shapes as calls:
 
 ```csharp
+// 1. collection, LEFT
+var orders = ctx.From<Order>()
+    .JoinInto<OrderItem>((o, i) => o.Id == i.OrderId, o => o.Items)
+    .ToList();
+
+// 2. collection, explicit kind
+var orders = ctx.From<Order>()
+    .JoinInto<OrderItem>((o, i) => o.Id == i.OrderId, o => o.Items, JoinType.Inner)
+    .ToList();
+
+// 3. reference, LEFT — TChild : class
+var orders = ctx.From<Order>()
+    .JoinInto<Invoice>((o, i) => o.Id == i.OrderId, o => o.Invoice)
+    .ToList();
+
+// 4. reference, explicit kind — TChild : class
+var orders = ctx.From<Order>()
+    .JoinInto<Invoice>((o, i) => o.Id == i.OrderId, o => o.Invoice, JoinType.Left)
+    .ToList();
+
+// 5. explicit keys — always LEFT
+var orders = ctx.From<Order>()
+    .JoinInto<OrderItem, int>((o, i) => o.Id == i.OrderId, o => o.Items, o => o.Id, i => i.OrderId)
+    .ToList();
+```
+
+Spell the child type argument explicitly, as above: inference from the predicate lambda is not a documented contract. The two **reference** forms require a reference-type child (`where TChild : class`); the **key** form requires a non-nullable key type and is **always `LEFT`** — that is the only join kind its signature exposes. The collection and reference forms resolve their keys from the declared relationship, and the key form is symmetrical to the [`LoadWith`](eager-loading.md) fallback for an entity pair without relationship metadata.
+
+#### Explicit source
+
+The explicit-source family is the same five shapes with the child source as the first argument:
+
+```csharp
+var orders = ctx.From<Order>()
+    .JoinInto(ctx.From<OrderItem>(), (o, i) => o.Id == i.OrderId, o => o.Items)
+    .ToList();
+
+var orders = ctx.From<Order>()
+    .JoinInto(ctx.From<OrderItem>(), (o, i) => o.Id == i.OrderId, o => o.Items, JoinType.Inner)
+    .ToList();
+
+var orders = ctx.From<Order>()
+    .JoinInto(ctx.From<Invoice>(), (o, i) => o.Id == i.OrderId, o => o.Invoice)
+    .ToList();
+
+var orders = ctx.From<Order>()
+    .JoinInto(ctx.From<Invoice>(), (o, i) => o.Id == i.OrderId, o => o.Invoice, JoinType.Left,
+        j => j.SuppressCartesianWarning())
+    .ToList();
+
 var orders = ctx.From<Order>()
     .JoinInto(ctx.From<OrderItem>(), (o, i) => o.Id == i.OrderId, o => o.Items, o => o.Id, i => i.OrderId)
     .ToList();
 ```
 
-`JoinInto` is **`LEFT` by default**: a parent with no children is kept with an empty collection. The explicit overload accepts only [`JoinType.Inner`](xref:NextORM.Core.JoinType) and [`JoinType.Left`](xref:NextORM.Core.JoinType); `Inner` drops childless parents.
+A source-less call is **exactly** this call with a bare `ctx.From<TChild>()` source: the source-less form resolves that source itself and then delegates, forwarding the predicate, the join kind and the options unchanged. The SQL, the plan and the results are the same, so for a bare source either family can be used interchangeably. Keep the explicit form when the child source is not the plain entity mapping — a raw table or CTE name, for example, exists only on a child builder.
+
+`JoinInto` is **`LEFT` by default**: a parent with no children is kept with an empty collection. The explicit-kind overloads accept only [`JoinType.Inner`](xref:NextORM.Core.JoinType) and [`JoinType.Left`](xref:NextORM.Core.JoinType); `Inner` drops childless parents.
+
+### Resolution and errors
+
+The child source is resolved once, while the join is declared:
+
+- a **configured mapping** wins over convention — when `From<Child>(…)` has already configured the child mapping (the table name, for instance), the source-less form joins that mapping, exactly as a bare explicit `ctx.From<Child>()` would;
+- an **unresolvable** child type fails **at the `JoinInto(...)` call**, with the same exception type and message as `From<TChild>()` itself; no builder is returned, so the failure does not surface later at `ToList()`;
+- a **`null` predicate** throws `ArgumentNullException` with `paramName: "predicate"` **before** the child source is resolved and **before** the options callback runs, so neither a broken child mapping nor a throwing callback can mask the argument error;
+- a **`null` navigation or key selector** behaves exactly as in the explicit-source form: the same guards in the same order, the same exceptions.
+
+The source-less form adds no second resolution path and no fallback table; everything the rest of this page says about keys, materialization, paging, `Where` and terminals applies to both families.
+
+### Options
+
+Every one of the ten forms takes a trailing `Action<JoinOptions>? options` argument. The callback runs **exactly once** per `JoinInto` call, and an exception thrown inside it propagates unchanged. Omitting the argument or passing `null` means no callback at all. The options object is not retained: its values are copied onto the resulting join.
+
+```csharp
+var orders = ctx.From<Order>()
+    .JoinInto<OrderItem>((o, i) => o.Id == i.OrderId, o => o.Items, JoinType.Left,
+        j => j.SuppressCartesianWarning())
+    .ToList();
+```
+
+The same parameter carries the local relationship configurations described below — [`JoinOptions.OneToOne`](xref:NextORM.Core.JoinOptions) and `JoinOptions.ManyToMany` — and the [join modifiers](#join-modifiers) of the underlying join.
+
+### Child filters
+
+"Source-less" describes the **source**, not a filter: the child source is the mapping of `TChild` and carries no condition. Neither family applies a **child-source** filter to the join today — a child builder that carries a `Where` does not add a condition to the join, and only the `(parent, child) => …` predicate reaches the `ON` clause. Filtering a child source is tracked as **#309**.
+
+To narrow the child set, write the condition into the predicate, which *is* the `ON` condition — `(o, i) => o.Id == i.OrderId && i.Active` pairs only matching active children. With `Left` a parent whose children are all filtered out is kept with an empty collection; with `Inner` it is dropped. Do not read a `Where` on the child source as the equivalent of that predicate: the join ignores it today.
+
+### Metadata-driven joins
+
+The navigation-first family takes **only a navigation**. The `ON` condition is synthesized from the declared relationship metadata, so the caller never restates the keys:
+
+```csharp
+// reference navigation (one-to-one) — TChild : class, always LEFT
+public EntityBuilder<TEntity> JoinInto<TChild>(
+    Expression<Func<TEntity, TChild?>> navigation,
+    Expression<Func<TEntity, TChild, bool>>? filter = null,
+    Action<JoinOptions>? options = null)
+    where TChild : class;
+
+// collection navigation (one-to-many or many-to-many) — always LEFT
+public EntityBuilder<TEntity> JoinInto<TChild>(
+    Expression<Func<TEntity, ICollection<TChild>>> collection,
+    Expression<Func<TEntity, TChild, bool>>? filter = null,
+    Action<JoinOptions>? options = null);
+```
+
+```csharp
+var orders = ctx.From<Order>()
+    .JoinInto(o => o.Invoice)                     // reference: fills Order.Invoice
+    .ToList();
+
+var orders = ctx.From<Order>()
+    .JoinInto(o => o.Items)                       // collection: fills Order.Items
+    .ToList();
+
+var orders = ctx.From<Order>()
+    .JoinInto(o => o.Items, (o, i) => i.Active)   // additional filter, still a LEFT join
+    .ToList();
+```
+
+**Inference.** The child type comes from the navigation, so no explicit type argument is written. A single reference navigation binds the **reference** form and assigns that member; a declared `ICollection<T>` binds the **collection** form and fills it. A **concrete** collection navigation (`List<T>`, `HashSet<T>`, any other `ICollection<T>` implementation) is routed to the collection form as well: overload resolution alone would prefer the reference form for a concrete type, so the collection overload carries an explicit overload-resolution priority. That is a deliberate rule of this API, not an incidental binding.
+
+**`ON`.** One equality per declared key component, conjoined in declaration order, is read from [`IRelationshipMetadata`](xref:NextORM.Core.IRelationshipMetadata): `parent.<PrincipalKey[i]> == child.<ForeignKey[i]>`. A composite key contributes every component, positionally; nothing is matched by column name, and a default principal key is never reduced to its first component. A many-to-many navigation keeps its junction synthesis — the parent→junction edge pairs the parent key with the junction's parent foreign key componentwise, the junction→child edge pairs the child key with the junction's child foreign key — and the optional filter is appended to that child edge.
+
+**The second argument is a filter, not a key restatement.** When supplied it becomes one more conjunct **inside the same `ON`** condition; it never replaces the declared-key equality and is never moved into a `WHERE`. Omitting it, or passing `null`, means no additional restriction. Because these are `LEFT` joins, a reference whose only candidate is filtered out stays `null`, a collection whose children are all filtered out stays empty, and the parent row is preserved either way. Key restatement is unnecessary, so an arbitrary child condition is the normal use: `(o, i) => i.Active` narrows the children while the declared keys still decide which parent they belong to.
+
+**Boundary with the ten predicate forms.** The five original `JoinInto` overloads and their five source-less counterparts are **unchanged**: they keep their signatures, their explicit join kinds and their predicate-as-`ON` semantics — the caller's `(parent, child) => …` remains the whole join condition and no declared key is synthesized into it. The metadata-driven semantics described here belong **only** to the two navigation-first overloads; no legacy form was retro-fitted. Choose the navigation-first forms when the relationship is declared and the keys should come from metadata; keep the predicate forms when the join condition is genuinely yours (a non-declared pair, an extra correlation, an explicit `Inner`/`Left` choice).
 
 ### One-to-one reference
 
@@ -191,7 +432,7 @@ The LEFT/INNER semantics are the same as for a one-to-many collection: with `Lef
 
 When a query carries two or more collection navigations (one-to-one is excluded) the preparation emits the `JoinInto.MultipleCollections` warning once per plan, because the intermediate row count multiplies into a cartesian product. Pass `JoinOptions.SuppressCartesianWarning()` through a `JoinInto` options lambda (`j => j.SuppressCartesianWarning()`) to silence it; the warning is informational and does not change the result.
 
-A junction whose parent and/or child foreign key spans several **components** is fully supported: the join and the occurrence partition use every declared component, so changing any component (not only the first) changes the linked child, and repeated junction occurrences stay distinct. The single-query dispatcher ([`EagerLoadMode.SingleQuery`](eager-loading.md)) handles such a junction too. The component lists must come from relationship metadata — the fluent declaration helpers below take a single key column. A many-to-many `JoinInto` takes **two** projection slots, so it counts double against the arity cap.
+A junction whose parent and/or child foreign key spans several **components** is fully supported: the join and the occurrence partition use every declared component, so changing any component (not only the first) changes the linked child, and repeated junction occurrences stay distinct. The single-query dispatcher ([`EagerLoadMode.SingleQuery`](eager-loading.md)) handles such a junction too. Declare the components with the composite fluent overloads (A–J) or with `ForeignKeys`/`PrincipalKeys` on the attribute; the legacy `ForeignKey` form remains for a single component. A many-to-many `JoinInto` takes **two** projection slots, so it counts double against the arity cap.
 
 ## One round trip
 
@@ -242,6 +483,8 @@ A `Where` after `JoinInto` is applied to the **joined query** — it filters the
 
 A `Where` written **before** `JoinInto` filters the parent source. The predicate passed to `JoinInto` is the `ON` condition and only pairs rows; it never removes a `LEFT` parent.
 
+`JoinInto` folds a child source's `Where` predicate into the join's `ON` condition, preserving unmatched parents for LEFT joins; unsupported child-query modifiers throw `NotSupportedException` before execution. A derived (`As`) child source is supported when its only modifier is its own `Where`; any other modifier on or inside it is rejected.
+
 ## Parent paging
 
 `Limit`/`Offset` (`Take`/`Page`) constrain **parents**, not denormalized rows. On a SQL provider the parent source is selected in a subquery with the limit and the join wraps around it, so paging a parent does not truncate its children. On the in-memory provider the limit is applied to the deduplicated parent list.
@@ -270,7 +513,7 @@ The join is part of the command and is stitched **only** by the stitching termin
 - [`ToList()`](xref:NextORM.Core.EntityBuilderExtensions.ToList``1(NextORM.Core.EntityBuilder{``0},System.ReadOnlySpan{System.Object})) and [`ToListAsync()`](xref:NextORM.Core.EntityBuilderExtensions.ToListAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])).
 - `ToArray()` and `ToArrayAsync()`.
 
-[`ToCommand()`](xref:NextORM.Core.EntityBuilder`1.ToCommand) keeps the join but returns only the **denormalized** `(parent, child)` rows, so a bare enumeration may repeat a parent once per matching child. Every other terminal built on the parent command — `First`, `Count`, `Any`, `ToHashSet`, `ToEnumerable`, `ToAsyncEnumerable`, [`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},System.Boolean,System.Threading.CancellationToken)) — excludes the join and returns the **parent only**, with the collections not filled. A `Select` projection or an `As` derived source is rejected with [`NotSupportedException`](xref:System.NotSupportedException): `Select` would keep the join without stitching (repeating parents, never grouping children) and `As` would drop the stitching metadata. Materialize with `ToList`/`ToListAsync` when the collections must be filled.
+[`ToCommand()`](xref:NextORM.Core.EntityBuilder`1.ToCommand) keeps the join but returns only the **denormalized** `(parent, child)` rows, so a bare enumeration may repeat a parent once per matching child. Every other terminal built on the parent command — `First`, `Count`, `Any`, `ToHashSet`, `ToEnumerable`, `ToAsyncEnumerable`, [`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},NextORM.Core.PrepareOptions,System.Threading.CancellationToken)) — excludes the join and returns the **parent only**, with the collections not filled. A `Select` projection or an `As` derived source is rejected with [`NotSupportedException`](xref:System.NotSupportedException): `Select` would keep the join without stitching (repeating parents, never grouping children) and `As` would drop the stitching metadata. Materialize with `ToList`/`ToListAsync` when the collections must be filled.
 
 ## In-memory parity
 
@@ -289,17 +532,18 @@ The following are rejected with [`NotSupportedException`](xref:System.NotSupport
 - a read-only collection member that is `null` at runtime;
 - more than seven child collections on one query (the projection arity cap).
 
-Key **arity** is not one of these boundaries: a many-to-many relationship under [`EagerLoadMode.SingleQuery`](eager-loading.md) and a composite principal, foreign or junction key on the relationship are supported on the explicit `JoinInto` path, which joins and groups on every declared component (see [Many-to-many through a junction](#many-to-many-through-a-junction)). The component lists must come from relationship metadata, because the fluent declaration helpers take a single key column.
+Key **arity** is not one of these boundaries: a many-to-many relationship under [`EagerLoadMode.SingleQuery`](eager-loading.md) and a composite principal, foreign or junction key on the relationship are supported on the explicit `JoinInto` path, which joins and groups on every declared component (see [Many-to-many through a junction](#many-to-many-through-a-junction)). The component lists come from the relationship metadata: declare them with the composite fluent overloads (A–J) or with `ForeignKeys`/`PrincipalKeys`, and `JoinInto` consumes every component in order.
 
-The relationship metadata itself fails closed too: an FK property that is not mapped on the dependent type, a principal type with no key, or an FK/principal-key type mismatch throws `NotSupportedException` when the keys are resolved.
+The relationship metadata itself fails closed too: an FK property that is not mapped on the dependent type, a principal type with no key, an empty or duplicated component list, a mismatched arity between the two sides (including a single-column foreign key against a composite default principal key), a null component, a component without a CLR member, or an FK/principal-key type mismatch (compared after unwrapping nullable) throws `NotSupportedException` when the keys are resolved — before any SQL is generated and before a plan is inserted into the plan cache. The same structural validation applies to manually supplied [`IRelationshipMetadata`](xref:NextORM.Core.IRelationshipMetadata) (see [Validation timing](#validation-timing)).
 
 ## Relationship metadata
 
-The metadata model is exposed through [`IEntityMetadata.Relationships`](xref:NextORM.Core.IEntityMetadata); each entry is an [`IRelationshipMetadata`](xref:NextORM.Core.IRelationshipMetadata) with [`Kind`](xref:NextORM.Core.IRelationshipMetadata) ([`RelationshipKind`](xref:NextORM.Core.RelationshipKind)), `DeclaringType`, `RelatedType`, `Navigation`, `IsCollection`, `ForeignKey`, `PrincipalKey` and `Inverse`. `Inverse` points at the other side's metadata when both sides are declared and agree on the foreign key and types, and is `null` otherwise — it is never inferred. `Inverse` is resolved **lazily on its first read and cached**: register the related type (and the declaring type) before reading it, because a read taken before the other side is registered caches `null` and will not be refreshed by a later registration.
+The metadata model is exposed through [`IEntityMetadata.Relationships`](xref:NextORM.Core.IEntityMetadata); each entry is an [`IRelationshipMetadata`](xref:NextORM.Core.IRelationshipMetadata) with [`Kind`](xref:NextORM.Core.IRelationshipMetadata) ([`RelationshipKind`](xref:NextORM.Core.RelationshipKind)), `DeclaringType`, `RelatedType`, `Navigation`, `IsCollection`, `ForeignKey`, `PrincipalKey` and `Inverse`. `ForeignKey` and `PrincipalKey` are ordered `IReadOnlyList<IPropertyMetadata>` component lists — the order is the declaration order (or, for a default principal key, entity-metadata order), and the component at position `i` on one side pairs with the component at position `i` on the other. `Inverse` points at the other side's metadata when both sides are declared and agree on the **full ordered** foreign key and types, and is `null` otherwise — it is never inferred. `Inverse` is resolved **lazily on its first read and cached**: register the related type (and the declaring type) before reading it, because a read taken before the other side is registered caches `null` and will not be refreshed by a later registration. Two different navigations that expose the same canonical mapping make the inverse ambiguous, and reading it throws `NotSupportedException` naming both candidates. A composite relationship is declared through the public producers — the composite `HasMany`/`HasOne`/`HasOneToOne`/`HasManyThrough` overloads or `[Relationship(ForeignKeys = …, PrincipalKeys = …)]` — and both [`JoinInto`](xref:NextORM.Core.EntityBuilder`1) and the metadata-driven [`LoadWith`](eager-loading.md#declared-metadata-form) consume every declared component in position order; a single-component declaration keeps the one-column form.
 
 ## See also
 
 - [Eager loading child collections (`LoadWith`)](eager-loading.md) — the alternative loader (split-query by default, single-query with `EagerLoadMode.SingleQuery`).
+- [Collection-valued projection slots](collection-projection.md) — the same declared relationship returned as a per-parent collection inside a projection.
 - [Joins](../guide/04-joins.md) — the explicit join surface.
 - [Entities and metadata](../getting-started/03-entities-and-metadata.md) — key and column mapping.
 

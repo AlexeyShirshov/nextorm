@@ -10,6 +10,7 @@ namespace NextORM.Integration.Tests;
 /// server. Like the shared suite, the typed values travel through <see cref="SqlFunctions.Parameter{T}"/>
 /// so the exact bytes are controlled by the CLR value rather than by a provider-specific column type.
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class ClickHouseCsvIntegrationTests : ProviderTestSuite
 {
     protected override ITestProvider Provider => ClickHouseTestProvider.Instance;

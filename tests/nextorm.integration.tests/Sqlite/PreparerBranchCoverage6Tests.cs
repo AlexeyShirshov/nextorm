@@ -47,7 +47,7 @@ namespace NextORM.Integration.Tests;
 /// <c>NeedMapping == false</c>. All of them are recorded in <c>rv1/inputs/preparer-arms.md</c>.
 /// </para>
 /// </summary>
-[Collection("Sqlite")]
+[Collection("Query plan cache")]
 public sealed class PreparerBranchCoverage6Tests : ProviderTestSuite
 {
     protected override ITestProvider Provider => SqliteTestProvider.Instance;

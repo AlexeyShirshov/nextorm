@@ -167,6 +167,41 @@ public class NavigationPathResolverTests
         public int ParentId { get; set; }
     }
 
+    public sealed class CompositeParent
+    {
+        public int TenantId { get; set; }
+        public int Id { get; set; }
+        public ICollection<CompositeChild> Children { get; set; } = new List<CompositeChild>();
+        public ICollection<CompositeChild> Reordered { get; set; } = new List<CompositeChild>();
+    }
+
+    public sealed class CompositeChild
+    {
+        public int TenantId { get; set; }
+        public int ParentId { get; set; }
+    }
+
+    public sealed class CompositeJunctionParent
+    {
+        public int TenantId { get; set; }
+        public int Id { get; set; }
+        public List<CompositeJunctionChild> Children { get; set; } = new();
+    }
+
+    public sealed class CompositeJunctionChild
+    {
+        public int TenantId { get; set; }
+        public int Id { get; set; }
+    }
+
+    public sealed class CompositeJunctionLink
+    {
+        public int ParentTenantId { get; set; }
+        public int ParentId { get; set; }
+        public int ChildTenantId { get; set; }
+        public int ChildId { get; set; }
+    }
+
     public struct ValueEntity
     {
         public int Id { get; set; }
@@ -475,8 +510,10 @@ public class NavigationPathResolverTests
         hop.Direction.Should().Be(NavigationDirection.DependentToPrincipal);
         hop.DeclaringType.Should().Be(typeof(ChildA));
         hop.RelatedType.Should().Be(typeof(ParentA));
-        hop.PrimaryLeg.ForeignKey.PropertyInfo.Should().BeSameAs(typeof(ChildA).GetProperty(nameof(ChildA.ParentId)));
-        hop.PrimaryLeg.PrincipalKey.PropertyInfo.Should().BeSameAs(typeof(ParentA).GetProperty(nameof(ParentA.Id)));
+        hop.PrimaryLeg.ForeignKeys.Should().ContainSingle().Which.PropertyInfo.Should().BeSameAs(
+            typeof(ChildA).GetProperty(nameof(ChildA.ParentId)));
+        hop.PrimaryLeg.PrincipalKeys.Should().ContainSingle().Which.PropertyInfo.Should().BeSameAs(
+            typeof(ParentA).GetProperty(nameof(ParentA.Id)));
         hop.SecondaryLeg.Should().BeNull();
     }
 
@@ -495,8 +532,10 @@ public class NavigationPathResolverTests
         // HasOneToOne declares the principal side: the FK lives on the related (dependent) type
         // (ProfileA.OwnerId) and the principal key on the declaring type (OwnerA.Id).
         hop.Direction.Should().Be(NavigationDirection.PrincipalToDependent);
-        hop.PrimaryLeg.ForeignKey.PropertyInfo.Should().BeSameAs(typeof(ProfileA).GetProperty(nameof(ProfileA.OwnerId)));
-        hop.PrimaryLeg.PrincipalKey.PropertyInfo.Should().BeSameAs(typeof(OwnerA).GetProperty(nameof(OwnerA.Id)));
+        hop.PrimaryLeg.ForeignKeys.Should().ContainSingle().Which.PropertyInfo.Should().BeSameAs(
+            typeof(ProfileA).GetProperty(nameof(ProfileA.OwnerId)));
+        hop.PrimaryLeg.PrincipalKeys.Should().ContainSingle().Which.PropertyInfo.Should().BeSameAs(
+            typeof(OwnerA).GetProperty(nameof(OwnerA.Id)));
     }
 
     [Fact]
@@ -537,8 +576,10 @@ public class NavigationPathResolverTests
         hop.Kind.Should().Be(RelationshipKind.OneToMany);
         hop.IsCollection.Should().BeTrue();
         hop.Direction.Should().Be(NavigationDirection.PrincipalToDependent);
-        hop.PrimaryLeg.ForeignKey.PropertyInfo.Should().BeSameAs(typeof(ChildA).GetProperty(nameof(ChildA.ParentId)));
-        hop.PrimaryLeg.PrincipalKey.PropertyInfo.Should().BeSameAs(typeof(ParentA).GetProperty(nameof(ParentA.Id)));
+        hop.PrimaryLeg.ForeignKeys.Should().ContainSingle().Which.PropertyInfo.Should().BeSameAs(
+            typeof(ChildA).GetProperty(nameof(ChildA.ParentId)));
+        hop.PrimaryLeg.PrincipalKeys.Should().ContainSingle().Which.PropertyInfo.Should().BeSameAs(
+            typeof(ParentA).GetProperty(nameof(ParentA.Id)));
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -638,11 +679,15 @@ public class NavigationPathResolverTests
         hop.JunctionType.Should().Be(typeof(M2MLink));
         hop.JunctionMetadata.Should().NotBeNull();
 
-        hop.PrimaryLeg.ForeignKey.PropertyInfo.Should().BeSameAs(typeof(M2MLink).GetProperty(nameof(M2MLink.ChildId)));
-        hop.PrimaryLeg.PrincipalKey.PropertyInfo.Should().BeSameAs(typeof(M2MChild).GetProperty(nameof(M2MChild.Id)));
+        hop.PrimaryLeg.ForeignKeys.Should().ContainSingle().Which.PropertyInfo.Should().BeSameAs(
+            typeof(M2MLink).GetProperty(nameof(M2MLink.ChildId)));
+        hop.PrimaryLeg.PrincipalKeys.Should().ContainSingle().Which.PropertyInfo.Should().BeSameAs(
+            typeof(M2MChild).GetProperty(nameof(M2MChild.Id)));
         hop.SecondaryLeg.Should().NotBeNull();
-        hop.SecondaryLeg!.ForeignKey.PropertyInfo.Should().BeSameAs(typeof(M2MLink).GetProperty(nameof(M2MLink.ParentId)));
-        hop.SecondaryLeg.PrincipalKey.PropertyInfo.Should().BeSameAs(typeof(M2MParent).GetProperty(nameof(M2MParent.Id)));
+        hop.SecondaryLeg!.ForeignKeys.Should().ContainSingle().Which.PropertyInfo.Should().BeSameAs(
+            typeof(M2MLink).GetProperty(nameof(M2MLink.ParentId)));
+        hop.SecondaryLeg.PrincipalKeys.Should().ContainSingle().Which.PropertyInfo.Should().BeSameAs(
+            typeof(M2MParent).GetProperty(nameof(M2MParent.Id)));
     }
 
     [Fact]
@@ -681,7 +726,7 @@ public class NavigationPathResolverTests
         var path = Resolve(Member(p, nameof(ClashParent.Children)), new object(), p, typeof(ClashParent));
 
         // the configured fluent mapping wins over the [Relationship] attribute
-        path.Hops[0].PrimaryLeg.ForeignKey.PropertyInfo.Should().BeSameAs(
+        path.Hops[0].PrimaryLeg.ForeignKeys.Should().ContainSingle().Which.PropertyInfo.Should().BeSameAs(
             typeof(ClashChild).GetProperty(nameof(ClashChild.ParentId)));
     }
 
@@ -792,13 +837,77 @@ public class NavigationPathResolverTests
         act.Should().Throw<NotSupportedException>().WithMessage("*not mapped on*");
     }
 
-    // The composite-key fail-closed boundary (RequireSingleKey and the many-to-many junction check) is
-    // unreachable through the real metadata model, which exposes single-column keys only
-    // (RelationshipMetadata's constructor takes a single PropertyInfo and ResolveKeys builds
-    // one-element lists). It is recorded as a guard, not forced through a parallel fake relationship
-    // system: NavigationPathResolver.RequireSingleKey (NavigationPathResolver.cs:290-295) rejects
-    // ForeignKey.Count != 1 || PrincipalKey.Count != 1, and ResolveJunctionHop
-    // (NavigationPathResolver.cs:260-267) rejects a composite junction key.
+    // ---------------------------------------------------------------------------------------------
+    // Composite keys
+    // ---------------------------------------------------------------------------------------------
+
+    [Fact]
+    public void Resolve_CompositeKeys_PreserveOrderedComponentsAndReorderedDeclarationDiffers()
+    {
+        Register(new EntityMetadataBuilder<CompositeParent>()
+            .HasMany(p => p.Children, c => new { c.TenantId, c.ParentId }, p => new { p.TenantId, p.Id })
+            .HasMany(p => p.Reordered, c => new { c.ParentId, c.TenantId }, p => new { p.Id, p.TenantId }));
+
+        var p = Expression.Parameter(typeof(CompositeParent), "p");
+        var path = Resolve(Member(p, nameof(CompositeParent.Children)), new object(), p, typeof(CompositeParent));
+        var leg = path.Hops[0].PrimaryLeg;
+
+        leg.Arity.Should().Be(2);
+        leg.ForeignKeys.Select(key => key.PropertyInfo).Should().ContainInOrder(
+            typeof(CompositeChild).GetProperty(nameof(CompositeChild.TenantId))!,
+            typeof(CompositeChild).GetProperty(nameof(CompositeChild.ParentId))!);
+        leg.PrincipalKeys.Select(key => key.PropertyInfo).Should().ContainInOrder(
+            typeof(CompositeParent).GetProperty(nameof(CompositeParent.TenantId))!,
+            typeof(CompositeParent).GetProperty(nameof(CompositeParent.Id))!);
+        path.Hops[0].SecondaryLeg.Should().BeNull();
+
+        // The same components declared in the opposite order are a different ordered identity, even though
+        // the two legs cover exactly the same member set.
+        var reordered = Resolve(Member(p, nameof(CompositeParent.Reordered)), new object(), p, typeof(CompositeParent));
+        reordered.Hops[0].PrimaryLeg.Arity.Should().Be(2);
+        reordered.Hops[0].PrimaryLeg.ForeignKeys.Select(key => key.PropertyInfo).Should().ContainInOrder(
+            typeof(CompositeChild).GetProperty(nameof(CompositeChild.ParentId))!,
+            typeof(CompositeChild).GetProperty(nameof(CompositeChild.TenantId))!);
+        reordered.Hops[0].PrimaryLeg.SameIdentity(leg).Should().BeFalse(
+            "the ordered component lists are the leg identity");
+        reordered.Hops[0].SameIdentity(path.Hops[0]).Should().BeFalse();
+    }
+
+    [Fact]
+    public void Resolve_CompositeJunction_PreservesBothOrderedLegs()
+    {
+        Register(new EntityMetadataBuilder<CompositeJunctionParent>()
+            .HasManyThrough<CompositeJunctionChild, CompositeJunctionLink>(
+                p => p.Children,
+                p => new { p.TenantId, p.Id },
+                l => new { l.ParentTenantId, l.ParentId },
+                c => new { c.TenantId, c.Id },
+                l => new { l.ChildTenantId, l.ChildId }));
+
+        var p = Expression.Parameter(typeof(CompositeJunctionParent), "p");
+        var hop = Resolve(
+            Member(p, nameof(CompositeJunctionParent.Children)), new object(), p, typeof(CompositeJunctionParent)).Hops[0];
+
+        hop.Kind.Should().Be(RelationshipKind.ManyToMany);
+        hop.IsManyToMany.Should().BeTrue();
+
+        hop.PrimaryLeg.Arity.Should().Be(2);
+        hop.PrimaryLeg.ForeignKeys.Select(key => key.PropertyInfo).Should().ContainInOrder(
+            typeof(CompositeJunctionLink).GetProperty(nameof(CompositeJunctionLink.ChildTenantId))!,
+            typeof(CompositeJunctionLink).GetProperty(nameof(CompositeJunctionLink.ChildId))!);
+        hop.PrimaryLeg.PrincipalKeys.Select(key => key.PropertyInfo).Should().ContainInOrder(
+            typeof(CompositeJunctionChild).GetProperty(nameof(CompositeJunctionChild.TenantId))!,
+            typeof(CompositeJunctionChild).GetProperty(nameof(CompositeJunctionChild.Id))!);
+
+        hop.SecondaryLeg.Should().NotBeNull();
+        hop.SecondaryLeg!.Arity.Should().Be(2);
+        hop.SecondaryLeg.ForeignKeys.Select(key => key.PropertyInfo).Should().ContainInOrder(
+            typeof(CompositeJunctionLink).GetProperty(nameof(CompositeJunctionLink.ParentTenantId))!,
+            typeof(CompositeJunctionLink).GetProperty(nameof(CompositeJunctionLink.ParentId))!);
+        hop.SecondaryLeg.PrincipalKeys.Select(key => key.PropertyInfo).Should().ContainInOrder(
+            typeof(CompositeJunctionParent).GetProperty(nameof(CompositeJunctionParent.TenantId))!,
+            typeof(CompositeJunctionParent).GetProperty(nameof(CompositeJunctionParent.Id))!);
+    }
 
     // ---------------------------------------------------------------------------------------------
     // Conversions
@@ -983,7 +1092,7 @@ public class NavigationPathResolverTests
         var p = Expression.Parameter(typeof(ThrowingParent), "p");
         var path = Resolve(Member(p, nameof(ThrowingParent.Children)), new object(), p, typeof(ThrowingParent));
 
-        path.Hops[0].PrimaryLeg.ForeignKey.PropertyInfo.Should().BeSameAs(
+        path.Hops[0].PrimaryLeg.ForeignKeys.Should().ContainSingle().Which.PropertyInfo.Should().BeSameAs(
             typeof(ThrowingChild).GetProperty(nameof(ThrowingChild.ParentId)));
         GetterProbe.Count.Should().Be(0, "resolution is metadata-only and never reads a runtime getter");
     }

@@ -66,6 +66,11 @@ The four share one `VarianceAccumulator`; a flavour returns `null` when there ar
 (fewer than 2 for the sample flavour, fewer than 1 for the population flavour). Because the functions are
 already named `stdev`/`var`, SQLite performs no aggregate name remapping.
 
+That null promise survives the CLR boundary: the four entity terminals and the `Sql.stdev*`/`Sql.var*`
+facade forms return `T?`, so a `null` from the accumulator reaches the caller as `null` instead of
+throwing on a non-nullable `double`. A one-row population result is still `0.0`, and duplicates
+collapsed by `DISTINCT` follow the same cardinality rule as the plain forms.
+
 ```csharp
 var stddev = ctx.From<IComplexEntity>()
     .Select(x => SqlFunctions.Sql.stdev((double)x.Id))
@@ -115,10 +120,10 @@ SQLite has no `OFFSET` without `LIMIT`, so an offset-only query emits the sentin
 
 ## SQLite-only functions
 
-`SqlFunctions.Sqlite` exposes the SQLite-only surface: the core scalars, JSON1, the date helpers, the
-math-extension functions and the FTS3/FTS4/FTS5 full-text query surface. `json_each`/`json_tree` and
-the FTS5 table-valued search are available as table functions. Other providers reject every member of
-the surface with a `NotSupportedException`.
+`SqlFunctions.Sqlite` exposes the SQLite-only surface: the core scalars, JSON1, the aggregate functions,
+the date helpers, the math-extension functions and the FTS3/FTS4/FTS5 full-text query surface.
+`json_each`/`json_tree` and the FTS5 table-valued search are available as table functions. Other
+providers reject every member of the surface with a `NotSupportedException`.
 
 ```csharp
 ctx.From<IComplexEntity>()
@@ -126,9 +131,13 @@ ctx.From<IComplexEntity>()
     {
         Json = SqlFunctions.Sqlite.json_extract<string>(x.String, "$.name"),
         Kind = SqlFunctions.Sqlite.@typeof(x.String),
+        Total = SqlFunctions.Sqlite.total(x.NullableInt),
         Pi = SqlFunctions.Sql.pi()
     });
 ```
+
+The shipped aggregate is `total(value)`: it returns `double` and never null, so an empty or all-null
+group yields `0.0`.
 
 ### Full-text search (FTS3/FTS4/FTS5)
 
@@ -186,11 +195,11 @@ order by rowid
 ```
 
 FTS5 also has a table-valued `FROM` form, `MatchTable`, which composes like any other source
-(`FromTableFunction`):
+(`From(() => ...)`):
 
 ```csharp
 var rows = ctx
-    .FromTableFunction(() => SqlFunctions.Sqlite.MatchTable<Article>("article_fts", query))
+    .From(() => SqlFunctions.Sqlite.MatchTable<Article>("article_fts", query))
     .OrderBy(x => x.RowId)
     .Select(x => new { x.RowId, x.Title })
     .ToList();
@@ -291,6 +300,26 @@ The LOB streaming terminals (`ToStream`/`ToTextReader`) are supported for a sing
 The multi-column `ToDataReader`/`ToDataReaderAsync` terminal **is** supported on SQLite. It goes through a separate, locator-free seam (the per-call `storeInCache: false` buffered preparation, not the `SequentialAccess` LOB path): the `rowid` locator is never appended, so `FieldCount` equals the projection column count and the ordinals match `Select`. The reader is **buffered**, not chunked — a `byte[]`/`string` column inside a multi-column projection is read whole into managed memory — so for a single large LOB column prefer `ToStream`/`ToTextReader`. The returned reader is caller-owned: dispose it to release the provider reader and the per-call command; the context stays alive and usable.
 
 SQLite's own FTS3/FTS4/FTS5 query surface is available (see [Full-text search](#full-text-search-fts3fts4fts5)), as is the SQLite-only FTS5 maintenance command builder (`CreateSqliteFts5CommandBuilder`); only the cross-provider `SqlFunctions.Sql.contains`/`freetext` predicates (gated by [`SupportsFullText`](xref:NextORM.Core.ISqlDialect.SupportsFullText), `false` on SQLite) stay outside it. The maintenance surface is rejected on every non-SQLite provider with `NotSupportedException`, and `Rebuild` is unavailable for contentless FTS5 tables.
+
+## Bulk insert
+
+SQLite has no native bulk API, so every bulk write takes the portable `INSERT ... VALUES` path:
+`Mode.Native` is refused by name before the source is enumerated, `Auto` always resolves to the portable
+path, and `Portable` is the explicit form of the same thing. The certified configuration is a **file
+database** (no cross-process server is involved).
+
+- The batch is chunked by `MaxBatchSize`/`MaxParameters`/`MaxSqlLength`; each chunk is one statement.
+- `KeepIdentity` writes the explicit identity column; `IgnoreDuplicates` uses `INSERT OR IGNORE`, and
+  `Returning*` uses `RETURNING` (SQLite 3.35+).
+- `CheckConstraints=false` is honoured by scoping `PRAGMA foreign_keys` around the write and is refused inside
+  an active transaction (the pragma is a no-op there); `KeepNulls=false` needs a default-equivalent shape, and
+  `TableLock`/`FireTriggers` are refused.
+- `DatabaseName` renders an attached/main/temp database qualifier where the dialect can express it; `ServerName`
+  is refused (no rerouting).
+- `Timeout` is one whole-invocation budget around the writes; an expired budget is a `TimeoutException` and a
+  caller cancellation always wins.
+
+See [Bulk insert](../guide/22-bulk-insert.md).
 
 ## Provider differences
 

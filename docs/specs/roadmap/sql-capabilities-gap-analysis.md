@@ -29,7 +29,7 @@ in [`sql-function-coverage-gap.md`](sql-function-coverage-gap.md).
 > | 12 | Table-valued functions (`[SqlTableFunction]`) | **<span style="color:green">Done</span>**; the built-in `SqlFunctions.Sql` TVFs are gated by `ISqlDialect.SupportsTableFunction` |
 > | 13 | Navigation properties / relationships | **<span style="color:green">Shipped</span>** — #105 (slices A+B) and #148 (implicit navigation) closed; design spec [`implicit-navigation-queries.md`](../design/implicit-navigation-queries.md): relationship metadata (all kinds declarable; O2M/M2O via `HasMany`/`HasOne`/`[Relationship]`, O2O via `HasOneToOne`, M2M via `HasManyThrough`), `JoinInto` (single-query loader — LEFT/INNER, `Where`, parent paging, multiple collections with the `JoinInto.MultipleCollections` warning and `SuppressCartesianWarning()`, O2O reference navigation, M2M through a junction, in-memory parity) and implicit navigation over declared relationships (reference chains/presence, four collection terminals, `AsEntityBuilder<T>`, fail-closed adapter composition); composite relationship/junction keys and M:N under single-query shipped (#213/#223), while public declaration of composite relationships and metadata-driven loading remain open ([#251](https://github.com/AlexeyShirshov/nextorm/issues/251), [#249](https://github.com/AlexeyShirshov/nextorm/issues/249)); convention-over-FK inference is deliberately absent |
 > | 14 | DML (`INSERT`/`UPDATE`/`DELETE`/`MERGE`) | `INSERT` + returning rows + key upsert + full `MERGE` branches (SQL Server, PostgreSQL 15+) + `DELETE` (predicate/key/`All`/`Returning`/`Truncate`/join, ClickHouse mutation) + `UPDATE` (predicate/key/`Returning`/join, ClickHouse mutation) **<span style="color:green">Done</span>**; in-memory only the key upsert |
-> | 15 | `APPLY` / `LATERAL` (`CrossApply`/`OuterApply`) | **<span style="color:green">Done</span>** — SQL Server `CROSS/OUTER APPLY`, PostgreSQL/MySQL/MariaDB `LATERAL`, including a **correlated** applied source (a lambda over the left-hand row); gated by `ISqlDialect.SupportsApply` (SQLite/ClickHouse reject); the in-memory provider does not support it |
+> | 15 | `APPLY` / `LATERAL` (`CrossApply`/`OuterApply`) | **<span style="color:green">Done</span>** — SQL Server `CROSS/OUTER APPLY`, PostgreSQL and MySQL 8.0.14+ `LATERAL`; a **correlated** applied source (a lambda over the left-hand row) is supported after a join on a flat 3–8 source chain. Gated by `ISqlDialect.SupportsApply`: MariaDB 11.4 (no lateral derived table), SQLite and ClickHouse refuse both kinds before SQL execution, and the in-memory provider does not support them |
 > | 16 | Statement-level query hints (`Hint(...)`) | **<span style="color:green">Done</span> on SQL Server, PostgreSQL and MySQL/MariaDB** (SQL Server `OPTION (...)`, PostgreSQL/MySQL/MariaDB inline `/*+ ... */`); SQLite and ClickHouse reject with `NotSupportedException` |
 > | 17 | Full-text search (`contains`/`freetext`) | **<span style="color:green">Done</span>** on SQL Server, PostgreSQL and MySQL/MariaDB via `MakeFullText` |
 > | 18 | JSON scalar functions (`json_value`/`json_query`/`json_modify`, `isjson`) | **<span style="color:green">Done</span> on SQL Server and MySQL/MariaDB** (`SupportsTextJson`); native JSON documents on PostgreSQL (`SupportsJson`) |
@@ -37,12 +37,12 @@ in [`sql-function-coverage-gap.md`](sql-function-coverage-gap.md).
 > | 20 | `GREATEST` / `LEAST` | **<span style="color:green">Done</span>** on SQL Server, PostgreSQL, MySQL/MariaDB, SQLite and ClickHouse; NULL semantics differ per provider |
 > | 21 | `STRING_AGG` / `ARRAY_AGG` (incl. `WITHIN GROUP`, `FILTER`) | **<span style="color:green">Done</span>** — `string_agg` on SQL Server, PostgreSQL, MySQL/MariaDB, SQLite and ClickHouse; `array_agg` on PostgreSQL (`MakeStringAgg`/`MakeArrayAgg`) |
 > | 22 | `ROLLUP` / `CUBE` / `GROUPING SETS` | **<span style="color:green">Done</span>** — `ROLLUP` on SQL Server, PostgreSQL, MySQL/MariaDB, SQLite and ClickHouse; `CUBE`/`GROUPING SETS` on SQL Server, PostgreSQL, SQLite and ClickHouse (`GroupByRollup`/`GroupByCube`/`GroupByGroupingSets`) |
-> | 23 | Date arithmetic (`date_add`/`date_diff`/`date_trunc`/`end_of_month`/`date_from_parts`, `DateTime.Add*`) | **<span style="color:green">Done</span>** across SQL Server, PostgreSQL, MySQL/MariaDB, SQLite and ClickHouse; the accepted fields differ per provider and are validated by `SupportsDateTruncField`/`SupportsDateAddField`/`SupportsDateDiffField`. The ClickHouse-native conversion/part surface (`toDate`/`toDateTime`/`toDate32`, `toYear`/..., `toStartOf*`, `toMonday`, `toYYYYMM`/`toYYYYMMDD`, `toUnixTimestamp`) is exposed through `SqlFunctions.ClickHouse` under `DateConversion` |
+> | 23 | Date arithmetic (`date_add`/`date_diff`/`date_trunc`/`end_of_month`/`date_from_parts`, `DateTime.Add*`) | **<span style="color:green">Done</span>** across SQL Server, PostgreSQL, MySQL/MariaDB, SQLite and ClickHouse; the accepted fields differ per provider and are validated by `SupportsDateTruncField`/`SupportsDateAddField`/`SupportsDateDiffField`. The ClickHouse-native conversion/part surface (`toDate`/`toDateTime`/`toDate32`, `toYear`/..., `toStartOf*`, `toMonday`, `toYYYYMM`/`toYYYYMMDD`, `toUnixTimestamp`) is exposed through `SqlFunctions.ClickHouse` under `DateConversion`; ClickHouse `date_add` promotes the `year`/`decade`/`century` operand to `DateTime64(6)` (the SQL result type of those three units, with the CLR API unchanged and supported results on pinned 25.8 within 1900–2299) and rejects `millennium` before execution ([#256](https://github.com/AlexeyShirshov/nextorm/issues/256)) |
 > | 24 | Locking table hints + row locking + index hints | **<span style="color:green">Done</span>** (locking table hints — `WithTableHint` on SQL Server only; row locking — `ForUpdate`/`ForShare` on PostgreSQL/MySQL/MariaDB and SQL Server; `WithIndex`/`WithoutIndex` on MySQL/MariaDB/SQLite/SQL Server; PostgreSQL/ClickHouse throw on table/index hints) |
 > | 25 | Extended scalar + session/info functions (`make_interval`, `justify_*`, `to_*`, `timezone`, `gen_random_uuid`/`uuidv7`, `pg_typeof`; `current_user`/`session_user`/`current_schema`/`current_database`/`version`) | Extended scalar + `pg_typeof`: **<span style="color:green">Done</span> on PostgreSQL** (`SupportsExtendedScalarFunctions`). Session/info: **<span style="color:green">Done</span>** cross-provider — all five on PostgreSQL/SQL Server/MySQL/MariaDB, `current_user`/`current_database`/`version` on ClickHouse and `version` on SQLite (`SessionInfoFunctions` + per-name `SessionInfoFunctions`). Session/server identity ([#219](https://github.com/AlexeyShirshov/nextorm/issues/219)): **<span style="color:green">Done</span>** — SQL Server `@@SERVERNAME`/`host_id()`/`host_name()`/`app_name()`/`suser_name()`/`original_login()` (gated by `ISqlServerFunctions.SupportsSessionIdentity`), PostgreSQL `pg_backend_pid()`/`inet_server_addr()`/`inet_server_port()`/`inet_client_addr()`/`inet_client_port()` (PG `inet` returned as text, SQL NULL on unix sockets), shared `connection_id()` (unsigned, MySQL/MariaDB and ClickHouse) and MySQL/MariaDB `user()`, ClickHouse `host_name()`/`tcp_port()`; every unsupported function/provider throws `NotSupportedException` at translation, and `host`/`app` values are client-supplied and untrusted. UUID generators: **<span style="color:green">Done</span>** cross-provider — `gen_random_uuid`/`uuidv7` on PostgreSQL/MariaDB/ClickHouse, `gen_random_uuid` (`newid()`) also on SQL Server, gated off on MySQL (v1 only) and SQLite (`UuidGenerators` + per-name `UuidGenerators`) |
 > | 26 | Correlated scalar subqueries (and correlated `EXISTS`/`IN`/`ANY`/`ALL` in `SELECT`/`WHERE`/`ORDER BY`/`HAVING`) | **<span style="color:green">Done</span> on SQL providers** (any nesting depth; join-projection outer references included) and on the in-memory provider for depth-one scalar/aggregate/`EXISTS`/`IN` (deeper forms throw `NotSupportedException`) |
 > | 27 | Materialize a query into a table (CTAS: `ToTable`/`ToTempTable`) | **<span style="color:green">Done</span>** on PostgreSQL, SQLite, MySQL, MariaDB, SQL Server (via `SELECT ... INTO`) and ClickHouse (persistent, `ENGINE = MergeTree`); the temporary `ToTempTable` form is on PostgreSQL/SQLite/MySQL/MariaDB only |
-> | 28 | Bulk insert / bulk copy (native `COPY`/`SqlBulkCopy` + chunked `VALUES`; `BulkInsertOptions`/`BulkInsertOptionsBuilder`) | **<span style="color:green">Done</span>** |
+> | 28 | Bulk insert / bulk copy (`BulkInsertMode` `Auto`/`Native`/`Portable`, chunked `VALUES`; `BulkInsertOptions`/`BulkInsertOptionsBuilder`) | **<span style="color:green">Done</span>** — native `COPY` (PostgreSQL), `SqlBulkCopy` (SQL Server), `MySqlBulkCopy`/`LOAD DATA LOCAL INFILE` (MySQL, MariaDB) and `InsertBinaryAsync` (ClickHouse), with the portable `INSERT ... VALUES` path everywhere; SQLite is portable-only (`Mode.Native` refused) |
 > | 29 | Row values (`System.Tuple`/`ValueTuple`) cross-provider (`ROW`/`tupleElement`, comparisons) | **<span style="color:green">Done</span>** on PostgreSQL and ClickHouse; **flat `(a, b)` constructor on MySQL/MariaDB/SQLite** as a direct `==`/`!=` predicate operand (inline `.ItemN` folds; projection/ordering/grouping/function arguments and server-side `.ItemN` rejected). Raw row materialisation shipped on PostgreSQL ([#194](https://github.com/AlexeyShirshov/nextorm/issues/194)); tuple `IN`/`Contains` ([#193](https://github.com/AlexeyShirshov/nextorm/issues/193)) over a flat value list (arity 1..7) shipped on PostgreSQL/ClickHouse/MySQL/MariaDB/SQLite, while SQL Server rejects it; a tuple-typed `QueryCommand` RHS and `Rest`/nested tuples remain deferred |
 > | 30 | EF Core integration (`nextorm.entityframeworkcore`): shared connection/transaction + `IModel` mapping | **P1+P2+P3 shipped; P4 <span style="color:orange">out of scope</span>** ([EF Core integration](../../advanced/integration-efcore.md)) — `CreateNextOrmContext`/`UseNextOrm` reuse the EF connection/current transaction and map entities from `IModel`; `ToNextOrm` translates a bounded `IQueryable` subset; the opt-in DML bridge (`SaveChanges`) is explicitly out of scope; shared-transaction tests on PostgreSQL/SQL Server/MySQL deferred to [#106](https://github.com/AlexeyShirshov/nextorm/issues/106) |
 > | 31 | Transactions (`ITransactionManager`): nextorm-owned and enlisted (EF Core/Dapper/ADO.NET) transaction | **<span style="color:green">Done</span>** on SQLite/PostgreSQL/SQL Server/MySQL/MariaDB; ClickHouse and in-memory reject |
@@ -51,11 +51,11 @@ in [`sql-function-coverage-gap.md`](sql-function-coverage-gap.md).
 > | 34 | C# string semantics (ordinal compare, format specifiers, culture; linq2db gap G12) | **<span style="color:green">Done</span>** ([Ordinal comparison and collation](../../scalar-functions/01-string-functions.md#ordinal-comparison-and-collation)) |
 > | 35 | CLR `Regex` (`IsMatch`/`Replace`) → provider-native regex | **<span style="color:green">Done</span> on PostgreSQL, MySQL/MariaDB, ClickHouse, SQLite and SQL Server 2025+** (`REGEXP_LIKE`/`REGEXP_REPLACE`; the match needs database compatibility level 170) ([`SupportsRegex`](xref:NextORM.Core.ISqlDialect.SupportsRegex), [Regular expressions](../../scalar-functions/01-string-functions.md#regular-expressions)) |
 > | 36 | Cross-provider string / numeric scalar wrappers (`left`/`right`, `lpad`/`rpad`, `repeat`, `reverse`, `space`, `translate`, `concat_ws`, `ascii`/`char`, `mod`, `log10`, `power`) | **<span style="color:green">Done</span>** ([Scalar functions](../../scalar-functions/01-string-functions.md#cross-provider-scalar-functions), [`IScalarFunctions`](xref:NextORM.Core.IScalarFunctions)) |
-> | 37 | Per-provider built-in function gaps (PostgreSQL / SQL Server / MySQL / MariaDB / SQLite / ClickHouse) | **<span style="color:green">Done</span>** — SQLite (`SqlFunctions.Sqlite`, item 41) and the PostgreSQL / SQL Server / MySQL / MariaDB / ClickHouse sets (items 37–42 in the [ledger](#5-resolved-and-out-of-scope-gaps-ledger)); the remaining per-provider names are tracked in [#281](https://github.com/AlexeyShirshov/nextorm/issues/281)–[#286](https://github.com/AlexeyShirshov/nextorm/issues/286) |
+> | 37 | Per-provider built-in function gaps (PostgreSQL / SQL Server / MySQL / MariaDB / SQLite / ClickHouse) | **<span style="color:green">Done</span>** — SQLite (`SqlFunctions.Sqlite`, item 41) and the PostgreSQL / SQL Server / MySQL / MariaDB / ClickHouse sets (items 37–42 in the [ledger](#5-resolved-and-out-of-scope-gaps-ledger)); the rc4 slice T283 adds the MySQL `JSON_STORAGE_FREE` diagnostic (see the ledger entry for the verified slice and the residual #283 scope); the PostgreSQL catalogue of [#281](https://github.com/AlexeyShirshov/nextorm/issues/281) is closed by T347 (196 new names, 17 tested refusals — [function coverage](sql-function-coverage-gap.md)); the remaining per-provider names are tracked in [#282](https://github.com/AlexeyShirshov/nextorm/issues/282)–[#286](https://github.com/AlexeyShirshov/nextorm/issues/286) |
 >
 > The workstreams above are closed; the remaining gaps are itemized in
 > [Remaining gaps](#4-remaining-gaps-in-order-of-significance): relationship metadata (#249, #251),
-> SQL Server composable DML `OUTPUT` (#266), NULLS placement (#287), `IS [NOT] DISTINCT FROM` (#288)
+> the residual SQL Server `OUTPUT` forms (#266), NULLS placement (#287)
 > and savepoints (#289), plus the ClickHouse `AggregateFunction` driver blocker (#62) and the
 > dynamic-schema tail (item 11).
 >
@@ -181,7 +181,8 @@ These are fully implemented and covered by SQL-generation or integration tests:
 
 Per-feature details and owners live in the per-feature `docs/specs/roadmap/todo_*.md`; the full matrix
 is in [`comparison/capability-matrix.md`](../comparison/capability-matrix.md). Shipped items were moved
-to the ledger on 2026-09-29; item 49 (eager loading) moved on 2026-10-17.
+to the ledger on 2026-09-29; item 49 (eager loading) moved on 2026-10-17; item 58 (savepoints) moved on
+2026-10-25.
 
 60. **Metadata-driven loading of declared relationships (issue [#249](https://github.com/AlexeyShirshov/nextorm/issues/249)).**
     `LoadWith` declares each edge with key selectors at the call site and does not consume relationship
@@ -211,17 +212,20 @@ to the ledger on 2026-09-29; item 49 (eager loading) moved on 2026-10-17.
     table functions and PostgreSQL `json_populate_record(set)`, both recorded in
     [Limitations](../../advanced/limitations.md).
     Shipped: [Dynamic result schema](../../guide/13-table-valued-functions.md#dynamic-result-schema).
-59. **SQL Server composable DML `OUTPUT` (issue [#266](https://github.com/AlexeyShirshov/nextorm/issues/266)).**
+59. **SQL Server composable DML `OUTPUT` (issue [#266](https://github.com/AlexeyShirshov/nextorm/issues/266)) — batch capture shipped, other forms open.**
     PostgreSQL can read a mutation's returned rows as an ordinary queryable source
     (`With("ins", insert.Returning(...)).From("ins")`, a data-modifying CTE). T-SQL cannot put `OUTPUT`
     inside a CTE, so on SQL Server the rows are consumed by the mutation itself (`Returning`,
-    `OutputInto`, `OutputIntoThenOutput`) and cannot feed a second statement of the same query. #266
-    tracks making `OUTPUT` a composable source.
-58. **Savepoints (issue [#289](https://github.com/AlexeyShirshov/nextorm/issues/289)).**
-    `ITransactionManager` exposes begin/commit/rollback only; a savepoint needs `ExecuteRaw`, and the
-    caller owns names and nesting ([Transactions](../../guide/23-transactions.md#nested-transactions-and-savepoints)).
-    #289 proposes `CreateSavepoint`/`RollbackToSavepoint`/`ReleaseSavepoint` (SQL Server has
-    `SAVE`/`ROLLBACK TRANSACTION` and no release; ClickHouse and in-memory reject).
+    `OutputInto`, `OutputIntoThenOutput`). **#266 shipped (rc4):** a batch-scoped capture —
+    `BatchBuilder.OutputIntoTableVariable(...)` for `INSERT`/`UPDATE`/`DELETE`/`MERGE`, read back inside
+    the same batch through `FromOutput<TResult>`/`FromOutputTable` and composed with
+    `Query`/`AddQuery`: one round trip, table-variable lifetime, `$action` first for MERGE, typed
+    refusals outside the owning batch (see
+    [Writing into a table variable](../../guide/17-insert-statement.md#batch-scoped-capture-batchbuilderoutputintotablevariable)
+    and [Capturing the merged rows](../../guide/21-merge-statement.md#capturing-the-merged-rows-batch-only)).
+    **Still absent:** a fluent MERGE `OutputInto`/`OutputIntoThenOutput`, real-table capture-source
+    helpers, join-mutation capture, and any capture outside SQL Server —
+    todo: [`todo_output_into.md`](todo_output_into.md).
 56. **`ORDER BY ... NULLS FIRST/LAST` (issue [#287](https://github.com/AlexeyShirshov/nextorm/issues/287)).**
     There is no null-placement overload, so NULLs sort the way the provider sorts them — and the default
     differs: PostgreSQL is `NULLS LAST` ascending / `FIRST` descending, SQL Server/MySQL/MariaDB/SQLite
@@ -229,11 +233,18 @@ to the ledger on 2026-09-29; item 49 (eager loading) moved on 2026-10-17.
     ([Sorting and paging](../../guide/06-sorting-and-paging.md)). #287 proposes a `NullsPosition`
     overload family: native syntax on PostgreSQL/SQLite 3.30+/ClickHouse, a `CASE` sort key on SQL
     Server/MySQL/MariaDB. Deferred earlier in the D233 window work.
-57. **`IS [NOT] DISTINCT FROM` (issue [#288](https://github.com/AlexeyShirshov/nextorm/issues/288)).**
-    `==`/`!=` keep SQL NULL semantics and there is no NULL-safe comparison, so a nullable "changed?"
-    predicate has to be written by hand. #288 proposes `SqlFunctions.Sql.is_distinct_from` /
-    `is_not_distinct_from`: native on PostgreSQL/SQLite (`IS`)/MySQL/MariaDB (`<=>`)/ClickHouse
-    (`isNotDistinctFrom`), emulated on SQL Server.
+63. **PostgreSQL numeric-scale functions `scale`/`min_scale`/`trim_scale` (issue [#281](https://github.com/AlexeyShirshov/nextorm/issues/281)).**
+    The rc4 slice adds the three documented `SqlFunctions.Postgres` members behind a **per-name**
+    `IScalarFunctions.Supports` gate (not `SupportsExtendedScalarFunctions`), renders
+    `scale(...)`/`min_scale(...)`/`trim_scale(...)` natively, returns `int?`/`int?`/`decimal?` with the
+    server-side decimal scale preserved, and rejects each name on every other provider. The residual
+    PostgreSQL catalogue of #281 — string, residual numeric, date/time, JSON/JSONB, array,
+    aggregate, full-text, UUID, system-information and binary-string functions — **closed in the same
+    milestone** (T347, pinned PostgreSQL 17.11): 196 new `SqlFunctions.Postgres` names over 231
+    declarations, `unnest` extended on its existing name, 17 names refused with a tested reason, and
+    every delivered name gated **per name** (`IScalarFunctions.Supports`, `SupportsTableFunction`) so
+    the other five providers reject it. The accounting and the refusal reasons are in
+    [function coverage](sql-function-coverage-gap.md) §1/§3.
 
 ---
 
@@ -378,7 +389,9 @@ to the ledger on 2026-09-29; item 49 (eager loading) moved on 2026-10-17.
     translated (`docs/getting-started/03-entities-and-metadata.md`, "Naming conventions").
 15. **Provider field/feature differences are decided and documented.** The accepted
     `date_add`/`date_trunc`/`date_diff` fields differ per provider (e.g. SQLite folds
-    `millisecond`/`quarter`, SQL Server rejects `decade`/`century`/`millennium` for `date_trunc`),
+    `millisecond`/`quarter`, SQL Server rejects `decade`/`century`/`millennium` for `date_trunc`,
+    ClickHouse rejects `millennium` for `date_add` — the year family is promoted to `DateTime64(6)`
+    there, which also sets the SQL result type of those units),
     `CUBE`/`GROUPING SETS` and `FULL JOIN` are missing on MySQL/MariaDB, `GREATEST`/`LEAST` has
     provider-specific NULL semantics, and several features (`FOR JSON`/`FOR XML`) exist on a subset of
     providers. Each divergence now carries an explicit **unify / gate / document** decision in
@@ -429,7 +442,12 @@ to the ledger on 2026-09-29; item 49 (eager loading) moved on 2026-10-17.
     `OUTPUT ... INTO` (`Returning(...).OutputInto(target)` writes the modified rows into an existing table;
     `OutputIntoThenOutput(target)` also returns them) and key-upsert `Returning()`
     (`ON CONFLICT ... RETURNING` on PostgreSQL/SQLite, `MERGE ... OUTPUT` on SQL Server; MySQL/MariaDB
-    reject it). Phase 2 (several result sets from one command) is now **implemented** (2026-09-26) by phase 4
+    reject it). #266 adds the **batch-scoped capture**: `BatchBuilder.OutputIntoTableVariable(...)` for
+    `INSERT`/`UPDATE`/`DELETE`/`MERGE` plus `FromOutput<TResult>`/`FromOutputTable` read-back in the same
+    batch (one round trip; MERGE leads with `$action`; see
+    [Writing into a table variable](../../guide/17-insert-statement.md#batch-scoped-capture-batchbuilderoutputintotablevariable)).
+    The remaining `OUTPUT` forms — fluent MERGE `OutputInto`, real-table capture sources and
+    join-mutation capture — are listed in [`todo_output_into.md`](todo_output_into.md). Phase 2 (several result sets from one command) is now **implemented** (2026-09-26) by phase 4
     of `todo_stored_procedures.md` (#70, including #25): the batch surface
     exposes `BatchBuilder.AddQuery<TResult>` + `Execute`/`ExecuteAsync` → `BatchResult.Read<TResult>()`,
     carrying several result sets in a single round trip (gated by `ISqlDialect.SupportsBatch`).
@@ -584,9 +602,11 @@ to the ledger on 2026-09-29; item 49 (eager loading) moved on 2026-10-17.
     `NEWSEQUENTIALID`, `UNICODE`/`NCHAR`, `SQUARE`, the trigonometric functions and the SQL Server JSON
     constructors/aggregates `JSON_ARRAY`/`JSON_OBJECT`/`JSON_ARRAYAGG`/`JSON_OBJECTAGG`/`JSON_CONTAINS`/
     `JSON_PATH_EXISTS`) is joined by the linq2db-v6.5.0 reconciliation ([#182](https://github.com/AlexeyShirshov/nextorm/issues/182)):
-    61 pinned T-SQL scalars = **51 covered + 10 excluded** (live mutable connection/session/statement-scope
-    state; #219 later opened three, leaving the seven tracked in
-    [#248](https://github.com/AlexeyShirshov/nextorm/issues/248)). The 47
+    61 pinned T-SQL scalars = **61 covered + 0 excluded** (live mutable connection/session/statement-scope
+    state is not an exclusion criterion: the #182 manifest pinned 51 covered + 10 excluded,
+    [#219](https://github.com/AlexeyShirshov/nextorm/issues/219) opened three of them and
+    [#248](https://github.com/AlexeyShirshov/nextorm/issues/248) the remaining seven, as-is with their
+    native semantics and caveats). The 47
     additions are the clock/offset/`*FROMPARTS` date family (`SYSDATETIME`/`SYSDATETIMEOFFSET`/
     `SYSUTCDATETIME`/`SWITCHOFFSET`/`TODATETIMEOFFSET`/`TIMEFROMPARTS`/`SMALLDATETIMEFROMPARTS`/
     `DATETIMEFROMPARTS`/`DATETIME2FROMPARTS`/`DATETIMEOFFSETFROMPARTS`; FROMPARTS 6 total/5 new, date 13
@@ -615,21 +635,32 @@ to the ledger on 2026-09-29; item 49 (eager loading) moved on 2026-10-17.
     `SETVAL`/`LASTVAL`) are members of `SqlFunctions.MySql`, supported per name by
     `MariaDbDialect.MySqlFunctions` and rejected by MySQL. SQL Server exposes the same `NEXT VALUE FOR`
     through `SqlFunctions.SqlServer.next_value_for`/`nextval`
-    ([#218](https://github.com/AlexeyShirshov/nextorm/issues/218)). See
+    ([#218](https://github.com/AlexeyShirshov/nextorm/issues/218)). The shipped surface is version-gated: `MONTHS_BETWEEN`/`TO_NUMBER` (12.2.1), `TO_DATE` (12.3) and the `UUID_V4()`/`UUID_V7()` generators (11.7) are emitted only for an explicitly configured server version at or above the minimum, and an unversioned `MariaDbDataContext` refuses them with `NotSupportedException` instead of emitting SQL MariaDB 11.4 rejects ([#280](https://github.com/AlexeyShirshov/nextorm/issues/280)). See
     [MySQL and MariaDB-specific SQL](../../guide/provider-specific-sql/mysql.md#mariadb).
 41. **SQLite built-in function gaps — <span style="color:green">shipped</span>.** `SqlFunctions.Sqlite` (`SqliteFunctions`) plus
     `ISqlDialect.SqliteFunctions` cover the core scalars (`printf`/`format`, `hex`/`unhex`,
-    `random`/`randomblob`, `quote`, `typeof`, `glob`, `unicode`/`char`, `soundex`, `octet_length`,
+    `random`/`randomblob`, `quote`, `typeof`, `glob`, `unicode`/`char`, `octet_length`,
     `if`/`ifnull`), the JSON1 family (`json_extract`, `->`/`->>`, `json_set`, `json_group_array`,
-    `json_each`, `json_tree` and the rest), the date helpers (`timediff`, `unixepoch`, `julianday`) and
-    the math-extension functions; other providers reject with `NotSupportedException`.
+    `json_each`, `json_tree` and the rest), the date helpers (`timediff`, `unixepoch`, `julianday`), the
+    math-extension functions and — as the shipped subset of
+    [#285](https://github.com/AlexeyShirshov/nextorm/issues/285) — the `total` aggregate (floating-point
+    sum, empty/all-null → `0.0`); other providers reject with `NotSupportedException`. The residual #285
+    SQLite aggregates `median`, `percentile`, `percentile_cont` and `percentile_disc` stay open until the
+    percentile extension is proven on a supported runtime and the `median` name collision is settled.
+    `soundex` is **not** part of the emitted surface: the shipped engine is built without
+    `SQLITE_SOUNDEX`, so `SqlFunctions.Sqlite.soundex` is kept for source/binary compatibility only and
+    preparation throws `NotSupportedException` before any SQL
+    ([#278](https://github.com/AlexeyShirshov/nextorm/issues/278)).
     Docs: [SQLite-specific SQL](../../guide/provider-specific-sql/sqlite.md) (EN+RU).
-42. **ClickHouse built-in function gaps — <span style="color:green">done</span>.** `lowerUTF8`/`upperUTF8`, `trim*`, `replaceRegexp*`,
+42. **ClickHouse built-in function gaps — <span style="color:orange">in progress</span>.** The shipped slices cover `lowerUTF8`/`upperUTF8`, `trim*`, `replaceRegexp*`,
     `match`/`extract`, `splitByString`, `formatDateTime`/`parseDateTime`, `now`/`today`/`yesterday`, the
-    `map*` family, `arrayConcat`/`arrayFlatten`/`arrayUniq`/`arrayIntersect`, the `groupBitmap`/`sumMap`
-    aggregates, the hash family and `generateULID` are now on `SqlFunctions.ClickHouse` (gated by the
-    ClickHouse-only capability flags). Docs:
-    [ClickHouse-specific SQL](../../guide/provider-specific-sql/clickhouse.md) (EN+RU, #78).
+    `map*` family (including the higher-order `map_filter`/`map_apply`/`map_sort`), `arrayConcat`/`arrayFlatten`/`arrayUniq`/`arrayIntersect`,
+    the `groupBitmap`/`sumMap` aggregates, the hash family, `generateULID`, and — added by #286 — the math
+    functions `log2`/`cbrt`/`exp2`/`exp10` (typed `double`/`double?`, ClickHouse-only). This does **not**
+    close the catalog: the residual numeric/string/rounding/date/array/tuple/map/JSON/hash/encoding/URL/bit
+    names stay open in #286 and remain tracked in
+    [the function-coverage gap](sql-function-coverage-gap.md) §3 umbrella row. Docs:
+    [ClickHouse-specific SQL](../../guide/provider-specific-sql/clickhouse.md) (EN+RU, #78, #286).
 43. **Captured-local parameter binding (repeated references) — <span style="color:green">Done</span> (`1.0-b.1`).** A captured local
     reachable from the final SQL is now registered exactly once — repeated occurrences reuse the same
     `@pN`, and a local living only inside a joined derived subquery binds too. Previously the command
@@ -695,15 +726,30 @@ to the ledger on 2026-09-29; item 49 (eager loading) moved on 2026-10-17.
     constructors) is gated by `ISqlDialect.SupportsRanges`; the in-memory provider evaluates the
     predicates with PostgreSQL semantics. Docs:
     [PostgreSQL-specific SQL](../../guide/provider-specific-sql/postgresql.md#range-types) (EN+RU).
-52. **SQL Server bulk-copy flags — <span style="color:green">Done</span> (`1.0-b.1`).** `BulkInsertOptions`/`BulkInsertOptionsBuilder` gained
-    `CheckConstraints`/`TableLock`/`KeepNulls`/`FireTriggers` (`bool?`, off by default), mapped to
-    `SqlBulkCopyOptions` on the SQL Server native `SqlBulkCopy` path; the PostgreSQL `COPY` path and the
-    portable `INSERT ... VALUES` path (including SQL Server `Returning*`/`KeepIdentity`) reject a requested
-    flag with `NotSupportedException` instead of silently ignoring it. ClickHouse
-    `MaxDegreeOfParallelism`/`WithoutSession` are deferred (`ClickHouseBulkCopy` is obsolete, the driver
-    exposes no `WithoutSession`, and the native path is not wired) and `UseInternalTransaction` is never set
-    (nextorm opens no implicit transaction). Docs:
-    [Bulk insert](../../guide/22-bulk-insert.md#sql-server-bulk-copy-options).
+52. **Bulk insert: modes, typed option groups, destination parts, whole-invocation timeout — <span style="color:green">Done</span> (`1.0.9-rc4`, #305).** The seven residual linq2db `BulkCopyOptions` items are closed.
+    `BulkCopyType` became `BulkInsertMode { Auto, Native, Portable }` (`Auto` by default; `Native` never falls
+    back; `Portable` never becomes native implicitly). `UseInternalTransaction` is the typed
+    `SqlServerBulkInsertOptions.UseInternalTransaction` group member, mapped to `SqlBulkCopyOptions` for the
+    driver batch only and refused on other paths and with an external transaction.
+    `DatabaseName` is implemented and dialect-scoped (PostgreSQL: the current database only); `ServerName` is a
+    named refusal everywhere — a bulk insert never reroutes to another server. The schema-only override is
+    `SchemaName`/`Schema(...)`. `TableOptions` became `BulkInsertTargetKind { Regular, LocalTemporary }` over
+    the existing temp mechanism; DDL flags remain out of scope. `BulkCopyTimeout` became one monotonic
+    `TimeSpan? Timeout` for the whole invocation on every path (`TimeoutSeconds`/`Timeout(int)` removed without
+    shims; `≤0` is an argument error, a deadline is a `TimeoutException`, caller cancellation wins), which also
+    removes the earlier PostgreSQL timeout restriction. ClickHouse `MaxDegreeOfParallelism`/`WithoutSession`
+    are implemented through the driver's `InsertBinaryAsync` as `ClickHouseBulkInsertOptions`
+    (`MaxDegreeOfParallelism`/`UseSession`) — note that `ClickHouseBulkCopy` in `ClickHouse.Driver` 1.4.0 is
+    **not** obsolete (only its `InitAsync` is), so the class was never the blocker. The bulk-copy flags keep
+    their semantic matrix: `TableLock`/`FireTriggers` are native-SQL-Server-only, `CheckConstraints=false` is
+    scoped on SQL Server/MariaDB/SQLite, `KeepNulls=false` needs a default-equivalent shape, and every other
+    request is a named refusal. MariaDB bulk `Returning*` carries its own version gate rather than a flat
+    refusal: the portable path renders `INSERT ... RETURNING` and returns the keys at an explicitly configured
+    13.0+ (a bulk-only capability on `MariaDbDialect`, so single-row insert/delete `RETURNING` stays refused and
+    `MariaDbDialect.SupportsReturning` stays `false`), and refuses by name below that. The certified live server
+    is `mariadb:11.4`, so the live run covers the refusal arm only; the 13.0+ arm is certified offline for the
+    rendered SQL, and a live oracle for it needs a server ≥ 13. Docs:
+    [Bulk insert](../../guide/22-bulk-insert.md#sql-server-bulk-copy-options) (EN+RU).
 
 53. **Query tag (`WithTag`) — <span style="color:green">shipped</span>.** `EntityBuilder<T>.WithTag(string?)` and
     `QueryCommand<T>.WithTag(string?)` render a free-form `/* tag */` block comment immediately after
@@ -740,6 +786,55 @@ to the ledger on 2026-09-29; item 49 (eager loading) moved on 2026-10-17.
     Shipped: [PostgreSQL provider](../../connecting-providers/postgres.md), [MariaDB provider](../../connecting-providers/mariadb.md),
     [Limitations](../../advanced/limitations.md).
 
+57. **`IS [NOT] DISTINCT FROM` — <span style="color:green">shipped</span> (issue [#288](https://github.com/AlexeyShirshov/nextorm/issues/288)).**
+    `SqlFunctions.Sql.is_not_distinct_from`/`is_distinct_from` are explicit, always-two-valued
+    null-safe comparison helpers (both `NULL` equal, exactly one `NULL` unequal, otherwise ordinary
+    comparison), and ordinary `==`/`!=` keep their SQL NULL semantics untouched. Rendering is
+    **driver-free but dialect-owned**: one focused translator
+    (`Visitors/NullSafeComparisonTranslator.cs`) validates the operands, folds literal NULLs, and calls
+    the per-dialect `INullSafeComparisonRenderer` capability (`DataContext/Dialect/DialectCapabilities.cs`)
+    — no provider-name switch in the visitor, and a provider without the capability fails closed before
+    any SQL is emitted. Native forms: PostgreSQL `IS [NOT] DISTINCT FROM`, SQLite `IS`/`IS NOT`,
+    MySQL and MariaDB (inherited) `<=>` with `not (<=>)` as the distinct form. Emulated with a guarded
+    equality predicate: SQL Server (so the supported version floor stays free of the 2022+ operator) and
+    ClickHouse. The original ClickHouse assumption in this document was **wrong**: the native spellings
+    are not usable in scalar context — `isNotDistinctFrom(...)` and `a <=> b` are accepted only in a
+    `JOIN ON` section and fail elsewhere on 25.8 with server error Code 48
+    `NOT_IMPLEMENTED` ("Function isNotDistinctFrom can be used only in the JOIN ON section"), so they are
+    never emitted. Literal NULLs fold (`1 = 1`/`1 = 0`, or `is null`/`is not null` for one literal), a
+    captured operand stays a metadata-typed parameter (never value-specialised; SQL Server rejects an
+    unmapped null operand with `Null-safe comparison requires a SQL Server type mapping for null
+    operands.` and incompatible operands with `Null-safe comparison requires compatible operand types.`),
+    a statically non-nullable CLR value pair may lower to `=`/`<>`, and the in-memory provider applies
+    the same truth table without a CLR-collation promise. Verified on all six providers (37/37 live
+    cells, 0 skips). Docs: [Null-safe comparison](../../scalar-functions/04-conditionals-and-conversion.md#null-safe-comparison-is-not-distinct-from)
+    (EN+RU), [Filtering](../../guide/03-filtering-where.md#explicit-null-safe-comparison-is-not-distinct-from),
+    [Limitations](../../advanced/limitations.md).
+
+58. **Savepoints — <span style="color:green">shipped</span> (issue [#289](https://github.com/AlexeyShirshov/nextorm/issues/289)).**
+    `ITransactionManager` gained six members — `CreateSavepoint`/`CreateSavepointAsync`,
+    `RollbackToSavepoint`/`RollbackToSavepointAsync` and `ReleaseSavepoint`/`ReleaseSavepointAsync` —
+    declared as XML-documented default interface methods, so an existing third-party implementation keeps
+    compiling; `DataContext` implements them explicitly and the concrete type gains no public savepoint
+    member. **Driver-delegated, never rendered:** every call goes to the active or enlisted `DbTransaction`
+    (`Save`/`Rollback`/`Release` and their async forms), so nextorm keeps no savepoint registry or stack,
+    never commits, never rolls the whole transaction back and never changes ownership. The capability is
+    nextorm-owned (`ISqlDialect.SupportsSavepoints`, fail-closed default `false`, with a `SqlDialectBase`
+    virtual twin because a derived-class member does not re-map an interface default member): SQLite,
+    PostgreSQL, SQL Server and MySQL opt in, MariaDB inherits MySQL, ClickHouse has no transaction at all,
+    and an unmodified third-party dialect stays `false`. Guard order is part of the contract —
+    transactions → savepoints → an active transaction → the name — so a multiply-invalid call reports the
+    first applicable failure and never touches the driver. Names are a portable API policy, not a driver
+    limit: 1–32 ASCII identifier characters (`[A-Za-z_][A-Za-z0-9_]*`), validated ordinally, which keeps
+    SQL Server's 32-character truncation out of reach; a duplicate valid name is delegated unchanged and
+    uniqueness/nesting stay with the caller. SQL Server's release still calls the driver and is a
+    **non-throwing no-op that preserves the data** (T-SQL has no `RELEASE SAVEPOINT`), Npgsql applies a
+    savepoint immediately so create-then-rollback needs no intervening command, and rollback-after-release
+    stays provider-defined (not promised). Verified on all five supported providers (105 live cases,
+    0 failed, 0 skipped), plus unit coverage of the guards, the name boundaries and the DIM defaults, and
+    the ClickHouse refusal on the transaction guard. Docs:
+    [Transactions](../../guide/23-transactions.md#nested-transactions-and-savepoints) (EN+RU).
+
 ## 6. Implementation plan
 
 This is the original per-workstream plan, kept as a status ledger. Workstreams that touch the same files
@@ -762,7 +857,7 @@ developed in parallel on the same working tree.
 | 12 | Table-valued functions | **<span style="color:green">Done</span>** (+ gated built-ins) | builder + `ISqlDialect.cs`, `SqlBuilder.cs` | `CommonTestSuite.Tvf.cs`, SQL-generation tests |
 | 13 | Navigation properties / relationships | **<span style="color:green">Shipped</span>** — #105 (slices A+B) and #148 (implicit navigation) closed; design spec `docs/specs/design/implicit-navigation-queries.md`: metadata model (all kinds declarable) + `JoinInto` (`HasMany`/`HasOne`/`HasManyThrough`/`[Relationship]`, O2M, O2O, M2M through a junction, LEFT/INNER, `Where`, parent paging, multiple collections + `JoinInto.MultipleCollections` warning/`SuppressCartesianWarning()`, in-memory) + implicit navigation over declared relationships (reference chains/presence, four collection terminals, `AsEntityBuilder<T>`, fail-closed adapter composition) shipped; composite relationship/junction keys and M:N under single-query shipped (#213/#223); convention-over-FK inference is deliberately absent | metadata (`Meta/`), `EntityBuilder.cs`, `JoinIntoSpec.cs`/`JoinIntoStitcher.cs`, `EntityBuilderEagerLoading.cs`, `Visitors/NavigationExpansion.cs` | `CommonTestSuite`, `SqlGenerationTests`, core in-memory/plan-cache/navigation suites |
 | 14 | DML (`INSERT`/`UPDATE`/`DELETE`/`MERGE`) | `INSERT` + `Returning` + key upsert + full `MERGE` branches + `DELETE` (predicate/key/`All`/`Returning`/`Truncate`/join, ClickHouse mutation) + `UPDATE` (predicate/key/`Returning`/join, ClickHouse mutation) **<span style="color:green">Done</span>**; in-memory only the key upsert | new subsystem + provider `DbCommand` layer | `CommonTestSuite.Insert.cs`, `CommonTestSuite.Delete.cs`, `CommonTestSuite.Update.cs`, `CommonTestSuite.Merge.cs`, SQL-generation tests |
-| 15 | `APPLY` / `LATERAL` | **<span style="color:green">Done</span>** (incl. correlated sources) | `JoinExpression.cs`, `SqlBuilder.cs`, dialects | SQL-generation tests |
+| 15 | `APPLY` / `LATERAL` | **<span style="color:green">Done</span>** (incl. correlated sources after a join on a flat 3–8 chain; MariaDB/SQLite/ClickHouse and in-memory gated off) | `JoinExpression.cs`, `SqlBuilder.cs`, dialects | SQL-generation tests |
 | 16 | Statement-level query hints | **<span style="color:green">Done</span> on SQL Server, PostgreSQL and MySQL/MariaDB** | `QueryCommand.TResult.cs`, `SqlBuilder.cs`, dialects | SQL-generation tests |
 | 16a | Join / subquery / tables-in-scope hints | **<span style="color:green">Done</span> (issue #96)** | `EntityBuilder.cs`, `JoinExpression.cs`, `FromExpression.cs`, `QueryCommand.cs`, `SqlBuilder.cs`, `SqlSourceRenderer.cs`, dialects | SQL-generation tests, plan-key tests |
 | 17 | Full-text search (`contains`/`freetext`) | **<span style="color:green">Done</span>** | `BuiltinFunctionTranslator.cs`, `ISqlDialect.cs`, `SqlDialectBase.cs`, dialects | SQL-generation tests |
@@ -785,7 +880,7 @@ developed in parallel on the same working tree.
 | 34 | C# string semantics (ordinal compare, format specifiers, culture; G12) | **<span style="color:green">Done</span>** ([Ordinal comparison and collation](../../scalar-functions/01-string-functions.md#ordinal-comparison-and-collation)) | `Visitors/StringFunctionTranslator.cs`, `Visitors/ScalarFunctionTranslator.cs`, `Visitors/BaseExpressionVisitor.cs`, `DataContext/Dialect/{ISqlDialect,SqlDialectBase,DialectCapabilities}.cs`, `Query/SqlFunctions.cs`, new `Visitors/StringFormatTranslator.cs`, `Visitors/CompositeFormat.cs`, `DataContext/InMemoryStringFunctionRewriter.cs`, provider `*Dialect.cs` | SQL-generation tests per provider; `CommonTestSuite.StringSemantics.cs` ordinal/format; `InMemoryStringSemanticsTests.cs` |
 | 35 | CLR `Regex` (`IsMatch`/`Replace`) → provider-native regex | **<span style="color:green">Done</span>** on PostgreSQL/MySQL/MariaDB/ClickHouse/SQLite and SQL Server 2025+ (`REGEXP_LIKE`/`REGEXP_REPLACE`; the match needs compatibility level 170) ([Regular expressions](../../scalar-functions/01-string-functions.md#regular-expressions)) | `Visitors/RegexSqlTranslator.cs`, `DataContext/Dialect/{ISqlDialect,SqlDialectBase}.cs`, `Visitors/ScalarFunctionTranslator.cs`, provider `*Dialect.cs` | per-provider `StringSemanticsSqlGenerationTests.cs`, `CommonTestSuite.Functions.cs`, `InMemoryStringSemanticsTests.cs` |
 | 36 | Cross-provider string / numeric scalar wrappers (`left`/`right`, `lpad`/`rpad`, `repeat`, `reverse`, `space`, `translate`, `concat_ws`, `ascii`/`char`, `mod`, `log10`, `power`) | **<span style="color:green">Done</span>** ([Scalar functions](../../scalar-functions/01-string-functions.md#cross-provider-scalar-functions)) | `Query/SqlFunctions.cs`, `DataContext/Dialect/{ISqlDialect,SqlDialectBase,DialectCapabilities}.cs` (`IScalarFunctions`), `Visitors/BuiltinFunctionTranslator.cs`, `Visitors/MathFunctionTranslator.cs`, `DataContext/{InMemoryScalarFunctions,InMemoryScalarFunctionRewriter}.cs`, provider `*Dialect.cs` | per-provider `CrossProviderScalarSqlGenerationTests.cs`; `CommonTestSuite.CrossProviderScalarFunctions.cs`; `InMemoryScalarFunctionsTests.cs` |
-| 37 | Per-provider built-in function gaps (PostgreSQL / SQL Server / MySQL / MariaDB / SQLite / ClickHouse) | **<span style="color:green">Done</span>** — six provider todos (#78–#83) closed; the remaining names are tracked per provider in [#281](https://github.com/AlexeyShirshov/nextorm/issues/281)–[#286](https://github.com/AlexeyShirshov/nextorm/issues/286) | `Query/SqlFunctions.{Postgres,SqlServer,MySql,Sqlite}.cs`, per-name capability objects, provider `*Dialect.cs` | per-provider SQL-generation tests; provider integration |
+| 37 | Per-provider built-in function gaps (PostgreSQL / SQL Server / MySQL / MariaDB / SQLite / ClickHouse) | **<span style="color:green">Done</span>** — six provider todos (#78–#83) closed; the rc4 slice T281 adds the PostgreSQL numeric-scale trio `scale`/`min_scale`/`trim_scale` (per-name gate, live PostgreSQL 17 assertions, fail-closed rejection elsewhere); the rc4 slice T283 adds the MySQL `JSON_STORAGE_FREE` diagnostic (per-name gate, live MySQL 8.4 raw-ADO oracle, explicit MariaDB rejection; the rest of #283 stays open); the PostgreSQL catalogue of [#281](https://github.com/AlexeyShirshov/nextorm/issues/281) is closed by T347 (196 new names over 231 declarations, 17 tested refusals — [function coverage](sql-function-coverage-gap.md)); the remaining names are tracked per provider in [#282](https://github.com/AlexeyShirshov/nextorm/issues/282)–[#286](https://github.com/AlexeyShirshov/nextorm/issues/286) | `Query/SqlFunctions.{Postgres,SqlServer,MySql,Sqlite}.cs`, per-name capability objects, provider `*Dialect.cs` | per-provider SQL-generation tests; provider integration |
 | 38 | Join projection into a user type (`As`) and arity beyond 8 (derived-table sugar; inline mapping optional) | **<span style="color:green">Done</span>** (B1 `As` derived table) ([Joins](../../guide/04-joins.md#naming-an-intermediate-projection-as)); inline mapping optional, not scheduled | `Builders/EntityBuilder.cs` (`As`); reuses `DataContext/DataContextExtensions.cs` (`From(QueryCommand)`), `DataContext/SqlSourceRenderer.cs`; optional inline phase: `Builders/Projection.cs`, `Builders/Joins/JoinedEntityBuilder.cs`, `Visitors/*`, `DataContext/QueryPlanner.cs`, `DataContext/InMemory*`, `Query/QueryPlanEqualityComparer.cs` | SQL-generation tests per provider; `CommonTestSuite.Join.cs`; in-memory `NotSupportedException` |
 
 Workstream 17–25 extended provider parity.
@@ -841,5 +936,5 @@ providers. External servers can be used instead via `NEXTORM_POSTGRES_CONNECTION
 
 ## See also
 
-- [nextorm vs linq2db: functionality comparison](../comparison/linq2db-comparison.md) — a focused side-by-side of the
+- [nextorm vs linq2db: functionality comparison](../../comparisons/capabilities.md) — a focused side-by-side of the
   two libraries across the current query surface, including the provider-only function families.

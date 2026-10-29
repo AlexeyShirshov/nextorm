@@ -3,7 +3,8 @@
   <PropertyGroup>
     <PackageId>nextorm.mysql</PackageId>
     <Title>Nextorm MySQL provider</Title>
-    <Description>MySQL provider for Nextorm</Description>
+    <Description>MySQL provider for Nextorm, a zero-SQL ORM for .NET: adds the MySQL dialect (ON DUPLICATE KEY upserts, native index hints, MySqlBatch batching) and UseMySql() over MySqlConnector.</Description>
+    <PackageTags>$(PackageTags);mysql;mysqlconnector</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>
@@ -12,6 +13,14 @@
 
   <ItemGroup>
     <PackageReference Include="MySqlConnector" />
+  </ItemGroup>
+
+  <!-- The provider's SQL-generation tests drive the bulk-insert shape guard without a server, so they
+       supply the catalog facts through the internal seam instead of opening a connection (the same
+       mechanism nextorm.postgres exposes to its own test project). -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="nextorm.mysql.tests" />
+    <InternalsVisibleTo Include="nextorm.mariadb.tests" />
   </ItemGroup>
 
   <ItemGroup>

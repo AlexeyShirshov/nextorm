@@ -12,12 +12,21 @@ feature:
 
 * **SQL Server** has two independent surfaces. [`ForJson`](xref:NextORM.Core.QueryCommand`1.ForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean,System.Object[])) executes the query and returns the
   whole result set as one JSON document (`FOR JSON PATH`/`FOR JSON AUTO`), and [`SqlServer`](xref:NextORM.Core.SqlFunctions.SqlServer) provides the JSON-as-text scalar functions
-  (`json_value`, `json_query`, `json_modify`, `isjson`) plus the `openjson` table function.
-* **PostgreSQL** has native `json`/`jsonb` types (the only provider with them) and a function/operator
-  surface on `SqlFunctions.Postgres`: construction, aggregation, access, containment and JSONPath.
-* **MySQL and MariaDB** store JSON in text columns and expose the same JSON-as-text surface as SQL
-  Server ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)) over the
-  `JSON_EXTRACT`/`JSON_UNQUOTE`/`JSON_SET` family.
+  (`json_value`, `json_query`, `json_modify`, `isjson`) plus the `openjson` table function. SQL Server
+  2025 (17.x) additionally has a distinct native `json` column type, reachable for `[JsonColumn]` only
+  through an explicit version gate — see
+  [Native `json` on SQL Server 2025+](#native-json-on-sql-server-2025).
+* **PostgreSQL** has native `json`/`jsonb` types and exposes the only `json`/`jsonb` function/operator
+  surface (`SqlFunctions.Postgres`): construction, aggregation, access, containment and JSONPath.
+* **MySQL and MariaDB** expose the same JSON-as-text surface as SQL Server
+  ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)) over the
+  `JSON_EXTRACT`/`JSON_UNQUOTE`/`JSON_SET` family. Their JSON *columns* are not the same thing: MySQL 8
+  has a real `json` type (the server validates, normalises and reports it as `json`), while MariaDB's
+  `JSON` is an alias for `LONGTEXT` plus a `json_valid()` CHECK (reported as `longtext`). Both are used
+  through the **text transport** — a `[JsonColumn]` property serializes to text that the server parses —
+  because neither provider has a bindable native JSON representation, so
+  `JsonColumnStorage.Native` is refused there (see
+  [Map a CLR object to a native JSON column](#map-a-clr-object-to-a-native-json-column)).
 * **ClickHouse** maps its string-JSON extractors (`JSONExtractString`, `JSONExtractInt`,
   `JSONExtractFloat`, `JSONExtractBool`, `JSONExtractRaw`, `JSONHas`, `JSONLength`, `JSONType`) — plus
   the array-returning `JSONExtractKeys`/`JSONExtractArrayRaw` (projecting as `string[]`) and
@@ -59,10 +68,10 @@ section for your provider; the [provider matrix](#provider-matrix) and
 
 | Provider | `ForJson` output | Native `json`/`jsonb` | JSON-as-text functions | `openjson` as `FROM` |
 |---|---|---|---|---|
-| SQL Server | Supported ([`SupportsForJson`](xref:NextORM.Core.ISqlDialect.SupportsForJson)) | No - JSON lives in `nvarchar` | Supported ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)) | Supported |
+| SQL Server | Supported ([`SupportsForJson`](xref:NextORM.Core.ISqlDialect.SupportsForJson)) | `json` on 2025+ ([`SupportsJson`](xref:NextORM.Core.ISqlDialect.SupportsJson)), opt-in through a declared major version 17+ or an Azure/Fabric SQL database engine edition; object/array roots only. Otherwise JSON lives in `nvarchar` | Supported ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)) | Supported |
 | PostgreSQL | No | Supported ([`SupportsJson`](xref:NextORM.Core.ISqlDialect.SupportsJson)) | No | No |
 | SQLite | No | No | No (JSON1 via `SqlFunctions.Sqlite`) | No |
-| MySQL / MariaDB | No | Not exposed | Supported ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)) | No |
+| MySQL / MariaDB | No | Real `json` column (MySQL) / `JSON` = `LONGTEXT` + `json_valid()` CHECK alias (MariaDB), both used through **text** storage; `Native` refused | Supported ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)) | No |
 | ClickHouse | No | Native `JSON` ([`SupportsJson`](xref:NextORM.Core.ISqlDialect.SupportsJson); object-rooted, via `[JsonColumn]`/`JsonObject`/`JsonDocument`/`JsonElement`) | String JSON + JSONPath scalars + native-JSON functions (`JSONAllPaths`/`JSONAllPathsWithTypes`/`toJSONString`; [`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract)) | No |
 | In-memory | Not applicable (no SQL) | Not applicable | Not applicable | Not applicable |
 
@@ -117,12 +126,14 @@ with `ForXml` throws `NotSupportedException("FOR JSON and FOR XML cannot be comb
 
 ### Read JSON stored in a text column
 
-Neither SQL Server nor MySQL/MariaDB expose a native JSON type here: JSON is stored in an ordinary text
-column and manipulated with text-oriented functions
+SQL Server before 2025 and MySQL/MariaDB expose no bindable native JSON *representation* here: JSON is
+stored in an ordinary text column and manipulated with text-oriented functions
 ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)). The path is a JSONPath string
 (`'$.name'`); `json_value` returns a scalar, `json_query` an object/array fragment and `json_modify` a
 modified copy. On MySQL/MariaDB the same expressions render as `json_unquote(json_extract(...))`,
-`json_extract(...)` and `json_set(...)`:
+`json_extract(...)` and `json_set(...)`. On SQL Server 2025 the same functions keep working over both an
+`nvarchar` column and the native `json` type (see
+[Native `json` on SQL Server 2025+](#native-json-on-sql-server-2025)):
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
@@ -156,10 +167,47 @@ select id
  from complex_entity where (isjson(somestring)) = 1
 ```
 
+### Native `json` on SQL Server 2025+
+
+SQL Server 2025 (17.x) has a **distinct built-in `json` type** — not an alias of `nvarchar` — and the
+Azure SQL engines built on the same release have it too. nextorm reaches it through the same
+`[JsonColumn]` mapping, gated on a **declared** state: a context built with `Version(17, 0)` or higher,
+**or** with an explicit `SqlServerEngineEdition` of `SqlDatabase` (5), `AzureSqlManagedInstance` (8) or
+`MicrosoftFabricSqlDatabase` (12). The default, unversioned construction stays text-only, so an existing
+`nvarchar`-backed mapping never changes under you:
+
+```csharp
+// Azure SQL Database / Fabric SQL database: declare the engine edition, not a fake major version.
+using var azure = new SqlServerDataContext(SqlServerEngineEdition.SqlDatabase, connectionString);
+
+// Version-first constructor: the declared major version opens the version-gated capabilities.
+using var dataContext = new SqlServerDataContext(new Version(17, 0), connectionString);
+
+[JsonColumn(Storage = JsonColumnStorage.Native)]   // Auto and Text are equally valid here
+public Address Address { get; set; } = new();
+```
+
+The representation stays the ordinary CLR `string`: parameters are inferred as `nvarchar`,
+there is no DOM parameter, no `SqlDbType.Json` and no double serialisation. On a gate-open context
+`Auto`, `Text` and `Native` resolve to the same text converter, so the stored bytes are identical to the
+text storage — the column type, not the converter, is what differs. What the native column *adds* is a
+server-side constraint: it stores **object and array documents only**, and rejects the scalar roots
+(string, number, boolean) and the JSON `null` document with server error **13609** — use the text
+storage for those payloads. That rejection is the server's, raised at execution; nextorm adds no
+client-side rule of its own.
+
+Edition 11 ("Azure Synapse serverless SQL pool, or Microsoft Fabric") does **not** grant the capability
+by edition; only 5, 8 and 12 do. nextorm never probes `SERVERPROPERTY('EngineEdition')` — the edition is
+a declaration, immutable per context type, and SQL generation depends only on the declared state. Azure
+SQL Database, Managed Instance and Fabric SQL database are **unit-tested only**: no live Azure/Fabric
+instance was available for this validation, and the claim does not extend to every Fabric workload.
+nextorm also generates no column DDL, so switching an existing column to `json` stays a
+deployment/migration decision.
+
 ### Turn JSON into rows with `openjson`
 
 `SqlFunctions.SqlServer.openjson(json)` is a table-valued function (SQL Server 2016+) used through
-[`FromTableFunction`](xref:NextORM.Core.DataContextExtensions.FromTableFunction``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{``0}}})). Its default
+[`From`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{NextORM.Core.EntityBuilder{``0}}})) with a factory call. Its default
 schema yields the properties of a JSON object or the elements of a JSON array as
 [`SqlFunctions.IOpenJsonRow`](xref:NextORM.Core.SqlFunctions.IOpenJsonRow) (`Key`/`Value`/`Type`):
 
@@ -167,7 +215,7 @@ schema yields the properties of a JSON object or the elements of a JSON array as
 var json = """{"a":1,"b":2}""";
 
 var entries = dataContext
-    .FromTableFunction(() => SqlFunctions.SqlServer.openjson(json))
+    .From(() => SqlFunctions.SqlServer.openjson(json))
     .Select(r => new { r.Key, r.Value, r.Type })
     .ToList();
 ```
@@ -177,8 +225,9 @@ select [key] as [Key], value, type
  from openjson(@json) as [t1]
 ```
 
-For a typed projection declare your own `[SqlTableFunction("openjson")]` wrapper whose row shape
-matches the `WITH (...)` clause; nextorm only emits the call, it does not create the function.
+For a typed projection declare your own `TvfEntityBuilder<T>` factory whose row shape matches the
+`WITH (...)` clause and pass the clause body as `withClause`; nextorm only emits the call, it does not
+create the function.
 `SqlFunctions.SqlServer.string_split` follows the same pattern for a comma-separated string. Both are
 gated by [`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect.SupportsTableFunction(System.String)), so only SQL Server emits them.
 
@@ -205,8 +254,14 @@ select id
  from complex_entity where ((@norm_p0 ->> 'name') = 'Alice')
 ```
 
-A plain JSON string is bound as `text`; parse it explicitly with `SqlFunctions.Postgres.json_cast(value)`
-(`cast(value as jsonb)`).
+Provider parameter binding is unchanged: a plain JSON string parameter is still bound as `text`. The six
+accessors `json_get`, `json_get_text`, `json_get_path` and `json_get_path_text` (both the string-key and
+the integer-index overloads) are the exception — they apply **contextual SQL typing**: a raw client
+document value (a literal, a captured value or an explicit parameter) is parsed as `jsonb` in the generated
+SQL, and the right operand is typed per overload (`text` for a string key, `integer` for an index, `text[]`
+for a path). Native `json`/`jsonb` columns and server-side JSON expressions are **not** cast and keep their
+operand and result types. For every other JSON function, parse a plain string explicitly with
+`SqlFunctions.Postgres.json_cast(value)` (`cast(value as jsonb)`).
 
 ### Map a CLR object to a native JSON column
 
@@ -228,9 +283,21 @@ public sealed class Customer
 ```
 
 The mapping covers the property, not the schema: nextorm does not generate the column DDL, so the table
-must already have the `jsonb` column. See
+must already have the `jsonb` column (the same holds for SQL Server's native `json` column — see
+[Native `json` on SQL Server 2025+](#native-json-on-sql-server-2025)). See
 [Value converters](../infrastructure/03-value-converters.md#json-columns) for the fluent
 `JsonColumn(o => ...)` form and serializer options.
+
+On **MySQL and MariaDB** the same attribute keeps the **text** storage, because those providers have a
+JSON *column* but no bindable native JSON *representation* (`MySqlConnector` rejects `JsonElement`,
+`JsonDocument` and `JsonNode` parameters, `MySqlDbType.JSON` accepts strings only, and a `json` column
+always reads back as `string`). This is fully supported storage, not a refusal of JSON columns: a
+MySQL 8 table may declare the column as `json` — the server validates and normalises the document — and a
+MariaDB table may declare it as `JSON`, which the server reports as `longtext` with a `json_valid()`
+CHECK. An explicit `JsonColumnStorage.Native` on either engine fails closed with a
+`NotSupportedException` naming the dialect (`MySqlDialect`/`MariaDbDialect`) before any command runs;
+use `Auto` (text) or `Text`. Note also that MySQL compares a `json` document as a typed value — a string
+operand does not equal it — and nextorm promises no equality translation for that column.
 
 Bare CLR JSON values are handled at the boundary, differently from a mapped column:
 
@@ -242,7 +309,12 @@ Bare CLR JSON values are handled at the boundary, differently from a mapped colu
   CLR `null`. Declared `JsonObject`/`JsonArray` properties, and a bare `JsonDocument`/`JsonElement` *scalar*
   projection, are outside this support — map those with `[JsonColumn]` or project them in a named shape. A
   `JsonNode` parameter still binds as `jsonb`.
-* A plain `string` maps to `text`; use `SqlFunctions.Postgres.json_cast(value)` to parse it as `jsonb`.
+* A plain `string` maps to `text`. The six accessors above (`json_get`, `json_get_text`, `json_get_path`,
+  `json_get_path_text`, string-key and integer-index overloads) still accept a raw client document string —
+  a literal, a captured value or an explicit parameter — because they apply contextual SQL typing and
+  parse it as `jsonb` in the generated SQL, typing the key/index/path as `text`/`integer`/`text[]`. A native
+  `json`/`jsonb` column or a server-side JSON expression is left uncast, so its operand and result types do
+  not change. For any other JSON function, use `SqlFunctions.Postgres.json_cast(value)` to parse a string.
 
 On ClickHouse the same section header applies to the native `JSON` column, whose physical type is
 `JSON` and which is **object-rooted**: it accepts JSON objects at the root and rejects arrays and
@@ -339,9 +411,18 @@ The access operators and predicates are exposed as `SqlFunctions.Postgres` metho
 | `SqlFunctions.Postgres.jsonb_path_exists(json, path)` / `jsonb_path_match(json, path)` | `jsonb_path_exists(json, cast(path as jsonpath))` / `jsonb_path_match(...)` |
 | `SqlFunctions.Postgres.jsonb_path_query_first(json, path)` / `jsonb_path_query_array(json, path)` | `jsonb_path_query_first(...)` / `jsonb_path_query_array(...)` |
 
+The four accessors above apply **contextual SQL typing**: a raw client document value (a literal, a
+captured value or an explicit parameter) is parsed as `jsonb`, so `json_get("{\"a\":1}", "a")` renders
+`cast('{"a":1}' as jsonb) -> cast('a' as text)`, while a native `json`/`jsonb` column or a server-side JSON
+expression is emitted unchanged (`doc -> cast('a' as text)`), preserving its operand and result types. The
+key/index/path is always typed for its overload: `cast(<key> as text)`, `cast(<index> as integer)`,
+`cast(<path> as text[])` — a literal key is inlined as `cast('a' as text)`. Parameter binding itself is
+unchanged; an ordinary `string` parameter is still bound as `text`.
+
 A `path`/`keys` operand is a `string[]` bound as a single array parameter, so
-`json_get_path(json, new[] { "a", "b" })` renders `json #> @p0`. JSONPath functions take the path as a
-plain string and cast it to `jsonpath`.
+`json_get_path(json, new[] { "a", "b" })` renders `json #> cast(@p0 as text[])`. JSONPath functions take
+the path as a plain string and cast it to `jsonpath`; `JSON_EXISTS`, `jsonpath` and the sibling JSON
+functions keep their own independent behavior.
 
 ```csharp
 var path = new[] { "a", "b" };
@@ -405,7 +486,7 @@ The construction and aggregation functions return `string?`; deserialize with
 | Read a field from a JSON value | `json_value(col, '$.x')` | `col ->> 'x'` |
 | Test that a value is JSON | `isjson(col)` | the value is typed `json`/`jsonb` by the column |
 | Filter by JSON content | `json_value(col, '$.x') = ...` | `col @> ...`, `col ? 'x'`, `col #> ...` |
-| Expand JSON into rows | `openjson(...)` as a `FROM` source | no built-in helper; declare a `[SqlTableFunction]` wrapper |
+| Expand JSON into rows | `openjson(...)` as a `FROM` source | no built-in helper; declare a `TvfEntityBuilder<T>` factory |
 
 ## Limitations
 
@@ -444,8 +525,14 @@ The construction and aggregation functions return `string?`; deserialize with
 * PostgreSQL maps a `[JsonColumn]` property to a native `jsonb` column (`Auto` storage) on read and
   write (insert, update and `RETURNING`), and a `JsonDocument`/`JsonElement`/`JsonNode` parameter binds
   as `jsonb`. ClickHouse maps `[JsonColumn]` `Auto`/`Native` and bare object-root
-  `JsonObject`/`JsonDocument`/`JsonElement` to its native object-rooted `JSON` column. SQL Server and
-  MySQL/MariaDB JSON is always text.
+  `JsonObject`/`JsonDocument`/`JsonElement` to its native object-rooted `JSON` column. SQL Server maps
+  `[JsonColumn]` `Auto`/`Native` to its native `json` type **only on a context that declares major
+  version 17 or higher, or an Azure/Fabric SQL database engine edition**, and then only for
+  object/array documents — a scalar root or the JSON
+  `null` document is refused by the server with error 13609, so those payloads need `Text` storage; on
+  a pre-2025 context with no version-17-equivalent edition declaration SQL Server JSON is always text. MySQL/MariaDB JSON columns are
+  reached through the text transport on both engines (`Auto`/`Text`), and `Native` is refused with the
+  dialect-named `NotSupportedException`.
 
 ## See also
 

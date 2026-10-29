@@ -106,6 +106,178 @@ public class CorrelatedQueryInMemoryTests
     }
 
     [Fact]
+    public void LongCountProjection_ShouldMatchCountPerOuterRow()
+    {
+        _sut.SimpleEntity.WithData(new[]
+        {
+            new SimpleEntity { Id = 1 },
+            new SimpleEntity { Id = 2 },
+            new SimpleEntity { Id = 3 }
+        });
+
+        var r = _sut.SimpleEntity
+            .Select(it => new
+            {
+                it.Id,
+                Cnt = _sut.SimpleEntity.Where(s => s.Id <= it.Id).Count(),
+                LCnt = _sut.SimpleEntity.Where(s => s.Id <= it.Id).LongCount()
+            })
+            .ToList()
+            .OrderBy(it => it.Id)
+            .ToList();
+
+        r.Select(it => it.LCnt).Should().Equal(new long[] { 1, 2, 3 },
+            "a correlated LongCount() counts the matching rows per outer row");
+        r.Select(it => it.LCnt).Should().Equal(r.Select(it => (long)it.Cnt),
+            "LongCount() must equal Count() converted to long for the same predicate");
+    }
+
+    [Fact]
+    public void LongCountProjection_ShouldReturnZeroForNoMatches()
+    {
+        _sut.SimpleEntity.WithData(new[]
+        {
+            new SimpleEntity { Id = 1 },
+            new SimpleEntity { Id = 2 },
+            new SimpleEntity { Id = 3 }
+        });
+
+        var r = _sut.SimpleEntity
+            .Select(it => new { it.Id, LCnt = _sut.SimpleEntity.Where(s => s.Id > it.Id + 100).LongCount() })
+            .ToList();
+
+        r.Should().HaveCount(3);
+        r.Should().OnlyContain(row => row.LCnt == 0L, "zero matching rows must count as 0L, not a substitute value");
+    }
+
+    [Fact]
+    public void LongCountProjection_ShouldCountRowsWithNullableValues()
+    {
+        using var ctx = new InMemoryDataContext();
+        var entity = ctx.From<NullableCountEntity>();
+        entity.WithData(new[]
+        {
+            new NullableCountEntity { Id = 1, Value = null },
+            new NullableCountEntity { Id = 2, Value = 7 },
+            new NullableCountEntity { Id = 3, Value = null }
+        });
+
+        var r = entity
+            .Select(it => new { it.Id, LCnt = entity.Where(v => v.Id <= it.Id).LongCount() })
+            .ToList()
+            .OrderBy(it => it.Id)
+            .ToList();
+
+        r.Select(it => it.LCnt).Should().Equal(new long[] { 1, 2, 3 },
+            "the 64-bit count counts rows, so rows whose nullable value is null are still counted");
+    }
+
+    [Fact]
+    public void LongCountProjection_ShouldCountEntityAndScalarReceivers()
+    {
+        _sut.SimpleEntity.WithData(new[]
+        {
+            new SimpleEntity { Id = 1 },
+            new SimpleEntity { Id = 2 },
+            new SimpleEntity { Id = 3 }
+        });
+
+        var r = _sut.SimpleEntity
+            .Select(it => new
+            {
+                it.Id,
+                All = _sut.SimpleEntity.LongCount(),
+                Upto = _sut.SimpleEntity.Where(s => s.Id <= it.Id).LongCount()
+            })
+            .ToList();
+
+        r.Should().HaveCount(3);
+        r.Should().OnlyContain(row => row.All == 3L, "a plain entity receiver counts every row");
+        r.OrderBy(row => row.Id).Select(row => row.Upto).Should().Equal(new long[] { 1, 2, 3 });
+        ((object)r[0].All).Should().BeOfType<long>("LongCount() declares a 64-bit result");
+    }
+
+    [Fact]
+    public void LongCountProjection_ShouldPreserveParametersAcrossCachedExecutions()
+    {
+        _sut.SimpleEntity.WithData(new[]
+        {
+            new SimpleEntity { Id = 1 },
+            new SimpleEntity { Id = 2 },
+            new SimpleEntity { Id = 3 }
+        });
+
+        var limit = 1;
+        var first = _sut.SimpleEntity
+            .Select(it => new { it.Id, LCnt = _sut.SimpleEntity.Where(s => s.Id <= it.Id && s.Id <= limit).LongCount() })
+            .ToList()
+            .OrderBy(it => it.Id)
+            .Select(it => it.LCnt)
+            .ToList();
+
+        limit = 2;
+        var second = _sut.SimpleEntity
+            .Select(it => new { it.Id, LCnt = _sut.SimpleEntity.Where(s => s.Id <= it.Id && s.Id <= limit).LongCount() })
+            .ToList()
+            .OrderBy(it => it.Id)
+            .Select(it => it.LCnt)
+            .ToList();
+
+        limit = 1;
+        var third = _sut.SimpleEntity
+            .Select(it => new { it.Id, LCnt = _sut.SimpleEntity.Where(s => s.Id <= it.Id && s.Id <= limit).LongCount() })
+            .ToList()
+            .OrderBy(it => it.Id)
+            .Select(it => it.LCnt)
+            .ToList();
+
+        first.Should().Equal(new long[] { 1, 1, 1 }, "the first parameter value applies to every outer row");
+        second.Should().Equal(new long[] { 1, 2, 2 }, "differing parameter values must not reuse the previous result");
+        third.Should().Equal(new long[] { 1, 1, 1 }, "re-executing with the earlier value must not keep a stale parameter");
+    }
+
+    [Fact]
+    public void NonNullableCorrelatedScalarProjection_ShouldRemainFailClosed()
+    {
+        using var ctx = new InMemoryDataContext();
+        ctx.From<D6Parent>(b => b.HasMany(p => p.Children, c => c.ParentId));
+        ctx.From<D6Child>(b => b.HasOne(c => c.Parent, c => c.ParentId));
+        ctx.From<D6Parent>().WithData(new[] { new D6Parent { Id = 1, Age = 42 } });
+        ctx.From<D6Child>().WithData(new[]
+        {
+            new D6Child { Id = 10, ParentId = 1 },
+            new D6Child { Id = 12, ParentId = 999 }
+        });
+
+        Action act = () => ctx.From<D6Child>()
+            .Select(c => new { c.Id, Age = c.Parent!.Age })
+            .ToList();
+
+        act.Should().Throw<QueryPreparationException>()
+            .WithMessage("*D6Child.Parent.Age*System.Int32*");
+    }
+
+    [Fact]
+    public async Task TopLevelLongCount_ShouldPreserveSyncAsyncAndDefaultArguments()
+    {
+        _sut.SimpleEntity.WithData(new[]
+        {
+            new SimpleEntity { Id = 1 },
+            new SimpleEntity { Id = 2 },
+            new SimpleEntity { Id = 3 }
+        });
+
+        var parameters = Array.Empty<object?>();
+        var asyncParameters = Array.Empty<object>();
+
+        _sut.SimpleEntity.LongCount().Should().Be(3L);
+        _sut.SimpleEntity.LongCount(parameters).Should().Be(3L);
+        (await _sut.SimpleEntity.LongCountAsync()).Should().Be(3L);
+        (await _sut.SimpleEntity.LongCountAsync(CancellationToken.None)).Should().Be(3L);
+        (await _sut.SimpleEntity.LongCountAsync(asyncParameters)).Should().Be(3L);
+    }
+
+    [Fact]
     public void CorrelatedScalarFirstOrDefault_ShouldYieldDefaultWhenNoRowMatches()
     {
         var r = _sut.SimpleEntity
@@ -181,4 +353,28 @@ public class CorrelatedQueryInMemoryTests
 
         r.Should().BeEmpty();
     }
+
+    /// <summary>
+    /// #303: an aggregate terminal inside a correlated WHERE predicate lowers to a correlated scalar
+    /// and takes part in the comparison per outer row, like the SQL providers, instead of failing on
+    /// the untyped registry placeholder.
+    /// </summary>
+    [Fact]
+    public void CorrelatedAggregateInWhere_ShouldComparePerRow()
+    {
+        var r = _sut.SimpleEntity
+            .Where(it => _sut.SimpleEntity.Where(s => s.Id <= it.Id).Count() > 1)
+            .Select(it => it.Id)
+            .ToList();
+
+        r.Should().Equal(2);
+    }
+}
+
+/// <summary>Entity with a nullable value column used by the row-count-versus-column-count tests.</summary>
+public sealed class NullableCountEntity
+{
+    public int Id { get; set; }
+
+    public int? Value { get; set; }
 }

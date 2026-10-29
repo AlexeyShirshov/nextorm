@@ -331,6 +331,25 @@ where (b = true)
 settings max_threads = 2
 ```
 
+`Settings` замыкает порядок предложений: он выводится после `LIMIT ... BY` и после
+`LIMIT`/`OFFSET`, а `LIMIT` после `SETTINGS` ClickHouse отклоняет (код сервера 62). Скалярный
+терминал добавляет постраничность — `First`/`FirstOrDefault` рендерят `limit 1`,
+`Single`/`SingleOrDefault` рендерят `limit 2` — поэтому предложение настроек идёт за ней:
+
+```csharp
+var count = dataContext.From<IComplexEntity>()
+    .Settings(("max_threads", "2"))
+    .Select(c => SqlFunctions.Sql.count())
+    .First();
+```
+
+```sql
+select toInt32(count(*))
+ from complex_entity
+limit 1
+ settings max_threads = 2
+```
+
 `Final()` принудительно выполняет merge ReplacingMergeTree/CollapsingMergeTree перед чтением; `Sample`
 читает долю строк `[0, 1]`; `PreWhere` фильтрует до обычного `WHERE`, позволяя пропустить чтение
 остальных колонок; `Settings` добавляет завершающее предложение, значения которого рендерятся как есть

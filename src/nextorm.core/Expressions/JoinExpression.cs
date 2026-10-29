@@ -145,6 +145,29 @@ public class JoinExpression(LambdaExpression? joinCondition, JoinType joinType =
     /// <see cref="From"/>; it is not part of the public surface.
     /// </summary>
     internal LambdaExpression? ApplySource { get; init; }
+    /// <summary>
+    /// The left-row slots a correlated APPLY source may address, one entry per one-based slot (#324).
+    /// Set at construction from the receiver's flat projection arity and rebuilt during preparation
+    /// from the command's actual FROM-plus-preceding-joins prefix. <c>null</c> for the legacy
+    /// single-entity APPLY, whose outer references keep their existing resolution path unchanged.
+    /// It carries no alias or render index, so it never participates in the plan-cache key.
+    /// </summary>
+    internal IReadOnlyList<ApplyLeftSlot>? ApplyLeftSlots { get; set; }
+    /// <summary>
+    /// Builds the addressable left-row slots of one correlated APPLY: slot 1 is the FROM source and
+    /// slot <c>n</c> the <c>n-1</c>-th preceding ordered join. <paramref name="owner"/> is the APPLY
+    /// lambda parameter instance that identifies the left row occurrence.
+    /// </summary>
+    /// <param name="owner">The APPLY lambda parameter (the left-row occurrence identity).</param>
+    /// <param name="slots">The number of addressable slots (FROM plus preceding joins).</param>
+    /// <returns>One entry per one-based slot.</returns>
+    internal static ApplyLeftSlot[] CreateApplyLeftSlots(ParameterExpression owner, int slots)
+    {
+        var result = new ApplyLeftSlot[slots];
+        for (var i = 0; i < slots; i++)
+            result[i] = new ApplyLeftSlot(owner, i + 1);
+        return result;
+    }
     /// <summary>Installs the derived query built from <see cref="ApplySource"/> during preparation.</summary>
     internal void SetFrom(FromExpression from) => _from = from;
     /// <summary>
@@ -212,6 +235,7 @@ public class JoinExpression(LambdaExpression? joinCondition, JoinType joinType =
             JoinHint = JoinHint,
             TableHints = TableHints,
             ApplySource = ApplySource,
+            ApplyLeftSlots = ApplyLeftSlots,
             OriginalJoinCondition = _originalJoinCondition,
             IsJoinInto = IsJoinInto,
             JoinIntoIdentity = JoinIntoIdentity,
@@ -275,3 +299,13 @@ public class JoinExpression(LambdaExpression? joinCondition, JoinType joinType =
     //     return true;
     // }
 }
+
+/// <summary>
+/// One addressable slot of a correlated APPLY's left row (#324): the APPLY lambda parameter instance
+/// that owns the row and the one-based slot the reference names. The slot is positional (FROM is slot
+/// 1, the first preceding join is slot 2, and so on), never an alias or a render index, so it is not a
+/// plan-cache key input. The <see cref="Owner"/> is compared by reference identity, never by name.
+/// </summary>
+/// <param name="Owner">The APPLY lambda parameter identifying the left-row occurrence.</param>
+/// <param name="Slot">The one-based position among the owner's FROM plus preceding ordered joins.</param>
+internal readonly record struct ApplyLeftSlot(ParameterExpression Owner, int Slot);

@@ -4,9 +4,9 @@
 Benchmark conditions: provider SQLite (`Microsoft.Data.Sqlite`) for every participant; async queries; each
 cell is the **fastest method** for that library in the linked BenchmarkDotNet report. Machine: AMD Ryzen 7
 5800HS with Radeon Graphics (8 logical / 4 physical cores), .NET 10.0.12, BenchmarkDotNet 0.15.8 (`ShortRun` +
-`InProcessEmitToolchain`). As of **2026-10-17** for the end-to-end, allocations, Category A and Category B
-tables (the tier-1 section keeps the date of its own run). In each row the leading cell is **bold** — the
-fastest in the time tables and the smallest allocation in the allocations table.
+`InProcessEmitToolchain`). As of **2026-10-20** for the end-to-end, allocations and Category B tables (the
+Category A table and the tier-1 section keep the date of their own run). In each row the leading cell is
+**bold** — the fastest in the time tables and the smallest allocation in the allocations table.
 <!-- benchmarks:conditions:end -->
 
 > **New (2026-10-17):** a warm-path-only feature report — no `Prepare()` arms, one table per tier,
@@ -61,26 +61,28 @@ BenchmarkDotNet `Mean` and `Allocated` divided by 10). Source reports:
 
 ### Category A — prepared vs compiled vs raw
 
-As of **2026-10-17**.
+<!-- benchmarks:category-a:start -->
+As of **2026-10-28**.
 
 | Feature | Nextorm (prepared) | Dapper | linq2db (compiled) | EF Core (compiled) |
 |---|---|---|---|---|
-| `CASE WHEN` | **9.26 µs / 744 B** | 14.60 µs / 1.34 KB | 15.08 µs / 1.59 KB | 35.61 µs / 7.90 KB |
-| CTE | **9.49 µs / 793 B** | 21.43 µs / 1.57 KB | 21.52 µs / 1.77 KB | — |
-| `SELECT DISTINCT` | **11.01 µs / 744 B** | 18.55 µs / 1.56 KB | 17.41 µs / 1.59 KB | 40.60 µs / 7.66 KB |
-| `EXCEPT` | **11.07 µs / 760 B** | 17.72 µs / 1.44 KB | 20.80 µs / 1.68 KB | 43.47 µs / 8.81 KB |
-| IN-list | **12.32 µs / 1.57 KB** | 18.65 µs / 1.27 KB | 43.53 µs / 15.23 KB | 60.70 µs / 14.77 KB |
-| `INTERSECT` | **10.36 µs / 744 B** | 16.77 µs / 1.29 KB | 19.66 µs / 1.63 KB | 41.75 µs / 7.94 KB |
-| 4-table join | **12.63 µs / 1.06 KB** | 25.52 µs / 2.02 KB | 23.27 µs / 2.07 KB | 46.82 µs / 8.49 KB |
-| `LEFT JOIN` | **12.09 µs / 1.20 KB** | 19.84 µs / 2.22 KB | 20.29 µs / 2.32 KB | 41.64 µs / 9.92 KB |
-| Recursive CTE | **12.64 µs / 752 B** | 24.24 µs / 1.53 KB | 25.73 µs / 1.78 KB | — |
-| String functions | **8.96 µs / 736 B** | 13.92 µs / 1.28 KB | 15.18 µs / 1.64 KB | 35.08 µs / 7.49 KB |
-| UDF | **9.27 µs / 768 B** | 14.08 µs / 1.28 KB | 15.05 µs / 1.64 KB | 34.82 µs / 7.49 KB |
-| Window functions | **14.44 µs / 848 B** | 30.04 µs / 1.54 KB | 31.84 µs / 1.74 KB | — |
+| `CASE WHEN` | **15.40 μs / 744 B** | 22.34 μs / 1.34 KB | 23.52 μs / 1.59 KB | 65.48 μs / 7.90 KB |
+| CTE | **15.37 μs / 793 B** | 32.57 μs / 1.57 KB | 35.08 μs / 1.77 KB | — |
+| `SELECT DISTINCT` | **17.25 μs / 744 B** | 27.84 μs / 1.56 KB | 29.24 μs / 1.59 KB | 58.57 μs / 7.67 KB |
+| `EXCEPT` | **15.62 μs / 760 B** | 26.20 μs / 1.44 KB | 28.71 μs / 1.68 KB | 66.22 μs / 8.81 KB |
+| IN-list | **19.78 μs / 1.63 KB** | 29.79 μs / 1.27 KB | 66.97 μs / 15.23 KB | 85.96 μs / 14.77 KB |
+| `INTERSECT` | **16.48 μs / 744 B** | 27.24 μs / 1.29 KB | 33.34 μs / 1.63 KB | 64.09 μs / 7.94 KB |
+| 4-table join | **21.14 μs / 1.06 KB** | 39.56 μs / 2.02 KB | 38.82 μs / 2.07 KB | 74.38 μs / 8.49 KB |
+| `LEFT JOIN` | **18.65 μs / 1.20 KB** | 32.07 μs / 2.22 KB | 33.19 μs / 2.32 KB | 66.57 μs / 9.92 KB |
+| Recursive CTE | **18.62 μs / 752 B** | 38.18 μs / 1.53 KB | 40.70 μs / 1.78 KB | — |
+| String functions | **14.22 μs / 736 B** | 21.73 μs / 1.28 KB | 23.90 μs / 1.64 KB | 55.54 μs / 7.49 KB |
+| UDF | **13.94 μs / 768 B** | 22.32 μs / 1.28 KB | 24.46 μs / 1.64 KB | 53.67 μs / 7.49 KB |
+| Window functions | **20.82 μs / 872 B** | 43.68 μs / 1.55 KB | 43.94 μs / 1.74 KB | — |
+<!-- benchmarks:category-a:end -->
 
-Nextorm prepared is the fastest on **every** feature and has the smallest allocation on 11 of 12 — IN-list
-is the exception (1.57 KB vs Dapper's 1.27 KB). Time is roughly 3.4–4.9× below EF Core and 1.5–2.3× below
-Dapper; allocations are 1.7–2.1× below Dapper and 8–12× below EF Core.
+Nextorm prepared is the fastest on **every** feature and has the smallest allocation on 11 of 12 — IN-list is
+the exception, where Dapper's cached raw SQL allocates less. The exact ratios are in the table above; they move
+with the runner, so treat deltas below ~20 % as noise.
 
 ### Category B — warm cached vs regular
 
@@ -304,16 +306,17 @@ dotnet run --project benchmarks/nextorm.benchmark -c Release -- --filter "*Sqlit
 Each linked report is the BenchmarkDotNet output committed under `benchmarks/BenchmarkDotNet.Artifacts/results/`.
 Set `NEXTORM_BENCH_FULL=1` to run the full out-of-process job instead of `ShortRun`.
 
-The end-to-end, allocations and Category B tables on this page are **generated** from those reports — do not
-edit them by hand. After a run:
+The end-to-end, allocations, Category A and Category B tables on this page are **generated** from those
+reports — do not edit them by hand. After a run:
 
 ```bash
-python3 .pdca/scripts/perf/update_benchmark_tables.py          # rewrite readme.md and both article mirrors
-python3 .pdca/scripts/perf/update_benchmark_tables.py --check  # CI mode: fail when a table is stale
+python3 tools/benchmarks/update_benchmark_tables.py          # rewrite readme.md and both article mirrors
+python3 tools/benchmarks/update_benchmark_tables.py --check  # CI mode: fail when a table is stale
 ```
 
-The same refresh runs from `.github/workflows/benchmarks.yml` (manual dispatch or monthly) and opens a pull
-request with the new reports and tables.
+The same refresh runs from `.github/workflows/benchmarks.yml` — automatically after every merge into `main`
+that touches the engine (`src/**`) or the benchmark project, and on demand from the Actions tab. It opens a
+pull request with the new reports and tables.
 
 ## See also
 

@@ -81,10 +81,20 @@ namespace NextORM.Core;
         /// <summary>All 1-based positions of <paramref name="element"/> in <paramref name="array"/>.</summary>
         public int[]? array_positions<T>(T[] array, T element) => default!;
 
-        /// <summary>Reverses the elements of <paramref name="array"/> (<c>array_reverse</c>, PostgreSQL 18+).</summary>
+        /// <summary>
+        /// Reverses the elements of <paramref name="array"/>. No current PostgreSQL release provides
+        /// <c>array_reverse</c>, so the PostgreSQL provider refuses the call at preparation with
+        /// <see cref="NotSupportedException"/> and never emits the function; no fallback (a
+        /// <see langword="null"/> array or an unchanged array) is substituted.
+        /// </summary>
         public T[] array_reverse<T>(T[] array) => default!;
 
-        /// <summary>Sorts the elements of <paramref name="array"/> (<c>array_sort</c>, PostgreSQL 18+).</summary>
+        /// <summary>
+        /// Sorts the elements of <paramref name="array"/> (<c>array_sort</c>, PostgreSQL 18+). The
+        /// PostgreSQL provider renders it only for an explicit server version 18 or later; a version
+        /// below 18 and an unset version refuse the call at preparation with
+        /// <see cref="NotSupportedException"/>.
+        /// </summary>
         public T[] array_sort<T>(T[] array) => default!;
 
         /// <summary>Returns a randomly shuffled copy of <paramref name="array"/> (<c>array_shuffle</c>, PostgreSQL 16+).</summary>
@@ -92,6 +102,14 @@ namespace NextORM.Core;
 
         /// <summary>Returns <paramref name="n"/> randomly selected elements of <paramref name="array"/> (<c>array_sample</c>, PostgreSQL 16+).</summary>
         public T[] array_sample<T>(T[] array, int n) => default!;
+
+        /// <summary>
+        /// Removes the last <paramref name="n"/> elements of a one-dimensional <paramref name="array"/>
+        /// (<c>trim_array</c>), keeping the element type. PostgreSQL raises an error when
+        /// <paramref name="n"/> is greater than the array length, and only one-dimensional arrays are
+        /// accepted; a SQL-NULL array stays NULL.
+        /// </summary>
+        public T[] trim_array<T>(T[] array, int? n) => default!;
 
         /// <summary><c>array &lt;@ other</c>: true when every element of <paramref name="array"/> is contained in <paramref name="other"/>.</summary>
         public bool array_contained_by<T>(T[] array, T[] other) => default!;
@@ -113,6 +131,143 @@ namespace NextORM.Core;
 
         /// <summary>Aggregates key/value pairs into a JSONB object (<c>jsonb_object_agg</c>).</summary>
         public string? jsonb_object_agg<TKey, TValue>(TKey? key, TValue? value) => default!;
+
+        /// <summary>
+        /// Aggregates the XML values of a group into one <c>xml</c> document (<c>xmlagg</c>, PostgreSQL 9.0+).
+        /// PostgreSQL has a single <c>xmlagg(xml) → xml</c> aggregate and no <c>text</c>/integer overload
+        /// (measured on 17.11: <c>xmlagg(text)</c> is <c>42883</c> "function xmlagg(text) does not exist"), so
+        /// the operand is cast to <c>xml</c> in the rendered SQL, so <paramref name="value"/> must hold
+        /// XML markup the <c>xml</c> type accepts; the cast is what keeps the emitted call in the
+        /// <c>xmlagg(xml)</c> form. The result is the
+        /// concatenation of the group's documents with no separator, read back by the driver as a plain
+        /// string (measured: the <c>xml</c> result arrives as <see cref="string"/> with data type name
+        /// <c>xml</c>). NULL operands are skipped, a group whose operands are all NULL yields NULL, and —
+        /// because this is an aggregate — an empty input still produces one row with NULL.
+        /// </summary>
+        /// <param name="value">The XML markup to aggregate.</param>
+        public string? xmlagg(string? value) => default!;
+
+        /// <summary>
+        /// Aggregates the values of <paramref name="property"/> into a JSON array, ignoring the NULL
+        /// values (<c>json_agg_strict</c>, PostgreSQL 16+). Unlike <c>json_agg</c> a group
+        /// whose values are all NULL yields an empty array (<c>[]</c>, measured), not an array of nulls;
+        /// an empty input still produces one NULL row. The result is <c>json</c>, read back as a string.
+        /// </summary>
+        /// <param name="property">The value to aggregate.</param>
+        public string? json_agg_strict<T>(T? property) => default!;
+
+        /// <summary>
+        /// Aggregates the values of <paramref name="property"/> into a JSONB array, ignoring the NULL
+        /// values (<c>jsonb_agg_strict</c>, PostgreSQL 16+). A group whose values are all NULL yields an
+        /// empty array (<c>[]</c>), an empty input still produces one NULL row, and the result is
+        /// <c>jsonb</c>, read back as a string.
+        /// </summary>
+        /// <param name="property">The value to aggregate.</param>
+        public string? jsonb_agg_strict<T>(T? property) => default!;
+
+        /// <summary>
+        /// Aggregates the key/value pairs of a group into a JSON object and rejects a duplicate key
+        /// (<c>json_object_agg_unique</c>, PostgreSQL 16+). A NULL value is kept as <c>null</c>, while a
+        /// duplicate key (<c>22030</c>) and a NULL key (<c>22004</c>) raise on execution — both measured on
+        /// 17.11. An empty input still produces one NULL row, and the result is <c>json</c>, read back as a
+        /// string.
+        /// </summary>
+        /// <param name="key">The object key.</param>
+        /// <param name="value">The value stored under the key.</param>
+        public string? json_object_agg_unique<TKey, TValue>(TKey? key, TValue? value) => default!;
+
+        /// <summary>
+        /// Aggregates the key/value pairs of a group into a JSON object, skipping the pairs whose value is
+        /// NULL and rejecting a duplicate key (<c>json_object_agg_unique_strict</c>, PostgreSQL 16+). A
+        /// pair whose value is NULL is dropped from the object (measured), a duplicate key (<c>22030</c>)
+        /// and a NULL key (<c>22004</c>) raise on execution — both measured on 17.11. An empty input still
+        /// produces one NULL row, and the result is <c>json</c>, read back as a string.
+        /// </summary>
+        /// <param name="key">The object key.</param>
+        /// <param name="value">The value stored under the key.</param>
+        public string? json_object_agg_unique_strict<TKey, TValue>(TKey? key, TValue? value) => default!;
+
+        /// <summary>
+        /// Aggregates the values of a group into a SQL/JSON array (<c>json_arrayagg</c>, PostgreSQL 17+; a
+        /// parser-level aggregate construct with no <c>pg_proc</c> row). The emitted form is the plain
+        /// <c>json_arrayagg(&lt;arg&gt;)</c>, whose measured default is <c>ABSENT ON NULL</c>: NULL values
+        /// are dropped, a group whose values are all NULL yields <c>[]</c>, and an empty input still
+        /// produces one NULL row. The PostgreSQL grammar also accepts
+        /// <c>[ORDER BY …] [ABSENT|NULL ON NULL] [RETURNING json|jsonb]</c> inside the call, but the
+        /// builder has no clause slot for an aggregate's internal argument list, so those modifiers are
+        /// not exposed: <c>RETURNING jsonb</c> has its own member (<see cref="jsonb_arrayagg{T}"/>) and
+        /// the <c>DISTINCT</c> spelling is a syntax error on 17.11 (<c>42601</c>, measured). The result
+        /// is <c>json</c>, read back as a string.
+        /// </summary>
+        /// <param name="property">The value to aggregate.</param>
+        public string? json_arrayagg<T>(T? property) => default!;
+
+        /// <summary>
+        /// Aggregates the values of a group into a SQL/JSON array of type <c>jsonb</c>
+        /// (<c>json_arrayagg(&lt;arg&gt; RETURNING jsonb)</c>, PostgreSQL 17+; exposed as
+        /// <c>jsonb_arrayagg</c> because PostgreSQL has no <c>jsonb_arrayagg</c> function). The measured
+        /// default is <c>ABSENT ON NULL</c>, so a group whose values are all NULL yields <c>[]</c> and an
+        /// empty input still produces one NULL row. Read back as a string (measured: Npgsql materialises
+        /// the <c>jsonb</c> result as <see cref="string"/>).
+        /// </summary>
+        /// <param name="property">The value to aggregate.</param>
+        public string? jsonb_arrayagg<T>(T? property) => default!;
+
+        /// <summary>
+        /// Aggregates the key/value pairs of a group into a SQL/JSON object (<c>json_objectagg</c>,
+        /// PostgreSQL 17+; a parser-level aggregate construct with no <c>pg_proc</c> row). The emitted
+        /// form is <c>json_objectagg(&lt;key&gt; VALUE &lt;value&gt;)</c>: PostgreSQL 17 admits exactly
+        /// one pair per call — the comma-separated two-pair form is a syntax error (<c>42601</c>) and the
+        /// <c>key : value</c> colon spelling is accepted but not emitted (the <c>VALUE</c> keyword is the
+        /// documented spelling). The measured default is <c>NULL ON NULL</c> (a NULL value is kept as
+        /// JSON <c>null</c>) and duplicate keys are kept as-is; a NULL key raises <c>22004</c>, and an
+        /// empty input yields NULL. Duplicate-key rejection (<c>22030</c>) is the
+        /// <c>WITH UNIQUE KEYS</c> form, exposed as <see cref="json_objectagg_unique{TKey,TValue}"/>;
+        /// <c>ABSENT ON NULL</c> and <c>[ORDER BY …]</c> are not exposed because the builder has no
+        /// clause slot for them. The result is <c>json</c>, read back as a string.
+        /// </summary>
+        /// <param name="key">The object key (any type; PostgreSQL coerces it to text, measured).</param>
+        /// <param name="value">The value stored under the key.</param>
+        public string? json_objectagg<TKey, TValue>(TKey? key, TValue? value) => default!;
+
+        /// <summary>
+        /// Rejects a duplicate key while aggregating the pairs into a SQL/JSON object
+        /// (<c>json_objectagg(&lt;key&gt; VALUE &lt;value&gt; WITH UNIQUE KEYS)</c>, PostgreSQL 17+;
+        /// exposed as <c>json_objectagg_unique</c> for the clause, distinct from the
+        /// <c>json_object_agg_unique</c> function). A duplicate key raises <c>22030</c> and a NULL key
+        /// raises <c>22004</c> — both measured on 17.11. A NULL value is kept as JSON <c>null</c> (the
+        /// measured default <c>NULL ON NULL</c>), and an empty input yields NULL. The result is
+        /// <c>json</c>, read back as a string.
+        /// </summary>
+        /// <param name="key">The object key (any type; PostgreSQL coerces it to text, measured).</param>
+        /// <param name="value">The value stored under the key.</param>
+        public string? json_objectagg_unique<TKey, TValue>(TKey? key, TValue? value) => default!;
+
+        /// <summary>
+        /// Aggregates the pairs into a SQL/JSON object of type <c>jsonb</c>
+        /// (<c>json_objectagg(&lt;key&gt; VALUE &lt;value&gt; RETURNING jsonb)</c>, PostgreSQL 17+;
+        /// exposed as <c>jsonb_objectagg</c> because no such function exists). The measured defaults are
+        /// those of <see cref="json_objectagg{TKey,TValue}"/>: <c>NULL ON NULL</c>, duplicate keys kept,
+        /// a NULL key raises <c>22004</c>, and an empty input yields NULL. Read back as a string.
+        /// </summary>
+        /// <param name="key">The object key (any type; PostgreSQL coerces it to text, measured).</param>
+        /// <param name="value">The value stored under the key.</param>
+        public string? jsonb_objectagg<TKey, TValue>(TKey? key, TValue? value) => default!;
+
+        /// <summary>
+        /// One bit of the super-aggregate identity of the current row (<c>grouping</c>, a parser-level
+        /// grouping function with no <c>pg_proc</c> row): <c>0</c> when <paramref name="column"/> is
+        /// grouped in this row, <c>1</c> when the row is a super-aggregate that aggregated it away.
+        /// The argument must be a grouping expression of the query's own grouping list — anything else
+        /// is <c>42803</c> — and the function is only useful with
+        /// <c>GROUP BY ROLLUP</c>/<c>CUBE</c>/<c>GROUPING SETS</c> (see <c>GroupByRollup</c>,
+        /// <c>GroupByCube</c> and <c>GroupByGroupingSets</c>); in a plain <c>GROUP BY</c> it is legal and
+        /// always <c>0</c>. The zero-argument spelling <c>grouping()</c> is a syntax error
+        /// (<c>42601</c>), and the result is <c>integer</c> (read back as <see cref="int"/>). All
+        /// measured on 17.11.
+        /// </summary>
+        /// <param name="column">A column of the query's grouping list.</param>
+        public int? grouping<T>(T? column) => default!;
 
         /// <summary>Builds a JSON object from alternating key/value arguments (<c>json_build_object</c>).</summary>
         public string json_build_object(params object?[] args) => default!;
@@ -148,6 +303,31 @@ namespace NextORM.Core;
         /// as <c>jsonb</c>).
         /// </summary>
         public string json_cast(object? value) => default!;
+
+        /// <summary>
+        /// SQL/JSON <c>json(expression FORMAT JSON)</c>: parses <paramref name="value"/>'s text as a JSON
+        /// document and returns it as <c>json</c>. The argument is rendered as text
+        /// (<c>cast(value as text)</c>) and <c>FORMAT JSON</c> declares it to be JSON text, so an invalid
+        /// document is rejected by the server. Distinct from <see cref="json_scalar{T}(T)"/>, which
+        /// converts a value to JSON (a string becomes a JSON string, not a parsed document).
+        /// A PostgreSQL 17 SQL/JSON constructor: it is grammar, not a <c>pg_proc</c> function.
+        /// </summary>
+        public string? json<T>(T? value) => default!;
+
+        /// <summary>
+        /// SQL/JSON <c>json_scalar(value)</c>: converts <paramref name="value"/> to a <c>json</c> scalar
+        /// (a string becomes a JSON string, a number a JSON number, SQL NULL stays NULL).
+        /// A PostgreSQL 17 SQL/JSON constructor: grammar, not a <c>pg_proc</c> function.
+        /// </summary>
+        public string? json_scalar<T>(T? value) => default!;
+
+        /// <summary>
+        /// SQL/JSON <c>json_serialize(expression FORMAT JSON RETURNING text)</c>: parses
+        /// <paramref name="value"/>'s text as JSON and returns its serialized <c>text</c>. The result is
+        /// text, not <c>json</c> — that is the difference from <see cref="json{T}(T)"/>.
+        /// A PostgreSQL 17 SQL/JSON constructor: grammar, not a <c>pg_proc</c> function.
+        /// </summary>
+        public string? json_serialize<T>(T? value) => default!;
 
         /// <summary><c>json -&gt; key</c>: the JSON element for <paramref name="key"/> (or null).</summary>
         public string? json_get(object? json, string? key) => default!;
@@ -235,6 +415,50 @@ namespace NextORM.Core;
 
         /// <summary>All items selected by <paramref name="path"/> as a JSON array.</summary>
         public string? jsonb_path_query_array(object? json, string? path) => default!;
+
+        /// <summary>
+        /// <c>json_extract_path(json, path)</c>: the <c>json</c> element at the key/index
+        /// <paramref name="path"/>. The document is a JSON <em>text</em> (the argument is cast to
+        /// <c>json</c> in the emitted SQL); the path is passed to the variadic parameter as one
+        /// <c>text[]</c>. An absent path, a JSON <c>null</c> element and a SQL NULL path all yield SQL
+        /// NULL; an empty path returns the document itself.
+        /// </summary>
+        public string? json_extract_path(string? json, string?[] path) => default!;
+
+        /// <summary><c>json_extract_path_text(json, path)</c>: the element at <paramref name="path"/> as text (SQL NULL when absent).</summary>
+        public string? json_extract_path_text(string? json, string?[] path) => default!;
+
+        /// <summary><c>jsonb_extract_path(json, path)</c>: the <c>jsonb</c> element at <paramref name="path"/> (SQL NULL when absent).</summary>
+        public string? jsonb_extract_path(string? json, string?[] path) => default!;
+
+        /// <summary><c>jsonb_extract_path_text(json, path)</c>: the <c>jsonb</c> element at <paramref name="path"/> as text (SQL NULL when absent).</summary>
+        public string? jsonb_extract_path_text(string? json, string?[] path) => default!;
+
+        /// <summary>
+        /// <c>jsonb_set_lax(json, path, new_value, create_if_missing, null_value_treatment)</c>: replaces
+        /// the value at <paramref name="path"/>, with the SQL-NULL <paramref name="newValue"/> handled by
+        /// <paramref name="nullValueTreatment"/> (<c>use_json_null</c>, <c>delete_key</c>,
+        /// <c>return_target</c> or <c>raise_exception</c>). Both PostgreSQL defaults are exposed as
+        /// explicit arguments (<paramref name="createIfMissing"/> = <c>true</c>,
+        /// <paramref name="nullValueTreatment"/> = <c>use_json_null</c>) instead of a nullable overload.
+        /// </summary>
+        public string? jsonb_set_lax(string? json, string?[] path, string? newValue, bool? createIfMissing, string? nullValueTreatment) => default!;
+
+        /// <summary>
+        /// <c>jsonb_path_exists_tz(json, path, vars, silent)</c>: true when <paramref name="path"/> selects
+        /// any item. The <c>_tz</c> form is required for paths that depend on the session time zone (for
+        /// example the <c>.datetime()</c> method); the non-<c>_tz</c> sibling raises an error for them.
+        /// </summary>
+        public bool? jsonb_path_exists_tz(string? json, string? path, string? vars, bool? silent) => default!;
+
+        /// <summary><c>jsonb_path_match_tz(json, path, vars, silent)</c>: true when <paramref name="path"/> selects a single true (time-zone-aware).</summary>
+        public bool? jsonb_path_match_tz(string? json, string? path, string? vars, bool? silent) => default!;
+
+        /// <summary><c>jsonb_path_query_array_tz(json, path, vars, silent)</c>: all matches as a <c>jsonb</c> array (time-zone-aware).</summary>
+        public string? jsonb_path_query_array_tz(string? json, string? path, string? vars, bool? silent) => default!;
+
+        /// <summary><c>jsonb_path_query_first_tz(json, path, vars, silent)</c>: the first match, or SQL NULL (time-zone-aware).</summary>
+        public string? jsonb_path_query_first_tz(string? json, string? path, string? vars, bool? silent) => default!;
 
         /// <summary>
         /// Casts <paramref name="path"/> to the PostgreSQL <c>jsonpath</c> type
@@ -338,6 +562,111 @@ namespace NextORM.Core;
         /// <summary>The bucket number for <paramref name="operand"/> in <paramref name="count"/> equal-width buckets.</summary>
         public int width_bucket(double? operand, double? low, double? high, int count) => default!;
 
+        /// <summary>
+        /// Integer division truncating toward zero (<c>div(y, x)</c>) on <c>numeric</c> operands, so
+        /// <c>div(7, 2)</c> is <c>3</c> and <c>div(-7, 2)</c> is <c>-3</c>. Division by zero raises on
+        /// the server. A NULL argument yields NULL. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public decimal? div(decimal? y, decimal? x) => default!;
+
+        /// <summary>
+        /// The error function <c>erf(x)</c> of <paramref name="x"/>, in the range -1..1. A NULL argument
+        /// yields NULL. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public double? erf(double? x) => default!;
+
+        /// <summary>
+        /// The complementary error function <c>erfc(x)</c> = 1 - <c>erf(x)</c>, in the range 0..2. A
+        /// NULL argument yields NULL. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public double? erfc(double? x) => default!;
+
+        /// <summary>
+        /// A normally distributed random value with the given <paramref name="mean"/> and
+        /// <paramref name="stddev"/> (<c>random_normal</c>); the result is volatile, so the same query
+        /// returns a different value on every execution. A NULL argument yields NULL. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public double? random_normal(double? mean, double? stddev) => default!;
+
+        /// <summary>Arccosine in degrees (<c>acosd</c>). A NULL argument yields NULL. Gated per name by <see cref="IScalarFunctions.Supports"/>.</summary>
+        public double? acosd(double? x) => default!;
+
+        /// <summary>Arcsine in degrees (<c>asind</c>). A NULL argument yields NULL. Gated per name by <see cref="IScalarFunctions.Supports"/>.</summary>
+        public double? asind(double? x) => default!;
+
+        /// <summary>Arctangent in degrees (<c>atand</c>). A NULL argument yields NULL. Gated per name by <see cref="IScalarFunctions.Supports"/>.</summary>
+        public double? atand(double? x) => default!;
+
+        /// <summary>Arctangent of <paramref name="y"/>/<paramref name="x"/> in degrees, using the signs of both arguments (<c>atan2d</c>). A NULL argument yields NULL.</summary>
+        public double? atan2d(double? y, double? x) => default!;
+
+        /// <summary>Cosine in degrees (<c>cosd</c>). A NULL argument yields NULL. Gated per name by <see cref="IScalarFunctions.Supports"/>.</summary>
+        public double? cosd(double? x) => default!;
+
+        /// <summary>Cotangent in degrees (<c>cotd</c>). A NULL argument yields NULL. Gated per name by <see cref="IScalarFunctions.Supports"/>.</summary>
+        public double? cotd(double? x) => default!;
+
+        /// <summary>Sine in degrees (<c>sind</c>). A NULL argument yields NULL. Gated per name by <see cref="IScalarFunctions.Supports"/>.</summary>
+        public double? sind(double? x) => default!;
+
+        /// <summary>Tangent in degrees (<c>tand</c>). A NULL argument yields NULL. Gated per name by <see cref="IScalarFunctions.Supports"/>.</summary>
+        public double? tand(double? x) => default!;
+
+        /// <summary>
+        /// <c>gamma(x)</c> is refused: it does not exist on the pinned PostgreSQL 17.11 server (absent
+        /// from <c>pg_proc</c>, absent from the PG17 mathematical-functions table, and the name fails
+        /// with <c>42883</c>), so any SQL emitted for it would be rejected by the target server.
+        /// </summary>
+        /// <returns>Never returns; the call is refused when the query is translated.</returns>
+        public double? gamma(double? x) =>
+            throw new NotSupportedException(
+                "The gamma function is refused: it does not exist on the pinned PostgreSQL 17.11 server.");
+
+        /// <summary>
+        /// <c>tgamma(x)</c> is refused: it does not exist on the pinned PostgreSQL 17.11 server (absent
+        /// from <c>pg_proc</c> and the name fails with <c>42883</c>), so any SQL emitted for it would be
+        /// rejected by the target server.
+        /// </summary>
+        /// <returns>Never returns; the call is refused when the query is translated.</returns>
+        public double? tgamma(double? x) =>
+            throw new NotSupportedException(
+                "The tgamma function is refused: it does not exist on the pinned PostgreSQL 17.11 server.");
+
+        /// <summary>
+        /// <c>lgamma(x)</c> is refused: it does not exist on the pinned PostgreSQL 17.11 server (absent
+        /// from <c>pg_proc</c> and the name fails with <c>42883</c>), so any SQL emitted for it would be
+        /// rejected by the target server.
+        /// </summary>
+        /// <returns>Never returns; the call is refused when the query is translated.</returns>
+        public double? lgamma(double? x) =>
+            throw new NotSupportedException(
+                "The lgamma function is refused: it does not exist on the pinned PostgreSQL 17.11 server.");
+
+        /// <summary>
+        /// The number of decimal digits in the fractional part of <paramref name="value"/>
+        /// (<c>scale</c>, PostgreSQL). Trailing zeroes count, so <c>12.3400</c> has scale 4. A NULL
+        /// argument yields NULL. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public int? scale(decimal? value) => default!;
+
+        /// <summary>
+        /// The number of fractional digits that remain after the trailing zeroes of
+        /// <paramref name="value"/> are removed (<c>min_scale</c>, PostgreSQL 13+); <c>12.3400</c>
+        /// reports 2. A NULL argument yields NULL. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public int? min_scale(decimal? value) => default!;
+
+        /// <summary>
+        /// <paramref name="value"/> with its trailing fractional zeroes removed (<c>trim_scale</c>,
+        /// PostgreSQL 13+): <c>12.3400</c> becomes <c>12.34</c>. Only zeroes are removed, so this is
+        /// not rounding and an input without removable zeroes is returned unchanged. A NULL argument
+        /// yields NULL. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public decimal? trim_scale(decimal? value) => default!;
+
         /// <summary>Splits <paramref name="value"/> on <paramref name="delimiter"/> and returns the <paramref name="field"/>-th part (1-based).</summary>
         public string? split_part(string? value, string? delimiter, int field) => default!;
 
@@ -428,7 +757,305 @@ namespace NextORM.Core;
         /// <summary>The substring matched by the first POSIX regular expression match in <paramref name="value"/> with <paramref name="flags"/>.</summary>
         public string? regexp_substr(string? value, string? pattern, string? flags) => default!;
 
-        /// <summary>Builds an interval from its parts.</summary>
+        /// <summary>
+        /// The first POSIX regular-expression match of <paramref name="pattern"/> in
+        /// <paramref name="value"/> as a <c>text[]</c> of its captured groups — the whole match when the
+        /// pattern has no groups. A pattern with no match returns <see langword="null"/> (not an empty
+        /// array), and a NULL argument yields NULL. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string?[] regexp_match(string? value, string? pattern) => default!;
+
+        /// <summary>
+        /// <c>regexp_match(value, pattern, flags)</c>: the first match with the given
+        /// <c>g</c>/<c>i</c>/<c>n</c>/<c>p</c>/<c>w</c>/<c>x</c> flags. A pattern with no match returns
+        /// <see langword="null"/>, and a NULL argument yields NULL. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string?[] regexp_match(string? value, string? pattern, string? flags) => default!;
+
+        /// <summary>
+        /// Removes the longest string containing only whitespace from both ends of
+        /// <paramref name="value"/> (<c>btrim</c>, the one-argument form). A NULL argument yields NULL.
+        /// Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? btrim(string? value) => default!;
+
+        /// <summary>
+        /// Removes the longest string containing only the characters of <paramref name="characters"/>
+        /// from both ends of <paramref name="value"/> (<c>btrim</c>, two-argument form). The second
+        /// argument is a character set, not a substring. A NULL argument yields NULL. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? btrim(string? value, string? characters) => default!;
+
+        /// <summary>
+        /// The <c>bytea</c> form of <see cref="btrim(string?, string?)"/>: removes the leading and
+        /// trailing bytes that occur in <paramref name="bytesToTrim"/>. A NULL argument yields NULL.
+        /// Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public byte[]? btrim(byte[]? value, byte[]? bytesToTrim) => default!;
+
+        /// <summary>
+        /// Removes the longest string containing only the characters of <paramref name="characters"/>
+        /// from the start of <paramref name="value"/> (<c>ltrim</c>, two-argument form). The
+        /// one-argument form is the built-in <see cref="string.TrimStart()"/> translation. A NULL
+        /// argument yields NULL. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? ltrim(string? value, string? characters) => default!;
+
+        /// <summary>
+        /// The <c>bytea</c> form of <see cref="ltrim(string?, string?)"/>: removes the leading bytes
+        /// that occur in <paramref name="bytesToTrim"/>. A NULL argument yields NULL. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public byte[]? ltrim(byte[]? value, byte[]? bytesToTrim) => default!;
+
+        /// <summary>
+        /// Removes the longest string containing only the characters of <paramref name="characters"/>
+        /// from the end of <paramref name="value"/> (<c>rtrim</c>, two-argument form). The
+        /// one-argument form is the built-in <see cref="string.TrimEnd()"/> translation. A NULL
+        /// argument yields NULL. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? rtrim(string? value, string? characters) => default!;
+
+        /// <summary>
+        /// The <c>bytea</c> form of <see cref="rtrim(string?, string?)"/>: removes the trailing bytes
+        /// that occur in <paramref name="bytesToTrim"/>. A NULL argument yields NULL. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public byte[]? rtrim(byte[]? value, byte[]? bytesToTrim) => default!;
+
+        /// <summary>
+        /// True when <paramref name="value"/> begins with <paramref name="prefix"/> (<c>starts_with</c>,
+        /// collation-aware, case-sensitive unless the collation says otherwise). A NULL argument yields
+        /// NULL. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public bool? starts_with(string? value, string? prefix) => default!;
+
+        /// <summary>
+        /// Splits a qualified identifier into its dot-separated parts (<c>parse_ident</c>), removing the
+        /// quoting of each part. With <paramref name="strict"/> true an invalid identifier raises
+        /// instead of being truncated after the first error. Returns <c>text[]</c>; a NULL argument
+        /// yields NULL. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string?[] parse_ident(string? value, bool? strict) => default!;
+
+        /// <summary>
+        /// Quotes <paramref name="value"/> as an SQL identifier, adding double quotes only when required
+        /// (<c>quote_ident</c>): <c>a b</c> becomes <c>"a b"</c>, <c>test</c> stays unquoted. A NULL
+        /// argument yields NULL. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? quote_ident(string? value) => default!;
+
+        /// <summary>
+        /// Quotes <paramref name="value"/> as an SQL string literal, doubling embedded single quotes and
+        /// prefixing a backslash-containing value with <c>E</c> (<c>quote_literal</c>, the <c>text</c>
+        /// overload). A NULL argument yields NULL — use
+        /// <see cref="quote_nullable(string?)"/> to obtain the <c>NULL</c> keyword. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? quote_literal(string? value) => default!;
+
+        /// <summary>
+        /// Like <see cref="quote_literal(string?)"/>, but a NULL argument yields the four-character text
+        /// <c>NULL</c> instead of NULL (<c>quote_nullable</c>, the <c>text</c> overload). Gated per name
+        /// by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? quote_nullable(string? value) => default!;
+
+        /// <summary>
+        /// The one-argument <c>to_ascii(text)</c> is refused: it takes the source encoding from the
+        /// database encoding, and PostgreSQL 17 supports the conversion only from <c>LATIN1</c>,
+        /// <c>LATIN2</c>, <c>LATIN9</c> and <c>WIN1250</c>. The pinned fixture database is UTF8, so the
+        /// form raises <c>0A000</c> even for ASCII-only input. Use
+        /// <see cref="to_ascii(string?, string?)"/> or <see cref="to_ascii(string?, int)"/> with an
+        /// explicit encoding instead.
+        /// </summary>
+        /// <returns>Never returns; the call is refused when the query is translated.</returns>
+        public string? to_ascii(string? value) =>
+            throw new NotSupportedException(
+                "The one-argument to_ascii function is refused: PostgreSQL 17 supports the conversion only " +
+                "from LATIN1, LATIN2, LATIN9 and WIN1250, and the pinned fixture database is UTF8, so the " +
+                "form raises 0A000; use to_ascii(value, encoding).");
+
+        /// <summary>
+        /// <c>to_ascii(value, encoding)</c> with the encoding named as text (for example
+        /// <c>LATIN1</c>). A NULL argument yields NULL. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? to_ascii(string? value, string? encoding) => default!;
+
+        /// <summary>
+        /// <c>to_ascii(value, encoding)</c> with the encoding given as its numeric code — the
+        /// identifier reported by <c>pg_encoding_to_char</c> (<c>8</c> = <c>LATIN1</c>, <c>9</c> =
+        /// <c>LATIN2</c>, <c>16</c> = <c>LATIN9</c>, <c>29</c> = <c>WIN1250</c>). This is the documented
+        /// <c>to_ascii(text, integer)</c> overload. The code is validated by the server when the command
+        /// runs, so an unknown code raises <c>42704</c> instead of being refused while the query is
+        /// prepared. A NULL argument yields NULL. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? to_ascii(string? value, int encoding) => default!;
+
+        /// <summary>
+        /// The hexadecimal representation of <paramref name="value"/> (<c>to_hex</c>); negative values
+        /// keep the two's-complement sign, so <c>-1</c> is <c>ffffffff</c>. A NULL argument yields NULL.
+        /// Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? to_hex(int? value) => default!;
+
+        /// <summary>The hexadecimal representation of the 64-bit <paramref name="value"/> (<c>to_hex</c>). A NULL argument yields NULL.</summary>
+        public string? to_hex(long? value) => default!;
+
+        /// <summary>The octal representation of <paramref name="value"/> (<c>to_oct</c>). A NULL argument yields NULL.</summary>
+        public string? to_oct(int? value) => default!;
+
+        /// <summary>The octal representation of the 64-bit <paramref name="value"/> (<c>to_oct</c>). A NULL argument yields NULL.</summary>
+        public string? to_oct(long? value) => default!;
+
+        /// <summary>The binary representation of <paramref name="value"/> (<c>to_bin</c>). A NULL argument yields NULL.</summary>
+        public string? to_bin(int? value) => default!;
+
+        /// <summary>The binary representation of the 64-bit <paramref name="value"/> (<c>to_bin</c>). A NULL argument yields NULL.</summary>
+        public string? to_bin(long? value) => default!;
+
+        /// <summary>
+        /// Converts <paramref name="bytes"/> from the named encoding into the database encoding
+        /// (<c>convert_from</c>). A value that is not valid in that encoding raises on the server rather
+        /// than being replaced. A NULL argument yields NULL. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? convert_from(byte[]? bytes, string? encoding) => default!;
+
+        /// <summary>
+        /// Converts <paramref name="value"/> from the database encoding into the named encoding
+        /// (<c>convert_to</c>), returning <c>bytea</c>. A NULL argument yields NULL. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public byte[]? convert_to(string? value, string? encoding) => default!;
+
+        /// <summary>
+        /// Encodes <paramref name="bytes"/> into a textual form named by <paramref name="format"/>
+        /// (<c>encode</c>): <c>base64</c>, <c>hex</c> or <c>escape</c>. A NULL argument yields NULL.
+        /// Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? encode(byte[]? bytes, string? format) => default!;
+
+        /// <summary>
+        /// Decodes the textual <paramref name="value"/> written in <paramref name="format"/>
+        /// (<c>decode</c>: <c>base64</c>, <c>hex</c> or <c>escape</c>) back into <c>bytea</c>. Malformed
+        /// input raises on the server. A NULL argument yields NULL. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public byte[]? decode(string? value, string? format) => default!;
+
+        /// <summary>
+        /// The <paramref name="index"/>-th bit of the <c>bytea</c> <paramref name="bytes"/> (0 = least
+        /// significant bit of the first byte), as 0 or 1 (<c>get_bit(bytea, bigint)</c>). A NULL or
+        /// out-of-range argument raises on the server. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public int? get_bit(byte[]? bytes, long? index) => default!;
+
+        /// <summary>
+        /// <paramref name="bytes"/> with its <paramref name="index"/>-th bit set to
+        /// <paramref name="value"/> (0 or 1), returning <c>bytea</c>
+        /// (<c>set_bit(bytea, bigint, integer)</c>). Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public byte[]? set_bit(byte[]? bytes, long? index, int? value) => default!;
+
+        /// <summary>
+        /// The <paramref name="index"/>-th byte of <paramref name="bytes"/> (0-based), as an integer
+        /// (<c>get_byte(bytea, integer)</c>). A NULL or out-of-range argument raises on the server. Gated
+        /// per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public int? get_byte(byte[]? bytes, int? index) => default!;
+
+        /// <summary>
+        /// <paramref name="bytes"/> with its <paramref name="index"/>-th byte replaced by
+        /// <paramref name="value"/>, returning <c>bytea</c> (<c>set_byte(bytea, integer, integer)</c>).
+        /// Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public byte[]? set_byte(byte[]? bytes, int? index, int? value) => default!;
+
+        /// <summary>
+        /// The number of set bits in <paramref name="bytes"/> (<c>bit_count(bytea)</c>), as a
+        /// <c>bigint</c>. A NULL argument yields NULL. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public long? bit_count(byte[]? bytes) => default!;
+
+        /// <summary>
+        /// <c>crc32(bytea)</c> is refused: it was introduced in PostgreSQL 18 and does not exist on the
+        /// pinned 17.11 server (absent from <c>pg_proc</c>; the name fails with <c>42883</c>), so no SQL
+        /// that executes on the target server can be emitted.
+        /// </summary>
+        /// <returns>Never returns; the call is refused when the query is translated.</returns>
+        public int? crc32(byte[]? bytes) =>
+            throw new NotSupportedException(
+                "The crc32 function is refused: it was introduced in PostgreSQL 18 and does not exist on " +
+                "the pinned 17.11 server (absent from pg_proc; the name fails with 42883), so no SQL that " +
+                "executes on the target server can be emitted.");
+
+        /// <summary>
+        /// <c>crc32c(bytea)</c> is refused for the same reason as <see cref="crc32(byte[])"/>: it is a
+        /// PostgreSQL 18 function absent from the pinned 17.11 server.
+        /// </summary>
+        /// <returns>Never returns; the call is refused when the query is translated.</returns>
+        public int? crc32c(byte[]? bytes) =>
+            throw new NotSupportedException(
+                "The crc32c function is refused: it was introduced in PostgreSQL 18 and does not exist on " +
+                "the pinned 17.11 server (absent from pg_proc; the name fails with 42883), so no SQL that " +
+                "executes on the target server can be emitted.");
+
+        /// <summary>
+        /// The Unicode normalization of <paramref name="value"/> in the form named by
+        /// <paramref name="form"/> (<c>normalize</c>): <c>NFC</c>, <c>NFD</c>, <c>NFKC</c> or
+        /// <c>NFKD</c>. The form is a grammar keyword in PostgreSQL, not a string value, so it must be a
+        /// constant and is rendered unquoted. A NULL argument yields NULL. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? normalize(string? value, string? form) => default!;
+
+        /// <summary>
+        /// Interprets backslash escapes (<c>\XXXX</c>, <c>\+XXXXXX</c>, <c>\uXXXX</c>,
+        /// <c>\UXXXXXXXX</c>) and doubled backslashes in <paramref name="value"/> as Unicode code
+        /// points (<c>unistr</c>). A NULL argument yields NULL. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? unistr(string? value) => default!;
+
+        /// <summary>
+        /// Splits <paramref name="value"/> on the <paramref name="delimiter"/> string and returns one
+        /// row per fragment (<c>string_to_table</c>), select
+        /// <see cref="SqlFunctions.IStringToTableRow.Value"/>. Use through <c>ctx.From(() =&gt; ...)</c>.
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.IStringToTableRow> string_to_table(string? value, string? delimiter) => new("string_to_table");
+
+        /// <summary>
+        /// <c>string_to_table(value, delimiter, null_string)</c>: fragments equal to
+        /// <paramref name="nullString"/> become NULL rows; the other fragments are unchanged. Use through
+        /// <c>ctx.From(() =&gt; ...)</c>.
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.IStringToTableRow> string_to_table(string? value, string? delimiter, string? nullString) => new("string_to_table");
+
+        /// <summary>
+        /// <c>casefold(text)</c> is refused: it was introduced in PostgreSQL 18 and does not exist on
+        /// the pinned 17.11 server (absent from <c>pg_proc</c>; the name fails with <c>42883</c>), so
+        /// any SQL emitted for it would be rejected by the target server.
+        /// </summary>
+        /// <returns>Never returns; the call is refused when the query is translated.</returns>
+        public string? casefold(string? value) =>
+            throw new NotSupportedException(
+                "The casefold function is refused: it was introduced in PostgreSQL 18 and does not exist on the pinned 17.11 server.");
+
+        /// <summary>
+        /// Builds an interval from its parts. A mapped <see cref="TimeSpan"/> result is supported only
+        /// for zero-month values: the mapper rejects a returned interval with a non-zero month component
+        /// (either sign) through <see cref="InvalidCastException"/> and converts the zero-month days and
+        /// microseconds exactly.
+        /// </summary>
         public TimeSpan? make_interval(int years, int months, int days, int hours, int minutes, double seconds) => default!;
 
         /// <summary>
@@ -440,17 +1067,27 @@ namespace NextORM.Core;
         /// <summary>Builds a timestamp from its parts (<c>make_timestamp</c>).</summary>
         public DateTime? make_timestamp(int year, int month, int day, int hour, int minute, double second) => default!;
 
-        /// <summary>Adjusts an interval so that 30-day units are represented as months.</summary>
+        /// <summary>
+        /// Adjusts an interval so that 30-day units are represented as months, so the returned value can
+        /// carry a month component: the mapper rejects a non-zero month component (either sign) through
+        /// <see cref="InvalidCastException"/> and converts a zero-month result exactly.
+        /// </summary>
         public TimeSpan? justify_days(TimeSpan? interval) => default!;
 
-        /// <summary>Adjusts an interval so that 24-hour units are represented as days.</summary>
+        /// <summary>
+        /// Adjusts an interval so that 24-hour units are represented as days. The returned interval is
+        /// subject to the same mapper rule: a non-zero month component (either sign) is rejected through
+        /// <see cref="InvalidCastException"/> and a zero-month value converts exactly.
+        /// </summary>
         public TimeSpan? justify_hours(TimeSpan? interval) => default!;
 
         /// <summary>
         /// The interval between two timestamps, subtracting <paramref name="b"/> from
         /// <paramref name="a"/> (<c>age</c>). PostgreSQL's <c>age</c> returns an <c>interval</c> that can
-        /// carry whole months, which a <see cref="TimeSpan"/> cannot represent; PostgreSQL treats a
-        /// month as 30 days when the value is read back as a <see cref="TimeSpan"/>.
+        /// carry whole months, which a <see cref="TimeSpan"/> cannot represent: on the mapped-column path
+        /// the mapper rejects a returned interval with a non-zero month component (either sign) through
+        /// <see cref="InvalidCastException"/> naming calendar months, and a month is never read back as 30
+        /// days. A zero-month value converts exactly. Other materialisation paths are not covered.
         /// </summary>
         public TimeSpan? age(DateTime? a, DateTime? b) => default!;
 
@@ -460,6 +1097,141 @@ namespace NextORM.Core;
         /// <c>"15 minutes"</c>; it is cast to <c>interval</c> in SQL.
         /// </summary>
         public DateTime? date_bin(string? stride, DateTime? source, DateTime? origin) => default!;
+
+        /// <summary>
+        /// Subtracts <paramref name="interval"/> from <paramref name="value"/> (<c>date_subtract</c> with
+        /// <c>timestamp with time zone</c>). The result is a <c>timestamp with time zone</c>; a NULL
+        /// argument yields NULL. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public DateTime? date_subtract(DateTime? value, TimeSpan? interval) => default!;
+
+        /// <summary>
+        /// Subtracts <paramref name="interval"/> from <paramref name="value"/> in the named
+        /// <paramref name="zone"/> (<c>date_subtract(timestamp with time zone, interval, text)</c>). A
+        /// NULL argument yields NULL. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public DateTime? date_subtract(DateTime? value, TimeSpan? interval, string? zone) => default!;
+
+        /// <summary>
+        /// Adjusts an interval so that 24-hour units are represented as days and 30-day units as months
+        /// (<c>justify_interval</c>). The returned interval can therefore carry a month component: an
+        /// interval with a non-zero month component (either sign) is rejected through
+        /// <see cref="InvalidCastException"/> when materialised as a <see cref="TimeSpan"/>, and a
+        /// zero-month value converts exactly. A NULL argument yields NULL. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public TimeSpan? justify_interval(TimeSpan? interval) => default!;
+
+        /// <summary>
+        /// Builds a <c>timestamp with time zone</c> from its parts in the session time zone
+        /// (<c>make_timestamptz</c>). A NULL argument yields NULL. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public DateTime? make_timestamptz(int? year, int? month, int? day, int? hour, int? minute, double? second) => default!;
+
+        /// <summary>
+        /// Builds a <c>timestamp with time zone</c> from its parts in the named
+        /// <paramref name="zone"/> (<c>make_timestamptz(..., timezone text)</c>). A NULL argument yields
+        /// NULL. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public DateTime? make_timestamptz(int? year, int? month, int? day, int? hour, int? minute, double? second, string? zone) => default!;
+
+        /// <summary>
+        /// The actual current time at the instant of the call (<c>clock_timestamp</c>), as a
+        /// <c>timestamp with time zone</c>. Unlike <c>statement_timestamp</c> and
+        /// <c>transaction_timestamp</c> it advances within a statement. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public DateTime? clock_timestamp() => default!;
+
+        /// <summary>
+        /// The time at which the current statement started (<c>statement_timestamp</c>), as a
+        /// <c>timestamp with time zone</c>. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public DateTime? statement_timestamp() => default!;
+
+        /// <summary>
+        /// The time at which the current transaction started (<c>transaction_timestamp</c>), as a
+        /// <c>timestamp with time zone</c>. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public DateTime? transaction_timestamp() => default!;
+
+        /// <summary>
+        /// The current date and time as text, including the time zone abbreviation
+        /// (<c>timeofday</c>, for example <c>Tue Oct 27 22:21:04.335170 2026 UTC</c>). Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? timeofday() => default!;
+
+        /// <summary>
+        /// True when the <c>date</c> <paramref name="value"/> is finite — that is, not
+        /// <c>infinity</c>/<c>-infinity</c> (<c>isfinite(date)</c>). A NULL argument yields NULL. Gated
+        /// per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public bool? isfinite(DateOnly? value) => default!;
+
+        /// <summary>
+        /// True when the <c>timestamp</c> <paramref name="value"/> is finite — that is, not
+        /// <c>infinity</c>/<c>-infinity</c> (<c>isfinite(timestamp)</c>). A NULL argument yields NULL.
+        /// Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public bool? isfinite(DateTime? value) => default!;
+
+        /// <summary>
+        /// True when the <c>interval</c> <paramref name="value"/> is finite (<c>isfinite(interval)</c>).
+        /// A NULL argument yields NULL. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public bool? isfinite(TimeSpan? value) => default!;
+
+        /// <summary>
+        /// <c>pg_sleep(seconds)</c> is refused: it returns <c>void</c>, and the expression model has no
+        /// void-typed projection, so no faithful result type exists. Declaring any CLR result would
+        /// return a value the server never sends; the call is refused while the query is translated and
+        /// no SQL is emitted.
+        /// </summary>
+        /// <returns>Never returns; the call is refused when the query is translated.</returns>
+        public void pg_sleep(double? seconds) =>
+            throw new NotSupportedException(
+                "The pg_sleep function is refused: it returns void, and the expression model has no " +
+                "void-typed projection, so no faithful CLR result exists; a fabricated value is never " +
+                "returned.");
+
+        /// <summary>
+        /// <c>pg_sleep_for(interval)</c> is refused for the same reason as <see cref="pg_sleep(double?)"/>:
+        /// it returns <c>void</c>, so there is no faithful expression result.
+        /// </summary>
+        /// <returns>Never returns; the call is refused when the query is translated.</returns>
+        public void pg_sleep_for(TimeSpan? interval) =>
+            throw new NotSupportedException(
+                "The pg_sleep_for function is refused: it returns void, and the expression model has no " +
+                "void-typed projection, so no faithful CLR result exists; a fabricated value is never " +
+                "returned.");
+
+        /// <summary>
+        /// <c>pg_sleep_until(timestamp with time zone)</c> is refused for the same reason as
+        /// <see cref="pg_sleep(double?)"/>: it returns <c>void</c>, so there is no faithful expression
+        /// result.
+        /// </summary>
+        /// <returns>Never returns; the call is refused when the query is translated.</returns>
+        public void pg_sleep_until(DateTime? target) =>
+            throw new NotSupportedException(
+                "The pg_sleep_until function is refused: it returns void, and the expression model has no " +
+                "void-typed projection, so no faithful CLR result exists; a fabricated value is never " +
+                "returned.");
+
+        /// <summary>
+        /// Extracts the <c>timestamp with time zone</c> embedded in a version 1 (or version 7) UUID
+        /// (<c>uuid_extract_timestamp</c>); UUIDs of other versions and the nil UUID yield NULL. Gated
+        /// per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public DateTime? uuid_extract_timestamp(Guid? value) => default!;
+
+        /// <summary>
+        /// The version number embedded in <paramref name="value"/> (<c>uuid_extract_version</c>), for
+        /// example <c>1</c> or <c>4</c>; the nil UUID yields NULL. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public short? uuid_extract_version(Guid? value) => default!;
 
         /// <summary>Formats a timestamp with a template.</summary>
         public string? to_char(DateTime? value, string? formatString) => default!;
@@ -494,8 +1266,535 @@ namespace NextORM.Core;
         /// <summary>The current timestamp without time zone.</summary>
         public DateTime? localtimestamp() => default!;
 
+        /// <summary>
+        /// The current role (<c>current_role</c>), normally the session user; the value is read as a
+        /// <c>name</c>. A bare SQL keyword rather than a call, so PostgreSQL renders it unparenthesised;
+        /// other providers and the in-memory provider refuse the name.
+        /// </summary>
+        public string? current_role() => default!;
+
+        /// <summary>
+        /// The name of the current database (<c>current_catalog</c>), read as a <c>name</c>. A bare SQL
+        /// keyword rather than a call, so PostgreSQL renders it unparenthesised; other providers and the
+        /// in-memory provider refuse the name.
+        /// </summary>
+        public string? current_catalog() => default!;
+
         /// <summary>The type name of <paramref name="value"/> (<c>pg_typeof</c>).</summary>
         public string? pg_typeof(object? value) => default!;
+
+        /// <summary>
+        /// The names of the schemas on the search path (<c>current_schemas(include_implicit)</c>), most
+        /// significant first; with <paramref name="includeImplicit"/> true the implicit system schemas are
+        /// included. The result is a <c>name[]</c>, read as a <see cref="string"/> array. Gated per name
+        /// by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string?[] current_schemas(bool? includeImplicit) => default!;
+
+        /// <summary>
+        /// The time the postmaster started (<c>pg_postmaster_start_time()</c>), as
+        /// <c>timestamp with time zone</c>. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public DateTime? pg_postmaster_start_time() => default!;
+
+        /// <summary>
+        /// The path of the current log file for the default (stderr) log format
+        /// (<c>pg_current_logfile()</c>), or NULL when the server does not collect logs. Gated per name
+        /// by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_current_logfile() => default!;
+
+        /// <summary>
+        /// The path of the current log file for the log format named <paramref name="format"/>
+        /// (<c>pg_current_logfile(format)</c>): <c>stderr</c>, <c>csvlog</c> or <c>jsonlog</c>; any other
+        /// format raises an error and an uncollected format yields NULL. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_current_logfile(string? format) => default!;
+
+        /// <summary>
+        /// The time the configuration files were last loaded (<c>pg_conf_load_time()</c>). Gated per name
+        /// by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public DateTime? pg_conf_load_time() => default!;
+
+        /// <summary>
+        /// Whether JIT compilation is available in this server process (<c>pg_jit_available()</c>).
+        /// Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public bool? pg_jit_available() => default!;
+
+        /// <summary>
+        /// The OID of this session's temporary schema, or <c>0</c> when none was created
+        /// (<c>pg_my_temp_schema()</c>); the OID is read as its text form. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_my_temp_schema() => default!;
+
+        /// <summary>
+        /// Whether the temporary schema identified by <paramref name="schemaOid"/> belongs to another
+        /// session (<c>pg_is_other_temp_schema(oid)</c>). Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public bool? pg_is_other_temp_schema(string? schemaOid) => default!;
+
+        /// <summary>
+        /// The fraction of the asynchronous notification queue currently in use, between 0 and 1
+        /// (<c>pg_notification_queue_usage()</c>). Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public double? pg_notification_queue_usage() => default!;
+
+        /// <summary>
+        /// The process IDs of the sessions holding a lock that blocks the session
+        /// <paramref name="pid"/> (<c>pg_blocking_pids(pid)</c>); an empty array when nothing blocks it.
+        /// Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public int[]? pg_blocking_pids(int? pid) => default!;
+
+        /// <summary>
+        /// The process IDs of the sessions holding a safe-snapshot conflict that blocks the session
+        /// <paramref name="pid"/> (<c>pg_safe_snapshot_blocking_pids(pid)</c>). Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public int[]? pg_safe_snapshot_blocking_pids(int? pid) => default!;
+
+        /// <summary>
+        /// The current nesting depth of trigger execution (<c>pg_trigger_depth()</c>), zero outside a
+        /// trigger. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public int? pg_trigger_depth() => default!;
+
+        /// <summary>
+        /// Whether the collation with the given <paramref name="oid"/> is visible in the current search
+        /// path (<c>pg_collation_is_visible(oid)</c>); NULL when the OID names no such object. The OID is passed in its
+        /// text form. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public bool? pg_collation_is_visible(string? oid) => default!;
+
+        /// <summary>
+        /// Whether the encoding conversion with the given <paramref name="oid"/> is visible in the current search
+        /// path (<c>pg_conversion_is_visible(oid)</c>); NULL when the OID names no such object. The OID is passed in its
+        /// text form. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public bool? pg_conversion_is_visible(string? oid) => default!;
+
+        /// <summary>
+        /// Whether the function or procedure with the given <paramref name="oid"/> is visible in the current search
+        /// path (<c>pg_function_is_visible(oid)</c>); NULL when the OID names no such object. The OID is passed in its
+        /// text form. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public bool? pg_function_is_visible(string? oid) => default!;
+
+        /// <summary>
+        /// Whether the operator class with the given <paramref name="oid"/> is visible in the current search
+        /// path (<c>pg_opclass_is_visible(oid)</c>); NULL when the OID names no such object. The OID is passed in its
+        /// text form. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public bool? pg_opclass_is_visible(string? oid) => default!;
+
+        /// <summary>
+        /// Whether the operator with the given <paramref name="oid"/> is visible in the current search
+        /// path (<c>pg_operator_is_visible(oid)</c>); NULL when the OID names no such object. The OID is passed in its
+        /// text form. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public bool? pg_operator_is_visible(string? oid) => default!;
+
+        /// <summary>
+        /// Whether the operator family with the given <paramref name="oid"/> is visible in the current search
+        /// path (<c>pg_opfamily_is_visible(oid)</c>); NULL when the OID names no such object. The OID is passed in its
+        /// text form. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public bool? pg_opfamily_is_visible(string? oid) => default!;
+
+        /// <summary>
+        /// Whether the extended statistics object with the given <paramref name="oid"/> is visible in the current search
+        /// path (<c>pg_statistics_obj_is_visible(oid)</c>); NULL when the OID names no such object. The OID is passed in its
+        /// text form. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public bool? pg_statistics_obj_is_visible(string? oid) => default!;
+
+        /// <summary>
+        /// Whether the table, view or other relation with the given <paramref name="oid"/> is visible in the current search
+        /// path (<c>pg_table_is_visible(oid)</c>); NULL when the OID names no such object. The OID is passed in its
+        /// text form. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public bool? pg_table_is_visible(string? oid) => default!;
+
+        /// <summary>
+        /// Whether the text-search configuration with the given <paramref name="oid"/> is visible in the current search
+        /// path (<c>pg_ts_config_is_visible(oid)</c>); NULL when the OID names no such object. The OID is passed in its
+        /// text form. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public bool? pg_ts_config_is_visible(string? oid) => default!;
+
+        /// <summary>
+        /// Whether the text-search dictionary with the given <paramref name="oid"/> is visible in the current search
+        /// path (<c>pg_ts_dict_is_visible(oid)</c>); NULL when the OID names no such object. The OID is passed in its
+        /// text form. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public bool? pg_ts_dict_is_visible(string? oid) => default!;
+
+        /// <summary>
+        /// Whether the text-search parser with the given <paramref name="oid"/> is visible in the current search
+        /// path (<c>pg_ts_parser_is_visible(oid)</c>); NULL when the OID names no such object. The OID is passed in its
+        /// text form. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public bool? pg_ts_parser_is_visible(string? oid) => default!;
+
+        /// <summary>
+        /// Whether the text-search template with the given <paramref name="oid"/> is visible in the current search
+        /// path (<c>pg_ts_template_is_visible(oid)</c>); NULL when the OID names no such object. The OID is passed in its
+        /// text form. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public bool? pg_ts_template_is_visible(string? oid) => default!;
+
+        /// <summary>
+        /// Whether the data type with the given <paramref name="oid"/> is visible in the current search
+        /// path (<c>pg_type_is_visible(oid)</c>); NULL when the OID names no type. The OID is passed in
+        /// its text form. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public bool? pg_type_is_visible(string? oid) => default!;
+
+        /// <summary>
+        /// The numeric code of the encoding called <paramref name="name"/>
+        /// (<c>pg_char_to_encoding(name)</c>), or <c>-1</c> when the name is not a known encoding.
+        /// Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public int? pg_char_to_encoding(string? name) => default!;
+
+        /// <summary>
+        /// The canonical name of the encoding with the given <paramref name="code"/>
+        /// (<c>pg_encoding_to_char(code)</c>); code <c>0</c> is <c>SQL_ASCII</c>, and an unknown code
+        /// yields the empty string. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_encoding_to_char(int? code) => default!;
+
+        /// <summary>
+        /// The base type of <paramref name="type"/> (<c>pg_basetype(regtype)</c>) in its text form, e.g.
+        /// <c>integer</c> for <c>integer</c> and <c>integer[]</c> for an integer array; an unknown type
+        /// name raises a server error. The <c>regtype</c> result is cast to text because the driver
+        /// cannot read a <c>regtype</c>. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_basetype(string? type) => default!;
+
+        /// <summary>
+        /// A human-readable description of a catalog object
+        /// (<c>pg_describe_object(classid, objid, objsubid)</c>), e.g. <c>table pg_class</c>; NULL when
+        /// the OIDs name no object. Both OIDs are passed in their text form. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_describe_object(string? classOid, string? objectOid, int? objectSubId) => default!;
+
+        /// <summary>
+        /// The file-system location of the tablespace with the given <paramref name="oid"/>
+        /// (<c>pg_tablespace_location(oid)</c>); the empty string for the default tablespace. The OID is
+        /// passed in its text form. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_tablespace_location(string? oid) => default!;
+
+        /// <summary>
+        /// The flags of the run-time setting <paramref name="setting"/>
+        /// (<c>pg_settings_get_flags(setting)</c>), e.g. <c>EXPLAIN</c>; an empty array when it has none
+        /// and NULL for an unknown setting. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string?[] pg_settings_get_flags(string? setting) => default!;
+
+        /// <summary>
+        /// Whether the index has the named property (<c>pg_index_has_property(index, property)</c>), e.g.
+        /// <c>clusterable</c>; NULL when the property is not recognised. The index is a <c>regclass</c>
+        /// name or a numeric OID in text form. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public bool? pg_index_has_property(string? index, string? property) => default!;
+
+        /// <summary>
+        /// Whether the index access method has the named property
+        /// (<c>pg_indexam_has_property(amoid, property)</c>), e.g. <c>can_order</c>; NULL when the
+        /// property is not recognised. The access-method OID is passed in its text form. Gated per name
+        /// by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public bool? pg_indexam_has_property(string? accessMethodOid, string? property) => default!;
+
+        /// <summary>
+        /// Whether the index column has the named property
+        /// (<c>pg_index_column_has_property(index, column, property)</c>), e.g. <c>orderable</c>; NULL
+        /// when the property is not recognised. The index is a <c>regclass</c> name or a numeric OID in
+        /// text form. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public bool? pg_index_column_has_property(string? index, int? columnNumber, string? property) => default!;
+
+        /// <summary>
+        /// Whether <paramref name="value"/> is valid input for the type <paramref name="typeName"/>
+        /// (<c>pg_input_is_valid(value, type)</c>), without raising an error; an unknown type name is
+        /// still an error. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public bool? pg_input_is_valid(string? value, string? typeName) => default!;
+
+        /// <summary>
+        /// The sequence owned by a serial or identity column
+        /// (<c>pg_get_serial_sequence(table, column)</c>), or NULL when the column has none; an unknown
+        /// column is an error. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_get_serial_sequence(string? table, string? column) => default!;
+
+        /// <summary>
+        /// The definition of the constraint with the given <paramref name="constraintOid"/>
+        /// (<c>pg_get_constraintdef(oid)</c>). Refused together with <see cref="pg_get_expr(object?, string?)"/>:
+        /// both render a stored node tree as SQL text, and the node-tree argument of <c>pg_get_expr</c>
+        /// cannot be called at all, because PostgreSQL requires a <c>pg_node_tree</c> argument and a value
+        /// of that type cannot be produced from CLR (<c>cannot accept a value of type pg_node_tree</c>).
+        /// Read the constraint text from <c>pg_constraint.conbin</c> through a raw command instead.
+        /// </summary>
+        /// <returns>Never returns; the call is refused when the query is translated.</returns>
+        public string? pg_get_constraintdef(string? constraintOid) =>
+            throw new NotSupportedException(GetConstraintdefRefusal);
+
+        /// <summary>
+        /// The definition of the constraint with the given <paramref name="constraintOid"/>, pretty-printed
+        /// when <paramref name="pretty"/> is true (<c>pg_get_constraintdef(oid, boolean)</c>). Refused with
+        /// <see cref="pg_get_constraintdef(string?)"/>.
+        /// </summary>
+        /// <returns>Never returns; the call is refused when the query is translated.</returns>
+        public string? pg_get_constraintdef(string? constraintOid, bool? pretty) =>
+            throw new NotSupportedException(GetConstraintdefRefusal);
+
+        /// <summary>
+        /// The expression stored in a <c>pg_node_tree</c>
+        /// (<c>pg_get_expr(pg_node_tree, oid)</c>). Refused: PostgreSQL requires a <c>pg_node_tree</c>
+        /// argument and a value of that type cannot be produced from CLR — the pinned 17.11 server answers
+        /// <c>cannot accept a value of type pg_node_tree</c>. There is no CLR type that can carry the
+        /// stored tree, so no form of this function can ever be prepared.
+        /// </summary>
+        /// <returns>Never returns; the call is refused when the query is translated.</returns>
+        public string? pg_get_expr(object? nodeTree, string? relationOid) =>
+            throw new NotSupportedException(GetExprRefusal);
+
+        /// <summary>
+        /// The expression stored in a <c>pg_node_tree</c>, pretty-printed when
+        /// <paramref name="pretty"/> is true (<c>pg_get_expr(pg_node_tree, oid, boolean)</c>). Refused with
+        /// <see cref="pg_get_expr(object?, string?)"/>.
+        /// </summary>
+        /// <returns>Never returns; the call is refused when the query is translated.</returns>
+        public string? pg_get_expr(object? nodeTree, string? relationOid, bool? pretty) =>
+            throw new NotSupportedException(GetExprRefusal);
+
+        /// <summary>
+        /// The argument list of the function with the given <paramref name="functionOid"/>
+        /// (<c>pg_get_function_arguments(oid)</c>), with argument names and defaults; the empty string for a
+        /// function without arguments. The OID is passed in its text form. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_get_function_arguments(string? functionOid) => default!;
+
+        /// <summary>
+        /// The identity argument list of the function with the given <paramref name="functionOid"/>
+        /// (<c>pg_get_function_identity_arguments(oid)</c>), without names and defaults; the form used to
+        /// identify the function in <c>ALTER</c>/<c>DROP</c>. The OID is passed in its text form. Gated per
+        /// name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_get_function_identity_arguments(string? functionOid) => default!;
+
+        /// <summary>
+        /// The result type of the function with the given <paramref name="functionOid"/>
+        /// (<c>pg_get_function_result(oid)</c>), e.g. <c>integer</c> or <c>TABLE(...)</c>. The OID is passed
+        /// in its text form. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_get_function_result(string? functionOid) => default!;
+
+        /// <summary>
+        /// The complete <c>CREATE OR REPLACE FUNCTION</c> statement of the function with the given
+        /// <paramref name="functionOid"/> (<c>pg_get_functiondef(oid)</c>); an aggregate or a window
+        /// function is an error. The OID is passed in its text form. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_get_functiondef(string? functionOid) => default!;
+
+        /// <summary>
+        /// The <c>CREATE INDEX</c> statement of the index with the given <paramref name="indexOid"/>
+        /// (<c>pg_get_indexdef(oid)</c>). The OID is passed in its text form. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_get_indexdef(string? indexOid) => default!;
+
+        /// <summary>
+        /// The definition of one index column of the index with the given <paramref name="indexOid"/>
+        /// (<c>pg_get_indexdef(oid, integer, boolean)</c>); an out-of-range column is an error. The OID is
+        /// passed in its text form. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_get_indexdef(string? indexOid, int? columnNumber, bool? pretty) => default!;
+
+        /// <summary>
+        /// The <c>FOR VALUES</c> clause of the partition bound of the relation with the given
+        /// <paramref name="relationOid"/> (<c>pg_get_partition_constraintdef(oid)</c>); an error when the
+        /// relation is not a partition. The OID is passed in its text form. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_get_partition_constraintdef(string? relationOid) => default!;
+
+        /// <summary>
+        /// The partition key of the partitioned table with the given <paramref name="relationOid"/>
+        /// (<c>pg_get_partkeydef(oid)</c>), e.g. <c>RANGE (id)</c>; an error when the relation is not
+        /// partitioned. The OID is passed in its text form. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_get_partkeydef(string? relationOid) => default!;
+
+        /// <summary>
+        /// The <c>CREATE RULE</c> statement of the rule with the given <paramref name="ruleOid"/>
+        /// (<c>pg_get_ruledef(oid)</c>). The OID is passed in its text form. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_get_ruledef(string? ruleOid) => default!;
+
+        /// <summary>
+        /// The <c>CREATE RULE</c> statement of the rule with the given <paramref name="ruleOid"/>,
+        /// pretty-printed when <paramref name="pretty"/> is true (<c>pg_get_ruledef(oid, boolean)</c>). The
+        /// OID is passed in its text form. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_get_ruledef(string? ruleOid, bool? pretty) => default!;
+
+        /// <summary>
+        /// The <c>CREATE STATISTICS</c> statement of the extended statistics object with the given
+        /// <paramref name="statisticsOid"/> (<c>pg_get_statisticsobjdef(oid)</c>). The OID is passed in its
+        /// text form. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_get_statisticsobjdef(string? statisticsOid) => default!;
+
+        /// <summary>
+        /// The <c>CREATE TRIGGER</c> statement of the trigger with the given <paramref name="triggerOid"/>
+        /// (<c>pg_get_triggerdef(oid)</c>). The OID is passed in its text form. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_get_triggerdef(string? triggerOid) => default!;
+
+        /// <summary>
+        /// The <c>CREATE TRIGGER</c> statement of the trigger with the given <paramref name="triggerOid"/>,
+        /// pretty-printed when <paramref name="pretty"/> is true (<c>pg_get_triggerdef(oid, boolean)</c>).
+        /// The OID is passed in its text form. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_get_triggerdef(string? triggerOid, bool? pretty) => default!;
+
+        /// <summary>
+        /// The name of the role with the given <paramref name="roleOid"/> (<c>pg_get_userbyid(oid)</c>), or
+        /// <c>unknown (OID=N)</c> when no role has that OID. The OID is passed in its text form. Gated per
+        /// name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_get_userbyid(string? roleOid) => default!;
+
+        /// <summary>
+        /// The reconstructed <c>SELECT</c> of the view named <paramref name="view"/>
+        /// (<c>pg_get_viewdef(text)</c>), where the argument is a view name or a numeric OID in text form
+        /// (rendered through a <c>to_regclass</c> cast; an unknown name yields NULL). Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_get_viewdef(string? view) => default!;
+
+        /// <summary>
+        /// The reconstructed <c>SELECT</c> of the view named <paramref name="view"/>, pretty-printed when
+        /// <paramref name="pretty"/> is true (<c>pg_get_viewdef(text, boolean)</c>); the name or OID goes
+        /// through a <c>to_regclass</c> cast. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_get_viewdef(string? view, bool? pretty) => default!;
+
+        /// <summary>
+        /// The reconstructed <c>SELECT</c> of the view with the given <paramref name="viewOid"/>
+        /// (<c>pg_get_viewdef(oid, integer)</c>), pretty-printed when <paramref name="pretty"/> is true.
+        /// The OID is passed in its text form (<c>to_regclass</c>). Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_get_viewdef(string? viewOid, int? pretty) => default!;
+
+        /// <summary>
+        /// Whether the current user has the privilege <paramref name="privilege"/> on the role
+        /// <paramref name="role"/> (<c>pg_has_role(name, text)</c>); the role may also be given as a numeric
+        /// OID in text form (<c>pg_has_role(oid, text)</c>), since it is rendered through a <c>regrole</c>
+        /// cast. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public bool? pg_has_role(string? role, string? privilege) => default!;
+
+        /// <summary>
+        /// Whether the current user has <paramref name="privilege"/> on <paramref name="role"/>, with
+        /// <paramref name="membership"/> naming the membership to check
+        /// (<c>pg_has_role(name, name, text)</c>); either role may be a numeric OID in text form, since both
+        /// are rendered through a <c>regrole</c> cast. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public bool? pg_has_role(string? role, string? membership, string? privilege) => default!;
+
+        /// <summary>
+        /// The current transaction snapshot (<c>pg_current_snapshot()</c>) in its textual form, e.g.
+        /// <c>100:104:100,102</c>; read as text because the driver cannot read a <c>pg_snapshot</c>. The
+        /// value can be passed back to <c>pg_snapshot_xmax</c>, <c>pg_snapshot_xmin</c> and
+        /// <c>pg_visible_in_snapshot</c>, which accept this textual form.
+        /// Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_current_snapshot() => default!;
+
+        /// <summary>
+        /// The current transaction id (<c>pg_current_xact_id()</c>) in its textual form; read as text
+        /// because the driver cannot read an <c>xid8</c>. A write transaction is assigned one lazily, so
+        /// this form assigns one. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_current_xact_id() => default!;
+
+        /// <summary>
+        /// The transaction id already assigned to the current transaction, or NULL when none is
+        /// (<c>pg_current_xact_id_if_assigned()</c>), in its textual form; read as text because the driver
+        /// cannot read an <c>xid8</c>. Unlike <see cref="pg_current_xact_id()"/> it assigns nothing. Gated
+        /// per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_current_xact_id_if_assigned() => default!;
+
+        /// <summary>
+        /// The highest transaction id of the snapshot <paramref name="snapshot"/>
+        /// (<c>pg_snapshot_xmax(pg_snapshot)</c>) in its textual form; the snapshot is the text produced by
+        /// <see cref="pg_current_snapshot()"/>. The <c>xid8</c> result is read as text because the driver
+        /// cannot read it. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_snapshot_xmax(string? snapshot) => default!;
+
+        /// <summary>
+        /// The lowest transaction id still in progress in the snapshot <paramref name="snapshot"/>
+        /// (<c>pg_snapshot_xmin(pg_snapshot)</c>) in its textual form; the <c>xid8</c> result is read as
+        /// text because the driver cannot read it. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_snapshot_xmin(string? snapshot) => default!;
+
+        /// <summary>
+        /// Whether the transaction <paramref name="xid"/> is visible in <paramref name="snapshot"/>
+        /// (<c>pg_visible_in_snapshot(xid8, pg_snapshot)</c>); both arguments are the textual forms.
+        /// Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public bool? pg_visible_in_snapshot(string? xid, string? snapshot) => default!;
+
+        /// <summary>
+        /// The commit time of the transaction <paramref name="xid"/> (<c>pg_xact_commit_timestamp(xid)</c>).
+        /// The time exists only for a transaction that committed while <c>track_commit_timestamp</c> was
+        /// enabled (a restart-only setting); otherwise the server raises SQLSTATE 55000
+        /// (<c>could not get commit timestamp data</c>). The <c>xid</c> argument is passed in its numeric
+        /// text form (the driver cannot bind an <c>xid</c>, and PostgreSQL has no integer-to-xid cast).
+        /// Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public DateTime? pg_xact_commit_timestamp(string? xid) => default!;
+
+        /// <summary>
+        /// The status of the transaction <paramref name="xid"/>
+        /// (<c>pg_xact_status(xid8)</c>): <c>in progress</c>, <c>committed</c>, <c>aborted</c> or
+        /// <c>subcommitted</c>. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public string? pg_xact_status(string? xid) => default!;
+
+        internal const string GetConstraintdefRefusal =
+            "The pg_get_constraintdef function is refused: it renders a stored constraint node tree as " +
+            "SQL text, and its pg_get_expr sibling cannot be called at all because PostgreSQL requires a " +
+            "pg_node_tree argument and a value of that type cannot be produced from CLR (cannot accept a " +
+            "value of type pg_node_tree); the pair is refused rather than half-exposed.";
+
+        internal const string GetExprRefusal =
+            "The pg_get_expr function is refused: PostgreSQL requires a pg_node_tree argument and a value " +
+            "of that type cannot be produced from CLR; the pinned 17.11 server answers \"cannot accept a " +
+            "value of type pg_node_tree\".";
 
         /// <summary>The current value of the run-time setting <paramref name="name"/> (<c>current_setting</c>).</summary>
         public string? current_setting(string? name) => default!;
@@ -562,6 +1861,167 @@ namespace NextORM.Core;
         /// <param name="tsquery">The <c>tsquery</c> whose matches are highlighted.</param>
         public string? ts_headline(string document, string? tsquery) => default!;
 
+        /// <summary>
+        /// Builds a <c>tsvector</c> from <paramref name="words"/> (<c>array_to_tsvector</c>). The result is
+        /// a <c>tsvector</c>, which the driver reads as text. PostgreSQL refuses an array holding a NULL,
+        /// so every element must be a non-NULL lexeme; positions are not assigned.
+        /// </summary>
+        /// <param name="words">The lexemes; an empty array yields an empty <c>tsvector</c>.</param>
+        public string? array_to_tsvector(string?[] words) => default!;
+
+        /// <summary>
+        /// Builds a <c>tsvector</c> from the string and numeric values of the <c>json</c> document that the
+        /// <paramref name="filter"/> selects (<c>json_to_tsvector</c>). The filter is a <c>jsonb</c> array
+        /// of the strings <c>"string"</c>, <c>"numeric"</c>, <c>"boolean"</c>, <c>"key"</c> and
+        /// <c>"all"</c>.
+        /// </summary>
+        /// <param name="json">The JSON document, as text.</param>
+        /// <param name="filter">The <c>jsonb</c> filter array, as text.</param>
+        public string? json_to_tsvector(string? json, string? filter) => default!;
+
+        /// <summary>
+        /// Builds a <c>tsvector</c> from a <c>json</c> document with an explicit text-search
+        /// <paramref name="config"/> (for example <c>english</c>).
+        /// </summary>
+        /// <param name="config">The text-search configuration name (<c>regconfig</c>).</param>
+        /// <param name="json">The JSON document, as text.</param>
+        /// <param name="filter">The <c>jsonb</c> filter array, as text.</param>
+        public string? json_to_tsvector(string? config, string? json, string? filter) => default!;
+
+        /// <summary>Builds a <c>tsvector</c> from a <c>jsonb</c> document (<c>jsonb_to_tsvector</c>).</summary>
+        /// <param name="json">The JSON document, as text.</param>
+        /// <param name="filter">The <c>jsonb</c> filter array, as text.</param>
+        public string? jsonb_to_tsvector(string? json, string? filter) => default!;
+
+        /// <summary>Builds a <c>tsvector</c> from a <c>jsonb</c> document with an explicit text-search config.</summary>
+        /// <param name="config">The text-search configuration name (<c>regconfig</c>).</param>
+        /// <param name="json">The JSON document, as text.</param>
+        /// <param name="filter">The <c>jsonb</c> filter array, as text.</param>
+        public string? jsonb_to_tsvector(string? config, string? json, string? filter) => default!;
+
+        /// <summary>
+        /// The text-search configuration the current session resolves by default
+        /// (<c>get_current_ts_config</c>), e.g. <c>english</c>. The server returns a <c>regconfig</c>,
+        /// which the driver reads as text.
+        /// </summary>
+        public string? get_current_ts_config() => default!;
+
+        /// <summary>
+        /// The number of lexemes and operators in <paramref name="tsquery"/> (<c>numnode</c>).
+        /// </summary>
+        /// <param name="tsquery">The <c>tsquery</c> text, for example <c>a &amp; b</c>.</param>
+        public int? numnode(string? tsquery) => default!;
+
+        /// <summary>
+        /// The query tree of <paramref name="tsquery"/> as text (<c>querytree</c>), with the operators and
+        /// the grouping the parser produced, for example <c>'b' &amp; 'a'</c>.
+        /// </summary>
+        /// <param name="tsquery">The <c>tsquery</c> text.</param>
+        public string? querytree(string? tsquery) => default!;
+
+        /// <summary>
+        /// Assigns the weight <paramref name="weight"/> to every lexeme of <paramref name="tsvector"/>
+        /// (<c>setweight</c>). The result is a <c>tsvector</c>, which the driver reads as text.
+        /// </summary>
+        /// <param name="tsvector">The <c>tsvector</c> text.</param>
+        /// <param name="weight">One of <c>A</c>, <c>B</c>, <c>C</c> or <c>D</c>; the server rejects anything else.</param>
+        public string? setweight(string? tsvector, string? weight) => default!;
+
+        /// <summary>
+        /// Assigns the weight <paramref name="weight"/> only to the lexemes listed in
+        /// <paramref name="lexemes"/> (<c>setweight</c>); the remaining lexemes keep their weights.
+        /// </summary>
+        /// <param name="tsvector">The <c>tsvector</c> text.</param>
+        /// <param name="weight">One of <c>A</c>, <c>B</c>, <c>C</c> or <c>D</c>.</param>
+        /// <param name="lexemes">The lexemes whose weight changes; a NULL element, an empty array and a
+        /// lexeme absent from <paramref name="tsvector"/> all leave the vector unchanged (measured on 17.11).</param>
+        public string? setweight(string? tsvector, string? weight, string?[] lexemes) => default!;
+
+        /// <summary>
+        /// Removes the positions and weights of <paramref name="tsvector"/>, leaving only the lexemes
+        /// (<c>strip</c>).
+        /// </summary>
+        /// <param name="tsvector">The <c>tsvector</c> text.</param>
+        public string? strip(string? tsvector) => default!;
+
+        /// <summary>
+        /// Removes <paramref name="lexeme"/> from <paramref name="tsvector"/>, NULLing the positions it
+        /// occupied (<c>ts_delete</c>). A missing lexeme leaves the vector unchanged.
+        /// </summary>
+        /// <param name="tsvector">The <c>tsvector</c> text.</param>
+        /// <param name="lexeme">The lexeme to delete.</param>
+        public string? ts_delete(string? tsvector, string? lexeme) => default!;
+
+        /// <summary>
+        /// Removes every lexeme listed in <paramref name="lexemes"/> from <paramref name="tsvector"/>
+        /// (<c>ts_delete</c>). A lexeme that does not match is ignored; a NULL element or an empty array
+        /// leaves the vector unchanged, and a SQL-NULL array yields NULL (measured on 17.11).
+        /// </summary>
+        /// <param name="tsvector">The <c>tsvector</c> text.</param>
+        /// <param name="lexemes">The lexemes to delete.</param>
+        public string? ts_delete(string? tsvector, string?[] lexemes) => default!;
+
+        /// <summary>
+        /// Keeps only the lexemes of <paramref name="tsvector"/> whose weight is one of
+        /// <paramref name="weights"/> (<c>ts_filter</c>).
+        /// </summary>
+        /// <param name="tsvector">The <c>tsvector</c> text.</param>
+        /// <param name="weights">The accepted weights, each one of <c>A</c>, <c>B</c>, <c>C</c> or <c>D</c>.</param>
+        public string? ts_filter(string? tsvector, string?[] weights) => default!;
+
+        /// <summary>
+        /// Rewrites <paramref name="query"/> with the rules returned by the SQL query
+        /// <paramref name="select"/> (<c>ts_rewrite</c>); that query must return a target <c>tsquery</c>
+        /// and a substitute <c>tsquery</c>. The result is a <c>tsquery</c>, which the driver reads as text.
+        /// </summary>
+        /// <param name="query">The <c>tsquery</c> text to rewrite.</param>
+        /// <param name="select">A SQL query returning the rewrite pairs, for example
+        /// <c>select 'a'::tsquery, 'c'::tsquery</c>.</param>
+        public string? ts_rewrite(string? query, string? select) => default!;
+
+        /// <summary>
+        /// Replaces every occurrence of <paramref name="target"/> in <paramref name="query"/> with
+        /// <paramref name="substitute"/> (<c>ts_rewrite</c>). The result is a <c>tsquery</c>, which the
+        /// driver reads as text.
+        /// </summary>
+        /// <param name="query">The <c>tsquery</c> text to rewrite.</param>
+        /// <param name="target">The <c>tsquery</c> to replace.</param>
+        /// <param name="substitute">The replacement <c>tsquery</c>.</param>
+        public string? ts_rewrite(string? query, string? target, string? substitute) => default!;
+
+        /// <summary>
+        /// Builds the phrase query <paramref name="query1"/> followed by <paramref name="query2"/>
+        /// (<c>tsquery_phrase</c>), for example <c>'a' &lt;-&gt; 'b'</c>. The result is a <c>tsquery</c>,
+        /// which the driver reads as text.
+        /// </summary>
+        /// <param name="query1">The first <c>tsquery</c> text.</param>
+        /// <param name="query2">The second <c>tsquery</c> text.</param>
+        public string? tsquery_phrase(string? query1, string? query2) => default!;
+
+        /// <summary>
+        /// Builds the phrase query with <paramref name="distance"/> between the operands
+        /// (<c>tsquery_phrase</c>), for example <c>'a' &lt;3&gt; 'b'</c>; the default distance is 1.
+        /// </summary>
+        /// <param name="query1">The first <c>tsquery</c> text.</param>
+        /// <param name="query2">The second <c>tsquery</c> text.</param>
+        /// <param name="distance">The number of positions between the operands.</param>
+        public string? tsquery_phrase(string? query1, string? query2, int? distance) => default!;
+
+        /// <summary>
+        /// The lexemes of <paramref name="tsvector"/> as a <c>text[]</c> (<c>tsvector_to_array</c>), in
+        /// the vector's stored order.
+        /// </summary>
+        /// <param name="tsvector">The <c>tsvector</c> text.</param>
+        public string?[] tsvector_to_array(string? tsvector) => default!;
+
+        /// <summary>
+        /// Normalizes <paramref name="token"/> with the text-search dictionary <paramref name="dictionary"/>
+        /// (<c>ts_lexize</c>). Returns the lexemes as a <c>text[]</c>; a stop word yields an empty array.
+        /// </summary>
+        /// <param name="dictionary">The dictionary name (<c>regdictionary</c>), for example <c>english_stem</c>.</param>
+        /// <param name="token">The token to normalize.</param>
+        public string?[] ts_lexize(string? dictionary, string? token) => default!;
+
         /// <summary><c>bool_and(property)</c>: true when every non-null value is true. Requires a provider that supports it.</summary>
         public T? bool_and<T>(T? property) => default!;
 
@@ -599,6 +2059,47 @@ namespace NextORM.Core;
         public double? regr_avgy<TY, TX>(TY? y, TX? x) => default!;
 
         /// <summary>
+        /// The sum of squares of the independent variable (<c>regr_sxx</c>), <c>sum(X^2) - sum(X)^2/N</c>
+        /// over the (Y, X) pairs in which both arguments are non-null. A group with no such pair, and
+        /// an empty input, yield NULL; a single pair yields 0.
+        /// </summary>
+        /// <param name="y">The dependent variable.</param>
+        /// <param name="x">The independent variable.</param>
+        public double? regr_sxx<TY, TX>(TY? y, TX? x) => default!;
+
+        /// <summary>
+        /// The sum of products of the independent and dependent variables (<c>regr_sxy</c>),
+        /// <c>sum(X*Y) - sum(X)*sum(Y)/N</c> over the pairs in which both arguments are non-null. A
+        /// group with no such pair, and an empty input, yield NULL.
+        /// </summary>
+        /// <param name="y">The dependent variable.</param>
+        /// <param name="x">The independent variable.</param>
+        public double? regr_sxy<TY, TX>(TY? y, TX? x) => default!;
+
+        /// <summary>
+        /// The sum of squares of the dependent variable (<c>regr_syy</c>), <c>sum(Y^2) - sum(Y)^2/N</c>
+        /// over the (Y, X) pairs in which both arguments are non-null. A group with no such pair, and
+        /// an empty input, yield NULL; a single pair yields 0.
+        /// </summary>
+        /// <param name="y">The dependent variable.</param>
+        /// <param name="x">The independent variable.</param>
+        public double? regr_syy<TY, TX>(TY? y, TX? x) => default!;
+
+        /// <summary>
+        /// An arbitrary value of the group (<c>any_value</c>, PostgreSQL 16+). The aggregate's
+        /// argument and result are <c>anyelement</c>, so the CLR result type is the argument's own
+        /// type; a group whose values are all NULL yields NULL, and — because this is an aggregate —
+        /// an empty input still produces one row with NULL. Only single-column CLR types (the
+        /// primitives, strings, dates, <see cref="decimal"/>, <see cref="Guid"/>, <see cref="byte"/>
+        /// arrays and their nullable forms) can be read back; any other type argument is refused
+        /// before SQL is emitted. This is the PostgreSQL 17 <c>any_value</c> <c>pg_proc</c> aggregate,
+        /// distinct from the portable <see cref="CommonFunctions.any_agg{T}(T)"/> member, whose
+        /// <c>ANY_VALUE</c>/<c>any</c> spellings PostgreSQL does not advertise.
+        /// </summary>
+        /// <param name="value">The value to sample.</param>
+        public T? any_value<T>(T? value) => default!;
+
+        /// <summary>
         /// <c>percentile_cont(fraction) within group (order by key)</c>: the interpolated value at
         /// the given fraction. Requires a provider that supports ordered-set aggregates. This is the
         /// ordered-set aggregate; <paramref name="orderBy"/> must be a lambda. The window form is the
@@ -608,6 +2109,32 @@ namespace NextORM.Core;
 
         /// <summary><c>percentile_disc(fraction) within group (order by key)</c>: the first value whose position reaches the fraction (ordered-set aggregate; the window form is <c>CommonFunctions.percentile_disc</c>).</summary>
         public T? percentile_disc<T>(double fraction, Expression<Func<T>> orderBy) => default!;
+
+        /// <summary>
+        /// <c>percentile_cont(0.5) within group (order by key)</c>: the median as the native ordered-set
+        /// aggregate (PostgreSQL has no <c>median</c> function of its own). Requires the ordered-set
+        /// percentile capability (see <see cref="ISqlDialect.SupportsOrderedPercentiles"/>; PostgreSQL) and
+        /// a floating-point <paramref name="orderBy"/> expression, because the continuous percentile
+        /// interpolates and returns <c>double precision</c>. This is an aggregate: it produces one row per
+        /// group, not one value per input row.
+        /// </summary>
+        /// <typeparam name="T">The sort expression's type; <see cref="double"/> or <see cref="float"/>.</typeparam>
+        /// <param name="orderBy">The ordering key, written as a lambda closing over the query parameter.</param>
+        /// <returns>The interpolated median, or SQL NULL when the group has no non-null values.</returns>
+        public double? median<T>(Expression<Func<T>> orderBy) => default!;
+
+        /// <summary>
+        /// <c>percentile</c>: not supported by PostgreSQL. Its native spellings are the typed
+        /// <see cref="percentile_cont{T}(double, Expression{Func{T}})"/> and
+        /// <see cref="percentile_disc{T}(double, Expression{Func{T}})"/> ordered-set aggregates, which
+        /// differ in whether the result is interpolated or an input value; a generic alias would hide that
+        /// difference. Referencing this member throws <see cref="NotSupportedException"/> at translation time.
+        /// </summary>
+        /// <typeparam name="T">The sort expression's type.</typeparam>
+        /// <param name="fraction">The percentile fraction, in <c>[0, 1]</c>.</param>
+        /// <param name="orderBy">The ordering key, written as a lambda closing over the query parameter.</param>
+        /// <returns>Never returns; the call is refused when the query is translated.</returns>
+        public double? percentile<T>(double fraction, Expression<Func<T>> orderBy) => default!;
 
         /// <summary><c>mode() within group (order by key)</c>: the most frequent value.</summary>
         public T? mode<T>(Expression<Func<T>> orderBy) => default!;
@@ -627,81 +2154,190 @@ namespace NextORM.Core;
         /// <summary>
         /// <c>generate_series(start, stop)</c> as a FROM source; select
         /// <see cref="SqlFunctions.IGenerateSeriesRow.Value"/>. Use through
-        /// <see cref="DataContextExtensions.FromTableFunction{T}(IDataContext, Expression{Func{IQueryable{T}}})"/>.
+        /// <c>ctx.From(() =&gt; ...)</c>.
         /// </summary>
-        [SqlTableFunction("generate_series")]
-        public IQueryable<SqlFunctions.IGenerateSeriesRow> generate_series(long start, long stop) => throw new NotSupportedException();
+        public TvfEntityBuilder<SqlFunctions.IGenerateSeriesRow> generate_series(long start, long stop) => new("generate_series");
 
         /// <summary><c>generate_series(start, stop, step)</c> as a FROM source.</summary>
-        [SqlTableFunction("generate_series")]
-        public IQueryable<SqlFunctions.IGenerateSeriesRow> generate_series(long start, long stop, long step) => throw new NotSupportedException();
+        public TvfEntityBuilder<SqlFunctions.IGenerateSeriesRow> generate_series(long start, long stop, long step) => new("generate_series");
 
         /// <summary>
         /// <c>unnest(array)</c> as a FROM source; select <see cref="SqlFunctions.IUnnestRow{T}.Value"/>. The
         /// array is normally supplied through <c>SqlFunctions.Parameter&lt;T[]&gt;(idx)</c>.
         /// </summary>
-        [SqlTableFunction("unnest")]
-        public IQueryable<SqlFunctions.IUnnestRow<T>> unnest<T>(T[] array) => throw new NotSupportedException();
+        public TvfEntityBuilder<SqlFunctions.IUnnestRow<T>> unnest<T>(T[] array) => new("unnest");
+
+        /// <summary>
+        /// <c>unnest(array1, array2)</c> as a FROM source: one row per position of the longest array, with
+        /// <see cref="SqlFunctions.IUnnestMultiRow{T1,T2}.Value1"/> and
+        /// <see cref="SqlFunctions.IUnnestMultiRow{T1,T2}.Value2"/> taking the elements of the two arrays and
+        /// the shorter array padded with <see langword="null"/>. The multi-array form is FROM-clause
+        /// grammar, not a <c>pg_proc</c> function: PostgreSQL rejects a column definition list on it and
+        /// points at <c>ROWS FROM</c>, which the provider renders. The admitted arities are one, two and
+        /// three arrays — there is no variadic claim.
+        /// </summary>
+        /// <typeparam name="T1">The element type of the first array.</typeparam>
+        /// <typeparam name="T2">The element type of the second array.</typeparam>
+        /// <param name="first">The first array.</param>
+        /// <param name="second">The second array; the shorter array is padded with <see langword="null"/>.</param>
+        public TvfEntityBuilder<SqlFunctions.IUnnestMultiRow<T1, T2>> unnest<T1, T2>(T1[] first, T2[] second) => new("unnest");
+
+        /// <summary>
+        /// <c>unnest(array1, array2, array3)</c> as a FROM source: the three admitted array positions, all
+        /// padded with <see langword="null"/> to the longest array (see
+        /// <see cref="SqlFunctions.IUnnestMultiRow{T1,T2,T3}"/>).
+        /// </summary>
+        /// <typeparam name="T1">The element type of the first array.</typeparam>
+        /// <typeparam name="T2">The element type of the second array.</typeparam>
+        /// <typeparam name="T3">The element type of the third array.</typeparam>
+        /// <param name="first">The first array.</param>
+        /// <param name="second">The second array.</param>
+        /// <param name="third">The third array.</param>
+        public TvfEntityBuilder<SqlFunctions.IUnnestMultiRow<T1, T2, T3>> unnest<T1, T2, T3>(T1[] first, T2[] second, T3[] third) => new("unnest");
+
+        /// <summary>
+        /// <c>unnest(four or more arrays)</c> is refused: PostgreSQL's multi-array <c>unnest</c> is
+        /// FROM-clause grammar with no variadic arity, and this library admits exactly one, two and three
+        /// arrays as typed overloads. Claiming an arbitrary arity through one overload would misrepresent
+        /// the grammar, so the call fails while the source is composed and no SQL is emitted.
+        /// </summary>
+        /// <typeparam name="TRow">The row shape the caller hoped to project; never produced.</typeparam>
+        /// <param name="first">The first array.</param>
+        /// <param name="second">The second array.</param>
+        /// <param name="third">The third array.</param>
+        /// <param name="fourth">The fourth array, which exceeds the admitted arities.</param>
+        /// <returns>Never returns; the call is refused when the source is composed.</returns>
+        public TvfEntityBuilder<TRow> unnest<TRow>(object? first, object? second, object? third, object? fourth) =>
+            throw new NotSupportedException(
+                "The unnest function is refused for four or more arrays: multi-array unnest is FROM-clause " +
+                "grammar with no variadic arity, and this library admits exactly one, two and three arrays " +
+                "as typed overloads.");
+
+        /// <summary>
+        /// <c>unnest(array) WITH ORDINALITY</c> as a FROM source: the element and its one-based position
+        /// (see <see cref="SqlFunctions.IUnnestOrdinalityRow{T}"/>). <c>WITH ORDINALITY</c> is FROM-clause
+        /// grammar, and the ordinality column is <c>bigint</c>, so it is <see cref="long"/> here.
+        /// </summary>
+        /// <typeparam name="T">The element type of the array.</typeparam>
+        /// <param name="array">The array to expand.</param>
+        public TvfEntityBuilder<SqlFunctions.IUnnestOrdinalityRow<T>> unnest_with_ordinality<T>(T[] array) => new("unnest_with_ordinality");
+
+        /// <summary>
+        /// <c>unnest(array1, array2) WITH ORDINALITY</c> as a FROM source: both admitted array positions
+        /// plus the shared one-based position; the shorter array is padded with <see langword="null"/> (see
+        /// <see cref="SqlFunctions.IUnnestOrdinalityMultiRow{T1,T2}"/>).
+        /// </summary>
+        /// <typeparam name="T1">The element type of the first array.</typeparam>
+        /// <typeparam name="T2">The element type of the second array.</typeparam>
+        /// <param name="first">The first array.</param>
+        /// <param name="second">The second array; the shorter array is padded with <see langword="null"/>.</param>
+        public TvfEntityBuilder<SqlFunctions.IUnnestOrdinalityMultiRow<T1, T2>> unnest_with_ordinality<T1, T2>(T1[] first, T2[] second) => new("unnest_with_ordinality");
+
+        /// <summary>
+        /// <c>generate_subscripts(array, dimension)</c> as a FROM source: one row per valid subscript of
+        /// the requested dimension (see <see cref="SqlFunctions.IGenerateSubscriptsRow"/>). PostgreSQL
+        /// numbers dimensions from one, and an empty or SQL-NULL array yields no rows.
+        /// </summary>
+        /// <typeparam name="T">The element type of the array.</typeparam>
+        /// <param name="array">The array whose subscripts are generated.</param>
+        /// <param name="dimension">The one-based array dimension.</param>
+        public TvfEntityBuilder<SqlFunctions.IGenerateSubscriptsRow> generate_subscripts<T>(T[] array, int? dimension) => new("generate_subscripts");
+
+        /// <summary>
+        /// <c>generate_subscripts(array, dimension, reverse)</c> as a FROM source: the same subscripts in
+        /// descending order when <paramref name="reverse"/> is <see langword="true"/>.
+        /// </summary>
+        /// <typeparam name="T">The element type of the array.</typeparam>
+        /// <param name="array">The array whose subscripts are generated.</param>
+        /// <param name="dimension">The one-based array dimension.</param>
+        /// <param name="reverse">Whether to generate the subscripts in descending order; <see langword="null"/> is not reversed.</param>
+        public TvfEntityBuilder<SqlFunctions.IGenerateSubscriptsRow> generate_subscripts<T>(T[] array, int? dimension, bool? reverse) => new("generate_subscripts");
 
         /// <summary>
         /// <c>regexp_matches(source, pattern)</c> as a FROM source: one row per match, the
         /// <c>regexp_matches</c> column is the <c>text[]</c> array of captured groups (see
         /// <see cref="SqlFunctions.IRegexpMatchesRow"/>).
         /// </summary>
-        [SqlTableFunction("regexp_matches")]
-        public IQueryable<SqlFunctions.IRegexpMatchesRow> regexp_matches(string? source, string? pattern) => throw new NotSupportedException();
+        public TvfEntityBuilder<SqlFunctions.IRegexpMatchesRow> regexp_matches(string? source, string? pattern) => new("regexp_matches");
 
         /// <summary><c>regexp_matches(source, pattern, flags)</c> as a FROM source, with the <c>g</c>/<c>i</c>/... flags.</summary>
-        [SqlTableFunction("regexp_matches")]
-        public IQueryable<SqlFunctions.IRegexpMatchesRow> regexp_matches(string? source, string? pattern, string? flags) => throw new NotSupportedException();
+        public TvfEntityBuilder<SqlFunctions.IRegexpMatchesRow> regexp_matches(string? source, string? pattern, string? flags) => new("regexp_matches");
 
         /// <summary>
         /// <c>regexp_split_to_table(source, pattern)</c> as a FROM source: one row per fragment (see
         /// <see cref="SqlFunctions.IRegexpSplitToTableRow"/>).
         /// </summary>
-        [SqlTableFunction("regexp_split_to_table")]
-        public IQueryable<SqlFunctions.IRegexpSplitToTableRow> regexp_split_to_table(string? source, string? pattern) => throw new NotSupportedException();
+        public TvfEntityBuilder<SqlFunctions.IRegexpSplitToTableRow> regexp_split_to_table(string? source, string? pattern) => new("regexp_split_to_table");
 
         /// <summary><c>regexp_split_to_table(source, pattern, flags)</c> as a FROM source.</summary>
-        [SqlTableFunction("regexp_split_to_table")]
-        public IQueryable<SqlFunctions.IRegexpSplitToTableRow> regexp_split_to_table(string? source, string? pattern, string? flags) => throw new NotSupportedException();
+        public TvfEntityBuilder<SqlFunctions.IRegexpSplitToTableRow> regexp_split_to_table(string? source, string? pattern, string? flags) => new("regexp_split_to_table");
 
         /// <summary>
         /// <c>jsonb_array_elements(json)</c> as a FROM source: one row per array element, the
         /// <c>value</c> column is the element as a jsonb document (see
         /// <see cref="SqlFunctions.IJsonArrayElementsRow"/>).
         /// </summary>
-        [SqlTableFunction("jsonb_array_elements")]
-        public IQueryable<SqlFunctions.IJsonArrayElementsRow> jsonb_array_elements(object? json) => throw new NotSupportedException();
+        public TvfEntityBuilder<SqlFunctions.IJsonArrayElementsRow> jsonb_array_elements(object? json) => new("jsonb_array_elements");
 
         /// <summary><c>jsonb_array_elements_text(json)</c> as a FROM source: one row per array element, the <c>value</c> column is text.</summary>
-        [SqlTableFunction("jsonb_array_elements_text")]
-        public IQueryable<SqlFunctions.IJsonArrayElementsRow> jsonb_array_elements_text(object? json) => throw new NotSupportedException();
+        public TvfEntityBuilder<SqlFunctions.IJsonArrayElementsRow> jsonb_array_elements_text(object? json) => new("jsonb_array_elements_text");
 
         /// <summary>
         /// <c>jsonb_each(json)</c> as a FROM source: one row per top-level object property, the
         /// <c>key</c>/<c>value</c> columns are text/jsonb (see <see cref="SqlFunctions.IJsonbEachRow"/>).
         /// </summary>
-        [SqlTableFunction("jsonb_each")]
-        public IQueryable<SqlFunctions.IJsonbEachRow> jsonb_each(object? json) => throw new NotSupportedException();
+        public TvfEntityBuilder<SqlFunctions.IJsonbEachRow> jsonb_each(object? json) => new("jsonb_each");
 
         /// <summary><c>jsonb_each_text(json)</c> as a FROM source: one row per property, <c>key</c>/<c>value</c> are text.</summary>
-        [SqlTableFunction("jsonb_each_text")]
-        public IQueryable<SqlFunctions.IJsonbEachRow> jsonb_each_text(object? json) => throw new NotSupportedException();
+        public TvfEntityBuilder<SqlFunctions.IJsonbEachRow> jsonb_each_text(object? json) => new("jsonb_each_text");
+
+        /// <summary>
+        /// <c>json_array_elements(json)</c> as a FROM source: one row per array element of the <c>json</c>
+        /// document, the single <c>value</c> column is the element as a <c>json</c> value (see
+        /// <see cref="SqlFunctions.IJsonArrayElementsRow"/>). The document is a JSON <em>text</em>: the
+        /// argument is cast to <c>json</c> in the emitted SQL, because a text parameter does not resolve to
+        /// the function. An empty array yields no rows.
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.IJsonArrayElementsRow> json_array_elements(string? json) => new("json_array_elements");
+
+        /// <summary>
+        /// <c>json_array_elements_text(json)</c> as a FROM source: one row per array element, the
+        /// <c>value</c> column is text (<c>null</c> for a JSON <c>null</c> element).
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.IJsonArrayElementsRow> json_array_elements_text(string? json) => new("json_array_elements_text");
+
+        /// <summary>
+        /// <c>json_each(json)</c> as a FROM source: one row per top-level object property, the
+        /// <c>key</c> (text) and <c>value</c> (a <c>json</c> value) columns (see
+        /// <see cref="SqlFunctions.IJsonbEachRow"/>; PostgreSQL 17 returns exactly two columns). An empty
+        /// object yields no rows.
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.IJsonbEachRow> json_each(string? json) => new("json_each");
+
+        /// <summary><c>json_each_text(json)</c> as a FROM source: one row per property, <c>key</c>/<c>value</c> are text.</summary>
+        public TvfEntityBuilder<SqlFunctions.IJsonbEachRow> json_each_text(string? json) => new("json_each_text");
+
+        /// <summary>
+        /// <c>jsonb_path_query_tz(json, path, vars, silent)</c> as a FROM source: one row per JSONPath
+        /// match, the single <c>jsonb_path_query_tz</c> column holds the match as text (see
+        /// <see cref="SqlFunctions.IJsonPathQueryTzRow"/>). The <c>_tz</c> form is required for paths that
+        /// depend on the session time zone (for example the <c>.datetime()</c> method); the non-<c>_tz</c>
+        /// sibling <see cref="jsonb_path_query(object?, string?)"/> raises an error for them. No match
+        /// yields no rows, and a SQL-NULL document yields no rows.
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.IJsonPathQueryTzRow> jsonb_path_query_tz(string? json, string? path, string? vars, bool? silent) => new("jsonb_path_query_tz");
 
         /// <summary>
         /// <c>jsonb_object_keys(json)</c> as a FROM source: one row per top-level object key (see
         /// <see cref="SqlFunctions.IJsonObjectKeysRow"/>).
         /// </summary>
-        [SqlTableFunction("jsonb_object_keys")]
-        public IQueryable<SqlFunctions.IJsonObjectKeysRow> jsonb_object_keys(object? json) => throw new NotSupportedException();
+        public TvfEntityBuilder<SqlFunctions.IJsonObjectKeysRow> jsonb_object_keys(object? json) => new("jsonb_object_keys");
 
         /// <summary>
         /// <c>jsonb_path_query(json, path)</c> as a FROM source: one row per JSONPath match. Cast a text
         /// path with <see cref="jsonpath(string?)"/> (<see cref="SqlFunctions.IJsonPathQueryRow"/>).
         /// </summary>
-        [SqlTableFunction("jsonb_path_query")]
-        public IQueryable<SqlFunctions.IJsonPathQueryRow> jsonb_path_query(object? json, string? path) => throw new NotSupportedException();
+        public TvfEntityBuilder<SqlFunctions.IJsonPathQueryRow> jsonb_path_query(object? json, string? path) => new("jsonb_path_query");
 
         /// <summary>
         /// <c>jsonb_to_record(json) AS x(col type, ...)</c> as a FROM source: one row from a single JSON
@@ -709,12 +2345,11 @@ namespace NextORM.Core;
         /// and rendered as the alias column-definition list. Requires a provider that supports a typed
         /// result schema (see <see cref="ISqlDialect.SupportsResultSchema(TableFunctionSchema)"/>; PostgreSQL). Use
         /// through
-        /// <see cref="DataContextExtensions.FromTableFunction{T}(IDataContext, System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{T}}})"/>.
+        /// <c>ctx.From(() =&gt; ...)</c>.
         /// </summary>
         /// <typeparam name="TRow">The caller-declared row shape; its <c>[Column]</c> names/types form the column list.</typeparam>
         /// <param name="json">The JSON object to expand.</param>
-        [SqlTableFunction("jsonb_to_record", ResultSchema = TableFunctionSchema.AliasColumnList)]
-        public IQueryable<TRow> jsonb_to_record<TRow>(object? json) => throw new NotSupportedException();
+        public TvfEntityBuilder<TRow> jsonb_to_record<TRow>(object? json) => new("jsonb_to_record", null, null, null, [], TableFunctionSchema.AliasColumnList);
 
         /// <summary>
         /// <c>jsonb_to_recordset(json) AS x(col type, ...)</c> as a FROM source: one row per element of a
@@ -725,15 +2360,299 @@ namespace NextORM.Core;
         /// </summary>
         /// <typeparam name="TRow">The caller-declared row shape; its <c>[Column]</c> names/types form the column list.</typeparam>
         /// <param name="json">The JSON array to expand.</param>
-        [SqlTableFunction("jsonb_to_recordset", ResultSchema = TableFunctionSchema.AliasColumnList)]
-        public IQueryable<TRow> jsonb_to_recordset<TRow>(object? json) => throw new NotSupportedException();
+        public TvfEntityBuilder<TRow> jsonb_to_recordset<TRow>(object? json) => new("jsonb_to_recordset", null, null, null, [], TableFunctionSchema.AliasColumnList);
+
+        /// <summary>
+        /// <c>json_to_record(json) AS x(col type, ...)</c> as a FROM source: one row from a single
+        /// <c>json</c> object, with the result schema derived from <typeparamref name="TRow"/>'s mapped
+        /// properties and rendered as the alias column-definition list. The document is a JSON
+        /// <em>text</em> (the argument is cast to <c>json</c> in the emitted SQL). Requires a provider that
+        /// supports a typed result schema (see <see cref="ISqlDialect.SupportsResultSchema(TableFunctionSchema)"/>;
+        /// PostgreSQL). Use through <c>ctx.From(() =&gt; ...)</c>.
+        /// </summary>
+        /// <typeparam name="TRow">The caller-declared row shape; its <c>[Column]</c> names/types form the column list.</typeparam>
+        /// <param name="json">The JSON object to expand.</param>
+        public TvfEntityBuilder<TRow> json_to_record<TRow>(string? json) => new("json_to_record", null, null, null, [], TableFunctionSchema.AliasColumnList);
+
+        /// <summary>
+        /// <c>json_to_recordset(json) AS x(col type, ...)</c> as a FROM source: one row per element of a
+        /// <c>json</c> array, with the result schema derived from <typeparamref name="TRow"/>'s mapped
+        /// properties. This is the set form of <see cref="json_to_record{TRow}(string?)"/>; an empty array
+        /// yields no rows.
+        /// </summary>
+        /// <typeparam name="TRow">The caller-declared row shape; its <c>[Column]</c> names/types form the column list.</typeparam>
+        /// <param name="json">The JSON array to expand.</param>
+        public TvfEntityBuilder<TRow> json_to_recordset<TRow>(string? json) => new("json_to_recordset", null, null, null, [], TableFunctionSchema.AliasColumnList);
+
+        /// <summary>
+        /// <c>json_populate_record(base, json, use_json_as_text)</c> is refused: the first argument is an
+        /// <c>anyelement</c> base <em>row</em> whose composite type a CLR type cannot name, so no faithful
+        /// call can be built (the column-definition list is available but does not replace the base row).
+        /// Referencing this member fails while the query is prepared.
+        /// </summary>
+        /// <typeparam name="TRow">The base row type the server would have to infer from the base value.</typeparam>
+        /// <param name="baseRecord">The base row value; a CLR type cannot carry the <c>anyelement</c> base.</param>
+        /// <param name="json">The JSON document to expand.</param>
+        /// <param name="useJsonAsText">Whether JSON strings are read as text values.</param>
+        /// <returns>Never returns; the call is refused when the source is composed.</returns>
+        public TvfEntityBuilder<TRow> json_populate_record<TRow>(object? baseRecord, string? json, bool? useJsonAsText) =>
+            throw new NotSupportedException(
+                "The json_populate_record function is refused: its first argument is an anyelement base row, " +
+                "and neither a named composite type nor the pseudo-type record can be named from a CLR type, " +
+                "so no faithful call can be emitted.");
+
+        /// <summary>
+        /// <c>json_populate_recordset(base, json, use_json_as_text)</c> is refused for the same reason as
+        /// <see cref="json_populate_record{TRow}(object?, string?, bool?)"/>: the <c>anyelement</c> base row
+        /// cannot be supplied from a CLR type.
+        /// </summary>
+        /// <typeparam name="TRow">The base row type the server would have to infer from the base value.</typeparam>
+        /// <param name="baseRecord">The base row value; a CLR type cannot carry the <c>anyelement</c> base.</param>
+        /// <param name="json">The JSON array to expand.</param>
+        /// <param name="useJsonAsText">Whether JSON strings are read as text values.</param>
+        /// <returns>Never returns; the call is refused when the source is composed.</returns>
+        public TvfEntityBuilder<TRow> json_populate_recordset<TRow>(object? baseRecord, string? json, bool? useJsonAsText) =>
+            throw new NotSupportedException(
+                "The json_populate_recordset function is refused: its first argument is an anyelement base row, " +
+                "and neither a named composite type nor the pseudo-type record can be named from a CLR type, " +
+                "so no faithful call can be emitted.");
+
+        /// <summary>
+        /// <c>jsonb_populate_record(base, json)</c> is refused: the <c>anyelement</c> base row's composite
+        /// type is what the result row carries, and no CLR type can name it.
+        /// </summary>
+        /// <typeparam name="TRow">The base row type the server would have to infer from the base value.</typeparam>
+        /// <param name="baseRecord">The base row value; a CLR type cannot carry the <c>anyelement</c> base.</param>
+        /// <param name="json">The JSON document to expand.</param>
+        /// <returns>Never returns; the call is refused when the source is composed.</returns>
+        public TvfEntityBuilder<TRow> jsonb_populate_record<TRow>(object? baseRecord, string? json) =>
+            throw new NotSupportedException(
+                "The jsonb_populate_record function is refused: its first argument is an anyelement base row, " +
+                "and the result row type is that base row's composite type, which no CLR type can name.");
+
+        /// <summary>
+        /// <c>jsonb_populate_recordset(base, json)</c> is refused for the same reason as
+        /// <see cref="jsonb_populate_record{TRow}(object?, string?)"/>: the <c>anyelement</c> base row cannot
+        /// be supplied from a CLR type.
+        /// </summary>
+        /// <typeparam name="TRow">The base row type the server would have to infer from the base value.</typeparam>
+        /// <param name="baseRecord">The base row value; a CLR type cannot carry the <c>anyelement</c> base.</param>
+        /// <param name="json">The JSON array to expand.</param>
+        /// <returns>Never returns; the call is refused when the source is composed.</returns>
+        public TvfEntityBuilder<TRow> jsonb_populate_recordset<TRow>(object? baseRecord, string? json) =>
+            throw new NotSupportedException(
+                "The jsonb_populate_recordset function is refused: its first argument is an anyelement base row, " +
+                "and the result row type is that base row's composite type, which no CLR type can name.");
+
+        /// <summary>
+        /// <c>jsonb_populate_record_valid(base, json)</c> is refused: the <c>anyelement</c> base row cannot be
+        /// supplied from a CLR type, and without a base row the server cannot determine the row type
+        /// (<c>0A000</c>). Referencing this member fails while the query is prepared, before any SQL is emitted.
+        /// </summary>
+        /// <param name="baseRecord">The base row value; a CLR type cannot carry the <c>anyelement</c> base.</param>
+        /// <param name="json">The JSON document to validate.</param>
+        /// <returns>Never returns; the call is refused when the query is prepared.</returns>
+        public bool? jsonb_populate_record_valid(object? baseRecord, string? json) =>
+            throw new NotSupportedException(
+                "The jsonb_populate_record_valid function is refused: its first argument is an anyelement base " +
+                "row that a CLR type cannot name, and without a base row the server raises 0A000 (could not " +
+                "determine row type).");
+
+        /// <summary>
+        /// <c>json_table(json, path COLUMNS (...))</c> is refused: the SQL/JSON table function needs its
+        /// per-call <c>COLUMNS (...)</c> clause inside the call parentheses, and the expression model only
+        /// renders a caller-declared schema as an alias column-definition list after the alias. The construct
+        /// itself works on PostgreSQL 17; only the rendering model cannot express it.
+        /// </summary>
+        /// <typeparam name="TRow">The row type the <c>COLUMNS</c> clause would declare.</typeparam>
+        /// <param name="json">The JSON document to read.</param>
+        /// <param name="path">The JSONPath that selects the rows.</param>
+        /// <returns>Never returns; the call is refused when the source is composed.</returns>
+        public TvfEntityBuilder<TRow> json_table<TRow>(string? json, string? path) =>
+            throw new NotSupportedException(
+                "The json_table function is refused: it needs a per-call COLUMNS (...) clause inside the call " +
+                "parentheses, which the expression model cannot render (a caller-declared schema is only " +
+                "rendered as an alias column-definition list after the alias).");
 
         /// <summary>
         /// <c>ts_stat(query)</c> as a FROM source: one row per lexeme of a <c>tsvector</c> query, the
         /// <c>word</c>/<c>ndoc</c>/<c>nentry</c> columns (see <see cref="SqlFunctions.ITsStatRow"/>).
         /// </summary>
-        [SqlTableFunction("ts_stat")]
-        public IQueryable<SqlFunctions.ITsStatRow> ts_stat(string? query) => throw new NotSupportedException();
+        public TvfEntityBuilder<SqlFunctions.ITsStatRow> ts_stat(string? query) => new("ts_stat");
+
+        /// <summary>
+        /// <c>ts_debug(document)</c> as a FROM source: one row per tokenizer step of the default
+        /// text-search configuration, with the six documented columns <c>alias</c>, <c>description</c>,
+        /// <c>token</c>, <c>dictionaries</c>, <c>dictionary</c> and <c>lexemes</c> (see
+        /// <see cref="SqlFunctions.ITsDebugRow"/>; measured on PostgreSQL 17). The
+        /// <c>regdictionary</c>/<c>regdictionary[]</c> columns have no CLR mapping and are cast to
+        /// <c>text</c>/<c>text[]</c> in the emitted projection. Only the one-argument
+        /// <c>ts_debug(text)</c> overload is exposed: the document always runs through the session's
+        /// default configuration, while the two-argument <c>ts_debug(regconfig, text)</c> form would need
+        /// a configuration argument the API does not model. An empty or SQL-NULL document yields no rows.
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.ITsDebugRow> ts_debug(string? document) => new("ts_debug");
+
+        /// <summary>
+        /// <c>ts_parse(parser, document)</c> as a FROM source: one row per token the named text-search
+        /// parser extracted, the <c>tokid</c>/<c>token</c> columns (see
+        /// <see cref="SqlFunctions.ITsParseRow"/>). The parser is passed by <em>name</em> (<c>default</c>,
+        /// <c>english</c>, …), so this member always resolves the <c>ts_parse(text, text)</c> overload:
+        /// PostgreSQL has no implicit <c>text</c> to <c>oid</c> cast, and the <c>ts_parse(oid, text)</c>
+        /// form cannot be reached from a string parameter. An unknown name raises
+        /// <c>42704</c> (<c>text search parser "…" does not exist</c>) on the server; an empty or
+        /// SQL-NULL document yields no rows.
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.ITsParseRow> ts_parse(string? parser, string? document) => new("ts_parse");
+
+        /// <summary>
+        /// <c>ts_token_type(parser)</c> as a FROM source: one row per token type the named text-search
+        /// parser recognises, the <c>tokid</c>/<c>alias</c>/<c>description</c> columns (see
+        /// <see cref="SqlFunctions.ITsTokenTypeRow"/>; 23 rows for <c>default</c> on PostgreSQL 17). The
+        /// parser is passed by <em>name</em>, so this member resolves the <c>ts_token_type(text)</c>
+        /// overload; the <c>ts_token_type(oid)</c> form cannot be reached from a string parameter
+        /// (no implicit <c>text</c> to <c>oid</c> cast). An unknown name raises <c>42704</c>, and a
+        /// SQL-NULL parser yields no rows.
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.ITsTokenTypeRow> ts_token_type(string? parser) => new("ts_token_type");
+
+        /// <summary>
+        /// <c>pg_control_system()</c> as a FROM source: the single control-file row (see
+        /// <see cref="SqlFunctions.IPgControlSystemRow"/>).
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.IPgControlSystemRow> pg_control_system() => new("pg_control_system");
+
+        /// <summary>
+        /// <c>pg_control_init()</c> as a FROM source: the single row of compile-time and control-file
+        /// constants (see <see cref="SqlFunctions.IPgControlInitRow"/>).
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.IPgControlInitRow> pg_control_init() => new("pg_control_init");
+
+        /// <summary>
+        /// <c>pg_control_recovery()</c> as a FROM source: the single recovery-state row; the
+        /// <c>pg_lsn</c> columns are text (see <see cref="SqlFunctions.IPgControlRecoveryRow"/>).
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.IPgControlRecoveryRow> pg_control_recovery() => new("pg_control_recovery");
+
+        /// <summary>
+        /// <c>pg_control_checkpoint()</c> as a FROM source: the single checkpoint-state row; the
+        /// <c>pg_lsn</c>/<c>oid</c> columns are text and the <c>xid</c> columns are <see cref="uint"/>
+        /// (see <see cref="SqlFunctions.IPgControlCheckpointRow"/>).
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.IPgControlCheckpointRow> pg_control_checkpoint() => new("pg_control_checkpoint");
+
+        /// <summary>
+        /// <c>pg_get_keywords()</c> as a FROM source: one row per SQL keyword or keyword-like token;
+        /// the <c>"char"</c> category code is read as text (see
+        /// <see cref="SqlFunctions.IPgKeywordRow"/>).
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.IPgKeywordRow> pg_get_keywords() => new("pg_get_keywords");
+
+        /// <summary>
+        /// <c>pg_listening_channels()</c> as a FROM source: one row per channel this session is
+        /// listening on (see <see cref="SqlFunctions.IListeningChannelRow"/>). The set is empty until a
+        /// <c>LISTEN</c> is issued on the same connection.
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.IListeningChannelRow> pg_listening_channels() => new("pg_listening_channels");
+
+        /// <summary>
+        /// <c>pg_snapshot_xip(snapshot)</c> as a FROM source: one row per in-progress transaction id of
+        /// the snapshot, read as text (see <see cref="SqlFunctions.ISnapshotXipRow"/>).
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.ISnapshotXipRow> pg_snapshot_xip(string? snapshot) => new("pg_snapshot_xip");
+
+        /// <summary>
+        /// <c>pg_tablespace_databases(oid)</c> as a FROM source: one row per database that has files in
+        /// the tablespace, with the database OID read as text (see
+        /// <see cref="SqlFunctions.ITablespaceDatabaseRow"/>).
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.ITablespaceDatabaseRow> pg_tablespace_databases(string? tablespaceOid) => new("pg_tablespace_databases");
+
+        /// <summary>
+        /// <c>pg_get_catalog_foreign_keys()</c> as a FROM source: one row per catalog foreign-key
+        /// relationship, with both <c>regclass</c> columns read as text and both column lists as
+        /// <c>text[]</c> (see <see cref="SqlFunctions.IPgCatalogForeignKeyRow"/>).
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.IPgCatalogForeignKeyRow> pg_get_catalog_foreign_keys() => new("pg_get_catalog_foreign_keys");
+
+        /// <summary>
+        /// <c>pg_options_to_table(options)</c> as a FROM source: one row per <c>name=value</c> storage
+        /// option, split into <c>option_name</c>/<c>option_value</c> (see
+        /// <see cref="SqlFunctions.IPgOptionRow"/>).
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.IPgOptionRow> pg_options_to_table(string?[] options) => new("pg_options_to_table");
+
+        /// <summary>
+        /// <c>pg_available_wal_summaries()</c> as a FROM source: one row per WAL summary file on disk,
+        /// with the <c>pg_lsn</c> bounds read as text (see
+        /// <see cref="SqlFunctions.IPgAvailableWalSummaryRow"/>). Empty while
+        /// <c>summarize_wal</c> is off.
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.IPgAvailableWalSummaryRow> pg_available_wal_summaries() => new("pg_available_wal_summaries");
+
+        /// <summary>
+        /// <c>pg_get_multixact_members(multixactid)</c> as a FROM source: one row per transaction that
+        /// is a member of the multixact, with its lock mode (see
+        /// <see cref="SqlFunctions.IPgMultixactMemberRow"/>).
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.IPgMultixactMemberRow> pg_get_multixact_members(uint? multixactId) => new("pg_get_multixact_members");
+
+        /// <summary>
+        /// <c>pg_get_object_address(type, object_names, object_args)</c> as a FROM source: the catalog
+        /// coordinates of the described object, with both OIDs read as text (see
+        /// <see cref="SqlFunctions.IPgObjectAddressRow"/>).
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.IPgObjectAddressRow> pg_get_object_address(string? type, string?[] objectNames, string?[] objectArgs) => new("pg_get_object_address");
+
+        /// <summary>
+        /// <c>pg_get_wal_summarizer_state()</c> as a FROM source: the single WAL summarizer state row,
+        /// with the <c>pg_lsn</c> columns read as text (see
+        /// <see cref="SqlFunctions.IPgWalSummarizerStateRow"/>).
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.IPgWalSummarizerStateRow> pg_get_wal_summarizer_state() => new("pg_get_wal_summarizer_state");
+
+        /// <summary>
+        /// <c>pg_last_committed_xact()</c> as a FROM source: the last transaction with a commit
+        /// timestamp, or no row when none is recorded (see
+        /// <see cref="SqlFunctions.IPgCommittedXactRow"/>).
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.IPgCommittedXactRow> pg_last_committed_xact() => new("pg_last_committed_xact");
+
+        /// <summary>
+        /// <c>pg_identify_object(classid, objid, objsubid)</c> as a FROM source: the type, schema, name
+        /// and identity of one catalog object (see <see cref="SqlFunctions.IPgIdentifyObjectRow"/>). An
+        /// object that does not exist yields one all-NULL row.
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.IPgIdentifyObjectRow> pg_identify_object(string? classId, string? objectId, int? objectSubId) => new("pg_identify_object");
+
+        /// <summary>
+        /// <c>pg_identify_object_as_address(classid, objid, objsubid)</c> as a FROM source: the
+        /// machine-readable address of one catalog object, both components as <c>text[]</c> (see
+        /// <see cref="SqlFunctions.IPgIdentifyObjectAddressRow"/>).
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.IPgIdentifyObjectAddressRow> pg_identify_object_as_address(string? classId, string? objectId, int? objectSubId) => new("pg_identify_object_as_address");
+
+        /// <summary>
+        /// <c>pg_input_error_info(value, type_name)</c> as a FROM source: the soft error report of parsing
+        /// <paramref name="value"/> as <paramref name="typeName"/>. A valid value yields one all-NULL row;
+        /// an invalid value yields the message and SQLSTATE (see
+        /// <see cref="SqlFunctions.IPgInputErrorInfoRow"/>).
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.IPgInputErrorInfoRow> pg_input_error_info(string? value, string? typeName) => new("pg_input_error_info");
+
+        /// <summary>
+        /// <c>pg_wal_summary_contents(tli, start_lsn, end_lsn)</c> as a FROM source: one block range of the
+        /// WAL summary file that covers the requested range, with the <c>oid</c> columns read as text (see
+        /// <see cref="SqlFunctions.IPgWalSummaryContentRow"/>).
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.IPgWalSummaryContentRow> pg_wal_summary_contents(long? timelineId, string? startLsn, string? endLsn) => new("pg_wal_summary_contents");
+
+        /// <summary>
+        /// <c>pg_xact_commit_timestamp_origin(xid)</c> as a FROM source: the commit timestamp of one
+        /// transaction and its replication origin, with <c>roident</c> read as text (see
+        /// <see cref="SqlFunctions.IPgXactCommitOriginRow"/>). Requires <c>track_commit_timestamp</c>.
+        /// </summary>
+        public TvfEntityBuilder<SqlFunctions.IPgXactCommitOriginRow> pg_xact_commit_timestamp_origin(uint? xid) => new("pg_xact_commit_timestamp_origin");
 
         /// <summary><c>a &amp;&amp; b</c>: true when the two ranges overlap (share at least one point).</summary>
         /// <typeparam name="T">The bound type of the ranges.</typeparam>

@@ -3,7 +3,8 @@
   <PropertyGroup>
     <PackageId>nextorm.entityframeworkcore</PackageId>
     <Title>Nextorm Entity Framework Core integration</Title>
-    <Description>Entity Framework Core integration for Nextorm: run nextorm reads over an existing DbContext connection and transaction, reusing the EF model mapping.</Description>
+    <Description>Entity Framework Core integration for Nextorm, a zero-SQL ORM for .NET: run nextorm queries and commands over an existing DbContext connection and transaction, reusing the EF model mapping. Adds CreateNextOrmContext().</Description>
+    <PackageTags>$(PackageTags);entity-framework-core;ef-core;efcore;entity-framework</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>

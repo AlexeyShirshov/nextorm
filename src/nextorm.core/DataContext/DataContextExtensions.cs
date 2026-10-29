@@ -1273,6 +1273,16 @@ public static class DataContextExtensions
     /// <param name="dataContext">The context to execute against.</param>
     /// <param name="query">The command whose definition drives the query.</param>
     /// <returns>A builder for composing the query further.</returns>
+    /// <remarks>
+    /// A single-column scalar source — including a set-operation command such as
+    /// <c>left.UnionAll(right)</c> — materialises directly to <c>List&lt;T&gt;</c>. The read builds its own
+    /// one-column shape and does not reuse the process-wide select-list cache entry of the result type,
+    /// so a preceding scalar read that warmed that entry does not change the result. Before this
+    /// behaviour, the warm path reused a cached object-materialisation list and threw
+    /// <see cref="QueryPreparationException"/> ("Cannot get ctor from ..."), while the cold path
+    /// succeeded. A derived source with more than one column still requires an explicit outer
+    /// <c>Select</c>.
+    /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static EntityBuilder<TResult> From<TResult>(this IDataContext dataContext, QueryCommand<TResult> query)
         => new(dataContext, query) { Logger = dataContext.CommandLogger };
@@ -1419,29 +1429,56 @@ public static class DataContextExtensions
     }
 
     /// <summary>
-    /// Starts a query from a table-valued function. <paramref name="call"/> must be a call to a static
-    /// method annotated with <see cref="SqlTableFunctionAttribute"/> (or declared in an annotated
-    /// type); its arguments are rendered as the function arguments and are parameterised like any
-    /// other expression. The function must already exist in the target database - nextorm only emits
-    /// the call.
+    /// Starts a query from a runtime table-valued-function descriptor supplied as an <b>expression</b>
+    /// source, for example <c>ctx.From(() =&gt; Db.MyTvf(42))</c>. The lambda is required: a direct
+    /// <c>Db.MyTvf(42)</c> call would pass an argument value and lose the expression, so only the lambda
+    /// carries the call node whose arguments are rendered/parameterised like any other SQL expression.
     /// <para>
-    /// Example: <c>ctx.FromTableFunction(() =&gt; Db.MyTvf(1, "x")).Select(r =&gt; new { r.Id })</c>.
+    /// The factory must return <see cref="TvfEntityBuilder{T}"/> for the same row type, and its metadata
+    /// must not depend on the argument values. The argument expressions are kept untouched — a member of
+    /// an outer row stays an outer-column reference, never an evaluated CLR value. Builder operations
+    /// composed on the descriptor in the same lambda (<c>Where</c>, ordering and other
+    /// builder-returning operations) are re-applied in their original order, so the source, its
+    /// arguments and the composed operations all reach the query. A captured descriptor or any other
+    /// shape without the original call expression is rejected with
+    /// <see cref="NotSupportedException"/>.
     /// </para>
     /// </summary>
-    public static EntityBuilder<T> FromTableFunction<T>(this IDataContext dataContext, Expression<Func<IQueryable<T>>> call)
+    /// <typeparam name="T">The mapped row type the function returns, i.e. the result type of the composed chain.</typeparam>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="source">The expression that calls the runtime factory, for example <c>() =&gt; Db.MyTvf(42)</c>.</param>
+    /// <returns>A builder for composing the query over the function.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="dataContext"/> or <paramref name="source"/> is <see langword="null"/>.</exception>
+    /// <exception cref="NotSupportedException">The expression is not a direct runtime-factory call or lost its argument provenance.</exception>
+    public static EntityBuilder<T> From<T>(this IDataContext dataContext, Expression<Func<EntityBuilder<T>>> source)
     {
         ArgumentNullException.ThrowIfNull(dataContext);
-        ArgumentNullException.ThrowIfNull(call);
 
-        var body = call.Body;
-        if (body is UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked } unary)
-            body = unary.Operand;
+        return SourceExpressionLowerer.LowerTvfSource(dataContext, source, nameof(source));
+    }
 
-        if (body is not MethodCallExpression methodCall)
-            throw new ArgumentException("The expression must be a call to a method mapped with [SqlTableFunction].", nameof(call));
+    /// <summary>
+    /// Starts a query from a runtime table-valued-function descriptor supplied as an expression source,
+    /// with per-source options. See <see cref="From{T}(IDataContext, Expression{Func{EntityBuilder{T}}})"/>.
+    /// </summary>
+    /// <typeparam name="T">The mapped row type the function returns, i.e. the result type of the composed chain.</typeparam>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="source">The expression that calls the runtime factory.</param>
+    /// <param name="configure">Configures the source placement, for example <c>o =&gt; o.WithSubQueryHint("NestLoop(t1)")</c>.</param>
+    /// <returns>A builder for composing the query over the function.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="dataContext"/>, <paramref name="source"/> or <paramref name="configure"/> is <see langword="null"/>.</exception>
+    /// <exception cref="NotSupportedException">The expression is not a direct runtime-factory call or lost its argument provenance.</exception>
+    public static EntityBuilder<T> From<T>(this IDataContext dataContext, Expression<Func<EntityBuilder<T>>> source, Action<FromOptions> configure)
+    {
+        ArgumentNullException.ThrowIfNull(dataContext);
+        ArgumentNullException.ThrowIfNull(configure);
 
-        var entity = dataContext.From<T>();
-        entity.SourceFrom = new FromExpression(TableFunctionExpression.Create(methodCall));
+        var fromOptions = new FromOptions();
+        configure(fromOptions);
+
+        var entity = SourceExpressionLowerer.LowerTvfSource(dataContext, source, nameof(source));
+        entity.SubQueryHint = fromOptions.SubQueryHint;
+        entity.SourceLockClause = fromOptions.SourceLock;
         return entity;
     }
 
@@ -1556,17 +1593,6 @@ public static class DataContextExtensions
     /// <returns>A builder for composing the query.</returns>
     public static EntityBuilder<TableAlias> CreateQueryBuilderFromSql(this IDataContext dataContext, string sql, object? parameters = null)
         => dataContext.FromSql(sql, parameters);
-
-    /// <summary>
-    /// Explicit factory alias of <see cref="FromTableFunction{T}(IDataContext, Expression{Func{IQueryable{T}}})"/>:
-    /// starts a query from a table-valued function.
-    /// </summary>
-    /// <typeparam name="T">The function's row type.</typeparam>
-    /// <param name="dataContext">The context to execute against.</param>
-    /// <param name="call">A call to a static method annotated with <see cref="SqlTableFunctionAttribute"/>.</param>
-    /// <returns>A builder for composing the query.</returns>
-    public static EntityBuilder<T> CreateQueryBuilderFromTableFunction<T>(this IDataContext dataContext, Expression<Func<IQueryable<T>>> call)
-        => dataContext.FromTableFunction(call);
 
     /// <summary>Starts a CTE scope with a single non-recursive declaration.</summary>
     public static CteQuery With(this IDataContext dataContext, string name, QueryCommand query)

@@ -4,3 +4,10 @@
 # them to CRLF on checkout and break the byte comparison.
 tests/nextorm.core.tests/Baselines/** -text
 tests/nextorm.sqlite.tests/Baselines/** -text
+
+# ClickHouse F18 geobase fixtures are handed to the server as-is (config.d/geobase.xml plus
+# regions_hierarchy.txt / regions_names_{en,ru}.txt through WithResourceMapping) and parsed as
+# tab-separated text. A CRLF checkout leaves a trailing \r on every name and on every hierarchy
+# line: regionToName then returns "США\r" and the server refuses to load the geobase at all
+# (DICTIONARIES_WAS_NOT_LOADED). Never convert these bytes.
+tests/nextorm.integration.tests/ClickHouse/Fixtures/** -text

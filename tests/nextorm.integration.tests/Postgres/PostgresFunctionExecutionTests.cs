@@ -1,5 +1,7 @@
+using System.Data.Common;
 using FluentAssertions;
 using NextORM.Core;
+using NextORM.Postgres;
 
 namespace NextORM.Integration.Tests;
 
@@ -265,5 +267,174 @@ public sealed class PostgresFunctionExecutionTests : ProviderTestSuite
         r.Clock.Should().Be("13:45:30");
         r.ShortYear.Should().Be("23");
         r.Separators.Should().Be("2023/05/17 13:45");
+    }
+
+    // T260 (#260): the PostgreSQL functions that do not exist on the configured server version must be
+    // refused at preparation, before the statement is dispatched. The three names below are the frozen
+    // refusal messages of the cycle; the tests assert the exact text and that no command reached the
+    // server, then prove the same context still executes an ordinary supported query.
+
+    private const string ArrayReverseRefusal =
+        "The PostgreSQL function 'array_reverse' is not supported by this provider.";
+
+    private const string ArraySortRefusal =
+        "The PostgreSQL function 'array_sort' is not supported by this provider.";
+
+    private const string UuidV7Refusal =
+        "The uuidv7 function is not supported by this provider.";
+
+    [Fact]
+    public void T260_ArrayReverse_Pg17_ShouldRefuseBeforeDispatch()
+    {
+        Provider.EnsureSeeded();
+        using var ctx = CreatePg17Context(out var recorder);
+        var entity = ctx.From<IComplexEntity>();
+        var values = new[] { 1, 2, 3 };
+
+        var exception = Record.Exception(
+            () => entity.Select(x => new { V = SqlFunctions.Postgres.array_reverse(values) }).ToList());
+
+        AssertRefused(exception, recorder, ArrayReverseRefusal);
+        AssertSupportedQueryStillExecutes(ctx);
+    }
+
+    [Fact]
+    public void T260_ArraySort_Pg17_ShouldRefuseBeforeDispatch()
+    {
+        Provider.EnsureSeeded();
+        using var ctx = CreatePg17Context(out var recorder);
+        var entity = ctx.From<IComplexEntity>();
+        var values = new[] { 3, 1, 2 };
+
+        var exception = Record.Exception(
+            () => entity.Select(x => new { V = SqlFunctions.Postgres.array_sort(values) }).ToList());
+
+        AssertRefused(exception, recorder, ArraySortRefusal);
+        AssertSupportedQueryStillExecutes(ctx);
+    }
+
+    [Fact]
+    public void T260_UuidV7_Pg17_ShouldRefuseBeforeDispatch()
+    {
+        Provider.EnsureSeeded();
+        using var ctx = CreatePg17Context(out var recorder);
+        var entity = ctx.From<IComplexEntity>();
+
+        var exception = Record.Exception(
+            () => entity.Select(x => new { V = SqlFunctions.Sql.uuidv7() }).ToList());
+
+        AssertRefused(exception, recorder, UuidV7Refusal);
+        AssertSupportedQueryStillExecutes(ctx);
+    }
+
+    [Fact]
+    public void T260_UnsetVersion_Pg17_ShouldRefuseAffectedFunctions()
+    {
+        Provider.EnsureSeeded();
+        using var ctx = CreateUnsetContext(out var recorder);
+        var entity = ctx.From<IComplexEntity>();
+        var values = new[] { 1, 2, 3 };
+
+        AssertRefused(
+            Record.Exception(() => entity.Select(x => new { V = SqlFunctions.Postgres.array_reverse(values) }).ToList()),
+            recorder, ArrayReverseRefusal);
+        AssertRefused(
+            Record.Exception(() => entity.Select(x => new { V = SqlFunctions.Postgres.array_sort(values) }).ToList()),
+            recorder, ArraySortRefusal);
+        AssertRefused(
+            Record.Exception(() => entity.Select(x => new { V = SqlFunctions.Sql.uuidv7() }).ToList()),
+            recorder, UuidV7Refusal);
+
+        AssertSupportedQueryStillExecutes(ctx);
+    }
+
+    [Fact]
+    public void T260_RepeatPreparation_Pg17_ShouldPreserveSupportedExecution()
+    {
+        Provider.EnsureSeeded();
+        using var ctx = CreatePg17Context(out var recorder);
+        var entity = ctx.From<IComplexEntity>();
+        var values = new[] { 1, 2, 3 };
+
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            AssertRefused(
+                Record.Exception(() => entity.Select(x => new { V = SqlFunctions.Postgres.array_sort(values) }).ToList()),
+                recorder, ArraySortRefusal);
+        }
+
+        AssertSupportedQueryStillExecutes(ctx);
+        recorder.Reset();
+
+        var repeated = Record.Exception(
+            () => entity.Select(x => new { V = SqlFunctions.Postgres.array_sort(values) }).ToList());
+        AssertRefused(repeated, recorder, ArraySortRefusal);
+    }
+
+    private static Pg17DataContext CreatePg17Context(out DispatchRecorder recorder)
+    {
+        recorder = new DispatchRecorder();
+        var ctx = new Pg17DataContext(PostgresContainer.ConnectionString);
+        ctx.AddInterceptor(recorder);
+        return ctx;
+    }
+
+    private static PostgresDataContext CreateUnsetContext(out DispatchRecorder recorder)
+    {
+        recorder = new DispatchRecorder();
+        var ctx = new PostgresDataContext(PostgresContainer.ConnectionString, new DataContextBuilder());
+        ctx.AddInterceptor(recorder);
+        return ctx;
+    }
+
+    private static void AssertRefused(Exception? exception, DispatchRecorder recorder, string message)
+    {
+        // The because-message records the SQL that actually reached the server on the red run, so the
+        // baseline failure carries the server-side statement and driver error, not only the type.
+        exception.Should().BeOfType<NotSupportedException>(
+                "the ORM must refuse at preparation, before dispatch; the dispatched SQL was: {0}; the observed failure was: {1}",
+                recorder.Describe(), exception?.ToString() ?? "<none>")
+            .Which.Message.Should().Be(message);
+        recorder.Executing.Should().BeEmpty("the refused statement must never reach the server");
+        recorder.Reset();
+    }
+
+    private static void AssertSupportedQueryStillExecutes(IDataContext ctx)
+        => ctx.From<ISimpleEntity>()
+            .Where(x => x.Id == 1)
+            .Select(x => x.Id)
+            .ToList()
+            .Should().Equal(1);
+
+    /// <summary>An explicitly versioned PG17 context; the version is immutable per concrete type.</summary>
+    private sealed class Pg17DataContext : PostgresDataContext
+    {
+        public Pg17DataContext(string connectionString)
+            : base(connectionString, new DataContextBuilder(), new Version(17, 0))
+        {
+        }
+    }
+
+    /// <summary>Records the SQL of every command that reaches the execution seam.</summary>
+    private sealed class DispatchRecorder : IQueryInterceptor
+    {
+        private readonly List<string> _executing = new();
+
+        public List<string> Executing
+        {
+            get { lock (_executing) return _executing.ToList(); }
+        }
+
+        public string Describe() => string.Join(" | ", Executing);
+
+        public void Reset()
+        {
+            lock (_executing) _executing.Clear();
+        }
+
+        public void CommandExecuting(CommandEventData eventData, DbCommand command)
+        {
+            lock (_executing) _executing.Add(command.CommandText.Replace("\r\n", "\n"));
+        }
     }
 }

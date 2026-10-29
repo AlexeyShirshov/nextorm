@@ -106,11 +106,10 @@ Two nextorm-specific rules that trip people up:
   `Select` lambda is still typed over the *source entity*, not over the key, so
   `GroupBy(b => new { D = date_trunc("day", b.BookDate) })` must be followed by
   `Select(b => new { D = date_trunc("day", b.BookDate), … })`.
-* **A derived query cannot yet be the primary `FROM` source while joined** — `ctx.From(derived).Join(...)`
-  fails during preparation (known gap 10 in
-  [`sql-capabilities-gap-analysis.md`](../../docs/specs/roadmap/sql-capabilities-gap-analysis.md)).
-  The reference queries declare their subqueries as CTEs, so the example uses the typed `query.AsCte(name)` /
-  `ctx.From(cte)` API (see rule 1); queries 1–5 are expressed this way and are all **WORKING**.
+* **A derived query can be the primary `FROM` source while joined** — `ctx.From(derived).Join(...)` is
+  supported (a `Where` before the join is pushed onto the derived query). The reference queries declare
+  their subqueries as CTEs, so the example uses the typed `query.AsCte(name)` / `ctx.From(cte)` API
+  (see rule 1); queries 1–5 are expressed this way and are all **WORKING**.
   Every method carries a `WORKING` / `NOT WORKING` comment saying which it is and, when it fails, why.
 
 ## Demo queries: SQL file → method

@@ -54,7 +54,7 @@ public class SqliteBenchmarkAny
         _db = builder.CreateDataContext();
         _ctx = new TestDataRepository(_db);
 
-        _cmd = _ctx.SimpleEntity.Where(e => e.Id == SqlFunctions.Parameter<int>(0)).AnyCommand().Prepare(true);
+        _cmd = _ctx.SimpleEntity.Where(e => e.Id == SqlFunctions.Parameter<int>(0)).AnyCommand().Prepare();
 
         ((IConnectionManager)_db).EnsureConnectionOpen();
     }

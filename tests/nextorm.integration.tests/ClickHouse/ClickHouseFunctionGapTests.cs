@@ -8,14 +8,15 @@ namespace NextORM.Integration.Tests;
 /// ClickHouse server: the UTF-8/regexp/split strings, the date format/parse helpers, the array set
 /// operations, the map family, the hashes and <c>generateULID</c>.
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class ClickHouseFunctionGapTests : ProviderTestSuite
 {
     protected override ITestProvider Provider => ClickHouseTestProvider.Instance;
 
     [Fact]
-    public void Utf8AndRegexpStrings_ShouldCompute()
+    public async Task Utf8AndRegexpStrings_ShouldCompute()
     {
-        var r = _sut.ComplexEntity
+        var query = _sut.ComplexEntity
             .Where(e => e.Id == 1)
             .Select(e => new
             {
@@ -27,8 +28,9 @@ public sealed class ClickHouseFunctionGapTests : ProviderTestSuite
                 E = SqlFunctions.ClickHouse.extract("abc123", "[0-9]+"),
                 EA = SqlFunctions.ClickHouse.extract_all("a1b2", "[0-9]"),
                 S = SqlFunctions.ClickHouse.split_by_string(",", "a,b,c")
-            })
-            .First();
+            });
+
+        var r = await query.FirstAsync(TestContext.Current.CancellationToken);
 
         r.L.Should().Be("привет");
         r.U.Should().Be("ПРИВЕТ");
@@ -41,9 +43,9 @@ public sealed class ClickHouseFunctionGapTests : ProviderTestSuite
     }
 
     [Fact]
-    public void DateTime_ShouldFormatParseAndCompute()
+    public async Task DateTime_ShouldFormatParseAndCompute()
     {
-        var r = _sut.ComplexEntity
+        var query = _sut.ComplexEntity
             .Where(e => e.Id == 1)
             .Select(e => new
             {
@@ -52,8 +54,9 @@ public sealed class ClickHouseFunctionGapTests : ProviderTestSuite
                 B = SqlFunctions.ClickHouse.parse_date_time_best_effort("2023-01-01"),
                 N = SqlFunctions.ClickHouse.now(),
                 T = SqlFunctions.ClickHouse.today()
-            })
-            .First();
+            });
+
+        var r = await query.FirstAsync(TestContext.Current.CancellationToken);
 
         r.F.Should().Be("2023-01-01");
         r.P.Should().Be(new DateTime(2023, 1, 1));
@@ -64,17 +67,18 @@ public sealed class ClickHouseFunctionGapTests : ProviderTestSuite
     }
 
     [Fact]
-    public void ArraySetOperations_ShouldCompute()
+    public async Task ArraySetOperations_ShouldCompute()
     {
-        var r = _sut.ArrayEntity
+        var query = _sut.ArrayEntity
             .Where(e => e.Id == 1)
             .Select(e => new
             {
                 C = SqlFunctions.ClickHouse.array_concat(e.Nums, e.Nums),
                 I = SqlFunctions.ClickHouse.array_intersect(e.Nums, e.Nums),
                 Q = SqlFunctions.ClickHouse.array_uniq(e.Nums)
-            })
-            .First();
+            });
+
+        var r = await query.FirstAsync(TestContext.Current.CancellationToken);
 
         r.C.Should().Equal(3, 1, 2, 3, 1, 2);
         r.I.Should().BeEquivalentTo(new[] { 3, 1, 2 });
@@ -82,32 +86,34 @@ public sealed class ClickHouseFunctionGapTests : ProviderTestSuite
     }
 
     [Fact]
-    public void MapFunctions_ShouldCompute()
+    public async Task MapFunctions_ShouldCompute()
     {
-        var r = _sut.ComplexEntity
+        var query = _sut.ComplexEntity
             .Where(e => e.Id == 1)
             .Select(e => new
             {
                 K = SqlFunctions.ClickHouse.map_keys(SqlFunctions.ClickHouse.map(Tuple.Create("a", 1L), Tuple.Create("b", 2L))),
                 Has = SqlFunctions.ClickHouse.map_contains_key(SqlFunctions.ClickHouse.map(Tuple.Create("a", 1L)), "a")
-            })
-            .First();
+            });
+
+        var r = await query.FirstAsync(TestContext.Current.CancellationToken);
 
         r.K.Should().Equal("a", "b");
         r.Has.Should().BeTrue();
     }
 
     [Fact]
-    public void HashAndUlidFunctions_ShouldCompute()
+    public async Task HashAndUlidFunctions_ShouldCompute()
     {
-        var r = _sut.ComplexEntity
+        var query = _sut.ComplexEntity
             .Where(e => e.Id == 1)
             .Select(e => new
             {
                 H = SqlFunctions.ClickHouse.xx_hash64("abc"),
                 U = SqlFunctions.ClickHouse.generate_ulid()
-            })
-            .First();
+            });
+
+        var r = await query.FirstAsync(TestContext.Current.CancellationToken);
 
         r.H.Should().NotBe(0);
         r.U.Should().NotBeNullOrEmpty();

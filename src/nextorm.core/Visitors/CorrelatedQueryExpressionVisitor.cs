@@ -414,6 +414,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
     private static bool IsAggregateTerminal(string methodName) => methodName switch
     {
         nameof(EntityBuilderExtensions.Count) => true,
+        nameof(EntityBuilderExtensions.LongCount) => true,
         nameof(EntityBuilderExtensions.Min) => true,
         nameof(EntityBuilderExtensions.Max) => true,
         nameof(EntityBuilderExtensions.Avg) => true,
@@ -435,7 +436,23 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
         var selectCall = AggregateTerminalRewriter.Rewrite(node, builderReceiver);
         var cmd = GetQueryCommand(selectCall);
         var firstCall = Expression.Call(selectCall, selectCall.Type.GetMethod("First", Type.EmptyTypes)!);
-        return ReplaceQueryCommand(firstCall, cmd);
+        var scalar = ReplaceQueryCommand(firstCall, cmd);
+
+        // #303: an aggregate terminal used as a value must expose the *value*, not the untyped
+        // Func<IQueryRegistry, QueryCommand> placeholder the generic terminal returns - a delegate has
+        // no numeric operator, so `Sum(...) > 6` fails inside Expression.MakeBinary. Re-type the
+        // returned placeholder into the result-typed registry-index shape (the one
+        // ReplaceScalarQueryCommand produces) and reuse the index it was just registered under: the
+        // command stays prepared and registered exactly once, and `limit 1` / the FirstOrDefault
+        // default still come from the First() terminal above.
+        if (scalar is LambdaExpression { Parameters.Count: 1 } placeholder
+            && placeholder.Parameters[0].Type == typeof(IQueryRegistry)
+            && placeholder.Body is IndexExpression { Arguments: [ConstantExpression { Value: int idx }] })
+        {
+            return TypedScalarPlaceholder(idx, cmd.ResultType ?? typeof(object));
+        }
+
+        return scalar;
     }
 
     /// <summary>
@@ -628,6 +645,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
             return false;
 
         path = resolved;
+        EnsureInMemorySingleColumnPath(resolved);
         EnsureRegisteredSource(resolved);
         return true;
     }
@@ -728,10 +746,20 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
             leg = hop.PrimaryLeg;
         }
 
-        Expression outerKey;
+        // AC251-18: the declaration/metadata model is provider-neutral, but the in-memory provider keeps
+        // its pre-composite divergence. A composite leg is refused here, on the in-memory path, exactly
+        // as the former single-column-only resolution refused it — never matched component-wise, and
+        // never rejected at metadata resolution.
+        EnsureInMemorySingleColumnKey(hop);
+
+        // One outer key per ordered component: a direct hop reads the principal keys off the query source;
+        // an in-memory reference prefix resolves the final principal key at execution time.
+        Expression[] outerKeys;
         if (path.Hops.Count == 1)
         {
-            outerKey = Expression.Property(outerParam, leg.PrincipalKey.PropertyInfo);
+            outerKeys = new Expression[leg.PrincipalKeys.Count];
+            for (var component = 0; component < outerKeys.Length; component++)
+                outerKeys[component] = Expression.Property(outerParam, leg.PrincipalKeys[component].PropertyInfo);
         }
         else if (IsInMemory)
         {
@@ -739,7 +767,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
             // prefix is walked through the registered datasets (never the CLR graph); when any hop is
             // absent the key is NULL, so an absent intermediate reference cannot match a default-valued
             // foreign key.
-            outerKey = BuildReferencePrefixKey(path, outerParam, leg);
+            outerKeys = [BuildReferencePrefixKey(path, outerParam, leg)];
         }
         else
         {
@@ -748,42 +776,53 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
         }
 
         var navigation = Expression.Parameter(sourceType, "navigation");
-        var foreignKey = Expression.Property(navigation, leg.ForeignKey.PropertyInfo);
 
-        var index = _queryProvider!.AddOuterReference(outerKey);
-        var markerConstructor = ReplaceConstantsExpressionVisitor.GetOuterRefMarkerCI(outerKey.Type);
-        var marker = Expression.Property(
-            Expression.New(markerConstructor, Expression.Constant(index)),
-            nameof(OuterRefMarker<int>.Ref));
+        // One equality per ordered component, ANDed in declaration order; a single-column relationship
+        // produces exactly the one equality (and one outer reference) it produced before.
+        Expression? body = null;
+        for (var component = 0; component < outerKeys.Length; component++)
+        {
+            var outerKey = outerKeys[component];
+            var foreignKey = Expression.Property(navigation, leg.ForeignKeys[component].PropertyInfo);
 
-        var (left, right) = AlignNavigationKeys(foreignKey, marker);
-        var parentEquality = Expression.Equal(left, right);
+            var index = _queryProvider!.AddOuterReference(outerKey);
+            var markerConstructor = ReplaceConstantsExpressionVisitor.GetOuterRefMarkerCI(outerKey.Type);
+            var marker = Expression.Property(
+                Expression.New(markerConstructor, Expression.Constant(index)),
+                nameof(OuterRefMarker<int>.Ref));
+
+            var (left, right) = AlignNavigationKeys(foreignKey, marker);
+            var parentEquality = Expression.Equal(left, right);
+            body = body is null ? parentEquality : Expression.AndAlso(body, parentEquality);
+        }
 
         JunctionChildFilter? childFilter = null;
-        Expression body = parentEquality;
 
         if (hop.IsManyToMany)
         {
             // #148-B R2.1: a many-to-many occurrence is a junction row whose mapped child exists. The
             // child leg is PrimaryLeg (junction child FK -> child principal key); the parent leg above is
-            // SecondaryLeg.
-            var childForeignKey = hop.PrimaryLeg.ForeignKey.PropertyInfo;
-            var childKey = hop.PrimaryLeg.PrincipalKey.PropertyInfo;
+            // SecondaryLeg. Every ordered child-key component takes part in the existence test.
+            var childForeignKeys = hop.PrimaryLeg.ForeignKeys;
+            var childKeys = hop.PrimaryLeg.PrincipalKeys;
 
             if (IsInMemory)
             {
                 // The in-memory provider cannot nest a child-key subquery in a correlated subcommand's
                 // condition, so the existence test is applied as a source filter on the junction
                 // (InMemoryQueryBuilder.CreateEnumerator). Junction multiplicity is still preserved.
-                childFilter = new JunctionChildFilter(hop.RelatedType, childForeignKey, childKey);
+                childFilter = new JunctionChildFilter(
+                    hop.RelatedType,
+                    childForeignKeys[0].PropertyInfo,
+                    childKeys[0].PropertyInfo);
             }
             else
             {
-                body = Expression.AndAlso(parentEquality, BuildJunctionChildExistence(navigation, hop.RelatedType, childForeignKey, childKey));
+                body = Expression.AndAlso(body!, BuildJunctionChildExistence(navigation, hop.RelatedType, childForeignKeys, childKeys));
             }
         }
 
-        return (sourceType, Expression.Lambda(body, navigation), childFilter);
+        return (sourceType, Expression.Lambda(body!, navigation), childFilter);
     }
 
     /// <summary>
@@ -791,7 +830,8 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
     /// prefix. The prefix hops are walked against the registered datasets at execution time (never the
     /// CLR navigation graph); the value is the final principal's principal key, or <see langword="null"/>
     /// when any prefix hop is absent. The nullable type is what keeps an absent reference from matching a
-    /// default-valued foreign key.
+    /// default-valued foreign key. AC251-18: every prefix hop and the collection leg must be single-column,
+    /// so the pre-composite in-memory shape is preserved.
     /// </summary>
     private Expression BuildReferencePrefixKey(ResolvedNavigationPath path, ParameterExpression outerParam, ResolvedNavigationLeg collectionLeg)
     {
@@ -807,6 +847,8 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
                     $"The navigation '{hop.DeclaringType.Name}.{hop.Navigation.Name}' is a collection; " +
                     "only a reference prefix before a collection is supported.");
 
+            EnsureInMemorySingleColumnKey(hop);
+
             chainHops[i] = new InMemoryNavigationChainHop
             {
                 EntityType = hop.RelatedType,
@@ -816,7 +858,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
         }
 
         var firstOuterKey = ResolveHopOuterKey(hops[0]).PropertyInfo;
-        var finalKey = collectionLeg.PrincipalKey.PropertyInfo;
+        var finalKey = collectionLeg.PrincipalKeys[0].PropertyInfo;
         var keyType = finalKey.PropertyType;
         var nullableType = keyType.IsValueType && Nullable.GetUnderlyingType(keyType) is null
             ? typeof(Nullable<>).MakeGenericType(keyType)
@@ -834,27 +876,86 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
     }
 
     /// <summary>
+    /// AC251-18: refuses a composite navigation on the in-memory path at the point the former
+    /// single-column-only resolution refused it — after the path is resolved from the (provider-neutral,
+    /// unchanged) metadata and before any provider source diagnostic. The refusal is not a metadata-time or
+    /// provider-neutral rejection: a SQL query over the same metadata proceeds with every component.
+    /// </summary>
+    private void EnsureInMemorySingleColumnPath(ResolvedNavigationPath path)
+    {
+        if (!IsInMemory)
+            return;
+
+        for (var i = 0; i < path.Hops.Count; i++)
+            EnsureInMemorySingleColumnKey(path.Hops[i]);
+    }
+
+    /// <summary>
+    /// AC251-18: the declaration/metadata model is provider-neutral, but the in-memory provider keeps its
+    /// pre-composite divergence. A navigation whose relationship leg carries more than one key component is
+    /// refused on the in-memory path with the same typed contract the former single-column-only resolution
+    /// used; the refusal never happens at (provider-neutral) metadata resolution and no component-wise
+    /// in-memory matching is introduced.
+    /// </summary>
+    private void EnsureInMemorySingleColumnKey(ResolvedNavigationHop hop)
+    {
+        if (!IsInMemory)
+            return;
+
+        if (hop.IsManyToMany)
+        {
+            if (hop.PrimaryLeg.Arity != 1 || hop.SecondaryLeg?.Arity != 1)
+                throw new NotSupportedException(
+                    $"The many-to-many relationship '{hop.DeclaringType.Name}.{hop.Navigation.Name}' has a composite junction key; " +
+                    "only single-column junction keys are supported.");
+
+            return;
+        }
+
+        if (hop.PrimaryLeg.Arity != 1)
+            throw new NotSupportedException(
+                $"The relationship '{hop.DeclaringType.Name}.{hop.Navigation.Name}' has a composite key; " +
+                "only single-column relationship keys are supported.");
+    }
+
+    /// <summary>
     /// #148-B R2.1: builds <c>junction.child_fk in (select child.pk from child)</c>, the mapped-child
     /// existence predicate appended to a many-to-many correlation on the SQL providers. The subquery is
     /// non-correlated and selects only the child key, so it neither joins the child relation into the
     /// count (no fan-out) nor deduplicates the junction rows.
     /// </summary>
-    private Expression BuildJunctionChildExistence(Expression navigation, Type childType, PropertyInfo childForeignKey, PropertyInfo childKey)
+    private Expression BuildJunctionChildExistence(
+        Expression navigation,
+        Type childType,
+        IReadOnlyList<IPropertyMetadata> childForeignKeys,
+        IReadOnlyList<IPropertyMetadata> childKeys)
     {
-        var childKeyType = childKey.PropertyType;
-        var childParameter = Expression.Parameter(childType, "child");
-        var childCommand = ((IDataContext)_dataProvider).CreateCommand(childKeyType, new QueryDefinition
+        // One child-key subquery per ordered component, ANDed in declaration order; a single-column
+        // junction produces exactly the one subquery it produced before.
+        Expression? body = null;
+        for (var component = 0; component < childKeys.Count; component++)
         {
-            Exp = Expression.Lambda(Expression.Property(childParameter, childKey), childParameter),
-            SrcType = childType,
-            Logger = _logger,
-        });
+            var childKey = childKeys[component].PropertyInfo;
+            var childForeignKey = childForeignKeys[component].PropertyInfo;
+            var childKeyType = childKey.PropertyType;
+            var childParameter = Expression.Parameter(childType, "child");
+            var childCommand = ((IDataContext)_dataProvider).CreateCommand(childKeyType, new QueryDefinition
+            {
+                Exp = Expression.Lambda(Expression.Property(childParameter, childKey), childParameter),
+                SrcType = childType,
+                Logger = _logger,
+            });
 
-        return Expression.Call(
-            Expression.Property(null, SQLPI),
-            InCommandMI.MakeGenericMethod(childKeyType),
-            Expression.Property(navigation, childForeignKey),
-            Expression.Constant(childCommand, typeof(QueryCommand<>).MakeGenericType(childKeyType)));
+            var exists = Expression.Call(
+                Expression.Property(null, SQLPI),
+                InCommandMI.MakeGenericMethod(childKeyType),
+                Expression.Property(navigation, childForeignKey),
+                Expression.Constant(childCommand, typeof(QueryCommand<>).MakeGenericType(childKeyType)));
+
+            body = body is null ? exists : Expression.AndAlso(body, exists);
+        }
+
+        return body!;
     }
 
     /// <summary>
@@ -1063,7 +1164,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
 
     /// <summary>
     /// #148-B R2.3: lowers a resolved multi-hop reference chain to an in-memory navigation-chain plan.
-    /// Every hop carries the mapped key pair; the first hop's outer key is registered as an outer
+    /// Every hop carries its mapped key pair; the first hop's outer key is registered as an outer
     /// reference, and the evaluator walks the registered datasets at execution time. A chain that is not
     /// a sequence of declared single-column reference hops is rejected (fail closed).
     /// </summary>
@@ -1077,7 +1178,8 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
     /// #148-B R2.3/D-R3-4: builds the in-memory navigation-chain command for a resolved reference chain
     /// (at least two hops). The optional <paramref name="trailing"/> members are read off the final
     /// principal by the chain selector; an empty list yields the whole principal (used by the multi-hop
-    /// presence check). The chain yields zero rows when any hop is absent.
+    /// presence check). The chain yields zero rows when any hop is absent. AC251-18: every hop must be
+    /// single-column, so the pre-composite in-memory chain is preserved.
     /// </summary>
     private QueryCommand BuildNavigationChainCommand(ResolvedNavigationPath path, IReadOnlyList<PropertyInfo> trailing, Type resultType)
     {
@@ -1098,6 +1200,8 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
                     $"The navigation '{hop.DeclaringType.Name}.{hop.Navigation.Name}' is not a declared single-column reference hop; " +
                     "the in-memory provider supports multi-hop chains of reference navigations only.");
             }
+
+            EnsureInMemorySingleColumnKey(hop);
 
             chainHops[i] = new InMemoryNavigationChainHop
             {
@@ -1134,17 +1238,24 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
         return command;
     }
 
-    /// <summary>The key on the previous entity that feeds this hop (the dependent FK or principal PK).</summary>
+    /// <summary>
+    /// The key on the previous entity that feeds this hop (the dependent FK or principal PK). Only a
+    /// one-component leg reaches here: <see cref="EnsureInMemorySingleColumnKey"/> has already refused a
+    /// composite leg on the in-memory path (AC251-18).
+    /// </summary>
     private static IPropertyMetadata ResolveHopOuterKey(ResolvedNavigationHop hop)
         => hop.Direction == NavigationDirection.DependentToPrincipal
-            ? hop.PrimaryLeg.ForeignKey
-            : hop.PrimaryLeg.PrincipalKey;
+            ? hop.PrimaryLeg.ForeignKeys[0]
+            : hop.PrimaryLeg.PrincipalKeys[0];
 
-    /// <summary>The key on this hop's entity matched against the previous key.</summary>
+    /// <summary>
+    /// The key on this hop's entity matched against the previous key. Only a one-component leg reaches
+    /// here (see <see cref="ResolveHopOuterKey"/>).
+    /// </summary>
     private static IPropertyMetadata ResolveHopMatchKey(ResolvedNavigationHop hop)
         => hop.Direction == NavigationDirection.DependentToPrincipal
-            ? hop.PrimaryLeg.PrincipalKey
-            : hop.PrimaryLeg.ForeignKey;
+            ? hop.PrimaryLeg.PrincipalKeys[0]
+            : hop.PrimaryLeg.ForeignKeys[0];
 
     /// <summary>
     /// Builds the correlated existence test for a declared reference navigation presence check. A
@@ -1203,18 +1314,20 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
 
         var navigation = Expression.Parameter(hop.RelatedType, "navigation");
 
+        EnsureInMemorySingleColumnKey(hop);
+
         Expression outerKey;
         Expression innerKey;
 
         if (hop.Direction == NavigationDirection.DependentToPrincipal)
         {
-            outerKey = Expression.Property(outerParam, hop.PrimaryLeg.ForeignKey.PropertyInfo);
-            innerKey = Expression.Property(navigation, hop.PrimaryLeg.PrincipalKey.PropertyInfo);
+            outerKey = Expression.Property(outerParam, hop.PrimaryLeg.ForeignKeys[0].PropertyInfo);
+            innerKey = Expression.Property(navigation, hop.PrimaryLeg.PrincipalKeys[0].PropertyInfo);
         }
         else if (hop.Direction == NavigationDirection.PrincipalToDependent)
         {
-            outerKey = Expression.Property(outerParam, hop.PrimaryLeg.PrincipalKey.PropertyInfo);
-            innerKey = Expression.Property(navigation, hop.PrimaryLeg.ForeignKey.PropertyInfo);
+            outerKey = Expression.Property(outerParam, hop.PrimaryLeg.PrincipalKeys[0].PropertyInfo);
+            innerKey = Expression.Property(navigation, hop.PrimaryLeg.ForeignKeys[0].PropertyInfo);
         }
         else
         {
@@ -1241,16 +1354,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
     private Expression RegisterScalarTyped(QueryCommand cmd, Type resultType)
     {
         PrepareAndRegister(cmd, out var idx);
-        _registryParameter ??= Expression.Parameter(typeof(IQueryRegistry));
-
-        var queryValue = Expression.Property(
-            Expression.Property(_registryParameter, ReferencedQueriesPI),
-            ItemPI,
-            Expression.Constant(idx));
-
-        // Route through object so the placeholder works for both a value type (unboxing) and a
-        // reference type (an arbitrary explicit reference conversion the direct Convert would refuse).
-        return Expression.Convert(Expression.Convert(queryValue, typeof(object)), resultType);
+        return TypedScalarPlaceholder(idx, resultType);
     }
 
     /// <summary>True when <paramref name="expression"/> reads a scalar member through a reference navigation.</summary>
@@ -1355,6 +1459,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
                 && resolved.FinalHop is { IsCollection: false })
             {
                 path = resolved;
+                EnsureInMemorySingleColumnPath(resolved);
                 EnsureRegisteredSource(resolved);
                 trailing = members.GetRange(k, members.Count - k);
                 return true;
@@ -1455,7 +1560,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
         }
         else
         {
-            var constRepl = new ReplaceConstantsExpressionVisitor(_outerParams, _queryProvider);
+            var constRepl = new ReplaceConstantsExpressionVisitor(NormalizationParameters(exp), _queryProvider);
             var body = constRepl.Visit(exp);
 
             if (constRepl.Params.Count > 0)
@@ -1513,6 +1618,65 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
         }
 
         return cmd;
+    }
+
+    /// <summary>
+    /// The outer-parameter set the preparation-local normalization rewrites into outer references: the
+    /// pushed lambda parameters plus any free parameter that is a navigation-join alias of the command
+    /// being prepared (<see cref="QueryCommand.NavigationPaths"/>). <see cref="NavigationExpansion"/>
+    /// injects such an alias on the outer command and a nested correlated lambda can capture it; it is
+    /// not a lambda parameter, so it never reaches the pushed outer parameters, and the nested command
+    /// does not own it either. Without this the alias stays free and compiling the nested command fails
+    /// with "variable 'navigationN' ... is not defined". Ownership is matched by reference against the
+    /// enclosing command's own path registry - never by name - and nothing is mutated or copied.
+    /// </summary>
+    private IEnumerable<ParameterExpression> NormalizationParameters(Expression expression)
+    {
+        if (_queryProvider is not QueryCommand { NavigationPaths: { Count: > 0 } paths })
+            return (IEnumerable<ParameterExpression>?)_outerParams ?? [];
+
+        var collector = new JoinedParameterCollector(paths, _outerParams);
+        collector.Visit(expression);
+
+        return collector.Found.Count == 0
+            ? (IEnumerable<ParameterExpression>?)_outerParams ?? []
+            : (_outerParams ?? []).Concat(collector.Found);
+    }
+
+    /// <summary>
+    /// Collects the free navigation-join aliases of the enclosing command that appear in an expression,
+    /// skipping the parameters already treated as outer.
+    /// </summary>
+    private sealed class JoinedParameterCollector(
+        IReadOnlyDictionary<ParameterExpression, string> paths,
+        IEnumerable<ParameterExpression>? outerParameters) : ExpressionVisitor
+    {
+        private readonly HashSet<ParameterExpression> _seen = outerParameters is null ? [] : [.. outerParameters];
+        private readonly List<ParameterExpression> _found = [];
+
+        internal List<ParameterExpression> Found => _found;
+
+        protected override Expression VisitParameter(ParameterExpression node)
+        {
+            if (!_seen.Contains(node) && IsJoinedParameter(node))
+            {
+                _seen.Add(node);
+                _found.Add(node);
+            }
+
+            return base.VisitParameter(node);
+        }
+
+        private bool IsJoinedParameter(ParameterExpression node)
+        {
+            foreach (var parameter in paths.Keys)
+            {
+                if (ReferenceEquals(parameter, node))
+                    return true;
+            }
+
+            return false;
+        }
     }
 
     /// <summary>
@@ -1611,15 +1775,25 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
 
         var idx = _queryProvider!.AddCommand(cmd);
 
+        return TypedScalarPlaceholder(idx, cmd.ResultType ?? typeof(object));
+    }
+
+    /// <summary>
+    /// Builds the result-typed registry-index placeholder for the command registered at
+    /// <paramref name="idx"/>: a read of the registry slot routed through <c>object</c>, so a value
+    /// type unboxes and a reference type takes the explicit conversion. The SQL renderer walks the
+    /// two conversions down to the index (see <see cref="ReplaceScalarQueryCommand"/>); sharing this
+    /// builder keeps every typed scalar placeholder in that one recognised shape.
+    /// </summary>
+    private Expression TypedScalarPlaceholder(int idx, Type resultType)
+    {
         _registryParameter ??= Expression.Parameter(typeof(IQueryRegistry));
+
         var queryValue = Expression.Property(
             Expression.Property(_registryParameter, ReferencedQueriesPI),
             ItemPI,
             Expression.Constant(idx));
 
-        // Route through object: a QueryCommand has no direct coercion to the numeric result type, and
-        // the reference-then-unbox shape is what the SQL renderer walks to the registry index.
-        var resultType = cmd.ResultType ?? typeof(object);
         return Expression.Convert(Expression.Convert(queryValue, typeof(object)), resultType);
     }
 
@@ -1767,8 +1941,45 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
             }
         }
 
+        // #303: a non-equality comparison whose operand is still a registry-query placeholder cannot
+        // be built - a Func has no numeric operator - and Expression.MakeBinary would surface an
+        // internal InvalidOperationException. Fail closed with a public preparation exception that
+        // names the terminal and the operator. The equality arm above keeps its boxed-object path, and
+        // Any/EXISTS (a bool-valued lambda) never carries a QueryCommand body, so it is not affected.
+        if (node.NodeType is ExpressionType.GreaterThan or ExpressionType.GreaterThanOrEqual
+                or ExpressionType.LessThan or ExpressionType.LessThanOrEqual)
+        {
+            var comparisonLeft = Visit(node.Left)!;
+            var comparisonRight = Visit(node.Right)!;
+
+            if (IsRegistryQueryPlaceholder(comparisonLeft) || IsRegistryQueryPlaceholder(comparisonRight))
+            {
+                var terminal = TerminalName(node.Left) ?? TerminalName(node.Right) ?? "<unknown>";
+                throw new QueryPreparationException(
+                    $"The query terminal '{terminal}' cannot be used with the '{node.NodeType}' operator: it does not "
+                    + "lower to a scalar value, so the operand is still a correlated-subquery placeholder. Only the "
+                    + "aggregate terminals Count, Min, Max, Avg, Sum, Stdev, Stdevp, Var and Varp can be composed in a comparison.");
+            }
+
+            return node.Update(comparisonLeft, node.Conversion, comparisonRight);
+        }
+
         return base.VisitBinary(node);
     }
+
+    /// <summary>
+    /// True when <paramref name="expression"/> is still the untyped subquery placeholder: a lambda over
+    /// the shared <see cref="IQueryRegistry"/> whose body is a <see cref="QueryCommand"/> (the
+    /// <c>Func&lt;IQueryRegistry, QueryCommand&gt;</c> shape the generic terminals return).
+    /// </summary>
+    private static bool IsRegistryQueryPlaceholder(Expression expression)
+        => expression is LambdaExpression { Parameters.Count: 1 } placeholder
+           && placeholder.Parameters[0].Type == typeof(IQueryRegistry)
+           && placeholder.Body.Type.IsAssignableTo(typeof(QueryCommand));
+
+    /// <summary>The terminal method name of a pre-visit comparison operand, when it is a method call.</summary>
+    private static string? TerminalName(Expression operand)
+        => operand is MethodCallExpression call ? call.Method.Name : null;
     /// <summary>
     /// Visits a conversion, preserving a lambda whose body is a <c>QueryCommand</c> (a subquery)
     /// instead of wrapping it in a new conversion node.

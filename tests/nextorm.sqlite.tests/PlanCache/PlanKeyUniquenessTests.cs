@@ -53,11 +53,9 @@ public class PlanKeyUniquenessTests
 
     public static class PkTvf
     {
-        [SqlTableFunction("pk_rows")]
-        public static IQueryable<ITvfRow> Rows() => throw new NotSupportedException();
+        public static TvfEntityBuilder<ITvfRow> Rows() => new("pk_rows");
 
-        [SqlTableFunction("pk_rows_by_id")]
-        public static IQueryable<ITvfRow> RowsById(long id) => throw new NotSupportedException();
+        public static TvfEntityBuilder<ITvfRow> RowsById(long id) => new("pk_rows_by_id");
     }
 
     private static EntityBuilder<IComplexEntity> E(IDataContext ctx) => ctx.From<IComplexEntity>();
@@ -234,9 +232,9 @@ public class PlanKeyUniquenessTests
             .Select(t => new PKRow { Id = null, Int = t.GetNullableInt32("val") }));
 
         // Table-valued functions
-        yield return ("tvf", ctx => ctx.FromTableFunction(() => PkTvf.Rows())
+        yield return ("tvf", ctx => ctx.From(() => PkTvf.Rows())
             .Select(r => new PKRow { Id = r.Id, Int = r.Int }));
-        yield return ("tvf-arg", ctx => ctx.FromTableFunction(() => PkTvf.RowsById(1))
+        yield return ("tvf-arg", ctx => ctx.From(() => PkTvf.RowsById(1))
             .Select(r => new PKRow { Id = r.Id, Int = r.Int }));
 
         // xml.nodes rowset
@@ -475,7 +473,7 @@ public class PlanKeyUniquenessTests
         // FROM-source comparer.
         var fromA = Row(E(ctx));
         var fromB = Row(E(ctx));
-        var fromD = ctx.FromTableFunction(() => PkTvf.Rows()).Select(r => new PKRow { Id = r.Id, Int = r.Int });
+        var fromD = ctx.From(() => PkTvf.Rows()).Select(r => new PKRow { Id = r.Id, Int = r.Int });
         fromA.PrepareCommand(false, CancellationToken.None);
         fromB.PrepareCommand(false, CancellationToken.None);
         fromD.PrepareCommand(false, CancellationToken.None);
@@ -529,7 +527,7 @@ public class PlanKeyUniquenessTests
         yield return ("cte", ctx => ctx.With("c", E(ctx).Select(x => new PKRow { Id = x.Id, Int = x.Int }))
             .From("c").Select(t => new PKRow { Id = t.GetNullableInt64("Id"), Int = t.GetNullableInt32("Int") }));
         yield return ("window", ctx => Row(E(ctx).Window("w", orderBy: [E(ctx).Asc(x => x.Id)])));
-        yield return ("tvf", ctx => ctx.FromTableFunction(() => PkTvf.Rows()).Select(r => new PKRow { Id = r.Id, Int = r.Int }));
+        yield return ("tvf", ctx => ctx.From(() => PkTvf.Rows()).Select(r => new PKRow { Id = r.Id, Int = r.Int }));
     }
 
     [Fact]
@@ -693,6 +691,14 @@ public class PlanKeyUniquenessTests
     private sealed class StubCommandHolder : IDbCommandHolder
     {
         public void ResetConnection(DbConnection conn, IDataContext dbContext)
+        {
+        }
+
+        public void EvictConnection(DbConnection conn)
+        {
+        }
+
+        public void OnCommandDisposed()
         {
         }
     }

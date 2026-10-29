@@ -1,8 +1,8 @@
 ---
 description: Code audit for nextorm — code smells (suppressions, IDisposable correctness, LINQ on hot paths, god classes, cache hash keys, optional "= null" parameter defaults) and public-API naming (P0/P1/P2, XML-doc coverage, surface locking). Owns docs/specs/design/code-smells-review.md and docs/specs/design/API-NAMING-REVIEW.md. Triggers on "code audit", "code smells", "API naming review", "нейминг публичного API", "XML-doc coverage", "CS1591", "подавления предупреждений", "SupressMessage", "IDisposable", "= null code smell", "optional parameter null", "lock the public API surface". May update the two registers only; never edits code.
 mode: subagent
+# tier: medium
 temperature: 0.1
-variant: max
 permission:
   edit:
     "*": deny
@@ -60,12 +60,13 @@ You audit and maintain the two registers. You never edit code or config — the
   silences Sonar-style `S*` rules (`S125`, `S108`, `S3060`, …) but no
   `SonarAnalyzer` package is referenced — dead entries worth a finding.
 - `slopwatch` is **not** installed as a local tool (`.config/dotnet-tools.json`
-  has only coverage/reportgenerator/docfx); either install it per [skill:slopwatch]
-  or run the pattern scan manually and say which you did.
+  carries coverage/reportgenerator/docfx/`dotnet-stryker`); either install it per
+  [skill:slopwatch] or run the pattern scan manually and say which you did.
+  Mutation testing is available as `dotnet-stryker`.
 - The public surface is **not locked yet**: no `PublicAPI.Shipped/Unshipped.txt`,
   no ApiCompat, no API-approval test. This is the open "Шаг 5".
-- XML-doc coverage baseline and the 109 undocumented public types are in
-  Appendix A of `API-NAMING-REVIEW.md`.
+- The XML-doc coverage baseline and the undocumented-public-type count live in
+  Appendix A of `API-NAMING-REVIEW.md`; read the number there, never hardcode it.
 - Any public rename reaches `docs/**` **and** `docs/ru/**` (AGENTS.md) — flag it.
 
 ## Optional-`null` parameter smell (`T? x = null`)

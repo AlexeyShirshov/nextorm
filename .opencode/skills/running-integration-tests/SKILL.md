@@ -1,6 +1,6 @@
 ---
 name: running-integration-tests
-description: Run nextorm's xunit v3 integration tests (tests/nextorm.integration.tests) against PostgreSQL, SQL Server, MySQL, ClickHouse and SQLite via Testcontainers. Use when running, filtering or debugging integration tests, or when Testcontainers/Podman/Docker connection fails — DOCKER_HOST, podman socket, container startup, skipped provider tests.
+description: Run nextorm's xunit v3 integration tests (tests/nextorm.integration.tests) against PostgreSQL, SQL Server, MySQL, ClickHouse and SQLite via Testcontainers. Use when running, filtering or debugging integration tests, or when Testcontainers/Podman/Docker connection fails — DOCKER_HOST, podman socket, container startup, providers failing without DOCKER_HOST.
 ---
 
 # Running nextorm integration tests
@@ -34,7 +34,7 @@ DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.so
   dotnet run --project tests/nextorm.integration.tests -c Debug -- \
   -noColor -notrait "Category=Diagnostic" > /tmp/opencode/integration.log 2>&1
 
-python3 .pdca/scripts/check-integration-skip-budget.py --log /tmp/opencode/integration.log
+python3 tools/integration/check-integration-skip-budget.py --log /tmp/opencode/integration.log
 ```
 
 Single provider (much faster — only that provider's container starts; the first run initializes the database, later runs reuse the stopped container and start in a second or two):
@@ -82,8 +82,9 @@ DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.so
 - **Capability skips are pinned.** `Assert.SkipUnless(Provider.SupportsX, ...)` in `CommonTestSuite` is legitimate only for the reviewed matrix in `Providers/ITestProvider.cs`. `CrossProvider/ProviderCapabilityContractTests` pins every flag per provider, so a flag that flips by accident is a red test instead of a disappearing fact you never notice.
 - **Explicit opt-out.** `NEXTORM_SKIP_PROVIDERS=postgres,sqlserver,mysql,clickhouse` (case-insensitive, comma/semicolon separated) is the only way to skip an unavailable provider. Use it for SQLite-only local runs, never for evidence.
 - **Diagnostic harnesses.** `LobCapabilityProbeTests`, `LobPerfHarnessTests` and `SqliteWarmAggregateAllocationTests` carry `[Trait("Category", "Diagnostic")]` and are opt-in via `NEXTORM_LOB_PROBE` / `NEXTORM_LOB_PERF` / `D243_ATTRIBUTION_REPORT`. Exclude them with `-notrait "Category=Diagnostic"`.
+- **The ClickHouse retry harness is gone (removed 2026-10-29).** `ClickHouseRetryScenarioTests`, `ClickHouseRetryReporter`, `FaultProxy` and the `tests/Shared/ClickHouseRetry/**` helpers no longer exist, and the ClickHouse reads that were enrolled in the harness call the provider directly. There is therefore no `NEXTORM_CLICKHOUSE_PROBE` switch and no retry summary line in the output; the other diagnostic harnesses in the bullet above are unaffected.
 - **Skip budget.** `tests/nextorm.integration.tests/skip-budget.json` pins the capability skips by reason. After a full run, check it with
-  `python3 .pdca/scripts/check-integration-skip-budget.py --log <log>`; the gate fails on any new or vanished skip. Intentional changes require updating the pinned matrix first, then `--update`. Diagnostic skips are ignored by the script, so the gate works with or without `-notrait`.
+  `python3 tools/integration/check-integration-skip-budget.py --log <log>`; the gate fails on any new or vanished skip. Intentional changes require updating the pinned matrix first, then `--update`. Diagnostic skips are ignored by the script, so the gate works with or without `-notrait`.
 - Containers start lazily per provider; each is built with `WithReuse(true)` + a `reuse-id` label, so at the end of the run it is **stopped but kept** and the next run starts the same container (skipping PostgreSQL/SQL Server/MySQL/ClickHouse initialization — the heavy disk I/O that can stall WSL). The `DatabaseContainers` assembly fixture performs the stop.
 - To force a clean database, delete the reused containers. `podman.exe` defaults to the **rootful** connection and will not list them; use the rootless connection (the one the socket exposes): `"/mnt/c/Program Files/RedHat/Podman/podman.exe" --connection podman-machine-default ps -a --filter label=reuse-id`, then `... rm -f <id>`. Changing a builder configuration (image, env, port bindings) changes the reuse hash and creates a **new** container, leaving the previous one behind — purge from time to time.
 - Reuse does **not** leak rows between runs: every provider's `EnsureSeeded` runs `drop table if exists …` before `create table`. Do not rely on a dirty container in a test.
@@ -97,6 +98,6 @@ DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.so
 ## Troubleshooting
 
 - `podman: command not found` in WSL → expected. Use the socket and/or `podman.exe`; do not try to install Podman inside WSL.
-- Testcontainers hangs or fails to connect → confirm the machine is running (`podman.exe machine list`, expect `Currently running`) and the socket exists: `ls -l /mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock`. Start Podman Desktop if it is missing.
+- Testcontainers hangs or fails to connect → confirm the machine is running (`podman.exe machine list`, expect `Currently running`) and the socket exists: `ls -l /mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock`. Start the machine with `"/mnt/c/Program Files/RedHat/Podman/podman.exe" machine start` (Podman Desktop may be closed).
 - Sanity-check the socket without Testcontainers:
   `curl -s --unix-socket /mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock http://d/v1.40/_ping` → `OK`.

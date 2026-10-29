@@ -63,6 +63,14 @@ public interface ISqlDialect
     /// </summary>
     bool SupportsApplyOnPlainTable => false;
     /// <summary>
+    /// True when the provider accepts a table-valued function directly as the <c>FROM</c> source of an
+    /// implicitly correlated join, so a bounded correlated APPLY over such a function can render the
+    /// function itself instead of a derived wrapper (which would need a lateral keyword to correlate).
+    /// MySQL and MariaDB correlate a function in <c>FROM</c> with the tables that precede it implicitly;
+    /// every other dialect keeps its own APPLY spelling. The safe default is <see langword="false"/>.
+    /// </summary>
+    bool SupportsDirectApplyTableFunction => false;
+    /// <summary>
     /// True when the provider understands the join strictness/kind modifiers in
     /// <see cref="JoinStrictness"/> (<c>ANY</c>/<c>ALL</c>/<c>ASOF</c>). The safe default is
     /// <c>false</c>; only ClickHouse opts in.
@@ -217,6 +225,18 @@ public interface ISqlDialect
     bool SupportsArrayFunctions { get; }
 
     /// <summary>
+    /// True when the provider renders the named array function of <see cref="PostgresFunctions"/> on
+    /// the array surface enabled by <see cref="SupportsArrays"/>. The default preserves the family
+    /// gate: every function an array-capable provider rendered before is still rendered. A provider
+    /// that must answer per name — because the server function is missing or version-gated
+    /// (PostgreSQL <c>array_reverse</c>/<c>array_sort</c>) — overrides it, and the translator refuses
+    /// the call at preparation instead of emitting SQL the server does not have. Declared as a
+    /// default interface method so existing external implementations keep compiling.
+    /// </summary>
+    /// <param name="name">The SQL name of the array function, without schema qualification.</param>
+    bool SupportsArrayFunction(string name) => true;
+
+    /// <summary>
     /// True when the provider translates the higher-order (lambda) array functions of
     /// <see cref="ClickHouseFunctions"/> (<c>arrayMap</c>, <c>arrayFilter</c>, <c>arrayExists</c>,
     /// <c>arrayAll</c>, <c>arrayCount</c>, <c>arrayFirst*</c>, <c>arrayLast*</c>). The safe default is
@@ -352,11 +372,57 @@ public interface ISqlDialect
     /// </summary>
     bool SupportsPercentileWindow { get; }
     /// <summary>
+    /// True when the provider expresses percentiles and the median as an ordered-set aggregate
+    /// (<c>percentile_cont(fraction) within group (order by key)</c>) rather than as a window function:
+    /// <see cref="PostgresFunctions.percentile_cont"/>, <see cref="PostgresFunctions.percentile_disc"/>
+    /// and <see cref="PostgresFunctions.median"/>. The safe default is <c>false</c>; only PostgreSQL opts
+    /// in today. This is deliberately separate from <see cref="SupportsOrderedAggregates"/>, which also
+    /// covers non-percentile members (<c>mode</c>), and from <see cref="SupportsPercentileWindow"/>,
+    /// which is the analytic shape. Declared as a default interface member so existing external
+    /// implementations keep compiling.
+    /// </summary>
+    bool SupportsOrderedPercentiles => false;
+    /// <summary>
     /// True when the provider can declare named windows (<c>WINDOW w AS (...)</c>) and reference them
     /// with <c>OVER w</c>. The safe default is <c>false</c>; PostgreSQL, MySQL, MariaDB, ClickHouse and
     /// SQLite opt in, while SQL Server has no <c>WINDOW</c> clause.
     /// </summary>
     bool SupportsNamedWindows { get; }
+    /// <summary>
+    /// True when the provider understands the native <c>NULLS FIRST</c>/<c>NULLS LAST</c> ordering
+    /// modifier, which the SQLite, PostgreSQL and ClickHouse dialects opt into. The safe default is
+    /// <c>false</c>: a provider that does not opt in gets the portable <c>CASE</c> emulation from
+    /// <see cref="RenderOrderBy"/>. Declared as a default interface member so existing external
+    /// implementations keep compiling without a new abstract obligation.
+    /// </summary>
+    bool SupportsNullsOrdering => false;
+    /// <summary>
+    /// Renders one logical <c>ORDER BY</c> item for <paramref name="expressionSql"/> with the requested
+    /// NULL placement. The default implementation emulates the placement with a <c>CASE</c> rank key
+    /// (<c>CASE WHEN K IS NULL THEN n ELSE m END ASC, K</c>, plus the descending suffix on the key only),
+    /// so the rank prefix stays ascending even for a descending key. Providers that opt into
+    /// <see cref="SupportsNullsOrdering"/> override it with the native <c>NULLS FIRST</c>/<c>NULLS LAST</c>
+    /// form. <see cref="NullsPosition.Default"/> bypasses this renderer entirely; passing it here is an
+    /// error. The returned fragment may contain two physical sort keys but is consumed as one item, and a
+    /// parameterized key therefore occurs twice and must be bound twice.
+    /// </summary>
+    /// <param name="expressionSql">The already-qualified, already-quoted key SQL.</param>
+    /// <param name="direction">The requested key direction; the emulated rank prefix ignores it.</param>
+    /// <param name="nullsPosition">The explicit NULL placement (<see cref="NullsPosition.First"/> or <see cref="NullsPosition.Last"/>).</param>
+    /// <returns>The rendered ordering item.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="nullsPosition"/> is not an explicit placement.</exception>
+    string RenderOrderBy(string expressionSql, OrderDirection direction, NullsPosition nullsPosition)
+        => NullsOrderingRenderer.Render(expressionSql, direction, nullsPosition);
+    /// <summary>
+    /// The renderer for the explicit null-safe comparison helpers
+    /// (<see cref="CommonFunctions.is_distinct_from{T}(T, T)"/> and
+    /// <see cref="CommonFunctions.is_not_distinct_from{T}(T, T)"/>), or <see langword="null"/> when
+    /// the provider does not support them. The safe default is <see langword="null"/>: the helper is
+    /// then rejected with an exception naming the provider and the form instead of emitting SQL the
+    /// provider cannot execute. Declared as a default interface member so existing external
+    /// implementations keep compiling without a new abstract obligation.
+    /// </summary>
+    INullSafeComparisonRenderer? NullSafeComparison => null;
     /// <summary>
     /// True when the provider can render the <c>GROUPS</c> window frame unit (peer groups rather than
     /// physical rows or ordering values). The safe default is <c>false</c>; PostgreSQL, ClickHouse and
@@ -533,6 +599,57 @@ public interface ISqlDialect
     ISqlServerFunctions? SqlServerFunctions => null;
 
     /// <summary>
+    /// True when the provider can render <see cref="CommonFunctions.base64_encode(byte[])"/> in its
+    /// standard RFC 4648 form. The safe default is <see langword="false"/>; SQL Server, PostgreSQL,
+    /// MySQL and MariaDB opt in. Declared as a default interface method so existing external
+    /// implementations keep compiling.
+    /// </summary>
+    bool SupportsBase64Encode => false;
+
+    /// <summary>
+    /// Renders <c>base64_encode(value)</c> over the already-rendered operand. Reached only when
+    /// <see cref="SupportsBase64Encode"/> is true. A literal NULL operand arrives as the bare token
+    /// <c>null</c> and must be replaced by the provider's typed binary NULL so the argument keeps its
+    /// SQL input type. The default rejects the call.
+    /// </summary>
+    string MakeBase64Encode(string value) =>
+        throw new NotSupportedException("The base64_encode function is not supported by this provider.");
+
+    /// <summary>
+    /// True when the provider can render <see cref="CommonFunctions.base64_decode(string?)"/> in its
+    /// standard RFC 4648 form. The safe default is <see langword="false"/>; SQL Server, PostgreSQL,
+    /// MySQL and MariaDB opt in. Declared as a default interface method so existing external
+    /// implementations keep compiling.
+    /// </summary>
+    bool SupportsBase64Decode => false;
+
+    /// <summary>
+    /// Renders <c>base64_decode(value)</c> over the already-rendered operand. Reached only when
+    /// <see cref="SupportsBase64Decode"/> is true. A literal NULL operand arrives as the bare token
+    /// <c>null</c> and must be replaced by the provider's typed text NULL. The default rejects the
+    /// call.
+    /// </summary>
+    string MakeBase64Decode(string value) =>
+        throw new NotSupportedException("The base64_decode function is not supported by this provider.");
+
+    /// <summary>
+    /// True when the provider can render <see cref="CommonFunctions.crypt_gen_random(int?)"/>.
+    /// The safe default is <see langword="false"/>; SQL Server, PostgreSQL, MySQL and MariaDB opt
+    /// in. Declared as a default interface method so existing external implementations keep
+    /// compiling.
+    /// </summary>
+    bool SupportsCryptGenRandom => false;
+
+    /// <summary>
+    /// Renders <c>crypt_gen_random(length)</c> over the already-rendered operand. Reached only when
+    /// <see cref="SupportsCryptGenRandom"/> is true. A literal NULL operand arrives as the bare
+    /// token <c>null</c> and must be replaced by the provider's typed integer NULL. The default
+    /// rejects the call.
+    /// </summary>
+    string MakeCryptGenRandom(string length) =>
+        throw new NotSupportedException("The crypt_gen_random function is not supported by this provider.");
+
+    /// <summary>
     /// True when the provider can render the boolean aggregates <c>bool_and</c>, <c>bool_or</c> and
     /// <c>every</c>. The safe default is <c>false</c>; only PostgreSQL opts in today.
     /// </summary>
@@ -585,6 +702,15 @@ public interface ISqlDialect
     ITopKAggregateRenderer? TopKAggregates => null;
 
     /// <summary>
+    /// The provider's renderer for the ClickHouse aggregate catalogue that has no cross-provider
+    /// spelling (the statistical aggregates, the parameterised quantile algorithms, the array- and
+    /// tuple-returning aggregates, the sequence aggregates and the time-series grid aggregates);
+    /// <c>null</c> means the provider cannot express them. Declared as a default interface method so
+    /// that existing external implementations keep compiling.
+    /// </summary>
+    IClickHouseAggregateRenderer? ClickHouseAggregates => null;
+
+    /// <summary>
     /// True when the provider can render the <c>anyLast</c> row-picking aggregate (the value of an
     /// arbitrary last row; <c>ClickHouseFunctions.any_last</c>). The safe default is <c>false</c>;
     /// ClickHouse opts in today. The arbitrary-value aggregate without the last-row restriction is
@@ -598,6 +724,79 @@ public interface ISqlDialect
     /// on ClickHouse. The safe default is <c>false</c>.
     /// </summary>
     bool SupportsAnyValueAggregate { get; }
+
+    /// <summary>
+    /// True when the provider is SQL Server and the declared server major version is 17 or later, so
+    /// the 2025-only T-SQL functions (<c>REGEXP_COUNT</c>, <c>REGEXP_SPLIT_TO_TABLE</c>,
+    /// <c>PRODUCT</c>) can be rendered. The safe default is <see langword="false"/>, and an
+    /// unversioned dialect refuses them. The gate is version-only: unlike <see cref="SupportsJson"/>,
+    /// an engine edition never substitutes for a declared major version. Declared as a default
+    /// interface method so existing external implementations keep compiling.
+    /// </summary>
+    bool SupportsSqlServer2025Functions => false;
+
+    /// <summary>
+    /// True when the provider is SQL Server and the declared server major version is 16 or later, so
+    /// the 2022-only T-SQL functions (<c>LEFT_SHIFT</c>/<c>RIGHT_SHIFT</c>) can be rendered. The safe
+    /// default is <see langword="false"/>, and an unversioned dialect refuses them. Declared as a
+    /// default interface method so existing external implementations keep compiling.
+    /// </summary>
+    bool SupportsSqlServer2022Functions => false;
+
+    /// <summary>
+    /// True when the provider can render the <c>PRODUCT(value)</c> aggregate
+    /// (<see cref="SqlServerFunctions.product{T}(T)"/>). On SQL Server it follows
+    /// <see cref="SupportsSqlServer2025Functions"/> because the aggregate arrived with 2025; the safe
+    /// default is <see langword="false"/>. Declared as a default interface method so existing
+    /// external implementations keep compiling.
+    /// </summary>
+    bool SupportsProductAggregate => false;
+
+    /// <summary>
+    /// True when the provider can render the <c>APPROX_COUNT_DISTINCT(value)</c> aggregate
+    /// (<see cref="SqlServerFunctions.approx_count_distinct{T}(T)"/>). On SQL Server it is available
+    /// from major version 15; the safe default is <see langword="false"/>, and an unversioned dialect
+    /// refuses the name. Declared as a default interface method so existing external implementations
+    /// keep compiling.
+    /// </summary>
+    bool SupportsApproxCountDistinctAggregate => false;
+
+    /// <summary>
+    /// True when the provider can render the <c>CHECKSUM_AGG(value)</c> aggregate
+    /// (<see cref="SqlServerFunctions.checksum_agg(int?)"/>). SQL Server has it without a version
+    /// floor, so the flag is a plain provider opt-in; the safe default is <see langword="false"/>.
+    /// Declared as a default interface method so existing external implementations keep compiling.
+    /// </summary>
+    bool SupportsChecksumAggregate => false;
+
+    /// <summary>
+    /// True when the provider can render the <c>GROUPING_ID(expressions)</c> aggregate
+    /// (<see cref="SqlServerFunctions.grouping_id(object?[])"/>). SQL Server has it without a version
+    /// floor, so the flag is a plain provider opt-in; the safe default is <see langword="false"/>.
+    /// Declared as a default interface method so existing external implementations keep compiling.
+    /// </summary>
+    bool SupportsGroupingIdAggregate => false;
+
+    /// <summary>
+    /// True when the provider can render the ordered-set aggregate
+    /// <c>APPROX_PERCENTILE_CONT(fraction) WITHIN GROUP (ORDER BY value)</c>
+    /// (<see cref="SqlServerFunctions.approx_percentile_cont{T}(double, T)"/>). On SQL Server it is
+    /// available from major version 16; the safe default is <see langword="false"/>, and an unversioned
+    /// dialect refuses the name. This is a name-specific gate: it deliberately does not widen
+    /// <see cref="SupportsOrderedAggregates"/> or <see cref="SupportsOrderedPercentiles"/>. Declared as
+    /// a default interface method so existing external implementations keep compiling.
+    /// </summary>
+    bool SupportsApproxPercentileCont => false;
+
+    /// <summary>
+    /// True when the provider can render the ordered-set aggregate
+    /// <c>APPROX_PERCENTILE_DISC(fraction) WITHIN GROUP (ORDER BY value)</c>
+    /// (<see cref="SqlServerFunctions.approx_percentile_disc{T}(double, T?)"/>). On SQL Server it is
+    /// available from major version 16; the safe default is <see langword="false"/>, and an unversioned
+    /// dialect refuses the name. Name-specific, like <see cref="SupportsApproxPercentileCont"/>. Declared
+    /// as a default interface method so existing external implementations keep compiling.
+    /// </summary>
+    bool SupportsApproxPercentileDisc => false;
 
     /// <summary>
     /// The provider's renderer for the ClickHouse sequence/funnel aggregates; <c>null</c> means the
@@ -668,7 +867,11 @@ public interface ISqlDialect
 
     /// <summary>
     /// True when the provider can render the ClickHouse dictionary functions
-    /// (<c>dictGet</c>/<c>dictGetOrDefault</c>/<c>dictHas</c>/<c>dictGetHierarchy</c>/<c>dictGetChildren</c>/<c>dictIsIn</c>).
+    /// (<c>dictGet</c>/<c>dictGetOrDefault</c>/<c>dictGetOrNull</c>/<c>dictGetAll</c>/
+    /// <c>dictGetDescendants</c>/<c>dictHas</c>/<c>dictGetHierarchy</c>/<c>dictGetChildren</c>/<c>dictIsIn</c>)
+    /// and the embedded-geobase region functions (<c>regionToName</c>/<c>regionToCity</c>/<c>regionToArea</c>/
+    /// <c>regionToDistrict</c>/<c>regionToCountry</c>/<c>regionToContinent</c>/<c>regionToTopContinent</c>/
+    /// <c>regionToPopulation</c>/<c>regionHierarchy</c>/<c>regionIn</c>).
     /// The safe default is <c>false</c>; ClickHouse opts in today.
     /// </summary>
     bool SupportsDictionaries { get; }
@@ -716,6 +919,15 @@ public interface ISqlDialect
     /// because its HTTP protocol has no transaction in the ADO.NET sense.
     /// </summary>
     bool SupportsTransactions => true;
+    /// <summary>
+    /// True when the provider supports savepoints inside an ADO.NET transaction — create, roll back to
+    /// and release a named point (<c>SAVEPOINT</c>/<c>ROLLBACK TO SAVEPOINT</c>/<c>RELEASE SAVEPOINT</c>,
+    /// or the SQL Server <c>SAVE TRANSACTION</c>/<c>ROLLBACK TRANSACTION</c> forms). Declared as a default
+    /// interface method returning <c>false</c> so existing external implementations keep compiling;
+    /// SQLite, PostgreSQL, SQL Server and MySQL opt in, MariaDB inherits MySQL's value, and ClickHouse
+    /// has no transaction at all.
+    /// </summary>
+    bool SupportsSavepoints => false;
     /// <summary>
     /// Applies the statement-level <paramref name="hints"/> to an already-rendered <paramref name="sql"/>
     /// statement. <paramref name="maxRecursionOption"/> is the trailing option produced by
@@ -876,6 +1088,33 @@ public interface ISqlDialect
     string MakeParam(string name);
     /// <summary>SQL type name used when a CLR conversion has to be rendered as a database cast.</summary>
     string MakeTypeName(Type type);
+    /// <summary>
+    /// Renders a SQL Server <c>TRY_CAST</c> of <paramref name="expression"/> to the SQL type that the
+    /// closed target map assigns to <paramref name="targetType"/>: the value is SQL NULL when the
+    /// conversion is invalid. Providers without the function keep the rejecting default here rather
+    /// than falling back to <see cref="MakeTypeName"/>, whose open name fall-back would emit SQL the
+    /// server rejects; only SQL Server's closed map may answer. A target outside the map is refused
+    /// before the command is prepared.
+    /// </summary>
+    /// <param name="expression">The already-rendered source expression.</param>
+    /// <param name="targetType">The CLR conversion target (possibly <see cref="Nullable{T}"/>).</param>
+    /// <returns>The complete <c>try_cast(… as …)</c> expression.</returns>
+    string MakeTryCast(string expression, Type targetType) =>
+        throw new NotSupportedException("The TRY_CAST function is not supported by this provider.");
+    /// <summary>
+    /// Renders a SQL Server <c>TRY_CONVERT</c> of <paramref name="expression"/> to the closed-map SQL
+    /// type of <paramref name="targetType"/>. <paramref name="style"/> is the already-rendered native
+    /// style argument, or <see langword="null"/> for the no-style form; a supplied SQL NULL style is a
+    /// non-null string and keeps the server's native NULL-style semantics, which the engine applies as a
+    /// NULL result even for a convertible value. Same rejection rules as
+    /// <see cref="MakeTryCast"/>.
+    /// </summary>
+    /// <param name="expression">The already-rendered source expression.</param>
+    /// <param name="targetType">The CLR conversion target (possibly <see cref="Nullable{T}"/>).</param>
+    /// <param name="style">The rendered style argument, or <see langword="null"/> when omitted.</param>
+    /// <returns>The complete <c>try_convert(…, …)</c> expression.</returns>
+    string MakeTryConvert(string expression, Type targetType, string? style) =>
+        throw new NotSupportedException("The TRY_CONVERT function is not supported by this provider.");
     /// <summary>Renders the SQL literal for a boolean value.</summary>
     string MakeBool(bool v);
     /// <summary>Renders <c>coalesce(v1, v2)</c> over the already-rendered operands.</summary>
@@ -898,6 +1137,37 @@ public interface ISqlDialect
     /// Maps an aggregate function name to the provider specific one, e.g. stdev -> stddev.
     /// </summary>
     string MakeAggregate(string name);
+    /// <summary>
+    /// Renders the argument of an <c>avg</c> aggregate from its already-rendered form. The default is
+    /// the identity; a dialect whose integer <c>avg</c> truncates widens an integral argument before
+    /// the aggregation instead of casting the aggregate result. Applied to ordinary, distinct,
+    /// filtered and window AVG, inside the parentheses and after <c>distinct</c>.
+    /// </summary>
+    /// <param name="argument">The rendered argument expression.</param>
+    /// <param name="inputType">The argument's CLR type (its nullable form included).</param>
+    /// <returns>The argument text the aggregate receives.</returns>
+    string MakeAverageArgument(string argument, Type inputType);
+    /// <summary>
+    /// Whether the rendered <c>avg</c> expression must be wrapped so that an empty or all-NULL input
+    /// yields SQL NULL. The default is <see langword="false"/>: every other provider already returns
+    /// NULL there. ClickHouse returns <c>nan</c>/<c>inf</c> instead and overrides this to
+    /// <see langword="true"/>.
+    /// </summary>
+    bool WrapsAverageResult => false;
+    /// <summary>
+    /// Wraps a fully rendered <c>avg</c> expression so that an empty or all-NULL input yields SQL NULL
+    /// (row eligibility, never the result value: a genuine NaN or infinity from non-empty data is kept).
+    /// The default is the identity; only called when <see cref="WrapsAverageResult"/> is
+    /// <see langword="true"/>. Applied to ordinary, distinct, filtered and window AVG after the
+    /// aggregate (and its window clause) has been composed.
+    /// </summary>
+    /// <param name="aggregate">The fully rendered aggregate, including its filter or window clause.</param>
+    /// <param name="argument">The rendered value argument, as it appears inside the aggregate.</param>
+    /// <param name="filterPredicate">The rendered aggregate filter predicate, or <see langword="null"/>.</param>
+    /// <param name="windowClause">The rendered <c>over ...</c> window suffix, or <see langword="null"/>.</param>
+    /// <returns>The expression to emit in place of <paramref name="aggregate"/>.</returns>
+    string MakeAverageResult(string aggregate, string argument, string? filterPredicate = null, string? windowClause = null)
+        => aggregate;
     /// <summary>Renders a string length function over <paramref name="value"/> (SQL Server <c>len</c>, others <c>length</c>).</summary>
     string MakeStringLength(string value);
     /// <summary>Renders an upper case conversion.</summary>
@@ -1181,6 +1451,18 @@ public interface ISqlDialect
     string MakeArrayFunction(string name, string call) => call;
 
     /// <summary>
+    /// Renders the result of an array-producing facade call over the already-rendered
+    /// <paramref name="call"/>, normalising it to the closed declared CLR <paramref name="resultType"/>.
+    /// <paramref name="name"/> is the facade method name (for example <c>group_array</c> or <c>range</c>),
+    /// never the provider's SQL spelling. The default is the identity: a dialect overrides this only when
+    /// its native element type or nullability differs from the declared CLR array type (ClickHouse returns
+    /// <c>Array(UInt8)</c> for <c>retention</c> and <c>Array(Int64)</c> for an <c>arrayMap</c> over
+    /// <c>int[]</c>). The implementation must return exactly one expression and must not rewrite the
+    /// <paramref name="call"/> itself.
+    /// </summary>
+    string MakeArrayResult(string name, string call, Type resultType) => call;
+
+    /// <summary>
     /// Renders an ordered-set aggregate as <c>&lt;aggregate&gt; within group (order by &lt;orderBy&gt;)</c>.
     /// <paramref name="aggregate"/> is the already-rendered call (for example <c>percentile_cont(0.5)</c>)
     /// and <paramref name="orderBy"/> the already-rendered key list.
@@ -1198,8 +1480,8 @@ public interface ISqlDialect
     /// <paramref name="name"/> declared in <see cref="CommonFunctions"/> (for example
     /// <c>generate_series</c>, <c>unnest</c>, <c>string_split</c>, <c>openjson</c>,
     /// <c>numbers</c>/<c>numbers_mt</c>, <c>zeros</c>/<c>zeros_mt</c>). User-defined
-    /// <see cref="SqlTableFunctionAttribute"/> functions are not gated by this and are emitted
-    /// verbatim on every provider.
+    /// table-function factories (returning <see cref="TvfEntityBuilder{T}"/>) are not gated by this
+    /// and are emitted verbatim on every provider.
     /// </summary>
     bool SupportsTableFunction(string name);
     /// <summary>

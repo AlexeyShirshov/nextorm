@@ -25,9 +25,9 @@ var rows = dataContext.From<IComplexEntity>()
 |---|---|---|---|
 | `count()` | `int` | `count_distinct(...)` | `int` |
 | `count_big()` | `long` | `count_big_distinct(...)` | `long` |
-| `min(x)` | совпадает с `x` | `avg_distinct(x)` | совпадает с `x` |
+| `min(x)` | совпадает с `x` | `avg_distinct(x)` | как `avg(x)` |
 | `max(x)` | совпадает с `x` | `sum_distinct(x)` | совпадает с `x` |
-| `avg(x)` | совпадает с `x` | `stdev_distinct(x)` | совпадает с `x` |
+| `avg(x)` | `double?` / `float?` / `decimal?` (по типу входа) | `stdev_distinct(x)` | совпадает с `x` |
 | `sum(x)` | совпадает с `x` | `stdevp_distinct(x)` | совпадает с `x` |
 | `stdev(x)` | совпадает с `x` | `var_distinct(x)` | совпадает с `x` |
 | `stdevp(x)` | совпадает с `x` | `varp_distinct(x)` | совпадает с `x` |
@@ -42,6 +42,43 @@ var rows = dataContext.From<IComplexEntity>()
 `Max(x)`, `Avg(x)`, `Sum(x)`, `Stdev(x)`, `Stdevp(x)`, `Var(x)` и `Varp(x)`, каждый с `...Async`-двойником
 и перегрузкой, принимающей позиционные параметры. У `count`, `count_big`, `count_distinct` и
 `count_big_distinct` нет терминала на сущности, и они используются через ``
+
+## Типы результата и аргументы AVG
+
+`avg` не возвращает тип своего аргумента: целочисленный столбец даёт дробный результат, поэтому
+`avg` по `[1, 2]` — это `1.5`, а не целое значение, которое возвращали предыдущие версии (`2`; `1`
+в SQL Server, где нативный целочисленный `AVG` усекает). Результат nullable на каждом провайдере,
+поэтому пустой вход или вход из одних `NULL` даёт `null`, а не незащищённое чтение.
+
+| Вход | Результат `avg(x)` |
+|---|---|
+| `byte`, `sbyte`, `short`, `ushort`, `int`, `uint`, `long`, `ulong` и их nullable-формы | `double?` |
+| `float`, `float?` | `float?` |
+| `double`, `double?` | `double?` |
+| `decimal`, `decimal?` | `decimal?` |
+
+Политика аргумента задаётся провайдером. SQL Server вычисляет `AVG` по не-плавающему аргументу как
+целое, поэтому аргумент расширяется *внутри* агрегата; остальные диалекты сохраняют нативный
+аргумент. Политика одинакова для `avg`, `avg_distinct` и оконного `avg_over`:
+
+| Провайдер | Генерируемый аргумент |
+|---|---|
+| SQLite, PostgreSQL, MySQL, MariaDB, ClickHouse | `avg(id)` |
+| SQL Server | `avg(cast(id as float))` |
+
+Nullable-результат и расширение аргумента — намеренное ломающее изменение исходного кода, а не
+бинарно-совместимое:
+
+```csharp
+int average = dataContext.From<ISimpleEntity>().Avg(e => e.Id);        // не компилируется
+var average = dataContext.From<ISimpleEntity>().Avg(e => e.Id);        // double?
+var direct  = dataContext.From<ISimpleEntity>().Select(e => SqlFunctions.Sql.avg(e.Id)).First(); // double?
+```
+
+Явные generic-аргументы, называвшие старую усекающую форму (`Avg<TEntity, TResult>` с целочисленным
+`TResult`, `avg<T>(...)`), тоже больше не компилируются; позвольте перегрузке выбрать объявление по
+типу селектора и читайте значение через `double?` (или `float?`/`decimal?` для соответствующих
+входов).
 
 ## GroupBy
 
@@ -162,6 +199,80 @@ var top = dataContext.From<IComplexEntity>()
 убыванию ставит `NULL` первыми, SQLite — последними), поэтому в примере сортировки группа `NULL`
 исключена.
 
+## Группировка, выведенная из проекции: SelectGroup
+
+`SelectGroup` принимает ту же лямбду проекции, что и `Select`, но вместо явного `GroupBy` выводит
+ключи группировки из самой проекции. Каждое зависящее от строки выражение без агрегата становится
+ключом, а агрегатные вызовы сворачивают каждую группу. Проекция сохраняет ровно свою форму — нет ни
+клиентской группировки, ни динамического типа, ни reflection-emit слияния плоского типа результата.
+Это квартальный пример из issue:
+
+```csharp
+ctx.From<Product>()
+   .SelectGroup(p => new
+   {
+       ProductID        = p.Item1.ProductId,
+       ProductName      = p.Item3.Name,
+       SalesQuarter     = SqlFunctions.Sql.date_trunc("quarter", p.Item2.OrderDate),
+       QuarterlyRevenue = SqlFunctions.Sql.sum(p.Item1.LineTotal),
+       QuarterlyQty     = SqlFunctions.Sql.sum(p.Item1.OrderQty),
+   });
+```
+
+`ProductID`, `ProductName` и весь вызов `date_trunc('quarter', OrderDate)` становятся ключами
+`GROUP BY`, а два вызова `sum` остаются агрегатами. Результаты и SQL эквивалентны явной форме
+`GroupBy(...).Select(...)` с теми же ключами.
+
+Правила вывода:
+
+* **Максимальные зависящие от строки подвыражения.** Анализатор собирает наибольшее подвыражение
+  каждого выходного значения, не содержащее агрегата и зависящее от текущей строки, а не спускается
+  до отдельных столбцов.
+* **Порядок первого появления.** Ключи выводятся в порядке первого появления их выражений в
+  проекции, поэтому сгенерированный `GROUP BY` детерминирован.
+* **Константы и захваченные значения не являются ключами.** Литерал или захваченная локальная
+  переменная не группирует и не сдвигает порядок ключей.
+* **Дубликаты схлопываются структурно.** Два структурно равных ключевых выражения дают один ключ.
+* **Целая скалярная функция остаётся одним ключом.** Ключом является
+  `date_trunc('quarter', OrderDate)`, «сырой» `OrderDate` рядом не добавляется.
+* **Гранулярность подвыражений сохраняется.** `sum(Amount) + Adjustment` выводит `Adjustment`;
+  `sum(Amount) + Price * Qty` выводит `Price * Qty`, а не `Price` и `Qty` по отдельности.
+* **Агрегатные вызовы непрозрачны.** Аргументы агрегата, его `DISTINCT`-вход и его `FILTER`-предикат
+  никогда не протекают в ключи группировки.
+* **Проекция сохраняется.** Исходная проекция рендерится как написана: ни один ключ не
+  переписывается, ни одно значение не сворачивается на клиенте, форма результата не меняется.
+
+Вырожденные проекции разрешаются без изобретения группировки:
+
+* **Ключи без агрегатов** возвращают уникальные комбинации ключей через `GROUP BY`; это не
+  построчный select.
+* **Агрегаты без ключей** — глобальная агрегация: без `GROUP BY`, ровно одна строка, а существующее
+  поведение провайдера на пустом входе для `count`, `sum` и `NULL` сохраняется.
+* **Не зависящая от строки проекция без агрегатов** ведёт себя как DISTINCT: каждое различное
+  значение возвращается один раз, а пустой источник даёт ноль строк вместо невалидного пустого
+  `GROUP BY`.
+
+`Having` и expression-`OrderBy` валидируются против выведенных ключей: каждое упомянутое в них
+выражение строки должно быть покрыто выведенным ключом, быть агрегатом либо захваченным/константным
+значением. Непокрытый член строки бросает `QueryPreparationException` до того, как команда дойдёт до
+базы данных, — группировка никогда не расширяется молча, а функциональные зависимости не выводятся.
+Поэтому захваченный порог допустим, а «голый» столбец внешней строки — нет. `OrderBy` по порядковому
+номеру сохраняет существующую проверку границ и не добавляет ключей. `Where` остаётся
+pre-group-фильтром и не участвует в выводе.
+
+Следующие комбинации бросают `QueryPreparationException`:
+
+* уже существующий явный `GroupBy`, `GroupByRollup`, `GroupByCube`, `GroupByGroupingSets` или
+  `WithTotals` — два механизма группировки никогда не сливаются и не переопределяют друг друга;
+* window-функции в проекции, `Having` или expression-`OrderBy`;
+* скалярные или коррелированные подзапросы в этих выражениях, в том числе внутри аргументов
+  агрегатов и внутри `FILTER`-предиката. Это отклонение безусловно и не зависит от вывода ключей;
+  подзапрос в `Where` по-прежнему поддерживается.
+
+Провайдер in-memory выполняет выведенную группировку в пределах существующей поверхности агрегатов:
+поддерживаемые агрегаты ведут себя так же, как при явном `GroupBy`, а скалярные функции поверхности
+провайдера и пользовательские функции отклоняются явно, а не вычисляются в процессе.
+
 ## ROLLUP и CUBE
 
 `GroupByRollup(...)` и `GroupByCube(...)` добавляют ANSI-модификаторы супер-агрегации. `ROLLUP`
@@ -273,9 +384,10 @@ select sum(id)
 |-----|
 | 55 |
 
-`avg` сохраняет дробную часть в SQLite и PostgreSQL; SQL Server вычисляет `AVG` по целочисленному
-столбцу как целое. У каждого агрегата есть терминал на сущности, который перенаправляет к той же
-функции: `Sum`, `Avg`, `Min` и `Max` эквивалентны `Select(...)` с последующим `First()`, а `Count()` —
+`avg` возвращает дробный nullable-результат для любого числового входа (см.
+[типы результата и аргументы AVG](#типы-результата-и-аргументы-avg)), поэтому `[1, 2]` — это `1.5`
+на любом провайдере, включая SQL Server. У каждого агрегата есть терминал на сущности, который
+перенаправляет к той же функции: `Sum`, `Avg`, `Min` и `Max` эквивалентны `Select(...)` с последующим `First()`, а `Count()` —
 `Select(e => SqlFunctions.Sql.count()).First()`:
 
 ```csharp
@@ -376,7 +488,7 @@ select sum(id)
 
 | Avg |
 |-----|
-| 6 |
+| 5.5 |
 
 Вывод:
 
@@ -461,6 +573,28 @@ var sumAfter5 = dataContext.From<ISimpleEntity>()
 var variance = dataContext.From<ISimpleEntity>().Select(x => SqlFunctions.Sql.varp((double)x.Id)).First();
 ```
 
+### Nullable-результаты и кардинальность
+
+Четыре семейства вариативности структурно nullable: `Stdev`, `Stdevp`, `Var` и `Varp`, а также
+восемь форм фасада `Sql.stdev*`/`Sql.var*` возвращают `T?`. Кардинальность считает вносящие вклад
+непустые значения после `DISTINCT`:
+
+| Вносящих вклад значений | `Stdev` / `Var` (выборочные) | `Stdevp` / `Varp` (генеральные) |
+|---|---|---|
+| 0 | `null` | `null` |
+| 1 | `null` | `0.0` |
+| 2 и более | установленная формула | установленная формула |
+
+Определённый ноль остаётся нулём: два и более одинаковых значения дают `0.0`, а генеральный
+результат по одной строке — `0.0`. `null` возвращается только для неопределённого результата и
+никогда не подменяется придуманным нулём.
+
+Поскольку результат теперь настоящий `Nullable<T>`, а не аннотация поверх обычного `double`,
+изменение ломает исходный код тех вызывающих, кто присваивает терминал в non-nullable
+`int`/`double`. Сохраняйте nullable-результат (`double?`) либо разворачивайте его явно.
+`?? 0` уместен только там, где ноль действительно означает «нет разброса»: иначе возвращается
+придуманный ноль для неопределённого случая.
+
 ## Логические, битовые, статистические и упорядоченные агрегаты
 
 Помимо `count`/`min`/`max`/`sum`/`avg`/`stdev`/`var`, [`Sql`](xref:NextORM.Core.SqlFunctions.Sql) предоставляет несколько семейств
@@ -486,7 +620,7 @@ var variance = dataContext.From<ISimpleEntity>().Select(x => SqlFunctions.Sql.va
 | Последняя строка | `SqlFunctions.ClickHouse.any_last(x)` | `anyLast(x)` | [`SupportsAnyAggregates`](xref:NextORM.Core.ISqlDialect.SupportsAnyAggregates) | ClickHouse |
 | С фильтром | `SqlFunctions.Sql.count(() => p)`, `sum(x, () => p)`, `avg(x, () => p)`, `min(x, () => p)`, `max(x, () => p)` | `count(*) filter (where p)`, ... / `countIf(p)`, `sumIf(x, p)`, ... | [`AggregateFilterStyle`](xref:NextORM.Core.ISqlDialect.AggregateFilterStyle) | PostgreSQL (9.4+), SQLite (ANSI `FILTER`), ClickHouse (`-If`) |
 | Последовательности / воронка | `SqlFunctions.ClickHouse.window_funnel(window, ts, c1, c2)`, `sequence_match(pattern, ts, c1, c2)`, `retention(c1, c2)` | `toInt32(windowFunnel(window)(ts, c1, c2))`, `toInt32(sequenceMatch(pattern)(ts, c1, c2))`, `retention(c1, c2)` | [`SequenceAggregates`](xref:NextORM.Core.ISqlDialect.SequenceAggregates) | ClickHouse |
-| Упорядоченные | `SqlFunctions.Postgres.percentile_cont(fraction, () => x)`, `percentile_disc(fraction, () => x)`, `mode(() => x)` | `percentile_cont(f) within group (order by x)`, ... | [`SupportsOrderedAggregates`](xref:NextORM.Core.ISqlDialect.SupportsOrderedAggregates) | PostgreSQL |
+| Упорядоченные | `SqlFunctions.Postgres.percentile_cont(fraction, () => x)`, `percentile_disc(fraction, () => x)`, `median(() => x)`, `mode(() => x)` | `percentile_cont(f) within group (order by x)`, `percentile_cont(0.5) within group (order by x)`, ... | [`SupportsOrderedAggregates`](xref:NextORM.Core.ISqlDialect.SupportsOrderedAggregates) (`mode`), [`SupportsOrderedPercentiles`](xref:NextORM.Core.ISqlDialect.SupportsOrderedPercentiles) (квантили, `median`) | PostgreSQL |
 
 MariaDB **не** поддерживает `any_agg`: в 10.4–12.x нет `ANY_VALUE` (возможность SQL-2023 `T626` всё ещё
 ожидается, ориентир — 13.2), поэтому [`SupportsAnyValueAggregate`](xref:NextORM.Core.ISqlDialect.SupportsAnyValueAggregate) равно `false`, а вызов отклоняется через `NotSupportedException`.
@@ -533,11 +667,23 @@ select groupBitAnd(id), covarPop(id, nullableint), argMax(somestring, id)
 запроса; ключ становится `order by <key>`. Вызов такого агрегата у провайдера без соответствующей
 возможности бросает `NotSupportedException`.
 
+В PostgreSQL медиана не является серверной функцией: `SqlFunctions.Postgres.median(() => x)` рендерит
+`percentile_cont(0.5) within group (order by x)` и является **агрегатом** (одна строка на группу) под
+[`SupportsOrderedPercentiles`](xref:NextORM.Core.ISqlDialect.SupportsOrderedPercentiles). Непрерывные формы интерполируют
+и возвращают `double precision`, поэтому `percentile_cont` и `median` требуют выражения сортировки с плавающей
+точкой — целочисленный/`numeric` ключ отклоняется с
+`The percentile_cont function on PostgreSQL requires a floating-point sort expression.`,
+а `percentile_disc` сохраняет тип выражения сортировки. Дробь — это `double` в `[0, 1]`, а не проценты; она
+должна быть конечной и константной (литерал или захваченная переменная), а зависящая от строки дробь
+отклоняется при генерации SQL. Общий `SqlFunctions.Postgres.percentile(fraction, () => x)` отклоняется:
+он никогда не становится псевдонимом непрерывной формы.
+
 Агрегаты ClickHouse для последовательностей/воронки принимают условия как встроенные булевы выражения
 (столбец `timestamp` — первым). `window_funnel` возвращает длину наибольшей последовательной цепочки в
 скользящем окне, `sequence_match` — `1`/`0` для паттерна; оба материализуются как CLR `int` (диалект
-приводит нативный беззнаковый результат через `toInt32(...)`). `retention` возвращает маску `UInt8`
-как массив, материализуемый как `byte[]` (проецируется напрямую или внутри другой array-функции):
+приводит нативный беззнаковый результат через `toInt32(...)`). `retention` возвращает маску `UInt8`,
+которую диалект нормализует к объявленному `int[]` (проецируется напрямую или внутри другой
+array-функции):
 
 ```csharp
 var funnel = dataContext.From<IEventEntity>()
@@ -555,9 +701,17 @@ var funnel = dataContext.From<IEventEntity>()
 -- ClickHouse
 select toInt32(windowFunnel(600)(ts, (event = 1), (event = 2))) as `Level`,
        toInt32(sequenceMatch('(?1).*(?2)')(ts, (event = 1), (event = 2))) as `Matched`,
-       arrayStringConcat(retention((event = 1), (event = 2)), ',') as `Mask`
+       arrayStringConcat(cast(retention((event = 1), (event = 2)) as Array(Int32)), ',') as `Mask`
  from event_entity
 ```
+
+Возвращающие массив агрегаты следуют **объявленному CLR-типу элемента**, а не выведенному сервером:
+`top_k`/`top_k_weighted`/`group_array`/`group_uniq_array` объявляют nullable-тип элемента, если вход
+nullable (`int?[]` → `Array(Nullable(Int32))`), а `retention` остаётся `int[]`, `array_map`/`range`
+следуют своим объявленным типам (`int[]`, `long[]`). Nullable описывает только **тип результата**:
+ClickHouse по-прежнему отбрасывает `NULL`-**входы** агрегата, поэтому `group_array`/`group_uniq_array`
+по nullable-колонке не сохраняют null-элементы — объявленный тип элемента nullable, но сам агрегат
+nulls не хранит.
 
 ## Агрегаты с FILTER
 
@@ -611,12 +765,12 @@ reader'ом как CLR `T[]`. В ClickHouse дополнительно дост�
 | Провайдер | `count_big` | Имена агрегатов | Целочисленный `AVG` | `var` / `varp` |
 |---|---|---|---|---|
 | SQLite | генерирует `count(*)` (уже 64-битный) | сохраняются как есть; `stdev`/`var` берутся из пользовательских агрегатов, регистрируемых провайдером | дробный (5.5 остаётся 5.5) | поддерживаются через эти пользовательские агрегаты |
-| SQL Server | генерирует `count_big(...)` | сохраняются как есть; `stdev`/`var` встроенные | целочисленный (5.5 становится 5) | встроенные |
+| SQL Server | генерирует `count_big(...)` | сохраняются как есть; `stdev`/`var` встроенные | дробный; аргумент расширяется (`avg(cast(id as float))`) | встроенные |
 | PostgreSQL | генерирует `count(*)` (уже 64-битный) | `stdev` → `stddev`, `stdevp` → `stddev_pop`, `var` → `variance`, `varp` → `var_pop` | дробный | встроенные |
 | MySQL | генерирует `count(*)` (уже 64-битный) | `stdev` → `stddev_samp`, `stdevp` → `stddev_pop`, `var` → `var_samp`, `varp` → `var_pop` | дробный | встроенные (`var_samp` / `var_pop`) |
 | MariaDB | генерирует `count(*)` (уже 64-битный) | то же отображение, что в MySQL (`stddev_samp` / `stddev_pop` / `var_samp` / `var_pop`) | дробный | встроенные (`var_samp` / `var_pop`) |
 | ClickHouse | оборачивает `count`/`count_distinct` (и фильтрованный `countIf`) в `toInt32(...)`, а `count_big`/`count_big_distinct` — в `toInt64(...)` (нативный `UInt64` не материализуется) | `stdev` → `stddevSamp`, `stdevp` → `stddevPop`, `var` → `varSamp`, `varp` → `varPop`, `covar_*` → `covarPop`/`covarSamp`, `bit_*` → `groupBit*`, фильтр агрегата → комбинатор `<fn>If` (`sumIf`, `countIf`) | дробный | `varSamp` / `varPop` |
-| In-memory | не покрыто набором тестов in-memory | не покрыто | не покрыто | не покрыто |
+| In-memory | не покрыто набором тестов in-memory | не покрыто | дробный (`double?` для целочисленных входов) | не покрыто |
 
 Порядок групп не определён стандартом SQL; проверяйте по ключу группы, а не по позиции. PostgreSQL и
 SQLite различаются в порядке `NULL` (PostgreSQL — первыми, SQLite — последними).

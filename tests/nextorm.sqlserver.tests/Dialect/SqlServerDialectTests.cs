@@ -287,6 +287,7 @@ public class SqlServerDialectTests
         Dialect.SupportsSequentialAccess.Should().BeTrue();
         // No trailing locator: SqlClient streams the payload without a rowid, so no "<payload>, rowid" SQL.
         Dialect.LobLocatorColumn.Should().BeNull();
+        Dialect.SupportsSavepoints.Should().BeTrue();
         Dialect.SupportsApply.Should().BeTrue();
         Dialect.SupportsQueryHints.Should().BeTrue();
         Dialect.SupportsGreatestLeast.Should().BeTrue();
@@ -337,6 +338,15 @@ public class SqlServerDialectTests
         functions.Supports("json_object").Should().BeTrue();
         functions.Supports("log10").Should().BeFalse();
 
+        // T248: live-scope scalars.
+        functions.Supports("current_request_id").Should().BeTrue();
+        functions.Supports("current_transaction_id").Should().BeTrue();
+        functions.Supports("xact_state").Should().BeTrue();
+        functions.Supports("ident_current").Should().BeTrue();
+        functions.Supports("min_active_rowversion").Should().BeTrue();
+        functions.Supports("rowcount_big").Should().BeTrue();
+        functions.Supports("scope_identity").Should().BeTrue();
+
         functions.Render("patindex", ["'%a%'", "[s]"]).Should().Be("patindex('%a%', [s])");
         functions.Render("quotename", ["[s]"]).Should().Be("quotename([s])");
         functions.Render("quotename", ["[s]", "'['"]).Should().Be("quotename([s], '[')");
@@ -358,6 +368,13 @@ public class SqlServerDialectTests
         functions.Render("json_objectagg", ["[k]", "[v]"]).Should().Be("json_objectagg([k] : [v])");
         functions.Render("json_contains", ["[j]", "'a'", "'$.x'"]).Should().Be("json_contains([j], 'a', '$.x')");
         functions.Render("json_path_exists", ["[j]", "'$.x'"]).Should().Be("json_path_exists([j], '$.x')");
+        functions.Render("current_request_id", []).Should().Be("current_request_id()");
+        functions.Render("current_transaction_id", []).Should().Be("current_transaction_id()");
+        functions.Render("xact_state", []).Should().Be("xact_state()");
+        functions.Render("ident_current", ["t"]).Should().Be("ident_current(t)");
+        functions.Render("min_active_rowversion", []).Should().Be("min_active_rowversion()");
+        functions.Render("rowcount_big", []).Should().Be("rowcount_big()");
+        functions.Render("scope_identity", []).Should().Be("scope_identity()");
 
         var odd = () => functions.Render("json_object", ["'k'"]);
         odd.Should().Throw<NotSupportedException>().WithMessage("*even*");

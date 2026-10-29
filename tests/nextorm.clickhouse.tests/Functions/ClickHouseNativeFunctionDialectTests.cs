@@ -1,4 +1,5 @@
 using FluentAssertions;
+using FluentAssertions.Execution;
 using NextORM.Core;
 using NextORM.ClickHouse;
 
@@ -44,7 +45,6 @@ public class ClickHouseNativeFunctionDialectTests
             ("array_uniq", ["a"], "toInt64(arrayUniq(a))"),
             ("array_intersect", ["a", "b"], "arrayIntersect(a, b)"),
             ("array_union", ["a", "b"], "arrayUnion(a, b)"),
-            ("array_except", ["a", "b"], "arrayExcept(a, b)"),
             ("array_symmetric_difference", ["a", "b"], "arraySymmetricDifference(a, b)"),
             ("map", ["'a'", "1"], "map('a', 1)"),
             ("map_keys", ["m"], "mapKeys(m)"),
@@ -64,21 +64,21 @@ public class ClickHouseNativeFunctionDialectTests
             ("group_bitmap_xor", ["x"], "groupBitmapXor(x)"),
             ("sum_map", ["k", "v"], "sumMap(k, v)"),
             ("sum_map_filtered", ["keys", "k", "v"], "sumMapFiltered(keys)(k, v)"),
-            ("md5", ["x"], "MD5(x)"),
-            ("sha1", ["x"], "SHA1(x)"),
-            ("sha256", ["x"], "SHA256(x)"),
-            ("sha512", ["x"], "SHA512(x)"),
+            ("md5", ["x"], "lower(hex(MD5(x)))"),
+            ("sha1", ["x"], "lower(hex(SHA1(x)))"),
+            ("sha256", ["x"], "lower(hex(SHA256(x)))"),
+            ("sha512", ["x"], "lower(hex(SHA512(x)))"),
             ("xx_hash32", ["x"], "toInt32(xxHash32(x))"),
             ("xx_hash64", ["x"], "toInt64(xxHash64(x))"),
             ("xxh3", ["x"], "toInt64(xxh3(x))"),
             ("city_hash64", ["x"], "toInt64(cityHash64(x))"),
             ("sip_hash64", ["x"], "toInt64(sipHash64(x))"),
-            ("sip_hash128", ["x"], "sipHash128(x)"),
+            ("sip_hash128", ["x"], "lower(hex(sipHash128(x)))"),
             ("murmur_hash2_32", ["x"], "toInt32(murmurHash2_32(x))"),
             ("murmur_hash2_64", ["x"], "toInt64(murmurHash2_64(x))"),
             ("murmur_hash3_32", ["x"], "toInt32(murmurHash3_32(x))"),
             ("murmur_hash3_64", ["x"], "toInt64(murmurHash3_64(x))"),
-            ("murmur_hash3_128", ["x"], "murmurHash3_128(x)"),
+            ("murmur_hash3_128", ["x"], "lower(hex(murmurHash3_128(x)))"),
             ("generate_ulid", [], "generateULID()")
         };
 
@@ -87,5 +87,52 @@ public class ClickHouseNativeFunctionDialectTests
             Scalars.Supports(name).Should().BeTrue($"ClickHouse supports {name}");
             Scalars.Render(name, args).Should().Be(expected);
         }
+    }
+
+    // #252: the native arrayExcept was introduced in ClickHouse 25.9, so on the pinned 25.8
+    // baseline the capability table must reject the name and a direct render must refuse every
+    // arity instead of emitting an UNKNOWN_FUNCTION call.
+    [Fact]
+    public void ArrayExcept_ShouldBeRefusedByTheCapabilityTable()
+    {
+        Scalars.Supports("array_except").Should().BeFalse(
+            "the native arrayExcept exists only from ClickHouse 25.9 and the pinned baseline is 25.8");
+
+        var arities = new[]
+        {
+            new[] { "a", "b" },
+            new[] { "a", "b", "c" },
+            new[] { "a" },
+            Array.Empty<string>()
+        };
+
+        using (new AssertionScope())
+        {
+            foreach (var args in arities)
+            {
+                FluentActions.Invoking(() => Scalars.Render("array_except", args))
+                    .Should().Throw<NotSupportedException>(
+                        "a direct render must refuse every arity instead of emitting arrayExcept(...)")
+                    .WithMessage("The array_except function is not supported by ClickHouse.");
+            }
+        }
+    }
+
+    [Fact]
+    public void ArrayExceptRefusal_ShouldNotDisturbSiblingArrayFunctions()
+    {
+        ClickHouseDialect.Instance.SupportsArrayFunctions.Should().BeTrue(
+            "the refusal is per function, not a change of the array capability");
+
+        Scalars.Supports("array_intersect").Should().BeTrue();
+        Scalars.Supports("array_union").Should().BeTrue();
+        Scalars.Supports("array_symmetric_difference").Should().BeTrue();
+        Scalars.Supports("array_distinct").Should().BeFalse(
+            "array_distinct keeps its own translator path, not the native scalar table");
+
+        Scalars.Render("array_intersect", ["a", "b"]).Should().Be("arrayIntersect(a, b)");
+        Scalars.Render("array_union", ["a", "b", "c"]).Should().Be("arrayUnion(a, b, c)");
+        Scalars.Render("array_symmetric_difference", ["a", "b"])
+            .Should().Be("arraySymmetricDifference(a, b)");
     }
 }

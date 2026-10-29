@@ -14,7 +14,7 @@ public class LobWrappersTests
     // A null owner is enough to pin the wrapper surface: reading/writing never touches the owner and
     // CommandReaderOwner.Dispose already tolerates a null reader/command. Owner release is covered by
     // the integration LOB tests against a real provider.
-    private static CommandReaderOwner NoOwner() => new(null!, null!);
+    private static CommandReaderOwner NoOwner() => new(null!, null!, null);
 
     private sealed class TrackingStream(byte[] data) : Stream
     {

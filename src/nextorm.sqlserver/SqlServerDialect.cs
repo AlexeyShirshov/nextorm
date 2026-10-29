@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using NextORM.Core;
 
@@ -12,10 +13,74 @@ public sealed class SqlServerDialect : SqlDialectBase
     /// <summary>The shared SQL Server dialect instance.</summary>
     public static readonly SqlServerDialect Instance = new();
 
-    private readonly IPivotRenderer _pivot;
+    /// <summary>
+    /// SQL Server supports <c>SAVE TRANSACTION</c> and <c>ROLLBACK TRANSACTION &lt;name&gt;</c>; its ADO.NET
+    /// release is a driver no-op, which this capability still reports as supported.
+    /// </summary>
+    public override bool SupportsSavepoints => true;
 
-    /// <summary>Creates the dialect and its capability renderers.</summary>
-    public SqlServerDialect() => _pivot = new SqlServerPivotRenderer(this);
+    private readonly IPivotRenderer _pivot;
+    private readonly SqlServerSpecificFunctions _sqlServerFunctions;
+    private readonly int? _serverMajorVersion;
+    private readonly SqlServerEngineEdition? _engineEdition;
+
+    /// <summary>The declared server major version, or <see langword="null"/> when unset.</summary>
+    internal int? DeclaredMajorVersion => _serverMajorVersion;
+
+    /// <summary>
+    /// Creates the version-agnostic dialect and its capability renderers. Every version-dependent
+    /// capability stays at its historical value, so SQL declared by this dialect keeps working on every
+    /// supported server.
+    /// </summary>
+    public SqlServerDialect()
+    {
+        _pivot = new SqlServerPivotRenderer(this);
+        _sqlServerFunctions = new SqlServerSpecificFunctions(this);
+    }
+
+    /// <summary>
+    /// Creates a dialect bound to an explicitly declared server version. The version is the only input:
+    /// neither the connection nor <c>sys.databases.compatibility_level</c> is inspected, so the emitted
+    /// SQL is a function of the caller's declaration alone.
+    /// </summary>
+    /// <param name="serverVersion">The SQL Server version the context declared.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="serverVersion"/> is <see langword="null"/>.</exception>
+    internal SqlServerDialect(Version serverVersion)
+        : this(ValidateServerVersion(serverVersion), engineEdition: null)
+    {
+    }
+
+    /// <summary>
+    /// Creates a dialect from the immutable declaration its context was built with: an optional server
+    /// version and an optional engine edition. Both are caller declarations — neither the connection nor
+    /// any server property is read, so the emitted SQL is a function of the declaration alone.
+    /// </summary>
+    /// <param name="serverVersion">The declared server version, or <see langword="null"/> when unset.</param>
+    /// <param name="engineEdition">The declared engine edition, or <see langword="null"/> when unset.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="engineEdition"/> is not a defined <see cref="SqlServerEngineEdition"/> value.</exception>
+    internal SqlServerDialect(Version? serverVersion, SqlServerEngineEdition? engineEdition)
+    {
+        ValidateEngineEdition(engineEdition);
+        _serverMajorVersion = serverVersion?.Major;
+        _engineEdition = engineEdition;
+        _pivot = new SqlServerPivotRenderer(this);
+        _sqlServerFunctions = new SqlServerSpecificFunctions(this);
+    }
+
+    private static Version ValidateServerVersion(Version serverVersion)
+    {
+        ArgumentNullException.ThrowIfNull(serverVersion);
+        return serverVersion;
+    }
+
+    private static void ValidateEngineEdition(SqlServerEngineEdition? engineEdition)
+    {
+        if (engineEdition is { } edition && !Enum.IsDefined(edition))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(engineEdition), edition, "Undefined SqlServerEngineEdition value.");
+        }
+    }
 
     /// <summary>Renders a positional parameter as <c>@name</c>.</summary>
     public override string MakeParam(string name) => $"@{name}";
@@ -229,6 +294,91 @@ public sealed class SqlServerDialect : SqlDialectBase
     /// <summary>SQL Server 2016+ renders the JSON-as-text functions (<c>json_value</c>, ...) over nvarchar.</summary>
     public override bool SupportsTextJson => true;
 
+    /// <summary>
+    /// True when the declared state says the server has a native <c>json</c> type: the declared major
+    /// version is 17 or higher, or the declared engine edition is one of the products that has the type
+    /// while reporting a lower version — <see cref="SqlServerEngineEdition.SqlDatabase"/> (5),
+    /// <see cref="SqlServerEngineEdition.AzureSqlManagedInstance"/> (8) or
+    /// <see cref="SqlServerEngineEdition.MicrosoftFabricSqlDatabase"/> (12). Edition 11
+    /// (<see cref="SqlServerEngineEdition.AzureSynapseServerlessSqlPoolOrMicrosoftFabric"/>) is deliberately
+    /// excluded: its serverless pool has no <c>json</c> column type. The decision is a pure function of the
+    /// declared state — the connection, the database compatibility level and
+    /// <c>SERVERPROPERTY('EngineEdition')</c> are never probed, and the version-only gate is unchanged.
+    /// The unversioned, edition-less dialect keeps <c>false</c>, so an existing <c>nvarchar</c>-backed
+    /// <c>[JsonColumn]</c> mapping is never retargeted by Auto.
+    /// </summary>
+    public override bool SupportsJson =>
+        _serverMajorVersion >= 17
+        || _engineEdition is SqlServerEngineEdition.SqlDatabase
+            or SqlServerEngineEdition.AzureSqlManagedInstance
+            or SqlServerEngineEdition.MicrosoftFabricSqlDatabase;
+
+    // Why these gates are version-only while SupportsJson above also consults the edition:
+    // SupportsJson answers "does the server have the native json column type", and a few
+    // Azure/Fabric products have that type while reporting a lower ProductMajorVersion, so the
+    // edition allowlist is a deliberate exception for storage. Function availability is a property
+    // of the engine major version itself: no edition adds REGEXP_COUNT, REGEXP_SPLIT_TO_TABLE,
+    // PRODUCT or LEFT_SHIFT to a major version that lacks it. An edition declaration therefore
+    // never substitutes for a version here, and the unversioned dialect keeps every flag false.
+
+    /// <summary>
+    /// True when the declared server major version is 17 or later: the 2025 function surface
+    /// (<c>REGEXP_COUNT</c>, <c>REGEXP_SPLIT_TO_TABLE</c>, <c>PRODUCT</c>) is available.
+    /// </summary>
+    public override bool SupportsSqlServer2025Functions => _serverMajorVersion >= 17;
+
+    /// <summary>
+    /// True when the declared server major version is 16 or later: the 2022 function surface
+    /// (<c>LEFT_SHIFT</c>/<c>RIGHT_SHIFT</c>) is available.
+    /// </summary>
+    public override bool SupportsSqlServer2022Functions => _serverMajorVersion >= 16;
+
+    /// <summary>The <c>PRODUCT</c> aggregate arrived with SQL Server 2025, so it follows that gate.</summary>
+    public override bool SupportsProductAggregate => SupportsSqlServer2025Functions;
+
+    /// <summary>
+    /// <see cref="CommonFunctions.any_agg"/> stays gated off on SQL Server: the T-SQL <c>ANY_VALUE</c>
+    /// aggregate does not exist on the recorded engine build <c>17.0.5005.3</c> (<c>Msg 195</c> in the
+    /// aggregate and <c>OVER ()</c> forms, at compatibility levels 160 and 170 and with
+    /// <c>PREVIEW_FEATURES = ON</c>), so there is no execution contract to enable. The
+    /// <see cref="SqlServerFunctions.any_value"/> member is a deterministic refusal, not this
+    /// aggregate's replacement; the providers that do enable <c>any_agg</c> keep their dispatch.
+    /// </summary>
+    public override bool SupportsAnyValueAggregate => false;
+
+    /// <summary>
+    /// <c>APPROX_COUNT_DISTINCT</c> arrived with SQL Server 2019 (major version 15). Version-only, like
+    /// every other function-availability gate here: no edition substitutes for a major version.
+    /// </summary>
+    public override bool SupportsApproxCountDistinctAggregate => _serverMajorVersion >= 15;
+
+    /// <summary><c>CHECKSUM_AGG</c> has no version floor: every declared SQL Server major version has it.</summary>
+    public override bool SupportsChecksumAggregate => true;
+
+    /// <summary><c>GROUPING_ID</c> has no version floor: every declared SQL Server major version has it.</summary>
+    public override bool SupportsGroupingIdAggregate => true;
+
+    /// <summary>
+    /// The approximate ordered-set percentiles arrived with SQL Server 2022 (major version 16).
+    /// Name-specific by design: the broad ordered-aggregate and interpolating-percentile flags stay
+    /// untouched, because SQL Server expresses those only as window functions.
+    /// </summary>
+    public override bool SupportsApproxPercentileCont => _serverMajorVersion >= 16;
+
+    /// <summary>
+    /// <c>APPROX_PERCENTILE_DISC</c> arrived with SQL Server 2022 (major version 16); name-specific for
+    /// the same reason as <see cref="SupportsApproxPercentileCont"/>.
+    /// </summary>
+    public override bool SupportsApproxPercentileDisc => _serverMajorVersion >= 16;
+
+    /// <summary>
+    /// The native <c>json</c> column is transported as the plain CLR <see cref="string"/>: SqlClient has
+    /// no DOM representation that binds and reads both a <c>json</c> and an <c>nvarchar(max)</c> column,
+    /// so the native storage resolves to the existing text converter with an inferred
+    /// <c>nvarchar</c> parameter (no <c>SqlDbType.Json</c>, no double serialization).
+    /// </summary>
+    public override Type NativeJsonProviderType => typeof(string);
+
     /// <summary>T-SQL <c>isjson</c> returns an <c>int</c>: <c>1</c>/<c>0</c>, so a value context casts it to <c>bit</c>.</summary>
     public override string MakeIsJson(string value, bool asPredicate) =>
         asPredicate ? $"(isjson({value})) = 1" : $"cast(isjson({value}) as bit)";
@@ -255,9 +405,31 @@ public sealed class SqlServerDialect : SqlDialectBase
     /// <summary>SQL Server supports the native <c>PIVOT</c>/<c>UNPIVOT</c> source constructs.</summary>
     public override IPivotRenderer Pivot => _pivot;
 
-    /// <summary>SQL Server exposes <c>string_split</c>, <c>openjson</c>, <c>containstable</c> and <c>freetexttable</c>.</summary>
+    /// <summary>
+    /// SQL Server exposes <c>string_split</c>, <c>openjson</c>, <c>containstable</c> and
+    /// <c>freetexttable</c> on every supported version, and <c>regexp_split_to_table</c>/
+    /// <c>regexp_matches</c> from 2025 (declared major version 17) on. The 2025 names are additionally
+    /// usable only at database compatibility level 170, which the dialect cannot inspect; that
+    /// prerequisite is documented and asserted live rather than silently assumed.
+    /// </summary>
     public override bool SupportsTableFunction(string name) =>
-        name is "string_split" or "openjson" or "containstable" or "freetexttable";
+        name is "string_split" or "openjson" or "containstable" or "freetexttable"
+        || ((name is "regexp_split_to_table" or "regexp_matches") && SupportsSqlServer2025Functions);
+
+    /// <summary>
+    /// Rewrites the <c>regexp_matches</c> match-type argument to <c>varchar</c>. The native third
+    /// argument is varchar-only: an nvarchar literal, NULL or parameter is Msg 8116 ("Argument data
+    /// type nvarchar is invalid for argument 3"), while a cast to varchar is accepted for every shape
+    /// (probe <c>matches_nvarchar</c>/<c>cast_lit_matches</c>/<c>cast_param_matches</c>). Only the SQL
+    /// type changes; the value is never validated client-side.
+    /// </summary>
+    public override string WrapTableFunction(string name, string call, IReadOnlyList<string> arguments)
+    {
+        if (name != "regexp_matches" || arguments.Count != 3)
+            return call;
+
+        return $"{name}({arguments[0]}, {arguments[1]}, cast({arguments[2]} as varchar(4000)))";
+    }
 
     /// <summary>SQL Server supports a raw SQL derived table (<c>FROM (&lt;sql&gt;) AS alias</c>).</summary>
     public override bool SupportsRawSqlSource => true;
@@ -395,6 +567,76 @@ public sealed class SqlServerDialect : SqlDialectBase
         _ => base.MakeTypeName(type)
     };
 
+    /// <summary>
+    /// Renders <c>try_cast(expression as &lt;type&gt;)</c> through the closed conversion map. The map is
+    /// deliberately separate from <see cref="MakeTypeName"/>: that one falls back to <c>type.Name</c>,
+    /// which is invalid T-SQL for <c>bool</c>/<c>Guid</c>/<c>DateTime</c>/<c>string</c> and wrong for
+    /// <c>TimeSpan</c> (ticks). Lengths and precisions are fixed in the map (no configurable
+    /// length/precision yet); the server applies its native truncation and rounding. An unmapped target
+    /// is refused before the command is prepared.
+    /// </summary>
+    /// <exception cref="NotSupportedException">The target has no entry in the closed map.</exception>
+    public override string MakeTryCast(string expression, Type targetType) =>
+        $"try_cast({expression} as {TryConversionTypeName("TRY_CAST", targetType)})";
+
+    /// <summary>
+    /// Renders <c>try_convert(&lt;type&gt;, expression[, style])</c> through the same closed map. A
+    /// <see langword="null"/> <paramref name="style"/> omits the argument; a supplied style (including a
+    /// typed SQL NULL) is the native style argument and keeps the server's NULL-style semantics, which is
+    /// a NULL result even for a convertible value.
+    /// </summary>
+    /// <exception cref="NotSupportedException">The target has no entry in the closed map.</exception>
+    public override string MakeTryConvert(string expression, Type targetType, string? style)
+    {
+        var sqlType = TryConversionTypeName("TRY_CONVERT", targetType);
+        return style is null
+            ? $"try_convert({sqlType}, {expression})"
+            : $"try_convert({sqlType}, {expression}, {style})";
+    }
+
+    /// <summary>
+    /// The closed CLR-to-SQL Server conversion map shared by <c>TRY_CAST</c> and <c>TRY_CONVERT</c>. It
+    /// never falls through to a CLR type name: an unmapped target is an explicit refusal naming the
+    /// calling member and the target.
+    /// </summary>
+    private static string TryConversionTypeName(string member, Type targetType)
+    {
+        var type = Nullable.GetUnderlyingType(targetType) ?? targetType;
+
+        return type switch
+        {
+            _ when type == typeof(byte) => "tinyint",
+            _ when type == typeof(short) => "smallint",
+            _ when type == typeof(int) => "int",
+            _ when type == typeof(long) => "bigint",
+            _ when type == typeof(float) => "real",
+            _ when type == typeof(double) => "float(53)",
+            _ when type == typeof(decimal) => "decimal(38,10)",
+            _ when type == typeof(bool) => "bit",
+            _ when type == typeof(Guid) => "uniqueidentifier",
+            _ when type == typeof(DateTime) => "datetime2(7)",
+            _ when type == typeof(DateTimeOffset) => "datetimeoffset(7)",
+            _ when type == typeof(TimeSpan) => "time(7)",
+            _ when type == typeof(string) => "nvarchar(4000)",
+            _ => throw new NotSupportedException(
+                $"The {member} function cannot map CLR target '{type.Name}' to a supported SQL Server conversion type.")
+        };
+    }
+
+    /// <summary>
+    /// SQL Server evaluates <c>avg</c> over an integer column as an integer and truncates the
+    /// fractional part. Widen the argument to <c>float</c> inside the aggregate; casting the
+    /// aggregate result cannot recover the discarded fraction.
+    /// </summary>
+    public override string MakeAverageArgument(string argument, Type inputType)
+    {
+        var type = Nullable.GetUnderlyingType(inputType) ?? inputType;
+        return type == typeof(byte) || type == typeof(sbyte) || type == typeof(short) || type == typeof(ushort)
+            || type == typeof(int) || type == typeof(uint) || type == typeof(long) || type == typeof(ulong)
+            ? $"cast({argument} as float)"
+            : argument;
+    }
+
     // SQL Server has no length(); its equivalent is len().
     /// <summary>SQL Server has no <c>length</c>; it renders <c>len(value)</c>.</summary>
     public override string MakeStringLength(string value) => $"len({value})";
@@ -445,11 +687,11 @@ public sealed class SqlServerDialect : SqlDialectBase
 
     /// <inheritdoc/>
     public override string MakeRegexMatch(string value, string pattern, bool ignoreCase) =>
-        $"regexp_like({value}, {QuoteStringLiteral(pattern)}, {(ignoreCase ? "'i'" : "'c'")})";
+        $"regexp_like({value}, {SqlStringLiteralPolicy.SqlServer.Render(pattern, SqlStringLiteralRole.RegexPattern)}, {(ignoreCase ? "'i'" : "'c'")})";
 
     /// <inheritdoc/>
     public override string MakeRegexReplace(string value, string pattern, string replacement, bool ignoreCase) =>
-        $"regexp_replace({value}, {QuoteStringLiteral(pattern)}, {QuoteStringLiteral(replacement)}, 1, 0, {(ignoreCase ? "'i'" : "'c'")})";
+        $"regexp_replace({value}, {SqlStringLiteralPolicy.SqlServer.Render(pattern, SqlStringLiteralRole.RegexPattern)}, {SqlStringLiteralPolicy.SqlServer.Render(replacement, SqlStringLiteralRole.RegexReplacement)}, 1, 0, {(ignoreCase ? "'i'" : "'c'")})";
 
     /// <summary>Renders <c>stuff(value, start + 1, count, newValue)</c>, or the truncated prefix when the count is <c>null</c>.</summary>
     public override string MakeStuff(string value, string start, string? count, string newValue) =>
@@ -631,6 +873,13 @@ public sealed class SqlServerDialect : SqlDialectBase
             : $"cast(case when {predicate} then 1 else 0 end as bit)";
     }
 
+    /// <summary>
+    /// T-SQL has no <c>IS [NOT] DISTINCT FROM</c> before SQL Server 2022, so both forms are emulated
+    /// over the ordinary equality primitives as a two-valued guarded predicate. Captured operands need
+    /// an explicit SQL type, which is resolved from the compared column's metadata.
+    /// </summary>
+    public override INullSafeComparisonRenderer? NullSafeComparison => SqlServerNullSafeComparisonRenderer.Instance;
+
     /// <summary>A bit value is not a valid T-SQL predicate, so it is compared with its true literal (<c>(value) = 1</c>).</summary>
     public override string MakeBooleanValuePredicate(string value)
     {
@@ -692,6 +941,11 @@ public sealed class SqlServerDialect : SqlDialectBase
     /// <summary>Renders <c>offset n rows</c> and an optional <c>fetch next m rows only|with ties</c>.</summary>
     public override void MakePage(Paging paging, StringBuilder sqlBuilder, KeywordCase keywordCase = KeywordCase.Lower)
     {
+        // T-SQL accepts WITH TIES only in TOP(n); OFFSET/FETCH permits ONLY. Refuse the combination before
+        // any fragment is appended so preparation fails closed instead of the server rejecting invalid SQL.
+        if (paging.HasWithTies && paging.Offset > 0)
+            throw new NotSupportedException("SQL Server does not support WITH TIES with a non-zero OFFSET. Use WithTies() without OFFSET.");
+
         sqlBuilder.Append(Kw(keywordCase, "offset ")).Append(paging.Offset).Append(Kw(keywordCase, " rows"));
 
         if (paging.Limit > 0)
@@ -746,8 +1000,46 @@ public sealed class SqlServerDialect : SqlDialectBase
     /// <summary>SQL Server renders every cross-provider scalar function (<c>lpad</c>/<c>rpad</c> through <c>replicate</c>).</summary>
     public override IScalarFunctions ScalarFunctions => SqlServerScalarFunctions.Instance;
 
-    /// <summary>SQL Server renders the T-SQL-only scalar functions (<c>patindex</c>, <c>quotename</c>, the trigonometric functions, the SQL/JSON constructors and aggregates, …).</summary>
-    public override ISqlServerFunctions? SqlServerFunctions => SqlServerSpecificFunctions.Instance;
+    /// <summary>
+    /// SQL Server renders the T-SQL-only scalar functions (<c>patindex</c>, <c>quotename</c>, the
+    /// trigonometric functions, the SQL/JSON constructors and aggregates, …). The renderer is bound to
+    /// this dialect instance so the version-gated names answer from the caller's declaration and never
+    /// from the version-blind singleton.
+    /// </summary>
+    public override ISqlServerFunctions? SqlServerFunctions => _sqlServerFunctions;
+
+    /// <summary>SQL Server 2025 has the native <c>BASE64_ENCODE</c> function over <c>varbinary</c>.</summary>
+    public override bool SupportsBase64Encode => true;
+
+    /// <inheritdoc/>
+    public override string MakeBase64Encode(string value) =>
+        $"BASE64_ENCODE({TypedNull(value, "varbinary(8000)")})";
+
+    /// <summary>SQL Server 2025 has the native <c>BASE64_DECODE</c> function returning <c>varbinary</c>.</summary>
+    public override bool SupportsBase64Decode => true;
+
+    /// <inheritdoc/>
+    public override string MakeBase64Decode(string value) =>
+        $"BASE64_DECODE({TypedNull(value, "varchar(8000)")})";
+
+    /// <summary>SQL Server has the <c>CRYPT_GEN_RANDOM</c> cryptographic generator over a constant or variable length.</summary>
+    public override bool SupportsCryptGenRandom => true;
+
+    /// <inheritdoc/>
+    public override string MakeCryptGenRandom(string length)
+    {
+        var argument = TypedNull(length, "int");
+        return $"CASE WHEN {argument} IS NULL THEN CAST(NULL AS varbinary(8000)) ELSE CRYPT_GEN_RANDOM({argument}) END";
+    }
+
+    /// <summary>
+    /// Replaces the bare <c>null</c> token of a literal NULL argument with the provider's typed NULL,
+    /// so the argument keeps the SQL input type the function declares instead of relying on an
+    /// implicit conversion SQL Server does not perform.
+    /// </summary>
+    private static string TypedNull(string value, string sqlType) =>
+        value == "null" ? $"CAST(NULL AS {sqlType})" : value;
+
 
     /// <summary>Appends the hints as an <c>option (...)</c> clause, folding an existing <c>maxrecursion</c> option into it.</summary>
     public override string RenderQueryHints(string sql, IReadOnlyList<string> hints, string? maxRecursionOption, KeywordCase keywordCase = KeywordCase.Lower)
@@ -1037,35 +1329,98 @@ internal sealed class SqlServerScalarFunctions : IScalarFunctions
 /// </summary>
 internal sealed class SqlServerSpecificFunctions : ISqlServerFunctions
 {
-    internal static readonly SqlServerSpecificFunctions Instance = new();
+    private readonly SqlServerDialect _dialect;
+
+    internal SqlServerSpecificFunctions(SqlServerDialect dialect) => _dialect = dialect;
 
     /// <summary>The SQL Server identity surface is exposed next to the T-SQL scalar library.</summary>
     bool ISqlServerFunctions.SupportsSessionIdentity => true;
 
     /// <inheritdoc/>
-    public bool Supports(string name) => name is
-        "patindex" or "quotename" or "soundex" or "difference" or "string_escape" or "unicode" or
-        "nchar" or "format" or "acos" or "asin" or "atan" or "atn2" or
-        "square" or "datename" or "date_bucket" or "hashbytes" or
-        "newsequentialid" or "json_array" or "json_object" or "json_arrayagg" or "json_objectagg" or
-        "json_contains" or "json_path_exists" or
-        "sysdatetime" or "sysdatetimeoffset" or "sysutcdatetime" or "switchoffset" or
-        "todatetimeoffset" or "timefromparts" or "smalldatetimefromparts" or "datetimefromparts" or
-        "datetime2fromparts" or "datetimeoffsetfromparts" or
-        "checksum" or "binary_checksum" or "compress" or "decompress" or
-        "rand" or "stuff" or
-        "col_length" or "col_name" or "ident_incr" or "ident_seed" or "index_col" or
-        "object_definition" or "object_id" or "object_name" or "object_schema_name" or "stats_date" or
-        "db_id" or "db_name" or "original_db_name" or "schema_id" or "schema_name" or
-        "type_id" or "type_name" or
-        "filegroup_id" or "filegroup_name" or "file_id" or "file_idex" or "file_name" or
-        "current_timezone" or "current_timezone_id" or "formatmessage" or "getansinull" or
-        "isdate" or "isnumeric" or "parsename" or "publishingservername" or "str" or
-        "next_value_for" or "nextval";
+    public bool Supports(string name) =>
+        (name is
+            "patindex" or "quotename" or "soundex" or "difference" or "string_escape" or "unicode" or
+            "nchar" or "format" or "acos" or "asin" or "atan" or "atn2" or
+            "square" or "datename" or "date_bucket" or "hashbytes" or
+            "newsequentialid" or "json_array" or "json_object" or "json_arrayagg" or "json_objectagg" or
+            "json_contains" or "json_path_exists" or
+            "sysdatetime" or "sysdatetimeoffset" or "sysutcdatetime" or "switchoffset" or
+            "todatetimeoffset" or "timefromparts" or "smalldatetimefromparts" or "datetimefromparts" or
+            "datetime2fromparts" or "datetimeoffsetfromparts" or
+            "checksum" or "binary_checksum" or "compress" or "decompress" or
+            "rand" or "stuff" or
+            "col_length" or "col_name" or "ident_incr" or "ident_seed" or "index_col" or
+            "object_definition" or "object_id" or "object_name" or "object_schema_name" or "stats_date" or
+            "db_id" or "db_name" or "original_db_name" or "schema_id" or "schema_name" or
+            "type_id" or "type_name" or
+            "filegroup_id" or "filegroup_name" or "file_id" or "file_idex" or "file_name" or
+            "current_request_id" or "current_timezone" or "current_timezone_id" or
+            "current_transaction_id" or
+            "formatmessage" or "getansinull" or "ident_current" or
+            "isdate" or "isnumeric" or "min_active_rowversion" or
+            "parsename" or "publishingservername" or "parse" or "try_parse" or
+            "rowcount_big" or "scope_identity" or "str" or "xact_state" or
+            "next_value_for" or "nextval" or
+            "try_cast" or "try_convert")
+        || (name == "regexp_count" && _dialect.SupportsSqlServer2025Functions)
+        || ((name is "regexp_substr" or "regexp_instr" or "regexp_matches"
+                or "edit_distance" or "edit_distance_similarity"
+                or "jaro_winkler_distance" or "jaro_winkler_similarity")
+            && _dialect.SupportsSqlServer2025Functions)
+        || ((name is "left_shift" or "right_shift" or "bit_count" or "get_bit" or "set_bit")
+            && _dialect.SupportsSqlServer2022Functions);
+
+    /// <inheritdoc/>
+    public string? GetUnsupportedReason(string name) => name switch
+    {
+        "regexp_count" => Unsupported("REGEXP_COUNT", requiredMajor: 17, _dialect.SupportsSqlServer2025Functions),
+        "regexp_substr" => Unsupported("REGEXP_SUBSTR", requiredMajor: 17, _dialect.SupportsSqlServer2025Functions),
+        "regexp_instr" => Unsupported("REGEXP_INSTR", requiredMajor: 17, _dialect.SupportsSqlServer2025Functions),
+        "regexp_matches" => Unsupported("REGEXP_MATCHES", requiredMajor: 17, _dialect.SupportsSqlServer2025Functions),
+        "edit_distance" => Unsupported("EDIT_DISTANCE", requiredMajor: 17, _dialect.SupportsSqlServer2025Functions),
+        "edit_distance_similarity" => Unsupported("EDIT_DISTANCE_SIMILARITY", requiredMajor: 17, _dialect.SupportsSqlServer2025Functions),
+        "jaro_winkler_distance" => Unsupported("JARO_WINKLER_DISTANCE", requiredMajor: 17, _dialect.SupportsSqlServer2025Functions),
+        "jaro_winkler_similarity" => Unsupported("JARO_WINKLER_SIMILARITY", requiredMajor: 17, _dialect.SupportsSqlServer2025Functions),
+        "regexp_split_to_table" => Unsupported("REGEXP_SPLIT_TO_TABLE", requiredMajor: 17, _dialect.SupportsSqlServer2025Functions),
+        "product" => Unsupported("PRODUCT", requiredMajor: 17, _dialect.SupportsProductAggregate),
+        "approx_count_distinct" => Unsupported("APPROX_COUNT_DISTINCT", requiredMajor: 15, _dialect.SupportsApproxCountDistinctAggregate),
+        "approx_percentile_cont" => Unsupported("APPROX_PERCENTILE_CONT", requiredMajor: 16, _dialect.SupportsApproxPercentileCont),
+        "approx_percentile_disc" => Unsupported("APPROX_PERCENTILE_DISC", requiredMajor: 16, _dialect.SupportsApproxPercentileDisc),
+        "left_shift" => Unsupported("LEFT_SHIFT", requiredMajor: 16, _dialect.SupportsSqlServer2022Functions),
+        "right_shift" => Unsupported("RIGHT_SHIFT", requiredMajor: 16, _dialect.SupportsSqlServer2022Functions),
+        "bit_count" => Unsupported("BIT_COUNT", requiredMajor: 16, _dialect.SupportsSqlServer2022Functions),
+        "get_bit" => Unsupported("GET_BIT", requiredMajor: 16, _dialect.SupportsSqlServer2022Functions),
+        "set_bit" => Unsupported("SET_BIT", requiredMajor: 16, _dialect.SupportsSqlServer2022Functions),
+        _ => null
+    };
+
+    /// <summary>
+    /// Builds the version-specific refusal for a gated name, or <see langword="null"/> when the name
+    /// is supported by this dialect's declared state (the caller then keeps its generic message).
+    /// </summary>
+    private string? Unsupported(string sqlName, int requiredMajor, bool supported) =>
+        supported
+            ? null
+            : $"The {sqlName} function requires SQL Server major version {requiredMajor} or later; "
+                + $"declared major version: {_dialect.DeclaredMajorVersion?.ToString(CultureInfo.InvariantCulture) ?? "unspecified"}.";
 
     /// <inheritdoc/>
     public string Render(string name, IReadOnlyList<string> args) => name switch
     {
+        // SQL Server 2025 regex scalar: int count of the non-overlapping matches (0 when none, NULL
+        // when the input is NULL).
+        "regexp_count" => $"regexp_count({args[0]}, {args[1]})",
+        // SQL Server 2025 regex scalars with the native optional positional arguments; omitted and
+        // supplied-NULL arguments are distinct call shapes and are passed through unchanged.
+        "regexp_substr" or "regexp_instr" => $"{name}({string.Join(", ", args)})",
+        // SQL Server 2025 fuzzy matching; the optional maximum_distance of edit_distance is passed
+        // through as rendered (the translator refuses a wider operand before SQL).
+        "edit_distance" or "edit_distance_similarity"
+            or "jaro_winkler_distance" or "jaro_winkler_similarity" =>
+            $"{name}({string.Join(", ", args)})",
+        // Legacy string-only arm: the translator routes the whole bit family through RenderBit, which
+        // also knows the operand type. A direct caller of this arm keeps the int operand shape.
+        "left_shift" => RenderBit(name, args[0], "int", args[1], null),
         "patindex" => $"patindex({args[0]}, {args[1]})",
         "quotename" => args.Count == 2 ? $"quotename({args[0]}, {args[1]})" : $"quotename({args[0]})",
         "soundex" => $"soundex({args[0]})",
@@ -1135,24 +1490,115 @@ internal sealed class SqlServerSpecificFunctions : ISqlServerFunctions
         "file_id" => $"file_id({args[0]})",
         "file_idex" => $"file_idex({args[0]})",
         "file_name" => $"file_name({args[0]})",
+        "current_request_id" => "current_request_id()",
         "current_timezone" => "current_timezone()",
         "current_timezone_id" => "current_timezone_id()",
+        "current_transaction_id" => "current_transaction_id()",
         "formatmessage" => $"formatmessage({string.Join(", ", args)})",
         "getansinull" => args.Count == 0 ? "getansinull()" : $"getansinull({args[0]})",
+        "ident_current" => $"ident_current({args[0]})",
         "isdate" => $"isdate({args[0]})",
         "isnumeric" => $"isnumeric({args[0]})",
+        "min_active_rowversion" => "min_active_rowversion()",
         "parsename" => $"parsename({args[0]}, {args[1]})",
         "publishingservername" => "publishingservername()",
+        "rowcount_big" => "rowcount_big()",
+        "scope_identity" => "scope_identity()",
         "str" => $"str({string.Join(", ", args)})",
+        "parse" => ParseExpression("PARSE", args[0]),
+        "try_parse" => ParseExpression("TRY_PARSE", args[0]),
+        "xact_state" => "xact_state()",
         // The sequence name arrives already bracket-quoted by the translator; both aliases render the
         // same T-SQL sequence expression.
         "next_value_for" or "nextval" => $"next value for {args[0]}",
         _ => throw new NotSupportedException($"The {name} function is not supported by SQL Server.")
     };
 
+    /// <summary>
+    /// Renders the SQL Server bit-manipulation family with typed arguments and typed-NULL branches. SQL
+    /// Server rejects a bare <c>left_shift(null, …)</c> with Msg 8116, so a NULL argument never reaches
+    /// the native call: the guard returns a typed NULL of the result type (<c>tinyint</c>/<c>smallint</c>/
+    /// <c>int</c>/<c>bigint</c> for the shifts and <c>SET_BIT</c>, <c>bigint</c> for <c>BIT_COUNT</c>,
+    /// <c>bit</c> for <c>GET_BIT</c>). The operand keeps its own SQL type, the shift amount is
+    /// <c>bigint</c>, the bit offset is <c>int</c> and a supplied <c>SET_BIT</c> value is <c>bit</c>.
+    /// </summary>
+    public string RenderBit(string name, string operand, string operandType, string? amount, string? value) =>
+        name switch
+        {
+            "left_shift" or "right_shift" => Shift(name, operand, operandType, Require(name, amount)),
+            "bit_count" => BitCount(operand, operandType),
+            "get_bit" => GetBit(operand, operandType, Require(name, amount)),
+            "set_bit" => SetBit(operand, operandType, Require(name, amount), value),
+            _ => throw new NotSupportedException($"The {name} function is not a bit-manipulation function.")
+        };
+
+    private static string Require(string name, string? amount) =>
+        amount ?? throw new NotSupportedException($"The {name} function requires a shift or bit-offset argument.");
+
+    /// <summary>Renders <c>LEFT_SHIFT</c>/<c>RIGHT_SHIFT</c> over a typed operand and a <c>bigint</c> shift.</summary>
+    private static string Shift(string name, string operand, string operandType, string amount)
+    {
+        var value = TypedNull(operand, operandType);
+        var shift = TypedNull(amount, "bigint");
+        return $"CASE WHEN {value} IS NULL OR {shift} IS NULL THEN CAST(NULL AS {operandType}) "
+            + $"ELSE {name}(cast({value} as {operandType}), cast({shift} as bigint)) END";
+    }
+
+    /// <summary>Renders <c>BIT_COUNT</c>: the engine returns <c>bigint</c>, so the NULL branch is too.</summary>
+    private static string BitCount(string operand, string operandType)
+    {
+        var value = TypedNull(operand, operandType);
+        return $"CASE WHEN {value} IS NULL THEN CAST(NULL AS bigint) "
+            + $"ELSE bit_count(cast({value} as {operandType})) END";
+    }
+
+    /// <summary>Renders <c>GET_BIT</c>: the engine returns <c>bit</c>, so the NULL branch is too.</summary>
+    private static string GetBit(string operand, string operandType, string offset)
+    {
+        var value = TypedNull(operand, operandType);
+        var position = TypedNull(offset, "int");
+        return $"CASE WHEN {value} IS NULL OR {position} IS NULL THEN CAST(NULL AS bit) "
+            + $"ELSE get_bit(cast({value} as {operandType}), cast({position} as int)) END";
+    }
+
+    /// <summary>
+    /// Renders <c>SET_BIT</c> with the two- or three-argument native form. An omitted bit value keeps the
+    /// native default (1); an explicitly NULL value is guarded into a NULL result instead of silently
+    /// becoming the default.
+    /// </summary>
+    private static string SetBit(string operand, string operandType, string offset, string? bitValue)
+    {
+        var value = TypedNull(operand, operandType);
+        var position = TypedNull(offset, "int");
+
+        if (bitValue is null)
+            return $"CASE WHEN {value} IS NULL OR {position} IS NULL THEN CAST(NULL AS {operandType}) "
+                + $"ELSE set_bit(cast({value} as {operandType}), cast({position} as int)) END";
+
+        var bit = TypedNull(bitValue, "bit");
+        return $"CASE WHEN {value} IS NULL OR {position} IS NULL OR {bit} IS NULL "
+            + $"THEN CAST(NULL AS {operandType}) "
+            + $"ELSE set_bit(cast({value} as {operandType}), cast({position} as int), cast({bit} as bit)) END";
+    }
+
+    /// <summary>Replaces the bare <c>null</c> token with a typed NULL so the argument keeps its type.</summary>
+    private static string TypedNull(string value, string sqlType) =>
+        value == "null" ? $"CAST(NULL AS {sqlType})" : value;
+
     /// <summary>Strips the surrounding single quotes a constant date-part string is rendered with.</summary>
     private static string DatePart(string value) =>
         value.Length >= 2 && value[0] == '\'' && value[^1] == '\'' ? value[1..^1] : value;
+
+    /// <summary>
+    /// Renders the frozen decimal parsing form: the result is always typed <c>decimal(38,18)</c>, the
+    /// culture is the literal <c>en-US</c> and never a parameter, and a literal NULL argument keeps
+    /// its text input type.
+    /// </summary>
+    private static string ParseExpression(string function, string value)
+    {
+        var input = value == "null" ? "CAST(NULL AS nvarchar(4000))" : value;
+        return $"CASE WHEN {input} IS NULL THEN CAST(NULL AS decimal(38,18)) ELSE {function}({input} AS decimal(38,18) USING N'en-US') END";
+    }
 
     /// <summary>Renders the alternating key/value arguments of <c>JSON_OBJECT</c> as <c>key : value</c> pairs.</summary>
     private static string JsonPairs(IReadOnlyList<string> args)
@@ -1166,4 +1612,38 @@ internal sealed class SqlServerSpecificFunctions : ISqlServerFunctions
 
         return string.Join(", ", parts);
     }
+}
+
+/// <summary>
+/// Renders the explicit null-safe comparison helpers on SQL Server, which has no
+/// <c>IS [NOT] DISTINCT FROM</c> on the supported version floor. Both forms are emulated over ordinary
+/// equality as an always-two-valued guarded predicate:
+/// <c>(a is not null and b is not null and a = b) or (a is null and b is null)</c>, with distinct as its
+/// logical complement. The result is never UNKNOWN, so a scalar projection only needs the existing
+/// Boolean lowering (<c>cast(case when ... then 1 else 0 end as bit)</c>).
+/// </summary>
+internal sealed class SqlServerNullSafeComparisonRenderer : INullSafeComparisonRenderer
+{
+    internal static readonly SqlServerNullSafeComparisonRenderer Instance = new();
+
+    /// <inheritdoc/>
+    public NullSafeComparisonDisposition DistinctDisposition => NullSafeComparisonDisposition.Emulated;
+
+    /// <inheritdoc/>
+    public NullSafeComparisonDisposition NotDistinctDisposition => NullSafeComparisonDisposition.Emulated;
+
+    /// <summary>
+    /// A comparison operand that SQL Server cannot bind without an explicit type is rejected instead of
+    /// being sent untyped, so this renderer requires the metadata-derived SQL type.
+    /// </summary>
+    public bool RequiresTypedNullOperands => true;
+
+    /// <inheritdoc/>
+    public string RenderDistinct(string left, string right) => $"(not {Guarded(left, right)})";
+
+    /// <inheritdoc/>
+    public string RenderNotDistinct(string left, string right) => Guarded(left, right);
+
+    private static string Guarded(string left, string right) =>
+        $"(({left} is not null and {right} is not null and {left} = {right}) or ({left} is null and {right} is null))";
 }

@@ -137,6 +137,7 @@ public sealed class MariaDbT232PivotTests : IDisposable
 /// Re-pins the shared typed PIVOT/UNPIVOT capability case for ClickHouse, which does not derive
 /// <see cref="CommonTestSuite"/>.
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class ClickHouseT232PivotTests : ProviderTestSuite
 {
     protected override ITestProvider Provider => ClickHouseTestProvider.Instance;

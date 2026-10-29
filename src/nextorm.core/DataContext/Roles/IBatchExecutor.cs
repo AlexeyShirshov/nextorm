@@ -95,18 +95,20 @@ internal interface IBatchExecutor
 
 /// <summary>
 /// One requested batch step. A step is the result-bearing read query, a
-/// <c>CREATE [TEMPORARY] TABLE ... AS SELECT</c> materialisation, or a side-effecting DML command
-/// (<c>INSERT</c>/<c>UPDATE</c>/<c>DELETE</c>/<c>TRUNCATE</c>). Result-bearing steps must be the trailing
-/// group of steps: no side-effecting step may follow a result.
+/// <c>CREATE [TEMPORARY] TABLE ... AS SELECT</c> materialisation, a side-effecting DML command
+/// (<c>INSERT</c>/<c>UPDATE</c>/<c>DELETE</c>/<c>TRUNCATE</c>), or a DML command whose output rows are
+/// captured into a same-batch table variable. Result-bearing steps must be the trailing group of steps:
+/// no side-effecting step may follow a result.
 /// </summary>
 internal sealed class BatchStepSpec
 {
-    private BatchStepSpec(QueryCommand? query, CreateTableAsCommand? createTableAs, MutationCommand? mutation, string? rawSql)
+    private BatchStepSpec(QueryCommand? query, CreateTableAsCommand? createTableAs, MutationCommand? mutation, string? rawSql, BatchCaptureStep? capture)
     {
         Query = query;
         CreateTableAs = createTableAs;
         Mutation = mutation;
         RawSql = rawSql;
+        Capture = capture;
     }
 
     /// <summary>The result-bearing read query, or <see langword="null"/> for a non-result step.</summary>
@@ -115,31 +117,74 @@ internal sealed class BatchStepSpec
     /// <summary>The materialisation command of the step, or <see langword="null"/> for a result, DML or raw step.</summary>
     public CreateTableAsCommand? CreateTableAs { get; }
 
-    /// <summary>The side-effecting DML command of the step, or <see langword="null"/> for a result, materialisation or raw step.</summary>
+    /// <summary>The side-effecting DML command of the step, or <see langword="null"/> for a result, materialisation, capture or raw step.</summary>
     public MutationCommand? Mutation { get; }
 
     /// <summary>The verbatim SQL of a raw side-effecting step (for example <c>DROP TABLE IF EXISTS</c>), or <see langword="null"/> for the other step kinds.</summary>
     public string? RawSql { get; }
 
+    /// <summary>The capture descriptor of the step — the DML command, its normalised table-variable name and the caller's column definitions — or <see langword="null"/> for the other step kinds.</summary>
+    public BatchCaptureStep? Capture { get; }
+
     /// <summary>Creates the result-bearing read-query step.</summary>
     /// <param name="query">The query whose rows form the batch result.</param>
     /// <returns>The step.</returns>
-    public static BatchStepSpec ForResult(QueryCommand query) => new(query, null, null, null);
+    public static BatchStepSpec ForResult(QueryCommand query) => new(query, null, null, null, null);
 
     /// <summary>Creates a materialisation step.</summary>
     /// <param name="command">The materialisation command.</param>
     /// <returns>The step.</returns>
-    public static BatchStepSpec ForCreateTableAs(CreateTableAsCommand command) => new(null, command, null, null);
+    public static BatchStepSpec ForCreateTableAs(CreateTableAsCommand command) => new(null, command, null, null, null);
 
     /// <summary>Creates a side-effecting DML step.</summary>
     /// <param name="command">The DML command.</param>
     /// <returns>The step.</returns>
-    public static BatchStepSpec ForMutation(MutationCommand command) => new(null, null, command, null);
+    public static BatchStepSpec ForMutation(MutationCommand command) => new(null, null, command, null, null);
 
     /// <summary>Creates a verbatim side-effecting SQL step. The SQL carries no parameters.</summary>
     /// <param name="sql">The statement text.</param>
     /// <returns>The step.</returns>
-    public static BatchStepSpec ForRaw(string sql) => new(null, null, null, sql);
+    public static BatchStepSpec ForRaw(string sql) => new(null, null, null, sql, null);
+
+    /// <summary>
+    /// Creates a capture step: the DML statement renders its <c>OUTPUT ... INTO</c> clause against the
+    /// same-batch table variable named by <paramref name="variableName"/>, without the automatic
+    /// read-back the standalone table-variable form emits.
+    /// </summary>
+    /// <param name="command">The DML command whose returning columns are captured.</param>
+    /// <param name="variableName">The normalised table-variable name, including the leading <c>@</c>.</param>
+    /// <param name="columnDefinitions">The caller-supplied, trusted column definitions of the <c>DECLARE</c> text.</param>
+    /// <returns>The step.</returns>
+    public static BatchStepSpec ForCapture(MutationCommand command, string variableName, string columnDefinitions)
+        => new(null, null, null, null, new BatchCaptureStep(command, variableName, columnDefinitions));
+}
+
+/// <summary>
+/// The descriptor of one batch capture step: a DML command, the normalised table-variable name its output
+/// is written into, and the caller-supplied column definitions of the declaration. The mutation kind is
+/// derivable from <see cref="Mutation"/>; the captured columns are its returning columns.
+/// </summary>
+internal sealed class BatchCaptureStep
+{
+    /// <summary>Creates a capture descriptor.</summary>
+    /// <param name="mutation">The DML command whose output rows are captured.</param>
+    /// <param name="variableName">The normalised table-variable name, including the leading <c>@</c>.</param>
+    /// <param name="columnDefinitions">The trusted column-definition text of the declaration.</param>
+    public BatchCaptureStep(MutationCommand mutation, string variableName, string columnDefinitions)
+    {
+        Mutation = mutation;
+        VariableName = variableName;
+        ColumnDefinitions = columnDefinitions;
+    }
+
+    /// <summary>The DML command whose returning columns form the captured rows.</summary>
+    public MutationCommand Mutation { get; }
+
+    /// <summary>The normalised table-variable name, including the leading <c>@</c>; never quoted.</summary>
+    public string VariableName { get; }
+
+    /// <summary>The caller-supplied, trusted column definitions of the <c>DECLARE @t TABLE (...)</c> text.</summary>
+    public string ColumnDefinitions { get; }
 }
 
 /// <summary>

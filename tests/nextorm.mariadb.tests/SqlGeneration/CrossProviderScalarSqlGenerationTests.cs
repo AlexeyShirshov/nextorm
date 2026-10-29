@@ -28,10 +28,10 @@ public class CrossProviderScalarSqlGenerationTests
         }));
 
         sql.Should().Contain("left(somestring, 3)");
-        sql.Should().Contain("lpad(somestring, 5, '0')");
+        sql.Should().Contain("lpad(somestring, 5, _utf8mb4 X'30')");
         sql.Should().Contain("repeat(somestring, 2)");
         sql.Should().Contain("reverse(somestring)");
-        sql.Should().Contain("concat_ws(',', somestring, somestring)");
+        sql.Should().Contain("concat_ws(_utf8mb4 X'2c', somestring, somestring)");
         sql.Should().Contain("ascii(somestring)");
     }
 

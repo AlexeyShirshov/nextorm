@@ -22,6 +22,7 @@ internal sealed class DbConnectionManager : IConnectionManager
     private readonly ILogger? _logger;
     private readonly bool _logSensitiveData;
     private readonly Func<bool> _supportsTransactions;
+    private readonly Func<bool> _supportsSavepoints;
     private readonly InterceptorHooks _interceptors;
 
     private DbConnection? _conn;
@@ -36,6 +37,7 @@ internal sealed class DbConnectionManager : IConnectionManager
         DbConnection? providedConnection,
         LoggingOptions logging,
         Func<bool> supportsTransactions,
+        Func<bool> supportsSavepoints,
         InterceptorHooks interceptors)
     {
         _owner = owner;
@@ -46,6 +48,7 @@ internal sealed class DbConnectionManager : IConnectionManager
         _logger = logging.Logger;
         _logSensitiveData = logging.LogSensitiveData;
         _supportsTransactions = supportsTransactions;
+        _supportsSavepoints = supportsSavepoints;
         _interceptors = interceptors;
     }
 
@@ -207,6 +210,117 @@ internal sealed class DbConnectionManager : IConnectionManager
         if (!_supportsTransactions())
             throw new NotSupportedException("This provider does not support transactions: its connection has no ADO.NET transaction.");
     }
+
+    /// <summary>
+    /// Creates a savepoint with the given name on the active or enlisted transaction. The call goes
+    /// straight to the provider: nextorm keeps no savepoint registry and does not validate uniqueness.
+    /// </summary>
+    /// <param name="name">The savepoint name: 1-32 ASCII identifier characters.</param>
+    public void CreateSavepoint(string name)
+    {
+        var transaction = GetSavepointTransaction();
+        ValidateSavepointName(name);
+        transaction.Save(name);
+    }
+
+    /// <summary>Asynchronously creates a savepoint with the given name on the active or enlisted transaction.</summary>
+    /// <param name="name">The savepoint name: 1-32 ASCII identifier characters.</param>
+    /// <param name="cancellationToken">Token passed to the provider's asynchronous savepoint call.</param>
+    /// <returns>A task that completes once the savepoint has been created.</returns>
+    public Task CreateSavepointAsync(string name, CancellationToken cancellationToken = default)
+    {
+        var transaction = GetSavepointTransaction();
+        ValidateSavepointName(name);
+        return transaction.SaveAsync(name, cancellationToken);
+    }
+
+    /// <summary>Rolls the active or enlisted transaction back to the given savepoint.</summary>
+    /// <param name="name">The savepoint name: 1-32 ASCII identifier characters.</param>
+    public void RollbackToSavepoint(string name)
+    {
+        var transaction = GetSavepointTransaction();
+        ValidateSavepointName(name);
+        transaction.Rollback(name);
+    }
+
+    /// <summary>Asynchronously rolls the active or enlisted transaction back to the given savepoint.</summary>
+    /// <param name="name">The savepoint name: 1-32 ASCII identifier characters.</param>
+    /// <param name="cancellationToken">Token passed to the provider's asynchronous rollback call.</param>
+    /// <returns>A task that completes once the rollback has been applied.</returns>
+    public Task RollbackToSavepointAsync(string name, CancellationToken cancellationToken = default)
+    {
+        var transaction = GetSavepointTransaction();
+        ValidateSavepointName(name);
+        return transaction.RollbackAsync(name, cancellationToken);
+    }
+
+    /// <summary>Releases the given savepoint on the active or enlisted transaction without committing.</summary>
+    /// <param name="name">The savepoint name: 1-32 ASCII identifier characters.</param>
+    public void ReleaseSavepoint(string name)
+    {
+        var transaction = GetSavepointTransaction();
+        ValidateSavepointName(name);
+        transaction.Release(name);
+    }
+
+    /// <summary>Asynchronously releases the given savepoint on the active or enlisted transaction without committing.</summary>
+    /// <param name="name">The savepoint name: 1-32 ASCII identifier characters.</param>
+    /// <param name="cancellationToken">Token passed to the provider's asynchronous release call.</param>
+    /// <returns>A task that completes once the savepoint has been released.</returns>
+    public Task ReleaseSavepointAsync(string name, CancellationToken cancellationToken = default)
+    {
+        var transaction = GetSavepointTransaction();
+        ValidateSavepointName(name);
+        return transaction.ReleaseAsync(name, cancellationToken);
+    }
+
+    // Guard order is part of the contract (most fundamental capability first, so a multiply-invalid
+    // call reports the first applicable failure and never touches the driver):
+    // 1) transactions, 2) savepoints, 3) an active transaction, then 4) the name.
+    private DbTransaction GetSavepointTransaction()
+    {
+        EnsureTransactionsSupported();
+        EnsureSavepointsSupported();
+
+        return CurrentTransaction
+            ?? throw new InvalidOperationException("Savepoint operations require an active transaction; start one with BeginTransaction or enlist one with UseTransaction.");
+    }
+
+    private void EnsureSavepointsSupported()
+    {
+        if (!_supportsSavepoints())
+            throw new NotSupportedException("This provider does not support savepoints: its ADO.NET transaction offers no savepoint operations.");
+    }
+
+    // Portable name policy, shared by all six operations: an ASCII identifier of 1-32 characters needs
+    // no provider-specific quoting and cannot hit SQL Server's 32-character truncation. Only ASCII
+    // ranges are inspected, so the check is ordinal and culture-independent by construction.
+    private static void ValidateSavepointName(string? name)
+    {
+        if (name is null)
+            throw new ArgumentNullException(nameof(name), "A savepoint name is required.");
+
+        if (name.Length == 0)
+            throw new ArgumentException("A savepoint name must not be empty.", nameof(name));
+
+        if (name.Length > MaxSavepointNameLength)
+            throw new ArgumentException($"A savepoint name must be at most {MaxSavepointNameLength} characters long, but was {name.Length}.", nameof(name));
+
+        if (!IsAsciiIdentifierStart(name[0]))
+            throw new ArgumentException($"'{name}' is not a valid savepoint name: it must start with an ASCII letter or an underscore.", nameof(name));
+
+        for (var i = 1; i < name.Length; i++)
+        {
+            if (!IsAsciiIdentifierPart(name[i]))
+                throw new ArgumentException($"'{name}' is not a valid savepoint name: only ASCII letters, digits and underscores are allowed.", nameof(name));
+        }
+    }
+
+    private static bool IsAsciiIdentifierStart(char c) => c is (>= 'A' and <= 'Z') or (>= 'a' and <= 'z') or '_';
+
+    private static bool IsAsciiIdentifierPart(char c) => IsAsciiIdentifierStart(c) || c is >= '0' and <= '9';
+
+    private const int MaxSavepointNameLength = 32;
 
     private void EnsureNoActiveTransaction()
     {

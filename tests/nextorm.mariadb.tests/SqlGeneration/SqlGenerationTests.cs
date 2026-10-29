@@ -68,7 +68,7 @@ public class SqlGenerationTests
         Normalize(ctx.CreateInsertBuilder<DynamicColumnsEntity>()
             .Values(DynamicWriteEntity())
             .ToSql())
-            .Should().Contain("(id, `alpha`, `mid`, `zeta`) values (@p0, @p1, @p2, @p3)");
+            .Should().Contain("(id, `alpha`, `mid`, `zeta`) values (@p0, _utf8mb4 X'61', @p2, @p3)");
     }
 
     [Fact]
@@ -80,7 +80,7 @@ public class SqlGenerationTests
             .Set(DynamicWriteEntity())
             .Where(x => x.Id == 1)
             .ToSql())
-            .Should().Contain("set `alpha` = @p0, `mid` = @p1, `zeta` = @p2 where id = 1");
+            .Should().Contain("set `alpha` = _utf8mb4 X'61', `mid` = @p1, `zeta` = @p2 where id = 1");
     }
 
     [Fact]
@@ -95,7 +95,7 @@ public class SqlGenerationTests
             .WhenNotMatchedInsert()
             .ToSql());
 
-        sql.Should().Contain("(id, `alpha`, `mid`, `zeta`) values (@p0, @p1, @p2, @p3)");
+        sql.Should().Contain("(id, `alpha`, `mid`, `zeta`) values (@p0, _utf8mb4 X'61', @p2, @p3)");
         // MariaDB's upsert match is implicit (ON DUPLICATE KEY), so the dynamic keys must appear only in
         // the insert list and the update assignments, never as a match key.
         sql.Should().Contain("on duplicate key update `alpha` = values(`alpha`), `mid` = values(`mid`), `zeta` = values(`zeta`)");
@@ -111,7 +111,7 @@ public class SqlGenerationTests
         ctx.CreateInsertBuilder<IMergeEntity>()
             .Values(new MergeEntity { Id = 1, Name = "a", Age = 5, Total = 9 })
             .ToSql()
-            .Should().Be("insert into merge_entity (id, name, age) values (@p0, @p1, @p2)");
+            .Should().Be("insert into merge_entity (id, name, age) values (@p0, _utf8mb4 X'61', @p2)");
     }
 
     [Fact]
@@ -232,7 +232,7 @@ public class SqlGenerationTests
     [Fact]
     public void UuidGenerators_ShouldUseMariaDbNames()
     {
-        using var ctx = MariaDbTestContext.Create();
+        using var ctx = MariaDbTestContext.Create(new Version(11, 7));
         var e = ctx.From<IComplexEntity>();
 
         var sql = SqlOf(ctx, e.Select(x => new
@@ -243,6 +243,19 @@ public class SqlGenerationTests
 
         sql.Should().Contain("uuid_v4()");
         sql.Should().Contain("uuid_v7()");
+    }
+
+    [Fact]
+    public void UuidGenerators_Unset_ShouldThrow()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var v4 = () => SqlOf(ctx, e.Select(x => new { U = SqlFunctions.Sql.gen_random_uuid() }));
+        var v7 = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Sql.uuidv7() }));
+
+        v4.Should().Throw<NotSupportedException>().WithMessage("*gen_random_uuid*not supported*");
+        v7.Should().Throw<NotSupportedException>().WithMessage("*uuidv7*not supported*");
     }
 
     [Fact]
@@ -270,7 +283,7 @@ public class SqlGenerationTests
         var sql = SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Sql.iif(x.Id > 0L, "yes", "no") }));
 
         sql.Should().Contain("if(");
-        sql.Should().Contain("'yes', 'no')");
+        sql.Should().Contain("_utf8mb4 X'796573', _utf8mb4 X'6e6f')");
     }
 
     [Fact]
@@ -321,23 +334,23 @@ public class SqlGenerationTests
         var source = "a,b";
         var pattern = ",";
 
-        var arrayElements = () => SqlOf(ctx, ctx.FromTableFunction(() => SqlFunctions.Postgres.jsonb_array_elements(json))
+        var arrayElements = () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.jsonb_array_elements(json))
             .Select(r => new { r.Value }));
         arrayElements.Should().Throw<NotSupportedException>().WithMessage("*jsonb_array_elements*");
 
-        var each = () => SqlOf(ctx, ctx.FromTableFunction(() => SqlFunctions.Postgres.jsonb_each(json))
+        var each = () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.jsonb_each(json))
             .Select(r => new { r.Key }));
         each.Should().Throw<NotSupportedException>().WithMessage("*jsonb_each*");
 
-        var split = () => SqlOf(ctx, ctx.FromTableFunction(() => SqlFunctions.Postgres.regexp_split_to_table(source, pattern))
+        var split = () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.regexp_split_to_table(source, pattern))
             .Select(r => new { r.Value }));
         split.Should().Throw<NotSupportedException>().WithMessage("*regexp_split_to_table*");
 
-        var record = () => SqlOf(ctx, ctx.FromTableFunction(() => SqlFunctions.Postgres.jsonb_to_record<int>(json))
+        var record = () => SqlOf(ctx, ctx.From(() => SqlFunctions.Postgres.jsonb_to_record<int>(json))
             .Select(r => new { V = r }));
         record.Should().Throw<NotSupportedException>().WithMessage("*jsonb_to_record*");
 
-        var values = () => SqlOf(ctx, ctx.FromTableFunction(() => SqlFunctions.ClickHouse.values<int>("(1)"))
+        var values = () => SqlOf(ctx, ctx.From(() => SqlFunctions.ClickHouse.values<int>("(1)"))
             .Select(r => new { V = r }));
         values.Should().Throw<NotSupportedException>().WithMessage("*values*");
     }
@@ -537,15 +550,15 @@ public class SqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Select(x => new { V = x.String!.IndexOf("b") }))
-            .Should().Contain("case when (instr(somestring, 'b')) = 0 then -1 else (instr(somestring, 'b')) - 1 end");
+            .Should().Contain("case when (instr(somestring, _utf8mb4 X'62')) = 0 then -1 else (instr(somestring, _utf8mb4 X'62')) - 1 end");
         SqlOf(ctx, e.Select(x => new { V = x.String!.LastIndexOf("b") }))
-            .Should().Contain("instr(reverse(somestring), reverse('b'))");
+            .Should().Contain("instr(reverse(somestring), reverse(_utf8mb4 X'62'))");
         SqlOf(ctx, e.Select(x => new { V = x.String!.PadLeft(5, '0') }))
-            .Should().Contain("case when char_length(somestring) >= (5) then somestring else concat(repeat('0', (5) - char_length(somestring)), somestring) end");
+            .Should().Contain("case when char_length(somestring) >= (5) then somestring else concat(repeat(_utf8mb4 X'30', (5) - char_length(somestring)), somestring) end");
         SqlOf(ctx, e.Select(x => new { V = x.String!.Insert(2, "x") }))
-            .Should().Contain("insert(somestring, 2 + 1, 0, 'x')");
+            .Should().Contain("insert(somestring, 2 + 1, 0, _utf8mb4 X'78')");
         SqlOf(ctx, e.Select(x => new { V = new string('*', 4) }))
-            .Should().Contain("repeat('*', 4)");
+            .Should().Contain("repeat(_utf8mb4 X'2a', 4)");
     }
 
     [Fact]
@@ -581,7 +594,7 @@ public class SqlGenerationTests
     }
 
     [Fact]
-    public void XmlNodes_ShouldThrowBecauseOnlySqlServerHasThem()
+    public void XmlNodes_ShouldThrowBecauseMariaDbHasNoApply()
     {
         using var ctx = MariaDbTestContext.Create();
 
@@ -589,7 +602,9 @@ public class SqlGenerationTests
             .CrossApply(x => SqlFunctions.SqlServer.xml_nodes(x.String, "/root/item"))
             .Select(p => new { p.Item2.Value }));
 
-        act.Should().Throw<NotSupportedException>().WithMessage("*xml.nodes*");
+        // The capability gate runs before the APPLY body is rendered, so the missing lateral source is
+        // the reported reason on this provider (the same contract as SQLite/ClickHouse).
+        act.Should().Throw<NotSupportedException>().WithMessage("*CrossApply*");
     }
 
     [Fact]
@@ -792,7 +807,7 @@ public class SqlGenerationTests
 
         var sql = Dequoted(SqlOf(ctx, e.Where(x => Tuple.Create(x.Id, x.String) == Tuple.Create(1L, "a")).Select(x => new { x.Id })));
 
-        sql.Should().Contain("where (id, somestring) = (1, 'a')");
+        sql.Should().Contain("where (id, somestring) = (1, _utf8mb4 X'61')");
     }
 
     [Fact]
@@ -803,7 +818,7 @@ public class SqlGenerationTests
 
         var sql = Dequoted(SqlOf(ctx, e.Where(x => Tuple.Create(x.Id, x.String) != Tuple.Create(2L, "b")).Select(x => new { x.Id })));
 
-        sql.Should().Contain("where (id, somestring) != (2, 'b')");
+        sql.Should().Contain("where (id, somestring) != (2, _utf8mb4 X'62')");
     }
 
     [Fact]
@@ -817,9 +832,9 @@ public class SqlGenerationTests
                         || (Tuple.Create(x.Id, x.String) == Tuple.Create(2L, "b")))
             .Select(x => new { x.Id })));
 
-        sql.Should().Contain("(id, somestring) = (1, 'a')");
+        sql.Should().Contain("(id, somestring) = (1, _utf8mb4 X'61')");
         sql.Should().Contain(" or ");
-        sql.Should().Contain("(id, somestring) = (2, 'b')");
+        sql.Should().Contain("(id, somestring) = (2, _utf8mb4 X'62')");
     }
 
     [Fact]
@@ -909,7 +924,7 @@ public class SqlGenerationTests
             .Where(x => new Tuple<long, string?>(x.Id, x.String) == new Tuple<long, string>(1L, "a"))
             .Select(x => new { x.Id })));
 
-        sql.Should().Contain("where (id, somestring) = (1, 'a')");
+        sql.Should().Contain("where (id, somestring) = (1, _utf8mb4 X'61')");
     }
 
     [Fact]
@@ -924,7 +939,7 @@ public class SqlGenerationTests
 
         // MariaDB inherits MySQL and spells the SQL-standard inequality "<>" as "!="; the engine emits "!="
         // for every NotEqual, so the assertion pins the actual emitted token (matching RawSourceBindingSqlGenerationTests).
-        sql.Should().Contain("where (id, somestring) != (2, 'b')");
+        sql.Should().Contain("where (id, somestring) != (2, _utf8mb4 X'62')");
     }
 
     [Fact]
@@ -981,6 +996,31 @@ public class SqlGenerationTests
             .Where(x => (object)Tuple.Create(x.Id, x.String) == (object)Tuple.Create(1L, "a"))
             .Select(x => new { x.Id })));
 
-        sql.Should().Contain("where (id, somestring) = (1, 'a')");
+        sql.Should().Contain("where (id, somestring) = (1, _utf8mb4 X'61')");
+    }
+    [Fact]
+    public void T292_VariabilityAggregateNames_ShouldRenderProviderSpelling()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        // T292 (#292): the eight variability facade forms keep their mariadb spelling with the
+        // structurally nullable result; the DISTINCT forms keep the SQL DISTINCT keyword.
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.stdev((double)x.Id)))
+            .Should().Contain("stddev_samp(");
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.stdev_distinct((double)x.Id)))
+            .Should().Contain("stddev_samp(distinct ");
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.stdevp((double)x.Id)))
+            .Should().Contain("stddev_pop(");
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.stdevp_distinct((double)x.Id)))
+            .Should().Contain("stddev_pop(distinct ");
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.var((double)x.Id)))
+            .Should().Contain("var_samp(");
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.var_distinct((double)x.Id)))
+            .Should().Contain("var_samp(distinct ");
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.varp((double)x.Id)))
+            .Should().Contain("var_pop(");
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.varp_distinct((double)x.Id)))
+            .Should().Contain("var_pop(distinct ");
     }
 }

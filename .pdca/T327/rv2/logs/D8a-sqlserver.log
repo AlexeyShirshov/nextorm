@@ -1,0 +1,22 @@
+xUnit.net v3 In-Process Runner v4.0.1+8ed8aa354c (64-bit .NET 10.0.12)
+  Discovering: nextorm.integration.tests
+  Discovered:  nextorm.integration.tests
+  Starting:    nextorm.integration.tests
+[testcontainers.org 00:00:00.28] Connected to Docker:
+  Host: unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock
+  Server Version: 5.8.6
+  Kernel Version: 6.18.33.2-microsoft-standard-WSL2
+  API Version: 1.44
+  Operating System: fedora
+  Total Memory: 11.68 GB
+[testcontainers.org 00:00:00.28] Reuse is an experimental feature. For more information, visit: https://dotnet.testcontainers.org/api/resource_reuse/
+[testcontainers.org 00:00:00.35] Reusable resource found
+[testcontainers.org 00:00:00.43] Start Docker container 264c4479ecbf
+[testcontainers.org 00:00:01.74] Wait for Docker container 264c4479ecbf to complete readiness checks
+[testcontainers.org 00:00:01.75] Execute "/bin/sh -c find /opt/mssql-tools*/bin/sqlcmd -type f -print -quit" at Docker container 264c4479ecbf
+[testcontainers.org 00:00:01.86] Execute "/opt/mssql-tools18/bin/sqlcmd -C -b -r 1 -d master -Q SELECT 1;" at Docker container 264c4479ecbf
+[testcontainers.org 00:00:09.63] Docker container 264c4479ecbf ready
+[testcontainers.org 00:00:12.62] Stop Docker container 264c4479ecbf
+  Finished:    nextorm.integration.tests (ID = 'b955c1960c46da09b333e47c50ad86b962bcaa47078089483f4545b578700bba')
+=== TEST EXECUTION SUMMARY ===
+   nextorm.integration.tests  Total: 10, Errors: 0, Failed: 0, Skipped: 0, Not Run: 0, Time: 12.848s

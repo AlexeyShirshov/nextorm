@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Linq.Expressions;
+using System.Reflection;
 
 namespace NextORM.Core;
 
@@ -141,12 +142,16 @@ internal static class StringFunctionTranslator
 
     /// <summary>
     /// Translates <c>string.ToUpper(CultureInfo)</c>/<c>string.ToLower(CultureInfo)</c>. Only
-    /// <see cref="CultureInfo.InvariantCulture"/> has a portable SQL form; any other culture is
+    /// <see cref="CultureInfo.InvariantCulture"/> has a portable SQL form, whether it is bound as the
+    /// natural C# static property or as an explicit constant expression; any other culture is
     /// rejected instead of silently using the database locale.
     /// </summary>
     private static bool TryTranslateCultureCase(BaseExpressionVisitor visitor, MethodCallExpression node)
     {
-        if (node.Arguments is [ConstantExpression { Value: CultureInfo culture }] && ReferenceEquals(culture, CultureInfo.InvariantCulture))
+        if (node.Arguments is [var argument]
+            && (argument is ConstantExpression { Value: CultureInfo culture } && ReferenceEquals(culture, CultureInfo.InvariantCulture)
+                || argument is MemberExpression { Expression: null, Member: PropertyInfo { Name: nameof(CultureInfo.InvariantCulture) } property }
+                    && property.DeclaringType == typeof(CultureInfo)))
         {
             var upper = node.Method.Name == nameof(string.ToUpper);
             return EmitStringFunction(visitor, node.Object!, v => upper ? visitor.Dialect.MakeUpper(v) : visitor.Dialect.MakeLower(v));
@@ -500,11 +505,11 @@ internal static class StringFunctionTranslator
             if (!SqlLiteral.TryGetConstantString(args[1], out var padValue))
                 throw new NotSupportedException("The string.PadLeft/PadRight padding character must be a constant.");
 
-            pad = SqlLiteral.ToSqlStringLiteral(padValue);
+            pad = visitor.RenderStringLiteral(padValue);
         }
         else
         {
-            pad = SqlLiteral.ToSqlStringLiteral(" ");
+            pad = visitor.RenderStringLiteral(" ");
         }
 
         if (visitor.IsParamMode)
@@ -571,7 +576,7 @@ internal static class StringFunctionTranslator
 
         visitor.NeedAliasForColumn = true;
         visitor.Builder!.Append(stringSplit.Render(
-            SqlLiteral.ToSqlStringLiteral(separator),
+            visitor.RenderStringLiteral(separator),
             visitor.VisitToString(node.Object)));
         return true;
     }
@@ -654,7 +659,9 @@ internal static class StringFunctionTranslator
         {
             var escapedValue = SqlLiteral.EscapeLikeWildcards(constant);
             escaped = escapedValue != constant;
-            return SqlLiteral.ToSqlStringLiteral(prefix + escapedValue + suffix);
+            // Wildcard escaping is a separate prior step: the policy only renders the resulting
+            // pattern as a literal in the role's provider spelling.
+            return visitor.RenderStringLiteral(prefix + escapedValue + suffix, SqlStringLiteralRole.LikePattern);
         }
 
         escaped = false;
@@ -662,12 +669,12 @@ internal static class StringFunctionTranslator
         var parts = new List<string>(3);
 
         if (prefix.Length > 0)
-            parts.Add(SqlLiteral.ToSqlStringLiteral(prefix));
+            parts.Add(visitor.RenderStringLiteral(prefix, SqlStringLiteralRole.LikePattern));
 
         parts.Add(visitor.VisitToString(argument));
 
         if (suffix.Length > 0)
-            parts.Add(SqlLiteral.ToSqlStringLiteral(suffix));
+            parts.Add(visitor.RenderStringLiteral(suffix, SqlStringLiteralRole.LikePattern));
 
         return visitor.Dialect.MakeConcat(parts);
     }

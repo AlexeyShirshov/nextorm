@@ -9,7 +9,7 @@ public static partial class SqlFunctions
     /// the date helpers and the math-extension functions). Every member is gated by
     /// <see cref="ISqlDialect.SqliteFunctions"/>; other providers reject it with a clear message.
     /// </summary>
-    public static SqliteFunctions Sqlite => default!;
+    public static SqliteFunctions Sqlite { get; } = new();
 
     /// <summary>
     /// Row shape produced by <see cref="SqliteFunctions.json_each(string)"/> and
@@ -77,8 +77,10 @@ public static partial class SqlFunctions
 /// The math functions require SQLite to be compiled with <c>SQLITE_ENABLE_MATH_FUNCTIONS</c>, the
 /// JSON functions are built in since SQLite 3.38 (opt-in <c>SQLITE_ENABLE_JSON1</c> before that),
 /// <c>jsonb</c>/<c>json_pretty</c> need 3.45/3.46, <c>unhex</c> needs 3.41 and <c>timediff</c> needs
-/// 3.43. <c>soundex</c> requires the <c>SQLITE_SOUNDEX</c> compile-time option and is not present in
-/// every build; the call is still rendered, and the server reports the missing function at run time.
+/// 3.43. <c>soundex</c> is <b>not emitted</b> on SQLite: the shipped engine has no such function
+/// (the <c>SQLITE_SOUNDEX</c> compile-time option is not enabled), so preparing a call fails with
+/// <see cref="NotSupportedException"/> before anything reaches the server — including on a custom
+/// build that does enable the option. The member is kept for source/binary compatibility only.
 /// </remarks>
 public class SqliteFunctions : CommonFunctions
 {
@@ -121,8 +123,14 @@ public class SqliteFunctions : CommonFunctions
     public string? @char(params int[] codes) => default!;
 
     /// <summary>
-    /// <c>soundex(X)</c>: the soundex encoding of <paramref name="value"/>. Requires SQLite to be
-    /// compiled with <c>SQLITE_SOUNDEX</c>.
+    /// <c>soundex(X)</c>: <b>not supported</b> on SQLite. The shipped engine does not have the function
+    /// (it is built without <c>SQLITE_SOUNDEX</c>), so preparing a call throws
+    /// <see cref="NotSupportedException"/> with the message
+    /// <c>The SQLite function 'soundex' is not supported by this provider.</c> before execution, and no
+    /// SQL is emitted; the refusal is unconditional, also on a custom engine built with
+    /// <c>SQLITE_SOUNDEX</c>. The member is retained for source/binary compatibility only — keep using
+    /// <see cref="SqlServerFunctions.soundex(string)"/> (or a raw SQL fragment) when a soundex code is
+    /// required.
     /// </summary>
     public string? soundex(string? value) => default!;
 
@@ -251,26 +259,29 @@ public class SqliteFunctions : CommonFunctions
     public string? json_group_object<TKey, TValue>(TKey? key, TValue? value) => default!;
 
     /// <summary>
+    /// <c>total(value)</c> aggregate: the sum of the group's non-null values as a floating-point number.
+    /// Unlike <c>sum</c> it never returns null — an empty or all-null group yields <c>0.0</c> — and it
+    /// always computes in floating point, so large integers do not overflow.
+    /// </summary>
+    public double total<T>(T? value) => default!;
+
+    /// <summary>
     /// <c>json_each(json)</c> as a FROM source: one row per immediate child (see
     /// <see cref="SqlFunctions.IJsonEachRow"/>).
     /// </summary>
-    [SqlTableFunction("json_each")]
-    public IQueryable<SqlFunctions.IJsonEachRow> json_each(string? json) => throw new NotSupportedException();
+    public TvfEntityBuilder<SqlFunctions.IJsonEachRow> json_each(string? json) => new("json_each");
 
     /// <summary><c>json_each(json, path)</c> as a FROM source, walking the element selected by <paramref name="path"/>.</summary>
-    [SqlTableFunction("json_each")]
-    public IQueryable<SqlFunctions.IJsonEachRow> json_each(string? json, string? path) => throw new NotSupportedException();
+    public TvfEntityBuilder<SqlFunctions.IJsonEachRow> json_each(string? json, string? path) => new("json_each");
 
     /// <summary>
     /// <c>json_tree(json)</c> as a FROM source: one row per element of the recursive walk (see
     /// <see cref="SqlFunctions.IJsonTreeRow"/>).
     /// </summary>
-    [SqlTableFunction("json_tree")]
-    public IQueryable<SqlFunctions.IJsonTreeRow> json_tree(string? json) => throw new NotSupportedException();
+    public TvfEntityBuilder<SqlFunctions.IJsonTreeRow> json_tree(string? json) => new("json_tree");
 
     /// <summary><c>json_tree(json, path)</c> as a FROM source, walking the element selected by <paramref name="path"/>.</summary>
-    [SqlTableFunction("json_tree")]
-    public IQueryable<SqlFunctions.IJsonTreeRow> json_tree(string? json, string? path) => throw new NotSupportedException();
+    public TvfEntityBuilder<SqlFunctions.IJsonTreeRow> json_tree(string? json, string? path) => new("json_tree");
 
     // -------------------------------------------------------------------------------------------------
     // FTS3/FTS4/FTS5 full-text search (FTS support exists only when SQLite was compiled with the
@@ -293,12 +304,11 @@ public class SqliteFunctions : CommonFunctions
     /// FTS5 <c>table(query)</c> as a FROM source: the table-valued form of an FTS5 search over
     /// <paramref name="table"/> using the <paramref name="match"/> query. <typeparamref name="TEntity"/>
     /// is the mapped row shape of the FTS table; project it like any other source. Use through
-    /// <see cref="DataContextExtensions.FromTableFunction{T}(IDataContext, System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{T}}})"/>.
+    /// <c>ctx.From(() =&gt; ...)</c>.
     /// <paramref name="table"/> is a trusted constant token emitted verbatim (never built from user
     /// input); <paramref name="match"/> stays parameterised. FTS5 only.
     /// </summary>
-    [SqlTableFunction(Fts5TableFunction, VerbatimArguments = new[] { 0 })]
-    public IQueryable<TEntity> MatchTable<TEntity>(string? table, string? match) => throw new NotSupportedException(InMemoryFtsMessage);
+    public TvfEntityBuilder<TEntity> MatchTable<TEntity>(string? table, string? match) => new(Fts5TableFunction, null, null, null, [0], TableFunctionSchema.None);
 
     /// <summary>FTS5 <c>bm25(table)</c>: the BM25 ranking score of each matching row (smaller is a better match). SQL-only.</summary>
     public double? FTS5bm25(string? table) => throw new NotSupportedException(InMemoryFtsMessage);
@@ -347,6 +357,29 @@ public class SqliteFunctions : CommonFunctions
 
     /// <summary>FTS3/4 <c>snippet(table, startMatch, endMatch, ellipses, columnIndex, tokensNumber)</c>. SQL-only.</summary>
     public string? FTS3Snippet(string? table, string? startMatch, string? endMatch, string? ellipses, int columnIndex, int tokensNumber) => throw new NotSupportedException(InMemoryFtsMessage);
+
+    /// <summary>
+    /// <c>median</c>: not supported by SQLite. The shipped SQLite build has no median aggregate
+    /// (it is neither a core function nor part of an enabled extension: <c>ENABLE_PERCENTILE</c> is off),
+    /// and this library does not emulate it. Referencing this member throws
+    /// <see cref="NotSupportedException"/> at translation time; no window rewrite or custom aggregate is
+    /// produced.
+    /// </summary>
+    /// <typeparam name="T">The value expression's type.</typeparam>
+    /// <param name="value">The value whose median would be taken.</param>
+    /// <returns>Never returns; the call is refused when the query is translated.</returns>
+    public double? median<T>(T? value) => default!;
+
+    /// <summary>
+    /// <c>percentile</c>: not supported by SQLite. There is no native percentile aggregate and no
+    /// emulation is provided. Referencing this member throws <see cref="NotSupportedException"/> at
+    /// translation time.
+    /// </summary>
+    /// <typeparam name="T">The value expression's type.</typeparam>
+    /// <param name="fraction">The percentile fraction, in <c>[0, 1]</c>.</param>
+    /// <param name="value">The value whose percentile would be taken.</param>
+    /// <returns>Never returns; the call is refused when the query is translated.</returns>
+    public double? percentile<T>(double fraction, T? value) => default!;
 
     /// <summary>The sentinel SQL name of the FTS5 table-valued form, rewritten by <c>SqliteDialect</c>.</summary>
     internal const string Fts5TableFunction = "fts5";

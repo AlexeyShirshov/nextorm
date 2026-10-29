@@ -135,6 +135,39 @@ Common suite runs once per provider (`Postgres`/`SqlServer`/`MySql`/`MariaDb`/`S
 | `Projection<T1>` is dim-1, a plain `IProjection`, not directly extendable | T | `RootAliasTests.cs:87` | covered |
 | Generated `WithAlias<T>` + `Alias.RootMarker` surface (null marker rejected) | T | `JoinAlias.g.cs` (generated); `RootAliasTests.cs:284` | covered |
 
+## 10. Source-less (type-only) alias form (#322)
+
+The alias marker on the source-less form: `.Join<TJoin>((left, right) => ..., Alias.X[, options])`.
+The joined source is created inside the core seam from the receiver's data context, so the call carries
+no `EntityBuilder<TJoin>` argument; the marker keeps its meaning (it names the new slot) and the
+source-less overload is the only alias surface that accepts `Action<JoinOptions>`.
+
+| Variant | Evidence | Location | Status |
+|---|---|---|---|
+| Exact `<TJoin>(condition, marker)` shape compiles and projects the named slot | T | `tests/nextorm.alias.tests/JoinAliasGeneratorDiagnosticTests.cs:943` (`TypeOnlyAliasExactCallShapeCompiles`) | covered |
+| Emitted source-less overload is `(condition, marker, Action<JoinOptions> options = null)` | T | `JoinAliasGeneratorDiagnosticTests.cs:1002`; emitter `src/nextorm.core.sourcegenerator/JoinAliasGenerator.cs:1461` (`step.SourceLess`) | covered |
+| All four conditional operators emitted source-less | T | `JoinAliasGeneratorDiagnosticTests.cs:1031` (`Source_less_alias_joins_emit_every_conditional_operator`) | covered |
+| Source-less surface closes every positional receiver arity (joined arity 2–7 → slots 2–8) | T | `JoinAliasGeneratorDiagnosticTests.cs:1060` | covered |
+| Generic `<TJoined>` type argument binds source-less | T | `JoinAliasGeneratorDiagnosticTests.cs:1099` | covered |
+| Seven-to-eight slot transition (arity-7 receiver → slot 8) | T | `JoinAliasGeneratorDiagnosticTests.cs:1123` | covered |
+| Malformed marker on the source-less form reports `NORMGEN005` | T | `JoinAliasGeneratorDiagnosticTests.cs:1151` | covered |
+| Ninth slot still reports `NORMGEN004` | T | `JoinAliasGeneratorDiagnosticTests.cs:1167` | covered |
+| Marker-last source-explicit overloads stay option-less; only the source-less form takes options | T | `tests/nextorm.alias.tests/AliasGeneratedSurfaceTests.cs:138`, `:178`; marker classification `JoinAliasGenerator.cs:567` (`TryLocateMarker`), joined-type discovery `:760` (`TryGetJoinedType`, argument zero never read as a source in the source-less branch) | covered |
+| Options callback runs exactly once and matches the explicit baseline | T | `tests/nextorm.core.tests/Query/TypeOnlyAliasSeamTests.cs:77` | covered |
+| Omitted and explicit-null options both preserve the join defaults | T | `TypeOnlyAliasSeamTests.cs:108` | covered |
+| `null` condition throws `ArgumentNullException` before the callback and without mutating state | T | `TypeOnlyAliasSeamTests.cs:132`; generated delegation `AliasInMemoryRefusalTests.cs:93` | covered |
+| JoinType is routed through the shared assembly path (no per-operator copy) | T | `TypeOnlyAliasSeamTests.cs:175` | covered |
+| Projection receiver keeps state and repeated preparation reuses the plan | T | `TypeOnlyAliasSeamTests.cs:196`; `AliasPlanCacheTests.cs:60` | covered |
+| Source-less alias SQL identity with the source-explicit form, 4 operators × arity 1–7 | T | `tests/nextorm.sqlite.tests/Joins/JoinAliasSqlGenerationTests.cs:223`; same theory in `nextorm.{postgres,sqlserver,mysql,mariadb,clickhouse}.tests/Joins/JoinAliasSqlGenerationTests.cs` | covered |
+| Source-less alias rows = source-explicit = positional (SQLite, unmatched rows included) | T | `tests/nextorm.alias.tests/AliasSqliteEndToEndTests.cs:173`, `:203` | covered |
+| **Refusal predicate**: MySQL/MariaDB `FullJoin` refuses in every form with the same `Full join` message, arity 1–7 | T | `tests/nextorm.mysql.tests/Joins/JoinAliasSqlGenerationTests.cs:302`; `tests/nextorm.mariadb.tests/Joins/JoinAliasSqlGenerationTests.cs:302`; dialect guard `src/nextorm.core/DataContext/SqlSourceRenderer.cs:188-190` (message `The Full join is not supported by this SQL dialect`), `src/nextorm.mysql/MySqlDialect.cs:166` (`SupportsFullJoin => false`, inherited by MariaDB) | covered |
+| **Refusal predicate**: live FULL refusal parity per cell (MySQL/MariaDB) | T | `tests/nextorm.integration.tests/CommonTestSuite/Joins/CommonTestSuite.JoinAlias.cs:278` (`TypeOnlyAliasRowsMatch`), re-pinned `MariaDb/MariaDbJoinAliasIntegrationTests.cs:36` | covered |
+| **Refusal predicate**: in-memory refuses every source-less alias, no positional fallback | T | `tests/nextorm.alias.tests/AliasInMemoryRefusalTests.cs:75` | covered |
+| Live row parity over O × R × V (4 operators × slots 2–8 × omitted/null/callback), 4 shared providers | T | `tests/nextorm.integration.tests/CommonTestSuite/Joins/CommonTestSuite.JoinAlias.cs:267` | covered |
+| Live row parity re-pinned on MariaDB and ClickHouse | T | `MariaDb/MariaDbJoinAliasIntegrationTests.cs:36`; `ClickHouse/ClickHouseJoinAliasIntegrationTests.cs:36` | covered |
+| Source-less form has no `CrossJoin`/`CrossApply`/`OuterApply` variant | guard | conditionless operators take no condition; surface `AliasGeneratedSurfaceTests.cs:178` asserts the marker-with-options shape only for the four conditional operators | by design |
+| Raw-table (`From("table")`) source is not resolvable by type | guard | `docs/guide/04-joins.md` scope of the source-less form; `From<TJoin>` resolution path `EntityBuilder.cs:2948` | by design |
+
 ## Gaps (tracked)
 
 1. **Correlated `CrossApply`/`OuterApply` alias has no positive SQL test** — only the in-memory

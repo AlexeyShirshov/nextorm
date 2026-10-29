@@ -141,6 +141,12 @@ var one = ctx.CreateUpdateBuilder<ISimpleEntity>()
 одной строки или затронуло больше одной. `Returning` доступен только в форме по предикату: форма по
 ключу (`Update(entity)`) его не предоставляет.
 
+Чтобы захватить обновлённые строки для следующей инструкции того же батча вместо возврата клиенту,
+зарегистрируйте захват в рамках батча — колонки `inserted.*` **и есть** захваченные строки — и постройте
+поверх него запрос через `FromOutput<TResult>`/`FromOutputTable`: см.
+[Захват в рамках батча](17-insert-statement.md#захват-в-рамках-батча-batchbuilderoutputintotablevariable).
+Только SQL Server.
+
 ## Обновление из join
 
 [`CreateUpdateJoinBuilder()`](xref:NextORM.Core.DataContextExtensions.CreateUpdateJoinBuilder``2(NextORM.Core.JoinedEntityBuilder{``0,``1}))

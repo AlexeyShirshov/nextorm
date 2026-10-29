@@ -454,7 +454,13 @@ internal static class BuiltinFunctionTranslator
 
         visitor.NeedAliasForColumn = true;
         var value = visitor.VisitToString(args[0]);
-        var delimiter = visitor.VisitToString(args[1]);
+
+        // MySQL/MariaDB spell the delimiter as GROUP_CONCAT(… SEPARATOR …), whose grammar accepts only a
+        // text-literal token: a charset-introduced hex value spelling (and therefore a lowered slot) is a
+        // syntax error there. The separator is therefore rendered as a literal token and never lowered.
+        var delimiter = ReferenceEquals(SqlStringLiteralPolicies.For(visitor.Dialect), SqlStringLiteralPolicy.MySql)
+            ? RenderMySqlStringAggSeparator(visitor, args[1])
+            : visitor.VisitToString(args[1]);
 
         // ClickHouse has no ANSI FILTER clause: its filtered string_agg is
         // arrayStringConcat(groupArrayIf(value, predicate), delimiter).
@@ -468,6 +474,22 @@ internal static class BuiltinFunctionTranslator
         visitor.Builder!.Append(visitor.Dialect.MakeStringAgg(value, delimiter));
 
         if (filter is not null) AggregateFilter.Append(visitor, filter);
+    }
+
+    /// <summary>
+    /// Renders the MySQL/MariaDB <c>GROUP_CONCAT … SEPARATOR</c> delimiter. The grammar accepts only a
+    /// text-literal token, so the delimiter must be a non-null constant string; a captured value would
+    /// otherwise be bound or lowered into an expression the grammar rejects.
+    /// </summary>
+    private static string RenderMySqlStringAggSeparator(BaseExpressionVisitor visitor, Expression argument)
+    {
+        if (!SqlLiteral.TryGetConstantString(argument, out var separator))
+            throw new NotSupportedException(
+                "The GROUP_CONCAT separator on MySQL/MariaDB requires a non-null constant string literal: " +
+                "the SEPARATOR grammar accepts a text token, not a parameter or an expression.");
+
+        return SqlStringLiteralPolicies.For(visitor.Dialect)
+            .Render(separator, SqlStringLiteralRole.GrammarToken, SqlStringGrammar.StringAggSeparator);
     }
 
     private static void EmitArrayAgg(BaseExpressionVisitor visitor, IReadOnlyList<Expression> args)

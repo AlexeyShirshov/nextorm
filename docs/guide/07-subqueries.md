@@ -55,6 +55,40 @@ var nested = dataContext.From<IComplexEntity>().Select(x => new { x.Id, Calc = x
 var rows = dataContext.From(nested).Select(t => new { t.Id, t.Calc }).ToList();
 ```
 
+Building the derived source and reading its rows are separate steps: `From(nested)` composes the
+derived table, while materializing it needs an explicit outer `Select`, since the enclosing query can
+only address the output columns the derived `SELECT` declares. A bare `From(nested).ToList()` works
+only when the inner projection is already a set of resolved column references (a mapped column, the
+renamed `Calc` above, or a computed scalar addressed by its output name). A projection built from
+row-member expressions — an anonymous `new { x.Id }` or a DTO `new Dto { Id = x.Id }` — would have to
+be re-translated against the derived source, so preparation refuses it with a
+`QueryPreparationException`. That restriction is about the **expression shape**, not about anonymous
+types: DTO projections are fully supported for a direct read (see [Projections](02-projections.md)),
+which does not make a bare derived read of the same DTO reusable. Add the outer `Select`
+(`From(nested).Select(t => t.Id)`) to read such a source. This rewrite works with member-init DTO and
+positional-record projections; the tested constructor-only class projection has a known pre-existing
+failure (`Cannot find inner column Id`), so use one of those supported forms instead.
+
+A **single-column scalar** derived source — a member projection or a set-operation command such as
+`left.UnionAll(right)` — has no row shape to build, so it materialises directly to `List<T>` regardless
+of whether the type's process-wide select-list cache is cold or was already populated by an earlier
+scalar read. The derived read builds its own one-column shape; it does not reuse or overwrite the cached
+entry. Before the fix the warm path reused the cached object-materialisation list and threw
+`QueryPreparationException: Cannot get ctor from T`, while the cold path succeeded.
+
+Two different aliases appear in these examples. The **table alias** (`t1`, `t2`, ...) names the derived
+source in `FROM` and qualifies every reference to it (`t1.id`); the provider generates it, you never
+write it. The **output-column alias** is what the derived `SELECT` itself declares: a projected member's
+name (`Calc`, `requiredstring as 'String'`), or — for an unaliased computed scalar — the generated output
+name that the enclosing query references. That generated name keeps the provider's own quoting
+(`'c0'`, `"c0"`, `[c0]`, `` `c0` ``); the spelling is an internal detail of the rendered statement, not a
+public naming guarantee. Read such a value through the builder, never by hard-coding the name:
+
+```csharp
+var inner = dataContext.From<IComplexEntity>().Where(x => x.Id <= 2).Select(x => x.Id * 2);
+var rows = dataContext.From(inner).OrderBy(x => x).Select(x => x * 3).ToList(); // 6, 12
+```
+
 ## Naming a derived table with `As`
 
 `As<TResult>(...)` wraps a projection as a derived table in `FROM`: it projects each row into the
@@ -213,9 +247,12 @@ The outer reference may be wrapped in a scalar function over the outer column (f
 `e.String.ToUpper()`); the function is rendered around the qualified outer alias just like any other
 expression.
 
-An aggregate terminal ([`Count`](xref:NextORM.Core.EntityBuilderExtensions.Count``1(NextORM.Core.EntityBuilder{``0})), `Sum(...)`, `Min`/`Max`/`Avg`, ...)
-is translated to the matching SQL aggregate over the subquery, so it can be used directly with an outer
-reference:
+In correlated **projections**, the supported builder aggregate terminals
+([`Count`](xref:NextORM.Core.EntityBuilderExtensions.Count``1(NextORM.Core.EntityBuilder{``0})), `LongCount`,
+`Sum`, `Min`, `Max`, `Avg`, `Stdev`, `Stdevp`, `Var` and `Varp`) are translated to aggregate scalar
+subqueries, so they can be used directly with an outer reference. `LongCount()` returns the per-outer-row
+`long` count, including `0` when no rows match. This projection support does not by itself extend
+aggregate-terminal support in `WHERE` predicates:
 
 ```csharp
 var rows = await dataContext.From<IComplexEntity>()
@@ -230,6 +267,56 @@ select t1.id, (select count(*)
 limit 1) as 'cnt'
  from complex_entity as 't1'
 ```
+
+The ordered result makes the wide count explicit: `LongCount()` returns the same sequence as `Count()`
+converted to `long`, and `0L` for an outer row whose inner predicate matches nothing.
+
+```csharp
+var rows = await dataContext.From<IComplexEntity>()
+    .OrderBy(it => it.Id)
+    .Select(it => new
+    {
+        it.Id,
+        cnt = dataContext.From<IComplexEntity>().Where(c => c.Id == it.Id).Count(),
+        longCnt = dataContext.From<IComplexEntity>().Where(c => c.Id == it.Id).LongCount()
+    })
+    .ToListAsync();
+// cnt:     [1, 2, 3]
+// longCnt: [1L, 2L, 3L]
+```
+
+
+The same aggregate terminal may stand on the left of a comparison in the filter, where it becomes a
+correlated scalar subquery evaluated once per outer row:
+
+```csharp
+var rows = await dataContext.From<IComplexEntity>()
+    .Where(it => dataContext.From<IComplexEntity>().Where(c => c.Id == it.Id).Sum(c => c.Int) > 6)
+    .Select(it => it.Id)
+    .ToListAsync();
+```
+
+```sql
+select t1.id
+ from complex_entity as 't1'
+ where ((select sum(t2.nullableint)
+ from complex_entity as 't2'
+ where t2.id = t1.id
+limit 1) > 6)
+```
+
+`Count`, `Sum`, `Min`, `Max` and `Avg` compose this way with the ordered comparisons, `==`/`!=`,
+arithmetic and the logical operators. The comparison stays outside the inner `select`, and SQL NULL
+semantics apply: a sum over no rows or over only `NULL` values is `NULL`, and a row whose aggregate is
+`NULL` never satisfies the comparison - it is not treated as zero. On the reported data (parent `8001`
+with child amounts 5 and 7, `8002` with only a `NULL` amount, `8003` with no children) the predicate
+returns `[8001]` only.
+
+`LongCount` composes here as well: it carries its own 64-bit artifact (`count_big(*)` where the provider
+has it, `count(*)` otherwise). A builder terminal outside the supported aggregate list (a scalar
+`First`/`Single`, for example) cannot take part in such a comparison: preparation fails closed with
+`QueryPreparationException` naming the terminal and the operator, instead of raising an internal
+expression-tree error.
 
 Correlation nests arbitrarily: a correlated subquery may itself contain a correlated subquery, and
 each outer reference resolves to the alias of the scope that declared it.

@@ -112,6 +112,152 @@ select id, multiIf((id = 1), 'one', (id = 2), 'two', 'many') as `Bucket`
  from complex_entity
 ```
 
+## Null-safe-сравнение (`IS [NOT] DISTINCT FROM`)
+
+`SqlFunctions.Sql.is_not_distinct_from` и `SqlFunctions.Sql.is_distinct_from` — явное, включаемое по
+желанию null-safe-сравнение. Оба принимают один общий тип операндов `T` и возвращают non-nullable
+`bool`:
+
+```csharp
+bool is_not_distinct_from<T>(T left, T right);
+bool is_distinct_from<T>(T left, T right);
+```
+
+Результат всегда двузначен — это никогда не SQL `NULL`/UNKNOWN, поэтому такое сравнение не может
+отбросить строку так, как это делает обычное сравнение:
+
+| `left` | `right` | `is_not_distinct_from` | `is_distinct_from` |
+|---|---|---|---|
+| `1` | `1` | `true` | `false` |
+| `1` | `2` | `false` | `true` |
+| `NULL` | `NULL` | `true` | `false` |
+| `NULL` | `1` | `false` | `true` |
+| `1` | `NULL` | `false` | `true` |
+
+`is_distinct_from` — дополнение `is_not_distinct_from`. Обычные `==` / `!=` **не меняются**: они
+сохраняют трёхзначную логику SQL и никогда не перезаписываются на этот помощник (сравнение с `NULL` не
+даёт строки в `WHERE`). Помощники нужны, когда «оба `NULL`» должно считаться равенством.
+
+```csharp
+int? previous = 42;
+
+var rows = await dataContext.From<ComplexEntity>()
+    .Where(e => SqlFunctions.Sql.is_not_distinct_from(e.Int, previous))
+    .Select(e => new { e.Id })
+    .ToListAsync();
+```
+
+| Провайдер | `is_not_distinct_from(a, b)` | `is_distinct_from(a, b)` | Реализация |
+|---|---|---|---|
+| PostgreSQL | `(a is not distinct from b)` | `(a is distinct from b)` | нативная |
+| SQLite | `(a is b)` | `(a is not b)` | нативная |
+| MySQL, MariaDB | `(a <=> b)` | `(not (a <=> b))` | нативная |
+| SQL Server | `((a is not null and b is not null and a = b) or (a is null and b is null))` | `(not ((a is not null and b is not null and a = b) or (a is null and b is null)))` | эмуляция |
+| ClickHouse | `((a is null and b is null) or (a is not null and b is not null and a = b))` | `(not ((a is null and b is null) or (a is not null and b is not null and a = b)))` | эмуляция |
+
+Логическую проекцию оформляет диалект: SQL Server легализует предикат как
+`cast(case when ... then 1 else 0 end as bit)`, остальные провайдеры проецируют его напрямую (в
+ClickHouse охраняемый предикат уже имеет тип `UInt8`).
+
+Свёртка, типизация и параметры ведут себя детерминированно:
+
+* два литеральных `NULL` сворачиваются в `1 = 1` (`is_not_distinct_from`) или `1 = 0`
+  (`is_distinct_from`);
+* ровно один литеральный `NULL` понижается до `is null` / `is not null` на другом операнде;
+* **захваченный** операнд остаётся одним параметром команды, а его SQL-тип берётся из маппинга
+  сравниваемой колонки (или её конвертера), а не из значения во время выполнения — захваченный `NULL`
+  работает и никогда не специализирует кэшированный SQL;
+* два статически non-nullable CLR-операнда **типа значения**, не читающие источник запроса (например,
+  две захваченные локальные `int`), могут понижаться до `=` / `<>`; nullable-значение, колонка,
+  навигация и операнд, расширяемый до NULL внешним соединением, всегда сохраняют null-safe-рендеринг.
+  Nullable-аннотация ссылочного типа **не** является доказательством на этапе выполнения: ссылка,
+  объявленная non-nullable, но фактически содержащая `NULL`, всё равно идёт null-safe-путём.
+
+Единый тип операндов `T` выводится, когда оба аргумента уже имеют его. У литерала `null` своего типа
+нет, поэтому укажите его явно — `is_not_distinct_from<int?>(null, null)` — либо приведите
+(`(int?)null`). Операнды с разными эффективными CLR-типами (после разворачивания nullable)
+отклоняются с `NotSupportedException` и `Null-safe comparison requires compatible operand types.`
+вместо молчаливого преобразования. В SQL Server SQL-тип null-операнда должен выводиться из метаданных
+(сначала маппинг связанной колонки/конвертера, затем CLR-тип операнда); операнд без маппинга падает до
+выполнения с `Null-safe comparison requires a SQL Server type mapping for null operands.`
+
+In-memory-провайдер применяет ту же таблицу истинности — оба `NULL` равны, ровно один `NULL` не равен,
+иначе `EqualityComparer<T>.Default` — поэтому ссылка `NULL` никогда не разыменовывается. Равенство
+строк в CLR — **не** коллация базы: in-memory-провайдер сравнивает строки CLR, а SQL-провайдер — с
+коллацией колонки, поэтому равенство при разных коллациях не обещается.
+
+Поддержка условных функций и преобразований в MariaDB, включая явные отказы, перечислена в
+[каталоге MariaDB](08-reference.md#mariadb-catalogue).
+
+## BASE64 и разбор decimal
+
+`SqlFunctions.Sql.base64_encode(byte[]?)` и `base64_decode(string?)` рендерят стандартный BASE64 по
+RFC 4648 (`+`, `/`, паддинг `=`, без переносов строк):
+
+| C# | SQL Server 2025 | PostgreSQL | MySQL / MariaDB |
+|---|---|---|---|---|
+| `base64_encode(value)` | `BASE64_ENCODE(value)` | `replace(encode(value, 'base64'), E'\n', '')` | `CAST(REPLACE(REPLACE(TO_BASE64(value), CHAR(13), ''), CHAR(10), '') AS CHAR)` |
+| `base64_decode(value)` | `BASE64_DECODE(value)` | `decode(value, 'base64')` | `FROM_BASE64(value)` |
+
+SQL NULL (литерал, параметр или nullable-столбец) даёт SQL NULL; пустой вход даёт пустой результат.
+Невалидный или URL-safe BASE64 находится вне переносимого входного домена, и ошибка провайдера не
+маскируется. ClickHouse, SQLite и in-memory провайдер отклоняют оба члена с
+`The {name} function is not supported by this provider.` В ClickHouse есть нативные `base64Encode`/
+`base64Decode`, но nextorm не открывает их в этом срезе: адаптер привязывает аргумент `byte[]` как
+`Array(UInt8)` и читает результат `String` как `string`, поэтому сигнатуру `byte[]` соблюсти нельзя.
+В SQL Server `base64_decode` принимает `varchar`, поэтому столбец `nvarchar` требует явного приведения.
+
+`SqlFunctions.SqlServer.parse(string?)` и `try_parse(string?)` разбирают `decimal(38,18)` с
+фиксированной культурой `en-US` — никогда не с языком сессии и никогда не с аргументом культуры.
+`parse` отдаёт серверную ошибку на неверном тексте (`Microsoft.Data.SqlClient.SqlException`),
+`try_parse` возвращает NULL. Оба возвращают `decimal?`, и неверный текст никогда не уходит в
+клиентский разбор.
+
+## SQL Server TRY_CAST и TRY_CONVERT
+
+`SqlFunctions.SqlServer.try_cast<T>(value)` и `try_convert<T>(value[, style])` рендерят T-SQL
+`TRY_CAST`/`TRY_CONVERT`: некорректное, переполняющее или выходящее за диапазон значение даёт SQL NULL
+вместо ошибки. Перегрузки разделены по форме цели:
+
+| C# | SQL |
+|---|---|
+| `try_cast<T>(value)` | `try_cast(value as <type>)` |
+| `try_cast(value)` / `try_convert(value)` | `try_cast(value as nvarchar(4000))` / `try_convert(nvarchar(4000), value)` |
+| `try_convert<T>(value)` | `try_convert(<type>, value)` |
+| `try_convert<T>(value, style)` / `try_convert(value, style)` | `try_convert(<type>, value, style)` |
+
+Цель — **закрытое отображение из CLR-типа `T`**, никогда не имя CLR-типа:
+
+| CLR-цель | Тип SQL Server |
+|---|---|
+| `byte` / `short` / `int` / `long` | `tinyint` / `smallint` / `int` / `bigint` |
+| `float` / `double` | `real` / `float(53)` |
+| `decimal` | `decimal(38,10)` |
+| `bool` | `bit` |
+| `Guid` | `uniqueidentifier` |
+| `DateTime` / `DateTimeOffset` | `datetime2(7)` / `datetimeoffset(7)` |
+| `TimeSpan` | `time(7)` |
+| `string` (негенерические перегрузки) | `nvarchar(4000)` |
+
+Цель вне отображения отклоняется до подготовки команды: `The TRY_CAST function cannot map CLR target
+'MyType' to a supported SQL Server conversion type.` Длины и точности фиксированы — аргумента длины или
+точности пока нет — и сервер применяет своё нативное усечение: значение длиннее 4000 символов
+преобразуется ровно в 4000 символов (`try_cast(<5000 символов> as nvarchar(4000))` даёт 4000 символов /
+8000 байт), а не ошибку.
+
+Аргумент style — это нативный стиль `datetime`/`float`/money, а не селектор цели. Его отсутствие и
+передача NULL-стиля — **разные перегрузки**: NULL-стиль рендерится как `CAST(NULL AS int)`, и тогда SQL
+Server возвращает NULL **независимо от значения** — `try_convert(int, '42', CAST(NULL AS int))` равно
+NULL, а не `42`.
+
+Неверные *значения* становятся NULL; недопустимое *преобразование* остаётся ошибкой движка, потому что
+рендер никогда не переписывает цель. Сегодня закрытое отображение не открывает такой цели, и `xml`
+намеренно не является публичной целью — «сырой» оператор `TRY_CAST(1 AS xml)` даёт `Msg 529` («Explicit
+conversion from data type int to xml is not allowed.»), и именно это унаследует любая будущая цель такого
+рода. Обе функции доступны на любом объявлении SQL Server (15, 16, 17 и неверсионированном), так как
+`TRY_CAST`/`TRY_CONVERT` появились до 2022; любой другой провайдер отклоняет член с `The TRY_CAST function
+is not supported by this provider.`
+
 ## Предикаты типов SQL Server
 
 `SqlFunctions.SqlServer.isdate(value)` и `isnumeric(value)` рендерятся как `isdate(...)` / `isnumeric(...)`
@@ -125,3 +271,28 @@ SQL Server):
 Они намеренно возвращают нативный T-SQL `int` (1/0), **не** `bit`, поэтому проецируются как обычные
 целочисленные значения и не материализуются в предикат
 `cast(case when ... then 1 else 0 end as bit)`.
+
+## Приведение типов (ClickHouse)
+
+Поверхность `to*`/`accurateCast`/`reinterpretAs` ClickHouse типизирована на `SqlFunctions.ClickHouse` и
+проходит через общий шлюз скалярных функций, поэтому все остальные диалекты её отклоняют. Цели
+точные: `Int8` расширяется до `short`/`Int16`, а `UInt16` — до `int`, потому что в общем построителе
+строк нет аксессоров `sbyte`/`ushort`; `to_decimal32`/`to_decimal64` принимают проверенный
+compile-time масштаб, а `accurate_cast_*` поставлен как двенадцать типизированных проверяемых целей
+(базовая, `_or_null`, `_or_default`), а не схлопывается в плечо `to*`.
+
+| Функция | SQL |
+|---|---|
+| `SqlFunctions.ClickHouse.to_string(v)` / `to_bool(v)` / `to_fixed_string(v, n)` / `to_low_cardinality(v)` | `toString` / `toBool` / `toFixedString` / `toLowCardinality` |
+| `SqlFunctions.ClickHouse.to_int8(v)` … `to_int64(v)` | `toInt8` … `toInt64` |
+| `SqlFunctions.ClickHouse.to_uint8(v)` … `to_uint64(v)` | `toUInt8` … `toUInt64` |
+| `SqlFunctions.ClickHouse.to_float32(v)` / `to_float64(v)` | `toFloat32` / `toFloat64` |
+| `SqlFunctions.ClickHouse.to_decimal32(v, scale)` / `to_decimal64(v, scale)` | `toDecimal32` / `toDecimal64` |
+| `SqlFunctions.ClickHouse.accurate_cast_int8(v)` … плюс `_or_null` / `_or_default` для каждой цели | `accurateCast` / `accurateCastOrNull` / `accurateCastOrDefault` |
+| `SqlFunctions.ClickHouse.reinterpret_as_uint8` … `reinterpret_as_uint64`, `_int8` … `_int64`, `_float32`/`_float64`, `_date`/`_date_time`/`_string`/`_fixed_string`/`_uuid` | `reinterpretAs*` |
+
+`reinterpretAs*` сохраняет little-endian битовый шаблон. 128/256-битные целые, `Decimal128`/
+`Decimal256` и одиннадцать единиц `to_interval_*` остаются отклонёнными (нет точного CLR-носителя —
+`BigInteger`, 96-битная мантисса `System.Decimal` и типы `Interval*`, существующие только в
+ClickHouse соответственно). См.
+[ClickHouse-specific SQL › Пока не поддерживается](../guide/provider-specific-sql/clickhouse.md#пока-не-поддерживается).

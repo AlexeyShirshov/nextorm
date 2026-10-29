@@ -21,7 +21,9 @@
   consequence is that an alias is always emitted);
 - `INTERSECT ALL` / `EXCEPT ALL` are supported ([`SupportsIntersectExceptAll`](xref:NextORM.Core.ISqlDialect.SupportsIntersectExceptAll) is `true`);
 - arrays are supported ([`SupportsArrays`](xref:NextORM.Core.ISqlDialect.SupportsArrays) is `true`): array parameters with the `any`/`all` quantifiers
-  and the array functions;
+  and the array functions, with two per-name exceptions ([`SupportsArrayFunction`](xref:NextORM.Core.ISqlDialect.SupportsArrayFunction(System.String))):
+  `array_reverse` is refused on every PostgreSQL version, and `array_sort` renders only from an
+  explicit 18+;
 - JSON/JSONB is supported ([`SupportsPostgresJsonSql`](xref:NextORM.Core.ISqlDialect.SupportsPostgresJsonSql) is `true`, PostgreSQL only; native `jsonb` storage is
   [`SupportsJson`](xref:NextORM.Core.ISqlDialect.SupportsJson)): the `json_agg`/`jsonb_agg` aggregates, the
   construction/access functions and the `->`/`->>`/`@>`/`?` operators, with `JsonDocument`/`JsonElement`/
@@ -33,6 +35,12 @@
 - date arithmetic is enabled ([`SupportsDateArithmetic`](xref:NextORM.Core.ISqlDialect.SupportsDateArithmetic) is `true`): `SqlFunctions.Sql.date_add`/`end_of_month`
   and the `DateTime.Add*` methods render PostgreSQL interval arithmetic
   (`x + (n * interval '1 day')`, `date_trunc('month', x) + interval '1 month - 1 day'`);
+- a `TimeSpan` column maps a PostgreSQL `interval` only for **zero-month** values: a returned interval
+  carrying a non-zero month component (either sign) is rejected with `InvalidCastException` naming
+  calendar months, zero-month days and microseconds convert exactly with checked arithmetic (an
+  unrepresentable value fails with `OverflowException` instead of wrapping), `time`/`timetz`
+  columns keep the driver's `TimeSpan` accessor unchanged, and a mapped `TimeOnly` projection is
+  supported for a `time` column (µs exact, with the day domain enforced);
 - the `string_agg`/`array_agg` aggregates are enabled ([`SupportsStringArrayAggregates`](xref:NextORM.Core.ISqlDialect.SupportsStringArrayAggregates) is `true`);
 - full-text search is enabled ([`SupportsFullText`](xref:NextORM.Core.ISqlDialect.SupportsFullText) is `true`): `SqlFunctions.Sql.contains` renders
   `to_tsvector(col) @@ plainto_tsquery(search)` and `freetext` `websearch_to_tsquery(search)`; ranking is
@@ -47,15 +55,30 @@
   `SqlFunctions.Sql.current_user`/`session_user`/`current_schema` render the key words and
   `current_database`/`version` render `current_database()`/`version()`;
 - the UUID generators are enabled ([`UuidGenerators`](xref:NextORM.Core.ISqlDialect.UuidGenerators) is `true`):
-  `SqlFunctions.Sql.gen_random_uuid()` renders `gen_random_uuid()` (PostgreSQL 13+) and `uuidv7()`
-  renders `uuidv7()` (PostgreSQL 18+);
+  `SqlFunctions.Sql.gen_random_uuid()` renders `gen_random_uuid()` (PostgreSQL 13+), and
+  `uuidv7()` renders `uuidv7()` only when the configured server version is an **explicit** 18 or later;
+  below 18 and when the version is unset the call is refused at preparation with
+  `NotSupportedException` and no v4 UUID is substituted;
 - the boolean, bitwise, statistical and ordered-set aggregates are enabled
   ([`SupportsBooleanAggregates`](xref:NextORM.Core.ISqlDialect.SupportsBooleanAggregates), [`SupportsBitAggregates`](xref:NextORM.Core.ISqlDialect.SupportsBitAggregates), [`SupportsStatisticalAggregates`](xref:NextORM.Core.ISqlDialect.SupportsStatisticalAggregates) and
   [`SupportsOrderedAggregates`](xref:NextORM.Core.ISqlDialect.SupportsOrderedAggregates) are `true`): `bool_and`/`bool_or`/`every`, `bit_and`/`bit_or`/`bit_xor`,
   `corr`/`covar_*`/`regr_*` and `percentile_cont`/`percentile_disc`/`mode` with `WITHIN GROUP`;
+- the ordered-set percentile surface adds the `median` composition
+  (`SqlFunctions.Postgres.median(() => x)` → `percentile_cont(0.5) within group (order by x)`, an
+  **aggregate**: one row per group) under the separate
+  [`SupportsOrderedPercentiles`](xref:NextORM.Core.ISqlDialect.SupportsOrderedPercentiles) flag. The
+  continuous form interpolates, so `percentile_cont` and `median` require a floating-point sort
+  expression and refuse an integer/numeric one
+  (`The percentile_cont function on PostgreSQL requires a floating-point sort expression.`);
+  `percentile_disc` keeps the sort expression's type. A fraction is a `double` in `[0, 1]`, not a
+  percentage, and is validated before rendering; the generic `SqlFunctions.Postgres.percentile` has no
+  native spelling and throws `NotSupportedException`;
 - aggregate names are remapped: `stdev`→`stddev`, `stdevp`→`stddev_pop`, `var`→`variance`,
   `varp`→`var_pop`;
 - `Math.Log` maps to `ln(...)` (PostgreSQL's `log()` is base 10);
+- `SqlFunctions.Postgres.log(base, x)` renders `log((base)::numeric, (x)::numeric)`: the only
+  two-argument overload is `log(numeric, numeric)`, so both operands are cast, and a null operand
+  yields SQL `NULL`;
 - `Math.Round(x, digits)` casts a `double`/`float` first argument to `numeric`
   (`round((x)::numeric, digits)`): PostgreSQL has no `round(double precision, integer)`;
 - `SqlFunctions.Postgres.setseed(seed)` renders `setseed(seed)` (gated by
@@ -66,6 +89,11 @@
   `quarter`/`week` (ISO)/`dow`/`isodow` and `SqlFunctions.Sql.date_part("epoch", value)` renders
   `cast(extract(epoch from value) as double precision)`;
 - paging is `limit n` / `limit n offset m`; an offset-only query emits `offset m` alone.
+
+The variability aggregates follow the shared cardinality contract: `Stdev`/`Var` are `null` for zero or
+one contributing value, `Stdevp`/`Varp` are `null` for zero and `0.0` for one. Because the result is now
+a real `Nullable<T>`, a sample over an empty or single-row set materializes as `null` instead of raising
+Npgsql's `InvalidCastException` (`Column V is null.`) on a non-nullable read.
 
 ## Registering the provider
 
@@ -101,12 +129,24 @@ The dialect can be pinned to the server version, which gates version-dependent s
 so the ANSI aggregate `FILTER (WHERE ...)` clause stays enabled. A version below 9.4 disables it: a
 filtered aggregate rejects with `NotSupportedException`.
 
+The per-name array and UUID functions are a deliberate exception to that permissive unset default.
+PostgreSQL provides no `array_reverse` in any current release and added `array_sort` and `uuidv7` only
+in 18, so an unset version **refuses all three at preparation** instead of assuming a version.
+An explicit 18+ enables `array_sort`/`uuidv7`; `array_reverse` stays refused on every version. No other
+unset-version gate changes, and no fallback (`NULL`, an unchanged array, a v4 UUID) is substituted.
+
 ```csharp
-// Unset: filtered aggregates are enabled (assumed 9.4+).
+// Unset: filtered aggregates are enabled (assumed 9.4+), while array_reverse, array_sort and uuidv7 are refused.
 using var current = new PostgresDataContext("Host=localhost;Database=app;...", new DataContextBuilder());
 
 // Pin 9.3: the aggregate `FILTER (WHERE ...)` clause is rejected.
 using var legacy = new PostgresDataContext("Host=localhost;Database=app;...", new DataContextBuilder(), new Version(9, 3));
+
+// Pin 17: array_sort() and uuidv7() are refused at preparation too; array_reverse is always refused.
+using var pg17 = new PostgresDataContext("Host=localhost;Database=app;...", new DataContextBuilder(), new Version(17, 0));
+
+// Pin 18: array_sort() and uuidv7() render natively; array_reverse is still refused.
+using var pg18 = new PostgresDataContext("Host=localhost;Database=app;...", new DataContextBuilder(), new Version(18, 0));
 ```
 
 The version is immutable and fixed per **concrete context type** for the process lifetime. Two contexts
@@ -183,8 +223,9 @@ select id
 ```
 
 The array functions (`cardinality`, `array_length`, `array_position`, ...) and the `@>`/`&&` operators
-are documented in [Scalar functions](../scalar-functions/06-arrays.md#arrays-postgresql). Other
-providers reject them with `NotSupportedException`.
+are documented in [Scalar functions](../scalar-functions/06-arrays.md#arrays-postgresql). Two names are
+refused at preparation even on PostgreSQL: `array_reverse` (no release provides it) and `array_sort`
+below an explicit 18+. Other providers reject the array surface with `NotSupportedException`.
 
 ## Range types
 
@@ -237,7 +278,13 @@ ctx.From<IComplexEntity>()
     .Select(e => SqlFunctions.Postgres.jsonb_agg(e.String));   // jsonb_agg(somestring)
 ```
 
-A plain JSON string is bound as `text`; use `SqlFunctions.Postgres.json_cast(value)` to parse it as `jsonb`. A
+Provider parameter binding is unchanged: a plain JSON string parameter is still bound as `text`. The six
+`json_get`/`json_get_text`/`json_get_path`/`json_get_path_text` accessors (string-key and integer-index
+overloads) are translator-local — they apply **contextual SQL typing** to a raw client document value
+(literal, captured value or explicit parameter) and parse it as `jsonb` in the generated SQL, and they type
+the key/index/path operand as `text`/`integer`/`text[]`. A native `json`/`jsonb` column or a server-side JSON
+expression is emitted uncast, so its operand and result types are unchanged. Use
+`SqlFunctions.Postgres.json_cast(value)` to parse a plain string for any other JSON function. A
 bare `JsonNode`/`JsonNode?` property (declared exactly `JsonNode`, not `JsonObject`/`JsonArray`) reads a
 native `json`/`jsonb` column: the column text is read and parsed for object, array and scalar roots, in both
 scalar (`Select(x => x.Data)`) and composite projections. A SQL `NULL` and a JSON literal `null` both
@@ -248,6 +295,12 @@ are unchanged, and nextorm generates no column DDL. The full
 surface (`json_agg`, `jsonb_build_object`, `->`, `->>`, `#>`, `@>`, `?`, `?|`, `?&`, ...) is documented
 in [Scalar functions](../scalar-functions/07-json-and-xml.md#json-and-jsonb-postgresql). Other providers
 reject it with `NotSupportedException`.
+
+`SqlFunctions.Sql.base64_encode` and `base64_decode` use the core `encode(value, 'base64')` /
+`decode(value, 'base64')` pair (the encode result has its trailing newline removed explicitly).
+`SqlFunctions.Sql.crypt_gen_random` calls `gen_random_bytes` from the **`pgcrypto`** extension: the
+extension must be installed on the server (`CREATE EXTENSION pgcrypto`). nextorm neither installs it
+nor detects its absence — a missing extension surfaces as the provider's native error.
 
 ## Additional function surface
 
@@ -296,6 +349,27 @@ var r = ctx.From<IComplexEntity>()
 // r[0].Id == 1 (the row whose Int is NULL)
 ```
 
+## Explicit NULL placement
+
+PostgreSQL has native `NULLS FIRST`/`NULLS LAST`, so [`NullsPosition`](xref:NextORM.Core.NullsPosition)
+`First`/`Last` render the modifier directly and [`ISqlDialect.SupportsNullsOrdering`](xref:NextORM.Core.ISqlDialect.SupportsNullsOrdering)
+is `true`:
+
+```csharp
+var r = ctx.From<IComplexEntity>()
+    .OrderBy(it => it.Int, NullsPosition.Last)
+    .Select(it => new { it.Id })
+    .ToList();
+// order by nullableint NULLS LAST
+```
+
+Placement is independent of direction: `First`/`Last` keep their group even when the key is descending
+(`order by nullableint desc NULLS FIRST`). `NullsPosition.Default` emits no clause and keeps the PostgreSQL
+default, which is direction-aware and opposite to SQLite/SQL Server/MySQL/MariaDB: ascending puts nulls
+**last** and descending puts them **first** (null sorts as the largest value). Because the modifier is
+native, the key is emitted once, `DISTINCT`/`DISTINCT ON` need no special handling, and a parameterized key
+binds once. See [Sorting and paging](../guide/06-sorting-and-paging.md#null-ordering-and-placement).
+
 ## Large objects (LOB streaming)
 
 A single `byte[]` or `string` column can be read as a `Stream`/`TextReader` without loading the value into managed memory. Npgsql implements `GetStream`/`GetTextReader` for `bytea` and `text`, so PostgreSQL is one of the three providers that support the LOB terminals in this release (alongside SQL Server and SQLite):
@@ -326,6 +400,26 @@ select t1.value, t2.somestring as "String"
  join complex_entity as "t2" on t1.id = t2.id
 ```
 
+## Bulk insert
+
+The native path is binary `COPY ... FROM STDIN (FORMAT BINARY)` through `NpgsqlBinaryImporter` on the
+context's own connection; `Auto` selects it for a compatible request, `Native` refuses by name instead of
+falling back, and `Portable` writes `INSERT ... VALUES` (the only path for `Returning*`).
+
+- Rows stream into one importer; a finite `MaxBatchSize` starts one importer per bounded chunk, `Complete`d on
+  success and disposed on error or cancellation.
+- `KeepIdentity` keeps the explicit identity column in the `COPY` column list; the portable statement adds
+  `OVERRIDING SYSTEM VALUE`.
+- `IgnoreDuplicates` is portable-only (`ON CONFLICT DO NOTHING`). `TableLock`, `FireTriggers` and
+  `CheckConstraints=false` are refused by name; `KeepNulls=false` needs a default-equivalent shape (every
+  written column nullable with a NULL/absent SQL default).
+- `DatabaseName` addresses only the connection's current database — naming it is a no-op, another database is
+  refused by name; `ServerName` is refused (no rerouting).
+- `Timeout` is one whole-invocation budget feeding the importer timeout and the linked token; an expired budget
+  is a `TimeoutException`, and a caller cancellation always wins.
+
+See [Bulk insert](../guide/22-bulk-insert.md).
+
 ## Provider differences
 
 | Aspect | PostgreSQL |
@@ -347,6 +441,7 @@ select t1.value, t2.somestring as "String"
 | Window functions | `percent_rank()`, `cume_dist()`, `nth_value(expr, n)` supported |
 | `date_add` / `end_of_month` / `DateTime.Add*` | interval arithmetic (`x + (n * interval '1 day')`) |
 | `string_agg` / `array_agg` / aggregate `filter` | supported (aggregate `filter` requires 9.4+; unset assumes ≥9.4) |
+| Median / percentiles | `SqlFunctions.Postgres.median(() => x)` → `percentile_cont(0.5) within group (order by x)` (aggregate, one row per group; floating-point sort only); `percentile_cont`/`percentile_disc` ordered-set; generic `percentile` throws (`SupportsOrderedPercentiles`) |
 | Server version | configured explicitly via the context `Version` |
 | Session/info functions | `current_user`, `session_user`, `current_schema`, `current_database()`, `version()` |
 | Table functions | `generate_series`, `unnest`, `regexp_matches`, `regexp_split_to_table`, `jsonb_array_elements(_text)`, `jsonb_each(_text)`, `jsonb_object_keys`, `jsonb_path_query`, `ts_stat` |
@@ -354,7 +449,8 @@ select t1.value, t2.somestring as "String"
 | `stdev` / `stdevp` | `stddev` / `stddev_pop` |
 | `var` / `varp` | `variance` / `var_pop` |
 | `DateTime.Now` / `UtcNow` | `now()` / `now() at time zone 'utc'` |
-| `ORDER BY … DESC` null placement | nulls sort first |
+| `ORDER BY` null placement (default) | nulls sort as the largest value, so `DESC` puts them first and `ASC` last |
+| Explicit NULL placement (`NullsPosition`) | native `NULLS FIRST`/`NULLS LAST` ([`SupportsNullsOrdering`](xref:NextORM.Core.ISqlDialect.SupportsNullsOrdering)) |
 
 ## See also
 

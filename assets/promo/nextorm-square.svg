@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1080" viewBox="0 0 1080 1080" role="img" aria-labelledby="t d">
+  <title id="t">NextORM — zero-SQL ORM for .NET</title>
+  <desc id="d">Square social card: NextORM wordmark, tagline, feature pills and a data-fetch benchmark chart on SQLite.</desc>
+  <defs>
+    <linearGradient id="wordmark" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#f8fafc"/>
+      <stop offset="0.55" stop-color="#c7d2fe"/>
+      <stop offset="1" stop-color="#67e8f9"/>
+    </linearGradient>
+    <linearGradient id="barBest" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#818cf8"/>
+      <stop offset="1" stop-color="#22d3ee"/>
+    </linearGradient>
+    <radialGradient id="glowViolet" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#7c3aed" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#7c3aed" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowCyan" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#0891b2" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#0891b2" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse">
+      <path d="M48 0 H0 V48" fill="none" stroke="#1e293b" stroke-width="1"/>
+    </pattern>
+    <radialGradient id="gridFade" cx="0.5" cy="0.3" r="0.8">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <mask id="gridMask">
+      <rect width="1080" height="1080" fill="url(#gridFade)"/>
+    </mask>
+  </defs>
+
+  <rect width="1080" height="1080" fill="#0b1220"/>
+  <rect width="1080" height="1080" fill="url(#grid)" mask="url(#gridMask)"/>
+  <circle cx="960" cy="80" r="440" fill="url(#glowViolet)"/>
+  <circle cx="100" cy="1030" r="400" fill="url(#glowCyan)"/>
+
+  <text x="64" y="150" font-family="Inter, Segoe UI, Ubuntu, DejaVu Sans, sans-serif" font-size="17" font-weight="700" letter-spacing="4" fill="#a5b4fc">ZERO-SQL ORM FOR .NET</text>
+
+  <text x="64" y="300" font-family="Inter, Segoe UI, Ubuntu, DejaVu Sans, sans-serif" font-size="118" font-weight="700" letter-spacing="-3" fill="url(#wordmark)">NextORM</text>
+
+  <text x="64" y="368" font-family="Inter, Segoe UI, Ubuntu, DejaVu Sans, sans-serif" font-size="28" font-weight="600" fill="#e2e8f0">Typed SQL from LINQ.</text>
+  <text x="64" y="404" font-family="Inter, Segoe UI, Ubuntu, DejaVu Sans, sans-serif" font-size="22" fill="#94a3b8">No change tracking · No mandatory entities</text>
+
+  <g font-family="Inter, Segoe UI, Ubuntu, DejaVu Sans, sans-serif" font-size="16" font-weight="600" fill="#c7d2fe">
+    <rect x="64" y="452" width="138" height="38" rx="19" fill="#111d33" stroke="#2b3a55"/>
+    <text x="133" y="477" text-anchor="middle">6 DB engines</text>
+    <rect x="218" y="452" width="130" height="38" rx="19" fill="#111d33" stroke="#2b3a55"/>
+    <text x="283" y="477" text-anchor="middle">Plan cache</text>
+    <rect x="364" y="452" width="178" height="38" rx="19" fill="#111d33" stroke="#2b3a55"/>
+    <text x="453" y="477" text-anchor="middle">Entities optional</text>
+  </g>
+
+  <!-- benchmark panel -->
+  <rect x="64" y="530" width="952" height="400" rx="22" fill="#0e1729" stroke="#2b3a55" stroke-width="1.4"/>
+
+  <text x="104" y="590" font-family="Inter, Segoe UI, Ubuntu, DejaVu Sans, sans-serif" font-size="19" font-weight="700" fill="#e2e8f0">3.5× faster than EF Core</text>
+  <text x="976" y="590" text-anchor="end" font-family="Inter, Segoe UI, Ubuntu, DejaVu Sans, sans-serif" font-size="13" fill="#8b9bb4">data fetch · SQLite · μs</text>
+
+  <g>
+    <rect x="220" y="636" width="620" height="28" rx="7" fill="#131f33"/>
+    <rect x="220" y="636" width="174.1" height="28" rx="7" fill="url(#barBest)"/>
+    <text x="200" y="656" text-anchor="end" font-family="Inter, Segoe UI, Ubuntu, DejaVu Sans, sans-serif" font-size="18" font-weight="700" fill="#f1f5f9">NextORM</text>
+    <text x="406" y="656" font-family="Inter, Segoe UI, Ubuntu, DejaVu Sans, sans-serif" font-size="17" font-weight="700" fill="#67e8f9">10.29 μs</text>
+
+    <rect x="220" y="700" width="620" height="28" rx="7" fill="#131f33"/>
+    <rect x="220" y="700" width="251.9" height="28" rx="7" fill="#475569"/>
+    <text x="200" y="720" text-anchor="end" font-family="Inter, Segoe UI, Ubuntu, DejaVu Sans, sans-serif" font-size="18" fill="#cbd5e1">Dapper</text>
+    <text x="484" y="720" font-family="Inter, Segoe UI, Ubuntu, DejaVu Sans, sans-serif" font-size="17" fill="#94a3b8">14.89 μs</text>
+
+    <rect x="220" y="764" width="620" height="28" rx="7" fill="#131f33"/>
+    <rect x="220" y="764" width="266.6" height="28" rx="7" fill="#475569"/>
+    <text x="200" y="784" text-anchor="end" font-family="Inter, Segoe UI, Ubuntu, DejaVu Sans, sans-serif" font-size="18" fill="#cbd5e1">linq2db</text>
+    <text x="499" y="784" font-family="Inter, Segoe UI, Ubuntu, DejaVu Sans, sans-serif" font-size="17" fill="#94a3b8">15.76 μs</text>
+
+    <rect x="220" y="828" width="620" height="28" rx="7" fill="#131f33"/>
+    <rect x="220" y="828" width="620" height="28" rx="7" fill="#475569"/>
+    <text x="200" y="848" text-anchor="end" font-family="Inter, Segoe UI, Ubuntu, DejaVu Sans, sans-serif" font-size="18" fill="#cbd5e1">EF Core</text>
+    <text x="852" y="848" font-family="Inter, Segoe UI, Ubuntu, DejaVu Sans, sans-serif" font-size="17" fill="#94a3b8">36.64 μs</text>
+  </g>
+
+  <line x1="104" y1="878" x2="976" y2="878" stroke="#1e293b"/>
+  <text x="104" y="906" font-family="Inter, Segoe UI, Ubuntu, DejaVu Sans, sans-serif" font-size="12.5" fill="#64748b">BenchmarkDotNet · async · AMD Ryzen 7 5800HS · .NET 10</text>
+
+  <text x="64" y="1002" font-family="JetBrains Mono, Consolas, Ubuntu Mono, DejaVu Sans Mono, monospace" font-size="16" fill="#94a3b8">alexeyshirshov.github.io/nextorm</text>
+</svg>

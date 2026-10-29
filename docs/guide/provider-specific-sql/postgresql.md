@@ -119,6 +119,15 @@ properties and a bare `JsonDocument`/`JsonElement` *scalar* projection remain ou
 `jsonb_*` family covers construction, extraction, containment and
 aggregation, for example `jsonb_build_object`, `jsonb_agg`, `json_get_text`, `json_cast`, `->`, `->>`.
 
+The four accessors `json_get`, `json_get_text`, `json_get_path` and `json_get_path_text` (string-key and
+integer-index overloads) apply **contextual SQL typing**: a raw client document value (literal, captured
+value or explicit parameter) is parsed as `jsonb` in the generated SQL — `json_get("{\"a\":1}", "a")`
+renders `cast('{"a":1}' as jsonb) -> cast('a' as text)` — while a native `json`/`jsonb` column or a
+server-side JSON expression is emitted unchanged (`doc -> cast('a' as text)`), so its operand and result
+types are preserved. The key/index/path operand is typed per overload as `text`/`integer`/`text[]`.
+Provider parameter binding is not changed: an ordinary `string` parameter still binds as `text`, and
+`JSON_EXISTS`/`jsonpath` and the sibling JSON functions keep their own behavior.
+
 ```csharp
 var json = dataContext.From<IComplexEntity>()
     .Select(e => SqlFunctions.Postgres.jsonb_agg(e.String))
@@ -138,6 +147,14 @@ See [JSON and JSONB (PostgreSQL)](../../scalar-functions/index.md) and
 * `percentile_cont`/`percentile_disc` are ordered-set aggregates rendered as
   `percentile_cont(f) within group (order by x)` ([`SupportsOrderedAggregates`](xref:NextORM.Core.ISqlDialect.SupportsOrderedAggregates),
   [`MakeWithinGroup`](xref:NextORM.Core.ISqlDialect.MakeWithinGroup(System.String,System.String,NextORM.Core.KeywordCase))); `mode()` is the ordered-set mode;
+* `median(() => x)` is the same surface with the fraction fixed at `0.5`
+  (`percentile_cont(0.5) within group (order by x)`, [`SupportsOrderedPercentiles`](xref:NextORM.Core.ISqlDialect.SupportsOrderedPercentiles)):
+  PostgreSQL has no `median` function, and this form is an **aggregate** (one row per group), not a window
+  function, so it never takes `OVER`;
+* the continuous forms interpolate and return `double precision`, so `percentile_cont`/`median` require a
+  floating-point sort expression (an integer/numeric key is refused); `percentile_disc` keeps the sort type.
+  Fractions are `double` in `[0, 1]`, finite and constant/captured, and are validated before rendering; the
+  generic `percentile` is refused;
 * `bool_and`/`bool_or`/`every`, the `regr_*` regression family and `bit_and`/`bit_or`/`bit_xor` are
   PostgreSQL-only and are rejected by every other dialect;
 * `array_agg` and the string/array aggregate surface are gated by
@@ -179,6 +196,13 @@ select id, ts_rank(to_tsvector(somestring), to_tsquery('cat'))
 
 Only PostgreSQL implements the native surface; every other provider rejects it at SQL build time.
 
+The `#281` additions extend the same surface: the vector and query constructors `array_to_tsvector`,
+`json_to_tsvector` and `jsonb_to_tsvector`; the inspection and rewriting members `numnode`, `querytree`,
+`setweight`, `strip`, `ts_delete`, `ts_filter`, `ts_rewrite` and `tsquery_phrase`; the conversion and
+lexing pair `tsvector_to_array` and `ts_lexize`; and the tokenizer readers `ts_debug`, `ts_parse` and
+`ts_token_type` as `FROM` sources. Their SQL forms, row interfaces and the `cast(... as text)` bridge are
+listed in [String functions › Full-text search (PostgreSQL, #281)](../../scalar-functions/01-string-functions.md#full-text-search-postgresql-281).
+
 ## Extended scalar and regexp helpers
 
 The [`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres) surface adds `pg_typeof`, `num_nulls`/
@@ -188,7 +212,104 @@ The [`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres) surface adds `pg_typeo
 `to_number`/`to_timestamp`/`timezone`/`make_interval`/`justify_*`) and the array constructors, all gated
 by `SupportsExtendedScalarFunctions`.
 
+The residual string catalogue of #281 sits on the same `Postgres` surface, one member per server
+overload: `btrim` (one-argument, character-set and `bytea` forms), the two-argument and `bytea` forms
+of `ltrim`/`rtrim`, `starts_with`, `parse_ident`, the `text` overloads of
+`quote_ident`/`quote_literal`/`quote_nullable`, `to_ascii(value, encoding)` (encoding named as text or
+as its PostgreSQL code),
+`to_hex`/`to_oct`/`to_bin` (integer and `bigint`), `convert_from`/`convert_to`, `encode`/`decode`,
+`normalize`, `unistr`, `regexp_match` (two- and three-argument) and the set-returning
+`string_to_table`. Each of these names is gated **individually** by
+[`IScalarFunctions.Supports`](xref:NextORM.Core.IScalarFunctions.Supports(System.String)) rather than
+by the family flag: a provider that does not implement the interface fails closed with
+`NotSupportedException`, and PostgreSQL SQL never reaches it. `normalize` takes its form as a bare
+grammar keyword (`NFC`/`NFD`/`NFKC`/`NFKD`), `regexp_match` returns NULL when nothing matches, and
+`to_hex` spells a negative `int` in two's complement (`-1` → `ffffffff`). Members that cannot run on
+the pinned PostgreSQL 17.11 — `casefold`, the one-argument `to_ascii` and the `anyelement` `quote_*`
+overloads — are refused while the query is prepared; the tested reasons are in the refusal table of
+[String functions](../../scalar-functions/01-string-functions.md#tested-refusals).
+
+The residual date/time family of #281 follows the same rule: `date_subtract` (the two-argument
+`interval` form and the zoned three-argument form, both returning `timestamp with time zone`),
+`justify_interval`, `make_timestamptz` (with and without a zone), the clocks
+`clock_timestamp`/`statement_timestamp`/`transaction_timestamp`, `timeofday` and `isfinite` over
+`date`, `timestamp` and `interval`. `clock_timestamp` is evaluated per row while
+`statement_timestamp`/`transaction_timestamp` stay fixed for the statement/transaction, and
+`justify_interval` returns an `interval`, so it follows the provider's interval handling described
+below. Each name is gated **individually** by `IScalarFunctions.Supports` and fails closed with
+`NotSupportedException` on a provider without the interface; `pg_sleep`/`pg_sleep_for`/`pg_sleep_until`
+are refused because each returns `void` and no faithful expression result exists — the refusal rows are
+in [Date and time functions](../../scalar-functions/03-date-and-time.md#postgresql-extended-date-and-time).
+
+UUID extraction is PostgreSQL-only as well: `uuid_extract_timestamp` yields a `timestamptz` (NULL for a
+version-4 UUID or the nil UUID) and `uuid_extract_version` yields a `smallint` (NULL for the nil UUID),
+both gated per name by `IScalarFunctions.Supports` with the same fail-closed refusal — see
+[Sequences and UUID generators](../../scalar-functions/10-sequences.md#uuid-generators).
+
+Next to `encode`/`decode`, the binary-string family adds `get_bit`/`set_bit` (bit indexes counted from
+the least significant bit of the first byte), `get_byte`/`set_byte` (zero-based byte indexes) and
+`bit_count` (set bits as `bigint`), each gated individually by `IScalarFunctions.Supports` and failing
+closed the same way. The `bit`-typed spellings have no CLR mapping and are refused, and
+`crc32`/`crc32c` are PostgreSQL 18 functions refused on the pinned 17.11; both reasons are in the
+refusal table of [String functions](../../scalar-functions/01-string-functions.md#tested-refusals).
+
+On the mapped-column path the duration rule follows the **returned** interval, never the function name:
+`make_interval`, a `justify_*` normalization and `age` all reject a result carrying a non-zero month
+component (either sign) with `InvalidCastException` naming calendar months, and convert a zero-month
+result exactly.
+
 See [Scalar functions](../../scalar-functions/index.md).
+
+## Numeric scale functions
+
+`SqlFunctions.Postgres.scale`/`min_scale`/`trim_scale` describe and normalize the scale of a `numeric`
+value. Each name is gated **individually** by
+[`IScalarFunctions.Supports`](xref:NextORM.Core.IScalarFunctions.Supports(System.String)) — not by a
+family-wide flag — and every other provider rejects the call with `NotSupportedException`, so
+PostgreSQL SQL never reaches a server that cannot run it.
+
+| C# | SQL | Returns |
+|---|---|---|
+| `SqlFunctions.Postgres.scale(decimal? value)` | `scale(value)` | `int?` — fractional digits, trailing zeroes included |
+| `SqlFunctions.Postgres.min_scale(decimal? value)` | `min_scale(value)` | `int?` — fractional digits without the trailing zeroes |
+| `SqlFunctions.Postgres.trim_scale(decimal? value)` | `trim_scale(value)` | `decimal?` — the value with its trailing zeroes removed |
+
+`scale` exists on every supported PostgreSQL version; `min_scale`/`trim_scale` need PostgreSQL 13 or
+newer. A NULL argument yields NULL for all three. `trim_scale` removes trailing zeroes only: unlike
+`round`/`trunc` it never rounds and never changes a significant digit, so `trim_scale(12.3400)` is
+`12.34` (decimal scale 2) while `trim_scale(12.3456)` is unchanged at scale 4. The value travels
+through Npgsql's numeric reader, so the returned decimal keeps the server-side scale.
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .Select(e => new
+    {
+        Scale = SqlFunctions.Postgres.scale(e.Numeric),
+        MinScale = SqlFunctions.Postgres.min_scale(e.Numeric),
+        Trimmed = SqlFunctions.Postgres.trim_scale(e.Numeric)
+    })
+    .ToList();
+```
+
+Next to the scale helpers, `SqlFunctions.Postgres` exposes the residual numeric family: `div`
+(truncating `numeric` division, so `div(7, 2)` is `3` and `div(-7, 2)` is `-3`), `erf`/`erfc`, the
+two-argument `random_normal(mean, stddev)` and the degree-based trigonometry
+`acosd`/`asind`/`atand`/`atan2d`/`cosd`/`cotd`/`sind`/`tand`, which take and return degrees. Every one
+of these names — like the three scale helpers — is gated individually by
+`IScalarFunctions.Supports`, so any other provider rejects the call with `NotSupportedException`.
+`gamma`/`tgamma`/`lgamma` are refused because they do not exist on the pinned PostgreSQL 17.11; the
+tested reasons for that and for the refused string members are listed in the refusal tables of the
+scalar-functions articles.
+
+See [Math functions](../../scalar-functions/02-math-functions.md#postgresql-numeric-scale).
+
+## Null-safe comparison
+
+PostgreSQL has the ANSI operators natively, so both helpers map one-to-one and the result is a plain
+boolean: `SqlFunctions.Sql.is_not_distinct_from(a, b)` renders `(a is not distinct from b)` and
+`is_distinct_from(a, b)` renders `(a is distinct from b)`. Both are two-valued, so no scalar
+legalisation is needed; ordinary `==`/`!=` keep their SQL NULL semantics. See
+[Null-safe comparison](../../scalar-functions/04-conditionals-and-conversion.md#null-safe-comparison-is-not-distinct-from).
 
 ## `DISTINCT ON`
 
@@ -215,7 +336,7 @@ See [Distinct](../09-distinct.md).
 ## Set-returning functions
 
 PostgreSQL's set-returning functions are exposed as table-valued functions through
-[`FromTableFunction`](xref:NextORM.Core.DataContextExtensions.FromTableFunction``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{``0}}})):
+[`From`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{NextORM.Core.EntityBuilder{``0}}})) with a runtime-factory call:
 
 | `SqlFunctions.Postgres.*` | SQL output columns | Row shape |
 | --- | --- | --- |
@@ -378,7 +499,7 @@ functions. Schema-less scenarios are covered by the existing paths instead:
   `FieldCount`/`ColumnNames` without materialisation, and [`ToDataReader`](../28-large-objects.md)
   streams them as a `DbDataReader`;
 * `jsonb_each` / `jsonb_each_text` / `jsonb_object_keys` expand a JSON object into key/value rows —
-  see [Dynamic result schema](../13-table-valued-functions.md#dynamic-result-schema).
+  see [Result schema and provider restrictions](../13-tvf-result-schemas.md#dynamic-result-schema).
 
 The `json_populate_record(set)` variants (which populate a caller-supplied base record instead of a
 free-form column list) remain out of scope. See

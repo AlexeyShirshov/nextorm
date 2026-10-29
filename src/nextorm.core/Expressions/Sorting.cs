@@ -15,12 +15,26 @@ public struct Sorting
     private OrderDirection _direction;
     private Expression? _preparedExpression;
     private readonly int? _columnIdx;
+    private NullsPosition _nullsPosition;
 
     /// <summary>Initializes a sort key from an expression that is translated during preparation.</summary>
     /// <param name="expression">The <c>ORDER BY</c> key expression.</param>
     public Sorting(Expression expression)
     {
         _expression = expression;
+    }
+
+    /// <summary>
+    /// Initializes a sort key from an expression that is translated during preparation, with an explicit
+    /// NULL placement.
+    /// </summary>
+    /// <param name="expression">The <c>ORDER BY</c> key expression.</param>
+    /// <param name="nullsPosition">Where SQL <c>NULL</c> values are placed for this key.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="nullsPosition"/> is not a defined <see cref="NullsPosition"/> member.</exception>
+    public Sorting(Expression expression, NullsPosition nullsPosition)
+    {
+        _expression = expression;
+        _nullsPosition = NullsOrderingRenderer.Validate(nullsPosition);
     }
 
     /// <summary>Initializes a sort key from an already-resolved result-set column index.</summary>
@@ -30,11 +44,36 @@ public struct Sorting
         _columnIdx = columnIdx;
     }
 
+    /// <summary>
+    /// Initializes a sort key from an already-resolved result-set column index, with an explicit NULL
+    /// placement.
+    /// </summary>
+    /// <param name="columnIdx">The zero-based column index.</param>
+    /// <param name="nullsPosition">Where SQL <c>NULL</c> values are placed for this key.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="nullsPosition"/> is not a defined <see cref="NullsPosition"/> member.</exception>
+    public Sorting(int columnIdx, NullsPosition nullsPosition)
+    {
+        _columnIdx = columnIdx;
+        _nullsPosition = NullsOrderingRenderer.Validate(nullsPosition);
+    }
+
     /// <summary>Ascending or descending.</summary>
     public OrderDirection Direction
     {
         readonly get => _direction;
         set => _direction = value;
+    }
+
+    /// <summary>
+    /// Where SQL <c>NULL</c> values are placed for this key. <see cref="NullsPosition.Default"/> emits no
+    /// clause and keeps the provider default; it is the value produced by the constructor overloads that
+    /// do not take a placement.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">The assigned value is not a defined <see cref="NullsPosition"/> member.</exception>
+    public NullsPosition NullsPosition
+    {
+        readonly get => _nullsPosition;
+        set => _nullsPosition = NullsOrderingRenderer.Validate(value);
     }
 
     /// <summary>

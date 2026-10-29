@@ -21,7 +21,8 @@
   следствием является то, что псевдоним выдаётся всегда);
 - `INTERSECT ALL` / `EXCEPT ALL` поддерживаются ([`SupportsIntersectExceptAll`](xref:NextORM.Core.ISqlDialect.SupportsIntersectExceptAll) равно `true`);
 - массивы поддерживаются ([`SupportsArrays`](xref:NextORM.Core.ISqlDialect.SupportsArrays) равно `true`): параметры-массивы с квантификаторами
-  `any`/`all` и функции для массивов;
+  `any`/`all` и функции для массивов, с двумя исключениями по имени ([`SupportsArrayFunction`](xref:NextORM.Core.ISqlDialect.SupportsArrayFunction(System.String)):
+  `array_reverse` отклоняется на любой версии PostgreSQL, а `array_sort` рендерится только при явной 18+);
 - JSON/JSONB поддерживается ([`SupportsPostgresJsonSql`](xref:NextORM.Core.ISqlDialect.SupportsPostgresJsonSql) равно `true`, только PostgreSQL; нативное хранение `jsonb` —
   [`SupportsJson`](xref:NextORM.Core.ISqlDialect.SupportsJson)): агрегаты `json_agg`/`jsonb_agg`, функции
   построения/доступа и операторы `->`/`->>`/`@>`/`?`, а параметры `JsonDocument`/`JsonElement`/`JsonNode`
@@ -33,6 +34,13 @@
 - арифметика дат включена ([`SupportsDateArithmetic`](xref:NextORM.Core.ISqlDialect.SupportsDateArithmetic) равно `true`): `SqlFunctions.Sql.date_add`/`end_of_month`
   и методы `DateTime.Add*` отрисовывают интервальную арифметику PostgreSQL
   (`x + (n * interval '1 day')`, `date_trunc('month', x) + interval '1 month - 1 day'`);
+- колонка `TimeSpan` отображает PostgreSQL `interval` только для значений с **нулевыми месяцами**:
+  возвращённый interval с ненулевой месячной составляющей (любого знака) отклоняется через
+  `InvalidCastException` с указанием календарных месяцев, дни и микросекунды при нулевых месяцах
+  конвертируются точно с проверяемой арифметикой (непредставимое значение падает с
+  `OverflowException`, а не переполняется-обёрткой), колонки `time`/`timetz` сохраняют прежний
+  аксессор `TimeSpan` драйвера, а для колонки `time` поддерживается проекция `TimeOnly` (точность до
+  микросекунды, домен суток проверяется);
 - агрегаты `string_agg`/`array_agg` включены ([`SupportsStringArrayAggregates`](xref:NextORM.Core.ISqlDialect.SupportsStringArrayAggregates) равно `true`);
 - полнотекстовый поиск включён ([`SupportsFullText`](xref:NextORM.Core.ISqlDialect.SupportsFullText) равно `true`): `SqlFunctions.Sql.contains` отрисовывает
   `to_tsvector(col) @@ plainto_tsquery(search)`, а `freetext` — `websearch_to_tsquery(search)`;
@@ -48,14 +56,28 @@
   `current_database`/`version` — как `current_database()`/`version()`;
 - генераторы UUID включены ([`UuidGenerators`](xref:NextORM.Core.ISqlDialect.UuidGenerators) равно `true`):
   `SqlFunctions.Sql.gen_random_uuid()` отрисовывается как `gen_random_uuid()` (PostgreSQL 13+), а
-  `uuidv7()` — как `uuidv7()` (PostgreSQL 18+);
+  `uuidv7()` — как `uuidv7()` только при **явно** заданной версии сервера 18 или новее; ниже 18 и при
+  незаданной версии вызов отклоняется при подготовке с `NotSupportedException`, и UUID v4 не подставляется;
 - логические, битовые, статистические и упорядоченные агрегаты включены ([`SupportsBooleanAggregates`](xref:NextORM.Core.ISqlDialect.SupportsBooleanAggregates),
   [`SupportsBitAggregates`](xref:NextORM.Core.ISqlDialect.SupportsBitAggregates), [`SupportsStatisticalAggregates`](xref:NextORM.Core.ISqlDialect.SupportsStatisticalAggregates) и [`SupportsOrderedAggregates`](xref:NextORM.Core.ISqlDialect.SupportsOrderedAggregates) равны `true`):
   `bool_and`/`bool_or`/`every`, `bit_and`/`bit_or`/`bit_xor`, `corr`/`covar_*`/`regr_*` и
   `percentile_cont`/`percentile_disc`/`mode` с `WITHIN GROUP`;
+- поверхность упорядоченных квантилей добавляет композицию `median`
+  (`SqlFunctions.Postgres.median(() => x)` → `percentile_cont(0.5) within group (order by x)`,
+  **агрегат**: одна строка на группу) под отдельным флагом
+  [`SupportsOrderedPercentiles`](xref:NextORM.Core.ISqlDialect.SupportsOrderedPercentiles).
+  Непрерывная форма интерполирует, поэтому `percentile_cont` и `median` требуют выражения сортировки
+  с плавающей точкой и отклоняют целочисленное/numeric
+  (`The percentile_cont function on PostgreSQL requires a floating-point sort expression.`);
+  `percentile_disc` сохраняет тип выражения сортировки. Дробь — это `double` в `[0, 1]`, а не
+  проценты, и проверяется до рендеринга; у общего `SqlFunctions.Postgres.percentile` нет нативного
+  написания, вызов бросает `NotSupportedException`;
 - имена агрегатов переотображаются: `stdev`→`stddev`, `stdevp`→`stddev_pop`, `var`→`variance`,
   `varp`→`var_pop`;
 - `Math.Log` отображается на `ln(...)` (в PostgreSQL `log()` — это логарифм по основанию 10);
+- `SqlFunctions.Postgres.log(base, x)` рендерится как `log((base)::numeric, (x)::numeric)`: единственная
+  двухаргументная перегрузка — `log(numeric, numeric)`, поэтому оба операнда приводятся к `numeric`,
+  а `null` в операнде даёт SQL `NULL`;
 - `Math.Round(x, digits)` приводит первый аргумент `double`/`float` к `numeric`
   (`round((x)::numeric, digits)`): в PostgreSQL нет `round(double precision, integer)`;
 - `SqlFunctions.Postgres.setseed(seed)` рендерит `setseed(seed)` (гейт
@@ -66,6 +88,11 @@
   покрывает `quarter`/`week` (ISO)/`dow`/`isodow`, а `SqlFunctions.Sql.date_part("epoch", value)`
   рендерит `cast(extract(epoch from value) as double precision)`;
 - разбиение на страницы — `limit n` / `limit n offset m`; запрос только с offset выдаёт только `offset m`.
+
+Агрегаты вариативности следуют общему контракту кардинальности: `Stdev`/`Var` дают `null` при нуле или
+одном вносящем вклад значении, `Stdevp`/`Varp` — `null` при нуле и `0.0` при одном. Поскольку результат
+теперь настоящий `Nullable<T>`, выборочный агрегат по пустому или однострочному набору материализуется
+как `null`, а не вызывает `InvalidCastException` Npgsql (`Column V is null.`) при non-nullable чтении.
 
 ## Регистрация провайдера
 
@@ -101,12 +128,25 @@ using IDataContext ctx = new PostgresDataContext("Host=localhost;Database=app;..
 PostgreSQL 9.4 или новее, поэтому предложение ANSI `FILTER (WHERE ...)` у агрегатов остаётся
 включённым. Версия ниже 9.4 его отключает: фильтрующий агрегат бросает `NotSupportedException`.
 
+Функции массивов и UUID с решением по имени — сознательное исключение из этого разрешающего
+поведения незаданной версии. В PostgreSQL нет `array_reverse` ни в одном текущем релизе, а `array_sort`
+и `uuidv7` появились только в 18, поэтому незаданная версия **отклоняет все три при подготовке**, а не
+предполагает версию. Явная 18+ включает `array_sort`/`uuidv7`; `array_reverse` отклоняется на любой
+версии. Никакие другие гейты незаданной версии не меняются, и никакой запасной вариант (`NULL`,
+неизменённый массив, UUID v4) не подставляется.
+
 ```csharp
-// Версия не задана: фильтрующие агрегаты включены (предполагается 9.4+).
+// Версия не задана: фильтрующие агрегаты включены (предполагается 9.4+), а array_reverse, array_sort и uuidv7 отклоняются.
 using var current = new PostgresDataContext("Host=localhost;Database=app;...", new DataContextBuilder());
 
 // Привязка к 9.3: предложение FILTER (WHERE ...) у агрегатов отклоняется.
 using var legacy = new PostgresDataContext("Host=localhost;Database=app;...", new DataContextBuilder(), new Version(9, 3));
+
+// Привязка к 17: array_sort() и uuidv7() тоже отклоняются при подготовке; array_reverse отклоняется всегда.
+using var pg17 = new PostgresDataContext("Host=localhost;Database=app;...", new DataContextBuilder(), new Version(17, 0));
+
+// Привязка к 18: array_sort() и uuidv7() рендерятся нативно; array_reverse по-прежнему отклоняется.
+using var pg18 = new PostgresDataContext("Host=localhost;Database=app;...", new DataContextBuilder(), new Version(18, 0));
 ```
 
 Версия неизменяема и фиксируется на **конкретный тип контекста** на всё время жизни процесса. Два
@@ -184,8 +224,10 @@ select id
 ```
 
 Функции для массивов (`cardinality`, `array_length`, `array_position`, ...) и операторы `@>`/`&&`
-описаны в разделе [Скалярные функции](../scalar-functions/06-arrays.md#массивы-postgresql). Остальные
-провайдеры отклоняют их с `NotSupportedException`.
+описаны в разделе [Скалярные функции](../scalar-functions/06-arrays.md#массивы-postgresql). Два имени
+отклоняются при подготовке даже на PostgreSQL: `array_reverse` (ни один релиз её не предоставляет) и
+`array_sort` ниже явной 18+. Остальные провайдеры отклоняют поверхность массивов с
+`NotSupportedException`.
 
 ## Range-типы
 
@@ -239,8 +281,15 @@ ctx.From<IComplexEntity>()
     .Select(e => SqlFunctions.Postgres.jsonb_agg(e.String));   // jsonb_agg(somestring)
 ```
 
-Обычная строка с JSON привязывается как `text`; для разбора используйте `SqlFunctions.Postgres.json_cast(value)`.
-«Голое» свойство `JsonNode`/`JsonNode?` (объявленное ровно как `JsonNode`, не `JsonObject`/`JsonArray`)
+Привязка параметров провайдером не меняется: обычный параметр-строка с JSON по-прежнему привязывается как
+`text`. Шесть аксессоров `json_get`/`json_get_text`/`json_get_path`/`json_get_path_text` (перегрузки по
+строковому ключу и по индексу) работают локально в трансляторе — они применяют **контекстную SQL-типизацию**
+к сырому клиентскому значению документа (литерал, захваченное значение или явный параметр) и разбирают его
+как `jsonb` в сгенерированном SQL, а ключ/индекс/путь типизируют как `text`/`integer`/`text[]`. Нативная
+колонка `json`/`jsonb` или серверное JSON-выражение выводятся без приведения, поэтому их типы операнда и
+результата не меняются. Для любой другой JSON-функции разбирайте строку через
+`SqlFunctions.Postgres.json_cast(value)`. «Голое» свойство `JsonNode`/`JsonNode?` (объявленное ровно как
+`JsonNode`, не `JsonObject`/`JsonArray`)
 читает нативную колонку `json`/`jsonb`: текст читается и разбирается для корней-объектов, массивов и
 скаляров, как в скалярной (`Select(x => x.Data)`), так и в составной проекции. SQL `NULL` и JSON-литерал
 `null` оба материализуются в CLR `null`. Объявленные свойства `JsonObject`/`JsonArray` и «голая»
@@ -250,6 +299,13 @@ ctx.From<IComplexEntity>()
 Полная поверхность (`json_agg`, `jsonb_build_object`, `->`, `->>`, `#>`, `@>`, `?`, `?|`, `?&`, ...)
 описана в разделе [Скалярные функции](../scalar-functions/07-json-and-xml.md#json-и-jsonb-postgresql).
 Остальные провайдеры отклоняют её с `NotSupportedException`.
+
+`SqlFunctions.Sql.base64_encode` и `base64_decode` используют пару ядра `encode(value, 'base64')` /
+`decode(value, 'base64')` (у результата encode явно удаляется завершающий перевод строки).
+`SqlFunctions.Sql.crypt_gen_random` вызывает `gen_random_bytes` из расширения **`pgcrypto`**:
+расширение должно быть установлено на сервере (`CREATE EXTENSION pgcrypto`). nextorm его не
+устанавливает и не детектирует отсутствие — отсутствующее расширение проявляется нативной ошибкой
+провайдера.
 
 ## Дополнительная поверхность функций
 
@@ -298,6 +354,28 @@ var r = ctx.From<IComplexEntity>()
 // r[0].Id == 1 (the row whose Int is NULL)
 ```
 
+## Явное размещение NULL
+
+В PostgreSQL есть нативные `NULLS FIRST`/`NULLS LAST`, поэтому [`NullsPosition`](xref:NextORM.Core.NullsPosition)
+`First`/`Last` отрисовывают модификатор напрямую, а [`ISqlDialect.SupportsNullsOrdering`](xref:NextORM.Core.ISqlDialect.SupportsNullsOrdering)
+равен `true`:
+
+```csharp
+var r = ctx.From<IComplexEntity>()
+    .OrderBy(it => it.Int, NullsPosition.Last)
+    .Select(it => new { it.Id })
+    .ToList();
+// order by nullableint NULLS LAST
+```
+
+Размещение не зависит от направления: `First`/`Last` сохраняют свою группу даже при нисходящем ключе
+(`order by nullableint desc NULLS FIRST`). `NullsPosition.Default` не генерирует клаузу и сохраняет
+умолчание PostgreSQL, которое зависит от направления и противоположно SQLite/SQL Server/MySQL/MariaDB:
+по возрастанию null идут **последними**, по убыванию — **первыми** (null считается наибольшим значением).
+Поскольку модификатор нативный, ключ генерируется один раз, `DISTINCT`/`DISTINCT ON` не требуют особой
+обработки, а параметризованный ключ привязывается один раз. См.
+[Сортировка и постраничная выборка](../guide/06-sorting-and-paging.md#упорядочивание-null-и-размещение).
+
 ## Большие объекты (потоковое чтение LOB)
 
 Одну колонку `byte[]` или `string` можно прочитать как `Stream`/`TextReader`, не загружая значение целиком в managed-память. Npgsql реализует `GetStream`/`GetTextReader` для `bytea` и `text`, поэтому PostgreSQL — один из трёх провайдеров, поддерживающих LOB-терминалы в этом выпуске (наряду с SQL Server и SQLite):
@@ -328,6 +406,26 @@ select t1.value, t2.somestring as "String"
  join complex_entity as "t2" on t1.id = t2.id
 ```
 
+## Массовая вставка
+
+Нативный путь — бинарный `COPY ... FROM STDIN (FORMAT BINARY)` через `NpgsqlBinaryImporter` на собственном
+соединении контекста; `Auto` выбирает его для совместимого запроса, `Native` отклоняет по имени вместо
+откатa, а `Portable` пишет `INSERT ... VALUES` (единственный путь для `Returning*`).
+
+- Строки идут в один importer; конечный `MaxBatchSize` запускает по одному importer на ограниченный чанк,
+  который завершается (`Complete`) при успехе и освобождается при ошибке или отмене.
+- `KeepIdentity` сохраняет явную identity-колонку в списке колонок `COPY`; портируемое утверждение добавляет
+  `OVERRIDING SYSTEM VALUE`.
+- `IgnoreDuplicates` есть только на портируемом пути (`ON CONFLICT DO NOTHING`). `TableLock`, `FireTriggers` и
+  `CheckConstraints=false` отклоняются по имени; `KeepNulls=false` требует default-equivalent формы (каждая
+  записываемая колонка nullable, её SQL-default NULL или отсутствует).
+- `DatabaseName` адресует только текущую базу соединения: её именование — no-op, другая база отклоняется по
+  имени; `ServerName` отклоняется (перенаправления нет).
+- `Timeout` — один бюджет на весь вызов, питающий таймаут importer и связанный токен; истёкший бюджет даёт
+  `TimeoutException`, а отмена вызывающего всегда побеждает.
+
+См. [Массовая вставка](../guide/22-bulk-insert.md).
+
 ## Различия провайдеров
 
 | Аспект | PostgreSQL |
@@ -349,6 +447,7 @@ select t1.value, t2.somestring as "String"
 | Оконные функции | `percent_rank()`, `cume_dist()`, `nth_value(expr, n)` поддерживаются |
 | `date_add` / `end_of_month` / `DateTime.Add*` | интервальная арифметика (`x + (n * interval '1 day')`) |
 | `string_agg` / `array_agg` / `filter` у агрегатов | поддерживаются (`filter` у агрегатов требует 9.4+; незаданная версия — ≥9.4) |
+| Медиана / квантили | `SqlFunctions.Postgres.median(() => x)` → `percentile_cont(0.5) within group (order by x)` (агрегат, одна строка на группу; сортировка только с плавающей точкой); `percentile_cont`/`percentile_disc` — ordered-set; общий `percentile` бросает (`SupportsOrderedPercentiles`) |
 | Версия сервера | настраивается явно через `Version` у контекста |
 | Session/info-функции | `current_user`, `session_user`, `current_schema`, `current_database()`, `version()` |
 | Табличные функции | `generate_series`, `unnest`, `regexp_matches`, `regexp_split_to_table`, `jsonb_array_elements(_text)`, `jsonb_each(_text)`, `jsonb_object_keys`, `jsonb_path_query`, `ts_stat`, `jsonb_to_record`/`jsonb_to_recordset` (схема из `TRow`) |
@@ -356,7 +455,8 @@ select t1.value, t2.somestring as "String"
 | `stdev` / `stdevp` | `stddev` / `stddev_pop` |
 | `var` / `varp` | `variance` / `var_pop` |
 | `DateTime.Now` / `UtcNow` | `now()` / `now() at time zone 'utc'` |
-| Размещение null при `ORDER BY … DESC` | null сортируются первыми |
+| Размещение null при `ORDER BY` (по умолчанию) | null сортируются как наибольшее значение: `DESC` ставит их первыми, `ASC` — последними |
+| Явное размещение NULL (`NullsPosition`) | нативные `NULLS FIRST`/`NULLS LAST` ([`SupportsNullsOrdering`](xref:NextORM.Core.ISqlDialect.SupportsNullsOrdering)) |
 
 ## См. также
 

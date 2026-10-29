@@ -75,6 +75,8 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
 
         if (x.GroupByWithTotals != y.GroupByWithTotals) return false;
 
+        if (x.IsSelectGroup != y.IsSelectGroup) return false;
+
         var xLimitBy = x.LimitBy;
         var yLimitBy = y.LimitBy;
         if (xLimitBy is not null || yLimitBy is not null)
@@ -219,6 +221,10 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
         if (x.ResolvedEagerLoadMode != y.ResolvedEagerLoadMode) return false;
 
         if (!x.EagerLoadShape.Equals(y.EagerLoadShape)) return false;
+
+        // The collection-valued projection slot graph changes what is executed and projected in memory even
+        // when the SQL is identical, so two variants must never share a plan entry (#249 / T353).
+        if (!x.CollectionSlotShape.Equals(y.CollectionSlotShape)) return false;
 
         if (!IEqualityComparerExtensions.Equals(this, x.ReferencedQueries, y.ReferencedQueries)) return false;
 
@@ -412,6 +418,8 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
 
             hash.Add(obj.GroupByWithTotals);
 
+            hash.Add(obj.IsSelectGroup);
+
             if (obj.GroupingType != GroupingType.None)
                 hash.Add(obj.GroupingType);
 
@@ -580,6 +588,8 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
             hash.Add((int)obj.ResolvedEagerLoadMode);
 
             obj.EagerLoadShape.AddTo(ref hash);
+
+            obj.CollectionSlotShape.AddTo(ref hash);
 
             if (obj.WindowsPlanHash != 0)
                 hash.Add(obj.WindowsPlanHash);

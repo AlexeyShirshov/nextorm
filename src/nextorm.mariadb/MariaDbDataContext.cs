@@ -57,4 +57,11 @@ public class MariaDbDataContext : MySqlDataContext
 
     /// <summary>The MariaDB SQL dialect (version-aware when a server version was supplied).</summary>
     public override ISqlDialect Dialect => _dialect;
+
+    /// <summary>
+    /// MariaDB inherits the MySQL duration semantics but carries its own message: the refusal names the
+    /// server the connection actually reached instead of borrowing the MySQL text.
+    /// </summary>
+    protected override string? TimeOnlyProjectionRefusal =>
+        "TimeOnly projection refused for MariaDB: TIME is a duration; use TimeSpan or an explicit value converter.";
 }

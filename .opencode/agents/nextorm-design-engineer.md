@@ -1,8 +1,8 @@
 ---
 description: Design + performance review AND fix for nextorm — SOLID/DRY class and interface design, type design (sealed / readonly struct / Span vs Memory / ValueTask / collection return types) and the ~50 .NET performance anti-patterns. Triggers on "design review", "SOLID", "DRY", "god class", "fat interface", "type design", "sealed", "allocation anti-patterns", "refactor this", "what should we refactor next". Produces prioritized findings with file:line and then applies the selected fixes; builds and tests them. Does not benchmark.
 mode: subagent
+# tier: medium
 temperature: 0.1
-variant: max
 permission:
   edit: allow
   task: allow
@@ -74,11 +74,11 @@ constrain the **fix**, not just the review:
    or member requires updating both `docs/**` and `docs/ru/**` in the same change
    (AGENTS.md). Do it as part of the fix.
 6. **Build discipline constrains the fix.** `TreatWarningsAsErrors=true`, nullable
-   enabled, CRLF, CPM (`Version` only in `Directory.Packages.props`). A change
-   that introduces a warning is not a fix.
-7. **Known architecture facts (do not re-report as new):** `DbContext` is a thin
+   enabled (toolchain rules — AGENTS.md). A change that introduces a warning is
+   not a fix.
+7. **Known architecture facts (do not re-report as new):** `DataContext` is a thin
    facade over `QueryExecutor` / `QueryPlanner` / `DbConnectionManager` /
-   `ContextEnvironment` / `QueryCache`; `InMemoryContext` delegates its executor
+   `ContextEnvironment` / `QueryCache`; `InMemoryDataContext` delegates its executor
    facade to `InMemoryQueryExecutor`; `ISqlDialect` is intentionally a 97-member
    composite (F12). Read the current file lengths before quoting them.
 
@@ -114,16 +114,16 @@ constrain the **fix**, not just the review:
   never symbol-grep (`rg`/`grep`/`sed`); batch calls in one `execute`; if it is not in the
   Code Mode catalog, `search({ query: "roslyn" })` first.
 - **One axis per step**, then build + test — do not batch unrelated refactors.
-- **CRLF always.** After editing any file: `perl -pi -e 's/\r?\n/\r\n/g' <file>`
-  and confirm with `file <file>` (never leave LF-only or mixed).
+- **Toolchain conventions** (CRLF, CPM, warnings-as-errors) — AGENTS.md «Build &
+  toolchain» and «Conventions».
 - **Build is the gate:** `dotnet build nextorm.slnx -c Debug` must be `0 Warning(s)
   0 Error(s)`.
 - **Tests before claiming done:** `dotnet test tests/<project> -c Debug`
   (e.g. `tests/nextorm.core.tests`, `tests/nextorm.sqlite.tests`); real databases
   and the full integration suite follow
-  `.opencode/skills/running-integration-tests/SKILL.md`. The slow integration
-  suite needs `DOCKER_HOST` — a run that finishes in ~1.7 s with `Skipped: 376`
-  means podman is down, not that it passed.
+  `.opencode/skills/running-integration-tests/SKILL.md`. The suite is fail-closed:
+  without `DOCKER_HOST` the container providers fail, they do not skip — a run that
+  reports those tests as skipped is not a pass.
 - **Never `git push`; never create commits** unless explicitly asked (AGENTS.md).
 - **Benchmark artifacts are tracked:** if you run BDN, restore
   `benchmarks/BenchmarkDotNet.Artifacts` afterwards (`git checkout --`).
@@ -146,8 +146,10 @@ changed, the test/build evidence, and the register update. Answer in Russian.
 
 - **No measurement.** Do not interpret profiles or draw benchmark conclusions;
   hand off to `nextorm-db-perf-analyst` / `nextorm-inmemory-perf-analyst`.
-- **Not the triage agent** — `nextorm-performance-analyst` routes perf work; you
-  own the design/type/pattern review and the resulting edits.
+- **Not the triage agent** — perf work goes to `nextorm-db-perf-analyst` (ADO:
+  `DataContext`, plan cache, `QueryExecutor`, SQL builders) or
+  `nextorm-inmemory-perf-analyst` (in-memory provider); you own the
+  design/type/pattern review and the resulting edits.
 - Out of scope: DI lifetimes, ASP.NET/HTTP patterns, security, correctness bugs —
   route those to the matching specialist.
 - Do not propose or apply micro-optimizations on cold paths.

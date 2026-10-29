@@ -25,6 +25,138 @@ internal static class TypeFacts
             : expression;
 
     /// <summary>
+    /// True when the expression is a null literal, possibly behind method-free conversions that
+    /// preserve null. The compiler lowers <c>(int?)null</c> to
+    /// <c>Convert(Constant(null, object), int?)</c>, so a plain <see cref="ConstantExpression"/>
+    /// test misses the shape the nullable-comparison paths have to recognise. Only
+    /// <see cref="ExpressionType.Convert"/>/<see cref="ExpressionType.ConvertChecked"/> nodes
+    /// without a user-defined method and whose target is nullable or a reference type are
+    /// unwrapped; a conversion to a non-nullable value type is not null-preserving. Members,
+    /// calls, closures and every other node are not evaluated and classify as <see langword="false"/>.
+    /// </summary>
+    internal static bool IsNullLiteral(Expression expression) => expression switch
+    {
+        ConstantExpression { Value: null } => true,
+        UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked, Method: null } unary
+            when IsNullPreservingConversion(unary.Type) => IsNullLiteral(unary.Operand),
+        _ => false
+    };
+
+    private static bool IsNullPreservingConversion(Type type)
+        => !type.IsValueType || Nullable.GetUnderlyingType(type) is not null;
+
+    /// <summary>
+    /// True for a captured/closure/static member operand whose declared type is a nullable value type
+    /// or a <see cref="string"/>. The classification is purely structural: the access chain has to end
+    /// at a closure host (<see cref="ConstantExpression"/>) or at a static member (no receiver), which
+    /// is exactly the shape <see cref="MemberTranslator"/> folds into a captured parameter. A mapped
+    /// column (<c>x.Int</c>) still references a query parameter and therefore classifies as
+    /// <see langword="false"/>. The value is never evaluated, so the shape never depends on it.
+    /// <see cref="string.Empty"/> is excluded: it is rendered as the dialect's empty-string literal,
+    /// not as a captured parameter.
+    /// </summary>
+    internal static bool IsCapturedNullableOrStringOperand(Expression expression)
+    {
+        expression = UnwrapConvert(expression);
+        if (expression is not MemberExpression member)
+            return false;
+
+        if (member.Expression is null
+            && member.Member.DeclaringType == typeof(string)
+            && member.Member.Name == nameof(string.Empty))
+            return false;
+
+        var type = member.Type;
+        if (type != typeof(string) && Nullable.GetUnderlyingType(type) is null)
+            return false;
+
+        var root = member.Expression;
+        while (root is MemberExpression nested)
+            root = nested.Expression;
+
+        return root is null or ConstantExpression;
+    }
+
+    /// <summary>
+    /// True for the mapped <c>Nullable&lt;T&gt;.HasValue</c> member access on a row-dependent
+    /// receiver (a query column), which translates to a <c>is [not] null</c> presence predicate. A
+    /// captured value's own <c>HasValue</c> has no query parameter in its receiver chain and keeps its
+    /// ordinary evaluation.
+    /// </summary>
+    internal static bool IsPresenceMember(MemberExpression member)
+        => member.Member.Name == nameof(Nullable<int>.HasValue)
+        && member.Member.DeclaringType is { } declaring
+        && Nullable.GetUnderlyingType(declaring) is not null
+        && member.Expression is { } receiver
+        && receiver.Has<ParameterExpression>();
+
+    /// <summary>
+    /// True when <paramref name="expression"/> is a predicate whose rendering needs the approved
+    /// null-safe translation (a captured nullable/string comparison or a mapped presence form). Used
+    /// to decide whether a boolean <c>SELECT</c> projection is assembled in predicate context and
+    /// legalised once at its scalar boundary; every other projection keeps its previous translation.
+    /// </summary>
+    internal static bool IsNullSafePredicateRoot(Expression expression)
+        => ProducesPredicate(expression) && ContainsNullSafeOperation(expression);
+
+    /// <summary>
+    /// True when the expression is a predicate node that the dialect has to legalise in a scalar
+    /// position. Bare boolean values (a bit column, a CASE) are excluded: they are already values.
+    /// </summary>
+    private static bool ProducesPredicate(Expression expression) => expression.NodeType switch
+    {
+        ExpressionType.Equal or ExpressionType.NotEqual
+            or ExpressionType.LessThan or ExpressionType.LessThanOrEqual
+            or ExpressionType.GreaterThan or ExpressionType.GreaterThanOrEqual
+            or ExpressionType.AndAlso or ExpressionType.OrElse
+            or ExpressionType.Not => true,
+        ExpressionType.MemberAccess => IsPresenceMember((MemberExpression)expression),
+        _ => false,
+    };
+
+    /// <summary>
+    /// True when the expression tree contains a captured nullable/string comparison or a mapped
+    /// presence form that the approved translation applies to.
+    /// </summary>
+    internal static bool ContainsNullSafeOperation(Expression expression)
+    {
+        var finder = new NullSafeOperationFinder();
+        finder.Visit(expression);
+        return finder.Found;
+    }
+
+    /// <summary>Depth-first search for the approved null-safe operations; stops at the first hit.</summary>
+    private sealed class NullSafeOperationFinder : ExpressionVisitor
+    {
+        public bool Found { get; private set; }
+
+        public override Expression? Visit(Expression? node)
+        {
+            if (Found || node is null)
+                return node;
+
+            if (node is BinaryExpression { Type: var type } binary
+                && type == typeof(bool)
+                && binary.NodeType is ExpressionType.Equal or ExpressionType.NotEqual
+                && !IsNullLiteral(binary.Left)
+                && !IsNullLiteral(binary.Right)
+                && IsCapturedNullableOrStringOperand(binary.Left) != IsCapturedNullableOrStringOperand(binary.Right))
+            {
+                Found = true;
+                return node;
+            }
+
+            if (node is MemberExpression member && IsPresenceMember(member))
+            {
+                Found = true;
+                return node;
+            }
+
+            return base.Visit(node);
+        }
+    }
+
+    /// <summary>
     /// True when the expression already renders as a predicate. Comparison/logical operators,
     /// boolean CASE/COALESCE and the recognised predicate methods produce a condition directly;
     /// anything else (a column, a constant, an arithmetic result) is a boolean value that the
@@ -39,6 +171,7 @@ internal static class TypeFacts
             or ExpressionType.Not or ExpressionType.Coalesce
             or ExpressionType.Conditional or ExpressionType.Switch => true,
         ExpressionType.Call => IsPredicateCall((MethodCallExpression)expression),
+        ExpressionType.MemberAccess => IsPresenceMember((MemberExpression)expression),
         _ => false
     };
 

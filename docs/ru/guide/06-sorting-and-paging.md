@@ -11,7 +11,10 @@
 
 * [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1) предоставляет `OrderBy(Expression<Func<TEntity, object?>>, OrderDirection)`,
   `OrderBy(expr)`, `OrderByDescending(expr)` и перегрузки с порядковым номером `OrderBy(int)`,
-  `OrderBy(int, OrderDirection)`, `OrderByDescending(int)`.
+  `OrderBy(int, OrderDirection)`, `OrderByDescending(int)`, а также перегрузки с явным размещением NULL
+  `OrderBy(expr, NullsPosition)` / `OrderBy(expr, OrderDirection, NullsPosition)` /
+  `OrderByDescending(expr, NullsPosition)` и семейство `ThenBy`/`ThenByDescending` (см.
+  [Упорядочивание NULL и размещение](#упорядочивание-null-и-размещение)).
 * [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1) также предоставляет `Limit(int)`, `Offset(int)` и `Page(int limit, int offset)`.
 * После [`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})) возвращаемый [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) повторяет поверхность построителя: перегрузки по выражению
   `OrderBy(expr)`, `OrderBy(expr, OrderDirection)` и `OrderByDescending(expr)`, перегрузки с порядковым номером
@@ -119,17 +122,97 @@ limit 10 offset 0
 принимают порядковый номер выходной колонки (счёт с 1), поэтому `.Select(it => it.Id).OrderByDescending(1)`
 продолжает работать. Член сортировки, отсутствующий в проекции, отклоняется на этапе подготовки запроса.
 
-## Упорядочивание NULL
+## Упорядочивание NULL и размещение
 
-nextorm не генерирует `NULLS FIRST` / `NULLS LAST`; размещение null определяется тем, что провайдер
-делает по умолчанию:
+Каждый ключ сортировки принимает явное размещение NULL через [`NullsPosition`](xref:NextORM.Core.NullsPosition):
+
+| Член | Значение | Смысл |
+|---|---|---|
+| [`Default`](xref:NextORM.Core.NullsPosition.Default) | `0` | не генерировать клаузу и сохранить умолчание провайдера (значение любого вызова без размещения) |
+| [`First`](xref:NextORM.Core.NullsPosition.First) | `1` | значения `NULL` идут перед всеми не-null значениями независимо от направления |
+| [`Last`](xref:NextORM.Core.NullsPosition.Last) | `2` | значения `NULL` идут после всех не-null значений независимо от направления |
+
+Размещение **не зависит от направления**: `First` оставляет группу `NULL` первой и в восходящем, и в
+нисходящем ключе, а направление упорядочивает только не-null значения.
+
+### Перегрузки
+
+Каждая форма ниже есть у [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1) и — после
+[`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})) — у [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1):
+
+* `OrderBy(expr, NullsPosition)`, `OrderBy(expr, OrderDirection, NullsPosition)` и
+  `OrderByDescending(expr, NullsPosition)`;
+* семейство вторичных ключей `ThenBy(expr)`, `ThenBy(expr, OrderDirection)`,
+  `ThenBy(expr, NullsPosition)`, `ThenBy(expr, OrderDirection, NullsPosition)`,
+  `ThenByDescending(expr)` и `ThenByDescending(expr, NullsPosition)`;
+* те же семейства по порядковому номеру выходной колонки (счёт с 1): `OrderBy(int, NullsPosition)`,
+  `OrderBy(int, OrderDirection, NullsPosition)`, `OrderByDescending(int, NullsPosition)`, `ThenBy(int)`,
+  `ThenBy(int, OrderDirection)`, `ThenBy(int, NullsPosition)`, `ThenBy(int, OrderDirection, NullsPosition)`,
+  `ThenByDescending(int)` и `ThenByDescending(int, NullsPosition)`.
+
+`ThenBy` добавляет ключ точно так же, как второй `OrderBy`; имя лишь выражает намерение. Каждый ключ несёт
+своё направление и размещение, поэтому смешанные вторичные ключи допустимы:
+
+```csharp
+var rows = await dataContext.From<ComplexEntity>()
+    .OrderBy(it => it.Int, NullsPosition.Last)
+    .ThenBy(it => it.Id, OrderDirection.Desc, NullsPosition.First)
+    .Select(it => new { it.Id })
+    .ToListAsync();
+```
+
+```sql
+-- SQLite
+select id
+ from complex_entity order by nullableint NULLS LAST, id desc NULLS FIRST
+```
+
+```sql
+-- SQL Server
+select id
+ from complex_entity order by CASE WHEN nullableint IS NULL THEN 1 ELSE 0 END ASC, nullableint, CASE WHEN id IS NULL THEN 0 ELSE 1 END ASC, id desc
+```
+
+Порядковый ключ разрешается в выражение выбранной колонки до применения размещения, поэтому эмуляция
+проверяет настоящий ключ (`CASE WHEN nullableint IS NULL …`), а не литеральный номер
+(`CASE WHEN 1 IS NULL …`); индекс, не разрешающийся в выбранную колонку, падает fail-closed.
+
+### Отрисовка по провайдерам
+
+SQLite, PostgreSQL и ClickHouse понимают нативный модификатор
+([`SupportsNullsOrdering`](xref:NextORM.Core.ISqlDialect.SupportsNullsOrdering) равен `true`). В SQL Server,
+MySQL и MariaDB синтаксиса `NULLS FIRST`/`NULLS LAST` нет, поэтому они получают портируемую эмуляцию, у
+которой ранг-префикс **всегда восходящий** — даже для нисходящего ключа — а запрошенное направление несёт
+только сам ключ:
+
+| Провайдер | `ASC` / `First` | `DESC` / `Last` |
+|---|---|---|
+| SQLite, PostgreSQL, ClickHouse | `k NULLS FIRST` | `k desc NULLS LAST` |
+| SQL Server, MySQL, MariaDB | `CASE WHEN k IS NULL THEN 0 ELSE 1 END ASC, k` | `CASE WHEN k IS NULL THEN 1 ELSE 0 END ASC, k desc` |
+
+`k` — квалифицированный и заквотированный SQL ключа. У эмулирующих провайдеров параметризованный ключ
+встречается в инструкции **дважды** (`CASE WHEN (k * @factor) IS NULL … END ASC, (k * @factor)`), и оба
+вхождения привязываются к одному параметру команды; нативная форма генерирует ключ один раз.
+
+### Умолчания провайдеров
+
+`NullsPosition.Default` не генерирует клаузу, поэтому размещение определяется самим провайдером — и
+различается по провайдеру и по направлению:
 
 | Провайдер | `ASC` | `DESC` |
 |---|---|---|
 | SQLite | nulls first | nulls last |
 | SQL Server | nulls first | nulls last |
+| MySQL | nulls first | nulls last |
+| MariaDB | nulls first | nulls last |
 | PostgreSQL | nulls last | nulls first |
+| ClickHouse | **nulls last** | **nulls last** |
 | In-memory | nulls first | nulls last |
+
+ClickHouse (25.8) ставит `NULL` последними в **обоих** направлениях, поэтому, в отличие от остальных
+SQL-провайдеров, `DESC` не переносит группу `NULL` в начало. Не полагайтесь на единый для всех провайдеров
+порядок null в общих запросах — указывайте `NullsPosition.First`/`Last`, когда размещение является частью
+результата.
 
 ```csharp
 var rows = await dataContext.From<ComplexEntity>()
@@ -138,8 +221,23 @@ var rows = await dataContext.From<ComplexEntity>()
     .ToListAsync();
 ```
 
-В PostgreSQL строка с `null` в `nullableint` (id `1`) идёт первой; в SQL Server - последней. Не
-полагайтесь на единый для всех провайдеров порядок null в общих запросах.
+С этим умолчанием строка с `null` в `nullableint` (id `1`) идёт первой в PostgreSQL и последней в SQL
+Server.
+
+### Формы, падающие fail-closed
+
+Эмуляция через `CASE` повторяет ключ сортировки, поэтому в SQL Server, MySQL и MariaDB явное размещение
+отклоняется с `BuildSqlCommandException` — до отправки любой инструкции — там, где инструкция не может
+законно нести повторённый ключ: запрос `DISTINCT`/`DISTINCT ON` (каждое выражение `ORDER BY` должно быть в
+списке выборки) и `LIMIT BY` в стиле ClickHouse. Размещение никогда не отбрасывается молча. Нативные
+провайдеры (SQLite, PostgreSQL, ClickHouse) ничего не повторяют и не ограничены: `DISTINCT`, `DISTINCT ON`
+и `LIMIT BY` сохраняют нативный модификатор. См. [Ограничения](../advanced/limitations.md).
+
+### In-memory
+
+Провайдер in-memory соблюдает то же явное размещение с той же семантикой и совпадает с SQL-оракулом
+результата ячейка в ячейку. Он сравнивает компаратором CLR по умолчанию, поэтому строки подчиняются
+сравнению CLR (`Comparer<string>.Default`), а **не** коллации базы данных.
 
 ## Limit и Offset
 
@@ -255,6 +353,12 @@ select top(3) with ties id, nullableint
 контекст бросают `NotSupportedException`. Сочетание с `DISTINCT`/`DISTINCT ON` отклоняется при
 генерации SQL с `BuildSqlCommandException`; сам fluent-вызов `WithTies()` сочетание не проверяет.
 
+В SQL Server модификатор поддерживается только в форме `TOP(n) WITH TIES` без offset. Положительный
+`OFFSET` вместе с `WithTies()` — `Page(5, 3).WithTies()` или `Offset(3).Limit(5).WithTies()` —
+бросает `NotSupportedException` во время подготовки запроса, до того как SQL отрендерен, отправлен или
+закэширован: T-SQL принимает `WITH TIES` только в `TOP`, но не в `OFFSET … FETCH … ONLY`. Используйте
+`WithTies()` без `OFFSET` либо обычное разбиение на страницы без ties.
+
 ## First, FirstOrDefault, Single, SingleOrDefault
 
 Терминальные методы для одной строки доступны в синхронной и асинхронной формах:
@@ -339,13 +443,13 @@ select exists(select *
 
 | Провайдер | Поведение |
 |---|---|
-| SQLite | `LIMIT` / `OFFSET`; offset без limit генерирует `limit -1 offset n`; null сортируются как наименьшее значение. |
-| SQL Server | `TOP(n)`, когда нет offset; иначе `OFFSET n ROWS` / `FETCH NEXT n ROWS ONLY` с подставленным `ORDER BY`; null сортируются как наименьшее значение. |
-| PostgreSQL | `LIMIT` / `OFFSET`; null сортируются как наибольшее значение. |
-| MySQL | `LIMIT` / `OFFSET`; offset без limit генерирует `limit 18446744073709551615 offset n`; null сортируются как наименьшее значение (первыми по возрастанию). |
+| SQLite | `LIMIT` / `OFFSET`; offset без limit генерирует `limit -1 offset n`; null по умолчанию сортируются как наименьшее значение, явное размещение нативное (`NULLS FIRST`/`NULLS LAST`). |
+| SQL Server | `TOP(n)`, когда нет offset; иначе `OFFSET n ROWS` / `FETCH NEXT n ROWS ONLY` с подставленным `ORDER BY`; null по умолчанию сортируются как наименьшее значение, явное размещение эмулируется префиксом `CASE`. |
+| PostgreSQL | `LIMIT` / `OFFSET`; null по умолчанию сортируются как наибольшее значение, явное размещение нативное (`NULLS FIRST`/`NULLS LAST`). |
+| MySQL | `LIMIT` / `OFFSET`; offset без limit генерирует `limit 18446744073709551615 offset n`; null по умолчанию сортируются как наименьшее значение (первыми по возрастанию), явное размещение эмулируется префиксом `CASE`. |
 | MariaDB | То же, что MySQL. |
-| ClickHouse | `LIMIT` / `OFFSET`; offset без limit генерирует `limit 18446744073709551615 offset n`. |
-| In-memory | [`OrderBy`](xref:NextORM.Core.EntityBuilder`1.OrderBy(System.Int32)) / [`OrderByDescending`](xref:NextORM.Core.EntityBuilder`1.OrderByDescending(System.Int32)) выполняются через LINQ; null при сортировке по возрастанию идут первыми (компаратор CLR по умолчанию). |
+| ClickHouse | `LIMIT` / `OFFSET`; offset без limit генерирует `limit 18446744073709551615 offset n`; null по умолчанию идут последними в **обоих** направлениях, явное размещение нативное (`NULLS FIRST`/`NULLS LAST`). |
+| In-memory | [`OrderBy`](xref:NextORM.Core.EntityBuilder`1.OrderBy(System.Int32)) / [`OrderByDescending`](xref:NextORM.Core.EntityBuilder`1.OrderByDescending(System.Int32)) выполняются через LINQ; null при сортировке по возрастанию идут первыми (компаратор CLR по умолчанию), а явное размещение соблюдается в процессе. |
 
 ## См. также
 

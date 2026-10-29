@@ -68,14 +68,23 @@ select id
 | `SqlFunctions.Postgres.array_fill(value, dims)` | `array_fill(value, dims)` |
 | `SqlFunctions.Postgres.array_dims(a)` | `array_dims(a)` |
 | `SqlFunctions.Postgres.array_positions(a, element)` | `array_positions(a, element)` |
-| `SqlFunctions.Postgres.array_reverse(a)` | `array_reverse(a)` (PostgreSQL 18+) |
-| `SqlFunctions.Postgres.array_sort(a)` | `array_sort(a)` (PostgreSQL 18+) |
+| `SqlFunctions.Postgres.array_reverse(a)` | — (ни один релиз PostgreSQL не предоставляет `array_reverse`; отказ при подготовке) |
+| `SqlFunctions.Postgres.array_sort(a)` | `array_sort(a)` (PostgreSQL 18+, требуется явная версия) |
 | `SqlFunctions.Postgres.array_shuffle(a)` | `array_shuffle(a)` (PostgreSQL 16+) |
 | `SqlFunctions.Postgres.array_sample(a, n)` | `array_sample(a, n)` (PostgreSQL 16+) |
 | `SqlFunctions.Postgres.array_to_string(a, delimiter)` | `array_to_string(a, delimiter)` |
 | `SqlFunctions.Postgres.string_to_array(s, delimiter)` | `string_to_array(s, delimiter)` |
 
-> Функции, возвращающие массив (`array_append`, `array_cat`, `array_reverse`, `string_to_array`, ...),
+> `array_reverse` и `array_sort` гейтятся по имени через
+> [`SupportsArrayFunction`](xref:NextORM.Core.ISqlDialect.SupportsArrayFunction(System.String)): провайдер
+> PostgreSQL отклоняет оба при подготовке, до отправки любого SQL, обычным `NotSupportedException`.
+> `array_reverse` отклоняется на **любой** версии PostgreSQL — ни один релиз её не предоставляет — с
+> `The PostgreSQL function 'array_reverse' is not supported by this provider.`; `array_sort`
+> отклоняется ниже PostgreSQL 18 **и когда версия сервера не задана**, с
+> `The PostgreSQL function 'array_sort' is not supported by this provider.` Отказ никогда не
+> превращается в `NULL`, неизменённый массив или `42883` от драйвера.
+
+> Функции, возвращающие массив (`array_append`, `array_cat`, `string_to_array`, ...),
 > можно использовать внутри запроса (предикат, `having` или вложенное выражение) или проецировать
 > напрямую: row reader материализует результат `Array(T)` как CLR `T[]`.
 
@@ -89,6 +98,68 @@ var rows = dataContext.From<IComplexEntity>()
 ```sql
 select cardinality(@norm_p1) as "N"
  from complex_entity where array_length(@norm_p0, 1) = 3
+```
+
+### Формирование и разворачивание массивов (#281)
+
+`trim_array` возвращает укороченную копию одномерного массива, а формы `unnest` с несколькими
+массивами, `WITH ORDINALITY` и `generate_subscripts` разворачивают массивы в строки. Шесть
+set-returning членов — это `FROM`-источники: вызывайте их внутри `ctx.From(() => ...)` и проецируйте
+члены интерфейса строки. Источник для одного массива `unnest(array)` (`IUnnestRow<T>`, колонка
+`unnest`) описан в разделе [Табличные функции](../guide/13-table-valued-functions.md#встроенные-табличные-функции).
+
+Скалярный член:
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.Postgres.trim_array(array, n)` | `trim_array(@p0, n)` |
+
+Члены, возвращающие набор, — фрагмент `FROM`, который отрисовывает каждый из них:
+
+| C# | SQL | Row interface | Columns (C# ← SQL: CLR) |
+|---|---|---|---|
+| `SqlFunctions.Postgres.unnest(first, second)` | `rows from (unnest(@p0), unnest(@p1)) as u(value1, value2)` | `IUnnestMultiRow<T1, T2>` | `Value1 T1 ← value1`; `Value2 T2 ← value2` |
+| `SqlFunctions.Postgres.unnest(first, second, third)` | `rows from (unnest(@p0), unnest(@p1), unnest(@p2)) as u(value1, value2, value3)` | `IUnnestMultiRow<T1, T2, T3>` | `Value1 T1 ← value1`; `Value2 T2 ← value2`; `Value3 T3 ← value3` |
+| `SqlFunctions.Postgres.unnest_with_ordinality(array)` | `rows from (unnest(@p0)) with ordinality as u(value, ordinality)` | `IUnnestOrdinalityRow<T>` | `Value T ← value`; `Ordinality long ← ordinality` |
+| `SqlFunctions.Postgres.unnest_with_ordinality(first, second)` | `rows from (unnest(@p0), unnest(@p1)) with ordinality as u(value1, value2, ordinality)` | `IUnnestOrdinalityMultiRow<T1, T2>` | `Value1 T1 ← value1`; `Value2 T2 ← value2`; `Ordinality long ← ordinality` |
+| `SqlFunctions.Postgres.generate_subscripts(array, dimension)` | `generate_subscripts(@p0, 1)` | `IGenerateSubscriptsRow` | `Value int ← generate_subscripts` |
+| `SqlFunctions.Postgres.generate_subscripts(array, dimension, reverse)` | `generate_subscripts(@p0, 1, true)` | `IGenerateSubscriptsRow` | `Value int ← generate_subscripts` |
+
+Измеренное поведение на PostgreSQL 17.11:
+
+* **Массивы разной длины дополняются `NULL`.** На каждую позицию самого длинного массива выдаётся одна
+  строка, и каждый более короткий массив с этой позиции даёт `NULL`: `unnest({1,2}, {a})` возвращает
+  `(1, 'a')`, `(2, NULL)`. Два пустых массива не дают ни одной строки.
+* **Колонка ordinality имеет тип `bigint`, то есть `long` на стороне CLR.** Она нумеруется с единицы и
+  общая для всех допущенных массивов вызова, поэтому `unnest_with_ordinality({10,20})` возвращает
+  `(10, 1)`, `(20, 2)`, а форма с двумя массивами возвращает общую позицию вместе с обоими массивами.
+* **Допущенная арность для нескольких массивов — один, два или три массива.** Четыре и более массива
+  отклоняются, пока источник ещё составляется — `NotSupportedException`, SQL не отправляется — с
+  сообщением
+  `The unnest function is refused for four or more arrays: multi-array unnest is FROM-clause grammar with no variadic arity, and this library admits exactly one, two and three arrays as typed overloads.`
+  Множественный `unnest` в PostgreSQL — это грамматика предложения `FROM`, а не `pg_proc`-функция,
+  поэтому вариадической арности у него нет; провайдер отрисовывает допущенные арности через
+  `ROWS FROM (...)`.
+* `generate_subscripts` нумерует измерения с единицы и возвращает по одной строке на каждый допустимый
+  индекс как `int`; `reverse: true` выдаёт их по убыванию, а пустой (или SQL-NULL) массив не даёт строк.
+* `trim_array` удаляет последние `n` элементов и сохраняет тип элемента; `n`, равное длине, даёт пустой
+  массив, `n = 0` возвращает массив без изменений, а `n` больше длины вызывает ошибку сервера.
+  Принимаются только одномерные массивы.
+* Операнд-массив передаётся **одним** параметром своего типа — `SqlFunctions.Parameter<T[]>(idx)` или
+  захваченный массив, — включая массив `FROM`-источника:
+  `generate_subscripts(SqlFunctions.Parameter<long[]>(0), 1)`.
+
+```csharp
+var rows = dataContext
+    .From(() => SqlFunctions.Postgres.unnest_with_ordinality(SqlFunctions.Parameter<long[]>(0)))
+    .Select(r => new { r.Value, r.Ordinality })
+    .ToList(new long[] { 10, 20 });
+```
+
+```sql
+select value, ordinality
+ from (select value, ordinality
+ from rows from (unnest(@norm_p0)) with ordinality as u(value, ordinality)) as "t1"
 ```
 
 ## Массивы (ClickHouse)
@@ -131,13 +202,90 @@ select cardinality(@norm_p1) as "N"
 | `SqlFunctions.ClickHouse.array_last(f, a)` | `arrayLast(f, a)` |
 | `SqlFunctions.ClickHouse.array_last_index(f, a)` | `arrayLastIndex(f, a)` |
 
+### Поставленные функции массивов, кортежей и Map (#286, T286b)
+
+Члены ниже дополняют каталог массивов на закреплённом сервере 25.8.33.6. Формы результатов объявлены
+явно: поэлементные предикаты возвращают `bool`, агрегаты — объявленный скалярный/массивный CLR-тип, а
+семейства sort/split/fill — `T[]`.
+
+| Функция | SQL |
+|---|---|
+| `SqlFunctions.ClickHouse.array_element(a, i)` | `arrayElement(a, i)` |
+| `SqlFunctions.ClickHouse.array_enumerate_dense(a)` | `arrayEnumerateDense(a)` |
+| `SqlFunctions.ClickHouse.array_zip(a, b)` | `arrayZip(a, b)` |
+| `SqlFunctions.ClickHouse.array_difference(a)` | `arrayDifference(a)` |
+| `SqlFunctions.ClickHouse.array_avg(a)` | `arrayAvg(a)` |
+| `SqlFunctions.ClickHouse.array_sum(a)` | `arraySum(a)` |
+| `SqlFunctions.ClickHouse.array_min(a)` | `arrayMin(a)` |
+| `SqlFunctions.ClickHouse.array_max(a)` | `arrayMax(a)` |
+| `SqlFunctions.ClickHouse.array_product(a)` | `arrayProduct(a)` |
+| `SqlFunctions.ClickHouse.array_top_k(a, k)` | `arrayTopK(a, k)` (версия: 26.6) |
+| `SqlFunctions.ClickHouse.array_bottom_k(a, k)` | `arrayBottomK(a, k)` (версия: 26.6) |
+| `SqlFunctions.ClickHouse.array_random_sample(a, n)` | `arrayRandomSample(a, n)` |
+| `SqlFunctions.ClickHouse.array_compact(a)` | `arrayCompact(a)` |
+| `SqlFunctions.ClickHouse.array_pop_back(a)` | `arrayPopBack(a)` |
+| `SqlFunctions.ClickHouse.array_pop_front(a)` | `arrayPopFront(a)` |
+| `SqlFunctions.ClickHouse.array_push_front(a, element)` | `arrayPushFront(a, element)` |
+| `SqlFunctions.ClickHouse.array_resize(a, size[, extender])` | `arrayResize(a, size[, extender])` |
+| `SqlFunctions.ClickHouse.array_remove(a, f)` | `arrayRemove(a, f)` (версия: 25.11) |
+| `SqlFunctions.ClickHouse.array_rotate_left(a, n)` / `array_rotate_right(a, n)` | `arrayRotateLeft` / `arrayRotateRight` |
+| `SqlFunctions.ClickHouse.array_shift_left(a, n)` / `array_shift_right(a, n)` | `arrayShiftLeft` / `arrayShiftRight` |
+| `SqlFunctions.ClickHouse.array_fold(f, a, init)` | `arrayFold(f, a, init)` |
+| `SqlFunctions.ClickHouse.array_fill(f, a)` / `array_reverse_fill(f, a)` | `arrayFill` / `arrayReverseFill` |
+| `SqlFunctions.ClickHouse.array_split(f, a)` / `array_reverse_split(f, a)` | `arraySplit` / `arrayReverseSplit` |
+| `SqlFunctions.ClickHouse.array_reverse_sort(a)` / `array_partial_sort(a, k)` | `arrayReverseSort` / `arrayPartialSort` |
+| `SqlFunctions.ClickHouse.array_sort(a)` | `arraySort(a)` |
+| `SqlFunctions.ClickHouse.array_shingles(a, n)` | `arrayShingles(a, n)` |
+| `SqlFunctions.ClickHouse.array_transpose(a)` | `arrayTranspose(a)` (версия: 26.4) |
+| `SqlFunctions.ClickHouse.array_cum_sum_non_negative(a)` | `arrayCumSumNonNegative(a)` |
+| `SqlFunctions.ClickHouse.count_equal(a, b)` | `countEqual(a, b)` |
+| `SqlFunctions.ClickHouse.array_with_constant(n, value)` | `arrayWithConstant(n, value)` |
+| `SqlFunctions.ClickHouse.array_jaccard_index(a, b)` / `array_similarity(a, b)` | `arrayJaccardIndex` / `arraySimilarity` |
+| `SqlFunctions.ClickHouse.tuple_concat(a, b)` | `tupleConcat(a, b)` |
+| `SqlFunctions.ClickHouse.tuple_names(t)` | `tupleNames(t)` |
+| `SqlFunctions.ClickHouse.flatten_tuple(t)` | `flattenTuple(t)` |
+| `SqlFunctions.ClickHouse.tuple_to_name_value_pairs(t)` | `tupleToNameValuePairs(t)` |
+| `SqlFunctions.ClickHouse.tuple_plus` / `tuple_minus` / `tuple_multiply` / `tuple_divide` | `tuplePlus` / `tupleMinus` / `tupleMultiply` / `tupleDivide` |
+| `SqlFunctions.ClickHouse.tuple_hamming_distance(a, b)` | `tupleHammingDistance(a, b)` |
+| `SqlFunctions.ClickHouse.dot_product(a, b)` | `dotProduct(a, b)` |
+| `SqlFunctions.ClickHouse.map_subtract(a, b)` | `mapSubtract(a, b)` |
+| `SqlFunctions.ClickHouse.map_update(a, b)` | `mapUpdate(a, b)` |
+| `SqlFunctions.ClickHouse.map_reverse_sort(m[, f])` / `map_partial_sort(m, k[, f])` | `mapReverseSort` / `mapPartialSort` |
+| `SqlFunctions.ClickHouse.map_from_arrays(keys, values)` | `mapFromArrays(keys, values)` |
+| `SqlFunctions.ClickHouse.map_populate_series(m, start, end[, step])` | `mapPopulateSeries(...)` |
+| `SqlFunctions.ClickHouse.extract_key_value_pairs(s)` | `extractKeyValuePairs(s)` |
+
+`arrayReduce`/`arrayReduceInRanges` остаются отклонёнными: агрегат задаётся строкой SQL во время
+выполнения, поэтому типизированный контракт невозможен (см.
+[ClickHouse-specific SQL › Пока не поддерживается](../guide/provider-specific-sql/clickhouse.md#пока-не-поддерживается)).
+`untuple` отклонён по той же структурной причине: одно выражение проекции отображается ровно в одну
+колонку результата.
+
 > `length`/`indexOf` нативно возвращают `UInt64`, поэтому диалект оборачивает их в `toInt64(...)`.
 > Функции, возвращающие массив (`split_by_char`, `array_sort`, `array_reverse`, `array_distinct`,
 > `range`, `array_enumerate`, `array_cum_sum`, `array_slice`, `array_push_back`, `group_array`,
 > `group_uniq_array`), можно проецировать напрямую — row reader материализует результат `Array(T)`
 > как CLR `T[]` — либо использовать как операнд другой array-функции (например, `length(...)` или
-> `array_string_concat(...)`). Тот же reader материализует нативную колонку `Tuple(...)` (или
+> `array_string_concat(...)`). Функции, у которых объявленный CLR-тип массива может отличаться от типа
+> элемента, выводимого ClickHouse (`top_k`, `top_k_weighted`, `group_array`, `group_uniq_array`,
+> `retention`, `array_map` и три перегрузки `range`), нормализуются **на сервере**: диалект оборачивает
+> готовый вызов ровно в один `cast(... as Array(...))`, построенный из закрытого объявленного CLR-типа
+> (`int[]` → `Array(Int32)`, `int?[]` → `Array(Nullable(Int32))`, `long[]` → `Array(Int64)`,
+> `string[]`/`string?[]` → `Array(Nullable(String))`). Элемент ссылочного типа объявляется `Nullable(...)`
+> всегда, потому что его nullable-аннотация CLR стирается в рантайме, поэтому приведение на стороне
+> вызывающего кода не требуется, а
+> `retention` материализуется как `int[]`, а не `byte[]`. Тот же reader материализует нативную колонку `Tuple(...)` (или
 > выражение типа `Tuple(...)`) как `System.Tuple<...>` арности 1–7.
+
+> `SqlFunctions.ClickHouse.array_except` остаётся для совместимости API. У необъявленного контекста —
+> закреплённая базовая версия 25.8 — нативной `arrayExcept` нет (она существует только с ClickHouse
+> 25.9), поэтому вызов отклоняется с `NotSupportedException` на этапе трансляции и SQL не
+> генерируется. Контекст, объявляющий 25.9 или новее через версионированный конструктор
+> `ClickHouseDataContext`, рендерит нативную `arrayExcept(...)` только для формы с двумя массивами
+> (нативная функция принимает ровно два массива; любая другая арность отклоняется до генерации SQL);
+> объявленная более старая версия
+> по-прежнему отклоняет вызов, называя требуемую `25.9` и объявленную версию. См.
+> [Объявление версии сервера](../connecting-providers/clickhouse.md#объявление-версии-сервера).
 
 > Предикаты отношения массивов возвращают `bool`: `starts_with(array, prefix)`/`ends_with(array, suffix)`
 > проверяют префикс/суффикс, а `has_substr(array, other)` — что `other` входит в `array` непрерывно и
@@ -210,8 +358,36 @@ select cardinality(@norm_p1) as "N"
 > поддерживающий higher-order array-функции (см.
 > [`SupportsHigherOrderArrayFunctions`](xref:NextORM.Core.ISqlDialect.SupportsHigherOrderArrayFunctions);
 > ClickHouse). ClickHouse повышает тип арифметического результата независимо от C# (элемент `Int32`,
-> умноженный на целочисленный литерал, даёт `Array(Int64)`), поэтому приводите тип внутри лямбды
-> (`v => (long)v * 2`), если тип элемента должен совпадать с проецируемым `T[]`.
+> умноженный на целочисленный литерал, даёт `Array(Int64)`); диалект нормализует готовый результат
+> `arrayMap` к закрытому объявленному CLR-типу элемента, поэтому операнд лямбды остаётся ровно таким,
+> как написан, и приведение вида `(long)v` внутри лямбды не требуется (`arrayFilter` и так возвращает
+> тип элемента входного массива).
+
+> **Nullable-элементы в связанном параметре-массиве:** CLR-массив ранга 1, чей **объявленный** тип элемента
+> nullable (`Nullable<T>` или `string`), связывается как `Array(Nullable(T))`, выведенный из этого
+> объявленного CLR-типа (`int?[]` → `Array(Nullable(Int32))`, `double?[]` → `Array(Nullable(Float64))`,
+> `DateTime?[]` → `Array(Nullable(DateTime))`, `decimal?[]` → `Array(Nullable(Decimal(38,10)))`, `string?[]` →
+> `Array(Nullable(String))`), поэтому `null`-элементы и их позиции доходят до сервера —
+> `array_map(v => v, new int?[] { 1, null, 3 })` даёт `{ 1, null, 3 }`. Пустые массивы и массивы из одних
+> `null` несут тот же типизированный элемент, а массив вызывающего не мутируется. Массивы с
+> non-nullable-элементом (`int[]`, `double[]`, `DateTime[]`, `decimal[]`, `byte[]`) не меняются;
+> nested/jagged и многомерные массивы, а также `null`-объект массива **не поддерживаются** и сохраняют
+> прежнее (выведенное драйвером) поведение. Массивы-**результаты** подчиняются тому же правилу
+> элемента: результат с элементом **ссылочного типа** объявляется `Nullable(...)` безусловно
+> (результат `string[]`/`string?[]` рендерится как
+> `Array(Nullable(String))`, jagged — как `Array(Array(Nullable(String)))`) и по-прежнему материализуется
+> как CLR `string[]` — меняется только текст генерируемого SQL, но не данные, не CLR-тип и не публичный
+> API, а элементы значимых типов (`int[]`, `int?[]`, `byte[]`) не затронуты. Decimal-массивы
+> **результата** материализуются в обеих формах с [#337](https://github.com/AlexeyShirshov/nextorm/issues/337):
+> `Array(Nullable(Decimal(38,10)))` → `decimal?[]` и `Array(Decimal(38,10))` → `decimal[]` — через
+> прямые, member-bound, многоколоночные и raw-маршруты чтения, причём каждое представимое значение
+> сохраняется точно (без округления, усечения и culture-преобразования). Элемент `Decimal(38,10)`,
+> мантисса которого при масштабе 10 превышает 96 бит (например `1e19`: мантисса `1e29` при пределе
+> CLR `decimal` `2^96 − 1`), в CLR `decimal` **не** представим: материализация падает fail-closed
+> с ошибкой драйвера `OverflowException` (`Value cannot be represented as System.Decimal`), а поскольку
+> закреплённый драйвер не отбрасывает хвостовые нули, математически меньшая запись не подставляется.
+> Оставшиеся ограничения массивов перечислены в
+> [Ограничениях](../advanced/limitations.md#ограничения).
 
 CLR-метод `string.Split` рендерится как `splitByChar(separator, value)` (гейт
 [`StringSplit`](xref:NextORM.Core.ISqlDialect.StringSplit)); поддерживается только

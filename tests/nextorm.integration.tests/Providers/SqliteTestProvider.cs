@@ -17,6 +17,16 @@ internal sealed class SqliteTestProvider : ITestProvider
     public static string DatabasePath { get; } =
         Path.Combine(Path.GetTempPath(), $"nextorm.integration.{Environment.ProcessId}.db");
 
+    /// <summary>
+    /// T358 (#348): one scratch file per process, and xunit runs collections in parallel, so two
+    /// classes can seed at the same time — one holds the writer lock while the other's
+    /// <c>drop table</c>/<c>insert</c> seed runs into <c>SQLITE_BUSY</c> ("database is locked"),
+    /// which then cascades into "no such table" for every test of that class. <c>Default Timeout</c>
+    /// makes the provider wait for the lock instead of failing: the contention is milliseconds of
+    /// seeding, not a deadlock, so waiting is the correct semantic rather than a retry that hides it.
+    /// </summary>
+    public const string ConnectionString = "Data Source='{0}';Default Timeout=30";
+
     public string Name => "sqlite";
     public bool IsAvailable => true;
     public bool SupportsFullJoin => true;
@@ -41,6 +51,9 @@ internal sealed class SqliteTestProvider : ITestProvider
     /// <summary>SQLite binds table-valued parameters through a JSON document.</summary>
     public bool SupportsTableValuedParameters => true;
     public bool SupportsTransactions => true;
+
+    /// <summary>Savepoints are available inside a transaction on this provider.</summary>
+    public bool SupportsSavepoints => true;
     public bool SupportsRegex => true;
     public bool SupportsLobStreaming => true;
     // The locator-free result path returns a buffered (non-sequential) reader without the rowid column.
@@ -48,15 +61,18 @@ internal sealed class SqliteTestProvider : ITestProvider
     public string TableValuedFunctionSkipReason => string.Empty;
     public string SkipReason => string.Empty;
 
-    public IDataContext CreateContext() => CreateContext(null);
+    public IDataContext CreateContext() => CreateContext((Microsoft.Extensions.Logging.ILoggerFactory?)null);
 
     public IDataContext CreateContext(Microsoft.Extensions.Logging.ILoggerFactory? loggerFactory)
     {
         var builder = new DataContextBuilder();
         if (loggerFactory is not null)
             builder = builder.UseLoggerFactory(loggerFactory);
-        return new SqliteDataContext($"Data Source='{DatabasePath}'", builder);
+        return new SqliteDataContext(string.Format(ConnectionString, DatabasePath), builder);
     }
+
+    public IDataContext CreateContext(DataContextBuilder builder)
+        => new SqliteDataContext(string.Format(ConnectionString, DatabasePath), builder);
 
     public void EnsureSeeded()
     {
@@ -69,7 +85,7 @@ internal sealed class SqliteTestProvider : ITestProvider
             if (File.Exists(DatabasePath))
                 File.Delete(DatabasePath);
 
-            using var ctx = new SqliteDataContext($"Data Source='{DatabasePath}'", new DataContextBuilder());
+            using var ctx = new SqliteDataContext(string.Format(ConnectionString, DatabasePath), new DataContextBuilder());
             using var conn = ctx.GetConnection();
             conn.Open();
             using var cmd = conn.CreateCommand();
@@ -84,6 +100,26 @@ internal sealed class SqliteTestProvider : ITestProvider
         """
         create table simple_entity (id integer primary key);
         insert into simple_entity (id) values (1),(2),(3),(4),(5),(6),(7),(8),(9),(10);
+
+        -- T291 (#291): AVG fixture, identical rows on every provider. Non-nullable integral columns
+        -- hold 1,2,1,3 and the nullable twins hold null,1,2,3.
+        create table avg_fixture
+        (
+            id integer primary key,
+            b integer not null,
+            s integer not null,
+            i integer not null,
+            l integer not null,
+            nb integer null,
+            ns integer null,
+            ni integer null,
+            nl integer null
+        );
+        insert into avg_fixture (id, b, s, i, l, nb, ns, ni, nl) values
+            (1, 1, 1, 1, 1, null, null, null, null),
+            (2, 2, 2, 2, 2, 1, 1, 1, 1),
+            (3, 1, 1, 1, 1, 2, 2, 2, 2),
+            (4, 3, 3, 3, 3, 3, 3, 3, 3);
 
         create table complex_entity
         (
@@ -135,7 +171,7 @@ internal sealed class SqliteTestProvider : ITestProvider
         -- Composite parent-link key fixture (#211 variant matrix :236): (tenant, link_id) is not the
         -- table key (row_id), so a partition on either component alone blends two parents.
         create table eager_composite_parent (row_id integer primary key, tenant int not null, link_id int not null);
-        create table eager_composite_child (id integer primary key, tenant int not null, parent_id int not null, sort_key int not null);
+        create table eager_composite_child (id integer primary key, tenant int null, parent_id int null, sort_key int not null);
 
         -- Many-to-many JoinInto fixtures (#135): the tag child plus the junction linking it to a parent.
         create table eager_tag (id integer primary key, name text);

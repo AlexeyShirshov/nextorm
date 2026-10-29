@@ -44,7 +44,7 @@ namespace NextORM.Integration.Tests;
 /// pair, a hand-built predicate with FRESH parameter instances, and one/two-level correlated nesting.
 /// </para>
 /// </summary>
-[Collection("Sqlite")]
+[Collection("Query plan cache")]
 public sealed class PlanEqualityDifferentialBranchCoverage4Tests : ProviderTestSuite
 {
     protected override ITestProvider Provider => SqliteTestProvider.Instance;
@@ -230,8 +230,8 @@ public sealed class PlanEqualityDifferentialBranchCoverage4Tests : ProviderTestS
 
         Run(Context.From<Pd4Marker>().Where(isNull).OrderBy(x => x.Id).Select(x => x.Id)).Should().Equal(4);
         Run(Context.From<Pd4Marker>().Where(isNullCaptured).OrderBy(x => x.Id).Select(x => x.Id)).Should()
-            .BeEmpty("a NULL-valued closure is a bound NULL parameter, i.e. SQL three-valued logic, not IS NULL - " +
-                      "which is exactly why the two shapes must not share a plan");
+            .Equal(new[] { 4 }, "a NULL-valued captured operand is compared with the approved total form, so it reads " +
+                      "the same rows as the literal IS NULL test while the expression trees stay distinct");
         Run(Context.From<Pd4Marker>().Where(isScore).OrderBy(x => x.Id).Select(x => x.Id)).Should().Equal(1, 2);
     }
 

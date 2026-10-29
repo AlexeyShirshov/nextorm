@@ -36,6 +36,7 @@ public class JoinIntoCompositeJunctionRejectionTests
 
     public sealed class CompositeJunctionParent
     {
+        public int TenantId { get; set; }
         public int Id { get; set; }
         public ICollection<CompositeJunctionChild> Children { get; set; } = new List<CompositeJunctionChild>();
     }
@@ -47,8 +48,8 @@ public class JoinIntoCompositeJunctionRejectionTests
 
     public sealed class CompositeJunctionLink
     {
+        public int ParentTenantId { get; set; }
         public int ParentId { get; set; }
-        public int ParentId2 { get; set; }
         public int ChildId { get; set; }
     }
 
@@ -57,6 +58,7 @@ public class JoinIntoCompositeJunctionRejectionTests
         var parentProps = Props<CompositeJunctionParent>();
         var childProps = Props<CompositeJunctionChild>();
         var linkProps = Props<CompositeJunctionLink>();
+        var parentTenantKey = Prop(parentProps, nameof(CompositeJunctionParent.TenantId)).PropertyInfo;
         var parentKey = Prop(parentProps, nameof(CompositeJunctionParent.Id)).PropertyInfo;
         var childKey = Prop(childProps, nameof(CompositeJunctionChild.Id)).PropertyInfo;
         var navigation = typeof(CompositeJunctionParent).GetProperty(nameof(CompositeJunctionParent.Children));
@@ -72,19 +74,19 @@ public class JoinIntoCompositeJunctionRejectionTests
                     typeof(CompositeJunctionChild),
                     navigation,
                     isCollection: true,
-                    childKey,
-                    parentKey,
+                    [childKey],
+                    [parentTenantKey, parentKey],
                     typeof(CompositeJunctionChild),
                     typeof(CompositeJunctionParent),
                     new RelationshipJunctionDeclaration
                     {
                         JunctionType = typeof(CompositeJunctionLink),
-                        ParentKey = [parentKey],
+                        ParentKey = [parentTenantKey, parentKey],
                         ChildKey = [childKey],
                         JunctionParentForeignKey =
                         [
+                            Prop(linkProps, nameof(CompositeJunctionLink.ParentTenantId)).PropertyInfo,
                             Prop(linkProps, nameof(CompositeJunctionLink.ParentId)).PropertyInfo,
-                            Prop(linkProps, nameof(CompositeJunctionLink.ParentId2)).PropertyInfo,
                         ],
                         JunctionChildForeignKey = [Prop(linkProps, nameof(CompositeJunctionLink.ChildId)).PropertyInfo],
                     }),
@@ -98,10 +100,11 @@ public class JoinIntoCompositeJunctionRejectionTests
         using var ctx = new TrackingContext();
 
         // D03 (#223): the composite-junction link source is now supported on the entity-item path, so
-        // building the declaration must no longer fail closed. The extra junction parent component is
-        // occurrence-only (the key covers one component). Preparation must render the composite link SQL
-        // without opening a connection or executing anything: it allocates the command's connection holder
-        // but never opens it, so the assertion is zero opened connections and zero executed commands.
+        // building the declaration must no longer fail closed. The junction declares two distinct
+        // foreign-key components that pair positionally with the two-component parent key. Preparation
+        // must render the composite link SQL without opening a connection or executing anything: it
+        // allocates the command's connection holder but never opens it, so the assertion is zero opened
+        // connections and zero executed commands.
         var builder = ctx.From<CompositeJunctionParent>()
             .JoinInto(ctx.From<CompositeJunctionChild>(), (p, c) => true, p => p.Children);
 
@@ -265,12 +268,16 @@ public class JoinIntoCompositeJunctionRejectionTests
     public void CompositeJunctionWhoseForeignKeysDoNotCoverEveryKeyComponent_ShouldThrowDeterministically()
     {
         // AC01 negative: a composite relationship whose junction foreign key covers fewer components than
-        // the announced key must fail closed at declaration with the deterministic coverage message,
-        // never degrade into a partial-key join. The relationship announces a two-component principal key
-        // (the same member twice is a valid multi-component stand-in) while the junction parent FK has one.
+        // the announced key must fail closed at declaration, never degrade into a partial-key join. The
+        // relationship announces a two-component principal key ([TenantId, Id]) while the junction parent
+        // foreign key has one component. The former fixture expressed the second key component by repeating
+        // Id, which the shared structural validator now rejects earlier as a duplicate component; a
+        // distinct two-component key is the malformed shape this test means to present, and it is rejected
+        // by the same structural arity rule the #223 coverage guard used to enforce alone.
         var parentProps = Props<CompositeJunctionParent>();
         var childProps = Props<CompositeJunctionChild>();
         var linkProps = Props<CompositeJunctionLink>();
+        var tenant = Prop(parentProps, nameof(CompositeJunctionParent.TenantId)).PropertyInfo;
         var parentKey = Prop(parentProps, nameof(CompositeJunctionParent.Id)).PropertyInfo;
         var childKey = Prop(childProps, nameof(CompositeJunctionChild.Id)).PropertyInfo;
         var navigation = typeof(CompositeJunctionParent).GetProperty(nameof(CompositeJunctionParent.Children));
@@ -286,14 +293,14 @@ public class JoinIntoCompositeJunctionRejectionTests
                     typeof(CompositeJunctionChild),
                     navigation,
                     isCollection: true,
-                    childKey,
-                    parentKey,
+                    [childKey],
+                    [tenant, parentKey],
                     typeof(CompositeJunctionChild),
                     typeof(CompositeJunctionParent),
                     new RelationshipJunctionDeclaration
                     {
                         JunctionType = typeof(CompositeJunctionLink),
-                        ParentKey = [parentKey, parentKey],
+                        ParentKey = [tenant, parentKey],
                         ChildKey = [childKey],
                         JunctionParentForeignKey = [Prop(linkProps, nameof(CompositeJunctionLink.ParentId)).PropertyInfo],
                         JunctionChildForeignKey = [Prop(linkProps, nameof(CompositeJunctionLink.ChildId)).PropertyInfo],
@@ -306,7 +313,7 @@ public class JoinIntoCompositeJunctionRejectionTests
             .JoinInto(ctx.From<CompositeJunctionChild>(), (p, c) => true, p => p.Children);
 
         act.Should().Throw<NotSupportedException>()
-            .WithMessage("*do not cover every composite key component*");
+            .WithMessage("*2 parent-key component(s) but 1 parent junction foreign-key component(s)*");
         ctx.ConnectionsRequested.Should().Be(0, "a malformed junction key is rejected at declaration; no SQL is executed");
     }
 

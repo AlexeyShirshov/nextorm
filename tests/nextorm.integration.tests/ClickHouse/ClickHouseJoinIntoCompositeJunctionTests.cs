@@ -9,6 +9,7 @@ namespace NextORM.Integration.Tests;
 /// graph/occurrence/null/query-count matrix is re-pinned here against a real server for both the
 /// standalone and the SingleQuery dispatcher. A skip is never a pass.
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class ClickHouseJoinIntoCompositeJunctionTests : ProviderTestSuite
 {
     protected override ITestProvider Provider => ClickHouseTestProvider.Instance;
