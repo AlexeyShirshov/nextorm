@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Data;
 using System.Data.Common;
+using System.Runtime.CompilerServices;
 
 namespace NextORM.Core;
 
@@ -20,6 +21,7 @@ namespace NextORM.Core;
 internal sealed class LobDataReader : DbDataReader
 {
     private readonly DbDataReader _inner;
+    private readonly int _fieldCount;
     private readonly CancellationToken _cancellationToken;
     private CommandReaderOwner? _owner;
     private bool _disposed;
@@ -27,6 +29,7 @@ internal sealed class LobDataReader : DbDataReader
     internal LobDataReader(CommandReaderOwner owner, CancellationToken cancellationToken)
     {
         _inner = owner.Reader;
+        _fieldCount = owner.Reader.FieldCount;
         _cancellationToken = cancellationToken;
         _owner = owner;
     }
@@ -34,10 +37,11 @@ internal sealed class LobDataReader : DbDataReader
     /// <inheritdoc/>
     public override int FieldCount
     {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get
         {
             ThrowIfDisposed();
-            return _inner.FieldCount;
+            return _fieldCount;
         }
     }
 
@@ -81,14 +85,17 @@ internal sealed class LobDataReader : DbDataReader
     public override object this[string name] => GetValue(GetOrdinal(name));
 
     /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public override bool Read()
     {
         ThrowIfDisposed();
-        _cancellationToken.ThrowIfCancellationRequested();
+        if (_cancellationToken.CanBeCanceled)
+            _cancellationToken.ThrowIfCancellationRequested();
         return _inner.Read();
     }
 
     /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public override async Task<bool> ReadAsync(CancellationToken cancellationToken)
     {
         ThrowIfDisposed();
@@ -101,14 +108,17 @@ internal sealed class LobDataReader : DbDataReader
     }
 
     /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public override bool NextResult()
     {
         ThrowIfDisposed();
-        _cancellationToken.ThrowIfCancellationRequested();
+        if (_cancellationToken.CanBeCanceled)
+            _cancellationToken.ThrowIfCancellationRequested();
         return _inner.NextResult();
     }
 
     /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public override async Task<bool> NextResultAsync(CancellationToken cancellationToken)
     {
         ThrowIfDisposed();

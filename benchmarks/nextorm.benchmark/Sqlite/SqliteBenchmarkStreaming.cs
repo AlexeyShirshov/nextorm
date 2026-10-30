@@ -165,9 +165,11 @@ public class SqliteBenchmarkStreaming
         nameof(B_Nextorm_ToDataReader),
         nameof(Dapper_ToDataReader),
         nameof(Linq2Db_ToDataReader),
+        nameof(Provider_Direct_ToDataReader),
         nameof(B_Nextorm_ToDataReader_Empty),
         nameof(Dapper_ToDataReader_Empty),
         nameof(Linq2Db_ToDataReader_Empty),
+        nameof(Provider_Direct_ToDataReader_Empty),
     })]
     public void ResetReaderSink() => _sink.Reset();
 
@@ -236,6 +238,26 @@ public class SqliteBenchmarkStreaming
     {
         using var reader = LinqToDB.Data.DataContextExtensions.ExecuteReader(_linq2Db.Db, EmptyRawReaderSql);
         Scan(reader.Reader!);
+    }
+
+    [Benchmark]
+    [BenchmarkCategory("B_RawReader")]
+    public void Provider_Direct_ToDataReader()
+    {
+        using var command = _conn.CreateCommand();
+        command.CommandText = RawReaderSql;
+        using var reader = command.ExecuteReader();
+        Scan(reader);
+    }
+
+    [Benchmark]
+    [BenchmarkCategory("B_RawReader_Empty")]
+    public void Provider_Direct_ToDataReader_Empty()
+    {
+        using var command = _conn.CreateCommand();
+        command.CommandText = EmptyRawReaderSql;
+        using var reader = command.ExecuteReader();
+        Scan(reader);
     }
 
     [Benchmark]

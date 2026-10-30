@@ -331,9 +331,12 @@ public static class QueryCommandExtensions
         var context = RequireRelationalContext(command);
         EnsureDataReaderSupported(context);
 
-        var owner = context.Dialect.LobLocatorColumn is not null
-            ? context.OpenResultReader(command, parameters, cancellationToken, DataReaderTerminalName)
-            : context.OpenLobReader(command, parameters, cancellationToken, DataReaderTerminalName);
+        // Route ToDataReader through the plain result-reader seam regardless of dialect: a raw
+        // multi-column reader never needs a LOB locator column, so the LOB seam (OpenLobReader +
+        // PrepareLobCommand) and its wrapper overhead are reserved for ToStream/ToTextReader.
+        // Sequential access is preserved for the providers that previously took the LOB path.
+        var sequential = context.Dialect.SupportsSequentialAccess && context.Dialect.LobLocatorColumn is null;
+        var owner = context.OpenResultReader(command, parameters, cancellationToken, DataReaderTerminalName, sequential);
         try
         {
             return new LobDataReader(owner, cancellationToken);
@@ -385,9 +388,8 @@ public static class QueryCommandExtensions
         var context = RequireRelationalContext(command);
         EnsureDataReaderSupported(context);
 
-        var owner = context.Dialect.LobLocatorColumn is not null
-            ? await context.OpenResultReaderAsync(command, (object[]?)parameters, cancellationToken, DataReaderTerminalName).ConfigureAwait(false)
-            : await context.OpenLobReaderAsync(command, (object[]?)parameters, cancellationToken, DataReaderTerminalName).ConfigureAwait(false);
+        var sequential = context.Dialect.SupportsSequentialAccess && context.Dialect.LobLocatorColumn is null;
+        var owner = await context.OpenResultReaderAsync(command, (object[]?)parameters, cancellationToken, DataReaderTerminalName, sequential).ConfigureAwait(false);
         try
         {
             return new LobDataReader(owner, cancellationToken);

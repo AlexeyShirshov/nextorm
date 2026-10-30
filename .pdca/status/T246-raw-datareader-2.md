@@ -1,0 +1,330 @@
+# Cycle status: T246 / cycle 2
+
+## Current state
+
+- task: `T246` · form: `cycle` · specialized skill: `pdca-dotnet` (`coder+.NET`, inherits `pdca-coder`)
+- mode: `autonomous` (collection `rc5` lane, auto-commit authorized)
+- cycle: `N=2` · revision: `r=1` · attempt: `n=1/3` (spent by this DO; candidate recorded; next attempt index `n=2/3`)
+- scope: the whole item goal of issue `#246` — a dialect-driven `ToDataReader` execution path (plain `OpenResultReader` seam + lean owner-disposal wrapper instead of `OpenLobReader` + `LobDataReader`) plus the benchmark/gate rows (10k raw reader, retained empty-result arm, new direct-provider-reader control arm), verified for `C1` (two-tier perf acceptance), `C2` (materialization / LOB terminal preservation), `C3` (`CommandReaderOwner` dispose & context lifetime) and `C4` (benchmark/gate row, direct-provider control, cross-provider streaming check) on snapshot `1e31331d`, branch `1.0.9-rc5` · status path: `.pdca/status/T246-raw-datareader-2.md`
+- goal: `ToDataReader` stops paying the LOB-seam/wrapper overhead on fresh-fluent raw-reader calls, closing the task on either the global target (`≤ 1.00×` linq2db time and `≤ 1.20×` linq2db allocations at 10k rows and empty result) or a measured same-round one-axis local win with no regression on the other axis (residual gap recorded), while `ToStream`/`ToTextReader` LOB semantics and `CommandReaderOwner` exact-once disposal stay intact — the §PLAN record and §Original task are authoritative
+- phase: `CHECK` · record: `completed` · outcome: `pending` (DO complete: candidate recorded with measurements under `.pdca/T246/rv6/`; independent CHECK not yet dispatched)
+- source: issue `#246` (`AlexeyShirshov/nextorm`), milestone `1.0.9-rc5`; re-entry after the closed `N=1, r=5` record terminal `incomplete` · context refs: `.pdca/status/collection-rc5.md` §`## Input` → `### #246 — Perf: ToDataReader raw reader is slower than linq2db`, `.pdca/status/T246-raw-datareader-1.md` (`N=1, r=5, n=1/3`, terminal `incomplete`, carried by reference — read-only), baseline `1e31331d`
+- criteria: `C1`, `C2`, `C3`, `C4` — exact text in §PLAN record `r1` §3, not retyped here; measurement method present in §PLAN record `r1` §4 (paired ABBA in the same session/round against baseline `1e31331d`, exact `MemoryDiagnoser` bytes, pre-registered `±5 %` time noise band) · evidence root: `.pdca/T246/rv6/` (contract revision `rv6`), DO attempts under `.pdca/T246/rv6/attempts/`; `.pdca/T246/rv1`..`rv5` belong to the closed `N=1` cycle and are read-only
+- fidelity note (recorded by the executor, not part of the plan): the planner's `r1` report was delivered to the executor in two truncated parts and is recorded here joined at exactly one point, marked inline as `⟦SEAM⟧` — the single join seam; no other wording was altered, edited, translated or reconstructed.
+
+## Original task
+
+Reference (the readable complete original, not repeated here): `.pdca/status/collection-rc5.md` §`## Input` → `### #246 — Perf: ToDataReader raw reader is slower than linq2db` (line 1025 of that file) — the complete verbatim issue body in its original language, including the 2026-10-17 benchmark table, the root-cause analysis (`QueryCommandExtensions.cs:326-355`, `DataContext.cs:469-505`, `LobDataReader.cs:20-90`), the five proposed work items and the user-supplied 2026-10-20 two-tier acceptance block, sourced verbatim from `/tmp/nextorm-rc5-issues.md`.
+
+## PLAN record
+
+### r1
+
+````markdown
+# PLAN — Item `T246` (`#246 — Perf: ToDataReader raw reader is slower than linq2db`)
+
+## 1. Cycle Identity & Re-entry Justification
+
+### Required Identity
+- **Primary required identity (new cycle on re-entry with changed measurement method & acceptance policy):**
+  - `cycle_id`: **`N = 2`**
+  - `plan_revision`: **`r = 1`**
+  - `attempt`: **`n = 1/3`**
+  - `status_path`: **`.pdca/status/T246-raw-datareader-2.md`** (carrying `.pdca/status/T246-raw-datareader-1.md` (`N=1, r=5, n=1/3`, terminal `incomplete`) by reference; evidence root `.pdca/T246/rv6/` or `.pdca/T246-2/rv1/`).
+- **In-place fallback identity (only if the collection runner hard-pins the single file `.pdca/status/T246-raw-datareader-1.md` and `N = 1`):**
+  - `cycle_id`: **`N = 1`**, `plan_revision`: **`r = 6`**, `attempt`: **`n = 1/3`**, `status_path`: **`.pdca/status/T246-raw-datareader-1.md`** (evidence root `.pdca/T246/rv6/`).
+- **Explicit deviation from the queue's `N = 1, r = 2` on `.pdca/status/T246-raw-datareader-1.md`:**
+  1. `.pdca/status/T246-raw-datareader-1.md` already exists and records a completed ACT in terminal `incomplete` at **`N = 1, r = 5, n = 1/3`** with persisted evidence `.pdca/T246/rv1..rv5`. Setting `r = 2` violates counter monotonicity (`5 → 2`) and would overwrite or collide with existing revision history (`r=2` through `r=5`).
+  2. Per `references/plan.md` §Revision accounting, history is never erased by a revision, and a change of the **measurement method** (and the user-supplied 2026-10-20 two-tier acceptance criteria replacing the frozen single-tier all-or-nothing gate of `N=1`) after a baseline exists constitutes a new cycle/baseline (`N=2, r=1`), never a backward revision of `N=1`.
+
+### Terminal Cause Carried Forward & How Re-entry Satisfies the Re-entry Rule
+- **Prior terminal cause (`N=1, r=5, n=1/3`, `Status: incomplete`):**
+  1. *Measured gate failure (`t246-gate-fail-recipe-lever`, `E246-409` / `E246-410` FAIL)*: `r=5` implemented an immutable `CommandRecipe`/`CommandRecipeStore` lever while leaving `ToDataReader` on the LOB seam (`OpenLobReader` + `LobDataReader`), missing the frozen all-or-nothing global threshold (`10k U ≤ 1.00`, `empty U ≤ 1.00`, `empty alloc ≤ 1.00`; measured `10k U = 1.1370–1.1808`, `empty U = 1.763–1.793`, `empty alloc = 5.040323×`). Earlier `r=4` (`reader-seam-cache-ownership`) failed because caching the shared `QueryCommand` directly broke exact-once `CommandReaderOwner` disposal (7 ownership tests failed).
+  2. *Oracle noise & budget exhaustion (`perf-oracle-window-noise`, `foreign-competing-workload-mid-block`, `5,865.65 s / 7,200 s` used)*: requiring three heavy multi-minute full-suite blocks (`~1,530 s` remaining work vs `1,334.35 s` budget left) exhausted wall-clock budget and suffered from mid-block host noise.
+- **Why this re-entry is valid (both a reformulated criterion/oracle in the brief AND an unexecuted primary lever):**
+  1. **Reformulated criterion and oracle (2026-10-20 two-tier policy in the brief):** The user's updated brief replaces the old all-or-nothing `≤ 1.00×` gate with a two-tier policy: (a) **Global target** (`10k rows ≤ 1.00×` linq2db time and `≤ 1.20×` linq2db allocations; empty-result arm likewise) and (b) **Local acceptance (task closure)** when a method achieves a real **one-axis win with no regression on the other** vs the same-round paired ABBA baseline (either exact-byte allocations decrease while time stays within the pre-registered noise band, **or** time improves beyond the noise band while exact-byte allocations do not increase), recording the residual gap to the global target.
+  2. **Untried primary lever (Proposed Work #1 & #2 — plain `OpenResultReader` seam + lean owner wrapper):** `r=5` left `empty alloc` at `5.04×` linq2db (`12.74 KB vs 5.52 KB`) because SQLite `ToDataReader` still routed through `OpenLobReader` (`Dialect.LobLocatorColumn is null` branch in `QueryCommandExtensions.cs:326-355`) and wrapped the provider reader in `LobDataReader` (`LobDataReader.cs:20-90`) on top of `CommandReaderOwner`. Routing `ToDataReader` directly through `OpenResultReader` (preserving `OpenLobReader` only for `ToStream`/`ToTextReader` or projections requiring LOB locator semantics) and trimming wrapper overhead directly removes the `LobDataReader` allocation and per-call/per-access forwarding overhead without caching/sharing a mutable `QueryCommand` across calls (preserving all 7 `CommandReaderOwner` exact-once disposal invariants).
+  3. **Cheaper, deterministic decisive evidence:** Under the two-tier policy, allocation improvements are judged by **exact byte counts** (`MemoryDiagnoser` allocated bytes/op, immune to CPU scheduler noise) alongside paired ABBA time measurements scoped to the streaming raw-reader arms (`10k rows`, `empty result`, `prepared control`, `direct-provider-reader control`), running well within a single 600 s window instead of 5,800+ s.
+
+---
+
+## 2. Form, Specialized Skill, and Entry Scope
+
+- **Form:** `cycle` (ordinary cycle)
+- **Specialized skill (overlay):** `pdca-dotnet` (`coder+.NET`, inheriting `pdca-coder`)
+- **Form rationale (one line):** The mechanism and volume are known and bounded (~3–6 files across `QueryCommandExtensions`, `DataContext`/`CommandReaderOwner`, `SqliteBenchmarkStreaming`, and reader unit/integration tests): route `ToDataReader` through the plain `OpenResultReader` seam with a lean owner-disposal wrapper instead of `OpenLobReader` + `LobDataReader`, add the direct-provider-reader control, and measure paired ABBA time and exact bytes on the 10k and empty-result arms.
+- **Entry scope:** Whole item `T246` — production seam routing and wrapper streamlining for `ToDataReader` in `src/nextorm.core`, direct-provider-reader control and empty-arm retention in `benchmarks/nextorm.benchmark`, and unit/dialect/integration verification of reader ownership and LOB terminal invariants on snapshot `1e31331d` (branch `1.0.9-rc5`).
+
+---
+
+## 3. Goal, Requested/Delivered Result, and Acceptance Criteria
+
+### Requested Result & Delivered Result
+- **Requested result:** A dialect-driven `ToDataReader` execution path and benchmark suite (including a direct-provider-reader control and empty-result arm) that eliminates unnecessary LOB-reader seam and wrapper overhead on fresh-fluent `ToDataReader` calls, meeting either the global target (`≤ 1.00×` linq2db time and `≤ 1.20×` linq2db allocations at 10k rows and empty result) or the local acceptance target (a measured one-axis win in time or exact-byte allocations vs the same-round baseline with no regression on the other axis and the residual gap to the global target recorded), while preserving `ToStream`/`ToTextReader` LOB semantics and `CommandReaderOwner` disposal semantics.
+- **Delivered result:** The exact same object — the updated `ToDataReader` seam/wrapper implementation in `src/nextorm.core`, the updated benchmark/gate rows (including the direct-provider-reader control and empty-result arm), passing unit/integration correctness and ownership tests, and the paired same-round benchmark measurement report recording the global/local acceptance outcome and any residual gap to the global target.
+
+### Original Task (Verbatim)
+
+`### #246 — Perf: ToDataReader raw reader is slower than linq2db`
+## Context
+
+The 2026-10-17 warm-path feature report (release 1.0.9-rc2, branch `1.0.9-rc3`, HEAD `881bf497`) shows the zero-materialization raw reader slower than linq2db, while the report’s other streaming rows are fine:
+
+| Arm | Nextorm | linq2db | Dapper | Nextorm / linq2db |
+|---|---:|---:|---:|---:|
+| Raw reader, 10,000 rows | 4.677 ms / 947.98 KB | **3.942 ms / 943.00 KB** | 3.996 ms / 942.77 KB | **1.19×** time, **1.005×** allocation |
+| Raw reader, empty result | 237.7 µs / 12.74 KB | **109.2 µs / 5.52 KB** | 126.7 µs / 5.29 KB | **2.18×** time, **2.31×** allocation |
+| Prepared control, 10,000 rows | 4.754 ms / 944.8 KB | — | — | 1.21× time, 1.00× allocation |
+
+Source: `benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkStreaming-report.csv`; new report: `docs/comparisons/feature-benchmarks-2026-10-17.md`.
+
+The benchmark is `B_Nextorm_ToDataReader`: a fresh `_ctx.LargeEntity.Select(...).ToDataReader()` against linq2db `ExecuteReader` and Dapper `ExecuteReader`, all scanning the same `id, someString` rows through one non-retaining sink. The prepared Nextorm control is slower too, so this is **not** primarily command construction.
+
+## Root-cause analysis
+
+`ToDataReader` on SQLite currently takes the LOB reader seam and wraps the provider reader:
+
+- `src/nextorm.core/Query/QueryCommandExtensions.cs:326-355` — `ToDataReader` calls `OpenLobReader` when `Dialect.LobLocatorColumn is null` (SQLite), otherwise `OpenResultReader`.
+- `src/nextorm.core/DataContext/DataContext.cs:469-505` — `OpenLobReader` uses `PrepareLobCommand`, which prepares with `storeInCache: false` and goes through the LOB path; `OpenResultReader` is the plain multi-column seam.
+- `src/nextorm.core/DataContext/LobDataReader.cs:20-90` — every `Read`, `GetInt64`/`GetString` (and other accessors) is forwarded through an extra `DbDataReader` wrapper with `ThrowIfDisposed` and a cancellation check; on SQLite there is no LOB locator to manage for this projection.
+
+The empty-result arm is decisive: with no rows to scan, Nextorm still needs 2.18× linq2db’s time and 2.31× its allocation. That points to fixed per-call reader/LOB setup and wrapper overhead, not row scanning or `GetString`.
+
+## Proposed work
+
+1. **Route `ToDataReader` through the plain result-reader seam.** For a multi-column raw reader that does not need a LOB locator, use `OpenResultReader`/its executor path instead of `OpenLobReader` + `LobDataReader`; reserve the LOB seam for projections that actually require locator/LOB semantics (and for `ToStream`/`ToTextReader`). Verify SQL, LOB behavior and ownership/dispose behavior on SQLite and the sequential-access providers.
+2. **Remove the per-access wrapper cost.** If an owner-aware wrapper is still required, make it a lean pass-through: `[MethodImpl(AggressiveInlining)]` on `Read`/typed getters, no per-access cancellation check when the token cannot be canceled, and cached field count/ordinal metadata. Consider returning the provider reader through an owner object rather than intercepting every accessor.
+3. **Avoid per-call preparation duplication.** `OpenLobReader`/`OpenResultReader` use `storeInCache: false`; evaluate an internal cached reader-plan descriptor for repeated shapes without mutating a shared `QueryCommand` or exposing `Prepare()`. The prepared control shows ~3 KB of the gap, so do this after the wrapper fix.
+4. **Add a direct-provider-reader control.** Benchmark Nextorm raw reader vs the same `DbDataReader` obtained directly from the provider; this separates executor/command overhead from wrapper/scanner overhead.
+5. **Keep the empty arm in the gate.** It is the cheapest regression detector for fixed overhead.
+
+### Acceptance Criteria (User-Supplied Set Reproduced Verbatim with Stable IDs)
+
+> **Verbatim user-supplied acceptance criteria (2026-10-20 two-tier policy):**
+>
+> **Global target (milestone-level):** raw reader at 10,000 rows ≤ **1.00×** linq2db time and ≤ **1.20×** linq2db allocations; the empty-result arm likewise (or a documented, owner-approved tolerance). The original **3.942 ms / 943.00 KB** and ≤1.00× absolute/ratio numbers remain the global/stretch reference.
+>
+> **Local acceptance (task closure):** if the chosen method cannot reach the global target, accept it when the measured change is a real one-axis win with no regression on the other:
+> - allocations decrease vs the same-round baseline and time does not worsen beyond the pre-registered noise band; **or**
+> - time improves beyond the pre-registered noise band and allocations do not increase.
+>
+> A method that improves neither axis, or improves one while regressing the other, is rejected and reverted. Reaching the global ratios is **not** required to close the task: record the residual gap to the global target and the measured local win.
+>
+> **Measurement rules:** same session/round and pinned DB, paired/ABBA measurement; no historical-number substitution; no threshold/tolerance/denominator edits after measurement. Allocation changes are judged by exact byte counts; time changes by the pre-registered noise band.
+>
+> ### Mandatory correctness and evidence
+> - No materialization/result change; LOB terminals (`ToStream`/`ToTextReader`) retain their locator/sequential-access behavior and tests.
+> - `CommandReaderOwner` dispose semantics remain: disposing the reader releases the per-call command and provider reader; the context stays open.
+> - Add a benchmark/gate row for the raw reader; run the streaming report on all relevant providers if the seam changes cross-provider.
+
+#### Stable Criterion ID Mapping (Strictly Coextensive with the Verbatim Set Above)
+- **`C1` [Performance — Two-Tier Acceptance (Global Target or Local One-Axis Win)]** *(kind: measurable)*:
+  - *Global target:* Raw reader (`B_Nextorm_ToDataReader`) at 10,000 rows achieves `≤ 1.00×` linq2db time and `≤ 1.20×` linq2db allocations, and the empty-result arm achieves `≤ 1.00×` linq2db time and `≤ 1.20×` linq2db allocations (with `3.942 ms / 943.00 KB` and `≤ 1.00×` recorded as the global/stretch reference); **OR**
+  - *Local acceptance (task closure):* Measured in the same session/round on a pinned DB via paired/ABBA runs against the same-round baseline (`1e31331d`) on the fresh-fluent raw-reader arms (10,000 rows and empty result), either:
+    1. Exact allocated bytes decrease (`B_candidate < B_baseline` in exact bytes) and mean time does not worsen beyond the pre-registered noise band (`T_candidate ≤ T_baseline × (1 + ε_noise)`); **or**
+    2. Mean time improves beyond the pre-registered noise band (`T_candidate < T_baseline × (1 - ε_noise)`) and exact allocated bytes do not increase (`B_candidate ≤ B_baseline` in exact bytes);
+    and the residual gap to the global target (`≤ 1.00×` time, `≤ 1.20×` alloc, and `3.942 ms / 943.00 KB` reference) plus the measured local win are explicitly recorded.
+  - *Negative condition:* A candidate that improves neither axis, or improves one axis while regressing the other beyond its threshold (exact bytes `> B_baseline` or time `> T_baseline × (1 + ε_noise)`), or uses historical-number substitution, or requires callers to call `Prepare()`, is rejected and reverted.
+- **`C2` [Materialization & LOB Terminal Preservation]** *(kind: behavioral/correctness)*:
+  - `ToDataReader` produces identical row/column results with no materialization change, and LOB terminals (`ToStream` / `ToTextReader`) retain their locator and `SequentialAccess` behavior and pass all existing and added tests across SQLite and sequential-access providers.
+  - *Negative condition:* Removing LOB support, altering `ToStream`/`ToTextReader` semantics, or introducing SQLite-only hardcoded SQL/seam hacks fails the criterion.
+- **`C3` [`CommandReaderOwner` Dispose & Context Lifetime Semantics]** *(kind: behavioral/correctness)*:
+  - Disposing the returned `DbDataReader` (sync `Dispose()` or async `DisposeAsync()`) releases the per-call `DbCommand` and underlying provider `DbDataReader` exactly once, while the owning `DataContext` and its connection remain open and usable for subsequent queries (and shared cached commands on the context are never mutated with sticky `Cache = false` / `_dontCache`).
+  - *Negative condition:* Any leak of the per-call command/reader, premature closure of the `DataContext`, violation of exact-once disposal, or mutation of shared `QueryCommand.Cache` fails the criterion.
+- **`C4` [Benchmark / Gate Row, Direct-Provider Control & Cross-Provider Streaming Verification]** *(kind: behavioral/artifact)*:
+  - `SqliteBenchmarkStreaming` includes the raw-reader benchmark/gate row (`10,000 rows`), keeps the `empty-result` arm, and includes the `direct-provider-reader control` (measuring the same `DbDataReader` obtained directly from the provider to separate executor/command overhead from wrapper/scanner overhead); if the reader seam changes cross-provider, streaming/reader verification runs across all relevant providers; furthermore, query-path changes pass the repository's standing acceptance benchmark gate (`--anyCategories=acceptance` without regression beyond the standing noise band).
+  - *Negative condition:* Omitting the empty arm, omitting the direct-provider-reader control, or leaving cross-provider streaming broken fails the criterion.
+
+---
+
+## 4. Measurement Method
+
+- **Metrics and units:**
+  1. **Execution time (`T`):** BenchmarkDotNet `Mean` time per operation in nanoseconds (`ns`) / microseconds (`µs`) / milliseconds (`ms`).
+  2. **Managed allocation (`B`):** BenchmarkDotNet `MemoryDiagnoser` `Allocated` in **exact bytes (`B`)** per operation.
+- **Denominators & Comparisons:**
+  1. **Global target ratio:** `R_time_global = T_Nextorm / T_linq2db` and `R_alloc_global = B_Nextorm / B_linq2db` measured in the **same round** on the 10,000-row raw-reader arm (`B_Nextorm_ToDataReader` vs `B_Linq2Db_ExecuteReader`) and on the empty-result raw-reader arm (`Empty_Nextorm_ToDataReader` vs `Empty_Linq2Db_ExecuteReader`). Global stretch reference: `3,942,000 ns` (`3.942 ms`) and `943.00 KB` (`965,632 B`).
+  2. **Local acceptance delta / ratio:** Paired comparison of the candidate worktree (`C`) against the unmodified baseline snapshot `1e31331d` (`A` / `B_base`) in the **same session/round** using paired **ABBA** ordering (`A1 → B1 → B2 → A2`, comparing aggregated/median-of-pair means `T_candidate / T_baseline` and exact byte counts `B_candidate - B_baseline`) on both the **empty-result raw-reader arm** and the **10,000-row fresh-fluent raw-reader arm**.
+  3. **Diagnostic controls (reported alongside):** Prepared raw-reader control (`B_Nextorm_ToDataReader_Prepared`) and the new direct-provider-reader control (`B_Provider_DirectDataReader` / empty equivalent).
+- **Inclusion / exclusion filters:**
+  - Included: `SqliteBenchmarkStreaming` raw-reader arms (10,000 rows fresh-fluent, empty-result fresh-fluent, prepared control, direct-provider-reader control, and linq2db reference arms), plus the standing query-path sanity check (`--anyCategories=acceptance`).
+  - Excluded: Unrelated benchmark classes during the paired ABBA raw-reader runs; no historical CSV numbers (`feature-benchmarks-2026-10-17.md` or `rv1..rv5`) may be substituted as the baseline denominator.
+- **Comparability conditions:**
+  - Same host session, same pinned SQLite database setup and row seed (`LargeEntity`, 10,000 rows, `id, someString` projection consumed through the identical non-retaining sink), Release build (`-c Release`), strictly serialized (one benchmark or container process at a time, no concurrent `dotnet`/`vbcscompiler` workloads), capped GC heap (`DOTNET_GCHeapHardLimit`), per-command `timeout 600` with streamed logs, paired ABBA execution order.
+- **Thresholds and provenance (with baseline-backed / provisional status):**
+  - **Global thresholds (user-supplied & baseline-backed from the 2026-10-17 report in the brief — non-provisional):** `R_time_global ≤ 1.00×` and `R_alloc_global ≤ 1.20×` vs same-round linq2db on 10,000 rows and empty result (stretch reference: `3.942 ms` / `3,942,000 ns` and `943.00 KB` / `965,632 B`).
+  - **Local acceptance allocation threshold (user-supplied in the brief — non-provisional, anchored to the same-round ABBA baseline):** Judged by **exact byte counts** (`0 B` tolerance). A win is `B_candidate < B_baseline` (strictly fewer bytes on the measured raw-reader arm(s), with zero byte increase on either the 10k or empty arm); non-regression is `B_candidate ≤ B_baseline`.
+  - **Local acceptance time noise band (`ε_noise`, pre-registered before measurement as required by the brief; absolute baseline values `T_baseline` are provisional until the same-round ABBA baseline run captures them, after which the ratio bound is locked with no post-measurement edits):** Pre-registered at **`±5 %` (`0.05`)** for paired ABBA same-round BenchmarkDotNet comparisons (and bounded by the repository's standing `<~20 %` single-run acceptance noise floor for `--anyCategories=acceptance`). Thus, for paired ABBA local acceptance:
+    - Under an **allocation win** (`B_candidate < B_baseline` on empty and/or 10k arm with no byte increase on the other): time non-regression requires `T_candidate ≤ 1.05 × T_baseline` across the paired ABBA aggregate on both the 10k and empty arms.
+    - Under a **time win** (`B_candidate ≤ B_baseline`): time improvement requires `T_candidate < 0.95 × T_baseline` with exact allocated bytes `B_candidate ≤ B_baseline` on both the 10k and empty arms.
+
+---
+
+## 5. Constraints & Assumptions
+
+### Constraints
+1. **Verbatim user constraints:**
+   - Do not remove LOB support or change `ToStream`/`ToTextReader` semantics.
+   - Do not require callers to use `Prepare()`; the measured path remains fresh-fluent.
+   - No benchmark-specific SQL or SQLite-only production hardcode; the seam choice must be dialect-driven.
+2. **Repository & standing constraints:**
+   - Snapshot anchored to `/home/alex/sources/nextorm`, branch `1.0.9-rc5`, base commit `1e31331d`.
+   - .NET 10, `TreatWarningsAsErrors=true` (0 warnings / 0 errors), Central Package Management, CRLF line endings throughout (`perl -pi -e 's/\r?\n/\r\n/g'`).
+   - Never mutate sticky `QueryCommand.Cache` / `_dontCache` on shared commands; use `storeInCache: false`.
+   - `CommandReaderOwner` exact-once disposal semantics (`r=4` lesson: never share a mutable `DbCommand` instance across active `CommandReaderOwner` instances).
+   - Tests use FluentAssertions only (`tests/nextorm.core.tests/Conventions/AssertionStyleTests.cs`); live-DB tests in `tests/nextorm.integration.tests` run fail-closed with `DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock` and never use `InMemoryDataContext`.
+   - Heavy runs must run one process at a time with `DOTNET_GCHeapHardLimit`, `timeout 600`, and streamed logs.
+   - Milestone `1.0.9-rc5` never moves; no `git push`, merge-to-main, or tag; auto-commit only for item-touched files on `collection/**` branches if authorized by the collection driver.
+
+### Known Resource and Access Constraints
+- Single shared Linux/WSL host environment where background compiler servers (`VBCSCompiler`) or concurrent processes can perturb sub-millisecond wall-clock timings if not serialized; however, BenchmarkDotNet `MemoryDiagnoser` exact byte counts are deterministic, and paired ABBA short runs of `SqliteBenchmarkStreaming` complete well inside a single `timeout 600` window.
+- Podman socket (`unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock`) is required for container-backed integration tests if cross-provider reader seams are touched.
+
+### Assumptions
+- **A1:** In `QueryCommandExtensions.ToDataReader` (`src/nextorm.core/Query/QueryCommandExtensions.cs:326-355`), routing `ToDataReader` unconditionally (or whenever no LOB locator projection is active) through `OpenResultReader` instead of `OpenLobReader` does not affect `ToStream` or `ToTextReader`, because `ToStream` and `ToTextReader` have their own dedicated entry points that continue to call `OpenLobReader`.
+- **A2:** Eliminating `OpenLobReader` (`PrepareLobCommand`) + `LobDataReader` wrapping from `ToDataReader` on dialects where `Dialect.LobLocatorColumn is null` (such as SQLite) directly eliminates the `LobDataReader` instance allocation and per-call LOB setup allocations, producing an immediate, deterministic exact-byte allocation reduction (and fixed-overhead time reduction on the empty-result arm).
+
+---
+
+## 6. Statement Gaps
+
+| Gap | Resolution Type | Resolution |
+|---|---|---|
+| Queue dispatch specifies `N=1, r=2` on `.pdca/status/T246-raw-datareader-1.md`, which already holds terminal `incomplete` at `N=1, r=5, n=1/3` | **Evidence** (supplied in prompt) | Resolved in §1: require `N=2, r=1, n=1/3` at `.pdca/status/T246-raw-datareader-2.md` (or monotonic `N=1, r=6, n=1/3` if the collection runner hard-pins `N=1` in place); never `r=2`. |
+| Numerical value of the "pre-registered noise band" required by the user's 2026-10-20 local acceptance criteria | **Assumption / Calibration** | Pre-registered in §4 at `±5 %` (`0.05`) for paired ABBA same-round BenchmarkDotNet runs (consistent with BDN warm-path repeatability on this host and stricter than the repo's `<~20 %` single-run acceptance gate noise band), while allocation changes use `0 B` exact byte counts as ⟦SEAM⟧ required by the brief. |
+| Whether Proposed Work #3 (cached reader-plan descriptor / recipe) is required after Proposed Work #1 & #2 | **Evidence** (from prior `r=4`/`r=5` record + brief) | Brief explicitly states: *"The prepared control shows ~3 KB of the gap, so do this after the wrapper fix"* and local acceptance closes the task on a real one-axis win with no regression on the other. Moreover, `r=5` proved that `CommandRecipe` alone without the seam/wrapper fix failed, and `r=4` proved caching the command breaks `CommandReaderOwner`. Therefore Proposed Work #1 & #2 (plain `OpenResultReader` seam + lean owner wrapper) + #4 & #5 (direct-provider control + empty arm) are primary; #3 is optional/deferred unless needed and safe for exact-once ownership. |
+
+---
+
+## 7. Minimal Solution & Alternatives
+
+### Chosen Minimal Solution (Proposed Work #1, #2, #4, #5)
+1. **Route `ToDataReader` through the plain `OpenResultReader` seam (Proposed Work #1):**
+   - In `src/nextorm.core/Query/QueryCommandExtensions.cs` (`ToDataReader`), stop branching on `Dialect.LobLocatorColumn is null` to call `OpenLobReader`; route `ToDataReader` through `OpenResultReader` (keeping `OpenLobReader` + `LobDataReader` exclusively for `ToStream`/`ToTextReader` or explicit LOB-locator operations).
+2. **Streamline the owner-aware reader wrapper (Proposed Work #2):**
+   - Ensure the reader returned by `OpenResultReader` (`CommandReaderOwner` or lean wrapper in `src/nextorm.core/DataContext/`) is a minimal pass-through: `[MethodImpl(MethodImplOptions.AggressiveInlining)]` on `Read`/`ReadAsync` and typed getters (`GetInt64`, `GetString`, `GetInt32`, `GetValue`, `IsDBNull`, etc.), avoid per-access cancellation checks when `!cancellationToken.CanBeCanceled`, and avoid redundant wrapper layering (`LobDataReader` over `CommandReaderOwner`) while strictly preserving exact-once disposal of the per-call `DbCommand` and `DbDataReader` without closing the `DataContext`.
+3. **Add direct-provider-reader control and retain empty-result arm (Proposed Work #4 & #5):**
+   - In `benchmarks/nextorm.benchmark` (`SqliteBenchmarkStreaming`), retain the empty-result arm (`Empty_Nextorm_ToDataReader`, `Empty_Linq2Db_ExecuteReader`, etc.) and add a direct-provider-reader control arm that opens the same `DbDataReader` directly on the SQLite provider connection/command and scans it through the identical sink.
+4. **Verify correctness and measure paired ABBA baseline vs candidate:**
+   - Run unit, dialect, and integration reader/LOB/ownership tests, then run paired ABBA benchmarks in the same round against baseline `1e31331d` to evaluate Global Target (`C1` Tier 1) and Local Acceptance (`C1` Tier 2), recording both the local win and the residual gap to the global target.
+
+### Alternatives Considered
+- **Alternative A — Re-apply `r=5` `CommandRecipe`/`CommandRecipeStore` without changing the `OpenLobReader`/`LobDataReader` seam:** *Rejected.* Already tried in `r=5` (`t246-gate-fail-recipe-lever`), where empty-arm allocations remained `5.04×` linq2db and 10k time remained `1.14–1.18×`.
+- **Alternative B — Cache and reuse the `DbCommand` across `ToDataReader` calls (`r=4` approach):** *Rejected.* Already tried in `r=4` (`reader-seam-cache-ownership`) and reverted because `CommandReaderOwner.Dispose` disposes the command, breaking 7 existing ownership tests and violating `C3`.
+- **Alternative C — Combine Proposed Work #1 + #2 with an internal read-only SQL/parameter descriptor cache (Proposed Work #3) if and only if #1 + #2 alone leave a solvable preparation allocation gap:** *Kept as a secondary option inside DO* only if it clones a fresh per-call `DbCommand` (preserving `C3`) and further reduces exact bytes without regressing time.
+
+---
+
+## 8. Effort Estimate
+
+- **Estimated effort:** Compact cycle (~1.5–2.5 hours total wall-clock, well within a single budget window):
+  - Code change in `QueryCommandExtensions` / `DataContext` / `CommandReaderOwner` + benchmark control: ~150–250 LOC across 3–6 files.
+  - Unit + dialect + integration test verification: ~10–15 minutes.
+  - Paired ABBA benchmark run on `SqliteBenchmarkStreaming` (10k + empty + controls) + `--anyCategories=acceptance`: ~15–25 minutes serialized.
+
+---
+
+## 9. Plan-to-DO Handoff
+
+Every DO dispatch carries by reference:
+- **Snapshot & branch:** `/home/alex/sources/nextorm`, branch `1.0.9-rc5`, base commit `1e31331d`.
+- **Cycle identity:** `N = 2, r = 1, n = 1/3`, status path `.pdca/status/T246-raw-datareader-2.md` (or `N = 1, r = 6, n = 1/3` on `.pdca/status/T246-raw-datareader-1.md` if the collection runner hard-pins `N=1` in place; never `r = 2`).
+- **Original task & verbatim criteria:** §3 above (`C1`, `C2`, `C3`, `C4`).
+- **Measurement specification:** §4 above (paired ABBA in the same session/round against baseline `1e31331d` on pinned SQLite DB; exact byte counts via `MemoryDiagnoser`; `±5 %` pre-registered time noise band; record both measured local win and residual gap to global `≤ 1.00×` time / `≤ 1.20×` alloc and `3.942 ms / 943.00 KB` stretch reference).
+- **Mandatory prohibitions:**
+  - Never mutate sticky `QueryCommand.Cache` / `_dontCache`; always use `storeInCache: false` when preparing non-cached commands.
+  - Never share a mutable `DbCommand` across `CommandReaderOwner` instances (`r=4` defect `reader-seam-cache-ownership`).
+  - Do not alter `ToStream` / `ToTextReader` LOB locator or `SequentialAccess` semantics.
+  - Do not require callers to call `Prepare()` on the measured `B_Nextorm_ToDataReader` path.
+  - No SQLite-only hardcoded SQL or benchmark-specific production branches; keep seam selection dialect-driven.
+  - Preserve CRLF line endings; 0 warnings / 0 errors (`TreatWarningsAsErrors=true`); FluentAssertions only in tests; no `InMemoryDataContext` in `tests/nextorm.integration.tests`.
+  - Run heavy benchmark/container commands strictly one at a time with `DOTNET_GCHeapHardLimit`, `timeout 600`, and streamed logs, after ensuring no stray `VBCSCompiler` or competing `dotnet` processes are active.
+
+---
+
+## 10. Risks and Stop Conditions
+
+### Risks
+1. **Cross-provider sequential-access / LOB expectation in existing tests (`R1`):** Some unit or integration test may assert that `ToDataReader` on a specific projection invokes `OpenLobReader` or returns `LobDataReader`. *Mitigation:* Check all callers/tests of `ToDataReader`, `OpenLobReader`, and `OpenResultReader` via Roslyn `refs`/`callers`; ensure `ToStream`/`ToTextReader` keep `OpenLobReader` and `ToDataReader` uses `OpenResultReader` unless the dialect/projection explicitly requires a LOB locator column.
+2. **Host CPU noise during ABBA timing (`R2`):** Background `VBCSCompiler` or container activity could inflate variance beyond `±5 %`. *Mitigation:* Shut down idle build servers (`dotnet build-server shutdown`) before benchmark pairs, run `--no-build` pre-built Release binaries in ABBA order, and rely on exact byte counts (`0 B` variance) plus paired ABBA means.
+
+### Stop Conditions
+- **STOP (Success / Task Closure):** `C2`, `C3`, and `C4` are met, and `C1` meets either the **Global Target** (`≤ 1.00×` time and `≤ 1.20×` alloc vs linq2db on 10k and empty arms) or **Local Acceptance** (exact allocated bytes decrease with paired ABBA time within `≤ 1.05×` baseline, **or** paired ABBA time `< 0.95×` baseline with exact allocated bytes `≤ 1.00×` baseline, on the raw-reader arms, with the residual gap to the global target recorded).
+- **STOP (Revert & Reject Candidate):** If the candidate improves neither time nor exact-byte allocations, or improves one while regressing the other beyond the pre-registered threshold (`> 1.05×` time or `> 0 B` allocation increase), or breaks `CommandReaderOwner` exact-once disposal / LOB terminal semantics and cannot be repaired within the 3-attempt DO/CHECK bound (`n = 3/3`).
+
+---
+
+## 11. Confidence and Gaps
+
+- **Verified from supplied facts:**
+  - Base commit `1e31331d` on `1.0.9-rc5` has all 34 prior `T246` paths cleanly reverted to `bcb8e676`.
+  - Root cause locations (`QueryCommandExtensions.cs:326-355`, `DataContext.cs:469-505`, `LobDataReader.cs:20-90`) and prior defect history (`r=1..r=5` in `.pdca/status/T246-raw-datareader-1.md`) are established.
+  - The 2026-10-20 two-tier acceptance policy is verbatim in the brief and explicitly authorizes task closure on a verified one-axis win with no regression on the other axis.
+- **Remaining assumptions:**
+  - `A1` and `A2` (§5) — that routing `ToDataReader` through `OpenResultReader` + lean owner wrapper reduces exact per-call bytes and empty-arm fixed overhead without disturbing `ToStream`/`ToTextReader` tests; directly testable in DO/CHECK.
+````
+
+## Approval record
+
+`not applicable: autonomous mode` — no ordinary plan approval was required or invented for this cycle (base §Control modes; the plan was produced and consumed inside the authorized `rc5` collection run, `plan_state=ready`).
+
+In-force auto-commit policy (verbatim, repo `AGENTS.md` §Git): "a `pdca-collection` cycle started with explicit auto-commit permission may (a) commit on `collection/**` branches inside the cycle worktree and (b) `git merge --no-ff` a group branch into the current branch." No `git push`, no merge into `main`, no tag; a commit touches only the files changed by item `T246`.
+
+## DO result
+
+Candidate recorded (attempt `n=1/3` spent). Implementation (4 touched paths, build 0 W/0 E):
+- `src/nextorm.core/Query/QueryCommandExtensions.cs` — `ToDataReader`/`ToDataReaderAsync` route through `OpenResultReader` instead of branching on `Dialect.LobLocatorColumn` (`OpenLobReader` retained for `ToStream`/`ToTextReader`).
+- `src/nextorm.core/DataContext/DataContext.cs` — `OpenResultReader`/`OpenResultReaderAsync` gain `sequentialAccess` param (default false), forwarded to `PrepareResultCommand`.
+- `src/nextorm.core/DataContext/LobDataReader.cs` — pass-through trims: cached `FieldCount`, `[MethodImpl(AggressiveInlining)]`, cancellation check skipped when token cannot be canceled.
+- `benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkStreaming.cs` — control arms `Provider_Direct_ToDataReader` and `Provider_Direct_ToDataReader_Empty`, registered in `IterationSetup`.
+
+Exact numbers (same-round paired, pinned DB; logs `.pdca/T246/rv6/logs/`):
+- `B_Nextorm_ToDataReader`: 3953.46 us / 973 504 B -> 4010.24 us / 973 504 B (+1.4 % time, allocations unchanged).
+- `B_Nextorm_ToDataReader_Empty`: 214.888 us / 16 048 B -> 186.08 us / 16 048 B (-13.4 % time, allocations unchanged).
+- linq2db reference: 3805.84 us / 965 632 B (10k); 84.837 us / 5 648 B (empty).
+- Direct-provider control (candidate): 3750.75 us / 940 236 B (10k); 61.34 us / 5 386 B (empty).
+
+Local acceptance: met — empty-result arm time wins -13.4 % beyond the +/-5 % noise band with allocations unchanged; 10k arm allocations unchanged with time +1.4 % inside noise. No regression beyond threshold on either axis. Global target not reached; residual recorded in `.pdca/T246/rv6/candidate.md`.
+
+Correctness (established, not re-run except container gate):
+- Build 0 W/0 E; `nextorm.core.tests` 3901 passed/0 failed; `nextorm.sqlite.tests` 2252 passed/1 skipped; `ToDataReader` integration selection 14 passed/0 failed.
+- Container gate: `.pdca/T246/rv6/gates/integration.log` — 7934 total / 7733 succeeded / 0 failed / 201 skipped, rc 0 (no `NEXTORM_SKIP_PROVIDERS`). No infrastructure/transport failure; no product defect observed.
+
+Evidence root: `.pdca/T246/rv6/` (snapshot, provenance, candidate.md, helpers.log rc 0, manifest.json).
+
+## CHECK record
+
+`not run: DO candidate recorded (see ## DO result and .pdca/T246/rv6/candidate.md); independent CHECK not yet dispatched for this item.
+
+## ACT record
+
+`pending` — not reached; this cycle is not closed.
+
+## Revision history
+
+2026-10-30T07:03:32Z | N=1 r=5 → N=2 r=1 | new cycle on re-entry, not a revision of `N=1`: the measurement method and acceptance policy changed (2026-10-20 two-tier global/local policy replacing the frozen single-tier all-or-nothing gate), which opens a new cycle/baseline after `N=1` closed terminal `incomplete`; the monotonic in-place alternative (`N=1, r=6`) was not chosen because the collection runner accepts the item's own status path. Carried by reference, not re-litigated: `N=1, r=1..r=5` in `.pdca/status/T246-raw-datareader-1.md` (read-only). Outgoing attempt identity: `N=1, r=5, n=1/3`, terminal `incomplete` (`t246-gate-fail-recipe-lever`); `r=1` is the initial revision of `N=2`.
+
+## Defect history
+
+Carried by reference from the closed record `.pdca/status/T246-raw-datareader-1.md` §`## Defect history` (read-only, not re-opened, no fix count changed). Its table carries **9** keys, carried as they stand: `perf-oracle-window-noise` (r=1/n=1, 0 fixes, planner terminal GAP); `log-per-op-vs-iteration-total` (r=2, fixed); `literal-job-id-vs-resolved-job` (r=2, fixed); `idle-vbcscompiler-foreign-activity` (r=2, fixed); `foreign-competing-workload-mid-block` (r=3, 0 fixes, terminal GAP — invalidity reason, not a product defect key); `defunct-csc-foreign-false-positive` (r=4/n=1, 1 fix); `cached-path-multi-report-aggregation` (r=4/n=1, 1 fix); `reader-seam-cache-ownership` (r=4/n=1, 0 fixes, STOP → PLAN); `t246-gate-fail-recipe-lever` (r=5/n=1, 0 fixes, measured FAIL). No key of `N=2` yet and no new observation recorded here.
+
+## Changed files
+
+- `src/nextorm.core/Query/QueryCommandExtensions.cs` → ToDataReader/ToDataReaderAsync routed through OpenResultReader
+- `src/nextorm.core/DataContext/DataContext.cs` → OpenResultReader/OpenResultReaderAsync gain sequentialAccess param
+- `src/nextorm.core/DataContext/LobDataReader.cs` → pass-through trims
+- `benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkStreaming.cs` → Provider_Direct_ToDataReader / _Empty control arms
+- `.pdca/status/T246-raw-datareader-2.md` → updated (DO result, changed files, git state, progress log)
+- `.pdca/status/collection-rc5.md` → one progress-log row appended
+
+## Git state
+
+`status path: .pdca/status/T246-raw-datareader-2.md — modified this cycle · untracked (durable on disk, not committed)`; baseline `1e31331d`, branch `1.0.9-rc5`, HEAD `c1a8871c`. Collection container `.pdca/status/collection-rc5.md` modified this cycle (one progress-log row). `.pdca/T246/rv6/` holds evidence (gitignored). Task-owned delta pending commit: the 4 touched source/benchmark files plus the two status files. Work outside this item's delta stays untouched and unclaimed.
+
+## Progress log
+
+append-only, one row per event, never edited retroactively:
+
+2026-10-30T07:03:32Z | PLAN | revision r=1 | attempt n=1 | PLAN completed (form=cycle, overlay=coder+.NET, N=2, r=1, n=1/3, plan_state=ready) — handoff at PLAN→DO boundary; re-entry after N=1 r=5 terminal incomplete, oracle reformulated per the brief's two-tier policy | `.pdca/status/T246-raw-datareader-2.md` §PLAN record (plan `r1`), evidence root `.pdca/T246/rv6/`
+2026-10-30T07:03:32Z | PLAN | revision r=1 | attempt n=1 | Notice (fidelity, autonomous): the planner's `r1` report reached the executor in two truncated parts and is recorded joined at exactly one seam marked `⟦SEAM⟧`; no other wording altered | `.pdca/status/T246-raw-datareader-2.md` §Current state, §PLAN record `r1` §6
+2026-10-31T02:30:00Z | DO | revision r=1 | attempt n=1/3 | candidate recorded: ToDataReader routed through OpenResultReader + lean LobDataReader; empty-arm time -13.4 %, allocations flat; 10k allocations flat, time +1.4 % inside noise; container gate 7934/7733/0/201 rc 0; evidence .pdca/T246/rv6/ (helpers rc 0) | .pdca/T246/rv6/candidate.md, .pdca/T246/rv6/gates/integration.log
