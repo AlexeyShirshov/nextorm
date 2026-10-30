@@ -1879,8 +1879,10 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// <param name="params">Positional parameters bound to the command, or <see langword="null"/>.</param>
     /// <param name="cancellationToken">Token used to cancel execution.</param>
     /// <returns>The materialised rows; empty when the query yields none.</returns>
-    public async Task<List<TResult>> ToListAsync<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, CancellationToken cancellationToken)
-        => await _executor.ToListAsync(preparedQueryCommand, @params, cancellationToken).ConfigureAwait(false);
+    // Returns the executor's task directly. An async/await wrapper here added a second
+    // Task<List<TResult>> allocation per call on the buffered terminal path, with no semantic change.
+    public Task<List<TResult>> ToListAsync<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, CancellationToken cancellationToken)
+        => _executor.ToListAsync(preparedQueryCommand, @params, cancellationToken);
 
     /// <summary>Executes the command and buffers all rows into a list.</summary>
     /// <typeparam name="TResult">The projected result type.</typeparam>

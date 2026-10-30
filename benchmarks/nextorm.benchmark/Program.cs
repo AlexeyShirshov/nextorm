@@ -49,6 +49,14 @@ if (args.Length > 0 && args[0] == "--t245-step2-breakdown")
     return await T245Step2BreakdownProbe.RunAsync(
         args.Length > 1 ? args[1] : throw new ArgumentException("--t245-step2-breakdown needs an output directory"));
 
+// T245 (#245) Step 2 (n=2/3): measurement-only decomposition of the warm cached execution bucket into
+// binding/checkout, reader construction, row loop, materializer loop, result list and async terminal
+// machinery. Benchmark-project-only; it never touches nextorm.core and changes no product behaviour,
+// acceptance recipe or threshold.
+if (args.Length > 0 && args[0] == "--t245-exec-decomposition")
+    return await T245ExecDecompositionProbe.RunAsync(
+        args.Length > 1 ? args[1] : throw new ArgumentException("--t245-exec-decomposition needs an output directory"));
+
 // T297-G8 (#297): BenchmarkDotNet launches one process per benchmark, so the class-level static
 // collector never sees more than the last probe of a BDN run. This env-gated entry point runs all
 // 32 probe bodies in a single process and writes the evidence; benchmark-project-only, and with
