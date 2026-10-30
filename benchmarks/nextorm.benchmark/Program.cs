@@ -1,5 +1,16 @@
 ﻿using BenchmarkDotNet.Running;
 using NextORM.Benchmark;
+using System.Runtime.InteropServices;
+
+// T245 Block 2 (#245 AC-245-03): process-level JIT-regime evidence printed by the harness itself,
+// for every invocation (probes and BDN arm runs), so the runtime's own view travels with the log.
+{
+    var hasTieredSwitch = AppContext.TryGetSwitch("System.Runtime.TieredCompilation", out var tieredSwitch);
+    var envTiered = Environment.GetEnvironmentVariable("DOTNET_TieredCompilation");
+    Console.WriteLine("T245-REGIME-HEADER: process_id={0} start_utc={1:O} framework={2} env_version={3} tiered_switch={4} dotnet_tiered_env={5}",
+        Environment.ProcessId, DateTime.UtcNow, RuntimeInformation.FrameworkDescription, Environment.Version,
+        hasTieredSwitch ? tieredSwitch.ToString() : "(unset)", envTiered ?? "(unset)");
+}
 
 // BenchmarkRunner.Run<ExpressionsExperiments>();
 // BenchmarkRunner.Run<BenchmarkQueryCommand>();
