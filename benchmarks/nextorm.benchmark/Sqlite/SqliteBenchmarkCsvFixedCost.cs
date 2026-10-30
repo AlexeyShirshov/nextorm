@@ -65,6 +65,7 @@ public class SqliteBenchmarkCsvFixedCost
 
     /// <summary>The realistic shape: one <c>WriteCsv</c> call over a three-column projection.</summary>
     [Benchmark]
+    [BenchmarkCategory("acceptance")]
     public void Nextorm_WriteCsv_3Col()
     {
         ResetDestination();

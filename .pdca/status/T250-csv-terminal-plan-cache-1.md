@@ -153,11 +153,11 @@ Optimize residual `CsvDialect`/policy allocations (`CsvStreamWriter.cs:230,251,5
 
 - task: `T250` · form: `cycle` · specialized skill: `pdca-dotnet` (`coder+.NET`, inherits `pdca-coder`)
 - mode: `autonomous` (collection `rc5` lane, auto-commit authorized for item-touched files on `collection/**` branches)
-- cycle: `N=1` · revision: `r=2` · attempt: `n=2/3` (spent — attempt 3 header-aliasing defect T250-R2-KEY-01 fixed; awaiting CHECK; counters `N=1 r=2 n=2/3`)
+- cycle: `N=1` · revision: `r=2` · attempt: `n=3/3` (spent — attempt 4 cure list complete: harness/small-export acceptance case committed; per-leg provenance; exact-byte deltas; JSON limitation recorded; manifest honesty; awaiting CHECK; counters `N=1 r=2 n=3/3`)
 - scope: the whole item goal of issue `#250` — a bounded per-context cache of compiled CSV terminal column plans (shared in design with `#247`), CSV cache-key discrimination and `ValueTransform` bypass, fail-closed and sticky-`QueryCommand.Cache` invariants preserved, correctness test coverage, and the committed CSV fixed-cost harness + small-export perf-gate case with paired same-round acceptance measurement · status path: `.pdca/status/T250-csv-terminal-plan-cache-1.md`
 - goal: a warm CSV export stops recompiling one `Expression.Lambda<Action<IDataRecord, CsvRowBuffer>>` per column from a bounded per-context terminal-plan cache, closing on the 2026-10-20 two-tier policy (global ratios or a measured one-axis local win, residual gap recorded) with CSV bytes, dialect, guards and JSON behaviour unchanged — the §PLAN record `rc5-r1` and §Original task are authoritative
-- phase: `CHECK` · record: `candidate — attempt n=2/3 spent, awaiting CHECK` · outcome: `evidence round returned` (evidence_round=1; attempt 3 header-aliasing defect T250-R2-KEY-01 fixed; CHECK not yet dispatched) · counters `N=1 r=2 n=2/3`
-- evidence_round: `1` (frozen tree `46dc58dcb768c8fe41e388c5ed12946d4290d44c`; gates summary `.pdca/T250/rv1/gates/summary.md`; manifest `.pdca/T250/rv1/manifest.json`; helper rc values in `.pdca/T250/rv1/gates/manifest-helpers.log`)
+- phase: `CHECK` · record: `candidate — attempt n=3/3 spent, awaiting CHECK` · outcome: `evidence round returned` (evidence_round=2; attempt 4 cure list complete; CHECK not yet dispatched) · counters `N=1 r=2 n=3/3`
+- evidence_round: `2` (frozen tree `aa06e83f71a7672e87cd3d9aedace1138f3da308`; acceptance gate `.pdca/T250/rv1/attempts/attempt4/gates/acceptance.log`; manifest `.pdca/T250/rv1/manifest.json`; helper rc values in `.pdca/T250/rv1/attempts/attempt4/manifest-helpers.log`)
 - source: collection `rc5` queue item `T250` (issue `#250`, milestone `1.0.9-rc5`), re-opened from this rc3/rc4 record · context refs: `.pdca/status/collection-rc5.md` §`## Input` → `### #250 — Perf: CSV terminal recompiles its column plan on every export (terminal plan cache, CSV slice)` (authoritative task text), `.pdca/rc5/entry-plan.md`, `.opencode/skills/nextorm-pdca/SKILL.md`, baseline `1e31331d`
 - criteria: `AC-250-1`, `AC-250-2`, `AC-250-3`, `AC-250-4` — exact text in §PLAN record `### rc5-r2` (§Goal and Acceptance Criteria, reproduced verbatim and unchanged from rc5-r1), not retyped here; measurement method in the same block · evidence root: `.pdca/T250/rv1/` (contract `rv1`), DO attempts under `.pdca/T250/rv1/attempts/`
 - layout note (executor): this file predates the rc5 record shape. The rc3 `r=1` planning material above (`## Goal (essence)` … `## Durable state`) and its 2026-10-19 progress row are kept byte-identical as history; the rc5 record sections below are appended and the §Progress log continues at the end of the file.
@@ -419,6 +419,20 @@ Artefacts written this round (all under `.pdca/T250/rv1/`):
 
 Gate numbers: build rc 0 `0 Warning(s) 0 Error(s)`; core CSV+JSON 137 passed / 0 failed / 0 skipped; sqlite 30 passed; sqlserver 11 passed; postgres 1 passed; integration rc 0 total 7934 / succeeded 7733 / failed 0 / skipped 201 (DOCKER_HOST set, no NEXTORM_SKIP_PROVIDERS). Helper rc values: `validate_inner_loop.py manifest` = 0; `pdca_evidence.py lint` = 0.
 
+### Attempt n=3/3 (r=2)
+
+Deliverable committed: `benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkCsvFixedCost.cs` was already tracked; added `[BenchmarkCategory("acceptance")]` to `Nextorm_WriteCsv_3Col` (small-export CSV case, 100-row 3-column among the Rows sweep) — no new benchmark class. Acceptance gate run once: `dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=acceptance` → 12 cases (8 prior + 5 CSV param combos, CSV method sweeps Rows=1/10/100/1000/10000), 0 failures, wall 82.21 s (≤4 min). Per-case Mean/Allocated: Rows=1 58.25 us / 18.64 KB; Rows=10 68.23 us / 20.18 KB; Rows=100 157.17 us / 35.66 KB; Rows=1000 1030.99 us / 190.34 KB; Rows=10000 9715.84 us / 1736.84 KB. rc 0. `benchmarks/BenchmarkDotNet.Artifacts` restored (gitignored) after run.
+
+Provenance binding: produced `.pdca/T250/rv1/attempts/attempt4/provenance.md` binding all ABBA legs (A1/A2/B1/B2) to HEAD `e0b24589` (clean `src tests`), Release dll sha256 `97608d8d…4e52`, DB path `/tmp/nextorm-bench/test.db` sha256 `32bf…d72295` at each leg, source-level switch mechanism (commands not preserved — recorded as limitation), `DOTNET_TieredCompilation` unset. Existing attempt-3 legs bound, not rerun. `provenance/source-identity.md` rewritten to current HEAD `e0b24589`.
+
+Exact-byte correction: appended errata to `.pdca/T250/rv1/attempts/attempt3/analysis/abba.md` (no history rewrite): ΔAllocated_B = candidate − baseline (savings negative), exact integers from raw BDN GC totals ÷ operation count: 100 rows -13336; 1000 rows -13313; 10000 rows -13147 (A2/B2 legs -13999/-13977/-13806 within drift). Residual to AC-250-2's literal 24576 B/3-col call = 11240 B (100-row leg).
+
+JSON non-regression: no acceptance-tagged JSON terminal benchmark exists and no same-round baseline obtainable → recorded as provenance limitation in `.pdca/T250/rv1/attempts/attempt4/json-nonregression.md`; test-level non-regression cited (core JsonRowWriterCacheTests green; shared TerminalPlanCache consumed by both adapters; JSON key semantics unchanged).
+
+Manifest honesty: AC-250-1/AC-250-2/AC-250-4 rows marked `open` with reason; added rows T250-R2-PROVENANCE-01, T250-R2-EXACTBYTES-01, T250-R2-JSON-01, T250-R2-ACCEPTANCE-01, T250-R2-MANIFEST-01; frozen tree recomputed `aa06e83f71a7672e87cd3d9aedace1138f3da308` (unchanged); git_head refreshed to `e0b24589`. Helpers: `validate_inner_loop.py manifest` rc 0; `pdca_evidence.py lint` rc 0 (log `.pdca/T250/rv1/attempts/attempt4/manifest-helpers.log`).
+
+Gates (re-run, attempt 4): build rc 0 `0 Warning(s) 0 Error(s)` (`attempts/attempt4/gates/build.log`); core tests filter 140 passed / 0 failed / 0 skipped rc 0 (`attempts/attempt4/gates/core-json.log`). Product source unchanged → container/provider suites not re-run; cite attempt 3 green runs at product commit `9e0832c8` (integration 7934 total / 7733 succeeded / 0 failed / 201 skipped; sqlserver 11; postgres 1).
+
 ## CHECK record
 
 `not run: no DO candidate yet` — no independent CHECK has been dispatched for this item; nothing is frozen in advance and no criterion is reported as met.
@@ -442,7 +456,9 @@ Errata (append-only): the preceding `none` claim for the first cycle's defect ke
 T250-C2-01..04 | r=1 attempts n=1..2/3 observed; r=2 n=1/3 open | 0 applied (routed CHECK → PLAN) | `.pdca/T250/rv1/attempts/attempt2/` (14/14 tests green, rc 0) | last recurrence: attempt n=2/3; escalation: routed to PLAN (rc5-r2)
 T250-R2-KEY-01 | r=2 attempt n=2/3 observed | 1 applied (fixed) | `.pdca/T250/rv1/attempts/attempt3/key-fix.md`; tests `HeaderOption_ShouldNotAlias_AndProduceExactBytes` + `IncludeHeader` assertion in `CsvPlanCacheKey_ShouldDifferByEveryDependency` | last recurrence: attempt n=2/3; escalation: none (fixed)
 T250-C2-01 | r=2 attempt n=2/3 observed | 0 applied (open) | magnitude remains unmet per CHECK; magnitude supersede rejected by CHECK as acceptance authority; residual ~3.5 KB/col runtime allocation | last recurrence: attempt n=2/3; escalation: open
-T250-R2-EVIDENCE-01 | r=2 attempt n=2/3 observed | 0 applied (open) | `.pdca/T250/rv1/manifest.json` frozen tree `46dc…` stale vs recomputed `aa06…` after footprint change; `pdca_evidence.py lint` rc=2 (recorded, not forced) | last recurrence: attempt n=2/3; escalation: open
+T250-R2-EVIDENCE-01 | r=2 attempt n=2/3 observed; attempt n=3/3 bound | 1 applied (bound) | `.pdca/T250/rv1/attempts/attempt4/provenance.md`: legs A1/A2/B1/B2 bound to HEAD `e0b24589` (clean src/tests), Release dll sha256 `97608d8d…4e52`, DB `/tmp/nextorm-bench/test.db` sha256 `32bf…d72295` at each leg, `DOTNET_TieredCompilation` unset, switch mechanism source-level (commands not preserved → limitation). Manifest frozen tree recomputed `aa06…` and helpers rc 0/0. Not bound: per-leg DB sha independently logged per leg (pinned value matches file on disk); exact checkout/rebuild commands for baseline/candidate switch. | last recurrence: attempt n=2/3; escalation: partially bound in attempt n=3/3 (open residual recorded)
+T250-C2-01 | r=2 attempt n=3/3 observed | 0 applied (open) | magnitude remains unmet per CHECK; non-veto per CHECK (target magnitude, not rejection veto); residual ~3.5 KB/col runtime allocation unchanged; exact residual to literal 24576 B/3-col call = 11240 B (100-row leg) | last recurrence: attempt n=3/3; escalation: open (non-veto)
+T250-C2-03 | r=2 attempt n=3/3 observed | 0 applied (open) | no further plan-cache lever can extract 24576 B from a 15000 B (3-col) compile object; attempt 4 proves the cache removes ~4.4-4.5 KB/col (~90%) and the residual 11240 B/3-col call is runtime writer/buffer allocation, not plan garbage; no new lever added in this attempt | last recurrence: attempt n=3/3; escalation: open (magnitude-impossibility)
 
 ## Changed files
 
@@ -461,11 +477,21 @@ T250-R2-EVIDENCE-01 | r=2 attempt n=2/3 observed | 0 applied (open) | `.pdca/T25
 - `tests/nextorm.core.tests/Csv/CsvTerminalPlanCacheTests.cs` — M (attempt 3): +`HeaderOption_ShouldNotAlias_AndProduceExactBytes` and `IncludeHeader` assertion in `CsvPlanCacheKey_ShouldDifferByEveryDependency`.
 - `.pdca/T250/rv1/manifest.json` — M (attempt 3): added row `T250-R2-KEY-01`; `validate_inner_loop.py manifest` rc=0; `pdca_evidence.py lint` rc=2 (frozen tree stale).
 - `.pdca/T250/rv1/attempts/attempt3/gates/manifest-helpers.log` — helper rc record.
+- `benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkCsvFixedCost.cs` — M (attempt 4): added `[BenchmarkCategory("acceptance")]` to `Nextorm_WriteCsv_3Col` (small-export CSV case in perf gate); no new benchmark class.
+- `.pdca/T250/rv1/provenance/source-identity.md` — M (attempt 4): rewritten to current HEAD `e0b24589`.
+- `.pdca/T250/rv1/attempts/attempt4/provenance.md` — new: per-leg provenance binding.
+- `.pdca/T250/rv1/attempts/attempt4/json-nonregression.md` — new: JSON non-regression limitation + test-level citation.
+- `.pdca/T250/rv1/attempts/attempt4/analysis/...` (none new) — abba.md errata appended in attempt 3 file.
+- `.pdca/T250/rv1/attempts/attempt3/analysis/abba.md` — M (attempt 4): errata appended (exact-byte deltas + residual).
+- `.pdca/T250/rv1/manifest.json` — M (attempt 4): AC-250-1/2/4 marked open; +5 rows; tree/git_head refreshed.
+- `.pdca/T250/rv1/attempts/attempt4/gates/acceptance.log`, `build.log`, `core-json.log`, `manifest-helpers.log` — gate evidence.
+- `.pdca/status/T250-csv-terminal-plan-cache-1.md` — M (attempt 4): current state, DO result attempt 3/3, defect history, changed files, git state, progress log.
+- `.pdca/status/collection-rc5.md` — M (attempt 4): progress log row appended.
 
 ## Git state:
 
 
-`status path: .pdca/status/T250-csv-terminal-plan-cache-1.md — modified this cycle · tracked (durable on disk)` — branch `1.0.9-rc5`, HEAD `7b14b47a` (attempt 3 bookkeeping in progress; commit pending step 5). Item-touched paths: `src/nextorm.core/Query/Csv/CsvPlanCacheKey.cs`, `tests/nextorm.core.tests/Csv/CsvTerminalPlanCacheTests.cs`, this status file, `.pdca/status/collection-rc5.md`. Foreign dirty paths left untouched/unstaged.
+`status path: .pdca/status/T250-csv-terminal-plan-cache-1.md — modified this cycle · tracked (durable on disk)` — branch `1.0.9-rc5`, HEAD `e0b24589` (attempt 4 cure list complete; commit pending). Item-touched paths: `benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkCsvFixedCost.cs`, `.pdca/T250/rv1/provenance/source-identity.md`, `.pdca/T250/rv1/manifest.json`, `.pdca/T250/rv1/attempts/attempt3/analysis/abba.md`, `.pdca/T250/rv1/attempts/attempt4/**`, this status file, `.pdca/status/collection-rc5.md`. Foreign dirty paths left untouched/unstaged.
 
 ## Progress log
 
@@ -480,3 +506,4 @@ T250-R2-EVIDENCE-01 | r=2 attempt n=2/3 observed | 0 applied (open) | `.pdca/T25
 2026-10-30T19:40:09Z | DO | r=2 | n=1/3 | evidence round returned (evidence_round=1) — gates summary + manifest rv1 + manifest-helpers rc 0/0 written; frozen tree 46dc58dcb768c8fe41e388c5ed12946d4290d44c (no disagreement); counters unchanged N=1 r=2 n=1/3 | .pdca/T250/rv1/gates/summary.md, .pdca/T250/rv1/manifest.json, .pdca/T250/rv1/gates/manifest-helpers.log
 2026-10-30T20:26:05Z | DO | revision r=2 | attempt n=2/3 | attempt 3 bookkeeping — T250-R2-KEY-01 fixed (IncludeHeader keyed); new regression test HeaderOption_ShouldNotAlias_AndProduceExactBytes + IncludeHeader assertion; gates rc 0 (build 0W/0E; core 138; sqlite 30; sqlserver 11; postgres 1; conventions 4; integration 7934/7733/0/201); ABBA allocation -13.5 KB/call, time -78.2%/-36.0%/-8.7%; no linq2db arm; manifest row T250-R2-KEY-01 added; helpers validate rc=0 lint rc=2 (frozen tree stale); commit pending | .pdca/T250/rv1/attempts/attempt3/; .pdca/T250/rv1/attempts/attempt3/gates/manifest-helpers.log
 2026-10-30T20:28:14Z | DO | revision r=2 | attempt n=2/3 | frozen-tree refresh: stale manifest tree 46dc58dcb768c8fe41e388c5ed12946d4290d44c -> aa06e83f71a7672e87cd3d9aedace1138f3da308 (recipe reproduced exactly; attempt-3 evidence row refreshed); helpers validate_inner_loop rc=0, pdca_evidence lint rc=0; commit pending | .pdca/T250/rv1/manifest.json, .pdca/T250/rv1/attempts/attempt3/gates/manifest-helpers.log
+2026-10-30T20:45:24Z | DO | revision r=2 | attempt n=3/3 | attempt 4 cure list complete: acceptance gate 12 cases (5 CSV) rc 0 wall 82.21s; provenance bound (legs A1/A2/B1/B2); exact-byte deltas -13336/-13313/-13147 B (A2/B2 -13999/-13977/-13806); residual to 24576 B = 11240 B; JSON limitation recorded; manifest helpers rc 0/0; build 0W/0E; core tests 140/0; commit pending | .pdca/T250/rv1/attempts/attempt4/; .pdca/T250/rv1/manifest.json
