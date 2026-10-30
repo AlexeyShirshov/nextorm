@@ -8,7 +8,7 @@ artifacts/
 *.log
 
 # BenchmarkDotNet output when run from the repo root (canonical reports live under benchmarks/)
-/BenchmarkDotNet.Artifacts/
+BenchmarkDotNet.Artifacts/
 
 # Stryker.NET mutation output
 /StrykerOutput/

@@ -1,7 +1,0 @@
-xUnit.net v3 In-Process Runner v4.0.1+8ed8aa354c (64-bit .NET 10.0.12)
-  Discovering: nextorm.mariadb.tests
-  Discovered:  nextorm.mariadb.tests
-  Starting:    nextorm.mariadb.tests
-  Finished:    nextorm.mariadb.tests (ID = '1895d5e7ec68832c242e614b19f81f35551c1e205f936bf8266b266f4fd51847')
-=== TEST EXECUTION SUMMARY ===
-   nextorm.mariadb.tests  Total: 24, Errors: 0, Failed: 0, Skipped: 0, Not Run: 0, Time: 0.861s

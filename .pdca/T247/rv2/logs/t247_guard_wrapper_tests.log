@@ -1,8 +1,0 @@
-test_marker_is_held_while_the_host_locked_driver_runs (test_t247_json_gate.DuplicateGuardWrapperTests) ... ok
-test_no_arguments_after_a_free_guard_is_usage_error (test_t247_json_gate.DuplicateGuardWrapperTests) ... ok
-test_second_wrapper_exits_90_before_any_driver_run (test_t247_json_gate.DuplicateGuardWrapperTests) ... ok
-
-----------------------------------------------------------------------
-Ran 3 tests in 0.006s
-
-OK

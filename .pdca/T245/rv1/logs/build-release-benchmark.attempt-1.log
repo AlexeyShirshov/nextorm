@@ -1,5 +1,0 @@
-start_utc=2026-10-18T16:51:35Z
-Terminated
-build_rc=143
-end_utc=2026-10-18T17:16:52Z
-NOTE: rc 143 is the SIGTERM of the *waiting flock process* by the executor (attempt budget 1800 s superseded by attempt 2 with -w 7200); the build command never started and produced no output.

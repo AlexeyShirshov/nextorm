@@ -1,3 +1,0 @@
-CMD taskset -c 1 dotnet /tmp/opencode/t297-p02/probe-c/bin/Release/net10.0/t297-probe-c.dll --arm all --warmup 5 --iters 30 --overhead-n 100000
-START 2026-10-19T12:07:22Z
-SqliteBenchmarkFeaturesFairCached verification passed: LeftJoin=10, Join4=3, Distinct=2, Case=3, ToUpper=1, Contains=1, InCaptured=2, InInline=2, RowNumber=3, SumOver=3, Cte=2, RecursiveCte=5, Intersect=3, Except=7, Udf=1

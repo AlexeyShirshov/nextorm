@@ -1,2 +1,0 @@
-$ python3 .pdca/scripts/validate_inner_loop.py brief .pdca/T297/rv5/test-scope.json
-rc=0 (no output; r=6 does not change the r=5 test scope: no product edit in this revision)

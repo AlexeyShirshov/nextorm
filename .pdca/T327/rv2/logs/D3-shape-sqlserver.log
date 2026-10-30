@@ -1,7 +1,0 @@
-xUnit.net v3 In-Process Runner v4.0.1+8ed8aa354c (64-bit .NET 10.0.12)
-  Discovering: nextorm.sqlserver.tests
-  Discovered:  nextorm.sqlserver.tests
-  Starting:    nextorm.sqlserver.tests
-  Finished:    nextorm.sqlserver.tests (ID = '77d0971395a477f272bad78498842fb9088d83a3f262147da62df481d8fd4960')
-=== TEST EXECUTION SUMMARY ===
-   nextorm.sqlserver.tests  Total: 25, Errors: 0, Failed: 0, Skipped: 0, Not Run: 0, Time: 0.429s

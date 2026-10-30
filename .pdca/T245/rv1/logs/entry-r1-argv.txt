@@ -1,1 +1,0 @@
-env -u NEXTORM_BENCH_FULL NEXTORM_BENCH_DB=/tmp/nextorm-bench/test.db dotnet run --project benchmarks/nextorm.benchmark -c Release -- --filter *SqliteBenchmarkFeaturesFairCached.B_* --exporters json --artifacts .pdca/T245/rv1/bdn/entry-r1

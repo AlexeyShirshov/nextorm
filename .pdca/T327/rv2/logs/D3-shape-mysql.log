@@ -1,7 +1,0 @@
-xUnit.net v3 In-Process Runner v4.0.1+8ed8aa354c (64-bit .NET 10.0.12)
-  Discovering: nextorm.mysql.tests
-  Discovered:  nextorm.mysql.tests
-  Starting:    nextorm.mysql.tests
-  Finished:    nextorm.mysql.tests (ID = '234e2d857c996e498b4e571c6c8ecb48774fcce130347335b10ec273d5cf0eca')
-=== TEST EXECUTION SUMMARY ===
-   nextorm.mysql.tests  Total: 24, Errors: 0, Failed: 0, Skipped: 0, Not Run: 0, Time: 0.364s
