@@ -6,6 +6,7 @@
 - base: `1e31331d`
 - status path: `.pdca/status/collection-rc5.md`
 - entry-plan ref: `.pdca/rc5/entry-plan.md` (verbatim copy of the entry planner's returned report, sha256 `ffaecc0b745db18d6af833398ea1b9a7f038a31ad36e57838a9ebc353f3f3f0f`)
+- container revision: r = 2 (entry scope 22) · entry-plan ref r=2: .pdca/rc5/entry-plan-r2.md (verbatim planner report, sha256 0283edbe19341e172e61660c3a041eb7e52075a0d17175f6d1835b534574ace4, 30744 bytes, 146 lines)
 - created (UTC): 2026-10-30T05:51:46Z
 - form: `collection`
 - overlay: `coder+.NET`
@@ -48,10 +49,14 @@ Auto-commit policy in force for this collection (verbatim, repo `AGENTS.md` §Gi
 | T274 | #274 | cycle | G1 | coder+.NET | ready | — | — | pending | active | 1.0.9-rc5 | N=1 | .pdca/status/T274-rc5-1.md | r=1 | 1e31331d | wave 4 examples CH; plan ready: cycle + coder+.NET, AC1..AC3, plan_ref .pdca/status/T274-rc5-1.md §PLAN record, evidence_root .pdca/rc5/items/T274/rv1/ | execution | 0 |
 | T302 | #302 | — | — | — | — | — | — | incomplete | active | — | N=1 | .pdca/status/T302-rc5-1.md | r=1 | 1e31331d | PLAN-terminal (r1 draft recorded, plan_state never ready): original task infeasible under the stated constraints — the issue body gates the product work behind two explicit USER acts (implementation-plan approval + separate implementation authorization) that autonomous mode cannot obtain; no DO, no CHECK, attempts=0, issue #302 stays OPEN in 1.0.9-rc5; next authorized action = normal-mode approval of the recorded plan draft | infeasible | 0 |
 | T319 | #319 | campaign | G1 | coder+.NET (step-level) | — | ready | .pdca/rc5/items/T319/preparation.md@r1 | in-progress | paused | 1.0.9-rc5 | N=1 | .pdca/status/T319-rc5-1.md | r=1 | 1e31331d | epic, candidate not scheduled; blocked by #317+#318; prepared: campaign (incremental), AC1..AC4, preparation_ref .pdca/rc5/items/T319/preparation.md@r1, depends_on T317+T318 (hard execution prerequisite), first step = post-prerequisite baseline measurement; Step 1 opened (planner: prerequisites satisfied as sequencing gate; both terminal infra → fallback clause activated); zero product edits; baseline pending; paused for the lane: Step 1 evidence complete, resume point = Step 1 boundary CHECK, counters unchanged, no attempt granted; re-anchoring of the baseline only if the boundary opens a change-producing Step 2 after other items touch the shared query path | execution | 0 |
+| T359 | #359 | cycle | G1 | coder+.NET | ready | — | — | pending | active | 1.0.9-rc5 | N=1 | .pdca/status/T359-rc5-1.md | r=1 | 8ab09df4 | scope revision r=2 (user added #359 to milestone); plan ready: cycle + coder+.NET, AC-T359-01..02, plan_ref .pdca/status/T359-rc5-1.md §PLAN record, evidence_root .pdca/rc5/items/T359/rv1/; blocks T271 (ClickHouse examples Retention, Array(Tuple(...))) | execution | 0 |
+| T360 | #360 | cycle | G1 | coder+.NET | ready | — | — | pending | active | 1.0.9-rc5 | N=1 | .pdca/status/T360-rc5-1.md | r=1 | 8ab09df4 | scope revision r=2 (user added #360); plan ready: cycle + coder+.NET, AC-T360-01..02, plan_ref .pdca/status/T360-rc5-1.md §PLAN record, evidence_root .pdca/rc5/items/T360/rv1/; opt-in, does not block T268, examples/** untouched | execution | 0 |
+| T361 | #361 | cycle | G1 | coder+.NET | ready | — | — | pending | active | 1.0.9-rc5 | N=1 | .pdca/status/T361-rc5-1.md | r=1 | 8ab09df4 | scope revision r=2 (user added #361); plan ready: cycle + coder+.NET, AC-T361-01..02, plan_ref .pdca/status/T361-rc5-1.md §PLAN record, evidence_root .pdca/rc5/items/T361/rv1/; product fix already landed in the user's commit c8eed046 — scope is the missing regression tests only, c8eed046 never re-attributed/reverted | execution | 0 |
+
 
 ## Input (verbatim from /tmp/nextorm-rc5-issues.md)
 
-Source: `/tmp/nextorm-rc5-issues.md` — 95 310 bytes, 19 sections (`#353` … `#245`, in the file's own order). Every section below is the complete verbatim body of that file, unabridged, in its original language and formatting (code blocks and benchmark tables kept); no paraphrase, translation, summary or reordering. This section is the authoritative input for every queue item. Issue bodies keep their own `## …` headings verbatim: those are content of this section, not outer container sections.
+Source: `/tmp/nextorm-rc5-issues.md` — 95 310 bytes, 19 sections (`#353` … `#245`, in the file's own order). Every section below is the complete verbatim body of that file, unabridged, in its original language and formatting (code blocks and benchmark tables kept); no paraphrase, translation, summary or reordering. This section is the authoritative input for every queue item. Issue bodies keep their own `## …` headings verbatim: those are content of this section, not outer container sections. Under container revision `r = 2` the three scope-extension briefs `#359`, `#360`, `#361` were appended verbatim from `.pdca/rc5/input-scope-extension/issue-{359,360,361}.md` (22 sections in total; each of the three carries its `title:`/`state:`/`labels:`/`milestone:`/`number:` header fields in that file's own order).
 
 ### #353 — Core: рукописные ManyToOne-метаданные с FK.Count > PrincipalKey.Count дают IndexOutOfRangeException вместо именной диагностики
 Найдено release-gate аудитом 1.0.9-rc4 (`docs/specs/design/code-smells-review.md` §«Предрелизный аудит v1.0.9-rc4», находка A). Классификация — **P2**: путь не публичный по умолчанию, но достижим из публичного API через рукописные метаданные.
@@ -1151,13 +1156,249 @@ A method that improves neither axis, or improves one while regressing the other,
 - #200 — earlier set-operation allocation work.
 - Report: `docs/comparisons/feature-benchmarks-2026-10-17.md`.
 
+### #359 — ClickHouse: group_array over a Tuple element renders Array(Nullable(Tuple`2)) — invalid SQL
+
+title:	ClickHouse: group_array over a Tuple element renders Array(Nullable(Tuple`2)) — invalid SQL
+state:	OPEN
+labels:	bug
+milestone:	1.0.9-rc5
+number:	359
+
+## Summary
+
+A ClickHouse projection of `SqlFunctions.ClickHouse.group_array(Tuple.Create(...))` renders a cast whose
+element type is the CLR name of the tuple with its generic arity (`Tuple`2`), so the emitted SQL is
+invalid:
+
+```sql
+cast(groupArray(tuple(t1.`WeekNumber`, round(...))) as Array(Nullable(Tuple`2))) as `RetentionMatrix`
+```
+
+ClickHouse parses the backtick as the start of a quoted identifier and rejects the statement:
+
+```
+Code: 62. DB::Exception: Back quoted string is not closed: Syntax error:
+failed at position 1172 (` desc) ...
+```
+
+## Impact
+
+`examples/nextorm.examples.clickhouse.analytics` query 4 (`Retention`) aborts on the `1.0.9-rc4`
+package — the only query in that example that projects an array **of tuples**. Any user projecting
+`group_array`/`group_uniq_array`/`array_map`/… over a tuple element hits the same invalid SQL.
+
+Regression vs `1.0.9-rc3`: the array-result normalisation (`MakeArrayResult`), which wraps an
+array-returning call in `cast(... as Array(...))`, did not exist in rc3 (it arrived with #276/#336), so
+rc3 emitted the bare `groupArray(...)` and the server inferred the type.
+
+## Root cause
+
+`src/nextorm.clickhouse/ClickHouseDialect.cs:266` — `MakeArrayElementType`:
+
+```csharp
+private string MakeArrayElementType(Type type)
+{
+    if (Nullable.GetUnderlyingType(type) is { IsValueType: true } underlying)
+        return $"Nullable({MakeTypeName(underlying)})";
+    if (type.IsArray)
+        return $"Array({MakeArrayElementType(type.GetElementType()!)})";
+    return type.IsValueType ? MakeTypeName(type) : $"Nullable({MakeTypeName(type)})";
+}
+```
+
+Two problems on the reference-element arm:
+
+1. it goes through `MakeTypeName`, whose open fall-back is `type.Name` (`SqlDialectBase.cs:534-546`), and
+   a generic CLR name carries its arity — ``Tuple`2``;
+2. ClickHouse does not allow `Nullable(Tuple(...))` (nor `Nullable(Array(...))`), so the `Nullable(...)`
+   wrapper is wrong for tuple elements in the first place.
+
+The file already has a tuple-aware renderer — `TypeName(Type)` (`ClickHouseDialect.cs:1356`, emits
+`Tuple(UInt8, Float64)` and is used by the aggregate-result path) — but `MakeArrayElementType` does not
+use it.
+
+## Expected
+
+```
+cast(groupArray(tuple(...)) as Array(Tuple(UInt8, Float64)))
+```
+
+## Reproduction
+
+`examples/nextorm.examples.clickhouse.analytics` → `ClickHouseQueries.Retention` at
+`examples/nextorm.examples.clickhouse.analytics/ClickHouseQueries.cs:131`:
+
+```bash
+DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock \
+  dotnet run --project examples/nextorm.examples.clickhouse.analytics -c Debug -- --only Retention
+```
+
+The same shape can be asserted without a database by preparing
+`ctx.From<IHit>().GroupBy(...).Select(g => new { M = SqlFunctions.ClickHouse.group_array(Tuple.Create(...)) })`
+and reading `DbPreparedQueryCommand<T>.DbCommand.CommandText`.
+
+## Acceptance
+
+- `group_array` (and the other `MakeArrayResult` members) over a `Tuple<...>` element emits
+  `Array(Tuple(<element types>))`, with no `Nullable(...)` wrapper and no CLR arity in the name.
+- SQL-generation test in `tests/nextorm.clickhouse.tests` pinning the text; existing non-tuple array
+  expectations (`Array(Nullable(String))` etc.) stay byte-identical.
+- `examples/nextorm.examples.clickhouse.analytics` query 4 `Retention` runs green on the next package
+  (it is excluded from the rc4 run because of this defect).
+
+### #360 — Core: composite ORDER BY key — OrderBy(p => new { … }) concatenates the columns into invalid SQL instead of expanding them
+
+title:	Core: composite ORDER BY key — OrderBy(p => new { … }) concatenates the columns into invalid SQL instead of expanding them
+state:	OPEN
+labels:	enhancement
+milestone:	1.0.9-rc5
+number:	360
+
+## Summary
+
+`OrderBy`/`OrderByDescending` accept `Expression<Func<TEntity, object?>>`, so a **composite** key selector compiles:
+
+```csharp
+.OrderBy(p => new { p.DelayChain.AirplaneCode, p.DelayChain.ScheduledDeparture })
+```
+
+but the engine stores it as **one** `Sorting` entry and renders it as one expression. The selector body is a
+`MemberInit`; the column visitor walks the bindings and concatenates their SQL fragments without a
+separator, so the statement is invalid and the failure is silent at compile time:
+
+```sql
+order by t1.idt2.id      -- measured: From<ISimpleEntity>().Join<IComplexEntity>().OrderBy(p => new { A = p.Item1.Id, B = p.Item2.Id })
+```
+
+Expected: `order by t1.id, t2.id`.
+
+This is a feature request to give composite keys a real surface (one call → several sort keys) and to make
+the unsupported shapes fail closed with a named message instead of emitting broken SQL.
+
+## Current behaviour
+
+* `EntityBuilder<TEntity>.OrderBy(Expression<Func<TEntity, object?>>, OrderDirection)` appends exactly one
+  `Sorting` (`src/nextorm.core/Builders/EntityBuilder.cs:5172-5180`; `Sorting` carries a single expression).
+* Rendering iterates the `Sorting[]` and calls `SqlSourceRenderer.MakeSort(...)` once per entry
+  (`src/nextorm.core/DataContext/SqlBuilder.cs:1680-1700`), which visits the expression with a column
+  visitor (`src/nextorm.core/DataContext/SqlSourceRenderer.cs:1460-1470`).
+* There is no expansion of `MemberInit` / anonymous types / `Tuple.Create` / `ValueTuple` into several keys,
+  and no diagnostic: the concatenated fragments produce syntactically valid-looking but semantically wrong
+  SQL (or a provider-side syntax error, depending on the fragments).
+* Workaround (documented, not a substitute): repeated `OrderBy`/`ThenBy` calls, which append tie-break keys
+  (`docs/guide/06-sorting-and-paging.md:24`). `OrderBy(a).OrderBy(b)` and `OrderBy(a).ThenBy(b)` are the
+  same request.
+
+## Desired surface
+
+Two acceptable designs; pick one in PLAN:
+
+1. **Expand a composite selector** — `OrderBy(p => new { p.A, p.B })`, `OrderBy(p => (p.A, p.B))` and
+   `OrderBy(p => Tuple.Create(p.A, p.B))` become N keys in declaration order, with the call's `direction`
+   and `NullsPosition` applied to every key.
+2. **Explicit multi-key overloads** — `OrderBy(params Expression<Func<TEntity, object?>>[] keys)` plus
+   `ThenBy`/`OrderByDescending` twins, leaving the single-key selector untouched.
+
+Whichever is chosen, a composite-shaped selector that cannot be expanded into plain scalar keys (for
+example a method call returning an object, or `new SomeClass { A = …, B = … }` with a mapping the engine
+cannot resolve) must throw a `NotSupportedException` naming the composite ORDER BY rule, **before** SQL is
+emitted — never concatenate bindings.
+
+## Acceptance
+
+- `OrderBy(p => new { p.A, p.B })` (or the chosen surface) emits `order by t1.a, t2.b` on every provider;
+  SQL is byte-identical to `OrderBy(p => p.A).ThenBy(p => p.B)`.
+- Direction and `NullsPosition` apply to each expanded key; the ordinal (`OrderBy(int)`) and single-key
+  expression paths stay byte-identical to today.
+- Composite shapes that cannot be expanded fail closed with a named `NotSupportedException` and emit no SQL.
+- SQL-generation tests for at least PostgreSQL and SQL Server (joined source, an alias chain, a CTE source)
+  plus a Composite-key row in `docs/guide/06-sorting-and-paging.md` (EN + RU).
+- `examples/nextorm.examples.postgres.aviasales/AviasalesQueries.cs` `AircraftDelayChains` can keep its two
+  `OrderBy` calls (they remain idiomatic) — the feature is opt-in and does not rewrite existing examples.
+
+## Context
+
+Found while reviewing the named-join example conversion (#231) — the two-key ordering there is written as
+two `OrderBy` calls, and the natural single-call form silently produces invalid SQL.
+
+### #361 — Join aliases: a joined CTE descriptor produced by an aliased chain silently drops Alias.X (CS0117)
+
+title:	Join aliases: a joined CTE descriptor produced by an aliased chain silently drops Alias.X (CS0117)
+state:	OPEN
+labels:	bug
+milestone:	1.0.9-rc5
+number:	361
+
+## Summary
+
+The join-alias generator silently drops an alias when the **joined source is a CTE/derived descriptor
+built from a chain that itself carries aliases**:
+
+```csharp
+var supplierDelays = ctx.From<IPurchaseOrderDetail>()
+    .WithAlias(Alias.OrderDetail)
+    .Join<IPurchaseOrderHeader>(..., Alias.PurchaseOrder)
+    .Join<IVendor>(..., Alias.Vendor)
+    .Select(p => new SupplierDelayRow { … })
+    .AsCte("SupplierDelays");
+
+var rows = await ctx.From(productionImpact).WithAlias(Alias.ProductionImpact)
+    .Join(supplierDelays, (pi, sd) => pi.ProductionImpact.ProductID == sd.ProductID, Alias.Supplier)
+    //                                                                              ^ CS0117: Alias.Supplier
+    …
+```
+
+`Alias.Supplier` is never emitted — the generator treats the join step as unresolvable and produces no
+member and no diagnostic, so the failure surfaces only as `CS0117` at the call site.
+
+Found by the examples conversion (#231): `examples/nextorm.examples.mssql.adventureworks`
+`AdventureWorksQueries.SupplyChain`.
+
+## Root cause
+
+`JoinAliasGenerator.TryGetJoinedType` (`src/nextorm.core.sourcegenerator/JoinAliasGenerator.cs:772`)
+resolves the joined element type **only from the semantic model**:
+
+```csharp
+if (semanticModel.GetTypeInfo(arguments[0].Expression, ct).Type is INamedTypeSymbol source
+    && source.TypeArguments.Length == 1
+    && (IsCteSource(source, semanticModel) || source.Name == "EntityBuilder")) { … }
+```
+
+On the generator's own pass the generated alias extensions do not exist yet, so the producer chain's
+type is an **error type** and the branch never matches. The *root* path already has the #230 syntax
+recovery (`ResolveQueryElementType`) for exactly this situation; the joined path had none.
+
+A second, related gap: `ResolveQueryElementType` recognised only `Select` as the operator that
+establishes the projected type, so a `SelectGroup` producer could not be recovered even through the
+syntax walk.
+
+## Fix (in this branch)
+
+1. When the joined source's semantic type is missing or an error type, recover the element type through
+   the existing `ResolveQueryElementType` walk and detect the descriptor kind (`AsCte` /
+   `AsRecursiveCte`) syntactically.
+2. Treat `SelectGroup` like `Select` in `ResolveQueryElementType` — it establishes the projected type
+   from the same lambda shape.
+
+No new diagnostic, no change for positional or unaliased shapes.
+
+## Acceptance
+
+- `Join(cte, …, Alias.X)` emits `Alias.X` when `cte` was produced by an aliased chain; the generated SQL
+  is identical to the positional form.
+- A `SelectGroup` producer can be consumed by an aliased chain.
+- `tests/nextorm.alias.tests` stays green (172/172 before the fix); a regression test covers both cases.
+- Examples: aliasing every `AdventureWorksQueries` chain (including `SupplyChain.supplierDelays`) builds
+  with 0 warnings / 0 errors and the live run keeps 11/11.
+
 ## Groups
 
 Clustering decided by `pdca-planner` after the ALL-barrier and persisted here (see §Decisions log): one group, `cap = 1` lane; the order below is the execution order inside that single lane.
 
 | group | ordered units | shared surface | why one group | worktree | branch | ref | status |
 |---|---|---|---|---|---|---|---|
-| G1 | T353 → T352 → T318 → T317 → T302 → T245 → T250 → T246 → T247 → T311 → T268 → T269 → T267 → T270 → T271 → T272 → T273 → T274 → T319 | src/nextorm.core/Query/QueryCommand*.cs; src/nextorm.core/Query/QueryCommandExtensions.cs; src/nextorm.core/DataContext/QueryPlanner.cs; src/nextorm.core/DataContext/DataContext.cs; src/nextorm.core/DataContext/SqlBuilder.cs; src/nextorm.core/Query/Json/; src/nextorm.core/Builders/ (CteHoister.cs, MetadataEagerLoadBinding.cs); examples/VERIFICATION.md; examples/nextorm.examples.postgres.aviasales/Benchmarks.cs; examples/nextorm.examples.clickhouse.analytics/Benchmarks.cs | 16 of the 18 executable units form one transitive write-surface component (src/nextorm.core core query, planner and builder files plus examples/VERIFICATION.md and the example Benchmarks.cs); T353 shares src/nextorm.core/Builders/ with T319; every container and benchmark run is globally exclusive, so a second lane could verify nothing in parallel | — | 1.0.9-rc5 | — | pending |
+| G1 | T353 → T352 → T318 → T317 → T302 → T245 → T250 → T246 → T247 → T311 → T359 → T360 → T361 → T268 → T269 → T267 → T270 → T271 → T272 → T273 → T274 → T319 | src/nextorm.core/Query/QueryCommand*.cs; src/nextorm.core/Query/QueryCommandExtensions.cs; src/nextorm.core/DataContext/QueryPlanner.cs; src/nextorm.core/DataContext/DataContext.cs; src/nextorm.core/DataContext/SqlBuilder.cs; src/nextorm.core/Query/Json/; src/nextorm.core/Builders/ (CteHoister.cs, MetadataEagerLoadBinding.cs); examples/VERIFICATION.md; examples/nextorm.examples.postgres.aviasales/Benchmarks.cs; examples/nextorm.examples.clickhouse.analytics/Benchmarks.cs; src/nextorm.clickhouse/ClickHouseDialect.cs; tests/nextorm.clickhouse.tests/; tests/nextorm.alias.tests/; tests/nextorm.core.tests/ | 16 of the 18 executable units form one transitive write-surface component (src/nextorm.core core query, planner and builder files plus examples/VERIFICATION.md and the example Benchmarks.cs); T353 shares src/nextorm.core/Builders/ with T319; every container and benchmark run is globally exclusive, so a second lane could verify nothing in parallel | — | 1.0.9-rc5 | — | pending |
 
 ## Integration branch
 
@@ -1191,6 +1432,27 @@ no plan revision bump, no new attempt, no defect entry — plan unchanged.
 - 2026-10-30T12:53:00Z · **`T245` Step 1 baseline recorded (measurement only, no product change).** On the frozen identity `HEAD cb2246e9` (`collection/rc5/group-1`, `src`/`tests` clean) the dispatch's three BDN runs plus the existing `--t245-attribution` probe ran one process at a time (all `rc=0`): EXCEPT `B_Nextorm_Cached_Except` `7 112.1 B/query` (71 121 B/op ÷ 10) vs `B_Linq2Db_Except` `5 176.2` ⇒ `1.374×` allocated, time `0.475×`; INTERSECT `B_Nextorm_Cached_Intersect` `7 096.1` vs `5 128.2` ⇒ `1.384×`, time `0.477×`; `Prepare()` controls `760.0`/`744.0 B/query`; ladder `Construct 4 184.18 → Prepare_NoHash 5 816.26 → Prepare_Hash 6 608.31 → Warm_PlanOnly 6 432.31/6 432.28 → Warm_Reused 0.00` B/query; probe composition per query EXCEPT/INTERSECT = operands `3 712`, clone `872`, prepare/hash `2 248`, execute `808`/`792`, closure residual `0`. Both same-round ratios sit above the `1.20×` target of `AC-245-01` — recorded, not adjudicated (verdict belongs to the Step 1 CHECK). Run A's filter did **not** yield the `Prepare()` controls or `*_Warm_Reused` the dispatch expected (they live in `SqliteBenchmarkFeaturesFair` / `SqliteBenchmarkWarmDecompose`); a 2-arm control run was added and nothing else. No attempt consumed, no criterion changed, no plan revision, no defect entry, zero product edits; item record `.pdca/status/T245-warm-set-ops-3.md` created with §Baseline record. Committed per this dispatch: the item record and this container status only (the container status is otherwise not committed by the campaign's policy). | `.pdca/status/T245-warm-set-ops-3.md` §Baseline record; `.pdca/rc5/items/T245/rv3/baseline/summary.md`; queue row `T245` unchanged
 
 - 2026-10-30T13:05:34Z · **Branch change directed by the user; the lane moved to `1.0.9-rc5` (ff-only).** The user directed that the lane's commits move from `collection/rc5/group-1` to `1.0.9-rc5`; this dispatch fast-forwarded the release branch to the lane tip and switched the worktree onto it (`git branch -f 1.0.9-rc5 46cd9785`, then `git switch 1.0.9-rc5`) under an ff-only precondition check — `git merge-base --is-ancestor 1.0.9-rc5 46cd9785` rc 0, `git diff --stat 1.0.9-rc5..46cd9785` exactly the two status files, nothing staged — after the caller's premise was **refuted** on disk (the caller reported the lane already fast-forwarded to `c7f4442d` and `1.0.9-rc5` checked out; the actual lane tip was `46cd9785`, one commit ahead of `c7f4442d`). Nothing was rewritten, reset or lost: HEAD `46cd9785` before and after, both status-file sha256 values unchanged, the 14-path `.pdca/status/*` dirty set unchanged and still uncommitted. `collection/rc5/group-1` is retired but kept as a label at `46cd9785` (never checked out again, never recreated, not an integration target). No merge barrier (one group `G1`), no `git merge --no-ff`, no push, no tag. `plan_cap = 3`, `lane_cap = 1`, the lane order, all counters, the evidence roots, the paused `T319` and the pending `#359`/`#360`/`#361` scope extension are unchanged. This changes no criterion, no plan revision, no attempt, no defect entry and no product file.
+- 2026-10-30T13:13:20Z · **Container revision `r = 1 → r = 2` (entry scope 19 → 22).** The user added `#359`, `#360`, `#361` to milestone `1.0.9-rc5` (#23); the single configured `pdca-planner` decided the revision — form `collection` and overlay `coder+.NET` unchanged, the form rationale carried forward from `r = 1` — with entry scope **22 tasks** (`#361`, `#360`, `#359`, `#353`, `#352`, `#319`, `#318`, `#317`, `#311`, `#302`, `#274`–`#267`, `#250`, `#247`, `#246`, `#245`: 20 open at revision time plus the 2 already closed by this collection) and the requested = delivered result unchanged in kind (verified execution and accounting of every milestone task on `1.0.9-rc5` under the collection contract).
+  - Criteria, verbatim from `.pdca/rc5/entry-plan-r2.md` §1 (`AC-COL-01` **re-issued** by the planner; `AC-COL-02`/`AC-COL-03`/`AC-COL-04` **unchanged** with the planner's stated reasons):
+    ```text
+    - **`AC-COL-01` (Полнота учёта очереди и дословная фиксация входов)**: *Принимаемый исход*: Все 22 задачи майлстона `1.0.9-rc5` (`#361`, `#360`, `#359`, `#353`, `#352`, `#319`, `#318`, `#317`, `#311`, `#302`, `#274`–`#267`, `#250`, `#247`, `#246`, `#245`, включая 2 уже закрытые этой коллекцией `#353`, `#352` и 20 открытых) зарегистрированы в `.pdca/status/collection-rc5.md` со стандартной 15-колоночной таблицей очереди и обязательными секциями контейнера, а полный исходный текст каждой из 22 задач (из `/tmp/nextorm-rc5-issues.md` для исходных 19 задач и дословных карточек GitHub Issues `#359`, `#360`, `#361` в снимке входов коллекции / записях элементов) сохранён без сокращений. *Негативное условие*: хотя бы одна из 22 задач отсутствует в очереди, её исходный текст усечён или переписан, либо задача перенесена в другой майлстон / создан дубликат в будущем майлстоне.
+    - **`AC-COL-02`**: **unchanged** — общерепозиторные гейты сборки (`0W/0E`), юнит-/диалектных/конвенционных/контейнерных интеграционных тестов (без `NEXTORM_SKIP_PROVIDERS`), приёмочного набора (7 кейсов ≤ 4 мин, 0 падений) и порогов покрытия (`85/75` и `65/74`) действуют без изменений для расширенного до 22 задач набора.
+    - **`AC-COL-03`**: **unchanged по составу обязательств автокоммита и гигиены Git/GitHub, с фиксацией входного ограничения пользователя по ветке** — коммиты линии `G1` выполняются напрямую в ветку `1.0.9-rc5` (метка `collection/rc5/group-1` выведена из обращения на `46cd9785`, барьер `git merge --no-ff` снят решением пользователя и не выполняется); все остальные требования `AC-COL-03` (автокоммит только затронутых файлов с `#N` и указателем на доказательства, закрытие выполненных задач с итоговым комментарием, сохранение незавершённых задач в `OPEN` в `1.0.9-rc5`, запрет `push`/`force-push`/слияния в `main`/тегов/захвата чужих грязных файлов) остаются в силе без изменений.
+    - **`AC-COL-04`**: **unchanged** — правило открытия пяти переформулированных из `rc4` задач (`#245`, `#246`, `#247`, `#250`, `#311`) на ревизии `r+1` с оценкой строго по тексту `rc5` не затрагивается добавлением `#359`, `#360`, `#361`.
+    ```
+  - Three new item plans, each `form: cycle` with `skill: pdca-dotnet` (`coder+.NET`), identity `N=1`, `r=1`, `n=1/3`, `plan_state=ready`, no DO started, no attempt consumed:
+    - `T359` — issue `#359` (ClickHouse `Array(Tuple(...))` in `MakeArrayElementType`), criteria `AC-T359-01`..`02`, evidence root `.pdca/rc5/items/T359/rv1/`, status `.pdca/status/T359-rc5-1.md`.
+    - `T360` — issue `#360` (core composite `OrderBy` selector), criteria `AC-T360-01`..`02`, evidence root `.pdca/rc5/items/T360/rv1/`, status `.pdca/status/T360-rc5-1.md`.
+    - `T361` — issue `#361` (regression tests for the `JoinAliasGenerator` CTE-descriptor / `SelectGroup` cases on top of the user's commit `c8eed046`), criteria `AC-T361-01`..`02`, evidence root `.pdca/rc5/items/T361/rv1/`, status `.pdca/status/T361-rc5-1.md`.
+  - New `G1` execution order (§Groups): `T353 → T352 → T318 → T317 → T302 → T245 → T250 → T246 → T247 → T311 → T359 → T360 → T361 → T268 → T269 → T267 → T270 → T271 → T272 → T273 → T274 → T319` — the three new units inserted as one block after `T311` and before the examples block `T268`…`T274`, the relative order of all 19 existing units unchanged.
+  - New dependency edge `T359 → T271` (the ClickHouse `Retention` example cannot run green until `Array(Tuple(...))` renders; `T359` therefore runs before the whole examples block). `T360` is opt-in and blocks nothing; `T361` is test-only.
+  - Schedule-revision classification: **compatible local** (persisted revision binding) — no stop and no re-approval; grounds: the scope extension was made by the user inside autonomous mode, no accepted/terminal/in-flight unit is cancelled, restarted or moved, and every pending unit keeps its relative order while the new edge runs forward along `G1`.
+  - Revision-binding line, verbatim:
+    ```text
+    schedule_revision: r=2 (compatible-local; base_revision=r1; active_item=T245@N3.r1.n1 untouched; scope=19->22 [+T359,+T360,+T361]; edges=[T359->T271]; order=T353->T352->T318->T317->T302->T245->T250->T246->T247->T311->T359->T360->T361->T268->T269->T267->T270->T271->T272->T273->T274->T319; branch=1.0.9-rc5 direct, group-branch merge superseded)
+    ```
+  - Complete returned report: `.pdca/rc5/entry-plan-r2.md` (verbatim planner report, sha256 `0283edbe19341e172e61660c3a041eb7e52075a0d17175f6d1835b534574ace4`, 30 744 bytes, 146 lines) — this entry references it and does not retell it.
+  - This changes no existing item's status, counters, plan revision or attempt (`T245` stays `N=3 r=1 n=1/3` mid-item, the three plan-terminal resolutions and the paused `T319` are untouched) and no product file.
 
 ## General verification and recovery
 
@@ -1202,8 +1464,8 @@ no plan revision bump, no new attempt, no defect entry — plan unchanged.
 
 ## Done / Verified / Incomplete
 
-- **Accepted goals: none yet** (0 of 19).
-- **Plan-terminal resolutions: 3** of 19 — `T302` = `infeasible` (PLAN-terminal, `attempts=0`, plan_state never `ready`, no DO, no CHECK; issue `#302` stays OPEN); `T318` = `infeasible` (PLAN-terminal after DO attempt 1: the scoped empty-collection copying is already absent, `0 B` measured delta on the clone-heavy arms, candidate reverted, no CHECK, no whole-goal acceptance; the queue's `attempts` cell reads `0` per the lint schema and the item record carries the real count of 1; issue `#318` stays OPEN); and `T317` = `infeasible` (DO → ACT with an expert feasibility decision after DO attempts 1 and 2: attempt 2 passed every gate — build 0W/0E, core 3892/3892, dialects 7/7, integration 7933/7732/0/201, acceptance 7/7 — but violated `AC-317-02` on 15 of 17 nextorm arms and showed no `AC-317-01` reduction above the host noise floor, and the routed strong-tier `pdca-escalate` decision established that a per-`QueryCommand` memo is written and never read on fresh-fluent calls, so attempt `3/3` was not run and no further attempt is consumed; the queue's `attempts` cell reads `0` per the lint schema and the item record carries the real count of 2; residual `qplan_hash` / `CaptureRawShape`·`Fingerprint` transferred to `T319` and `T245`; issue `#317` stays OPEN).
+- **Accepted goals: none yet** (0 of 22).
+- **Plan-terminal resolutions: 3** of 22 — `T302` = `infeasible` (PLAN-terminal, `attempts=0`, plan_state never `ready`, no DO, no CHECK; issue `#302` stays OPEN); `T318` = `infeasible` (PLAN-terminal after DO attempt 1: the scoped empty-collection copying is already absent, `0 B` measured delta on the clone-heavy arms, candidate reverted, no CHECK, no whole-goal acceptance; the queue's `attempts` cell reads `0` per the lint schema and the item record carries the real count of 1; issue `#318` stays OPEN); and `T317` = `infeasible` (DO → ACT with an expert feasibility decision after DO attempts 1 and 2: attempt 2 passed every gate — build 0W/0E, core 3892/3892, dialects 7/7, integration 7933/7732/0/201, acceptance 7/7 — but violated `AC-317-02` on 15 of 17 nextorm arms and showed no `AC-317-01` reduction above the host noise floor, and the routed strong-tier `pdca-escalate` decision established that a per-`QueryCommand` memo is written and never read on fresh-fluent calls, so attempt `3/3` was not run and no further attempt is consumed; the queue's `attempts` cell reads `0` per the lint schema and the item record carries the real count of 2; residual `qplan_hash` / `CaptureRawShape`·`Fingerprint` transferred to `T319` and `T245`; issue `#317` stays OPEN).
 - **Execution failures: none yet** — no item reached DO and failed; the three `incomplete` rows (`T302`, `T318`, `T317`) are PLAN-/DO-terminal feasibility resolutions, not execution failures.
 - **Collection completeness: none yet** — no original item goal is accepted.
 - **Integrated-tree verdict: none yet** — no independent integration CHECK has run.
@@ -1245,3 +1507,4 @@ append-only, one row per event, never edited retroactively:
 2026-10-30T12:53:00Z | D | revision r=1 | attempt n=1 | T245 Step 1 baseline (measurement only, no product change, no attempt consumed) on the frozen identity HEAD cb2246e9: EXCEPT 7 112.1 B/query vs linq2db 5 176.2 (1.374× alloc, 0.475× time, +1 935.9 B), INTERSECT 7 096.1 vs 5 128.2 (1.384×, 0.477×, +1 967.9 B), Prepare() controls 760.0/744.0, ladder Construct 4 184.18 → Warm_PlanOnly 6 432.31/6 432.28 → Warm_Reused 0.00 B/query, probe phases operands 3 712 / clone 872 / prepare 2 248 / execute 808-792 with closure residual 0; three BDN runs + the existing attribution probe all exit 0; CHECK pending, no verdict | `.pdca/rc5/items/T245/rv3/baseline/summary.md`, `.pdca/status/T245-warm-set-ops-3.md` §Baseline record
 2026-10-30T13:02:40Z | C | revision r=1 | attempt n=1 | T245 step-1 CHECK: not accepted -> DO evidence completion (no attempt consumed, counters unchanged); findings T245-S1-F1..F3 | `.pdca/rc5/items/T245/rv3/baseline/`
 2026-10-30T13:05:34Z | P | revision r=1 | attempt n=1 | Branch change directed by the user (bookkeeping only, no product change): the lane's commits now land on `1.0.9-rc5` — before `HEAD 46cd9785` on `collection/rc5/group-1`, after `HEAD 46cd9785` on `1.0.9-rc5`; `git branch -f 1.0.9-rc5 46cd9785` was legal only under the proven fast-forward (`git merge-base --is-ancestor 1.0.9-rc5 46cd9785` rc 0; `git diff --stat 1.0.9-rc5..46cd9785` = `.pdca/status/T245-warm-set-ops-3.md` and `.pdca/status/collection-rc5.md` only; `git diff --cached --stat` empty), then `git switch 1.0.9-rc5`. The 14-path dirty set (3 modified `T247`/`T250`/`T311`, 11 untracked `T246`/`T267`/`T268`/`T269`/`T270`/`T271`/`T272`/`T273`/`T274`/`T302`/`T319`) is unchanged and still uncommitted; sha256 `.pdca/status/collection-rc5.md` `3abd0701d5e8931123bb72ce2e05fdaa3f73eab94cb4fa0ab6e92854d69c6e25` before → same after, `.pdca/status/T245-warm-set-ops-3.md` `75b1834b88c6db7a06d3b1d6a06ec092dd0e942519e2b48c586dbf1ef99ffb59` before → same after; `collection/rc5/group-1` kept at `46cd9785` as a retired label (never checked out again, never recreated); no merge barrier, no `git merge --no-ff`, no push, no tag; no criterion, plan revision, attempt, counter, defect entry or product file changed. Notice (autonomous) for the final report: the caller's premise was refuted on disk — it reported the lane already fast-forwarded to `c7f4442d` with `1.0.9-rc5` checked out, while the actual state was `HEAD 46cd9785` on `collection/rc5/group-1` and `1.0.9-rc5` at `c7f4442d`, one commit behind. | queue `branch` cells, §Groups `G1`, §Integration branch, §Decisions log, this row; `git rev-parse HEAD` 46cd9785 on both sides; `git status --porcelain` 14 paths
+2026-10-30T13:13:51Z | P | revision r=2 | attempt n=1 | Container revision r=1 → r=2 recorded (entry scope 19 → 22): three new queue rows `T359`/`T360`/`T361` (`plan_state=ready`, `cycle` + `coder+.NET`, `N=1` `r=1` `n=1/3`, status paths `.pdca/status/T{359,360,361}-rc5-1.md`, evidence roots `.pdca/rc5/items/T{359,360,361}/rv1/`), `## Input` extended with the verbatim `#359`/`#360`/`#361` briefs (bodies byte-identical to `.pdca/rc5/input-scope-extension/issue-{359,360,361}.md`, header fields carried in file order), `G1` order now `T353 → T352 → T318 → T317 → T302 → T245 → T250 → T246 → T247 → T311 → T359 → T360 → T361 → T268 → T269 → T267 → T270 → T271 → T272 → T273 → T274 → T319`, edge `T359 → T271`, schedule revision classified **compatible local** (no stop/re-approve); `AC-COL-01` re-issued by `pdca-planner`, `AC-COL-02..04` unchanged; `T245` stays mid-item (`N=3 r=1 n=1/3`), no existing item's status, counter, plan revision or attempt changed, no product file touched; three item records created at the PLAN→DO boundary (no DO started, no attempt consumed) | `.pdca/rc5/entry-plan-r2.md`; queue rows `T359`/`T360`/`T361`; §Groups `G1`; §Decisions log; `.pdca/status/T359-rc5-1.md`, `.pdca/status/T360-rc5-1.md`, `.pdca/status/T361-rc5-1.md`
