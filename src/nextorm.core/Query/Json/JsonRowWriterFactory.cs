@@ -48,7 +48,8 @@ internal static class JsonRowWriterFactory
     private static readonly MethodInfo WriteStartObjectMI = typeof(Utf8JsonWriter).GetMethod(nameof(Utf8JsonWriter.WriteStartObject), Type.EmptyTypes)!;
     private static readonly MethodInfo WriteEndObjectMI = typeof(Utf8JsonWriter).GetMethod(nameof(Utf8JsonWriter.WriteEndObject), Type.EmptyTypes)!;
     private static readonly MethodInfo WriteNullValueMI = typeof(Utf8JsonWriter).GetMethod(nameof(Utf8JsonWriter.WriteNullValue), Type.EmptyTypes)!;
-    private static readonly MethodInfo WritePropertyNameMI = typeof(Utf8JsonWriter).GetMethod(nameof(Utf8JsonWriter.WritePropertyName), [typeof(string)])!;
+    private static readonly MethodInfo WritePropertyNameStringMI = typeof(Utf8JsonWriter).GetMethod(nameof(Utf8JsonWriter.WritePropertyName), [typeof(string)])!;
+    private static readonly MethodInfo WritePropertyNameMI = typeof(Utf8JsonWriter).GetMethod(nameof(Utf8JsonWriter.WritePropertyName), [typeof(JsonEncodedText)])!;
     private static readonly MethodInfo WriteBooleanValueMI = typeof(Utf8JsonWriter).GetMethod(nameof(Utf8JsonWriter.WriteBooleanValue), [typeof(bool)])!;
     private static readonly MethodInfo WriteStringValueStringMI = typeof(Utf8JsonWriter).GetMethod(nameof(Utf8JsonWriter.WriteStringValue), [typeof(string)])!;
     private static readonly MethodInfo WriteStringValueGuidMI = typeof(Utf8JsonWriter).GetMethod(nameof(Utf8JsonWriter.WriteStringValue), [typeof(Guid)])!;
@@ -118,7 +119,7 @@ internal static class JsonRowWriterFactory
             }
             else
             {
-                var name = Expression.Constant(column.Name);
+                var name = Expression.Constant(JsonEncodedText.Encode(column.Name));
                 writePresent = Expression.Block(
                     Expression.Call(writer, WritePropertyNameMI, name),
                     WriteValue(writer, column, value));
@@ -348,14 +349,14 @@ internal static class JsonRowWriterFactory
         var column = new JsonShapeColumn(binding.Ordinal, name, valueType, kind, binding.Nullable, binding.DefaultOnNull, enumUnderlying, enumConverter);
         var isNull = Expression.Call(record, IsDBNullMI, Expression.Constant(binding.Ordinal));
         var present = Expression.Block(
-            Expression.Call(writer, WritePropertyNameMI, Expression.Constant(name)),
+            Expression.Call(writer, WritePropertyNameMI, Expression.Constant(JsonEncodedText.Encode(name))),
             WriteValue(writer, column, ReadValue(record, column)));
 
         Expression writeNull;
         if (binding.DefaultOnNull)
         {
             writeNull = Expression.Block(
-                Expression.Call(writer, WritePropertyNameMI, Expression.Constant(name)),
+                Expression.Call(writer, WritePropertyNameMI, Expression.Constant(JsonEncodedText.Encode(name))),
                 WriteValue(writer, column, Expression.Default(valueType)));
         }
         else
@@ -363,7 +364,7 @@ internal static class JsonRowWriterFactory
             writeNull = options.IgnoreNull
                 ? Expression.Empty()
                 : Expression.Block(
-                    Expression.Call(writer, WritePropertyNameMI, Expression.Constant(name)),
+                    Expression.Call(writer, WritePropertyNameMI, Expression.Constant(JsonEncodedText.Encode(name))),
                     Expression.Call(writer, WriteNullValueMI));
         }
 
@@ -378,7 +379,7 @@ internal static class JsonRowWriterFactory
         var arrayWriter = BuildArrayWriter(node.DeclaredType, node.Name, depth + 1);
         var isNull = Expression.Call(record, IsDBNullMI, Expression.Constant(binding.Ordinal));
         var present = Expression.Block(
-            Expression.Call(writer, WritePropertyNameMI, Expression.Constant(name)),
+            Expression.Call(writer, WritePropertyNameMI, Expression.Constant(JsonEncodedText.Encode(name))),
             Expression.Invoke(
                 Expression.Constant(arrayWriter),
                 Expression.Call(record, GetValueMI, Expression.Constant(binding.Ordinal)),
@@ -386,7 +387,7 @@ internal static class JsonRowWriterFactory
         var writeNull = options.IgnoreNull
             ? (Expression)Expression.Empty()
             : Expression.Block(
-                Expression.Call(writer, WritePropertyNameMI, Expression.Constant(name)),
+                Expression.Call(writer, WritePropertyNameMI, Expression.Constant(JsonEncodedText.Encode(name))),
                 Expression.Call(writer, WriteNullValueMI));
         return Expression.IfThenElse(isNull, writeNull, present);
     }
@@ -398,18 +399,18 @@ internal static class JsonRowWriterFactory
         if (node.Presence.Kind == JsonShapePresenceKind.Always)
         {
             return Expression.Block(
-                Expression.Call(writer, WritePropertyNameMI, Expression.Constant(name)),
+                Expression.Call(writer, WritePropertyNameMI, Expression.Constant(JsonEncodedText.Encode(name))),
                 body);
         }
 
         var anyNotNull = BuildAnyColumnNotNull(node.Presence, record);
         var present = Expression.Block(
-            Expression.Call(writer, WritePropertyNameMI, Expression.Constant(name)),
+            Expression.Call(writer, WritePropertyNameMI, Expression.Constant(JsonEncodedText.Encode(name))),
             body);
         var writeNull = options.IgnoreNull
             ? (Expression)Expression.Empty()
             : Expression.Block(
-                Expression.Call(writer, WritePropertyNameMI, Expression.Constant(name)),
+                Expression.Call(writer, WritePropertyNameMI, Expression.Constant(JsonEncodedText.Encode(name))),
                 Expression.Call(writer, WriteNullValueMI));
         return Expression.IfThenElse(anyNotNull, present, writeNull);
     }

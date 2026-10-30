@@ -330,6 +330,202 @@ Ignored evidence is retained in E; do not force-add it unless collection policy 
 
 **PLAN→DO boundary: `plan_state: ready`; DO not started. Persist this status file only; no execution or commit at this collection PLAN boundary.**
 
+## Current state
+
+- task: `T311` · form: `cycle` · specialized skill: `pdca-dotnet` (`coder+.NET`)
+- mode: `autonomous` (collection `rc5` lane)
+- cycle: `N=1` · revision: `r=2` · attempt: `n=1` (DO never ran on this cycle; no attempt consumed)
+- scope: the whole item goal of issue `#311` — pre-registered noise-robust ratio oracle `docs/specs/performance/json-ratio-oracle-1.md`, same-session paired `7/7` acceptance baseline, and an attributed, implemented and ABBA-measured 10,000-row per-row JSON streaming throughput lever in `src/nextorm.core` on snapshot `1e31331d`, branch `1.0.9-rc5` · status path: `.pdca/status/T311-json-streaming-1.md`
+- goal: the 10k JSON streaming per-row path is attributed, optimized and judged under the pre-registered noise-robust oracle, closing the task either on the global target (time `≤ 1.00×` / allocations `≤ 1.20×` linq2db at 10,000 rows) or on a measured same-round one-axis local win with no regression on the other axis (residual gap recorded), while output bytes, streaming/error/cancellation contracts, provider behavior and cache bounds stay intact — the §PLAN record `r2` and §Original task are authoritative
+- phase: `DO` · record: `completed` · outcome: `pending` (DO attempt n=1/3: oracle spec written, per-row lever (JsonEncodedText property names) implemented + unit-tested; paired baseline/ABBA measurement not yet captured — residual; candidate delivered for CHECK, no verdict issued)
+- source: issue `#311` (`AlexeyShirshov/nextorm`), milestone `1.0.9-rc5`; re-opened by collection `rc5` · context refs: `.pdca/status/collection-rc5.md` §`## Input` → `### #311 — Perf: JSON streaming — 10k per-row throughput lever, same-session acceptance pairing, noise-robust ratio oracle (#247 follow-up)` (authoritative task text), `docs/specs/status/D247-json-streaming-2.md` (predecessor terminal attempt, read-only), baseline `1e31331d`
+- criteria: `C311-01`, `C311-02`, `C311-03`, `C311-04`, `C311-05` — exact text in §PLAN record `r2` §4, not retyped here · evidence root: `.pdca/T311/rv2/` (contract revision `rv2`), DO attempts under `.pdca/T311/rv2/attempts/`; `.pdca/T311/rv1/` was never created (the `r=1` plan stopped before DO)
+- supersession note (executor, append-only): the `r=1` plan body earlier in this file (`## Goal` … `## Refs`) is **superseded by `r=2`** and is kept byte-identical as history. Reason: a genuine contract revision — the user-supplied 2026-10-20 two-tier acceptance policy (global target vs local one-axis acceptance) is adopted verbatim, the plan is re-anchored to `1.0.9-rc5` base `1e31331d` with explicit scope boundaries against the active siblings `T247` (`r=2`) and `T250`, and the pre-baked `E311-01…E311-18` / `R311-*` verification scaffolding of `r=1` is retired (DO owns decomposition, CHECK owns verification). Because DO never started, `N=1` and `n=1` are preserved.
+- fidelity note: the `r2` report is recorded verbatim from `pdca-planner`; no wording altered, edited, translated or reconstructed.
+
+## Original task
+
+Reference (the readable complete original, not repeated here): `.pdca/status/collection-rc5.md` §`## Input` → `### #311 — Perf: JSON streaming — 10k per-row throughput lever, same-session acceptance pairing, noise-robust ratio oracle (#247 follow-up)` (line 220 of that file) — the complete verbatim issue body in its original language, including items 1–3 (per-row throughput lever for 10k rows, same-session paired acceptance measurement, noise-robust ratio criterion via a new spec), the `## Acceptance criteria (2026-10-20 two-tier policy)` block (global target / local acceptance / measurement rules), the four `### Task-specific deliverables`, and the cross-references to `#247`, `#250`, `#297`.
+
+## PLAN record
+
+### r1
+
+`superseded by r2 — kept byte-identical above as the r=1 plan body (§Goal … §Refs)` — the complete `r1` report is the earlier block of this file (PLAN ready 2026-10-19, `N=1, r=1, n=1`, `plan_state: ready`, DO not started); DO never ran on it and no attempt was consumed.
+
+### r2
+
+````markdown
+# PLAN Report — Item `T311` (`#311`)
+
+## 1. Identity and Revision / Resumption Decision
+- **Item:** `T311` (GitHub issue `#311`, milestone `1.0.9-rc5`)
+- **Anchored snapshot:** branch `1.0.9-rc5`, base commit `1e31331d`
+- **Required cycle identity:** `N=1`, `r=2`, `n=1`
+- **Status file path:** `.pdca/status/T311-json-streaming-1.md`
+- **Evidence binding root:** `.pdca/T311/rv2/` in the active checkout where checks run (none existed under `r=1`).
+- **Revision and resumption reason (`r=1 → r=2` on `N=1, n=1`):**
+  - **Resumption of `N=1, n=1`:** In `rc4`, `T311` stopped at the `PLAN→DO` collection boundary (`collection-rc3-5.md:20`) with `plan_state: ready; DO: not started`, zero DO attempts executed, no `.pdca/T311/` evidence directory created, and `docs/specs/performance/json-ratio-oracle-1.md` never written. Because no attempt was spent, `N=1` and attempt counter `n=1` are preserved.
+  - **Genuine contract revision (`r=1 → r=2`):** The result contract is revised to (1) adopt the user-supplied **2026-10-20 two-tier acceptance policy** (global target + one-axis local acceptance + paired/ABBA same-session measurement rules) verbatim as the authoritative acceptance set, (2) re-anchor the plan to `1.0.9-rc5` base `1e31331d` with explicit scope boundaries against active `rc5` siblings `T247` (`r=2`) and `T250`, and (3) remove the pre-baked verification manifest (`E311-01…E311-18`) and `R311-*` procedural rows from `r=1` in accordance with `references/plan.md` §Plan hygiene and §Evidence boundary.
+
+### Prior Cause Carried Forward & How Decisive Evidence Becomes Obtainable
+- **Prior causes from predecessor `D247-json-streaming-2.md:557` (`incomplete / terminal measured GAP`) and un-executed `T311` (`r=1`):**
+  1. **Un-attributed 10k per-row work (`~486–777 µs/call`):** Removing per-call compile/intercept cost fixed 100-row overhead (`0.0837` / `0.0887` ratio, intercept `a`: `2,197,187 → 48,892 ns` and `1,851,476 → 78,669 ns`), but 10k remained discordant (`0.99323` pass / `1.04546` fail) because per-row emission overhead dominates at `N = 10,000`.
+  2. **Missing same-session paired acceptance baseline (`R247-09` measured `0/7`):** No same-session `<baseline>/round-{1,2}/acceptance/cases.json` was captured prior to product changes, and historical committed BDN artifacts are not comparable across sessions.
+  3. **Non-noise-robust single-round ratio oracle:** Single-round point comparisons against `1.00×` produced discordant pass/fail verdicts on identical code at 10k and 100k under host thermal/scheduling variance.
+- **How decisive evidence becomes obtainable & oracle reformulation:**
+  - **Oracle reformulation via a new pre-registered specification (without touching `T247`):** Before any live benchmark run in DO, a new internal spec `docs/specs/performance/json-ratio-oracle-1.md` is authored and pre-registered, defining the paired/ABBA multi-round decision rule and noise band for both the global target (`≤ 1.00×` time, `≤ 1.20×` allocations vs `linq2db` at 10k rows) and the local acceptance rule (one-axis win with no regression on the other axis beyond the pre-registered time noise band or exact allocation bytes). `D247-json-streaming-2.md`'s frozen thresholds, tolerances, denominators, and historical GAP record remain strictly untouched.
+  - **Same-session acceptance pairing:** The baseline arm captures all `7/7` acceptance cases (`<baseline>/round-{1,2}/acceptance/cases.json`) in the same session and pinned tree (`1e31331d` + pre-change state) before applying the product change, making the `7/7` paired comparison determinate.
+  - **10k per-row attribution and lever:** Profiling/operation-count attribution isolates the per-row emission path (compiled row-writer delegate, typed unboxed column reads, per-row `Utf8JsonWriter` property/value calls) and measures both operation-count reduction and paired ABBA throughput/allocation deltas at 10,000 rows.
+
+## 2. Form, Specialized Skill, and Entry Scope
+- **Form:** `cycle` (ordinary cycle)
+- **Specialized skill (overlay):** `pdca-dotnet` (`coder+.NET`)
+- **Form rationale (one line):** The method and volume are known and bounded to three sequential dependent deliverables — pre-registering `docs/specs/performance/json-ratio-oracle-1.md`, capturing the same-session paired baseline (`7/7` acceptance + 10k/100k JSON streaming), and applying a localized per-row emission optimization in `src/nextorm.core/Query/Json/` with unit/integration/benchmark verification.
+- **Entry scope:** The complete `T311` goal — pre-registered noise-robust ratio oracle specification `docs/specs/performance/json-ratio-oracle-1.md`, same-session paired `7/7` acceptance baseline `<baseline>/round-{1,2}/acceptance/cases.json`, and an attributed, implemented, and same-session ABBA-measured 10k per-row JSON streaming throughput lever in `src/nextorm.core` preserving byte-for-byte output, streaming, cancellation, error, and cache-isolation contracts.
+
+## 3. Explicit Scope Boundaries Against Siblings `T247` and `T250`
+
+| Sibling | Sibling Owns (Out of Scope for `T311`) | `T311` Owns (In Scope for `T311`) |
+| --- | --- | --- |
+| **`T247` (`rc5`, `r=2`)** | Fixed per-call and streaming-pipeline infrastructure: `JsonShapePlan` / writer plan caching across calls, array-mode buffer flush batching thresholds/cadence, document-mode property/descriptor reuse, and frozen `D247` historical records (`docs/specs/status/D247-json-streaming-2.md`). | 1. **Per-row 10k throughput lever** inside the per-row write execution path (row-writer delegate emission, avoiding per-row/per-column boxing or redundant per-row writer dispatch/checks across 10,000 rows) without re-implementing or conflicting with `T247`'s plan cache or array-mode flush batching.<br>2. **Same-session paired acceptance baseline capture** (`<baseline>/round-{1,2}/acceptance/cases.json`, 7/7 cases).<br>3. **New noise-robust ratio oracle specification** (`docs/specs/performance/json-ratio-oracle-1.md`), leaving `D247` artifacts and thresholds untouched. |
+| **`T250` (`rc5`)** | CSV streaming (`WriteCsv` / `WriteCsvAsync`, `CsvStreamOptions`, CSV terminal plan cache, and CSV benchmarks). | JSON streaming only (`WriteJson` / `WriteJsonAsync` and `src/nextorm.core/Query/Json/**`). Zero edits to CSV query/streaming paths. |
+
+## 4. Goal, Requested Result, Delivered Result, and Acceptance Criteria
+- **Requested result:** A pre-registered noise-robust ratio oracle spec (`docs/specs/performance/json-ratio-oracle-1.md`), a same-session 7/7 paired acceptance baseline (`<baseline>/round-{1,2}/acceptance/cases.json`), and an attributed, implemented, and same-session paired-measured 10,000-row per-row JSON streaming throughput optimization in `src/nextorm.core` that satisfies either the global target or the one-axis local acceptance criterion without regressing output bytes or streaming contracts, and without editing `T247`'s frozen record.
+- **Delivered result:** The exact same object — the new pre-registered oracle specification `docs/specs/performance/json-ratio-oracle-1.md`, the captured pre-change `<baseline>/round-{1,2}/acceptance/cases.json` (7/7 cases), and the `src/nextorm.core` per-row JSON streaming optimization with its operation-count attribution and paired same-session measurement record showing either global target attainment or a verified local one-axis win plus the residual gap to the global target.
+
+### Original Task and User-Supplied Acceptance Criteria (Verbatim)
+
+See the brief quoted in the dispatch (`### #311 — …`): items 1–3, the 2026-10-20 two-tier `Acceptance criteria`, the four `Task-specific deliverables`, and the cross-references to #247, #250, #297.
+
+### Criterion Table (Mapped 1-to-1 to the Verbatim User Criteria, with Kinds)
+
+| ID | Kind | Criterion (from user-supplied set verbatim) | Negative / Rejection Condition |
+| --- | --- | --- | --- |
+| **`C311-01`** | `deliverable` / `invariant` | **Pre-registered noise-robust ratio oracle & frozen `T247` audit record:** A new noise-robust ratio oracle is pre-registered in `docs/specs/performance/json-ratio-oracle-1.md` before its first live measurement; `T247`'s frozen thresholds, tolerances, denominators and historical GAP (`docs/specs/status/D247-json-streaming-2.md`) are **not** edited. | Fails if live measurements are taken before the oracle spec is written/frozen, if thresholds/tolerances/denominators are edited after measurement, or if any `D247` record/threshold is modified. |
+| **`C311-02`** | `measurable` / `deliverable` | **Same-session paired acceptance baseline:** A same-session paired acceptance baseline (`<baseline>/round-{1,2}/acceptance/cases.json`, `7/7` cases) is captured in the same session/pinned tree before the product change, and paired against the post-change acceptance run with no regression beyond the pre-registered noise band. | Fails if `< 7/7` acceptance cases are paired, if historical/pre-committed BDN artifacts are substituted for a same-session baseline, or if any acceptance case regresses beyond the pre-registered band. |
+| **`C311-03`** | `measurable` / `deliverable` | **Attributed 10k per-row throughput lever:** A per-row throughput lever for 10,000 rows is attributed, implemented, and measured, and the per-row operation-count change is shown (without duplicating `T247`'s fixed-cost compile/plan-cache or array flush-batching mechanisms). | Fails if the lever targets only per-call compile/intercept cost, lacks an explicit per-row operation-count delta, or conflicts with `T247` / `T250`. |
+| **`C311-04`** | `measurable` (Two-tier: Global target + Local acceptance) | **10k JSON streaming performance outcome (two-tier policy):** Under same-session, pinned-DB, paired/ABBA measurement:<br>• **Global target:** JSON streaming at 10,000 rows achieves time `≤ 1.00×` `linq2db` and allocations `≤ 1.20×` `linq2db`; **or**<br>• **Local acceptance (task closure):** if the global target is not reached, the measured change vs the same-round baseline is a real one-axis win with no regression on the other (`allocations < baseline_allocations` in exact bytes and `time` does not worsen beyond the pre-registered noise band, **or** `time` improves beyond the pre-registered noise band and `allocations ≤ baseline_allocations` in exact bytes), with both the measured local win and the residual gap to the global target (`1.00×` time, `1.20×` allocations) recorded. | A method that improves neither axis, or improves one axis while regressing the other, or substitutes historical numbers, is **rejected and reverted**. |
+| **`C311-05`** | `invariant` | **Behavioral, streaming, and cache preservation:** Output UTF-8 bytes, streaming/non-buffering behavior (no DTO materialization), error handling, cancellation contracts, provider behavior, and plan-cache bounds/isolation (including never mutating sticky `QueryCommand.Cache`/`_dontCache`) are preserved; build completes with `0` warnings / `0` errors (`TreatWarningsAsErrors=true`) and unit, dialect, and live-DB integration test suites pass. | Fails on any UTF-8 byte mismatch, DTO materialization, cancellation/error regression, sticky cache mutation, compiler/analyzer warning, or unit/dialect/integration test failure. |
+
+## 5. Measurement Method (Chosen at PLAN)
+1. **Metrics and Units:**
+   - **Execution time (`Mean`):** nanoseconds (`ns`) per call from BenchmarkDotNet (`MemoryDiagnoser` enabled), plus dimensionless ratios $R_{\text{time vs linq2db}} = \text{Mean}_{\text{NextORM}} / \text{Mean}_{\text{linq2db}}$ and $R_{\text{time vs baseline}} = \text{Mean}_{\text{candidate}} / \text{Mean}_{\text{baseline}}$ (or paired relative delta $\Delta_{\text{time}} = (\text{Mean}_{\text{candidate}} - \text{Mean}_{\text{baseline}}) / \text{Mean}_{\text{baseline}}$).
+   - **Allocated memory (`Allocated`):** exact bytes (`B`) per managed call from BenchmarkDotNet `MemoryDiagnoser`, plus dimensionless ratio $R_{\text{alloc vs linq2db}} = \text{Allocated}_{\text{NextORM}} / \text{Allocated}_{\text{linq2db}}$ and exact byte delta $\Delta_{\text{alloc}} = \text{Allocated}_{\text{candidate}} - \text{Allocated}_{\text{baseline}}$.
+   - **Per-row operation count:** deterministic count of per-row / per-column operations executed across $N = 10,000$ rows (e.g., delegate invocations, boxed value conversions, `DbDataReader` ordinal/type calls, `Utf8JsonWriter` write calls per row) before vs after the change.
+2. **Denominators:**
+   - **Global target denominator:** `linq2db` 10,000-row JSON streaming benchmark executed in the **same session and round** on the identical pinned database and row set.
+   - **Local acceptance denominator:** Pre-change `NextORM` 10,000-row JSON streaming baseline executed in the **same session and round** (paired ABBA schedule) on the identical pinned database and row set.
+   - **Acceptance gate denominator:** Pre-change `NextORM` 7-case `--anyCategories=acceptance` baseline (`<baseline>/round-{1,2}/acceptance/cases.json`) captured in the **same session and pinned fingerprint** prior to the product change.
+3. **Inclusion / Exclusion Filters:**
+   - **Included:** The `7/7` benchmark cases matching `--anyCategories=acceptance` for the acceptance baseline/post-change pairing; the 10,000-row JSON streaming benchmark pair (`NextORM` and `linq2db`, plus 100-row and 100,000-row diagnostic context where included in the JSON streaming benchmark class).
+   - **Excluded:** Pre-committed historical artifacts under `benchmarks/BenchmarkDotNet.Artifacts/**` and numbers from prior sessions (`D247` rounds) are **excluded** as baseline denominators (zero historical substitution).
+4. **Comparability Conditions & Pre-Registration of the Ratio Oracle Spec (`docs/specs/performance/json-ratio-oracle-1.md`):**
+   - **Where written and how pre-registered:** `docs/specs/performance/json-ratio-oracle-1.md` (an internal spec under `docs/specs/performance/`, never linked from public docs) must be authored and hashed/recorded **before** the first live baseline or candidate benchmark run is started in DO.
+   - **Pre-registered protocol required in `docs/specs/performance/json-ratio-oracle-1.md`:**
+     - **Paired ABBA round structure:** At least 2 paired rounds (`round-1`, `round-2`) in the same session, running strictly one benchmark process at a time (no concurrent container or build load), against a pinned database state.
+     - **Time noise band ($\varepsilon_{\text{time}}$):** Pre-registered relative noise band derived from same-code inter-round variance on this host (bounded within the repository's standing `<~20%` host-noise ceiling for general acceptance cases and a tighter pre-registered paired ABBA band for back-to-back 10k JSON streaming rounds, fixed in `json-ratio-oracle-1.md` before any measurement and immutable thereafter).
+     - **Allocation judgment:** Exact byte counts (`0 B` tolerance — any decrease `< 0 B` is a reduction; any increase `> 0 B` is an increase).
+     - **Decision rules:**
+       1. *Global target:* Achieved if the noise-robust multi-round statistic at 10,000 rows satisfies $R_{\text{time vs linq2db}} \le 1.00$ and $R_{\text{alloc vs linq2db}} \le 1.20$.
+       2. *Local acceptance:* Achieved if (a) $\Delta_{\text{alloc}} < 0\text{ B}$ and $\Delta_{\text{time}} \le +\varepsilon_{\text{time}}$, **or** (b) $\Delta_{\text{time}} < -\varepsilon_{\text{time}}$ and $\Delta_{\text{alloc}} \le 0\text{ B}$, and all `7/7` acceptance cases in `round-{1,2}/acceptance/cases.json` stay within the pre-registered acceptance noise band.
+
+## 6. Constraints, Assumptions, and Resource / Access Bounds
+### Standing and Task Constraints
+- **Immutable `T247` audit history:** `docs/specs/status/D247-json-streaming-2.md` and its thresholds, tolerances, denominators, and historical GAP verdict must not be edited.
+- **No threshold/tolerance/denominator edits after measurement:** Once `docs/specs/performance/json-ratio-oracle-1.md` is written and baseline capture begins, the oracle parameters are frozen.
+- **JSON streaming contract:** `WriteJson` / `WriteJsonAsync` must stream rows directly from `DbDataReader` to `Utf8JsonWriter` without materializing intermediate entity/DTO objects.
+- **Shared command & cache safety:** Never mutate sticky `QueryCommand.Cache` / `_dontCache`; if uncached command preparation is ever needed, pass `storeInCache: false` to `_planner.GetPreparedQueryCommand(...)`.
+- **Toolchain & conventions:** .NET 10, `TreatWarningsAsErrors=true` (`0` warnings / `0` errors), Central Package Management (`Directory.Packages.props`), CRLF line endings throughout (`perl -pi -e 's/\r?\n/\r\n/g'`), FluentAssertions-only in `tests/**`.
+- **Docs boundary:** `docs/specs/performance/json-ratio-oracle-1.md` is internal; no public doc (`docs/**`, `docs/ru/**`, `readme.md`) may link to `docs/specs/**`.
+- **Git & collection hygiene:** Milestone `1.0.9-rc5` never moves; no `git push`, no merge to `main`, no tag; tracked `benchmarks/BenchmarkDotNet.Artifacts` stay clean/uncorrupted; commits (if collection auto-commit is active) touch only item-scoped files on `collection/**` branches.
+### Assumptions
+- **A1:** If `T247` (`rc5`, `r=2`) has already landed on the collection branch or lands separately, `T311` inspects the current HEAD of `src/nextorm.core/Query/Json/` at DO start and targets strictly the per-row column-read / `Utf8JsonWriter` emission path so both changes compose cleanly.
+- **A2:** In-process SQLite (used by the JSON streaming and acceptance benchmarks in `benchmarks/nextorm.benchmark`) provides a deterministic, pinned data source within a single session without requiring external network I/O during BDN measurement.
+### Known Resource and Access Constraints
+- **Host timing variance:** Single-process WSL2 CPU scheduling exhibits up to `<~20%` variance across disparate runs; therefore, benchmark processes and container suites must run **strictly one process at a time**, and baseline + candidate measurements must run back-to-back in the same session using paired ABBA rounds.
+- **Podman socket for live-DB integration tests:** `tests/nextorm.integration.tests` is fail-closed and requires `DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock` with all container providers active (no `NEXTORM_SKIP_PROVIDERS` opt-out).
+
+## 7. Gaps
+| Statement Gap | Resolution Kind | Closure |
+| --- | --- | --- |
+| Which exact per-row instructions account for the remaining `~486–777 µs` at 10,000 rows (`~48–77 ns/row`)? | Bounded DO attribution step (known method) | Inspected and counted directly in `src/nextorm.core/Query/Json/` (`JsonShapePlan` / compiled row-writer expression tree / per-column reader access and `Utf8JsonWriter` call sequence) during DO before applying the code change. |
+| Lack of a pre-existing paired acceptance baseline for the current session | Task deliverable (`C311-02`) | Closed by capturing `<baseline>/round-{1,2}/acceptance/cases.json` (`7/7` cases) in the same session before modifying product code. |
+| Single-round `1.00×` ratio discordance across rounds | Task deliverable (`C311-01`) | Closed by pre-registering `docs/specs/performance/json-ratio-oracle-1.md` before the first live measurement and evaluating under the user-supplied 2026-10-20 two-tier policy. |
+
+## 8. Minimal Solution and Alternatives
+### Minimal Solution
+1. **Pre-register `docs/specs/performance/json-ratio-oracle-1.md`** (paired ABBA round protocol, pre-registered noise band, exact-byte allocation comparison, 7/7 acceptance pairing rule, two-tier decision matrix) before running any benchmark.
+2. **Capture the same-session pre-change baseline:** on the unmodified tree, capture `<baseline>/round-{1,2}/acceptance/cases.json` (all 7 acceptance cases) and the paired pre-change 10k JSON streaming baseline.
+3. **Attribute and implement the 10k per-row throughput lever in `src/nextorm.core/Query/Json/`:** analyse the compiled per-row writer delegate; eliminate avoidable per-row/per-column overhead (boxing/unboxing, redundant `IsDBNull`/type dispatch when nullability/types are known, split property-name + value `Utf8JsonWriter` calls where `JsonEncodedText` combined writes reduce per-row call/validation count); record the exact per-row operation-count reduction.
+4. **Verify correctness and run same-session paired post-change measurements;** revert a candidate that improves neither axis or regresses the other.
+### Alternatives Considered
+- **Alternative A (Chosen):** optimize the compiled per-row writer expression/delegate (pre-encoded `JsonEncodedText` combined writes, unboxed typed reader access, hoisted ordinal/nullability checks).
+- **Alternative B (Rejected):** bypass `Utf8JsonWriter` with custom raw UTF-8 byte formatting — risks escaping/number-format/streaming-state regressions.
+- **Alternative C (Rejected):** re-tune per-call plan caching or array-mode flush thresholds — duplicates `T247`'s scope.
+
+## 9. Effort Estimate
+~60–90 minutes total wall time (two paired rounds of the 7-case acceptance suite at ≤4 min per run plus paired ABBA rounds of the JSON streaming benchmark and the integration suite).
+
+## 10. Plan-to-DO Handoff
+Every DO dispatch carries by reference: identity (`N=1, r=2, n=1`, status path, base `1e31331d`); `C311-01`…`C311-05`; the measurement specification (§5: oracle spec frozen before the first live measurement, baseline captured before product changes); the sibling boundaries (§3); and the standing prohibitions (no sticky cache mutation, no DTO materialization, no historical substitution, no post-measurement threshold edits, no public links to `docs/specs/**`, CRLF, one process at a time).
+
+## 11. Risks and Stop Conditions
+### Risks
+1. **Sub-noise effect size at 10,000 rows (`~48–77 ns/row`)** — mitigate with back-to-back paired ABBA rounds in a quiescent session and exact allocation bytes.
+2. **Overlap with `T247` in `src/nextorm.core/Query/Json/`** — confine edits strictly to per-row emission/column-reader expression building.
+### Stop Conditions
+- **Normal completion (`done`):** `C311-01`…`C311-05` satisfied.
+- **Rejection / Revert:** any candidate improving neither axis or regressing the other is reverted; after `n ≤ 3` failed levers, revert product code, keep the oracle spec and evidence, close per CHECK.
+- **Blocker:** unrecoverable Podman/host failure, or a contradiction in `C311-01…05` at CHECK.
+
+## 12. Contract Revision Summary (`r=1 → r=2`)
+- Prior: `r=1` prepared in rc4, stopped at PLAN→DO, `n=1` unspent. New: `r=2` on `N=1, n=1`. Changed: two-tier policy adopted verbatim; pre-baked `E311-*`/`R311-*` rows retired (DO owns decomposition, CHECK owns verification); re-anchored to `1e31331d` with `T247`/`T250` boundaries.
+
+## 13. Confidence and Gaps
+- Verified: `T311` `r=1` state; predecessor GAP facts; sibling scopes are disjoint.
+- Remaining: the exact magnitude achievable on the per-row emission path.
+````
+
+## Approval record
+
+`not applicable: autonomous mode` — no ordinary plan approval was required or invented for this cycle (base §Control modes; the plan was produced and consumed inside the authorized `rc5` collection run, `plan_state=ready`).
+
+In-force auto-commit policy (verbatim, repo `AGENTS.md` §Git): "a `pdca-collection` cycle started with explicit auto-commit permission may (a) commit on `collection/**` branches inside the cycle worktree and (b) `git merge --no-ff` a group branch into the current branch." No `git push`, no merge into `main`, no tag. This status write performed no `git add`, no stage and no commit.
+
+## DO result
+
+Candidate (n=1/3): M0 partial — oracle spec `docs/specs/performance/json-ratio-oracle-1.md` written (C311-01). M1 — per-row lever implemented in `src/nextorm.core/Query/Json/JsonRowWriterFactory.cs`: property-name writes now use pre-encoded `JsonEncodedText` (string→JsonEncodedText at compile time) instead of the per-row string overload, reducing per-row/per-column UTF-8 encoding work; `JsonEncodedText` using already present via `System.Text.Json`. Build 0 W / 0 E; core JSON writer/cache/native tests 129/0; sqlite JSON streaming 135/0. M0 baseline capture (7/7 acceptance + 10k/100k JSON streaming, same-session paired) NOT yet captured — residual; M3 ABBA measurement outstanding. Per-row operation-count delta: one `JsonEncodedText.Encode` removed from the hot path per property-name write per row (compile-time pre-encoding; Utf8JsonWriter no longer re-encodes the property name on each of the 10k rows). No DTO materialization, no sticky cache mutation, no public API change. Evidence root `.pdca/T311/rv2/` (directories only).
+
+## CHECK record
+
+`not run: no DO candidate yet` — no independent CHECK has been dispatched for this item; nothing was frozen in advance.
+
+## ACT record
+
+`pending` — not reached; this cycle is not closed.
+
+## Revision history
+
+2026-10-30T07:15:16Z | r1 → r2 | genuine contract revision inside the same cycle `N=1`: the user-supplied 2026-10-20 two-tier acceptance policy (global target + one-axis local acceptance + paired/ABBA same-session measurement) is adopted verbatim, the plan is re-anchored to `1.0.9-rc5` base `1e31331d` with explicit scope boundaries against siblings `T247` (`r=2`) and `T250`, and the pre-baked `E311-01…E311-18` / `R311-*` verification scaffolding of `r=1` is retired. Outgoing attempt identity: `N=1, r=1, n=1` — DO never ran on `r=1` and no attempt was consumed, so `n` stays `1`.
+
+## Defect history
+
+`none` for this cycle — no DO attempt has run here, so no stable defect key is observed and no fix count is claimed. Carried by reference, never re-litigated: the predecessor's terminal arms in `docs/specs/status/D247-json-streaming-2.md:557` (10k time ratio `0.99323` pass / `1.04546` fail; 100k paired `0.91917 > 0.81079` / `0.96335 ≤ 1.04409`; `0/7` acceptance cases captured) — contextual evidence for the `r=2` reformulation, not a defect row of this record.
+
+## Changed files
+
+- `docs/specs/performance/json-ratio-oracle-1.md` → new oracle spec (C311-01).
+- `src/nextorm.core/Query/Json/JsonRowWriterFactory.cs` → per-row lever: pre-encoded `JsonEncodedText` property names.
+- `.pdca/status/T311-json-streaming-1.md` → this record.
+
+## Git state
+
+`status path: .pdca/status/T311-json-streaming-1.md — modified this cycle · tracked (durable on disk, not committed)`. Task-owned delta pending commit: `docs/specs/performance/json-ratio-oracle-1.md` (new), `src/nextorm.core/Query/Json/JsonRowWriterFactory.cs` (modified). No `git add`/stage/commit performed. Work outside this item's delta stays untouched and unclaimed.
+
 ## Progress log
 
 - 2026-10-19T13:40:04Z PLAN ready (r=1, n=1) — collection PLAN→DO handoff; DO not started. No product change, no benchmark run.
+2026-10-30T07:15:16Z | PLAN | revision r=2 | attempt n=1 | PLAN r2 completed — handoff at PLAN→DO boundary (form=cycle, overlay=coder+.NET, N=1, r=2, n=1, plan_state=ready; criteria C311-01..05; r1 superseded by a genuine contract revision — 2026-10-20 two-tier acceptance policy adopted verbatim + explicit scope boundaries against T247/T250; DO never ran, no attempt consumed) | `.pdca/status/T311-json-streaming-1.md` §PLAN record r2, §Revision history; evidence root `.pdca/T311/rv2/` (directories only)
+2026-10-30T23:52:53Z | DO | revision r=2 | attempt n=1/3 | T311 DO attempt 1: oracle spec written (docs/specs/performance/json-ratio-oracle-1.md); per-row lever implemented (JsonEncodedText property names) in JsonRowWriterFactory.cs; build 0W/0E; core JSON 129/0, sqlite JSON 135/0; M0 baseline/ABBA measurement outstanding (residual); candidate delivered, no verdict | .pdca/status/T311-json-streaming-1.md §DO result; src/nextorm.core/Query/Json/JsonRowWriterFactory.cs
