@@ -4248,7 +4248,17 @@ public partial class QueryCommand
         if (depth == 0 && IsTrivialEntitySelect(cmd)) return null;
         if (cmd._referencedQueries is { Count: > 0 } || cmd._outerRefs is { Count: > 0 }) return null;
         if (cmd.HasDataModifyingCte || cmd.HasTemporaryTableSource()) return null;
-        if (cmd._union is not null && CaptureRawShape(cmd._union, depth + 1) is null) return null;
+
+        // The set-operation operand's descriptor is captured ONCE and travels on the root shape below.
+        // Re-capturing it here just to test eligibility allocated a complete second RawShape (plus its
+        // nested nodes) per set-op query and threw it away; the retained capture is the same descriptor
+        // the eligibility test needs, so the duplicate is not built at all.
+        RawShape? union = null;
+        if (cmd._union is not null)
+        {
+            union = CaptureRawShape(cmd._union, depth + 1);
+            if (union is null) return null;
+        }
 
         if (!IsPlainTableSource(cmd._from)) return null;
 
@@ -4259,13 +4269,6 @@ public partial class QueryCommand
             {
                 if (!IsPlainTableSource(joins[i].From)) return null;
             }
-        }
-
-        RawShape? union = null;
-        if (cmd._union is not null)
-        {
-            union = CaptureRawShape(cmd._union, depth + 1);
-            if (union is null) return null;
         }
 
         RawShape.CteShape[]? ctes = null;
