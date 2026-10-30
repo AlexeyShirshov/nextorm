@@ -310,4 +310,180 @@ public class CsvTerminalPlanCacheTests
         a.Should().Be(b);
         a.Should().NotBeNull();
     }
+
+    [Fact]
+    public void CacheHit_ShouldBeByteIdenticalToColdRun_WithCrlfRfc4180()
+    {
+        var ctx = CreateDb(out var path);
+        try
+        {
+            byte[] cold;
+            using (var d = new MemoryStream())
+            {
+                ctx.From<CsvCacheRow>().OrderBy(r => r.Id).WriteCsv(d, new CsvStreamOptions(), CancellationToken.None);
+                cold = d.ToArray();
+            }
+
+            byte[] warm;
+            using (var d = new MemoryStream())
+            {
+                ctx.From<CsvCacheRow>().OrderBy(r => r.Id).WriteCsv(d, new CsvStreamOptions(), CancellationToken.None);
+                warm = d.ToArray();
+            }
+
+            warm.Should().Equal(cold, "a cache hit must be byte-identical to the cold run");
+            Encoding.UTF8.GetString(cold).Should().Contain("\r\n", "CSV output must use CRLF line endings (RFC 4180)");
+            ctx.TerminalPlanCacheForTesting.CompilationCount.Should().Be(1, "the warm run must not recompile");
+        }
+        finally
+        {
+            ctx.Dispose();
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void CrossContext_ShouldNotShareEntriesOrCompilationCounter()
+    {
+        var ctx1 = CreateDb(out var path1);
+        var ctx2 = CreateDb(out var path2);
+        try
+        {
+            ctx1.TerminalPlanCacheForTesting.Should().NotBeSameAs(ctx2.TerminalPlanCacheForTesting,
+                "each context owns its own terminal plan cache");
+
+            using (var d = new MemoryStream()) ctx1.From<CsvCacheRow>().OrderBy(r => r.Id).WriteCsv(d, new CsvStreamOptions(), CancellationToken.None);
+            ctx1.TerminalPlanCacheForTesting.CompilationCount.Should().Be(1);
+            ctx1.TerminalPlanCacheForTesting.EntryCount.Should().Be(1);
+
+            // Second context must compile independently: no entry sharing, no shared counter.
+            using (var d = new MemoryStream()) ctx2.From<CsvCacheRow>().OrderBy(r => r.Id).WriteCsv(d, new CsvStreamOptions(), CancellationToken.None);
+            ctx2.TerminalPlanCacheForTesting.CompilationCount.Should().Be(1, "context 2 must compile its own plan");
+            ctx2.TerminalPlanCacheForTesting.EntryCount.Should().Be(1);
+
+            ctx1.TerminalPlanCacheForTesting.CompilationCount.Should().Be(1, "context 1 counter must be untouched by context 2");
+            ctx1.TerminalPlanCacheForTesting.EntryCount.Should().Be(1, "context 1 entries must not be shared with context 2");
+        }
+        finally
+        {
+            ctx1.Dispose();
+            ctx2.Dispose();
+            if (File.Exists(path1)) File.Delete(path1);
+            if (File.Exists(path2)) File.Delete(path2);
+        }
+    }
+
+    [Fact]
+    public void OptionsChangeAndClear_ShouldProduceFreshPlanAndContent()
+    {
+        var ctx = CreateDb(out var path);
+        try
+        {
+            using var commaDestination = new MemoryStream();
+            ctx.From<CsvCacheRow>().OrderBy(r => r.Id).WriteCsv(commaDestination, new CsvStreamOptions { Delimiter = ',' }, CancellationToken.None);
+            var commaBytes = commaDestination.ToArray();
+            ctx.TerminalPlanCacheForTesting.CompilationCount.Should().Be(1);
+
+            using var semicolonDestination = new MemoryStream();
+            ctx.From<CsvCacheRow>().OrderBy(r => r.Id).WriteCsv(semicolonDestination, new CsvStreamOptions { Delimiter = ';' }, CancellationToken.None);
+            var semicolonBytes = semicolonDestination.ToArray();
+            ctx.TerminalPlanCacheForTesting.CompilationCount.Should().Be(2, "a changed delimiter must compile a fresh plan");
+
+            commaBytes.Should().NotEqual(semicolonBytes, "a stale plan must not be reused after an option change");
+            Encoding.UTF8.GetString(commaBytes).Should().Contain(",");
+            Encoding.UTF8.GetString(semicolonBytes).Should().Contain(";");
+
+            // Clear drops entries and forces a recompile.
+            ctx.TerminalPlanCacheForTesting.EntryCount.Should().Be(2);
+            DataContextCache.Clear();
+            using var afterClear = new MemoryStream();
+            ctx.From<CsvCacheRow>().OrderBy(r => r.Id).WriteCsv(afterClear, new CsvStreamOptions { Delimiter = ',' }, CancellationToken.None);
+            ctx.TerminalPlanCacheForTesting.CompilationCount.Should().Be(3, "DataContextCache.Clear must invalidate and recompile");
+            ctx.TerminalPlanCacheForTesting.EntryCount.Should().Be(1);
+        }
+        finally
+        {
+            ctx.Dispose();
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void ValueTransform_ShouldBypassLookupAndPublication_CompileCounterUnchanged()
+    {
+        var ctx = CreateDb(out var path);
+        try
+        {
+            var options = new CsvStreamOptions { ValueTransform = v => v?.ToString()?.ToUpperInvariant() };
+            byte[] firstBytes;
+            using (var d1 = new MemoryStream())
+            {
+                ctx.From<CsvCacheRow>().OrderBy(r => r.Id).WriteCsv(d1, options, CancellationToken.None);
+                firstBytes = d1.ToArray();
+            }
+            using (var d2 = new MemoryStream()) ctx.From<CsvCacheRow>().OrderBy(r => r.Id).WriteCsv(d2, options, CancellationToken.None);
+
+            ctx.TerminalPlanCacheForTesting.EntryCount.Should().Be(0, "ValueTransform must not be published");
+            ctx.TerminalPlanCacheForTesting.CompilationCount.Should().Be(0, "ValueTransform must bypass cache lookup and publication entirely");
+            Encoding.UTF8.GetString(firstBytes).Should().Contain("ALPHA", "the transform must be applied");
+        }
+        finally
+        {
+            ctx.Dispose();
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Bound_ShouldNeverExceedCapacity()
+    {
+        var ctx = CreateDb(out var path);
+        try
+        {
+            for (var i = 0; i < 70; i++)
+            {
+                var options = new CsvStreamOptions { NullMarker = $"N{i}" };
+                using var d = new MemoryStream();
+                ctx.From<CsvCacheRow>().OrderBy(r => r.Id).WriteCsv(d, options, CancellationToken.None);
+            }
+
+            ctx.TerminalPlanCacheForTesting.EntryCount.Should().BeLessThanOrEqualTo(TerminalPlanCache.Capacity,
+                "the combined terminal cache must stay within its bound");
+            ctx.TerminalPlanCacheForTesting.CompilationCount.Should().Be(70, "every distinct key must compile once");
+        }
+        finally
+        {
+            ctx.Dispose();
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void StorageTypeSeparation_EndToEnd_ShouldRecompileAndProduceCorrectOutput()
+    {
+        // End-to-end: two projections whose reader storage types differ (int column vs string column)
+        // must not alias a cached plan; each must compile and emit its own correct bytes.
+        var ctx = CreateDb(out var path);
+        try
+        {
+            using var intDestination = new MemoryStream();
+            ctx.From<CsvCacheRow>().OrderBy(r => r.Id).WriteCsv(intDestination, new CsvStreamOptions(), CancellationToken.None);
+            var intBytes = Encoding.UTF8.GetString(intDestination.ToArray());
+            ctx.TerminalPlanCacheForTesting.CompilationCount.Should().Be(1);
+
+            using var stringDestination = new MemoryStream();
+            ctx.From<CsvCacheRow>().Select(r => r.Name).WriteCsv(stringDestination, new CsvStreamOptions(), CancellationToken.None);
+            var stringBytes = Encoding.UTF8.GetString(stringDestination.ToArray());
+            ctx.TerminalPlanCacheForTesting.CompilationCount.Should().Be(2, "a differing projection/storage type must compile a fresh plan");
+
+            intBytes.Should().Contain("Id");
+            stringBytes.Should().Contain("Name");
+            intBytes.Should().NotBe(stringBytes);
+        }
+        finally
+        {
+            ctx.Dispose();
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
 }
