@@ -23,10 +23,13 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     private readonly QueryExecutor _executor;
     private readonly QueryPlanner _planner;
     private readonly InterceptorHooks _interceptors;
-    // Compiled JSON row writers owned by this context: a bounded LRU, so a repeated warm export does
-    // not recompile the same shape. Entries are pure delegates (no reader, destination or command) and
-    // are invalidated on PurgeQueryCache or by the process-wide DataContextCache.Clear generation.
-    private readonly JsonRowWriterCache _jsonRowWriters = new();
+    // One bounded terminal-plan cache shared by every terminal kind (JSON row writers and CSV column
+    // plans) of this context: a single LRU of capacity TerminalPlanCache.Capacity, tagged by kind. A
+    // repeated warm export does not recompile the same plan. Entries are pure delegates (no reader,
+    // destination or command) and are invalidated on PurgeQueryCache or by the process-wide
+    // DataContextCache.Clear generation.
+    private readonly TerminalPlanCache _terminalPlans = new();
+    private readonly JsonRowWriterCache _jsonRowWriters;
 
     /// <summary>
     /// Creates a context from builder options (logger factory, mapping mode, naming convention and
@@ -70,6 +73,9 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         _eagerLoadMode = optionsBuilder.EagerLoadMode;
 
         _queryCache = new QueryCache(QueryPlanStore.Clear);
+
+        // The JSON adapter shares the one combined terminal-plan cache of this context.
+        _jsonRowWriters = new JsonRowWriterCache(_terminalPlans);
 
         // Interceptors are created once and shared with every axis, so a per-instance
         // AddInterceptor is visible to the connection, planning and execution paths alike.
@@ -2005,9 +2011,19 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
 
     /// <summary>
     /// The context-owned compiled JSON row-writer cache. Test/evidence observability only: the cache is
-    /// an engine detail and is not part of the public context surface.
+    /// an engine detail and is not part of the public context surface. It shares the one combined
+    /// terminal-plan cache, so its counts aggregate every terminal kind.
     /// </summary>
     internal JsonRowWriterCache JsonRowWriterCacheForTesting => _jsonRowWriters;
+
+    /// <summary>
+    /// The one combined terminal-plan cache owned by this context (JSON + CSV). Test/evidence
+    /// observability and the seam the terminal operators use to reuse compiled plans.
+    /// </summary>
+    internal TerminalPlanCache TerminalPlanCacheForTesting => _terminalPlans;
+
+    /// <summary>Internal seam to the combined terminal-plan cache for the terminal operators.</summary>
+    internal TerminalPlanCache TerminalPlans => _terminalPlans;
 
     /// <summary>
     /// Executes a supported scalar terminal (T243/D243 fast path) from the context-owned immutable

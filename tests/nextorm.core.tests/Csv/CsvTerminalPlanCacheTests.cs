@@ -1,0 +1,313 @@
+using System.ComponentModel.DataAnnotations.Schema;
+using System.Data;
+using System.Data.Common;
+using System.Text;
+using FluentAssertions;
+using Microsoft.Data.Sqlite;
+using NextORM.Sqlite;
+using NextORM.Core;
+
+namespace NextORM.Core.Tests;
+
+/// <summary>
+/// Cache-key correctness coverage for the bounded per-context CSV terminal plan cache:
+/// the key must describe every compiled-plan dependency, a differing option must never reuse a
+/// plan, <c>ValueTransform</c> must bypass lookup and publication, and a process-wide generation
+/// bump / purge must invalidate stale entries.
+/// </summary>
+public class CsvTerminalPlanCacheTests
+{
+    [SqlTable("csv_cache_row")]
+    private sealed class CsvCacheRow
+    {
+        [Column("id")]
+        public int Id { get; set; }
+
+        [Column("name")]
+        public string? Name { get; set; }
+    }
+
+    private sealed class FakeRecord : IDataRecord
+    {
+        private readonly Type[] _types;
+
+        public FakeRecord(Type[] types) => _types = types;
+
+        public int FieldCount => _types.Length;
+
+        public object this[int i] => throw new NotSupportedException();
+
+        public object this[string name] => throw new NotSupportedException();
+
+        public bool GetBoolean(int i) => throw new NotSupportedException();
+
+        public byte GetByte(int i) => throw new NotSupportedException();
+
+        public long GetBytes(int i, long fieldOffset, byte[]? buffer, int bufferoffset, int length) => throw new NotSupportedException();
+
+        public char GetChar(int i) => throw new NotSupportedException();
+
+        public long GetChars(int i, long fieldoffset, char[]? buffer, int bufferoffset, int length) => throw new NotSupportedException();
+
+        public IDataReader GetData(int i) => throw new NotSupportedException();
+
+        public string GetDataTypeName(int i) => _types[i].Name;
+
+        public DateTime GetDateTime(int i) => throw new NotSupportedException();
+
+        public decimal GetDecimal(int i) => throw new NotSupportedException();
+
+        public double GetDouble(int i) => throw new NotSupportedException();
+
+        public Type GetFieldType(int i) => _types[i];
+
+        public float GetFloat(int i) => throw new NotSupportedException();
+
+        public Guid GetGuid(int i) => throw new NotSupportedException();
+
+        public short GetInt16(int i) => throw new NotSupportedException();
+
+        public int GetInt32(int i) => throw new NotSupportedException();
+
+        public long GetInt64(int i) => throw new NotSupportedException();
+
+        public string GetName(int i) => $"c{i}";
+
+        public int GetOrdinal(string name) => throw new NotSupportedException();
+
+        public string GetString(int i) => throw new NotSupportedException();
+
+        public object GetValue(int i) => throw new NotSupportedException();
+
+        public int GetValues(object[] values) => throw new NotSupportedException();
+
+        public bool IsDBNull(int i) => false;
+    }
+
+    private static SqliteDataContext CreateDb(out string path)
+    {
+        path = Path.Combine(Path.GetTempPath(), $"nextorm-csvcache-{Guid.NewGuid():N}.db");
+        using (var connection = new SqliteConnection($"Data Source={path}"))
+        {
+            connection.Open();
+            using (var create = connection.CreateCommand())
+            {
+                create.CommandText = "create table csv_cache_row (id integer primary key, name text);";
+                create.ExecuteNonQuery();
+            }
+
+            using var insert = connection.CreateCommand();
+            insert.CommandText = "insert into csv_cache_row (id, name) values ($id, $name);";
+            insert.Parameters.Add(new SqliteParameter("$id", 1));
+            insert.Parameters.Add(new SqliteParameter("$name", "alpha"));
+            insert.ExecuteNonQuery();
+
+            insert.Parameters["$id"].Value = 2;
+            insert.Parameters["$name"].Value = "be,ta";
+            insert.ExecuteNonQuery();
+        }
+
+        return new SqliteDataContext($"Data Source={path}", new DataContextBuilder());
+    }
+
+    private static string Utf8(MemoryStream stream) => Encoding.UTF8.GetString(stream.ToArray());
+
+    [Fact]
+    public void WarmLookup_ShouldNotRecompile()
+    {
+        var ctx = CreateDb(out var path);
+        try
+        {
+            var options = new CsvStreamOptions();
+            using var firstDestination = new MemoryStream();
+            ctx.From<CsvCacheRow>().OrderBy(r => r.Id).WriteCsv(firstDestination, options, CancellationToken.None);
+
+            using var secondDestination = new MemoryStream();
+            ctx.From<CsvCacheRow>().OrderBy(r => r.Id).WriteCsv(secondDestination, options, CancellationToken.None);
+
+            ctx.TerminalPlanCacheForTesting.CompilationCount.Should().Be(1, "a warm hit must not recompile");
+            ctx.TerminalPlanCacheForTesting.EntryCount.Should().Be(1);
+            firstDestination.ToArray().Should().Equal(secondDestination.ToArray(), "warm output must be byte-identical");
+        }
+        finally
+        {
+            ctx.Dispose();
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Key_ShouldSeparateDelimiter_NullMarker_AndExcelMode()
+    {
+        var ctx = CreateDb(out var path);
+        try
+        {
+            var baseline = new CsvStreamOptions();
+            using (var d = new MemoryStream()) ctx.From<CsvCacheRow>().OrderBy(r => r.Id).WriteCsv(d, baseline, CancellationToken.None);
+            ctx.TerminalPlanCacheForTesting.CompilationCount.Should().Be(1);
+
+            var delimiterChanged = new CsvStreamOptions { Delimiter = ';' };
+            using (var d = new MemoryStream()) ctx.From<CsvCacheRow>().OrderBy(r => r.Id).WriteCsv(d, delimiterChanged, CancellationToken.None);
+            ctx.TerminalPlanCacheForTesting.CompilationCount.Should().Be(2, "a different delimiter must compile a fresh plan");
+
+            var nullMarkerChanged = new CsvStreamOptions { NullMarker = "NULL" };
+            using (var d = new MemoryStream()) ctx.From<CsvCacheRow>().OrderBy(r => r.Id).WriteCsv(d, nullMarkerChanged, CancellationToken.None);
+            ctx.TerminalPlanCacheForTesting.CompilationCount.Should().Be(3, "a different null marker must compile a fresh plan");
+
+            var excelChanged = new CsvStreamOptions { ExcelMode = true };
+            using (var d = new MemoryStream()) ctx.From<CsvCacheRow>().OrderBy(r => r.Id).WriteCsv(d, excelChanged, CancellationToken.None);
+            ctx.TerminalPlanCacheForTesting.CompilationCount.Should().Be(4, "a different excel mode must compile a fresh plan");
+
+            ctx.TerminalPlanCacheForTesting.EntryCount.Should().Be(4);
+        }
+        finally
+        {
+            ctx.Dispose();
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Key_ShouldSeparateProjectionSignature()
+    {
+        var ctx = CreateDb(out var path);
+        try
+        {
+            using (var d = new MemoryStream()) ctx.From<CsvCacheRow>().OrderBy(r => r.Id).WriteCsv(d, new CsvStreamOptions(), CancellationToken.None);
+            ctx.TerminalPlanCacheForTesting.CompilationCount.Should().Be(1);
+
+            using (var d = new MemoryStream()) ctx.From<CsvCacheRow>().Select(r => new { r.Id }).OrderBy(r => r.Id).WriteCsv(d, new CsvStreamOptions(), CancellationToken.None);
+            ctx.TerminalPlanCacheForTesting.CompilationCount.Should().Be(2, "a different projection must compile a fresh plan");
+        }
+        finally
+        {
+            ctx.Dispose();
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void ValueTransform_ShouldBypassLookupAndPublication()
+    {
+        var ctx = CreateDb(out var path);
+        try
+        {
+            var options = new CsvStreamOptions { ValueTransform = v => v?.ToString()?.ToUpperInvariant() };
+            byte[] firstBytes;
+            using (var d1 = new MemoryStream())
+            {
+                ctx.From<CsvCacheRow>().OrderBy(r => r.Id).WriteCsv(d1, options, CancellationToken.None);
+                firstBytes = d1.ToArray();
+            }
+            using (var d2 = new MemoryStream()) ctx.From<CsvCacheRow>().OrderBy(r => r.Id).WriteCsv(d2, options, CancellationToken.None);
+
+            ctx.TerminalPlanCacheForTesting.EntryCount.Should().Be(0, "ValueTransform must not be published");
+            Encoding.UTF8.GetString(firstBytes).Should().Contain("ALPHA", "the transform must be applied");
+        }
+        finally
+        {
+            ctx.Dispose();
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void GenerationBump_ShouldInvalidateAndNotReturnStale()
+    {
+        var ctx = CreateDb(out var path);
+        try
+        {
+            using (var d = new MemoryStream()) ctx.From<CsvCacheRow>().OrderBy(r => r.Id).WriteCsv(d, new CsvStreamOptions(), CancellationToken.None);
+            ctx.TerminalPlanCacheForTesting.CompilationCount.Should().Be(1);
+            ctx.TerminalPlanCacheForTesting.EntryCount.Should().Be(1);
+
+            DataContextCache.Clear();
+            using (var d = new MemoryStream()) ctx.From<CsvCacheRow>().OrderBy(r => r.Id).WriteCsv(d, new CsvStreamOptions(), CancellationToken.None);
+            ctx.TerminalPlanCacheForTesting.CompilationCount.Should().Be(2, "a generation bump must recompile");
+            ctx.TerminalPlanCacheForTesting.EntryCount.Should().Be(1);
+
+            ctx.PurgeQueryCache();
+            ctx.TerminalPlanCacheForTesting.EntryCount.Should().Be(0, "purge drops entries");
+            using (var d = new MemoryStream()) ctx.From<CsvCacheRow>().OrderBy(r => r.Id).WriteCsv(d, new CsvStreamOptions(), CancellationToken.None);
+            ctx.TerminalPlanCacheForTesting.CompilationCount.Should().Be(3);
+        }
+        finally
+        {
+            ctx.Dispose();
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void StalePlanNegative_OptionsChangeContentDiffers()
+    {
+        var ctx = CreateDb(out var path);
+        try
+        {
+            using var commaDestination = new MemoryStream();
+            ctx.From<CsvCacheRow>().OrderBy(r => r.Id).WriteCsv(commaDestination, new CsvStreamOptions { Delimiter = ',' }, CancellationToken.None);
+
+            using var semicolonDestination = new MemoryStream();
+            ctx.From<CsvCacheRow>().OrderBy(r => r.Id).WriteCsv(semicolonDestination, new CsvStreamOptions { Delimiter = ';' }, CancellationToken.None);
+
+            var comma = Utf8(commaDestination);
+            var semicolon = Utf8(semicolonDestination);
+            comma.Should().NotBe(semicolon, "a stale comma plan must not be reused for a semicolon request");
+            comma.Should().Contain(",");
+            semicolon.Should().Contain(";");
+        }
+        finally
+        {
+            ctx.Dispose();
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void CsvPlanCacheKey_ShouldDifferByEveryDependency()
+    {
+        var columns = new[] { new SelectExpression(typeof(int)) { Index = 0, PropertyName = "Id" } };
+        var schema = new FakeRecord(new[] { typeof(int) });
+
+        var baseline = CsvPlanCacheKey.Build(typeof(SqliteDataContext), columns, schema, false, new CsvStreamOptions());
+        baseline.Should().NotBeNull();
+
+        // delimiter
+        CsvPlanCacheKey.Build(typeof(SqliteDataContext), columns, schema, false, new CsvStreamOptions { Delimiter = ';' })
+            .Should().NotBe(baseline, "delimiter is part of the key");
+        // null marker
+        CsvPlanCacheKey.Build(typeof(SqliteDataContext), columns, schema, false, new CsvStreamOptions { NullMarker = "NULL" })
+            .Should().NotBe(baseline, "null marker is part of the key");
+        // excel mode
+        CsvPlanCacheKey.Build(typeof(SqliteDataContext), columns, schema, false, new CsvStreamOptions { ExcelMode = true })
+            .Should().NotBe(baseline, "excel mode is part of the key");
+        // sequential access
+        CsvPlanCacheKey.Build(typeof(SqliteDataContext), columns, schema, true, new CsvStreamOptions())
+            .Should().NotBe(baseline, "sequential access is part of the key");
+        // storage type
+        var longSchema = new FakeRecord(new[] { typeof(long) });
+        CsvPlanCacheKey.Build(typeof(SqliteDataContext), columns, longSchema, false, new CsvStreamOptions())
+            .Should().NotBe(baseline, "reader storage type is part of the key");
+        // context type
+        CsvPlanCacheKey.Build(typeof(object), columns, schema, false, new CsvStreamOptions())
+            .Should().NotBe(baseline, "context type is part of the key");
+        // projection signature (property name)
+        var renamed = new[] { new SelectExpression(typeof(int)) { Index = 0, PropertyName = "Other" } };
+        CsvPlanCacheKey.Build(typeof(SqliteDataContext), renamed, schema, false, new CsvStreamOptions())
+            .Should().NotBe(baseline, "projection signature is part of the key");
+        // ValueTransform bypasses
+        CsvPlanCacheKey.Build(typeof(SqliteDataContext), columns, schema, false, new CsvStreamOptions { ValueTransform = v => v?.ToString() })
+            .Should().BeNull("ValueTransform must bypass the cache");
+    }
+
+    [Fact]
+    public void CsvPlanCacheKey_ShouldBeStableForEquivalentOptions()
+    {
+        var columns = new[] { new SelectExpression(typeof(int)) { Index = 0, PropertyName = "Id" } };
+        var schema = new FakeRecord(new[] { typeof(int) });
+        var a = CsvPlanCacheKey.Build(typeof(SqliteDataContext), columns, schema, false, new CsvStreamOptions());
+        var b = CsvPlanCacheKey.Build(typeof(SqliteDataContext), columns, schema, false, new CsvStreamOptions());
+        a.Should().Be(b);
+        a.Should().NotBeNull();
+    }
+}

@@ -235,62 +235,41 @@ internal static class JsonRowWriterKey
 }
 
 /// <summary>
-/// Bounded, context-owned cache of compiled <see cref="JsonRowWriter"/> delegates. One entry is the
-/// provider-independent semantic key of a frozen shape plus the immutable delegate built from it; no
-/// reader, destination, command, option instance or execution state is retained, so a resident
-/// delegate can be invoked concurrently and by any later call with the same shape.
-/// <para>
-/// Capacity is <see cref="Capacity"/> published entries with LRU eviction. Lookup, cold compilation,
-/// publication and eviction run under one lock, so a resident entry is compiled exactly once even
-/// under concurrent first use; the returned delegates are invoked outside the lock. Boundedness and
-/// isolation are both required: entries live per <see cref="DataContext"/> (two contexts never share),
-/// and a process-wide generation in <see cref="DataContextCache"/> invalidates every context's entries
-/// when the process-wide caches are cleared.
-/// </para>
+/// Thin adapter over the shared <see cref="TerminalPlanCache"/> for the JSON row-writer terminal kind.
+/// The bounded LRU, the lock, the generation counter and the eviction logic all live in
+/// <see cref="TerminalPlanCache"/>; this adapter only builds the provider-independent semantic key
+/// (via <see cref="JsonRowWriterKey"/>) and casts the stored value back to <see cref="JsonRowWriter"/>.
+/// An unrepresentable key bypasses the cache: the writer is compiled but nothing is published.
 /// </summary>
 internal sealed class JsonRowWriterCache
 {
-    /// <summary>Maximum number of published writer entries; the least recently used entry is evicted first.</summary>
-    internal const int Capacity = 64;
+    /// <summary>Maximum number of published writer entries; shared with the combined terminal cache.</summary>
+    internal const int Capacity = TerminalPlanCache.Capacity;
 
-    private sealed class Entry
+    private readonly TerminalPlanCache _inner;
+
+    /// <summary>Creates an adapter over a freshly owned terminal cache (isolated, for tests).</summary>
+    internal JsonRowWriterCache() : this(new TerminalPlanCache())
     {
-        internal Entry(string key, JsonRowWriter writer)
-        {
-            Key = key;
-            Writer = writer;
-        }
-
-        internal string Key { get; }
-
-        internal JsonRowWriter Writer { get; }
     }
 
-    private readonly object _gate = new();
-    private readonly Dictionary<string, LinkedListNode<Entry>> _index = new(StringComparer.Ordinal);
-    private readonly LinkedList<Entry> _lru = new();
-    private long _generation = DataContextCache.JsonRowWriterCacheGeneration;
-    private int _compilationCount;
-
-    /// <summary>The number of published entries (test/evidence observability).</summary>
-    internal int EntryCount
+    /// <summary>Creates an adapter sharing the supplied terminal cache (one combined store per context).</summary>
+    internal JsonRowWriterCache(TerminalPlanCache inner)
     {
-        get
-        {
-            lock (_gate)
-                return _index.Count;
-        }
+        _inner = inner ?? throw new ArgumentNullException(nameof(inner));
     }
+
+    /// <summary>The number of published entries across all terminal kinds (test/evidence observability).</summary>
+    internal int EntryCount => _inner.EntryCount;
 
     /// <summary>
-    /// The number of cold compilations performed under the lock. A warm hit does not increment it, so it
-    /// is the observable proof that a resident entry was built once (test/evidence observability).
+    /// The number of cold compilations performed under the lock across all terminal kinds. A warm hit
+    /// does not increment it (test/evidence observability).
     /// </summary>
-    internal int CompilationCount => Volatile.Read(ref _compilationCount);
+    internal int CompilationCount => _inner.CompilationCount;
 
     /// <summary>
     /// Returns the resident writer for <paramref name="plan"/>, compiling and publishing it on a miss.
-    /// An unrepresentable key bypasses the cache: the writer is compiled but nothing is published.
     /// </summary>
     /// <param name="plan">The frozen shape plan to write rows with.</param>
     /// <returns>The cached or freshly compiled writer.</returns>
@@ -302,52 +281,9 @@ internal sealed class JsonRowWriterCache
         if (key is null)
             return JsonRowWriterFactory.Build(plan);
 
-        var generation = DataContextCache.JsonRowWriterCacheGeneration;
-        lock (_gate)
-        {
-            if (_generation != generation)
-            {
-                _index.Clear();
-                _lru.Clear();
-                _generation = generation;
-            }
-
-            if (_index.TryGetValue(key, out var node))
-            {
-                if (!ReferenceEquals(node, _lru.First))
-                {
-                    _lru.Remove(node);
-                    _lru.AddFirst(node);
-                }
-
-                return node.Value.Writer;
-            }
-
-            // Compiled under the lock on purpose: the minimal variant guarantees a resident entry is
-            // built once, accepting the cold-compilation contention instead of duplicate publication.
-            var writer = JsonRowWriterFactory.Build(plan);
-            _compilationCount++;
-
-            var added = _lru.AddFirst(new Entry(key, writer));
-            _index.Add(key, added);
-            if (_index.Count > Capacity)
-            {
-                var last = _lru.Last!;
-                _lru.RemoveLast();
-                _index.Remove(last.Value.Key);
-            }
-
-            return writer;
-        }
+        return (JsonRowWriter)_inner.GetOrBuild("json:" + key, () => JsonRowWriterFactory.Build(plan));
     }
 
-    /// <summary>Drops every entry, releasing the delegates it retained.</summary>
-    internal void Clear()
-    {
-        lock (_gate)
-        {
-            _index.Clear();
-            _lru.Clear();
-        }
-    }
+    /// <summary>Drops every entry of the shared terminal cache, releasing the delegates it retained.</summary>
+    internal void Clear() => _inner.Clear();
 }

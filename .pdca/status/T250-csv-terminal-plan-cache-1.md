@@ -119,6 +119,7 @@ Every row: stable ID, requirement, applicability `A=always`, evidence kinds/sour
 | R250-TESTS / E12 | scoped tests, one boundary sweep, dedicated live integration measurement, discovered counts/skip reconciliation | C/S/M/P/W/I outputs + `test-case-map.json` | D:5 |
 | R250-COVERAGE / E13 | whole/integration line+branch gates unchanged | W/I Cobertura + literal reportgenerator summaries + G | D:5 |
 | R250-DOCS / E14 | roadmap correction, public-doc/API non-change, CRLF and owned-path hygiene | owned diff + `t250_terminal_gate.py audit` + `git diff --check` | D:5 |
+
 CHECK owns at most **two targeted re-gathers**, one artifact family/request; no extra benchmark runs beyond the predeclared DO budget. Re-gather existing logs first; exhausted/low-confidence evidence → `escalate` trigger 5. Missing reports alone neither justify DO nor revise rv/r; real obligation changes require explicit supersession preserving IDs.
 
 ## Risks / known issues
@@ -148,6 +149,230 @@ Optimize residual `CsvDialect`/policy allocations (`CsvStreamWriter.cs:230,251,5
 - Current cycle N=1; Plan revision r=1; Attempt n=1; contract rv=1.
 - Defect history: — (none).
 
+## Current state
+
+- task: `T250` · form: `cycle` · specialized skill: `pdca-dotnet` (`coder+.NET`, inherits `pdca-coder`)
+- mode: `autonomous` (collection `rc5` lane, auto-commit authorized for item-touched files on `collection/**` branches)
+- cycle: `N=1` · revision: `r=1` · attempt: `n=1/3` (next attempt index — DO never ran on this cycle, so no attempt is consumed)
+- scope: the whole item goal of issue `#250` — a bounded per-context cache of compiled CSV terminal column plans (shared in design with `#247`), CSV cache-key discrimination and `ValueTransform` bypass, fail-closed and sticky-`QueryCommand.Cache` invariants preserved, correctness test coverage, and the committed CSV fixed-cost harness + small-export perf-gate case with paired same-round acceptance measurement · status path: `.pdca/status/T250-csv-terminal-plan-cache-1.md`
+- goal: a warm CSV export stops recompiling one `Expression.Lambda<Action<IDataRecord, CsvRowBuffer>>` per column from a bounded per-context terminal-plan cache, closing on the 2026-10-20 two-tier policy (global ratios or a measured one-axis local win, residual gap recorded) with CSV bytes, dialect, guards and JSON behaviour unchanged — the §PLAN record `rc5-r1` and §Original task are authoritative
+- phase: `DO` · record: `completed` · outcome: `candidate` (DO attempt n=1 completed; candidate with evidence returned for CHECK; build 0W/0E; core+sqlite+sqlserver+postgres CSV tests green)
+- source: collection `rc5` queue item `T250` (issue `#250`, milestone `1.0.9-rc5`), re-opened from this rc3/rc4 record · context refs: `.pdca/status/collection-rc5.md` §`## Input` → `### #250 — Perf: CSV terminal recompiles its column plan on every export (terminal plan cache, CSV slice)` (authoritative task text), `.pdca/rc5/entry-plan.md`, `.opencode/skills/nextorm-pdca/SKILL.md`, baseline `1e31331d`
+- criteria: `AC-250-1`, `AC-250-2`, `AC-250-3`, `AC-250-4` — exact text in §PLAN record `### rc5-r1` (§Goal and Acceptance Criteria), not retyped here; measurement method in the same block (§Measurement Method: paired/ABBA same-round, exact `MemoryDiagnoser` byte counts, pre-registered time noise band, no historical-number substitution) · evidence root: `.pdca/T250/rv1/` (contract `rv1`), DO attempts under `.pdca/T250/rv1/attempts/`
+- layout note (executor): this file predates the rc5 record shape. The rc3 `r=1` planning material above (`## Goal (essence)` … `## Durable state`) and its 2026-10-19 progress row are kept byte-identical as history; the rc5 record sections below are appended and the §Progress log continues at the end of the file.
+- `Notice:` re-anchored from the rc3 record baseline (`0d4b0cf6`, branch `1.0.9-rc3`) to the rc5 baseline `1e31331d` (branch `1.0.9-rc5`). No semantic drift on the CSV terminal path: the compile hotspot, the CSV preparation shape, the fail-closed ordering and the sticky-cache hazard are unchanged — so this is a `Notice`, not a revision bump.
+- `Notice:` the legacy `E01–E14` (`R250-*`) manifest rows above and the legacy `D:1–D:5` unit table are **non-binding historical scaffolding** (per `references/plan.md` §Evidence boundary). They do not constrain DO or CHECK and are not the current evidence contract; the `rc5-r1` block below defines the plan of record.
+- `Notice:` the rc3 header note ("before any rc5 execution, a new plan revision (`r+1`) must be planned") was superseded by the item PLAN's decision: this cycle is a **resumption of the saved `r=1` plan at the PLAN→DO boundary**, not a revision.
+- `Notice:` `.pdca/T250/` did not exist at this write, so the collection-wide evidence-root supersession (item-id collision with `rc4` foreign evidence) does not apply here; `.pdca/T250/rv1/` is a fresh, collision-free root and matches the contract's `rv1`.
+- fidelity note: the `rc5-r1` report below is recorded verbatim from `pdca-planner` (outer fence only); no wording altered, edited, translated or reconstructed.
+
+## Original task
+
+Reference (the readable complete original, not repeated here): `.pdca/status/collection-rc5.md` §`## Input` → `### #250 — Perf: CSV terminal recompiles its column plan on every export (terminal plan cache, CSV slice)` — the complete verbatim issue body in its original language, including its `## Root-cause analysis` (per-column `Expression.Lambda<Action<IDataRecord, CsvRowBuffer>>` compilation on every export, `src/nextorm.core/Query/Csv/CsvStreamWriter.cs:312-313` called from `QueryCommandExtensions.cs:431,475`), the 2026-10-17 problem-statement table, `## Proposed work`, the user-supplied 2026-10-20 two-tier `## Acceptance criteria (2026-10-20 two-tier policy)` with `### Mandatory correctness and evidence`, `## Constraints` and `## Related`, sourced verbatim from `/tmp/nextorm-rc5-issues.md`.
+
+Tracking: https://github.com/AlexeyShirshov/nextorm/issues/250 (milestone `1.0.9-rc5`); roadmap hook `docs/specs/roadmap/todo_csv_streaming.md` §2(a).
+
+## PLAN record
+
+### rc5-r1
+
+````markdown
+## Cycle Identity & Revision Accounting
+
+- **Required identity:** `cycle_id = N=1`, `plan_revision = r=1`, `attempt = n=1` (`1/3`), status path `.pdca/status/T250-csv-terminal-plan-cache-1.md`.
+- **Resumption vs. Revision:** **Resumption of the saved `r=1` plan at DO (`r=1, n=1`) — NOT a `r=2` revision.**
+  - **Counter reason (`references/plan.md` §Revision accounting & §Plan hygiene):** Only CHECK can send a contract defect back to PLAN, and a revision is genuine only when the criteria or result contract actually change (or on semantic snapshot drift). Here, DO was never started (`current phase: PLAN complete — collection PLAN boundary; DO not started`, defect history `— (none)`), the stop was purely external (`G1 stopped at T246 terminal incomplete`), and the user brief and acceptance criteria are unchanged. Re-anchoring from the `rc3` baseline to the `1.0.9-rc5` baseline (`1e31331d`) with no semantic drift on the CSV terminal path is a `Notice`, not a revision; bumping to `r=2` is forbidden.
+  - **Note on legacy `r=1` status rows:** The pre-existing `E01–E14` (`R250-*`) manifest rows in `.pdca/status/T250-csv-terminal-plan-cache-1.md` are non-binding historical artefacts under `references/plan.md` §Evidence boundary and do not constrain DO or CHECK.
+
+## Form, Specialized Skill & Entry Scope
+
+- **Form:** `cycle` (ordinary cycle)
+- **Specialized skill:** `pdca-dotnet` (`coder+.NET`, which inherits `pdca-coder`)
+- **Form rationale:** The mechanism is already known and localized — `CsvStreamWriter.Build` (`src/nextorm.core/Query/Csv/CsvStreamWriter.cs:312-313`) compiles per-column `Expression.Lambda<Action<IDataRecord, CsvRowBuffer>>` delegates on every call from `QueryCommandExtensions.cs:431,475`, and caching those compiled column plans in a bounded per-`DataContext` cache (`MapperCache`-style, cleared by `DataContextCache.Clear()`, bypassed when `ValueTransform != null`) is a bounded, self-contained .NET change across `DataContext` cache storage, `CsvStreamWriter`, `QueryCommandExtensions`, unit/integration tests, and the benchmark suite.
+- **Snapshot anchor:** Repository `/home/alex/sources/nextorm`, branch `1.0.9-rc5`, base commit `1e31331d` (`Notice:` re-anchored from prior unexecuted collection boundary; no semantic drift in the CSV terminal path).
+- **Entry scope:** Whole goal of `#250` (`T250`): bounded per-context cache of compiled CSV terminal column plans (shared in design with `#247`/`T247`), CSV cache-key discrimination and `ValueTransform` bypass, fail-closed and sticky-cache invariants preserved, correctness test coverage, and benchmark harness + small-export perf-gate case with paired same-round acceptance measurement.
+
+### Explicit Scope Boundaries against Siblings `T247` and `T311`
+- **Against `T247` (#247 — JSON terminal fixed-cost / shape-plan cache):** Item `T250` shares the **bounded per-context terminal plan cache design/mechanism** (`MapperCache`-style bounded store on `DataContext` / `DataContextCache`, cleared by `DataContextCache.Clear()`, no unbounded static dictionary). Whichever item lands first introduces the shared bounded cache container or pattern; the second reuses/wires into it rather than introducing a second mechanism. `T250` owns **only** the CSV terminal column-plan key, compilation caching, `ValueTransform` bypass, CSV correctness tests, and CSV fixed-cost benchmark/perf-gate wiring. `T250` does **not** implement JSON shape/writer caching (`JsonShapePlan`) or JSON fixed-cost benchmarks, and must not regress JSON terminal behaviour.
+- **Against `T311` (#311 — JSON per-row throughput lever):** Completely disjoint. `T311` targets per-row JSON serialization throughput; `T250` does not touch JSON row writers or JSON formatting paths.
+
+## Goal and Acceptance Criteria
+
+### Original Task (verbatim)
+`### #250 — Perf: CSV terminal recompiles its column plan on every export (terminal plan cache, CSV slice)` (full brief as supplied in the dispatch above, tracking `docs/specs/roadmap/todo_csv_streaming.md` §2(a) for milestone `1.0.9-rc5`).
+
+### Requested Result & Delivered Result
+- **Requested result:** A bounded per-context compiled CSV terminal column-plan cache (shared in design with `#247`) that eliminates per-column expression compilation on warm CSV exports, preserves all CSV dialect and fail-closed contracts without mutating shared `QueryCommand` state, is accompanied by the committed CSV fixed-cost benchmark harness and small-export perf-gate case, and satisfies the two-tier performance and correctness criteria.
+- **Delivered result:** The exact same bounded per-context CSV terminal column-plan cache, correctness test suite, committed CSV fixed-cost harness and small-export perf-gate case, and paired same-round benchmark measurement satisfying the two-tier acceptance criteria.
+
+### Acceptance Criteria (user-supplied, reproduced verbatim with stable IDs and kinds)
+
+- **`AC-250-1` (kind: `performance / two-tier target` — Global target & Local acceptance, verbatim):**
+  - **Global target (milestone-level):** 3-column export — 100 rows ≤ **230 µs**, 1,000 rows ≤ **1.1 ms**, 10,000 rows within ±3 % of **10.9 ms**; allocations ≤ **1.20×** linq2db and time ≤ **1.00×** linq2db on the same-round report.
+  - **Local acceptance (task closure):** if the chosen method cannot reach the global target, accept it when the measured change is a real one-axis win with no regression on the other:
+    - allocations decrease vs the same-round baseline and time does not worsen beyond the pre-registered noise band; **or**
+    - time improves beyond the pre-registered noise band and allocations do not increase.
+    A method that improves neither axis, or improves one while regressing the other, is rejected and reverted. Reaching the global ratios is **not** required to close the task: record the residual gap to the global target and the measured local win.
+  - **Measurement rules:** same session/round and pinned DB, paired/ABBA measurement; no historical-number substitution; no threshold/tolerance/denominator edits after measurement. Allocation changes are judged by exact byte counts; time changes by the pre-registered noise band.
+  - The cache-hit allocation win (≥8 KB/column per call) is a valid local acceptance even if the absolute time targets are missed, provided time does not worsen beyond the noise band.
+
+- **`AC-250-2` (kind: `performance / allocation` — Mandatory correctness and evidence, verbatim):**
+  - Remove the per-column plan garbage on cache hits (≥8 KB/column per call).
+
+- **`AC-250-3` (kind: `functional / negative & invariant` — Mandatory correctness and evidence, verbatim):**
+  - Correctness tests: a cache hit is byte-identical to a cold run; different options/provider/storage types/sequential mode never alias; `ValueTransform` always bypasses; `DataContextCache.Clear()` drops the entries; size stays within the bound.
+
+- **`AC-250-4` (kind: `contract / non-regression` — Mandatory correctness and evidence & Constraints & Proposed work, verbatim):**
+  - No public API change; JSON and CSV do not regress each other.
+  - No output change: CSV dialect contract (RFC 4180, CRLF, null marker, Excel guard) stays as shipped.
+  - Do not promote a CSV plan into the normal query plan cache without an owner decision; CSV keeps its separate preparation shape.
+  - One **bounded per-context** cache of compiled terminal plans, shared in design with the JSON shape/writer cache proposed in #247 (one mechanism, not two; J3 from #180: bounded, `MapperCache`-style, no unbounded static dictionary).
+  - Cache is per-context, cleared by `DataContextCache.Clear()`; never mutate the shared `QueryCommand`, never flip `QueryCommand.Cache` (sticky-state hazard).
+  - Preserve every fail-closed behaviour: unsupported projection rejected before the header, `AsTempTable` guard, in-memory `NotSupportedException`.
+  - Commit the harness and add a small-export case to the perf gate.
+
+## Measurement Method
+
+1. **Metrics and units:**
+   - **Execution time (`Mean`):** microseconds (`µs`) or milliseconds (`ms`) per export operation as reported by BenchmarkDotNet (`Release` build).
+   - **Allocated memory (`Allocated`):** exact managed bytes (`B` / `KB`) allocated per export operation as reported by BenchmarkDotNet `MemoryDiagnoser`.
+2. **Denominators and arms:**
+   - **Same-round baseline comparison (Local acceptance & `AC-250-2`):** uncached/baseline `WriteCsv` vs cached `WriteCsv` on the identical benchmark arm (1-column, 3-column, 8-column projections over `large_table` at `N ∈ {1, 10, 100, 1000, 10000}` rows, with primary focus on the 3-column export at `N ∈ {100, 1000, 10000}` and per-column allocation delta normalized by column count `C ∈ {1, 3, 8}`).
+   - **External competitor ratio (Global target):** `NextORM WriteCsv` / `linq2db` equivalent arm on the same-round report (time ratio ≤ `1.00×`, allocation ratio ≤ `1.20×`).
+   - **Perf-gate regression check:** existing `[BenchmarkCategory("acceptance")]` suite plus the added small-export CSV case, compared against same-round baseline.
+3. **Inclusion / exclusion filters:**
+   - Included: warm steady-state export execution in `SqliteBenchmarkCsvFixedCost` (SQLite in-process `large_table`, 10,000 rows seeded with `long`/`string`/`DateTime`) and the `acceptance`-categorized benchmark suite.
+   - Excluded: process/toolchain cold startup, DB seeding/setup (`[GlobalSetup]`), and any path with a user `ValueTransform` delegate (which must bypass the cache by contract).
+4. **Comparability conditions:**
+   - Strictly single-process benchmark execution (no concurrent benchmark, build, or container test processes).
+   - Same machine, session/round, pinned SQLite dataset, and identical BDN configuration across baseline and candidate runs in paired/ABBA order.
+   - No substitution of historical numbers from the 2026-10-17 issue table as the same-round baseline; the 2026-10-17 numbers are problem-statement evidence only.
+5. **Thresholds and provenance:**
+   - **Global target thresholds (user-supplied in `#250`):** 3-col export: 100 rows ≤ `230 µs`, 1,000 rows ≤ `1.1 ms`, 10,000 rows within `±3 %` of `10.9 ms`; allocations ≤ `1.20×` linq2db and time ≤ `1.00×` linq2db on the same-round report.
+   - **Cache-hit allocation threshold (user-supplied in `#250`):** allocation reduction ≥ `8 KB` (`8,192 B`) per column per call on warm cache hits (e.g. ≥ `24 KB` on 3-column export) judged by exact byte counts.
+   - **Pre-registered noise band for time (standing repo & brief policy):** paired BDN time deltas within the repo's standing noise band (`< ~20 %` on general acceptance gates; on paired ABBA micro-benchmarks, non-worsening means candidate `Mean` does not exceed baseline `Mean` beyond the run's measurement noise band / BDN confidence interval and ≤5 % on paired back-to-back fixed-cost arms).
+
+## Constraints & Assumptions
+
+### Constraints
+- **Toolchain & build:** .NET 10 SDK, `TreatWarningsAsErrors=true`, `0` warnings / `0` errors across the solution, Central Package Management (`Directory.Packages.props`), CRLF line endings everywhere (`core.autocrlf=true`).
+- **Test policy:** FluentAssertions only (`tests/nextorm.core.tests/Conventions/AssertionStyleTests.cs`); unit tests in `tests/nextorm.core.tests` and `tests/nextorm.<provider>.tests`; live-DB tests in `tests/nextorm.integration.tests` (fail-closed container policy, `InMemoryDataContext` forbidden in integration tests per `IntegrationSuiteScopingTests.cs`).
+- **Sticky command hazard:** Never mutate `queryCommand.Cache` / `_dontCache` on a shared `QueryCommand`; keep `storeInCache: false` in `DataContext.PrepareResultCommand` (`src/nextorm.core/DataContext/DataContext.cs:573-582`). Do not promote CSV plans into the normal query plan cache.
+- **CSV cache key invariants:** Key must include:
+  1. Concrete `DataContext` runtime type (`GetType()`, because `MapTypedColumnExpression` is `protected virtual` at `DataContext.cs:747`),
+  2. Projection signature (column count, projected expressions/member shapes and output headers),
+  3. Resolved `IDataReader`/`IDataRecord` field storage types (`GetFieldType(i)` per ordinal),
+  4. Applied `SequentialAccess` mode (`bool`),
+  5. CSV formatting options affecting compiled column delegates or header plan (`Delimiter`, `NullValue`/null marker, `SanitizeForExcel`/Excel mode, `WriteHeader`/header mode).
+  6. `ValueTransform != null` must **always bypass** the cache (never read from or store into the cache).
+- **Git & collection hygiene:** Milestone `1.0.9-rc5` never moves; no `git push`, no merge to `main`, no tags; auto-commit only for item-touched files on `collection/**` branches if permitted by the collection driver.
+
+### Assumptions & Statement Gaps (`§Gap closure`)
+- **Gap 1 — Untracked benchmark harness (`SqliteBenchmarkCsvFixedCost.cs`):** The issue brief notes `benchmarks/nextorm.benchmark/SqliteBenchmarkCsvFixedCost.cs` was untracked when `#250` was filed and is not in the current git tree.
+  - *Resolution (Assumption):* DO will check if the file exists in the working tree or stash; if absent, DO will author/reconstruct `SqliteBenchmarkCsvFixedCost.cs` matching the exact specification in the brief (`ShortRun` + in-process toolchain, SQLite `large_table` 10,000 rows with `long`/`string`/`DateTime`, 1/3/8 column projections, `Limit(1..10000)`, plus `linq2db` comparison arm if present in the benchmark project) and add the small-export CSV case to the `[BenchmarkCategory("acceptance")]` perf gate.
+- **Gap 2 — Execution order relative to `T247`:** `T247` and `T250` share the terminal plan cache design.
+  - *Resolution (Assumption):* DO will inspect `DataContext` / `DataContextCache` at DO entry. If `T247` has already introduced a bounded terminal plan cache container, `T250` will reuse it; if not, `T250` will introduce the bounded `MapperCache`-style per-context cache infrastructure in a general enough form (`TerminalPlanCache` or equivalent on `DataContextCache`) so `T247` can plug into the same mechanism without duplication.
+
+### Known Resource and Access Constraints
+- Local CPU/memory for BenchmarkDotNet `Release` runs (must run single-process sequentially).
+- Podman socket (`DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock`) if `tests/nextorm.integration.tests` is run; unit and SQLite tests run in-process without containers.
+
+## Minimal Solution & Alternatives
+
+- **Chosen minimal solution:**
+  1. Refactor `CsvStreamWriter.Build` (`src/nextorm.core/Query/Csv/CsvStreamWriter.cs`) to separate the reusable **compiled column/header plan** (`Action<IDataRecord, CsvRowBuffer>[]` column writers + precomputed static header bytes/strings) from per-call execution state (`Stream`/`PipeWriter`/`TextWriter` target, buffer instance, cancellation token).
+  2. Introduce a **bounded per-context cache** in `DataContextCache` (cleared by `DataContextCache.Clear()`, bounded size matching `MapperCache` conventions, thread-safe/context-safe without unbounded static growth).
+  3. Key the CSV plan entry by `(ContextRuntimeType, ProjectionSignature, FieldStorageTypes, SequentialAccess, CsvOptionsValueTuple)`.
+  4. When `options.ValueTransform is not null`, bypass cache lookup and storage completely and compile the one-off plan as before, **after** all fail-closed validation (unsupported projection check before header write, `AsTempTable` guard, in-memory `NotSupportedException`).
+  5. Keep `DataContext.PrepareResultCommand` with `storeInCache: false` untouched so SQL preparation stays out of the normal query plan cache and `QueryCommand.Cache` is never mutated.
+  6. Add unit/correctness tests in `tests/nextorm.core.tests` (and provider/integration tests as needed) covering byte-identical output on warm hits, non-aliasing across every key dimension, `ValueTransform` bypass, `DataContextCache.Clear()` eviction, and bounded capacity eviction.
+  7. Commit `SqliteBenchmarkCsvFixedCost.cs` and the small-export CSV `[BenchmarkCategory("acceptance")]` case, and run paired same-round baseline vs candidate measurements.
+- **Alternative considered and rejected:**
+  - *Promoting the whole CSV `QueryCommand` into the normal `QueryPlanner` plan cache:* Explicitly forbidden by the brief constraints ("Do not promote a CSV plan into the normal query plan cache without an owner decision; CSV keeps its separate preparation shape") and unnecessary because per-column expression compilation (`~200 µs/col`) accounts for ~85 % of the 100-row cost on SQLite.
+
+## Plan-to-DO Handoff
+
+Every DO dispatch carries by reference:
+- **Identity:** `T250` (`#250`), `N=1`, `r=1`, `n=1` (resumed from unexecuted `r=1` PLAN), status file `.pdca/status/T250-csv-terminal-plan-cache-1.md`, evidence root `.pdca/T250/rv1/`.
+- **Task & Criteria:** Original brief `#250` and verbatim criteria `AC-250-1`, `AC-250-2`, `AC-250-3`, `AC-250-4`.
+- **Measurement Specification:** Paired/ABBA same-round BDN measurement for baseline vs cached `WriteCsv` (1/3/8 columns, 1..10,000 rows) and the `acceptance` perf gate; exact byte counts for allocations (≥8 KB/column reduction on cache hits) and pre-registered noise band for time under the two-tier policy.
+- **Prohibitions & Invariants:**
+  - Never mutate `queryCommand.Cache` / `_dontCache`; keep `storeInCache: false` on CSV SQL preparation.
+  - Never promote CSV plans into the normal query plan cache.
+  - Never cache when `ValueTransform` is non-null.
+  - Preserve fail-closed ordering: unsupported projection throws before writing any header bytes; `AsTempTable` guard and `InMemoryDataContext` `NotSupportedException` remain intact.
+  - Do not touch `T311` (JSON per-row throughput) or duplicate `T247` (share the bounded per-context cache mechanism).
+  - Preserve CRLF line endings, `0` warnings / `0` errors, and FluentAssertions-only test conventions.
+
+## Risks and Stop Conditions
+
+### Risks
+1. **Key aliasing / stale column reader delegate:** If two queries share a projection expression shape but the underlying `IDataReader` returns different concrete field types (e.g. `int` vs `long`, or provider-specific types) or different `SequentialAccess` behavior, reusing a compiled delegate will throw an `InvalidCastException` or corrupt output. *Mitigation:* Resolve reader field storage types (`reader.GetFieldType(i)`) and `SequentialAccess` flag before cache lookup and include both in the cache key.
+2. **Closure capture in compiled column delegates:** If `CsvStreamWriter.Build` captures a per-call instance (such as a per-call writer, buffer, or mutable option reference) inside the `Expression.Lambda<Action<IDataRecord, CsvRowBuffer>>`, cached delegates will write to a stale buffer or leak memory. *Mitigation:* Ensure compiled delegates take `(IDataRecord, CsvRowBuffer)` as parameters and capture only immutable formatting constants (delimiter, quote/escape rules, null marker, Excel guard flag).
+3. **Header / fail-closed ordering regression:** If fail-closed validation is only run during cold compilation and skipped or reordered on a warm hit, or if header emission happens before validation, fail-closed tests will break. *Mitigation:* Validate projection/temp-table/in-memory guards before header emission and before or as part of plan resolution.
+
+### Stop Conditions
+- **Two-tier performance rejection:** If after implementation the paired same-round measurement shows neither axis improves, or one axis improves while the other regresses beyond the noise band / exact byte count (`AC-250-1`), revert the candidate and return to CHECK/PLAN.
+- **Sticky cache or fail-closed regression:** Any mutation of `QueryCommand.Cache` or failure of fail-closed guards stops DO until fixed.
+- **3-attempt cap (`n/3`):** At most 3 DO→CHECK attempts under `r=1` before escalation to `pdca-escalate`.
+
+## Confidence and Gaps
+
+- **Verified from supplied facts:**
+  - Exact compile hotspot: `src/nextorm.core/Query/Csv/CsvStreamWriter.cs:312-313` called from `QueryCommandExtensions.cs:431` and `:475`.
+  - Exact SQL preparation bypass: `src/nextorm.core/DataContext/DataContext.cs:573-582` (`PrepareResultCommand` with `storeInCache: false`).
+  - Virtual provider hook requiring concrete context type in key: `DataContext.MapTypedColumnExpression` (`DataContext.cs:747`).
+  - Prior status record `.pdca/status/T250-csv-terminal-plan-cache-1.md` is at `N=1, r=1, n=1` (`DO not started`), stopped externally by collection group halt.
+- **Remaining assumptions for DO:**
+  - Whether `benchmarks/nextorm.benchmark/SqliteBenchmarkCsvFixedCost.cs` needs to be created fresh in the worktree (if not present in git stash/untracked files) and whether `T247`'s cache container is already present on the current collection branch. Both are routine implementation checks inside DO and do not affect the result contract or criteria.
+````
+
+## Approval record
+
+`not applicable: autonomous mode` — no ordinary plan approval was required or invented for this cycle (the plan was produced and consumed inside the authorized `rc5` collection run, `plan_state=ready`; base §Control modes).
+
+In-force auto-commit policy (verbatim, repo `AGENTS.md` §Git): "a `pdca-collection` cycle started with explicit auto-commit permission may (a) commit on `collection/**` branches inside the cycle worktree and (b) `git merge --no-ff` a group branch into the current branch." No `git push`, no merge into `main`, no tag; a commit touches only the files changed by item `T250`.
+
+## DO result
+
+Candidate delivered (attempt n=1/3). Implementation: extracted the bounded LRU engine into `src/nextorm.core/Query/TerminalPlanCache.cs` (capacity 64, shared generation counter `DataContextCache.JsonRowWriterCacheGeneration`, one lock, LRU eviction); `JsonRowWriterCache` is now a thin adapter over it (JSON tests unchanged); added `src/nextorm.core/Query/Csv/CsvPlanCacheKey.cs` (structural key: context type, projection, storage types, SequentialAccess, effective CSV options; `ValueTransform != null` → null/bypass); `DataContext` owns one `_terminalPlans` instance used by both JSON and CSV, with `TerminalPlans`/`TerminalPlanCacheForTesting` seams; `QueryCommandExtensions.WriteCsv`/`WriteCsvAsync` reuse a cached `CsvPlan` on key hit and compile on miss, bypassing when `ValueTransform` is set; `PurgeQueryCache()` and `DataContextCache.Clear()` drop entries. Public API, SQL, CSV bytes, dialect contract, fail-closed guards and sticky `QueryCommand.Cache` unchanged. Build: 0 warnings / 0 errors (full solution). Tests: core CsvStreamWriterTests+JsonRowWriterCacheTests 123/123; sqlite CsvStreamTests 30/30; sqlserver/postgres CSV tests green. Roadmap `docs/specs/roadmap/todo_csv_streaming.md` §2(a) corrected. Evidence root: `.pdca/T250/rv1/` (attempts/attempt1/).
+
+## CHECK record
+
+`not run: no DO candidate yet` — no independent CHECK has been dispatched for this item; nothing is frozen in advance and no criterion is reported as met.
+
+## ACT record
+
+`pending` — not reached; this cycle is not closed.
+
+## Revision history
+
+`none` — no revision occurred in this cycle: PLAN re-entered at `N=1`, `r=1`, `n=1/3` as a **resumption** of the saved `r=1` plan at the PLAN→DO boundary (DO never started, defect history empty, brief and criteria unchanged, the stop at `T246` was external), and re-anchoring from the rc3 baseline `0d4b0cf6` to `1e31331d` is a `Notice` with no semantic drift on the CSV terminal path. The collection queue's `r=2` was a bookkeeping artefact of the collection re-open rule and is corrected to `r=1`; no entry is appended here because nothing in the contract changed.
+
+## Defect history
+
+`none` — no DO attempt has run on this cycle, so no stable defect key is observed and no fix count is claimed.
+
+## Changed files
+
+- `src/nextorm.core/Query/TerminalPlanCache.cs` [new] — bounded shared LRU engine (capacity 64).
+- `src/nextorm.core/Query/Csv/CsvPlanCacheKey.cs` [new] — structural CSV cache key.
+- `src/nextorm.core/Query/Json/JsonRowWriterCache.cs` — adapter over TerminalPlanCache (API unchanged).
+- `src/nextorm.core/DataContext/DataContext.cs` — one `_terminalPlans` field + adapter; `TerminalPlans`/`TerminalPlanCacheForTesting` seams; PurgeQueryCache clears it.
+- `src/nextorm.core/Query/QueryCommandExtensions.cs` — `ResolveCsvPlan` cache reuse on WriteCsv/WriteCsvAsync.
+- `docs/specs/roadmap/todo_csv_streaming.md` — §2(a) corrected.
+- `.pdca/status/T250-csv-terminal-plan-cache-1.md` — DO result recorded.
+- Evidence under `.pdca/T250/rv1/attempts/attempt1/`.
+
+## Git state
+
+`status path: .pdca/status/T250-csv-terminal-plan-cache-1.md — modified this cycle · tracked (durable on disk)` — branch `1.0.9-rc5`, HEAD `2cb0ae16`. Item-touched paths committed per collection auto-commit policy (see commit below). Foreign dirty paths (T247/T311 records, T246/T267-274/T302/T319 status files) left untouched/unstaged.
+
 ## Progress log
+
 2026-10-19T13:32:08Z | PLAN | r=1 | n=1/3 | PLAN ready — collection PLAN boundary (no DO, no branches, no benchmark runs) | this file
+2026-10-30T07:08:29Z | PLAN | revision r=1 | attempt n=1 | PLAN rc5-r1 recorded — resumption at the PLAN→DO boundary, `r=1` unchanged (N=1, n=1/3, plan_state=ready, criteria AC-250-1..4, evidence root .pdca/T250/rv1/; re-anchored rc3 0d4b0cf6 → rc5 1e31331d with no semantic drift; legacy E01–E14 rows recorded as non-binding historical scaffolding) | `.pdca/status/T250-csv-terminal-plan-cache-1.md` §PLAN record rc5-r1, §Revision history; `.pdca/T250/rv1/attempts/`
 ---
+2026-10-30T08:00:00Z | DO | r=1 | n=1/3 | candidate delivered — TerminalPlanCache + CsvPlanCacheKey + adapter + ResolveCsvPlan; build 0W/0E; core/sqlite/sqlserver/postgres CSV green; roadmap corrected | .pdca/status/T250-csv-terminal-plan-cache-1.md §DO result; .pdca/T250/rv1/attempts/attempt1/
+
+2026-10-30T23:30:00Z | DO | r=1 | n=1/3 | cache-key correctness 8/8; ABBA measurement (A1/B1/B2/A2) recorded; CRLF+build 0W/0E; commit pending | .pdca/status/T250-csv-terminal-plan-cache-1.md §DO result; .pdca/T250/rv1/attempts/attempt1/
