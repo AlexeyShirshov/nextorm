@@ -1,0 +1,16 @@
+# CodeQL analysis scope for nextorm (advanced setup, `.github/workflows/codeql.yml`).
+#
+# The shipped surface is `src/**`; tests, benchmarks, examples and docs are not analysed. They were
+# the bulk of the extraction that exhausted the runner's disk under the previous default setup
+# (runs 40922948818, 40922605464), and they carry no consumer-facing code scanning value.
+name: nextorm CodeQL config
+
+paths-ignore:
+  - artifacts/**
+  - benchmarks/**
+  - docs/**
+  - examples/**
+  - tests/**
+  - tools/**
+  - .pdca/**
+  - '**/*.md'
