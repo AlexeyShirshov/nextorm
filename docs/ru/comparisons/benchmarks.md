@@ -2,11 +2,11 @@
 
 <!-- benchmarks:conditions:start -->
 Условия: провайдер SQLite (`Microsoft.Data.Sqlite`) у всех участников; асинхронные запросы; в ячейке — **самый
-быстрый метод** этой библиотеки в связанном отчёте BenchmarkDotNet. Машина: AMD Ryzen 7 5800HS with Radeon
-Graphics (8 логических / 4 физических ядер), .NET 10.0.12, BenchmarkDotNet 0.15.8 (`ShortRun` +
-`InProcessEmitToolchain`). На **2026-10-20** для таблиц сквозных сценариев, аллокаций и категории B (таблица
-категории A и раздел tier-1 сохраняют дату своего прогона). В каждой строке лидирующая ячейка выделена
-**полужирным** — быстрейшая в таблицах времени и с наименьшей аллокацией в таблице аллокаций.
+быстрый метод** этой библиотеки в связанном отчёте BenchmarkDotNet. Машина: AMD EPYC 9V74 (4 логических / 2
+физических ядер), .NET 10.0.14, BenchmarkDotNet 0.15.8 (`ShortRun` + `InProcessEmitToolchain`). На
+**2026-10-30** для таблиц сквозных сценариев, аллокаций и категории B (таблица категории A и раздел tier-1
+сохраняют дату своего прогона). В каждой строке лидирующая ячейка выделена **полужирным** — быстрейшая в
+таблицах времени и с наименьшей аллокацией в таблице аллокаций.
 <!-- benchmarks:conditions:end -->
 
 > **Новое (2026-10-17):** отчёт по фичам только на warm-пути — без веток `Prepare()`, одна таблица на
@@ -17,13 +17,13 @@ Graphics (8 логических / 4 физических ядер), .NET 10.0.1
 <!-- benchmarks:e2e:start -->
 | Метод | Nextorm | Dapper | linq2db | EF Core |
 |---|:---:|:---:|:---:|:---:|
-| [Выборка данных](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkIteration-report-github.md) | **10.29 μs** | 14.89 μs | 15.76 μs | 36.64 μs |
-| [Широкая выборка данных](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkLargeIteration-report-github.md) | **8.331 ms** | 8.680 ms | 9.366 ms | 9.771 ms |
-| [Where](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report-github.md) | **886.7 μs** | 1,369.6 μs | 1,412.3 μs | 3,199.6 μs |
-| [Simulate work](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkSimulateWork-report-github.md) | **7.594 ms** | 26.432 ms | 393.986 ms | 110.812 ms |
-| [Any](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report-github.md) | **889.9 μs** | 1,399.7 μs | 1,498.9 μs | 3,620.0 μs |
-| [FirstOrDefault](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkFirst-report-github.md) | **91.35 μs** | 146.41 μs | 388.41 μs | 351.03 μs |
-| [SingleOrDefault](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkSingle-report-github.md) | **90.87 μs** | 140.79 μs | 394.50 μs | 345.20 μs |
+| [Выборка данных](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkIteration-report-github.md) | **9.926 μs** | 13.107 μs | 13.492 μs | 26.482 μs |
+| [Широкая выборка данных](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkLargeIteration-report-github.md) | **7.589 ms** | 8.176 ms | 8.537 ms | 8.950 ms |
+| [Where](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report-github.md) | **855.5 μs** | 1,153.7 μs | 1,198.2 μs | 2,468.9 μs |
+| [Simulate work](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkSimulateWork-report-github.md) | **7.024 ms** | 20.144 ms | 235.186 ms | 77.044 ms |
+| [Any](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report-github.md) | **869.7 μs** | 1,180.8 μs | 1,248.4 μs | 2,613.2 μs |
+| [FirstOrDefault](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkFirst-report-github.md) | **87.72 μs** | 118.99 μs | 223.82 μs | 246.84 μs |
+| [SingleOrDefault](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkSingle-report-github.md) | **86.57 μs** | 118.70 μs | 228.30 μs | 246.69 μs |
 <!-- benchmarks:e2e:end -->
 
 ### Аллокации
@@ -33,13 +33,13 @@ Graphics (8 логических / 4 физических ядер), .NET 10.0.1
 <!-- benchmarks:allocations:start -->
 | Метод | Nextorm | Dapper | linq2db | EF Core |
 |---|:---:|:---:|:---:|:---:|
-| Выборка данных | **792 B** | 1,904 B | 2,088 B | 10,224 B |
+| Выборка данных | **1.02 KB** | 1.86 KB | 2.04 KB | 9.98 KB |
 | Широкая выборка данных | **2.14 MB** | 2.59 MB | **2.14 MB** | 4.28 MB |
-| Where | **92.43 KB** | 180.72 KB | 253.53 KB | 789.17 KB |
-| Simulate work | **6.25 MB** | 8.90 MB | 121.57 MB | 13.68 MB |
+| Where | **118.98 KB** | 180.71 KB | 253.52 KB | 789.16 KB |
+| Simulate work | **6.25 MB** | 8.90 MB | 122.26 MB | 13.68 MB |
 | Any | **85.16 KB** | 139.07 KB | 233.60 KB | 807.05 KB |
 | FirstOrDefault | **8.63 KB** | 16.48 KB | 187.58 KB | 80.40 KB |
-| SingleOrDefault | **8.36 KB** | 16.40 KB | 187.82 KB | 80.40 KB |
+| SingleOrDefault | **8.36 KB** | 16.40 KB | 187.58 KB | 80.40 KB |
 <!-- benchmarks:allocations:end -->
 
 ## Сравнение по фичам (честное)
@@ -62,22 +62,22 @@ Graphics (8 логических / 4 физических ядер), .NET 10.0.1
 ### Категория A — prepared против compiled и raw
 
 <!-- benchmarks:category-a:start -->
-На **2026-10-28**.
+На **2026-10-30**.
 
 | Фича | Nextorm (prepared) | Dapper | linq2db (compiled) | EF Core (compiled) |
 |---|---|---|---|---|
-| `CASE WHEN` | **15.40 μs / 744 B** | 22.34 μs / 1.34 KB | 23.52 μs / 1.59 KB | 65.48 μs / 7.90 KB |
-| CTE | **15.37 μs / 793 B** | 32.57 μs / 1.57 KB | 35.08 μs / 1.77 KB | — |
-| `SELECT DISTINCT` | **17.25 μs / 744 B** | 27.84 μs / 1.56 KB | 29.24 μs / 1.59 KB | 58.57 μs / 7.67 KB |
-| `EXCEPT` | **15.62 μs / 760 B** | 26.20 μs / 1.44 KB | 28.71 μs / 1.68 KB | 66.22 μs / 8.81 KB |
-| IN-list | **19.78 μs / 1.63 KB** | 29.79 μs / 1.27 KB | 66.97 μs / 15.23 KB | 85.96 μs / 14.77 KB |
-| `INTERSECT` | **16.48 μs / 744 B** | 27.24 μs / 1.29 KB | 33.34 μs / 1.63 KB | 64.09 μs / 7.94 KB |
-| Join по 4 таблицам | **21.14 μs / 1.06 KB** | 39.56 μs / 2.02 KB | 38.82 μs / 2.07 KB | 74.38 μs / 8.49 KB |
-| `LEFT JOIN` | **18.65 μs / 1.20 KB** | 32.07 μs / 2.22 KB | 33.19 μs / 2.32 KB | 66.57 μs / 9.92 KB |
-| Рекурсивный CTE | **18.62 μs / 752 B** | 38.18 μs / 1.53 KB | 40.70 μs / 1.78 KB | — |
-| Строковые функции | **14.22 μs / 736 B** | 21.73 μs / 1.28 KB | 23.90 μs / 1.64 KB | 55.54 μs / 7.49 KB |
-| UDF | **13.94 μs / 768 B** | 22.32 μs / 1.28 KB | 24.46 μs / 1.64 KB | 53.67 μs / 7.49 KB |
-| Оконные функции | **20.82 μs / 872 B** | 43.68 μs / 1.55 KB | 43.94 μs / 1.74 KB | — |
+| `CASE WHEN` | **8.79 μs / 744 B** | 12.21 μs / 1.34 KB | 12.48 μs / 1.59 KB | 24.58 μs / 7.90 KB |
+| CTE | **9.13 μs / 793 B** | 16.60 μs / 1.57 KB | 16.63 μs / 1.77 KB | — |
+| `SELECT DISTINCT` | **10.17 μs / 744 B** | 13.84 μs / 1.56 KB | 13.53 μs / 1.59 KB | 26.69 μs / 7.66 KB |
+| `EXCEPT` | **10.25 μs / 760 B** | 14.56 μs / 1.44 KB | 15.99 μs / 1.68 KB | 28.99 μs / 8.81 KB |
+| IN-list | **11.15 μs / 1.63 KB** | 14.12 μs / 1.27 KB | 25.13 μs / 15.23 KB | 36.71 μs / 14.77 KB |
+| `INTERSECT` | **9.60 μs / 744 B** | 13.66 μs / 1.29 KB | 15.05 μs / 1.63 KB | 27.41 μs / 7.94 KB |
+| Join по 4 таблицам | **11.87 μs / 1.06 KB** | 21.29 μs / 2.02 KB | 18.79 μs / 2.07 KB | 33.04 μs / 8.49 KB |
+| `LEFT JOIN` | **11.50 μs / 1.20 KB** | 16.74 μs / 2.22 KB | 16.89 μs / 2.32 KB | 29.62 μs / 9.92 KB |
+| Рекурсивный CTE | **11.11 μs / 752 B** | 18.05 μs / 1.53 KB | 18.86 μs / 1.78 KB | — |
+| Строковые функции | **8.73 μs / 736 B** | 11.92 μs / 1.28 KB | 12.45 μs / 1.64 KB | 24.56 μs / 7.49 KB |
+| UDF | **8.73 μs / 768 B** | 11.98 μs / 1.28 KB | 12.40 μs / 1.64 KB | 23.93 μs / 7.49 KB |
+| Оконные функции | **12.50 μs / 848 B** | 20.51 μs / 1.55 KB | 21.25 μs / 1.74 KB | — |
 <!-- benchmarks:category-a:end -->
 
 Nextorm prepared быстрее **на каждой** фиче и с наименьшей аллокацией на 11 из 12 — исключение IN-list, где
@@ -89,18 +89,18 @@ Nextorm prepared быстрее **на каждой** фиче и с наиме�
 <!-- benchmarks:category-b:start -->
 | Фича | Nextorm (cached) | Dapper | linq2db | EF Core |
 |---|---|---|---|---|
-| `CASE WHEN` | **13.04 μs / 3.22 KB** | 14.00 μs / 1.34 KB | 25.05 μs / 3.80 KB | 56.78 μs / 11.95 KB |
-| CTE | 32.72 μs / 10.89 KB | **19.83 μs / 1.57 KB** | 56.89 μs / 9.06 KB | — |
-| `SELECT DISTINCT` | **15.53 μs / 3.80 KB** | 18.41 μs / 1.56 KB | 30.44 μs / 3.91 KB | 64.19 μs / 12.20 KB |
-| `EXCEPT` | 17.15 μs / 6.38 KB | **16.96 μs / 1.44 KB** | 38.10 μs / 5.05 KB | 72.82 μs / 15.31 KB |
-| IN-list | 31.65 μs / 7.76 KB | **18.12 μs / 1.27 KB** | 69.44 μs / 18.91 KB | 112.63 μs / 22.61 KB |
-| `INTERSECT` | 16.79 μs / 6.36 KB | **15.60 μs / 1.29 KB** | 36.77 μs / 5.01 KB | 71.94 μs / 14.38 KB |
-| Join по 4 таблицам | 32.96 μs / 10.67 KB | **25.03 μs / 2.02 KB** | 65.38 μs / 14.10 KB | 114.20 μs / 24.69 KB |
-| `LEFT JOIN` | 23.03 μs / 6.16 KB | **19.83 μs / 2.22 KB** | 69.12 μs / 8.60 KB | 94.80 μs / 20.27 KB |
-| Рекурсивный CTE | 35.33 μs / 13.31 KB | **24.44 μs / 1.53 KB** | 60.41 μs / 8.39 KB | — |
-| Строковые функции | 14.97 μs / 4.20 KB | **13.93 μs / 1.28 KB** | 30.95 μs / 4.78 KB | 66.26 μs / 13.27 KB |
-| UDF | 15.53 μs / 4.29 KB | **14.29 μs / 1.28 KB** | 48.46 μs / 6.50 KB | 66.25 μs / 13.27 KB |
-| Оконные функции | 31.55 μs / 5.03 KB | **29.75 μs / 1.55 KB** | 62.11 μs / 5.99 KB | — |
+| `CASE WHEN` | **11.33 μs / 3.52 KB** | 12.19 μs / 1.34 KB | 16.03 μs / 3.80 KB | 33.69 μs / 11.95 KB |
+| CTE | 21.69 μs / 11.83 KB | **16.54 μs / 1.57 KB** | 33.10 μs / 9.20 KB | — |
+| `SELECT DISTINCT` | **12.67 μs / 4.15 KB** | 14.19 μs / 1.56 KB | 17.70 μs / 3.91 KB | 37.53 μs / 12.20 KB |
+| `EXCEPT` | **14.46 μs / 6.95 KB** | **14.46 μs / 1.44 KB** | 21.93 μs / 5.05 KB | 45.65 μs / 15.31 KB |
+| IN-list | 20.34 μs / 7.99 KB | **14.13 μs / 1.27 KB** | 42.62 μs / 18.91 KB | 80.37 μs / 22.61 KB |
+| `INTERSECT` | 13.85 μs / 6.93 KB | **13.55 μs / 1.29 KB** | 21.37 μs / 5.01 KB | 44.31 μs / 14.38 KB |
+| Join по 4 таблицам | 24.38 μs / 11.58 KB | **21.02 μs / 2.02 KB** | 39.49 μs / 13.95 KB | 81.53 μs / 24.59 KB |
+| `LEFT JOIN` | 17.43 μs / 6.58 KB | **16.68 μs / 2.22 KB** | 39.70 μs / 8.60 KB | 63.96 μs / 20.55 KB |
+| Рекурсивный CTE | 24.91 μs / 14.28 KB | **17.98 μs / 1.53 KB** | 34.80 μs / 8.54 KB | — |
+| Строковые функции | 12.18 μs / 4.52 KB | **11.84 μs / 1.28 KB** | 18.12 μs / 4.78 KB | 39.65 μs / 13.39 KB |
+| UDF | 12.38 μs / 4.60 KB | **11.87 μs / 1.28 KB** | 24.47 μs / 6.39 KB | 38.90 μs / 13.39 KB |
+| Оконные функции | 20.56 μs / 5.42 KB | **20.43 μs / 1.55 KB** | 37.44 μs / 5.99 KB | — |
 <!-- benchmarks:category-b:end -->
 
 В warm-пути Nextorm быстрее Dapper на `CASE WHEN` и `SELECT DISTINCT` и близок на строковых
