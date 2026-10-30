@@ -1,7 +1,6 @@
 using System.Collections;
 using System.Data;
 using System.Data.Common;
-using System.Runtime.CompilerServices;
 
 namespace NextORM.Core;
 
@@ -35,7 +34,6 @@ internal sealed class LobDataReader : DbDataReader
     /// <inheritdoc/>
     public override int FieldCount
     {
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get
         {
             ThrowIfDisposed();
@@ -83,17 +81,14 @@ internal sealed class LobDataReader : DbDataReader
     public override object this[string name] => GetValue(GetOrdinal(name));
 
     /// <inheritdoc/>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public override bool Read()
     {
         ThrowIfDisposed();
-        if (_cancellationToken.CanBeCanceled)
-            _cancellationToken.ThrowIfCancellationRequested();
+        _cancellationToken.ThrowIfCancellationRequested();
         return _inner.Read();
     }
 
     /// <inheritdoc/>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public override async Task<bool> ReadAsync(CancellationToken cancellationToken)
     {
         ThrowIfDisposed();
@@ -106,17 +101,14 @@ internal sealed class LobDataReader : DbDataReader
     }
 
     /// <inheritdoc/>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public override bool NextResult()
     {
         ThrowIfDisposed();
-        if (_cancellationToken.CanBeCanceled)
-            _cancellationToken.ThrowIfCancellationRequested();
+        _cancellationToken.ThrowIfCancellationRequested();
         return _inner.NextResult();
     }
 
     /// <inheritdoc/>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public override async Task<bool> NextResultAsync(CancellationToken cancellationToken)
     {
         ThrowIfDisposed();
@@ -332,9 +324,9 @@ internal sealed class LobDataReader : DbDataReader
         if (disposing && !_disposed)
         {
             _disposed = true;
-            // Exact-once ownership: the CommandReaderOwner disposes the provider reader AND the
-            // per-call command; do NOT dispose _inner separately (same object) — that would be a
-            // duplicate disposal of the provider reader.
+            // Exact-once ownership (correctness repair ported from T246-R1-F7): the
+            // CommandReaderOwner disposes the provider reader AND the per-call command;
+            // do NOT dispose _inner separately (same object) — that would be a duplicate.
             var owner = _owner;
             _owner = null;
             if (owner is not null)
@@ -355,8 +347,7 @@ internal sealed class LobDataReader : DbDataReader
             return;
 
         _disposed = true;
-        // Exact-once ownership: the CommandReaderOwner disposes the provider reader AND the
-        // per-call command; do NOT dispose _inner separately (same object).
+        // Exact-once ownership (correctness repair ported from T246-R1-F7).
         var owner = _owner;
         _owner = null;
         if (owner is not null)
@@ -376,6 +367,5 @@ internal sealed class LobDataReader : DbDataReader
 
     private void ThrowIfDisposed()
         => ObjectDisposedException.ThrowIf(_disposed, this);
-
 
 }

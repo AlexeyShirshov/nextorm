@@ -267,65 +267,6 @@ public class LobDataReaderTests
         return (new LobDataReader(owner, cancellationToken), inner);
     }
 
-    private static (LobDataReader Reader, FakeDbDataReader Inner) CreateMultiReader()
-    {
-        var inner = new FakeDbDataReader(
-            (["id", "name"], [typeof(long), typeof(string)], [[1L, "alpha"]]),
-            (["a", "b", "c"], [typeof(int), typeof(int), typeof(int)], [[1, 2, 3]]));
-        var owner = new CommandReaderOwner(null!, inner, null);
-        return (new LobDataReader(owner, CancellationToken.None), inner);
-    }
-
-    [Fact]
-    public void LobDataReader_NextResult_DifferentColumnCount_ShouldRefreshMetadata()
-    {
-        var (reader, _) = CreateMultiReader();
-        using var _ = reader;
-
-        reader.FieldCount.Should().Be(2);
-        reader.GetName(0).Should().Be("id");
-        reader.GetName(1).Should().Be("name");
-        reader.GetOrdinal("name").Should().Be(1);
-        reader.Read().Should().BeTrue();
-        reader.GetInt64(0).Should().Be(1L);
-        reader.GetString(1).Should().Be("alpha");
-
-        reader.NextResult().Should().BeTrue();
-
-        reader.FieldCount.Should().Be(3);
-        reader.GetName(0).Should().Be("a");
-        reader.GetName(2).Should().Be("c");
-        reader.GetOrdinal("c").Should().Be(2);
-        reader.GetOrdinal("missing").Should().Be(-1);
-        var outOfRange = () => reader.GetName(3);
-        outOfRange.Should().Throw<IndexOutOfRangeException>();
-        reader.Read().Should().BeTrue();
-        reader.GetInt32(0).Should().Be(1);
-        reader.GetInt32(1).Should().Be(2);
-        reader.GetInt32(2).Should().Be(3);
-    }
-
-    [Fact]
-    public async Task LobDataReader_NextResultAsync_DifferentColumnCount_ShouldRefreshMetadata()
-    {
-        var (reader, _) = CreateMultiReader();
-        await using var _ = reader;
-
-        reader.FieldCount.Should().Be(2);
-        reader.GetName(1).Should().Be("name");
-        (await reader.ReadAsync(TestContext.Current.CancellationToken)).Should().BeTrue();
-
-        (await reader.NextResultAsync(TestContext.Current.CancellationToken)).Should().BeTrue();
-
-        reader.FieldCount.Should().Be(3);
-        reader.GetName(0).Should().Be("a");
-        reader.GetOrdinal("c").Should().Be(2);
-        var outOfRange = () => reader.GetName(3);
-        outOfRange.Should().Throw<IndexOutOfRangeException>();
-        (await reader.ReadAsync(TestContext.Current.CancellationToken)).Should().BeTrue();
-        reader.GetInt32(2).Should().Be(3);
-    }
-
     [Fact]
     public void LobDataReader_Metadata_ShouldDelegateToInner()
     {

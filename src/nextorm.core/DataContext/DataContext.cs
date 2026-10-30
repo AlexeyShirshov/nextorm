@@ -583,17 +583,17 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     // SQLite, whose rowid locator would otherwise be appended). The plan is prepared per call with
     // storeInCache: false and without touching QueryCommand.Cache, so a shared command (for example
     // the context-cached AnyCommand) is never mutated and no plan is promoted into the plan cache.
-    internal CommandReaderOwner OpenResultReader<TResult>(QueryCommand<TResult> queryCommand, ReadOnlySpan<object?> @params, CancellationToken cancellationToken, string terminalName = CsvTerminalName, bool sequentialAccess = false)
+    internal CommandReaderOwner OpenResultReader<TResult>(QueryCommand<TResult> queryCommand, ReadOnlySpan<object?> @params, CancellationToken cancellationToken, string terminalName = CsvTerminalName)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var prepared = PrepareResultCommand(queryCommand, cancellationToken, terminalName, sequentialAccess);
+        var prepared = PrepareResultCommand(queryCommand, cancellationToken, terminalName);
         return _executor.OpenResultReader(prepared, @params);
     }
 
-    internal async Task<CommandReaderOwner> OpenResultReaderAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken, string terminalName = CsvTerminalName, bool sequentialAccess = false)
+    internal async Task<CommandReaderOwner> OpenResultReaderAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken, string terminalName = CsvTerminalName)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var prepared = PrepareResultCommand(queryCommand, cancellationToken, terminalName, sequentialAccess);
+        var prepared = PrepareResultCommand(queryCommand, cancellationToken, terminalName);
         return await _executor.OpenResultReaderAsync(prepared, @params, cancellationToken).ConfigureAwait(false);
     }
 
