@@ -441,6 +441,41 @@ public class LobDataReaderTests
     }
 
     [Fact]
+    public void LobDataReader_Dispose_SingleCall_ShouldDisposeProviderReaderExactlyOnce()
+    {
+        var (reader, inner) = CreateReader();
+
+        reader.Dispose();
+
+        inner.DisposeCount.Should().Be(1);
+        var act = () => reader.Read();
+        act.Should().Throw<ObjectDisposedException>();
+    }
+
+    [Fact]
+    public async Task LobDataReader_DisposeAsync_SingleCall_ShouldDisposeProviderReaderExactlyOnce()
+    {
+        var (reader, inner) = CreateReader();
+
+        await reader.DisposeAsync();
+
+        inner.DisposeCount.Should().Be(1);
+        var act = async () => await reader.ReadAsync(TestContext.Current.CancellationToken);
+        await act.Should().ThrowAsync<ObjectDisposedException>();
+    }
+
+    [Fact]
+    public async Task LobDataReader_DisposeAsyncThenDispose_ShouldBeIdempotent()
+    {
+        var (reader, inner) = CreateReader();
+
+        await reader.DisposeAsync();
+        reader.Dispose();
+
+        inner.DisposeCount.Should().Be(1);
+    }
+
+    [Fact]
     public void LobDataReader_Close_ShouldReleaseInner()
     {
         var (reader, inner) = CreateReader();
@@ -632,10 +667,12 @@ public class LobDataReaderTests
 
         protected override void Dispose(bool disposing)
         {
-            if (disposing && !_disposed)
+            if (disposing)
             {
-                _disposed = true;
+                // Count every invocation so repeated disposal of the same reader is observable;
+                // the LobDataReader must guard against it (exact-once ownership).
                 DisposeCount++;
+                _disposed = true;
             }
             base.Dispose(disposing);
         }
