@@ -7,7 +7,7 @@
 - cycle: `N=3` · revision: `r=1` · attempt: `n=1/3` (step 1 is measurement-only and consumes **no** attempt — no candidate is produced)
 - scope: step 1 of the campaign — the same-round baseline for the warm cached fluent `Except`/`Intersect` paths plus per-phase allocation attribution, **measurement only, no product change**. Every later step's scope is decided by the planner after this step's CHECK. · status path: `.pdca/status/T245-warm-set-ops-3.md`
 - goal: reduce per-query managed allocations on the warm cached fluent `Except`/`Intersect` paths of `NextORM.Core` without SQL/behaviour/API regression, with per-phase attribution, native allocation gates and same-round paired BDN evidence — the §PLAN record, §Original task and `.pdca/rc5/items/T245/preparation.md@r1` are authoritative
-- phase: `DO` · record: `open` · outcome: `pending` — step 1 loop-back: CHECK not accepted → DO evidence completion (no attempt consumed, n=1/3 unchanged); the three requested artifacts (provenance, reconciliation, exact extraction) are supplied at `.pdca/rc5/items/T245/rv3/provenance/` and `.pdca/rc5/items/T245/rv3/reconciliation/` and returned for **re-CHECK**; no candidate, no attempt consumed, counters still `N=3 r=1 n=1/3`
+- phase: `DO` · record: `open` · outcome: `pending` — step 1 second loop-back: re-CHECK not accepted → DO evidence completion (5 requested items, no attempt consumed, n=1/3 unchanged); an escalation is in flight for the same-defect recurrence (T245-S1-F1/F2) and for the PLAN-owned re-anchor question
 - source: issue `#245` (`AlexeyShirshov/nextorm`, milestone `1.0.9-rc5`), dispatched through collection `rc5` · context refs: `.pdca/rc5/items/T245/preparation.md@r1`, `.pdca/rc5/entry-plan.md@r1`, `.pdca/status/collection-rc5.md` §Input → `### #245 …`, §Task queue row `T245`, §Decisions log 06:45:06Z (evidence-root supersede)
 - criteria: `AC-245-01` … `AC-245-07` — exact verbatim text in §Original task below (source: `preparation.md@r1` §6, "verbatim user-supplied set"), not retyped in the summary
 
@@ -242,6 +242,117 @@ No candidate ABBA run, native-gate implementation or whole-suite run is requeste
 
 The report states the authorized next transition only; this record judges nothing and adds no verdict of its own.
 
+### Step 1 re-CHECK (after evidence completion)
+
+Record metadata (executor, not part of the report): **step 1** · check recorded `2026-10-30T13:37:35Z` UTC · verdict `not accepted` · next transition `→ DO (evidence completion)` · counters `N=3 r=1 n=1/3` **unchanged** · **no attempt consumed**.
+
+Source reference: the independent `pdca-check` **re-CHECK** report as returned to this campaign's Step 1 second loop-back, after the evidence completion recorded in §DO result `### Step 1 evidence completion (CHECK → DO)`. It has no separate persisted report file — its evidence pointers are the artefacts under `.pdca/rc5/items/T245/rv3/`, which CHECK opened directly (scoped read). Recorded below as returned, fenced only so that its own `#`/`##`/`####` headings stay literal and do not compete with this file's fixed sections; no byte of the report was rewritten, summarised, translated or judged.
+
+````markdown
+## Verdict: **not accepted — Step 1 only**
+
+The re-gather materially improves the evidence, especially preparation attribution. It does **not yet close baseline authorization or establish the complete acceptance-regime byte breakdown**. No campaign verdict or implementation rejection follows.
+
+Evidence pointers below are relative to `.pdca/rc5/items/T245/rv3/`, unless stated otherwise.
+
+### Criteria assessment
+
+The seven criteria cover the original issue and are judgeable without alteration. `AC-245-01` is the global/stretch alternative to local acceptance under `AC-245-02`.
+
+Candidate ABBA comparisons, native-gate additions and regression suites remain later-step obligations—not missing Step 1 deliverables. The unresolved issues concern charter §7's **valid, comparable and complete measurement basis**, not defective user criteria.
+
+### Criteria matrix
+
+Statuses describe the campaign criteria; step-local observations are distinguished from outstanding campaign work.
+
+| Criterion | Status | Established basis / remaining obligation |
+|---|---|---|
+| **AC-245-01** | **unmet** | Baseline allocation ratios **1.374× / 1.384×**, above 1.20×; time ratios approximately **0.475× / 0.477×**. Not itself a Step 1 blocker. `reconciliation/exact-values.csv:32,34,46,51`. |
+| **AC-245-02** | **unverified** | No candidate or local win measured, as expected at this boundary. |
+| **AC-245-03** | **unverified** | Exact allocation extraction and current DB observations supplied. Authorized baseline identity, complete workload equivalence and transferable phase attribution remain unresolved. ABBA remains a future obligation. See F1/F2. |
+| **AC-245-04** | **unverified** | Captured Git observations support no product change through **0d3bf558**. They do not cover the reported final harness commit. Candidate time/SQL/order/duplicates/API preservation remains future work. `provenance/git-diff-no-product-change.txt:29–60`. |
+| **AC-245-05** | **unverified** | Controls **760 / 744 B/query**, and EXCEPT `Warm_Reused = 0` are recorded in exact extraction; the original baseline records both reused controls at zero. Preservation and native-gate additions remain open. `reconciliation/exact-values.csv:2–3,79`; status §Baseline record. |
+| **AC-245-06** | **unverified** | Separate per-case results supplied; preparation independently corroborated at approximately **2,248 B/query**. Complete mapping of phase bytes to the acceptance regime remains unresolved; final candidate numbers are not due yet. |
+| **AC-245-07** | **unverified** | Pre-harness Git captures support unchanged protected sources and recipe. Final frozen-delta observation and semantic verification of the new instrumentation are absent. See F2. |
+
+### Findings and explicit closure
+
+#### **T245-S1-F1 — blocking, confirmed; partially resolved, not closed**
+Concerns `AC-245-03/06`, charter §7.
+
+**Resolved:** preparation is no longer supported solely by algebraic closure. Independently measured plan-only and construction arms yield **2,248.12 B/query**, agreeing with the probe's **2,248**. The tiering-off probe also reproduces execution controls **760/744**.
+
+Observed diagnostic runs completed:
+
+- `dotnet run … -- --t245-reconcile …` → **RC=0**, `reconciliation/t245-reconcile.log:27`;
+- same probe with tiering disabled → **RC=0**, `probe-tiering-off.log:27`;
+- `--filter '*T245Reconciliation*' --exporters json`, default/disabled tiering → **RC=0**, respective BDN logs `:497/:496`.
+
+**Still unresolved:** those observations support a JIT-regime association, but do not independently establish that the original **80.21/80.18 B** cross-run discrepancy specifically belongs to tiering state. Single-process closure is useful corroboration, not direct observation of the earlier processes' cause.
+
+Nor do the five new BDN rows identify an independently measured INTERSECT counterpart; applying their reconciliation to both operations still needs a semantic observation or matched measurement. The claimed exact acceptance-path construction/clone breakdown therefore remains unverified.
+
+Evidence: `reconciliation/reconciliation.md:55–98,149–154`; `exact-values.csv:117–126`; BDN logs.
+
+#### **T245-S1-F2 — blocking; mismatch confirmed, authorization unverified; not closed**
+Concerns `AC-245-03/04/07`, charter §7.
+
+The raw Git evidence establishes:
+
+- `1e31331d` and measured `cb2246e9` **differ in eight product/test files, 253 insertions and 44 deletions**;
+- `cb2246e9..0d3bf558` has no product/test/benchmark/example delta.
+
+It does **not** recover authorization superseding the charter's repeatedly explicit `1e31331d` baseline. Current-tip equivalence to the measured tree cannot substitute for that decision. The original item PLAN remains absent.
+
+Additionally:
+
+- the supplied semantic-observation artifact uses **`rg` symbol searches**, not the requested Roslyn observations;
+- the captured delta ends before the reported commit **aed135d1**;
+- the core DLL hash was captured after its **13:22 rebuild**; no baseline core hash establishes the report's "both runs" binary-identity claim.
+
+Evidence: `provenance/git-diff-no-product-change.txt:35–60`; `branch-and-divisor-sources.txt:1–29`; `sha256-binary-after-rebuild.txt:7–18`; `provenance.md:177–214`.
+
+The three benchmark paths are **consistent with** charter §4's measurement-only surface, but content compliance is not yet independently established.
+
+#### **T245-S1-F3 — informational, confirmed; harmless with qualification**
+The original stale launch text and historical reference remain. They are now explicitly identified and excluded from current-round acceptance arithmetic. **Closed as a provenance limitation, not refuted or corrected.**
+
+Evidence: `reconciliation/reconciliation.md:99–101`; original status CHECK record `:218–222`.
+
+#### **T245-S1-F4 — informational, confirmed — inconsistent evidence labels**
+Concerns attribution/report consistency under `AC-245-06`.
+
+- `reconciliation.md:55–59` labels its residual `full − … − exec`, but the baseline values give **−80.21/−80.18**, and set E gives **+0.12**, contrary to their displayed signs.
+- `probe-reconcile.csv:22` labels **1** as `queries_per_window`, although **45,840 / 4,584 = 10** logical queries.
+- Status `:284` says no benchmark file changed, contradicting `:279–282`.
+
+These do not alone invalidate the measured medians, but must not persist as an accepted accounting basis.
+
+### Verification limits
+
+**Established:** captured Git relationships; readable exact-value tables; successful diagnostic runs; approximately **2,248 B/query** independently corroborated preparation cost; tiering-sensitive allocation levels.
+
+**Assumptions/unknowns:** authorized re-anchor, final frozen delta, semantic equivalence and denominators of the new harness, complete both-operation acceptance-regime attribution, and baseline core-binary identity. Compact raw BDN JSON was reader-truncated, so all 125 extraction rows were not independently cross-validated.
+
+No historical-provenance exception is accepted: the supplied substitute does not resolve the conflicting baseline binding. Object-level allocation tracing is **not inherently required**.
+
+### Next authorized transition: **→ DO — evidence completion**
+
+Before any product-changing step, have the driver obtain:
+
+1. **The exact existing PLAN/re-anchor authorization.** If none exists, do not invent one; an actual charter change must be decided by PLAN, not waived by CHECK.
+2. **Final identity/delta evidence through aed135d1**, including tracked and untracked scope, acceptance-source hashes and run/binary linkage. Qualify unsupported baseline core-hash claims.
+3. **Roslyn-grounded observations** of harness workload equivalence, both-operation coverage, preparation entry points and logical-query denominators.
+4. **Matched baseline-only phase evidence for both operations under the acceptance regime**, resolving or explicitly bounding the remaining cross-run attribution—not merely declaring it closed. Preserve original runs and all frozen acceptance rules.
+5. Correct the contradictory accounting labels with an append-only clarification.
+
+No candidate ABBA run, native-gate implementation or whole-suite run is requested for this completion.
+
+**Confidence:** high in the observed numerical improvements and remaining provenance gap; limited in complete transferable attribution. **No attempt consumed; `N=3, r=1, n=1/3` unchanged.**
+````
+
+The report states the authorized next transition only; this record judges nothing and adds no verdict of its own.
+
 ## ACT record
 
 `pending`
@@ -252,13 +363,14 @@ The report states the authorized next transition only; this record judges nothin
 
 ## Defect history
 
-One row per stable defect key, as the Step 1 CHECK returned it. **No attempt consumed, no product change, counters `N=3 r=1 n=1/3` unchanged** (step 1 is measurement-only; the requested evidence completion is a re-gather, not a counted attempt).
+One row per stable defect key, as the Step 1 CHECK and its re-CHECK returned them. **No attempt consumed, no product change, counters `N=3 r=1 n=1/3` unchanged** (step 1 is measurement-only; the requested evidence completion is a re-gather, not a counted attempt). One evidence-completion round was applied per blocking finding (`T245-S1-F1`, `T245-S1-F2`) — **zero product fixes**, no attempt consumed, and the same-defect recurrence on both keys has triggered `pdca-escalate` before any further fix round.
 
 | key | revisions/attempts observed | fixes applied | evidence | last recurrence/escalation |
 |---|---|---|---|---|
-| `T245-S1-F1` | `r=1`, `n=1` (step 1, no attempt consumed) | `0` — blocking, **confirmed**: attribution does not close against the acceptance workload (`AC-245-03/06`, charter §7.3); **no fix applied** | `.pdca/rc5/items/T245/rv3/baseline/summary.md:92–112`; `t245-attribution.log:56–67`; `…WarmDecompose-report-github.md:24–42` | Step 1 CHECK `2026-10-30T13:02:13Z` → routed `CHECK → DO` (evidence completion), not escalated; re-gather requested → evidence supplied at `.pdca/rc5/items/T245/rv3/reconciliation/reconciliation.md` (2026-10-30T13:31Z); verdict still CHECK's |
-| `T245-S1-F2` | `r=1`, `n=1` (step 1, no attempt consumed) | `0` — blocking, **unverified**: baseline provenance / no-product-change invariant (`AC-245-03/04/07`, charter §7); the charter's `1e31331d` vs the measured `cb2246e9` is not established as equivalent | `preparation.md:49,114–118`; `.pdca/status/T245-warm-set-ops-3.md:48,58–59,106` | Step 1 CHECK `2026-10-30T13:02:13Z` → routed `CHECK → DO` (provenance observation artifact requested); re-gather requested → evidence supplied at `.pdca/rc5/items/T245/rv3/provenance/provenance.md` (2026-10-30T13:30Z); verdict still CHECK's |
-| `T245-S1-F3` | `r=1`, `n=1` (step 1, no attempt consumed) | `0` — informational, **confirmed**: stale provenance text (`launch_command` names `rv1`, `argv` names `rv3`); historical substitution **not** established | `.pdca/rc5/items/T245/rv3/baseline/attribution/probe-variants2.json:10–17`; `t245-attribution.log:66–67` | Step 1 CHECK `2026-10-30T13:02:13Z`; no correction routed, qualification only |
+| `T245-S1-F1` | `r=1`, `n=1` (step 1, no attempt consumed; `1` evidence-completion round) | `0` product fixes — blocking, **confirmed**; re-CHECK status **partially resolved, not closed**: preparation independently measured at ≈`2,248.12 B/query` (was algebraic only) and `760/744` execution controls reproduced with tiering off; the `80.21/80.18 B` cross-run discrepancy is *associated with* the JIT regime, not directly attributed, and no independently measured INTERSECT counterpart exists | `reconciliation/reconciliation.md:55–98,149–154`; `reconciliation/exact-values.csv:117–126`; `reconciliation/t245-reconcile.log:27`; `probe-tiering-off.log:27`; BDN logs `:497/:496` | re-CHECK `2026-10-30T13:37:35Z` → still `CHECK → DO` (evidence completion, 5 items); **recurrence** after 1 evidence round ⇒ `pdca-escalate` in flight |
+| `T245-S1-F2` | `r=1`, `n=1` (step 1, no attempt consumed; `1` evidence-completion round) | `0` product fixes — blocking; re-CHECK status **mismatch confirmed, authorization unverified, not closed**: `1e31331d` vs `cb2246e9` = 8 product/test files, `253+/44−`; `cb2246e9..0d3bf558` product delta empty; no authorization superseding the charter's `1e31331d`, item PLAN still absent; semantic-observation artifact uses `rg`, delta ends before `aed135d1`, core DLL hash taken after the 13:22 rebuild | `provenance/git-diff-no-product-change.txt:35–60`; `branch-and-divisor-sources.txt:1–29`; `sha256-binary-after-rebuild.txt:7–18`; `provenance.md:177–214` | re-CHECK `2026-10-30T13:37:35Z` → still `CHECK → DO` (evidence completion, items 1–3); the re-anchor decision is **PLAN-owned**; **recurrence** after 1 evidence round ⇒ `pdca-escalate` in flight |
+| `T245-S1-F3` | `r=1`, `n=1` (step 1, no attempt consumed) | `0` — informational, **confirmed**; re-CHECK status **closed as a provenance limitation, not refuted**: stale `launch_command` names `rv1` vs `argv` `rv3`, and the printed BDN reconciliation uses historical references, now explicitly identified and excluded from current-round acceptance arithmetic | `.pdca/rc5/items/T245/rv3/baseline/attribution/probe-variants2.json:10–17`; `t245-attribution.log:66–67`; `reconciliation/reconciliation.md:99–101` | re-CHECK `2026-10-30T13:37:35Z`; no correction routed, qualification only — no escalation |
+| `T245-S1-F4` | `r=1`, `n=1` (step 1, no attempt consumed) | `0` — informational, **confirmed** (new at re-CHECK): inconsistent evidence labels under `AC-245-06` — `reconciliation.md:55–59` labels the residual `full − … − exec` while the values give `−80.21/−80.18` and set E `+0.12`, contrary to their displayed signs; `probe-reconcile.csv:22` labels `1` as `queries_per_window` although `45,840 / 4,584 = 10` logical queries; status `:284` says no benchmark file changed, contradicting `:279–282`. Does not invalidate the measured medians but must not persist as an accepted accounting basis; correction is requested append-only (re-CHECK item 5) | `reconciliation/reconciliation.md:55–59`; `reconciliation/probe-reconcile.csv:22`; `.pdca/status/T245-warm-set-ops-3.md:284` vs `:279–282` | re-CHECK `2026-10-30T13:37:35Z` → `CHECK → DO` (append-only clarification, item 5); informational — no escalation |
 
 ## Changed files
 
@@ -282,10 +394,11 @@ One row per stable defect key, as the Step 1 CHECK returned it. **No attempt con
   - `benchmarks/nextorm.benchmark/Program.cs` → modified, +7 lines at `:38-:43` (the `--t245-reconcile` hook).
 
 No file under `src/`, `tests/`, `benchmarks/` or `docs/` was created, edited or deleted — the product tree is byte-identical to `cb2246e9`.
+- Step 1 re-CHECK record (this dispatch): `.pdca/status/T245-warm-set-ops-3.md` → appended §CHECK record `### Step 1 re-CHECK (after evidence completion)`, refreshed the §Current state phase line, replaced the three §Defect history rows and added `T245-S1-F4`, appended one §Progress log row, refreshed §Git state; `.pdca/status/collection-rc5.md` → queue row `T245` notes appended + one §Progress log row. No other path written; no product, test, benchmark or evidence artefact changed in this dispatch.
 
 ## Git state
 
-`status path: .pdca/status/T245-warm-set-ops-3.md — tracked; modified in this cycle (step-1 evidence completion) and committed together with .pdca/status/collection-rc5.md and the three measurement-only benchmark paths` — branch `1.0.9-rc5`, baseline supplied this cycle `cb2246e9` (measured tree; product sources byte-identical to `HEAD`), tip before this commit `0d3bf558`. Durable on disk and read back; the commit exists because this dispatch's brief authorizes it under the collection `rc5` auto-commit policy. Evidence under `.pdca/rc5/items/T245/rv3/**` stays uncommitted (local evidence, never a CI input). This cycle's task-owned delta: the two status files, the three benchmark paths above (one modified, two new), and the `rv3/provenance/**` + `rv3/reconciliation/**` artifacts; nothing else is staged, no `-A`, no push, no merge, no tag, no branch switch. Work outside this delta (the other `.pdca/status/*` dirty set) stays untouched and unclaimed.
+`status path: .pdca/status/T245-warm-set-ops-3.md — tracked; modified in this cycle (step-1 re-CHECK record) and committed together with .pdca/status/collection-rc5.md under the collection `rc5` auto-commit policy` — branch `1.0.9-rc5`; at the start of this dispatch HEAD was `aed135d1` and both status paths were clean (the 13:35 evidence-completion entry is already committed there); baseline supplied this cycle `cb2246e9` (measured tree; product sources byte-identical to `HEAD`). Durable on disk and read back; the commit of this dispatch carries the subject `#245 T245 step-1 re-CHECK: not accepted -> DO evidence completion; escalation in flight` and its sha is the commit that contains this entry (`git log -1 --format=%h -- .pdca/status/T245-warm-set-ops-3.md`). Evidence under `.pdca/rc5/items/T245/rv3/**` stays uncommitted (local evidence, never a CI input). This cycle's task-owned delta: the two status files, the three measurement-only benchmark paths above (one modified, two new), and the `rv3/baseline/**`, `rv3/provenance/**`, `rv3/reconciliation/**` artifacts; nothing else is staged, no `-A`, no push, no merge, no tag, no branch switch. Work outside this delta (the other `.pdca/status/*` dirty set) stays untouched and unclaimed.
 
 ## Progress log
 
@@ -305,3 +418,4 @@ No file under `src/`, `tests/`, `benchmarks/` or `docs/` was created, edited or 
 2026-10-30T13:28:00Z | DO | revision r=1 | attempt n=1 | run K 5 arms re-run tiering default exit 0, 36 s, JSON kept: construct 410 416/410 417, plan-only 635 228, full 71 124, prepared 7 600 B/op; single-process ladder closure −0.12 vs the cross-run +80.21 of the baseline set | `reconciliation/bdn-reconcile-arms-tiered.{log,full-compressed.json,github.md,csv}`
 2026-10-30T13:32:00Z | DO | revision r=1 | attempt n=1 | three artifacts written: `provenance/provenance.md` (+8 raw `git-*`/`sha256-*` files), `reconciliation/reconciliation.md` (per-gap closure: 528 = 399.82 + 48 + 80.08, owner harness/JIT tiering; prepare phase matched), `reconciliation/exact-values.{json,csv}` + `extraction-notes.md` (125 exact arm rows, display-rounding table); DB `32bf10a0…72295` 753 664 B unchanged, no container run needed | `.pdca/rc5/items/T245/rv3/provenance/`, `.pdca/rc5/items/T245/rv3/reconciliation/`
 2026-10-30T13:35:00Z | DO | revision r=1 | attempt n=1 | step-1 evidence completion returned for **re-CHECK**: no candidate produced, no attempt consumed, `N=3 r=1 n=1/3` unchanged, no criterion/threshold/denominator changed, no product behaviour change; verdict remains CHECK's | this record §DO result `### Step 1 evidence completion (CHECK → DO)`
+2026-10-30T13:37:35Z | C | revision r=1 | attempt n=1 | T245 step-1 **re-CHECK** returned **not accepted** (Step 1 only) → `DO` evidence completion with 5 requested items, **no attempt consumed**, counters `N=3 r=1 n=1/3` unchanged: (1) the exact existing PLAN/re-anchor authorization (a real charter change belongs to PLAN, never a CHECK waiver), (2) final identity/delta evidence through `aed135d1` incl. tracked and untracked scope, acceptance-source hashes and run/binary linkage, with unsupported baseline core-hash claims qualified, (3) Roslyn-grounded observations of harness workload equivalence, both-operation coverage, preparation entry points and logical-query denominators, (4) matched baseline-only phase evidence for both operations under the acceptance regime, resolving or explicitly bounding the cross-run attribution while preserving original runs and frozen rules, (5) append-only correction of the contradictory accounting labels; criteria `AC-245-01` unmet (`1.374×`/`1.384×` allocation, `0.475×`/`0.477×` time), `AC-245-02..07` unverified; defects `T245-S1-F1` (blocking, **partially resolved, not closed**), `T245-S1-F2` (blocking, **mismatch confirmed, authorization unverified, not closed**), `T245-S1-F3` (informational, **closed as a provenance limitation**), `T245-S1-F4` (informational, confirmed — inconsistent evidence labels); one evidence-completion round applied per blocking finding, zero product fixes, and the same-defect recurrence on F1/F2 has triggered `pdca-escalate` (also covering the PLAN-owned re-anchor question) before any further fix round; no candidate ABBA run, native gate or whole-suite run requested; no product change. Notice (autonomous): the re-CHECK's own pointers into this status file (`:218–222`, `:279–282`, `:284`) address the pre-append record and shift by this append — they are kept as returned and remain resolvable by content | this record §CHECK record `### Step 1 re-CHECK (after evidence completion)`; `.pdca/rc5/items/T245/rv3/reconciliation/`, `.pdca/rc5/items/T245/rv3/provenance/`
