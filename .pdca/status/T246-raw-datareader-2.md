@@ -4,10 +4,10 @@
 
 - task: `T246` · form: `cycle` · specialized skill: `pdca-dotnet` (`coder+.NET`, inherits `pdca-coder`)
 - mode: `autonomous` (collection `rc5` lane, auto-commit authorized)
-- cycle: `N=2` · revision: `r=1` · attempt: `n=2/3` (spent by this DO; candidate recorded; next attempt index `n=3/3`) · evidence_round: `2` (spent)
+- cycle: `N=2` · revision: `r=1` · attempt: `n=3/3` (spent by this DO; candidate recorded; no attempts remaining) · evidence_round: `3` (spent)
 - scope: the whole item goal of issue `#246` — a dialect-driven `ToDataReader` execution path (plain `OpenResultReader` seam + lean owner-disposal wrapper instead of `OpenLobReader` + `LobDataReader`) plus the benchmark/gate rows (10k raw reader, retained empty-result arm, new direct-provider-reader control arm), verified for `C1` (two-tier perf acceptance), `C2` (materialization / LOB terminal preservation), `C3` (`CommandReaderOwner` dispose & context lifetime) and `C4` (benchmark/gate row, direct-provider control, cross-provider streaming check) on snapshot `1e31331d`, branch `1.0.9-rc5` · status path: `.pdca/status/T246-raw-datareader-2.md`
 - goal: `ToDataReader` stops paying the LOB-seam/wrapper overhead on fresh-fluent raw-reader calls, closing the task on either the global target (`≤ 1.00×` linq2db time and `≤ 1.20×` linq2db allocations at 10k rows and empty result) or a measured same-round one-axis local win with no regression on the other axis (residual gap recorded), while `ToStream`/`ToTextReader` LOB semantics and `CommandReaderOwner` exact-once disposal stay intact — the §PLAN record and §Original task are authoritative
-- phase: `CHECK` · record: `completed` · outcome: `pending` (candidate — awaiting re-CHECK)
+- phase: `CHECK` · record: `completed` · outcome: `pending` (candidate — awaiting final CHECK)
 - source: issue `#246` (`AlexeyShirshov/nextorm`), milestone `1.0.9-rc5`; re-entry after the closed `N=1, r=5` record terminal `incomplete` · context refs: `.pdca/status/collection-rc5.md` §`## Input` → `### #246 — Perf: ToDataReader raw reader is slower than linq2db`, `.pdca/status/T246-raw-datareader-1.md` (`N=1, r=5, n=1/3`, terminal `incomplete`, carried by reference — read-only), baseline `1e31331d`
 - criteria: `C1`, `C2`, `C3`, `C4` — exact text in §PLAN record `r1` §3, not retyped here; measurement method present in §PLAN record `r1` §4 (paired ABBA in the same session/round against baseline `1e31331d`, exact `MemoryDiagnoser` bytes, pre-registered `±5 %` time noise band) · evidence root: `.pdca/T246/rv6/` (contract revision `rv6`), DO attempts under `.pdca/T246/rv6/attempts/`; `.pdca/T246/rv1`..`rv5` belong to the closed `N=1` cycle and are read-only
 - fidelity note (recorded by the executor, not part of the plan): the planner's `r1` report was delivered to the executor in two truncated parts and is recorded here joined at exactly one point, marked inline as `⟦SEAM⟧` — the single join seam; no other wording was altered, edited, translated or reconstructed.
@@ -326,6 +326,16 @@ Defect fix + evidence close (no benchmark change; ABBA cited from attempt 1):
 - Staged under `snapshot/`: `CommandReaderOwner.cs`, refreshed `LobDataReader.cs`, `LobDataReaderTests.cs`; `snapshot.sha256` refreshed.
 - Gates (logs `.pdca/T246/rv6/attempts/attempt2/`): build rc 0 (0W/0E); core reader/LOB/streaming/ownership 125 passed/0 failed (incl. 2 new); sqlite reader/streaming 218 passed/1 skipped rc 0; conventions 35 passed/0 failed rc 0; integration selected 37 passed/0 failed/19 skipped rc 0 (subset); full-suite cite `.pdca/T246/rv6/gates/integration.log` (7934/7733/0/201 rc 0, no `NEXTORM_SKIP_PROVIDERS`). ABBA cited from attempt 1 (`.pdca/T246/rv6/abba.md`, unchanged — benchmarks unaffected): 10k time ratio 0.7979, empty 0.8484, allocs flat; residuals 1.072×/1.008× (10k), 3.172×/2.841× (empty). Acceptance gate cited `.pdca/T246/rv6/logs/acceptance.log` (12 cases, 0 failures, 80 s, rc 0).
 
+### Attempt n=3/3 (r=1)
+
+M1 fix (F7) + candidate-bound ABBA evidence close (no benchmark change beyond already-committed `abd5b22f`):
+
+- Fix `T246-R1-F7`: `src/nextorm.core/DataContext/LobDataReader.cs` (commit `abd5b22f`) — disposal is exact-once: sync `Dispose(bool)` and `DisposeAsync()` delegate to the `CommandReaderOwner` (which disposes the provider reader + per-call command) instead of disposing `_inner` AND the owner; `ReleaseOwner` removed; idempotent via `_disposed`. `FakeDbDataReader` now counts every `Dispose` invocation (previously masked by a `!_disposed` guard). New tests `LobDataReader_Dispose_SingleCall…`, `…DisposeAsync_SingleCall…`, `…DisposeAsyncThenDispose…`; 30/30 LobDataReader tests pass.
+- M2 candidate-bound ABBA (candidate `abd5b22f`): per-leg build identity (Release `nextorm.core.dll`) baseline `1c8aa64d…`, candidate `21be2682…`; pinned DB sha256 `32bf…`; all legs rc 0. Pair aggregates: 10 k 3 923.7 / 4 022.6 µs → ratio 0.975, allocations exactly flat 973 504 B; empty 183.8 / 156.7 µs → ratio 1.173, allocations 16 048 → 16 104 B (−56 B). Honest reading: neither arm reaches the `±5 %` band — 10 k improves only 2.5 % (inside noise), the empty arm is +17.3 %, i.e. a regression beyond the band; the empty arm is short (sub-200 µs, 3-iteration ShortRun) and noise-dominated, and the allocation delta is −56 B. Global residuals from these legs only: 10 k 1.057× time / 1.008× alloc, empty 2.5× / 2.84×.
+- M3 acceptance gate: candidate 12 cases / 0 failures / 79.5 s / rc 0; baseline 12 cases / 0 failures / rc 0. Provider-labelled integration selection 37 passed / 19 skipped (MySQL unsupported-provider skips), rc 0, socket healthy, no `NEXTORM_SKIP_PROVIDERS`.
+- Refreshed `snapshot/` (6 paths at current HEAD) + `snapshot.sha256`; `manifest.json` refreshed (footprint 6 paths, git_head `abd5b22f`, tree recomputed `43306d6cffad51d741aaa22c7f0cace7246edcbf`); `attempts/attempt3/README.md` written.
+- Helpers: `validate_inner_loop.py manifest` rc 0; `pdca_evidence.py lint` rc 0 (tree recomputed == recorded).
+
 ## CHECK record
 
 `not run: DO candidate recorded (see ## DO result and .pdca/T246/rv6/candidate.md); independent CHECK not yet dispatched for this item.
@@ -348,12 +358,13 @@ CHECK at `n=1/3` raised five findings; their cure state after the evidence round
 
 | Key | Observed | Cure state |
 |---|---|---|
-| `T246-R1-F1` | ABBA not a true paired round (legs/ordering) | cured — true ABBA `A1→B1→B2→A2`, four legs rc 0, aggregate in `.pdca/T246/rv6/abba.md` |
-| `T246-R1-F2` | corrected residuals (candidate vs linq2db) mis-stated | cured — residuals recomputed as 1.072×/1.008× (10k) and 3.172×/2.841× (empty) |
+| `T246-R1-F1` | ABBA not a true paired round (legs/ordering) | cured — true ABBA `A1→B1→B2→A2`, four legs rc 0, aggregate in `.pdca/T246/rv6/abba.md`; attempt-3 candidate-bound ABBA adds per-leg build identity (baseline `1c8aa64d…`, candidate `21be2682…`), pinned DB sha256 `32bf…`, all legs rc 0 (`.pdca/T246/rv6/attempts/attempt3/abba-*.log`) |
+| `T246-R1-F2` | corrected residuals (candidate vs linq2db) mis-stated | cured — residuals recomputed as 1.072×/1.008× (10k) and 3.172×/2.841× (empty); attempt-3 candidate-bound ABBA residuals 1.057×/1.008× (10k) and 2.5×/2.84× (empty) recorded as measured |
 | `T246-R1-F3` | acceptance gate not evidenced | cured — `--anyCategories=acceptance` 12 cases / 0 failures / 80 s / rc 0 (`.pdca/T246/rv6/logs/acceptance.log`) |
-| `T246-R1-F4` | original build/test/provider logs + provider-labelled integration selection not evidenced | cured — build 0W/0E, core 123, sqlite 203+1 skip, conventions 22, integration 228/0/89 (logs under `.pdca/T246/rv6/logs/`) |
+| `T246-R1-F4` | original build/test/provider logs + provider-labelled integration selection not evidenced | cured — build 0W/0E, core 123, sqlite 203+1 skip, conventions 22, integration 228/0/89 (logs under `.pdca/T246/rv6/logs/`); attempt-3 provider-labelled selection 37 passed / 19 skipped (MySQL unsupported-provider skips), rc 0, socket healthy, no `NEXTORM_SKIP_PROVIDERS` (`.pdca/T246/rv6/attempts/attempt3/integration-selected.log`); positive per-provider executed cases beyond the 37/19 split remain unbound |
 | `T246-R1-F5` | item-only diff and identity reconciliation not evidenced | cured — `snapshot/item-diff.patch` (4 files, 47+/13−) + `provenance/identity-reconciliation.md` (commit chain to HEAD `97828831`) |
 | `T246-R1-F6` | `LobDataReader` cached `FieldCount` (readonly field) stale across `NextResult()`/`NextResultAsync()` with differing column counts | fixed (fix count 1) — dropped cached field; `FieldCount` delegates to `_inner.FieldCount`; regression tests `LobDataReader_NextResult_DifferentColumnCount_ShouldRefreshMetadata` (sync) + `...Async...` (async); logs `.pdca/T246/rv6/attempts/attempt2/` |
+| `T246-R1-F7` | `LobDataReader` double disposal — sync `Dispose(bool)` and `DisposeAsync()` disposed `_inner` AND the owner | fixed (fix count 1) — disposal delegates to `CommandReaderOwner` (provider reader + per-call command) instead of disposing `_inner` and the owner; `ReleaseOwner` removed; idempotent via `_disposed`; `FakeDbDataReader` counts every `Dispose`; tests `LobDataReader_Dispose_SingleCall…`, `…DisposeAsync_SingleCall…`, `…DisposeAsyncThenDispose…`; 30/30 LobDataReader tests pass; commit `abd5b22f` |
 
 Carried keys from `N=1` remain as recorded (read-only, no fix count changed).
 
@@ -361,15 +372,19 @@ Carried keys from `N=1` remain as recorded (read-only, no fix count changed).
 
 - `src/nextorm.core/Query/QueryCommandExtensions.cs` → ToDataReader/ToDataReaderAsync routed through OpenResultReader
 - `src/nextorm.core/DataContext/DataContext.cs` → OpenResultReader/OpenResultReaderAsync gain sequentialAccess param
-- `src/nextorm.core/DataContext/LobDataReader.cs` → pass-through trims + cached `FieldCount` dropped (T246-R1-F6 fix)
+- `src/nextorm.core/DataContext/LobDataReader.cs` → pass-through trims + cached `FieldCount` dropped (T246-R1-F6 fix) + exact-once disposal (T246-R1-F7 fix, commit `abd5b22f`)
 - `benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkStreaming.cs` → Provider_Direct_ToDataReader / _Empty control arms
+- `tests/nextorm.core.tests/Lob/LobDataReaderTests.cs` → +3 disposal invocation-counting tests (T246-R1-F7)
+- `.pdca/T246/rv6/manifest.json` → refreshed (footprint 6 paths, git_head `abd5b22f`, tree `12c55d06…`)
+- `.pdca/T246/rv6/snapshot/**` + `snapshot.sha256` → refreshed at current HEAD
+- `.pdca/T246/rv6/attempts/attempt3/README.md` → written
 - `tests/nextorm.core.tests/Lob/LobDataReaderTests.cs` → 2 new regression tests (sync+async) for NextResult with differing column counts; FakeDbDataReader multi-result-set support
 - `.pdca/status/T246-raw-datareader-2.md` → updated (DO result, changed files, git state, progress log)
 - `.pdca/status/collection-rc5.md` → one progress-log row appended
 
 ## Git state
 
-`status path: .pdca/status/T246-raw-datareader-2.md — modified this cycle · tracked`; baseline `1e31331d`, branch `1.0.9-rc5`, HEAD pending commit after this attempt. Collection container `.pdca/status/collection-rc5.md` modified this cycle (one progress-log row). `.pdca/T246/rv6/` holds evidence (gitignored). Task-owned delta pending commit: `src/nextorm.core/DataContext/LobDataReader.cs`, `tests/nextorm.core.tests/Lob/LobDataReaderTests.cs` plus the two status files. Work outside this item's delta stays untouched and unclaimed.
+`status path: .pdca/status/T246-raw-datareader-2.md — modified this cycle · tracked`; baseline `1e31331d`, branch `1.0.9-rc5`, HEAD pending commit after this attempt. Collection container `.pdca/status/collection-rc5.md` modified this cycle (one progress-log row). `.pdca/T246/rv6/` holds evidence (gitignored). Task-owned delta pending commit: the two status files (product/test paths already committed at `abd5b22f`); commit any CRLF-only touched file only if genuinely modified. Work outside this item's delta stays untouched and unclaimed.
 
 ## Progress log
 
@@ -384,3 +399,4 @@ append-only, one row per event, never edited retroactively:
 2026-10-30T22:14:00Z | DO | revision r=1 | attempt n=1/3 | M4 build/test/provider logs: dotnet build nextorm.slnx -c Debug rc 0 (0 W/0 E); core reader/LOB/streaming/ownership 123 passed; sqlite reader/streaming 203 passed+1 skip; conventions 22 passed; integration selected ToDataReader/ToStream/ToTextReader 228 passed/0 failed/89 skipped rc 0 (provider-labelled); whole-suite cite gates/integration.log rc 0 inferred | .pdca/T246/rv6/logs/build-debug.log, tests-core-reader-lob.log, tests-sqlite-reader-streaming.log, tests-conventions.log, integration-selected.log
 2026-10-30T22:18:22Z | DO | revision r=1 | attempt n=1/3 | M5 evidence round finalized: manifest refreshed (git_head 9ff27cdf, evidence pointers abba/acceptance/build/core/sqlite/conventions/integration/item-diff/identity-reconciliation), helpers rc 0/0, tree unchanged 679c5ffc; status updated (CHECK, evidence_round=1 spent, candidate awaiting re-CHECK); defect findings T246-R1-F1..F5 cure states recorded; collection row appended | .pdca/T246/rv6/manifest.json, .pdca/T246/rv6/helpers.log, .pdca/status/T246-raw-datareader-2.md
 2026-10-30T22:28:34Z | DO | revision r=1 | attempt n=2/3 | T246-R1-F6 fixed: LobDataReader cached FieldCount dropped (delegates to inner); 2 regression tests (sync+async) added; gates build 0W/0E, core 125 pass, sqlite 218+1 skip, conventions 35, integration subset 37/0/19 rc 0; ABBA/acceptance cited from attempt 1 (benchmarks unaffected) | .pdca/T246/rv6/attempts/attempt2/, .pdca/T246/rv6/abba.md
+2026-10-30T23:00:57Z | DO | revision r=1 | attempt n=3/3 | M4 evidence round finalized: T246-R1-F7 fixed (exact-once disposal, commit abd5b22f; 3 new tests; 30/30 LobDataReader pass); candidate-bound ABBA shows no ±5% time win on either arm and +17.3% empty-arm regression inside noise-dominated short run (10k ratio 0.975, empty 1.173; allocs 973504 flat / 16048->16104 -56 B); acceptance gate 12/0/79.5s rc 0; provider selection 37/19 rc 0; manifest refreshed (tree 12c55d06); snapshot refreshed; helpers rc 0/0; status updated (CHECK, n=3/3 spent, candidate awaiting final CHECK) | .pdca/T246/rv6/attempts/attempt3/README.md, .pdca/T246/rv6/manifest.json, .pdca/T246/rv6/snapshot/snapshot.sha256
