@@ -578,12 +578,17 @@ internal static class MetadataEagerLoadResolver
         var foreign = relationship.ForeignKey;
         var principal = relationship.PrincipalKey;
 
-        var parent = new PropertyInfo[principal.Count];
-        var child = new PropertyInfo[foreign.Count];
+        PropertyInfo[] parent;
+        PropertyInfo[] child;
 
         if (relationship.Kind == RelationshipKind.ManyToOne)
         {
-            // Declaring = dependent (foreign key), related = principal key.
+            // Declaring = dependent (foreign key), related = principal key. Each side is sized by the
+            // collection it is filled from, so a hand-written arity mismatch reaches the caller's arity
+            // guard instead of indexing past the opposite key's length.
+            parent = new PropertyInfo[foreign.Count];
+            child = new PropertyInfo[principal.Count];
+
             for (var i = 0; i < foreign.Count; i++)
                 parent[i] = foreign[i].PropertyInfo;
             for (var i = 0; i < principal.Count; i++)
@@ -593,6 +598,9 @@ internal static class MetadataEagerLoadResolver
         {
             // Declaring = principal/owning side, related = dependent (foreign key). Many-to-many exposes
             // the parent-side key as PrincipalKey and the child-side key as ForeignKey.
+            parent = new PropertyInfo[principal.Count];
+            child = new PropertyInfo[foreign.Count];
+
             for (var i = 0; i < principal.Count; i++)
                 parent[i] = principal[i].PropertyInfo;
             for (var i = 0; i < foreign.Count; i++)

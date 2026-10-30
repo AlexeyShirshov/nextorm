@@ -1,0 +1,1230 @@
+# Collection rc5 — milestone 1.0.9-rc5 (#23), all open tasks
+
+- collection-id: `rc5`
+- entry: fresh entry (autonomous, authorized auto-commit)
+- repo/branch: `AlexeyShirshov/nextorm` / `1.0.9-rc5`
+- base: `1e31331d`
+- status path: `.pdca/status/collection-rc5.md`
+- entry-plan ref: `.pdca/rc5/entry-plan.md` (verbatim copy of the entry planner's returned report, sha256 `ffaecc0b745db18d6af833398ea1b9a7f038a31ad36e57838a9ebc353f3f3f0f`)
+- created (UTC): 2026-10-30T05:51:46Z
+- form: `collection`
+- overlay: `coder+.NET`
+
+## Original task
+
+«pdca по открытым задачам из майлстона rc5 автономно с автокомитом»
+
+User constraints (three, quoted verbatim from the task line above):
+
+- `по открытым задачам из майлстона rc5`
+- `автономно`
+- `с автокомитом`
+
+Auto-commit policy in force for this collection (verbatim, repo `AGENTS.md` §Git): "a `pdca-collection` cycle started with explicit auto-commit permission may (a) commit on `collection/**` branches inside the cycle worktree and (b) `git merge --no-ff` a group branch into the current branch." Push stays with the user: no `git push`, no merge into `main`, no tag or release commit.
+
+## Task queue (source of truth)
+
+| id | issue | execution_kind | group | selected_variant | plan_state | preparation_state | preparation_ref | status | branch | cycle_id | status_path | plan_revision | baseline | notes | terminal | attempts |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| T353 | #353 | cycle | G1 | coder+.NET | ready | — | — | done | collection/rc5/group-1 | N=1 | .pdca/status/T353-rc5-1.md | r=1 | 1e31331d | wave 1 correctness; plan ready: cycle + coder+.NET, AC-T353-01..03, plan_ref .pdca/status/T353-rc5-1.md §PLAN record, evidence_root .pdca/T353/rv1/; evidence_root superseded -> .pdca/rc5/items/T353/rv1/ (id collision with rc4 evidence); done: AC-T353-01..03 met (CHECK accepted), commit 5d108505, evidence .pdca/rc5/items/T353/rv1/ | execution | 0 |
+| T352 | #352 | cycle | G1 | coder+.NET | ready | — | — | pending | collection/rc5/group-1 | N=1 | .pdca/status/T352-rc5-1.md | r=1 | 1e31331d | wave 1 correctness; plan ready: cycle + coder+.NET, AC-T352-01..03, plan_ref .pdca/status/T352-rc5-1.md §PLAN record, evidence_root .pdca/T352/rv1/; evidence_root superseded -> .pdca/rc5/items/T352/rv1/ (id collision with rc4 evidence) | execution | 0 |
+| T318 | #318 | cycle | G1 | coder+.NET | ready | — | — | pending | collection/rc5/group-1 | N=1 | .pdca/status/T318-rc5-1.md | r=1 | 1e31331d | wave 2 core perf; plan ready: cycle + coder+.NET, AC-T318-01..03, plan_ref .pdca/status/T318-rc5-1.md §PLAN record, evidence_root .pdca/rc5/items/T318/rv1/ | execution | 0 |
+| T317 | #317 | cycle | G1 | coder+.NET | ready | — | — | pending | collection/rc5/group-1 | N=1 | .pdca/status/T317-rc5-1.md | r=1 | 1e31331d | wave 2 core perf; plan ready: cycle + coder+.NET, AC-317-01..04, plan_ref .pdca/status/T317-rc5-1.md §PLAN record, evidence_root .pdca/rc5/items/T317/rv1/ | execution | 0 |
+| T245 | #245 | campaign | G1 | coder+.NET (step-level) | — | ready | .pdca/rc5/items/T245/preparation.md@r1 | pending | collection/rc5/group-1 | N=3 | .pdca/status/T245-warm-set-ops-3.md | r=1 | 1e31331d | re-opened rc5: new revision r+1 in the existing rc4 record (AC-COL-04); prepared: campaign (incremental), AC-245-01..07, preparation_ref .pdca/rc5/items/T245/preparation.md@r1, evidence_root .pdca/T245/rv3/; identity per item PLAN (N=3 r=1) supersedes the queue's N=1 r=2 because -1.md and -2.md are closed terminal records | execution | 0 |
+| T246 | #246 | cycle | G1 | coder+.NET | ready | — | — | pending | collection/rc5/group-1 | N=2 | .pdca/status/T246-raw-datareader-2.md | r=1 | 1e31331d | re-opened rc5: new revision r+1 in the existing rc4 record (AC-COL-04); plan ready: cycle + coder+.NET, C1..C4, plan_ref .pdca/status/T246-raw-datareader-2.md §PLAN record, evidence_root .pdca/T246/rv6/; identity per item PLAN (N=2 r=1) supersedes the queue's N=1 r=2 (the -1.md record is closed at r=5) | execution | 0 |
+| T247 | #247 | cycle | G1 | coder+.NET | ready | — | — | pending | collection/rc5/group-1 | N=1 | .pdca/status/T247-json-streaming-1.md | r=2 | 1e31331d | re-opened rc5: new revision r+1 in the existing rc4 record (AC-COL-04); plan ready (r=2): cycle + coder+.NET, AC-247-01..06, plan_ref .pdca/status/T247-json-streaming-1.md §PLAN record r2, evidence_root .pdca/T247/rv3/ | execution | 0 |
+| T250 | #250 | cycle | G1 | coder+.NET | ready | — | — | pending | collection/rc5/group-1 | N=1 | .pdca/status/T250-csv-terminal-plan-cache-1.md | r=1 | 1e31331d | re-opened rc5: new revision r+1 in the existing rc4 record (AC-COL-04); plan ready (resumption, r=1): cycle + coder+.NET, AC-250-1..4, plan_ref .pdca/status/T250-csv-terminal-plan-cache-1.md §PLAN record rc5-r1, evidence_root .pdca/T250/rv1/; r=2 corrected to r=1 — no revision, DO never ran | execution | 0 |
+| T311 | #311 | cycle | G1 | coder+.NET | ready | — | — | pending | collection/rc5/group-1 | N=1, r=2 | .pdca/status/T311-json-streaming-1.md | r=2 | 1e31331d | re-opened rc5: new revision r+1 in the existing rc4 record (AC-COL-04); plan ready (r=2): cycle + coder+.NET, C311-01..05, plan_ref .pdca/status/T311-json-streaming-1.md §PLAN record r2, evidence_root .pdca/T311/rv2/ | execution | 0 |
+| T267 | #267 | cycle | G1 | coder+.NET | ready | — | — | pending | collection/rc5/group-1 | N=1 | .pdca/status/T267-rc5-1.md | r=1 | 1e31331d | wave 4 examples PG; plan ready: cycle + coder+.NET, AC1..AC3, plan_ref .pdca/status/T267-rc5-1.md §PLAN record, evidence_root .pdca/rc5/items/T267/rv1/ | execution | 0 |
+| T268 | #268 | cycle | G1 | coder+.NET | ready | — | — | pending | collection/rc5/group-1 | N=1 | .pdca/status/T268-rc5-1.md | r=1 | 1e31331d | wave 4 examples PG; plan ready: cycle + coder+.NET, AC1..AC3, plan_ref .pdca/status/T268-rc5-1.md §PLAN record, evidence_root .pdca/rc5/items/T268/rv1/; write surface overlaps T267/T269 per plan §Estimated Write Surface | execution | 0 |
+| T269 | #269 | cycle | G1 | coder+.NET | ready | — | — | pending | collection/rc5/group-1 | N=1 | .pdca/status/T269-rc5-1.md | r=1 | 1e31331d | wave 4 examples PG; plan ready: cycle + coder+.NET, AC1..AC3, plan_ref .pdca/status/T269-rc5-1.md §PLAN record, evidence_root .pdca/rc5/items/T269/rv1/ | execution | 0 |
+| T270 | #270 | cycle | G1 | coder+.NET | ready | — | — | pending | collection/rc5/group-1 | N=1 | .pdca/status/T270-rc5-1.md | r=1 | 1e31331d | wave 4 examples CH; plan ready: cycle + coder+.NET, AC1..AC3, plan_ref .pdca/status/T270-rc5-1.md §PLAN record, evidence_root .pdca/rc5/items/T270/rv1/ | execution | 0 |
+| T271 | #271 | cycle | G1 | coder+.NET | ready | — | — | pending | collection/rc5/group-1 | N=1 | .pdca/status/T271-rc5-1.md | r=1 | 1e31331d | wave 4 examples CH; plan ready: cycle + coder+.NET, AC1..AC3, plan_ref .pdca/status/T271-rc5-1.md §PLAN record, evidence_root .pdca/rc5/items/T271/rv1/ | execution | 0 |
+| T272 | #272 | cycle | G1 | coder+.NET | ready | — | — | pending | collection/rc5/group-1 | N=1 | .pdca/status/T272-rc5-1.md | r=1 | 1e31331d | wave 4 examples CH; plan ready: cycle + coder+.NET, AC1..AC3, plan_ref .pdca/status/T272-rc5-1.md §PLAN record, evidence_root .pdca/rc5/items/T272/rv1/ | execution | 0 |
+| T273 | #273 | cycle | G1 | coder+.NET | ready | — | — | pending | collection/rc5/group-1 | N=1 | .pdca/status/T273-rc5-1.md | r=1 | 1e31331d | wave 4 examples CH; plan ready: cycle + coder+.NET, AC1..AC3, plan_ref .pdca/status/T273-rc5-1.md §PLAN record, evidence_root .pdca/rc5/items/T273/rv1/ | execution | 0 |
+| T274 | #274 | cycle | G1 | coder+.NET | ready | — | — | pending | collection/rc5/group-1 | N=1 | .pdca/status/T274-rc5-1.md | r=1 | 1e31331d | wave 4 examples CH; plan ready: cycle + coder+.NET, AC1..AC3, plan_ref .pdca/status/T274-rc5-1.md §PLAN record, evidence_root .pdca/rc5/items/T274/rv1/ | execution | 0 |
+| T302 | #302 | — | — | — | — | — | — | incomplete | — | N=1 | .pdca/status/T302-rc5-1.md | r=1 | 1e31331d | PLAN-terminal (r1 draft recorded, plan_state never ready): original task infeasible under the stated constraints — the issue body gates the product work behind two explicit USER acts (implementation-plan approval + separate implementation authorization) that autonomous mode cannot obtain; no DO, no CHECK, attempts=0, issue #302 stays OPEN in 1.0.9-rc5; next authorized action = normal-mode approval of the recorded plan draft | infeasible | 0 |
+| T319 | #319 | campaign | G1 | coder+.NET (step-level) | — | ready | .pdca/rc5/items/T319/preparation.md@r1 | pending | collection/rc5/group-1 | N=1 | .pdca/status/T319-rc5-1.md | r=1 | 1e31331d | epic, candidate not scheduled; blocked by #317+#318; prepared: campaign (incremental), AC1..AC4, preparation_ref .pdca/rc5/items/T319/preparation.md@r1, depends_on T317+T318 (hard execution prerequisite), first step = post-prerequisite baseline measurement; no runtime status, no baseline, no DO | execution | 0 |
+
+## Input (verbatim from /tmp/nextorm-rc5-issues.md)
+
+Source: `/tmp/nextorm-rc5-issues.md` — 95 310 bytes, 19 sections (`#353` … `#245`, in the file's own order). Every section below is the complete verbatim body of that file, unabridged, in its original language and formatting (code blocks and benchmark tables kept); no paraphrase, translation, summary or reordering. This section is the authoritative input for every queue item. Issue bodies keep their own `## …` headings verbatim: those are content of this section, not outer container sections.
+
+### #353 — Core: рукописные ManyToOne-метаданные с FK.Count > PrincipalKey.Count дают IndexOutOfRangeException вместо именной диагностики
+Найдено release-gate аудитом 1.0.9-rc4 (`docs/specs/design/code-smells-review.md` §«Предрелизный аудит v1.0.9-rc4», находка A). Классификация — **P2**: путь не публичный по умолчанию, но достижим из публичного API через рукописные метаданные.
+
+## Где
+
+`src/nextorm.core/Builders/MetadataEagerLoadBinding.cs:581-590` (`MapComponents`).
+
+```csharp
+var parent = new PropertyInfo[principal.Count];
+var child  = new PropertyInfo[foreign.Count];
+
+if (relationship.Kind == RelationshipKind.ManyToOne)
+{
+    for (var i = 0; i < foreign.Count; i++)
+        parent[i] = foreign[i].PropertyInfo;   // выход за границы, если foreign.Count > principal.Count
+```
+
+## Режим отказа
+
+Для **рукописной** реализации `IRelationshipMetadata` с `Kind = ManyToOne` и `Foreign.Count > PrincipalKey.Count` цикл пишет в `parent`, выделенный по `principal.Count`, и падает с сырым `IndexOutOfRangeException` — **до** проверки арности ниже по стеку (`MetadataEagerLoadBinding.cs:359`), которая для несогласованной пары ключей обещает именованный `NotSupportedException` с описанием связи.
+
+То есть обещание «несогласованная арность → дизайнерский отказ» не выполняется ровно на этом срезе: пользователь получает исключение без контекста (какая связь, какие ключи, какую форму чинить).
+
+## Ожидаемое
+
+Именованный отказ с текстом связи и обеими арностями — тот же, что уже отдаёт проверка арности. Варианты фикса (выбрать в PLAN):
+
+1. выделять `parent`/`child` по фактическим длинам ветви (`ManyToOne`: `parent = new PropertyInfo[foreign.Count]`), чтобы до проверки арности доходило всегда; либо
+2. поднять проверку арности выше `MapComponents` (до выделения массивов) и не полагаться на порядок вызовов.
+
+## Репро
+
+Единичный тест в `tests/nextorm.core.tests`: метаданные `ManyToOne` с `PrincipalKey = [Id]`, `ForeignKey = [AId, BId]`, вызов eager-load `LoadWith` по этой связи → сейчас `IndexOutOfRangeException`, ожидается `NotSupportedException` с описанием связи.
+
+### #352 — MariaDB: xxh3 / xxh32 are advertised but absent on 11.4 (error 1305)
+## What
+
+`NextORM.MariaDb.MariaDbNativeFunctions` advertises `xxh3` and `xxh32` on the pinned MariaDB **11.4** baseline, but the server has neither function: the emitted SQL fails at execution time with **error 1305**.
+
+Same defect class as #280 (`months_between` / `to_date` / `to_number` advertised but absent on 11.4), which was fixed by a per-name version gate; `xxh3`/`xxh32` were left ungated.
+
+- **Provider:** MariaDB (`nextorm.mariadb`, `src/nextorm.mariadb/MariaDbDialect.cs`, `MariaDbNativeFunctions`)
+- **Server:** `mariadb:11.4` (image pinned by the integration suite; `select version()` starts with `11.4`)
+- **Capability:** `SqlFunctions.MySql.xxh3(string)` / `SqlFunctions.MySql.xxh32(string)`
+
+## Expected
+
+`MariaDbNativeFunctions.Supports("xxh3")` / `Supports("xxh32")` must be `false` for a server that does not implement them, exactly as the same renderer already excludes `uuid_to_bin`, `json_arrow`, `is_uuid`, `grouping` and the eight names the 11.4 baseline reports as absent (error 1305). A gated name is then refused with `NotSupportedException` before any SQL is emitted.
+
+## Actual
+
+`Supports` returns `true`, the translator emits `xxh3(...)` / `xxh32(...)`, and the server rejects the statement:
+
+```
+MySqlConnector.MySqlException: FUNCTION nextorm.xxh3 does not exist   (Number = 1305)
+MySqlConnector.MySqlException: FUNCTION nextorm.xxh32 does not exist  (Number = 1305)
+```
+
+## Reproduce
+
+```sql
+select xxh3('abc');    -- ERROR 1305 (42000): FUNCTION nextorm.xxh3 does not exist
+select xxh32('abc');   -- ERROR 1305 (42000): FUNCTION nextorm.xxh32 does not exist
+```
+
+Through the ORM (production path):
+
+```csharp
+using var ctx = new MariaDbDataContext("<mariadb:11.4 connection string>", new DataContextBuilder());
+ctx.From<Probe>().Where(x => x.Id == 1)
+   .Select(x => SqlFunctions.MySql.xxh3("abc"))
+   .ToList();   // MySqlException 1305
+```
+
+## Observed by
+
+`tests/nextorm.integration.tests/MariaDb/MariaDbNativeFunctionLiveTests.cs`,
+`AdvertisedXxhNames_ShouldBeRefusedByThePinnedServer` (executed against the live 11.4 container; it asserts the 1305 refusal and pins `select version()`).
+
+Found while raising branch coverage of the MariaDB/MySQL native-function surface (cycle `integration-branch-coverage-11`, step 1).
+
+### #319 — Epic: build-once query construction (lazy descriptor chain) — candidate, not scheduled
+## Why
+
+COW (T297) was rejected because it reduced allocations by 1–12% but slowed every cached arm by 5–15%. The attribution shows the cost is spread over raw-recipe planning (`CaptureRawShape`/`Fingerprint`/`Matches`/`CopyTo`, 52–71%), capture (26–59%) and plan hashing (up to 77% on one arm) — no single dominant cause.
+
+The structural alternative is not to compress a heavy command per node, but to **stop building one per node**.
+
+## Idea
+
+- Fluent operators produce a compact, immutable descriptor chain instead of a full `QueryCommand` each.
+- The single `QueryCommand` is materialized once, at the end of the chain.
+- Evaluate a struct/SOA description (one array, no per-node heap object) as the implementation, for locality and allocation reasons.
+- Keep public fluent semantics and the ownership/clone contract.
+
+## Hard bars (unchanged from the #297 decision)
+
+- Time **≤1.00×** the same-round baseline on every cached arm (including a non-CTE sentinel), judged with the measurement error.
+- Allocations strictly better than baseline where the change applies; zero regression elsewhere.
+- Public API unchanged; protected `QueryCommand` surface unchanged (E19 gate).
+- Full benchmark matrix + all test suites per cycle.
+
+## Status
+
+**Candidate, not scheduled.** Do not start before the plan-hash memoization and empty-collection fast-path issues land — they may close the remaining gap without a structural refactor. This epic is the fallback, not the default.
+
+## Related
+
+- #297 — COW, closed not viable.
+- #244 — warm CTE allocation residual (accepted).
+- #245 — set-op allocation parity.
+
+### #318 — Perf: avoid copying empty collections in QueryCommand.Clone()
+## Context
+
+`QueryCommand.Clone()` is semantically mandatory (G4: `NestedSetOperations_KeepOperandsUnchanged` proves operands must not be mutated), but the clone shell (**816 B**, T245 evidence) copies joins / sorting / array-join / window / CTE metadata even when those collections are null or empty.
+
+T245 established the clone shell itself is required; it did **not** establish that copying empty collections is required.
+
+## Proposal
+
+- Fast paths for null/empty collections in `Clone()` / `CopyTo`: return the shared immutable empty instance instead of allocating and copying.
+- Keep the existing tail-clone fix for chained set operations (`a.Union(b).Except(c)`).
+- Scope: general construction path; no benchmark-specific conditions.
+
+## Acceptance
+
+- Allocation reduction on clone-heavy arms (set operations, CTE) with **no time regression** (interleaved ABBA, all cached arms).
+- Ownership/aliasing tests: mutating a clone never affects the source; chained set-op semantics unchanged; operand reuse unchanged.
+- Full test suites, build 0W/0E; public API unchanged.
+
+## Related
+
+- #240 — construction allocation follow-up (closed with accepted residual).
+- #245 — set-op allocation parity (same command path).
+
+### #317 — Perf: memoize plan hash/fingerprint per description version (warm path)
+## Context
+
+T297 (COW) was closed as not viable on time, but its attribution (E38/P04) produced a lever that applies to the **baseline** tree:
+
+- `B_Nextorm_Cached_In_ListContains_Captured`: `qplan_hash` was **76.9%** of the measured gap;
+- Cte / RecursiveCte / LeftJoin: raw-recipe planning in `src/nextorm.core/DataContext/QueryPlanner.cs:614-662` (`CaptureRawShape`, `Fingerprint`, `Matches`, `ApplyPreparationFrom` → `CopyTo`, staged `QueryPlan`) was **52–71%**.
+
+The warm cached path still constructs and hashes the query shape on every fresh-fluent call even when the description has not changed.
+
+## Proposal
+
+Memoize the shape fingerprint/hash per description version; reuse the staged `QueryPlan` when the shape matches. Invalidate on mutation via an explicit version counter (the write barrier already exists for `SharedRelations`). No public API change; plan-cache key semantics unchanged.
+
+## Acceptance
+
+- Paired (interleaved ABBA) measurement on `SqliteBenchmarkFeaturesFairCached`, **all families**: measurable time reduction; no statistically significant regression on any arm.
+- Allocations non-increasing on every arm.
+- Plan-key equivalence tests: identical shape → identical key; any mutation → new key; cached and non-cached paths agree.
+- Full test suites (core, dialects, fail-closed integration), build 0W/0E.
+
+## Constraints
+
+- No benchmark-specific shortcuts, no threshold changes, no `Cache = false` mutation of shared commands.
+- Evidence: two valid same-round rounds plus raw BDN JSON; thresholds stay as recorded in the issue.
+
+## Related
+
+- #297 — closed not viable; this lever is independent of COW.
+- #240 / #201 — warm-path construction allocation scope.
+
+### #311 — Perf: JSON streaming — 10k per-row throughput lever, same-session acceptance pairing, noise-robust ratio oracle (#247 follow-up)
+Follow-up to #247 (T247 ended `incomplete` / terminal measured GAP — see #247 for the verdict). Three concrete items, none of them a re-litigation of T247's thresholds:
+
+### 1. Per-row throughput lever for 10k rows
+The change removed the per-call (compile/intercept) cost — 100-row ratio 0.0837/0.0887, intercept `a` 2,197,187 → 48,892 ns and 1,851,476 → 78,669 ns — but the 10k comparison against linq2db is still discordant: **0.99323** (pass) / **1.04546** (fail) and 100k paired **0.91917 > 0.81079** / **0.96335 ≤ 1.04409**. ~486–777 µs per call of un-attributed work remains. The open question is the per-row write path (row-writer delegate, boxed reads, `Utf8JsonWriter` usage, buffer flushing), not the compile path.
+
+### 2. Same-session paired acceptance measurement
+R247-09 measured **0 of 7** acceptance cases because no paired acceptance baseline exists. The gate needs `<baseline>/round-{1,2}/acceptance/cases.json` captured in the *same* session/pinned tree as the final run; the pre-change tree no longer exists, and pre-committed BDN artifacts are not a valid paired baseline. Define and record the acceptance arm up front, in the same fingerprint, before any product change.
+
+### 3. Noise-robust ratio criterion, via a new spec
+The per-round ratio oracle produced discordant rounds on identical code (10k and 100k), so a single-round threshold of 1.0 is not noise-robust at this effect size. This must be resolved by **a new specification** (e.g. min-of-N or paired-difference with a pre-registered noise band, decided before measurement) — explicitly **not** by editing T247's thresholds, tolerances or denominators, which stay frozen for audit.
+
+## Acceptance criteria (2026-10-20 two-tier policy)
+
+**Global target (milestone-level):** JSON streaming at 10,000 rows — time ≤ **1.00×** linq2db and allocations ≤ **1.20×** linq2db, same-session paired measurement.
+
+**Local acceptance (task closure):** if the chosen method cannot reach the global target, accept it when the measured change is a real one-axis win with no regression on the other:
+- allocations decrease vs the same-round baseline and time does not worsen beyond the pre-registered noise band; **or**
+- time improves beyond the pre-registered noise band and allocations do not increase.
+
+A method that improves neither axis, or improves one while regressing the other, is rejected and reverted. Reaching the global ratios is **not** required to close the task: record the residual gap to the global target and the measured local win.
+
+**Measurement rules:** same session/round and pinned DB, paired/ABBA measurement; no historical-number substitution; no threshold/tolerance/denominator edits after measurement. Allocation changes are judged by exact byte counts; time changes by the pre-registered noise band.
+
+### Task-specific deliverables
+- A per-row throughput lever for 10k is attributed, implemented and measured; operation-count change is shown.
+- A same-session paired acceptance baseline (`<baseline>/round-{1,2}/acceptance/cases.json`, 7/7 cases) is captured before the product change.
+- A new noise-robust ratio oracle is pre-registered before its first live measurement; T247’s frozen thresholds, tolerances, denominators and historical GAP are **not** edited.
+- Output bytes, streaming/error/cancellation contracts and provider behavior are preserved; cache bounds/isolation remain.
+
+
+Cross-references: #247 (terminal GAP record), #250 (CSV terminal plan cache, same benchmark family), #297 (CTE structural allocation follow-up, same measurement approach).
+
+### #302 — SelectWhereMax/Min: reconsider the portable window lowering — GROUP BY / join-back strategy (perf)
+## Статус
+
+- **Стадия:** **письменная спецификация утверждена USER 2026-10-18** (явный approval: «апрув»). Утверждена revised **SQL-only** редакция: in-memory вне области; native-пути PostgreSQL/ClickHouse сохраняются. Design scope согласован; **свежий независимый builder-check этой редакции выполнен** (одно уже решённое NULL-уточнение внесено без нового user question). Предыдущий builder-check относился к предыдущей редакции и не заменяет fresh check.
+- **Разграничение гейтов:** design approval ≠ approval плана ≠ разрешение на исполнение. **План реализации не создан и не утверждён** (следующий допустимый артефакт; требует отдельного USER approval). **Продуктовая реализация не авторизована** — нужно отдельное явное разрешение после approval плана. Автоматического approval нет.
+- **Issue:** эта задача, #302, **OPEN**. Title не меняется. Milestone — **`1.0.9-rc5`** (проверен в GitHub; сохраняется, новый не создаётся). Новый issue не создаётся: это та же согласованная задача, расширенная до SQL-only архитектуры.
+- **Спецификация:** `docs/superpowers/specs/2026-10-18-issue-302-all-aggregate-lowering-design.md`.
+- **Связанные:** #144 — native `One` для PostgreSQL/ClickHouse (closed); его требование window-portability для `All` заменяется этой задачей, исторические артефакты #144 не переписываются; #115 — исходный API (closed).
+- Git: commit/push/merge не авторизованы. Issue не закрывается; approval спеки не означает approval плана или approval реализации.
+
+## Согласованные решения
+
+Прежнее обязательное правило `All` (не меняется):
+
+> «в режиме All нужно использовать группировку вместо оконок там, где нет нативного пути».
+
+Это **безусловная стратегия** для поддерживаемых форм `ExtremeRowTies.All`. Она не зависит от индексов, оценок оптимизатора, универсального порога скорости или отдельного performance-approval. Предложение оставить grouped `All` на оконном понижении из-за неблагоприятных индексных планов пользователем **отклонено**; к этому вопросу не возвращаемся.
+
+Согласованное расширение архитектурного scope:
+
+- `SelectWhereMax` / `SelectWhereMin` — **SQL-side синтаксический сахар**: пользовательская форма задаёт логическую семантику, SQL-стратегия строится внутри обычного query-конвейера.
+- `ExtremeRow` остаётся **логическим описанием** до выбора SQL-стратегии; отдельного исполняемого SQL-конвейера вокруг него быть не должно.
+- **In-memory явно вне области** этой задачи.
+- **Native-пути PostgreSQL/ClickHouse должны быть сохранены** (пользователь подтвердил).
+
+## Центральное требование: SQL-side sugar и общий query-tree
+
+`SelectWhereMax/Min` понижается в обычный query-tree/derived source, а SQL собирается **общей** инфраструктурой движка:
+
+- portable `All` → агрегат + join-back/predicate;
+- portable `One` → существующая оконная стратегия (без изменений);
+- native `One` PostgreSQL/ClickHouse и внешний `IExtremeRowRenderer` — сохраняются.
+
+Результат обязан использовать общие примитивы для source/`FROM`, projection, filter, alias, `DISTINCT`, sorting и parameter rendering. Отдельный полный `MakeExtremeRowOuter`-рендерер, дублирующий эти примитивы, не допускается. Недостаточно перенести существующую SQL-строковую сборку в новый `ExtremeRow`-builder-класс: дублирование должно быть **устранено**, а не переименовано. Специализированный semantic-to-query lowering разрешён и необходим; небольшой адаптер для строкового native-renderer'а допустим, публичный контракт не меняется. Native-адаптер может передать opaque source result в общий outer projection, если нужен общий внутренний механизм; точное представление выбирает план, готовый адаптер не считается проверенным.
+
+**Фаза понижения (architect scope/safety choice, не цитата пользователя):** сохраняются logical command/cache identity и общая clause/preparation/equality/clone bookkeeping, если изменение не строго необходимо для SQL lowering; shared state, нужное неизменному in-memory, не удаляется. Допустимо понижать detached SQL tree **после** формирования логического ключа при условиях: исходная keyed-команда не мутируется, для SQL- и parameter-traversal'ов и cache-hit'ов используется идентичная детерминированная lowered-структура. Before-key normalizer **не обязателен**; если выбран — обязан обработать raw-shape preparation recipes, cache identity, clone state и hash invalidation до ключа. План выбирает и документирует точную фазу и владельца.
+
+## In-memory — явно вне области
+
+- Не удалять и не переписывать `InMemoryExtremeRow`.
+- Не добавлять in-memory поддержку subquery join, window, group-row selection.
+- Не маршрутизировать in-memory через новый SQL query-tree.
+- Не менять source-order winner, null-семантику, guards, async-ограничения или сложность исполнения.
+- Не пытаться исправить обнаруженное поведение in-memory с right-side derived join в рамках #302.
+- Общие logical objects обязаны оставаться совместимыми с in-memory.
+- Существующий in-memory unit suite — **только regression check** из-за общего кода, не implementation deliverable и не расширение scope.
+
+## Область
+
+**В области:**
+
+- все SQL-провайдеры: SQLite, SQL Server, PostgreSQL, MySQL, MariaDB, ClickHouse;
+- `All`, grouped и global, `Max` и `Min`;
+- скалярный и составной value key;
+- агрегатное понижение: grouped — `GROUP BY` + join-back; global — скалярный агрегат + join-back/predicate;
+- необходимая общая поддержка построения query-tree: hidden aliases, pass-through columns, derived source;
+- сохранение семантики, eligibility, guards, projection/mapping, outer `DISTINCT`, output ordering;
+- SQL-generation тесты по всем шести семействам диалектов и live integration в доступном harness;
+- публичная документация EN+RU: `All` — агрегатное понижение через общий lowering, native-hook сохранён, `One` без изменения семантики; без ссылок на внутренние спецификации;
+- performance evidence как supporting-материал, не acceptance gate.
+
+**Вне области:** in-memory; изменения `One` (кроме внутренних рефакторингов с byte-identical SQL); новые native `All` renderer'ы; API tie-break; новый публичный API; расширение query shapes; новые ограничения runtime-типов/селекторов; стратегия, зависящая от метаданных/индексов/плана; создание схемы/индексов; blanket performance guarantee; переписывание общего normalization/optimizer (LINQ roadmap); рефакторинг других синтаксических фич (`PerParentPaging` — optional, не требуется).
+
+Не является целью удалить каждое упоминание `ExtremeRow`, удалить clause из публичного builder'а/логического `QueryCommand` или переписать plan-cache model. Цель — устранить избыточный исполняемый SQL-конвейер и использовать общие примитивы движка. Логическое состояние, необходимое для unchanged in-memory, может оставаться в общих preparation/cloning/cache структурах.
+
+## Семантические инварианты
+
+Наследуются из `docs/specs/design/issue-144-native-extreme-row.md:22-30`:
+
+- `All` возвращает **все** tied winner-строки; каждая строка — **полная исходная строка**, payload не собирается из произвольных агрегатов.
+- Ties — **только** по полному селектору. Пользовательский `OrderBy` влияет только на выдачу после выбора победителей. API tie-break нет.
+- Дубликаты исходных строк сохраняются в рамках существующей семантики внешнего `DISTINCT`.
+- Поддерживаются `Max` и `Min`.
+- Строки, где **любой** компонент value key `NULL`, исключаются **до** агрегата и **до** join-back.
+- Nullable-ключи групп поддерживаются; равенство групп при join-back — null-safe **по каждому компоненту** group key, выразимое обычным OR: `(a = b OR (a IS NULL AND b IS NULL))`. Провайдерно-специфичный синтаксис — необязательная оптимизация; отсутствие native null-safe оператора не блокер.
+- Группа опускается **только** если после исключения строк с `NULL` хотя бы в одном компоненте value-selector в ней не осталось допустимых строк. `NULL` в group-selector не исключает ни строку, ни группу; в том числе полностью `NULL` составной ключ группы образует допустимую группу. Пустой вход опускается; global на пустом входе возвращает ноль строк.
+- Пользовательские фильтры применяются к **одной и той же** eligible-популяции и для экстремума, и для payload (одинаково на обеих сторонах). Winner не может быть отфильтрован только с одной стороны.
+- Составной value key сравнивается **лексикографически** (поэтапные агрегаты), никогда не независимыми `MAX(a)`, `MAX(b)`.
+- Сохраняются projection, mapping, outer `DISTINCT`, output ordering и текущий набор guards.
+- Query shapes не расширяются; ранее принятые selector-типы/формы не начинают отвергаться; новые ограничения runtime-типов/селекторов не вводятся.
+- Source mapping и converter-семантика MySQL/MariaDB и остальных провайдеров не меняются.
+- Window-lowering **не** используется как fallback для `All`.
+- Валидация пользовательского запроса выполняется **до** lowering и остаётся отдельной; внутренние join/grouping/window-узлы не легализуют запрещённые пользовательские формы и не должны вызывать не относящиеся к ним `ExtremeRow` guards. Набор guard-отказов пользовательских запросов не меняется.
+
+## Native-hook
+
+Публичный `IExtremeRowRenderer`, DTO-конструкторы и их ленивость сохраняются. `CanRender` — side-effect-free eligibility **до** любых SQL/alias/parameter-мутаций; отрицательный ответ даёт fallback на build-strategy time, исключение пробрасывается без retry/late fallback. Renderer возвращает строку — адаптер не устраняется «AST-only» подходом. Native `One` PostgreSQL/ClickHouse сохраняется, требование byte-identical SQL для `One` остаётся. Существующие fragment-тесты `One` недостаточны как исторический golden: нужен baseline полного SQL до/после.
+
+## Концептуальная SQL-конструкция
+
+> Architect guidance, не выбранный пользователем синтаксис. Builder может выбрать эквивалентную provider-специфичную SQL без ranking window и оптимизировать scalar/composite раздельно.
+
+1. **Eligible source `S`** — исходный `FROM` + пользовательский фильтр + `IS NOT NULL` по каждому компоненту value key. Одна и та же популяция используется для агрегата и join-back.
+2. **Global scalar** — `E = MAX(value)` / `MIN(value)` по `S`; join-back `S` к `E` по равенству value. На пустом `S` агрегат `NULL` → winners нет. Допустима эквивалентная форма `value = (SELECT MAX(value) ...)`.
+3. **Grouped scalar** — `E = group key + MAX/MIN(value) GROUP BY group key`; join-back по null-safe равенству group key (по каждому компоненту) и value-сравнению, согласованному с ranking/ties провайдера.
+4. **Составной value key** — поэтапное агрегатное ограничение: агрегировать первый компонент в исходных группах (глобально, если group key нет), оставить tied по лучшему префиксу, агрегировать следующий компонент внутри выжившей популяции той же группы, повторять до конца; вернуть только финальные winner-строки. Это даёт `(9,2)` > `(8,100)` и не создаёт несуществующую `(9,100)`. Чистый `NOT EXISTS` не заменяет требуемое агрегатное понижение; допустима другая семантически эквивалентная агрегатная конструкция.
+
+Внутренние derived tables/CTE допустимы в пределах возможностей провайдера; `MATERIALIZED` CTE не предписывается, поддержка CTE не становится требованием к публичной форме. Никакого создания схемы/индексов, навязывания имён индексов, runtime-инспекции схемы или переключения стратегии по плану. Оконное понижение **не** используется как fallback для `All`; окно остаётся стратегией `One` там, где нет native-рендера. SQL-синтаксис/диалектные адаптации — зона builder/plan; общая core-семантика не дублируется по имени провайдера.
+
+## Типовой паритет
+
+- Все текущие допустимые key/group типы, converted keys, nullable keys и arities составных ключей остаются допустимыми.
+- Сохраняются bound SQL type semantics, collation equality и поведение floating-point `NaN`/non-finite там, где оно сейчас поддержано.
+- Несовместимости вроде `MIN`/`MAX` над SQL Server `bit`/`bool` решаются provider-appropriate агрегатными/order-preserving представлениями, а не сменой контракта.
+- Никакого нового публичного API, window-fallback или молчаливого ограничения типов/селекторов как workaround.
+- Точные адаптеры и SQL рассматриваются в плане; parity-тесты обязательны. Невозможность паритета — **planning blocker**, а не разрешение изменить требование.
+
+## Кэш и детерминизм
+
+Наследуется из #144: стратегия детерминирована формой запроса и провайдером; нет mutable per-context переключателей/per-instance toggles; отсутствие capability ≠ неподдержанная фича; guards выполняются до диспатча; запрещено мутировать sticky `QueryCommand.Cache`; после decline renderer'а cache остаётся включённым; число запросов, наблюдаемое вызывающей стороной, не меняется; нет client-side materialization; выполняется один DB statement.
+
+Дополнительно: SQL- и parameter-traversal используют одну и ту же детерминированную lowered-структуру; cache-hit её не пересобирает иначе. Одинаковая логическая форма с разными bound values переиспользует план с текущими значениями; другая форма `Where` не даёт ошибочного sharing; raw-shape cold/hit и повторные prepared/fresh запросы сохраняют поведение. Поведение внешнего renderer'а на cache path пинуется тестами как существующее intended behavior; не предполагается, что callbacks никогда не повторяются во время parameter extraction.
+
+## Grounded discovery
+
+Проверенные точки кода (ингредиенты, не доказательство готового сквозного прототипа):
+
+- `src/nextorm.core/DataContext/SqlBuilder.cs:46-49` — ранний специальный диспатч команды с `ExtremeRow`.
+- `SqlBuilder.cs:1267-1407` — `MakeExtremeRowOuter` + `AppendOrderBy`: дублирующие projection/`DISTINCT`/ordering/parameter traversal.
+- `src/nextorm.core/Expressions/FromExpression.cs:48/106` — derived-table source.
+- `src/nextorm.core/DataContext/SqlSourceRenderer.cs:559-593` — общий рендеринг derived source.
+- `src/nextorm.core/Expressions/SelectExpression.cs:24,26,109,117,126,133,140` — projection identity и hidden/pass-through metadata.
+- `src/nextorm.core/Query/QueryCommand.QueryPreparer.cs:1515-1544,1579-1598` — pass-through/derived-output columns.
+- `src/nextorm.core/Query/SqlFunctions.cs:101` + `src/nextorm.core/Visitors/NormSqlTranslator.cs:186-199` — column-by-name и ссылки на output alias.
+- `src/nextorm.core/DataContext/QueryPlanner.cs:609-656` — raw recipe до preparation; `:692-700` — логический ключ до SQL; `:743-745` — сбор SQL/параметров; `:887-909` — параметры на cache-hit.
+- `src/nextorm.core/DataContext/Dialect/DialectCapabilities.cs:478/487` — публичные `CanRender`/`Render`.
+
+Ограничения evidence: это наличие ингредиентов и точек интеграции, **не** успешный end-to-end lowered-прототип. Построение всего SQL AST не объявляется проверенным/протестированным. Общая null-safe OR-форма уже поддержана; отсутствие отдельного native null-safe оператора не является блокером.
+
+## Performance evidence (supporting, не acceptance gate)
+
+Временные артефакты, **не** durable tracked документация:
+
+- `/tmp/opencode/issue-302-all-spike/report.md` — SQLite `3.37.2`, raw SQL, 200k строк.
+- `/tmp/opencode/issue-302-all-spike-modern/report.md` — SQLite `3.53.4`, .NET 10, `Microsoft.Data.Sqlite`, raw SQL, 200k строк.
+
+Наблюдения:
+
+- Scalar grouped без индекса: агрегатная форма примерно **1.6–2x** быстрее rank (в отчёте `1.57–2.02`).
+- Grouped с подходящим составным индексом: кратный выигрыш (в старом отчёте `7–29x`).
+- На modern SQLite при индексе только по value (`ix(v)`) исходный join-back уходит за **20 s** guard (abort), rank — **0.64 s**.
+- `MATERIALIZED`-кандидат убирает abort, но в 30 состояниях медленнее rank на **12–81%** (ratios `1.12–1.81`). Это одна исследованная SQL-форма, не доказательство, что агрегатное понижение неверно.
+- Composite performance **не измерялся**. Composite `NOT EXISTS` fixture проверял корректность semijoin, а не реализацию агрегатного понижения.
+- Не утверждается, что все провайдеры измерены.
+
+Пользователь осведомлён и всё равно требует агрегатный `All`. Универсальное ускорение не гарантируется; порога, при котором нужно оставить окно, нет. Регрессии нельзя маскировать — они должны быть явно показаны. Выбор агрегатной стратегии не зависит от процентов ускорения, индексов или оценок оптимизатора.
+
+## Приёмка
+
+**Архитектура:** существующий общий render используется, параллельного outer-SELECT конвейера нет; дублирование не «переехало» в новый `ExtremeRow`-builder.
+
+**SQL-generation и normalized tree:** шесть семейств диалектов; `Max`/`Min`; grouped/global; скалярный/составной key; контракты `NULL`, group keys, фильтров (одинаково на обеих сторонах), projection, ordering, dedup; для `All` assert'ится агрегатное понижение и отсутствие `rank()`/`row_number()` lowering; hidden alias collision, mapped physical columns, DTO/anonymous/record projection, nullable payload, output sorting, `DISTINCT`; guards исходного запроса — до внутреннего lowering, внутренние узлы не вызывают чужие guards.
+
+**`One`/native:** baseline полного SQL до/после (fragment-тесты недостаточны как golden); native `One` PG/CH и forced-portable дают эквивалентный результат; внешний renderer accept/decline/throw; decline — fallback на build-strategy time, throw — без retry; ленивость payload/DTO не нарушена.
+
+**Кэш/параметры:** одинаковая логическая форма с разными bound values переиспользует план с текущими значениями; другая форма `Where` не даёт ошибочного sharing; raw-shape cold/hit; повторные prepared/fresh запросы; после decline cache остаётся включённым; sticky `QueryCommand.Cache` не мутируется; параметры детерминированы в SQL и extraction mode; custom renderer на cache path ведёт себя согласно пинуемому существующему intended behavior.
+
+**Live integration:** реальный SQLite; container-backed PostgreSQL, SQL Server, MySQL, ClickHouse; MariaDB — SQL-generation плюс live в рамках доступного harness; запуск по `.opencode/skills/running-integration-tests`; unit/SQL-generation тесты не заменяют live; SQL-generation обязателен по всем шести семействам.
+
+**Correctness matrix:** несколько ties; целостность payload; сохранение дубликатов; `NULL` в любом компоненте value key; nullable группы (сохраняются; `NULL` в group-selector, включая полностью `NULL` составной ключ, группу не исключает), группы без допустимых value-строк после исключения `NULL` хотя бы в одном компоненте value-selector (опускаются), пустой вход; фильтры, удаляющие winners, — одна популяция с обеих сторон; `(9,2)` vs `(8,100)`; converted keys, включая SQL Server `bool`; floating-point/collation в пределах поддержки; ordering, projection, distinct. Previous window lowering — только test-only baseline; production window-fallback запрещён. Существующие guard-отказы — без изменений.
+
+**In-memory:** только regression check существующего unit suite; новых тестов/capability нет; поведение не меняется; не implementation deliverable.
+
+**Performance:** воспроизводимый raw/ORM-замер; минимум без индекса, с подходящим индексом и только по value; показываются и улучшения, и регрессии; стратегия не гейтится процентами; никаких schema changes; composite-замеры не выдаются за выполненные, если их не было.
+
+**Документационная ревизия:** эта ревизия — documentation-only; build/tests для неё не запускались, и это ожидаемо. Acceptance gates относятся к будущей реализации.
+
+## Публичная документация (обязательный deliverable)
+
+Обновляются обе локали в одном изменении: `docs/guide/09-distinct.md`, `docs/advanced/select-where-extrema-native.md`, `docs/advanced/api-reference.md` и соответствующие RU-страницы.
+
+- `SelectWhereMax/Min` — SQL-side syntactic sugar; логическая форма понижается внутри общего query-конвейера.
+- `All` описывается как агрегатное понижение (grouped `GROUP BY` + join-back; global скалярный агрегат + join-back/predicate; composite лексикографически), ranking window для `All` не используется.
+- Native-hook описывается точно: native `One` PG/CH и внешний `IExtremeRowRenderer` сохранены; native `All` renderer'а нет, поэтому `All` идёт агрегатным понижением.
+- `One` — без изменения семантики: native PG/CH, portable window в остальных случаях.
+- Никаких ссылок на `docs/specs/**` или `docs/superpowers/**` из публичных страниц/readme; обоснование inline.
+- EN и RU зеркальны; новых публичных API нет.
+
+## Non-goals
+
+In-memory; переписывание общего normalization/optimizer (LINQ roadmap); редизайн публичного renderer-контракта; удаление clause state как самоцель; рефакторинг других синтаксических фич (`PerParentPaging` — optional); изменения `One` кроме внутренних рефакторингов; новые native `All` renderer'ы; API tie-break; новый публичный API; расширение query shapes или новые ограничения типов/селекторов; стратегия по метаданным/индексам/плану; schema/индексы; blanket performance guarantee. Общие переиспользуемые куски могут пригодиться будущим фичам, но #302 на них не расширяется.
+
+## Риски и блокеры
+
+- Composite-агрегат не измерялся; корректность доказывается тестами, а не выводится из scalar-случая.
+- Провайдерные различия null-safe equality, collation, `NaN`/non-finite и `bit`/`bool` могут вскрыть type blockers — planning blocker, не повод менять требование. Отсутствие native null-safe оператора не блокер.
+- Агрегатная форма может регрессировать на части планов; это показывается честно, без маскировки и без возврата к окну.
+- MariaDB live-доступность зависит от harness; SQL-generation покрытие обязательно в любом случае.
+- Необходимость публичного изменения `IExtremeRowRenderer` — остановка и отдельный вопрос на approval.
+- Точное внутреннее представление «opaque native source → общая projection» не проверено; это planning detail.
+- Обнаруженное in-memory поведение right-side derived join **не** исправляется в #302; фиксируется отдельно как вне-scope находка.
+
+## Следующий гейт
+
+1. ~~Свежий независимый builder-check **этой** редакции~~ — **выполнен**: одно уточнение про `NULL` уже решено унаследованной семантикой (внесено в спецификацию, §4/§5.5.3/§11.6), нового user question не потребовалось. Предыдущий review относился к предыдущей редакции.
+2. ~~USER review и approval письменной спецификации~~ — **выполнено 2026-10-18**: USER дал явный approval («апрув») revised SQL-only редакции; in-memory вне области. Автоматического approval нет и не подразумевается.
+3. **Текущий гейт:** план реализации. План **ещё не создан и не утверждён**; он требует отдельного USER approval. Реализация (код/тесты/доки продукта) **не авторизована** — нужно отдельное явное разрешение после approval плана.
+4. Commit/push/merge не авторизованы.
+
+Approval спецификации не означает approval плана и не означает approval реализации; issue остаётся **OPEN** до завершения будущей реализации.
+
+### #274 — Perf: examples/CH RollingActivity allocates 1.22× linq2db
+## Context
+
+The 2026-10-17 examples comparison benchmark (Release, `ShortRun` + `InProcessEmitToolchain`, `[MemoryDiagnoser]`, warm ClickHouse volume; AMD Ryzen 7 5800HS, .NET 10.0.12; working tree at `c9b12d12`) shows the nextorm arm allocating **1.22×** what the linq2db arm allocates, while time is better:
+
+| Arm | Mean | Allocated |
+|---|---:|---:|
+| `Nextorm_RollingActivity` | **58.88 ms** | 58.12 KB |
+| `Linq2Db_RollingActivity` | 66.74 ms | **47.48 KB** |
+| Ratio | 0.88× | **1.22×** |
+
+Benchmark: `examples/nextorm.examples.clickhouse.analytics/Benchmarks.cs`, course query 11 (7-day rolling + cumulative windows) over `datasets.hits_v1`; both arms return 7 rows.
+
+## Why it matters
+
+Time is already better than linq2db; the remaining regression is +10.6 KB of fixed per-call allocation for a 7-row result. Fixing it removes the last allocation regression in this example and keeps the time win.
+
+## Preliminary attribution
+
+Both arms aggregate daily `hits`/`uniqExact` and apply the same two framed windows; nextorm emits the windows with `SqlFunctions.Sql.sum_over(...)` and casts to `long`. Suspects: window descriptor construction (two windows over the same aggregate) and command/parameter allocation.
+
+## Proposed work
+
+1. Profile `Nextorm_RollingActivity` and compare generated SQL with the linq2db arm (`--log-sql`).
+2. Remove avoidable per-call allocations in the two-window shape (share the aggregate/frame descriptors, reuse the plan for the repeated shape) while keeping the current time win.
+3. Post before/after numbers here and update `examples/VERIFICATION.md`.
+
+## Acceptance criteria
+
+- `Nextorm_RollingActivity` allocated ≤ **1.2×** `Linq2Db_RollingActivity` (stretch ≤1.0×), time remains better than the current 66.7 ms linq2db value, same 7 rows.
+- `dotnet build examples/nextorm.examples.clickhouse.analytics -c Release` stays 0W/0E.
+- Before/after values (at least two runs each) posted here.
+
+## Reproduction
+
+```bash
+cd /home/alex/sources/nextorm
+DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock \
+  dotnet run --project examples/nextorm.examples.clickhouse.analytics -c Release -- \
+  --benchmark --filter '*RollingActivity*'
+```
+
+## Constraints
+
+- Do not change the modelled SQL semantics or the entity mappings to game allocation.
+- Do not remove the linq2db arm.
+- `ShortRun` is noisy: validate with at least two runs before/after.
+
+## Related
+
+- Comparison conversion and full benchmark record: `examples/VERIFICATION.md` (2026-10-17).
+- Sibling allocation regressions: #244, #245, #246, #247, #250.
+
+### #273 — Perf: examples/CH SessionDepth allocates 1.62× linq2db
+## Context
+
+The 2026-10-17 examples comparison benchmark (Release, `ShortRun` + `InProcessEmitToolchain`, `[MemoryDiagnoser]`, warm ClickHouse volume; AMD Ryzen 7 5800HS, .NET 10.0.12; working tree at `c9b12d12`) shows the nextorm arm allocating **1.62×** what the linq2db arm allocates:
+
+| Arm | Mean | Allocated |
+|---|---:|---:|
+| `Nextorm_SessionDepth` | 166.90 ms | **88.20 KB** |
+| `Linq2Db_SessionDepth` | 115.63 ms | **54.52 KB** |
+| Ratio | 1.44× | **1.62×** |
+
+Benchmark: `examples/nextorm.examples.clickhouse.analytics/Benchmarks.cs`, course query 10 (sessionization + `multiIf` depth buckets) over `datasets.hits_v1`; both arms return 5 rows.
+
+## Why it matters
+
+Only 5 rows are returned, so the 33.7 KB delta is fixed per-call cost. Time also regresses 1.44×, so the two are likely connected (extra descriptor/plan work).
+
+## Preliminary attribution
+
+Both arms use `lagInFrame`/cumulative-sum windows, a grouped session table and `multiIf` buckets. nextorm expresses the bucket in `GroupBy`/`OrderBy`/`Select` via `SqlFunctions.ClickHouse.multi_if(when(...), otherwise(...))`; suspects are the three descriptor instances of the same bucket expression and per-call plan construction. Confirm by profiling and SQL diff.
+
+## Proposed work
+
+1. Profile `Nextorm_SessionDepth` and compare generated SQL with the linq2db arm (`--log-sql`).
+2. Avoid rebuilding the `multiIf` bucket expression three times per call (shared descriptor / cached plan) and reduce per-call command/parameter allocation.
+3. Post before/after numbers here and update `examples/VERIFICATION.md`.
+
+## Acceptance criteria
+
+- `Nextorm_SessionDepth` allocated ≤ **1.2×** `Linq2Db_SessionDepth` (stretch ≤1.0×), time not worse than the current 166.9 ms, same 5 rows.
+- `dotnet build examples/nextorm.examples.clickhouse.analytics -c Release` stays 0W/0E.
+- Before/after values (at least two runs each) posted here.
+
+## Reproduction
+
+```bash
+cd /home/alex/sources/nextorm
+DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock \
+  dotnet run --project examples/nextorm.examples.clickhouse.analytics -c Release -- \
+  --benchmark --filter '*SessionDepth*'
+```
+
+## Constraints
+
+- Do not change the modelled SQL semantics or the entity mappings to game allocation.
+- Do not remove the linq2db arm.
+- `ShortRun` is noisy: validate with at least two runs before/after.
+
+## Related
+
+- Comparison conversion and full benchmark record: `examples/VERIFICATION.md` (2026-10-17).
+- Sibling allocation regressions: #244, #245, #246, #247, #250.
+
+### #272 — Perf: examples/CH Sessions allocates 2.82× linq2db
+## Context
+
+The 2026-10-17 examples comparison benchmark (Release, `ShortRun` + `InProcessEmitToolchain`, `[MemoryDiagnoser]`, warm ClickHouse volume; AMD Ryzen 7 5800HS, .NET 10.0.12; working tree at `c9b12d12`) shows the nextorm arm allocating **2.82×** what the linq2db arm allocates:
+
+| Arm | Mean | Median | Allocated |
+|---|---:|---:|---:|
+| `Nextorm_Sessions` | 8,023.28 ms* | 1,270.66 ms | **488.07 KB** |
+| `Linq2Db_Sessions` | 1,033.79 ms | 1,045.71 ms | **173.20 KB** |
+| Ratio | — | 1.22× | **2.82×** |
+
+\* the mean is skewed by a heavy tail (StdDev 11.8 s); use the median for time, allocation is stable. Benchmark: `examples/nextorm.examples.clickhouse.analytics/Benchmarks.cs`, query `Sql/clickhouse_sessions.sql` over `datasets.hits_v1`; both arms return 100 rows.
+
+## Why it matters
+
+This is the only case where the gap is plausibly per-row (+3.15 KB per returned row over 100 rows) as well as fixed: session windows, the quantile threshold and the 100-row projection. It is the largest absolute allocation regression in ClickHouse (315 KB per call).
+
+## Preliminary attribution
+
+Both arms use three chained CTEs, `lagInFrame`/cumulative-sum windows and a `quantile(0.99)` threshold; nextorm additionally casts `UserID`/`session_id` to `long` and materialises `session_id` via `Sql.Expr`. Suspects: per-row anonymous-type materialisation, window descriptor construction, and the threshold query/plan. Confirm with allocation tracing, not by inspection alone.
+
+## Proposed work
+
+1. Profile `Nextorm_Sessions` (BDN `MemoryDiagnoser`, allocation tracing) and compare generated SQL with the linq2db arm (`--log-sql`).
+2. Separate fixed (plan/command/descriptor) from per-row (materialiser) allocation; reduce the dominant one. For per-row, check the row materialiser/anonymous projection; for fixed, reuse the plan for a repeated shape.
+3. Post before/after numbers here and update `examples/VERIFICATION.md`.
+
+## Acceptance criteria
+
+- `Nextorm_Sessions` allocated ≤ **1.2×** `Linq2Db_Sessions` (stretch ≤1.0×), median time not worse than the current 1.27 s, same 100 rows.
+- `dotnet build examples/nextorm.examples.clickhouse.analytics -c Release` stays 0W/0E.
+- Before/after values (at least two runs each) posted here.
+
+## Reproduction
+
+```bash
+cd /home/alex/sources/nextorm
+DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock \
+  dotnet run --project examples/nextorm.examples.clickhouse.analytics -c Release -- \
+  --benchmark --filter '*Sessions*'
+```
+
+## Constraints
+
+- Do not change the modelled SQL semantics or the entity mappings to game allocation.
+- Do not remove the linq2db arm.
+- `ShortRun` is noisy (this case has a heavy tail): validate with at least two runs and report the median.
+
+## Related
+
+- Comparison conversion and full benchmark record: `examples/VERIFICATION.md` (2026-10-17).
+- Sibling allocation regressions: #244, #245, #246, #247, #250.
+
+### #271 — Perf: examples/CH Retention allocates 3.02× linq2db
+## Context
+
+The 2026-10-17 examples comparison benchmark (Release, `ShortRun` + `InProcessEmitToolchain`, `[MemoryDiagnoser]`, warm ClickHouse volume; AMD Ryzen 7 5800HS, .NET 10.0.12; working tree at `c9b12d12`) shows the nextorm arm allocating **3.02×** what the linq2db arm allocates:
+
+| Arm | Mean | Allocated |
+|---|---:|---:|
+| `Nextorm_Retention` | 283.38 ms | **98.80 KB** |
+| `Linq2Db_Retention` | 279.03 ms | **32.75 KB** |
+| Ratio | 1.02× | **3.02×** |
+
+Benchmark: `examples/nextorm.examples.clickhouse.analytics/Benchmarks.cs`, query `Sql/clickhouse_retention.sql` over `datasets.hits_v1`; both arms return 1 row. Allocation is per single operation; server memory is not measured.
+
+Caveat: the two arms intentionally materialise the matrix differently — nextorm returns `Tuple<byte,double>[]` and formats it in C#, while the linq2db arm uses `FromSql` with `toString(groupArray(...))`. The comparison is therefore not purely ORM-vs-ORM: part of the gap is representation plus the raw terminal. It is still the fixed per-call cost of the nextorm LINQ CTE chain (`first_visits`/`cohort_sizes`/`weekly` + `group_array`) that should be reduced.
+
+## Why it matters
+
+A single row is returned, so 98.8 KB is entirely fixed query-build/plan cost plus the small tuple array. This is a good probe for the cost of three chained typed CTEs and `group_array(Tuple.Create(...))`.
+
+## Preliminary attribution
+
+Suspects: three CTE descriptors, the `toMonday`/`date_diff`/`cast` expressions, `group_array(Tuple.Create(...))` argument construction, and command/parameter allocation. Confirm by tracing and by comparing the generated SQL with the `FromSql` SQL.
+
+## Proposed work
+
+1. Profile the arm and compare generated SQL with the linq2db arm (`--log-sql`).
+2. Reduce per-call allocations in the CTE/`group_array` path (descriptor reuse/plan cache for the repeated shape, without mutating a shared `QueryCommand`).
+3. Keep a raw-terminal and a LINQ-vs-LINQ control so the acceptance number is interpreted correctly; post before/after values here and in `examples/VERIFICATION.md`.
+
+## Acceptance criteria
+
+- `Nextorm_Retention` allocated ≤ **1.2×** `Linq2Db_Retention` (stretch ≤1.0×), time not worse than the current 283.4 ms, same 1 row and correct matrix.
+- `dotnet build examples/nextorm.examples.clickhouse.analytics -c Release` stays 0W/0E.
+- Before/after values (at least two runs each) posted here.
+
+## Reproduction
+
+```bash
+cd /home/alex/sources/nextorm
+DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock \
+  dotnet run --project examples/nextorm.examples.clickhouse.analytics -c Release -- \
+  --benchmark --filter '*Retention*'
+```
+
+## Constraints
+
+- Do not change the modelled SQL semantics or the entity mappings to game allocation.
+- Do not remove the linq2db arm or its `FromSql` fallback.
+- `ShortRun` is noisy: validate with at least two runs before/after.
+
+## Related
+
+- Comparison conversion and full benchmark record: `examples/VERIFICATION.md` (2026-10-17).
+- Sibling allocation regressions: #244, #245, #246, #247, #250.
+
+### #270 — Perf: examples/CH Funnel allocates 3.04× linq2db
+## Context
+
+The 2026-10-17 examples comparison benchmark (Release, `ShortRun` + `InProcessEmitToolchain`, `[MemoryDiagnoser]`, warm ClickHouse volume; AMD Ryzen 7 5800HS, .NET 10.0.12; working tree at `c9b12d12`) shows the nextorm arm allocating **3.04×** what the linq2db arm allocates:
+
+| Arm | Mean | Allocated |
+|---|---:|---:|
+| `Nextorm_Funnel` | 189.70 ms | **161.07 KB** |
+| `Linq2Db_Funnel` | 193.58 ms | **52.93 KB** |
+| Ratio | 0.98× | **3.04×** |
+
+Benchmark: `examples/nextorm.examples.clickhouse.analytics/Benchmarks.cs`, query `Sql/clickhouse_funnel.sql` over `datasets.hits_v1`; both arms return 3 rows. Allocation is per single operation (build + execute + materialise); server memory is not measured.
+
+Caveat: nextorm uses the LINQ `SqlFunctions.ClickHouse.window_funnel(...)` surface, while the linq2db arm issues the per-user `windowFunnel` part through `FromSql` and then groups with LINQ. Part of the gap is LINQ descriptor construction vs a raw terminal, but +108 KB per call for a 3-row result is fixed overhead.
+
+## Why it matters
+
+Three rows are returned, so this is a fixed per-call cost (window-function descriptor, derived-query/CTE plan, command/parameter setup), not materialisation. This is the largest ClickHouse allocation regression.
+
+## Preliminary attribution
+
+Suspects: construction of the `windowFunnel` descriptor and its three boolean arguments per call, derived-query/CTE plan building, and command/parameter allocation. Confirm with allocation tracing and by comparing the generated SQL (`--log-sql`) with the `FromSql` SQL.
+
+## Proposed work
+
+1. Profile `Nextorm_Funnel` (BDN `MemoryDiagnoser` + allocation tracing) and diff the generated SQL against the linq2db arm.
+2. Reduce per-call descriptor/plan allocation for the window-funnel shape (cache the plan/descriptor for the repeated query without mutating a shared `QueryCommand`).
+3. Add a LINQ-vs-LINQ control if the `FromSql` advantage remains, and record before/after numbers here and in `examples/VERIFICATION.md`.
+
+## Acceptance criteria
+
+- `Nextorm_Funnel` allocated ≤ **1.2×** `Linq2Db_Funnel` (stretch ≤1.0×), time not worse than the current 189.7 ms, same 3 rows.
+- `dotnet build examples/nextorm.examples.clickhouse.analytics -c Release` stays 0W/0E.
+- Before/after values (at least two runs each) posted here.
+
+## Reproduction
+
+```bash
+cd /home/alex/sources/nextorm
+DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock \
+  dotnet run --project examples/nextorm.examples.clickhouse.analytics -c Release -- \
+  --benchmark --filter '*Funnel*'
+```
+
+## Constraints
+
+- Do not change the modelled SQL semantics or the entity mappings to game allocation.
+- Do not remove the linq2db arm or its `FromSql` fallback.
+- `ShortRun` is noisy: validate with at least two runs before/after.
+
+## Related
+
+- Comparison conversion and full benchmark record: `examples/VERIFICATION.md` (2026-10-17).
+- Sibling allocation regressions: #244, #245, #246, #247, #250.
+
+### #269 — Perf: examples/PG AirportOnTimePerformance allocates 1.23× linq2db
+## Context
+
+The 2026-10-17 examples comparison benchmark (Release, `ShortRun` + `InProcessEmitToolchain`, `[MemoryDiagnoser]`, warm Testcontainers volumes; AMD Ryzen 7 5800HS, .NET 10.0.12; working tree at `c9b12d12`) shows the nextorm arm allocating **1.23×** what the linq2db arm allocates:
+
+| Arm | Mean | Allocated |
+|---|---:|---:|
+| `Nextorm_AirportOnTimePerformance` | 62.78 ms | **52.81 KB** |
+| `Linq2Db_AirportOnTimePerformance` | 62.08 ms | **43.07 KB** |
+| Ratio | 1.01× | **1.23×** |
+
+Benchmark: `examples/nextorm.examples.postgres.aviasales/Benchmarks.cs`. Both arms model the airport on-time-performance query (63 rows) with conditional aggregation over `bookings.timetable`.
+
+## Why it matters
+
+Time is at parity; the regression is +9.7 KB of fixed per-call allocation for a 63-row result. It points at query-build/parameter overhead rather than materialisation.
+
+## Preliminary attribution
+
+The nextorm query chains `delay`/`isDelayed`/`isCancelled` projections and conditional `sum` aggregates. The `date_diff` expression is duplicated in `Delay` and `IsDelayed`; descriptor/parameter construction for the repeated expression is a plausible source. Confirm by profiling, not by inspection alone.
+
+## Proposed work
+
+1. Profile the arm with BDN `MemoryDiagnoser` and compare SQL with the linq2db arm (`--log-sql`).
+2. Remove avoidable repeated expression/parameter construction (share the `date_diff` descriptor between `Delay` and `IsDelayed`, or cache the plan for the repeated shape) without changing the SQL result.
+3. Post before/after numbers and update `examples/VERIFICATION.md`.
+
+## Acceptance criteria
+
+- `Nextorm_AirportOnTimePerformance` allocated ≤ **1.2×** `Linq2Db_AirportOnTimePerformance` (stretch ≤1.0×), time not worse than the current 62.8 ms, same 63 rows.
+- `dotnet build examples/nextorm.examples.postgres.aviasales -c Release` stays 0W/0E.
+- Before/after values (at least two runs each) posted here.
+
+## Reproduction
+
+```bash
+cd /home/alex/sources/nextorm
+DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock \
+  dotnet run --project examples/nextorm.examples.postgres.aviasales -c Release -- \
+  --benchmark --filter '*AirportOnTimePerformance*'
+```
+
+## Constraints
+
+- Do not change the modelled SQL semantics or the entity mappings to game allocation.
+- Do not remove the linq2db arm.
+- `ShortRun` is noisy: validate with at least two runs before/after.
+
+## Related
+
+- Comparison conversion and full benchmark record: `examples/VERIFICATION.md` (2026-10-17).
+- Sibling allocation regressions: #244, #245, #246, #247, #250.
+
+### #268 — Perf: examples/PG AircraftDelayChains allocates 1.42× linq2db
+## Context
+
+The 2026-10-17 examples comparison benchmark (Release, `ShortRun` + `InProcessEmitToolchain`, `[MemoryDiagnoser]`, warm Testcontainers volumes; AMD Ryzen 7 5800HS, .NET 10.0.12; working tree at `c9b12d12`) shows the nextorm arm allocating **1.42×** what the linq2db arm allocates:
+
+| Arm | Mean | Allocated |
+|---|---:|---:|
+| `Nextorm_AircraftDelayChains` | 54.30 ms | **60.18 KB** |
+| `Linq2Db_AircraftDelayChains` | 55.25 ms | **42.51 KB** |
+| Ratio | 0.98× | **1.42×** |
+
+Benchmark: `examples/nextorm.examples.postgres.aviasales/Benchmarks.cs`. Both arms model `Sql/aircraft_delay_chains.sql` (two CTEs + `LAG` windows + join) over the same dataset and return 30 rows. Time is at parity; only allocation regresses (+17.7 KB per call).
+
+## Why it matters
+
+This is the CTE/window-heavy reference query, and the extra allocation is fixed per call (30 rows, tiny result set). It is a useful proxy for the cost of typed CTE + window descriptors in nextorm versus linq2db's cached query plan.
+
+## Preliminary attribution
+
+Both arms are LINQ with `AsCte` + `Sql.Window`; the difference is likely in how nextorm builds the two CTE descriptors and the window functions per call (plan-key/command construction), not in materialisation. Confirm with allocation tracing before changing anything.
+
+## Proposed work
+
+1. Profile the nextorm arm and compare its generated SQL with the linq2db arm (`--log-sql`); identify whether the extra allocations sit in CTE descriptor construction, window expression building, or command/parameter setup.
+2. Remove avoidable per-call allocations in that path (cache the plan/command shape for a repeated identical query without mutating a shared `QueryCommand`).
+3. Record before/after numbers in this issue and `examples/VERIFICATION.md`.
+
+## Acceptance criteria
+
+- `Nextorm_AircraftDelayChains` allocated ≤ **1.2×** `Linq2Db_AircraftDelayChains` (stretch ≤1.0×), time not worse than the current 54.3 ms, same 30 rows.
+- `dotnet build examples/nextorm.examples.postgres.aviasales -c Release` stays 0W/0E.
+- Before/after values (at least two runs each) posted here.
+
+## Reproduction
+
+```bash
+cd /home/alex/sources/nextorm
+DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock \
+  dotnet run --project examples/nextorm.examples.postgres.aviasales -c Release -- \
+  --benchmark --filter '*AircraftDelayChains*'
+```
+
+## Constraints
+
+- Do not change the modelled SQL semantics or the entity mappings to game allocation.
+- Do not remove the linq2db arm.
+- `ShortRun` is noisy: validate with at least two runs before/after.
+
+## Related
+
+- Comparison conversion and full benchmark record: `examples/VERIFICATION.md` (2026-10-17).
+- Sibling allocation regressions: #244, #245, #246, #247, #250.
+
+### #267 — Perf: examples/PG DelayPercentilesByModel allocates 5.67× linq2db
+## Context
+
+The 2026-10-17 examples comparison benchmark (Release, `ShortRun` + `InProcessEmitToolchain`, `[MemoryDiagnoser]`, warm Testcontainers volumes; AMD Ryzen 7 5800HS, .NET 10.0.12; working tree at `c9b12d12`) shows the nextorm arm allocating **5.67×** what the linq2db arm allocates on the same query and dataset:
+
+| Arm | Mean | Allocated |
+|---|---:|---:|
+| `Nextorm_DelayPercentilesByModel` | 45.05 ms | **31.30 KB** |
+| `Linq2Db_DelayPercentilesByModel` | 45.04 ms | **5.52 KB** |
+| Ratio | 1.00× | **5.67×** |
+
+Benchmark: `examples/nextorm.examples.postgres.aviasales/Benchmarks.cs`. Both arms model `Sql/delay_percentiles_by_model.sql` over the same 3M-row `bookings` dataset and return 8 rows. Allocation is per single operation (build + execute + materialise); database server memory is not measured.
+
+Caveat: the linq2db arm issues the ordered-set `percentile_disc(...) WITHIN GROUP (...)` through `FromSql` (linq2db has no LINQ surface for it), while nextorm uses `SqlFunctions.Postgres.percentile_disc(...)`. Part of the gap is therefore LINQ translation vs a raw terminal, but 25.8 KB per call is still worth removing.
+
+## Why it matters
+
+Only 8 rows are returned, so allocation is dominated by fixed per-call work (plan/command/parameter construction and the aggregate expression), not by row materialisation. This is the largest allocation regression in the PostgreSQL example.
+
+## Preliminary attribution
+
+The nextorm arm builds a `percentile_disc` aggregate from a lambda (`() => SqlFunctions.Sql.date_diff(...)`) inside a `GroupBy` projection. Suspects: per-call expression/parameter construction for the aggregate, the `date_diff` argument closure, and plan-key/command allocation. Needs a MemoryDiagnoser breakdown, not a guess.
+
+## Proposed work
+
+1. Profile `Nextorm_DelayPercentilesByModel` with `DOTNET_` allocation tracing / BDN `MemoryDiagnoser` and compare the generated SQL (`--log-sql`) with the linq2db `FromSql` SQL; confirm whether row materialisation or per-call build dominates.
+2. Remove avoidable per-call expression/parameter allocation in the `percentile_disc` + `date_diff` path (or cache the aggregate descriptor/plan for the repeated shape without mutating a shared `QueryCommand`).
+3. If the remaining gap is the raw-SQL advantage, document it explicitly and add a LINQ-vs-LINQ control row so the comparison stays honest.
+4. Record the post-fix numbers in `examples/VERIFICATION.md` and in this issue.
+
+## Acceptance criteria
+
+- `Nextorm_DelayPercentilesByModel` allocated ≤ **1.2×** `Linq2Db_DelayPercentilesByModel` (stretch ≤1.0×), with no time regression and the same 8 rows in both arms.
+- `dotnet build examples/nextorm.examples.postgres.aviasales -c Release` stays 0W/0E.
+- Before/after values (at least two runs each) posted here.
+
+## Reproduction
+
+```bash
+cd /home/alex/sources/nextorm
+DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock \
+  dotnet run --project examples/nextorm.examples.postgres.aviasales -c Release -- \
+  --benchmark --filter '*DelayPercentilesByModel*'
+```
+
+## Constraints
+
+- Do not change the modelled SQL semantics or the entity mappings to game allocation.
+- Do not remove the linq2db arm or the `FromSql` fallback.
+- `ShortRun` is noisy: validate with at least two runs before/after.
+
+## Related
+
+- Comparison conversion and full benchmark record: `examples/VERIFICATION.md` (2026-10-17).
+- Sibling allocation regressions: #244, #245, #246, #247, #250.
+
+### #250 — Perf: CSV terminal recompiles its column plan on every export (terminal plan cache, CSV slice)
+## Context
+
+`todo_csv_streaming.md` §2(a) is still open: the CSV terminal compiles its column plan on every export. Issue #112 (the feature) is closed, but that slice was left in the plan without a tracking issue, so this ticket tracks it. Same fixed-cost pattern as the JSON terminal in #247, measured on the same machine/day.
+
+## Evidence (measured 2026-10-17)
+
+Harness: new benchmark class `benchmarks/nextorm.benchmark/SqliteBenchmarkCsvFixedCost.cs` (currently untracked in the working tree), `ShortRun` + in-process toolchain, SQLite `large_table` (10 000 rows, `long`/`string`/`DateTime`), projections 1/3/8 columns, `Limit(1..10000)`. Report: `benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkCsvFixedCost-report-github.md`.
+
+| Rows | ToList 3-col (warm plan) | WriteCsv 1 col | WriteCsv 3 col | WriteCsv 8 col |
+|---|---|---|---|---|
+| 1 | 17.0 µs | 198.0 µs | 571.1 µs | 1 621.0 µs |
+| 10 | 24.1 µs | 204.2 µs | 588.0 µs | 1 618.2 µs |
+| 100 | 97.5 µs | 235.4 µs | 697.9 µs | 1 924.3 µs |
+| 1 000 | 829.4 µs | 544.8 µs | 1 637.1 µs | 4 815.6 µs |
+| 10 000 | 8 526 µs | 3 678 µs | 10 907 µs | 31 963 µs |
+
+Fit of `T(N) = fixed + N × perRow`:
+
+| Arm | fixed | perRow |
+|---|---|---|
+| ToList 3-col | ~12–17 µs | 0.86 µs |
+| WriteCsv 1 col | ~198 µs | 0.35 µs |
+| WriteCsv 3 col | ~590 µs | 1.03 µs |
+| WriteCsv 8 col | ~1 650 µs | 3.02 µs |
+
+- **~200–207 µs of fixed cost per column**, plus ~8–9 KB of plan garbage per column per call (WriteCsv 3-col at 1 row: 28.1 KB vs 4.5 KB for `ToList`).
+- The whole delta against the warmed `ToList` arm is accounted for by 3 × ~200 µs, i.e. **the per-column compile dominates; SQL re-planning on SQLite is small** (< ~50 µs). Caching only the column plan (not the SQL plan) is therefore the right first target.
+- Cost share for a 3-column export: 100 rows — 590/698 µs (**85 %**); 1 000 rows — 36 %; 10 000 rows — 5.4 %.
+
+## Root cause
+
+- `CsvStreamWriter.Build` compiles one delegate per column: `Expression.Lambda<Action<IDataRecord, CsvRowBuffer>>(...).Compile()` — `src/nextorm.core/Query/Csv/CsvStreamWriter.cs:312-313`, invoked from `QueryCommandExtensions.cs:431` and `:475` on every call.
+- CSV preparation deliberately skips the plan cache: `DataContext.PrepareResultCommand` → `storeInCache: false` (`src/nextorm.core/DataContext/DataContext.cs:573-582`), so the SQL plan is rebuilt too (small on SQLite, may matter more on PostgreSQL/SQL Server — not measured yet).
+
+## Proposed work
+
+1. One **bounded per-context** cache of compiled terminal plans, shared in design with the JSON shape/writer cache proposed in #247 (one mechanism, not two; J3 from #180: bounded, `MapperCache`-style, no unbounded static dictionary).
+2. CSV key: concrete context type (`MapTypedColumnExpression` is `protected virtual`, `DataContext.cs:747`), projection signature, resolved reader storage types, applied `SequentialAccess` mode, CSV options (delimiter, null marker, Excel mode, header). **`ValueTransform` must bypass the cache** — it is a per-call delegate that may capture state.
+3. Cache is per-context, cleared by `DataContextCache.Clear()`; never mutate the shared `QueryCommand`, never flip `QueryCommand.Cache` (sticky-state hazard).
+4. Preserve every fail-closed behaviour: unsupported projection rejected before the header, `AsTempTable` guard, in-memory `NotSupportedException`.
+5. Commit the harness and add a small-export case to the perf gate.
+
+## Acceptance criteria (2026-10-20 two-tier policy)
+
+**Global target (milestone-level):** 3-column export — 100 rows ≤ **230 µs**, 1,000 rows ≤ **1.1 ms**, 10,000 rows within ±3 % of **10.9 ms**; allocations ≤ **1.20×** linq2db and time ≤ **1.00×** linq2db on the same-round report.
+
+**Local acceptance (task closure):** if the chosen method cannot reach the global target, accept it when the measured change is a real one-axis win with no regression on the other:
+- allocations decrease vs the same-round baseline and time does not worsen beyond the pre-registered noise band; **or**
+- time improves beyond the pre-registered noise band and allocations do not increase.
+
+A method that improves neither axis, or improves one while regressing the other, is rejected and reverted. Reaching the global ratios is **not** required to close the task: record the residual gap to the global target and the measured local win.
+
+**Measurement rules:** same session/round and pinned DB, paired/ABBA measurement; no historical-number substitution; no threshold/tolerance/denominator edits after measurement. Allocation changes are judged by exact byte counts; time changes by the pre-registered noise band.
+
+The cache-hit allocation win (≥8 KB/column per call) is a valid local acceptance even if the absolute time targets are missed, provided time does not worsen beyond the noise band.
+
+### Mandatory correctness and evidence
+- Remove the per-column plan garbage on cache hits (≥8 KB/column per call).
+- Correctness tests: a cache hit is byte-identical to a cold run; different options/provider/storage types/sequential mode never alias; `ValueTransform` always bypasses; `DataContextCache.Clear()` drops the entries; size stays within the bound.
+- No public API change; JSON and CSV do not regress each other.
+
+## Constraints
+
+- No output change: CSV dialect contract (RFC 4180, CRLF, null marker, Excel guard) stays as shipped.
+- Do not promote a CSV plan into the normal query plan cache without an owner decision; CSV keeps its separate preparation shape.
+
+## Related
+
+- #112 — CSV streaming feature (closed; this slice remains).
+- #167, #168 — chunked `byte[]` read and SQL Server typed numeric mapping.
+- #247 — JSON streaming fixed cost (same root cause; measured fixed cost is ~2.9× larger there).
+- Specs: `docs/specs/roadmap/todo_csv_streaming.md` §2(a), `docs/advanced/limitations.md`.
+
+### #247 — Perf: JSON streaming is slower than linq2db at 10k rows
+## Context
+
+The 2026-10-17 warm-path feature report (release 1.0.9-rc2, branch `1.0.9-rc3`, HEAD `881bf497`) shows JSON streaming slower than linq2db at the 10,000-row size, despite lower allocations:
+
+| JSON array, DTO payload | Nextorm `WriteJson_Array_Dto` | linq2db materialize + `JsonSerializer` | Nextorm / linq2db |
+|---|---:|---:|---:|
+| 1,000 rows | 2.132 ms / 84.01 KB | 0.562 ms / 90.39 KB | **3.79×** time |
+| 10,000 rows | 10.352 ms / 435.64 KB | **9.150 ms / 963.56 KB** | **1.13×** time (0.45× allocation) |
+| 100,000 rows | **82.891 ms** / 3,951.92 KB | 86.797 ms / 9,087.21 KB | 0.95× time |
+
+Source: `benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWriteJson-report.csv` (rows filtered by `RowCount`; 10,000 is the headline size); new report: `docs/comparisons/feature-benchmarks-2026-10-17.md`.
+
+Important nuance: `WriteJson` does not materialize `TResult` (the 435.64 KB is not a DTO list). It is ~44 B/row, consistent with per-row `GetString` for the `name` column plus writer/plan state: the key-only `WriteJson_Array_Scalar` is 38.04 KB at 10,000 rows. “Zero materialization” therefore does not mean “zero allocation”. The 1k/100k points show a large **fixed per-call cost**: Nextorm loses badly at 1k rows and is roughly level at 100k. The direct writer also spends 4.18 ms more than materializing the same DTOs (`ToList_Dto`, 6.170 ms / 785.21 KB at 10k, no serialization); that is a profiling signal, not a like-for-like serialization comparison — the control arm in the proposal makes it fair.
+
+## Root-cause analysis
+
+`WriteJson` rebuilds the streaming machinery on every call:
+
+- `src/nextorm.core/DataContext/DataContext.cs:353-420` (`PrepareJsonStream`) clones the command, resets preparation, prepares a document-mode command with `storeInCache: false`, builds `JsonShapePlan`, and compiles a new `JsonRowWriter` via `JsonRowWriterFactory.Build` on **every call**; there is no shape/writer cache.
+- `src/nextorm.core/Query/Json/JsonStreamWriter.cs:47-65` — `WriteRow` calls `Utf8JsonWriter.Flush()` and `_sink.Flush()` after **every row**; NDJSON needs per-record boundaries, but array mode can batch flushes.
+- The per-row path reads strings with `IDataRecord.GetString` (one string allocation per row); this is the main remaining allocation, not DTO materialization.
+
+The fixed-cost pattern (3.79× at 1k, 1.13× at 10k, 0.95× at 100k) is exactly what per-call clone/prepare/plan/compile plus per-row flush would produce.
+
+## Proposed work
+
+1. **Attribute first.** Add a JSON phase benchmark (1k/10k/100k) that separates command clone/prepare, shape-plan build, row-writer compile, per-row `WriteRow`, and flush. Use the 1k row case to expose fixed costs; do not optimize only the 10k number.
+2. **Cache the immutable shape/writer.** Cache `JsonShapePlan` and the compiled `JsonRowWriter` keyed by projection shape + options + naming policy; make it bounded/thread-safe and invalidate on metadata/options changes. Keep the command/parameter path separate.
+3. **Batch array-mode flushes.** In `JsonStreamWriter.WriteRow`, avoid flushing `Utf8JsonWriter` and the pooled sink after every row for array mode; flush when the pooled buffer is full or at `Complete`, while preserving bounded memory and NDJSON’s per-record behavior. Add a buffer-size threshold test.
+4. **Reuse a document-mode prepared descriptor.** Evaluate caching the no-mapper document preparation (or its immutable recipe) keyed by shape, instead of clone + `storeInCache: false` per call. Preserve the rule that the caller’s command is never mutated and no plan is promoted into the normal cache without an owner decision.
+5. **Reduce fixed setup.** Pool/reuse `JsonStreamWriter`/`Utf8JsonWriter` where ownership allows, or at least avoid rebuilding `JsonShapePlan`/expression trees; measure before deciding whether the per-row string extraction needs a `GetChars`/pooled-char path.
+6. **Add a control arm.** Benchmark Nextorm `ToList_Dto + JsonSerializer.Serialize` with the same payload and sink; this distinguishes “direct writer is slow” from “serialization itself is slow” and prevents an unfair comparison.
+
+## Acceptance criteria (2026-10-20 two-tier policy)
+
+**Global target (milestone-level):** at 10,000 rows, `WriteJson_Array_Dto` ≤ **1.00×** linq2db time and ≤ **1.20×** linq2db allocations; at 1,000 rows, the fixed-cost gap is materially reduced; 100k rows do not regress. The original **9.150 ms / 435.64 KB** and ≤1.2× 1k targets remain the global/stretch reference.
+
+**Local acceptance (task closure):** if the chosen method cannot reach the global target, accept it when the measured change is a real one-axis win with no regression on the other:
+- allocations decrease vs the same-round baseline and time does not worsen beyond the pre-registered noise band; **or**
+- time improves beyond the pre-registered noise band and allocations do not increase.
+
+A method that improves neither axis, or improves one while regressing the other, is rejected and reverted. Reaching the global ratios is **not** required to close the task: record the residual gap to the global target and the measured local win.
+
+**Measurement rules:** same session/round and pinned DB, paired/ABBA measurement; no historical-number substitution; no threshold/tolerance/denominator edits after measurement. Allocation changes are judged by exact byte counts; time changes by the pre-registered noise band.
+
+Note: 10k allocations are already below linq2db, so a **time-only win with allocations not increasing** is sufficient for local acceptance.
+
+### Mandatory correctness and evidence
+- No public API/output change: valid JSON, same DTO payload, array/NDJSON/root/IgnoreNull semantics, cancellation and partial-output/error policy preserved.
+- Add JSON 1k/10k/100k rows to the performance gate; include the `ToList_Dto + JsonSerializer` control in the report.
+- Explain the remaining per-row string allocation explicitly; “zero materialization” is not claimed as zero allocation.
+
+## Constraints
+
+- Do not switch the public `WriteJson` contract to materialize DTOs; direct streaming must remain the default.
+- Do not weaken JSON validation, cancellation, or error policy for speed.
+- No benchmark-specific payload checks; cache keys must be general and bounded.
+
+## Related
+
+- #39 — `WriteJson`/`WriteJsonAsync` streaming feature.
+- #176-#180 — JSON streaming phases/validation.
+- #188 — Tier-1 cross-library JSON/CSV benchmark.
+- Report: `docs/comparisons/feature-benchmarks-2026-10-17.md`.
+
+### #246 — Perf: ToDataReader raw reader is slower than linq2db
+## Context
+
+The 2026-10-17 warm-path feature report (release 1.0.9-rc2, branch `1.0.9-rc3`, HEAD `881bf497`) shows the zero-materialization raw reader slower than linq2db, while the report’s other streaming rows are fine:
+
+| Arm | Nextorm | linq2db | Dapper | Nextorm / linq2db |
+|---|---:|---:|---:|---:|
+| Raw reader, 10,000 rows | 4.677 ms / 947.98 KB | **3.942 ms / 943.00 KB** | 3.996 ms / 942.77 KB | **1.19×** time, **1.005×** allocation |
+| Raw reader, empty result | 237.7 µs / 12.74 KB | **109.2 µs / 5.52 KB** | 126.7 µs / 5.29 KB | **2.18×** time, **2.31×** allocation |
+| Prepared control, 10,000 rows | 4.754 ms / 944.8 KB | — | — | 1.21× time, 1.00× allocation |
+
+Source: `benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkStreaming-report.csv`; new report: `docs/comparisons/feature-benchmarks-2026-10-17.md`.
+
+The benchmark is `B_Nextorm_ToDataReader`: a fresh `_ctx.LargeEntity.Select(...).ToDataReader()` against linq2db `ExecuteReader` and Dapper `ExecuteReader`, all scanning the same `id, someString` rows through one non-retaining sink. The prepared Nextorm control is slower too, so this is **not** primarily command construction.
+
+## Root-cause analysis
+
+`ToDataReader` on SQLite currently takes the LOB reader seam and wraps the provider reader:
+
+- `src/nextorm.core/Query/QueryCommandExtensions.cs:326-355` — `ToDataReader` calls `OpenLobReader` when `Dialect.LobLocatorColumn is null` (SQLite), otherwise `OpenResultReader`.
+- `src/nextorm.core/DataContext/DataContext.cs:469-505` — `OpenLobReader` uses `PrepareLobCommand`, which prepares with `storeInCache: false` and goes through the LOB path; `OpenResultReader` is the plain multi-column seam.
+- `src/nextorm.core/DataContext/LobDataReader.cs:20-90` — every `Read`, `GetInt64`/`GetString` (and other accessors) is forwarded through an extra `DbDataReader` wrapper with `ThrowIfDisposed` and a cancellation check; on SQLite there is no LOB locator to manage for this projection.
+
+The empty-result arm is decisive: with no rows to scan, Nextorm still needs 2.18× linq2db’s time and 2.31× its allocation. That points to fixed per-call reader/LOB setup and wrapper overhead, not row scanning or `GetString`.
+
+## Proposed work
+
+1. **Route `ToDataReader` through the plain result-reader seam.** For a multi-column raw reader that does not need a LOB locator, use `OpenResultReader`/its executor path instead of `OpenLobReader` + `LobDataReader`; reserve the LOB seam for projections that actually require locator/LOB semantics (and for `ToStream`/`ToTextReader`). Verify SQL, LOB behavior and ownership/dispose behavior on SQLite and the sequential-access providers.
+2. **Remove the per-access wrapper cost.** If an owner-aware wrapper is still required, make it a lean pass-through: `[MethodImpl(AggressiveInlining)]` on `Read`/typed getters, no per-access cancellation check when the token cannot be canceled, and cached field count/ordinal metadata. Consider returning the provider reader through an owner object rather than intercepting every accessor.
+3. **Avoid per-call preparation duplication.** `OpenLobReader`/`OpenResultReader` use `storeInCache: false`; evaluate an internal cached reader-plan descriptor for repeated shapes without mutating a shared `QueryCommand` or exposing `Prepare()`. The prepared control shows ~3 KB of the gap, so do this after the wrapper fix.
+4. **Add a direct-provider-reader control.** Benchmark Nextorm raw reader vs the same `DbDataReader` obtained directly from the provider; this separates executor/command overhead from wrapper/scanner overhead.
+5. **Keep the empty arm in the gate.** It is the cheapest regression detector for fixed overhead.
+
+## Acceptance criteria (2026-10-20 two-tier policy)
+
+**Global target (milestone-level):** raw reader at 10,000 rows ≤ **1.00×** linq2db time and ≤ **1.20×** linq2db allocations; the empty-result arm likewise (or a documented, owner-approved tolerance). The original **3.942 ms / 943.00 KB** and ≤1.00× absolute/ratio numbers remain the global/stretch reference.
+
+**Local acceptance (task closure):** if the chosen method cannot reach the global target, accept it when the measured change is a real one-axis win with no regression on the other:
+- allocations decrease vs the same-round baseline and time does not worsen beyond the pre-registered noise band; **or**
+- time improves beyond the pre-registered noise band and allocations do not increase.
+
+A method that improves neither axis, or improves one while regressing the other, is rejected and reverted. Reaching the global ratios is **not** required to close the task: record the residual gap to the global target and the measured local win.
+
+**Measurement rules:** same session/round and pinned DB, paired/ABBA measurement; no historical-number substitution; no threshold/tolerance/denominator edits after measurement. Allocation changes are judged by exact byte counts; time changes by the pre-registered noise band.
+
+### Mandatory correctness and evidence
+- No materialization/result change; LOB terminals (`ToStream`/`ToTextReader`) retain their locator/sequential-access behavior and tests.
+- `CommandReaderOwner` dispose semantics remain: disposing the reader releases the per-call command and provider reader; the context stays open.
+- Add a benchmark/gate row for the raw reader; run the streaming report on all relevant providers if the seam changes cross-provider.
+
+## Constraints
+
+- Do not remove LOB support or change `ToStream`/`ToTextReader` semantics.
+- Do not require callers to use `Prepare()`; the measured path remains fresh-fluent.
+- No benchmark-specific SQL or SQLite-only production hardcode; the seam choice must be dialect-driven.
+
+## Related
+
+- #188 — Tier-1 comparison benchmarks (streaming/raw reader scenario).
+- #189 / #134 — `ToDataReader` SQLite support.
+- Report: `docs/comparisons/feature-benchmarks-2026-10-17.md`.
+
+### #245 — Perf: warm EXCEPT/INTERSECT allocations exceed linq2db (#240 follow-up)
+## Context
+
+The 2026-10-17 warm-path feature report (release 1.0.9-rc2, branch `1.0.9-rc3`, HEAD `881bf497`) shows EXCEPT/INTERSECT still above linq2db on allocations; time is much better:
+
+| Scenario | Nextorm cached | linq2db | Nextorm / linq2db | Nextorm `Prepare()` control (per query) |
+|---|---:|---:|---:|---:|
+| EXCEPT | 6.38 KB/query (17.15 µs) | 5.05 KB/query (38.10 µs) | **1.26×** allocation | ~742 B (11.07 µs) |
+| INTERSECT | 6.36 KB/query (16.79 µs) | 5.01 KB/query (36.77 µs) | **1.27×** allocation | ~727 B (10.36 µs) |
+
+Source: `benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkFeaturesFairCached-report.csv`; new report: `docs/comparisons/feature-benchmarks-2026-10-17.md`.
+
+## Relationship to #240
+
+#240 closed the construction-allocation follow-up to #201 with a partial landing and an owner-accepted residual: Except 1.2426× and Intersect 1.2511× remained above the 1.20× target. The new report measures 1.26×/1.27×. This ticket is the owner-requested rc3 follow-up for **set operations only**; it does not reopen the frozen D201-3 recipe or change the accepted threshold. The prepared controls are diagnostic only — the target remains the fresh-fluent cached path.
+
+## Root cause
+
+`Except`/`Intersect` construct a new first-operand clone and attach the second operand, then prepare and hash the combined tree:
+
+- `src/nextorm.core/Query/QueryCommand.TResult.cs:1106-1131` — `Except`/`Intersect` do `(QueryCommand<TResult>)Clone()`, preserve `_from`, `ResetPreparation()`, then `SetOperation(...)`.
+- `src/nextorm.core/Query/QueryCommand.cs:1164-1190` — `SetOperation` stores the second operand by reference and clones the tail only when chaining; the first-operand clone and its arrays/lists dominate for the two-operand case.
+- `Clone()` copies the command’s joins/sorting/array-join/window/CTE metadata even when those collections are empty, and the fresh command still pays the per-call plan-hash/prepare path.
+
+#240 evidence: construction alone is larger than LINQ to DB’s entire query cost; the prepared controls above (~727–742 B/query) show that SQL execution and row reading are not the gap.
+
+## Proposed work
+
+1. **Attribute the set-op path.** Add EXCEPT/INTERSECT phases to the existing decomposition probe (construct first operand, attach second, prepare/hash, execute) and publish B/op. Confirm how much is `Clone()` vs hash vs metadata.
+2. **Avoid full first-operand cloning.** Introduce a copy-on-write/set-op view or a dedicated set-operation command that references the immutable first operand instead of cloning every collection. Keep public fluent semantics and ownership (the existing tail-clone fix must remain).
+3. **Use empty-collection fast paths.** `Clone()`/`CopyTo` should not allocate/copy arrays and lists that are null/empty; apply the same to `ResetPreparation` paths for set operations.
+4. **Reuse the prepared set-op shape.** Cache the immutable set-operation preparation descriptor keyed by both operand shapes, so a repeated fresh EXCEPT/INTERSECT does not re-hash and re-copy both operands. Do not cache mutable commands; preserve parameter/result semantics.
+5. **Keep the frozen recipe and plan-cache key semantics unchanged.** No threshold change; no benchmark-specific shortcuts.
+
+## Acceptance criteria (2026-10-20 two-tier policy)
+
+**Global target (milestone-level):** EXCEPT/INTERSECT allocations ≤ **1.20×** linq2db and time ≤ **1.00×** linq2db on the same-round report. The original ≤ **5.05 KB/query** (EXCEPT) / ≤ **5.01 KB/query** (INTERSECT) parity numbers remain the stretch reference, not a per-task gate.
+
+**Local acceptance (task closure):** if the chosen method cannot reach the global target, accept it when the measured change is a real one-axis win with no regression on the other:
+- allocations decrease vs the same-round baseline and time does not worsen beyond the pre-registered noise band; **or**
+- time improves beyond the pre-registered noise band and allocations do not increase.
+
+A method that improves neither axis, or improves one while regressing the other, is rejected and reverted. Reaching the global ratios is **not** required to close the task: record the residual gap to the global target and the measured local win.
+
+**Measurement rules:** same session/round and pinned DB, paired/ABBA measurement; no historical-number substitution; no threshold/tolerance/denominator edits after measurement. Allocation changes are judged by exact byte counts; time changes by the pre-registered noise band.
+
+### Mandatory correctness and evidence
+- Time does not regress beyond the ShortRun noise band; SQL, result order/duplicates and public API unchanged.
+- Prepared controls and `Warm_Reused = 0 B` unchanged; add both rows to the native allocation gate.
+- Evidence includes attribution and final per-case BDN numbers; no averaged set-operation number.
+
+## Constraints
+
+- Preserve the #240 fix that prevents mutating a shared set-op tail (`a.Union(b).Except(c)`).
+- Do not change the cache-key semantics or the frozen D201-3 recipe.
+- General path only; no benchmark-specific SQL/type checks.
+
+## Related
+
+- #240 — predecessor construction-allocation scope and accepted Except/Intersect residual.
+- #201 — cached-path parity goal (Category-B scope).
+- #200 — earlier set-operation allocation work.
+- Report: `docs/comparisons/feature-benchmarks-2026-10-17.md`.
+
+## Groups
+
+Clustering decided by `pdca-planner` after the ALL-barrier and persisted here (see §Decisions log): one group, `cap = 1` lane; the order below is the execution order inside that single lane.
+
+| group | ordered units | shared surface | why one group | worktree | branch | ref | status |
+|---|---|---|---|---|---|---|---|
+| G1 | T353 → T352 → T318 → T317 → T319 → T245 → T250 → T246 → T247 → T311 → T268 → T269 → T267 → T270 → T271 → T272 → T273 → T274 | src/nextorm.core/Query/QueryCommand*.cs; src/nextorm.core/Query/QueryCommandExtensions.cs; src/nextorm.core/DataContext/QueryPlanner.cs; src/nextorm.core/DataContext/DataContext.cs; src/nextorm.core/DataContext/SqlBuilder.cs; src/nextorm.core/Query/Json/; src/nextorm.core/Builders/ (CteHoister.cs, MetadataEagerLoadBinding.cs); examples/VERIFICATION.md; examples/nextorm.examples.postgres.aviasales/Benchmarks.cs; examples/nextorm.examples.clickhouse.analytics/Benchmarks.cs | 16 of the 18 executable units form one transitive write-surface component (src/nextorm.core core query, planner and builder files plus examples/VERIFICATION.md and the example Benchmarks.cs); T353 shares src/nextorm.core/Builders/ with T319; every container and benchmark run is globally exclusive, so a second lane could verify nothing in parallel | — | collection/rc5/group-1 | — | pending |
+
+## Integration branch
+
+One group ⇒ **no merge barrier**. Work happens in the **current worktree** on `collection/rc5/group-1`, created from `1.0.9-rc5` (`1e31331d`); nothing is merged into `1.0.9-rc5` or `main`, `git push` never runs, and the user integrates later.
+
+## Decisions log
+
+- 2026-10-30T05:51:46Z · **Entry PLAN (form decision).** The entry `pdca-planner` returned the form `collection` with overlay `coder+.NET` (`pdca-coder` + `pdca-dotnet`), 19-item entry scope, criteria `AC-COL-01` … `AC-COL-04` plus one `AC-<issue>` per item, container revision `r = 1` and item revisions `r = 1` (`r = 2` for the five re-opened rc4 items). The complete returned report is persisted verbatim at `.pdca/rc5/entry-plan.md` (sha256 `ffaecc0b745db18d6af833398ea1b9a7f038a31ad36e57838a9ebc353f3f3f0f`, 54 333 bytes, 256 lines); this log entry references it and does not retell it.
+- 2026-10-30T05:51:46Z · **Tooling substitution.** `.pdca/scripts/` does not contain `validate_inner_loop.py` or `pdca_evidence.py`; both are optional in `pdca-dotnet`, so this run uses the tooling that exists — `status_lint.py` (staged byte-identically from `pdca-collection/scripts/`, sha256 `3c08f33d699afc18310c8c6de5fc51c310a66f2e6568c1ae1e6b50ce6a2d7c71`) for the queue, and direct artifact paths under `.pdca/<task>/rv<k>/` for evidence. No validator run is claimed for the two absent helpers.
+### Correction (caller-verified, 2026-10-30T05:55:26Z)
+
+The preceding tooling note rested on a wrong caller fact; it is superseded here, not deleted. `validate_inner_loop.py` and `pdca_evidence.py` live in the installed .NET overlay package `pdca-dotnet`, not in the base `pdca` package: `/home/alex/.config/opencode/skills/pdca-dotnet/scripts/validate_inner_loop.py` (sha256 `59ed8d885f7a811d5dd1ebde8b377c58e731d932714cc7c3663b271b45735946`) and `/home/alex/.config/opencode/skills/pdca-dotnet/scripts/pdca_evidence.py` (sha256 `d3bb29dc853ab3e6b5f4fc7a3d98c4f50f3ec5771555a850c621057629d4a488`), byte-identical to the source skill and to the `opencode-config` snapshot. The earlier check looked only at `~/.config/opencode/skills/pdca/scripts/` (the base package) and never at `~/.config/opencode/skills/pdca-dotnet/scripts/`.
+
+`.pdca/scripts/` legitimately lacks them at rest: `.gitignore:31` ignores `/.pdca/scripts/`, and the install contract is that the executor stages byte-identical copies **before the first helper run** (precedent: unit T307 in this repo recorded the same two hashes).
+
+Therefore: **no substitution, no waiver, no deviation, no `Notice:`** about missing helpers. An unconditional mandated check cannot be waived; a fabricated deviation for a non-existent deficiency is worse than the deficiency.
+
+Both helpers are **mandatory** when a unit's .NET inner-loop or evidence gate is due: stage them byte-identically from `/home/alex/.config/opencode/skills/pdca-dotnet/scripts/` into `<repo>/.pdca/scripts/`, then run them from the project root (`python3 .pdca/scripts/validate_inner_loop.py brief|report|project|manifest …`, `python3 .pdca/scripts/pdca_evidence.py generate|lint …`). A helper is never run from the installed skill directory.
+
+**Staged this dispatch (2026-10-30T05:55:26Z):** byte-identical copies into `/home/alex/sources/nextorm/.pdca/scripts/`, verified with `sha256sum` and `cmp` on source and copy — `validate_inner_loop.py`: source `59ed8d885f7a811d5dd1ebde8b377c58e731d932714cc7c3663b271b45735946` = copy `59ed8d885f7a811d5dd1ebde8b377c58e731d932714cc7c3663b271b45735946`; `pdca_evidence.py`: source `d3bb29dc853ab3e6b5f4fc7a3d98c4f50f3ec5771555a850c621057629d4a488` = copy `d3bb29dc853ab3e6b5f4fc7a3d98c4f50f3ec5771555a850c621057629d4a488`.
+
+no plan revision bump, no new attempt, no defect entry — plan unchanged.
+
+- 2026-10-30T05:51:46Z · **Containers available.** Containers are available with `DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock` (Podman Engine 5.8.6, verified by the caller); the integration suite is fail-closed and `NEXTORM_SKIP_PROVIDERS` is never used as evidence of a passing provider run.
+- 2026-10-30T06:38:24Z · **Parallel preparation ceiling.** `plan_cap = 4` for the initial per-item PLAN/preparation dispatches, concurrent up to `min(#items without a ready plan, plan_cap)` and bounded by observed host capacity; reason: `pdca-collection` §P step 2 «Parallel preparation» scheduling choice (the host exposes no such key), 19 independent items, planner calls are read-only and independent — planning is the only parallel phase. All writes to this collection status and to every item status stay serialized through `pdca-executor`; the ALL-barrier still gates lane allocation and every DO; all timing/benchmark/container-backed integration execution stays strictly one process at a time. `plan_cap` is lowered if a provider rate-limit or a failed call is observed, and the new value + reason are recorded the same way.
+
+- 2026-10-30T07:38:03Z · **Post-barrier schedule and lane allocation (`pdca-planner`).** Exactly one group `G1`, execution order `T353 → T352 → T318 → T317 → T319 → T245 → T250 → T246 → T247 → T311 → T268 → T269 → T267 → T270 → T271 → T272 → T273 → T274` (§Groups). Clustering reason: 16 of the 18 executable units form one transitive write-surface component (`src/nextorm.core/**` — `QueryCommand*.cs`, `QueryPlanner.cs`, `DataContext.cs`, `QueryCommandExtensions.cs`, `Query/Json/**`, `CteHoister.cs`, `SqlBuilder.cs` — plus `examples/VERIFICATION.md` and the example `Benchmarks.cs`), `T353` shares `src/nextorm.core/Builders/**` with `T319`, and every container/benchmark run is globally exclusive, so a second lane could verify nothing in parallel. Lane count `cap = 1` for exactly that reason (serialized write surface plus global exclusivity of container and benchmark execution). DAG (hard ordering): `T318 → T319`, `T317 → T319`, `T318 → T245`, `T245 → T250`, `T250 → T246`, `T246 → T247`, `T247 → T311`, `T319 → T268`, `T268 → T269 → T267`, `T267 → T270 → T271 → T272 → T273 → T274`. Lane allocated: `collection/rc5/group-1` in the **current worktree** (one group ⇒ no separate worktree), created from `1.0.9-rc5` at `1e31331d`; nothing merged into `1.0.9-rc5` or `main`, no push. `T302` excluded as terminal: `infeasible` at `r=1`, `attempts=0` — no lane, no group, no execution. `T319` is gated on `T317` and `T318` both `done`. PLAN revision vector unchanged — this decision introduces no item revision (each item keeps the revision already persisted: `r=1`, and `r=2` for `T247`/`T311`); `T302` terminal at `r=1`, `attempts=0`; no counter, attempt or defect entry changed.
+
+## General verification and recovery
+
+- common verification state: `unverified` — no integration CHECK has run yet; there is no `C` result and no evidence pointer.
+- blocking reason: none recorded (the state is `unverified`, not `blocked`).
+- defect id: none — no defect history yet.
+- linked corrective cycle: none.
+- next allowed step: per-item PLANs → ALL-barrier.
+
+## Done / Verified / Incomplete
+
+- **Accepted goals: none yet** (0 of 19).
+- **Plan-terminal resolutions: 1** of 19 — `T302` = `infeasible` (PLAN-terminal, `attempts=0`, plan_state never `ready`, no DO, no CHECK; issue `#302` stays OPEN).
+- **Execution failures: none yet** — no item reached DO and failed; the one `incomplete` row (`T302`) is a PLAN-terminal resolution, not an execution failure.
+- **Collection completeness: none yet** — no original item goal is accepted.
+- **Integrated-tree verdict: none yet** — no independent integration CHECK has run.
+
+## Progress log
+
+append-only, one row per event, never edited retroactively:
+
+2026-10-30T06:38:14Z | P | revision r=1 | attempt n=0 | Recovered after interruption: a host restart killed the previous driver session `ses_e74a9b803ffebtRyA9WyHbkdmI`; the new driver continues the SAME collection `rc5` (no new collection id, no second status file, no second entry PLAN). State as read from this file at recovery: container revision `r = 1`; 19 queue items (`T353`,`T352`,`T318`,`T317`,`T245`,`T246`,`T247`,`T250`,`T311`,`T267`…`T274`,`T302`,`T319`) all `plan_state = pending`, `status = pending`; 0 of 19 prepared; `## Groups` and `## Integration branch` still placeholders; ALL-barrier not passed; no item DO has started; no `collection/rc5/*` branch and no rc5 worktree. No counter change (`N` and `r` unchanged), no plan revision bump, no attempt consumed, no defect entry. Containers available (`DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock`, Podman 5.8.6). Next allowed step: per-item PLANs → ALL-barrier. Resuming `pdca-collection` §P step 2. | `.pdca/status/collection-rc5.md` (state as read); entry plan `.pdca/rc5/entry-plan.md`
+2026-10-30T06:45:06Z | P | revision r=1 | attempt n=0 | Evidence root superseded for every item of this collection: `.pdca/<item-id>/rv<k>/` → `.pdca/rc5/items/<item-id>/rv<k>/` (collection-scoped, `attempts/` beneath it; `T353` and `T352` updated now). Reason: item ids are reused from collection `rc4`, so the default per-item root is not isolated — `.pdca/T352/rv1/` holds foreign issue-`#296` artifacts dated 2026-10-28 (`checkpoint.md`, `evidence.json`, `manifest.json`, `integration.log.plain`, `plan-lint.json`, `inputs/`, `review/`) and `.pdca/T353/rv1/` likewise holds 2026-10-28 foreign artifacts, so a scoped CHECK read of the old root would read foreign evidence; the collection id is unique, the item id is not. Previous values stay recorded in the two item records as references only; `.pdca/T352/**` and `.pdca/T353/**` are untouched. No criterion, plan revision, attempt, counter or defect entry changed. Notice (autonomous) for the final report. | `.pdca/rc5/items/T353/rv1/attempts/`, `.pdca/rc5/items/T352/rv1/attempts/` (directories only); item records `.pdca/status/T353-rc5-1.md`, `.pdca/status/T352-rc5-1.md` (§Current state + §Progress log); queue rows `T353`/`T352` of this file
+2026-10-30T07:00:53Z | P | revision r=1 | attempt n=0 | T245 campaign preparation persisted (form=incremental, preparation_state=ready, preparation_ref .pdca/rc5/items/T245/preparation.md@r1, N=3 r=1 n=1/3, status_path .pdca/status/T245-warm-set-ops-3.md) — barrier-ready, no runtime status, no baseline, no DO | `.pdca/rc5/items/T245/preparation.md` (immutable charter r1); queue row `T245` of this file; `.pdca/T245/rv3/` (directory only)
+2026-10-30T07:00:53Z | P | revision r=1 | attempt n=0 | Notice (autonomous) for the final report: item `T245` PLAN set `N=3`/`r=1` and a new status path `.pdca/status/T245-warm-set-ops-3.md` instead of the queue's `N=1`/`r=2`, because both existing `T245` records are closed terminal cycles (`.pdca/status/T245-warm-set-ops-1.md` at `N=1 r=2 n=1/3`, `.pdca/status/T245-warm-set-ops-2.md` at `N=2 r=1 n=1/3`) and reusing or overwriting either would erase terminal history; no counter or plan revision of the collection itself changed, no attempt consumed, no defect entry | `.pdca/rc5/items/T245/preparation.md` §0; `.pdca/status/T245-warm-set-ops-1.md`, `.pdca/status/T245-warm-set-ops-2.md` (records read as identity evidence, untouched)
+2026-10-30T07:03:32Z | P | revision r=1 | attempt n=0 | T246 PLAN persisted: form=cycle, overlay=coder+.NET, plan_state=ready, status=pending, identity N=2 r=1 n=1/3, status_path .pdca/status/T246-raw-datareader-2.md, criteria C1..C4, evidence_root .pdca/T246/rv6/ (directories only); queue row T246 updated (execution_kind=cycle, selected_variant=coder+.NET, plan_state=ready, cycle_id=N=2, status_path, plan_revision=r=1); no criterion, attempt or defect entry changed; PLAN→DO boundary reached, no DO started | .pdca/status/T246-raw-datareader-2.md (§Current state, §PLAN record r1); queue row T246 of this file; .pdca/T246/rv6/attempts/
+2026-10-30T07:03:32Z | P | revision r=1 | attempt n=0 | Notice (autonomous) for the final report: the queue's T246 identity N=1, r=2 was superseded by the item PLAN's N=2, r=1 — .pdca/status/T246-raw-datareader-1.md is a closed record at N=1 r=5 n=1/3 (terminal incomplete), so r=2 would collide with existing revision history and a changed measurement/acceptance basis opens a new cycle; the N=1 r=6 in-place alternative was not used; plan_cap lowered from 4 to 3 after one planner call failed in transport (timeout, no state written) and was retried on the same PLAN — no counter, attempt or defect entry of the collection changed | .pdca/status/T246-raw-datareader-2.md §1 (identity), §Revision history; .pdca/status/T246-raw-datareader-1.md (read-only)
+2026-10-30T07:05:59Z | P | revision r=1 | attempt n=0 | T247 PLAN persisted: form=cycle, overlay=coder+.NET, plan_state=ready, status=pending, identity N=1 r=2 n=1/3, status_path .pdca/status/T247-json-streaming-1.md, criteria AC-247-01..06, evidence_root .pdca/T247/rv3/ (directories only); queue row T247 updated (execution_kind=cycle, selected_variant=coder+.NET, plan_state=ready, plan_revision=r=2); r=1 superseded by a genuine contract revision (two-tier acceptance + explicit scope boundary against T311/T250), DO never ran so n stays 1/3; no collection counter, attempt or defect entry changed; PLAN→DO boundary reached, no DO started | .pdca/status/T247-json-streaming-1.md (§Current state, §PLAN record r2, §Revision history); queue row T247 of this file; .pdca/T247/rv3/attempts/
+2026-10-30T07:08:29Z | P | revision r=1 | attempt n=0 | T250 PLAN persisted: form=cycle, overlay=coder+.NET, plan_state=ready, status=pending, identity N=1 r=1 n=1/3 (resumption of the saved r=1 plan at the PLAN→DO boundary, not a revision), status_path .pdca/status/T250-csv-terminal-plan-cache-1.md, criteria AC-250-1..4, evidence_root .pdca/T250/rv1/ (directories only); queue row T250 updated (execution_kind=cycle, selected_variant=coder+.NET, plan_state=ready, plan_revision=r=1, cycle_id cell normalized from 'N=1, r=2' to 'N=1'); no collection counter, attempt or defect entry changed; PLAN→DO boundary reached, no DO started | .pdca/status/T250-csv-terminal-plan-cache-1.md (§Current state, §PLAN record rc5-r1, §Revision history); queue row T250 of this file; .pdca/T250/rv1/attempts/
+2026-10-30T07:08:29Z | P | revision r=1 | attempt n=0 | Notice (autonomous) for the final report: the collection queue's plan revision for item T250 was corrected r=2 → r=1 — the item PLAN re-entered T250 as a resumption of its saved r=1 plan at the PLAN→DO boundary (DO never ran, defect history empty, brief and criteria unchanged, the stop at T246 was external; re-anchoring rc3 0d4b0cf6 → rc5 1e31331d is a Notice with no semantic drift), so a revision bump was forbidden and the re-open rule's r+1 does not apply to an unexecuted plan; the cycle_id cell dropped its stale ', r=2' suffix to match the identity; no criterion, attempt, collection counter or defect entry changed | .pdca/status/T250-csv-terminal-plan-cache-1.md §PLAN record rc5-r1, §Revision history
+2026-10-30T07:15:16Z | P | revision r=1 | attempt n=0 | T311 PLAN persisted: form=cycle, overlay=coder+.NET, plan_state=ready, status=pending, identity N=1 r=2 n=1, status_path .pdca/status/T311-json-streaming-1.md, criteria C311-01..05, evidence_root .pdca/T311/rv2/ (directories only); queue row T311 updated (execution_kind=cycle, selected_variant=coder+.NET, plan_state=ready, plan_revision=r=2); r=1 superseded by a genuine contract revision (2026-10-20 two-tier acceptance policy adopted verbatim + explicit sibling boundaries T247/T250 + retired E311/R311 scaffolding), DO never ran so n stays 1; no collection counter, attempt or defect entry changed; PLAN→DO boundary reached, no DO started | `.pdca/status/T311-json-streaming-1.md` (§Current state, §PLAN record r2, §Revision history); queue row `T311` of this file; `.pdca/T311/rv2/attempts/`
+2026-10-30T07:15:16Z | P | revision r=1 | attempt n=0 | Notice (autonomous) for the final report: the collection-wide evidence-root supersession of 2026-10-30T06:45:06Z was motivated by the item-id collision with foreign rc4 artifacts under `.pdca/T352/rv1/` and `.pdca/T353/rv1/`; for `T311` no such collision exists (`.pdca/T311` did not exist before this write), so the item PLAN's contract evidence root `.pdca/T311/rv2/` is used as-is and no foreign artifact can be read through it; this follows the same root convention already recorded for T246 (`rv6`), T247 (`rv3`) and T250 (`rv1`); no criterion, plan revision, attempt, collection counter or defect entry changed | `.pdca/status/T311-json-streaming-1.md` §Current state (evidence root); this file's progress-log row of 2026-10-30T06:45:06Z (read-only)
+2026-10-30T07:18:02Z | P | revision r=1 | attempt n=0 | T267 PLAN persisted: form=cycle, overlay=coder+.NET, plan_state=ready, status=pending, identity N=1 r=1 n=1, status_path .pdca/status/T267-rc5-1.md, criteria AC1..AC3, evidence_root .pdca/rc5/items/T267/rv1/ (attempts/ directory only, collection-scoped, no .pdca/T267 root); queue row T267 updated (execution_kind=cycle, selected_variant=coder+.NET, plan_state=ready, plan_revision=r=1); no criterion, collection counter, attempt or defect entry changed; PLAN→DO boundary reached, no DO started | `.pdca/status/T267-rc5-1.md` (§Current state, §PLAN record r1, §Revision history); queue row `T267` of this file; `.pdca/rc5/items/T267/rv1/attempts/`
+2026-10-30T07:18:02Z | P | revision r=1 | attempt n=0 | Notice (autonomous) for the final report: the T267 planner's verbatim quote of the issue benchmark table inside its returned plan was delivered with a mangled third row (`| Linq2Db_DelayPercentilesByModel | 45.04 ms | **5.52 KB` -> **5.67×** |`); it is recorded exactly as returned and not repaired, the authoritative brief stays this file's §Input → `### #267`, and the fidelity note lives in the item record's §Current state + §Progress log, not inside the verbatim block; no criterion, plan revision, collection counter, attempt or defect entry changed | `.pdca/status/T267-rc5-1.md` §Current state (fidelity note), §Progress log; this file's progress-log row of 2026-10-30T07:18:02Z
+2026-10-30T07:19:17Z | P | revision r=1 | attempt n=0 | T268 PLAN persisted: form=cycle, overlay=coder+.NET, plan_state=ready, status=pending, identity N=1 r=1 n=1, status_path .pdca/status/T268-rc5-1.md, criteria AC1..AC3, evidence_root .pdca/rc5/items/T268/rv1/ (attempts/ directory only, collection-scoped, no .pdca/T268 root); queue row T268 updated (execution_kind=cycle, selected_variant=coder+.NET, plan_state=ready, plan_revision=r=1); no criterion, collection counter, attempt or defect entry changed; PLAN→DO boundary reached, no DO started | `.pdca/status/T268-rc5-1.md` (§Current state, §PLAN record r1, §Revision history); queue row `T268` of this file; `.pdca/rc5/items/T268/rv1/attempts/`
+2026-10-30T07:23:23Z | P | revision r=1 | attempt n=0 | T269 PLAN persisted: form=cycle, overlay=coder+.NET, plan_state=ready, status=pending, identity N=1 r=1 n=1, status_path .pdca/status/T269-rc5-1.md, criteria AC1..AC3, evidence_root .pdca/rc5/items/T269/rv1/ (attempts/ directory only, collection-scoped, superseding the plan text's .pdca/T269/rv1/ binding root - the item id is reused from an earlier collection); queue row T269 updated (execution_kind=cycle, selected_variant=coder+.NET, plan_state=ready, plan_revision=r=1); no criterion, collection counter, attempt or defect entry changed; PLAN→DO boundary reached, no DO started | `.pdca/status/T269-rc5-1.md` (§Current state, §PLAN record r1, §Revision history); queue row `T269` of this file; `.pdca/rc5/items/T269/rv1/attempts/`
+2026-10-30T07:24:34Z | P | revision r=1 | attempt n=0 | T270 PLAN persisted: form=cycle, overlay=coder+.NET, plan_state=ready, status=pending, identity N=1 r=1 n=1, status_path .pdca/status/T270-rc5-1.md, criteria AC1..AC3, evidence_root .pdca/rc5/items/T270/rv1/ (attempts/ directory only, collection-scoped); queue row T270 updated (execution_kind=cycle, selected_variant=coder+.NET, plan_state=ready, plan_revision=r=1); no criterion, collection counter, attempt or defect entry changed; PLAN→DO boundary reached, no DO started | `.pdca/status/T270-rc5-1.md` (§Current state, §PLAN record r1, §Revision history); queue row `T270` of this file; `.pdca/rc5/items/T270/rv1/attempts/`
+2026-10-30T07:25:02Z | P | revision r=1 | attempt n=0 | T271 PLAN persisted: form=cycle, overlay=coder+.NET, plan_state=ready, status=pending, identity N=1 r=1 n=1, status_path .pdca/status/T271-rc5-1.md, criteria AC1..AC3, evidence_root .pdca/rc5/items/T271/rv1/ (attempts/ directory only, collection-scoped); queue row T271 updated (execution_kind=cycle, selected_variant=coder+.NET, plan_state=ready, plan_revision=r=1); no criterion, collection counter, attempt or defect entry changed; PLAN→DO boundary reached, no DO started | `.pdca/status/T271-rc5-1.md` (§Current state, §PLAN record r1, §Revision history); queue row `T271` of this file; `.pdca/rc5/items/T271/rv1/attempts/`
+2026-10-30T07:28:02Z | P | revision r=1 | attempt n=0 | T272 PLAN persisted: form=cycle, overlay=coder+.NET, plan_state=ready, status=pending, identity N=1 r=1 n=1, status_path .pdca/status/T272-rc5-1.md, criteria AC1..AC3, evidence_root .pdca/rc5/items/T272/rv1/ (attempts/ directory only, collection-scoped); queue row T272 updated (execution_kind=cycle, selected_variant=coder+.NET, plan_state=ready, plan_revision=r=1); no criterion, collection counter, attempt or defect entry changed; PLAN→DO boundary reached, no DO started | `.pdca/status/T272-rc5-1.md` (§Current state, §PLAN record r1, §Revision history); queue row `T272` of this file; `.pdca/rc5/items/T272/rv1/attempts/`
+2026-10-30T07:28:43Z | P | revision r=1 | attempt n=0 | T273 PLAN persisted: form=cycle, overlay=coder+.NET, plan_state=ready, status=pending, identity N=1 r=1 n=1, status_path .pdca/status/T273-rc5-1.md, criteria AC1..AC3, evidence_root .pdca/rc5/items/T273/rv1/ (attempts/ directory only, collection-scoped, superseding the plan text's `.pdca/T273/rv1/` binding root - the item id is reused from an earlier collection); queue row T273 updated (execution_kind=cycle, selected_variant=coder+.NET, plan_state=ready, plan_revision=r=1); no criterion, collection counter, attempt or defect entry changed; PLAN→DO boundary reached, no DO started | `.pdca/status/T273-rc5-1.md` (§Current state, §PLAN record r1, §Revision history); queue row `T273` of this file; `.pdca/rc5/items/T273/rv1/attempts/`
+2026-10-30T07:29:14Z | P | revision r=1 | attempt n=0 | T274 PLAN persisted: form=cycle, overlay=coder+.NET, plan_state=ready, status=pending, identity N=1 r=1 n=1, status_path .pdca/status/T274-rc5-1.md, criteria AC1..AC3, evidence_root .pdca/rc5/items/T274/rv1/ (attempts/ directory only, collection-scoped, superseding the plan text's `.pdca/T274/rv1/` binding root - the item id is reused from an earlier collection); queue row T274 updated (execution_kind=cycle, selected_variant=coder+.NET, plan_state=ready, plan_revision=r=1); no criterion, collection counter, attempt or defect entry changed; PLAN→DO boundary reached, no DO started | `.pdca/status/T274-rc5-1.md` (§Current state, §PLAN record r1, §Revision history); queue row `T274` of this file; `.pdca/rc5/items/T274/rv1/attempts/`
+2026-10-30T07:35:22Z | P | revision r=1 | attempt n=0 | T302 PLAN-terminal resolution recorded: terminal=infeasible, attempts=0, plan_state=— (never ready), no DO, no CHECK — cause verbatim-short: original task is infeasible under the stated constraints, because the item's own body gates the product work behind two explicit USER acts (approval of an implementation plan that does not exist yet, then a separate authorization of the implementation) and autonomous mode can obtain neither, nor narrow the requested result to the plan alone; cycle N=1 r=1 n=0 unspent; the r1 plan draft is kept in the record for the next authorized run; issue #302 stays OPEN in milestone 1.0.9-rc5; queue row T302 = status=incomplete, cycle_id=N=1, plan_revision=r=1 | `.pdca/status/T302-rc5-1.md` (§Current state, §PLAN record r1, §ACT record); queue row `T302` of this file
+2026-10-30T07:35:22Z | P | revision r=1 | attempt n=0 | Notice (autonomous) for the final report: item `T302` closed at the PLAN→ACT boundary as `infeasible` with `attempts=0` — no user approval of the implementation plan and no separate user authorization of the product implementation are obtainable in autonomous mode, so no DO was entered and no independent CHECK ran (recorded as absent, never as a pass); the item is `incomplete`, not `done`, and nothing in this resolution is credit toward the collection goal; a normal-mode, user-present session must approve the recorded plan draft before a new cycle N=2 may open | `.pdca/status/T302-rc5-1.md` §ACT record, §CHECK record; this file §Done / Verified / Incomplete
+2026-10-30T07:35:22Z | P | revision r=1 | attempt n=0 | T319 campaign preparation persisted: form=incremental (campaign), preparation_state=ready, preparation_ref .pdca/rc5/items/T319/preparation.md@r1, identity N=1 r=1 n=0/3, status_path .pdca/status/T319-rc5-1.md, criteria AC1..AC4 verbatim, depends_on T317+T318 (hard execution prerequisite), first step = post-prerequisite baseline measurement with a pre-set STOP at the Step 1 boundary — barrier-ready but prerequisite-blocked: no campaign runtime status created, no baseline measured, no DO, no product change | `.pdca/rc5/items/T319/preparation.md` (immutable charter r1, sha256 `fe74e5b39674acb3ac8ca0aad176c7b5868164d8727aa858a4d5c64023ab5260`); queue row `T319` of this file
+2026-10-30T07:35:22Z | P | revision r=1 | attempt n=0 | Notice (autonomous) for the final report: item `T319` is prepared as a `campaign` although the issue says «Candidate, not scheduled. Do not start before» `#317`/`#318` land — the bar is on execution, not on preparing, so it is represented as a hard `depends_on: T317, T318` plus a Step 1 that measures the post-prerequisite gap first and stops the campaign there if the gap is already closed; the campaign must not start until both prerequisites are accepted or explicitly resolved, and the queue row stays `plan_state=—`, `status=pending` | `.pdca/rc5/items/T319/preparation.md` §0, §7, §12; queue row `T319` of this file
+2026-10-30T07:39:11Z | P | revision r=1 | attempt n=0 | ALL-barrier passed; schedule persisted (G1, cap=1, order T353 → T352 → T318 → T317 → T319 → T245 → T250 → T246 → T247 → T311 → T268 → T269 → T267 → T270 → T271 → T272 → T273 → T274); lane allocated: collection/rc5/group-1 in the current worktree; T302 terminal (no lane); next: T353 DO | §Groups, §Integration branch, §Decisions log of this file; `git rev-parse HEAD` 1e31331d (branch collection/rc5/group-1)
