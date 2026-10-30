@@ -211,7 +211,8 @@ entry point. MySQL's dialect does not report them, so a MySQL query using one of
 | `json_equals(json1, json2)` | `json_equals(...)` | `1` when the JSON documents are equal (object key order does not matter), `0` when they differ, `null` for SQL NULL; MariaDB 11.4 baseline, MySQL rejects it |
 | `json_normalize(json)` | `json_normalize(...)` | canonical JSON text (sorted object keys, no unnecessary whitespace, idempotent), `null` for SQL NULL; MariaDB 11.4 baseline, MySQL rejects it |
 
-These three Oracle-compatible conversions (`months_between`, `to_date`, `to_number`) are **version-gated**:
+These three Oracle-compatible conversions (`months_between`, `to_date`, `to_number`) and the xxHash pair
+(`xxh3`, `xxh32`; MariaDB 13.1+) are **version-gated**:
 MariaDB has none of them on 11.4, so `MariaDbDialect` emits each one only when the context was built with an
 explicit server version at or above its minimum. An **unversioned** MariaDB context (the default two-argument
 constructor) refuses the call with `NotSupportedException` during preparation instead of emitting SQL the

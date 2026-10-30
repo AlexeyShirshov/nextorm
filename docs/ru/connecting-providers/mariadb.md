@@ -155,7 +155,7 @@ MariaDB отличается от [MySQL](mysql.md) возможностью о�
 | Медиана (аналитическая) | `SqlFunctions.MySql.median(v).Over(...)` → `percentile_cont(0.5) within group (order by v) over (...)`: одна строка на входную строку; окно только с `partition by` (оконный `ORDER BY`/рамка отклоняются) |
 | Общий квантиль | не поддерживается: `SqlFunctions.MySql.percentile(fraction, v)` бросает `NotSupportedException("The percentile function is not supported by MariaDB.")` |
 | Дробь квантиля | `double` в `[0, 1]` (не проценты), проверяется до рендеринга; значение вне диапазона или не конечное число бросает `ArgumentOutOfRangeException` |
-| Нативные функции | поверхность `SqlFunctions.MySql`, унаследованная от MySQL, **минус** `uuid_to_bin`/`bin_to_uuid`, **плюс** имена MariaDB (расширенный regexp, `nvl`/`nvl2`, `add_months`/`months_between`, `to_char`/`to_date`/`to_number`, `kdf`, `xxh3`/`xxh32`, `json_detailed`/`json_compact`, доступ к последовательностям) |
+| Нативные функции | поверхность `SqlFunctions.MySql`, унаследованная от MySQL, **минус** `uuid_to_bin`/`bin_to_uuid`, **плюс** имена MariaDB (расширенный regexp, `nvl`/`nvl2`, `add_months`/`months_between`, `to_char`/`to_date`/`to_number`, `kdf`, `xxh3`/`xxh32`, `json_detailed`/`json_compact`, доступ к последовательностям). `months_between`/`to_date`/`to_number` (12.2.1 / 12.3 / 12.2.1) и `xxh3`/`xxh32` (13.1) зависят от версии: контекст без версии или сервер ниже минимума отклоняет их с `NotSupportedException` до эмиссии SQL |
 | Потоковое чтение LOB (`ToStream`/`ToTextReader`) | `NotSupportedException` |
 
 ## См. также
