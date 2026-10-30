@@ -456,7 +456,7 @@ References:
 - cycle: `N=1` · revision: `r=2` · attempt: `n=2/3`
 - scope: the whole item goal of issue `#247` — the fixed-cost and streaming-pipeline architecture of `WriteJson`/`WriteJsonAsync`: bounded thread-safe `JsonShapePlan` + compiled `JsonRowWriter` cache, document-mode prepared-descriptor reuse (`storeInCache: false`, never mutating the caller's command or sticky `QueryCommand.Cache`), array-mode flush batching (NDJSON per-record flushing preserved), `JsonStreamWriter`/`Utf8JsonWriter` setup reduction, the 1k/10k/100k phase-attribution benchmark plus the `ToList_Dto + JsonSerializer.Serialize` control arm, unit/correctness coverage, and paired same-session performance evaluation closing on the 2026-10-20 two-tier policy (`AC-247-01..06`) on snapshot `1e31331d`, branch `1.0.9-rc5` · status path: `.pdca/status/T247-json-streaming-1.md`
 - goal: the #247 JSON streaming pipeline stops paying rebuild-per-call and per-row flush cost, closing the task either on the global target (`10k rows ≤ 1.00×` linq2db time and `≤ 1.20×` linq2db allocations; 1k fixed-cost gap materially reduced; 100k non-regressing) or on a measured same-round one-axis local win with no regression on the other axis (residual gap recorded), while JSON output bytes, array/NDJSON/root/IgnoreNull semantics, cancellation and partial-output/error policy stay intact — the §PLAN record `r2` and §Original task are authoritative
-- phase: `CHECK` · record: `blocked` · outcome: `incomplete` (DO attempt n=2/3: all three mechanisms exhausted — M1 cache already present, M2 prepared-descriptor reuse not safely implementable, M3 setup reduction no safe lever; build 0W/0E, core JSON 188/188, sqlite JSON 135/135, integration 7733/0; no candidate; residual to ACT)
+- phase: `ACT` · record: `completed` · outcome: `incomplete` (DO → ACT, no candidate produced, no CHECK ran: attempt 1 (flush batching) broke AC-247-03 partial-output policy and was reverted; attempt 2 exhausted all three mechanisms — M1 TerminalPlanCache + JsonRowWriterCache adapter already present (c9aa8690), M2 document-mode prepared-descriptor reuse not safely implementable, M3 JsonStreamWriter/Utf8JsonWriter setup reduction no safe lever without touching AC-247-03 flush semantics; candidate == baseline at 1k/10k/100k; no axis moved; no Tier A or Tier B credit; derived allocation bar ΔAlloc ≤ 0 B with a time move beyond the pre-registered noise band from attempts/attempt2/decomposition.md; evidence .pdca/T247/rv3/)
 - source: issue `#247` (`AlexeyShirshov/nextorm`), milestone `1.0.9-rc5`; re-opened by collection `rc5` (new revision `r+1` in this existing rc4 record, `AC-COL-04`) · context refs: `.pdca/status/collection-rc5.md` §`## Input` → `### #247 — Perf: JSON streaming is slower than linq2db at 10k rows` (authoritative task text), `docs/specs/status/D247-json-streaming-2.md` (earlier terminal attempt, carried by reference, read-only), baseline `1e31331d`
 - criteria: `AC-247-01`, `AC-247-02`, `AC-247-03`, `AC-247-04`, `AC-247-05`, `AC-247-06` — exact text in §PLAN record `r2` §4, not retyped here; measurement method in §PLAN record `r2` §5 (same-session paired/ABBA against baseline `1e31331d`, exact `MemoryDiagnoser` bytes, pre-registered time noise band, no historical-number substitution) · evidence root: `.pdca/T247/rv3/` (contract revision `rv3`), DO attempts under `.pdca/T247/rv3/attempts/`; `.pdca/T247/rv2/` belongs to the earlier attempt and is read-only
 - supersession note (executor, append-only): the earlier plan block `## Plan (r=1)` above is **superseded by `r=2`** and is kept byte-identical as history. Reason: a genuine contract revision — the 2026-10-20 two-tier acceptance policy (global target vs local one-axis acceptance) replaces the retired single-tier `R247-01..20` row set, and an explicit scope boundary is drawn against `T311` (10k per-row throughput lever, same-session paired acceptance baseline harness, noise-robust ratio oracle) and `T250` (CSV terminal plan cache). The `r=1` dependency gate on the `T311` handoff is removed: `T247` neither depends on `T311` to start or close under the local-acceptance policy, and does not re-litigate `T247`'s thresholds.
@@ -639,11 +639,32 @@ In-force auto-commit policy (verbatim, repo `AGENTS.md` §Git): "a `pdca-collect
 
 ## CHECK record
 
-`not run: no DO candidate yet` — no independent CHECK has been dispatched for this item; nothing frozen in advance.
+`not run: no DO candidate existed for this revision` — no independent CHECK was dispatched and no candidate was produced; CHECK is recorded as absent, never as a pass. No verdict, no per-criterion matrix, no findings. The two DO attempts are recorded under §DO result and in the progress log; neither produced a candidate that could be checked.
 
 ## ACT record
 
-`pending` — not reached; this cycle is not closed.
+`incomplete` — DO → ACT, no candidate produced, no CHECK ran, no PASS, no `done`, no credit.
+
+Outcome: `incomplete` (terminal, no accepted scope). `N=1`, `r=2`, `n=2/3`; attempts exhausted (2 of 3 consumed; the third was not opened because no permitted continuation remained — all three planned mechanisms non-moving).
+
+Both attempts, with their commits:
+- attempt 1 (`42dc4a59`, status only): array-mode flush batching broke the partial-output/error-policy tests (AC-247-03) — altered the completed-row prefix / Flush=0 contract; reverted; no candidate; no axis moved.
+- attempt 2 (`d1aebc3e`, status only, zero product change): all three planned mechanisms exhausted without moving an axis:
+  - M1 bounded shape-plan/row-writer cache — **already exists** in code (`TerminalPlanCache` + `JsonRowWriterCache` adapter, from the earlier #180 work, commit `c9aa8690`); reused, not rebuilt. No new lever.
+  - M2 document-mode prepared-descriptor reuse — judged **not safely implementable**: no pre-preparation key, temp-table/parameter correctness risk; not attempted.
+  - M3 `JsonStreamWriter`/`Utf8JsonWriter` setup reduction — **no safe lever** without touching the AC-247-03 flush semantics or risking correctness; not attempted.
+
+Candidate == baseline (no axis moved): `WriteJson_Array_Dto` 1 k **611.2 µs / 51.45 KB** (ratio 1.000), 10 k **7 870.3 µs / 403.1 KB** (1.000), 100 k **79 049.0 µs / 3 919.49 KB** (1.000). Neither Tier A nor Tier B is met (no time move beyond the pre-registered noise band, no allocation decrease).
+
+Derived allocation bar (from the cold-vs-warm decomposition, per the #250 forward obligation — never a copied `≥8 KB/column` figure): `ΔAlloc ≤ 0 B` on `WriteJson_Array_Dto`, with a time move beyond the pre-registered noise band. Decomposition: `.pdca/T247/rv3/attempts/attempt2/decomposition.md`.
+
+Residual to the global target: `1.000×` time / `1.000×` alloc vs baseline ⇒ the 10 k `≤1.00×` linq2db ratio remains **unmeasured in this item** — no paired same-session linq2db arm was run here, so the global ratio is neither met nor refuted by this item; the residual gap to `≤ 1.00×` is not quantified in this cycle.
+
+Gates recorded at the current identity: build `0 W / 0 E`; core JSON **188/188**; sqlite JSON **135/135**; fail-closed integration **7 733 passed / 0 failed / 201 skipped**; `status_lint` rc 0. Evidence root `.pdca/T247/rv3/` (`attempts/attempt1/`, `attempts/attempt2/`, `decomposition.md`).
+
+"Must never claim" list (no win, no Tier A/B credit, no verified ratio, no closure): no local-acceptance win on either axis; no Tier A or Tier B credit; no verified `≤1.00×` linq2db ratio at 10 k; no closure of issue #247; no `done`. The three mechanisms are recorded as non-moving, not as implemented. Issue #247 stays OPEN.
+
+Handoff (next authorized action): a new authorized PLAN under §State machine and counters is required to reopen this item; this cycle is closed as `incomplete` and is not reopened automatically. The residual per-row `IDataRecord.GetString` allocation and any future lever belong to a separate `P:` task (issue #311 owns the 10 k per-row throughput lever).
 
 ## Revision history
 
@@ -651,15 +672,18 @@ In-force auto-commit policy (verbatim, repo `AGENTS.md` §Git): "a `pdca-collect
 
 ## Defect history
 
-`none` for this cycle — no DO attempt has run here, so no stable defect key is observed and no fix count is claimed. Carried by reference, never re-litigated: the earlier attempt's terminal arms in `docs/specs/status/D247-json-streaming-2.md:557` (10k time ratio `1.04546 / 0.91917` vs the strict single-tier `0.81079`; `0/7` acceptance cases captured) — contextual evidence for the `r=2` reformulation, not a defect row of this record.
+Finalized for this cycle (DO → ACT, incomplete, no candidate). No stable defect key produced a fix that survived; both attempts are recorded as unaccepted:
+- `T247-D1` | observed revisions/attempts: r=2 / n=1 (attempt 1); fixes applied: 0 (reverted) | evidence: `.pdca/T247/rv3/attempts/attempt1/`, commit `42dc4a59` | last recurrence/escalation: attempt 1 reverted — array-mode flush batching broke AC-247-03 (partial-output/error policy: completed-row prefix + Flush=0); no candidate.
+- `T247-D2` | observed revisions/attempts: r=2 / n=2 (attempt 2); fixes applied: 0 | evidence: `.pdca/T247/rv3/attempts/attempt2/`, commit `d1aebc3e`, decomposition `.pdca/T247/rv3/attempts/attempt2/decomposition.md` | last recurrence/escalation: all three mechanisms non-moving (M1 cache already present c9aa8690; M2 not safely implementable; M3 no safe lever without touching AC-247-03); candidate == baseline; no axis moved; no Tier A/B credit.
+Carried by reference, never re-litigated: the earlier attempt's terminal arms in `docs/specs/status/D247-json-streaming-2.md:557` (10k time ratio `1.04546 / 0.91917` vs the strict single-tier `0.81079`; `0/7` acceptance cases captured) — contextual evidence for the `r=2` reformulation, not a defect row of this record.
 
 ## Changed files
 
-Task-owned records only: `.pdca/status/T247-json-streaming-1.md` (this file, attempt n=2/3 recorded); `.pdca/T247/rv3/attempts/attempt2/decomposition.md`, `.pdca/T247/rv3/attempts/attempt2/baseline.md`. No product, test or benchmark file changed.
+Task-owned records only: `.pdca/status/T247-json-streaming-1.md` (this file, ACT finalization — phase `ACT`, `incomplete`, no candidate, no CHECK); `.pdca/T247/rv3/attempts/attempt1/`, `.pdca/T247/rv3/attempts/attempt2/` (including `decomposition.md`, `baseline.md`) — local evidence, gitignored. `.pdca/status/collection-rc5.md` (queue row T247 + §Done/Verified/Incomplete + progress log) updated in the same commit. No product, test or benchmark file changed.
 
 ## Git state
 
-`status path: .pdca/status/T247-json-streaming-1.md — modified this cycle · tracked (durable on disk, not committed)` — inspected against baseline `1e31331d` (branch `1.0.9-rc5`): tracked, clean before this write. Evidence under `.pdca/T247/rv3/attempts/attempt2/` untracked. No product change. Work outside this item's delta untouched.
+`status path: .pdca/status/T247-json-streaming-1.md — modified this cycle (ACT finalization) · tracked (durable on disk, pending commit)` — branch `1.0.9-rc5`, baseline `1e31331d`. Evidence under `.pdca/T247/rv3/attempts/` untracked/local. No product, test or benchmark file changed. Work outside this item's delta untouched and unclaimed. Commit authorized for this status file plus `.pdca/status/collection-rc5.md` only (explicit paths, no `-A`), subject `#247 T247 ACT: incomplete — no candidate, all three planned mechanisms non-moving; derived allocation bar from cold-vs-warm decomposition; no credit; evidence .pdca/T247/rv3/`. No push.
 
 ## Progress log
 
@@ -669,3 +693,4 @@ Task-owned records only: `.pdca/status/T247-json-streaming-1.md` (this file, att
 2026-10-31T04:25:00Z | DO | attempt n=1 | blocked | no safe implementation lever; flush batching reverted (partial-output AC); build 0W/0E, core JSON 188/188; no candidate; residual to ACT | `.pdca/status/T247-json-streaming-1.md` §DO result
 
 2026-10-31T05:30:00Z | DO | attempt n=2/3 | blocked | all three mechanisms exhausted (M1 cache already present, M2 not safely implementable, M3 no safe lever); build 0W/0E; core JSON 188/188; sqlite JSON 135/135; integration 7733 passed/0 failed; baseline 1k 611.2us/51.45KB 10k 7870.3us/403.1KB 100k 79049us/3919.49KB; no candidate; residual to ACT | `.pdca/status/T247-json-streaming-1.md` §DO result; `.pdca/T247/rv3/attempts/attempt2/
+2026-10-31T06:00:00Z | ACT | revision r=2 | attempt n=2/3 | incomplete (DO -> ACT, no candidate, no CHECK): attempt 1 (42dc4a59) flush batching reverted (AC-247-03); attempt 2 (d1aebc3e) all three mechanisms non-moving (M1 cache already present c9aa8690, M2 not safely implementable, M3 no safe lever); candidate == baseline 1k 611.2us/51.45KB 10k 7870.3us/403.1KB 100k 79049.0us/3919.49KB; no Tier A/B credit; derived bar DeltaAlloc <= 0 B with time move beyond noise band (attempts/attempt2/decomposition.md); gates build 0W/0E, core JSON 188/188, sqlite JSON 135/135, integration 7733/0/201; issue #247 stays OPEN | `.pdca/status/T247-json-streaming-1.md` section ACT record; `.pdca/T247/rv3/`
