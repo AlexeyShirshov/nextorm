@@ -264,6 +264,25 @@ internal static class T245ExecDecompositionProbe
                 }
             }));
 
+            // E12/E13 are floor measurements for the E10 - E11 remainder (step-2 n=3/3 investigation):
+            // they allocate no product data, only the return-value machinery an async
+            // Task<List<TResult>> terminal must produce. Measurement-only.
+            var prebuilt = new List<int>(hint);
+            for (var i = 0; i < hint; i++) prebuilt.Add(i);
+
+            rows.Add(Measure("E12_taskresult_prebuilt", operation, async () =>
+            {
+                var task = Task.FromResult(prebuilt);
+                var list = await task.ConfigureAwait(false);
+                _sink += list.Count;
+            }));
+
+            rows.Add(Measure("E13_async_generic_id", operation, async () =>
+            {
+                var list = await IdAsync(prebuilt).ConfigureAwait(false);
+                _sink += list.Count;
+            }));
+
             recipe[operation] = new RecipeProbe
             {
                 RowCount = hint,
@@ -375,6 +394,12 @@ internal static class T245ExecDecompositionProbe
             ThreadMean = perQuery.Average(),
             ProcessMedian = Median(perQueryProcess),
         };
+    }
+
+    private static async Task<List<int>> IdAsync(List<int> value)
+    {
+        await Task.CompletedTask.ConfigureAwait(false);
+        return value;
     }
 
     private static double Median(double[] sorted)
