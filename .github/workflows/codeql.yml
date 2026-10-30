@@ -1,0 +1,104 @@
+name: CodeQL
+
+# Advanced setup for code scanning.
+#
+# Replaces the repository's CodeQL *default* setup (Settings → Code security → Code scanning →
+# CodeQL analysis → Switch to advanced), which extracted the whole tree in buildless mode and died of
+# disk exhaustion on the hosted runner:
+#   "Severe disk cache trouble (corruption or out of space) ... Failed to write item to disk"
+#   "System.IO.IOException: No space left on device"
+# See runs 40922948818 (main) and 40922605464 (PR #354).
+#
+# The scoping is the point:
+#   * C# is extracted from a *manual build of the library projects only* (`src/**`). Building the test,
+#     benchmark and example projects added gigabytes of packages and assemblies to the database for
+#     code that is not shipped.
+#   * `tests/`, `benchmarks/`, `examples/`, `docs/`, `artifacts/` and `.pdca/` are excluded from the
+#     analysis itself (`.github/codeql/codeql-config.yml`).
+#   * Preinstalled toolchains the build never touches (Android SDK, GHC, Swift, Edge) are removed first,
+#     so the runner starts with several more gigabytes of free space.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly, matching the cadence of the default setup this replaces.
+    - cron: '23 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+  packages: read
+  actions: read
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: csharp
+            build-mode: manual
+          - language: actions
+            build-mode: none
+          - language: python
+            build-mode: none
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Free disk space
+        run: |
+          set -euo pipefail
+          df -h /
+          sudo rm -rf \
+            /usr/local/lib/android \
+            /opt/ghc \
+            /usr/local/.ghcup \
+            /usr/share/swift \
+            /opt/microsoft/msedge
+          df -h /
+
+      - name: Setup .NET
+        if: matrix.language == 'csharp'
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore local tools
+        if: matrix.language == 'csharp'
+        run: dotnet tool restore
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          config-file: ./.github/codeql/codeql-config.yml
+
+      - name: Build the library projects
+        if: matrix.language == 'csharp'
+        run: |
+          set -euo pipefail
+          for project in src/*/*.csproj; do
+            echo "::group::dotnet build ${project}"
+            dotnet build "${project}" -c Release --nologo
+            echo "::endgroup::"
+          done
+          df -h /
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:${{ matrix.language }}"
