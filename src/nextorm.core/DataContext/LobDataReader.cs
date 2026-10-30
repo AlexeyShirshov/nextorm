@@ -21,7 +21,6 @@ namespace NextORM.Core;
 internal sealed class LobDataReader : DbDataReader
 {
     private readonly DbDataReader _inner;
-    private readonly int _fieldCount;
     private readonly CancellationToken _cancellationToken;
     private CommandReaderOwner? _owner;
     private bool _disposed;
@@ -29,7 +28,6 @@ internal sealed class LobDataReader : DbDataReader
     internal LobDataReader(CommandReaderOwner owner, CancellationToken cancellationToken)
     {
         _inner = owner.Reader;
-        _fieldCount = owner.Reader.FieldCount;
         _cancellationToken = cancellationToken;
         _owner = owner;
     }
@@ -41,7 +39,7 @@ internal sealed class LobDataReader : DbDataReader
         get
         {
             ThrowIfDisposed();
-            return _fieldCount;
+            return _inner.FieldCount;
         }
     }
 

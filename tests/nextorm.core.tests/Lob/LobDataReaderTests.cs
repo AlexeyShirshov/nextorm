@@ -267,6 +267,65 @@ public class LobDataReaderTests
         return (new LobDataReader(owner, cancellationToken), inner);
     }
 
+    private static (LobDataReader Reader, FakeDbDataReader Inner) CreateMultiReader()
+    {
+        var inner = new FakeDbDataReader(
+            (["id", "name"], [typeof(long), typeof(string)], [[1L, "alpha"]]),
+            (["a", "b", "c"], [typeof(int), typeof(int), typeof(int)], [[1, 2, 3]]));
+        var owner = new CommandReaderOwner(null!, inner, null);
+        return (new LobDataReader(owner, CancellationToken.None), inner);
+    }
+
+    [Fact]
+    public void LobDataReader_NextResult_DifferentColumnCount_ShouldRefreshMetadata()
+    {
+        var (reader, _) = CreateMultiReader();
+        using var _ = reader;
+
+        reader.FieldCount.Should().Be(2);
+        reader.GetName(0).Should().Be("id");
+        reader.GetName(1).Should().Be("name");
+        reader.GetOrdinal("name").Should().Be(1);
+        reader.Read().Should().BeTrue();
+        reader.GetInt64(0).Should().Be(1L);
+        reader.GetString(1).Should().Be("alpha");
+
+        reader.NextResult().Should().BeTrue();
+
+        reader.FieldCount.Should().Be(3);
+        reader.GetName(0).Should().Be("a");
+        reader.GetName(2).Should().Be("c");
+        reader.GetOrdinal("c").Should().Be(2);
+        reader.GetOrdinal("missing").Should().Be(-1);
+        var outOfRange = () => reader.GetName(3);
+        outOfRange.Should().Throw<IndexOutOfRangeException>();
+        reader.Read().Should().BeTrue();
+        reader.GetInt32(0).Should().Be(1);
+        reader.GetInt32(1).Should().Be(2);
+        reader.GetInt32(2).Should().Be(3);
+    }
+
+    [Fact]
+    public async Task LobDataReader_NextResultAsync_DifferentColumnCount_ShouldRefreshMetadata()
+    {
+        var (reader, _) = CreateMultiReader();
+        await using var _ = reader;
+
+        reader.FieldCount.Should().Be(2);
+        reader.GetName(1).Should().Be("name");
+        (await reader.ReadAsync(TestContext.Current.CancellationToken)).Should().BeTrue();
+
+        (await reader.NextResultAsync(TestContext.Current.CancellationToken)).Should().BeTrue();
+
+        reader.FieldCount.Should().Be(3);
+        reader.GetName(0).Should().Be("a");
+        reader.GetOrdinal("c").Should().Be(2);
+        var outOfRange = () => reader.GetName(3);
+        outOfRange.Should().Throw<IndexOutOfRangeException>();
+        (await reader.ReadAsync(TestContext.Current.CancellationToken)).Should().BeTrue();
+        reader.GetInt32(2).Should().Be(3);
+    }
+
     [Fact]
     public void LobDataReader_Metadata_ShouldDelegateToInner()
     {
@@ -445,18 +504,39 @@ public class LobDataReaderTests
         await act.Should().ThrowAsync<OperationCanceledException>();
     }
 
-    private sealed class FakeDbDataReader(string[] names, Type[] types, object?[][] rows) : DbDataReader
+    private sealed class FakeDbDataReader : DbDataReader
     {
+        private sealed record ResultSet(string[] Names, Type[] Types, object?[][] Rows);
+
+        private readonly List<ResultSet> _sets;
+        private int _setIndex;
         private int _rowIndex = -1;
         private bool _disposed;
+
+        public FakeDbDataReader(string[] names, Type[] types, object?[][] rows)
+            : this(new[] { new ResultSet(names, types, rows) })
+        {
+        }
+
+        public FakeDbDataReader(params (string[] Names, Type[] Types, object?[][] Rows)[] resultSets)
+            : this(resultSets.Select(r => new ResultSet(r.Names, r.Types, r.Rows)).ToArray())
+        {
+        }
+
+        private FakeDbDataReader(ResultSet[] sets)
+        {
+            _sets = sets.ToList();
+        }
+
+        private ResultSet Current => _sets[_setIndex];
 
         public int DisposeCount { get; private set; }
         public int StreamCalls { get; private set; }
         public int TextReaderCalls { get; private set; }
 
-        public override int FieldCount => names.Length;
+        public override int FieldCount => Current.Names.Length;
         public override int Depth => 0;
-        public override bool HasRows => rows.Length > 0;
+        public override bool HasRows => Current.Rows.Length > 0;
         public override bool IsClosed => _disposed;
         public override int RecordsAffected => -1;
 
@@ -466,7 +546,7 @@ public class LobDataReaderTests
         public override bool Read()
         {
             _rowIndex++;
-            return _rowIndex < rows.Length;
+            return _rowIndex < Current.Rows.Length;
         }
 
         public override Task<bool> ReadAsync(CancellationToken cancellationToken)
@@ -475,84 +555,80 @@ public class LobDataReaderTests
             return Task.FromResult(Read());
         }
 
-        public override bool NextResult() => false;
+        public override bool NextResult()
+        {
+            if (_setIndex + 1 < _sets.Count)
+            {
+                _setIndex++;
+                _rowIndex = -1;
+                return true;
+            }
+            return false;
+        }
 
-        public override Task<bool> NextResultAsync(CancellationToken cancellationToken) => Task.FromResult(false);
+        public override Task<bool> NextResultAsync(CancellationToken cancellationToken) => Task.FromResult(NextResult());
 
-        public override string GetName(int ordinal) => names[ordinal];
+        public override string GetName(int ordinal) => Current.Names[ordinal];
 
-        public override int GetOrdinal(string name) => Array.IndexOf(names, name);
+        public override int GetOrdinal(string name) => Array.IndexOf(Current.Names, name);
 
-        public override Type GetFieldType(int ordinal) => types[ordinal];
+        public override Type GetFieldType(int ordinal) => Current.Types[ordinal];
 
-        public override string GetDataTypeName(int ordinal) => types[ordinal].Name;
+        public override string GetDataTypeName(int ordinal) => Current.Types[ordinal].Name;
 
-        public override object GetValue(int ordinal) => rows[_rowIndex][ordinal]!;
+        public override object GetValue(int ordinal) => Current.Rows[_rowIndex][ordinal]!;
 
         public override int GetValues(object[] values)
         {
-            var count = Math.Min(values.Length, names.Length);
-            Array.Copy(rows[_rowIndex], values, count);
+            var count = Math.Min(values.Length, Current.Names.Length);
+            Array.Copy(Current.Rows[_rowIndex], values, count);
             return count;
         }
 
-        public override bool IsDBNull(int ordinal) => rows[_rowIndex][ordinal] is null;
+        public override bool IsDBNull(int ordinal) => Current.Rows[_rowIndex][ordinal] is null;
 
-        public override bool GetBoolean(int ordinal) => (bool)rows[_rowIndex][ordinal]!;
-
-        public override byte GetByte(int ordinal) => (byte)rows[_rowIndex][ordinal]!;
-
+        public override bool GetBoolean(int ordinal) => (bool)Current.Rows[_rowIndex][ordinal]!;
+        public override byte GetByte(int ordinal) => (byte)Current.Rows[_rowIndex][ordinal]!;
         public override long GetBytes(int ordinal, long dataOffset, byte[]? buffer, int bufferOffset, int length)
         {
-            var data = (byte[])rows[_rowIndex][ordinal]!;
+            var data = (byte[])Current.Rows[_rowIndex][ordinal]!;
             var count = (int)Math.Min(length, data.Length - dataOffset);
             if (buffer is not null)
                 Array.Copy(data, dataOffset, buffer, bufferOffset, count);
             return count;
         }
-
-        public override char GetChar(int ordinal) => (char)rows[_rowIndex][ordinal]!;
-
+        public override char GetChar(int ordinal) => (char)Current.Rows[_rowIndex][ordinal]!;
         public override long GetChars(int ordinal, long dataOffset, char[]? buffer, int bufferOffset, int length)
         {
-            var data = (string)rows[_rowIndex][ordinal]!;
+            var data = (string)Current.Rows[_rowIndex][ordinal]!;
             var count = (int)Math.Min(length, data.Length - dataOffset);
             if (buffer is not null)
                 data.CopyTo((int)dataOffset, buffer, bufferOffset, count);
             return count;
         }
-
-        public override DateTime GetDateTime(int ordinal) => (DateTime)rows[_rowIndex][ordinal]!;
-
-        public override decimal GetDecimal(int ordinal) => (decimal)rows[_rowIndex][ordinal]!;
-
-        public override double GetDouble(int ordinal) => (double)rows[_rowIndex][ordinal]!;
-
-        public override float GetFloat(int ordinal) => (float)rows[_rowIndex][ordinal]!;
-
-        public override Guid GetGuid(int ordinal) => (Guid)rows[_rowIndex][ordinal]!;
-
-        public override short GetInt16(int ordinal) => (short)rows[_rowIndex][ordinal]!;
-
-        public override int GetInt32(int ordinal) => (int)rows[_rowIndex][ordinal]!;
-
-        public override long GetInt64(int ordinal) => (long)rows[_rowIndex][ordinal]!;
-
-        public override string GetString(int ordinal) => (string)rows[_rowIndex][ordinal]!;
+        public override DateTime GetDateTime(int ordinal) => (DateTime)Current.Rows[_rowIndex][ordinal]!;
+        public override decimal GetDecimal(int ordinal) => (decimal)Current.Rows[_rowIndex][ordinal]!;
+        public override double GetDouble(int ordinal) => (double)Current.Rows[_rowIndex][ordinal]!;
+        public override float GetFloat(int ordinal) => (float)Current.Rows[_rowIndex][ordinal]!;
+        public override Guid GetGuid(int ordinal) => (Guid)Current.Rows[_rowIndex][ordinal]!;
+        public override short GetInt16(int ordinal) => (short)Current.Rows[_rowIndex][ordinal]!;
+        public override int GetInt32(int ordinal) => (int)Current.Rows[_rowIndex][ordinal]!;
+        public override long GetInt64(int ordinal) => (long)Current.Rows[_rowIndex][ordinal]!;
+        public override string GetString(int ordinal) => (string)Current.Rows[_rowIndex][ordinal]!;
 
         public override Stream GetStream(int ordinal)
         {
             StreamCalls++;
-            return new MemoryStream((byte[])rows[_rowIndex][ordinal]!);
+            return new MemoryStream((byte[])Current.Rows[_rowIndex][ordinal]!);
         }
 
         public override TextReader GetTextReader(int ordinal)
         {
             TextReaderCalls++;
-            return new StringReader((string)rows[_rowIndex][ordinal]!);
+            return new StringReader((string)Current.Rows[_rowIndex][ordinal]!);
         }
 
-        public override IEnumerator GetEnumerator() => rows.GetEnumerator();
+        public override IEnumerator GetEnumerator() => Current.Rows.GetEnumerator();
 
         protected override void Dispose(bool disposing)
         {
@@ -561,7 +637,6 @@ public class LobDataReaderTests
                 _disposed = true;
                 DisposeCount++;
             }
-
             base.Dispose(disposing);
         }
 
