@@ -1515,6 +1515,24 @@ this is the user's own scoping of the 2026-10-30 Lane G1 two-tier amendment; the
 
 - 2026-10-30T (ACT finalization, T245) · **User-directed continuation of lane G1 past the incomplete T245 (verbatim instruction, recorded as the user's decision, not a contract default).** The user directed: «Then continue the lane: `T250 → T246 → T247 → T311 → T359 → T360 → T361 → T268 → T269 → T267 → T270 → T271 → T272 → T273 → T274`». This continues the `G1` lane past an `incomplete` item (`T245`, stop verdict `stopped`, not a product failure — the tree is regression-free with all gates green), and is an explicit user schedule decision superseding the collection's group-stop default for this item; the remaining items keep their own statuses; no item is marked `incomplete` by the group-stop rule. The DAG edge `T245 → T250` is therefore crossed without an accepted `T245` basis, and `T250`'s own stale-plan applicability check applies at its DO. The planner's boundary decision is preserved verbatim in the item record (`.pdca/status/T245-warm-set-ops-3.md`). No counter, plan revision, attempt or criterion changed by this entry. | `.pdca/status/T245-warm-set-ops-3.md`; queue row `T245`
 
+- 2026-10-30T19:00:00Z · **Process amendment — Evidence-round cap (user, lane G1, effective immediately).** User process amendment (lane-wide, effective immediately); no plan revision, no counter, no attempt, no defect entry, no criterion and no product file changes.
+
+  Verbatim rule (user authorization «п1 - ок, делай»):
+  ````markdown
+  ### Process amendment — Evidence-round cap (user, lane G1, effective immediately)
+
+  **User authorization (verbatim):** «п1 - ок, делай»
+
+  **Rule — one evidence round per criterion per revision.**
+
+  1. A `CHECK → DO` return whose **sole** ground is missing evidence/verification for a criterion grants that criterion exactly **one** additional DO round, recorded as `evidence_round=1` in the item record. Per the base contract that round is not a defect and **does not consume an attempt** (`n/3` unchanged) — that part stays exactly as it is.
+  2. If the criterion is still not verifiable from the artefacts on disk after that round, CHECK must return a verdict on what exists — `unverified` where evidence is missing, never silently `met` — and the driver routes it: a product defect → a counted DO attempt; a wrong/unachievable contract → `CHECK → PLAN`; otherwise → `pdca-escalate` or the planner's step-boundary decision (STOP / next step).
+  3. **No second evidence round on the same criterion within the same revision.** A genuinely new criterion, or a new artefact requirement created by an accepted revision, opens its own single round.
+  4. The rule targets the observed failure mode: `unverified` is not an attempt, so an unbounded "gather more evidence" loop can run without ever charging `n/3` — `T245` spent roughly an hour in exactly that loop after `n=3/3` was already exhausted.
+
+  **Scope:** every item of lane `G1` (`T250`, `T246`, `T247`, `T311`, `T359`, `T360`, `T361`, `T268`, `T269`, `T267`, `T270`–`T274`, and any later item). It is a process constraint on phase routing, **not** a criteria change: no threshold, tolerance, denominator or measurement method moves, and it neither widens nor narrows any user-supplied criterion. Every subsequent `pdca-check` dispatch carries this rule in its inline contract.
+  ````
+
 ## General verification and recovery
 
 - common verification state: `unverified` — no integration CHECK has run yet; there is no `C` result and no evidence pointer.
@@ -1522,6 +1540,7 @@ this is the user's own scoping of the 2026-10-30 Lane G1 two-tier amendment; the
 - defect id: none — no defect history yet.
 - linked corrective cycle: none.
 - next allowed step: per-item PLANs → ALL-barrier.
+- evidence-round cap (user, lane G1, effective immediately): one evidence round per criterion per revision, recorded as evidence_round=1, not a defect and not an attempt; a second evidence round on the same criterion within the same revision is forbidden — CHECK then verdicts on the artefacts on disk (unverified where missing, never silently met) and the driver routes to a counted DO attempt / CHECK → PLAN / pdca-escalate / the planner's step-boundary decision. Full text: §Decisions log entry of the same date.
 
 ## Done / Verified / Incomplete
 
@@ -1591,3 +1610,4 @@ append-only, one row per event, never edited retroactively:
 2026-10-30T17:32Z | D | revision r=3 | attempt n=2 | T245 step-2 (r=3) block C commit on `1.0.9-rc5`: subject `#245 T245 step-2 (r3): integration gate green 7934/7733/0/201; n=3/3 unspent — 72 B/query Task-result remainder is irreducible; evidence .pdca/rc5/items/T245/rv3/` — exactly three paths staged by explicit `git add` (`benchmarks/nextorm.benchmark/Attribution/T245ExecDecompositionProbe.cs`, `.pdca/status/T245-warm-set-ops-3.md`, `.pdca/status/collection-rc5.md`); no `-A`, no push, no merge, no tag, no branch switch; `.pdca/rc5/**` evidence stays local/gitignored; `n=2/3` spent, `n=3/3` open/unspent, `r=3` unchanged, no `r=4`, no product change; **resume point: step-2 boundary `DO → CHECK`** | queue row `T245` notes append; `.pdca/status/T245-warm-set-ops-3.md` §Git state, §Progress log
 2026-10-30T18:35Z | DO | revision r=3 | attempt n=3 | T245 step-2 (r=3) **third CHECK -> DO three blockers worked**: Block 1 accounting correction (errata §E11: product-attributed `1 408`, product-unknown `≈296`, `48` probe-only) commit `172bb703`; Block 2 process-level JIT-regime header (Program.cs) + captured held-regime headers commit `3b2d03f4`; Block 3 preparation-remainder decomposition — `≈296` = TryGetRaw comparers `216` + staged-key validation `80`, general machinery protected by `AC-245-07`, **no in-scope lever**, revert nothing, **`n=3/3` spent**, attempt budget exhausted, commit `b568b9bd`; build 0W/0E throughout; no product change; `R2` retained; ceilings `7 530 / 1 090 / 0` intact; resume point step-2 boundary `DO → CHECK` | `.pdca/status/T245-warm-set-ops-3.md`; `.pdca/rc5/items/T245/rv3/step2-r3/`
 2026-10-30T (ACT) | A | revision r=3 | attempt n=3/3 | T245 ACT finalization: step 2 not accepted — campaign stopped (N=3 r=3 n=3/3); M1 (bc641498) + R2 (c3294de9) retained and uncredited; residual 764.68/805.98 B/query to 1.20×; issue #245 stays OPEN; user-directed continuation of lane G1 recorded in Decisions log | .pdca/status/T245-warm-set-ops-3.md; .pdca/status/collection-rc5.md
+2026-10-30T19:00:00Z | P | revision r=3 | attempt n=1 | Process amendment recorded: evidence-round cap (user, lane G1, effective immediately) — one evidence round per criterion per revision (evidence_round=1, not a defect, not an attempt); no second evidence round on the same criterion within the same revision; CHECK then verdicts on artefacts on disk (unverified where missing, never silently met) and the driver routes. Lane-wide, all G1 items (T250, T246, T247, T311, T359, T360, T361, T268, T269, T267, T270–T274 and any later item). No plan revision, no counter, no attempt, no defect entry, no criterion, no product file. Full text: §Decisions log entry of the same date. | .pdca/status/collection-rc5.md §Decisions log; .pdca/status/T245-warm-set-ops-3.md
