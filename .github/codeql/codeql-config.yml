@@ -3,6 +3,10 @@
 # The shipped surface is `src/**`; tests, benchmarks, examples and docs are not analysed. They were
 # the bulk of the extraction that exhausted the runner's disk under the previous default setup
 # (runs 40922948818, 40922605464), and they carry no consumer-facing code scanning value.
+#
+# `tools/**` is deliberately NOT ignored: it is the only home of the Python sources in this
+# repository, and an empty Python extraction is a hard failure ("CodeQL detected code written in
+# Python but could not process any of it", run 41011087596).
 name: nextorm CodeQL config
 
 paths-ignore:
@@ -11,6 +15,5 @@ paths-ignore:
   - docs/**
   - examples/**
   - tests/**
-  - tools/**
   - .pdca/**
   - '**/*.md'
