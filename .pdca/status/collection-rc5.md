@@ -1628,3 +1628,4 @@ append-only, one row per event, never edited retroactively:
 2026-10-30T22:00:55Z | D | revision r=1 | attempt n=1/3 | T246 M1 evidence round: identity reconciliation + item-only diff + refreshed snapshot (no product change); evidence .pdca/T246/rv6/provenance/identity-reconciliation.md | .pdca/T246/rv6/snapshot/item-diff.patch
 2026-10-30T22:10:19Z | D | revision r=1 | attempt n=1/3 | T246 M2 ABBA A1/B1/B2/A2 complete: local acceptance met (time -20.2% 10k, -15.2% empty, allocs flat); residual 1.072x/1.008x (10k), 3.172x/2.841x (empty); evidence .pdca/T246/rv6/abba.md
 2026-10-30T22:12:00Z | D | revision r=1 | attempt n=1/3 | T246 M3 acceptance gate green: 12 cases, 0 failures, wall 80s, rc 0 | .pdca/T246/rv6/logs/acceptance.log
+2026-10-30T22:14:00Z | D | revision r=1 | attempt n=1/3 | T246 M4 build/test/provider logs captured (rc 0) | .pdca/T246/rv6/logs/
