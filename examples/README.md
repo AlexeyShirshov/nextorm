@@ -141,13 +141,13 @@ datasets. The examples deliberately express the original SQL without workarounds
 means one arm hit a documented gap; `DIFF` means the two arms returned different row counts; any other
 error still aborts.
 
-Last run against Testcontainers (Podman), 2026-10-20 (`NextOrmVersion = 1.0.9-rc3`):
+Last run against Testcontainers (Podman), 2026-10-30 (`NextOrmVersion = 1.0.9-rc4`):
 
 | Project | Matched in both arms | Remaining `FAIL`s (documented gaps) |
 |---|---|---|
 | postgres aviasales | 11/11 | — (query 8 uses linq2db `FromSql` for `percentile_disc`) |
 | mssql adventureworks | 11/11 | — (query 5 uses conditional aggregation instead of `PIVOT` on the linq2db arm) |
-| clickhouse analytics | 10/11 | `Incremental` — nextorm has no `uniqMerge` surface; the linq2db arm runs it through `FromSql` |
+| clickhouse analytics | 9/11 (10 executed) | `Incremental` — nextorm has no `uniqMerge` surface; `Retention` is excluded because the rc4 package emits an invalid tuple-array cast ([#359](https://github.com/AlexeyShirshov/nextorm/issues/359)) |
 
 The detailed, dated verification log (per-query failures and the roadmap item that tracks each) lives in
 [`VERIFICATION.md`](VERIFICATION.md) — update it on every re-run.

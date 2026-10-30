@@ -447,7 +447,9 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
         {
             var operation = name.Identifier.ValueText;
 
-            if (operation == "Select")
+            // Select and SelectGroup both establish the query element type from their lambda body; the
+            // latter is the key-inferring projection (same lambda shape, same projected type).
+            if (operation is "Select" or "SelectGroup")
             {
                 var arguments = invocation.ArgumentList.Arguments;
                 if (arguments.Count > 0 && GetLambdaBody(arguments[arguments.Count - 1].Expression) is { } body
@@ -817,6 +819,79 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
             joined = source.TypeArguments[0];
             isCte = IsCteSource(source, semanticModel);
             return true;
+        }
+
+        // A descriptor built from an aliased chain carries a generated alias-extension type that does not
+        // exist on the generator's input pass, so its semantic type is an error type — the same #230
+        // situation the root path recovers from syntax. Recovering here keeps `Alias.<Name>` emitted when
+        // an aliased chain is consumed as a joined source instead of being silently dropped.
+        if (semanticModel.GetTypeInfo(arguments[0].Expression, ct).Type is null or { TypeKind: TypeKind.Error })
+        {
+            if (ResolveQueryElementType(arguments[0].Expression, semanticModel, ct) is { TypeKind: not TypeKind.Error } recovered)
+            {
+                joined = recovered;
+                isCte = IsCteDescriptorSyntax(arguments[0].Expression);
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Syntax-only CTE test for the error-type fallback: the descriptor factory (<c>AsCte</c> /
+    /// <c>AsRecursiveCte</c>) is the outermost call of the variable's initializer, or of the argument the
+    /// query root wraps. A derived query or a builder source answers <see langword="false"/>.
+    /// </summary>
+    private static bool IsCteDescriptorSyntax(ExpressionSyntax expression)
+    {
+        while (true)
+        {
+            switch (expression)
+            {
+                case ParenthesizedExpressionSyntax parenthesized:
+                    expression = parenthesized.Expression;
+                    continue;
+
+                // ctx.From(cte) / ctx.From(derived): the descriptor is the argument.
+                case InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax { Name.Identifier.ValueText: "From" } } invocation:
+                    expression = invocation.ArgumentList.Arguments[0].Expression;
+                    continue;
+
+                case InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax call }:
+                    if (call.Name.Identifier.ValueText is "AsCte" or "AsRecursiveCte") return true;
+                    if (call.Name.Identifier.ValueText is "ToCommand" or "Prepare")
+                    {
+                        expression = call.Expression;
+                        continue;
+                    }
+
+                    return false;
+
+                case IdentifierNameSyntax identifier:
+                    return InitializerIsCte(identifier);
+
+                default:
+                    return false;
+            }
+        }
+    }
+
+    /// <summary>Finds the <c>var</c> declaration of <paramref name="identifier"/> and tests its initializer.</summary>
+    private static bool InitializerIsCte(IdentifierNameSyntax identifier)
+    {
+        var scope = identifier.Ancestors().FirstOrDefault(static a =>
+            a is MethodDeclarationSyntax or LocalFunctionStatementSyntax or AccessorDeclarationSyntax
+            or GlobalStatementSyntax);
+
+        if (scope is null) return false;
+
+        var name = identifier.Identifier.ValueText;
+        foreach (var declarator in scope.DescendantNodes().OfType<VariableDeclaratorSyntax>())
+        {
+            if (!string.Equals(declarator.Identifier.ValueText, name, StringComparison.Ordinal)) continue;
+            if (declarator.Initializer is null) continue;
+            return IsCteDescriptorSyntax(declarator.Initializer.Value);
         }
 
         return false;

@@ -78,7 +78,7 @@ SQL clause order: `From().Join().Where().GroupBy().Having().OrderBy().Limit().Se
 | `SELECT a AS x` | `.Select(t => new { x = t.A })` (anonymous type = result row) |
 | `JOIN u ON a = b` / `LEFT JOIN` | `.Join<IU>((t, u) => …)` / `.LeftJoin<IU>((t, u) => …)`; joined items are `p.Item1`, `p.Item2`, … |
 | `WHERE c` | `.Where(t => c)` |
-| `GROUP BY a, b` | `.GroupBy(t => new { t.A, t.B })` |
+| `GROUP BY a, b` | `.GroupBy(t => new { t.A, t.B })`, or `.SelectGroup(t => new { t.A, t.B, total = SqlFunctions.Sql.sum(t.X) })` to infer the keys from the projection (query 5) |
 | `HAVING c` | `.Having(g => c)` (repeat the aggregate) or a derived query + `.Where(...)` |
 | `ORDER BY a, b DESC` | `.OrderBy(t => t.A).OrderByDescending(t => t.B)` (chained calls = multiple keys) |
 | `LIMIT n` | `.Limit(n)` |
@@ -111,6 +111,14 @@ Two nextorm-specific rules that trip people up:
   their subqueries as CTEs, so the example uses the typed `query.AsCte(name)` / `ctx.From(cte)` API
   (see rule 1); queries 1–5 are expressed this way and are all **WORKING**.
   Every method carries a `WORKING` / `NOT WORKING` comment saying which it is and, when it fails, why.
+* **Named joins are opt-in and need a named projection.** A chain names its slots with
+  `ctx.From(...).WithAlias(Alias.Root)` plus a trailing `Alias.<Name>` on each join, and reads them as
+  `p.Root`/`p.Name` instead of `p.ItemN`. Two constraints come with it: a joined **entity** uses the
+  source-less form (`.Join<IEntity>((l, r) => …, Alias.X)`), while a joined **CTE** passes its
+  descriptor (`.Join(cte, …, Alias.X)`), and the chain's **whole projection must be a named type**,
+  because the alias generator renders that concrete type and reports `NORMGEN009` for an anonymous one
+  (#229). Every query in this example names its joins; the `route_monthly_revenue` chain of query 5 needs
+  no DTO because its root is the mapped `ITimetable` table.
 
 ## Demo queries: SQL file → method
 
@@ -119,11 +127,11 @@ Markers: **OK** — expressed with the regular LINQ API; **≡** — same result
 
 | # | SQL | Method | Coverage | Notes |
 |---|---|---|---|---|
-| 1 | [`aircraft_delay_chains.sql`](Sql/aircraft_delay_chains.sql) | `AviasalesQueries.AircraftDelayChains` | OK | two **typed** CTEs (`AsCte`: `flight_delays`, `delay_chains` reading the first); `LAG(...) OVER` → `lag(...).Over(...)`; `->> 'ru'` → `json_get_text`; `EXTRACT(EPOCH)/60` → `date_diff("second",…)/60.0`; final `JOIN airplanes_data` on the CTE |
-| 2 | [`business_occupancy_matrix.sql`](Sql/business_occupancy_matrix.sql) | `AviasalesQueries.BusinessOccupancyMatrix` | OK | two CTEs joined to each other and to `airplanes_data`; `EXTRACT(ISODOW…)` → `date_diff("day", date_trunc("week",…),…)+1`; `AVG(CASE WHEN day=n THEN ratio END)` → conditional `avg(day == n ? ratio : null)`; `NULLIF` → `nullif` |
+| 1 | [`aircraft_delay_chains.sql`](Sql/aircraft_delay_chains.sql) | `AviasalesQueries.AircraftDelayChains` | OK | two **typed** CTEs (`AsCte`: `flight_delays`, `delay_chains` reading the first and projected into the named `DelayChainRow`); the outer chain is aliased — `WithAlias(Alias.DelayChain)` + `Alias.Airplane` — and read as `p.DelayChain`/`p.Airplane`; `LAG(...) OVER` → `lag(...).Over(...)`; `->> 'ru'` → `json_get_text`; `EXTRACT(EPOCH)/60` → `date_diff("second",…)/60.0` |
+| 2 | [`business_occupancy_matrix.sql`](Sql/business_occupancy_matrix.sql) | `AviasalesQueries.BusinessOccupancyMatrix` | OK | two CTEs joined to each other and to `airplanes_data`, both projected into named rows (`FlightOccupancyRow`, `BusinessCapacityRow`) and all three slots named — `WithAlias(Alias.Occupancy)` + `Alias.Capacity`/`Alias.Airplane`; `EXTRACT(ISODOW…)` → `date_diff("day", date_trunc("week",…),…)+1`; `AVG(CASE WHEN day=n THEN ratio END)` → conditional `avg(day == n ? ratio : null)`; `NULLIF` → `nullif` |
 | 3 | [`passenger_noshow_analysis.sql`](Sql/passenger_noshow_analysis.sql) | `AviasalesQueries.PassengerNoShowAnalysis` | OK | `passenger_stats` typed CTE groups `passenger_flight_history` with member access; `CASE WHEN bp.seat_no IS NULL THEN 1 ELSE 0 END` → `x == null ? 1 : 0`; `total_booked = total_noshows` in the outer `Where` |
 | 4 | [`rolling_revenue_metrics.sql`](Sql/rolling_revenue_metrics.sql) | `AviasalesQueries.RollingRevenueMetrics` | OK | CTE `daily_revenue`; `DATE_TRUNC('day')` → `date_trunc("day",…)`; `SUM OVER (ROWS UNBOUNDED PRECEDING)` → `sum_over(...).Over(..., RowsUnboundedPrecedingToCurrentRow)`; `AVG OVER (6 PRECEDING)` → `avg_over(...).Over(..., Rows(Preceding(6), CurrentRow))` |
-| 5 | [`route_network_abc_xyz.sql`](Sql/route_network_abc_xyz.sql) | `AviasalesQueries.RouteNetworkAbcXyz` | OK | three chained **typed** CTEs (`AsCte`: `route_monthly_revenue`, `route_aggregates`, `abc_analys`); `STDDEV` → `stdev` (projected `(decimal?)`, so the one-month-per-route case stays distinct from zero); `SUM(...) OVER() / SUM(...) OVER()` → `sum_over(...).Over()`; `city ->> 'ru' \|\| ' -> '` → `json_get_text(...) + " -> " + …`; ABC/XYZ `CASE` → ternary chain |
+| 5 | [`route_network_abc_xyz.sql`](Sql/route_network_abc_xyz.sql) | `AviasalesQueries.RouteNetworkAbcXyz` | OK | three chained **typed** CTEs (`AsCte`: `route_monthly_revenue`, `route_aggregates`, `abc_analys`); the two grouped CTEs use `SelectGroup`, so the keys (`route` + `flight_month`, then `route`) are inferred from the projection instead of a separate `GroupBy`; the four-table join of `route_monthly_revenue` names every slot — `WithAlias(Alias.Timetable)` + `Alias.Departure`/`Arrival`/`Segment`/`Ticket` — and needs no DTO because its root is a mapped table; `STDDEV` → `stdev` (projected `(decimal?)`, so the one-month-per-route case stays distinct from zero); `SUM(...) OVER() / SUM(...) OVER()` → `sum_over(...).Over()`; `city ->> 'ru' \|\| ' -> '` → `json_get_text(...) + " -> " + …`; ABC/XYZ `CASE` → ternary chain |
 
 ## Course exercises (6–11)
 

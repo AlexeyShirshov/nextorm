@@ -1,6 +1,6 @@
 # Examples verification report
 
-> **Last verified: 2026-10-20** (the examples are now **comparison projects**: every query has a
+> **Last verified: 2026-10-30** (the examples are now **comparison projects**: every query has a
 > nextorm arm and a linq2db arm, and both are executed against the same dataset; BenchmarkDotNet runs
 > through `--benchmark`). Re-run the examples whenever the engine gains features and update the tables
 > below. This file is the source of truth for "what works / what does not and why"; the topics are owned
@@ -8,11 +8,11 @@
 > [`docs/specs/`](../docs/specs). Run mechanics live in
 > [`.opencode/skills/running-examples/SKILL.md`](../.opencode/skills/running-examples/SKILL.md).
 >
-> **The numbers below are from 2026-10-20 and predate the typed-join migration** (`#231`:
-> `Join(ctx.From<T>(), …)` → `Join<T>(…)`, 24 sites in aviasales and 23 in adventureworks). The
-> examples reference the **published** packages, so they are not re-run against working-tree sources:
-> re-verification happens once the next package version is published, when `NextOrmVersion` is bumped
-> and all three apps are executed again and the tables below are replaced with what was observed.
+> **The numbers below are from 2026-10-30**, observed after the four remaining anonymous chains were
+> converted to named projections and aliased joins (#231) and `NextOrmVersion` was bumped to
+> `1.0.9-rc4`, the release that ships the fix for the CTE-alias defect those chains exposed (#350).
+> The mssql example still builds the `ProjectReference` to `src/` (#232); postgres and clickhouse use
+> the published rc4 packages.
 
 ## Environment
 
@@ -36,28 +36,66 @@ as `FAIL`; any other exception aborts the run.
 |---|---|---|
 | `nextorm.examples.postgres.aviasales` | **11/11** | — |
 | `nextorm.examples.mssql.adventureworks` | **11/11** | — |
-| `nextorm.examples.clickhouse.analytics` | **10/11** | `Incremental` (nextorm arm only) |
+| `nextorm.examples.clickhouse.analytics` | **9/11** (10 of 11 executed; `Retention` excluded) | `Incremental` (nextorm arm only) and `Retention` — the rc4 tuple-array cast ([#359](https://github.com/AlexeyShirshov/nextorm/issues/359)) |
 
-Query-by-query counts on 2026-10-20 (warm volumes, Podman) — identical to the 2026-10-17 run:
+Query-by-query counts on 2026-10-30 (warm volumes, Podman):
 
 * postgres: aircraft delay chains 30, occupancy matrix 8, no-show 0, rolling revenue 91, ABC/XYZ 614,
   top routes 186, airport OTP 63, percentiles 8, frequent flyers 10, passenger growth 2, cancellations 15
-  — identical in both arms.
+  — identical in both arms. `AircraftDelayChains` is the query the named-alias conversion rewrote and
+  the one #350 broke; it now returns 30 rows again.
 * mssql: 146, 364, 0, 266, 4, 12, 40, 20, 14, 364, 40 — identical in both arms.
-* clickhouse: array analytics 10, funnel 3, retention 1, sessions 100, daily traffic 7, top landing
-  pages 10, device split 2, top referrers 10, session depth 5, rolling activity 7; `Incremental`
-  returns 7 rows on the linq2db arm and throws on the nextorm arm.
+* clickhouse: array analytics 10, funnel 3, sessions 100, daily traffic 7, top landing pages 10, device
+  split 2, top referrers 10, session depth 5, rolling activity 7; `Incremental` returns 7 rows on the
+  linq2db arm and throws on the nextorm arm; `Retention` did not execute (#359).
 
 ## Failures and their tracked cause
 
 | Query | Why it fails | Tracked in |
 |---|---|---|
+| CH `Retention` | rc4 wraps every array result in `cast(… as Array(...))`; for a tuple element the type renderer falls back to the CLR name including its arity, so the SQL says ``Array(Nullable(Tuple`2))`` and ClickHouse rejects it (`Code: 62. Back quoted string is not closed`). The alias conversion is not involved — the positional form emits the same cast. Not present in rc3, which emitted the bare `groupArray(...)`. | [#359](https://github.com/AlexeyShirshov/nextorm/issues/359) |
 | CH `Incremental` | nextorm: `uniqMerge`, the `-Merge` combinator over an `AggregateFunction(uniq, …)` state column, has no LINQ surface in the released packages (the state cannot be projected as a scalar). The linq2db arm runs the query through `FromSql` and returns 7 rows, so the gap is visible rather than assumed. | [`todo_clickhouse_aggregate_function_state.md`](../docs/specs/roadmap/todo_clickhouse_aggregate_function_state.md) |
 
 MSSQL `QuarterlyPivot` is no longer a failure: the native `PIVOT` now accepts a derived query, so the
 reference `WITH OrderMargins AS (<5-table join>) ... PIVOT (...)` is expressed directly.
 
 ## Actuality changes made on this verification
+
+* **Re-verified against the `1.0.9-rc4` packages (2026-10-30).** `NextOrmVersion` bumped
+  `1.0.9-rc3 → 1.0.9-rc4` (mssql keeps the `ProjectReference`). rc4 ships the CTE-alias fix (#350,
+  T363) and the aliased **source-less** join form (#322), so the four chains whose joins still
+  projected anonymously (#231) were converted: `AircraftDelayChains` and `BusinessOccupancyMatrix`
+  (postgres), `SupplyChain` (mssql) and `Retention` (clickhouse) project their aliased CTEs into named
+  row types (`DelayChainRow`/`FlightOccupancyRow`/`BusinessCapacityRow`, `SupplierDelayRow`/
+  `ProductionImpactRow`, `RetentionWeekRow`/`CohortSizeRow`) and name every slot
+  (`WithAlias(Alias.<Root>)` + `Alias.<Name>`), reading `p.<Slot>` instead of `p.ItemN`. Joined
+  entities use the source-less form (`.Join<T>((l, r) => …, Alias.X)`); a joined CTE passes its
+  descriptor (`.Join(cte, …, Alias.X)`). No anonymous root or anonymous aliased CTE is left in those
+  chains. The `route_monthly_revenue` join chain of postgres query 5 is named too
+  (`Alias.Timetable` + `Alias.Departure`/`Arrival`/`Segment`/`Ticket`): its root is a mapped table, so
+  it needs no DTO, and only `p.ItemN` → `p.<Slot>` changed. **Every join in all three examples is
+  named**: each chain roots at `WithAlias(Alias.<Root>)` and passes `Alias.<Name>` per join, so no
+  `p.ItemN` is left in a query body. Every reference `GROUP BY` whose keys are exactly the projection's
+  non-aggregate outputs is written as `SelectGroup`, so the keys are inferred instead of repeated in a
+  `GroupBy` + `Select` pair and the rendered SQL is unchanged. Four sites keep the explicit pair:
+  postgres `BusinessOccupancyMatrix` (its `DayOfWeek` projection would become a fourth key) and
+  clickhouse `Retention.first_visits` (its key would be the `UserId` cast), both documented at the call
+  site, plus two for generator reasons — mssql `VipChurn`'s `CustomerMetrics` and clickhouse
+  `Retention.weekly`: the generator's chain recovery does not yet recognise `SelectGroup`, so a
+  `SelectGroup` producer would drop the aliases of the chain that consumes it.
+  Results: postgres **11/11** — `AircraftDelayChains` returns 30 rows in both arms now that #350 is
+  fixed (it was 10/11 on the T361 candidate); mssql **11/11**; clickhouse **9/10 executed**, with
+  `Incremental` as the only failing query and `Retention` excluded (below).
+* **New rc4 defect found by the converted clickhouse chain: the tuple-array cast (#359).** `Retention`
+  projects `group_array(Tuple.Create(...))`; rc4 wraps array results in `cast(… as Array(...))` and the
+  element renderer emits the **CLR** name for a tuple, including its arity:
+  ``cast(… as Array(Nullable(Tuple`2)))``. The backtick opens a quoted identifier, so the server rejects
+  the statement with `Code: 62. Back quoted string is not closed`, and the run aborts (it is not one of
+  the documented gap exception types). This is unrelated to the alias conversion — the aliased SQL is
+  otherwise identical to the positional form — and it did not exist in rc3, which emitted the bare
+  `groupArray(...)` without a cast. Tracked in
+  [#359](https://github.com/AlexeyShirshov/nextorm/issues/359); `Retention` is excluded from the rc4
+  run via `--only` and is expected back at `[ OK ]` on the package that carries the fix.
 
 * **AdventureWorks consumes the current checkout instead of a published package (#232).**
   `nextorm.examples.mssql.adventureworks` replaces its `nextorm`/`nextorm.sqlserver`
@@ -67,9 +105,10 @@ reference `WITH OrderMargins AS (<5-table join>) ... PIVOT (...)` is expressed d
   are unchanged.
 
 * **Examples moved to the published packages.** The three projects now reference the `nextorm.*` NuGet
-  packages (`NextOrmVersion = 1.0.9-rc3` in [`Directory.Packages.props`](../Directory.Packages.props))
-  instead of `src/`, so they build against what ships on nuget.org. Re-run against Testcontainers after
-  the switch: postgres `11/11`, mssql `11/11`, clickhouse `10/11` (`Incremental` only).
+  packages (`NextOrmVersion` in [`Directory.Packages.props`](../Directory.Packages.props), `1.0.9-rc3`
+  at the time of that switch) instead of `src/`, so they build against what ships on nuget.org. Re-run
+  against Testcontainers after the switch: postgres `11/11`, mssql `11/11`, clickhouse `10/11`
+  (`Incremental` only).
 * **Databases are cached in named Docker volumes (the examples are read-only).** Each `DemoDatabase`
   mounts a named volume at the provider's data directory and only copies the dataset + loads when a
   row-count probe finds no data, so warm runs skip the copy and the multi-minute load and merely start
@@ -156,7 +195,7 @@ reference `WITH OrderMargins AS (<5-table join>) ... PIVOT (...)` is expressed d
   for `AirportOnTimePerformance`/`DelayPercentilesByModel` (values then match exactly).
 * **Packages.** The examples add `linq2db` 6.5.0 plus the PostgreSQL/SQL Server/ClickHouse providers
   (`Linq2DbVersion` in [`Directory.Packages.props`](Directory.Packages.props)). The nextorm package
-  model is unchanged: postgres/clickhouse use the published `1.0.9-rc3` packages, mssql stays on
+  model is unchanged: postgres/clickhouse use the published `1.0.9-rc4` packages, mssql stays on
   `ProjectReference` for the typed `Pivot` surface.
 * **Full benchmark run (2026-10-17, Release, `ShortRun` + `InProcessEmitToolchain`, warm volumes).**
   PostgreSQL 22/22 cases (28:53), MSSQL 22/22 (02:43), ClickHouse 19/21 (06:29; `Nextorm_DailyTraffic`

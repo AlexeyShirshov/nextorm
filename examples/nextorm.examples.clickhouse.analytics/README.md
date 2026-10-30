@@ -83,8 +83,9 @@ clause order: `From().Where().GroupBy().Having().OrderBy().Limit().Select()`.
 | `WITH x AS (SELECT …)` | declare it as a CTE: the typed `query.AsCte("x")` + `ctx.From(cte)` (member access, type inference) or the string `ctx.With("x", query).From("x")` (columns read by name, `t.GetInt64("UserID")`, because the name carries no type); a later CTE reads an earlier one the same way |
 | `SELECT a AS x` | `.Select(h => new { x = h.A })` |
 | `JOIN u ON a = b` | `.Join<IU>((h, u) => …)`; joined items are `p.Item1`, `p.Item2`, … |
+| `JOIN u ON a = b` with slot names | `.Join<IU>((h, u) => …, Alias.U)` plus `.WithAlias(Alias.Root)` on the chain's root: the slots are then read as `p.Root`/`p.U`. A joined **CTE** passes its descriptor instead of a type parameter (`.Join(cte, …, Alias.X)`). The chain's projection must be a **named** type (the alias generator renders the chain's concrete type and reports `NORMGEN009` on an anonymous one, #229). Every query in this example names its joins. Query 4 is currently blocked by an unrelated packaging defect in the tuple-array cast ([#359](https://github.com/AlexeyShirshov/nextorm/issues/359)), not by the alias surface |
 | `WHERE c` | `.Where(h => c)` |
-| `GROUP BY a` | `.GroupBy(h => new { h.A })` |
+| `GROUP BY a` | `.GroupBy(h => new { h.A })`, or `.SelectGroup(h => new { h.A, n = SqlFunctions.Sql.count() })` to infer the keys from the projection (most demo queries). `Retention.first_visits` and `Retention.weekly` keep `GroupBy`: the first would group by the `UserId` cast, the second must stay a `Select` producer because the shipped alias generator recovers a consumed chain only through `Select` |
 | `HAVING c` | `.Having(g => c)` or a derived query + `.Where(...)` |
 | `ORDER BY a, b DESC` | `.OrderBy(h => h.A).OrderByDescending(h => h.B)` |
 | `LIMIT n` | `.Limit(n)` |
@@ -117,14 +118,15 @@ clause order: `From().Where().GroupBy().Having().OrderBy().Limit().Select()`.
 ## Demo queries: SQL file → method
 
 Markers: **OK** — expressed with the regular LINQ API; **FAIL** — the faithful port hits a gap and
-throws (documented in the method comment).
+throws (documented in the method comment); **BLOCKED** — the port is complete but a packaged engine
+defect stops it at execution (tracked in the linked issue).
 
 | # | SQL | Method | Coverage | Notes |
 |---|---|---|---|---|
 | 1 | [`clickhouse_array_analytics.sql`](Sql/clickhouse_array_analytics.sql) | `ClickHouseQueries.ArrayAnalytics` | OK | `splitByChar` → `split_by_char`; `arrayMap`/`arrayFilter` → `array_map`/`array_filter`; the result is grouped by the array expression |
 | 2 | [`clickhouse_funnel.sql`](Sql/clickhouse_funnel.sql) | `ClickHouseQueries.Funnel` | OK | `windowFunnel` → `window_funnel(...)`; inner `GROUP BY UserID` + outer `GROUP BY level` → two derived queries |
 | 3 | [`clickhouse_incremental.sql`](Sql/clickhouse_incremental.sql) | `ClickHouseQueries.Incremental` | FAIL | `uniqMerge` (`-Merge` over an `AggregateFunction` state) has no LINQ surface on the released packages; throws instead of falling back to `WithSql` |
-| 4 | [`clickhouse_retention.sql`](Sql/clickhouse_retention.sql) | `ClickHouseQueries.Retention` | OK | the `WITH first_visits, cohort_sizes, weekly` CTEs → typed `AsCte`; the inner join + `groupArray((…))` → `group_array(Tuple.Create(…))` |
+| 4 | [`clickhouse_retention.sql`](Sql/clickhouse_retention.sql) | `ClickHouseQueries.Retention` | **BLOCKED** ([#359](https://github.com/AlexeyShirshov/nextorm/issues/359)) | the `WITH first_visits, cohort_sizes, weekly` CTEs → typed `AsCte`; `cohort_sizes` and `weekly` are projected into named rows (`CohortSizeRow`, `RetentionWeekRow`) and the outer chain names both slots (`WithAlias(Alias.Week)` + `Alias.Cohort`); the inner join + `groupArray((…))` → `group_array(Tuple.Create(…))`. The aliased SQL is correct, but the `1.0.9-rc4` package wraps the tuple array in ``cast(… as Array(Nullable(Tuple`2)))`` — a CLR type name, not a ClickHouse type — so the server rejects the statement (`Code: 62`) |
 | 5 | [`clickhouse_sessions.sql`](Sql/clickhouse_sessions.sql) | `ClickHouseQueries.Sessions` | OK | three chained **typed** CTEs (`AsCte`: `sessions`, `session_flags`, `session_counts`); `lagInFrame` → `lag_in_frame(...).Over(...)`; `runningAccumulate(if(…))` → cumulative `sum_over(c ? 1 : 0)`; `quantile(0.99)(…)` → `SqlFunctions.ClickHouse.quantile(0.99, …)` |
 
 > The retention query in `Sql/clickhouse_retention.sql` was corrected on porting: the original

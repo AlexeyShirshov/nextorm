@@ -1,5 +1,6 @@
 using System.Text.Json;
 using NextORM.Core;
+using NextORM.Generated.nextorm_examples_clickhouse_analytics;
 
 namespace NextORM.Examples.ClickHouse.Analytics;
 
@@ -22,17 +23,9 @@ public static class ClickHouseQueries
     {
         var rows = await ctx.From<IHit>()
             .Where(h => h.SearchPhrase != "" && h.EventDate == new DateTime(2014, 3, 20))
-            .GroupBy(h => new
-            {
-                CleanWords = SqlFunctions.ClickHouse.array_filter(
-                    x => x.ToLower().Length > 3,
-                    SqlFunctions.ClickHouse.array_map(
-                        x => x.ToLower(),
-                        SqlFunctions.ClickHouse.split_by_char(" ", h.SearchPhrase)))
-            })
             .OrderByDescending(h => SqlFunctions.Sql.count())
             .Limit(10)
-            .Select(h => new
+            .SelectGroup(h => new
             {
                 CleanWords = SqlFunctions.ClickHouse.array_filter(
                     x => x.ToLower().Length > 3,
@@ -53,8 +46,7 @@ public static class ClickHouseQueries
     {
         var perUser = ctx.From<IHit>()
             .Where(h => h.EventDate == new DateTime(2014, 3, 20))
-            .GroupBy(h => new { h.UserId })
-            .Select(h => new
+            .SelectGroup(h => new
             {
                 h.UserId,
                 Level = SqlFunctions.ClickHouse.window_funnel(1800, h.EventTime,
@@ -62,9 +54,8 @@ public static class ClickHouseQueries
             });
 
         var rows = await ctx.From(perUser)
-            .GroupBy(p => new { p.Level })
             .OrderBy(p => p.Level)
-            .Select(p => new { p.Level, ConversionCount = SqlFunctions.Sql.count() })
+            .SelectGroup(p => new { p.Level, ConversionCount = SqlFunctions.Sql.count() })
             .ToListAsync(ct);
 
         return rows;
@@ -81,14 +72,18 @@ public static class ClickHouseQueries
 
     // 4. Sql/clickhouse_retention.sql
     // WORKING: the first_visits / cohort_sizes / weekly CTEs are declared as typed descriptors (`AsCte`)
-    // and read back with member access; the inner t subquery joins hits with first_visits;
-    // groupArray((week_number, pct)) → group_array(Tuple.Create(...)), which materialises as a CLR
+    // and read back with member access; the inner t subquery joins hits with first_visits. cohort_sizes and
+    // weekly are projected into named row types and the outer chain names both joins
+    // (`WithAlias(Alias.Week)` + `Alias.Cohort`) — the alias surface refuses an anonymous chain type
+    // (#229). groupArray((week_number, pct)) → group_array(Tuple.Create(...)), which materialises as a CLR
     // Tuple<...>[]. The matrix is formatted for display in C# (there is no portable toString()).
     public static async Task<object> Retention(IDataContext ctx, CancellationToken ct)
     {
         // CTE first_visits: each user's first (Monday-aligned) visit. UserID is projected as Int64 so the
         // later join with hits_v1.UserID (UInt64) has a common key type on both sides.
         var firstVisits = ctx.From<IHit>()
+            // Explicit GroupBy, not SelectGroup: the projection casts UserId, so key inference would
+            // group by the cast expression instead of the column the reference SQL groups by.
             .GroupBy(h => new { h.UserId })
             .Select(h => new
             {
@@ -99,44 +94,45 @@ public static class ClickHouseQueries
 
         // CTE cohort_sizes: how many users start in each cohort week.
         var cohortSizes = ctx.From(firstVisits)
-            .GroupBy(f => new { f.cohort_week })
-            .Select(f => new
+            .SelectGroup(f => new CohortSizeRow
             {
-                f.cohort_week,
-                cohort_size = SqlFunctions.Sql.count()
+                CohortWeek = f.cohort_week,
+                CohortSize = SqlFunctions.Sql.count()
             })
             .AsCte("cohort_sizes");
 
         // CTE weekly: each cohort's weekly distinct users (the inner `t` subquery of the reference).
-        var weekly = ctx.From<IHit>()
-            .Join(firstVisits, (h, fv) => (long)h.UserId == fv.UserID)
+        // GroupBy + Select rather than SelectGroup: this descriptor roots the aliased outer chain below,
+        // and the shipped 1.0.9-rc4 alias generator recovers a consumed chain's element type only through
+        // a `Select`, so a `SelectGroup` producer would drop `Alias.Week`/`Alias.Cohort` at the consumer.
+        var weekly = ctx.From<IHit>().WithAlias(Alias.Hit)
+            .Join(firstVisits, (h, fv) => (long)h.Hit.UserId == fv.UserID, Alias.FirstVisit)
             .GroupBy(p => new
             {
-                cohort_week = p.Item2.cohort_week,
-                week_number = (byte)((SqlFunctions.Sql.date_diff("day", p.Item2.cohort_week,
-                    SqlFunctions.ClickHouse.to_monday(p.Item1.EventDate)) ?? 0) / 7)
+                cohort_week = p.FirstVisit.cohort_week,
+                week_number = (byte)((SqlFunctions.Sql.date_diff("day", p.FirstVisit.cohort_week,
+                    SqlFunctions.ClickHouse.to_monday(p.Hit.EventDate)) ?? 0) / 7)
             })
-            .Select(p => new
+            .Select(p => new RetentionWeekRow
             {
-                cohort_week = p.Item2.cohort_week,
-                week_number = (byte)((SqlFunctions.Sql.date_diff("day", p.Item2.cohort_week,
-                    SqlFunctions.ClickHouse.to_monday(p.Item1.EventDate)) ?? 0) / 7),
-                distinct_users = SqlFunctions.Sql.count_distinct(p.Item1.UserId)
+                CohortWeek = p.FirstVisit.cohort_week,
+                WeekNumber = (byte)((SqlFunctions.Sql.date_diff("day", p.FirstVisit.cohort_week,
+                    SqlFunctions.ClickHouse.to_monday(p.Hit.EventDate)) ?? 0) / 7),
+                DistinctUsers = SqlFunctions.Sql.count_distinct(p.Hit.UserId)
             })
             .AsCte("weekly");
 
-        var rows = await ctx.From(weekly)
-            .Join(cohortSizes, (w, cs) => w.cohort_week == cs.cohort_week)
-            .Where(p => p.Item1.week_number <= 4)
-            .GroupBy(p => new { p.Item1.cohort_week })
-            .OrderByDescending(p => p.Item1.cohort_week)
-            .Select(p => new
+        var rows = await ctx.From(weekly).WithAlias(Alias.Week)
+            .Join(cohortSizes, (w, cs) => w.Week.CohortWeek == cs.CohortWeek, Alias.Cohort)
+            .Where(p => p.Week.WeekNumber <= 4)
+            .OrderByDescending(p => p.Week.CohortWeek)
+            .SelectGroup(p => new
             {
-                CohortWeek = p.Item1.cohort_week,
-                CohortSize = SqlFunctions.Sql.max(p.Item2.cohort_size),
+                CohortWeek = p.Week.CohortWeek,
+                CohortSize = SqlFunctions.Sql.max(p.Cohort.CohortSize),
                 RetentionMatrix = SqlFunctions.ClickHouse.group_array(Tuple.Create(
-                    p.Item1.week_number,
-                    Math.Round((double)p.Item1.distinct_users / p.Item2.cohort_size * 100, 2)))
+                    p.Week.WeekNumber,
+                    Math.Round((double)p.Week.DistinctUsers / p.Cohort.CohortSize * 100, 2)))
             })
             .ToListAsync(ct);
 
@@ -191,8 +187,7 @@ public static class ClickHouseQueries
 
         // CTE session_counts.
         var counts = ctx.From(flags)
-            .GroupBy(f => new { f.UserID, f.session_id })
-            .Select(f => new
+            .SelectGroup(f => new
             {
                 f.UserID,
                 f.session_id,
@@ -225,9 +220,8 @@ public static class ClickHouseQueries
     {
         var rows = await ctx.From<IHit>()
             .Where(h => h.EventDate >= new DateTime(2014, 3, 17) && h.EventDate <= new DateTime(2014, 3, 23))
-            .GroupBy(h => new { h.EventDate })
             .OrderBy(h => h.EventDate)
-            .Select(h => new
+            .SelectGroup(h => new
             {
                 h.EventDate,
                 Hits = SqlFunctions.Sql.count(),
@@ -244,10 +238,9 @@ public static class ClickHouseQueries
     {
         var rows = await ctx.From<IHit>()
             .Where(h => h.EventDate == new DateTime(2014, 3, 20) && h.Url != "")
-            .GroupBy(h => new { h.Url })
             .OrderByDescending(h => SqlFunctions.Sql.count())
             .Limit(10)
-            .Select(h => new
+            .SelectGroup(h => new
             {
                 h.Url,
                 Hits = SqlFunctions.Sql.count(),
@@ -264,9 +257,8 @@ public static class ClickHouseQueries
     {
         var rows = await ctx.From<IHit>()
             .Where(h => h.EventDate >= new DateTime(2014, 3, 17) && h.EventDate <= new DateTime(2014, 3, 23))
-            .GroupBy(h => new { Device = h.IsMobile == 1 ? "mobile" : "desktop" })
             .OrderByDescending(h => SqlFunctions.Sql.count())
-            .Select(h => new
+            .SelectGroup(h => new
             {
                 Device = h.IsMobile == 1 ? "mobile" : "desktop",
                 Hits = SqlFunctions.Sql.count(),
@@ -287,10 +279,9 @@ public static class ClickHouseQueries
     {
         var rows = await ctx.From<IHit>()
             .Where(h => h.EventDate == new DateTime(2014, 3, 20) && h.RefererDomain != "")
-            .GroupBy(h => new { h.RefererDomain })
             .OrderByDescending(h => SqlFunctions.Sql.count())
             .Limit(10)
-            .Select(h => new
+            .SelectGroup(h => new
             {
                 h.RefererDomain,
                 Hits = SqlFunctions.Sql.count(),
@@ -326,26 +317,16 @@ public static class ClickHouseQueries
             });
 
         var sessions = ctx.From(flags)
-            .GroupBy(f => new { f.UserId, f.SessionId })
-            .Select(f => new { f.UserId, f.SessionId, Hits = SqlFunctions.Sql.count() });
+            .SelectGroup(f => new { f.UserId, f.SessionId, Hits = SqlFunctions.Sql.count() });
 
         var rows = await ctx.From(sessions)
-            .GroupBy(s => new
-            {
-                Bucket = SqlFunctions.ClickHouse.multi_if(
-                        SqlFunctions.ClickHouse.when(s.Hits == 1, "01: single"),
-                        SqlFunctions.ClickHouse.when(s.Hits <= 3, "02: 2-3"),
-                        SqlFunctions.ClickHouse.when(s.Hits <= 10, "03: 4-10"),
-                        SqlFunctions.ClickHouse.when(s.Hits <= 30, "04: 11-30"),
-                        SqlFunctions.ClickHouse.otherwise("05: 30+"))
-            })
             .OrderBy(s => SqlFunctions.ClickHouse.multi_if(
                         SqlFunctions.ClickHouse.when(s.Hits == 1, "01: single"),
                         SqlFunctions.ClickHouse.when(s.Hits <= 3, "02: 2-3"),
                         SqlFunctions.ClickHouse.when(s.Hits <= 10, "03: 4-10"),
                         SqlFunctions.ClickHouse.when(s.Hits <= 30, "04: 11-30"),
                         SqlFunctions.ClickHouse.otherwise("05: 30+")))
-            .Select(s => new
+            .SelectGroup(s => new
             {
                 Bucket = SqlFunctions.ClickHouse.multi_if(
                         SqlFunctions.ClickHouse.when(s.Hits == 1, "01: single"),
@@ -366,8 +347,7 @@ public static class ClickHouseQueries
     {
         var daily = ctx.From<IHit>()
             .Where(h => h.EventDate >= new DateTime(2014, 3, 17) && h.EventDate <= new DateTime(2014, 3, 23))
-            .GroupBy(h => new { h.EventDate })
-            .Select(h => new
+            .SelectGroup(h => new
             {
                 h.EventDate,
                 Hits = SqlFunctions.Sql.count(),
@@ -393,4 +373,20 @@ public static class ClickHouseQueries
 
         return rows;
     }
+}
+
+// Named projections for the aliased Retention chain. The named join-alias surface (#160/#229) generates
+// an extension whose receiver is the chain's concrete type, which cannot be rendered for an anonymous
+// type (NORMGEN009), so both aliased CTEs are projected into named row types.
+public sealed class RetentionWeekRow
+{
+    public DateTime? CohortWeek { get; init; }
+    public byte WeekNumber { get; init; }
+    public int DistinctUsers { get; init; }
+}
+
+public sealed class CohortSizeRow
+{
+    public DateTime? CohortWeek { get; init; }
+    public int CohortSize { get; init; }
 }
