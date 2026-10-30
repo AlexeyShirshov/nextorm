@@ -35,6 +35,13 @@ if (args.Length > 0 && args[0] == "--t245-attribution")
             ? args[1]
             : Environment.GetEnvironmentVariable("NEXTORM_T245_ATTRIBUTION_OUT") ?? ".pdca/T245/rv1/attribution");
 
+// T245 (#245) Step 1 evidence completion: measurement-only reconciliation probe. It measures the exact
+// BDN arm bodies and the attribution-probe bodies in one process and against one pinned database, so the
+// probe level and the acceptance arms can be compared directly. Benchmark-project-only; no product change.
+if (args.Length > 0 && args[0] == "--t245-reconcile")
+    return await T245ReconciliationProbe.RunAsync(
+        args.Length > 1 ? args[1] : throw new ArgumentException("--t245-reconcile needs an output directory"));
+
 // T297-G8 (#297): BenchmarkDotNet launches one process per benchmark, so the class-level static
 // collector never sees more than the last probe of a BDN run. This env-gated entry point runs all
 // 32 probe bodies in a single process and writes the evidence; benchmark-project-only, and with

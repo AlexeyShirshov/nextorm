@@ -7,7 +7,7 @@
 - cycle: `N=3` · revision: `r=1` · attempt: `n=1/3` (step 1 is measurement-only and consumes **no** attempt — no candidate is produced)
 - scope: step 1 of the campaign — the same-round baseline for the warm cached fluent `Except`/`Intersect` paths plus per-phase allocation attribution, **measurement only, no product change**. Every later step's scope is decided by the planner after this step's CHECK. · status path: `.pdca/status/T245-warm-set-ops-3.md`
 - goal: reduce per-query managed allocations on the warm cached fluent `Except`/`Intersect` paths of `NextORM.Core` without SQL/behaviour/API regression, with per-phase attribution, native allocation gates and same-round paired BDN evidence — the §PLAN record, §Original task and `.pdca/rc5/items/T245/preparation.md@r1` are authoritative
-- phase: `DO` · record: `open` · outcome: `pending` — step 1 loop-back: CHECK not accepted → DO evidence completion (no attempt consumed, n=1/3 unchanged); route `CHECK → DO` per the CHECK record's §Next authorized transition (evidence completion is a requested re-gather, not a counted attempt)
+- phase: `DO` · record: `open` · outcome: `pending` — step 1 loop-back: CHECK not accepted → DO evidence completion (no attempt consumed, n=1/3 unchanged); the three requested artifacts (provenance, reconciliation, exact extraction) are supplied at `.pdca/rc5/items/T245/rv3/provenance/` and `.pdca/rc5/items/T245/rv3/reconciliation/` and returned for **re-CHECK**; no candidate, no attempt consumed, counters still `N=3 r=1 n=1/3`
 - source: issue `#245` (`AlexeyShirshov/nextorm`, milestone `1.0.9-rc5`), dispatched through collection `rc5` · context refs: `.pdca/rc5/items/T245/preparation.md@r1`, `.pdca/rc5/entry-plan.md@r1`, `.pdca/status/collection-rc5.md` §Input → `### #245 …`, §Task queue row `T245`, §Decisions log 06:45:06Z (evidence-root supersede)
 - criteria: `AC-245-01` … `AC-245-07` — exact verbatim text in §Original task below (source: `preparation.md@r1` §6, "verbatim user-supplied set"), not retyped in the summary
 
@@ -63,6 +63,83 @@ Step 1 baseline, measurement only, **no product edit and no attempt consumed**. 
 - Deviation recorded, not hidden: the dispatch expected run A's filter to yield `B_Nextorm_Prepared_*` and `*_Warm_Reused`; it yields neither (the `Prepare()` controls are `A_Nextorm_Prepared_*` in `SqliteBenchmarkFeaturesFair`, the `*_Prepare_*`/`*_Warm_Reused` rungs are `WarmDecompose`-only). Run C supplies the requested control rows (2 arms, no other arm added); run D is the phase probe that `preparation.md@r1` §7.1 requires and it already exists at `HEAD` — no harness was written or modified.
 - Evidence root: `.pdca/rc5/items/T245/rv3/` per the dispatch and the collection's 2026-10-30T06:45:06Z supersede (`.pdca/<item>/rv<k>/` → `.pdca/rc5/items/<item>/rv<k>/`); `preparation.md@r1` still carries the pre-supersede form `.pdca/T245/rv3/` — pointer only, nothing was written there.
 - Unfinished for this step: the CHECK of this measurement (driver's next action). No candidate, so no verdict, no `PASS`, no attempt used.
+
+### Step 1 evidence completion (CHECK → DO)
+
+Recorded `2026-10-30T13:35Z` UTC. This is the re-gather the Step 1 CHECK authorized (`CHECK → DO (evidence completion)`,
+Step 1 CHECK record `2026-10-30T13:02:13Z`), **not** a new attempt: no candidate, no product change, `n=1/3` unchanged, no
+criterion/threshold/denominator/tolerance edited, runs A–D untouched. The three requested artifacts are delivered:
+
+1. **Provenance observation** — `.pdca/rc5/items/T245/rv3/provenance/provenance.md` plus the raw command outputs
+   `git-identity.txt`, `git-diff-no-product-change.txt`, `git-reanchor-1e31331d-vs-cb2246e9.txt`,
+   `branch-and-divisor-sources.txt`, `sha256-benchmark-sources-and-binary.txt`, `sha256-binary-after-rebuild.txt`,
+   `sha256-db-before.txt`, `sha256-db-after.txt`.
+2. **Acceptance-workload reconciliation** — `.pdca/rc5/items/T245/rv3/reconciliation/reconciliation.md` plus the new
+   probe/BDN artifacts named in its §5.
+3. **Exact extraction** — `.pdca/rc5/items/T245/rv3/reconciliation/exact-values.json`, `exact-values.csv`,
+   `extraction-notes.md` (125 arm rows, exact integer `BytesAllocatedPerOperation`, divisor with `file:line`, B/query
+   division shown, `Mean` ns + `StdErr` ns, run identity).
+
+**Provenance verdict on `cb2246e9..HEAD` (from actual output):** the four commits are `.pdca/status/**`-only;
+`git diff --stat cb2246e9..HEAD -- src tests benchmarks` and `-- examples` are both **empty**; `git status --porcelain
+-- src tests benchmarks examples` is **empty** at dispatch start. So the *measured* product tree is byte-identical to
+today's tip `0d3bf558` on `1.0.9-rc5`. The charter's `1e31331d` is an ancestor of `cb2246e9` but **not** byte-identical
+to it: `git diff --stat 1e31331d..cb2246e9 -- src tests benchmarks` = 8 files, 253+/44−; semantic equivalence is **not**
+established by any output (recorded as such, not waived). The original item PLAN remains missing from disk — recorded
+as a fidelity gap with the accessible authoritative substitutes (charter §2/§3/§7, §Original task, container decisions
+log); it is **not** reconstructed.
+
+**Reconciliation outcome per gap (B/query, EXCEPT/INTERSECT)** — all four CHECK gaps close on a named owner, none by
+editing a denominator:
+
+| gap | value | owner | outcome |
+|---|---:|---|---|
+| probe total vs acceptance arm | +527.9 | harness (JIT tiering), decomposed below | closed |
+| construction rung | +399.82 | **harness difference** — JIT tiered compilation; with `DOTNET_TieredCompilation=0` BDN measures 4 584.19/4 584.20 vs the probe's 4 584 | closed |
+| execution control | +48.00 | **harness difference** — same regime; BDN 760.00/744.00 = probe 760/744 with tiering off | closed |
+| ladder `Warm_PlanOnly` + prepared vs full | +80.21 / +80.18 | **harness difference** — unequal JIT state between the three *baseline* runs; within one process the ladder closes to −0.12 (run E) / +0.19 (run F) / 0.00 (probe) | closed |
+| prepare/hash + lookup phase | 0 | — | matched (2 248.13 / 2 248.12 / 2 248) |
+
+The probe's algebraic prepare phase (`T245AttributionProbe.cs:669`) is now **independently measured** (plan-only arm) and
+gives the same 2 248 B/query, so the residual-0 identity is corroborated rather than assumed. Unverified and named in
+`reconciliation.md` §7: the *object-level* mechanism of the tiered-JIT allocation reduction, the cross-run spread of the
+tiered level, and the ~2× time difference of the tiering-off runs.
+
+**Runs · exit · UTC · log** (one process at a time, `dotnet build-server shutdown` first,
+`DOTNET_GCHeapHardLimit=0x80000000 DOTNET_gcServer=0 NEXTORM_BENCH_DB=/tmp/nextorm-bench/test.db timeout 1800`):
+
+- G `dotnet run --project benchmarks/nextorm.benchmark -c Release --no-build -- --t245-reconcile .pdca/rc5/items/T245/rv3/reconciliation`
+  → **0**, 13:26:52Z→13:26:53Z, `reconciliation/t245-reconcile.log`, `probe-reconcile.{json,csv}`.
+- H same with `DOTNET_TieredCompilation=0` → **0**, 13:26:56Z→13:26:57Z, `reconciliation/probe-tiering-off.log`,
+  `reconciliation/tiering-off/probe-reconcile.{json,csv}`.
+- I `… --filter '*T245Reconciliation*' --exporters json` → **0**, 13:23:51Z→13:24:28Z (37 s),
+  `reconciliation/bdn-reconcile-arms-first-tiered.log` (its JSON was overwritten by run J in the shared artifacts dir).
+- J same filter with `DOTNET_TieredCompilation=0` → **0**, 13:24:57Z→13:25:33Z (34 s),
+  `reconciliation/bdn-reconcile-arms-tiering-off.log` + `…-tiering-off-{full-compressed.json,github.md,csv}`.
+- K same filter, tiering default (re-run to keep its own JSON) → **0**, 13:27:24Z→13:28:00Z (36 s),
+  `reconciliation/bdn-reconcile-arms-tiered.log` + `…-tiered-{full-compressed.json,github.md,csv}`.
+
+Honest note: two earlier invocations of the **new** probe (`13:22:36Z`, `13:26:31Z`) had a per-query divisor error in my
+own harness for the 1-call and 100-call window shapes (divided by 1 / by 10 instead of by the logical-query count); the
+divisor was fixed and runs G/H are the corrected ones. Their logs were overwritten by the corrected run and none of
+their numbers is used. DB pin before/after every run:
+`32bf10a08291f25afff934f42c378215b6e8f76b8568d6afd519a53a92d72295`, 753 664 B, mtime unchanged; the probe records the
+same `harness.db_sha256`. Container socket present; **no container run was needed**.
+
+**Measurement-only harness hunks** (not a candidate, not an attempt, no product behaviour, no acceptance-recipe change):
+
+- `benchmarks/nextorm.benchmark/Attribution/T245ReconciliationProbe.cs` (new) — `--t245-reconcile`; measures the exact
+  BDN arm bodies and the probe's own bodies in one process; per-query divisor = `callsPerWindow × queriesPerCall`
+  (`Measure`, the window loop and the division in `Measure`).
+- `benchmarks/nextorm.benchmark/Attribution/T245ReconciliationBenchmark.cs` (new) — five BDN arms reproducing the
+  existing bodies verbatim; reachable only through the `*T245Reconciliation*` filter, never an acceptance filter.
+- `benchmarks/nextorm.benchmark/Program.cs:38-:43` (+7 lines) — the `--t245-reconcile` hook next to the existing
+  `--t245-attribution` hook.
+
+**Explicit statements:** no candidate was produced, **no attempt consumed**, `n=1/3` unchanged; no criterion, threshold,
+denominator or acceptance metric was changed; no product behaviour changed (`src/**`, `tests/**`, `examples/**`
+untouched); no CHECK was run here and no verdict/PASS is stated — the delta judgement and the Step 1 basis remain
+`pdca-check`'s call. Returned to the driver for **re-CHECK**.
 
 ## Baseline record
 
@@ -179,8 +256,8 @@ One row per stable defect key, as the Step 1 CHECK returned it. **No attempt con
 
 | key | revisions/attempts observed | fixes applied | evidence | last recurrence/escalation |
 |---|---|---|---|---|
-| `T245-S1-F1` | `r=1`, `n=1` (step 1, no attempt consumed) | `0` — blocking, **confirmed**: attribution does not close against the acceptance workload (`AC-245-03/06`, charter §7.3); **no fix applied** | `.pdca/rc5/items/T245/rv3/baseline/summary.md:92–112`; `t245-attribution.log:56–67`; `…WarmDecompose-report-github.md:24–42` | Step 1 CHECK `2026-10-30T13:02:13Z` → routed `CHECK → DO` (evidence completion), not escalated |
-| `T245-S1-F2` | `r=1`, `n=1` (step 1, no attempt consumed) | `0` — blocking, **unverified**: baseline provenance / no-product-change invariant (`AC-245-03/04/07`, charter §7); the charter's `1e31331d` vs the measured `cb2246e9` is not established as equivalent | `preparation.md:49,114–118`; `.pdca/status/T245-warm-set-ops-3.md:48,58–59,106` | Step 1 CHECK `2026-10-30T13:02:13Z` → routed `CHECK → DO` (provenance observation artifact requested) |
+| `T245-S1-F1` | `r=1`, `n=1` (step 1, no attempt consumed) | `0` — blocking, **confirmed**: attribution does not close against the acceptance workload (`AC-245-03/06`, charter §7.3); **no fix applied** | `.pdca/rc5/items/T245/rv3/baseline/summary.md:92–112`; `t245-attribution.log:56–67`; `…WarmDecompose-report-github.md:24–42` | Step 1 CHECK `2026-10-30T13:02:13Z` → routed `CHECK → DO` (evidence completion), not escalated; re-gather requested → evidence supplied at `.pdca/rc5/items/T245/rv3/reconciliation/reconciliation.md` (2026-10-30T13:31Z); verdict still CHECK's |
+| `T245-S1-F2` | `r=1`, `n=1` (step 1, no attempt consumed) | `0` — blocking, **unverified**: baseline provenance / no-product-change invariant (`AC-245-03/04/07`, charter §7); the charter's `1e31331d` vs the measured `cb2246e9` is not established as equivalent | `preparation.md:49,114–118`; `.pdca/status/T245-warm-set-ops-3.md:48,58–59,106` | Step 1 CHECK `2026-10-30T13:02:13Z` → routed `CHECK → DO` (provenance observation artifact requested); re-gather requested → evidence supplied at `.pdca/rc5/items/T245/rv3/provenance/provenance.md` (2026-10-30T13:30Z); verdict still CHECK's |
 | `T245-S1-F3` | `r=1`, `n=1` (step 1, no attempt consumed) | `0` — informational, **confirmed**: stale provenance text (`launch_command` names `rv1`, `argv` names `rv3`); historical substitution **not** established | `.pdca/rc5/items/T245/rv3/baseline/attribution/probe-variants2.json:10–17`; `t245-attribution.log:66–67` | Step 1 CHECK `2026-10-30T13:02:13Z`; no correction routed, qualification only |
 
 ## Changed files
@@ -191,12 +268,24 @@ One row per stable defect key, as the Step 1 CHECK returned it. **No attempt con
 - `.pdca/rc5/items/T245/rv3/baseline/attribution/probe-variants2.{json,csv}` → written by the existing probe entry point (`--t245-attribution`).
 - `.pdca/status/T245-warm-set-ops-3.md` → created (this record).
 - `.pdca/status/collection-rc5.md` → modified: §Decisions log entry + §Progress log row recording this Step 1 baseline; queue row `T245` unchanged (`status=ready`, `attempts=0`).
+- Step 1 evidence completion (CHECK → DO), all under `.pdca/rc5/items/T245/rv3/`:
+  - `provenance/provenance.md` → created: tree identity, no-product-change invariant (`cb2246e9..HEAD` product diff empty), benchmark-source and executed-binary identity, DB pin, verified divisors, missing-PLAN record, re-anchor facts, what it establishes.
+  - `provenance/git-identity.txt`, `git-diff-no-product-change.txt`, `git-reanchor-1e31331d-vs-cb2246e9.txt`, `branch-and-divisor-sources.txt`, `sha256-benchmark-sources-and-binary.txt`, `sha256-binary-after-rebuild.txt`, `sha256-db-before.txt`, `sha256-db-after.txt` → created: raw command stdout + `rc=` for every provenance claim.
+  - `reconciliation/reconciliation.md` → created: per-phase/per-arm matched measurement table, per-gap owner and outcome, run ledger, unverified list.
+  - `reconciliation/t245-reconcile.log`, `probe-reconcile.json`, `probe-reconcile.csv`, `probe-tiering-off.log`, `reconciliation/tiering-off/probe-reconcile.{json,csv}` → created by the new measurement-only probe (runs G, H).
+  - `reconciliation/bdn-reconcile-arms-first-tiered.log`, `bdn-reconcile-arms-tiering-off.{log,full-compressed.json,github.md,csv}`, `bdn-reconcile-arms-tiered.{log,full-compressed.json,github.md,csv}` → created by the new measurement-only BDN arms (runs I, J, K).
+  - `reconciliation/exact-values.json`, `exact-values.csv`, `extraction-notes.md` → created: 125 exact arm rows (integer `BytesAllocatedPerOperation`, divisor with `file:line`, B/query division, Mean/StdErr ns, run identity) and the display-rounding table.
+  - `reconciliation/db-sha-before.txt`, `db-sha-after.txt` → created: pinned-DB hash/size/mtime before and after every run.
+- Measurement-only harness (not a candidate, no product behaviour; reported as hunks):
+  - `benchmarks/nextorm.benchmark/Attribution/T245ReconciliationProbe.cs` → created (new file, `--t245-reconcile` entry point; window/division at `Measure`, `:286-:324`).
+  - `benchmarks/nextorm.benchmark/Attribution/T245ReconciliationBenchmark.cs` → created (new file, 5 BDN arms `:62-:104`, class `:29`).
+  - `benchmarks/nextorm.benchmark/Program.cs` → modified, +7 lines at `:38-:43` (the `--t245-reconcile` hook).
 
 No file under `src/`, `tests/`, `benchmarks/` or `docs/` was created, edited or deleted — the product tree is byte-identical to `cb2246e9`.
 
 ## Git state
 
-`status path: .pdca/status/T245-warm-set-ops-3.md — tracked; committed in 46cd9785, the commit that carries this step-1 CHECK record · lane branch now 1.0.9-rc5` — durable on disk and read back; this supersedes the earlier "created this cycle · untracked" wording, which was true only before that commit (committing it was that dispatch's explicit instruction under the collection `rc5` auto-commit policy). Baseline supplied this cycle: `cb2246e9`. Container status `.pdca/status/collection-rc5.md` was clean at `cb2246e9` before that modification, so its committed delta is this cycle's only. The lane's commits now land on `1.0.9-rc5`, which was fast-forwarded to `46cd9785` (no rewrite, no merge, no reset). Evidence under `.pdca/rc5/items/T245/rv3/baseline/` stays uncommitted (local evidence, never a CI input). The commit carried exactly `.pdca/status/T245-warm-set-ops-3.md` and `.pdca/status/collection-rc5.md`; no staging of anything else, no `-A`, no push.
+`status path: .pdca/status/T245-warm-set-ops-3.md — tracked; modified in this cycle (step-1 evidence completion) and committed together with .pdca/status/collection-rc5.md and the three measurement-only benchmark paths` — branch `1.0.9-rc5`, baseline supplied this cycle `cb2246e9` (measured tree; product sources byte-identical to `HEAD`), tip before this commit `0d3bf558`. Durable on disk and read back; the commit exists because this dispatch's brief authorizes it under the collection `rc5` auto-commit policy. Evidence under `.pdca/rc5/items/T245/rv3/**` stays uncommitted (local evidence, never a CI input). This cycle's task-owned delta: the two status files, the three benchmark paths above (one modified, two new), and the `rv3/provenance/**` + `rv3/reconciliation/**` artifacts; nothing else is staged, no `-A`, no push, no merge, no tag, no branch switch. Work outside this delta (the other `.pdca/status/*` dirty set) stays untouched and unclaimed.
 
 ## Progress log
 
@@ -207,3 +296,12 @@ No file under `src/`, `tests/`, `benchmarks/` or `docs/` was created, edited or 
 2026-10-30T12:50:08Z | DO | revision r=1 | attempt n=1 | run D existing `--t245-attribution` probe exit 0, deterministic, closure residual 0: operands 3 712, clone 872, prepare/hash 2 248, execute 808/792, totals 7 640/7 624 B/query (probe level +528 vs BDN; used for relative shares only) | `t245-attribution.log`, `attribution/probe-variants2.json`
 2026-10-30T12:52:00Z | DO | revision r=1 | attempt n=1 | baseline record written: `summary.md` + §Baseline record; no product change, no attempt consumed, no candidate ⇒ CHECK pending, no verdict | `.pdca/rc5/items/T245/rv3/baseline/summary.md`, `.pdca/status/T245-warm-set-ops-3.md`
 2026-10-30T13:02:18Z | C | revision r=1 | attempt n=1 | Step 1 CHECK returned **not accepted** → `DO` evidence completion (no attempt consumed, counters `N=3 r=1 n=1/3` unchanged): the measurement does not yet establish the exact comparable byte pool for Step 2's basis; criteria `AC-245-01` unmet (1.374×/1.384× allocation, above the 1.20× stretch), `AC-245-02..07` unverified; findings `T245-S1-F1` (blocking, confirmed — attribution does not close: probe +527.9 B/query vs BDN arms, 80.21/80.18 B residual over the ladder), `T245-S1-F2` (blocking, unverified — charter `1e31331d` vs measured `cb2246e9`, no observed identity diff), `T245-S1-F3` (informational, confirmed — stale `launch_command` `rv1` vs `argv` `rv3`); requested evidence: (1) provenance observation artifact, (2) acceptance-workload reconciliation artifact, (3) machine-readable exact BDN allocation extraction; no candidate ABBA run, no native gate, no whole-suite run requested; no product change, no attempt consumed | `.pdca/rc5/items/T245/rv3/baseline/`
+2026-10-30T13:22:20Z | DO | revision r=1 | attempt n=1 | Step 1 evidence completion opened (re-gather, no attempt): provenance raw capture (git identity, `cb2246e9..HEAD` diff/status, benchmark-source sha256, binary identity, DB pin) and two measurement-only harness files added under `benchmarks/nextorm.benchmark/Attribution/` + a 7-line `Program.cs` hook; no product/test/example edit | `.pdca/rc5/items/T245/rv3/provenance/`
+2026-10-30T13:22:37Z | DO | revision r=1 | attempt n=1 | first `--t245-reconcile` invocation discarded: my own harness divided the 1-call and 100-call window shapes by the wrong logical-query count; fixed, re-run; no number from that invocation is used and its log was overwritten | —
+2026-10-30T13:24:28Z | DO | revision r=1 | attempt n=1 | run I `--filter '*T245Reconciliation*' --exporters json` exit 0, 5 arms, 37 s, BDN `ShortRun`/`InProcessEmitToolchain`, tiering default: `Construct_LadderBody` 410 416 B/op, `Warm_PlanOnly` 635 228, `Full_Terminal` 71 124, `Prepared_Reuse` 7 600; its JSON was overwritten in the shared artifacts dir by run J | `reconciliation/bdn-reconcile-arms-first-tiered.log`
+2026-10-30T13:25:33Z | DO | revision r=1 | attempt n=1 | run J same 5 arms with `DOTNET_TieredCompilation=0` exit 0, 34 s: construct 458 419/458 420, plan-only 683 231, full 75 925, prepared 7 600 B/op — i.e. the probe's exact level | `reconciliation/bdn-reconcile-arms-tiering-off.{log,full-compressed.json,github.md,csv}`
+2026-10-30T13:26:53Z | DO | revision r=1 | attempt n=1 | run G `--t245-reconcile` exit 0 (~1 s), tiering default: full 7 640/7 624 = construct 4 584 + prepare 2 248 + exec 808/792 (closure 0.00); `construct_*` = 4 584 in all three window shapes (1-call/10-loop/100-loop) | `reconciliation/t245-reconcile.log`, `probe-reconcile.{json,csv}`
+2026-10-30T13:26:57Z | DO | revision r=1 | attempt n=1 | run H same probe with `DOTNET_TieredCompilation=0` exit 0: full 7 592/7 576, prepare 2 248, exec 760/744 (= BDN `Prepare()` control exactly), closure 0.00 — the 399.82 + 48.00 B gap is the JIT regime | `reconciliation/probe-tiering-off.log`, `tiering-off/probe-reconcile.{json,csv}`
+2026-10-30T13:28:00Z | DO | revision r=1 | attempt n=1 | run K 5 arms re-run tiering default exit 0, 36 s, JSON kept: construct 410 416/410 417, plan-only 635 228, full 71 124, prepared 7 600 B/op; single-process ladder closure −0.12 vs the cross-run +80.21 of the baseline set | `reconciliation/bdn-reconcile-arms-tiered.{log,full-compressed.json,github.md,csv}`
+2026-10-30T13:32:00Z | DO | revision r=1 | attempt n=1 | three artifacts written: `provenance/provenance.md` (+8 raw `git-*`/`sha256-*` files), `reconciliation/reconciliation.md` (per-gap closure: 528 = 399.82 + 48 + 80.08, owner harness/JIT tiering; prepare phase matched), `reconciliation/exact-values.{json,csv}` + `extraction-notes.md` (125 exact arm rows, display-rounding table); DB `32bf10a0…72295` 753 664 B unchanged, no container run needed | `.pdca/rc5/items/T245/rv3/provenance/`, `.pdca/rc5/items/T245/rv3/reconciliation/`
+2026-10-30T13:35:00Z | DO | revision r=1 | attempt n=1 | step-1 evidence completion returned for **re-CHECK**: no candidate produced, no attempt consumed, `N=3 r=1 n=1/3` unchanged, no criterion/threshold/denominator changed, no product behaviour change; verdict remains CHECK's | this record §DO result `### Step 1 evidence completion (CHECK → DO)`
