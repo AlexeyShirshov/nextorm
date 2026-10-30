@@ -42,6 +42,13 @@ if (args.Length > 0 && args[0] == "--t245-reconcile")
     return await T245ReconciliationProbe.RunAsync(
         args.Length > 1 ? args[1] : throw new ArgumentException("--t245-reconcile needs an output directory"));
 
+// T245 (#245) Step 2: measurement-only object-level breakdown of the set-op construction and
+// prepare/hash/lookup buckets. Benchmark-project-only entry point; it never touches nextorm.core and
+// changes no product behaviour, acceptance recipe or threshold.
+if (args.Length > 0 && args[0] == "--t245-step2-breakdown")
+    return await T245Step2BreakdownProbe.RunAsync(
+        args.Length > 1 ? args[1] : throw new ArgumentException("--t245-step2-breakdown needs an output directory"));
+
 // T297-G8 (#297): BenchmarkDotNet launches one process per benchmark, so the class-level static
 // collector never sees more than the last probe of a BDN run. This env-gated entry point runs all
 // 32 probe bodies in a single process and writes the evidence; benchmark-project-only, and with
