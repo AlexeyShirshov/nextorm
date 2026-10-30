@@ -40,9 +40,11 @@ internal static class CsvPlanCacheKey
         var delimiter = options?.Delimiter ?? ',';
         var nullMarker = options?.NullMarker ?? CsvStreamOptions.DefaultNullMarker;
         var excelMode = options?.ExcelMode ?? false;
+        var includeHeader = options?.IncludeHeader ?? true;
         builder.Append(delimiter).Append(';');
         AppendString(builder, nullMarker);
         AppendBool(builder, excelMode);
+        AppendBool(builder, includeHeader);
 
         // Projection signature.
         AppendInt(builder, selectList.Length);

@@ -281,6 +281,9 @@ public class CsvTerminalPlanCacheTests
         // excel mode
         CsvPlanCacheKey.Build(typeof(SqliteDataContext), columns, schema, false, new CsvStreamOptions { ExcelMode = true })
             .Should().NotBe(baseline, "excel mode is part of the key");
+        // include header
+        CsvPlanCacheKey.Build(typeof(SqliteDataContext), columns, schema, false, new CsvStreamOptions { IncludeHeader = false })
+            .Should().NotBe(baseline, "header emission is part of the key");
         // sequential access
         CsvPlanCacheKey.Build(typeof(SqliteDataContext), columns, schema, true, new CsvStreamOptions())
             .Should().NotBe(baseline, "sequential access is part of the key");
@@ -479,6 +482,60 @@ public class CsvTerminalPlanCacheTests
             intBytes.Should().Contain("Id");
             stringBytes.Should().Contain("Name");
             intBytes.Should().NotBe(stringBytes);
+        }
+        finally
+        {
+            ctx.Dispose();
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void HeaderOption_ShouldNotAlias_AndProduceExactBytes()
+    {
+        var ctx = CreateDb(out var path);
+        try
+        {
+            // First call with header enabled compiles a plan.
+            byte[] withHeader;
+            using (var d = new MemoryStream())
+            {
+                ctx.From<CsvCacheRow>().OrderBy(r => r.Id).WriteCsv(d, new CsvStreamOptions { IncludeHeader = true }, CancellationToken.None);
+                withHeader = d.ToArray();
+            }
+            ctx.TerminalPlanCacheForTesting.CompilationCount.Should().Be(1);
+            ctx.TerminalPlanCacheForTesting.EntryCount.Should().Be(1);
+
+            // Second call differing only in the header option must NOT alias: it compiles a fresh plan.
+            byte[] withoutHeader;
+            using (var d = new MemoryStream())
+            {
+                ctx.From<CsvCacheRow>().OrderBy(r => r.Id).WriteCsv(d, new CsvStreamOptions { IncludeHeader = false }, CancellationToken.None);
+                withoutHeader = d.ToArray();
+            }
+            ctx.TerminalPlanCacheForTesting.CompilationCount.Should().Be(2,
+                "differing only in the header option must not reuse a cached plan");
+            ctx.TerminalPlanCacheForTesting.EntryCount.Should().Be(2);
+
+            // Exact byte-correct output for both (with header row).
+            var expectedWithHeader = "Id,Name\r\n1,alpha\r\n2,\"be,ta\"\r\n";
+            var expectedWithoutHeader = "1,alpha\r\n2,\"be,ta\"\r\n";
+            Encoding.UTF8.GetString(withHeader).Should().Be(expectedWithHeader,
+                "the header-enabled call must emit the header row and CRLF-terminated rows");
+            Encoding.UTF8.GetString(withoutHeader).Should().Be(expectedWithoutHeader,
+                "the header-disabled call must omit the header row and emit CRLF-terminated rows");
+
+            // A repeat of the header-enabled call is a cache hit: no recompile, identical bytes.
+            using (var d = new MemoryStream())
+            {
+                ctx.From<CsvCacheRow>().OrderBy(r => r.Id).WriteCsv(d, new CsvStreamOptions { IncludeHeader = true }, CancellationToken.None);
+                d.ToArray().Should().Equal(withHeader, "a cache hit must be byte-identical to the cold run");
+            }
+            ctx.TerminalPlanCacheForTesting.CompilationCount.Should().Be(2, "the repeated call must be a cache hit");
+
+            // The cache must not grow unbounded: entries stay within the combined capacity.
+            ctx.TerminalPlanCacheForTesting.EntryCount.Should().BeLessThanOrEqualTo(TerminalPlanCache.Capacity,
+                "the combined terminal cache must stay within its bound");
         }
         finally
         {
