@@ -153,10 +153,10 @@ Optimize residual `CsvDialect`/policy allocations (`CsvStreamWriter.cs:230,251,5
 
 - task: `T250` · form: `cycle` · specialized skill: `pdca-dotnet` (`coder+.NET`, inherits `pdca-coder`)
 - mode: `autonomous` (collection `rc5` lane, auto-commit authorized for item-touched files on `collection/**` branches)
-- cycle: `N=1` · revision: `r=2` · attempt: `n=3/3` (spent — attempt 4 cure list complete: harness/small-export acceptance case committed; per-leg provenance; exact-byte deltas; JSON limitation recorded; manifest honesty; awaiting CHECK; counters `N=1 r=2 n=3/3`)
+- cycle: `N=1` · revision: `r=2` · attempt: `n=3/3` (spent — attempt 4 cure list complete: harness/small-export acceptance case committed; per-leg provenance; exact-byte deltas; JSON limitation recorded; manifest honesty; CHECK r=2 n=3/3 returned `not accepted`; ACT finalizes Tier B local acceptance at n=3/3, step-level, with recorded residual; counters `N=1 r=2 n=3/3`)
 - scope: the whole item goal of issue `#250` — a bounded per-context cache of compiled CSV terminal column plans (shared in design with `#247`), CSV cache-key discrimination and `ValueTransform` bypass, fail-closed and sticky-`QueryCommand.Cache` invariants preserved, correctness test coverage, and the committed CSV fixed-cost harness + small-export perf-gate case with paired same-round acceptance measurement · status path: `.pdca/status/T250-csv-terminal-plan-cache-1.md`
 - goal: a warm CSV export stops recompiling one `Expression.Lambda<Action<IDataRecord, CsvRowBuffer>>` per column from a bounded per-context terminal-plan cache, closing on the 2026-10-20 two-tier policy (global ratios or a measured one-axis local win, residual gap recorded) with CSV bytes, dialect, guards and JSON behaviour unchanged — the §PLAN record `rc5-r1` and §Original task are authoritative
-- phase: `CHECK` · record: `candidate — attempt n=3/3 spent, awaiting CHECK` · outcome: `evidence round returned` (evidence_round=2; attempt 4 cure list complete; CHECK not yet dispatched) · counters `N=1 r=2 n=3/3`
+- phase: `ACT` · record: `final — Tier B local acceptance at n=3/3, step-level, with recorded residual` · outcome: `Tier B local acceptance at n=3/3 (limited, step-level); AC-250-1 unverified, AC-250-2 unmet magnitude (non-veto), AC-250-3 met, AC-250-4 unverified-blocking (JSON non-regression + attribution provenance open)` · counters `N=1 r=2 n=3/3`
 - evidence_round: `2` (frozen tree `aa06e83f71a7672e87cd3d9aedace1138f3da308`; acceptance gate `.pdca/T250/rv1/attempts/attempt4/gates/acceptance.log`; manifest `.pdca/T250/rv1/manifest.json`; helper rc values in `.pdca/T250/rv1/attempts/attempt4/manifest-helpers.log`)
 - source: collection `rc5` queue item `T250` (issue `#250`, milestone `1.0.9-rc5`), re-opened from this rc3/rc4 record · context refs: `.pdca/status/collection-rc5.md` §`## Input` → `### #250 — Perf: CSV terminal recompiles its column plan on every export (terminal plan cache, CSV slice)` (authoritative task text), `.pdca/rc5/entry-plan.md`, `.opencode/skills/nextorm-pdca/SKILL.md`, baseline `1e31331d`
 - criteria: `AC-250-1`, `AC-250-2`, `AC-250-3`, `AC-250-4` — exact text in §PLAN record `### rc5-r2` (§Goal and Acceptance Criteria, reproduced verbatim and unchanged from rc5-r1), not retyped here; measurement method in the same block · evidence root: `.pdca/T250/rv1/` (contract `rv1`), DO attempts under `.pdca/T250/rv1/attempts/`
@@ -435,11 +435,66 @@ Gates (re-run, attempt 4): build rc 0 `0 Warning(s) 0 Error(s)` (`attempts/attem
 
 ## CHECK record
 
-`not run: no DO candidate yet` — no independent CHECK has been dispatched for this item; nothing is frozen in advance and no criterion is reported as met.
+### r=2 n=3/3 — CHECK verdict: `not accepted` (terminal, attempt budget spent)
+
+Verdict: `not accepted` on the evidence as presented. Mandatory `AC-250-4` unverified: comparative JSON/mixed-terminal non-regression unproved; attribution of the ABBA legs unbound. Terminal case after the revision's attempt budget (n=3/3).
+
+Per-criterion matrix:
+- `AC-250-1` — **unverified** (performance / two-tier target): global targets unmeasured — no same-round linq2db arm in `SqliteBenchmarkCsvFixedCost`; local win measured (allocations −13.47…−13.67 KB/call, time −78.2 % / −36.0 % / −8.7 %, repeat drift inside the pre-registered ±20 % band) but the 10 000-row ±3 % band was missed upward (9 596.78 / 9 812.37 µs vs [10 573, 11 227] µs) — a speed improvement, not a regression, and not a veto.
+- `AC-250-2` — **unmet (magnitude only, non-veto)** (performance / allocation): cache removes ≈4.4–4.5 KB/col (~90 % of the ≈4.9–5.0 KB/col cold compile object); the literal ≥8 KB/col (≥24 576 B / 3-column call) bar is unmet by 11 239.98046875 B (first pair) / 10 908.47265625 B (equal-leg mean). The cache-hit allocation win is real; the magnitude bar overestimated the actual compile cost.
+- `AC-250-3` — **met** (functional / negative & invariant): cache hit byte-identical to cold run (sync/async, CRLF/RFC 4180); no aliasing across options/provider/storage types/sequential; `ValueTransform` always bypasses; `DataContextCache.Clear()` and `PurgeQueryCache()` drop entries; bound ≤64 respected; 14/14 `CsvTerminalPlanCacheTests` green.
+- `AC-250-4` — **unverified-blocking** (contract / non-regression): no public API change and CSV dialect contract (RFC 4180, CRLF, null marker, Excel guard) preserved (verified); JSON and CSV non-regression **unproved** — no acceptance-tagged JSON terminal benchmark and no same-round baseline obtainable; attribution of the ABBA legs bound only partially (per-leg DB sha matches the pinned value on disk, exact checkout/rebuild commands for the baseline/candidate switch not preserved).
+
+Source refs: `.pdca/T250/rv1/manifest.json` (AC-250-1/2/4 rows marked `open`); `.pdca/T250/rv1/attempts/attempt4/provenance.md`; `.pdca/T250/rv1/attempts/attempt4/json-nonregression.md`; `.pdca/T250/rv1/attempts/attempt3/analysis/abba.md` (errata); `.pdca/T250/rv1/attempts/attempt4/gates/{acceptance,build,core-json,manifest-helpers}.log`.
+
+### Expert review — `pdca-escalate` (strong tier)
+
+Recommendation: **no criteria or contract defect**; `STOP` would be wrong (a tested, committed, retained product change with verified gates would be reverted); the honest outcome is a **Tier B local acceptance at `n=3/3`, step-level, with a recorded residual** under the lane `G1` amendment rule 3 and the user's scoping clarification (attempt budget is per step and per contract revision; partial-win acceptance applies at step level; the campaign's number of steps is not capped).
+
+Accepted scope recorded (product commit `9e0832c8`, harness commit `7f4b8907`):
+- one bounded per-context `TerminalPlanCache` (capacity 64, shared generation counter, one lock, LRU eviction) reused by the JSON row-writer cache adapter and the CSV terminal plan;
+- `CsvPlanCacheKey` structural key (concrete context type, projection, reader storage types, `SequentialAccess`, delimiter/null marker/Excel mode/**header**);
+- `ValueTransform != null` always bypasses lookup and publication;
+- `DataContextCache.Clear()` and `PurgeQueryCache()` drop entries; bound respected;
+- `QueryCommand.Cache` / `_dontCache` untouched; `storeInCache: false` retained;
+- fail-closed guards (unsupported projection before header, `AsTempTable`, in-memory `NotSupportedException`) unchanged;
+- harness commit `7f4b8907` added `[BenchmarkCategory("acceptance")]` to `Nextorm_WriteCsv_3Col` (small-export CSV case).
+
+"Never claim" (explicit limits of this record):
+- That `AC-250-1` is verified or the global targets met.
+- That the attribution is bound to a verified source identity or reproducible from stored commands.
+- That `AC-250-2`'s magnitude is met.
+- That JSON non-regression is proved.
+- That no further lever exists.
+- That the planner's `r=2` magnitude "supersede" waived anything — acceptance rests on the `G1` amendment rule 3 + the user's scoping clarification only.
+- That the 10 000-row case regressed (CHECK refuted it: −8.7 %, below the stretch interval, not a veto).
 
 ## ACT record
 
-`pending` — not reached; this cycle is not closed.
+Finalized outcome (CHECK `r=2 n=3/3` `not accepted` + expert review `pdca-escalate`): **Tier B local acceptance at `n=3/3`, step-level, with a recorded residual** — not `STOP`, not `done`/`met`, not a global-target claim. Accepted under the lane `G1` amendment rule 3 and the user's scoping clarification (attempt budget per step and per contract revision; partial-win acceptance at step level).
+
+Accepted scope: one bounded per-context `TerminalPlanCache` (capacity 64, shared generation, LRU) reused by the JSON row-writer cache adapter and the CSV terminal plan; `CsvPlanCacheKey` structural key (context type, projection, storage types, sequential, delimiter/null marker/Excel mode/header); `ValueTransform` bypass; `DataContextCache.Clear()`/`PurgeQueryCache()` invalidation; `QueryCommand.Cache` untouched; fail-closed guards unchanged. Product commit `9e0832c8`; harness commit `7f4b8907` (small-export CSV case in the `acceptance` category).
+
+Numbers (candidate − baseline, B/query):
+- Equal-leg mean deltas: 100 rows −13 667.52734375; 1 000 rows −13 644.953125; 10 000 rows −13 476.
+- First pair: −13 336.01953125 / −13 313.09375 / −13 146.625; second pair: −13 999.03515625 / −13 976.8125 / −13 805.375.
+- Time: −78.2 % / −36.0 % / −8.7 %; repeat drift inside the pre-registered ±20 % band.
+- Residual to `AC-250-2`'s literal 24 576 B/3-column call: 11 239.98046875 B (first pair) and 10 908.47265625 B (equal-leg mean).
+- Residual to the Tier A global target: allocation/time ratios unmeasured (no same-round linq2db arm in `SqliteBenchmarkCsvFixedCost`).
+
+Gates: build 0 W / 0 E (rc 0); core CSV+JSON+convention selections 140 passed / 0 failed; sqlite 30; sqlserver 11; postgres 1; fail-closed integration 7 934 / 7 733 / 0 / 201 (`DOCKER_HOST`, no `NEXTORM_SKIP_PROVIDERS`); acceptance gate 12 cases / 5 CSV parameter sets, 0 failures, 82.21 s (100 rows 157.17 µs / 35.66 KB; 1 000 rows 1 030.99 µs / 190.34 KB; 10 000 rows 9 715.84 µs / 1 736.84 KB).
+
+Residual list (open items):
+(a) attribution/provenance unbound — `T250-R2-EVIDENCE-01`;
+(b) JSON/mixed comparative non-regression unproved;
+(c) harness commit `7f4b8907` absent from the frozen snapshot / manifest identity;
+(d) `AC-250-2` magnitude unmet (−4.4…−4.5 KB/col vs the literal bar);
+(e) `T250-C2-03` no-further-lever unverified;
+(f) global linq2db ratio arms unmeasured (milestone-level residual).
+
+Issue handling: `gh issue comment 250` posted (URL recorded below); issue `#250` stays **OPEN** in milestone `1.0.9-rc5` — not closed. No "done"/"met" claim; magnitude not claimed reached.
+
+Counters: `N=1` · `r=2` · `n=3/3` (spent). No further attempt; campaign continues with other items.
 
 ## Revision history
 
@@ -491,7 +546,7 @@ T250-C2-03 | r=2 attempt n=3/3 observed | 0 applied (open) | no further plan-cac
 ## Git state:
 
 
-`status path: .pdca/status/T250-csv-terminal-plan-cache-1.md — modified this cycle · tracked (durable on disk)` — branch `1.0.9-rc5`, HEAD `e0b24589` (attempt 4 cure list complete; commit pending). Item-touched paths: `benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkCsvFixedCost.cs`, `.pdca/T250/rv1/provenance/source-identity.md`, `.pdca/T250/rv1/manifest.json`, `.pdca/T250/rv1/attempts/attempt3/analysis/abba.md`, `.pdca/T250/rv1/attempts/attempt4/**`, this status file, `.pdca/status/collection-rc5.md`. Foreign dirty paths left untouched/unstaged.
+`status path: .pdca/status/T250-csv-terminal-plan-cache-1.md — modified this cycle · tracked (durable on disk)` — branch `1.0.9-rc5`, HEAD `7f4b8907` (harness commit) with ACT finalization committed in this cycle (sha recorded after commit; see progress log). Item-touched paths for this ACT: this status file and `.pdca/status/collection-rc5.md` only (product/test/docs/benchmark artifacts untouched by ACT). Foreign dirty paths left untouched/unstaged.
 
 ## Progress log
 
@@ -507,3 +562,4 @@ T250-C2-03 | r=2 attempt n=3/3 observed | 0 applied (open) | no further plan-cac
 2026-10-30T20:26:05Z | DO | revision r=2 | attempt n=2/3 | attempt 3 bookkeeping — T250-R2-KEY-01 fixed (IncludeHeader keyed); new regression test HeaderOption_ShouldNotAlias_AndProduceExactBytes + IncludeHeader assertion; gates rc 0 (build 0W/0E; core 138; sqlite 30; sqlserver 11; postgres 1; conventions 4; integration 7934/7733/0/201); ABBA allocation -13.5 KB/call, time -78.2%/-36.0%/-8.7%; no linq2db arm; manifest row T250-R2-KEY-01 added; helpers validate rc=0 lint rc=2 (frozen tree stale); commit pending | .pdca/T250/rv1/attempts/attempt3/; .pdca/T250/rv1/attempts/attempt3/gates/manifest-helpers.log
 2026-10-30T20:28:14Z | DO | revision r=2 | attempt n=2/3 | frozen-tree refresh: stale manifest tree 46dc58dcb768c8fe41e388c5ed12946d4290d44c -> aa06e83f71a7672e87cd3d9aedace1138f3da308 (recipe reproduced exactly; attempt-3 evidence row refreshed); helpers validate_inner_loop rc=0, pdca_evidence lint rc=0; commit pending | .pdca/T250/rv1/manifest.json, .pdca/T250/rv1/attempts/attempt3/gates/manifest-helpers.log
 2026-10-30T20:45:24Z | DO | revision r=2 | attempt n=3/3 | attempt 4 cure list complete: acceptance gate 12 cases (5 CSV) rc 0 wall 82.21s; provenance bound (legs A1/A2/B1/B2); exact-byte deltas -13336/-13313/-13147 B (A2/B2 -13999/-13977/-13806); residual to 24576 B = 11240 B; JSON limitation recorded; manifest helpers rc 0/0; build 0W/0E; core tests 140/0; commit pending | .pdca/T250/rv1/attempts/attempt4/; .pdca/T250/rv1/manifest.json
+2026-10-30T20:52:10Z | ACT | revision r=2 | attempt n=3/3 | ACT finalized: CHECK r=2 n=3/3 `not accepted` + expert review (pdca-escalate): Tier B local acceptance at n=3/3, step-level, with recorded residual; AC-250-1 unverified, AC-250-2 unmet magnitude (non-veto), AC-250-3 met, AC-250-4 unverified-blocking; product commit 9e0832c8, harness commit 7f4b8907; issue #250 stays OPEN; residual (a)-(f) recorded; commit of the two status files pending | .pdca/status/T250-csv-terminal-plan-cache-1.md §ACT record; .pdca/status/collection-rc5.md
