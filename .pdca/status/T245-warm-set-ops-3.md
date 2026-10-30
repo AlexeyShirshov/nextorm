@@ -7,7 +7,7 @@
 - cycle: `N=3` · revision: `r=2` · attempt: `n=1/3` (still unspent — step 1 is measurement-only and consumes **no** attempt; no candidate is produced) · preparation_ref: `.pdca/rc5/items/T245/preparation-r2.md@r2`
 - scope: step 1 of the campaign — the same-round baseline for the warm cached fluent `Except`/`Intersect` paths plus per-phase allocation attribution, **measurement only, no product change**. Every later step's scope is decided by the planner after this step's CHECK. · status path: `.pdca/status/T245-warm-set-ops-3.md`
 - goal: reduce per-query managed allocations on the warm cached fluent `Except`/`Intersect` paths of `NextORM.Core` without SQL/behaviour/API regression, with per-phase attribution, native allocation gates and same-round paired BDN evidence — the §PLAN record, §Original task and `.pdca/rc5/items/T245/preparation-r2.md@r2` are authoritative
-- phase: `DO` · record: `open` · outcome: `pending` — step 1 bounded round 2 (after PLAN `r=2`) returned for re-CHECK — no attempt consumed, zero product change
+- phase: `ACT` · closed for **step 1** · record: `step boundary` — pending the planner's Step 2 scope/contract decision · outcome: `step 1 accepted, campaign open` (no campaign `PASS`, no `done`, no attempt consumed, issue #245 stays OPEN)
 - source: issue `#245` (`AlexeyShirshov/nextorm`, milestone `1.0.9-rc5`), dispatched through collection `rc5` · context refs: `.pdca/rc5/items/T245/preparation.md@r1`, `.pdca/rc5/entry-plan.md@r1`, `.pdca/status/collection-rc5.md` §Input → `### #245 …`, §Task queue row `T245`, §Decisions log 06:45:06Z (evidence-root supersede)
 - criteria: `AC-245-01` … `AC-245-07` — exact verbatim text in §Original task below (source: `preparation.md@r1` §6, "verbatim user-supplied set"), not retyped in the summary
 
@@ -248,6 +248,24 @@ the driver for **re-CHECK**.
 - **`preparation_ref@r1`:** `.pdca/rc5/items/T245/preparation.md@r1` (sha256 of the file is not claimed here; the file is the immutable charter).
 - **Carried context, not re-measured:** `T317` residual per `.pdca/status/T317-rc5-1.md` — deterministic `+160 B/op` on the four `In*` arms and `+1 761 B` mean on `RecursiveCte`, both unmeasured in this step, mechanism unattributed; a per-instance memo seam cannot satisfy `AC-317-02` (fresh `QueryCommand` per terminal). `T318` closed terminal `infeasible` with no product delta — no empty-collection fast path is available as a lever; the clone shell remains `872 B/query`.
 
+### Accepted basis (r=2, after Step 1 CHECK)
+
+Appended `2026-10-30T14:09Z` UTC. The Step 1 CHECK recorded below accepted **this** baseline as the campaign's source-bound measurement basis under the `X1` binding `cb2246e9` (plan revision `r=2`). It is one table, taken from run L (`.pdca/rc5/items/T245/rv3/reconciliation/bdn-both-operations.log`, exit **0**, 10 benchmarks, 65.66 s; `both-operations.md`):
+
+| phase (B/query) | EXCEPT | INTERSECT |
+|---|---:|---:|
+| construction | 4 104.16 | 4 104.18 |
+| preparation/hash + lookup | 2 248.12 | 2 248.10 |
+| prepared execution/materialization | 760.10 | 744.10 |
+| full cached terminal | 7 112.40 | 7 096.40 |
+| decomposed − full residual | −0.02 | −0.02 |
+
+with the same-round baseline BDN arms `7 112.1 / 7 096.1 B/query` versus linq2db `5 176.2 / 5 128.2` = **1.374× / 1.384×** allocated (time ≈ `0.475× / 0.477×`), `Prepare()` controls **760.0 / 744.0** and `Warm_Reused` **0.00** B/query for both operations.
+
+**Limits that travel with this table (as CHECK stated):** `160.01 / 528.03 B/query` are diagnostic observed-range constructions, **not** bounds on future processes (the default-tiered plain probe itself measures construction at `4 584 B/query`); preparation's ≈`2 248 B/query` is observed stability, **not** proven regime invariance; the `872 B` clone is **not** a proven, safely removable acceptance-path byte pool; **no** drift allowance, threshold correction or historical substitution is authorized; Step 2 must produce its own same-round paired comparison under the held-JIT-regime condition. The `−0.02 B/query` residual is recorded, not a tolerance.
+
+**The r1-recorded values above remain as measured and are not superseded in place** — the `r=2` block supersedes the *binding*, not those numbers; both stay readable and neither is edited.
+
 ## CHECK record
 
 Record metadata (executor, not part of the report): **step 1** · check recorded `2026-10-30T13:02:13Z` UTC · verdict `not accepted` · next transition `→ DO (evidence completion)` · counters `N=3 r=1 n=1/3` **unchanged** · **no attempt consumed**.
@@ -446,9 +464,100 @@ No candidate ABBA run, native-gate implementation or whole-suite run is requeste
 
 The report states the authorized next transition only; this record judges nothing and adds no verdict of its own.
 
+### Step 1 CHECK under PLAN r=2 — accepted
+
+Record metadata (executor, not part of the report): **step 1** · step 1 **accepted under `r=2`** · check recorded `2026-10-30T14:09Z` UTC · verdict `accepted — Step 1 under r=2 only` · next transition `→ ACT`, then the campaign step boundary · counters `N=3 r=2 n=1/3` **unchanged** · **no attempt consumed**.
+
+Source reference: the independent `pdca-check` third Step 1 report (after the bounded round 2 under PLAN `r=2`) as returned to this campaign's Step 1 boundary. It has no separate persisted report file of its own — its evidence pointers are the artefacts under `.pdca/rc5/items/T245/rv3/`, which CHECK opened directly (scoped read). Recorded below as returned, fenced only so that its own `##`/`###` headings stay literal and do not compete with this file's fixed sections; no byte of the report was rewritten, summarised, translated or judged.
+
+````markdown
+## Verdict: **accepted — Step 1 under `r=2` only**
+
+The evidence now supports a **source-bound, per-operation baseline and bounded phase attribution** on `cb2246e9`. This does **not** accept the campaign, demonstrate a local improvement, or prove that any measured bytes are safely removable.
+
+Pointers below are relative to `.pdca/rc5/items/T245/rv3/`, unless otherwise stated.
+
+### Criteria assessment
+
+The supplied criteria cover the original issue and are judgeable without alteration. `AC-245-01` is the global/stretch alternative to local acceptance under `AC-245-02`.
+
+PLAN's recorded `r=2` decision establishes the baseline binding; it is not evidence of measurement correctness. Candidate comparisons, native gates and regression testing remain subsequent-step obligations.
+
+### Criteria matrix
+
+Statuses below concern the **campaign criteria**; outstanding campaign work does not fail this measurement-only step.
+
+| ID | Status | Established / outstanding |
+|---|---|---|
+| AC-245-01 | **unmet** | Baseline allocations **7,112.1 / 7,096.1 B/query**, versus linq2db **5,176.2 / 5,128.2**: **1.374× / 1.384×**, exceeding 1.20×. Time ratios approximately **0.475× / 0.477×**. `reconciliation/exact-values.csv:32,34,46,51`. |
+| AC-245-02 | **unverified** | No candidate or paired local win exists. Expected at Step 1. |
+| AC-245-03 | **unverified** | Step-local source identity, normalization and DB observations supplied. ABBA and demonstrated baseline/candidate JIT-regime comparability remain future obligations. `provenance/identity-final-raw.txt:20–54`; `roslyn-observations.md:72–90`; `reconciliation/db-sha-both-operations.txt`. |
+| AC-245-04 | **unverified** | Captured committed and working-tree product deltas from `cb2246e9` are empty. Candidate time, SQL/order/duplicate/API non-regression remains untested. `provenance/identity-final-raw.txt:20–35`. |
+| AC-245-05 | **unverified** | Baseline prepared controls **760 / 744 B/query**; both `Warm_Reused` controls **0 B**. Preservation against a candidate and native-gate additions remain open. `exact-values.csv:2–3`; `baseline/…WarmDecompose-report-github.md:16–18`. |
+| AC-245-06 | **unverified** | Step-local per-operation attribution supplied; final candidate BDN numbers remain due. Run L independently covers both operations. `reconciliation/both-operations.md:40–49`; `bdn-both-operations.log`. |
+| AC-245-07 | **met — Step 1 only** | No captured product delta; acceptance benchmark sources unchanged, with additions confined to diagnostic harness paths. This establishes preservation during measurement, not safety of a future implementation. `identity-final-raw.txt:9–54`; `roslyn-observations.md:18–41`. |
+
+### Accepted measurement basis
+
+Run L:
+
+`dotnet run --project benchmarks/nextorm.benchmark -c Release --no-build -- --filter '*T245Reconciliation*' --exporters json`
+
+Recorded **exit 0**, with **10 benchmarks completed in 65.66 seconds**. The raw log corroborates completion and allocation totals (`bdn-both-operations.log:84,160,387,463,542,621,696,773,943–948`).
+
+| B/query | EXCEPT | INTERSECT |
+|---|---:|---:|
+| Construction | 4,104.16 | 4,104.18 |
+| Preparation/hash/lookup, derived from measured rungs | 2,248.12 | 2,248.10 |
+| Prepared execution/materialization | 760.10 | 744.10 |
+| Full terminal | 7,112.40 | 7,096.40 |
+| Decomposed minus full | −0.02 | −0.02 |
+
+The **−0.02 B/query** residual is recorded, not converted into an allocation tolerance.
+
+### Findings and explicit closure
+
+- **T245-S1-F1 — previously blocking, confirmed; closed for the revised Step 1 scope.** Both-operation measurements and independently measured preparation rungs resolve the previous coverage and algebraic-only attribution gaps. The original **80.21/80.18 B/query** discrepancy remains **causally unverified**, as the new report explicitly acknowledges (`both-operations.md:107–121`). Closure means that `r=2`'s bounded measurement deliverable is satisfied—not that the earlier processes' JIT history was recovered.
+- **T245-S1-F2 — previously blocking; baseline mismatch confirmed historically; closed on the authorized source-tree basis.** PLAN explicitly chose `cb2246e9` (`../plan-r2.md:1–15`), and raw Git observations cover the final harness working state. **Baseline core-binary identity is not hash-proven.** The historical-provenance limitation is accepted with source-tree diffs, source hashes and run records as the substitute (`identity-final.md:80–96`). Zero direct symbol references do **not**, by themselves, prove complete transitive semantic equivalence between the two baseline trees; that equivalence is unnecessary after the authorized rebind.
+- **T245-S1-F3 — informational, confirmed; remains closed as a provenance limitation.** Stale launch text and historical comparison constants are excluded from current acceptance arithmetic (`reconciliation.md:99–101`).
+- **T245-S1-F4 — informational, confirmed; closed by append-only clarification.** Residual signs, logical-window labeling and changed-file scope are explicitly corrected (`errata.md:13–93`; status record:507). The original errors are not refuted.
+
+### Verification limits and carry-forward restrictions
+
+- **160.01 / 528.03 B/query are diagnostic observed-range constructions, not guaranteed upper bounds on future processes.** In particular, the default-tiered plain probe itself measures construction at **4,584 B/query** (`t245-reconcile.log:5–9`). Do not apply 160.01 as a universal cross-harness bound.
+- Preparation's approximately **2,248 B/query** stability is observed across these runs, not proof of universal regime invariance.
+- The probe's **872 B clone** observation is not an established, safely removable acceptance-path byte pool.
+- No threshold correction, historical substitution or cross-process "drift allowance" is authorized. Step 2 must establish its own same-round paired comparison under the recorded held-regime condition.
+- Compact raw JSON was reader-truncated; I corroborated run-L totals through its raw GC log rather than independently parsing every JSON field. No proving action was run by CHECK.
+
+### Next authorized transition: **→ ACT**
+
+Record the accepted **Step 1 knowledge increment**, its source-bound identity and the limits above. Subsequent implementation scope belongs to PLAN; this verdict does not authorize a candidate or close #245.
+
+**Confidence:** high in the measured coarse phase composition and captured no-product-change state; limited in historical binary provenance and causal JIT attribution. **No attempt consumed; `N=3, r=2, n=1/3` unchanged.**
+````
+
+The report states the outcome above only; this record judges nothing and adds no verdict of its own.
+
 ## ACT record
 
-`pending`
+**Step 1 closed as accepted; the campaign stays open — nothing else is closed.** ACT records only what the Step 1 CHECK above determined: there is no campaign `PASS`, no `done`, no candidate and no attempt consumed, and issue `#245` stays **OPEN**.
+
+- **Accepted basis.** The `X1` binding `cb2246e9` (plan revision `r=2`, `.pdca/rc5/items/T245/plan-r2.md`) with run L (`dotnet run --project benchmarks/nextorm.benchmark -c Release --no-build -- --filter '*T245Reconciliation*' --exporters json`, exit **0**, 10 benchmarks, 65.66 s), B/query:
+
+  | phase (B/query) | EXCEPT | INTERSECT |
+  |---|---:|---:|
+  | construction | 4 104.16 | 4 104.18 |
+  | preparation/hash + lookup | 2 248.12 | 2 248.10 |
+  | prepared execution/materialization | 760.10 | 744.10 |
+  | full cached terminal | 7 112.40 | 7 096.40 |
+  | decomposed − full residual | −0.02 | −0.02 |
+
+  plus the same-round baseline BDN arms: `7 112.1 / 7 096.1 B/query` versus linq2db `5 176.2 / 5 128.2` ⇒ **1.374× / 1.384×** allocated (time ≈ `0.475× / 0.477×`); `Prepare()` controls **760.0 / 744.0**; `Warm_Reused` **0.00** B/query for both operations. Pointers: `.pdca/rc5/items/T245/rv3/reconciliation/{both-operations.md,exact-values.csv,bdn-both-operations.log}`, `.pdca/rc5/items/T245/rv3/provenance/{identity-final.md,identity-final-raw.txt,roslyn-observations.md}`, §Baseline record `### Accepted basis (r=2, after Step 1 CHECK)` above.
+- **Carry-forward limits (exactly as CHECK stated, binding on every later step).** The **160.01 / 528.03 B/query** figures are diagnostic observed-range constructions, **not** guaranteed upper bounds on future processes (the default-tiered plain probe itself measures construction at **4 584 B/query**), so `160.01` must not be applied as a universal cross-harness bound; preparation's ≈**2 248 B/query** stability is **observed, not proven** regime-invariant; the probe's **872 B clone** observation is **not** an established, safely removable acceptance-path byte pool; **no** threshold correction, historical substitution or cross-process "drift allowance" is authorized, and **Step 2 must establish its own same-round paired comparison under the recorded held-JIT-regime condition** (`AC-245-03`).
+- **Findings closed as returned.** `T245-S1-F1` closed **for the `r=2` Step 1 scope** (both-operation measurements + independently measured preparation rungs; the `80.21/80.18 B` discrepancy stays causally unverified). `T245-S1-F2` closed on the **authorized source-tree basis** (`X1 = cb2246e9`), with the binary-identity limitation recorded (no baseline core-DLL hash exists; source-tree diffs/hashes/run records are the substitute). `T245-S1-F4` closed by append-only clarification. `T245-S1-F3` remains a **provenance limitation** (stale launch text / historical constants excluded from current arithmetic).
+- **State.** No attempt consumed — `N=3`, `r=2`, `n=1/3` (unspent); **zero product change** in this dispatch and in the whole of Step 1 (`src/**`, `tests/**`, `examples/**` byte-identical to `cb2246e9`); no criterion, threshold, denominator or tolerance edited; **campaign not accepted**; issue **#245 stays OPEN**.
+- **Next authorized action — the campaign step boundary.** `pdca-planner` decides Step 2's scope and contract (including whether any implementation step is authorized, and its own same-round paired comparison under the held-regime condition). **No Step 2 work starts before that decision**: no candidate, no run, no native gate, no suite, no product edit from this record.
 
 ## Revision history
 
@@ -472,6 +581,13 @@ Round-2 status, append-only — one line per key; the rows above are unchanged (
 - `T245-S1-F1` = round 2 (bounded, PLAN `r=2`) applied at `2026-10-30T14:03Z`; both-operation phase evidence supplied (EXCEPT **and** INTERSECT, five arms each, closure `−0.02 / −0.02` B/query), residual bounded at **160.01 B** cross-process (`112.01` construction + `48.00` execution; `528.03` across the tiering-off regime) — not closed by direct observation; **verdict pending**.
 - `T245-S1-F2` = round 2 applied at `2026-10-30T14:03Z`: final identity through `5fa1849c` (`cb2246e9..HEAD` product diff empty, working tree product diff empty), the 8-file `1e31331d..cb2246e9` inventory proven non-touching via Roslyn refs, core-DLL baseline-hash limitation stated (no pre-rebuild hash exists, none fabricated); **verdict pending**.
 - `T245-S1-F4` = round 2 applied at `2026-10-30T14:03Z`: append-only errata written (`reconciliation/errata.md` — residual sign, `queries_per_window`, changed-files contradiction) with one append-only pointer line in `reconciliation.md` and the §Changed-files correction line below the original sentence; **verdict pending**.
+
+Step 1 CHECK closure, append-only — one line per key as the accepted CHECK returned it (`2026-10-30T14:09Z`, under PLAN `r=2`; **no attempt consumed**, `N=3 r=2 n=1/3`; **zero product fixes**):
+
+- `T245-S1-F1` — **closed for the `r=2` Step 1 scope.** Both-operation measurements plus independently measured preparation rungs resolve the coverage and algebraic-only-attribution gaps; the `80.21 / 80.18 B/query` discrepancy stays **causally unverified** (not recovered). Fixes applied: `0` product. Evidence: `reconciliation/both-operations.md:107–121`; `bdn-both-operations.log`.
+- `T245-S1-F2` — **closed on the authorized source-tree basis.** PLAN chose `cb2246e9` (`plan-r2.md:1–15`) and raw Git observations cover the final harness working state; **baseline core-binary identity is not hash-proven** — the historical-provenance limitation is accepted with source-tree diffs, source hashes and run records as the substitute (`identity-final.md:80–96`). Zero direct symbol references do not prove transitive semantic equivalence, which is unnecessary after the rebind. Fixes applied: `0` product. Evidence: `provenance/identity-final.md`, `identity-final-raw.txt:20–54`.
+- `T245-S1-F3` — **remains a provenance limitation** (informational, confirmed): stale launch text and historical comparison constants stay excluded from current acceptance arithmetic. Fixes applied: `0`. Evidence: `reconciliation/reconciliation.md:99–101`.
+- `T245-S1-F4` — **closed by append-only clarification** (informational, confirmed): residual signs, logical-window labelling and changed-file scope explicitly corrected; the original errors are **not** refuted. Fixes applied: `0`. Evidence: `reconciliation/errata.md:13–93`; status record `:507`.
 
 ## Changed files
 
@@ -506,10 +622,13 @@ No file under `src/`, `tests/`, `benchmarks/` or `docs/` was created, edited or 
 - `benchmarks/nextorm.benchmark/Attribution/T245ReconciliationBenchmark.cs` → modified (`65 insertions, 1 deletion`): five `_Intersect` arms added at `:91`, `:113`, `:135`, `:150`, `:164` (`Construct_LadderBody_Intersect`, `Construct_ProbeBody_Intersect`, `Warm_PlanOnly_LadderBody_Intersect`, `Prepared_Reuse_Intersect`, `Full_Terminal_Intersect`) — measurement-only, reachable only through the `*T245Reconciliation*` filter; no product behaviour, no acceptance recipe, threshold, denominator or tolerance changed.
 - Correction (append-only, added below the earlier sentence "No file under …"): that sentence is **contradicted by commit `aed135d1`**, which added three `benchmarks/nextorm.benchmark/**` harness files (`Attribution/T245ReconciliationProbe.cs`, `Attribution/T245ReconciliationBenchmark.cs`, `Program.cs` +7 lines). Correct scope: **no** `src/`, `tests/` or `docs/` change; `benchmarks/**` measurement-only harness changed. The original sentence above stands as written and is not edited (this closes `T245-S1-F4`'s third label).
 - This dispatch (finalization only — no run, no measurement): `.pdca/status/T245-warm-set-ops-3.md` → modified (DO-result heading order fixed, §Current state phase line, §Changed files, §Git state, §Defect history append, §Progress log append); `.pdca/status/collection-rc5.md` → modified (queue row `T245` notes append + one §Progress log row). Nothing else written.
+- Step 1 ACT closure (this dispatch — finalization only, **no run, no measurement, no product change**): `.pdca/status/T245-warm-set-ops-3.md` → modified append-only (§CHECK record `### Step 1 CHECK under PLAN r=2 — accepted`; §ACT record `pending` → Step 1 closure; §Baseline record `### Accepted basis (r=2, after Step 1 CHECK)`; §Current state phase line; §Defect history closure lines; §Changed files + §Git state + §Progress log appends); `.pdca/status/collection-rc5.md` → modified (queue row `T245` notes append + one §Progress log row). Nothing else written; no `.pdca/rc5/items/T245/rv3/**` artefact touched.
 
 ## Git state
 
 `status path: .pdca/status/T245-warm-set-ops-3.md — tracked; modified in this cycle (Step 1 bounded round-2 evidence record + this finalization) and committed in this dispatch's commit, together with .pdca/status/collection-rc5.md and benchmarks/nextorm.benchmark/Attribution/T245ReconciliationBenchmark.cs, under the collection `rc5` auto-commit policy` — branch `1.0.9-rc5`; at the start of this dispatch `HEAD` was `5fa1849c` (the PLAN `r=2` commit) with the round-2 evidence, the errata pointer and the five `_Intersect` arms uncommitted. The finalization sha is **not** written back into this file (a commit cannot contain its own hash): it is the single commit after `5fa1849c` that touches this path, `git log -1 --format=%h -- .pdca/status/T245-warm-set-ops-3.md`, subject `#245 T245 step-1 bounded completion: both-operation attribution, Roslyn observations, errata, final identity; evidence .pdca/rc5/items/T245/rv3/`. Evidence under `.pdca/rc5/items/T245/rv3/**` stays uncommitted (local evidence, never a CI input). This cycle's task-owned delta: the two status files, the one modified benchmark harness path, and the `rv3/**` artifacts; nothing else is staged, no `-A`, no push, no merge, no tag, no branch switch. Work outside this delta (the other `.pdca/status/*` dirty and untracked set — `T247`, `T250`, `T311`, `T246`, `T267`…`T274`, `T302`, `T319`) stays untouched and unclaimed.
+
+Step 1 ACT closure (`2026-10-30T14:09Z` UTC, this dispatch): `HEAD` at the start of the dispatch was `c4a965bc` on `1.0.9-rc5`; `status path: .pdca/status/T245-warm-set-ops-3.md — tracked, created in this cycle (N=3) and modified again in this dispatch` and `.pdca/status/collection-rc5.md` likewise **forwarded to the commit** made in this dispatch (message `#245 T245 step 1 ACT: baseline accepted under r=2 (X1 cb2246e9); campaign open`), exactly those two paths — no `-A`, no push, no merge, no tag, no branch switch. The commit sha is not written back into this file (a commit cannot contain its own hash): it is the single commit after `c4a965bc` that touches this path. Evidence under `.pdca/rc5/items/T245/rv3/**` stays **uncommitted** (local evidence, never a CI input). The unrelated dirty/untracked set under `.pdca/status/` (`T247`, `T250`, `T311` modified; `T246`, `T267`…`T274`, `T302`, `T319` untracked) is unchanged and unclaimed.
 
 ## Progress log
 
@@ -535,3 +654,4 @@ No file under `src/`, `tests/`, `benchmarks/` or `docs/` was created, edited or 
 2026-10-30T14:02Z | DO | revision r=2 | attempt n=1 | run L `dotnet run --project benchmarks/nextorm.benchmark -c Release --no-build -- --filter '*T245Reconciliation*' --exporters json` exit **0**, `13:46:25Z→13:47:32Z` (BDN `65.66 s`), **10 arms**, tiering default: construction `410 416 / 410 418`, plan-only `635 228 / 635 228`, prepared `7 601 / 7 441`, full `71 124 / 70 964` B/op ⇒ closure `−0.02 / −0.02` B/query; DB pin `32bf10a0…72295` unchanged | `.pdca/rc5/items/T245/rv3/reconciliation/bdn-both-operations.{log,csv,github.md,full-compressed.json}`, `reconciliation/db-sha-both-operations.txt`
 2026-10-30T14:02Z | DO | revision r=2 | attempt n=1 | round-2 artifacts written: `reconciliation/both-operations.md` (both-operation attribution, `160.01 B` cross-process bound, `528.03 B` tiering-off bound, preparation regime-invariant, `Warm_Reused = 0 B`, `80.21/80.18` residual associated-not-closed), `provenance/roslyn-observations.md`, `reconciliation/errata.md` (+ one append-only pointer line in `reconciliation.md`), `provenance/identity-final.md` + `identity-final-raw.txt` (identity `5fa1849c`, 8-file inventory non-touching via `roslyn refs`, core-DLL baseline-hash limitation); no candidate, no attempt consumed, zero product change | `.pdca/rc5/items/T245/rv3/reconciliation/`, `.pdca/rc5/items/T245/rv3/provenance/`
 2026-10-30T14:03Z | DO | revision r=2 | attempt n=1 | step-1 bounded round 2 (after PLAN `r=2`) returned for **re-CHECK**; this dispatch executed **no run and no measurement** — status record only (DO-result heading order fixed, §Changed files / §Git state refreshed, defect history + progress log appended); no attempt consumed (`N=3 r=2 n=1/3`), no criterion/threshold/denominator/tolerance changed, zero product change; finalization commit subject `#245 T245 step-1 bounded completion: both-operation attribution, Roslyn observations, errata, final identity; evidence .pdca/rc5/items/T245/rv3/` (its sha is not self-referenced in this file; see §Git state) | this record §DO result, §Git state; `.pdca/status/collection-rc5.md`
+2026-10-30T14:09Z | A | revision r=2 | attempt n=1 | **Step 1 accepted under PLAN `r=2`** (independent `pdca-check`, `accepted — Step 1 under r=2 only`): accepted basis = `X1` binding `cb2246e9` with the run-L both-operation table (construction `4 104.16 / 4 104.18`; preparation `2 248.12 / 2 248.10`; execution `760.10 / 744.10`; full `7 112.40 / 7 096.40`; residual `−0.02` B/query) and the baseline BDN arms `7 112.1 / 7 096.1` vs linq2db `5 176.2 / 5 128.2` (`1.374×`/`1.384×`; controls `760.0 / 744.0`; `Warm_Reused` `0.00`); carry-forward limits recorded exactly as CHECK stated (`160.01`/`528.03` are observed diagnostic ranges, not bounds; ≈`2 248` invariance observed not proven; the `872 B` clone is not a proven removable pool; **no drift allowance**; Step 2 must establish its own same-round paired comparison under the held-JIT-regime condition); findings `F1` closed for the `r=2` Step 1 scope, `F2` closed on the authorized source-tree basis (binary-identity limitation recorded), `F3` remains a provenance limitation, `F4` closed by append-only clarification; **no attempt consumed** (`N=3 r=2 n=1/3`), **zero product change**, **campaign not accepted**, issue **#245 stays OPEN**; ACT closed for step 1 only — next is the **campaign step boundary**, `pdca-planner` decides Step 2's scope/contract and no Step 2 work starts before that decision | this record §CHECK record `### Step 1 CHECK under PLAN r=2 — accepted`, §ACT record, §Baseline record `### Accepted basis (r=2, after Step 1 CHECK)`; `.pdca/rc5/items/T245/rv3/reconciliation/{both-operations.md,bdn-both-operations.log,exact-values.csv}`; `.pdca/status/collection-rc5.md` queue row `T245` + §Progress log
