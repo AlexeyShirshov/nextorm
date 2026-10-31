@@ -265,13 +265,11 @@ public class ClickHouseDialect : SqlDialectBase
     // Array(Array(Nullable(String))) and never Nullable(Array(...)).
     private string MakeArrayElementType(Type type)
     {
-        // Tuple element types (Tuple<...>, ValueTuple<...>, including Nullable<...> tuples and
-        // nested tuples) are routed through the tuple-aware renderer TypeName(Type), so they emit
-        // Tuple(...) without the CLR arity name and without an unconditional Nullable(...) wrapper.
+        // Tuple element types (any arity, including Nullable<...> tuples and nested tuples) are
+        // routed through the tuple-aware renderer TypeName(Type), so they emit Tuple(...) without
+        // the CLR arity name and without an outer Nullable(...) wrapper around the tuple itself.
         // Non-tuple behaviour is byte-identical to the previous implementation.
-        if (TypeFacts.IsTupleType(type) || TypeFacts.IsValueTupleType(type)
-            || (Nullable.GetUnderlyingType(type) is { } tupleUnderlying
-                && (TypeFacts.IsTupleType(tupleUnderlying) || TypeFacts.IsValueTupleType(tupleUnderlying))))
+        if (TypeFacts.IsTupleRenderingType(type))
         {
             return TypeName(this, type);
         }
@@ -292,14 +290,24 @@ public class ClickHouseDialect : SqlDialectBase
     /// </summary>
     internal static string TypeName(ClickHouseDialect dialect, Type type)
     {
+        // Tuple types (any arity, including Nullable<...> wrappers) render as Tuple(...)
+        // WITHOUT an outer Nullable(...) wrapper around the tuple itself; nullable fields
+        // inside keep their own Nullable(T) rendering via the recursive call below.
+        if (TypeFacts.IsTupleRenderingType(type))
+        {
+            var tupleType = Nullable.GetUnderlyingType(type) is { } tupleUnderlying
+                && TypeFacts.IsTupleRenderingType(tupleUnderlying)
+                ? tupleUnderlying
+                : type;
+            if (tupleType.IsGenericType)
+                return "Tuple(" + string.Join(", ", tupleType.GetGenericArguments().Select(a => TypeName(dialect, a))) + ")";
+        }
+
         if (Nullable.GetUnderlyingType(type) is { IsValueType: true } underlying)
             return $"Nullable({TypeName(dialect, underlying)})";
 
         if (type.IsArray)
             return $"Array({TypeName(dialect, type.GetElementType()!)})";
-
-        if (TypeFacts.IsTupleType(type) || TypeFacts.IsValueTupleType(type))
-            return "Tuple(" + string.Join(", ", type.GetGenericArguments().Select(a => TypeName(dialect, a))) + ")";
 
         return dialect.MakeTypeName(type);
     }

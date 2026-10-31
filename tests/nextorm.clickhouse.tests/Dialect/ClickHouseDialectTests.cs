@@ -597,4 +597,28 @@ public class ClickHouseDialectTests
         Dialect.MakeArrayResult("group_array", "groupArray(s)", typeof(string[]))
             .Should().Be("cast(groupArray(s) as Array(Nullable(String)))");
     }
+
+    [Fact]
+    public void MakeArrayResult_NullableTupleElement_ShouldRenderTupleWithoutNullableWrapper()
+    {
+        // (a) nullable value-tuple element: no Nullable(...) wrapper around the tuple
+        Dialect.MakeArrayResult("group_array", "groupArray(t)", typeof(Nullable<(int, string)>[]))
+            .Should().Be("cast(groupArray(t) as Array(Tuple(Int32, String)))");
+
+        // (b) nullable fields inside the tuple still render Nullable(T)
+        Dialect.MakeArrayResult("group_array", "groupArray(t)", typeof(Nullable<(int?, string)>[]))
+            .Should().Be("cast(groupArray(t) as Array(Tuple(Nullable(Int32), String)))");
+
+        // nested tuple whose nullable fields still render Nullable(T)
+        Dialect.MakeArrayResult("group_array", "groupArray(t)", typeof(Tuple<Tuple<int?, string>, (long, (byte, byte?))>[]))
+            .Should().Be("cast(groupArray(t) as Array(Tuple(Tuple(Nullable(Int32), String), Tuple(Int64, Tuple(UInt8, Nullable(UInt8))))))");
+    }
+
+    [Fact]
+    public void MakeArrayResult_HighArityTupleElement_ShouldRenderTupleWithoutClrArity()
+    {
+        // (c) arity-8 / nested rest: valid Tuple(...), no Tuple`8
+        Dialect.MakeArrayResult("group_array", "groupArray(t)", typeof((int, int, int, int, int, int, int, int)[]))
+            .Should().Be("cast(groupArray(t) as Array(Tuple(Int32, Int32, Int32, Int32, Int32, Int32, Int32, Tuple(Int32))))");
+    }
 }

@@ -260,6 +260,24 @@ internal static class TypeFacts
     internal static bool IsTupleLike(Type type) => IsTupleType(type) || IsValueTupleType(type);
 
     /// <summary>
+    /// True for any tuple-shaped type the ClickHouse type renderer can decompose into a
+    /// <c>Tuple(...)</c> definition: the <see cref="Tuple"/>/<see cref="ValueTuple"/> families
+    /// at any arity (including the 8-element <c>Rest</c> form), a <see cref="Nullable{T}"/>
+    /// wrapping one of them, and any generic type implementing
+    /// <see cref="System.Runtime.CompilerServices.ITuple"/>. Used so tuple elements never fall
+    /// through to the CLR name ``Tuple`N``.
+    /// </summary>
+    internal static bool IsTupleRenderingType(Type type)
+    {
+        type = Nullable.GetUnderlyingType(type) ?? type;
+        if (!type.IsGenericType)
+            return false;
+        if (IsTupleFamily(type))
+            return true;
+        return typeof(System.Runtime.CompilerServices.ITuple).IsAssignableFrom(type);
+    }
+
+    /// <summary>
     /// True for any arity of the <see cref="System.Tuple"/> / <see cref="System.ValueTuple"/> families,
     /// including the 8-element <c>Rest</c> form that <see cref="IsTupleLike"/> deliberately excludes, and
     /// for a <see cref="Nullable{T}"/> wrapping a value-tuple (the recognisable nullable tuple shape; a
