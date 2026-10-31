@@ -41,9 +41,10 @@ as `FAIL`; any other exception aborts the run.
 Query-by-query counts on 2026-10-30 (warm volumes, Podman):
 
 * postgres: aircraft delay chains 30, occupancy matrix 8, no-show 0, rolling revenue 91, ABC/XYZ 614,
-  top routes 186, airport OTP 63, percentiles 8, frequent flyers 10, passenger growth 2, cancellations 15
-  — identical in both arms. `AircraftDelayChains` is the query the named-alias conversion rewrote and
-  the one #350 broke; it now returns 30 rows again.
+  top routes 186, airport OTP 63, percentiles 8, frequent flyers 10, passenger growth 2, cancellations 15.
+  All queries return matching row counts; full-value equality is verified separately where noted below.
+  `AircraftDelayChains` is the query the named-alias conversion rewrote and the one #350 broke; it now
+  returns 30 rows again.
 * mssql: 146, 364, 0, 266, 4, 12, 40, 20, 14, 364, 40 — identical in both arms.
 * clickhouse: array analytics 10, funnel 3, sessions 100, daily traffic 7, top landing pages 10, device
   split 2, top referrers 10, session depth 5, rolling activity 7; `Incremental` returns 7 rows on the
@@ -60,6 +61,18 @@ MSSQL `QuarterlyPivot` is no longer a failure: the native `PIVOT` now accepts a 
 reference `WITH OrderMargins AS (<5-table join>) ... PIVOT (...)` is expressed directly.
 
 ## Actuality changes made on this verification
+
+* **T269 PG AirportOnTimePerformance measurement (2026-10-31).** The final result type is now an
+  `internal readonly record struct` (same six columns/order; see
+  [`AviasalesQueries.cs`](nextorm.examples.postgres.aviasales/AviasalesQueries.cs)). Four baseline
+  paired runs measured NextORM allocations `51.95, 51.95, 51.61, 51.80 KB/op` and linq2db
+  `43.33, 43.55, 43.64, 42.90 KB/op` (ratios `1.198×, 1.193×, 1.183×, 1.207×`). Two candidate
+  paired runs measured NextORM `50,365.33 B/op / 61.382 ms` and `50,110 B/op / 62.274 ms`, versus
+  linq2db `44,472 B/op / 61.422 ms` and `43,824 B/op / 61.564 ms`; ratios `1.1325×` and `1.1434×`.
+  Both arms returned 63 rows. Full ordered JSON comparison found two `AvgDelayMinutes` differences
+  (Toronto `15.1` vs `15`; Helsinki `13.5` vs `13.4`), so equal row counts are established but full
+  value equivalence is not. Evidence, including frozen-source linkage and diff, is under
+  `.pdca/rc5/items/T269/rv1/evidence-round1/`.
 
 * **Re-verified against the `1.0.9-rc4` packages (2026-10-30).** `NextOrmVersion` bumped
   `1.0.9-rc3 → 1.0.9-rc4` (mssql keeps the `ProjectReference`). rc4 ships the CTE-alias fix (#350,

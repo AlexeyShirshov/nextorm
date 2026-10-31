@@ -389,15 +389,14 @@ public static class AviasalesQueries
             .Where(s => s.Flights >= 50)
             .OrderByDescending(s => (double)s.Delayed / s.Flights)
             .OrderBy(s => s.City)
-            .Select(s => new
-            {
+            .Select(s => new AirportOnTimePerformanceRow(
                 s.City,
                 s.Flights,
                 s.Delayed,
-                DelayedPct = Math.Round((double)s.Delayed / s.Flights * 100, 2),
+                Math.Round((double)s.Delayed / s.Flights * 100, 2),
                 s.Cancelled,
-                AvgDelayMinutes = Math.Round(s.AvgDelayMinutes ?? 0.0, 1)
-            })
+                Math.Round(s.AvgDelayMinutes ?? 0.0, 1)
+            ))
             .ToListAsync(ct);
 
         return rows;
@@ -559,3 +558,11 @@ public sealed class BusinessCapacityRow
     public string AirplaneCode { get; init; } = "";
     public int TotalBusinessSeats { get; init; }
 }
+
+internal readonly record struct AirportOnTimePerformanceRow(
+    string? City,
+    int Flights,
+    int Delayed,
+    double DelayedPct,
+    int Cancelled,
+    double AvgDelayMinutes);
