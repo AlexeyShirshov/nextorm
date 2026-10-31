@@ -5171,11 +5171,16 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// <returns>A builder with the added ordering key.</returns>
     public EntityBuilder<TEntity> OrderBy(Expression<Func<TEntity, object?>> orderExp, OrderDirection direction)
     {
+        if (orderExp is null) throw new ArgumentNullException(nameof(orderExp));
+        // Expand composite selectors (anonymous type / ValueTuple / Tuple / MemberInit) into one
+        // Sorting per member in declaration/binding order before any clone or state change, so a
+        // non-expandable composite shape fails closed with a NotSupportedException before SQL.
+        var keys = BuildSortKeys(orderExp, direction, NullsPosition.Default);
         var b = Clone();
-        var key = new Sorting(orderExp) { Direction = direction };
         // _sorting is shared with the parent/siblings after a clone; detach with a new list before
         // appending so a fork never grows the parent's ordering.
-        b._sorting = b._sorting is null ? [key] : [.. b._sorting, key];
+        var existing = b._sorting;
+        b._sorting = existing is null ? [.. keys] : [.. existing, .. keys];
         return b;
     }
     /// <summary>Adds an ascending ordering key by <paramref name="orderExp"/>.</summary>
@@ -5395,16 +5400,182 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// </summary>
     private EntityBuilder<TEntity> AppendOrdering(Expression? expression, int? columnIdx, OrderDirection direction, NullsPosition nullsPosition)
     {
-        var key = expression is not null
-            ? new Sorting(expression, nullsPosition) { Direction = direction }
-            : new Sorting(columnIdx!.Value, nullsPosition) { Direction = direction };
+        if (columnIdx.HasValue)
+        {
+            var key = new Sorting(columnIdx.Value, nullsPosition) { Direction = direction };
 
-        var b = Clone();
-        // _sorting is shared with the parent/siblings after a clone; detach with a new list before
-        // appending so a fork never grows the parent's ordering.
-        b._sorting = b._sorting is null ? [key] : [.. b._sorting, key];
-        return b;
+            var b = Clone();
+            // _sorting is shared with the parent/siblings after a clone; detach with a new list before
+            // appending so a fork never grows the parent's ordering.
+            b._sorting = b._sorting is null ? [key] : [.. b._sorting, key];
+            return b;
+        }
+
+        if (expression is null) throw new ArgumentNullException(nameof(expression));
+        var orderExp = (Expression<Func<TEntity, object?>>)expression;
+        // Expand composite selectors before any clone or state change.
+        var keys = BuildSortKeys(orderExp, direction, nullsPosition);
+
+        var bb = Clone();
+        var existing = bb._sorting;
+        bb._sorting = existing is null ? [.. keys] : [.. existing, .. keys];
+        return bb;
     }
+
+    private static List<Sorting> BuildSortKeys(Expression<Func<TEntity, object?>> orderExp, OrderDirection direction, NullsPosition nullsPosition)
+    {
+        var bodies = ExpandSortKey(orderExp.Body);
+        var list = new List<Sorting>(bodies.Count);
+        foreach (var e in bodies)
+        {
+            Expression body = e.Type.IsValueType ? Expression.Convert(e, typeof(object)) : e;
+            var lambda = Expression.Lambda<Func<TEntity, object?>>(body, orderExp.Parameters[0]);
+            list.Add(new Sorting(lambda, nullsPosition) { Direction = direction });
+        }
+        return list;
+    }
+
+    private static Expression StripConvert(Expression e)
+    {
+        while (e is UnaryExpression ue
+               && (ue.NodeType == ExpressionType.Convert || ue.NodeType == ExpressionType.ConvertChecked)
+               && ue.Type == typeof(object))
+        {
+            e = ue.Operand;
+        }
+        return e;
+    }
+
+    private static List<Expression> ExpandSortKey(Expression body)
+    {
+        body = StripConvert(body);
+
+        // Anonymous type: new { ... }
+        if (body is NewExpression ne && IsAnonymousType(ne.Type))
+        {
+            if (ne.Arguments.Count == 0)
+                throw Unsupported("empty anonymous type");
+            var list = new List<Expression>();
+            foreach (var arg in ne.Arguments)
+                list.AddRange(ExpandSortKey(arg));
+            if (list.Count == 0)
+                throw Unsupported("empty anonymous type");
+            return list;
+        }
+
+        // Tuple NewExpression: ValueTuple<...> / Tuple<...>
+        if (body is NewExpression tne && IsTupleType(tne.Type))
+        {
+            if (tne.Arguments.Count == 0)
+                throw Unsupported("empty tuple");
+            var list = new List<Expression>();
+            foreach (var arg in FlattenTupleArgs(tne))
+                list.AddRange(ExpandSortKey(arg));
+            if (list.Count == 0)
+                throw Unsupported("empty tuple");
+            return list;
+        }
+
+        // Tuple.Create / ValueTuple.Create
+        if (body is MethodCallExpression mce && IsTupleCreate(mce))
+        {
+            if (mce.Arguments.Count == 0)
+                throw Unsupported("empty tuple");
+            var list = new List<Expression>();
+            foreach (var arg in mce.Arguments)
+                list.AddRange(ExpandSortKey(arg));
+            if (list.Count == 0)
+                throw Unsupported("empty tuple");
+            return list;
+        }
+
+        // MemberInitExpression: new KeyDto { A = ..., B = ... }
+        if (body is MemberInitExpression mie)
+        {
+            if (mie.NewExpression.Arguments.Count != 0)
+                throw Unsupported("member init mixing constructor arguments with member bindings");
+            if (mie.Bindings.Count == 0)
+                throw Unsupported("empty member init");
+            if (mie.Bindings.Any(b => b is not MemberAssignment))
+                throw Unsupported("member init with non-assignment binding");
+            var list = new List<Expression>();
+            foreach (var b in mie.Bindings)
+            {
+                var ma = (MemberAssignment)b;
+                list.AddRange(ExpandSortKey(ma.Expression));
+            }
+            if (list.Count == 0)
+                throw Unsupported("empty member init");
+            return list;
+        }
+
+        // Known scalar value constructions stay a single key.
+        if (body is NewExpression sneScalar && IsKnownScalarConstruction(sneScalar))
+        {
+            return new List<Expression> { body };
+        }
+
+        // Non-expandable composite shapes.
+        if (body is NewExpression sne2 && sne2.Arguments.Count > 0)
+            throw Unsupported($"non-expandable constructor '{sne2.Type.Name}'");
+        if (body is NewArrayExpression)
+            throw Unsupported("array composite");
+        if (body is ListInitExpression)
+            throw Unsupported("list composite");
+
+        // MemberInit with zero bindings handled above; empty handled.
+
+        // Otherwise a scalar expression: single key.
+        return new List<Expression> { body };
+    }
+
+    private static IEnumerable<Expression> FlattenTupleArgs(NewExpression ne)
+    {
+        if (ne.Arguments.Count < 8)
+            return ne.Arguments;
+        var result = new List<Expression>(ne.Arguments.Take(7));
+        var rest = StripConvert(ne.Arguments[7]);
+        if (rest is NewExpression restNe && IsTupleType(restNe.Type))
+            result.AddRange(FlattenTupleArgs(restNe));
+        else
+            result.Add(rest);
+        return result;
+    }
+
+    private static bool IsAnonymousType(Type t)
+    {
+        if (t is null || !t.IsClass) return false;
+        var name = t.Name;
+        return name.Contains("AnonymousType");
+    }
+
+    private static bool IsTupleType(Type t)
+    {
+        if (t is null || !t.IsGenericType) return false;
+        var def = t.GetGenericTypeDefinition();
+        var fullName = def.FullName;
+        if (string.IsNullOrEmpty(fullName)) return false;
+        return fullName!.StartsWith("System.ValueTuple`", StringComparison.Ordinal)
+            || fullName!.StartsWith("System.Tuple`", StringComparison.Ordinal);
+    }
+
+    private static bool IsTupleCreate(MethodCallExpression mce)
+    {
+        if (mce.Method.Name != "Create") return false;
+        var dt = mce.Method.DeclaringType;
+        if (dt is null) return false;
+        return dt == typeof(ValueTuple) || dt == typeof(Tuple);
+    }
+
+    private static bool IsKnownScalarConstruction(NewExpression ne)
+    {
+        var t = ne.Type;
+        return t == typeof(DateTime) || t == typeof(DateTimeOffset) || t == typeof(DateOnly)
+            || t == typeof(TimeOnly) || t == typeof(TimeSpan) || t == typeof(Guid) || t == typeof(decimal);
+    }
+
+    private static NotSupportedException Unsupported(string shape)
+        => new NotSupportedException($"Composite ORDER BY selector of shape '{shape}' is not supported; expand it into individual OrderBy/ThenBy keys or use a scalar selector.");
 }
 
 /// <summary>

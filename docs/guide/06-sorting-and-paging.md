@@ -65,6 +65,18 @@ select id
 
 Keys are emitted in the order the calls were made and separated by commas.
 
+A single `OrderBy`/`ThenBy` call may also take a composite selector. The shapes
+`OrderBy(p => new { p.A, p.B })`, `OrderBy(p => (p.A, p.B))` and
+`OrderBy(p => new KeyDto { A = p.A, B = p.B })` expand into one key per member in
+declaration (binding) order; every key carries the direction and `NullsPosition`
+of the original call, so the generated SQL is identical to the chained
+`OrderBy(...).ThenBy(...)` form. Composite expansion is opt-in and does not change
+the behaviour of single-key or ordinal overloads. Composite shapes that cannot be
+expanded (a constructor with arguments, an array or list initializer, an empty
+composite, or a member initializer that mixes constructor arguments with
+bindings) throw `NotSupportedException` when the query is built, before any SQL
+is produced.
+
 ## Ordering by projected column ordinal
 
 After a projection, the sort key can be the ordinal of a select-list column (1-based). This is the
