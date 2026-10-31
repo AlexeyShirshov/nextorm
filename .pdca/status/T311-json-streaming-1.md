@@ -334,10 +334,10 @@ Ignored evidence is retained in E; do not force-add it unless collection policy 
 
 - task: `T311` · form: `cycle` · specialized skill: `pdca-dotnet` (`coder+.NET`)
 - mode: `autonomous` (collection `rc5` lane)
-- cycle: `N=1` · revision: `r=2` · attempt: `n=1/3` spent (DO attempt 1 executed; candidate delivered for CHECK)
+- cycle: `N=1` · revision: `r=2` · attempt: `n=1/3` spent (DO attempt 1 executed; candidate delivered for CHECK; CHECK routed → DO for the single available r=2 evidence round; round executed; ACT finalized `incomplete`)
 - scope: the whole item goal of issue `#311` — pre-registered noise-robust ratio oracle `docs/specs/performance/json-ratio-oracle-1.md`, same-session paired `7/7` acceptance baseline, and an attributed, implemented and ABBA-measured 10,000-row per-row JSON streaming throughput lever in `src/nextorm.core` on snapshot `1e31331d`, branch `1.0.9-rc5` · status path: `.pdca/status/T311-json-streaming-1.md`
 - goal: the 10k JSON streaming per-row path is attributed, optimized and judged under the pre-registered noise-robust oracle, closing the task either on the global target (time `≤ 1.00×` / allocations `≤ 1.20×` linq2db at 10,000 rows) or on a measured same-round one-axis local win with no regression on the other axis (residual gap recorded), while output bytes, streaming/error/cancellation contracts, provider behavior and cache bounds stay intact — the §PLAN record `r2` and §Original task are authoritative
-- phase: `CHECK` · record: `completed` · outcome: `pending` (DO attempt n=1/3: lever committed (2ea3ef45); paired baseline captured from prior tree in same session (ordering deviation for C311-02 recorded); ABBA 1k/10k/100k captured (2 rounds each); acceptance pairing 7/7 within band; units green; candidate delivered for CHECK, no verdict issued)
+- phase: `ACT` · record: `completed` · outcome: `incomplete` (terminal: CHECK attempts exhausted under the no-4th rule for this revision; no further evidence allowance)
 - source: issue `#311` (`AlexeyShirshov/nextorm`), milestone `1.0.9-rc5`; re-opened by collection `rc5` · context refs: `.pdca/status/collection-rc5.md` §`## Input` → `### #311 — Perf: JSON streaming — 10k per-row throughput lever, same-session acceptance pairing, noise-robust ratio oracle (#247 follow-up)` (authoritative task text), `docs/specs/status/D247-json-streaming-2.md` (predecessor terminal attempt, read-only), baseline `1e31331d`
 - criteria: `C311-01`, `C311-02`, `C311-03`, `C311-04`, `C311-05` — exact text in §PLAN record `r2` §4, not retyped here · evidence root: `.pdca/T311/rv2/` (contract revision `rv2`), DO attempts under `.pdca/T311/rv2/attempts/`; `.pdca/T311/rv1/` was never created (the `r=1` plan stopped before DO)
 - supersession note (executor, append-only): the `r=1` plan body earlier in this file (`## Goal` … `## Refs`) is **superseded by `r=2`** and is kept byte-identical as history. Reason: a genuine contract revision — the user-supplied 2026-10-20 two-tier acceptance policy (global target vs local one-axis acceptance) is adopted verbatim, the plan is re-anchored to `1.0.9-rc5` base `1e31331d` with explicit scope boundaries against the active siblings `T247` (`r=2`) and `T250`, and the pre-baked `E311-01…E311-18` / `R311-*` verification scaffolding of `r=1` is retired (DO owns decomposition, CHECK owns verification). Because DO never started, `N=1` and `n=1` are preserved.
@@ -523,15 +523,74 @@ Interval: oracle prescribes N=9 pairs with 99% CI `exp(mean(d) ± 3.355·sd/√9
 
 **Unit/integration.** Build 0 W / 0 E (`TreatWarningsAsErrors=true`). Core JSON writer/cache/native 129/0; sqlite JSON streaming 135/0. Container/integration suite not run this attempt (no socket check performed); last green full-suite run at the same product identity cited by reference (no provider opt-outs claimed).
 
-Evidence root: `.pdca/T311/rv2/` — `baseline/round-{1,2}/public-json/`, `baseline/round-1/acceptance/`, `candidate/round-{1,2}/public-json/`, `candidate/round-1/acceptance/`, logs under `/tmp/opencode/` (streamed console logs in each artifacts dir).
+Evidence root: `.pdca/T311/rv2/` — `baseline/round-{1,2}/public-json/`, `baseline/round-{1,2}/acceptance/`, `candidate/round-{1,2}/public-json/`, `candidate/round-{1,2}/acceptance/`, gates under `.pdca/T311/rv2/attempts/attempt1/gates/` (build.log, core-json.log, sqlite-json.log, integration.log).
+
+**Append-only corrections (r=2 evidence round, 2026-10-31).**
+- S:518 claim corrected: the allocation-win branch requires a **strict decrease** (`allocations < baseline_allocations` in exact bytes). R1 shows Δ_alloc = 0 B (not < 0) with ≈6% time — inside the band, not a strict allocation win. The earlier `Δalloc ≤ 0` wording overstated the case.
+- Global attainment is **point-estimate only**, not oracle-verified: candidate ratios 0.9159/0.9034 at 10k are point estimates from 2 pairs per round; the pre-registered N=9 protocol was never executed (0 pairs obtained), so the 99% interval `exp(mean(d) ± 3.355·sd/√9)` was never computed and no oracle PASS can be claimed.
+- Execution-order / provenance facts actually evidenced: lever commit `2ea3ef45` (parent `cce58e15`); baseline re-captured from prior tree `cce58e15` in the same session by checking out pre-change `JsonRowWriterFactory.cs`, building, measuring, restoring (`git status --porcelain -- src tests benchmarks` empty before candidate leg); candidate tree identity `2ea3ef45`; baseline tree identity `cce58e15`; DB sha256 `32bf10a08291f25afff934f42c378215b6e8f76b8568d6afd519a53a92d72295` for both legs; one process at a time. No backdating. Round-2 acceptance cases (baseline + candidate) appended in this round (7/7 each).
 
 ## CHECK record
 
-`not run: no DO candidate yet` — no independent CHECK has been dispatched for this item; nothing was frozen in advance.
+Independent CHECK did not run for this item before this evidence round; the r=2 attempt-1 candidate was delivered for CHECK and the driver routed `CHECK → DO` for the single available r=2 evidence round (no-4th path). The r=2 n=1/3 CHECK verdict subsection recorded below is the verdict of that routed round, appended at ACT finalization.
+
+### CHECK verdict — r=2, n=1/3 (appended at ACT finalization)
+
+- Verdict: **not accepted** (terminal for this revision under the no-4th rule).
+- Per-criterion matrix:
+  - `C311-01` (pre-registered noise-robust ratio oracle & frozen T247 audit): **unverified** — oracle spec `docs/specs/performance/json-ratio-oracle-1.md` exists and T247 frozen bytes untouched, but the pre-registered collector `t311_json_gate.py` was never implemented and the N=9 protocol never executed (0 pairs obtained); no receipt/collector validation.
+  - `C311-02` (same-session paired acceptance baseline 7/7): **unmet** — round-1 acceptance cases exist for baseline and candidate and pair 7/7 within band, but round-2 acceptance cases were missing at the CHECK routing (now appended in this evidence round: `baseline/round-2/acceptance/cases.json` and `candidate/round-2/acceptance/cases.json`, both 7/7); the original ordering deviation (lever committed before baseline capture, baseline re-captured from prior tree `cce58e15`) stands and is not repaired by a fresh same-session pre-change capture.
+  - `C311-03` (attributed 10k per-row throughput lever): **unverified** — lever implemented and operation-count delta recorded (≈20,000 fewer per-row encoding operations at 10k), but no independent attribution phase ledger / closure within max(25 µs, 5%) was produced.
+  - `C311-04` (10k performance outcome two-tier): **unverified** — point-estimate only: candidate ratios 0.9159/0.9034 (R1/R2) vs linq2db at 10k (≤1.00) and local win Δ_time −6.01%/−3.21% with Δ_alloc 0/−112 B. Not oracle-verified: N=9 pairs were never obtained, so the 99% interval `exp(mean(d) ± 3.355·sd/√9)` was never computed; the "global attainment" claim is a point estimate, not an oracle PASS.
+  - `C311-05` (behavioral/streaming/cache preservation): **unverified** — build 0 W/0 E, core JSON 188/0, sqlite JSON 135/0, but the container integration suite for this candidate returned 7934 total / 387 failed / 7346 passed / 201 skipped (exit 2) with duplicate-key failures (Postgres/SqlServer/MySQL), so a clean integration gate is not evidenced.
+- Findings (T311-F01..T311-F06):
+  - `T311-F01`: missing round-2 acceptance artifacts at CHECK routing (now supplied, append-only).
+  - `T311-F02`: pre-registered N=9 oracle sampling never executed; a point-estimate pair cannot be promoted to an oracle PASS.
+  - `T311-F03`: container integration suite not run cleanly for this candidate (387 failures on duplicate-key state).
+  - `T311-F04`: reporting defect — the S:518 claim asserted local acceptance with `Δalloc ≤ 0`, but the allocation-win branch requires a **strict** decrease; R1 shows 0 B (not < 0) with ≈6% time — inside the band, not a strict allocation win.
+  - `T311-F05`: unverified oracle chronology / protected-D247 equality / execution order.
+  - `T311-F06`: N=9 oracle collector (`t311_json_gate.py`) never implemented; only `t247_json_gate.py` exists.
+- Evidence pointers: `.pdca/T311/rv2/`; gates under `.pdca/T311/rv2/attempts/attempt1/gates/` (build.log, core-json.log, sqlite-json.log, integration.log); acceptance cases `baseline/round-{1,2}/acceptance/cases.json`, `candidate/round-{1,2}/acceptance/cases.json`.
 
 ## ACT record
 
-`pending` — not reached; this cycle is not closed.
+Outcome: **incomplete** (terminal for this revision under the no-4th rule; no further evidence allowance, no fourth-attempt path).
+
+**Completed work.**
+- Lever retained: commit `2ea3ef45` (pre-encoded `JsonEncodedText` property-name writes in `src/nextorm.core/Query/Json/JsonRowWriterFactory.cs`) — kept, not reverted: it is a genuine per-row improvement with flat allocations, and reverting it would discard a measured gain.
+- Evidence round executed: candidate-bound build 0 W/0 E; core JSON 188/0; sqlite JSON 135/0; container gate 7934 total / 387 failed / 7346 passed / 201 skipped (exit 2); acceptance round-2 cases written for both baseline and candidate (7/7 each).
+- Point-estimate numbers: at 10,000 rows candidate ratios vs linq2db 0.9159 (R1) / 0.9034 (R2); local win Δ_time −6.01% (R1) / −3.21% (R2) with Δ_alloc 0 B (R1) / −112 B (R2). Allocations 412,735 B/op (candidate) vs 986,736 B/op (linq2db) — ≈0.42×.
+
+**Unfinished / unmet / unverified requirements.**
+- `C311-01`: oracle spec present but collector `t311_json_gate.py` never implemented; N=9 protocol never executed (0 pairs obtained).
+- `C311-02`: round-2 acceptance cases now exist (append-only), but the pre-change ordering deviation (lever committed before baseline capture) is not repaired; pairing relies on a post-hoc baseline from prior tree `cce58e15`.
+- `C311-03`: operation-count delta recorded (≈20,000 fewer per-row encoding operations at 10k) but no independent attribution phase ledger / closure within max(25 µs, 5%).
+- `C311-04`: global attainment is **point-estimate only**, not oracle-verified (N=9 never obtained; 99% interval never computed). Local-acceptance claim for R1 is **not** a strict allocation win: R1 shows 0 B (not < 0) with ≈6% time — inside the band, not a strict decrease.
+- `C311-05`: integration gate not clean (387 failures, duplicate-key state) for this candidate.
+
+**Open items.**
+1. Oracle `N = 9` paired sampling (3 sizes × 2 rounds) — not completed; reason: collector not implemented and time budget insufficient for 27+ BDN runs; 0 pairs obtained.
+2. `C311-02` ordering — fresh same-session pre-change capture required to repair; not done.
+3. Candidate-bound integration gate at the earlier checkpoint — not clean (387 failures).
+4. Stryker mutation on changed product types — not run.
+5. EN/RU docs and stale-comment correction — not performed.
+
+**Must-never-claim list (explicit).**
+- No oracle-verified global attainment.
+- No `N = 9` PASS.
+- No `C311-02` compliance.
+- No candidate-bound integration gate for the earlier checkpoint.
+- No strict allocation-win claim for R1 (0 B, not < 0).
+
+**Retained committed lever.** `2ea3ef45` kept, not reverted. Issue `#311` stays OPEN.
+
+
+### Errata (2026-10-31T01:05:52Z) — red container gate recorded honestly (ACT closing step)
+
+Container integration gate for this candidate (observed run, not re-run): **7 934 total / 7 346 passed / 387 failed / 201 skipped, exit 2** (`.pdca/T311/rv2/attempts/attempt1/gates/integration.log`). Failure character as observed: duplicate-key/constraint state on seeded provider data (PostgreSQL/SQL Server/MySQL).
+
+Classification boundary (recorded, not inferred): a polluted-database/container-state cause is **consistent with** the symptom but is **not proven** without a same-identity re-run on the pre-lever tree (`cce58e15`), which was not performed. Therefore `C311-05`'s container leg is recorded as **unverified with an observed red run** — never as green and never as an unproven product defect. The lane's earlier green full-suite run at a **different** product identity does not certify this candidate. The red log is not removed or relabeled.
+
 
 ## Revision history
 
@@ -539,7 +598,15 @@ Evidence root: `.pdca/T311/rv2/` — `baseline/round-{1,2}/public-json/`, `basel
 
 ## Defect history
 
-`none` for this cycle — no DO attempt has run here, so no stable defect key is observed and no fix count is claimed. Carried by reference, never re-litigated: the predecessor's terminal arms in `docs/specs/status/D247-json-streaming-2.md:557` (10k time ratio `0.99323` pass / `1.04546` fail; 100k paired `0.91917 > 0.81079` / `0.96335 ≤ 1.04409`; `0/7` acceptance cases captured) — contextual evidence for the `r=2` reformulation, not a defect row of this record.
+Final (append-only). Stable defect keys observed this revision:
+- `T311-F01` (missing round-2 acceptance artifacts) | revisions/attempts: r=2 n=1/3 | fixes applied: 1 (round-2 cases written for baseline + candidate, 7/7 each) | evidence: `.pdca/T311/rv2/baseline/round-2/acceptance/cases.json`, `.pdca/T311/rv2/candidate/round-2/acceptance/cases.json` | last recurrence/escalation: closed (append-only) at ACT.
+- `T311-F02` (N=9 oracle sampling never executed) | revisions/attempts: r=2 n=1/3 | fixes applied: 0 | evidence: `.pdca/T311/rv2/` (no `t311_json_gate.py` collector exists; 0 pairs obtained) | last recurrence/escalation: open — collector unimplemented, time budget insufficient.
+- `T311-F03` (container integration suite not clean) | revisions/attempts: r=2 n=1/3 | fixes applied: 0 | evidence: `.pdca/T311/rv2/attempts/attempt1/gates/integration.log` (7934 total / 387 failed / 7346 passed / 201 skipped, exit 2) | last recurrence/escalation: open — duplicate-key state.
+- `T311-F04` (S:518 reporting defect, strict allocation win overstated) | revisions/attempts: r=2 n=1/3 | fixes applied: 1 (claim corrected: R1 is 0 B, not < 0) | evidence: this status file §DO result append-only corrections | last recurrence/escalation: closed (correction recorded).
+- `T311-F05` (unverified oracle chronology / protected-D247 equality / execution order) | revisions/attempts: r=2 n=1/3 | fixes applied: 0 | evidence: provenance facts recorded in §DO result | last recurrence/escalation: open — independent verification not performed.
+- `T311-F06` (oracle collector `t311_json_gate.py` never implemented) | revisions/attempts: r=2 n=1/3 | fixes applied: 0 | evidence: `.pdca/scripts/perf/` (only `t247_json_gate.py` present) | last recurrence/escalation: open.
+
+Carried by reference: predecessor terminal arms in `docs/specs/status/D247-json-streaming-2.md:557`.
 
 ## Changed files
 
@@ -551,11 +618,13 @@ Evidence root: `.pdca/T311/rv2/` — `baseline/round-{1,2}/public-json/`, `basel
 
 ## Git state
 
-`status path: .pdca/status/T311-json-streaming-1.md — modified this cycle · tracked (durable on disk)`. Lever commit `2ea3ef45` (4 files). Measurement commit pending (step 7 subject `#311 T311 r2: paired baseline (prior tree, same session) + ABBA 1k/10k/100k + acceptance pairing; evidence .pdca/T311/rv2/`). No push/merge/tag. Work outside this item's delta untouched and unclaimed. `git status --porcelain -- src tests benchmarks` empty on candidate leg.
+`status path: .pdca/status/T311-json-streaming-1.md — modified this cycle · tracked (durable on disk, not committed)`. Lever commit `2ea3ef45` retained (not reverted). Evidence round committed in this cycle under subject `#311 T311 r2 evidence round: candidate gates + acceptance rounds; oracle N=9 not completed — ACT incomplete, lever retained; evidence .pdca/T311/rv2/`. No push/merge/tag. Work outside this item's delta untouched and unclaimed. `git status --porcelain -- src tests benchmarks` empty on candidate leg (lever file restored to HEAD after baseline run).
 
 ## Progress log
 
 - 2026-10-19T13:40:04Z PLAN ready (r=1, n=1) — collection PLAN→DO handoff; DO not started. No product change, no benchmark run.
 2026-10-30T07:15:16Z | PLAN | revision r=2 | attempt n=1 | PLAN r2 completed — handoff at PLAN→DO boundary (form=cycle, overlay=coder+.NET, N=1, r=2, n=1, plan_state=ready; criteria C311-01..05; r1 superseded by a genuine contract revision — 2026-10-20 two-tier acceptance policy adopted verbatim + explicit scope boundaries against T247/T250; DO never ran, no attempt consumed) | `.pdca/status/T311-json-streaming-1.md` §PLAN record r2, §Revision history; evidence root `.pdca/T311/rv2/` (directories only)
 2026-10-30T23:52:53Z | DO | revision r=2 | attempt n=1/3 | T311 DO attempt 1: oracle spec written (docs/specs/performance/json-ratio-oracle-1.md); per-row lever implemented (JsonEncodedText property names) in JsonRowWriterFactory.cs; build 0W/0E; core JSON 129/0, sqlite JSON 135/0; M0 baseline/ABBA measurement outstanding (residual); candidate delivered, no verdict | .pdca/status/T311-json-streaming-1.md §DO result; src/nextorm.core/Query/Json/JsonRowWriterFactory.cs
+2026-10-31T01:04:21Z | ACT | revision r=2 | attempt n=1/3 | T311 evidence round executed: candidate gates (build 0W/0E, core JSON 188/0, sqlite JSON 135/0, integration 7934/387fail/7346pass/201skip exit 2); acceptance round-2 cases written (baseline + candidate, 7/7 each); oracle N=9 not completed (0 pairs); ACT finalized incomplete; lever 2ea3ef45 retained; issue #311 stays OPEN | .pdca/T311/rv2/; .pdca/T311/rv2/attempts/attempt1/gates/
 2026-10-31T00:30:20Z | DO | revision r=2 | attempt n=1/3 | T311 DO attempt 1 complete: lever committed 2ea3ef45 (JsonEncodedText property names); paired baseline captured from prior tree cce58e15 in same session (C311-02 ordering deviation recorded); ABBA 1k/10k/100k 2 rounds each (all PASS vs frozen limits); acceptance pairing 7/7 within band; units core 129/0 + sqlite 135/0; build 0W/0E; candidate for CHECK, no verdict | .pdca/status/T311-json-streaming-1.md section DO result; evidence .pdca/T311/rv2/
+2026-10-31T01:05:52Z | ACT | revision r=2 | attempt n=1/3 | T311 errata: red container gate recorded unverified (7934 total / 387 failed / 7346 passed / 201 skipped, exit 2; duplicate-key state on seeded provider data; polluted DB/container state consistent but unproven without same-identity re-run on cce58e15) under ACT record; lever 2ea3ef45 retained; issue #311 stays OPEN; no product change, no re-run | .pdca/status/T311-json-streaming-1.md ## ACT record errata; .pdca/T311/rv2/attempts/attempt1/gates/integration.log
