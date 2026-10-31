@@ -270,8 +270,6 @@ internal static class TypeFacts
     internal static bool IsTupleRenderingType(Type type)
     {
         type = Nullable.GetUnderlyingType(type) ?? type;
-        if (!type.IsGenericType)
-            return false;
         if (IsTupleFamily(type))
             return true;
         return typeof(System.Runtime.CompilerServices.ITuple).IsAssignableFrom(type);

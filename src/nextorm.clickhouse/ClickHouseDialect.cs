@@ -1,4 +1,5 @@
 using System.Collections.Frozen;
+using System.Reflection;
 using System.Text;
 using NextORM.Core;
 
@@ -299,8 +300,12 @@ public class ClickHouseDialect : SqlDialectBase
                 && TypeFacts.IsTupleRenderingType(tupleUnderlying)
                 ? tupleUnderlying
                 : type;
-            if (tupleType.IsGenericType)
-                return "Tuple(" + string.Join(", ", tupleType.GetGenericArguments().Select(a => TypeName(dialect, a))) + ")";
+            var componentTypes = GetTupleComponentTypes(tupleType);
+            if (componentTypes is not null && componentTypes.Length > 0)
+                return "Tuple(" + string.Join(", ", componentTypes.Select(a => TypeName(dialect, a))) + ")";
+            // Non-generic ITuple with no discoverable components: still route through the tuple
+            // renderer so no Nullable(...)/CLR name is emitted (AC-T359-01).
+            return "Tuple()";
         }
 
         if (Nullable.GetUnderlyingType(type) is { IsValueType: true } underlying)
@@ -310,6 +315,85 @@ public class ClickHouseDialect : SqlDialectBase
             return $"Array({TypeName(dialect, type.GetElementType()!)})";
 
         return dialect.MakeTypeName(type);
+    }
+
+    /// <summary>
+    /// Resolves the component types of a tuple-shaped type, including a non-generic type that
+    /// implements <see cref="System.Runtime.CompilerServices.ITuple"/> (e.g. a non-generic subclass
+    /// of <see cref="System.Tuple{T1, T2}"/>). Returns <c>null</c> when no components can be
+    /// discovered.
+    /// </summary>
+    private static Type[]? GetTupleComponentTypes(Type type)
+    {
+        type = System.Nullable.GetUnderlyingType(type) ?? type;
+
+        if (type.IsGenericType)
+        {
+            var args = type.GetGenericArguments();
+            if (args.Length > 0)
+            {
+                var defName = type.GetGenericTypeDefinition().FullName;
+                if (defName is null
+                    || defName.StartsWith("System.Tuple`", System.StringComparison.Ordinal)
+                    || defName.StartsWith("System.ValueTuple`", System.StringComparison.Ordinal)
+                    || typeof(System.Runtime.CompilerServices.ITuple).IsAssignableFrom(type))
+                {
+                    return args;
+                }
+            }
+        }
+
+        for (var bt = type.BaseType; bt is not null && bt != typeof(object); bt = bt.BaseType)
+        {
+            if (!bt.IsGenericType)
+                continue;
+            var baseDef = bt.GetGenericTypeDefinition().FullName;
+            if (baseDef is not null
+                && (baseDef.StartsWith("System.Tuple`", System.StringComparison.Ordinal)
+                    || baseDef.StartsWith("System.ValueTuple`", System.StringComparison.Ordinal)))
+            {
+                var args = bt.GetGenericArguments();
+                if (args.Length > 0)
+                    return args;
+            }
+        }
+
+        // Custom ITuple implementations: discover Item1..ItemN properties (then fields).
+        var numbered = new System.Collections.Generic.List<(int n, Type t)>();
+        foreach (var p in type.GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
+        {
+            if (!p.Name.StartsWith("Item", System.StringComparison.Ordinal))
+                continue;
+            var suffix = p.Name.Substring(4);
+            if (suffix.Length == 0)
+                continue;
+            if (int.TryParse(suffix, out var n))
+                numbered.Add((n, p.PropertyType));
+        }
+        if (numbered.Count > 0)
+        {
+            numbered.Sort((a, b) => a.n.CompareTo(b.n));
+            return numbered.Select(x => x.t).ToArray();
+        }
+
+        numbered.Clear();
+        foreach (var f in type.GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
+        {
+            if (!f.Name.StartsWith("Item", System.StringComparison.Ordinal))
+                continue;
+            var suffix = f.Name.Substring(4);
+            if (suffix.Length == 0)
+                continue;
+            if (int.TryParse(suffix, out var n))
+                numbered.Add((n, f.FieldType));
+        }
+        if (numbered.Count > 0)
+        {
+            numbered.Sort((a, b) => a.n.CompareTo(b.n));
+            return numbered.Select(x => x.t).ToArray();
+        }
+
+        return null;
     }
 
     /// <summary>

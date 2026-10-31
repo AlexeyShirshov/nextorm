@@ -621,4 +621,19 @@ public class ClickHouseDialectTests
         Dialect.MakeArrayResult("group_array", "groupArray(t)", typeof((int, int, int, int, int, int, int, int)[]))
             .Should().Be("cast(groupArray(t) as Array(Tuple(Int32, Int32, Int32, Int32, Int32, Int32, Int32, Tuple(Int32))))");
     }
+
+    [Fact]
+    public void MakeArrayResult_NonGenericITupleElement_ShouldRenderTupleWithoutNullableWrapperOrClrArity()
+    {
+        // non-generic reference type implementing ITuple (subclass of Tuple<int,string>)
+        var rendered = Dialect.MakeArrayResult("group_array", "groupArray(t)", typeof(NonGenericTuple[]));
+        rendered.Should().Contain("Tuple(");
+        rendered.Should().NotContain("Nullable(Tuple");
+        rendered.Should().NotContain("`");
+    }
+
+    private sealed class NonGenericTuple : Tuple<int, string>
+    {
+        public NonGenericTuple(int item1, string item2) : base(item1, item2) { }
+    }
 }
