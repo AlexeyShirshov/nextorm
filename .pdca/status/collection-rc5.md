@@ -1667,3 +1667,5 @@ append-only, one row per event, never edited retroactively:
 2026-10-31T | ACT | revision r=2 | attempt n=0 | T360 N=2 accepted and queue finalized; accepted goals 5/22; residual AC-03/C4 retained as unverified | .pdca/status/T360-rc5-2.md; .pdca/rc5/items/T360/rv3/attempts/attempt1/
 
 2026-10-31T08:38:12Z | DO | T361 n=1/3 | T361 queue pending → in-progress: candidate has two aliased-chain regression tests; full solution build rc0 0W/0E; alias suite 174/174, 0 failures, 0 skipped; evidence helpers 0/0, collection status lint 0; CHECK pending, commit pending | `.pdca/status/T361-rc5-1.md`; `.pdca/rc5/items/T361/rv1/attempts/attempt1/`
+
+2026-10-31T08:38:52Z | DO | T361 n=1/3 | T361 committed as `1fa69499` (test file + both status records, explicit paths only); c8eed046 untouched; CHECK pending | `.pdca/status/T361-rc5-1.md`; commit `1fa69499`
