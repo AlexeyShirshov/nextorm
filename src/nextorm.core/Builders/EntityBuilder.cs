@@ -5591,8 +5591,24 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         {
             return typeof(ITuple).IsAssignableFrom(t);
         }
-        catch
+        catch (ArgumentException)
         {
+            // Invalid generic/type arguments supplied to reflection.
+            return false;
+        }
+        catch (AmbiguousMatchException)
+        {
+            // Reflection could not uniquely resolve a member.
+            return false;
+        }
+        catch (TargetInvocationException)
+        {
+            // A reflected invocation threw while probing the type.
+            return false;
+        }
+        catch (InvalidOperationException)
+        {
+            // The type is not in a state that supports the query.
             return false;
         }
     }
