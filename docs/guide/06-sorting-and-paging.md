@@ -65,12 +65,15 @@ select id
 
 Keys are emitted in the order the calls were made and separated by commas.
 
-A single `OrderBy`/`ThenBy` call may also take a composite selector. The shapes
-`OrderBy(p => new { p.A, p.B })`, `OrderBy(p => (p.A, p.B))` and
-`OrderBy(p => new KeyDto { A = p.A, B = p.B })` expand into one key per member in
-declaration (binding) order; every key carries the direction and `NullsPosition`
-of the original call, so the generated SQL is identical to the chained
-`OrderBy(...).ThenBy(...)` form. Composite expansion is opt-in and does not change
+A composite selector is accepted by `OrderBy`, `OrderByDescending`, `ThenBy` and
+`ThenByDescending`. The shapes `OrderBy(p => new { p.A, p.B })`,
+`OrderBy(p => (p.A, p.B))` and `OrderBy(p => new KeyDto { A = p.A, B = p.B })`
+expand into one key per member in declaration (binding) order; every key carries
+the direction and `NullsPosition` of the original call. In particular, a composite
+selector passed to `OrderByDescending` expands to N descending keys, and one passed
+to `ThenByDescending` does the same for that call; each key carries that call's
+`NullsPosition`. The generated SQL is identical to the chained equivalent, such as
+`OrderByDescending(...).ThenByDescending(...)`. Composite expansion is opt-in and does not change
 the behaviour of single-key or ordinal overloads. Composite shapes that cannot be
 expanded (a constructor with arguments, an array or list initializer, an empty
 composite, or a member initializer that mixes constructor arguments with
