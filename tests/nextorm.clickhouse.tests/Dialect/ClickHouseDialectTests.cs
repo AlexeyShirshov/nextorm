@@ -626,14 +626,83 @@ public class ClickHouseDialectTests
     public void MakeArrayResult_NonGenericITupleElement_ShouldRenderTupleWithoutNullableWrapperOrClrArity()
     {
         // non-generic reference type implementing ITuple (subclass of Tuple<int,string>)
-        var rendered = Dialect.MakeArrayResult("group_array", "groupArray(t)", typeof(NonGenericTuple[]));
-        rendered.Should().Contain("Tuple(");
-        rendered.Should().NotContain("Nullable(Tuple");
-        rendered.Should().NotContain("`");
+        Dialect.MakeArrayResult("group_array", "groupArray(t)", typeof(NonGenericTuple[]))
+            .Should().Be("cast(groupArray(t) as Array(Tuple(Int32, String)))");
+    }
+
+    [Fact]
+    public void MakeArrayResult_TaggedTupleElement_ShouldResolveBaseTupleComponents()
+    {
+        // generic ITuple subclass whose own generic parameter list is NOT the component list:
+        // TaggedTuple<long> : Tuple<int, string> must render the base tuple's components.
+        Dialect.MakeArrayResult("group_array", "groupArray(t)", typeof(TaggedTuple<long>[]))
+            .Should().Be("cast(groupArray(t) as Array(Tuple(Int32, String)))");
+
+        // standalone (non-array) rendering via the shared tuple-aware renderer.
+        ClickHouseDialect.TypeName(ClickHouseDialect.Instance, typeof(TaggedTuple<long>))
+            .Should().Be("Tuple(Int32, String)");
+    }
+
+    [Fact]
+    public void TypeName_TaggedTuple_ShouldResolveBaseTupleComponents()
+    {
+        ClickHouseDialect.TypeName(ClickHouseDialect.Instance, typeof(TaggedTuple<int>))
+            .Should().Be("Tuple(Int32, String)");
+    }
+
+    [Fact]
+    public void MakeArrayResult_CustomItupleWithItems_ShouldResolveFromItemMembers()
+    {
+        // custom ITuple (not inheriting Tuple/ValueTuple) exposing Item1..ItemN.
+        Dialect.MakeArrayResult("group_array", "groupArray(t)", typeof(CustomItemTuple[]))
+            .Should().Be("cast(groupArray(t) as Array(Tuple(Int32, String)))");
+
+        ClickHouseDialect.TypeName(ClickHouseDialect.Instance, typeof(CustomItemTuple))
+            .Should().Be("Tuple(Int32, String)");
+    }
+
+    [Fact]
+    public void MakeArrayResult_BareItuple_ShouldThrowNotSupportedException()
+    {
+        var act = () => Dialect.MakeArrayResult("group_array", "groupArray(t)", typeof(System.Runtime.CompilerServices.ITuple[]));
+        act.Should().Throw<NotSupportedException>();
+
+        var act2 = () => ClickHouseDialect.TypeName(ClickHouseDialect.Instance, typeof(System.Runtime.CompilerServices.ITuple));
+        act2.Should().Throw<NotSupportedException>();
+    }
+
+    [Fact]
+    public void MakeArrayResult_EmptyItuple_ShouldThrowNotSupportedException()
+    {
+        var act = () => Dialect.MakeArrayResult("group_array", "groupArray(t)", typeof(EmptyItuple[]));
+        act.Should().Throw<NotSupportedException>();
+
+        var act2 = () => ClickHouseDialect.TypeName(ClickHouseDialect.Instance, typeof(EmptyItuple));
+        act2.Should().Throw<NotSupportedException>();
     }
 
     private sealed class NonGenericTuple : Tuple<int, string>
     {
         public NonGenericTuple(int item1, string item2) : base(item1, item2) { }
+    }
+
+    private sealed class TaggedTuple<T> : Tuple<int, string>
+    {
+        public T Tag { get; }
+        public TaggedTuple(int item1, string item2, T tag) : base(item1, item2) { Tag = tag; }
+    }
+
+    private sealed class CustomItemTuple : System.Runtime.CompilerServices.ITuple
+    {
+        public int Item1 { get; }
+        public string Item2 { get; } = string.Empty;
+        public int Length => 2;
+        public object? this[int index] => index == 0 ? Item1 : Item2;
+    }
+
+    private sealed class EmptyItuple : System.Runtime.CompilerServices.ITuple
+    {
+        public int Length => 0;
+        public object? this[int index] => throw new IndexOutOfRangeException();
     }
 }

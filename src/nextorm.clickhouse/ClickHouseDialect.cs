@@ -303,9 +303,12 @@ public class ClickHouseDialect : SqlDialectBase
             var componentTypes = GetTupleComponentTypes(tupleType);
             if (componentTypes is not null && componentTypes.Length > 0)
                 return "Tuple(" + string.Join(", ", componentTypes.Select(a => TypeName(dialect, a))) + ")";
-            // Non-generic ITuple with no discoverable components: still route through the tuple
-            // renderer so no Nullable(...)/CLR name is emitted (AC-T359-01).
-            return "Tuple()";
+            // A bare ITuple or an ITuple with no discoverable Item1..ItemN members has no
+            // components to render. Refuse explicitly instead of emitting invalid ClickHouse
+            // DDL `Tuple()` (T359-C7).
+            throw new NotSupportedException(
+                $"ClickHouse tuple type '{type.FullName ?? type.Name}' has no discoverable components " +
+                $"(a bare System.Runtime.CompilerServices.ITuple or an ITuple without public Item1..ItemN members is not supported).");
         }
 
         if (Nullable.GetUnderlyingType(type) is { IsValueType: true } underlying)
@@ -333,10 +336,13 @@ public class ClickHouseDialect : SqlDialectBase
             if (args.Length > 0)
             {
                 var defName = type.GetGenericTypeDefinition().FullName;
+                // Direct generic-argument extraction applies only when `type` itself is a
+                // constructed System.Tuple<...>/System.ValueTuple<...>. A generic ITuple subclass
+                // (e.g. TaggedTuple<long> : Tuple<int, string>) must resolve components from its
+                // Tuple/ValueTuple base, never from its own generic argument list (T359-C7).
                 if (defName is null
                     || defName.StartsWith("System.Tuple`", System.StringComparison.Ordinal)
-                    || defName.StartsWith("System.ValueTuple`", System.StringComparison.Ordinal)
-                    || typeof(System.Runtime.CompilerServices.ITuple).IsAssignableFrom(type))
+                    || defName.StartsWith("System.ValueTuple`", System.StringComparison.Ordinal))
                 {
                     return args;
                 }
