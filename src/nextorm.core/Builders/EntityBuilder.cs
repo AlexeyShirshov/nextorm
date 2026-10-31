@@ -5450,6 +5450,16 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     {
         body = StripConvert(body);
 
+        // Fail-closed: reject any expression whose static type is a composite type but which is not an
+        // expandable NewExpression or a static ValueTuple/Tuple.Create call (e.g. a helper method call
+        // returning a tuple, a member access or an invocation). This runs before any state change.
+        if (body is MethodCallExpression mceGuard && !IsTupleCreate(mceGuard) && IsCompositeType(mceGuard.Type))
+            throw Unsupported($"non-expandable method call '{mceGuard.Method.Name}' returning composite");
+        if (body is MemberExpression meGuard && IsCompositeType(meGuard.Type))
+            throw Unsupported($"non-expandable member access '{meGuard.Member.Name}' returning composite");
+        if (body is InvocationExpression ieGuard && IsCompositeType(ieGuard.Type))
+            throw Unsupported("non-expandable invocation returning composite");
+
         // Anonymous type: new { ... }
         if (body is NewExpression ne && IsAnonymousType(ne.Type))
         {
@@ -5515,15 +5525,17 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
             return new List<Expression> { body };
         }
 
-        // Non-expandable composite shapes.
-        if (body is NewExpression sne2 && sne2.Arguments.Count > 0)
+        // Non-expandable composite shapes (any remaining NewExpression is non-expandable).
+        if (body is NewExpression sne2)
             throw Unsupported($"non-expandable constructor '{sne2.Type.Name}'");
         if (body is NewArrayExpression)
             throw Unsupported("array composite");
         if (body is ListInitExpression)
             throw Unsupported("list composite");
 
-        // MemberInit with zero bindings handled above; empty handled.
+        // Fail-closed: any remaining composite-typed expression is non-expandable.
+        if (IsCompositeType(body.Type))
+            throw Unsupported($"non-expandable composite '{body.Type.Name}'");
 
         // Otherwise a scalar expression: single key.
         return new List<Expression> { body };
@@ -5544,9 +5556,20 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
 
     private static bool IsAnonymousType(Type t)
     {
-        if (t is null || !t.IsClass) return false;
+        if (t is null || !t.IsClass || t.IsAbstract || t.IsNested || !t.IsGenericType)
+            return false;
+        if (!Attribute.IsDefined(t, typeof(CompilerGeneratedAttribute), false))
+            return false;
         var name = t.Name;
-        return name.Contains("AnonymousType");
+        if (!(name.StartsWith("<>f__AnonymousType", StringComparison.Ordinal)
+              || name.StartsWith("VB$AnonymousType", StringComparison.Ordinal)))
+            return false;
+        // Constructor parameters must match the declared properties (compiler-generated anonymous types).
+        var ctor = t.GetConstructors().FirstOrDefault();
+        if (ctor is null) return false;
+        var props = t.GetProperties();
+        if (ctor.GetParameters().Length != props.Length) return false;
+        return true;
     }
 
     private static bool IsTupleType(Type t)
@@ -5557,6 +5580,21 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         if (string.IsNullOrEmpty(fullName)) return false;
         return fullName!.StartsWith("System.ValueTuple`", StringComparison.Ordinal)
             || fullName!.StartsWith("System.Tuple`", StringComparison.Ordinal);
+    }
+
+    private static bool IsCompositeType(Type t)
+    {
+        if (t is null) return false;
+        if (IsAnonymousType(t)) return true;
+        if (IsTupleType(t)) return true;
+        try
+        {
+            return typeof(ITuple).IsAssignableFrom(t);
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static bool IsTupleCreate(MethodCallExpression mce)

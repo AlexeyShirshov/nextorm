@@ -12,6 +12,77 @@ namespace NextORM.Integration.Tests;
 public abstract partial class CommonTestSuite
 {
     [Fact]
+    public void T360_CompositeOrderBy_Anonymous_LiveEqualsChained()
+    {
+        _sut.ComplexEntity
+            .OrderBy(x => new { x.Int, x.Id })
+            .Select(x => x.Id)
+            .ToList()
+            .Should().Equal(_sut.ComplexEntity
+                .OrderBy(x => x.Int)
+                .ThenBy(x => x.Id)
+                .Select(x => x.Id)
+                .ToList());
+    }
+
+    [Fact]
+    public void T360_CompositeOrderBy_Tuple_LiveEqualsChained()
+    {
+        _sut.ComplexEntity
+            .OrderBy(x => new ValueTuple<int?, long>(x.Int, x.Id))
+            .Select(x => x.Id)
+            .ToList()
+            .Should().Equal(_sut.ComplexEntity
+                .OrderBy(x => x.Int)
+                .ThenBy(x => x.Id)
+                .Select(x => x.Id)
+                .ToList());
+    }
+
+    [Fact]
+    public void T360_CompositeOrderBy_MemberInit_LiveEqualsChained()
+    {
+        _sut.ComplexEntity
+            .OrderBy(x => new T360CompositeOrderByKey { Int = x.Int, Id = x.Id })
+            .Select(x => x.Id)
+            .ToList()
+            .Should().Equal(_sut.ComplexEntity
+                .OrderBy(x => x.Int)
+                .ThenBy(x => x.Id)
+                .Select(x => x.Id)
+                .ToList());
+    }
+
+    [Fact]
+    public void T360_CompositeOrderByDescending_LiveEqualsChained()
+    {
+        _sut.ComplexEntity
+            .OrderByDescending(x => new { x.Int, x.Id })
+            .Select(x => x.Id)
+            .ToList()
+            .Should().Equal(_sut.ComplexEntity
+                .OrderByDescending(x => x.Int)
+                .ThenByDescending(x => x.Id)
+                .Select(x => x.Id)
+                .ToList());
+    }
+
+    [Fact]
+    public void T360_CompositeThenBy_LiveEqualsChained()
+    {
+        _sut.ComplexEntity
+            .OrderBy(x => x.Id)
+            .ThenBy(x => new { x.Int })
+            .Select(x => x.Id)
+            .ToList()
+            .Should().Equal(_sut.ComplexEntity
+                .OrderBy(x => x.Id)
+                .ThenBy(x => x.Int)
+                .Select(x => x.Id)
+                .ToList());
+    }
+
+    [Fact]
     public void T360_CompositeOrderBy_LiveEqualsChained()
     {
         // Anonymous composite, ascending.
