@@ -82,6 +82,36 @@ public abstract partial class CommonTestSuite
                 .ToList());
     }
 
+    /// <summary>
+    /// A composite primary key followed by a composite <c>ThenByDescending</c> secondary key. The seeded
+    /// rows 2 and 3 share <c>nullableint = 1</c> and <c>tinyval = 2</c>, so only the descending secondary
+    /// key can break the tie: <c>id</c> descending puts 3 before 2 on every provider.
+    /// </summary>
+    [Fact]
+    public void T360_CompositeThenByDescending_MultiKeyTieBreak_LiveEqualsChained()
+    {
+        _sut.ComplexEntity
+            .Where(x => x.Int != null)
+            .OrderBy(x => new { x.Int, x.TinyInt })
+            .ThenByDescending(x => new { x.Id, x.Boolean })
+            .Select(x => x.Id)
+            .ToList()
+            .Should().Equal(3L, 2L);
+
+        _sut.ComplexEntity
+            .OrderBy(x => new { x.Int, x.TinyInt })
+            .ThenByDescending(x => new { x.Id, x.Boolean })
+            .Select(x => x.Id)
+            .ToList()
+            .Should().Equal(_sut.ComplexEntity
+                .OrderBy(x => x.Int)
+                .ThenBy(x => x.TinyInt)
+                .ThenByDescending(x => x.Id)
+                .ThenByDescending(x => x.Boolean)
+                .Select(x => x.Id)
+                .ToList());
+    }
+
     [Fact]
     public void T360_CompositeOrderBy_LiveEqualsChained()
     {

@@ -31,6 +31,33 @@ public struct T360KeyStruct
 public static class T360Helpers
 {
     public static (int, int) GetTuple(T360MemEntity x) => (x.B, x.A);
+
+    /// <summary>A property access whose static type is a composite tuple: rejected, never expanded.</summary>
+    public static (int, int) StaticTuple => (1, 2);
+
+    /// <summary>A captured delegate: invoking it yields an invocation expression, not a method call.</summary>
+    public static Func<T360MemEntity, (int, int)> TupleFactory { get; } = x => (x.B, x.A);
+}
+
+/// <summary>Every non-expandable composite selector shape enumerated by AC-T360-04.</summary>
+public enum T360NegativeShape
+{
+    EmptyAnonymous,
+    EmptyValueTupleNew,
+    EmptyValueTupleCreate,
+    EmptyMemberInit,
+    MixedMemberInit,
+    ParameterizedConstructor,
+    ParameterlessConstructor,
+    FakeAnonymousType,
+    MemberListBinding,
+    MemberMemberBinding,
+    Array,
+    ListInit,
+    MethodCallReturningComposite,
+    MemberAccessReturningComposite,
+    InvocationReturningComposite,
+    NestedMethodCallReturningComposite,
 }
 
 public class FakeAnonymousType
@@ -143,60 +170,6 @@ public class CompositeOrderByTests
     }
 
     [Fact]
-    public void NonExpandable_ConstructorWithArgs_Throws()
-    {
-        var ctx = new InMemoryDataContext();
-        var b = ctx.From<T360MemEntity>();
-        FluentActions.Invoking(() => b.OrderBy(x => new T360KeyDto(x.A, x.B)))
-            .Should().Throw<NotSupportedException>();
-    }
-
-    [Fact]
-    public void NonExpandable_EmptyAnonymous_Throws()
-    {
-        var ctx = new InMemoryDataContext();
-        var b = ctx.From<T360MemEntity>();
-        FluentActions.Invoking(() => b.OrderBy(x => new { }))
-            .Should().Throw<NotSupportedException>();
-    }
-
-    [Fact]
-    public void NonExpandable_EmptyTuple_Throws()
-    {
-        var ctx = new InMemoryDataContext();
-        var b = ctx.From<T360MemEntity>();
-        FluentActions.Invoking(() => b.OrderBy(x => ValueTuple.Create()))
-            .Should().Throw<NotSupportedException>();
-    }
-
-    [Fact]
-    public void NonExpandable_EmptyMemberInit_Throws()
-    {
-        var ctx = new InMemoryDataContext();
-        var b = ctx.From<T360MemEntity>();
-        FluentActions.Invoking(() => b.OrderBy(x => new T360KeyDto { }))
-            .Should().Throw<NotSupportedException>();
-    }
-
-    [Fact]
-    public void NonExpandable_Array_Throws()
-    {
-        var ctx = new InMemoryDataContext();
-        var b = ctx.From<T360MemEntity>();
-        FluentActions.Invoking(() => b.OrderBy(x => new[] { x.A, x.B }))
-            .Should().Throw<NotSupportedException>();
-    }
-
-    [Fact]
-    public void NonExpandable_MixedMemberInit_Throws()
-    {
-        var ctx = new InMemoryDataContext();
-        var b = ctx.From<T360MemEntity>();
-        FluentActions.Invoking(() => b.OrderBy(x => new T360KeyDto(x.A) { B = x.B }))
-            .Should().Throw<NotSupportedException>();
-    }
-
-    [Fact]
     public void DirectionAndNulls_Propagate()
     {
         // Descending composite
@@ -278,6 +251,65 @@ public class CompositeOrderByTests
     }
 
     [Fact]
+    public void Tuple_ConstructorRest8_ValueTuple_ExpandsNineKeys()
+    {
+        // 8+ element tuple written through the CONSTRUCTOR (the factory form is the other test): the 8th
+        // slot carries a nested 2-tuple, so the declaration order is A,B,Id,A,B,Id,A + B,Id = 9 keys.
+        var ctx = new InMemoryDataContext();
+        var composite = ctx.From<T360MemEntity>().OrderBy(x =>
+            new ValueTuple<int, int, int, int, int, int, int, ValueTuple<int, int>>(
+                x.A, x.B, x.Id, x.A, x.B, x.Id, x.A, new ValueTuple<int, int>(x.B, x.Id)));
+
+        AssertNineKeys(composite);
+
+        var chained = ctx.From<T360MemEntity>()
+            .OrderBy(x => x.A).ThenBy(x => x.B).ThenBy(x => x.Id)
+            .ThenBy(x => x.A).ThenBy(x => x.B).ThenBy(x => x.Id)
+            .ThenBy(x => x.A).ThenBy(x => x.B).ThenBy(x => x.Id);
+        AssertCompositeMatchesChained(ctx, composite, chained);
+    }
+
+    [Fact]
+    public void Tuple_ConstructorRest8_Tuple_ExpandsNineKeys()
+    {
+        var ctx = new InMemoryDataContext();
+        var composite = ctx.From<T360MemEntity>().OrderBy(x =>
+            new Tuple<int, int, int, int, int, int, int, Tuple<int, int>>(
+                x.A, x.B, x.Id, x.A, x.B, x.Id, x.A, new Tuple<int, int>(x.B, x.Id)));
+
+        AssertNineKeys(composite);
+
+        var chained = ctx.From<T360MemEntity>()
+            .OrderBy(x => x.A).ThenBy(x => x.B).ThenBy(x => x.Id)
+            .ThenBy(x => x.A).ThenBy(x => x.B).ThenBy(x => x.Id)
+            .ThenBy(x => x.A).ThenBy(x => x.B).ThenBy(x => x.Id);
+        AssertCompositeMatchesChained(ctx, composite, chained);
+    }
+
+    private static void AssertNineKeys(EntityBuilder<T360MemEntity> composite)
+    {
+        string[] expected =
+        [
+            "x => Convert(x.A, Object)",
+            "x => Convert(x.B, Object)",
+            "x => Convert(x.Id, Object)",
+            "x => Convert(x.A, Object)",
+            "x => Convert(x.B, Object)",
+            "x => Convert(x.Id, Object)",
+            "x => Convert(x.A, Object)",
+            "x => Convert(x.B, Object)",
+            "x => Convert(x.Id, Object)",
+        ];
+        composite.Sorting.Should().HaveCount(9);
+        for (var i = 0; i < expected.Length; i++)
+        {
+            composite.Sorting![i].SortExpression!.ToString().Should().Be(expected[i], $"key {i} declaration order");
+            composite.Sorting![i].Direction.Should().Be(OrderDirection.Asc, $"key {i} direction");
+            composite.Sorting![i].NullsPosition.Should().Be(NullsPosition.Default, $"key {i} NULL placement");
+        }
+    }
+
+    [Fact]
     public void StructMemberInit_WithConvertWrapper_Works()
     {
         var ctx = CreateContext(
@@ -320,113 +352,145 @@ public class CompositeOrderByTests
     }
 
 
-    [Fact]
-    public void NonExpandable_ListInit_Throws()
-    {
-        var ctx = new InMemoryDataContext();
-        var b = ctx.From<T360MemEntity>();
-        FluentActions.Invoking(() => b.OrderBy(x => new List<int> { x.A, x.B }))
-            .Should().Throw<NotSupportedException>();
-    }
+    // ---- non-expandable shapes (AC-T360-04) -------------------------------------------------
 
-    [Fact]
-    public void NonExpandable_MemberListBinding_Throws()
+    /// <summary>
+    /// Every AC-T360-04 shape fails closed at call time: the <see cref="NotSupportedException"/> message names
+    /// the unsupported shape, and the prior builder keeps the very same <c>_sorting</c> list instance with
+    /// element-wise identical entries. Both entry points are exercised — <c>OrderBy</c> (fresh) and
+    /// <c>ThenBy</c> (append onto the existing sorting).
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(NegativeShapeRows))]
+    public void NonExpandable_EveryShape_ThrowsNamedMessage_AndLeavesPriorSortingUnchanged(T360NegativeShape shape)
     {
         var ctx = new InMemoryDataContext();
-        var b = ctx.From<T360MemEntity>();
-        FluentActions.Invoking(() => b.OrderBy(x => new T360ListDto { Items = { x.A } }))
-            .Should().Throw<NotSupportedException>();
-    }
+        var builder = ctx.From<T360MemEntity>().OrderBy(x => x.Id);
+        var beforeList = builder.Sorting;
+        var before = builder.Sorting!.ToArray();
+        before.Should().HaveCount(1);
+        var expectedMessage = $"*{ExpectedNegativeShapeFragment(shape)}*";
 
-    [Fact]
-    public void NonExpandable_MemberMemberBinding_Throws()
-    {
-        var ctx = new InMemoryDataContext();
-        var b = ctx.From<T360MemEntity>();
-        FluentActions.Invoking(() => b.OrderBy(x => new T360NestedDto { Inner = { A = x.A } }))
-            .Should().Throw<NotSupportedException>();
-    }
+        FluentActions.Invoking(() => ApplyNegative(builder, shape, thenBy: false))
+            .Should().Throw<NotSupportedException>().WithMessage(expectedMessage);
+        FluentActions.Invoking(() => ApplyNegative(builder, shape, thenBy: true))
+            .Should().Throw<NotSupportedException>().WithMessage(expectedMessage);
 
-    [Fact]
-    public void NonExpandable_ParameterlessCtor_Throws()
-    {
-        var ctx = new InMemoryDataContext();
-        var b = ctx.From<T360MemEntity>();
-        FluentActions.Invoking(() => b.OrderBy(x => new T360KeyDto()))
-            .Should().Throw<NotSupportedException>();
-    }
-
-    [Fact]
-    public void NonExpandable_FakeAnonymousType_Throws()
-    {
-        var ctx = new InMemoryDataContext();
-        var b = ctx.From<T360MemEntity>();
-        FluentActions.Invoking(() => b.OrderBy(x => new FakeAnonymousType(x.A, x.B)))
-            .Should().Throw<NotSupportedException>();
-    }
-
-    [Fact]
-    public void NonExpandable_HelperTupleCall_Throws()
-    {
-        var ctx = new InMemoryDataContext();
-        var b = ctx.From<T360MemEntity>();
-        FluentActions.Invoking(() => b.OrderBy(x => T360Helpers.GetTuple(x)))
-            .Should().Throw<NotSupportedException>();
-    }
-
-    [Fact]
-    public void NonExpandable_EmptyTupleNew_Throws()
-    {
-        var ctx = new InMemoryDataContext();
-        var b = ctx.From<T360MemEntity>();
-        FluentActions.Invoking(() => b.OrderBy(x => new ValueTuple()))
-            .Should().Throw<NotSupportedException>();
-    }
-
-    [Fact]
-    public void NonExpandable_MessageNamesShape_Throws()
-    {
-        var ctx = new InMemoryDataContext();
-        var b = ctx.From<T360MemEntity>().OrderBy(x => x.Id);
-        FluentActions.Invoking(() => b.ThenBy(x => T360Helpers.GetTuple(x)))
-            .Should().Throw<NotSupportedException>()
-            .WithMessage("*non-expandable method call 'GetTuple' returning composite*");
-    }
-
-    [Fact]
-    public void NonExpandable_UnchangedSorting_OnThrow()
-    {
-        var ctx = new InMemoryDataContext();
-        var b = ctx.From<T360MemEntity>().OrderBy(x => x.Id);
-        var beforeList = b.Sorting;
-        var before = b.Sorting!.ToArray();
-        FluentActions.Invoking(() => b.OrderBy(x => new T360KeyDto(x.A, x.B)))
-            .Should().Throw<NotSupportedException>();
-        var after = b.Sorting!.ToArray();
-        b.Sorting.Should().BeSameAs(beforeList);
-        before.Length.Should().Be(after.Length);
+        builder.Sorting.Should().BeSameAs(beforeList);
+        builder.Sorting!.Should().HaveCount(before.Length);
         for (var i = 0; i < before.Length; i++)
         {
-            before[i].Direction.Should().Be(after[i].Direction);
-            before[i].NullsPosition.Should().Be(after[i].NullsPosition);
-            before[i].ColumnIndex.Should().Be(after[i].ColumnIndex);
-            before[i].SortExpression?.ToString().Should().Be(after[i].SortExpression?.ToString());
-            before[i].PreparedExpression?.ToString().Should().Be(after[i].PreparedExpression?.ToString());
+            builder.Sorting![i].Direction.Should().Be(before[i].Direction, $"prior sorting element {i} unchanged");
+            builder.Sorting![i].NullsPosition.Should().Be(before[i].NullsPosition, $"prior sorting element {i} unchanged");
+            builder.Sorting![i].ColumnIndex.Should().Be(before[i].ColumnIndex, $"prior sorting element {i} unchanged");
+            builder.Sorting![i].SortExpression!.ToString().Should().Be(
+                before[i].SortExpression!.ToString(), $"prior sorting element {i} unchanged");
+        }
+    }
+
+    /// <summary>Completeness guard: the theory must keep covering every enumerated AC-T360-04 shape.</summary>
+    [Fact]
+    public void NegativeShapes_Dimension_IsComplete()
+    {
+        var shapes = Enum.GetValues<T360NegativeShape>();
+        shapes.Should().HaveCount(16, "every shape enumerated by AC-T360-04 must stay in the table");
+        shapes.Select(ExpectedNegativeShapeFragment).Should().OnlyContain(f => !string.IsNullOrWhiteSpace(f));
+    }
+
+    public static IEnumerable<object[]> NegativeShapeRows()
+        => Enum.GetValues<T360NegativeShape>().Select(shape => new object[] { shape });
+
+    private static string ExpectedNegativeShapeFragment(T360NegativeShape shape) => shape switch
+    {
+        T360NegativeShape.EmptyAnonymous => "AnonymousType",
+        T360NegativeShape.EmptyValueTupleNew => "non-expandable constructor 'ValueTuple'",
+        T360NegativeShape.EmptyValueTupleCreate => "empty tuple",
+        T360NegativeShape.EmptyMemberInit => "empty member init",
+        T360NegativeShape.MixedMemberInit => "member init mixing constructor arguments with member bindings",
+        T360NegativeShape.ParameterizedConstructor => "non-expandable constructor 'T360KeyDto'",
+        T360NegativeShape.ParameterlessConstructor => "non-expandable constructor 'T360KeyDto'",
+        T360NegativeShape.FakeAnonymousType => "non-expandable constructor 'FakeAnonymousType'",
+        T360NegativeShape.MemberListBinding => "member init with non-assignment binding",
+        T360NegativeShape.MemberMemberBinding => "member init with non-assignment binding",
+        T360NegativeShape.Array => "array composite",
+        T360NegativeShape.ListInit => "list composite",
+        T360NegativeShape.MethodCallReturningComposite => "non-expandable method call 'GetTuple' returning composite",
+        T360NegativeShape.MemberAccessReturningComposite => "non-expandable member access 'StaticTuple' returning composite",
+        T360NegativeShape.InvocationReturningComposite => "non-expandable invocation returning composite",
+        T360NegativeShape.NestedMethodCallReturningComposite => "non-expandable method call 'GetTuple' returning composite",
+        _ => throw new ArgumentOutOfRangeException(nameof(shape), shape, "unhandled negative shape"),
+    };
+
+    private static void ApplyNegative(EntityBuilder<T360MemEntity> builder, T360NegativeShape shape, bool thenBy)
+    {
+        switch (shape)
+        {
+            case T360NegativeShape.EmptyAnonymous:
+                if (thenBy) builder.ThenBy(x => new { }); else builder.OrderBy(x => new { });
+                break;
+            case T360NegativeShape.EmptyValueTupleNew:
+                if (thenBy) builder.ThenBy(x => new ValueTuple()); else builder.OrderBy(x => new ValueTuple());
+                break;
+            case T360NegativeShape.EmptyValueTupleCreate:
+                if (thenBy) builder.ThenBy(x => ValueTuple.Create()); else builder.OrderBy(x => ValueTuple.Create());
+                break;
+            case T360NegativeShape.EmptyMemberInit:
+                if (thenBy) builder.ThenBy(x => new T360KeyDto { }); else builder.OrderBy(x => new T360KeyDto { });
+                break;
+            case T360NegativeShape.MixedMemberInit:
+                if (thenBy) builder.ThenBy(x => new T360KeyDto(x.A) { B = x.B }); else builder.OrderBy(x => new T360KeyDto(x.A) { B = x.B });
+                break;
+            case T360NegativeShape.ParameterizedConstructor:
+                if (thenBy) builder.ThenBy(x => new T360KeyDto(x.A, x.B)); else builder.OrderBy(x => new T360KeyDto(x.A, x.B));
+                break;
+            case T360NegativeShape.ParameterlessConstructor:
+                if (thenBy) builder.ThenBy(x => new T360KeyDto()); else builder.OrderBy(x => new T360KeyDto());
+                break;
+            case T360NegativeShape.FakeAnonymousType:
+                if (thenBy) builder.ThenBy(x => new FakeAnonymousType(x.A, x.B)); else builder.OrderBy(x => new FakeAnonymousType(x.A, x.B));
+                break;
+            case T360NegativeShape.MemberListBinding:
+                if (thenBy) builder.ThenBy(x => new T360ListDto { Items = { x.A } }); else builder.OrderBy(x => new T360ListDto { Items = { x.A } });
+                break;
+            case T360NegativeShape.MemberMemberBinding:
+                if (thenBy) builder.ThenBy(x => new T360NestedDto { Inner = { A = x.A } }); else builder.OrderBy(x => new T360NestedDto { Inner = { A = x.A } });
+                break;
+            case T360NegativeShape.Array:
+                if (thenBy) builder.ThenBy(x => new object?[] { x.A, x.B }); else builder.OrderBy(x => new object?[] { x.A, x.B });
+                break;
+            case T360NegativeShape.ListInit:
+                if (thenBy) builder.ThenBy(x => new List<int> { x.A, x.B }); else builder.OrderBy(x => new List<int> { x.A, x.B });
+                break;
+            case T360NegativeShape.MethodCallReturningComposite:
+                if (thenBy) builder.ThenBy(x => T360Helpers.GetTuple(x)); else builder.OrderBy(x => T360Helpers.GetTuple(x));
+                break;
+            case T360NegativeShape.MemberAccessReturningComposite:
+                if (thenBy) builder.ThenBy(x => T360Helpers.StaticTuple); else builder.OrderBy(x => T360Helpers.StaticTuple);
+                break;
+            case T360NegativeShape.InvocationReturningComposite:
+                if (thenBy) builder.ThenBy(x => T360Helpers.TupleFactory(x)); else builder.OrderBy(x => T360Helpers.TupleFactory(x));
+                break;
+            case T360NegativeShape.NestedMethodCallReturningComposite:
+                if (thenBy) builder.ThenBy(x => new { x.A, T = T360Helpers.GetTuple(x) });
+                else builder.OrderBy(x => new { x.A, T = T360Helpers.GetTuple(x) });
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(shape), shape, "unhandled negative shape");
         }
     }
 
     // ---- helpers ---------------------------------------------------------------------------
 
-    private static string Normalize(string sql) => sql.Replace("\r\n", "\n");
-
     private static DbPreparedQueryCommand<T> Prepare<T>(IDataContext ctx, QueryCommand<T> cmd)
         => (DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(cmd, false, false, CancellationToken.None);
 
+    // Raw generated SQL exactly as rendered: no line-ending normalization, no trimming. The expected values
+    // are literal strings with explicit "\n" separators, so a CRLF byte would surface as a real difference.
     private static string SqlOf<T>(IDataContext ctx, EntityBuilder<T> builder)
-        => Normalize(Prepare(ctx, builder.ToCommand()).DbCommand.CommandText);
+        => Prepare(ctx, builder.ToCommand()).DbCommand.CommandText;
 
     private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd)
-        => Normalize(Prepare(ctx, cmd).DbCommand.CommandText);
+        => Prepare(ctx, cmd).DbCommand.CommandText;
 
     private static void AssertCompositeMatchesChained(InMemoryDataContext ctx, EntityBuilder<T360MemEntity> composite, EntityBuilder<T360MemEntity> chained)
     {
