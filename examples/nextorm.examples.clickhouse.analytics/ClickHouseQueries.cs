@@ -55,11 +55,13 @@ public static class ClickHouseQueries
 
         var rows = await ctx.From(perUser)
             .OrderBy(p => p.Level)
-            .SelectGroup(p => new { p.Level, ConversionCount = SqlFunctions.Sql.count() })
+            .SelectGroup(p => new FunnelResultRow(p.Level, SqlFunctions.Sql.count()))
             .ToListAsync(ct);
 
         return rows;
     }
+
+    private readonly record struct FunnelResultRow(int Level, int ConversionCount);
 
     // 3. Sql/clickhouse_incremental.sql
     // NOT WORKING: uniqMerge over an AggregateFunction(uniq, UInt64) state has no LINQ surface in the

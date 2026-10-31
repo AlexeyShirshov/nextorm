@@ -72,9 +72,27 @@ reference `WITH OrderMargins AS (<5-table join>) ... PIVOT (...)` is expressed d
   Both arms returned 63 rows. Full ordered JSON comparison found two `AvgDelayMinutes` differences
   (Toronto `15.1` vs `15`; Helsinki `13.5` vs `13.4`), so equal row counts are established but full
   value equivalence is not. Evidence, including frozen-source linkage and diff, is under
-  `.pdca/rc5/items/T269/rv1/evidence-round1/`.
+   `.pdca/rc5/items/T269/rv1/evidence-round1/`.
 
-* **Re-verified against the `1.0.9-rc4` packages (2026-10-30).** `NextOrmVersion` bumped
+ * **T270 CH Funnel projection measurement (2026-11-01).** The final Funnel projection in
+   [`ClickHouseQueries.cs`](nextorm.examples.clickhouse.analytics/ClickHouseQueries.cs) now uses a
+    `readonly record struct` with the same `int Level` / `int ConversionCount` members and types. Two baseline
+   paired `*Funnel*` ShortRuns measured Nextorm `48.63 KB / 158.049 ms` vs linq2db `53.33 KB /
+   145.187 ms` (ratio `0.912×`), and `48.81 KB / 156.764 ms` vs `53.36 KB / 153.478 ms` (`0.915×`).
+    Initial candidate runs with a mismatched `long ConversionCount` measured `46.99 KB / 152.2 ms`
+    vs `52.89 KB / 150.9 ms` (`0.8885×`) and `47.12 KB / 149.1 ms` vs `53.05 KB / 149.2 ms`
+    (`0.8882×`); that candidate changed the generated cast and was corrected. Final candidate runs
+    with `int ConversionCount` measured Nextorm `46.52 KB / 157.0 ms` vs linq2db `53.60 KB / 155.4 ms`
+    (`0.8679×`), and `46.62 KB / 163.3 ms` vs `54.15 KB / 159.8 ms` (`0.8609×`). Baseline and candidate numbers
+   differ substantially from the historical 2026-10-17 baseline (`161.07 / 52.93 KB`), so comparisons
+   here are the same-session current-checkout pairs. The post-change full Funnel comparison returned
+    `(Level, ConversionCount)`: `(0,35709)`, `(1,744)`, `(2,9)` in both arms, and pre/post `cmp`
+    succeeded for SQL and full row dumps (both rc=0). The rejected `long` candidate's SQL differed
+    only by the added `cast(toInt32(count(*)) as Int64)`; the final `int` candidate restores byte identity.
+   Candidate run logs and row output are under `.pdca/rc5/items/T270/rv1/attempts/1/`; baseline logs
+   are under `.pdca/rc5/items/T270/rv1/baseline/`.
+
+ * **Re-verified against the `1.0.9-rc4` packages (2026-10-30).** `NextOrmVersion` bumped
   `1.0.9-rc3 → 1.0.9-rc4` (mssql keeps the `ProjectReference`). rc4 ships the CTE-alias fix (#350,
   T363) and the aliased **source-less** join form (#322), so the four chains whose joins still
   projected anonymously (#231) were converted: `AircraftDelayChains` and `BusinessOccupancyMatrix`
