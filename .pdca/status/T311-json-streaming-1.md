@@ -604,6 +604,26 @@ Failing tests (verbatim):
 
 Verdict on the earlier red run (7 934 / 7 346 / 387 / 201, duplicate-key state): **still red -> product defect** — the duplicate-key/constraint state is gone after fresh volumes (no duplicate-key failures remain), but the gate is not green: 2 failures remain (Postgres xid assertion; ClickHouse UnionAll ordering). Not classified as environment; evidence in the log.
 
+### Errata (2026-10-31T07:30:00Z) — residual 2 integration failures isolated and classified (T311)
+
+Reproduction (DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock; no NEXTORM_SKIP_PROVIDERS; one process at a time; timeout 590s):
+- `dotnet test tests/nextorm.integration.tests -c Debug --no-build --filter "FullyQualifiedName~SystemInfoControlAndKeywordReaders_ShouldExposeRowsAndClrTypes"` → isolated-1.log rc 0 (1/1 passed); isolated-2.log rc 0 (1/1 passed).
+- `dotnet test tests/nextorm.integration.tests -c Debug --no-build --filter "FullyQualifiedName~NullableScalarMaterialize_Live"` → isolated-3.log rc 0 (5/5 passed); isolated-4.log rc 0 (5/5 passed).
+Pre-lever (src/nextorm.core/Query/Json/JsonRowWriterFactory.cs checked out from cce58e15; core + test projects rebuilt): same two commands → isolated-prelever-pg.log rc 0 (1/1 passed); isolated-prelever-ch.log rc 0 (5/5 passed). Lever version restored; `git status --porcelain -- src tests` empty; `git diff 2ea3ef45 -- src tests` empty.
+
+Reproduction matrix:
+- Postgres SystemInfoControlAndKeywordReaders_ShouldExposeRowsAndClrTypes: full-suite fail (OldestActiveXid == NextXid, 6609u); current-tree run1 pass; run2 pass; pre-lever pass.
+- ClickHouse T300ScalarDerivedSourceLiveMatrix.NullableScalarMaterialize_Live(clickhouse): full-suite fail ({2,3,1,2} vs {1,2,2,3}); current-tree run1 pass; run2 pass; pre-lever pass.
+
+Classification: **environment/infrastructure** (flaky/state-dependent) — not candidate-caused and not a pre-existing product defect.
+Basis: the lever's only product change is JsonRowWriterFactory.cs (JSON streaming); neither failing test exercises that path, and swapping the lever out (pre-lever tree) does not change the outcome (both pass in isolation). The Postgres failure is a checkpoint xid state race (OldestActiveXid equals NextXid under an active transaction during the full-suite run) and is not reproducible in isolation. The ClickHouse failure is non-deterministic row ordering of UnionAll without ORDER BY (expected {1,2,2,3}, observed {2,3,1,2}) and is not reproducible in isolation and not a product ordering guarantee.
+
+Verbatim exceptions (from integration-reprovisioned.log):
+- Postgres: `Expected cc.OldestActiveXid to be less than 6609u because the oldest active xid, 0 when none was active, precedes the next transaction id, but found 6609u.`
+- ClickHouse: `Expected context.From(NullableLeft(context).UnionAll(NullableRight(context))).ToList() to be equal to {1, 2, 2, 3}, but {2, 3, 1, 2} differs at index 0.`
+
+Candidate container gate is **green-for-scope**: the only remaining reds are the two named environment failures; no product change made.
+
 ## Revision history
 
 2026-10-30T07:15:16Z | r1 → r2 | genuine contract revision inside the same cycle `N=1`: the user-supplied 2026-10-20 two-tier acceptance policy (global target + one-axis local acceptance + paired/ABBA same-session measurement) is adopted verbatim, the plan is re-anchored to `1.0.9-rc5` base `1e31331d` with explicit scope boundaries against siblings `T247` (`r=2`) and `T250`, and the pre-baked `E311-01…E311-18` / `R311-*` verification scaffolding of `r=1` is retired. Outgoing attempt identity: `N=1, r=1, n=1` — DO never ran on `r=1` and no attempt was consumed, so `n` stays `1`.
