@@ -1,6 +1,6 @@
 # Examples verification report
 
-> **Last verified: 2026-10-30** (the examples are now **comparison projects**: every query has a
+> **Last verified: 2026-11-01** (the examples are now **comparison projects**: every query has a
 > nextorm arm and a linq2db arm, and both are executed against the same dataset; BenchmarkDotNet runs
 > through `--benchmark`). Re-run the examples whenever the engine gains features and update the tables
 > below. This file is the source of truth for "what works / what does not and why"; the topics are owned
@@ -295,3 +295,26 @@ and both arms returned the same 8 rows and values.
   | Candidate | 3 | 125.22 | 971.084 | 168.41 | 940.072 | 0.744× |
 
   All candidate pairs are within the 1.2× allocation target and below the 1,270.66 ms latency limit; every arm returns 100 rows. The baseline linq2db allocation and candidate Nextorm allocation varied substantially, so these results support measured target attainment, not a reliable causal savings claim; uniform ≤1.0× stretch attainment is not established. The comparison query orders descending by Hits and has no secondary key: raw positional changes are only swaps inside equal-Hits ties, with 100-row multisets and descending order preserved. For SQL identity, a temporary `ILoggerFactory` Debug setup captured the two complete non-benchmark NextORM statements; pre/post statements compare byte-identically (rc=0), including `limit 1` and `limit 100`. Extracted full statements are in `.pdca/rc5/items/T272/rv1/attempts/1/sql-{pre,post}-full.txt`. No separate control arm is exposed. Evidence: `.pdca/rc5/items/T272/rv1/attempts/1/`.
+
+* **T273 CH SessionDepth projection measurement (2026-11-01).** The final grouped result uses
+  `readonly record struct SessionDepthRow(string? Bucket, int Sessions)` with the original CLR member
+  types. The two current-checkout before/after pairs use Release `ShortRun` + `InProcessEmitToolchain`;
+  the table reports BDN allocation and the actual three-sample median time (and arithmetic mean for the
+  frozen AC1 mean-time bound). Ratios are `Nextorm / linq2db` allocations.
+
+  | State / run | Nextorm KB | Nextorm mean ms | Nextorm median ms | linq2db KB | linq2db mean ms | linq2db median ms | Ratio |
+  |---|---:|---:|---:|---:|---:|---:|---:|
+  | Before 1 | 79.60 | 99.540 | 99.924 | 53.97 | 100.781 | 100.219 | 1.4749× |
+  | Before 2 | 78.71 | 108.724 | 105.977 | 53.90 | 100.894 | 101.024 | 1.4603× |
+  | After 1 | 79.24 | 104.228 | 102.566 | 54.50 | 97.422 | 97.779 | 1.4539× |
+  | After 2 | 78.59 | 112.722 | 115.204 | 55.46 | 106.331 | 108.318 | 1.4171× |
+
+  The post-change pairs remain above the user target `≤1.2×` (and do not establish the `≤1.0×`
+  stretch); the performance criterion is not demonstrated by these measurements. Both Nextorm means
+  remain below 166.9 ms. Each benchmark run executed both arms (2/2). The exact five ordered rows are
+  unchanged in each arm (`cmp` rc=0); nextorm SQL is byte-identical before/after (`cmp` rc=0), and each
+  arm's result multiset is preserved. The historical issue measurement was 166.90/115.63 ms and
+  88.20/54.52 KB (1.62×); these current-checkout pairs are the comparable before/after evidence. A
+  post-projection `SelectGroup(...).OrderBy(Bucket)` factoring was rejected by query preparation
+  (`SelectGroup ORDER BY references a row expression not covered by inferred keys`) and reverted.
+  Full logs and captures: `.pdca/rc5/items/T273/rv1/`.
