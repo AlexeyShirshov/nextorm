@@ -1678,4 +1678,6 @@ append-only, one row per event, never edited retroactively:
 
 2026-10-31T09:11:00Z | P | revision r=1 | attempt n=0 | T361 N=2 PLAN persisted (plan_state=ready, N=2 r=1 n=1/3, evidence root .pdca/rc5/items/T361/rv2/, plan verbatim at .pdca/rc5/items/T361/plan-r1.md sha256 66f7346f30919d3bb5deda2b1e5f40a130979c53dec8eff5a18222c7ade1f9cf); queue row T361 updated (cycle_id N=2, status_path, plan_revision r=1, status in-progress); user-directed N=2 test-design framing recorded; no attempt consumed; PLAN → DO boundary reached, no DO started | .pdca/rc5/items/T361/plan-r1.md; .pdca/status/T361-rc5-2.md; .pdca/status/collection-rc5.md row T361
 
-2026-10-31T09:49:31Z | ACT | revision r=1 | attempt n=2/3 | T361 N=2 accepted and finalized; accepted goals 5→6 of 22; issue closure pending; evidence .pdca/rc5/items/T361/rv2/ | .pdca/status/T361-rc5-2.md; queue row T361
+2026-10-31T09:49:31Z | ACT | revision r=1 | attempt n=2/3 | T361 N=2 accepted and finalized; accepted goals 5→6 of 22; issue #361 closed; first commit d4908568; evidence .pdca/rc5/items/T361/rv2/ | .pdca/status/T361-rc5-2.md; queue row T361
+
+2026-10-31T09:50:12Z | ACT | revision r=1 | attempt n=2/3 | T361 status-only ACT follow-up: first commit d4908568 contains exactly five authorized paths; issue #361 closed; accepted goals 6/22 | .pdca/status/T361-rc5-2.md; issue #361
