@@ -599,6 +599,19 @@ public class ClickHouseDialectTests
     }
 
     [Fact]
+    public void MakeArrayResult_GroupArrayRetentionTuple_ShouldUseWellFormedClickHouseTupleType()
+    {
+        var sql = Dialect.MakeArrayResult(
+            "group_array",
+            "groupArray(tuple(week, retention))",
+            typeof(Tuple<byte, double>[]));
+
+        sql.Should().Be("cast(groupArray(tuple(week, retention)) as Array(Tuple(UInt8, Float64)))");
+        sql.Should().NotContain("`");
+        sql.Should().NotContain("Tuple`2");
+    }
+
+    [Fact]
     public void MakeArrayResult_NullableTupleElement_ShouldRenderTupleWithoutNullableWrapper()
     {
         // (a) nullable value-tuple element: no Nullable(...) wrapper around the tuple
