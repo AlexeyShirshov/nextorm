@@ -230,6 +230,25 @@ reference `WITH OrderMargins AS (<5-table join>) ... PIVOT (...)` is expressed d
   [#273](https://github.com/AlexeyShirshov/nextorm/issues/273) (CH `SessionDepth` 1.62×) and
   [#274](https://github.com/AlexeyShirshov/nextorm/issues/274) (CH `RollingActivity` 1.22×).
 
+## T267 projection allocation follow-up (2026-11-01)
+
+The two-stage `DelayPercentilesByModel` projections now use readonly record structs. The historical
+pre-change baseline (two `ShortRun`/`InProcessEmitToolchain` runs) and same-round post-change runs:
+
+| State / run | Nextorm Mean | Nextorm Allocated | linq2db Mean | linq2db Allocated | Allocation ratio |
+|---|---:|---:|---:|---:|---:|
+| Before 1 (standing baseline) | 45.93 ms | 29.70 KB | 45.51 ms | 5.56 KB | 5.34× |
+| Before 2 (standing baseline) | 44.45 ms | 29.76 KB | 44.75 ms | 5.52 KB | 5.39× |
+| After 1 | 45.30 ms | 28.25 KB | 45.46 ms | 5.56 KB | 5.08× |
+| After 2 | 45.04 ms | 28.23 KB | 45.25 ms | 5.56 KB | 5.08× |
+
+Same-round small-arm control, `AircraftDelayChains`: run 1 Nextorm 49.22 ms / 60.54 KB and linq2db
+53.52 ms / 42.72 KB; run 2 Nextorm 49.40 ms / 60.35 KB and linq2db 54.41 ms / 42.90 KB. The projection
+probe measured 30,896 B/call anonymous vs 29,192 B/call struct (~213 B/row); build-only was 18,440
+B/call, so the dominant residual is per-call pipeline construction, not per-row materialisation.
+This step does not claim that residual is closable here. SQL capture before/after was byte-identical,
+and both arms returned the same 8 rows and values.
+
 ## Known environment pitfalls (do not mistake for product failures)
 
 * The Podman machine can stop after an OOM on the WSL host (`no such container`, connection refused).

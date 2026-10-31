@@ -410,19 +410,17 @@ public static class AviasalesQueries
             .Join<IAirplaneData>((f, a) => f.Timetable.AirplaneCode == a.AirplaneCode, Alias.Airplane)
             .Where(p => (p.Timetable.Status == "Departed" || p.Timetable.Status == "Arrived")
                         && p.Timetable.ActualDeparture != null)
-            .SelectGroup(p => new
-            {
-                Model = SqlFunctions.Postgres.json_get_text(p.Airplane.Model, "ru"),
-                Flights = SqlFunctions.Sql.count(),
-                MedianDelay = SqlFunctions.Postgres.percentile_disc(0.5,
+            .SelectGroup(p => new DelayPercentilesByModelStatsRow(
+                SqlFunctions.Postgres.json_get_text(p.Airplane.Model, "ru"),
+                SqlFunctions.Sql.count(),
+                SqlFunctions.Postgres.percentile_disc(0.5,
                     () => SqlFunctions.Sql.date_diff("minute", p.Timetable.ScheduledDeparture, p.Timetable.ActualDeparture)),
-                P90Delay = SqlFunctions.Postgres.percentile_disc(0.9,
-                    () => SqlFunctions.Sql.date_diff("minute", p.Timetable.ScheduledDeparture, p.Timetable.ActualDeparture))
-            });
+                SqlFunctions.Postgres.percentile_disc(0.9,
+                    () => SqlFunctions.Sql.date_diff("minute", p.Timetable.ScheduledDeparture, p.Timetable.ActualDeparture))));
 
         var rows = await ctx.From(stats)
             .OrderBy(s => s.Model)
-            .Select(s => new { s.Model, s.Flights, s.MedianDelay, s.P90Delay })
+            .Select(s => new DelayPercentilesByModelRow(s.Model, s.Flights, s.MedianDelay, s.P90Delay))
             .ToListAsync(ct);
 
         return rows;
@@ -566,3 +564,15 @@ internal readonly record struct AirportOnTimePerformanceRow(
     double DelayedPct,
     int Cancelled,
     double AvgDelayMinutes);
+
+internal readonly record struct DelayPercentilesByModelStatsRow(
+    string? Model,
+    int Flights,
+    int? MedianDelay,
+    int? P90Delay);
+
+internal readonly record struct DelayPercentilesByModelRow(
+    string? Model,
+    int Flights,
+    int? MedianDelay,
+    int? P90Delay);
