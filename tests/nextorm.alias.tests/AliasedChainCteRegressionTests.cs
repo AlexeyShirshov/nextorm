@@ -7,7 +7,8 @@ namespace NextORM.AliasTests;
 public class AliasedChainCteRegressionTests
 {
     [Fact]
-    public void Joined_cte_from_aliased_chain_preserves_typed_join_alias()
+    // Runtime SQL-equivalence coverage only; JoinAliasGenerator recovery is covered by generator-level tests.
+    public void Runtime_joined_cte_from_aliased_chain_preserves_positional_vs_aliased_sql_identity()
     {
         var (path, ctx, sql) = AliasSqliteDatabase.CreateContext();
         try
@@ -18,13 +19,21 @@ public class AliasedChainCteRegressionTests
                 .Select(p => new { Id = p.Buyer.Id, Name = p.Buyer.Name })
                 .AsCte("aliased_people");
 
+            _ = ctx.From<Order>(b => b.Table("orders"))
+                .Join(people, (o, p) => o.BuyerId == p.Id)
+                .Select(p => p.Item2.Name)
+                .ToList();
+            var positionalSql = sql.Statements[^1];
+
             var rows = ctx.From<Order>(b => b.Table("orders"))
                 .WithAlias(Alias.Root)
-                .Join(people, (o, p) => o.Root.BuyerId == p.Id, Alias.Buyer)
-                .Select(p => p.Buyer.Name)
+                .Join(people, (o, p) => o.Root.BuyerId == p.Id, Alias.Z)
+                .Select(p => p.Z.Name)
                 .ToList();
 
             rows.Should().ContainSingle().Which.Should().Be("Buyer");
+            sql.Statements[^1].Should().Be(positionalSql,
+                "the same joined CTE must render identical SQL when referenced positionally or through Alias.Z");
             sql.Statements[^1].Should().Be(
                 "with aliased_people as (" +
                 "select t2.Id, t2.Name\n" +
@@ -42,7 +51,8 @@ public class AliasedChainCteRegressionTests
     }
 
     [Fact]
-    public void Select_group_producer_is_consumed_by_aliased_chain()
+    // Runtime SQL-equivalence coverage only; JoinAliasGenerator recovery is covered by generator-level tests.
+    public void Runtime_select_group_cte_preserves_positional_vs_aliased_sql_identity()
     {
         var (path, ctx, sql) = AliasSqliteDatabase.CreateContext();
         try
