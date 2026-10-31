@@ -205,16 +205,13 @@ public static class ClickHouseQueries
             .Where(c => c.hits_in_session > threshold)
             .OrderByDescending(c => c.hits_in_session)
             .Limit(100)
-            .Select(c => new
-            {
-                c.UserID,
-                SessionId = c.session_id,
-                Hits = c.hits_in_session
-            })
+            .Select(c => new SessionResultRow(c.UserID, c.session_id, c.hits_in_session))
             .ToListAsync(ct);
 
         return rows;
     }
+
+    private readonly record struct SessionResultRow(long UserID, long SessionId, int Hits);
 
     // 6. daily_traffic
     // WORKING: GROUP BY EventDate with count() + uniqExact.

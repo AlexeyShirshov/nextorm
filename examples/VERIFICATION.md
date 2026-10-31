@@ -284,3 +284,14 @@ and both arms returned the same 8 rows and values.
   runs reuse the named volume and skip it.
 * This repository is sometimes edited by another agent in parallel; re-check that the example
   `md5sum`s you measured still match before trusting a run, and re-run if the tree moved.
+* **T272 CH Sessions projection measurement (2026-11-01).** The `Sessions` result projection uses `readonly record struct SessionResultRow(long UserID, long SessionId, int Hits)` with unchanged member types. Each paired ShortRun executed both arms against the warm `hits_v1` volume. Allocation is KB/op; times below are the per-run **medians** (ms/op), not means.
+
+  | State | Run | Nextorm KB | Nextorm median ms | linq2db KB | linq2db median ms | Ratio |
+  |---|---:|---:|---:|---:|---:|---:|
+  | Baseline | 1 | 129.52 | 973.510 | 167.16 | 985.279 | 0.775× |
+  | Baseline | 2 | 128.98 | 973.917 | 489.84 | 957.986 | 0.263× |
+  | Candidate | 1 | 174.12 | 999.166 | 169.35 | 959.816 | 1.028× |
+  | Candidate | 2 | 127.73 | 964.912 | 168.02 | 958.511 | 0.760× |
+  | Candidate | 3 | 125.22 | 971.084 | 168.41 | 940.072 | 0.744× |
+
+  All candidate pairs are within the 1.2× allocation target and below the 1,270.66 ms latency limit; every arm returns 100 rows. The baseline linq2db allocation and candidate Nextorm allocation varied substantially, so these results support measured target attainment, not a reliable causal savings claim; uniform ≤1.0× stretch attainment is not established. The comparison query orders descending by Hits and has no secondary key: raw positional changes are only swaps inside equal-Hits ties, with 100-row multisets and descending order preserved. For SQL identity, a temporary `ILoggerFactory` Debug setup captured the two complete non-benchmark NextORM statements; pre/post statements compare byte-identically (rc=0), including `limit 1` and `limit 100`. Extracted full statements are in `.pdca/rc5/items/T272/rv1/attempts/1/sql-{pre,post}-full.txt`. No separate control arm is exposed. Evidence: `.pdca/rc5/items/T272/rv1/attempts/1/`.
