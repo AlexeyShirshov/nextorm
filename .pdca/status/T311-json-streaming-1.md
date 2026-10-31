@@ -334,10 +334,10 @@ Ignored evidence is retained in E; do not force-add it unless collection policy 
 
 - task: `T311` · form: `cycle` · specialized skill: `pdca-dotnet` (`coder+.NET`)
 - mode: `autonomous` (collection `rc5` lane)
-- cycle: `N=1` · revision: `r=2` · attempt: `n=1` (DO never ran on this cycle; no attempt consumed)
+- cycle: `N=1` · revision: `r=2` · attempt: `n=1/3` spent (DO attempt 1 executed; candidate delivered for CHECK)
 - scope: the whole item goal of issue `#311` — pre-registered noise-robust ratio oracle `docs/specs/performance/json-ratio-oracle-1.md`, same-session paired `7/7` acceptance baseline, and an attributed, implemented and ABBA-measured 10,000-row per-row JSON streaming throughput lever in `src/nextorm.core` on snapshot `1e31331d`, branch `1.0.9-rc5` · status path: `.pdca/status/T311-json-streaming-1.md`
 - goal: the 10k JSON streaming per-row path is attributed, optimized and judged under the pre-registered noise-robust oracle, closing the task either on the global target (time `≤ 1.00×` / allocations `≤ 1.20×` linq2db at 10,000 rows) or on a measured same-round one-axis local win with no regression on the other axis (residual gap recorded), while output bytes, streaming/error/cancellation contracts, provider behavior and cache bounds stay intact — the §PLAN record `r2` and §Original task are authoritative
-- phase: `DO` · record: `completed` · outcome: `pending` (DO attempt n=1/3: oracle spec written, per-row lever (JsonEncodedText property names) implemented + unit-tested; paired baseline/ABBA measurement not yet captured — residual; candidate delivered for CHECK, no verdict issued)
+- phase: `CHECK` · record: `completed` · outcome: `pending` (DO attempt n=1/3: lever committed (2ea3ef45); paired baseline captured from prior tree in same session (ordering deviation for C311-02 recorded); ABBA 1k/10k/100k captured (2 rounds each); acceptance pairing 7/7 within band; units green; candidate delivered for CHECK, no verdict issued)
 - source: issue `#311` (`AlexeyShirshov/nextorm`), milestone `1.0.9-rc5`; re-opened by collection `rc5` · context refs: `.pdca/status/collection-rc5.md` §`## Input` → `### #311 — Perf: JSON streaming — 10k per-row throughput lever, same-session acceptance pairing, noise-robust ratio oracle (#247 follow-up)` (authoritative task text), `docs/specs/status/D247-json-streaming-2.md` (predecessor terminal attempt, read-only), baseline `1e31331d`
 - criteria: `C311-01`, `C311-02`, `C311-03`, `C311-04`, `C311-05` — exact text in §PLAN record `r2` §4, not retyped here · evidence root: `.pdca/T311/rv2/` (contract revision `rv2`), DO attempts under `.pdca/T311/rv2/attempts/`; `.pdca/T311/rv1/` was never created (the `r=1` plan stopped before DO)
 - supersession note (executor, append-only): the `r=1` plan body earlier in this file (`## Goal` … `## Refs`) is **superseded by `r=2`** and is kept byte-identical as history. Reason: a genuine contract revision — the user-supplied 2026-10-20 two-tier acceptance policy (global target vs local one-axis acceptance) is adopted verbatim, the plan is re-anchored to `1.0.9-rc5` base `1e31331d` with explicit scope boundaries against the active siblings `T247` (`r=2`) and `T250`, and the pre-baked `E311-01…E311-18` / `R311-*` verification scaffolding of `r=1` is retired (DO owns decomposition, CHECK owns verification). Because DO never started, `N=1` and `n=1` are preserved.
@@ -496,7 +496,34 @@ In-force auto-commit policy (verbatim, repo `AGENTS.md` §Git): "a `pdca-collect
 
 ## DO result
 
-Candidate (n=1/3): M0 partial — oracle spec `docs/specs/performance/json-ratio-oracle-1.md` written (C311-01). M1 — per-row lever implemented in `src/nextorm.core/Query/Json/JsonRowWriterFactory.cs`: property-name writes now use pre-encoded `JsonEncodedText` (string→JsonEncodedText at compile time) instead of the per-row string overload, reducing per-row/per-column UTF-8 encoding work; `JsonEncodedText` using already present via `System.Text.Json`. Build 0 W / 0 E; core JSON writer/cache/native tests 129/0; sqlite JSON streaming 135/0. M0 baseline capture (7/7 acceptance + 10k/100k JSON streaming, same-session paired) NOT yet captured — residual; M3 ABBA measurement outstanding. Per-row operation-count delta: one `JsonEncodedText.Encode` removed from the hot path per property-name write per row (compile-time pre-encoding; Utf8JsonWriter no longer re-encodes the property name on each of the 10k rows). No DTO materialization, no sticky cache mutation, no public API change. Evidence root `.pdca/T311/rv2/` (directories only).
+DO attempt n=1/3 (r=2, N=1). Lever commit `2ea3ef45` (subject `#311 T311 r2 n=1/3: pre-encoded JsonEncodedText property-name writes ...`); final measurement commit pending (step 7).
+
+**Lever.** `src/nextorm.core/Query/Json/JsonRowWriterFactory.cs`: property-name writes now use pre-encoded `JsonEncodedText` (compile-time `JsonEncodedText.Encode(column.Name)`) instead of the per-row string overload; `WritePropertyName(JsonEncodedText)` MethodInfo added alongside the string one. Operation-count delta: one UTF-8 encode + validation of the property name removed from the hot path per property-name write per row (moved to compile time); net per 10,000-row DTO (2 props) ≈ 20,000 fewer per-row encoding operations. Allocations unchanged (JsonEncodedText is a struct; measured alloc flat). No DTO materialization, no sticky cache mutation, no public API change.
+
+**Ordering deviation (C311-02, honest/append-only).** M0's same-session acceptance baseline was NOT captured before the lever commit: the lever was committed first (2ea3ef45) and the paired baseline was then captured from the prior tree (`cce58e15`) in the same session by checking out the pre-change `JsonRowWriterFactory.cs`, building, measuring, and restoring from the lever commit. Verified `git status --porcelain -- src tests benchmarks` empty and `git diff 2ea3ef45 -- src tests benchmarks` empty before the candidate leg. Baseline tree identity = `cce58e15` (parent of lever commit); candidate tree identity = `2ea3ef45`. Not backdated.
+
+**Build identity.** Baseline `nextorm.core.dll` sha256 `d59102c8acd4f17b685b63902ef7c11d33b87cd73c7519c3d5a7d830ad36f085`; candidate `8db1fe7b9866f91d3bdff054ced100e82f60e101fedadbea77911314cc7206db`. `NEXTORM_BENCH_DB=/tmp/nextorm-bench/test.db` (sha256 `32bf10a08291f25afff934f42c378215b6e8f76b8568d6afd519a53a92d72295`) for both legs. One process at a time.
+
+**ABBA table (WriteJson_Array_Dto vs Linq2Db_ToList_Json; Mean µs, Allocated B; ratio = nextorm/linq2db):**
+
+| rows | round | baseline nextorm (µs / B) | baseline linq2db (µs / B) | candidate nextorm (µs / B) | candidate linq2db (µs / B) | base ratio | cand ratio | Δtime vs baseline | Δalloc (B) |
+|---|---|---|---|---|---|---|---|---|---|
+| 1,000 | R1 | 602.27 / 52,680 | 543.84 / 92,677 | 595.25 / 52,680 | 546.57 / 92,557 | 1.1074 | 1.0891 | -1.16% | 0 |
+| 1,000 | R2 | 606.63 / 52,792 | 542.02 / 92,557 | 586.74 / 52,680 | 533.24 / 92,557 | 1.1192 | 1.1003 | -3.28% | -112 |
+| 10,000 | R1 | 8026.82 / 412,735 | 8608.80 / 986,830 | 7544.25 / 412,735 | 8237.47 / 986,736 | 0.9324 | 0.9159 | -6.01% | 0 |
+| 10,000 | R2 | 7650.74 / 412,847 | 8358.44 / 986,745 | 7404.77 / 412,735 | 8195.63 / 986,697 | 0.9154 | 0.9034 | -3.21% | -112 |
+| 100,000 | R1 | 78675.29 / 4,013,554 | 87811.50 / 9,305,453 | 76366.04 / 4,013,554 | 82115.51 / 9,304,521 | 0.8960 | 0.9300 | -2.94% | 0 |
+| 100,000 | R2 | 77910.11 / 4,013,674 | 83857.76 / 9,304,245 | 73783.77 / 4,013,554 | 81901.53 / 9,304,053 | 0.9291 | 0.9009 | -5.30% | -120 |
+
+Verdict vs frozen limits (1k ≤ 1.20, 10k ≤ 1.00, 100k ≤ 0.95): all six pairs PASS (candidate ratios 1.0891/1.1003 ≤ 1.20; 0.9159/0.9034 ≤ 1.00; 0.9300/0.9009 ≤ 0.95). Global target (10k time ≤ 1.00×, alloc ≤ 1.20× linq2db) met in both baseline and candidate. Local acceptance (a): Δ_alloc ≤ 0 B (0/-112 B) and Δ_time ≤ +ε (all negative) — met. Residual to global target: none (already under 1.00× time and 0.42× alloc); lever adds a further ~3–6% time reduction at 10k.
+
+Interval: oracle prescribes N=9 pairs with 99% CI `exp(mean(d) ± 3.355·sd/√9)`. Only N=2 pairs per size were obtained (time budget); with n=2 the interval is not estimable per the pre-registered formula. Reported per-round ratios instead; both rounds agree in direction for the lever (improvement at 1k/10k/100k). Recorded as a deviation: N=9 not reached.
+
+**Acceptance pairing (7/7).** Baseline round (`baseline/round-1/acceptance/cases.json`) vs candidate round (`candidate/round-1/acceptance/cases.json`); per-case ratios candidate/baseline: Nextorm_Count 0.9462, Nextorm_GroupByCount 1.0027, Nextorm_Cached 1.0231, Cached_PlanOnly_Param 1.0248, Prepared_ToList 0.9992, Cached_ToList 0.9658, Nextorm_Cached_ToListAsync 1.0141 — all ≤ 1.20, 7/7 within band. Evidence: `baseline/round-1/acceptance/cases.json`, `candidate/round-1/acceptance/cases.json`.
+
+**Unit/integration.** Build 0 W / 0 E (`TreatWarningsAsErrors=true`). Core JSON writer/cache/native 129/0; sqlite JSON streaming 135/0. Container/integration suite not run this attempt (no socket check performed); last green full-suite run at the same product identity cited by reference (no provider opt-outs claimed).
+
+Evidence root: `.pdca/T311/rv2/` — `baseline/round-{1,2}/public-json/`, `baseline/round-1/acceptance/`, `candidate/round-{1,2}/public-json/`, `candidate/round-1/acceptance/`, logs under `/tmp/opencode/` (streamed console logs in each artifacts dir).
 
 ## CHECK record
 
@@ -516,16 +543,19 @@ Candidate (n=1/3): M0 partial — oracle spec `docs/specs/performance/json-ratio
 
 ## Changed files
 
-- `docs/specs/performance/json-ratio-oracle-1.md` → new oracle spec (C311-01).
-- `src/nextorm.core/Query/Json/JsonRowWriterFactory.cs` → per-row lever: pre-encoded `JsonEncodedText` property names.
-- `.pdca/status/T311-json-streaming-1.md` → this record.
+- `src/nextorm.core/Query/Json/JsonRowWriterFactory.cs` → lever (commit `2ea3ef45`): pre-encoded `JsonEncodedText` property-name writes.
+- `docs/specs/performance/json-ratio-oracle-1.md` → pre-registered oracle spec (commit `2ea3ef45`).
+- `.pdca/status/T311-json-streaming-1.md` → this record (measurement update).
+- `.pdca/status/collection-rc5.md` → progress log row.
+- Evidence (untracked, not committed as product): `.pdca/T311/rv2/baseline/**`, `.pdca/T311/rv2/candidate/**`.
 
 ## Git state
 
-`status path: .pdca/status/T311-json-streaming-1.md — modified this cycle · tracked (durable on disk, not committed)`. Task-owned delta pending commit: `docs/specs/performance/json-ratio-oracle-1.md` (new), `src/nextorm.core/Query/Json/JsonRowWriterFactory.cs` (modified). No `git add`/stage/commit performed. Work outside this item's delta stays untouched and unclaimed.
+`status path: .pdca/status/T311-json-streaming-1.md — modified this cycle · tracked (durable on disk)`. Lever commit `2ea3ef45` (4 files). Measurement commit pending (step 7 subject `#311 T311 r2: paired baseline (prior tree, same session) + ABBA 1k/10k/100k + acceptance pairing; evidence .pdca/T311/rv2/`). No push/merge/tag. Work outside this item's delta untouched and unclaimed. `git status --porcelain -- src tests benchmarks` empty on candidate leg.
 
 ## Progress log
 
 - 2026-10-19T13:40:04Z PLAN ready (r=1, n=1) — collection PLAN→DO handoff; DO not started. No product change, no benchmark run.
 2026-10-30T07:15:16Z | PLAN | revision r=2 | attempt n=1 | PLAN r2 completed — handoff at PLAN→DO boundary (form=cycle, overlay=coder+.NET, N=1, r=2, n=1, plan_state=ready; criteria C311-01..05; r1 superseded by a genuine contract revision — 2026-10-20 two-tier acceptance policy adopted verbatim + explicit scope boundaries against T247/T250; DO never ran, no attempt consumed) | `.pdca/status/T311-json-streaming-1.md` §PLAN record r2, §Revision history; evidence root `.pdca/T311/rv2/` (directories only)
 2026-10-30T23:52:53Z | DO | revision r=2 | attempt n=1/3 | T311 DO attempt 1: oracle spec written (docs/specs/performance/json-ratio-oracle-1.md); per-row lever implemented (JsonEncodedText property names) in JsonRowWriterFactory.cs; build 0W/0E; core JSON 129/0, sqlite JSON 135/0; M0 baseline/ABBA measurement outstanding (residual); candidate delivered, no verdict | .pdca/status/T311-json-streaming-1.md §DO result; src/nextorm.core/Query/Json/JsonRowWriterFactory.cs
+2026-10-31T00:30:20Z | DO | revision r=2 | attempt n=1/3 | T311 DO attempt 1 complete: lever committed 2ea3ef45 (JsonEncodedText property names); paired baseline captured from prior tree cce58e15 in same session (C311-02 ordering deviation recorded); ABBA 1k/10k/100k 2 rounds each (all PASS vs frozen limits); acceptance pairing 7/7 within band; units core 129/0 + sqlite 135/0; build 0W/0E; candidate for CHECK, no verdict | .pdca/status/T311-json-streaming-1.md section DO result; evidence .pdca/T311/rv2/
