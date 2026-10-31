@@ -1966,6 +1966,18 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
     }
 
     [Fact]
+    public void GroupArray_TupleColumn_ShouldExecuteAndMaterialiseTupleArray()
+    {
+        var value = _sut.DataProvider
+            .From<ITupleEntity>()
+            .Select(x => SqlFunctions.ClickHouse.group_array(x.Pair))
+            .First();
+
+        value.Should().BeOfType<Tuple<int, string>[]>();
+        value.Should().HaveCount(2);
+    }
+
+    [Fact]
     public void Insert_Value_ShouldPersistRow()
     {
         var ctx = _sut.DataProvider;

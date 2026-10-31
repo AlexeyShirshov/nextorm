@@ -265,6 +265,17 @@ public class ClickHouseDialect : SqlDialectBase
     // Array(Array(Nullable(String))) and never Nullable(Array(...)).
     private string MakeArrayElementType(Type type)
     {
+        // Tuple element types (Tuple<...>, ValueTuple<...>, including Nullable<...> tuples and
+        // nested tuples) are routed through the tuple-aware renderer TypeName(Type), so they emit
+        // Tuple(...) without the CLR arity name and without an unconditional Nullable(...) wrapper.
+        // Non-tuple behaviour is byte-identical to the previous implementation.
+        if (TypeFacts.IsTupleType(type) || TypeFacts.IsValueTupleType(type)
+            || (Nullable.GetUnderlyingType(type) is { } tupleUnderlying
+                && (TypeFacts.IsTupleType(tupleUnderlying) || TypeFacts.IsValueTupleType(tupleUnderlying))))
+        {
+            return TypeName(this, type);
+        }
+
         if (Nullable.GetUnderlyingType(type) is { IsValueType: true } underlying)
             return $"Nullable({MakeTypeName(underlying)})";
 
@@ -272,6 +283,25 @@ public class ClickHouseDialect : SqlDialectBase
             return $"Array({MakeArrayElementType(type.GetElementType()!)})";
 
         return type.IsValueType ? MakeTypeName(type) : $"Nullable({MakeTypeName(type)})";
+    }
+
+    /// <summary>
+    /// Tuple-aware ClickHouse type renderer shared by <see cref="MakeArrayElementType"/> and the
+    /// aggregate renderer's <c>TypeName</c>: handles nullable, array and the <see cref="Tuple"/> /
+    /// <see cref="ValueTuple"/> families (including nested tuples and value-/reference-typed fields).
+    /// </summary>
+    internal static string TypeName(ClickHouseDialect dialect, Type type)
+    {
+        if (Nullable.GetUnderlyingType(type) is { IsValueType: true } underlying)
+            return $"Nullable({TypeName(dialect, underlying)})";
+
+        if (type.IsArray)
+            return $"Array({TypeName(dialect, type.GetElementType()!)})";
+
+        if (TypeFacts.IsTupleType(type) || TypeFacts.IsValueTupleType(type))
+            return "Tuple(" + string.Join(", ", type.GetGenericArguments().Select(a => TypeName(dialect, a))) + ")";
+
+        return dialect.MakeTypeName(type);
     }
 
     /// <summary>
@@ -1356,28 +1386,10 @@ internal sealed class ClickHouseAggregateRenderer(ClickHouseDialect dialect) : I
 
     /// <summary>
     /// Renders a ClickHouse type name for a CLR type, covering the nullable, array and
-    /// <see cref="Tuple"/> family shapes the aggregate results declare.
+    /// <see cref="Tuple"/> / <see cref="ValueTuple"/> family shapes the aggregate results declare.
+    /// Delegates to the shared tuple-aware renderer <see cref="ClickHouseDialect.TypeName(ClickHouseDialect, Type)"/>.
     /// </summary>
-    private string TypeName(Type type)
-    {
-        if (Nullable.GetUnderlyingType(type) is { IsValueType: true } underlying)
-            return $"Nullable({TypeName(underlying)})";
-
-        if (type.IsArray)
-            return $"Array({TypeName(type.GetElementType()!)})";
-
-        if (type.IsGenericType && TupleArities.Contains(type.GetGenericTypeDefinition()))
-            return "Tuple(" + string.Join(", ", type.GetGenericArguments().Select(TypeName)) + ")";
-
-        return dialect.MakeTypeName(type);
-    }
-
-    /// <summary>The <see cref="Tuple"/> generic arities the row materializer supports.</summary>
-    private static readonly HashSet<Type> TupleArities =
-    [
-        typeof(Tuple<>), typeof(Tuple<,>), typeof(Tuple<,,>), typeof(Tuple<,,,>),
-        typeof(Tuple<,,,,>), typeof(Tuple<,,,,,>), typeof(Tuple<,,,,,,>)
-    ];
+    private string TypeName(Type type) => ClickHouseDialect.TypeName(dialect, type);
 }
 
 internal sealed class ClickHouseSequenceAggregateRenderer : ISequenceAggregateRenderer

@@ -577,4 +577,24 @@ public class ClickHouseDialectTests
         Dialect.UuidGenerators!.Render("gen_random_uuid").Should().Be("generateUUIDv4()");
         Dialect.UuidGenerators!.Render("uuidv7").Should().Be("generateUUIDv7()");
     }
+
+    [Fact]
+    public void MakeArrayResult_TupleElement_ShouldRenderTupleWithoutNullableWrapperOrClrArity()
+    {
+        // reference tuple element
+        Dialect.MakeArrayResult("group_array", "groupArray(t)", typeof(Tuple<int, string>[]))
+            .Should().Be("cast(groupArray(t) as Array(Tuple(Int32, String)))");
+
+        // value tuple element
+        Dialect.MakeArrayResult("group_array", "groupArray(t)", typeof((int, string)[]))
+            .Should().Be("cast(groupArray(t) as Array(Tuple(Int32, String)))");
+
+        // nested tuple with a nullable value field
+        Dialect.MakeArrayResult("group_array", "groupArray(t)", typeof(Tuple<Tuple<int?, string>, (long, (byte, byte?))>[]))
+            .Should().Be("cast(groupArray(t) as Array(Tuple(Tuple(Nullable(Int32), String), Tuple(Int64, Tuple(UInt8, Nullable(UInt8))))))");
+
+        // non-tuple guard: string array rendering is unchanged
+        Dialect.MakeArrayResult("group_array", "groupArray(s)", typeof(string[]))
+            .Should().Be("cast(groupArray(s) as Array(Nullable(String)))");
+    }
 }
