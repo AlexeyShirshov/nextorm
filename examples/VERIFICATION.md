@@ -271,6 +271,34 @@ B/call, so the dominant residual is per-call pipeline construction, not per-row 
 This step does not claim that residual is closable here. SQL capture before/after was byte-identical,
 and both arms returned the same 8 rows and values.
 
+## T267 #267 Lever 1 publication (2026-11-01, n=3/3 attempt)
+
+Before/after for `AviasalesQueries.DelayPercentilesByModel` (PG, `ShortRun` + `InProcessEmitToolchain`,
+`[MemoryDiagnoser]`, warm volume `nextorm-examples-aviasales-data`, 21758 flights). Before = retained
+rung `84e98272` (readonly record struct projections); after = commit `9cc092a5` (hoisted call-site
+expression trees). Both arms model `Sql/delay_percentiles_by_model.sql` and return the same 8 rows.
+
+Before (pre-Lever-1, n=2 baseline runs):
+
+| Run | Nextorm Mean | Nextorm Allocated | linq2db Mean | linq2db Allocated | Ratio |
+|---|---:|---:|---:|---:|---:|
+| Before 1 | 50.76 ms | 28.90 KB | 45.15 ms | 5.56 KB | 5.20× |
+| Before 2 | 45.17 ms | 28.17 KB | 45.47 ms | 5.56 KB | 5.07× |
+
+After (Lever 1, n=3 compliant baseline runs of current tree):
+
+| Run | Nextorm Mean | Nextorm Allocated | linq2db Mean | linq2db Allocated | Ratio |
+|---|---:|---:|---:|---:|---:|
+| After 1 | 45.03 ms | 16.17 KB | 45.27 ms | 5.52 KB | 2.93× |
+| After 2 | 45.23 ms | 16.18 KB | 45.61 ms | 5.56 KB | 2.91× |
+
+n=3/3 Lever 2 (per-call builder/visitor/command construction trimming in `src/nextorm.core`) was
+timeboxed out: no safe, measurable lever found; candidate code reverted by construction. Retained
+rungs `84e98272` + `9cc092a5` stand. Tier A target (≤6.67 KB = 1.2×5.56) unmet; residual gap ~9.5 KB/query.
+SQL byte-identical before/after; 8 rows identical in both arms (NextORM vs linq2db). Build:
+`dotnet build examples/nextorm.examples.postgres.aviasales -c Release` → 0W/0E (exit 0). Core tests:
+3946 passed / 0 failed. Evidence: `.pdca/T267/rv2/` (logs n3-baseline-{1,2}.log, receipts, gates).
+
 ## Known environment pitfalls (do not mistake for product failures)
 
 * The Podman machine can stop after an OOM on the WSL host (`no such container`, connection refused).
