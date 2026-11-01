@@ -22,35 +22,21 @@ public static class AviasalesQueries
     {
         // CTE flight_delays (delay_minutes + LAG over the same partition).
         var flightDelays = ctx.From<ITimetable>()
-            .Where(AircraftDelayChainsFlightDelaysWhere)
-            .Select(Once(
-                static (ITimetable f) => new
-                {
-                    flight_id = f.FlightId,
-                    airplane_code = f.AirplaneCode,
-                    actual_departure = f.ActualDeparture,
-                    scheduled_departure = f.ScheduledDeparture,
-                    delay_minutes = SqlFunctions.Sql.date_diff("second", f.ScheduledDeparture, f.ActualDeparture) / 60.0,
-                    prev_departure = SqlFunctions.Sql.lag(f.ActualDeparture)
-                        .Over(partitionBy: () => f.AirplaneCode, orderBy: () => f.ActualDeparture),
-                    prev_delay_minutes = SqlFunctions.Sql.lag(
-                            SqlFunctions.Sql.date_diff("second", f.ScheduledDeparture, f.ActualDeparture) / 60.0)
-                        .Over(partitionBy: () => f.AirplaneCode, orderBy: () => f.ActualDeparture)
-                },
-                static () => (ITimetable f) => new
-                {
-                    flight_id = f.FlightId,
-                    airplane_code = f.AirplaneCode,
-                    actual_departure = f.ActualDeparture,
-                    scheduled_departure = f.ScheduledDeparture,
-                    // EXTRACT(EPOCH FROM actual_departure - scheduled_departure) / 60
-                    delay_minutes = SqlFunctions.Sql.date_diff("second", f.ScheduledDeparture, f.ActualDeparture) / 60.0,
-                    prev_departure = SqlFunctions.Sql.lag(f.ActualDeparture)
-                        .Over(partitionBy: () => f.AirplaneCode, orderBy: () => f.ActualDeparture),
-                    prev_delay_minutes = SqlFunctions.Sql.lag(
-                            SqlFunctions.Sql.date_diff("second", f.ScheduledDeparture, f.ActualDeparture) / 60.0)
-                        .Over(partitionBy: () => f.AirplaneCode, orderBy: () => f.ActualDeparture)
-                }))
+            .Where(f => (f.Status == "Departed" || f.Status == "Arrived") && f.ActualDeparture != null)
+            .Select(f => new
+            {
+                flight_id = f.FlightId,
+                airplane_code = f.AirplaneCode,
+                actual_departure = f.ActualDeparture,
+                scheduled_departure = f.ScheduledDeparture,
+                // EXTRACT(EPOCH FROM actual_departure - scheduled_departure) / 60
+                delay_minutes = SqlFunctions.Sql.date_diff("second", f.ScheduledDeparture, f.ActualDeparture) / 60.0,
+                prev_departure = SqlFunctions.Sql.lag(f.ActualDeparture)
+                    .Over(partitionBy: () => f.AirplaneCode, orderBy: () => f.ActualDeparture),
+                prev_delay_minutes = SqlFunctions.Sql.lag(
+                        SqlFunctions.Sql.date_diff("second", f.ScheduledDeparture, f.ActualDeparture) / 60.0)
+                    .Over(partitionBy: () => f.AirplaneCode, orderBy: () => f.ActualDeparture)
+            })
             .AsCte("flight_delays");
 
         // CTE delay_chains: SELECT *, CASE ... AS is_chain_link FROM flight_delays.
@@ -69,27 +55,19 @@ public static class AviasalesQueries
             .AsCte("delay_chains");
 
         var rows = await ctx.From(delayChains).WithAlias(Alias.DelayChain)
-            .Join<IAirplaneData>(AircraftDelayChainsJoinCondition, Alias.Airplane)
-            .Where(AircraftDelayChainsOuterWhere)
-            .OrderBy(AircraftDelayChainsOrderByAirplane)
-            .OrderBy(AircraftDelayChainsOrderByScheduled)
-            .Select(Once(
-                static (NextORM.Generated.nextorm_examples_postgres_aviasales.AliasProjection_A1_DelayChain_A2_Airplane<DelayChainRow, IAirplaneData> p) => new
-                {
-                    Model = SqlFunctions.Postgres.json_get_text(p.Airplane.Model, "ru"),
-                    AirplaneCode = p.DelayChain.AirplaneCode,
-                    ScheduledDeparture = p.DelayChain.ScheduledDeparture,
-                    DelayMinutes = Math.Round(p.DelayChain.DelayMinutes ?? 0.0, 1),
-                    PrevDelayMinutes = Math.Round(p.DelayChain.PrevDelayMinutes ?? 0.0, 1)
-                },
-                static () => (NextORM.Generated.nextorm_examples_postgres_aviasales.AliasProjection_A1_DelayChain_A2_Airplane<DelayChainRow, IAirplaneData> p) => new
-                {
-                    Model = SqlFunctions.Postgres.json_get_text(p.Airplane.Model, "ru"),
-                    AirplaneCode = p.DelayChain.AirplaneCode,
-                    ScheduledDeparture = p.DelayChain.ScheduledDeparture,
-                    DelayMinutes = Math.Round(p.DelayChain.DelayMinutes ?? 0.0, 1),
-                    PrevDelayMinutes = Math.Round(p.DelayChain.PrevDelayMinutes ?? 0.0, 1)
-                }))
+            .Join<IAirplaneData>(
+                (dc, ac) => dc.DelayChain.AirplaneCode == ac.AirplaneCode, Alias.Airplane)
+            .Where(p => p.DelayChain.DelayMinutes > 30 && p.DelayChain.PrevDelayMinutes > 30)
+            .OrderBy(p => p.DelayChain.AirplaneCode)
+            .OrderBy(p => p.DelayChain.ScheduledDeparture)
+            .Select(p => new
+            {
+                Model = SqlFunctions.Postgres.json_get_text(p.Airplane.Model, "ru"),
+                AirplaneCode = p.DelayChain.AirplaneCode,
+                ScheduledDeparture = p.DelayChain.ScheduledDeparture,
+                DelayMinutes = Math.Round(p.DelayChain.DelayMinutes ?? 0.0, 1),
+                PrevDelayMinutes = Math.Round(p.DelayChain.PrevDelayMinutes ?? 0.0, 1)
+            })
             .ToListAsync(ct);
 
         return rows;
@@ -446,39 +424,6 @@ public static class AviasalesQueries
 
     private static readonly Expression<Func<DelayPercentilesByModelStatsRow, DelayPercentilesByModelRow>> DelayPercentilesSelect =
         s => new DelayPercentilesByModelRow(s.Model, s.Flights, s.MedianDelay, s.P90Delay);
-
-    // Hoisted call-site expression trees (Lever 1, #268): constructed once, reused per call.
-    // The two anonymous-projection Selects are now also hoisted via the generic holder below
-    // (Once<TSource, TResult>), preserving the compiler-generated anonymous types.
-    private static readonly Expression<Func<ITimetable, bool>> AircraftDelayChainsFlightDelaysWhere =
-        f => (f.Status == "Departed" || f.Status == "Arrived") && f.ActualDeparture != null;
-
-    private static readonly Expression<Func<NextORM.Generated.nextorm_examples_postgres_aviasales.AliasProjection_A1_DelayChain<DelayChainRow>, IAirplaneData, bool>> AircraftDelayChainsJoinCondition =
-        (dc, ac) => dc.DelayChain.AirplaneCode == ac.AirplaneCode;
-
-    private static readonly Expression<Func<NextORM.Generated.nextorm_examples_postgres_aviasales.AliasProjection_A1_DelayChain_A2_Airplane<DelayChainRow, IAirplaneData>, bool>> AircraftDelayChainsOuterWhere =
-        p => p.DelayChain.DelayMinutes > 30 && p.DelayChain.PrevDelayMinutes > 30;
-
-    private static readonly Expression<Func<NextORM.Generated.nextorm_examples_postgres_aviasales.AliasProjection_A1_DelayChain_A2_Airplane<DelayChainRow, IAirplaneData>, object?>> AircraftDelayChainsOrderByAirplane =
-        p => p.DelayChain.AirplaneCode;
-
-    private static readonly Expression<Func<NextORM.Generated.nextorm_examples_postgres_aviasales.AliasProjection_A1_DelayChain_A2_Airplane<DelayChainRow, IAirplaneData>, object?>> AircraftDelayChainsOrderByScheduled =
-        p => p.DelayChain.ScheduledDeparture;
-
-    // Hoisted anonymous-projection Select trees (#268 cycle 3): constructed once per process via a
-    // generic holder keyed on (TSource, TResult), preserving the compiler-generated anonymous types.
-    private static class AircraftDelayChainsExprCache<TSource, TResult>
-    {
-        public static Expression<Func<TSource, TResult>>? Value;
-    }
-
-    // Fallback (pattern B): inference of TResult from a bare factory lambda failed (CS0411), so a
-    // "sample factory" (witness) lambda binds TResult; it is never invoked - only `factory` builds
-    // the single cached Expression tree.
-    private static Expression<Func<TSource, TResult>> Once<TSource, TResult>(
-        Func<TSource, TResult> sample,
-        Func<Expression<Func<TSource, TResult>>> factory) =>
-        AircraftDelayChainsExprCache<TSource, TResult>.Value ??= factory();
 
     // 8. delay_percentiles_by_model
     // WORKING: percentile_disc(...) WITHIN GROUP (ORDER BY …).
