@@ -126,10 +126,14 @@ unchanged — `T311-CHECK-01..06` stand exactly as recorded in `.pdca/status/T31
 
 ## Git state
 
-status path: `.pdca/status/T311-json-streaming-4.md` — created this cycle; tracked after the single ACT commit for this closure (pending at write time; the commit carries only this path and reports `#311` plus the `774b3e0c` evidence pointer). Branch `1.0.9-rc5`. The two untracked user files `docs/assets/diagrams/selectwheremin-current.svg` and `docs/superpowers/specs/2026-11-01-query-components-proof-design.md` remain untracked and unstaged. No push, no merge, no tag.
+status path: .pdca/status/T311-json-streaming-4.md — created this cycle; tracked, committed as 8eefdcfd264a555e511105fe925e06d092592259 (this record) with `#311` plus the `774b3e0c` evidence pointer; a finalization commit follows that only appends these progress lines. Branch `1.0.9-rc5`. The two untracked user files `docs/assets/diagrams/selectwheremin-current.svg` and `docs/superpowers/specs/2026-11-01-query-components-proof-design.md` remain untracked and unstaged. No push, no merge, no tag.
 
 ## Progress log
 
 `2026-11-01T11:52:24Z | ACT | revision r1 | n/a | status file created | .pdca/status/T311-json-streaming-4.md`
 `2026-11-01T11:53:00Z | ACT | revision r1 | n/a | status_lint.py rc 0 | .pdca/status/T311-json-streaming-4.md`
 `2026-11-01T11:53:30Z | ACT | revision r1 | n/a | ACT closed — owner decision (documented permanent exception); #311 to be closed as completed | .pdca/status/T311-json-streaming-4.md`
+`2026-11-01T11:53:36Z | ACT | revision r1 | n/a | closure record committed | 8eefdcfd (.pdca/status/T311-json-streaming-4.md, 1 file)`
+`2026-11-01T11:53:36Z | ACT | revision r1 | n/a | issue comment posted | https://github.com/AlexeyShirshov/nextorm/issues/311#issuecomment-6557564283`
+`2026-11-01T11:53:36Z | ACT | revision r1 | n/a | issue closed by owner decision (documented permanent exception) | gh issue close 311 --reason completed`
+`2026-11-01T11:53:36Z | ACT | revision r1 | n/a | issue state verified CLOSED, milestone 1.0.9-rc5 | gh issue view 311`
