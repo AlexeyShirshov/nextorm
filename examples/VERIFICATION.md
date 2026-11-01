@@ -397,7 +397,7 @@ Tier outcome: **Tier B** — allocation drops ~6.4 KB/call (~10.7%) consistently
 (60.22/60.51 KB → 53.75/54.08 KB) and the ratio improves 1.404× → 1.252×/1.262×, but the
 `≤1.20×` Tier A target is not reached under the `1.0.9-rc4` NuGet binding (residual ~0.05-0.06×).
 Mean execution time shows no regression (48.92/49.22 ms vs 49.78/49.32 ms baseline and 54.3 ms
-reference); Nextorm stays ~1.09-1.10× linq2db. SQL capture before/after byte-identical (rc=0);
-both arms returned the same 30 rows and values (first 10 rows identical, count 30). Gates:
+reference); Nextorm/Linq2db Mean ratio ~0.929×/~0.907× (before) and ~0.914×/~0.908× (after) (Nextorm faster). SQL capture before/after byte-identical (rc=0);
+both arms returned the same 30 rows and values (all 30 rows identical by value). Gates:
 example Release 0W/0E, solution 0W/0E, core tests 3946/3946, postgres tests 1907/1907.
 Issue #268 stays open with the residual posted. Evidence: `.pdca/T268/rv2/`.
