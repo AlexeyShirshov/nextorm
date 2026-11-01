@@ -367,3 +367,37 @@ SQL byte-identical before/after; 8 rows identical in both arms (NextORM vs linq2
   Release 0W/0E, core tests 3946/3946, ClickHouse tests 1456/1456, ClickHouse integration 151/151
   with no skips. Logs and identity artifacts: `.pdca/rc5/items/T274/rv1/`; issue #274 comment posted
   with this table.
+
+## T268 #268 Lever 1 publication (2026-11-01, cycle 2 n=1/3)
+
+Call-site expression-tree hoisting in `AviasalesQueries.AircraftDelayChains`
+(`examples/nextorm.examples.postgres.aviasales/AviasalesQueries.cs`): five nameable trees
+(`flight_delays` Where on `ITimetable`; `Join<IAirplaneData>` condition; outer Where; two OrderBy keys)
+hoisted to `static readonly Expression<...>`; the two anonymous-projection Selects stay inline to
+preserve nominal anonymous types. Builders/`QueryCommand` stay per-call. Both arms model
+`Sql/aircraft_delay_chains.sql` and return 30 rows. PG, `ShortRun` + `InProcessEmitToolchain`,
+`[MemoryDiagnoser]`, warm volume `nextorm-examples-aviasales-data`, 21758 flights.
+`nextorm`/`nextorm.postgres` `1.0.9-rc4`, `linq2db` `6.5.0` (no ProjectReference).
+
+Before (unmodified `HEAD = 28e848a3`, n=2 paired runs):
+
+| Run | Nextorm Mean | Nextorm Allocated | linq2db Mean | linq2db Allocated | Ratio |
+|---|---:|---:|---:|---:|---:|
+| Before 1 | 49.78 ms | 60.22 KB | 53.57 ms | 42.89 KB | 1.404× |
+| Before 2 | 49.32 ms | 60.51 KB | 54.37 ms | 43.10 KB | 1.404× |
+
+After (hoisted, n=2 paired runs):
+
+| Run | Nextorm Mean | Nextorm Allocated | linq2db Mean | linq2db Allocated | Ratio |
+|---|---:|---:|---:|---:|---:|
+| After 1 | 48.92 ms | 53.75 KB | 53.52 ms | 42.93 KB | 1.252× |
+| After 2 | 49.22 ms | 54.08 KB | 54.18 ms | 42.85 KB | 1.262× |
+
+Tier outcome: **Tier B** — allocation drops ~6.4 KB/call (~10.7%) consistently across both runs
+(60.22/60.51 KB → 53.75/54.08 KB) and the ratio improves 1.404× → 1.252×/1.262×, but the
+`≤1.20×` Tier A target is not reached under the `1.0.9-rc4` NuGet binding (residual ~0.05-0.06×).
+Mean execution time shows no regression (48.92/49.22 ms vs 49.78/49.32 ms baseline and 54.3 ms
+reference); Nextorm stays ~1.09-1.10× linq2db. SQL capture before/after byte-identical (rc=0);
+both arms returned the same 30 rows and values (first 10 rows identical, count 30). Gates:
+example Release 0W/0E, solution 0W/0E, core tests 3946/3946, postgres tests 1907/1907.
+Issue #268 stays open with the residual posted. Evidence: `.pdca/T268/rv2/`.

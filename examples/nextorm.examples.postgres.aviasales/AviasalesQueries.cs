@@ -22,7 +22,7 @@ public static class AviasalesQueries
     {
         // CTE flight_delays (delay_minutes + LAG over the same partition).
         var flightDelays = ctx.From<ITimetable>()
-            .Where(f => (f.Status == "Departed" || f.Status == "Arrived") && f.ActualDeparture != null)
+            .Where(AircraftDelayChainsFlightDelaysWhere)
             .Select(f => new
             {
                 flight_id = f.FlightId,
@@ -55,11 +55,10 @@ public static class AviasalesQueries
             .AsCte("delay_chains");
 
         var rows = await ctx.From(delayChains).WithAlias(Alias.DelayChain)
-            .Join<IAirplaneData>(
-                (dc, ac) => dc.DelayChain.AirplaneCode == ac.AirplaneCode, Alias.Airplane)
-            .Where(p => p.DelayChain.DelayMinutes > 30 && p.DelayChain.PrevDelayMinutes > 30)
-            .OrderBy(p => p.DelayChain.AirplaneCode)
-            .OrderBy(p => p.DelayChain.ScheduledDeparture)
+            .Join<IAirplaneData>(AircraftDelayChainsJoinCondition, Alias.Airplane)
+            .Where(AircraftDelayChainsOuterWhere)
+            .OrderBy(AircraftDelayChainsOrderByAirplane)
+            .OrderBy(AircraftDelayChainsOrderByScheduled)
             .Select(p => new
             {
                 Model = SqlFunctions.Postgres.json_get_text(p.Airplane.Model, "ru"),
@@ -424,6 +423,25 @@ public static class AviasalesQueries
 
     private static readonly Expression<Func<DelayPercentilesByModelStatsRow, DelayPercentilesByModelRow>> DelayPercentilesSelect =
         s => new DelayPercentilesByModelRow(s.Model, s.Flights, s.MedianDelay, s.P90Delay);
+
+    // Hoisted call-site expression trees (Lever 1, #268): constructed once, reused per call.
+    // Only the trees whose parameter/return types are nameable (ITimetable + the DelayChain
+    // alias projection) are hoisted; the two anonymous-projection Selects stay inline so the
+    // nominal anonymous types are preserved.
+    private static readonly Expression<Func<ITimetable, bool>> AircraftDelayChainsFlightDelaysWhere =
+        f => (f.Status == "Departed" || f.Status == "Arrived") && f.ActualDeparture != null;
+
+    private static readonly Expression<Func<NextORM.Generated.nextorm_examples_postgres_aviasales.AliasProjection_A1_DelayChain<DelayChainRow>, IAirplaneData, bool>> AircraftDelayChainsJoinCondition =
+        (dc, ac) => dc.DelayChain.AirplaneCode == ac.AirplaneCode;
+
+    private static readonly Expression<Func<NextORM.Generated.nextorm_examples_postgres_aviasales.AliasProjection_A1_DelayChain_A2_Airplane<DelayChainRow, IAirplaneData>, bool>> AircraftDelayChainsOuterWhere =
+        p => p.DelayChain.DelayMinutes > 30 && p.DelayChain.PrevDelayMinutes > 30;
+
+    private static readonly Expression<Func<NextORM.Generated.nextorm_examples_postgres_aviasales.AliasProjection_A1_DelayChain_A2_Airplane<DelayChainRow, IAirplaneData>, object?>> AircraftDelayChainsOrderByAirplane =
+        p => p.DelayChain.AirplaneCode;
+
+    private static readonly Expression<Func<NextORM.Generated.nextorm_examples_postgres_aviasales.AliasProjection_A1_DelayChain_A2_Airplane<DelayChainRow, IAirplaneData>, object?>> AircraftDelayChainsOrderByScheduled =
+        p => p.DelayChain.ScheduledDeparture;
 
     // 8. delay_percentiles_by_model
     // WORKING: percentile_disc(...) WITHIN GROUP (ORDER BY …).
