@@ -1550,6 +1550,7 @@ this is the user's own scoping of the 2026-10-30 Lane G1 two-tier amendment; the
 - Defect id: `COL-1` — shared evidence gap; observed collection revision r=2, no attempted fix; evidence `.pdca/rc5/rv1/integration-check.md`; last recurrence/escalation: none; linked corrective cycle: none (another evidence round would be a new cycle).
 - Next allowed step: none — collection closed.
 - Integration CHECK report (verbatim): `.pdca/rc5/rv1/integration-check.md`.
+- Working-tree reconciliation (2026-11-01): T269 accepted attribution harness committed as `c2a63089` with evidence pointer `.pdca/rc5/items/T269/rv1/attribution/probe.txt`; temporary ClickHouse Debug-capture edits restored (T272 evidence confirms temporary instrumentation was reverted); unexplained untracked SVG deleted; untracked T302 status record committed in the rc5 bookkeeping commit. No product behavior changed; no push/merge/tag. Before/after evidence: `.pdca/rc5/rv1/tree-reconcile/before.md`, `.pdca/rc5/rv1/tree-reconcile/after.md`.
 
 ## Done / Verified / Incomplete
 
@@ -1571,6 +1572,8 @@ this is the user's own scoping of the 2026-10-30 Lane G1 two-tier amendment; the
 
 
 append-only, one row per event, never edited retroactively:
+
+2026-11-01T00:44:49Z | ACT | revision r=2 | attempt n=0 | Working-tree reconciliation: committed accepted T269 attribution tooling as c2a63089; restored temporary ClickHouse instrumentation; deleted unexplained untracked SVG; committed T302 item status in bookkeeping commit; no product behavior changes, no push/merge/tag | .pdca/rc5/rv1/tree-reconcile/before.md; .pdca/rc5/rv1/tree-reconcile/after.md
 
 2026-11-01T00:36:31Z | ACT | revision r=2 | attempt n=0 | T319 finalized incomplete / STOP at Step 1 boundary: addressable gap not confirmed, not refuted; hypothetical net range +1,120.23 / +360.22 / −159.78 B/query (+9.2 / +3.0 / −1.3%); #319 OPEN; residual G1-SCF-01; evidence root .pdca/rc5/items/T319/rv1/ | .pdca/status/T319-rc5-1.md; .pdca/rc5/items/T319/rv1/step1/check-boundary.md; .pdca/rc5/items/T319/rv1/step1/escalation-boundary.md
 
