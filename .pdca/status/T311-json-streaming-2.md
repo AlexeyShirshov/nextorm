@@ -4,10 +4,10 @@
 
 - task: `T311` · form: `cycle` · specialized skill: `pdca-dotnet` (`coder+.NET`)
 - mode: `autonomous`
-- cycle: `N=2` · revision: `r=1` · attempt: `n=2/3` (entering; `n=3/3` in reserve)
-- scope: `#311` JSON streaming (`ToStream`/`ToTextReader`) — construction/preparation share measurement + acceptance baseline capture + new oracle pre-registration (part 1 of this dispatch); status path `.pdca/status/T311-json-streaming-2.md`
+- cycle: `N=2` · revision: `r=1` · attempt: `n=2/3` (terminal; `n=3/3` unspent per stop condition)
+- scope: `#311` JSON streaming (`ToStream`/`ToTextReader`) — pre-lever measurement + acceptance baseline + oracle-2; no lever implemented; ACT finalization; status path `.pdca/status/T311-json-streaming-2.md`
 - goal: measurable improvement on the remaining `#311` JSON streaming 1k arm (`1.089×`) while preserving the retained `2ea3ef45` 10k win and all 7/7 acceptance/oracle checks — §PLAN record authoritative
-- phase: `DO` · record: `open` · outcome: `pending`
+- phase: `ACT` · record: `completed` · outcome: `incomplete`
 - source: issue `#311` (`AlexeyShirshov/nextorm`), milestone `1.0.9-rc5`; re-entry cycle `N=2` after `N=1` terminal `incomplete` (`.pdca/status/T311-json-streaming-1.md`, read-only); context refs: `.pdca/status/T246-raw-datareader-3.md` §`## Original task` → `#### Cycle 3: #311` (`AC-311-01..03`); caller dispatch (this DO dispatch)
 - criteria: `AC-311-01`, `AC-311-02`, `AC-311-03` (by reference to `.pdca/status/T246-raw-datareader-3.md` §3.2 and `.pdca/status/T311-json-streaming-1.md`) — exact text in §PLAN record `r1`, not retyped here
 - evidence root: `.pdca/T311/rv3/`
@@ -50,36 +50,38 @@ Reference (readable complete original, not repeated here): `.pdca/status/T246-ra
 
 ## DO result
 
-`pending: DO in progress (part 1 of this dispatch)`.
+Pre-lever measurement completed; no product edit. Removable per-call construction+preparation cost on the `#311` JSON streaming arms (single process, Release, pinned DB `NEXTORM_BENCH_DB=/tmp/nextorm-bench/test.db`, host quiesced; `.pdca/T311/rv3/logs/decomposition.log`): 1k = 4,451 B (8.45% of allocations) and 12,610 ns (2.17% of time); 10k = 4,434 B (1.07% of allocations), time within noise (−365,238 ns); query-building alone at 1k = 2,416 B (4.59%) / 1,382 ns (0.24%). The 1k time gap to parity is 8.9% (`1.089×`), so the construction seam cannot close it even if fully removed — stop condition triggered, no lever implemented, no speculative edit. Deliverables completed and committed at `b6f9925a` (`AC-311-03`): same-session paired acceptance baseline 7/7 in both rounds at `.pdca/T311/rv3/baseline/round-{1,2}/acceptance/cases.json`; pre-registered noise-robust oracle `docs/specs/performance/json-ratio-oracle-2.md` (`json-ratio-oracle-1.md` and T247's frozen thresholds/tolerances/denominators/GAP untouched). Retained `2ea3ef45` win stays exactly as it is (`0.42×` allocations, `0.903–0.916×` time at 10k, `1.089×` at 1k); nothing reverted. `n=3/3` unspent but unused per the plan's stop condition. Units: none added; no superseded→replacement mapping. Candidate is not a verdict.
 
 ## CHECK record
 
-`not run: DO in progress (no candidate yet)`.
+`not run: DO → ACT` (no candidate produced; pre-lever measurement refuted the lever's plausibility).
 
 ## ACT record
 
-`pending`.
+Outcome: `incomplete` · terminal = `execution` · accepted scope: `none` · issue `#311` left OPEN (no `gh issue close`). Completed deliverables (commit `b6f9925a`, `AC-311-03`): (1) same-session paired acceptance baseline 7/7 in both rounds at `.pdca/T311/rv3/baseline/round-{1,2}/acceptance/cases.json`; (2) pre-registered noise-robust oracle `docs/specs/performance/json-ratio-oracle-2.md` (oracle-1 and T247's frozen thresholds/tolerances/denominators/GAP untouched). Measured residual: removable per-call construction+preparation cost at 1k = 4,451 B (8.45% of allocations) / 12,610 ns (2.17% of time); at 10k = 4,434 B (1.07%), time within noise (−365,238 ns); query-building alone at 1k = 2,416 B (4.59%) / 1,382 ns (0.24%). The 1k time gap to parity is 8.9% (`1.089×`), so the construction seam cannot close it even if fully removed; hence no lever implemented, no speculative edit. Why incomplete, not accepted: `AC-311-01` Tier A (time ≤1.00× / alloc ≤1.20× at 10k) remains unmet on the 1k arm's time ratio; no Tier B local win produced in this attempt; retained `2ea3ef45` win stays exactly as it is (`0.42×` allocations, `0.903–0.916×` time at 10k, `1.089×` at 1k). Retention: `2ea3ef45` retained; nothing reverted; `n=3/3` unspent but unused per the plan's stop condition. Verification limits: the decomposition isolates construction+preparation by a cached-vs-uncached arm pair (`D` vs `A`) and a query-building-only arm (`B`); it does not claim a general library-wide construction cost, and it does not import any `G1-SCF-01` CTE byte. Next authorized action: a further cycle is a separate authorized PLAN under the state machine; issue `#311` stays open. No CHECK ran; no `PASS`; no `done`.
 
 ## Revision history
 
-`none` (new cycle `N=2`, `r=1`, entering `n=2/3`).
+`none` (`N=2`, `r=1`, no replan; terminal `incomplete` at `n=2/3`).
 
 ## Defect history
 
-`none` (new cycle; prior defects in `.pdca/status/T311-json-streaming-1.md` §Defect history read-only).
+`none` (no product defect key; no implementation change in this cycle).
 
 ## Changed files
 
-- `.pdca/status/T311-json-streaming-2.md` → this record
-- `docs/specs/performance/json-ratio-oracle-2.md` → new pre-registered oracle (commit fdc5bc1b)
+- `.pdca/status/T311-json-streaming-2.md` → this record (ACT finalization)
+- `docs/specs/performance/json-ratio-oracle-2.md` → new pre-registered oracle (commit `b6f9925a`)
 - `.pdca/T311/rv3/baseline/round-{1,2}/acceptance/cases.json` → 7/7 each (gitignored evidence)
 - `.pdca/T311/rv3/logs/decomposition.log` → pre-lever decomposition (gitignored evidence)
+- No product code changed; `2ea3ef45` retained untouched.
 
 ## Git state
 
-`status path: .pdca/status/T311-json-streaming-2.md — modified this cycle · tracked (commit fdc5bc1b)`. Baseline HEAD at dispatch `ac92e8ca`; now `fdc5bc1b`. Two untracked user files untouched.
+`status path: .pdca/status/T311-json-streaming-2.md — modified this cycle, tracked (durable on disk; commit pending in this ACT)`; branch `1.0.9-rc5`, baseline `b6f9925a`. No product paths modified. Untracked `docs/assets/diagrams/selectwheremin-current.svg` and `docs/superpowers/specs/2026-11-01-query-components-proof-design.md` are foreign and untouched. Evidence root `.pdca/T311/rv3/` untracked, not committed. Status file committed in this ACT.
 
 ## Progress log
 
 - 2026-11-01T14:43:23Z | DO | revision r=1 | attempt n=2/3 | T311 N=2 part-1 dispatch started: status file created; no product edit yet | `.pdca/status/T311-json-streaming-2.md`
 - 2026-11-01T09:51:09Z | DO | revision r=1 | attempt n=2/3 | T311 N=2 part-1 complete: acceptance 7/7 x2, oracle-2 pre-registered, decomposition (construction+prep <=8.45% alloc/~2.2% time at 1k) -> stop condition triggered, no lever; commit fdc5bc1b | `.pdca/T311/rv3/`, `docs/specs/performance/json-ratio-oracle-2.md`
+- 2026-11-01T09:52:31Z | ACT | revision r=1 | attempt n=2/3 | finalized incomplete (DO→ACT): construction share 2.17% of 1k time cannot close the 8.9% gap; 7/7 baseline + oracle-2 delivered; issue #311 left OPEN; no gh issue close; n=3/3 unspent; evidence .pdca/T311/rv3/ | `.pdca/status/T311-json-streaming-2.md`
