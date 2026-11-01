@@ -377,3 +377,37 @@ reference); Nextorm/Linq2db Mean ratio ~0.929×/~0.907× (before) and ~0.914×/~
 both arms returned the same 30 rows and values (all 30 rows identical by value). Gates:
 example Release 0W/0E, solution 0W/0E, core tests 3946/3946, postgres tests 1907/1907.
 Issue #268 stays open with the residual posted. Evidence: `.pdca/T268/rv2/`.
+### Cycle 3 — anonymous-type Select hoisting (2026-11-01, n=1/3)
+
+Anonymous-type Select hoisting in `AviasalesQueries.AircraftDelayChains`
+(`examples/nextorm.examples.postgres.aviasales/AviasalesQueries.cs`): the two remaining
+per-call anonymous-typed `Select` expression trees (the `legs` projection and the outer
+summary projection) are now built once per process via the documented generic holder
+helper (`AircraftDelayChainsExprCache<TSource,TResult>` + `Once<TSource,TResult>`); builders
+and `QueryCommand`s stay fresh per call. Both arms model `Sql/aircraft_delay_chains.sql`
+and return 30 rows. PG, `ShortRun` + `InProcessEmitToolchain`, `[MemoryDiagnoser]`,
+warm volume `nextorm-examples-aviasales-data`, 21758 flights.
+`nextorm`/`nextorm.postgres` `1.0.9-rc4`, `linq2db` `6.5.0` (no ProjectReference).
+
+Before (unmodified tree, n=2 paired runs, this cycle's baseline on the 5-tree tree):
+
+| Run | Nextorm Mean | Nextorm Allocated | linq2db Mean | linq2db Allocated | Ratio |
+|---|---:|---:|---:|---:|---:|
+| Before 1 | 48.72 ms | 53.97 KB | 53.23 ms | 42.25 KB | 1.2774× |
+| Before 2 | 48.60 ms | 53.93 KB | 53.12 ms | 43.29 KB | 1.2458× |
+
+After (hoisted, n=2 paired runs, candidate tree):
+
+| Run | Nextorm Mean | Nextorm Allocated | linq2db Mean | linq2db Allocated | Ratio |
+|---|---:|---:|---:|---:|---:|
+| After 1 | 48.57 ms | 39.88 KB | 53.14 ms | 42.44 KB | 0.93968× |
+| After 2 | 48.34 ms | 39.88 KB | 52.83 ms | 42.65 KB | 0.93505× |
+
+Tier outcome: **Tier A** — allocation ratio `0.940×` / `0.935×`, i.e. the `≤1.20×`
+target is met (also `≤1.0×` stretch). Mean execution time shows no regression
+(48.57/48.34 ms vs the 54.3 ms reference); Nextorm/Linq2db Mean ratio
+`~0.914×` / `~0.915×` (Nextorm faster). SQL capture before/after byte-identical
+(SHA-256 `be0102ee9f647aa6f87745e8a32ecc9563422c78a0db0e0d12556dcd3efe67a4`);
+both arms returned the same 30 rows and values (all 30 rows identical by value). Gates:
+solution Debug 0W/0E, example Release 0W/0E, core tests 3946/3946, postgres tests 1907/1907.
+Issue #268 stays open pending CHECK acceptance of the cycle. Evidence: `.pdca/T268/rv3/`.
