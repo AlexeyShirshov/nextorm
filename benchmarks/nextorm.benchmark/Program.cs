@@ -46,6 +46,9 @@ if (args.Length > 0 && args[0] == "--t245-attribution")
             ? args[1]
             : Environment.GetEnvironmentVariable("NEXTORM_T245_ATTRIBUTION_OUT") ?? ".pdca/T245/rv1/attribution");
 
+if (args.Length > 0 && args[0] == "--t269-airport-probe")
+    return await T269AirportOnTimeProbe.RunAsync(args.Length > 1 ? args[1] : ".");
+
 // T245 (#245) Step 1 evidence completion: measurement-only reconciliation probe. It measures the exact
 // BDN arm bodies and the attribution-probe bodies in one process and against one pinned database, so the
 // probe level and the acceptance arms can be compared directly. Benchmark-project-only; no product change.
