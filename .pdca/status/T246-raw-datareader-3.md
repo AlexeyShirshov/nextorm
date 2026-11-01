@@ -4,14 +4,14 @@
 
 - task: `T246` · form: `cycle` · specialized skill: `pdca-dotnet` (`coder+.NET`, inherits `pdca-coder`)
 - mode: `autonomous`
-- disposition: `paused` (user stop, not a verdict)
-- cycle: `N=3` · revision: `r=1` · attempt: `n=2/3` (next attempt; 2 of 3 attempts remain — `n=2/3`, `n=3/3` in reserve; prior `n=1/3` spent in `N=2` on reverted `OpenResultReader` + lean `LobDataReader` candidate, empty arm +17.3 %; this DO made no product change and consumed no correcting attempt)
+- disposition: `closed` (incomplete; DO→ACT; no candidate; issue #246 OPEN)
+- cycle: `N=3` · revision: `r=1` · attempt: `n=2/3` (entering; `n=3/3` in reserve; prior `n=1/3` spent in `N=2` on reverted `OpenResultReader` + lean `LobDataReader` candidate, empty arm +17.3 %)
 - scope: `#246` only — `ToDataReader` raw reader vs linq2db on fresh-fluent path (10k + empty arms), construction-cost lever under `G1-SCF-01`; status path `.pdca/status/T246-raw-datareader-3.md`
 - goal: measured performance improvement on `ToDataReader` (Tier A global ratios or Tier B one-axis local win) committed on `1.0.9-rc5`, or measured residual proof recorded `incomplete` with issue left open — §PLAN record and §Original task authoritative
-- phase: `DO→ACT` · record: `completed` · outcome: `paused (user stop at DO→ACT boundary; not a verdict)`
+- phase: `ACT` · record: `completed` · outcome: `incomplete (no in-scope construction lever without design change; DO→ACT)`
 - source: issue `#246` (`AlexeyShirshov/nextorm`), milestone `1.0.9-rc5`; re-entry cycle `N=3` after `N=2` terminal `incomplete` (`.pdca/status/T246-raw-datareader-2.md`, read-only) · context refs: caller dispatch "three residuals of the closed rc5 collection; item #246"; retained wins `84e98272`, `2ea3ef45`, `F7` in HEAD `04d35452`
 - criteria: `AC-246-01..04` — exact text in §PLAN record `r1` (source: caller dispatch), not retyped here
-- evidence root: `.pdca/T246/rv7/`
+- evidence root: `.pdca/T246/rv8/`
 
 ## Original task
 
@@ -277,36 +277,52 @@ Every DO dispatch for Cycles 1, 2, and 3 carries by reference:
 ## END FROZEN PLAN
 ````
 
+## PLAN record
+
+### r1 resumption
+
+````markdown
+# PLAN — Resumption of `rc5` Residual Lane (`#246`, `#267`, `#311`)
+
+- **Shared form, overlay & anchor (by reference to frozen entry plan `.pdca/status/T246-raw-datareader-3.md` §`## PLAN record` r1):** Three sequential, single-process ordinary `cycle`s; specialized skill `pdca-dotnet` (`coder+.NET`). No form reclassification. Anchored to branch `1.0.9-rc5` at HEAD `5c162b06` (two untracked user files `docs/assets/diagrams/selectwheremin-current.svg` and `docs/superpowers/specs/2026-11-01-query-components-proof-design.md` untouched).
+- **Binding treatment of `G1-SCF-01` (verdict `LIMITED`):** Treated strictly as an investigation-grade hypothesis from a CTE construction workload (`9,025.344 / 9,145.344 B → 4,272 B/query` under expression hoisting; caveats 1–9 binding). Its bytes and percentages are **never** imported as baseline or proof for `#246`, `#267`, or `#311`.
+- **Hard stop across all three blocks:** At most **one** evidence-completion round per criterion per revision; after it, take the honest verdict (implementation → DO, contract → PLAN, exhausted → ACT).
+
+## Block 1: `#246` Resume — Raw `DbDataReader` (`ToDataReader`)
+
+- **Attempt accounting, status & evidence root:** `N=3`, `r=1`, entering `n=2/3` (`n=3/3` in reserve). Status: `/home/alex/sources/nextorm/.pdca/status/T246-raw-datareader-3.md`. Evidence root: `.pdca/T246/rv8/` (fresh per-round root; reuses `.pdca/T246/rv7/logs/baseline-full.log` as the paired pre-change baseline).
+- **Requested vs delivered result (same object):** Measurable reduction of fixed per-call time and allocation overhead on the fresh-fluent `ToDataReader` execution path relative to `linq2db` and provider-direct `DbDataReader` on `1.0.9-rc5`, delivered as a committed in-scope code change with paired benchmark and fail-closed test evidence, or an honest `incomplete` verdict if the in-scope ceiling cannot yield a Tier A/B win.
+- **Cycle scope & acceptance criteria (by reference):** `ToDataReader` execution/preparation/builder seam in `src/nextorm.core/**` and dialect providers, plus unit/integration tests and benchmarks. Criteria: **`AC-246-01`, `AC-246-02`, `AC-246-03`, `AC-246-04`** by reference to `.pdca/status/T246-raw-datareader-3.md` §3.2 (verbatim, unchanged).
+- **Ceiling quantification & gap analysis:**
+  - *Established baseline (`rv7`):* At 10k rows, `B_Nextorm_ToDataReader` (`5,619.81 us / 973,504 B`) is already near parity with `Linq2Db_ToDataReader` (`5,519.80 us / 965,632 B`, **1.018× time / 1.008× alloc**, delta **+7,872 B/call**; per-row delta ~0 at `95.75` vs `96.00 B/row`), and prepared 10k (`947.91 KB`) differs by only **~2.78 KB**. On the empty arm (`0` rows), `B_Nextorm_ToDataReader_Empty` (`292.83 us / 16,048 B`) exceeds `Linq2Db_Empty` (`91.06 us / 5,648 B`) by **+201.77 us (3.216×)** and **+10,400 B/call (2.841×)**.
+  - *Ceiling:* Any construction/preparation lever is bounded above by the **10,400 B/call (and ~202 us/call) empty-arm fixed gap**, and by **~2.78–10.4 KB (~0.3–1.1%)** on the 10k arm. Therefore, the lever targets the **fixed per-call overhead** (directly governing `B_Nextorm_ToDataReader_Empty` and small-N calls while keeping 10k ≤1.018×/1.008×).
+- **Measurement method:**
+  - *Subject & denominator arms:* `B_Nextorm_ToDataReader` (10k) and `B_Nextorm_ToDataReader_Empty` (0 rows) vs `Linq2Db_ToDataReader` / `Linq2Db_Empty` (primary denominator) and `Provider_Direct` / `Provider_Direct_Empty` (reference floor), plus prepared control arm.
+  - *Metric, unit & filters:* Mean execution time (`us`/op) and managed allocation (`B`/op), Release build, pinned SQLite DB (`NEXTORM_BENCH_DB=/tmp/nextorm-bench/test.db`), single process, paired same-round execution with both 10k and empty (small) arms visible.
+  - *Thresholds & provenance (frozen plan §3.2):* **Tier A:** meets target ratios in `AC-246-01..02` across required arms with `AC-246-03..04` green. **Tier B:** statistically repeatable reduction on ≥1 primary axis (time or `B`/op on empty or 10k arm) vs the `rv7` baseline (`16,048 B` / `292.83 us` empty; `973,504 B` / `5,619.81 us` 10k) with no regression beyond the noise band on the other axis/arm and `AC-246-03..04` satisfied.
+- **Candidate levers for DO (in-scope vs out-of-scope):**
+  1. *Internal raw-shape / preparation cache reuse on the uncached `ToDataReader` path:* Extend `OpenLobReader`/`PrepareLobCommand` (`DataContext.cs:543-578`) and `OpenResultReader` (`:586-638`) → `QueryPlanner.GetPreparedQueryCommand` (`:702-776`) so fresh-fluent `ToDataReader` calls can reuse pre-prepared SQL/factory artifacts via `QueryPlanStore` without mutating `queryCommand.Cache` (`_dontCache` sticky trap) and without requiring user `.Prepare()`.
+  2. *Per-call builder / expression-rewrite allocation reduction on `From → Where → Select → ToDataReader`:* Avoid avoidable per-call `EntityBuilder.Clone()`, `ReplaceParameterExpressionVisitor` allocation, or reader-owner wrapper churn when building fresh fluent commands, and/or hoist static expression trees in the benchmark/call-site only where permitted by `AC-246-04`.
+  - *Out-of-scope:* `ToStream`/`ToTextReader`; relaxing `CommandReaderOwner` exact-once disposal (`AC-246-03`); requiring `.Prepare()` (`AC-246-04`); mutating shared `QueryCommand.Cache`; non-dialect-driven LOB branching.
+- **Stop condition & `incomplete` trigger:** Stop as soon as a paired same-round run after the candidate lever(s) + at most one evidence-completion round finishes. If neither Lever 1 nor Lever 2 reduces the `10,400 B` / `201.77 us` empty-arm gap or 10k metrics (or if `n=3/3` is exhausted without a Tier A/B win), route to ACT as `incomplete` and leave `#246` open. Any measured Tier B win is committed and retained.
+````
+
 ## Approval record
 
 `not applicable: autonomous mode` — no ordinary plan approval was required or invented for this cycle.
 
 ## DO result
 
-No product code change was made (no candidate implemented). `Measurement first` baseline captured on the current tree (`HEAD 04d35452`, F7 retained) on the pinned DB; attribution performed; conclusion: no in-scope construction/per-row lever exists under the task constraints that can produce a Tier B one-axis win without regression, so the cycle stops under the plan's stop condition (no viable in-scope lever). Build baseline `0 Warning(s) 0 Error(s)` (unchanged tree). Evidence root `.pdca/T246/rv7/`.
+No product code change was made in this attempt (`n=2/3`): `Measurement first` baseline re-captured on the current tree (`HEAD 5c162b06`, F7 retained) on the pinned DB into `.pdca/T246/rv8/logs/baseline-round1.log` (exit 0, 9 reader arms). Candidate attribution (fixed vs per-row, same as prior cycle): fixed (empty) term dominates - NextORM empty 272.95 us / 16.16 KB vs provider-direct 112.46 us / 5.3 KB (delta alloc ~10.86 KB); per-row overhead ~0 (NextORM 95.75 B/row vs provider-direct ~96 B/row). Prepared 10k arm 8,105.04 us / 943.41 KB vs fresh 20,485.54 us / 951.17 KB - only ~7.76 KB separates prepared from fresh across 10k rows, so query construction/preparation is a small share of the fixed cost; the bulk of the ~10.86 KB fixed gap is preparation/execution overhead (command, plan, reader, LOB seam).
 
-Baseline (same session, pinned DB `/tmp/nextorm-bench/test.db`, Release, ShortRun, log `.pdca/T246/rv7/logs/baseline-full.log`; exact bytes from BDN `// GC:` lines):
-- `B_Nextorm_ToDataReader` (10k): 5619.81 us, 973504 B.
-- `Linq2Db_ToDataReader` (10k): 5519.80 us, 965632 B.
-- `Provider_Direct_ToDataReader` (10k): 4956.45 us, 965368 B.
-- `B_Nextorm_ToDataReader_Empty`: 292.83 us, 16048 B.
-- `Linq2Db_ToDataReader_Empty`: 91.06 us, 5648 B.
-- `Provider_Direct_ToDataReader_Empty`: 81.25 us, 5384 B.
-- `A_Nextorm_Prepared_ToDataReader` (10k, prepared cmd): 6141.90 us, 947904? (947.91 KB) — see log.
+Lever assessment:
+- Lever 1 (raw-shape/preparation cache reuse on the uncached `ToDataReader` path via `QueryPlanStore`): not safely implementable within the constraints - raw candidate publication (`QueryPlanStore.SetRaw`) is gated on `storeInCache && queryCommand.Cache`, and reader paths use `PreparedCommandCache.None`/`storeInCache: false` precisely because the command is minted per execution and disposed exactly once (AC-246-03 exact-once disposal). Publishing a normalized entry would share a disposed command across executions (ownership hazard), previously reverted. A separate raw-only immutable store would be a new subsystem, out of scope for one bounded attempt.
+- Lever 2 (per-call builder/expression-rewrite allocation reduction): the benchmark's projection lambda is already compiler-cached (no capture); `EntityBuilder.Clone()`/`ReplaceParameterExpressionVisitor` are not on the measured fresh-fluent reader path in a trimmable way without risking correctness; no safe, measurable reduction identified.
+Conclusion: no in-scope construction/per-row lever under the task constraints delivers a Tier B one-axis win (exact byte decrease with time within band, or time beyond band with no alloc increase) on both arms without regression. Cycle stops under the plan stop condition (no viable in-scope lever); `#246` stays OPEN. No product/test/benchmark source changes; no commit of product code.
 
-Ratios NextORM/linq2db: 10k time 1.018×, alloc 1.008×; empty time 3.216×, alloc 2.841×. Global target (≤1.00× time, ≤1.20× alloc) unmet on time for 10k and both axes for empty.
+Gates: build Debug 0W/0E, Release 0W/0E (nextorm.core); `dotnet test tests/nextorm.core.tests --filter FullyQualifiedName~Lob` 92 passed / 0 failed; status_lint rc 0. Evidence root `.pdca/T246/rv8/`.
 
-Attribution (fixed vs per-row, current tree):
-- Fixed (empty) NextORM vs provider-direct: Δtime 211.58 us, Δalloc 10664 B.
-- Per-row (10k−empty)/10000: NextORM 0.5327 us/row, 95.75 B/row; provider-direct 0.4875 us/row, 96.00 B/row. Per-row overhead is near zero; the empty/fixed term dominates.
-- Prepared arm (`A_Nextorm_Prepared_ToDataReader`) allocates only ~2.78 KB less than the fresh arm across 10k rows, so query construction itself is a small share of the fixed cost; the bulk of the 10.6 KB fixed gap is preparation/execution overhead (command, plan, reader, LOB seam).
-
-Candidate assessment:
-- Prior candidate (N=2) already tried routing `ToDataReader` through `OpenResultReader` (removing the LOB seam on SQLite): empty time −13.4 % but allocations flat and 10k time inside noise; empty arm still +17.3 % in the candidate-bound ABBA. Combining with the raw-recipe/cache lever would require publishing a prepared command into `QueryPlanStore` for a reader path whose command is disposed per execution (ownership hazard, previously reverted in r=4), or a cached SQL/plan descriptor that is not implemented and would be a new subsystem — out of scope for a single bounded cycle and not safely doable under `CommandReaderOwner` exact-once disposal (AC-246-03) and the no-`Prepare()` constraint (AC-246-04).
-- Trimming `LobDataReader` further (already AggressiveInlining + cancellation skip + F6/F7 fixes) addresses only the single wrapper instance, not the 10.6 KB fixed gap.
-- Therefore no in-scope construction/per-row lever exists under the constraints that can deliver a Tier B win (exact byte decrease with time within band, or time beyond band with no alloc increase) on both arms without regression. The cycle stops per plan §9 Risk 3 / terminal rule 3.
-
-Correctness/infra not re-run (no code change); standing baseline build 0 W/0 E recorded above; benchmark arms retained unchanged. Issue #246 stays OPEN.
+Evidence-completion round (this file, n=2/3, no product change): the 20,485.54 us round-1 figure for `B_Nextorm_ToDataReader` (10k) is **not** a reproducible property of the tree. Re-run under the reported host state into `.pdca/T246/rv8/logs/baseline-recheck.log` (Release, pinned DB, ShortRun, single process, same filters) gave `B_Nextorm_ToDataReader` 10k = 18,193 us / 974,000 B (allocations byte-stable vs round-1 974,000 B and rv7 973,504 B; Linq2Db 10k 22,684 us / 965,680 B, Provider_Direct 10k 12,123 us / 965,416 B in the same run). An isolated single-arm cold run gave 15,509 us / 969,344 B. The full-class rv7 run (22 benchmarks, prior warmup) gave 5,620 us / 973,504 B. Time varies 5.6 -> 20.5 -> 18.2 -> 15.5 ms while allocations stay byte-stable (973,504 / 974,000 / 974,000 / 969,344 B), and the NextORM/linq2db ratio swings 1.018x -> 4.08x -> 0.80x -> 0.69x. Classification: **(b) load/first-run (warmup/ordering) artifact**, not (a). No tree change, no product edit, no candidate, no commit. Empty-arm residual (clean rv7 reference): `B_Nextorm_ToDataReader_Empty` 292.83 us / 16,048 B vs `Linq2Db_ToDataReader_Empty` 91.06 us / 5,648 B (3.216x time / 2.841x alloc) and vs `Provider_Direct_ToDataReader_Empty` 81.25 us / 5,384 B (delta +211.58 us, +10,664 B). The earlier "no in-scope lever" conclusion on the empty arm stands; the 10k arm is already at parity (1.018x) on the clean run.
 
 ## CHECK record
 
@@ -314,25 +330,38 @@ Correctness/infra not re-run (no code change); standing baseline build 0 W/0 E r
 
 ## ACT record
 
-`pending` — DO returned an incomplete/blocked report (no in-scope lever under constraints) for ACT to finalize; no CHECK ran. Cause, completed work, remaining work and residual are recorded in §DO result above. Issue #246 stays OPEN. No commit.
+outcome: `incomplete` · terminal: `execution` · accepted scope: `none` · issue `#246` left OPEN (no `gh issue close`).
+
+Cause: No in-scope construction/per-row lever exists for #246 under the stated constraints (AC-246-03 exact-once `CommandReaderOwner` disposal; AC-246-04 no `Prepare()` requirement, no LOB/streaming change). Lever 1 (raw-shape/preparation reuse on `PreparedCommandCache.None` reader paths) is blocked by the exact-once disposal contract — sharing a minted-then-disposed command is an ownership hazard. Lever 2 (per-call builder/expression-rewrite trim) has no safe measurable trim on the fresh-fluent reader path. Therefore no Tier A/B candidate was produced.
+
+Completed work: `Measurement first` baseline re-captured on the current tree (HEAD 5c162b06, F7 retained) on the pinned DB into `.pdca/T246/rv8/logs/baseline-round1.log` (exit 0, 9 reader arms); evidence-completion re-run into `.pdca/T246/rv8/logs/baseline-recheck.log`; attribution (fixed term dominates: ~10.86 KB fixed gap vs provider-direct; per-row overhead ~0; prepared 10k allocates only ~7.76 KB less than fresh across 10k). Build Debug/Release 0W/0E; `dotnet test tests/nextorm.core.tests --filter FullyQualifiedName~Lob` 92 passed / 0 failed; status_lint rc 0. No product/test/benchmark source change; no commit of product code.
+
+Remaining work (unmet/unverified): AC-246-01 global ratios unmet (empty arm 3.216× time / 2.841× alloc vs linq2db; 10k arm already at parity 1.018× time / 1.008× alloc on the clean rv7 run); AC-246-02 measurement rules satisfied for the rounds captured; AC-246-03 mandatory correctness/evidence partly unverified (no candidate seam, no benchmark/gate row added, no cross-provider streaming report); AC-246-04 constraints honored (no LOB change, no Prepare() requirement, no dialect hardcode). Residual to be addressed by a future design change (raw-only immutable store / seam redesign) under a new authorized cycle — not by this attempt.
+
+Residual (from frozen rv7, same tree family, single process, clean host): empty arm `B_Nextorm_ToDataReader_Empty` 292.83 us / 16,048 B vs `Linq2Db_ToDataReader_Empty` 91.06 us / 5,648 B (3.216× time / 2.841× alloc) and vs `Provider_Direct_ToDataReader_Empty` 81.25 us / 5,384 B (+211.58 us / +10,664 B); 10k `B_Nextorm_ToDataReader` 5,619.81 us / 973,504 B vs `Linq2Db_ToDataReader` 5,519.80 us / 965,632 B (1.018× / 1.008×); per-row overhead ≈0; construction share ≈2.78–2.84 KB per call (prepared-vs-fresh across 10k), i.e. a ceiling well below the 10.4 KB empty gap.
+
+Measurement-quality statement: the two rv8 measurement rounds are environment-unstable and not evidence-grade — round-1 (`.pdca/T246/rv8/logs/baseline-round1.log`) 10k NextORM 20,485.54 us / 974,000 B vs linq2db 5,020.74 us / 965,680 B; recheck (`.pdca/T246/rv8/logs/baseline-recheck.log`) 10k 18,193 us vs linq2db 22,684 us; isolated cold single arm 15,509 us. Allocations byte-stable (973,504 / 974,000 / 974,000 / 969,344 B) while times swing 5.6–20.5 ms on an unchanged tree, under host load (VBCSCompiler 78–201%, 7 MSBuild nodes). No ratio in those rounds is claimable as a tree property; the frozen rv7 baseline (`.pdca/T246/rv7/logs/baseline-full.log`, single process, clean host) remains the residual basis. `n=3/3` stays unspent, unused.
 
 ## Revision history
 
-`none yet` — append-only.
+`none`
 
 ## Defect history
 
-Carried by reference from prior cycles `.pdca/status/T246-raw-datareader-1.md` and `.pdca/status/T246-raw-datareader-2.md` (read-only). No new defect keys recorded yet for `N=3`.
+Carried by reference from prior cycles `.pdca/status/T246-raw-datareader-1.md` and `.pdca/status/T246-raw-datareader-2.md` (read-only). No new product defect key for `N=3`.
+
+Non-defect note (environment/measurement quality, not a defect): rv8 rounds 1–2 were load-compromised — host under load (VBCSCompiler 78–201%, 7 MSBuild nodes); time swings 5.6–20.5 ms on an unchanged tree while allocations stay byte-stable (973,504 / 974,000 / 974,000 / 969,344 B); ratios in those rounds are not claimable as tree properties. Frozen rv7 baseline (`.pdca/T246/rv7/logs/baseline-full.log`, single process, clean host) remains the residual basis. No fix applied, no escalation.
 
 ## Changed files
 
-- `.pdca/status/T246-raw-datareader-3.md` → created/updated this cycle (status record).
-- `.pdca/T246/rv7/logs/baseline-full.log` → baseline benchmark log (evidence, untracked).
-- No product/test/benchmark source changes. No commit.
+- `.pdca/status/T246-raw-datareader-3.md` → modified this cycle (PLAN r1 + resumption; DO result; CHECK not run; ACT finalized `incomplete`; evidence root rv8).
+- `.pdca/T246/rv8/logs/baseline-round1.log` → baseline benchmark log (evidence, untracked).
+- `.pdca/T246/rv8/logs/baseline-recheck.log` → evidence-completion re-run (untracked, no product change).
+- No product/test/benchmark source changes. No commit of product code.
 
 ## Git state
 
-`status path: .pdca/status/T246-raw-datareader-3.md — created in this cycle, untracked before this commit (durable on disk, not committed)`; branch `1.0.9-rc5`, baseline `04d35452`. No product paths modified. Untracked `docs/assets/diagrams/selectwheremin-current.svg` is foreign and untouched. Evidence root `.pdca/T246/rv7/` untracked, not committed.
+`status path: .pdca/status/T246-raw-datareader-3.md — modified this cycle, tracked (durable on disk; commit pending in this ACT)`; branch `1.0.9-rc5`, baseline `5c162b06`. No product paths modified. Untracked `docs/assets/diagrams/selectwheremin-current.svg` and `docs/superpowers/specs/2026-11-01-query-components-proof-design.md` are foreign and untouched. Evidence root `.pdca/T246/rv8/` untracked, not committed. No commit of product code prior to this ACT; status file committed in this ACT.
 
 ## Checkpoint
 
@@ -356,3 +385,19 @@ append-only, one row per event, never edited retroactively:
 2026-11-01 | DO | revision r=1 | attempt n=2/3 | attribution: per-row overhead ~0 (0.533 vs 0.488 us/row, 95.75 vs 96.00 B/row); prepared arm allocates only ~2.78 KB less than fresh over 10k; no in-scope lever under constraints (seam+recipe would require publishing disposed commands; LobDataReader trim addresses single instance) → DO stops, incomplete, no code change | `.pdca/T246/rv7/logs/baseline-full.log`
 2026-11-01 | DO | revision r=1 | attempt n=2/3 | DO completed: incomplete/blocked report for ACT; no CHECK ran; issue #246 stays OPEN; no commit | `.pdca/status/T246-raw-datareader-3.md`
 2026-11-01T06:38:16Z | DO→ACT | revision r=1 | attempt n=2/3 | lane paused by user at DO→ACT boundary; no product change to revert | `.pdca/status/T246-raw-datareader-3.md`
+2026-11-01 | DO | revision r=1 | attempt n=2/3 | resumed per dispatch; PLAN r1 resumption recorded (shared header + Block 1); evidence root rv8 | `.pdca/status/T246-raw-datareader-3.md`
+2026-11-01 | DO | revision r=1 | attempt n=2/3 | Measurement first baseline re-captured (Release, pinned DB, ShortRun, single process): B_Nextorm_ToDataReader 10k 20485.54 us / 951.17 KB; Linq2Db 10k 5020.74 us / 943.05 KB; Provider_Direct 10k 4833.08 us / 942.79 KB; empty NextORM 272.95 us / 16.16 KB vs Linq2Db 94.95 us / 5.56 KB; Provider_Direct empty 112.46 us / 5.3 KB; prepared 10k 8105.04 us / 943.41 KB | `.pdca/T246/rv8/logs/baseline-round1.log`
+2026-11-01 | DO | revision r=1 | attempt n=2/3 | attribution: fixed term dominates (delta alloc ~10.86 KB vs provider-direct); per-row overhead ~0; Lever 1 not safely implementable (ownership hazard under AC-246-03); Lever 2 no safe measurable reduction → no candidate, incomplete | `.pdca/T246/rv8/logs/baseline-round1.log`
+2026-11-01 | DO | revision r=1 | attempt n=2/3 | gates: build Debug/Release 0W/0E; Lob tests 92 passed; status_lint rc 0; no commit of product code; #246 stays OPEN | `.pdca/status/T246-raw-datareader-3.md`
+2026-11-01 | DO | revision r=1 | attempt n=2/3 | evidence-completion round (no product change): 20.5 ms round-1 figure for B_Nextorm_ToDataReader (10k) re-run under host state into .pdca/T246/rv8/logs/baseline-recheck.log = 18,193 us / 974,000 B (alloc byte-stable vs round-1 974,000 B and rv7 973,504 B); isolated cold run 15,509 us / 969,344 B; rv7 full-class 5,620 us / 973,504 B. Classification (b) load/first-run (warmup/ordering) artifact; time 5.6->20.5->18.2->15.5 ms with allocs byte-stable and ratio 1.018x->4.08x->0.80x->0.69x. No candidate, no commit; #246 stays OPEN | `.pdca/T246/rv8/logs/baseline-recheck.log`
+2026-11-01T08:54:10Z | ACT | revision r=1 | attempt n=2/3 | finalized incomplete (DO→ACT): no in-scope lever (Lever 1 ownership hazard under AC-246-03; Lever 2 no safe trim); issue #246 left OPEN; no gh issue close; n=3/3 unspent; rv8 rounds load-compromised, rv7 residual basis | `.pdca/status/T246-raw-datareader-3.md`
+
+
+## G1-SCF-01 diagnostic input
+
+- CTE construction (`BuildCte`): 9,024.74 / 9,024.74 / 9,024.67 B/construction; expression-hoist control: −52.7% / −53.3% (9,025.3 / 9,145.3 baseline vs 4,272 B/query hoisted).
+- T267 construction prefix: inner chain 13.28–13.52 KB/construction; full chain 18.61–18.88 KB/construction.
+- Verdict: LIMITED; the CTE delta is not proven to come from expression-tree construction alone (static, capture-free shape); see limitations in GitHub comment.
+- Local evidence (not a public link): `.pdca/G1-SCF-01/RESULTS.md` and `.pdca/G1-SCF-01/diag-20261101/`.
+- GitHub comments: #267 https://github.com/AlexeyShirshov/nextorm/issues/267#issuecomment-6555409789; #311 https://github.com/AlexeyShirshov/nextorm/issues/311#issuecomment-6555410226; #246 https://github.com/AlexeyShirshov/nextorm/issues/246#issuecomment-6555410684.
+- Resume meaning: the out-of-lane G1-SCF-01 decision now yields an investigation-grade in-scope lever (reuse of expression trees), satisfying the checkpoint condition; this is not an approved design. Resume DO at n=2/3 only after design approval, retaining the same ABBA gate.
