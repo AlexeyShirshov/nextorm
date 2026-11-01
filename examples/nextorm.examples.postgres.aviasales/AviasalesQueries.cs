@@ -402,25 +402,41 @@ public static class AviasalesQueries
         return rows;
     }
 
+    // Hoisted call-site expression trees (Lever 1, #267): constructed once, reused per call.
+    private static readonly Expression<Func<NextORM.Generated.nextorm_examples_postgres_aviasales.AliasProjection_A1_Timetable<ITimetable>, IAirplaneData, bool>> DelayPercentilesJoinCondition =
+        (f, a) => f.Timetable.AirplaneCode == a.AirplaneCode;
+
+    private static readonly Expression<Func<NextORM.Generated.nextorm_examples_postgres_aviasales.AliasProjection_A1_Timetable_A2_Airplane<ITimetable, IAirplaneData>, bool>> DelayPercentilesWhere =
+        p => (p.Timetable.Status == "Departed" || p.Timetable.Status == "Arrived")
+            && p.Timetable.ActualDeparture != null;
+
+    private static readonly Expression<Func<NextORM.Generated.nextorm_examples_postgres_aviasales.AliasProjection_A1_Timetable_A2_Airplane<ITimetable, IAirplaneData>, DelayPercentilesByModelStatsRow>> DelayPercentilesSelectGroup =
+        p => new DelayPercentilesByModelStatsRow(
+            SqlFunctions.Postgres.json_get_text(p.Airplane.Model, "ru"),
+            SqlFunctions.Sql.count(),
+            SqlFunctions.Postgres.percentile_disc(0.5,
+                () => SqlFunctions.Sql.date_diff("minute", p.Timetable.ScheduledDeparture, p.Timetable.ActualDeparture)),
+            SqlFunctions.Postgres.percentile_disc(0.9,
+                () => SqlFunctions.Sql.date_diff("minute", p.Timetable.ScheduledDeparture, p.Timetable.ActualDeparture)));
+
+    private static readonly Expression<Func<DelayPercentilesByModelStatsRow, object?>> DelayPercentilesOrderBy =
+        s => s.Model;
+
+    private static readonly Expression<Func<DelayPercentilesByModelStatsRow, DelayPercentilesByModelRow>> DelayPercentilesSelect =
+        s => new DelayPercentilesByModelRow(s.Model, s.Flights, s.MedianDelay, s.P90Delay);
+
     // 8. delay_percentiles_by_model
     // WORKING: percentile_disc(...) WITHIN GROUP (ORDER BY …).
     public static async Task<object> DelayPercentilesByModel(IDataContext ctx, CancellationToken ct)
     {
         var stats = ctx.From<ITimetable>().WithAlias(Alias.Timetable)
-            .Join<IAirplaneData>((f, a) => f.Timetable.AirplaneCode == a.AirplaneCode, Alias.Airplane)
-            .Where(p => (p.Timetable.Status == "Departed" || p.Timetable.Status == "Arrived")
-                        && p.Timetable.ActualDeparture != null)
-            .SelectGroup(p => new DelayPercentilesByModelStatsRow(
-                SqlFunctions.Postgres.json_get_text(p.Airplane.Model, "ru"),
-                SqlFunctions.Sql.count(),
-                SqlFunctions.Postgres.percentile_disc(0.5,
-                    () => SqlFunctions.Sql.date_diff("minute", p.Timetable.ScheduledDeparture, p.Timetable.ActualDeparture)),
-                SqlFunctions.Postgres.percentile_disc(0.9,
-                    () => SqlFunctions.Sql.date_diff("minute", p.Timetable.ScheduledDeparture, p.Timetable.ActualDeparture))));
+            .Join<IAirplaneData>(DelayPercentilesJoinCondition, Alias.Airplane)
+            .Where(DelayPercentilesWhere)
+            .SelectGroup(DelayPercentilesSelectGroup);
 
         var rows = await ctx.From(stats)
-            .OrderBy(s => s.Model)
-            .Select(s => new DelayPercentilesByModelRow(s.Model, s.Flights, s.MedianDelay, s.P90Delay))
+            .OrderBy(DelayPercentilesOrderBy)
+            .Select(DelayPercentilesSelect)
             .ToListAsync(ct);
 
         return rows;
