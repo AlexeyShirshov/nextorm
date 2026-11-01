@@ -440,7 +440,7 @@ Must not be claimed: any "PASS"/"accepted"/"closes the question" wording; releas
 
 ## Git state
 
-`status path: .pdca/status/T311-json-streaming-3.md — modified this cycle · untracked (durable on disk, not committed)`; baseline supplied at creation: branch `1.0.9-rc5`, HEAD `9e7fb4b3`. Same-cycle touched-file ledger: `.pdca/scripts/perf/t311_json_gate.py`, `.pdca/T311/rv4/**`, `docs/specs/performance/t311-oracle-rv4/**`, `.pdca/status/T311-json-streaming-3.md`; pending commit of the two versioned paths only (`.pdca/status/T311-json-streaming-3.md` and `docs/specs/performance/t311-oracle-rv4/**`); detached worktree removed.
+`status path: .pdca/status/T311-json-streaming-3.md — committed this cycle (774b3e0c) · tracked` ; branch `1.0.9-rc5`, HEAD before commit `9e7fb4b3`. Committed paths: `.pdca/status/T311-json-streaming-3.md` and `docs/specs/performance/t311-oracle-rv4/**` (17 files). `.pdca/scripts/perf/t311_json_gate.py` and `.pdca/T311/rv4/**` remain gitignored/untracked by design. The two untouchable user files remain untracked and unstaged.
 
 ## Progress log
 
