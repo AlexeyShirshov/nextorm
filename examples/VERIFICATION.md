@@ -318,3 +318,24 @@ and both arms returned the same 8 rows and values.
   post-projection `SelectGroup(...).OrderBy(Bucket)` factoring was rejected by query preparation
   (`SelectGroup ORDER BY references a row expression not covered by inferred keys`) and reverted.
   Full logs and captures: `.pdca/rc5/items/T273/rv1/`.
+
+* **T274 CH RollingActivity projection measurement (2026-11-01).** Both grouped/returned projections
+  now use `readonly record struct` rows with the original CLR member types: `DateTime EventDate`,
+  `int Hits`, `long Users`, and `long` for both rolling sums. The standing baseline is the two paired
+  current-lane-head runs (collection base `1e31331d` is an ancestor of HEAD; the same-round linq2db
+  denominator is unaffected):
+
+  | State / run | Nextorm KB | Nextorm mean ms | Nextorm median ms | linq2db KB | linq2db mean ms | linq2db median ms | Ratio |
+  |---|---:|---:|---:|---:|---:|---:|---:|
+  | Before 1 | 56.84 | 57.148 | 56.764 | 46.99 | 52.610 | 52.787 | 1.210× |
+  | Before 2 | 57.58 | 56.973 | 56.403 | 47.21 | 52.485 | 52.703 | 1.220× |
+  | After 1 | 55.97 | 60.705 | 59.804 | 47.07 | 51.825 | 52.373 | 1.189× |
+  | After 2 | 55.97 | 59.325 | 58.629 | 46.87 | 51.200 | 51.305 | 1.194× |
+
+  Both after-runs meet the `≤1.2×` allocation target and `mean <66.7 ms`; the stretch `≤1.0×` is
+  not met. Each paired run executed both benchmarks (2/2). Before/after SQL `cmp` rc=0; full ordered
+  row `cmp` rc=0 for each arm and between the two arms. All 7 row values match exactly; there is no
+  tie permutation, and each arm's result multiset is preserved. Gates: solution Debug 0W/0E, example
+  Release 0W/0E, core tests 3946/3946, ClickHouse tests 1456/1456, ClickHouse integration 151/151
+  with no skips. Logs and identity artifacts: `.pdca/rc5/items/T274/rv1/`; issue #274 comment posted
+  with this table.

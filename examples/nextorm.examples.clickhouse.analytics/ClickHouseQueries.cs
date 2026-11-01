@@ -346,32 +346,37 @@ public static class ClickHouseQueries
     {
         var daily = ctx.From<IHit>()
             .Where(h => h.EventDate >= new DateTime(2014, 3, 17) && h.EventDate <= new DateTime(2014, 3, 23))
-            .SelectGroup(h => new
-            {
+            .SelectGroup(h => new RollingActivityDailyRow(
                 h.EventDate,
-                Hits = SqlFunctions.Sql.count(),
-                Users = SqlFunctions.ClickHouse.uniq_exact(h.UserId)
-            });
+                SqlFunctions.Sql.count(),
+                SqlFunctions.ClickHouse.uniq_exact(h.UserId)));
 
         var rows = await ctx.From(daily)
             .OrderBy(d => d.EventDate)
-            .Select(d => new
-            {
+            .Select(d => new RollingActivityRow(
                 d.EventDate,
                 d.Hits,
                 d.Users,
                 // sum() widens the Int32 count to Int64 in ClickHouse; cast so the CLR type matches.
-                Rolling7DayHits = (long)SqlFunctions.Sql.sum_over(d.Hits).Over(
+                (long)SqlFunctions.Sql.sum_over(d.Hits).Over(
                     SqlFunctions.Sql.asc(() => d.EventDate),
                     WindowFrame.Rows(WindowFrameBound.Preceding(6), WindowFrameBound.CurrentRow)),
-                CumulativeHits = (long)SqlFunctions.Sql.sum_over(d.Hits).Over(
+                (long)SqlFunctions.Sql.sum_over(d.Hits).Over(
                     SqlFunctions.Sql.asc(() => d.EventDate),
-                    WindowFrame.RowsUnboundedPrecedingToCurrentRow)
-            })
+                    WindowFrame.RowsUnboundedPrecedingToCurrentRow)))
             .ToListAsync(ct);
 
         return rows;
     }
+
+    private readonly record struct RollingActivityDailyRow(DateTime EventDate, int Hits, long Users);
+
+    private readonly record struct RollingActivityRow(
+        DateTime EventDate,
+        int Hits,
+        long Users,
+        long Rolling7DayHits,
+        long CumulativeHits);
 }
 
 // Named projections for the aliased Retention chain. The named join-alias surface (#160/#229) generates
