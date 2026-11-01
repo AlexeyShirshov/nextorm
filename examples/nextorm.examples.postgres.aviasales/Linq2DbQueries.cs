@@ -4,12 +4,14 @@ using LinqToDB.Async;
 namespace NextORM.Examples.Postgres.Aviasales;
 
 /// <summary>
-/// The comparison arm: the same eleven queries as <see cref="AviasalesQueries"/> (which model the files
+/// The comparison arm: ten of the eleven queries of <see cref="AviasalesQueries"/> (which model the files
 /// in <c>Sql/</c>), expressed with the linq2db LINQ API over <see cref="Linq2DbEntities"/>. Constructs
-/// the linq2db LINQ surface does not model — PostgreSQL's two-argument <c>percentile_disc</c> aggregate
-/// and the <c>jsonb -&gt;&gt;</c> operator — are expressed with linq2db's <see cref="Sql.Expr{T}"/>
-/// escape hatch, so the query still goes through the linq2db translator instead of falling back to raw
-/// SQL. Methods return the row list and never print: the runner and the benchmarks share them.
+/// the linq2db LINQ surface does not model — the <c>jsonb -&gt;&gt;</c> operator, <c>date_trunc</c>,
+/// <c>EXTRACT</c> and <c>to_char</c> — are expressed with linq2db's <see cref="Sql.Expr{T}"/>
+/// escape hatch, so the query still goes through the linq2db translator. <c>DelayPercentilesByModel</c>
+/// has no linq2db arm: the only faithful form was a whole-query <c>FromSql</c> of hand-written SQL,
+/// which a comparison arm may not use. Methods return the row list and never print: the runner and the
+/// benchmarks share them.
 /// </summary>
 public static class Linq2DbQueries
 {
@@ -331,28 +333,6 @@ public static class Linq2DbQueries
                       }).ToListAsync(ct);
     }
 
-    // 8. delay_percentiles_by_model
-    // The percentile_disc ordered-set aggregate needs a per-row ORDER BY expression, which the liq2db
-    // LINQ group projection cannot reference; the reference SQL is issued through linq2db's FromSql.
-    public static async Task<object> DelayPercentilesByModel(IDataContext db, CancellationToken ct)
-    {
-        var rows = db.FromSql<DelayPercentileRow>($"""
-            SELECT
-                ac.model ->> 'ru' AS "Model",
-                count(*) AS "Flights",
-                percentile_disc(0.5) WITHIN GROUP (
-                    ORDER BY CAST(trunc(EXTRACT(EPOCH FROM (f.actual_departure - f.scheduled_departure)) / 60) AS integer)) AS "MedianDelay",
-                percentile_disc(0.9) WITHIN GROUP (
-                    ORDER BY CAST(trunc(EXTRACT(EPOCH FROM (f.actual_departure - f.scheduled_departure)) / 60) AS integer)) AS "P90Delay"
-            FROM bookings.timetable f
-            JOIN bookings.airplanes_data ac ON f.airplane_code = ac.airplane_code
-            WHERE f.status IN ('Departed', 'Arrived') AND f.actual_departure IS NOT NULL
-            GROUP BY ac.model ->> 'ru'
-            ORDER BY ac.model ->> 'ru'
-            """);
-
-        return await rows.ToListAsync(ct);
-    }
 
     // 9. frequent_flyers
     public static async Task<object> FrequentFlyers(IDataContext db, CancellationToken ct)
@@ -447,12 +427,4 @@ public static class Linq2DbQueries
                           CancelRatePct = Math.Round((double)r.Cancelled / r.Flights * 100, 2)
                       }).Take(15).ToListAsync(ct);
     }
-}
-
-public sealed class DelayPercentileRow
-{
-    [LinqToDB.Mapping.Column("Model")] public string? Model { get; set; }
-    [LinqToDB.Mapping.Column("Flights")] public int Flights { get; set; }
-    [LinqToDB.Mapping.Column("MedianDelay")] public decimal? MedianDelay { get; set; }
-    [LinqToDB.Mapping.Column("P90Delay")] public decimal? P90Delay { get; set; }
 }

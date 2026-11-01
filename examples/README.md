@@ -74,7 +74,7 @@ DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.so
 The benchmark uses `Job.ShortRun` + `InProcessEmitToolchain` (warmup 3 / iterations 3) and
 `[MemoryDiagnoser]`; set `NEXTORM_EXAMPLES_BENCH_FULL=1` for the full out-of-process job. The measured
 code is only "build + execute + materialise" — no printing or JSON formatting. Every query has a
-`Nextorm_*` baseline and a `Linq2Db_*` arm; `Incremental` on ClickHouse is linq2db-only because the
+`Nextorm_*` baseline and a `Linq2Db_*` arm only for native queries on both sides; whole-query `FromSql` comparisons are excluded, while partial `Sql.Expr(...)` fragments are allowed. ClickHouse `Incremental`
 nextorm arm throws the documented gap.
 
 ## Notes on the nextorm API
@@ -122,12 +122,13 @@ instead of being masked:
   `sum_over`), and the array / higher-order-lambda surface (`splitByChar`, `arrayMap`, `arrayFilter`,
   grouping by an array) plus `groupArray((…))`/tuple results are expressed through
   `split_by_char`/`array_map`/`array_filter`/`group_array` + `Tuple.Create`; only `uniqMerge`
-  (`-Merge`/`-State`) still has no LINQ surface, so that query throws instead of running the original SQL
-  through `WithSql`.
+  (`-Merge`/`-State`) still has no LINQ surface, so that query was removed from the example rather than
+  run through `WithSql`.
 
 ## Extra course exercises
 
-On top of the five demo queries each project adds six course-style queries (6–11) over the same data:
+On top of the five demo queries each project adds six course-style queries (6–11) over the same data
+(ClickHouse keeps five — the `uniqMerge` query was removed):
 top-N per group, conditional/FILTER aggregation, `WITHIN GROUP` percentiles, `string_agg`/`group_concat`,
 `LAG`/`LEAD` growth, `NTILE` RFM segmentation, Pareto 80/20, rolling windows, and a device/session
 breakdown for ClickHouse. All of them are `WORKING` except where noted in the method comment.
@@ -145,9 +146,9 @@ Last run against Testcontainers (Podman), 2026-10-30 (`NextOrmVersion = 1.0.9-rc
 
 | Project | Matched in both arms | Remaining `FAIL`s (documented gaps) |
 |---|---|---|
-| postgres aviasales | 11/11 | — (query 8 uses linq2db `FromSql` for `percentile_disc`) |
+| postgres aviasales | 10/10 | — (`DelayPercentilesByModel` is nextorm-only) |
 | mssql adventureworks | 11/11 | — (query 5 uses conditional aggregation instead of `PIVOT` on the linq2db arm) |
-| clickhouse analytics | 9/11 (10 executed) | `Incremental` — nextorm has no `uniqMerge` surface; `Retention` is excluded because the rc4 package emits an invalid tuple-array cast ([#359](https://github.com/AlexeyShirshov/nextorm/issues/359)) |
+| clickhouse analytics | 9/9 | `Retention` remains nextorm-only; `Incremental` comparison removed |
 
 The detailed, dated verification log (per-query failures and the roadmap item that tracks each) lives in
 [`VERIFICATION.md`](VERIFICATION.md) — update it on every re-run.

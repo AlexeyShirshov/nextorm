@@ -5,13 +5,14 @@ using LinqToDB.Mapping;
 namespace NextORM.Examples.ClickHouse.Analytics;
 
 /// <summary>
-/// The comparison arm: the same eleven queries as <see cref="ClickHouseQueries"/> (which model the
+/// The comparison arm: nine of the ten queries of <see cref="ClickHouseQueries"/> (which model the
 /// files in <c>Sql/</c>), expressed with linq2db over <see cref="Linq2DbEntities"/>. ClickHouse
 /// functions with no linq2db LINQ surface (<c>windowFunnel</c>, <c>lagInFrame</c>, <c>uniq</c>,
 /// <c>groupArray</c>, <c>multiIf</c>, <c>quantile</c>, arrays) are emitted with
-/// <see cref="Sql.Expr{T}"/> so the whole query still goes through the linq2db translator. Retention
-/// and the session queries format ClickHouse tuples/arrays with <c>toString</c> — the CLR comparison
-/// arm has no tuple-array type, while the nextorm arm materialises <c>Tuple&lt;…&gt;[]</c>.
+/// <see cref="Sql.Expr{T}"/> so the whole query still goes through the linq2db translator, except the
+/// inner per-user part of <c>windowFunnel</c>, which is a <c>FromSql</c> subquery inside an otherwise
+/// LINQ query. <c>Retention</c> has no linq2db arm (its only faithful form was a whole-query
+/// <c>FromSql</c>), and <c>Incremental</c> was removed from the example.
 /// Methods return the row list and never print: the runner and the benchmarks share them.
 /// </summary>
 public static class Linq2DbQueries
@@ -62,63 +63,6 @@ public static class Linq2DbQueries
                       select new { g.Key.Level, ConversionCount = g.Count() }).ToListAsync(ct);
     }
 
-    // 3. Sql/clickhouse_incremental.sql — the nextorm arm throws (no uniqMerge surface); linq2db can
-    // express the combinator with FromSql.
-    public static async Task<object> Incremental(IDataContext db, CancellationToken ct)
-    {
-        var rows = db.FromSql<IncrementalRow>($"""
-            (
-            SELECT EventDate, uniqMerge(users_state) AS UniqueVisitors
-            FROM datasets.daily_unique_users_mv
-            WHERE EventDate >= {new DateTime(2014, 3, 1)} AND EventDate <= {new DateTime(2014, 3, 31)}
-            GROUP BY EventDate
-            ORDER BY EventDate DESC
-            )
-            """);
-
-        return await rows.ToListAsync(ct);
-    }
-
-    // 4. Sql/clickhouse_retention.sql
-    // The cohort matrix needs groupArray over a per-row tuple; the LINQ surface has no raw-aggregate
-    // API, so the corrected reference query is issued with FromSql.
-    public static async Task<object> Retention(IDataContext db, CancellationToken ct)
-    {
-        var rows = db.FromSql<RetentionRow>($"""
-            (
-            WITH
-                first_visits AS (
-                    SELECT UserID, toMonday(min(EventDate)) AS cohort_week
-                    FROM datasets.hits_v1
-                    GROUP BY UserID
-                ),
-                cohort_sizes AS (
-                    SELECT cohort_week, count() AS cohort_size
-                    FROM first_visits
-                    GROUP BY cohort_week
-                )
-            SELECT
-                t.cohort_week AS CohortWeek,
-                toInt64(any(cs.cohort_size)) AS CohortSize,
-                toString(groupArray((t.week_number, round(t.distinct_users / cs.cohort_size * 100, 2)))) AS RetentionMatrix
-            FROM (
-                SELECT
-                    fv.cohort_week AS cohort_week,
-                    toUInt8((toMonday(h.EventDate) - fv.cohort_week) / 7) AS week_number,
-                    count(DISTINCT h.UserID) AS distinct_users
-                FROM datasets.hits_v1 h
-                JOIN first_visits fv ON h.UserID = fv.UserID
-                WHERE week_number <= 4
-                GROUP BY fv.cohort_week, week_number
-            ) t
-            JOIN cohort_sizes cs ON t.cohort_week = cs.cohort_week
-            GROUP BY t.cohort_week
-            ORDER BY t.cohort_week DESC
-            )
-            """);
-
-        return await rows.ToListAsync(ct);
-    }
 
     // 5. Sql/clickhouse_sessions.sql
     public static async Task<object> Sessions(IDataContext db, CancellationToken ct)
@@ -284,22 +228,9 @@ public static class Linq2DbQueries
     }
 }
 
-// Projection types for the FromSql terminals above.
+// Projection type for the FromSql terminal above.
 public sealed class FunnelLevelRow
 {
     [Column("UserID")] public ulong UserId { get; set; }
     [Column("Level")] public byte Level { get; set; }
-}
-
-public sealed class IncrementalRow
-{
-    [Column("EventDate")] public DateTime EventDate { get; set; }
-    [Column("UniqueVisitors")] public ulong UniqueVisitors { get; set; }
-}
-
-public sealed class RetentionRow
-{
-    [Column("CohortWeek")] public DateTime CohortWeek { get; set; }
-    [Column("CohortSize")] public long CohortSize { get; set; }
-    [Column("RetentionMatrix")] public string RetentionMatrix { get; set; } = "";
 }

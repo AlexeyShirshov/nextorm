@@ -62,16 +62,6 @@ public static class ClickHouseQueries
     }
 
     private readonly record struct FunnelResultRow(int Level, int ConversionCount);
-
-    // 3. Sql/clickhouse_incremental.sql
-    // NOT WORKING: uniqMerge over an AggregateFunction(uniq, UInt64) state has no LINQ surface in the
-    // released nextorm packages (there is no uniqMerge/`-Merge` combinator), so the state column cannot
-    // be projected as a scalar. Not worked around with raw SQL on purpose; tracked in
-    // docs/specs/roadmap/todo_clickhouse_aggregate_function_state.md.
-    public static Task<object> Incremental(IDataContext ctx, CancellationToken ct) =>
-        throw new NotSupportedException(
-            "uniqMerge over an AggregateFunction state has no LINQ surface (see docs/specs/roadmap/todo_clickhouse_aggregate_function_state.md).");
-
     // 4. Sql/clickhouse_retention.sql
     // WORKING: the first_visits / cohort_sizes / weekly CTEs are declared as typed descriptors (`AsCte`)
     // and read back with member access; the inner t subquery joins hits with first_visits. cohort_sizes and

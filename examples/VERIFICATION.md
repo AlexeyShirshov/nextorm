@@ -1,7 +1,7 @@
 # Examples verification report
 
-> **Last verified: 2026-11-01** (the examples are now **comparison projects**: every query has a
-> nextorm arm and a linq2db arm, and both are executed against the same dataset; BenchmarkDotNet runs
+> **Last verified: 2026-11-01** (the examples are now **comparison projects**: native comparison queries have
+> nextorm and linq2db arms, and both are executed against the same dataset; BenchmarkDotNet runs
 > through `--benchmark`). Re-run the examples whenever the engine gains features and update the tables
 > below. This file is the source of truth for "what works / what does not and why"; the topics are owned
 > by the roadmap backlog under [`docs/specs/roadmap/`](../docs/specs/roadmap) and
@@ -25,18 +25,18 @@ DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.so
   dotnet run --project examples/<name> -c Debug
 ```
 
-Each `Program` runs both arms (nextorm and linq2db) for every query to completion: it prints the rows of
+Each `Program` runs both native arms for each comparable query to completion: it prints the rows of
 each arm, `[ OK ]`/`[FAIL]`/`[DIFF]` per query and an `n/m queries matched in both arms` summary. Only
 documented gaps (`NotSupportedException`, `QueryPreparationException`, `LinqToDBException`) are recorded
-as `FAIL`; any other exception aborts the run.
+as `FAIL`; any other exception aborts the run. Comparison arms must be native on both sides; whole-query raw SQL (`FromSql`) is not allowed, while partial `Sql.Expr(...)` fragments inside an otherwise native LINQ query are allowed.
 
 ## Results
 
 | Example | Matched in both arms | Failing query (documented gap) |
 |---|---|---|
-| `nextorm.examples.postgres.aviasales` | **11/11** | — |
+| `nextorm.examples.postgres.aviasales` | **10/10** | — |
 | `nextorm.examples.mssql.adventureworks` | **11/11** | — |
-| `nextorm.examples.clickhouse.analytics` | **9/11** (10 of 11 executed; `Retention` excluded) | `Incremental` (nextorm arm only) and `Retention` — the rc4 tuple-array cast ([#359](https://github.com/AlexeyShirshov/nextorm/issues/359)) |
+| `nextorm.examples.clickhouse.analytics` | **9/9** | — |
 
 Query-by-query counts on 2026-10-30 (warm volumes, Podman):
 
@@ -47,24 +47,27 @@ Query-by-query counts on 2026-10-30 (warm volumes, Podman):
   returns 30 rows again.
 * mssql: 146, 364, 0, 266, 4, 12, 40, 20, 14, 364, 40 — identical in both arms.
 * clickhouse: array analytics 10, funnel 3, sessions 100, daily traffic 7, top landing pages 10, device
-  split 2, top referrers 10, session depth 5, rolling activity 7; `Incremental` returns 7 rows on the
-  linq2db arm and throws on the nextorm arm; `Retention` did not execute (#359).
+  split 2, top referrers 10, session depth 5, rolling activity 7; `Retention` (nextorm-only) is excluded from comparison; `Incremental` was removed with the whole-query `FromSql` cleanup.
 
 ## Failures and their tracked cause
 
 | Query | Why it fails | Tracked in |
 |---|---|---|
-| CH `Retention` | rc4 wraps every array result in `cast(… as Array(...))`; for a tuple element the type renderer falls back to the CLR name including its arity, so the SQL says ``Array(Nullable(Tuple`2))`` and ClickHouse rejects it (`Code: 62. Back quoted string is not closed`). The alias conversion is not involved — the positional form emits the same cast. Not present in rc3, which emitted the bare `groupArray(...)`. | [#359](https://github.com/AlexeyShirshov/nextorm/issues/359) |
-| CH `Incremental` | nextorm: `uniqMerge`, the `-Merge` combinator over an `AggregateFunction(uniq, …)` state column, has no LINQ surface in the released packages (the state cannot be projected as a scalar). The linq2db arm runs the query through `FromSql` and returns 7 rows, so the gap is visible rather than assumed. | [`todo_clickhouse_aggregate_function_state.md`](../docs/specs/roadmap/todo_clickhouse_aggregate_function_state.md) |
+| CH `Retention` | rc4 wraps every array result in `cast(… as Array(...))`; for a tuple element the type renderer falls back to the CLR name including its arity, so the SQL says ``Array(Nullable(Tuple`2))`` and ClickHouse rejects it (`Code: 62. Back quoted string is not closed`). The alias conversion is not involved — the positional form emits the same cast. Not present in rc3, which emitted the bare `groupArray(...)`. The query is nextorm-only since the 2026-11-01 comparison withdrawal. | [#359](https://github.com/AlexeyShirshov/nextorm/issues/359) |
+
+CH `Incremental` is no longer part of the example: `uniqMerge` (the `-Merge` combinator over an
+`AggregateFunction(uniq, …)` state column) has no nextorm LINQ surface in the released packages — the
+state cannot be projected as a scalar — and its only comparison arm was a whole-query linq2db `FromSql`.
+Tracked in [`todo_clickhouse_aggregate_function_state.md`](../docs/specs/roadmap/todo_clickhouse_aggregate_function_state.md).
 
 MSSQL `QuarterlyPivot` is no longer a failure: the native `PIVOT` now accepts a derived query, so the
 reference `WITH OrderMargins AS (<5-table join>) ... PIVOT (...)` is expressed directly.
 
 ## Actuality changes made on this verification
 
- * **T271 CH Retention source binding and projection measurement (2026-10-31).** The ClickHouse analytics example now references `src/nextorm.core` and `src/nextorm.clickhouse` (plus the source-generator analyzer), avoiding the broken `1.0.9-rc4` cached package that emitted `Array(Nullable(Tuple`2)))`. Workspace-source baseline ShortRuns measured NextORM `87.46 KB / 186.1 ms` vs linq2db `32.83 KB / 160.4 ms` (2.664×), and `87.81 KB / 187.1 ms` vs `32.10 KB / 162.8 ms` (2.735×). The final `SelectGroup` projection is an `internal readonly record struct RetentionGroupRow` with the original `DateTime?`, `int`, and `Tuple<byte,double>[]` member types; the live arm still returns the same 1 row and matrix. Final paired runs measured NextORM `197.47 KB / 190.5 ms` vs linq2db `32.28 KB / 166.4 ms` (6.118×; anomalous run) and `87.37 KB / 190.7 ms` vs `31.96 KB / 163.8 ms` (2.733×). In run 1, LINQ raw-terminal (`FromSql`) measured `32.28 KB / 166.4 ms` and LINQ-vs-LINQ control `31.52 KB / 166.2 ms`; run 2 measured `31.96 KB / 163.8 ms` and `32.23 KB / 163.4 ms`. Ratios remain above the `1.2×` criterion, so the performance objective is not met; this entry records evidence, not acceptance. SQL and row snapshots compare byte-identically before/after the projection change (`cmp` rc 0). The AC3 historical “before” context remains the rc4-package failure (Retention previously aborted before producing benchmark data); the workspace-source baselines above are the comparable pre-lever measurements. Logs and snapshots are under `.pdca/rc5/items/T271/rv1/`.
+ * **T271 CH Retention source binding and projection measurement (2026-10-31).** Comparison withdrawn on 2026-11-01 (#271, whole-query `FromSql` rule). NextORM-only historical figures: workspace-source baselines 87.46 KB / 186.1 ms and 87.81 KB / 187.1 ms; final projection 197.47 KB / 190.5 ms and 87.37 KB / 190.7 ms. The `SelectGroup` projection was subsequently reverted; source references and tuple-rendering test remain. SQL and row snapshots were byte-identical before/after. Evidence: `.pdca/rc5/items/T271/rv1/`.
 
-  * **T271 correction round (2026-10-31).** The `RetentionGroupRow` projection was reverted; the runnable anonymous projection is restored to the same source state as the workspace baseline (revert diff rc 0), with the workspace project references and tuple-rendering unit test retained. The former `Linq2Db_RetentionControl` was removed: it duplicated the raw-SQL `FromSql` arm and was not a genuine LINQ-vs-LINQ control. On the reverted baseline, a synchronous single-run probe (3 warmups + 9 samples, `GC.GetAllocatedBytesForCurrentThread`) measured median total `68,176 B/call` (43,392 B query/CTE construction + 24,784 B planning/execute/materialise); two later samples were `67,344 B` (43,392 + 23,952 B). Every sample returned 1 row and a one-element matrix. AC1 remains unmet and no Tier B performance credit is claimed; the earlier candidate spike and all paired numbers remain in the T271 evidence history. Gates in correction round: solution Debug 0W/0E, core tests 3946/3946, ClickHouse tests 1456/1456, ClickHouse integration 151/151 with no skips, example Release 0W/0E. Correction evidence: `.pdca/rc5/items/T271/rv1/attempts/2/`.
+  * **T271 correction round (2026-10-31).** The `RetentionGroupRow` projection was reverted; the runnable anonymous projection is restored to the same source state as the workspace baseline (revert diff rc 0), with the workspace project references and tuple-rendering unit test retained. On the reverted baseline, a synchronous single-run probe (3 warmups + 9 samples, `GC.GetAllocatedBytesForCurrentThread`) measured median total `68,176 B/call` (43,392 B query/CTE construction + 24,784 B planning/execute/materialise); two later samples were `67,344 B` (43,392 + 23,952 B). Every sample returned 1 row and a one-element matrix. AC1 remains unmet and no Tier B performance credit is claimed; comparative data is historical only. Gates in correction round: solution Debug 0W/0E, core tests 3946/3946, ClickHouse tests 1456/1456, ClickHouse integration 151/151 with no skips, example Release 0W/0E. Correction evidence: `.pdca/rc5/items/T271/rv1/attempts/2/`.
 
 * **T269 PG AirportOnTimePerformance measurement (2026-10-31).** The final result type is now an
   `internal readonly record struct` (same six columns/order; see
@@ -208,96 +211,69 @@ reference `WITH OrderMargins AS (<5-table join>) ... PIVOT (...)` is expressed d
 
 ## Comparison conversion (2026-10-17)
 
-* **Every example is now a comparison project.** The eleven queries per dataset are implemented twice:
+* **Every example is now a comparison project.** Each dataset's comparable queries are implemented twice:
   `*Queries.cs` (nextorm) and `Linq2DbQueries.cs` (linq2db 6.5.0), with parallel entity mappings
   (`Entities.cs` interfaces for nextorm, `Linq2DbEntities.cs` POCOs for linq2db). `Program` runs both
   arms per query, prints the first rows of each, reports `[ OK ]`/`[FAIL]`/`[DIFF]` and checks that the
-  row counts match. Known-gap exceptions on either side are `[FAIL]`; anything else aborts.
+  row counts match. Queries that cannot be compared natively (`DelayPercentilesByModel`, `Retention`)
+  keep only the nextorm arm. Known-gap exceptions on either side are `[FAIL]`; anything else aborts.
 * **Benchmarks.** Each project has a BenchmarkDotNet class (`Benchmarks.cs`) with a `Nextorm_*`
   baseline and a `Linq2Db_*` arm per query; `--benchmark` provisions the DB once and runs BDN in-process
   (`Job.ShortRun` + `InProcessEmitToolchain`, `[MemoryDiagnoser]`). Filter with
   `--benchmark --filter '*Name*'`; set `NEXTORM_EXAMPLES_BENCH_FULL=1` for the full job. The measured
   code is only build + execute + materialise (no printing/JSON).
-* **linq2db arms deliberately use raw terminals where the LINQ surface ends** — annotated per method:
-  PostgreSQL `percentile_disc(...) WITHIN GROUP` (`FromSql`), MSSQL `PIVOT` (rewritten as conditional
-  aggregation), ClickHouse `windowFunnel`/`groupArray`/`uniqMerge` (`FromSql`) and the aggregate-state
-  threshold. Everything else is LINQ (`AsCte`, `Sql.Window.*`, `Sql.StringAggregate`, `Sql.Expr`).
-  Value parity was spot-checked across all queries. Two intentional representation differences remain on
-  ClickHouse: `uniq` is approximate, so the linq2db arm uses exact `COUNT(DISTINCT)` (e.g.
-  `DeviceSplit` desktop users 86 944 vs 86 317), and the retention matrix is a `toString(...)` string on
-  the linq2db arm vs a CLR tuple array on the nextorm arm. PostgreSQL `date_diff("minute")` is truncated
+* Partial `Sql.Expr(...)` fragments are allowed inside native linq2db queries; whole-query `FromSql` comparison arms are not. `Funnel` uses `FromSql` only for an inner subquery and remains a native LINQ query overall. The former PG `DelayPercentilesByModel` (#267) and CH `Retention` (#271) comparisons were withdrawn on 2026-11-01 under this rule; both queries are nextorm-only now, and CH `Incremental` was removed with them. MSSQL `PIVOT` is conditional aggregation on both sides.
+  Everything else is LINQ (`AsCte`, `Sql.Window.*`, `Sql.StringAggregate`, `Sql.Expr`).
+  Value parity was spot-checked across all retained queries. One intentional representation difference
+  remains on ClickHouse: `uniq` is approximate, so the linq2db arm uses exact `COUNT(DISTINCT)` (e.g.
+  `DeviceSplit` desktop users 86 944 vs 86 317). PostgreSQL `date_diff("minute")` is truncated
   integer minutes in nextorm, so the linq2db arm emits the same `CAST(trunc(EXTRACT(EPOCH …)/60) AS integer)`
-  for `AirportOnTimePerformance`/`DelayPercentilesByModel` (values then match exactly).
+  for `AirportOnTimePerformance` (values then match exactly).
 * **Packages.** The examples add `linq2db` 6.5.0 plus the PostgreSQL/SQL Server/ClickHouse providers
   (`Linq2DbVersion` in [`Directory.Packages.props`](Directory.Packages.props)). The nextorm package
   model is unchanged: postgres/clickhouse use the published `1.0.9-rc4` packages, mssql stays on
   `ProjectReference` for the typed `Pivot` surface.
 * **Full benchmark run (2026-10-17, Release, `ShortRun` + `InProcessEmitToolchain`, warm volumes).**
-  PostgreSQL 22/22 cases (28:53), MSSQL 22/22 (02:43), ClickHouse 19/21 (06:29; `Nextorm_DailyTraffic`
-  and `Linq2Db_Incremental` hit transient ClickHouse HTTP 120 s timeouts and were re-run successfully:
-  78.72 / 83.82 ms and 24.84 ms). Notable ratios (nextorm / linq2db, mean): PG
+  PostgreSQL 22/22 cases (28:53), MSSQL 22/22 (02:43), ClickHouse 19/21 (06:29; historical benchmark set).
+  Notable ratios (nextorm / linq2db, mean): PG
   `BusinessOccupancyMatrix` 4.71 s / 19.86 s, `PassengerNoShowAnalysis` 4.90 s / 16.49 s,
-  `DelayPercentilesByModel` 45.05 / 45.04 ms (5.5 KB vs 31.3 KB allocated); MSSQL `RollingKpi`
+  MSSQL `RollingKpi`
   19.2 / 32.6 ms, `ProductAbcXyz` 84.1 / 154.6 ms, `QuarterlyPivot` 181 / 109 ms, `TerritoryGrowthMoM`
   13.3 / 32.8 ms; ClickHouse `Sessions` 1.27 s median / 1.05 s, `SessionDepth` 167 / 116 ms,
   `TopLandingPages` 414 / 370 ms. Database execution dominates every case, so the ratios reflect the SQL
   plans the two ORMs generate, not only materialisation overhead; `ShortRun` values are noisy and are
   regression indicators, not published benchmark claims. Allocation regressions above 1.2× are tracked
-  in [#267](https://github.com/AlexeyShirshov/nextorm/issues/267) (PG `DelayPercentilesByModel` 5.67×),
+  in [#267](https://github.com/AlexeyShirshov/nextorm/issues/267) (PG `DelayPercentilesByModel`, comparison withdrawn 2026-11-01),
   [#268](https://github.com/AlexeyShirshov/nextorm/issues/268) (PG `AircraftDelayChains` 1.42×),
   [#269](https://github.com/AlexeyShirshov/nextorm/issues/269) (PG `AirportOnTimePerformance` 1.23×),
   [#270](https://github.com/AlexeyShirshov/nextorm/issues/270) (CH `Funnel` 3.04×),
-  [#271](https://github.com/AlexeyShirshov/nextorm/issues/271) (CH `Retention` 3.02×),
+  [#271](https://github.com/AlexeyShirshov/nextorm/issues/271) (CH `Retention`, comparison withdrawn 2026-11-01),
   [#272](https://github.com/AlexeyShirshov/nextorm/issues/272) (CH `Sessions` 2.82×),
   [#273](https://github.com/AlexeyShirshov/nextorm/issues/273) (CH `SessionDepth` 1.62×) and
   [#274](https://github.com/AlexeyShirshov/nextorm/issues/274) (CH `RollingActivity` 1.22×).
 
 ## T267 projection allocation follow-up (2026-11-01)
 
+Comparison withdrawn on 2026-11-01 (#267, whole-query `FromSql` rule); the following NextORM-only measurements remain historical facts.
+
 The two-stage `DelayPercentilesByModel` projections now use readonly record structs. The historical
 pre-change baseline (two `ShortRun`/`InProcessEmitToolchain` runs) and same-round post-change runs:
 
-| State / run | Nextorm Mean | Nextorm Allocated | linq2db Mean | linq2db Allocated | Allocation ratio |
-|---|---:|---:|---:|---:|---:|
-| Before 1 (standing baseline) | 45.93 ms | 29.70 KB | 45.51 ms | 5.56 KB | 5.34× |
-| Before 2 (standing baseline) | 44.45 ms | 29.76 KB | 44.75 ms | 5.52 KB | 5.39× |
-| After 1 | 45.30 ms | 28.25 KB | 45.46 ms | 5.56 KB | 5.08× |
-| After 2 | 45.04 ms | 28.23 KB | 45.25 ms | 5.56 KB | 5.08× |
+| State / run | Nextorm Mean | Nextorm Allocated |
+|---|---:|---:|
+| Before 1 (standing baseline) | 45.93 ms | 29.70 KB |
+| Before 2 (standing baseline) | 44.45 ms | 29.76 KB |
+| After 1 | 45.30 ms | 28.25 KB |
+| After 2 | 45.04 ms | 28.23 KB |
 
-Same-round small-arm control, `AircraftDelayChains`: run 1 Nextorm 49.22 ms / 60.54 KB and linq2db
-53.52 ms / 42.72 KB; run 2 Nextorm 49.40 ms / 60.35 KB and linq2db 54.41 ms / 42.90 KB. The projection
-probe measured 30,896 B/call anonymous vs 29,192 B/call struct (~213 B/row); build-only was 18,440
+Same-round NextORM projection probe measured 30,896 B/call anonymous vs 29,192 B/call struct (~213 B/row); build-only was 18,440
 B/call, so the dominant residual is per-call pipeline construction, not per-row materialisation.
 This step does not claim that residual is closable here. SQL capture before/after was byte-identical,
-and both arms returned the same 8 rows and values.
+and the nextorm arm returned the same 8 rows and values before and after.
 
-## T267 #267 Lever 1 publication (2026-11-01, n=3/3 attempt)
+## T267 #267 Lever 1 publication (2026-11-01)
 
-Before/after for `AviasalesQueries.DelayPercentilesByModel` (PG, `ShortRun` + `InProcessEmitToolchain`,
-`[MemoryDiagnoser]`, warm volume `nextorm-examples-aviasales-data`, 21758 flights). Before = retained
-rung `84e98272` (readonly record struct projections); after = commit `9cc092a5` (hoisted call-site
-expression trees). Both arms model `Sql/delay_percentiles_by_model.sql` and return the same 8 rows.
-
-Before (pre-Lever-1, n=2 baseline runs):
-
-| Run | Nextorm Mean | Nextorm Allocated | linq2db Mean | linq2db Allocated | Ratio |
-|---|---:|---:|---:|---:|---:|
-| Before 1 | 50.76 ms | 28.90 KB | 45.15 ms | 5.56 KB | 5.20× |
-| Before 2 | 45.17 ms | 28.17 KB | 45.47 ms | 5.56 KB | 5.07× |
-
-After (Lever 1, n=3 compliant baseline runs of current tree):
-
-| Run | Nextorm Mean | Nextorm Allocated | linq2db Mean | linq2db Allocated | Ratio |
-|---|---:|---:|---:|---:|---:|
-| After 1 | 45.03 ms | 16.17 KB | 45.27 ms | 5.52 KB | 2.93× |
-| After 2 | 45.23 ms | 16.18 KB | 45.61 ms | 5.56 KB | 2.91× |
-
-n=3/3 Lever 2 (per-call builder/visitor/command construction trimming in `src/nextorm.core`) was
-timeboxed out: no safe, measurable lever found; candidate code reverted by construction. Retained
-rungs `84e98272` + `9cc092a5` stand. Tier A target (≤6.67 KB = 1.2×5.56) unmet; residual gap ~9.5 KB/query.
-SQL byte-identical before/after; 8 rows identical in both arms (NextORM vs linq2db). Build:
-`dotnet build examples/nextorm.examples.postgres.aviasales -c Release` → 0W/0E (exit 0). Core tests:
-3946 passed / 0 failed. Evidence: `.pdca/T267/rv2/` (logs n3-baseline-{1,2}.log, receipts, gates).
+Comparison withdrawn on 2026-11-01 (#267, whole-query `FromSql` rule). Historical NextORM-only measurements: before Lever 1, 50.76/45.17 ms and 28.90/28.17 KB; after Lever 1, 45.03/45.23 ms and 16.17/16.18 KB. Lever 2 was timeboxed out; retained changes stand. Tier A target and residual gap remain historical conclusions only. Evidence: `.pdca/T267/rv2/`.
 
 ## Known environment pitfalls (do not mistake for product failures)
 

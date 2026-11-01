@@ -17,7 +17,7 @@ next to its two implementations and you can translate your own queries in either
 | [`Sql/*.sql`](Sql) | Original model queries — the reference both arms are verified against |
 | [`AviasalesQueries.cs`](AviasalesQueries.cs) | nextorm implementation of the 5 demo queries + 6 course-style exercises |
 | [`Entities.cs`](Entities.cs) | nextorm `[SqlTable]` / `[Column]` entity interfaces for the `bookings` schema |
-| [`Linq2DbQueries.cs`](Linq2DbQueries.cs) | linq2db implementation of the same eleven queries |
+| [`Linq2DbQueries.cs`](Linq2DbQueries.cs) | linq2db implementation of ten of the eleven queries (`DelayPercentilesByModel` is nextorm-only) |
 | [`Linq2DbEntities.cs`](Linq2DbEntities.cs) | linq2db `[Table]` / `[Column]` POCOs for the same tables |
 | [`Comparison.cs`](Comparison.cs) | Runs both arms, prints `[ OK ]`/`[FAIL]`/`[DIFF]`, compares row counts |
 | [`Benchmarks.cs`](Benchmarks.cs) | BenchmarkDotNet class: one `[Benchmark]` per arm and query |
@@ -45,7 +45,7 @@ exception still aborts the run. See [`../README.md`](../README.md) for the share
 
 `--benchmark` provisions the database once (the same named volume as the plain run) and then runs
 BenchmarkDotNet in-process (`Job.ShortRun` + `InProcessEmitToolchain`, `[MemoryDiagnoser]`). Every
-query has a `Nextorm_*` baseline and a `Linq2Db_*` arm; the measured code is only "build + execute +
+each comparable query has a `Nextorm_*` baseline and a `Linq2Db_*` arm; `DelayPercentilesByModel` is nextorm-only because its former comparison used whole-query `FromSql`. The measured code is only "build + execute +
 materialise" (no printing, no JSON). A full filtered example:
 
 ```bash
@@ -61,10 +61,8 @@ Set `NEXTORM_EXAMPLES_BENCH_FULL=1` for the full out-of-process BenchmarkDotNet 
 
 The linq2db queries mirror the SQL structurally as well: typed CTEs use `AsCte`/`From`, window
 functions use `Sql.Window.*`, `STDDEV` uses `AnalyticFunctions.StdDevSamp`, and `string_agg` uses
-`Sql.StringAggregate(...).ToValue()`. Two constructs have no linq2db LINQ surface and are issued
-through `FromSql` (still inside linq2db, not a separate driver): the ordered-set
-`percentile_disc(...) WITHIN GROUP (...)` in query 8, and nothing else — the `jsonb ->>` operator uses
-`Sql.Expr`. Both are annotated in [`Linq2DbQueries.cs`](Linq2DbQueries.cs).
+`Sql.StringAggregate(...).ToValue()`. Whole-query raw SQL comparisons are not included; partial
+`Sql.Expr(...)` fragments within native LINQ are allowed. `DelayPercentilesByModel` is nextorm-only.
 
 ## SQL → nextorm: general rules
 

@@ -8,10 +8,10 @@ same dataset and benchmarked.
 The project shows **how a real SQL query becomes nextorm code — and where the portable LINQ surface
 stops**. Every method pair models exactly one query file in [`Sql/`](Sql); the method comment names it.
 Missing capabilities are **not** worked around on the nextorm side: the affected method throws
-`NotSupportedException` instead of falling back to raw SQL. Only `Incremental` (`uniqMerge` over an
-`AggregateFunction` state) still throws — its linq2db counterpart works through `FromSql`, which makes
-the gap visible side by side. The tables below map each SQL construct to the nextorm construct that
-replaces it.
+`NotSupportedException`. `Incremental` (`uniqMerge` over an `AggregateFunction` state) has no nextorm
+LINQ surface at all, so the query was removed from the example — with it went the whole-query linq2db
+`FromSql` arm that could not be compared fairly. The tables below map each SQL construct to the nextorm
+construct that replaces it.
 
 ## Layout
 
@@ -20,7 +20,7 @@ replaces it.
 | [`Sql/*.sql`](Sql) | Original model queries — the reference both arms are verified against |
 | [`ClickHouseQueries.cs`](ClickHouseQueries.cs) | nextorm implementation of the 5 demo queries + 6 course-style exercises |
 | [`Entities.cs`](Entities.cs) | nextorm `[SqlTable]` / `[Column]` entity interfaces |
-| [`Linq2DbQueries.cs`](Linq2DbQueries.cs) | linq2db implementation of the same eleven queries |
+| [`Linq2DbQueries.cs`](Linq2DbQueries.cs) | linq2db implementation of nine of the ten queries (`Retention` is nextorm-only) |
 | [`Linq2DbEntities.cs`](Linq2DbEntities.cs) | linq2db `[Table]` / `[Column]` POCOs for `hits_v1` and the materialized view |
 | [`Comparison.cs`](Comparison.cs) | Runs both arms, prints `[ OK ]`/`[FAIL]`/`[DIFF]`, compares row counts |
 | [`Benchmarks.cs`](Benchmarks.cs) | BenchmarkDotNet class: one `[Benchmark]` per arm and query |
@@ -47,7 +47,7 @@ other exception still aborts the run. See [`../README.md`](../README.md) for the
 
 `--benchmark` reuses the loaded dataset and runs BenchmarkDotNet in-process (`Job.ShortRun` +
 `InProcessEmitToolchain`, `[MemoryDiagnoser]`). Every query has a `Nextorm_*` baseline and a
-`Linq2Db_*` arm (`Incremental` is linq2db-only); a filtered run:
+`Linq2Db_*` arm for native comparison queries; whole-query `FromSql` is not allowed (partial `Sql.Expr(...)` is allowed). `Retention` is nextorm-only and `Incremental` is omitted; a filtered run:
 
 ```bash
 DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock \
@@ -59,18 +59,17 @@ Set `NEXTORM_EXAMPLES_BENCH_FULL=1` for the full out-of-process BenchmarkDotNet 
 
 ### The linq2db arm
 
-`windowFunnel`, `groupArray`/tuples, `uniqMerge` and the `quantile` threshold are delivered through
-linq2db's raw terminals (`FromSql` / `Sql.Expr`) where its LINQ surface has no raw-aggregate API; the
+The inner per-user part of `windowFunnel` is issued through a linq2db `FromSql` subquery, because its
+LINQ surface has no raw-aggregate API for it; the outer histogram stays LINQ. `groupArray`/tuples and
+the `quantile` threshold use `Sql.Expr(...)` fragments inside otherwise native LINQ queries, and the
 rest is regular linq2db LINQ (`Sql.Window`, `Count(DISTINCT)` in place of the approximate `uniq`,
 `Sql.Expr` for `multiIf`/array functions). ClickHouse calls the schema a *database*, so the tables are
 attached with `DatabaseName("datasets")`. Every deviation is annotated in
 [`Linq2DbQueries.cs`](Linq2DbQueries.cs).
 
-Two representation differences are intentional: `uniq` is **approximate** by design, so the linq2db arm
+One representation difference is intentional: `uniq` is **approximate** by design, so the linq2db arm
 uses `COUNT(DISTINCT)` (exact) and the `Users` column can differ by a small amount (for example
-`DeviceSplit` desktop: 86 944 vs 86 317 on the current dataset); and the retention matrix is projected
-with `toString(groupArray(...))` on the linq2db arm because CLR has no tuple-array type for it, while
-nextorm materialises `Tuple<…>[]` and formats it in C#.
+`DeviceSplit` desktop: 86 944 vs 86 317 on the current dataset).
 
 ## SQL → nextorm: general rules
 
@@ -125,7 +124,7 @@ defect stops it at execution (tracked in the linked issue).
 |---|---|---|---|---|
 | 1 | [`clickhouse_array_analytics.sql`](Sql/clickhouse_array_analytics.sql) | `ClickHouseQueries.ArrayAnalytics` | OK | `splitByChar` → `split_by_char`; `arrayMap`/`arrayFilter` → `array_map`/`array_filter`; the result is grouped by the array expression |
 | 2 | [`clickhouse_funnel.sql`](Sql/clickhouse_funnel.sql) | `ClickHouseQueries.Funnel` | OK | `windowFunnel` → `window_funnel(...)`; inner `GROUP BY UserID` + outer `GROUP BY level` → two derived queries |
-| 3 | [`clickhouse_incremental.sql`](Sql/clickhouse_incremental.sql) | `ClickHouseQueries.Incremental` | FAIL | `uniqMerge` (`-Merge` over an `AggregateFunction` state) has no LINQ surface on the released packages; throws instead of falling back to `WithSql` |
+| 3 | [`clickhouse_incremental.sql`](Sql/clickhouse_incremental.sql) | removed from the example | — | `uniqMerge` (`-Merge` over an `AggregateFunction` state) has no nextorm LINQ surface; its only comparison arm was a whole-query linq2db `FromSql`, which a comparison may not use |
 | 4 | [`clickhouse_retention.sql`](Sql/clickhouse_retention.sql) | `ClickHouseQueries.Retention` | **BLOCKED** ([#359](https://github.com/AlexeyShirshov/nextorm/issues/359)) | the `WITH first_visits, cohort_sizes, weekly` CTEs → typed `AsCte`; `cohort_sizes` and `weekly` are projected into named rows (`CohortSizeRow`, `RetentionWeekRow`) and the outer chain names both slots (`WithAlias(Alias.Week)` + `Alias.Cohort`); the inner join + `groupArray((…))` → `group_array(Tuple.Create(…))`. The aliased SQL is correct, but the `1.0.9-rc4` package wraps the tuple array in ``cast(… as Array(Nullable(Tuple`2)))`` — a CLR type name, not a ClickHouse type — so the server rejects the statement (`Code: 62`) |
 | 5 | [`clickhouse_sessions.sql`](Sql/clickhouse_sessions.sql) | `ClickHouseQueries.Sessions` | OK | three chained **typed** CTEs (`AsCte`: `sessions`, `session_flags`, `session_counts`); `lagInFrame` → `lag_in_frame(...).Over(...)`; `runningAccumulate(if(…))` → cumulative `sum_over(c ? 1 : 0)`; `quantile(0.99)(…)` → `SqlFunctions.ClickHouse.quantile(0.99, …)` |
 

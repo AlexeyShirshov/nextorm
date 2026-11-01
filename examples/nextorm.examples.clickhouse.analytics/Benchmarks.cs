@@ -55,13 +55,7 @@ public class ClickHouseBenchmarks
     public async Task Linq2Db_Funnel() => await Linq2DbQueries.Funnel(_linq2db, default);
 
     [Benchmark]
-    public async Task Linq2Db_Incremental() => await Linq2DbQueries.Incremental(_linq2db, default);
-
-    [Benchmark]
     public async Task Nextorm_Retention() => await ClickHouseQueries.Retention(_nextorm, default);
-
-    [Benchmark]
-    public async Task Linq2Db_Retention() => await Linq2DbQueries.Retention(_linq2db, default);
 
     [Benchmark]
     public async Task Nextorm_Sessions() => await ClickHouseQueries.Sessions(_nextorm, default);
