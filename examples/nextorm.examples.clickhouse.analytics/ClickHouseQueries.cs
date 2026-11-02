@@ -55,13 +55,12 @@ public static class ClickHouseQueries
 
         var rows = await ctx.From(perUser)
             .OrderBy(p => p.Level)
-            .SelectGroup(p => new FunnelResultRow(p.Level, SqlFunctions.Sql.count()))
+            .SelectGroup(p => new { p.Level, ConversionCount = SqlFunctions.Sql.count() })
             .ToListAsync(ct);
 
         return rows;
     }
 
-    private readonly record struct FunnelResultRow(int Level, int ConversionCount);
     // 4. Sql/clickhouse_retention.sql
     // WORKING: the first_visits / cohort_sizes / weekly CTEs are declared as typed descriptors (`AsCte`)
     // and read back with member access; the inner t subquery joins hits with first_visits. cohort_sizes and
@@ -195,13 +194,16 @@ public static class ClickHouseQueries
             .Where(c => c.hits_in_session > threshold)
             .OrderByDescending(c => c.hits_in_session)
             .Limit(100)
-            .Select(c => new SessionResultRow(c.UserID, c.session_id, c.hits_in_session))
+            .Select(c => new
+            {
+                c.UserID,
+                SessionId = c.session_id,
+                Hits = c.hits_in_session
+            })
             .ToListAsync(ct);
 
         return rows;
     }
-
-    private readonly record struct SessionResultRow(long UserID, long SessionId, int Hits);
 
     // 6. daily_traffic
     // WORKING: GROUP BY EventDate with count() + uniqExact.
@@ -336,37 +338,32 @@ public static class ClickHouseQueries
     {
         var daily = ctx.From<IHit>()
             .Where(h => h.EventDate >= new DateTime(2014, 3, 17) && h.EventDate <= new DateTime(2014, 3, 23))
-            .SelectGroup(h => new RollingActivityDailyRow(
+            .SelectGroup(h => new
+            {
                 h.EventDate,
-                SqlFunctions.Sql.count(),
-                SqlFunctions.ClickHouse.uniq_exact(h.UserId)));
+                Hits = SqlFunctions.Sql.count(),
+                Users = SqlFunctions.ClickHouse.uniq_exact(h.UserId)
+            });
 
         var rows = await ctx.From(daily)
             .OrderBy(d => d.EventDate)
-            .Select(d => new RollingActivityRow(
+            .Select(d => new
+            {
                 d.EventDate,
                 d.Hits,
                 d.Users,
                 // sum() widens the Int32 count to Int64 in ClickHouse; cast so the CLR type matches.
-                (long)SqlFunctions.Sql.sum_over(d.Hits).Over(
+                Rolling7DayHits = (long)SqlFunctions.Sql.sum_over(d.Hits).Over(
                     SqlFunctions.Sql.asc(() => d.EventDate),
                     WindowFrame.Rows(WindowFrameBound.Preceding(6), WindowFrameBound.CurrentRow)),
-                (long)SqlFunctions.Sql.sum_over(d.Hits).Over(
+                CumulativeHits = (long)SqlFunctions.Sql.sum_over(d.Hits).Over(
                     SqlFunctions.Sql.asc(() => d.EventDate),
-                    WindowFrame.RowsUnboundedPrecedingToCurrentRow)))
+                    WindowFrame.RowsUnboundedPrecedingToCurrentRow)
+            })
             .ToListAsync(ct);
 
         return rows;
     }
-
-    private readonly record struct RollingActivityDailyRow(DateTime EventDate, int Hits, long Users);
-
-    private readonly record struct RollingActivityRow(
-        DateTime EventDate,
-        int Hits,
-        long Users,
-        long Rolling7DayHits,
-        long CumulativeHits);
 }
 
 // Named projections for the aliased Retention chain. The named join-alias surface (#160/#229) generates

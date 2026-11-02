@@ -350,3 +350,22 @@ The `AircraftDelayChains` call-site expression hoists measured in cycles 2–3 w
 they removed caller-side work that the linq2db arm also performs on every call, so the
 comparison stopped being engine-vs-engine. Raw measurements remain as evidence under
 `.pdca/T268/rv2/` and `.pdca/T268/rv3/`; #268 is re-scoped to the engine.
+
+## Example-side levers reverted (2026-11-02)
+
+The example-side levers behind #267, #269, #270, #272 and #274 are **reverted**:
+
+- #267 — hoisted `DelayPercentilesByModel` expression trees (`9cc092a5`) and `readonly record struct`
+  row types (`84e98272`);
+- #269 — `readonly record struct AirportOnTimePerformanceRow` (`d1a7fa62`);
+- #270 — `readonly record struct FunnelResultRow` (`04dc4b2f`);
+- #272 — `readonly record struct` Sessions projection (`23ac24f0`);
+- #274 — `readonly record struct` RollingActivity projections (`55499588`).
+
+Each removed caller-side work or changed the example's own data shape, so the comparison stopped being
+engine-vs-engine; a performance issue about an example is closed by a fix in `src/**`, never by editing
+the example's call site or projection type. The measured numbers stay in the historical sections above
+as evidence only. Both examples build Release 0W/0E afterwards.
+
+The core direction is closed with numbers in `docs/specs/performance/decisions-and-lessons.md` (§R15)
+and in the closing comments of #319 and #363.
