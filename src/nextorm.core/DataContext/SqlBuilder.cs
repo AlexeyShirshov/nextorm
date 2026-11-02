@@ -1136,12 +1136,15 @@ internal readonly struct SqlBuilder
         EnsureExtremeRowCompatible(cmd, selectInto);
 
         // S1: All global scalar (Ties == All, no grouping, one value key) is lowered to an aggregate
-        // command E joined back to the source O through the common MakeSelect pipeline. All other
-        // shapes (grouped, composite, One) keep the existing paths.
-        if (cmd.ExtremeRow is { Ties: ExtremeRowTies.All, GroupBy: null }
+        // command E joined back to the source O through the common MakeSelect pipeline. S2 extends the
+        // same topology to the grouped scalar form (one value key, one or more group keys, null-safe
+        // OR-join per nullable key). All other shapes (composite, One) keep the existing paths.
+        if (cmd.ExtremeRow is { Ties: ExtremeRowTies.All } extremeRow
             && cmd.ExtremeRowColumns is { Length: 1 })
         {
-            var lowered = ExtremeRowLowering.BuildAllGlobalScalar(cmd);
+            var lowered = extremeRow.GroupBy is null
+                ? ExtremeRowLowering.BuildAllGlobalScalar(cmd)
+                : ExtremeRowLowering.BuildAllGroupedScalar(cmd);
             return new SqlBuilder(_ctx).MakeSelect(lowered, selectInto);
         }
 

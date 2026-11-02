@@ -64,6 +64,19 @@ public sealed class SqlBuilderGuardTests : ProviderTestSuite
     }
 
     [Fact]
+    public void ExtremeRow_GroupedAll_WithPaging_ShouldThrow()
+    {
+        // S2/T302: the grouped All shape is lowered after the guard, so the user-command modifier must
+        // still be rejected before any aggregate + join-back lowering runs.
+        FluentActions
+            .Invoking(() => _sut.SimpleEntity
+                .SelectWhereMax(x => x.Id, ExtremeRowTies.All, x => x.Id)
+                .Limit(1)
+                .ToList())
+            .Should().Throw<BuildSqlCommandException>();
+    }
+
+    [Fact]
     public void ExtremeRow_WithGroupingOrHaving_ShouldThrow()
     {
         FluentActions

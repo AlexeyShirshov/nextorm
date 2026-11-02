@@ -271,15 +271,19 @@ public class ExtremeRowNativeSqlGenerationTests
     }
 
     [Fact]
-    public void SelectWhereMax_AllTiesGrouped_ShouldKeepPortableWindowLowering()
+    public void SelectWhereMax_AllTiesGrouped_ShouldLowerToAggregateJoin()
     {
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
         var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Int, ExtremeRowTies.All, x => x.Id).Select(x => new { x.Id })));
 
-        norm.Should().Contain("rank() over (partition by id order by nullableint desc)");
-        norm.Should().Contain("= 1");
+        norm.Should().Contain("max(nullableint) as __nextorm_ext_1_0");
+        norm.Should().Contain("group by id");
+        norm.Should().Contain("__nextorm_ext_1_1");
+        norm.Should().Contain("join");
+        norm.Should().NotContain("rank()");
+        norm.Should().NotContain("row_number()");
         norm.Should().NotContain("limit 1");
         norm.Should().NotContain("distinct on");
     }

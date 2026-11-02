@@ -127,6 +127,164 @@ public class T302ExtremeRowAllSqlGenerationTests
             .Count();
         qualifiers.Should().BeGreaterThanOrEqualTo(2);
     }
+    [Fact]
+    public void Max_All_Grouped_SingleNonNullableKey()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<T302ExtremeAllEntity>().Where(x => x.Score > 5);
+
+        var norm = SqlOf(ctx, e.SelectWhereMax(x => x.Score, ExtremeRowTies.All, x => x.Id).ToCommand()).ToLowerInvariant();
+
+        // Aggregate E: max(score) as __nextorm_ext_1_0, non-nullable group key id as __nextorm_ext_1_1.
+        norm.Should().Contain("max(");
+        norm.Should().Contain("__nextorm_ext_1_0");
+        norm.Should().Contain("__nextorm_ext_1_1");
+        norm.Should().Contain("group by");
+        norm.Should().Contain("join");
+        norm.Should().NotContain(" or ");
+        norm.Should().NotContain("rank(");
+        norm.Should().NotContain("row_number(");
+        // The user condition C is duplicated into E and O deliberately.
+        (norm.Split(new[] { "score > 5" }, StringSplitOptions.None).Length - 1).Should().Be(2);
+    }
+
+    [Fact]
+    public void Max_All_Grouped_NullableKey_ShouldRefuseClickHouseJoinOnGuard()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<T302ExtremeAllEntity>().Where(x => x.Score > 5);
+
+        // Deferred to S4 (ClickHouse nullable): the #296 safety guard refuses bare IS NULL residuals
+        // in a JOIN ON predicate, so the portable null-safe OR-form is not emitted here yet. The
+        // refusal is preparation-time and deterministic, never a runtime surprise.
+        FluentActions.Invoking(() => SqlOf(ctx,
+                e.SelectWhereMax(x => x.Score, ExtremeRowTies.All, x => x.Cat).ToCommand()))
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("*bare-IS-NULL*");
+    }
+
+    [Fact]
+    public void Min_All_Grouped_SingleNonNullableKey()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<T302ExtremeAllEntity>();
+
+        var norm = SqlOf(ctx, e.SelectWhereMin(x => x.Score, ExtremeRowTies.All, x => x.Id).ToCommand()).ToLowerInvariant();
+
+        norm.Should().Contain("min(");
+        norm.Should().Contain("group by");
+        norm.Should().Contain("join");
+        norm.Should().Contain("__nextorm_ext_1_0");
+        norm.Should().Contain("__nextorm_ext_1_1");
+        // A non-nullable group key joins with plain equality - no null-safe OR arm.
+        norm.Should().NotContain(" or ");
+        norm.Should().NotContain("rank(");
+        norm.Should().NotContain("row_number(");
+    }
+
+    [Fact]
+    public void Max_All_Grouped_CompositeNullableKey_ShouldRefuseClickHouseJoinOnGuard()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<T302ExtremeAllEntity>().Where(x => x.Score > 5);
+
+        // Same S4 deferral as the single nullable key: any nullable component of the group key lowers
+        // to the null-safe OR-form, which the #296 guard refuses in a ClickHouse JOIN ON.
+        FluentActions.Invoking(() => SqlOf(ctx,
+                e.SelectWhereMax(x => x.Score, ExtremeRowTies.All, x => new { x.Cat, x.Id }).ToCommand()))
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("*bare-IS-NULL*");
+    }
+
+    [Fact]
+    public void Max_All_Grouped_CompositeNonNullableKey()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<T302ExtremeCompositeEntity>().Where(x => x.Score > 5);
+
+        // Composite non-nullable group key (grp, id): the aggregate E emits both group aliases and
+        // groups by both columns; O joins the aggregate back on both keys with plain equality, so no
+        // null-safe OR arm appears anywhere.
+        var norm = SqlOf(ctx,
+                e.SelectWhereMax(x => x.Score, ExtremeRowTies.All, x => new { x.Grp, x.Id }).ToCommand())
+            .ToLowerInvariant();
+
+        norm.Should().Contain("max(");
+        norm.Should().Contain("__nextorm_ext_1_0");
+        norm.Should().Contain("__nextorm_ext_1_1");
+        norm.Should().Contain("__nextorm_ext_1_2");
+        norm.Should().Contain("group by");
+        norm.Should().Contain("join");
+        norm.Should().NotContain(" or ");
+        norm.Should().NotContain("rank(");
+        norm.Should().NotContain("row_number(");
+
+        // GROUP BY names both key columns, not only the first.
+        var groupBy = norm.Substring(norm.IndexOf("group by", StringComparison.Ordinal));
+        groupBy = groupBy.Substring(0, groupBy.IndexOf(')'));
+        groupBy.Should().Contain("grp").And.Contain("id");
+
+        // The join-back matches both keys against their own aliases - and the value alias.
+        var onClause = norm.Substring(norm.IndexOf(" on ", norm.IndexOf("join", StringComparison.Ordinal), StringComparison.Ordinal));
+        System.Text.RegularExpressions.Regex
+            .IsMatch(onClause, "grp\\s*=\\s*[a-z0-9_\\[\\]`\"]+\\.[\\[`\"]*__nextorm_ext_1_1")
+            .Should().BeTrue("the first composite key must be joined back on __nextorm_ext_1_1");
+        System.Text.RegularExpressions.Regex
+            .IsMatch(onClause, "\\.id\\s*=\\s*[a-z0-9_\\[\\]`\"]+\\.[\\[`\"]*__nextorm_ext_1_2")
+            .Should().BeTrue("the second composite key must be joined back on __nextorm_ext_1_2");
+        onClause.Should().Contain("__nextorm_ext_1_0");
+    }
+
+    [Fact]
+    public void Projection_Distinct_OrderBy_All_Grouped()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<T302ExtremeAllEntity>().Where(x => x.Score > 5);
+
+        // Non-nullable group key keeps this fact off the ClickHouse JOIN ON guard (see the two
+        // explicit refusal facts); the outer projection and ORDER BY still use the nullable payload.
+        var norm = SqlOf(ctx, e.SelectWhereMax(
+                x => x.Score,
+                x => new T302ExtremeAllDto { Id = x.Id, Cat = x.Cat },
+                ExtremeRowTies.All,
+                x => x.Id)
+            .Distinct()
+            .OrderBy(x => x.Cat)).ToLowerInvariant();
+
+        norm.Should().Contain("distinct");
+        norm.Should().Contain("order by");
+        norm.Should().Contain("group by");
+        norm.Should().Contain("join");
+        norm.Should().Contain("__nextorm_ext_1_0");
+        norm.Should().Contain("__nextorm_ext_1_1");
+        norm.Should().NotContain("rank(");
+        norm.Should().NotContain("row_number(");
+        (norm.Split(new[] { "score > 5" }, StringSplitOptions.None).Length - 1).Should().Be(2);
+    }
+
+    [Fact]
+    public void MappedColumns_HiddenAlias_All_Grouped()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<T302ExtremeAllCollisionEntity>();
+
+        // The value key's physical column is itself named like the lowering's aggregate alias; the
+        // group key is non-nullable, so the join is plain equality apart from that collision.
+        var norm = SqlOf(ctx, e.SelectWhereMax(x => x.Collide, ExtremeRowTies.All, x => x.Id).ToCommand()).ToLowerInvariant();
+
+        norm.Should().Contain("max(");
+        norm.Should().Contain("__nextorm_ext_1_0");
+        norm.Should().Contain("__nextorm_ext_1_1");
+        norm.Should().Contain("group by");
+        norm.Should().NotContain("rank(");
+        norm.Should().NotContain("row_number(");
+        var qualifiers = System.Text.RegularExpressions.Regex
+            .Matches(norm, "([a-z0-9_\\[\\]`\"]+)\\.[\\[`\"]*__nextorm_ext_1_0")
+            .Select(m => m.Groups[1].Value)
+            .Distinct()
+            .Count();
+        qualifiers.Should().BeGreaterThanOrEqualTo(2);
+    }
 }
 
 [SqlTable("t302_extreme_all")]
@@ -144,6 +302,14 @@ public sealed class T302ExtremeAllDto
 }
 
 public sealed record T302ExtremeAllRecord(int Id, string? Cat);
+
+[SqlTable("t302_extreme_composite")]
+public sealed class T302ExtremeCompositeEntity
+{
+    [Key][Column("id")] public int Id { get; set; }
+    [Column("grp")] public int Grp { get; set; }
+    [Column("score")] public int? Score { get; set; }
+}
 
 [SqlTable("t302_extreme_all")]
 public sealed class T302ExtremeAllCollisionEntity

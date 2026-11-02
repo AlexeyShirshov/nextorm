@@ -5225,7 +5225,7 @@ public class SqlGenerationTests
     }
 
     [Fact]
-    public void SelectWhereMax_GroupedAll_ShouldUseRankToKeepEveryTie()
+    public void SelectWhereMax_GroupedAll_ShouldLowerToAggregateJoin()
     {
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
@@ -5234,9 +5234,13 @@ public class SqlGenerationTests
             .SelectWhereMax(x => x.Int, ExtremeRowTies.All, x => x.String)
             .Select(x => new { x.Id })));
 
-        norm.Should().Contain("rank() over (partition by somestring order by nullableint desc)");
-        norm.Should().Contain("= 1");
+        norm.Should().Contain("max(nullableint) as __nextorm_ext_1_0");
+        norm.Should().Contain("group by somestring");
+        norm.Should().Contain("__nextorm_ext_1_1");
         norm.Should().Contain("nullableint is not null");
+        norm.Should().Contain(" or ");
+        norm.Should().NotContain("rank()");
+        norm.Should().NotContain("row_number()");
         OuterSelectList(norm).Should().NotContain("__nextorm_rn");
     }
 
@@ -5393,15 +5397,19 @@ public class SqlGenerationTests
     }
 
     [Fact]
-    public void SelectWhereMax_ProjectionGroupedAll_ShouldUseRankToKeepEveryTiePerGroup()
+    public void SelectWhereMax_ProjectionGroupedAll_ShouldLowerToAggregateJoin()
     {
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
         var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Int, x => new { x.Id, x.String }, ExtremeRowTies.All, x => x.String)));
 
-        norm.Should().Contain("rank() over (partition by somestring order by nullableint desc)");
-        norm.Should().Contain("= 1");
+        norm.Should().Contain("max(nullableint) as __nextorm_ext_1_0");
+        norm.Should().Contain("group by somestring");
+        norm.Should().Contain("__nextorm_ext_1_1");
+        norm.Should().Contain(" or ");
+        norm.Should().NotContain("rank()");
+        norm.Should().NotContain("row_number()");
         OuterSelectList(norm).Should().NotContain("__nextorm_rn");
     }
 

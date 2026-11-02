@@ -297,14 +297,19 @@ public class ExtremeRowNativeSqlGenerationTests
     }
 
     [Fact]
-    public void SelectWhereMax_AllTiesGrouped_ShouldKeepPortableWindowLowering()
+    public void SelectWhereMax_AllTiesGrouped_ShouldLowerToAggregateJoin()
     {
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<ExtremeNativeEntity>();
 
         var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.K1, x => new { x.Id }, ExtremeRowTies.All, x => new { x.Id })));
 
-        norm.Should().Contain("rank() over (partition by id order by k1 desc)");
+        norm.Should().Contain("max(k1)");
+        norm.Should().Contain("group by id");
+        norm.Should().Contain("__nextorm_ext_1_0");
+        norm.Should().Contain("__nextorm_ext_1_1");
+        norm.Should().Contain("join");
+        norm.Should().NotContain("rank()");
         norm.Should().NotContain("argMax");
     }
 
