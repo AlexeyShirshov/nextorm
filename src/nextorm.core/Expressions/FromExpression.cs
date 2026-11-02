@@ -165,6 +165,14 @@ public sealed class FromExpression
      /// </summary>
      internal string? SubQueryHint { get; init; }
      /// <summary>
+     /// Set only on the derived sources the composite <c>All</c> lowering joins: the derived table's
+     /// output aliases are also read by the enclosing command's own join predicate, so the occurrence
+     /// must bind by parameter identity instead of the positional same-type lookup. Without it an
+     /// earlier-registered projection source shifts the positional index and the reference resolves to
+     /// the base table (or to nothing). Never part of a source's plan identity.
+     /// </summary>
+     internal bool BindOccurrenceByParameter { get; init; }
+     /// <summary>
      /// Optional source-level row lock attached to this physical source, or <c>null</c> when the source
      /// carries none. Set through <see cref="FromOptions.ForUpdate()"/>/<see cref="FromOptions.ForShare()"/>
      /// (the primary source) or <see cref="JoinOptions.ForUpdate()"/>/<see cref="JoinOptions.ForShare()"/>
@@ -238,6 +246,7 @@ public sealed class FromExpression
           SourceBinding = sourceBinding ?? source.SourceBinding;
           RecursiveOwner = source.RecursiveOwner;
           IsTableVariableSource = source.IsTableVariableSource;
+          BindOccurrenceByParameter = source.BindOccurrenceByParameter;
      }
 
      /// <summary>
@@ -303,11 +312,11 @@ public sealed class FromExpression
           if (Pivot is not null)
           {
                var pivot = Pivot.CloneForCache();
-               return ReferenceEquals(pivot, Pivot) ? this : new FromExpression(pivot) { SubQueryHint = SubQueryHint, SourceBinding = SourceBinding, SourceLock = SourceLock };
+               return ReferenceEquals(pivot, Pivot) ? this : new FromExpression(pivot) { SubQueryHint = SubQueryHint, SourceBinding = SourceBinding, SourceLock = SourceLock, BindOccurrenceByParameter = BindOccurrenceByParameter };
           }
 
           if (!string.IsNullOrEmpty(Table) || SourceType is not null || TableFunction is not null || LinqSource is not null || RawSqlSource is not null || XmlNodes is not null) return this;
 
-          return new FromExpression(SubQuery!.CloneForCache()) { SubQueryHint = SubQueryHint, SourceBinding = SourceBinding, SourceLock = SourceLock };// { TableAlias = TableAlias };
+          return new FromExpression(SubQuery!.CloneForCache()) { SubQueryHint = SubQueryHint, SourceBinding = SourceBinding, SourceLock = SourceLock, BindOccurrenceByParameter = BindOccurrenceByParameter };// { TableAlias = TableAlias };
      }
 }

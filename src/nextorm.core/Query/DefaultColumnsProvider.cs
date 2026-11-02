@@ -91,6 +91,19 @@ public class DefaultColumnsProvider : IColumnsProvider, IOuterSlotSourceRegistry
         _list.Add((queryCommand.ResultType!, queryCommand, fromProjection, false, null));
     }
 
+    /// <summary>
+    /// Registers a derived-table source bound to <paramref name="sourceParameter"/>, so an enclosing
+    /// select list of the same command can resolve that occurrence's alias by identity. Unlike a
+    /// physical source the derived table keeps its own result columns; only the occurrence binding is
+    /// added. Used by the <c>All</c> composite lowering through
+    /// <c>SqlSourceRenderer</c>'s derived-source render path.
+    /// </summary>
+    internal void AddNestedSource(QueryCommand queryCommand, bool fromProjection, ParameterExpression sourceParameter)
+    {
+        _list.Add((queryCommand.ResultType!, queryCommand, fromProjection, false, sourceParameter));
+        _paramSources[sourceParameter] = _list.Count - 1;
+    }
+
     /// <inheritdoc/>
     public int? FindAlias(ParameterExpression param, bool fromProjection)
         => FindAlias(param, fromProjection, includeOuterScopes: false, includeNestedSources: false);

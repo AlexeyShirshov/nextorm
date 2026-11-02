@@ -893,7 +893,18 @@ internal static class SqlSourceRenderer
 
                 if (ctx.ParamMode) return string.Empty;
 
-                ctx.ColumnsProvider.Add(cmd, false);
+                // A composite-All stage joins a derived table and also reads that stage's output aliases
+                // from its own predicate; registering the occurrence by parameter identity lets those
+                // references resolve to the derived source even when a projection source was registered
+                // before the join and the positional same-type lookup would no longer reach it. Only the
+                // sources the lowering marks need this: every other derived source keeps the positional
+                // behaviour (and therefore the same SQL it had before the composite lowering).
+                if (sourceParameter is not null
+                    && from.BindOccurrenceByParameter
+                    && ctx.ColumnsProvider is DefaultColumnsProvider nestedSources)
+                    nestedSources.AddNestedSource(cmd, false, sourceParameter);
+                else
+                    ctx.ColumnsProvider.Add(cmd, false);
 
                 var sqlBuilder = StringBuilderPool.Shared.Get();
                 try

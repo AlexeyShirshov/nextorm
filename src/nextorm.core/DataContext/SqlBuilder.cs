@@ -1138,13 +1138,17 @@ internal readonly struct SqlBuilder
         // S1: All global scalar (Ties == All, no grouping, one value key) is lowered to an aggregate
         // command E joined back to the source O through the common MakeSelect pipeline. S2 extends the
         // same topology to the grouped scalar form (one value key, one or more group keys, null-safe
-        // OR-join per nullable key). All other shapes (composite, One) keep the existing paths.
+        // OR-join per nullable key). S3 extends it to composite value keys (two or more components) as
+        // a staged aggregate chain E_1..E_n + O, which is the only shape that keeps lexicographic
+        // semantics without a window function. All other shapes (One) keep the existing paths.
         if (cmd.ExtremeRow is { Ties: ExtremeRowTies.All } extremeRow
-            && cmd.ExtremeRowColumns is { Length: 1 })
+            && cmd.ExtremeRowColumns is { Length: > 0 } valueColumns)
         {
-            var lowered = extremeRow.GroupBy is null
-                ? ExtremeRowLowering.BuildAllGlobalScalar(cmd)
-                : ExtremeRowLowering.BuildAllGroupedScalar(cmd);
+            var lowered = valueColumns.Length == 1
+                ? extremeRow.GroupBy is null
+                    ? ExtremeRowLowering.BuildAllGlobalScalar(cmd)
+                    : ExtremeRowLowering.BuildAllGroupedScalar(cmd)
+                : ExtremeRowLowering.BuildAllComposite(cmd);
             return new SqlBuilder(_ctx).MakeSelect(lowered, selectInto);
         }
 
