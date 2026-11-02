@@ -54,6 +54,16 @@ public sealed class SqlBuilderGuardTests : ProviderTestSuite
     }
 
     [Fact]
+    public void ExtremeRow_GlobalAll_WithPaging_ShouldThrow()
+    {
+        // S1/T302: the global All shape is lowered after the guard, so the user-command modifier must
+        // still be rejected before any lowering runs.
+        FluentActions
+            .Invoking(() => _sut.SimpleEntity.SelectWhereMax(x => x.Id, ExtremeRowTies.All).Limit(1).ToList())
+            .Should().Throw<BuildSqlCommandException>();
+    }
+
+    [Fact]
     public void ExtremeRow_WithGroupingOrHaving_ShouldThrow()
     {
         FluentActions

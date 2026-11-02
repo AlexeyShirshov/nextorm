@@ -250,18 +250,22 @@ public class ExtremeRowNativeSqlGenerationTests
         norm.Should().NotContain("order by nullableint desc, id");
     }
 
-    // --- fallback: All and ineligible key types keep the portable window path ----------------
+    // --- fallback: grouped All and ineligible key types keep the portable window path --------
 
     [Fact]
-    public void SelectWhereMax_AllTies_ShouldKeepPortableWindowLowering()
+    public void SelectWhereMax_AllTiesGlobal_ShouldLowerToAggregateJoin()
     {
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
         var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Int, x => new { x.Id }, ExtremeRowTies.All)));
 
-        norm.Should().Contain("rank() over (order by nullableint desc)");
-        norm.Should().Contain("= 1");
+        norm.Should().Contain("max(nullableint) as __nextorm_ext_1_0");
+        norm.Should().Contain("join (select max(nullableint)");
+        norm.Should().Contain("on t1.nullableint = __nextorm_ext_1_0");
+        norm.Should().Contain("where nullableint is not null");
+        norm.Should().NotContain("rank()");
+        norm.Should().NotContain("row_number()");
         norm.Should().NotContain("limit 1");
         norm.Should().NotContain("distinct on");
     }

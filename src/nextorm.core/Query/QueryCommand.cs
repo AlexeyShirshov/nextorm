@@ -1107,6 +1107,30 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     }
 
     /// <summary>
+    /// Sets the prepared projection columns. Used only by internal lowering paths that build detached
+    /// command variants; never mutates the original command.
+    /// </summary>
+    internal void SetSelectList(SelectExpression[]? value) => _selectList = value;
+
+    /// <summary>
+    /// Sets the prepared grouping columns. Used only by internal lowering paths that build detached
+    /// command variants; never mutates the original command.
+    /// </summary>
+    internal void SetGroupingList(SelectExpression[]? value) => _groupingList = value;
+
+    /// <summary>
+    /// Sets the prepared join list. Used only by internal lowering paths that build detached command
+    /// variants; never mutates the original command.
+    /// </summary>
+    internal void SetJoins(JoinExpression[]? value) => _joins = value;
+
+    /// <summary>
+    /// Sets the prepared sorting. Used only by internal lowering paths that build detached command
+    /// variants; never mutates the original command.
+    /// </summary>
+    internal void SetSorting(Sorting[]? value) => _sorting = value;
+
+    /// <summary>
     /// Discards every prepared piece (from, columns, grouping, conditions, array joins and hashes) so the
     /// command is prepared again on its next execution. Called after a clone is mutated.
     /// </summary>

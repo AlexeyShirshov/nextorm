@@ -5406,15 +5406,17 @@ public class SqlGenerationTests
     }
 
     [Fact]
-    public void SelectWhereMax_ProjectionGlobalAll_ShouldUseRankWithoutPartition()
+    public void SelectWhereMax_ProjectionGlobalAll_ShouldLowerToAggregateJoin()
     {
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
         var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Int, x => new { x.Id }, ExtremeRowTies.All)));
 
-        norm.Should().Contain("rank() over (order by nullableint desc)");
-        norm.Should().Contain("= 1");
+        norm.Should().Contain("max(nullableint) as __nextorm_ext_1_0");
+        norm.Should().Contain("join (select max(nullableint)");
+        norm.Should().Contain("on t1.nullableint = __nextorm_ext_1_0");
+        norm.Should().NotContain("rank()");
         OuterSelectList(norm).Should().NotContain("__nextorm_rn");
     }
 

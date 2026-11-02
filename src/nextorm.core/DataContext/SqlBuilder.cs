@@ -1135,6 +1135,16 @@ internal readonly struct SqlBuilder
 
         EnsureExtremeRowCompatible(cmd, selectInto);
 
+        // S1: All global scalar (Ties == All, no grouping, one value key) is lowered to an aggregate
+        // command E joined back to the source O through the common MakeSelect pipeline. All other
+        // shapes (grouped, composite, One) keep the existing paths.
+        if (cmd.ExtremeRow is { Ties: ExtremeRowTies.All, GroupBy: null }
+            && cmd.ExtremeRowColumns is { Length: 1 })
+        {
+            var lowered = ExtremeRowLowering.BuildAllGlobalScalar(cmd);
+            return new SqlBuilder(_ctx).MakeSelect(lowered, selectInto);
+        }
+
         // Native generation is an optional dialect capability, limited to the single-row One form: All
         // keeps every tied winner and stays on the portable rank lowering. The eligibility decision is
         // made from a side-effect-free description BEFORE any build-context/parameter/alias work; a

@@ -278,18 +278,20 @@ public class ExtremeRowNativeSqlGenerationTests
         sql.Should().Contain("argMax(");
     }
 
-    // --- fallback: All and ineligible shapes keep the portable window path --------------------
+    // --- fallback: grouped All and ineligible shapes keep the portable window path ------------
 
     [Fact]
-    public void SelectWhereMax_AllTies_ShouldKeepPortableWindowLowering()
+    public void SelectWhereMax_AllTiesGlobal_ShouldLowerToAggregateJoin()
     {
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<ExtremeNativeEntity>();
 
         var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.K1, ExtremeRowTies.All).ToCommand()));
 
-        norm.Should().Contain("rank() over (order by k1 desc)");
-        norm.Should().Contain("= 1");
+        norm.Should().Contain("max(k1)");
+        norm.Should().Contain("join");
+        norm.Should().Contain("__nextorm_ext_1_0");
+        norm.Should().NotContain("rank()");
         norm.Should().NotContain("argMax");
         norm.Should().NotContain("having count()");
     }

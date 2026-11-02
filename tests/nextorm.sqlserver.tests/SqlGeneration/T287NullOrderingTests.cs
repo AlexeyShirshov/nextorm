@@ -303,7 +303,7 @@ public class T287NullOrderingTests
 
     /// <summary>
     /// V31: the extreme-row lowering (<c>SelectWhereMax</c> with <c>ExtremeRowTies.All</c>, i.e. the
-    /// portable rank-derived path every provider takes) must carry an explicit placement into the outer
+    /// aggregate join-back path a global scalar key takes) must carry an explicit placement into the outer
     /// <c>ORDER BY</c> rendered by <c>SqlBuilder.AppendOrderBy</c>. A command that only decorated the
     /// projection - or that dropped the placement between the derived table and the outer statement -
     /// would pass the in-memory case and silently ignore the request on SQL providers.
@@ -321,8 +321,9 @@ public class T287NullOrderingTests
                 .ThenBy(x => x.Id)
                 .Select(x => new { x.Id, x.Key }));
 
-            sql.Should().Contain("rank()").And.Contain("__nextorm_rn",
-                "the Ties.All extreme-row command must take the portable rank lowering whose outer ordering is under test");
+            sql.Should().Contain("max(").And.Contain("__nextorm_ext_1_0",
+                "the global Ties.All extreme-row command must take the aggregate join-back lowering whose outer ordering is under test");
+            sql.Should().NotContain("rank()").And.NotContain("__nextorm_rn");
             sql.Should().EndWith(extreme,
                 $"the outer order of the surviving rows for {direction}/{placement} must carry the placement");
         }
