@@ -618,10 +618,12 @@ public sealed class CachedPreparationRecipeTests
         var inner = ctx.From<SimpleEntity>().Where(x => x.Id > 0).Select(x => new { x.Id });
         var fromSubquery = ctx.From(inner).Select(t => t.Id);
 
+        QueryCommand.CaptureRawShape(fromSubquery).Should().NotBeNull("a derived-table SubQuery source now has a provable raw identity");
+
         var sql = PrepareSql(ctx, fromSubquery);
         sql.Should().NotBeNullOrWhiteSpace();
-        QueryCommand.CaptureRawShape(fromSubquery).Should().BeNull("a derived-table source has no provable raw identity");
-        QueryPlanner.RecipePublishes.Should().Be(0);
+        // The SubQuery source is now eligible for the raw recipe; a single prepare publishes (but does not reuse) it.
+        QueryPlanner.RecipePublishes.Should().BeGreaterThan(0);
         QueryPlanner.RecipeReuses.Should().Be(0);
     }
 
