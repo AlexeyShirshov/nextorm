@@ -4024,12 +4024,6 @@ public partial class QueryCommand
         internal UnionType UnionType;
         internal RawShape? Union;
         internal CteShape[]? Ctes;
-        // Nested derived SubQuery sources (main From and per-join), captured recursively. A null entry
-        // means that position has no SubQuery source. The presence/absence and shape of these nested
-        // commands is part of the raw identity, so a graph with a SubQuery source is only eligible when
-        // every nested SubQuery is itself eligible (CaptureRawShape returns non-null for each).
-        internal RawShape? SubQueryShape;
-        internal RawShape?[]? JoinSubQueryShapes;
 
         /// <summary>Structural fingerprint used only to partition candidates into buckets.</summary>
         internal int Fingerprint;
@@ -4108,27 +4102,11 @@ public partial class QueryCommand
 
             if (UnionType != other.UnionType) return false;
             if (!NestedEqual(Union, other.Union, comparerSource)) return false;
-            if (!NestedEqual(SubQueryShape, other.SubQueryShape, comparerSource)) return false;
-            if (!JoinSubQueryShapesEqual(JoinSubQueryShapes, other.JoinSubQueryShapes, comparerSource)) return false;
             return CtesEqual(Ctes, other.Ctes, comparerSource);
         }
 
         private static bool NestedEqual(RawShape? a, RawShape? b, QueryCommand src)
             => a is null ? b is null : b is not null && a.Matches(b, src);
-
-        private static bool JoinSubQueryShapesEqual(RawShape?[]? a, RawShape?[]? b, QueryCommand src)
-        {
-            if (a is null || a.Length == 0) return b is null || b.Length == 0;
-            if (b is null || b.Length != a.Length) return false;
-            for (var i = 0; i < a.Length; i++)
-            {
-                var x = a[i];
-                var y = b[i];
-                if (x is null) { if (y is not null) return false; }
-                else { if (y is null || !x.Matches(y, src)) return false; }
-            }
-            return true;
-        }
 
         private static bool CtesEqual(CteShape[]? a, CteShape[]? b, QueryCommand src)
         {
@@ -4284,29 +4262,12 @@ public partial class QueryCommand
 
         if (!IsPlainTableSource(cmd._from)) return null;
 
-        RawShape? fromSubQueryShape = null;
-        var fromSubQuery = cmd._from?.SubQuery;
-        if (fromSubQuery is not null)
-        {
-            fromSubQueryShape = CaptureRawShape(fromSubQuery, depth + 1);
-            if (fromSubQueryShape is null) return null;
-        }
-
         var joins = cmd._joins;
-        RawShape?[]? joinSubQueryShapes = null;
         if (joins is { Length: > 0 })
         {
-            joinSubQueryShapes = new RawShape?[joins.Length];
             for (var i = 0; i < joins.Length; i++)
             {
                 if (!IsPlainTableSource(joins[i].From)) return null;
-                var joinSubQuery = joins[i].From?.SubQuery;
-                if (joinSubQuery is not null)
-                {
-                    var nested = CaptureRawShape(joinSubQuery, depth + 1);
-                    if (nested is null) return null;
-                    joinSubQueryShapes[i] = nested;
-                }
             }
         }
 
@@ -4406,8 +4367,6 @@ public partial class QueryCommand
             UnionType = cmd._unionType,
             Union = union,
             Ctes = ctes,
-            SubQueryShape = fromSubQueryShape,
-            JoinSubQueryShapes = joinSubQueryShapes,
         };
 
         // Closure / literal-vs-parameter classification: a captured member access (a compiler
@@ -4449,7 +4408,7 @@ public partial class QueryCommand
     /// <summary>Whether a source is a plain table/CTE-name source the raw descriptor can describe.</summary>
     private static bool IsPlainTableSource(FromExpression? from)
         => from is null
-            || (from.ColumnShape is null && from.Pivot is null
+            || (from.SubQuery is null && from.ColumnShape is null && from.Pivot is null
                 && from.XmlNodes is null && from.RawSqlSource is null && from.TempTable is null
                 && from.TableFunction is null && from.TableExpressionOverride is null);
 
@@ -4483,22 +4442,12 @@ public partial class QueryCommand
         }
         else if (shape.From?.ColumnShape is null)
         {
+            // A fresh command carries no source type before preparation: the entity type is the main
+            // expression's first parameter (mirrors PrepareCommand's srcType resolution).
             var mainType = shape.EntityType
                 ?? (shape.Exp?.Parameters is { Count: > 0 } parameters ? parameters[0].Type : null);
             if (HasApplicableFilters(MainFilterEntityType(mainType), commandScope, dataContext))
                 return true;
-        }
-
-        if (shape.From?.SubQuery is not null)
-        {
-            if (shape.SubQueryShape is { } nestedMain)
-            {
-                if (HasApplicableFiltersInRawGraph(nestedMain, dataContext)) return true;
-            }
-            else
-            {
-                return true;
-            }
         }
 
         // Joins: mirrors InjectJoinFilters — the effective scope is the union of the join's own scope and
@@ -4514,18 +4463,7 @@ public partial class QueryCommand
                 // A derived-table source is never part of an eligible raw graph; a null source cannot be
                 // proven filter-free, so it is treated as filter-bearing (fail closed).
                 if (joinFrom is null) return true;
-                if (joinFrom.SubQuery is not null)
-                {
-                    if (shape.JoinSubQueryShapes is { Length: > 0 } jss && i < jss.Length && jss[i] is { } nestedJoin)
-                    {
-                        if (HasApplicableFiltersInRawGraph(nestedJoin, dataContext)) return true;
-                    }
-                    else
-                    {
-                        return true;
-                    }
-                    continue;
-                }
+                if (joinFrom.SubQuery is not null) continue;
                 if (joinFrom.ColumnShape is not null && joinFrom.SourceBinding is null) continue;
 
                 var joinScope = join.FilterScope is { } childScope ? childScope.Union(commandScope) : commandScope;
@@ -4755,15 +4693,6 @@ public partial class QueryCommand
 
             if (shape.Union is not null)
                 hash.Add(shape.Union.Fingerprint);
-
-            if (shape.SubQueryShape is not null)
-                hash.Add(shape.SubQueryShape.Fingerprint);
-
-            if (shape.JoinSubQueryShapes is { Length: > 0 } jss)
-            {
-                for (var i = 0; i < jss.Length; i++)
-                    hash.Add(jss[i]?.Fingerprint ?? 0);
-            }
 
             return hash.ToHashCode();
         }
