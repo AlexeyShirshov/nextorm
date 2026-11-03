@@ -88,6 +88,10 @@ internal sealed class SqlServerTestProvider : ITestProvider
             conn.Open();
             using var cmd = conn.CreateCommand();
             cmd.CommandText = SeedSql;
+            // First container start on this host can exceed the default 30 s command timeout while
+            // SQL Server finishes recovery and the seed script runs; keep the allowance local to
+            // the test fixture so product contexts keep their provider default.
+            cmd.CommandTimeout = 180;
             cmd.ExecuteNonQuery();
 
             _seeded = true;
