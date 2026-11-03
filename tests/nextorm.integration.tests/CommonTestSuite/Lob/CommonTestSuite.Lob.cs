@@ -869,32 +869,6 @@ public abstract partial class CommonTestSuite
     }
 
     [Fact]
-    public void LobDataReader_HitAndMiss_ShouldReturnSameRows()
-    {
-        RequireLobDataReader();
-
-        var command = _sut.ComplexEntity.OrderBy(it => it.Id).Select(it => new { it.Id, it.String });
-
-        using (var first = command.ToDataReader())
-        {
-            var rows = new List<(long Id, string? Text)>();
-            while (first.Read())
-                rows.Add((first.GetInt64(0), first.IsDBNull(1) ? null : first.GetString(1)));
-            rows.Should().Equal((1L, "dadfasd"), (2L, "xxx"), (3L, null));
-        }
-
-        using (var second = command.ToDataReader())
-        {
-            var rows = new List<(long Id, string? Text)>();
-            while (second.Read())
-                rows.Add((second.GetInt64(0), second.IsDBNull(1) ? null : second.GetString(1)));
-            rows.Should().Equal((1L, "dadfasd"), (2L, "xxx"), (3L, null));
-        }
-
-        _sut.SimpleEntity.Where(it => it.Id == 1).Select(it => it.Id).First().Should().Be(1);
-    }
-
-    [Fact]
     public void LobDataReader_CancelledBeforeOpen_ShouldThrowAndNotLeak()
     {
         RequireLobDataReader();
@@ -907,32 +881,6 @@ public abstract partial class CommonTestSuite
         var act = () => command.ToDataReader(cts.Token);
 
         act.Should().Throw<OperationCanceledException>();
-
-        _sut.SimpleEntity.Where(it => it.Id == 1).Select(it => it.Id).First().Should().Be(1);
-    }
-
-    [Fact]
-    public async Task LobDataReader_HitAndMissAsync_ShouldReturnSameRows()
-    {
-        RequireLobDataReader();
-
-        var command = _sut.ComplexEntity.OrderBy(it => it.Id).Select(it => new { it.Id, it.String });
-
-        await using (var first = await command.ToDataReaderAsync(TestContext.Current.CancellationToken))
-        {
-            var rows = new List<(long Id, string? Text)>();
-            while (await first.ReadAsync(TestContext.Current.CancellationToken))
-                rows.Add((first.GetInt64(0), first.IsDBNull(1) ? null : first.GetString(1)));
-            rows.Should().Equal((1L, "dadfasd"), (2L, "xxx"), (3L, null));
-        }
-
-        await using (var second = await command.ToDataReaderAsync(TestContext.Current.CancellationToken))
-        {
-            var rows = new List<(long Id, string? Text)>();
-            while (await second.ReadAsync(TestContext.Current.CancellationToken))
-                rows.Add((second.GetInt64(0), second.IsDBNull(1) ? null : second.GetString(1)));
-            rows.Should().Equal((1L, "dadfasd"), (2L, "xxx"), (3L, null));
-        }
 
         _sut.SimpleEntity.Where(it => it.Id == 1).Select(it => it.Id).First().Should().Be(1);
     }

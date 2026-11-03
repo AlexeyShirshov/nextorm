@@ -543,24 +543,6 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     internal CommandReaderOwner OpenLobReader<TResult>(QueryCommand<TResult> queryCommand, ReadOnlySpan<object?> @params, CancellationToken cancellationToken, string? terminalName = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
-
-        // #246 S3: hit path for the ToDataReader (non-locator / LOB) flavour. Only this terminal opts in;
-        // ToStream/ToTextReader keep the existing prepared path. Gate order per plan sec. 5:
-        // 1. cache disabled -> no lookup/publication, existing path;
-        // 2. key not constructible -> existing uncached path;
-        // 3. capability mismatch -> fall back before opening a command;
-        // 4. errors propagate.
-        if (terminalName == QueryCommandExtensions.DataReaderTerminalName && queryCommand.Cache)
-        {
-            if (RawReaderKey.TryCreate(this, queryCommand, RawReaderFlavor.Lob, false, false, out var hitKey))
-            {
-                if (ReaderDescriptorStore.TryGet(in hitKey, out var hitDescriptor) && hitDescriptor is not null)
-                {
-                    return OpenLobReaderFromDescriptor(hitDescriptor, queryCommand, @params, cancellationToken);
-                }
-            }
-        }
-
         var prepared = PrepareLobCommand(queryCommand, cancellationToken, terminalName);
         return _executor.OpenLobReader(prepared, @params);
     }
@@ -568,18 +550,6 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     internal async Task<CommandReaderOwner> OpenLobReaderAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken, string? terminalName = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
-
-        if (terminalName == QueryCommandExtensions.DataReaderTerminalName && queryCommand.Cache)
-        {
-            if (RawReaderKey.TryCreate(this, queryCommand, RawReaderFlavor.Lob, false, false, out var hitKey))
-            {
-                if (ReaderDescriptorStore.TryGet(in hitKey, out var hitDescriptor) && hitDescriptor is not null)
-                {
-                    return await OpenLobReaderFromDescriptorAsync(hitDescriptor, queryCommand, @params, cancellationToken).ConfigureAwait(false);
-                }
-            }
-        }
-
         var prepared = PrepareLobCommand(queryCommand, cancellationToken, terminalName);
         return await _executor.OpenLobReaderAsync(prepared, @params, cancellationToken).ConfigureAwait(false);
     }
@@ -605,42 +575,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         // disposed. The streaming terminal owns exactly one execution, so the command is minted per
         // execution and disposed exactly once when the reader's CommandReaderOwner releases its lease
         // (PreparedCommandCache.None, AC03).
-        var preparedLob = (DbPreparedQueryCommand<TResult>)_planner.GetPreparedQueryCommand(queryCommand, false, false, PreparedCommandCache.None, true, cancellationToken);
-
-        // #246 S1: publication only. Nothing reads the store yet, so this must not change behaviour.
-        // Gated exactly as design sec. 4: cache disabled => no publication; non-ToDataReader terminals
-        // (ToStream/ToTextReader) are excluded; key construction failure leaves the path untouched.
-        if (terminalName == QueryCommandExtensions.DataReaderTerminalName && queryCommand.Cache)
-        {
-            if (RawReaderKey.TryCreate(this, queryCommand, RawReaderFlavor.Lob, false, false, out var lobKey))
-            {
-                var lobParams = new RawParameterSpec[preparedLob.DbCommandParams.Count];
-                for (var i = 0; i < lobParams.Length; i++)
-                {
-                    var p = preparedLob.DbCommandParams[i];
-                    lobParams[i] = new RawParameterSpec
-                    {
-                        Name = p.ParameterName,
-                        Position = i,
-                        ProviderType = typeof(void),
-                        DbType = p.DbType,
-                        Size = p.Size,
-                        Precision = p.Precision,
-                        Scale = p.Scale,
-                        Direction = p.Direction,
-                    };
-                }
-
-                var lobDescriptor = new RawReaderDescriptor(
-                    preparedLob.CommandText,
-                    lobParams,
-                    RawReaderFlavor.Lob,
-                    QueryPlanStore.Generation);
-                ReaderDescriptorStore.TryPublish(in lobKey, lobDescriptor);
-            }
-        }
-
-        return preparedLob;
+        return (DbPreparedQueryCommand<TResult>)_planner.GetPreparedQueryCommand(queryCommand, false, false, PreparedCommandCache.None, true, cancellationToken);
     }
 
     // The plain (non-LOB) multi-column reader seam: unlike PrepareLobCommand it demands neither
@@ -651,24 +586,6 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     internal CommandReaderOwner OpenResultReader<TResult>(QueryCommand<TResult> queryCommand, ReadOnlySpan<object?> @params, CancellationToken cancellationToken, string terminalName = CsvTerminalName)
     {
         cancellationToken.ThrowIfCancellationRequested();
-
-        // #246 S2: hit path for the ToDataReader (SQLite locator) flavour. Only this terminal opts in;
-        // CSV and other callers keep the existing prepared path. Gate order per plan sec. 5:
-        // 1. cache disabled -> no lookup/publication, existing path;
-        // 2. key not constructible -> existing uncached path;
-        // 3. capability mismatch -> fall back before opening a command;
-        // 4. errors propagate.
-        if (terminalName == QueryCommandExtensions.DataReaderTerminalName && queryCommand.Cache)
-        {
-            if (RawReaderKey.TryCreate(this, queryCommand, RawReaderFlavor.Result, false, false, out var hitKey))
-            {
-                if (ReaderDescriptorStore.TryGet(in hitKey, out var hitDescriptor) && hitDescriptor is not null)
-                {
-                    return OpenResultReaderFromDescriptor(hitDescriptor, queryCommand, @params, cancellationToken);
-                }
-            }
-        }
-
         var prepared = PrepareResultCommand(queryCommand, cancellationToken, terminalName);
         return _executor.OpenResultReader(prepared, @params);
     }
@@ -676,18 +593,6 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     internal async Task<CommandReaderOwner> OpenResultReaderAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken, string terminalName = CsvTerminalName)
     {
         cancellationToken.ThrowIfCancellationRequested();
-
-        if (terminalName == QueryCommandExtensions.DataReaderTerminalName && queryCommand.Cache)
-        {
-            if (RawReaderKey.TryCreate(this, queryCommand, RawReaderFlavor.Result, false, false, out var hitKey))
-            {
-                if (ReaderDescriptorStore.TryGet(in hitKey, out var hitDescriptor) && hitDescriptor is not null)
-                {
-                    return await OpenResultReaderFromDescriptorAsync(hitDescriptor, queryCommand, @params, cancellationToken).ConfigureAwait(false);
-                }
-            }
-        }
-
         var prepared = PrepareResultCommand(queryCommand, cancellationToken, terminalName);
         return await _executor.OpenResultReaderAsync(prepared, @params, cancellationToken).ConfigureAwait(false);
     }
@@ -730,167 +635,6 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     private static bool IsSequential<TResult>(DbPreparedQueryCommand<TResult> command)
         => (command.Behavior & CommandBehavior.SequentialAccess) != 0;
 
-    private CommandReaderOwner OpenResultReaderFromDescriptor<TResult>(
-        RawReaderDescriptor descriptor,
-        QueryCommand<TResult> queryCommand,
-        ReadOnlySpan<object?> @params,
-        CancellationToken cancellationToken)
-    {
-        // Re-extract parameter values per call (the descriptor carries no values).
-        var extracted = _planner.ExtractParams(queryCommand);
-        var noParams = !(extracted.Count > 0);
-
-        var needsParamRefresh = false;
-        if (!noParams)
-        {
-            for (var i = 0; i < extracted.Count; i++)
-            {
-                if (!NormParam.IsName(extracted[i].Name) && !extracted[i].Stable)
-                {
-                    needsParamRefresh = true;
-                    break;
-                }
-            }
-        }
-
-        var singleRow = queryCommand.SingleRow && Dialect.SupportsCommandBehaviorSingleRow;
-
-        var seeds = extracted.Count > 0 ? extracted.ToArray() : Array.Empty<Parameter>();
-        var factory = new PreparedCommandFactory(descriptor.SqlText, queryCommand.ResolvedCommandTimeout, seeds);
-        var planParameters = factory.CreatePlanParameters(_createParamSimple);
-        var compiledQuery = new DbPreparedQueryCommand<TResult>(
-            factory,
-            planParameters,
-            null,
-            new PreparedCommandOptions(singleRow, descriptor.SqlText, noParams, needsParamRefresh)
-            {
-                SequentialAccess = false,
-                Cache = PreparedCommandCache.None,
-            });
-
-        return _executor.OpenResultReader(compiledQuery, @params);
-    }
-
-    private async Task<CommandReaderOwner> OpenResultReaderFromDescriptorAsync<TResult>(
-        RawReaderDescriptor descriptor,
-        QueryCommand<TResult> queryCommand,
-        object[]? @params,
-        CancellationToken cancellationToken)
-    {
-        var extracted = _planner.ExtractParams(queryCommand);
-        var noParams = !(extracted.Count > 0);
-
-        var needsParamRefresh = false;
-        if (!noParams)
-        {
-            for (var i = 0; i < extracted.Count; i++)
-            {
-                if (!NormParam.IsName(extracted[i].Name) && !extracted[i].Stable)
-                {
-                    needsParamRefresh = true;
-                    break;
-                }
-            }
-        }
-
-        var singleRow = queryCommand.SingleRow && Dialect.SupportsCommandBehaviorSingleRow;
-
-        var seeds = extracted.Count > 0 ? extracted.ToArray() : Array.Empty<Parameter>();
-        var factory = new PreparedCommandFactory(descriptor.SqlText, queryCommand.ResolvedCommandTimeout, seeds);
-        var planParameters = factory.CreatePlanParameters(_createParamSimple);
-        var compiledQuery = new DbPreparedQueryCommand<TResult>(
-            factory,
-            planParameters,
-            null,
-            new PreparedCommandOptions(singleRow, descriptor.SqlText, noParams, needsParamRefresh)
-            {
-                SequentialAccess = false,
-                Cache = PreparedCommandCache.None,
-            });
-
-        return await _executor.OpenResultReaderAsync(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
-    }
-
-    private CommandReaderOwner OpenLobReaderFromDescriptor<TResult>(
-        RawReaderDescriptor descriptor,
-        QueryCommand<TResult> queryCommand,
-        ReadOnlySpan<object?> @params,
-        CancellationToken cancellationToken)
-    {
-        var extracted = _planner.ExtractParams(queryCommand);
-        var noParams = !(extracted.Count > 0);
-
-        var needsParamRefresh = false;
-        if (!noParams)
-        {
-            for (var i = 0; i < extracted.Count; i++)
-            {
-                if (!NormParam.IsName(extracted[i].Name) && !extracted[i].Stable)
-                {
-                    needsParamRefresh = true;
-                    break;
-                }
-            }
-        }
-
-        var singleRow = queryCommand.SingleRow && Dialect.SupportsCommandBehaviorSingleRow;
-
-        var seeds = extracted.Count > 0 ? extracted.ToArray() : Array.Empty<Parameter>();
-        var factory = new PreparedCommandFactory(descriptor.SqlText, queryCommand.ResolvedCommandTimeout, seeds);
-        var planParameters = factory.CreatePlanParameters(_createParamSimple);
-        var compiledQuery = new DbPreparedQueryCommand<TResult>(
-            factory,
-            planParameters,
-            null,
-            new PreparedCommandOptions(singleRow, descriptor.SqlText, noParams, needsParamRefresh)
-            {
-                SequentialAccess = true,
-                Cache = PreparedCommandCache.None,
-            });
-
-        return _executor.OpenLobReader(compiledQuery, @params);
-    }
-
-    private async Task<CommandReaderOwner> OpenLobReaderFromDescriptorAsync<TResult>(
-        RawReaderDescriptor descriptor,
-        QueryCommand<TResult> queryCommand,
-        object[]? @params,
-        CancellationToken cancellationToken)
-    {
-        var extracted = _planner.ExtractParams(queryCommand);
-        var noParams = !(extracted.Count > 0);
-
-        var needsParamRefresh = false;
-        if (!noParams)
-        {
-            for (var i = 0; i < extracted.Count; i++)
-            {
-                if (!NormParam.IsName(extracted[i].Name) && !extracted[i].Stable)
-                {
-                    needsParamRefresh = true;
-                    break;
-                }
-            }
-        }
-
-        var singleRow = queryCommand.SingleRow && Dialect.SupportsCommandBehaviorSingleRow;
-
-        var seeds = extracted.Count > 0 ? extracted.ToArray() : Array.Empty<Parameter>();
-        var factory = new PreparedCommandFactory(descriptor.SqlText, queryCommand.ResolvedCommandTimeout, seeds);
-        var planParameters = factory.CreatePlanParameters(_createParamSimple);
-        var compiledQuery = new DbPreparedQueryCommand<TResult>(
-            factory,
-            planParameters,
-            null,
-            new PreparedCommandOptions(singleRow, descriptor.SqlText, noParams, needsParamRefresh)
-            {
-                SequentialAccess = true,
-                Cache = PreparedCommandCache.None,
-            });
-
-        return await _executor.OpenLobReaderAsync(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
-    }
-
     private DbPreparedQueryCommand<TResult> PrepareResultCommand<TResult>(
         QueryCommand<TResult> queryCommand,
         CancellationToken cancellationToken,
@@ -915,7 +659,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         // per-connection state and never disposed. The reader terminal owns exactly one execution, so the
         // command is minted per execution and disposed exactly once when the reader's CommandReaderOwner
         // releases its lease (PreparedCommandCache.None, AC03).
-        var preparedResult = (DbPreparedQueryCommand<TResult>)_planner.GetPreparedQueryCommand(
+        return (DbPreparedQueryCommand<TResult>)_planner.GetPreparedQueryCommand(
             queryCommand,
             createEnumerator: false,
             storeInCache: false,
@@ -924,39 +668,6 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             streamingRowsRequested: false,
             suppressLobLocator: suppressLobLocator,
             cancellationToken);
-
-        // #246 S1: publication only, gated to the ToDataReader terminal. Nothing reads the store yet.
-        if (terminalName == QueryCommandExtensions.DataReaderTerminalName && queryCommand.Cache)
-        {
-            if (RawReaderKey.TryCreate(this, queryCommand, RawReaderFlavor.Result, sequentialAccess, suppressLobLocator, out var resultKey))
-            {
-                var resultParams = new RawParameterSpec[preparedResult.DbCommandParams.Count];
-                for (var i = 0; i < resultParams.Length; i++)
-                {
-                    var p = preparedResult.DbCommandParams[i];
-                    resultParams[i] = new RawParameterSpec
-                    {
-                        Name = p.ParameterName,
-                        Position = i,
-                        ProviderType = typeof(void),
-                        DbType = p.DbType,
-                        Size = p.Size,
-                        Precision = p.Precision,
-                        Scale = p.Scale,
-                        Direction = p.Direction,
-                    };
-                }
-
-                var resultDescriptor = new RawReaderDescriptor(
-                    preparedResult.CommandText,
-                    resultParams,
-                    RawReaderFlavor.Result,
-                    QueryPlanStore.Generation);
-                ReaderDescriptorStore.TryPublish(in resultKey, resultDescriptor);
-            }
-        }
-
-        return preparedResult;
     }
 
     // The message names the calling terminal so ToDataReader does not surface CSV wording, while the CSV
