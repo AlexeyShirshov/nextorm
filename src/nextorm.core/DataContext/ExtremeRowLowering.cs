@@ -8,6 +8,22 @@ internal static class ExtremeRowLowering
 {
     internal const string AggregateAlias = "__nextorm_ext_1_0";
 
+    private static readonly MethodInfo s_nullSafeJoinEqual =
+        typeof(ExtremeRowLowering).GetMethod(nameof(NullSafeJoinEqual), BindingFlags.NonPublic | BindingFlags.Static)!;
+
+    /// <summary>
+    /// Translation-only marker for the null-safe equality of a group-key join-back
+    /// (<c>g = g' or (g is null and g' is null)</c>). The <c>All</c> lowering emits it instead of the
+    /// portable OR-form when the dialect can express the comparison natively inside a <c>JOIN ON</c>
+    /// predicate: ClickHouse refuses a bare <c>IS NULL</c> residual in <c>JOIN ON</c> (#296) but accepts
+    /// its native <c>isNotDistinctFrom</c> there. The renderer decides the emitted SQL form
+    /// (<see cref="ExtremeRowNullSafeJoinTranslator"/>), so the marker never leaks a provider name into
+    /// the lowering and, on every other dialect, the byte-identical OR-form is still produced. It is
+    /// never evaluated: it exists only inside a rendered query expression.
+    /// </summary>
+    internal static bool NullSafeJoinEqual<T>(T left, T right) => throw new NotSupportedException(
+        "The internal ExtremeRow null-safe join marker is translation-only and cannot be evaluated.");
+
     internal static QueryCommand BuildAllGlobalScalar(QueryCommand cmd)
     {
         ArgumentNullException.ThrowIfNull(cmd);
@@ -19,11 +35,17 @@ internal static class ExtremeRowLowering
         var valueType = valueColumn.PropertyType;
         var originalParameter = extremeRow.ValueSelector.Parameters[0];
 
-        var aggregateSelect = new SelectExpression(valueType)
+        // A bool/bool? value key aggregates through its order-preserving integer representation:
+        // SQL Server rejects min/max over a raw bit column, and the representation keeps
+        // false < true. A nullable bool keeps NULL as NULL so a NULL-valued source row can never
+        // join the extremum 0 back. Every other component type keeps the expression itself.
+        var (valueStorage, valueStorageType) = MakeValueStorage(valueExpression!);
+
+        var aggregateSelect = new SelectExpression(valueStorageType)
         {
             Index = 0,
             PropertyName = AggregateAlias,
-            Expression = MakeAggregate(extremeRow.Kind, valueType, valueExpression!),
+            Expression = MakeAggregate(extremeRow.Kind, valueStorageType, valueStorage),
             OutputName = AggregateAlias,
         };
 
@@ -39,8 +61,8 @@ internal static class ExtremeRowLowering
         var xParameter = Expression.Parameter(entityType, "x");
         var eParameter = Expression.Parameter(entityType, "e");
 
-        var leftValue = new ParameterReplacer(originalParameter, xParameter).Visit(valueExpression);
-        var rightValue = MakeColumnCall(eParameter, valueType, AggregateAlias);
+        var leftValue = new ParameterReplacer(originalParameter, xParameter).Visit(valueStorage);
+        var rightValue = MakeColumnCall(eParameter, valueStorageType, AggregateAlias);
         var joinConditionBody = Expression.Equal(leftValue!, rightValue);
         var joinLambda = Expression.Lambda(joinConditionBody, xParameter, eParameter);
 
@@ -75,7 +97,7 @@ internal static class ExtremeRowLowering
     /// conventions and case-sensitive providers cannot desynchronize the two sides. A nullable group
     /// key joins with the OR-form <c>a = b or (a is null and b is null)</c>.
     /// </summary>
-    internal static QueryCommand BuildAllGroupedScalar(QueryCommand cmd)
+    internal static QueryCommand BuildAllGroupedScalar(QueryCommand cmd, bool nativeNullSafeJoin)
     {
         ArgumentNullException.ThrowIfNull(cmd);
 
@@ -91,12 +113,15 @@ internal static class ExtremeRowLowering
         var originalParameter = extremeRow.ValueSelector.Parameters[0];
         var groupParameter = extremeRow.GroupBy!.Parameters[0];
 
-        var aggregateSelect = new SelectExpression(valueType)
+        // Same order-preserving bool representation as the composite and global-scalar forms.
+        var (valueStorage, valueStorageType) = MakeValueStorage(valueExpression!);
+
+        var aggregateSelect = new SelectExpression(valueStorageType)
         {
             Index = groupColumns.Length,
             PropertyName = AggregateAlias,
             OutputName = AggregateAlias,
-            Expression = MakeAggregate(extremeRow.Kind, valueType, valueExpression!),
+            Expression = MakeAggregate(extremeRow.Kind, valueStorageType, valueStorage),
         };
 
         var groupSelects = new SelectExpression[groupColumns.Length];
@@ -148,12 +173,7 @@ internal static class ExtremeRowLowering
             Expression groupCondition;
             if (IsNullable(keyType))
             {
-                var nullConstant = Expression.Constant(null, keyType);
-                groupCondition = Expression.OrElse(
-                    Expression.Equal(left, right),
-                    Expression.AndAlso(
-                        Expression.Equal(left, nullConstant),
-                        Expression.Equal(right, nullConstant)));
+                groupCondition = MakeNullSafeJoinEqual(left, right, keyType, nativeNullSafeJoin);
             }
             else
             {
@@ -165,8 +185,8 @@ internal static class ExtremeRowLowering
                 : Expression.AndAlso(joinConditionBody, groupCondition);
         }
 
-        var leftValue = new ParameterReplacer(originalParameter, xParameter).Visit(valueExpression)!;
-        var valueCondition = Expression.Equal(leftValue, MakeColumnCall(eParameter, valueType, AggregateAlias));
+        var leftValue = new ParameterReplacer(originalParameter, xParameter).Visit(valueStorage)!;
+        var valueCondition = Expression.Equal(leftValue, MakeColumnCall(eParameter, valueStorageType, AggregateAlias));
         joinConditionBody = joinConditionBody is null
             ? valueCondition
             : Expression.AndAlso(joinConditionBody, valueCondition);
@@ -219,10 +239,12 @@ internal static class ExtremeRowLowering
     /// A <c>bool</c> value component is aggregated through its order-preserving integer representation
     /// <c>case when v then 1 else 0 end</c>: <c>min</c>/<c>max</c> over a SQL Server <c>bit</c> column is
     /// rejected by the server, while the representation keeps <c>false &lt; true</c> and the join-back
-    /// comparison uses the same representation on both sides.
+    /// comparison uses the same representation on both sides. A <c>bool?</c> component keeps its
+    /// nullability (<c>case when v is null then null when v then 1 else 0 end</c>), so a row whose value
+    /// key is NULL never joins the integer <c>0</c> back.
     /// </para>
     /// </summary>
-    internal static QueryCommand BuildAllComposite(QueryCommand cmd)
+    internal static QueryCommand BuildAllComposite(QueryCommand cmd, bool nativeNullSafeJoin)
     {
         ArgumentNullException.ThrowIfNull(cmd);
 
@@ -256,15 +278,21 @@ internal static class ExtremeRowLowering
         }
 
         // The aggregating/comparison representation of every value component (raw, except a bool
-        // component, which is widened to its order-preserving integer form).
+        // component, which is widened to its order-preserving integer form). The raw expression of each
+        // component is kept too: a stage repeats a prefix component in its GROUP BY, and grouping by the
+        // raw column (not by the storage form) is what keeps the two renders of one key identical.
         var valueExpressions = new Expression[valueCount];
         var valueTypes = new Type[valueCount];
+        var rawExpressions = new Expression[valueCount];
+        var rawTypes = new Type[valueCount];
         for (var i = 0; i < valueCount; i++)
         {
             var raw = valueColumns[i].Expression!;
             var (storage, storageType) = MakeValueStorage(raw);
             valueExpressions[i] = storage;
             valueTypes[i] = storageType;
+            rawExpressions[i] = raw;
+            rawTypes[i] = raw.Type;
         }
 
         var notNull = BuildNotNullPredicate(valueColumns);
@@ -298,7 +326,22 @@ internal static class ExtremeRowLowering
                     OutputName = alias,
                     Expression = valueExpressions[i],
                 };
-                groupingList[groupCount + i] = selectList[groupCount + i];
+                // GROUP BY repeats the *raw* component of the prefix, not its storage form. The two
+                // renders must be identical for the server to accept the statement, and the storage
+                // form is not always parameter-free: a value-converted component (a model bool in an
+                // int column, an enum in a text column) folds its converted constant into a parameter,
+                // and the SELECT list and the GROUP BY render the same node twice, i.e. as two distinct
+                // parameters (SQL Server then rejects the select-list expression as "not contained in
+                // either an aggregate function or the GROUP BY clause"). The storage form is a
+                // deterministic function of the raw column, so grouping by the raw column is
+                // equivalent, and for every non-converted component the raw expression *is* the
+                // storage expression, so the rendered SQL is unchanged.
+                groupingList[groupCount + i] = new SelectExpression(rawTypes[i])
+                {
+                    Index = groupCount + i,
+                    PropertyName = alias,
+                    Expression = rawExpressions[i],
+                };
             }
 
             var aggregateAlias = ValueAlias(k, k);
@@ -332,7 +375,7 @@ internal static class ExtremeRowLowering
                 {
                     var left = new ParameterReplacer(originalParameter, leftParameter).Visit(groupExpressions[i])!;
                     var right = MakeColumnCall(stageParameter, groupTypes[i], GroupAlias(k - 1, i));
-                    joinCondition = And(joinCondition, MakeNullSafeEqual(left, right, groupTypes[i]));
+                    joinCondition = And(joinCondition, MakeNullSafeJoinEqual(left, right, groupTypes[i], nativeNullSafeJoin));
                 }
 
                 for (var i = 0; i < k - 1; i++)
@@ -364,7 +407,7 @@ internal static class ExtremeRowLowering
         {
             var left = new ParameterReplacer(originalParameter, outerLeft).Visit(groupExpressions[i])!;
             var right = MakeColumnCall(outerStage, groupTypes[i], GroupAlias(valueCount, i));
-            outerCondition = And(outerCondition, MakeNullSafeEqual(left, right, groupTypes[i]));
+            outerCondition = And(outerCondition, MakeNullSafeJoinEqual(left, right, groupTypes[i], nativeNullSafeJoin));
         }
 
         for (var i = 0; i < valueCount; i++)
@@ -393,16 +436,32 @@ internal static class ExtremeRowLowering
     /// <summary>
     /// The aggregating representation of one value component: the expression itself, or its
     /// order-preserving integer form for a <c>bool</c>/<c>bool?</c> component (see
-    /// <see cref="BuildAllComposite"/>).
+    /// <see cref="BuildAllComposite"/>); a nullable bool keeps NULL as NULL.
     /// </summary>
     private static (Expression Expression, Type Type) MakeValueStorage(Expression raw)
     {
         var type = raw.Type;
-        if (type != typeof(bool) && type != typeof(bool?))
+        if (type == typeof(bool))
+        {
+            var test = Expression.Equal(raw, Expression.Constant(true, type));
+            return (Expression.Condition(test, Expression.Constant(1), Expression.Constant(0)), typeof(int));
+        }
+
+        if (type != typeof(bool?))
             return (raw, type);
 
-        var test = Expression.Equal(raw, Expression.Constant(true, type));
-        return (Expression.Condition(test, Expression.Constant(1), Expression.Constant(0)), typeof(int));
+        // A nullable bool keeps its nullability in the storage representation: mapping NULL to 0 would
+        // let a NULL-valued source row join the extremum 0 back in the outer query (the non-null guard
+        // only filters the aggregate stage), so NULL stays NULL and never equals a non-null extremum.
+        var nullConstant = Expression.Constant(null, type);
+        var nullableInt = typeof(int?);
+        var isNull = Expression.Equal(raw, nullConstant);
+        var isTrue = Expression.Equal(raw, Expression.Constant(true, type));
+        var integer = Expression.Condition(isTrue, Expression.Constant(1), Expression.Constant(0));
+        return (
+            Expression.Condition(
+                isNull, Expression.Constant(null, nullableInt), Expression.Convert(integer, nullableInt)),
+            nullableInt);
     }
 
     /// <summary>
@@ -454,12 +513,19 @@ internal static class ExtremeRowLowering
 
     /// <summary>
     /// Null-safe equality between two sides of a group-key join: a plain <c>=</c> for a non-nullable
-    /// value type, the OR-form <c>a = b or (a is null and b is null)</c> otherwise.
+    /// value type, the OR-form <c>a = b or (a is null and b is null)</c> otherwise, or — when the
+    /// dialect can express it natively inside <c>JOIN ON</c> — the internal
+    /// <see cref="NullSafeJoinEqual{T}(T, T)"/> marker the renderer turns into that dialect's form
+    /// (ClickHouse <c>isNotDistinctFrom</c>; the #296 guard stays untouched for user predicates).
     /// </summary>
-    private static Expression MakeNullSafeEqual(Expression left, Expression right, Type type)
+    internal static Expression MakeNullSafeJoinEqual(
+        Expression left, Expression right, Type type, bool nativeNullSafeJoin)
     {
         if (!IsNullable(type))
             return Expression.Equal(left, right);
+
+        if (nativeNullSafeJoin)
+            return Expression.Call(s_nullSafeJoinEqual.MakeGenericMethod(type), left, right);
 
         var nullConstant = Expression.Constant(null, type);
         return Expression.OrElse(

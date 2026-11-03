@@ -547,6 +547,9 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         if (NormSqlTranslator.TryTranslateColumnReference(this, node))
             return node;
 
+        if (ExtremeRowNullSafeJoinTranslator.TryTranslate(this, node))
+            return node;
+
         if (ScalarFunctionTranslator.TryTranslateBuiltIn(this, node))
             return node;
 

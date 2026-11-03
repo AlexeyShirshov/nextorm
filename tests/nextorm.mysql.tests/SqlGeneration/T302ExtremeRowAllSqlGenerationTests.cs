@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Data.Common;
 using FluentAssertions;
@@ -36,6 +36,42 @@ public class T302ExtremeRowAllSqlGenerationTests
         norm.Should().Contain("is not null");
         (norm.Split(new[] { "score > 5" }, StringSplitOptions.None).Length - 1).Should().Be(2);
     }
+
+    [Fact]
+    public void FluentMappedColumns_GroupedComposite_All()
+    {
+        using var ctx = MySqlTestContext.Create();
+        var e = ctx.From<T302ExtremeFluentEntity>(cfg =>
+        {
+            cfg.Property(x => x.Id).HasColumnName("f_id");
+            cfg.Property(x => x.Score!).HasColumnName("f_score");
+            cfg.Property(x => x.Cat!).HasColumnName("f_cat");
+            cfg.Property(x => x.Payload!).HasColumnName("f_payload");
+        });
+
+        // The entity also declares [Column("a_*")] attributes, so the fluent mapping must win for the
+        // group key, the value key and the payload alike; a stage that fell back to the attribute name
+        // (or emitted an empty identifier) fails here.
+        var norm = SqlOf(ctx,
+                e.SelectWhereMax(x => new { x.Score, x.Id }, ExtremeRowTies.All, x => x.Cat).ToCommand())
+            .ToLowerInvariant();
+
+        Matches(norm, @"max\(\W*?f_score\W*?\)").Should().BeTrue(norm);
+        Matches(norm, @"max\(\W*?f_id\W*?\)").Should().BeTrue(norm);
+        Matches(norm, @"where\W+?f_score\W+?is not null").Should().BeTrue(norm);
+        Matches(norm, @"group by\W+?f_cat").Should().BeTrue(norm);
+        norm.Should().Contain("f_payload");
+        norm.Should().Contain("join");
+        norm.Should().NotContain("a_id");
+        norm.Should().NotContain("a_score");
+        norm.Should().NotContain("a_cat");
+        norm.Should().NotContain("a_payload");
+        norm.Should().NotContain("rank(");
+        norm.Should().NotContain("row_number(");
+    }
+
+    private static bool Matches(string sql, string pattern)
+        => System.Text.RegularExpressions.Regex.IsMatch(sql, pattern);
 
     [Fact]
     public void Min_All_Global()
@@ -97,10 +133,17 @@ public class T302ExtremeRowAllSqlGenerationTests
         var norm = SqlOf(ctx, e.SelectWhereMax(x => x.Score, ExtremeRowTies.All)
             .Distinct()
             .OrderBy(x => x.Cat)
+            .ThenBy(x => x.Id)
             .ToCommand()).ToLowerInvariant();
 
         norm.Should().Contain("distinct");
         norm.Should().Contain("order by");
+        // ThenBy renders as a second key of the same outer ORDER BY, after the primary key (VM-S4-16).
+        var orderBy = norm[norm.LastIndexOf("order by", StringComparison.Ordinal)..];
+        var catIdx = orderBy.IndexOf("cat", StringComparison.Ordinal);
+        var idIdx = orderBy.IndexOf("id", StringComparison.Ordinal);
+        catIdx.Should().BeGreaterThanOrEqualTo(0);
+        idIdx.Should().BeGreaterThan(catIdx);
         norm.Should().Contain("max(");
         norm.Should().Contain("__nextorm_ext_1_0");
         norm.Should().Contain("join");
@@ -693,4 +736,13 @@ public sealed class T302ExtremeConvertedEntity
     [ValueConverter(typeof(EnumToStringConverter<T302ExtremeConvertedState>))]
     public T302ExtremeConvertedState Grp { get; set; }
     [Column("payload")] public int Payload { get; set; }
+}
+
+[SqlTable("t302_extreme_fluent")]
+public sealed class T302ExtremeFluentEntity
+{
+    [Key][Column("a_id")] public int Id { get; set; }
+    [Column("a_score")] public int? Score { get; set; }
+    [Column("a_cat")] public string? Cat { get; set; }
+    [Column("a_payload")] public int? Payload { get; set; }
 }

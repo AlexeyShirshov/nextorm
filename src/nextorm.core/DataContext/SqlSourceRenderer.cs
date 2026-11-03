@@ -380,7 +380,7 @@ internal static class SqlSourceRenderer
     // AdvancedAggregateTranslator.ProviderLabel's dialect-name switch and SqlStringLiteralPolicies'
     // exact-type map). A user dialect is never mistaken for the built-in one unless it carries the
     // same type name.
-    private static bool IsClickHouseDialect(ISqlDialect dialect)
+    internal static bool IsClickHouseDialect(ISqlDialect dialect)
         => dialect.GetType().Name == "ClickHouseDialect";
 
     /// <summary>

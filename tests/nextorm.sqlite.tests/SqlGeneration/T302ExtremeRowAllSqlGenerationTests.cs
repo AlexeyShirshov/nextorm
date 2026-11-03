@@ -38,6 +38,43 @@ public class T302ExtremeRowAllSqlGenerationTests
     }
 
     [Fact]
+    public void FluentMappedColumns_GroupedComposite_All()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<T302ExtremeFluentEntity>(cfg =>
+        {
+            cfg.Property(x => x.Id).HasColumnName("f_id");
+            cfg.Property(x => x.Score!).HasColumnName("f_score");
+            cfg.Property(x => x.Cat!).HasColumnName("f_cat");
+            cfg.Property(x => x.Payload!).HasColumnName("f_payload");
+        });
+
+        // The entity carries [Column("a_*")] attributes as well, so this fact proves the fluent mapping
+        // wins for the group key, the value key and the payload alike and that no stage falls back to the
+        // attribute physical name. The assertions name real identifiers: comparing a string with the
+        // physical names stripped also stripped the projection's own output aliases ('id'/'score'/...).
+        var norm = SqlOf(ctx,
+                e.SelectWhereMax(x => new { x.Score, x.Id }, ExtremeRowTies.All, x => x.Cat).ToCommand())
+            .ToLowerInvariant();
+
+        norm.Should().Contain("select t1.f_id as 'id'");
+        norm.Should().Contain("t1.f_score as 'score'");
+        norm.Should().Contain("t1.f_cat as 'cat'");
+        norm.Should().Contain("t1.f_payload as 'payload'");
+        norm.Should().Contain("max(f_score)");
+        norm.Should().Contain("max(f_id)");
+        norm.Should().Contain("where f_score is not null");
+        norm.Should().Contain("group by f_cat");
+        norm.Should().Contain("join");
+        norm.Should().NotContain("a_id");
+        norm.Should().NotContain("a_score");
+        norm.Should().NotContain("a_cat");
+        norm.Should().NotContain("a_payload");
+        norm.Should().NotContain("rank(");
+        norm.Should().NotContain("row_number(");
+    }
+
+    [Fact]
     public void Min_All_Global()
     {
         using var ctx = SqliteTestContext.Create();
@@ -97,10 +134,17 @@ public class T302ExtremeRowAllSqlGenerationTests
         var norm = SqlOf(ctx, e.SelectWhereMax(x => x.Score, ExtremeRowTies.All)
             .Distinct()
             .OrderBy(x => x.Cat)
+            .ThenBy(x => x.Id)
             .ToCommand()).ToLowerInvariant();
 
         norm.Should().Contain("distinct");
         norm.Should().Contain("order by");
+        // ThenBy renders as a second key of the same outer ORDER BY, after the primary key (VM-S4-16).
+        var orderBy = norm[norm.LastIndexOf("order by", StringComparison.Ordinal)..];
+        var catIdx = orderBy.IndexOf("cat", StringComparison.Ordinal);
+        var idIdx = orderBy.IndexOf("id", StringComparison.Ordinal);
+        catIdx.Should().BeGreaterThanOrEqualTo(0);
+        idIdx.Should().BeGreaterThan(catIdx);
         norm.Should().Contain("max(");
         norm.Should().Contain("__nextorm_ext_1_0");
         norm.Should().Contain("join");
@@ -672,6 +716,15 @@ public sealed class T302ExtremeAllCollisionEntity
     [Key][Column("id")] public int Id { get; set; }
     [Column("score")] public int? Score { get; set; }
     [Column("__nextorm_ext_1_0")] public int? Collide { get; set; }
+}
+
+[SqlTable("t302_extreme_fluent")]
+public sealed class T302ExtremeFluentEntity
+{
+    [Key][Column("a_id")] public int Id { get; set; }
+    [Column("a_score")] public int? Score { get; set; }
+    [Column("a_cat")] public string? Cat { get; set; }
+    [Column("a_payload")] public int? Payload { get; set; }
 }
 
 public enum T302ExtremeConvertedState

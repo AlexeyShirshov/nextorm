@@ -1144,11 +1144,15 @@ internal readonly struct SqlBuilder
         if (cmd.ExtremeRow is { Ties: ExtremeRowTies.All } extremeRow
             && cmd.ExtremeRowColumns is { Length: > 0 } valueColumns)
         {
+            // ClickHouse refuses a bare IS NULL residual in JOIN ON (#296) but accepts its native
+            // isNotDistinctFrom there; the lowering emits an internal marker for that case and the
+            // renderer chooses the form, so every other dialect keeps the byte-identical OR-form.
+            var nativeNullSafeJoin = SqlSourceRenderer.IsClickHouseDialect(_ctx.Dialect);
             var lowered = valueColumns.Length == 1
                 ? extremeRow.GroupBy is null
                     ? ExtremeRowLowering.BuildAllGlobalScalar(cmd)
-                    : ExtremeRowLowering.BuildAllGroupedScalar(cmd)
-                : ExtremeRowLowering.BuildAllComposite(cmd);
+                    : ExtremeRowLowering.BuildAllGroupedScalar(cmd, nativeNullSafeJoin)
+                : ExtremeRowLowering.BuildAllComposite(cmd, nativeNullSafeJoin);
             return new SqlBuilder(_ctx).MakeSelect(lowered, selectInto);
         }
 
