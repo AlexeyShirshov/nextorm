@@ -621,6 +621,24 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     internal CommandReaderOwner OpenResultReader<TResult>(QueryCommand<TResult> queryCommand, ReadOnlySpan<object?> @params, CancellationToken cancellationToken, string terminalName = CsvTerminalName)
     {
         cancellationToken.ThrowIfCancellationRequested();
+
+        // #246 S2: hit path for the ToDataReader (SQLite locator) flavour. Only this terminal opts in;
+        // CSV and other callers keep the existing prepared path. Gate order per plan sec. 5:
+        // 1. cache disabled -> no lookup/publication, existing path;
+        // 2. key not constructible -> existing uncached path;
+        // 3. capability mismatch -> fall back before opening a command;
+        // 4. errors propagate.
+        if (terminalName == QueryCommandExtensions.DataReaderTerminalName && queryCommand.Cache)
+        {
+            if (RawReaderKey.TryCreate(this, queryCommand, RawReaderFlavor.Result, false, false, out var hitKey))
+            {
+                if (ReaderDescriptorStore.TryGet(in hitKey, out var hitDescriptor) && hitDescriptor is not null)
+                {
+                    return OpenResultReaderFromDescriptor(hitDescriptor, queryCommand, @params, cancellationToken);
+                }
+            }
+        }
+
         var prepared = PrepareResultCommand(queryCommand, cancellationToken, terminalName);
         return _executor.OpenResultReader(prepared, @params);
     }
@@ -628,6 +646,18 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     internal async Task<CommandReaderOwner> OpenResultReaderAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken, string terminalName = CsvTerminalName)
     {
         cancellationToken.ThrowIfCancellationRequested();
+
+        if (terminalName == QueryCommandExtensions.DataReaderTerminalName && queryCommand.Cache)
+        {
+            if (RawReaderKey.TryCreate(this, queryCommand, RawReaderFlavor.Result, false, false, out var hitKey))
+            {
+                if (ReaderDescriptorStore.TryGet(in hitKey, out var hitDescriptor) && hitDescriptor is not null)
+                {
+                    return await OpenResultReaderFromDescriptorAsync(hitDescriptor, queryCommand, @params, cancellationToken).ConfigureAwait(false);
+                }
+            }
+        }
+
         var prepared = PrepareResultCommand(queryCommand, cancellationToken, terminalName);
         return await _executor.OpenResultReaderAsync(prepared, @params, cancellationToken).ConfigureAwait(false);
     }
@@ -669,6 +699,87 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
 
     private static bool IsSequential<TResult>(DbPreparedQueryCommand<TResult> command)
         => (command.Behavior & CommandBehavior.SequentialAccess) != 0;
+
+    private CommandReaderOwner OpenResultReaderFromDescriptor<TResult>(
+        RawReaderDescriptor descriptor,
+        QueryCommand<TResult> queryCommand,
+        ReadOnlySpan<object?> @params,
+        CancellationToken cancellationToken)
+    {
+        // Re-extract parameter values per call (the descriptor carries no values).
+        var extracted = _planner.ExtractParams(queryCommand);
+        var noParams = !(extracted.Count > 0);
+
+        var needsParamRefresh = false;
+        if (!noParams)
+        {
+            for (var i = 0; i < extracted.Count; i++)
+            {
+                if (!NormParam.IsName(extracted[i].Name) && !extracted[i].Stable)
+                {
+                    needsParamRefresh = true;
+                    break;
+                }
+            }
+        }
+
+        var singleRow = queryCommand.SingleRow && Dialect.SupportsCommandBehaviorSingleRow;
+
+        var seeds = extracted.Count > 0 ? extracted.ToArray() : Array.Empty<Parameter>();
+        var factory = new PreparedCommandFactory(descriptor.SqlText, queryCommand.ResolvedCommandTimeout, seeds);
+        var planParameters = factory.CreatePlanParameters(_createParamSimple);
+        var compiledQuery = new DbPreparedQueryCommand<TResult>(
+            factory,
+            planParameters,
+            null,
+            new PreparedCommandOptions(singleRow, descriptor.SqlText, noParams, needsParamRefresh)
+            {
+                SequentialAccess = false,
+                Cache = PreparedCommandCache.None,
+            });
+
+        return _executor.OpenResultReader(compiledQuery, @params);
+    }
+
+    private async Task<CommandReaderOwner> OpenResultReaderFromDescriptorAsync<TResult>(
+        RawReaderDescriptor descriptor,
+        QueryCommand<TResult> queryCommand,
+        object[]? @params,
+        CancellationToken cancellationToken)
+    {
+        var extracted = _planner.ExtractParams(queryCommand);
+        var noParams = !(extracted.Count > 0);
+
+        var needsParamRefresh = false;
+        if (!noParams)
+        {
+            for (var i = 0; i < extracted.Count; i++)
+            {
+                if (!NormParam.IsName(extracted[i].Name) && !extracted[i].Stable)
+                {
+                    needsParamRefresh = true;
+                    break;
+                }
+            }
+        }
+
+        var singleRow = queryCommand.SingleRow && Dialect.SupportsCommandBehaviorSingleRow;
+
+        var seeds = extracted.Count > 0 ? extracted.ToArray() : Array.Empty<Parameter>();
+        var factory = new PreparedCommandFactory(descriptor.SqlText, queryCommand.ResolvedCommandTimeout, seeds);
+        var planParameters = factory.CreatePlanParameters(_createParamSimple);
+        var compiledQuery = new DbPreparedQueryCommand<TResult>(
+            factory,
+            planParameters,
+            null,
+            new PreparedCommandOptions(singleRow, descriptor.SqlText, noParams, needsParamRefresh)
+            {
+                SequentialAccess = false,
+                Cache = PreparedCommandCache.None,
+            });
+
+        return await _executor.OpenResultReaderAsync(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
+    }
 
     private DbPreparedQueryCommand<TResult> PrepareResultCommand<TResult>(
         QueryCommand<TResult> queryCommand,

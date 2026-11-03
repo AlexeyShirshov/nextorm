@@ -91,7 +91,7 @@ internal sealed class QueryPlanner : IQueryPlanner
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private List<Parameter> ExtractParams(QueryCommand queryCommand)
+    internal List<Parameter> ExtractParams(QueryCommand queryCommand)
     {
         var @params = new List<Parameter>();
         MakeSelect(queryCommand, true, @params, queryCommand, null, false, false);
