@@ -88,7 +88,7 @@ var top = ctx.From<Player>()
     .ToList();
 ```
 
-Публичный контракт — пять небольших типов: [`IQueryComponent`](xref:NextORM.Core.IQueryComponent) (слот, вид
+Публичный контракт — шесть небольших типов: [`IQueryComponent`](xref:NextORM.Core.IQueryComponent) (слот, вид
 вклада, `Prepare`, `BuildQuery`), [`IQueryComponentDescriptor`](xref:NextORM.Core.IQueryComponentDescriptor)
 (неизменяемое подготовленное состояние), [`QueryComponentContribution`](xref:NextORM.Core.QueryComponentContribution)
 (`AdditivePredicate` или `ExclusiveRowSource`) и контексты
@@ -200,6 +200,33 @@ public sealed class ExternalExtremeComponent<TEntity> : IQueryComponent
     public Type Slot => typeof(ExternalExtremeComponent<TEntity>);
     public QueryComponentContribution Contribution => QueryComponentContribution.ExclusiveRowSource;
 
+    // Отвергаем каждый модификатор, который не выражает ранжированный производный источник. Ядро
+    // дополнительно применяет к каждому эксклюзивному reshape полную границу встроенного спуска
+    // (подготовленный HAVING, LIMIT BY, ARRAY JOIN, DISTINCT ON, TABLESAMPLE, временные клаузы,
+    // блокировки источника).
+    private static void ValidateCompatibility(QueryCommand cmd)
+    {
+        if (cmd.Ctes is { Count: > 0 }) throw NotCompatible("common table expressions (WITH)");
+        if (cmd.Having is not null) throw NotCompatible("HAVING");
+        if (cmd.Windows is { Count: > 0 }) throw NotCompatible("named windows");
+        if (cmd.GroupingList is { Length: > 0 } || cmd.GroupBy is not null) throw NotCompatible("GROUP BY");
+        if (cmd.Joins is { Length: > 0 }) throw NotCompatible("joins");
+        if (cmd.PreWhere is not null) throw NotCompatible("PREWHERE");
+        if (!cmd.Paging.IsEmpty) throw NotCompatible("paging");
+        if (cmd.UnionQuery is not null) throw NotCompatible("a set operation");
+        if (cmd.TableHints is { Count: > 0 }) throw NotCompatible("table hints");
+        if (cmd.IndexHints is { Count: > 0 }) throw NotCompatible("index hints");
+        if (cmd.TablesInScopeHints is { Count: > 0 }) throw NotCompatible("tables-in-scope hints");
+        if (cmd.Hints is { Count: > 0 }) throw NotCompatible("query hints");
+        if (cmd.Final) throw NotCompatible("FINAL");
+        if (cmd.SampleRatio is not null) throw NotCompatible("SAMPLE");
+        if (cmd.Settings is { Count: > 0 }) throw NotCompatible("SETTINGS");
+        if (cmd.ForJsonClause is not null || cmd.ForXmlClause is not null) throw NotCompatible("FOR JSON/FOR XML");
+    }
+
+    private static BuildSqlCommandException NotCompatible(string modifier)
+        => new($"SelectWhereMax/SelectWhereMin cannot be combined with {modifier}.");
+
     public IQueryComponentDescriptor Prepare(IQueryComponentPrepareContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -209,8 +236,9 @@ public sealed class ExternalExtremeComponent<TEntity> : IQueryComponent
         if (_ties is not (ExtremeRowTies.One or ExtremeRowTies.All))
             throw new ArgumentOutOfRangeException(nameof(_ties), _ties, "Unknown ExtremeRowTies value.");
 
-        // Проверки формы конкретного оператора — здесь: отвергайте то, что оператор не умеет
-        // выразить (например, пагинацию или HAVING), вместо произвольной композиции.
+        // Отвергайте то, что ранжированный производный источник не умеет выразить, вместо
+        // произвольной композиции. Ядро повторно применяет полную границу встроенного спуска.
+        ValidateCompatibility(context.Command);
 
         var hash = new HashCode();
         hash.Add(Slot);
@@ -236,9 +264,27 @@ public sealed class ExternalExtremeComponent<TEntity> : IQueryComponent
         var inner = cmd.Clone();
         inner.Components = null;
 
+        var valueKeys = Decompose(_valueSelector, entity);
+
+        // NULL в любом ключе значения никогда не побеждает в крайнем значении встроенного переносного
+        // спуска, поэтому такие строки исключаются внутри ранжированного источника до окна.
+        Expression? filter = null;
+        foreach (var key in valueKeys)
+        {
+            if (!key.Type.IsValueType || Nullable.GetUnderlyingType(key.Type) is not null)
+                filter = And(filter, Expression.NotEqual(key, Expression.Constant(null, key.Type)));
+        }
+        if (inner.GetComponentPreparedCondition() is LambdaExpression condition
+            && condition.Parameters.Count > 0)
+        {
+            filter = And(filter, new ParameterReplacer(condition.Parameters[0], entity).Visit(condition.Body));
+        }
+        if (filter is not null)
+            inner.SetComponentPreparedCondition(Expression.Lambda(filter, entity));
+
         var direction = _kind == ExternalExtremeKind.Max ? EngineHandles.Desc : EngineHandles.Asc;
         var orderKeys = Expression.NewArrayInit(typeof(WindowOrder),
-            Decompose(_valueSelector, entity).Select(v => (Expression)Expression.Call(sql, direction,
+            valueKeys.Select(v => (Expression)Expression.Call(sql, direction,
                 Expression.Quote(Expression.Lambda<Func<object?>>(
                     Expression.Convert(v, typeof(object)))))).ToArray());
 
@@ -271,6 +317,9 @@ public sealed class ExternalExtremeComponent<TEntity> : IQueryComponent
         cmd.SetComponentPreparedCondition(Expression.Lambda(
             Expression.Equal(rankColumn, Expression.Constant(1)), outer));
     }
+
+    private static Expression And(Expression? left, Expression right)
+        => left is null ? right : Expression.AndAlso(left, right);
 
     private static Expression[] Decompose(LambdaExpression selector, ParameterExpression entity)
     {
