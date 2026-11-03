@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using BenchmarkDotNet.Attributes;
+using Microsoft.Data.Sqlite;
 using NextORM.Core;
 using NextORM.Sqlite;
 
@@ -47,28 +48,51 @@ public abstract class T302ExtremeRowBenchmarkBase
     [GlobalSetup]
     public void Setup()
     {
-        _file = Path.Combine(Path.GetTempPath(), $"nextorm-t302-extreme-{(Indexed ? "indexed" : "plain")}.db");
-        if (File.Exists(_file))
-            File.Delete(_file);
+        // A unique file per setup call: BenchmarkDotNet re-runs GlobalSetup per benchmark method, and a
+        // fixed path would collide with the still-open connection of the previous instance.
+        _file = Path.Combine(Path.GetTempPath(), $"nextorm-t302-extreme-{(Indexed ? "indexed" : "plain")}-{Guid.NewGuid():N}.db");
+
+        using (var connection = new SqliteConnection($"Data Source={_file}"))
+        {
+            connection.Open();
+            using (var ddl = connection.CreateCommand())
+            {
+                ddl.CommandText = "create table if not exists extreme_rows (id integer primary key, score integer not null, category text not null, payload text not null)";
+                ddl.ExecuteNonQuery();
+            }
+
+            using (var transaction = connection.BeginTransaction())
+            using (var insert = connection.CreateCommand())
+            {
+                insert.Transaction = transaction;
+                insert.CommandText = "insert into extreme_rows (id, score, category, payload) values ($id, $score, $category, $payload)";
+                var id = insert.CreateParameter(); id.ParameterName = "$id"; insert.Parameters.Add(id);
+                var score = insert.CreateParameter(); score.ParameterName = "$score"; insert.Parameters.Add(score);
+                var category = insert.CreateParameter(); category.ParameterName = "$category"; insert.Parameters.Add(category);
+                var payload = insert.CreateParameter(); payload.ParameterName = "$payload"; insert.Parameters.Add(payload);
+                for (var i = 1; i <= RowCount; i++)
+                {
+                    id.Value = i;
+                    score.Value = i % DistinctValues;
+                    category.Value = $"cat{i % 50}";
+                    payload.Value = $"payload-{i}";
+                    insert.ExecuteNonQuery();
+                }
+
+                transaction.Commit();
+            }
+
+            if (Indexed)
+            {
+                using var index = connection.CreateCommand();
+                index.CommandText = "create index ix_extreme_rows_score on extreme_rows (score)";
+                index.ExecuteNonQuery();
+            }
+        }
 
         var builder = new DataContextBuilder();
         builder.UseSqlite(_file);
         _db = builder.CreateDataContext();
-
-        Execute($"create table extreme_rows (id integer primary key, score integer not null, category text not null, payload text not null)");
-        using (var transaction = _db.BeginTransaction())
-        {
-            for (var id = 1; id <= RowCount; id++)
-            {
-                var score = id % DistinctValues;
-                Execute($"insert into extreme_rows (id, score, category, payload) values ({id}, {score}, 'cat{id % 50}', 'payload-{id}')");
-            }
-
-            transaction.Commit();
-        }
-
-        if (Indexed)
-            Execute("create index ix_extreme_rows_score on extreme_rows (score)");
 
         var source = _db.From<ExtremeRowEntity>();
         _all = source.SelectWhereMax(x => x.Score, ExtremeRowTies.All).Prepare();
@@ -89,14 +113,6 @@ public abstract class T302ExtremeRowBenchmarkBase
             throw new InvalidOperationException($"All(value-only) expected {AllRows} rows, got {valueOnly.Count}");
         if (_db.ToList(_all).Select(x => x.Score).Distinct().Single() != DistinctValues - 1)
             throw new InvalidOperationException("All did not keep the extreme key");
-    }
-
-    private void Execute(string sql)
-    {
-        var command = _db.CreateCommand();
-        command.CommandText = sql;
-        command.ExecuteNonQuery();
-        command.Dispose();
     }
 
     [GlobalCleanup]
@@ -121,14 +137,14 @@ public abstract class T302ExtremeRowBenchmarkBase
 }
 
 /// <summary>Extreme-row matrix without an index on the extreme key.</summary>
-public sealed class T302ExtremeRowPlainBenchmark : T302ExtremeRowBenchmarkBase
+public class T302ExtremeRowPlainBenchmark : T302ExtremeRowBenchmarkBase
 {
     /// <inheritdoc />
     protected override bool Indexed => false;
 }
 
 /// <summary>Extreme-row matrix with an index on the extreme key.</summary>
-public sealed class T302ExtremeRowIndexedBenchmark : T302ExtremeRowBenchmarkBase
+public class T302ExtremeRowIndexedBenchmark : T302ExtremeRowBenchmarkBase
 {
     /// <inheritdoc />
     protected override bool Indexed => true;
