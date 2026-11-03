@@ -109,6 +109,12 @@ public sealed class ExternalSelectWhereComponent<TEntity> : IQueryComponent
 
     private static void ValidateCompatibility(QueryCommand cmd)
     {
+        // The engine enforces the complete built-in rejection boundary for every exclusive row-source
+        // reshape (QueryComponentCompatibility → ExtremeRowCompatibility), including the state the
+        // public surface does not expose (prepared HAVING, LIMIT BY, ARRAY JOIN, DISTINCT ON,
+        // TABLESAMPLE, temporal clauses, prepared array joins and source-level locks). The checks below
+        // are the subset a consumer can reproduce itself; they keep the component honest when it is
+        // used through a command the engine did not prepare.
         if (cmd.Ctes is { Count: > 0 }) throw NotCompatible("common table expressions (WITH)");
         if (cmd.Having is not null) throw NotCompatible("HAVING");
         if (cmd.Windows is { Count: > 0 }) throw NotCompatible("named windows");
@@ -125,6 +131,28 @@ public sealed class ExternalSelectWhereComponent<TEntity> : IQueryComponent
         if (cmd.SampleRatio is not null) throw NotCompatible("SAMPLE");
         if (cmd.Settings is { Count: > 0 }) throw NotCompatible("SETTINGS");
         if (cmd.ForJsonClause is not null || cmd.ForXmlClause is not null) throw NotCompatible("FOR JSON/FOR XML");
+    }
+
+    /// <summary>
+    /// Aggregate function names the engine lowers through <c>CommonFunctions</c> (the same set the
+    /// in-memory evaluator folds). A component projects its own hidden rank column into the select list,
+    /// so an aggregate in that list would be evaluated over the reshaped rows; it is rejected explicitly
+    /// instead of being composed.
+    /// </summary>
+    private static readonly HashSet<string> AggregateFunctionNames = new(StringComparer.Ordinal)
+    {
+        "min", "max", "sum", "avg", "count", "count_big", "stdev", "stdevp", "var", "varp",
+    };
+
+    private static void EnsureNoAggregates(SelectExpression[]? selectList)
+    {
+        if (selectList is null) return;
+
+        for (var i = 0; i < selectList.Length; i++)
+        {
+            if (selectList[i].Expression is { } expression && AggregateDetector.Contains(expression))
+                throw NotCompatible("aggregates");
+        }
     }
 
     private static BuildSqlCommandException NotCompatible(string modifier)
@@ -172,6 +200,10 @@ public sealed class ExternalSelectWhereComponent<TEntity> : IQueryComponent
 
         var inner = cmd.Clone();
         inner.Components = null;
+        // The hidden rank column is appended to the inner select list. An aggregate there would be
+        // evaluated over the reshaped rows instead of the projected ones, so it is refused explicitly.
+        EnsureNoAggregates(cmd.SelectList);
+        EnsureNoAggregates(inner.SelectList);
         // The built-in portable lowering excludes rows with a NULL in any value key. Apply the same
         // filter inside the ranked derived source, before the window is evaluated.
         Expression? innerFilter = null;
@@ -357,6 +389,34 @@ public sealed class ExternalSelectWhereComponent<TEntity> : IQueryComponent
             if (_state.GroupBy is null || rhs._state.GroupBy is null)
                 return _state.GroupBy is null && rhs._state.GroupBy is null;
             return _state.Comparer.Equals(_state.GroupBy, rhs._state.GroupBy);
+        }
+    }
+
+    /// <summary>
+    /// True when the expression contains a call to one of the engine's aggregate functions
+    /// (<see cref="CommonFunctions"/>), at any depth.
+    /// </summary>
+    private sealed class AggregateDetector : ExpressionVisitor
+    {
+        internal static bool Contains(Expression expression)
+        {
+            var visitor = new AggregateDetector();
+            visitor.Visit(expression);
+            return visitor._found;
+        }
+
+        private bool _found;
+
+        protected override Expression VisitMethodCall(MethodCallExpression node)
+        {
+            if (node.Method.DeclaringType == typeof(CommonFunctions)
+                && AggregateFunctionNames.Contains(node.Method.Name))
+            {
+                _found = true;
+                return node;
+            }
+
+            return base.VisitMethodCall(node);
         }
     }
 

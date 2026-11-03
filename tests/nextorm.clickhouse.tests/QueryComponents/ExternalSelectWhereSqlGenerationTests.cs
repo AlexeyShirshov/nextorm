@@ -21,7 +21,7 @@ public sealed class ExternalSelectWhereSqlGenerationTests : ExternalSelectWhereS
 
         public override ISqlDialect Dialect => _dialect;
 
-        private static string GetConnectionString(ClickHouseDataContext source) => "Host=localhost;Port=8123;Username=default;Password=nextorm;Database=nextorm";
+        private static string GetConnectionString(ClickHouseDataContext source) => source.ConnectionString;
     }
 
     private sealed class ForcedPortableDialect : ClickHouseDialect

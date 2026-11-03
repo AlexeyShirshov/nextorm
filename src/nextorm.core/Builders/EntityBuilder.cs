@@ -3173,6 +3173,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// </summary>
     /// <param name="component">The component to attach.</param>
     /// <returns>A new builder with the component attached.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="component"/> is <see langword="null"/>.</exception>
     public EntityBuilder<TEntity> WithComponent(IQueryComponent component)
     {
         ArgumentNullException.ThrowIfNull(component);

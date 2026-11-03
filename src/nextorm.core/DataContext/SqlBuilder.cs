@@ -36,11 +36,26 @@ internal readonly struct SqlBuilder
     {
         if (cmd.Components is { Count: > 0 } components)
         {
+            // Render-time half of the engine-side rejection boundary: the prepared select list is
+            // available here, so the window-function rule is observable too.
+            QueryComponentCompatibility.EnsureExclusiveReshapeCompatible(cmd);
+
+            // The parameter-refresh pass re-renders the same command to re-extract parameter values,
+            // reaching this method outside the cache-hit fast path. Reusing the shape the miss render
+            // built keeps that pass from re-running every component's BuildQuery: the parameter set is
+            // identical because the shape is identical, and a captured closure read at render time still
+            // yields the current value.
+            if (_ctx.ParamMode && cmd.ComponentRenderShape is { } builtShape)
+                return new SqlBuilder(_ctx).MakeSelect(builtShape, selectInto);
+
             var rebuilt = cmd.Clone();
             rebuilt.Components = null;
             rebuilt.PreparedComponents = cmd.PreparedComponents;
             foreach (var component in components)
                 component.BuildQuery(new QueryComponentContext(rebuilt));
+
+            if (!_ctx.ParamMode)
+                cmd.ComponentRenderShape = rebuilt;
 
             return new SqlBuilder(_ctx).MakeSelect(rebuilt, selectInto);
         }

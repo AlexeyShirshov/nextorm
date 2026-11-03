@@ -6,6 +6,10 @@ using NextORM.QueryComponents;
 
 namespace NextORM.Integration.Tests;
 
+[CollectionDefinition("MariaDb query components", DisableParallelization = true)]
+public sealed class MariaDbQueryComponentsCollection;
+
+[Collection("MariaDb query components")]
 public sealed class MariaDbQueryComponentsIntegrationTests : IDisposable
 {
     private static readonly object Gate = new();

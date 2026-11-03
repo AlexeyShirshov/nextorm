@@ -99,3 +99,32 @@ public sealed class QueryComponentContext : IQueryComponentPrepareContext, IQuer
     /// <inheritdoc />
     public IEqualityComparer<Expression> ExpressionComparer { get; }
 }
+
+/// <summary>
+/// Engine-side compatibility gate for query components. An exclusive row-source reshape produces the
+/// same ranked-derived-source shape as the built-in <c>SelectWhereMin/Max</c> lowering, so the exact set
+/// of query modifiers that lowering cannot express is rejected for every such component, independently
+/// of which checks a component can express through the public surface.
+/// </summary>
+internal static class QueryComponentCompatibility
+{
+    /// <summary>
+    /// Applies <see cref="ExtremeRowCompatibility.EnsureModifiersCompatible"/> when the command carries
+    /// an exclusive row-source reshape component. A command with only additive components is untouched.
+    /// </summary>
+    /// <param name="cmd">The command being prepared or rendered.</param>
+    internal static void EnsureExclusiveReshapeCompatible(QueryCommand cmd)
+    {
+        if (cmd.PreparedComponents is not { Count: > 0 } prepared)
+            return;
+
+        for (var i = 0; i < prepared.Count; i++)
+        {
+            if (prepared[i].Contribution == QueryComponentContribution.ExclusiveRowSource)
+            {
+                ExtremeRowCompatibility.EnsureModifiersCompatible(cmd);
+                return;
+            }
+        }
+    }
+}

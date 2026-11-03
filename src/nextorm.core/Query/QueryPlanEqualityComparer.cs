@@ -256,12 +256,14 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
     private static bool ComponentsEqual(IReadOnlyList<IQueryComponent>? x, IReadOnlyList<IQueryComponent>? y, QueryCommand? xCommand, QueryCommand? yCommand)
     {
         // Prefer the prepared descriptors when both commands have them: they carry the full
-        // structural state that the component contract requires to be part of the key.
+        // structural state that the component contract requires to be part of the key. The branch
+        // mirrors the hash, which only consumes descriptors when the list is non-empty, so an empty
+        // prepared list can never compare equal to a non-empty one (Equals ⇒ same hash).
         var xPrepared = xCommand?.PreparedComponents;
         var yPrepared = yCommand?.PreparedComponents;
-        if (xPrepared is not null || yPrepared is not null)
+        if (xPrepared is { Count: > 0 } || yPrepared is { Count: > 0 })
         {
-            if (xPrepared is null || yPrepared is null) return false;
+            if (xPrepared is not { Count: > 0 } || yPrepared is not { Count: > 0 }) return false;
             if (xPrepared.Count != yPrepared.Count) return false;
             for (var i = 0; i < xPrepared.Count; i++)
             {

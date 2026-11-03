@@ -69,6 +69,7 @@ public partial class QueryCommand
         // dropped with that key. The component list itself stays attached; the next preparation
         // rebuilds the descriptors, and until then the plan key falls back to the raw component list.
         PreparedComponents = null;
+        ComponentRenderShape = null;
     }
 
     /// <summary>Returns the comparer used to key whole query plans, creating it on first use.</summary>

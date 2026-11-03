@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using System.Collections.ObjectModel;
 using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
 
@@ -681,11 +682,65 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// <summary>Sets the ORDER BY columns. Engine-owned structural primitive for query components.</summary>
     public void SetComponentSorting(Sorting[]? value) => _sorting = value;
 
-    /// <summary>The query components attached to this command, or <c>null</c> when there are none.</summary>
-    public IReadOnlyList<IQueryComponent>? Components { get; set; }
+    /// <summary>
+    /// The query components attached to this command, or <c>null</c> when there are none. Assigning a
+    /// different list is an identity change: the memoized plan key is dropped together with the prepared
+    /// descriptors computed under it, so a caller can never leave a stale prepared identity attached.
+    /// The returned list is a read-only view over the shared backing list, so a downcast cannot mutate
+    /// the list every clone sees.
+    /// </summary>
+    public IReadOnlyList<IQueryComponent>? Components
+    {
+        get => _componentsView ??= AsReadOnly(_components);
+        set
+        {
+            if (ReferenceEquals(_components, value))
+                return;
+            _components = value;
+            _componentsView = null;
+            InvalidatePlanKey();
+        }
+    }
 
-    /// <summary>The prepared query-component descriptors, or <c>null</c> when there are none.</summary>
-    public IReadOnlyList<IQueryComponentDescriptor>? PreparedComponents { get; set; }
+    /// <summary>
+    /// The prepared query-component descriptors, or <c>null</c> when there are none. The engine owns the
+    /// list; assigning it re-keys the command because the descriptors are part of the plan identity. The
+    /// returned list is a read-only view over the shared backing list.
+    /// </summary>
+    public IReadOnlyList<IQueryComponentDescriptor>? PreparedComponents
+    {
+        get => _preparedComponentsView ??= AsReadOnly(_preparedComponents);
+        set
+        {
+            _preparedComponents = value;
+            _preparedComponentsView = null;
+            // Descriptors are part of the plan identity: a memoized key built under the previous list
+            // must not survive the assignment.
+            _planKey = null;
+            _planKeySql = null;
+        }
+    }
+
+    private IReadOnlyList<IQueryComponent>? _components;
+    private IReadOnlyList<IQueryComponentDescriptor>? _preparedComponents;
+    private IReadOnlyList<IQueryComponent>? _componentsView;
+    private IReadOnlyList<IQueryComponentDescriptor>? _preparedComponentsView;
+
+    private static IReadOnlyList<T>? AsReadOnly<T>(IReadOnlyList<T>? source)
+        => source switch
+        {
+            null => null,
+            ReadOnlyCollection<T> view => view,
+            IList<T> list => new ReadOnlyCollection<T>(list),
+            _ => new ReadOnlyCollection<T>(new List<T>(source)),
+        };
+
+    /// <summary>
+    /// The command shape the attached components produced on the cache-miss render, reused by the
+    /// parameter-refresh pass instead of re-running <see cref="IQueryComponent.BuildQuery"/>. Render-scoped
+    /// engine state: dropped with the plan key and on reset, never part of the plan identity.
+    /// </summary>
+    internal QueryCommand? ComponentRenderShape { get; set; }
 
     /// <summary>The prepared value-selector columns of <see cref="ExtremeRow"/>, or <c>null</c> when there is none.</summary>
     internal SelectExpression[]? ExtremeRowColumns => _extremeRowColumns;
@@ -1166,6 +1221,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         _extremeRowColumns = null;
         _extremeRowGroupByColumns = null;
         PreparedComponents = null;
+        ComponentRenderShape = null;
         _perParentPartitionColumns = null;
         PreparedPreWhere = null;
         _preparedArrayJoin = null;

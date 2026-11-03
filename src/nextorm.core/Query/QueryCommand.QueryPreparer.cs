@@ -111,15 +111,34 @@ public partial class QueryCommand
                     prepared.Add(descriptor);
                 }
 
-                var exclusiveSlots = prepared
-                    .Where(d => d.Contribution == QueryComponentContribution.ExclusiveRowSource)
-                    .Select(d => d.Slot)
-                    .Distinct()
-                    .Count();
-                if (exclusiveSlots > 1)
-                    throw new BuildSqlCommandException("Multiple distinct exclusive row-source reshape components are not supported.");
+                // A plain loop keeps the prepare path allocation-free (no Where/Select/Distinct chain)
+                // and names both slot identities in the diagnostic.
+                IQueryComponentDescriptor? firstExclusive = null;
+                for (var i = 0; i < prepared.Count; i++)
+                {
+                    var candidate = prepared[i];
+                    if (candidate.Contribution != QueryComponentContribution.ExclusiveRowSource)
+                        continue;
+
+                    if (firstExclusive is null)
+                    {
+                        firstExclusive = candidate;
+                        continue;
+                    }
+
+                    if (firstExclusive.Slot != candidate.Slot)
+                        throw new BuildSqlCommandException(
+                            "Multiple distinct exclusive row-source reshape components are not supported: " +
+                            $"'{firstExclusive.Slot.Name}' and '{candidate.Slot.Name}'.");
+                }
 
                 cmd.PreparedComponents = prepared;
+
+                // #362: an exclusive reshape is the same ranked-derived-source shape the built-in
+                // lowering refuses to compose, so the engine (not the component) enforces the full
+                // rejection boundary. The check is repeated at render time, where the prepared select
+                // list exists and the window-function boundary becomes observable.
+                QueryComponentCompatibility.EnsureExclusiveReshapeCompatible(cmd);
             }
             else
             {

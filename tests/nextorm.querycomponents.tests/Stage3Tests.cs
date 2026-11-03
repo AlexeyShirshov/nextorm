@@ -65,7 +65,9 @@ public class Stage3Tests
         QueryCommand<Entity> cmd = b;
         Action act = () => _ = SqlOf(ctx, cmd);
         act.Should().Throw<Exception>()
-            .Which.Message.Should().Contain("Multiple distinct exclusive row-source reshape");
+            .Which.Message.Should().Contain("Multiple distinct exclusive row-source reshape")
+            .And.Contain(nameof(ExternalSelectWhereComponent<Entity>))
+            .And.Contain(nameof(ConflictingReshapeComponent<Entity>));
     }
 
     // Chunk A3
