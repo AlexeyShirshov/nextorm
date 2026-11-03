@@ -178,6 +178,9 @@ internal static class QueryPlanStore
         bucket.Add(new RawCandidate(plan, holder, shape));
     }
 
+    /// <summary>Process-wide generation shared with the reader-descriptor partition; bumped by <see cref="Clear"/>.</summary>
+    internal static long Generation => Volatile.Read(ref _generation);
+
     internal static void Clear() => Interlocked.Increment(ref _generation);
 
     internal static IEnumerable<IDbCommandHolder> Values

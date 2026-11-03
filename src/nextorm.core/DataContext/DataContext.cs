@@ -575,7 +575,42 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         // disposed. The streaming terminal owns exactly one execution, so the command is minted per
         // execution and disposed exactly once when the reader's CommandReaderOwner releases its lease
         // (PreparedCommandCache.None, AC03).
-        return (DbPreparedQueryCommand<TResult>)_planner.GetPreparedQueryCommand(queryCommand, false, false, PreparedCommandCache.None, true, cancellationToken);
+        var preparedLob = (DbPreparedQueryCommand<TResult>)_planner.GetPreparedQueryCommand(queryCommand, false, false, PreparedCommandCache.None, true, cancellationToken);
+
+        // #246 S1: publication only. Nothing reads the store yet, so this must not change behaviour.
+        // Gated exactly as design sec. 4: cache disabled => no publication; non-ToDataReader terminals
+        // (ToStream/ToTextReader) are excluded; key construction failure leaves the path untouched.
+        if (terminalName == QueryCommandExtensions.DataReaderTerminalName && queryCommand.Cache)
+        {
+            if (RawReaderKey.TryCreate(this, queryCommand, RawReaderFlavor.Lob, false, false, out var lobKey))
+            {
+                var lobParams = new RawParameterSpec[preparedLob.DbCommandParams.Count];
+                for (var i = 0; i < lobParams.Length; i++)
+                {
+                    var p = preparedLob.DbCommandParams[i];
+                    lobParams[i] = new RawParameterSpec
+                    {
+                        Name = p.ParameterName,
+                        Position = i,
+                        ProviderType = typeof(void),
+                        DbType = p.DbType,
+                        Size = p.Size,
+                        Precision = p.Precision,
+                        Scale = p.Scale,
+                        Direction = p.Direction,
+                    };
+                }
+
+                var lobDescriptor = new RawReaderDescriptor(
+                    preparedLob.CommandText,
+                    lobParams,
+                    RawReaderFlavor.Lob,
+                    QueryPlanStore.Generation);
+                ReaderDescriptorStore.TryPublish(in lobKey, lobDescriptor);
+            }
+        }
+
+        return preparedLob;
     }
 
     // The plain (non-LOB) multi-column reader seam: unlike PrepareLobCommand it demands neither
@@ -659,7 +694,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         // per-connection state and never disposed. The reader terminal owns exactly one execution, so the
         // command is minted per execution and disposed exactly once when the reader's CommandReaderOwner
         // releases its lease (PreparedCommandCache.None, AC03).
-        return (DbPreparedQueryCommand<TResult>)_planner.GetPreparedQueryCommand(
+        var preparedResult = (DbPreparedQueryCommand<TResult>)_planner.GetPreparedQueryCommand(
             queryCommand,
             createEnumerator: false,
             storeInCache: false,
@@ -668,6 +703,39 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             streamingRowsRequested: false,
             suppressLobLocator: suppressLobLocator,
             cancellationToken);
+
+        // #246 S1: publication only, gated to the ToDataReader terminal. Nothing reads the store yet.
+        if (terminalName == QueryCommandExtensions.DataReaderTerminalName && queryCommand.Cache)
+        {
+            if (RawReaderKey.TryCreate(this, queryCommand, RawReaderFlavor.Result, sequentialAccess, suppressLobLocator, out var resultKey))
+            {
+                var resultParams = new RawParameterSpec[preparedResult.DbCommandParams.Count];
+                for (var i = 0; i < resultParams.Length; i++)
+                {
+                    var p = preparedResult.DbCommandParams[i];
+                    resultParams[i] = new RawParameterSpec
+                    {
+                        Name = p.ParameterName,
+                        Position = i,
+                        ProviderType = typeof(void),
+                        DbType = p.DbType,
+                        Size = p.Size,
+                        Precision = p.Precision,
+                        Scale = p.Scale,
+                        Direction = p.Direction,
+                    };
+                }
+
+                var resultDescriptor = new RawReaderDescriptor(
+                    preparedResult.CommandText,
+                    resultParams,
+                    RawReaderFlavor.Result,
+                    QueryPlanStore.Generation);
+                ReaderDescriptorStore.TryPublish(in resultKey, resultDescriptor);
+            }
+        }
+
+        return preparedResult;
     }
 
     // The message names the calling terminal so ToDataReader does not surface CSV wording, while the CSV
