@@ -3355,6 +3355,19 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void SelectWhereMax_GlobalOne_ShouldQualifyTheRankFilterThroughTheDerivedSource()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Int).Select(x => new { x.Id })));
+
+        // #302 S5: the outer statement is rendered by the common pipeline over an opaque derived
+        // fragment, so its rank predicate must be qualified by the derived table's alias.
+        norm.Should().Contain(".__nextorm_rn = 1");
+    }
+
+    [Fact]
     public void SelectWhereMax_Projection_ShouldProjectTheExtremeRowAndDropTheRank()
     {
         using var ctx = SqliteTestContext.Create();

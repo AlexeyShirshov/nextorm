@@ -132,7 +132,8 @@ internal readonly struct SqlBuilder
                 && Array.Exists(selectList, static item => item.IsDynamicColumnsStore);
             var needAlias = hasJoins || _ctx.QueryProvider.OuterReferences?.Count > 0
                 || (hasDynamicStore && _ctx.Dialect.RequiresQualifiedSelectStar)
-                || from?.SourceLock is not null;
+                || from?.SourceLock is not null
+                || from?.DerivedFragment is not null;
 
             // Source-level row locking is fail-closed: a dialect whose lock renderer does not opt in
             // (MariaDB, SQLite, ClickHouse, in-memory) must reject it instead of silently emitting a
@@ -162,6 +163,7 @@ internal readonly struct SqlBuilder
                 && from.TableExpressionOverride is null
                 && from.Pivot is null
                 && from.XmlNodes is null
+                && from.DerivedFragment is null
                 && !((from.RawSqlSource is not null || from.TableFunction is not null) && _ctx.Dialect.RequireSubqueryAlias);
 
             // Tables-in-scope hints are structural on SQL Server (a WITH(...) on every physical table)
@@ -1194,8 +1196,25 @@ internal readonly struct SqlBuilder
         var entityType = cmd.EntityType!;
         var from = cmd.From!;
         var rankColumn = MakeExtremeRowRankName(entityType);
-        var innerSql = MakePortableExtremeRowInner(cmd, entityType, from, rankColumn);
-        return MakeExtremeRowOuter(cmd, entityType, innerSql, rankColumn);
+
+        // Keep the inner derived table's rendering unchanged, but expose it as an opaque fragment
+        // source so the outer statement is rendered through the common MakeSelect pipeline.
+        var self = this;
+        var fragment = new DerivedFragmentExpression(entityType, ctx => self.MakePortableExtremeRowInner(cmd, entityType, from, rankColumn));
+
+        var oCommand = cmd.Clone();
+        oCommand.ExtremeRow = null;
+        oCommand.From = new FromExpression(fragment);
+
+        var oParameter = Expression.Parameter(entityType, "o");
+        var columnMethod = typeof(SqlFunctions).GetMethod(nameof(SqlFunctions.Column))!.MakeGenericMethod(typeof(int));
+        var columnCall = Expression.Call(null, columnMethod, oParameter, Expression.Constant(rankColumn));
+        oCommand.PreparedCondition = Expression.Lambda(Expression.Equal(columnCall, Expression.Constant(1)), oParameter);
+
+        if (cmd.IgnoreColumns || cmd.SelectList is null || cmd.SelectList.Length == 0)
+            oCommand.SetSelectList(BuildExtremeRowEntitySelectList(entityType));
+
+        return new SqlBuilder(_ctx).MakeSelect(oCommand);
     }
 
     /// <summary>

@@ -766,6 +766,9 @@ internal static class SqlSourceRenderer
         if (from.RawSqlSource is not null)
             return MakeRawSqlSource(in ctx, from, needAlias, entityType, hasJoins);
 
+        if (from.DerivedFragment is not null)
+            return MakeDerivedFragment(in ctx, from, needAlias, entityType, hasJoins);
+
         if (from.TableExpressionOverride is not null)
             return MakeTableExpression(in ctx, from, options, entityType);
 
@@ -973,6 +976,41 @@ internal static class SqlSourceRenderer
         for (var i = 0; i < extra.Count; i++)
             combined[hints.Count + i] = extra[i];
         return combined;
+    }
+
+    /// <summary>
+    /// Renders an opaque derived fragment as <c>(&lt;fragment&gt;) AS alias</c>. The fragment's render
+    /// delegate produces the SQL text in SQL mode and performs the matching parameter walk in parameter
+    /// mode (emitting nothing). The entity type is registered as a physical-shaped source so member
+    /// access resolves against the fragment's columns.
+    /// </summary>
+    private static string MakeDerivedFragment(in SqlBuildContext ctx, FromExpression from, bool needAlias, Type? entityType, bool hasJoins)
+    {
+        var fragment = from.DerivedFragment!;
+
+        if (ctx.ParamMode)
+        {
+            ctx.ColumnsProvider.Add(fragment.EntityType, false);
+            fragment.Render(ctx);
+            return string.Empty;
+        }
+
+        var sqlBuilder = StringBuilderPool.Shared.Get();
+        try
+        {
+            var innerSql = fragment.Render(ctx) ?? string.Empty;
+            sqlBuilder.Append('(').Append(innerSql).Append(')');
+
+            ctx.ColumnsProvider.Add(fragment.EntityType, false);
+
+            sqlBuilder.Append(ctx.Dialect.MakeTableAlias(ctx.AliasProvider!.GetNextAlias(from), ctx.KeywordCase));
+
+            return sqlBuilder.ToString();
+        }
+        finally
+        {
+            StringBuilderPool.Shared.Return(sqlBuilder);
+        }
     }
 
     /// <summary>

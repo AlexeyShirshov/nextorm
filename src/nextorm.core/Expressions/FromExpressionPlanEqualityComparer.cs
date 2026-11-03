@@ -71,6 +71,11 @@ public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromE
         if (x.RawSqlSource is not null || y.RawSqlSource is not null)
             return ReferenceEquals(x.RawSqlSource, y.RawSqlSource);
 
+        // An opaque derived fragment is identified by reference only: its render delegate is not
+        // comparable and the fragment never enters a keyed command's source identity.
+        if (x.DerivedFragment is not null || y.DerivedFragment is not null)
+            return ReferenceEquals(x.DerivedFragment, y.DerivedFragment);
+
         // if (x.TableAlias != y.TableAlias) return false;
         if (!string.Equals(x.SubQueryHint, y.SubQueryHint, StringComparison.Ordinal)) return false;
 
@@ -354,6 +359,14 @@ public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromE
             rawHash.Add(System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj.RawSqlSource));
             AddBindingHash(ref rawHash, obj.SourceBinding);
             return rawHash.ToHashCode();
+        }
+
+        if (obj.DerivedFragment is not null)
+        {
+            var fragHash = new System.HashCode();
+            fragHash.Add(System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj.DerivedFragment));
+            AddBindingHash(ref fragHash, obj.SourceBinding);
+            return fragHash.ToHashCode();
         }
 
         // A named table with an entity binding is identified by its name plus the binding identity: two

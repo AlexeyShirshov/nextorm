@@ -89,6 +89,10 @@ public sealed class FromExpression
      {
           RawSqlSource = rawSqlSource;
      }
+     internal FromExpression(DerivedFragmentExpression derivedFragment)
+     {
+          DerivedFragment = derivedFragment;
+     }
      internal FromExpression(XmlNodesExpression xmlNodes)
      {
           XmlNodes = xmlNodes;
@@ -151,6 +155,12 @@ public sealed class FromExpression
      /// <see cref="LinqSource"/> and <see cref="RawSqlSource"/>.
      /// </summary>
      internal readonly XmlNodesExpression? XmlNodes;
+     /// <summary>
+     /// Set when this source is an opaque derived fragment (see <see cref="DerivedFragmentExpression"/>).
+     /// Mutually exclusive with <see cref="Table"/>, <see cref="SubQuery"/>, <see cref="RawSqlSource"/>
+     /// and the other source kinds.
+     /// </summary>
+     internal readonly DerivedFragmentExpression? DerivedFragment;
      /// <summary>
      /// Whether <see cref="Table"/> names a same-batch table variable (a batch <c>OUTPUT ... INTO</c>
      /// capture source). A table variable is addressed by its bare <c>@name</c> and must never be
@@ -236,6 +246,7 @@ public sealed class FromExpression
           LinqSource = source.LinqSource;
           RawSqlSource = source.RawSqlSource;
           XmlNodes = source.XmlNodes;
+          DerivedFragment = source.DerivedFragment;
           TableNameOverride = tableName ?? source.TableNameOverride;
           SchemaOverride = schema ?? source.SchemaOverride;
           DatabaseOverride = database ?? source.DatabaseOverride;
@@ -315,7 +326,7 @@ public sealed class FromExpression
                return ReferenceEquals(pivot, Pivot) ? this : new FromExpression(pivot) { SubQueryHint = SubQueryHint, SourceBinding = SourceBinding, SourceLock = SourceLock, BindOccurrenceByParameter = BindOccurrenceByParameter };
           }
 
-          if (!string.IsNullOrEmpty(Table) || SourceType is not null || TableFunction is not null || LinqSource is not null || RawSqlSource is not null || XmlNodes is not null) return this;
+          if (!string.IsNullOrEmpty(Table) || SourceType is not null || TableFunction is not null || LinqSource is not null || RawSqlSource is not null || XmlNodes is not null || DerivedFragment is not null) return this;
 
           return new FromExpression(SubQuery!.CloneForCache()) { SubQueryHint = SubQueryHint, SourceBinding = SourceBinding, SourceLock = SourceLock, BindOccurrenceByParameter = BindOccurrenceByParameter };// { TableAlias = TableAlias };
      }
