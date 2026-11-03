@@ -713,3 +713,4 @@ No product, test, benchmark or example source file under `src/`, `tests/`, `exam
 2026-11-01T13:32:30Z | ACT | revision r1 | attempt 1/3 | status_lint rc 0 | .pdca/T246/rv3/logs/status-lint-final.txt
 2026-11-01T13:33:00Z | ACT | revision r1 | attempt 1/3 | committed commit on 1.0.9-rc5 whose message names #246, S0 (incomplete, Gate 0 UNVERIFIED) and .pdca/T246/rv3/; identify it with git log -1 --format=%H -- .pdca/status/T246-raw-datareader-4.md | .pdca/status/T246-raw-datareader-4.md
 2026-11-01T13:34:00Z | ACT | revision r1 | attempt 1/3 | issue comment posted | https://github.com/AlexeyShirshov/nextorm/issues/246#issuecomment-6558642429
+S0 (cycle 5, HEAD 0e5322e5): verdict=addressable; slice S=(a)+(b_recon)=3944.24 B/call (empty arm: A=3920.24+BRecon=24.00; 10k arm: S=3016.00 B/call); noise band ~0.03 B; formal frozen-verdict UNVERIFIED on validity (b_other 4N); evidence .pdca/T246/rv3/ (RESULTS.md); no product/test/benchmark change.
