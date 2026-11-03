@@ -80,11 +80,38 @@ public sealed class ExternalSelectWhereComponent<TEntity> : IQueryComponent
 
     public QueryComponentContribution Contribution => QueryComponentContribution.ExclusiveRowSource;
 
+
+    private static void ValidateCompatibility(QueryCommand cmd)
+    {
+        if (cmd.Ctes is { Count: > 0 }) throw NotCompatible("common table expressions (WITH)");
+        if (cmd.Having is not null) throw NotCompatible("HAVING");
+        if (cmd.Windows is { Count: > 0 }) throw NotCompatible("named windows");
+        if (cmd.GroupingList is { Length: > 0 } || cmd.GroupBy is not null) throw NotCompatible("GROUP BY");
+        if (cmd.Joins is { Length: > 0 }) throw NotCompatible("joins");
+        if (cmd.PreWhere is not null) throw NotCompatible("PREWHERE");
+        if (!cmd.Paging.IsEmpty) throw NotCompatible("paging");
+        if (cmd.UnionQuery is not null) throw NotCompatible("a set operation");
+        if (cmd.TableHints is { Count: > 0 }) throw NotCompatible("table hints");
+        if (cmd.IndexHints is { Count: > 0 }) throw NotCompatible("index hints");
+        if (cmd.TablesInScopeHints is { Count: > 0 }) throw NotCompatible("tables-in-scope hints");
+        if (cmd.Hints is { Count: > 0 }) throw NotCompatible("query hints");
+        if (cmd.Final) throw NotCompatible("FINAL");
+        if (cmd.SampleRatio is not null) throw NotCompatible("SAMPLE");
+        if (cmd.Settings is { Count: > 0 }) throw NotCompatible("SETTINGS");
+        if (cmd.ForJsonClause is not null || cmd.ForXmlClause is not null) throw NotCompatible("FOR JSON/FOR XML");
+    }
+
+    private static BuildSqlCommandException NotCompatible(string modifier)
+        => new($"SelectWhereMax/SelectWhereMin cannot be combined with {modifier}.");
+
     public IQueryComponentDescriptor Prepare(IQueryComponentPrepareContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
         if (context.Command.DataContext is InMemoryDataContext)
             throw new NotSupportedException("ExternalSelectWhereMin/Max is not supported by the in-memory provider.");
+
+        ValidateCompatibility(context.Command);
+
         var comparer = context.ExpressionComparer;
         var discriminator = _kind == ExternalExtremeKind.Min ? "Min" : "Max";
         var hash = new HashCode();
@@ -108,41 +135,78 @@ public sealed class ExternalSelectWhereComponent<TEntity> : IQueryComponent
         var entityType = typeof(TEntity);
         var rankAlias = MakeRankAlias(entityType);
         var entityParam = Expression.Parameter(entityType, "x");
-
-        // Rebind the value/group selectors to the command's entity parameter shape.
-        var valueBody = new ParameterReplacer(_valueSelector.Parameters[0], entityParam).Visit(_valueSelector.Body)!;
-        var groupBody = _groupBy is null
-            ? null
-            : new ParameterReplacer(_groupBy.Parameters[0], entityParam).Visit(_groupBy.Body);
+        var valueComponents = DecomposeSelector(_valueSelector, entityParam);
+        var groupComponents = _groupBy is null ? Array.Empty<Expression>() : DecomposeSelector(_groupBy, entityParam);
 
         var inner = cmd.Clone();
         inner.Components = null;
 
-        // Add the collision-safe hidden rank column.
-        var valueLambda = Expression.Lambda<Func<object?>>(Expression.Convert(valueBody, typeof(object)));
-        Expression? partitionLambda = null;
-        if (groupBody is not null)
-            partitionLambda = Expression.Lambda<Func<object?>>(Expression.Convert(groupBody, typeof(object)));
+        // The built-in portable lowering excludes rows with a NULL in any value key. Apply the same
+        // filter inside the ranked derived source, before the window is evaluated.
+        Expression? innerFilter = null;
+        for (var i = 0; i < valueComponents.Length; i++)
+        {
+            var component = valueComponents[i];
+            if (IsNullable(component.Type))
+            {
+                var notNull = Expression.NotEqual(component, Expression.Constant(null, component.Type));
+                innerFilter = innerFilter is null ? notNull : Expression.AndAlso(innerFilter, notNull);
+            }
+        }
+        var existingCondition = inner.GetComponentPreparedCondition();
+        if (existingCondition is LambdaExpression conditionLambda && conditionLambda.Parameters.Count > 0)
+        {
+            var conditionBody = new ParameterReplacer(conditionLambda.Parameters[0], entityParam).Visit(conditionLambda.Body);
+            innerFilter = innerFilter is null ? conditionBody : Expression.AndAlso(innerFilter, conditionBody);
+        }
+        else if (existingCondition is not null)
+        {
+            innerFilter = innerFilter is null ? existingCondition : Expression.AndAlso(innerFilter, existingCondition);
+        }
+        inner.SetComponentPreparedCondition(innerFilter is null ? null : Expression.Lambda(innerFilter, entityParam));
 
-        var rowNumberMethod = typeof(CommonFunctions).GetMethod("row_number", BindingFlags.Public | BindingFlags.Instance)!;
-        var rowNumberCall = Expression.Call(Expression.Property(null, typeof(SqlFunctions), "Sql"), rowNumberMethod);
+        var sqlProperty = Expression.Property(null, typeof(SqlFunctions), "Sql");
+        var rankMethod = typeof(CommonFunctions).GetMethod(
+            _ties == ExtremeRowTies.All ? "rank" : "row_number",
+            BindingFlags.Public | BindingFlags.Instance)!;
+        var rankCall = Expression.Call(sqlProperty, rankMethod);
+
         var ascMethod = typeof(CommonFunctions).GetMethod("asc", BindingFlags.Public | BindingFlags.Instance)!;
         var descMethod = typeof(CommonFunctions).GetMethod("desc", BindingFlags.Public | BindingFlags.Instance)!;
-        var sqlProperty = Expression.Property(null, typeof(SqlFunctions), "Sql");
-        Expression orderByArg;
-        if (_kind == ExternalExtremeKind.Max)
-            orderByArg = Expression.Call(sqlProperty, descMethod, Expression.Quote(valueLambda));
+        var directionMethod = _kind == ExternalExtremeKind.Max ? descMethod : ascMethod;
+        var orderCalls = new Expression[valueComponents.Length];
+        for (var i = 0; i < valueComponents.Length; i++)
+        {
+            var lambda = Expression.Lambda<Func<object?>>(Expression.Convert(valueComponents[i], typeof(object)));
+            orderCalls[i] = Expression.Call(sqlProperty, directionMethod, Expression.Quote(lambda));
+        }
+        var orderArray = Expression.NewArrayInit(typeof(WindowOrder), orderCalls);
+
+        Expression partitionArg;
+        if (groupComponents.Length == 0)
+        {
+            partitionArg = Expression.Constant(null, typeof(Expression<Func<object?>>[]));
+        }
         else
-            orderByArg = Expression.Call(sqlProperty, ascMethod, Expression.Quote(valueLambda));
+        {
+            var partitionLambdas = new Expression[groupComponents.Length];
+            for (var i = 0; i < groupComponents.Length; i++)
+            {
+                var lambda = Expression.Lambda<Func<object?>>(Expression.Convert(groupComponents[i], typeof(object)));
+                partitionLambdas[i] = Expression.Quote(lambda);
+            }
+            partitionArg = Expression.NewArrayInit(typeof(Expression<Func<object?>>), partitionLambdas);
+        }
 
         var overMethod = typeof(WindowFunction<int>).GetMethod(
             "Over",
-            new[] { typeof(Expression<Func<object?>>), typeof(WindowOrder), typeof(WindowFrame) })!;
-        Expression partitionArg = partitionLambda is null
-            ? Expression.Constant(null, typeof(Expression<Func<object?>>))
-            : Expression.Quote(partitionLambda);
-        var orderArg = orderByArg;
-        var rankExpression = Expression.Call(rowNumberCall, overMethod, partitionArg, orderArg, Expression.Constant(null, typeof(WindowFrame)));
+            new[] { typeof(Expression<Func<object?>>[]), typeof(WindowOrder[]), typeof(WindowFrame) })!;
+        var rankExpression = Expression.Call(
+            rankCall,
+            overMethod,
+            partitionArg,
+            orderArray,
+            Expression.Constant(null, typeof(WindowFrame)));
 
         var rankSelect = new SelectExpression(typeof(int))
         {
@@ -173,6 +237,30 @@ public sealed class ExternalSelectWhereComponent<TEntity> : IQueryComponent
         CopyCommandState(outer, cmd);
         cmd.SetComponentPreparedCondition(rankFilter);
     }
+
+
+    private static Expression[] DecomposeSelector(LambdaExpression selector, ParameterExpression entityParameter)
+    {
+        var body = StripBoxing(selector.Body);
+        if (body is NewExpression { Arguments.Count: > 0 } ctor)
+        {
+            var result = new Expression[ctor.Arguments.Count];
+            for (var i = 0; i < result.Length; i++)
+                result[i] = new ParameterReplacer(selector.Parameters[0], entityParameter).Visit(ctor.Arguments[i])!;
+            return result;
+        }
+
+        return [new ParameterReplacer(selector.Parameters[0], entityParameter).Visit(body)!];
+    }
+
+
+    private static bool IsNullable(Type type)
+        => !type.IsValueType || Nullable.GetUnderlyingType(type) is not null;
+
+    private static Expression StripBoxing(Expression expression)
+        => expression is UnaryExpression { NodeType: ExpressionType.Convert, Type: var type } convert && type == typeof(object)
+            ? convert.Operand
+            : expression;
 
     private static string MakeRankAlias(Type entityType)
     {
