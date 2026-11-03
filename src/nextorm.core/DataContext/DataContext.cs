@@ -543,6 +543,24 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     internal CommandReaderOwner OpenLobReader<TResult>(QueryCommand<TResult> queryCommand, ReadOnlySpan<object?> @params, CancellationToken cancellationToken, string? terminalName = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
+
+        // #246 S3: hit path for the ToDataReader (non-locator / LOB) flavour. Only this terminal opts in;
+        // ToStream/ToTextReader keep the existing prepared path. Gate order per plan sec. 5:
+        // 1. cache disabled -> no lookup/publication, existing path;
+        // 2. key not constructible -> existing uncached path;
+        // 3. capability mismatch -> fall back before opening a command;
+        // 4. errors propagate.
+        if (terminalName == QueryCommandExtensions.DataReaderTerminalName && queryCommand.Cache)
+        {
+            if (RawReaderKey.TryCreate(this, queryCommand, RawReaderFlavor.Lob, false, false, out var hitKey))
+            {
+                if (ReaderDescriptorStore.TryGet(in hitKey, out var hitDescriptor) && hitDescriptor is not null)
+                {
+                    return OpenLobReaderFromDescriptor(hitDescriptor, queryCommand, @params, cancellationToken);
+                }
+            }
+        }
+
         var prepared = PrepareLobCommand(queryCommand, cancellationToken, terminalName);
         return _executor.OpenLobReader(prepared, @params);
     }
@@ -550,6 +568,18 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     internal async Task<CommandReaderOwner> OpenLobReaderAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken, string? terminalName = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
+
+        if (terminalName == QueryCommandExtensions.DataReaderTerminalName && queryCommand.Cache)
+        {
+            if (RawReaderKey.TryCreate(this, queryCommand, RawReaderFlavor.Lob, false, false, out var hitKey))
+            {
+                if (ReaderDescriptorStore.TryGet(in hitKey, out var hitDescriptor) && hitDescriptor is not null)
+                {
+                    return await OpenLobReaderFromDescriptorAsync(hitDescriptor, queryCommand, @params, cancellationToken).ConfigureAwait(false);
+                }
+            }
+        }
+
         var prepared = PrepareLobCommand(queryCommand, cancellationToken, terminalName);
         return await _executor.OpenLobReaderAsync(prepared, @params, cancellationToken).ConfigureAwait(false);
     }
@@ -779,6 +809,86 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             });
 
         return await _executor.OpenResultReaderAsync(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
+    }
+
+    private CommandReaderOwner OpenLobReaderFromDescriptor<TResult>(
+        RawReaderDescriptor descriptor,
+        QueryCommand<TResult> queryCommand,
+        ReadOnlySpan<object?> @params,
+        CancellationToken cancellationToken)
+    {
+        var extracted = _planner.ExtractParams(queryCommand);
+        var noParams = !(extracted.Count > 0);
+
+        var needsParamRefresh = false;
+        if (!noParams)
+        {
+            for (var i = 0; i < extracted.Count; i++)
+            {
+                if (!NormParam.IsName(extracted[i].Name) && !extracted[i].Stable)
+                {
+                    needsParamRefresh = true;
+                    break;
+                }
+            }
+        }
+
+        var singleRow = queryCommand.SingleRow && Dialect.SupportsCommandBehaviorSingleRow;
+
+        var seeds = extracted.Count > 0 ? extracted.ToArray() : Array.Empty<Parameter>();
+        var factory = new PreparedCommandFactory(descriptor.SqlText, queryCommand.ResolvedCommandTimeout, seeds);
+        var planParameters = factory.CreatePlanParameters(_createParamSimple);
+        var compiledQuery = new DbPreparedQueryCommand<TResult>(
+            factory,
+            planParameters,
+            null,
+            new PreparedCommandOptions(singleRow, descriptor.SqlText, noParams, needsParamRefresh)
+            {
+                SequentialAccess = true,
+                Cache = PreparedCommandCache.None,
+            });
+
+        return _executor.OpenLobReader(compiledQuery, @params);
+    }
+
+    private async Task<CommandReaderOwner> OpenLobReaderFromDescriptorAsync<TResult>(
+        RawReaderDescriptor descriptor,
+        QueryCommand<TResult> queryCommand,
+        object[]? @params,
+        CancellationToken cancellationToken)
+    {
+        var extracted = _planner.ExtractParams(queryCommand);
+        var noParams = !(extracted.Count > 0);
+
+        var needsParamRefresh = false;
+        if (!noParams)
+        {
+            for (var i = 0; i < extracted.Count; i++)
+            {
+                if (!NormParam.IsName(extracted[i].Name) && !extracted[i].Stable)
+                {
+                    needsParamRefresh = true;
+                    break;
+                }
+            }
+        }
+
+        var singleRow = queryCommand.SingleRow && Dialect.SupportsCommandBehaviorSingleRow;
+
+        var seeds = extracted.Count > 0 ? extracted.ToArray() : Array.Empty<Parameter>();
+        var factory = new PreparedCommandFactory(descriptor.SqlText, queryCommand.ResolvedCommandTimeout, seeds);
+        var planParameters = factory.CreatePlanParameters(_createParamSimple);
+        var compiledQuery = new DbPreparedQueryCommand<TResult>(
+            factory,
+            planParameters,
+            null,
+            new PreparedCommandOptions(singleRow, descriptor.SqlText, noParams, needsParamRefresh)
+            {
+                SequentialAccess = true,
+                Cache = PreparedCommandCache.None,
+            });
+
+        return await _executor.OpenLobReaderAsync(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
     }
 
     private DbPreparedQueryCommand<TResult> PrepareResultCommand<TResult>(
