@@ -245,7 +245,7 @@ public class ExtremeRowNativeSqlGenerationTests
         innerOrder.Should().BeGreaterThanOrEqualTo(0);
         derivedTableEnd.Should().BeGreaterThan(innerOrder);
         outerOrder.Should().BeGreaterThan(derivedTableEnd);
-        norm.Should().Contain("limit 1) as t1 order by");
+        norm.Should().Contain("limit 1) as t1  order by");
         // The user's output ordering is not woven into the tie-winner ordering.
         norm.Should().NotContain("order by nullableint desc, id");
     }

@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using FluentAssertions;
 using NextORM.Core;
@@ -12,7 +12,7 @@ namespace NextORM.Integration.Tests;
 ///
 /// <para>
 /// Targeted arms: <c>MakeSelect</c>'s star/tag head through the shared <c>Any</c>/<c>Count</c>
-/// terminals, <c>MakeExtremeRowOuter</c> (the portable <c>row_number</c>/<c>rank</c> lowering with
+/// terminals, the shared derived-table outer (formerly <c>MakeExtremeRowOuter</c>; the portable <c>row_number</c>/<c>rank</c> lowering with
 /// NULL keys, the <c>All</c> ties arm and the grouped partition arm), <c>MakeNamedWindow</c> with a
 /// <c>GROUPS</c> frame, <c>MakeTableFunction</c> (built-in <c>json_each</c> bare and a
 /// caller-declared function under a join), <c>MakeWithClause</c> (two declarations plus the legacy

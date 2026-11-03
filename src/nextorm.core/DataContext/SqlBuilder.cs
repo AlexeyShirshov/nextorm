@@ -1310,12 +1310,43 @@ internal readonly struct SqlBuilder
         var entityType = cmd.EntityType!;
         var from = cmd.From!;
 
+        // Keep the native winner's SQL production (source filter + renderer) inside an opaque fragment
+        // so the outer statement is rendered through the common MakeSelect pipeline, mirroring the
+        // portable lowering. The fragment delegate walks the source expressions in both modes; the
+        // renderer is invoked in SQL mode only.
+        var self = this;
+        var fragment = new DerivedFragmentExpression(entityType, ctx => self.MakeNativeExtremeRowWinner(
+            cmd, renderer, entityType, from, entitySelectList, keyColumns));
+
+        var oCommand = cmd.Clone();
+        oCommand.ExtremeRow = null;
+        oCommand.From = new FromExpression(fragment);
+        oCommand.PreparedCondition = null;
+
+        if (oCommand.IgnoreColumns || oCommand.SelectList is null || oCommand.SelectList.Length == 0)
+            oCommand.SetSelectList(BuildExtremeRowEntitySelectList(entityType));
+
+        return new SqlBuilder(_ctx).MakeSelect(oCommand);
+    }
+
+    /// <summary>
+    /// Builds the native strategy's winning-row source: the same filtered source as the portable
+    /// lowering (without the rank), handed to the renderer. Returns the rendered winner SQL in SQL
+    /// mode and performs the source expression walk in parameter mode, emitting nothing.
+    /// </summary>
+    private string? MakeNativeExtremeRowWinner(
+        QueryCommand cmd,
+        IExtremeRowRenderer renderer,
+        Type entityType,
+        FromExpression from,
+        SelectExpression[] entitySelectList,
+        IReadOnlyList<ExtremeRowRenderColumn> keyColumns)
+    {
         var sourceSql = MakeNativeExtremeRowSource(cmd, entityType, from);
 
-        // Parameter mode emits no SQL; the outer call still walks the projection and ordering so the
-        // collected parameters stay in step with the SQL pass.
+        // Parameter mode emits no SQL; the source walk has already happened above.
         if (_ctx.ParamMode || sourceSql is null)
-            return MakeExtremeRowOuter(cmd, entityType, null, rankColumn: null, entitySelectList);
+            return null;
 
         var (payloadAliases, keyAliases, groupAliases) = MakeExtremeRowAliases(cmd, entitySelectList);
         var winnerSql = renderer.Render(new ExtremeRowRenderRequest(
@@ -1328,7 +1359,7 @@ internal readonly struct SqlBuilder
             groupAliases,
             _ctx.KeywordCase));
 
-        return MakeExtremeRowOuter(cmd, entityType, winnerSql, rankColumn: null, entitySelectList);
+        return winnerSql;
     }
 
     /// <summary>
@@ -1483,126 +1514,6 @@ internal readonly struct SqlBuilder
 
         var (columns, _) = EntitySelectListBuilder.Build(entityType, entityMeta, CancellationToken.None);
         return columns;
-    }
-
-    /// <summary>
-    /// Wraps the already-rendered <paramref name="innerSql"/> (the portable ranked derived table or the
-    /// native winning-row source) in the outer statement: the command's projection, DISTINCT, the
-    /// user's output ordering, and - for the portable strategy - the <c>rn = 1</c> filter on
-    /// <paramref name="rankColumn"/>. <paramref name="rankColumn"/> is <see langword="null"/> for the
-    /// native strategy, whose source already selects the winners. <paramref name="entitySelectList"/> is
-    /// the projection built once by the native dispatch and reused here; the portable path passes
-    /// <see langword="null"/> and the projection is built on demand.
-    /// </summary>
-    private string? MakeExtremeRowOuter(
-        QueryCommand cmd,
-        Type entityType,
-        string? innerSql,
-        string? rankColumn,
-        SelectExpression[]? entitySelectList = null)
-    {
-        // --- outer statement over the derived table ---
-        string? result = null;
-        _ctx.ColumnsProvider.PushSourceScope();
-        try
-        {
-            string? alias = null;
-            if (!_ctx.ParamMode)
-            {
-                // Register the derived table as a physical-shaped source so member access of the
-                // command's select list resolves to its aliased columns; the inner `select *` exposes
-                // the source's physical column names.
-                _ctx.ColumnsProvider.Add(entityType, false);
-                alias = _ctx.AliasProvider!.GetNextAlias(new FromExpression(entityType));
-            }
-
-            var outer = _ctx.ParamMode ? null : StringBuilderPool.Shared.Get();
-            try
-            {
-                var selectList = cmd.SelectList;
-
-                if (!_ctx.ParamMode)
-                {
-                    outer!.Append(Kw("select "));
-
-                    if (cmd.Tag is { Length: > 0 } tag)
-                        outer.Append(MakeTagComment(tag)).Append(' ');
-
-                    if (cmd.IsDistinct)
-                        outer.Append(Kw("distinct "));
-
-                    if (cmd.IgnoreColumns || selectList is null || selectList.Length == 0)
-                    {
-                        // The inner derived table selects the source columns plus the synthetic rank
-                        // column, so a bare `*` here would leak that rank column into the result. With no
-                        // explicit projection, expand the entity's mapped columns explicitly (the same
-                        // shape the normal whole-row select path prepares) so the rank is dropped. The
-                        // native dispatch hands its single projection in; the portable path builds it.
-                        var entityColumns = entitySelectList ?? BuildExtremeRowEntitySelectList(entityType);
-                        for (var i = 0; i < entityColumns.Length; i++)
-                        {
-                            if (i > 0) outer.Append(", ");
-
-                            var item = entityColumns[i];
-                            var (needAliasForColumn, column) = SqlSourceRenderer.MakeColumn(in _ctx, item, entityType, dontNeedAlias: false, renameAware: true);
-                            outer.Append(column);
-
-                            if (needAliasForColumn)
-                                outer.Append(_ctx.Dialect.MakeColumnAlias(item.PropertyName, _ctx.KeywordCase));
-                        }
-                    }
-                    else
-                    {
-                        for (var i = 0; i < selectList.Length; i++)
-                        {
-                            if (i > 0) outer.Append(", ");
-
-                            var item = selectList[i];
-                            var (needAliasForColumn, column) = SqlSourceRenderer.MakeColumn(in _ctx, item, entityType, dontNeedAlias: false, renameAware: true);
-                            outer.Append(column);
-
-                            if (needAliasForColumn)
-                                outer.Append(_ctx.Dialect.MakeColumnAlias(item.PropertyName, _ctx.KeywordCase));
-                        }
-                    }
-
-                    outer.Append(SqlText.NewLine).Append(Kw(" from ")).Append('(').Append(innerSql).Append(')')
-                        .Append(_ctx.Dialect.MakeTableAlias(alias!, _ctx.KeywordCase));
-
-                    if (rankColumn is not null)
-                    {
-                        outer.Append(SqlText.NewLine).Append(Kw(" where ")).Append(alias).Append('.')
-                            .Append(_ctx.Dialect.MakeColumnReference(rankColumn)).Append(" = 1");
-                    }
-
-                    AppendOrderBy(cmd, entityType, outer);
-                }
-                else
-                {
-                    // Parameter pass: walk the same expressions in the same order as the SQL pass.
-                    if (!cmd.IgnoreColumns && selectList is not null)
-                    {
-                        for (var i = 0; i < selectList.Length; i++)
-                            SqlSourceRenderer.MakeColumn(in _ctx, selectList[i], entityType, dontNeedAlias: false, renameAware: true);
-                    }
-
-                    if (cmd.Sorting is { Length: > 0 } sorting)
-                        WalkOrderByParameters(cmd, entityType, sorting);
-                }
-
-                result = outer?.ToString();
-            }
-            finally
-            {
-                if (outer is not null) StringBuilderPool.Shared.Return(outer);
-            }
-        }
-        finally
-        {
-            _ctx.ColumnsProvider.PopSourceScope();
-        }
-
-        return result;
     }
 
     /// <summary>

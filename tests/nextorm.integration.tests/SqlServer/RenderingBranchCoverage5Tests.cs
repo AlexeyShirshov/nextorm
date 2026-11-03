@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using FluentAssertions;
 using NextORM.Core;
@@ -18,7 +18,7 @@ namespace NextORM.Integration.Tests;
 /// <c>OuterApply</c> :2712) and over a CORRELATED DERIVED query, rendered as T-SQL
 /// <c>CROSS APPLY</c>/<c>OUTER APPLY</c> by <c>SqlServerDialect.MakeApply</c> (:371-375); the
 /// <c>SelectWhereMax</c>/<c>SelectWhereMin</c> portable rank lowering over a nullable key
-/// (<c>SqlBuilder.MakeExtremeRowOuter</c> :1273) with every tied row and with a single winner.
+/// (the shared derived-table outer, previously <c>SqlBuilder.MakeExtremeRowOuter</c>) with every tied row and with a single winner.
 /// </para>
 ///
 /// <para>
