@@ -691,14 +691,33 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// </summary>
     public IReadOnlyList<IQueryComponent>? Components
     {
-        get => _componentsView ??= AsReadOnly(_components);
+        get
+        {
+            var state = _componentState;
+            return state is null ? null : state.ComponentsView ??= AsReadOnly(state.Components);
+        }
         set
         {
-            if (ReferenceEquals(_components, value))
-                return;
-            _components = value;
-            _componentsView = null;
+            if (_componentState is null)
+            {
+                if (value is null)
+                    return;
+                _componentState = new ComponentState { Components = value };
+            }
+            else
+            {
+                if (ReferenceEquals(_componentState.Components, value))
+                    return;
+                _componentState.Components = value;
+                _componentState.ComponentsView = null;
+            }
+
             InvalidatePlanKey();
+
+            // An all-null state is indistinguishable from no components; drop the object so a
+            // command that had its components cleared does not carry an empty holder.
+            if (_componentState is { Components: null, PreparedComponents: null, RenderShape: null })
+                _componentState = null;
         }
     }
 
@@ -709,22 +728,54 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// </summary>
     public IReadOnlyList<IQueryComponentDescriptor>? PreparedComponents
     {
-        get => _preparedComponentsView ??= AsReadOnly(_preparedComponents);
+        get
+        {
+            var state = _componentState;
+            return state is null ? null : state.PreparedComponentsView ??= AsReadOnly(state.PreparedComponents);
+        }
         set
         {
-            _preparedComponents = value;
-            _preparedComponentsView = null;
+            if (_componentState is null)
+            {
+                if (value is not null)
+                    _componentState = new ComponentState { PreparedComponents = value };
+            }
+            else
+            {
+                _componentState.PreparedComponents = value;
+                _componentState.PreparedComponentsView = null;
+            }
+
             // Descriptors are part of the plan identity: a memoized key built under the previous list
-            // must not survive the assignment.
+            // must not survive the assignment. Cleared unconditionally, exactly as before the
+            // component state moved into its holder.
             _planKey = null;
             _planKeySql = null;
         }
     }
 
-    private IReadOnlyList<IQueryComponent>? _components;
-    private IReadOnlyList<IQueryComponentDescriptor>? _preparedComponents;
-    private IReadOnlyList<IQueryComponent>? _componentsView;
-    private IReadOnlyList<IQueryComponentDescriptor>? _preparedComponentsView;
+    // #362 AC7: every piece of component state lives in one holder so a command without components
+    // carries a single null reference instead of five. The holder is created on the first component
+    // assignment and is copied (never shared mutably) by Clone.
+    private sealed class ComponentState
+    {
+        internal IReadOnlyList<IQueryComponent>? Components;
+        internal IReadOnlyList<IQueryComponentDescriptor>? PreparedComponents;
+        internal IReadOnlyList<IQueryComponent>? ComponentsView;
+        internal IReadOnlyList<IQueryComponentDescriptor>? PreparedComponentsView;
+        internal QueryCommand? RenderShape;
+
+        internal ComponentState Clone()
+        {
+            var copy = (ComponentState)MemberwiseClone();
+            // Render-scoped engine state: like the pre-consolidation clone, a new command never
+            // inherits a render shape built for another command instance.
+            copy.RenderShape = null;
+            return copy;
+        }
+    }
+
+    private ComponentState? _componentState;
 
     private static IReadOnlyList<T>? AsReadOnly<T>(IReadOnlyList<T>? source)
         => source switch
@@ -740,7 +791,21 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// parameter-refresh pass instead of re-running <see cref="IQueryComponent.BuildQuery"/>. Render-scoped
     /// engine state: dropped with the plan key and on reset, never part of the plan identity.
     /// </summary>
-    internal QueryCommand? ComponentRenderShape { get; set; }
+    internal QueryCommand? ComponentRenderShape
+    {
+        get => _componentState?.RenderShape;
+        set
+        {
+            if (_componentState is null)
+            {
+                if (value is null)
+                    return;
+                _componentState = new ComponentState();
+            }
+
+            _componentState.RenderShape = value;
+        }
+    }
 
     /// <summary>The prepared value-selector columns of <see cref="ExtremeRow"/>, or <c>null</c> when there is none.</summary>
     internal SelectExpression[]? ExtremeRowColumns => _extremeRowColumns;

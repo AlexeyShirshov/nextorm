@@ -105,11 +105,10 @@ public partial class QueryCommand
         dst.DistinctOn = DistinctOn;
         dst._distinctOnColumns = _distinctOnColumns;
         dst.ExtremeRow = ExtremeRow;
-        // #362 AC7: the component lists are never mutated in place (the preparer and the render path
-        // only read them, and every write assigns a new list), so a clone shares the instances instead
-        // of paying two list copies on every component render/warm lookup.
-        dst.Components = Components;
-        dst.PreparedComponents = PreparedComponents;
+        // #362 AC7: the holder is copied in one step. Its component/descriptor lists are never mutated
+        // in place (the preparer and the render path only read them, every write assigns a new list),
+        // so the copy shares those instances instead of paying two list copies on every clone.
+        dst._componentState = _componentState?.Clone();
         dst._extremeRowColumns = _extremeRowColumns;
         dst._extremeRowGroupByColumns = _extremeRowGroupByColumns;
         dst.PerParentPaging = PerParentPaging;

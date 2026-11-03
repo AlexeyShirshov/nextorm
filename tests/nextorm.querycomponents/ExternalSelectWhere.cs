@@ -202,8 +202,8 @@ public sealed class ExternalSelectWhereComponent<TEntity> : IQueryComponent
         inner.Components = null;
         // The hidden rank column is appended to the inner select list. An aggregate there would be
         // evaluated over the reshaped rows instead of the projected ones, so it is refused explicitly.
+        // The clone shares the select list instance, so one walk covers both.
         EnsureNoAggregates(cmd.SelectList);
-        EnsureNoAggregates(inner.SelectList);
         // The built-in portable lowering excludes rows with a NULL in any value key. Apply the same
         // filter inside the ranked derived source, before the window is evaluated.
         Expression? innerFilter = null;
@@ -276,9 +276,14 @@ public sealed class ExternalSelectWhereComponent<TEntity> : IQueryComponent
             Expression = rankExpression
         };
 
-        var innerSelects = inner.SelectList is null
+        // Exact-size copy: the previous LINQ chain allocated an iterator plus an intermediate array on
+        // every cold build, which is pure overhead on the prepare path the component already pays for.
+        var sourceSelects = inner.SelectList;
+        var innerSelects = sourceSelects is null
             ? new[] { rankSelect }
-            : inner.SelectList.Concat(new[] { rankSelect }).ToArray();
+            : new SelectExpression[sourceSelects.Length + 1];
+        sourceSelects?.CopyTo(innerSelects, 0);
+        innerSelects[^1] = rankSelect;
         inner.SetComponentSelectList(innerSelects);
         inner.SetComponentSorting(null);
 
