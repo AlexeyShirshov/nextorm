@@ -83,6 +83,8 @@ public sealed class ExternalSelectWhereComponent<TEntity> : IQueryComponent
     public IQueryComponentDescriptor Prepare(IQueryComponentPrepareContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
+        if (context.Command.DataContext is InMemoryDataContext)
+            throw new NotSupportedException("ExternalSelectWhereMin/Max is not supported by the in-memory provider.");
         var comparer = context.ExpressionComparer;
         var discriminator = _kind == ExternalExtremeKind.Min ? "Min" : "Max";
         var hash = new HashCode();
@@ -124,13 +126,22 @@ public sealed class ExternalSelectWhereComponent<TEntity> : IQueryComponent
 
         var rowNumberMethod = typeof(CommonFunctions).GetMethod("row_number", BindingFlags.Public | BindingFlags.Instance)!;
         var rowNumberCall = Expression.Call(Expression.Property(null, typeof(SqlFunctions), "Sql"), rowNumberMethod);
+        var ascMethod = typeof(CommonFunctions).GetMethod("asc", BindingFlags.Public | BindingFlags.Instance)!;
+        var descMethod = typeof(CommonFunctions).GetMethod("desc", BindingFlags.Public | BindingFlags.Instance)!;
+        var sqlProperty = Expression.Property(null, typeof(SqlFunctions), "Sql");
+        Expression orderByArg;
+        if (_kind == ExternalExtremeKind.Max)
+            orderByArg = Expression.Call(sqlProperty, descMethod, Expression.Quote(valueLambda));
+        else
+            orderByArg = Expression.Call(sqlProperty, ascMethod, Expression.Quote(valueLambda));
+
         var overMethod = typeof(WindowFunction<int>).GetMethod(
             "Over",
-            new[] { typeof(Expression<Func<object?>>), typeof(Expression<Func<object?>>), typeof(WindowFrame) })!;
+            new[] { typeof(Expression<Func<object?>>), typeof(WindowOrder), typeof(WindowFrame) })!;
         Expression partitionArg = partitionLambda is null
             ? Expression.Constant(null, typeof(Expression<Func<object?>>))
             : Expression.Quote(partitionLambda);
-        var orderArg = Expression.Quote(valueLambda);
+        var orderArg = orderByArg;
         var rankExpression = Expression.Call(rowNumberCall, overMethod, partitionArg, orderArg, Expression.Constant(null, typeof(WindowFrame)));
 
         var rankSelect = new SelectExpression(typeof(int))
@@ -265,15 +276,6 @@ public sealed class ExternalSelectWhereComponent<TEntity> : IQueryComponent
     }
 }
 
-public sealed class AdditivePredicateComponent<TEntity> : IQueryComponent
-{
-    public Type Slot => typeof(AdditivePredicateComponent<TEntity>);
-    public QueryComponentContribution Contribution => QueryComponentContribution.AdditivePredicate;
-    public IQueryComponentDescriptor Prepare(IQueryComponentPrepareContext context) =>
-        new SimpleDescriptor(Slot, GetType(), Contribution, "Predicate", 0, (a, b) => true);
-    public void BuildQuery(IQueryComponentBuildContext context) { }
-}
-
 public sealed class ConflictingReshapeComponent<TEntity> : IQueryComponent
 {
     public Type Slot => typeof(ConflictingReshapeComponent<TEntity>);
@@ -301,4 +303,51 @@ internal sealed class SimpleDescriptor : IQueryComponentDescriptor
     public string Discriminator { get; }
     public int StructuralHash { get; }
     public bool StructurallyEquals(IQueryComponentDescriptor? other) => other is not null && _equals(this, other);
+}
+public sealed class AdditivePredicateComponent<TEntity> : IQueryComponent
+{
+    private readonly LambdaExpression _predicate;
+
+    public AdditivePredicateComponent(LambdaExpression predicate)
+    {
+        ArgumentNullException.ThrowIfNull(predicate);
+        _predicate = predicate;
+    }
+
+    public Type Slot => typeof(AdditivePredicateComponent<TEntity>);
+    public QueryComponentContribution Contribution => QueryComponentContribution.AdditivePredicate;
+
+    public IQueryComponentDescriptor Prepare(IQueryComponentPrepareContext context)
+        => new SimpleDescriptor(Slot, GetType(), Contribution, "Predicate", 0, (a, b) => true);
+
+    public void BuildQuery(IQueryComponentBuildContext context)
+    {
+        var cmd = context.Command;
+        var entityType = typeof(TEntity);
+        var param = Expression.Parameter(entityType, "x");
+
+        Expression? body = null;
+        var existing = cmd.GetComponentPreparedCondition();
+        if (existing is LambdaExpression existingLambda)
+            body = new Replacer(existingLambda.Parameters[0], param).Visit(existingLambda.Body);
+
+        var predicateBody = new Replacer(_predicate.Parameters[0], param).Visit(_predicate.Body);
+        var combined = body is null ? predicateBody : Expression.AndAlso(body, predicateBody);
+        cmd.SetComponentPreparedCondition(Expression.Lambda(combined, param));
+    }
+
+    private sealed class Replacer : ExpressionVisitor
+    {
+        private readonly ParameterExpression _oldParameter;
+        private readonly ParameterExpression _newParameter;
+
+        public Replacer(ParameterExpression oldParameter, ParameterExpression newParameter)
+        {
+            _oldParameter = oldParameter;
+            _newParameter = newParameter;
+        }
+
+        protected override Expression VisitParameter(ParameterExpression node)
+            => node == _oldParameter ? _newParameter : base.VisitParameter(node);
+    }
 }

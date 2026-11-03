@@ -675,6 +675,9 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// <summary>Sets the prepared WHERE predicate. Engine-owned structural primitive for query components.</summary>
     public void SetComponentPreparedCondition(Expression? value) => PreparedCondition = value;
 
+    /// <summary>Gets the prepared WHERE predicate. Engine-owned structural primitive for query components.</summary>
+    public Expression? GetComponentPreparedCondition() => PreparedCondition;
+
     /// <summary>Sets the ORDER BY columns. Engine-owned structural primitive for query components.</summary>
     public void SetComponentSorting(Sorting[]? value) => _sorting = value;
 
