@@ -65,6 +65,10 @@ public partial class QueryCommand
     {
         _planKey = null;
         _planKeySql = null;
+        // #362: a prepared component descriptor belongs to the key it was computed under, so it is
+        // dropped with that key. The component list itself stays attached; the next preparation
+        // rebuilds the descriptors, and until then the plan key falls back to the raw component list.
+        PreparedComponents = null;
     }
 
     /// <summary>Returns the comparer used to key whole query plans, creating it on first use.</summary>

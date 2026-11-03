@@ -105,8 +105,11 @@ public partial class QueryCommand
         dst.DistinctOn = DistinctOn;
         dst._distinctOnColumns = _distinctOnColumns;
         dst.ExtremeRow = ExtremeRow;
-        dst.Components = Components is null ? null : new List<IQueryComponent>(Components);
-        dst.PreparedComponents = PreparedComponents is null ? null : new List<IQueryComponentDescriptor>(PreparedComponents);
+        // #362 AC7: the component lists are never mutated in place (the preparer and the render path
+        // only read them, and every write assigns a new list), so a clone shares the instances instead
+        // of paying two list copies on every component render/warm lookup.
+        dst.Components = Components;
+        dst.PreparedComponents = PreparedComponents;
         dst._extremeRowColumns = _extremeRowColumns;
         dst._extremeRowGroupByColumns = _extremeRowGroupByColumns;
         dst.PerParentPaging = PerParentPaging;

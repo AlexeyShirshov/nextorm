@@ -10,6 +10,34 @@ public enum ExternalExtremeKind
     Max
 }
 
+/// <summary>
+/// The reflection handles the component emits into its structural expression tree, resolved once for
+/// the process instead of re-scanned on every cold preparation. Every handle is a method the public
+/// engine surface already exposes; nothing internal is opened.
+/// </summary>
+internal static class ExternalSelectWhereReflection
+{
+    internal static readonly MethodInfo Asc =
+        typeof(CommonFunctions).GetMethod("asc", BindingFlags.Public | BindingFlags.Instance)!;
+
+    internal static readonly MethodInfo Desc =
+        typeof(CommonFunctions).GetMethod("desc", BindingFlags.Public | BindingFlags.Instance)!;
+
+    internal static readonly MethodInfo RowNumber =
+        typeof(CommonFunctions).GetMethod("row_number", BindingFlags.Public | BindingFlags.Instance)!;
+
+    internal static readonly MethodInfo Rank =
+        typeof(CommonFunctions).GetMethod("rank", BindingFlags.Public | BindingFlags.Instance)!;
+
+    internal static readonly MethodInfo ColumnOfInt =
+        typeof(SqlFunctions).GetMethod("Column", BindingFlags.Public | BindingFlags.Static)!.MakeGenericMethod(typeof(int));
+
+    internal static readonly MethodInfo Over =
+        typeof(WindowFunction<int>).GetMethod(
+            "Over",
+            new[] { typeof(Expression<Func<object?>>[]), typeof(WindowOrder[]), typeof(WindowFrame) })!;
+}
+
 public static class ExternalSelectWhereExtensions
 {
     public static EntityBuilder<TEntity> ExternalSelectWhereMin<TEntity, TValue>(
@@ -67,8 +95,6 @@ public sealed class ExternalSelectWhereComponent<TEntity> : IQueryComponent
         Expression<Func<TEntity, object?>>? groupBy)
     {
         ArgumentNullException.ThrowIfNull(valueSelector);
-        if (!Enum.IsDefined(ties))
-            throw new ArgumentOutOfRangeException(nameof(ties));
 
         _kind = kind;
         _valueSelector = valueSelector;
@@ -110,6 +136,12 @@ public sealed class ExternalSelectWhereComponent<TEntity> : IQueryComponent
         if (context.Command.DataContext is InMemoryDataContext)
             throw new NotSupportedException("ExternalSelectWhereMin/Max is not supported by the in-memory provider.");
 
+        // The ties value is validated here rather than at construction: attaching a component must stay
+        // as cheap as attaching the built-in clause (AC7 construction phase), while an unsupported
+        // value is still rejected explicitly during preparation.
+        if (_ties is not (ExtremeRowTies.One or ExtremeRowTies.All))
+            throw new ArgumentOutOfRangeException(nameof(_ties), _ties, "Unknown ExtremeRowTies value.");
+
         ValidateCompatibility(context.Command);
 
         var comparer = context.ExpressionComparer;
@@ -140,7 +172,6 @@ public sealed class ExternalSelectWhereComponent<TEntity> : IQueryComponent
 
         var inner = cmd.Clone();
         inner.Components = null;
-
         // The built-in portable lowering excludes rows with a NULL in any value key. Apply the same
         // filter inside the ranked derived source, before the window is evaluated.
         Expression? innerFilter = null;
@@ -166,14 +197,14 @@ public sealed class ExternalSelectWhereComponent<TEntity> : IQueryComponent
         inner.SetComponentPreparedCondition(innerFilter is null ? null : Expression.Lambda(innerFilter, entityParam));
 
         var sqlProperty = Expression.Property(null, typeof(SqlFunctions), "Sql");
-        var rankMethod = typeof(CommonFunctions).GetMethod(
-            _ties == ExtremeRowTies.All ? "rank" : "row_number",
-            BindingFlags.Public | BindingFlags.Instance)!;
+        var rankMethod = _ties == ExtremeRowTies.All
+            ? ExternalSelectWhereReflection.Rank
+            : ExternalSelectWhereReflection.RowNumber;
         var rankCall = Expression.Call(sqlProperty, rankMethod);
 
-        var ascMethod = typeof(CommonFunctions).GetMethod("asc", BindingFlags.Public | BindingFlags.Instance)!;
-        var descMethod = typeof(CommonFunctions).GetMethod("desc", BindingFlags.Public | BindingFlags.Instance)!;
-        var directionMethod = _kind == ExternalExtremeKind.Max ? descMethod : ascMethod;
+        var directionMethod = _kind == ExternalExtremeKind.Max
+            ? ExternalSelectWhereReflection.Desc
+            : ExternalSelectWhereReflection.Asc;
         var orderCalls = new Expression[valueComponents.Length];
         for (var i = 0; i < valueComponents.Length; i++)
         {
@@ -198,9 +229,7 @@ public sealed class ExternalSelectWhereComponent<TEntity> : IQueryComponent
             partitionArg = Expression.NewArrayInit(typeof(Expression<Func<object?>>), partitionLambdas);
         }
 
-        var overMethod = typeof(WindowFunction<int>).GetMethod(
-            "Over",
-            new[] { typeof(Expression<Func<object?>>[]), typeof(WindowOrder[]), typeof(WindowFrame) })!;
+        var overMethod = ExternalSelectWhereReflection.Over;
         var rankExpression = Expression.Call(
             rankCall,
             overMethod,
@@ -221,20 +250,13 @@ public sealed class ExternalSelectWhereComponent<TEntity> : IQueryComponent
         inner.SetComponentSelectList(innerSelects);
         inner.SetComponentSorting(null);
 
-        var outer = cmd.Clone();
-        outer.Components = null;
-        outer.From = new FromExpression(inner);
-        outer.SetComponentSelectList(cmd.SelectList);
+        // The engine hands this method a private clone of the live command (SqlBuilder.MakeSelect), so
+        // the rebuilt outer statement is written in place: no second full command clone per build.
+        cmd.From = new FromExpression(inner);
 
         var outerParam = Expression.Parameter(entityType, "o");
-        var columnMethod = typeof(SqlFunctions).GetMethod("Column", BindingFlags.Public | BindingFlags.Static)!
-            .MakeGenericMethod(typeof(int));
-        var columnCall = Expression.Call(null, columnMethod, outerParam, Expression.Constant(rankAlias));
+        var columnCall = Expression.Call(null, ExternalSelectWhereReflection.ColumnOfInt, outerParam, Expression.Constant(rankAlias));
         var rankFilter = Expression.Lambda(Expression.Equal(columnCall, Expression.Constant(1)), outerParam);
-        outer.SetComponentPreparedCondition(rankFilter);
-
-        // Replace the original command state with the rebuilt outer command.
-        CopyCommandState(outer, cmd);
         cmd.SetComponentPreparedCondition(rankFilter);
     }
 
@@ -284,16 +306,6 @@ public sealed class ExternalSelectWhereComponent<TEntity> : IQueryComponent
                 return name;
             name += "_";
         }
-    }
-
-    private static void CopyCommandState(QueryCommand source, QueryCommand destination)
-    {
-        // QueryCommand has no public whole-state copy; copy the fields the render path needs.
-        destination.From = source.From;
-        destination.SetComponentSelectList(source.SelectList);
-        destination.SetComponentSorting(source.Sorting is null ? null : (Sorting[])source.Sorting.Clone());
-        destination.Paging = source.Paging;
-        // Preserve the original projection/order metadata already carried by destination.
     }
 
     private sealed class CapturedState

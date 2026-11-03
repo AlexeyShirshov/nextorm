@@ -36,7 +36,12 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     private LimitByClause? _limitBy;
     private DistinctOnClause? _distinctOn;
     private ExtremeRowClause? _extremeRow;
-    private IReadOnlyList<IQueryComponent>? _components;
+    // #362 AC7: one component is the common case, so it is carried in a plain field instead of a
+    // one-element list; `_components` holds two or more and is null otherwise. The two fields are
+    // never set at once. Attaching the first component therefore costs the component object only,
+    // matching the built-in operator's single-clause attachment (no list, no closure).
+    private IQueryComponent? _component;
+    private List<IQueryComponent>? _components;
     private TableSampleClause? _tablesample;
     private TemporalClause? _temporal;
     private LockClause? _rowLock;
@@ -471,7 +476,11 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         cmd.LimitBy = LimitByClause;
         cmd.DistinctOn = _distinctOn;
         cmd.ExtremeRow = _extremeRow;
-        cmd.Components = _components is null ? null : new List<IQueryComponent>(_components);
+        cmd.Components = _components is not null
+            ? new List<IQueryComponent>(_components)
+            : _component is not null
+                ? new IQueryComponent[] { _component }
+                : null;
         cmd.TableSample = _tablesample;
         cmd.Temporal = _temporal;
         cmd.RowLock = _rowLock;
@@ -3169,17 +3178,33 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         ArgumentNullException.ThrowIfNull(component);
 
         var b = Clone();
-        var list = _components is null
-            ? new List<IQueryComponent>()
-            : new List<IQueryComponent>(_components);
 
-        var index = list.FindIndex(c => c.Slot == component.Slot);
-        if (index >= 0)
-            list[index] = component;
-        else
-            list.Add(component);
+        if (_components is null)
+        {
+            // 0 -> 1 and same-slot replacement stay allocation-free beyond the component itself.
+            if (_component is null || _component.Slot == component.Slot)
+            {
+                b._component = component;
+                return b;
+            }
 
-        b._components = list;
+            b._component = null;
+            b._components = new List<IQueryComponent>(2) { _component, component };
+            return b;
+        }
+
+        // Clone already produced a private copy of the list, so the replacement/addition is in place.
+        var list = b._components!;
+        for (var i = 0; i < list.Count; i++)
+        {
+            if (list[i].Slot == component.Slot)
+            {
+                list[i] = component;
+                return b;
+            }
+        }
+
+        list.Add(component);
         return b;
     }
 
@@ -3253,6 +3278,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         dst.LimitByClause = LimitByClause;
         dst.DistinctOnClause = DistinctOnClause;
         dst.ExtremeRowClause = ExtremeRowClause;
+        dst._component = _component;
         dst._components = _components is null ? null : new List<IQueryComponent>(_components);
         dst.TableSampleClause = TableSampleClause;
         dst.TemporalClause = TemporalClause;
@@ -3330,6 +3356,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         || _limitBy is not null
         || _distinctOn is not null
         || _extremeRow is not null
+        || _component is not null
         || _components is { Count: > 0 }
         || _preWhere is not null
         || _arrayJoins is { Count: > 0 }
