@@ -268,26 +268,54 @@ select t1.id, t1.label
 экстремум и не попадают в результат. Группа, у которой сравниваемое значение всегда `null`, не даёт
 ни одной строки, а глобальная форма возвращает пустой результат, когда все значения `null`.
 
-**Переносимая реализация.** Диалект понижает запрос до производной таблицы с оконной функцией —
-`row_number()` для [`One`](xref:NextORM.Core.ExtremeRowTies.One), `rank()` для [`All`](xref:NextORM.Core.ExtremeRowTies.All), `over (partition by <группа> order by <значение> [desc])` —
-с фильтром по рангу `1`, а условие источника объединяется через `AND` с фильтром `is not null` по
-значению:
+**Как понижается запрос.** `SelectWhereMax`/`SelectWhereMin` — это синтаксический сахар на стороне
+SQL: логический запрос понижается внутри общего конвейера, и форма зависит только от политики
+совпадений.
+
+[`One`](xref:NextORM.Core.ExtremeRowTies.One) понижается до производной таблицы с оконной функцией —
+`row_number()` над `(partition by <группа> order by <значение> [desc])` — с фильтром по `1`, а условие
+источника объединяется через `AND` с фильтром `is not null` по значению. На PostgreSQL и ClickHouse
+нативно подходящий запрос с `One` вместо этого рендерится нативно, автоматически, по провайдеру и
+форме запроса — см.
+[Нативные стратегии выбора экстремальной строки](../advanced/select-where-extrema-native.md), — а любой
+другой провайдер или форма сохраняет переносимое окно.
+
+[`All`](xref:NextORM.Core.ExtremeRowTies.All) понижается до **агрегатной** формы. Ранжирующее окно не
+используется никогда: в запросе с `All` нет ни `rank()`, ни `row_number()`, ни оконного
+`over (...)`. По группам это `GROUP BY <группа>` с выбором экстремального значения (и null-safe ключа
+группы) и соединением обратно с источником; глобально — одна скалярная агрегатная подзапрос-выборка,
+соединённая обратно; составной ключ разрешается покомпонентно, лексикографически — экстремум каждого
+следующего компонента берётся по строкам, уже совпавшим с выбранным префиксом, — поэтому `(9, 2)`
+побеждает `(8, 100)`.
 
 ```sql
--- переносимая форма: ранжируем строки источника, затем оставляем ранг 1
-select <проекция>
- from (
-    select *, row_number() over (partition by <группа> order by <значение> desc) as rn
- from <источник>
-    where <значение> is not null and <условие>
-) t where t.rn = 1
+-- All, глобально: один скалярный агрегат, соединённый обратно с источником
+select t1.id, t1.score, t1.category, t1.label
+ from extrema_entity as "t1"
+ join (select max(score) as "__nextorm_ext_1_0"
+ from extrema_entity) as "t2" on t1.score = t2."__nextorm_ext_1_0"
+
+-- All, по группам: null-safe ключ группы и экстремальное значение, сгруппированные и соединённые обратно
+select t1.id, t1.score, t1.category, t1.label
+ from extrema_entity as "t1"
+ join (select category as "__nextorm_ext_1_1", max(score) as "__nextorm_ext_1_0"
+ from extrema_entity
+ group by category) as "t2" on ((t1.category = t2."__nextorm_ext_1_1" or (t1.category is null and t2."__nextorm_ext_1_1" is null)) and t1.score = t2."__nextorm_ext_1_0")
+
+-- One, по группам (переносимая форма): ранжируем строки источника, затем оставляем ранг 1
+select t1.id, t1.score, t1.category, t1.label
+ from (select *, row_number() over (partition by category order by score desc) as "__nextorm_rn"
+ from extrema_entity
+ where score is not null) as "t1"
+ where t1."__nextorm_rn" = 1
 ```
 
-Это реализация на каждом SQL-провайдере (SQLite, SQL Server, PostgreSQL, MySQL, MariaDB и
-ClickHouse) и на провайдере in-memory. На PostgreSQL и ClickHouse нативно подходящий запрос с `One`
-вместо этого рендерится нативно, автоматически, по провайдеру и форме запроса — см.
-[Нативные стратегии выбора экстремальной строки](../advanced/select-where-extrema-native.md). Любая
-другая форма сохраняет переносимое понижение выше.
+Обе формы сохраняют условие источника от вызывающего кода и фильтр `is not null` по сравниваемому
+значению, и обе порождаются одним и тем же шагом конвейера, поэтому контракт результата выше — целые
+строки сущности, перегрузки с проекцией, требование отображённого источника и семантика `null` —
+одинаков для любой политики совпадений и любого SQL-провайдера (SQLite, SQL Server, PostgreSQL, MySQL,
+MariaDB и ClickHouse). Провайдер in-memory вычисляет тот же контракт напрямую своим перечислителем и
+SQL не рендерит вовсе.
 
 Запрос отклоняется на этапе построения SQL при сочетании с другим модификатором формы строк, который
 не выражается через производную таблицу: [`DistinctOn`](xref:NextORM.Postgres.PostgresEntityBuilderExtensions.DistinctOn``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}})), [`GroupBy`](xref:NextORM.Core.EntityBuilder`1.GroupBy``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), соединение, `Having`,
@@ -319,4 +347,5 @@ Source: `tests/nextorm.integration.tests/CommonTestSuite/Queries/CommonTestSuite
 `tests/nextorm.sqlserver.tests/SqlGeneration/SqlGenerationTests.cs:26,35`,
 `tests/nextorm.postgres.tests/SqlGeneration/SqlGenerationTests.cs:25`,
 `tests/nextorm.integration.tests/CommonTestSuite/Queries/CommonTestSuite.SelectWhereExtrema.cs:41`,
+`tests/nextorm.sqlite.tests/SqlGeneration/T302ExtremeRowAllSqlGenerationTests.cs:27`,
 `tests/nextorm.integration.tests/ClickHouse/ClickHouseIntegrationTests.cs:1353`.
