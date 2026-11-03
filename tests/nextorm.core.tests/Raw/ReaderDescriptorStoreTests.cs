@@ -210,4 +210,53 @@ public class ReaderDescriptorStoreTests
         descriptor.SqlText.Should().Be("sql");
         ReaderDescriptorStore.Clear();
     }
+
+    [Fact]
+    public void KeyIdentity_InCardinality_ProducesDifferentKey()
+    {
+        using var ctx = CreateContext();
+        var ids1 = new[] { 1, 2 };
+        var ids2 = new[] { 1, 2, 3 };
+
+        var cmd1 = ctx.From<Entity>().Where(x => ids1.Contains(x.Id)).Select(x => x.Id);
+        var cmd2 = ctx.From<Entity>().Where(x => ids2.Contains(x.Id)).Select(x => x.Id);
+
+        cmd1.PrepareCommand(false, CancellationToken.None);
+        cmd2.PrepareCommand(false, CancellationToken.None);
+
+        RawReaderKey.TryCreate(ctx, cmd1, RawReaderFlavor.Result, false, false, out var k1).Should().BeTrue();
+        RawReaderKey.TryCreate(ctx, cmd2, RawReaderFlavor.Result, false, false, out var k2).Should().BeTrue();
+
+        k1.Should().NotBe(k2);
+    }
+
+    [Fact]
+    public void KeyIdentity_CollectionShape_ProducesDifferentKey()
+    {
+        using var ctx = CreateContext();
+        var flat = new[] { 1, 2 };
+        var nested = new[] { new[] { 1, 2 } };
+
+        // Two distinct collection shapes feeding the same predicate surface must not collide.
+        var cmd1 = ctx.From<Entity>().Where(x => flat.Contains(x.Id)).Select(x => x.Id);
+        var cmd2 = ctx.From<Entity>().Where(x => x.Id == 1 || x.Id == 2).Select(x => x.Id);
+
+        cmd1.PrepareCommand(false, CancellationToken.None);
+        cmd2.PrepareCommand(false, CancellationToken.None);
+
+        RawReaderKey.TryCreate(ctx, cmd1, RawReaderFlavor.Result, false, false, out var k1).Should().BeTrue();
+        RawReaderKey.TryCreate(ctx, cmd2, RawReaderFlavor.Result, false, false, out var k2).Should().BeTrue();
+
+        k1.Should().NotBe(k2);
+    }
+
+    [Fact]
+    public void KeyIdentity_UnsupportedForm_NullContextOrCommand_ReturnsFalse()
+    {
+        using var ctx = CreateContext();
+        var cmd = ctx.From<Entity>().Select(x => x.Id);
+
+        RawReaderKey.TryCreate(null!, cmd, RawReaderFlavor.Result, false, false, out _).Should().BeFalse();
+        RawReaderKey.TryCreate(ctx, null!, RawReaderFlavor.Result, false, false, out _).Should().BeFalse();
+    }
 }

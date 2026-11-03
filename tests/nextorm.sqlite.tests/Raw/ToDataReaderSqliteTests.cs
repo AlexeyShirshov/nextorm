@@ -1516,6 +1516,17 @@ public class ToDataReaderSqliteTests
 
     [Fact]
 
+    public void RawReaderKey_TempTableSource_ShouldBeNonKeyable()
+    {
+        using var ctx = SqliteTestContext.CreateSqlite();
+        var source = ctx.From<ISimpleEntity>().Select(x => new { x.Id }).AsTempTable();
+        var query = ctx.From(source).Select(t => new { Id = t.GetInt32("id") });
+
+        RawReaderKey.TryCreate(ctx, query, RawReaderFlavor.Result, false, false, out _)
+            .Should().BeFalse("temp-table sources are not a single statement and must fall back");
+    }
+
+    [Fact]
     public async Task ToDataReaderAsync_TempTableSource_ShouldNameReaderTerminalWithoutCsvText()
 
     {
