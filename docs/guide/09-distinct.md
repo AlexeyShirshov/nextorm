@@ -304,10 +304,23 @@ select t1.id, t1.score, t1.category, t1.label
  where t1."__nextorm_rn" = 1
 ```
 
-Both shapes keep the caller's source condition and the `is not null` filter on the comparison value, and
-both are produced by the same pipeline step, so the result contract above — whole-entity rows, the
-projection overloads, the mapped-source requirement and the `null` semantics — is identical for every
-tie policy and every SQL provider (SQLite, SQL Server, PostgreSQL, MySQL, MariaDB and ClickHouse). The
+Both shapes keep the caller's source condition and the `null` semantics: a `null` comparison value never
+wins the extremum. The window form filters with `is not null` before ranking; the aggregate form relies on
+the aggregate and the key comparison discarding `null`, and renders that same `is not null` filter inside
+the aggregate when the key is nullable:
+
+```sql
+-- All, global, nullable key: the aggregate filters nulls itself
+select t1.id, t1.score, t1.category
+ from extrema_nullable as "t1"
+ join (select max(score) as "__nextorm_ext_1_0"
+ from extrema_nullable
+ where score is not null) as "t2" on t1.score = t2."__nextorm_ext_1_0"
+```
+
+Both shapes are produced by the same pipeline step, so the result contract above — whole-entity rows, the
+projection overloads, the mapped-source requirement and the `null` semantics — is identical for every tie
+policy and every SQL provider (SQLite, SQL Server, PostgreSQL, MySQL, MariaDB and ClickHouse). The
 in-memory provider evaluates the same contract directly over its own enumerator and renders no SQL at
 all.
 
