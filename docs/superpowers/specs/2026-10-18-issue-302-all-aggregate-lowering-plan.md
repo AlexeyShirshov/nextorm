@@ -342,11 +342,25 @@ Lowering `E` + `O`; guards и рендер общие; SQL-generation по 6 д�
 SQL-generation и live по всем шести семействам (MariaDB — SQL-generation обязательно, live — в
 пределах harness); SQL Server `bit`; ClickHouse nullable; collation/`NaN` parity.
 
-### S5 — `One` portable через общий outer (byte-identical)
+### S5 — `One` portable через общий outer (**семантическая эквивалентность**)
 
-Baseline полного SQL снимается **до** изменения (все диалекты × формы). Затем `MakeExtremeRowOuter`
-удаляется, `One` идёт через fragment source + общий `MakeSelect`. Гейт: SQL совпадает с baseline
-byte-for-byte; поведение/параметры не меняются.
+> **Поправка гейта, решение USER 2026-11-03:** требование byte-identity для `One` заменено
+> эквивалентностью по смыслу. Причина — измеренная: 74/84 арма совпадают байт-в-байт, а остаток
+> сводится к кавычкам ссылки на rank-колонку и одному пробелу перед `ORDER BY`, которые задаются
+> глобальными конвенциями рендера; подгонка под них означала бы либо менять рендер для всех
+> запросов, либо возвращать спец-случаи, то есть дублирование под другим именем.
+
+Baseline полного SQL, параметров и строк снимается **до** изменения (все диалекты × формы).
+Затем `MakeExtremeRowOuter` удаляется, `One` идёт через fragment source + общий `MakeSelect`.
+Гейт:
+- **семантическая эквивалентность SQL**: после нормализации пробелов и кавычек идентификаторов
+  statement совпадает с baseline;
+- **тот же набор строк** на живой БД для матрицы форм (порядок — согласно `ORDER BY`);
+- **тот же состав и порядок параметров**;
+- поведение, владение reader'ом и публичный контракт не меняются.
+
+Любое расхождение сверх нормализованных пробелов/кавычек — блокер, а не повод расширять
+нормализацию.
 
 ### S6 — Native `One` через общий outer
 
@@ -413,7 +427,7 @@ prepared/fresh; после decline renderer'а cache включён; sticky `Cac
 |---|---|
 | 11.1 Архитектура | `MakeExtremeRowOuter` удалён (S5/S6); `All`/`One`/native идут через `MakeSelect`; architecture review диффа. |
 | 11.2 SQL-generation и normalized tree | §9, S1–S5. |
-| 11.3 `One`, native, renderer | golden baseline (S5), native-тесты (S6). |
+| 11.3 `One`, native, renderer | baseline SQL/строк/параметров + семантическая эквивалентность (S5, поправка 2026-11-03), native-тесты (S6). |
 | 11.4 Кэш и параметры | §9. |
 | 11.5 Live integration | §9, S4/S8. |
 | 11.6 Correctness matrix | §9, S2–S4. |
