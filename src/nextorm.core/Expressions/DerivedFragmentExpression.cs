@@ -11,8 +11,8 @@ namespace NextORM.Core;
 internal sealed class DerivedFragmentExpression(Type entityType, Func<SqlBuildContext, string?> render)
 {
     /// <summary>The entity type exposed by the fragment; registered as a physical-shaped source.</summary>
-    public Type EntityType { get; } = entityType;
+    internal Type EntityType { get; } = entityType;
 
     /// <summary>Renders the fragment: SQL text in SQL mode, parameter walk (no text) in parameter mode.</summary>
-    public Func<SqlBuildContext, string?> Render { get; } = render;
+    internal Func<SqlBuildContext, string?> Render { get; } = render;
 }
