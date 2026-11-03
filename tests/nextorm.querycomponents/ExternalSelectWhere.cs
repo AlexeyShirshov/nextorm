@@ -1,0 +1,304 @@
+using System.Linq.Expressions;
+using System.Reflection;
+using NextORM.Core;
+
+namespace NextORM.QueryComponents;
+
+public enum ExternalExtremeKind
+{
+    Min,
+    Max
+}
+
+public static class ExternalSelectWhereExtensions
+{
+    public static EntityBuilder<TEntity> ExternalSelectWhereMin<TEntity, TValue>(
+        this EntityBuilder<TEntity> source,
+        Expression<Func<TEntity, TValue>> valueSelector,
+        ExtremeRowTies ties = ExtremeRowTies.One,
+        Expression<Func<TEntity, object?>>? groupBy = null)
+        => source.WithComponent(new ExternalSelectWhereComponent<TEntity>(ExternalExtremeKind.Min, valueSelector, ties, groupBy));
+
+    public static EntityBuilder<TEntity> ExternalSelectWhereMax<TEntity, TValue>(
+        this EntityBuilder<TEntity> source,
+        Expression<Func<TEntity, TValue>> valueSelector,
+        ExtremeRowTies ties = ExtremeRowTies.One,
+        Expression<Func<TEntity, object?>>? groupBy = null)
+        => source.WithComponent(new ExternalSelectWhereComponent<TEntity>(ExternalExtremeKind.Max, valueSelector, ties, groupBy));
+
+    public static QueryCommand<TResult> ExternalSelectWhereMin<TEntity, TValue, TResult>(
+        this EntityBuilder<TEntity> source,
+        Expression<Func<TEntity, TValue>> valueSelector,
+        Expression<Func<TEntity, TResult>> projection,
+        ExtremeRowTies ties = ExtremeRowTies.One,
+        Expression<Func<TEntity, object?>>? groupBy = null)
+    {
+        ArgumentNullException.ThrowIfNull(projection);
+        return source.WithComponent(new ExternalSelectWhereComponent<TEntity>(ExternalExtremeKind.Min, valueSelector, ties, groupBy))
+            .Select(projection);
+    }
+
+    public static QueryCommand<TResult> ExternalSelectWhereMax<TEntity, TValue, TResult>(
+        this EntityBuilder<TEntity> source,
+        Expression<Func<TEntity, TValue>> valueSelector,
+        Expression<Func<TEntity, TResult>> projection,
+        ExtremeRowTies ties = ExtremeRowTies.One,
+        Expression<Func<TEntity, object?>>? groupBy = null)
+    {
+        ArgumentNullException.ThrowIfNull(projection);
+        return source.WithComponent(new ExternalSelectWhereComponent<TEntity>(ExternalExtremeKind.Max, valueSelector, ties, groupBy))
+            .Select(projection);
+    }
+}
+
+public sealed class ExternalSelectWhereComponent<TEntity> : IQueryComponent
+{
+    public static int BuildCount;
+    public static void ResetBuildCount() => BuildCount = 0;
+    private readonly ExternalExtremeKind _kind;
+    private readonly LambdaExpression _valueSelector;
+    private readonly ExtremeRowTies _ties;
+    private readonly Expression<Func<TEntity, object?>>? _groupBy;
+
+    public ExternalSelectWhereComponent(
+        ExternalExtremeKind kind,
+        LambdaExpression valueSelector,
+        ExtremeRowTies ties,
+        Expression<Func<TEntity, object?>>? groupBy)
+    {
+        ArgumentNullException.ThrowIfNull(valueSelector);
+        if (!Enum.IsDefined(ties))
+            throw new ArgumentOutOfRangeException(nameof(ties));
+
+        _kind = kind;
+        _valueSelector = valueSelector;
+        _ties = ties;
+        _groupBy = groupBy;
+    }
+
+    public Type Slot => typeof(ExternalSelectWhereComponent<TEntity>);
+
+    public QueryComponentContribution Contribution => QueryComponentContribution.ExclusiveRowSource;
+
+    public IQueryComponentDescriptor Prepare(IQueryComponentPrepareContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        var comparer = context.ExpressionComparer;
+        var discriminator = _kind == ExternalExtremeKind.Min ? "Min" : "Max";
+        var hash = new HashCode();
+        hash.Add(Slot);
+        hash.Add(GetType());
+        hash.Add(discriminator);
+        hash.Add(_ties);
+        hash.Add(_valueSelector, comparer);
+        if (_groupBy is not null)
+            hash.Add(_groupBy, comparer);
+
+        var captured = new CapturedState(_kind, _ties, _valueSelector, _groupBy, comparer);
+        return new Descriptor(this, captured, hash.ToHashCode());
+    }
+
+    public void BuildQuery(IQueryComponentBuildContext context)
+    {
+        ExternalSelectWhereComponent<TEntity>.BuildCount++;
+        ArgumentNullException.ThrowIfNull(context);
+        var cmd = context.Command;
+        var entityType = typeof(TEntity);
+        var rankAlias = MakeRankAlias(entityType);
+        var entityParam = Expression.Parameter(entityType, "x");
+
+        // Rebind the value/group selectors to the command's entity parameter shape.
+        var valueBody = new ParameterReplacer(_valueSelector.Parameters[0], entityParam).Visit(_valueSelector.Body)!;
+        var groupBody = _groupBy is null
+            ? null
+            : new ParameterReplacer(_groupBy.Parameters[0], entityParam).Visit(_groupBy.Body);
+
+        var inner = cmd.Clone();
+        inner.Components = null;
+
+        // Add the collision-safe hidden rank column.
+        var valueLambda = Expression.Lambda<Func<object?>>(Expression.Convert(valueBody, typeof(object)));
+        Expression? partitionLambda = null;
+        if (groupBody is not null)
+            partitionLambda = Expression.Lambda<Func<object?>>(Expression.Convert(groupBody, typeof(object)));
+
+        var rowNumberMethod = typeof(CommonFunctions).GetMethod("row_number", BindingFlags.Public | BindingFlags.Instance)!;
+        var rowNumberCall = Expression.Call(Expression.Property(null, typeof(SqlFunctions), "Sql"), rowNumberMethod);
+        var overMethod = typeof(WindowFunction<int>).GetMethod(
+            "Over",
+            new[] { typeof(Expression<Func<object?>>), typeof(Expression<Func<object?>>), typeof(WindowFrame) })!;
+        Expression partitionArg = partitionLambda is null
+            ? Expression.Constant(null, typeof(Expression<Func<object?>>))
+            : Expression.Quote(partitionLambda);
+        var orderArg = Expression.Quote(valueLambda);
+        var rankExpression = Expression.Call(rowNumberCall, overMethod, partitionArg, orderArg, Expression.Constant(null, typeof(WindowFrame)));
+
+        var rankSelect = new SelectExpression(typeof(int))
+        {
+            Index = inner.SelectList?.Length ?? 0,
+            PropertyName = rankAlias,
+            Expression = rankExpression
+        };
+
+        var innerSelects = inner.SelectList is null
+            ? new[] { rankSelect }
+            : inner.SelectList.Concat(new[] { rankSelect }).ToArray();
+        inner.SetComponentSelectList(innerSelects);
+        inner.SetComponentSorting(null);
+
+        var outer = cmd.Clone();
+        outer.Components = null;
+        outer.From = new FromExpression(inner);
+        outer.SetComponentSelectList(cmd.SelectList);
+
+        var outerParam = Expression.Parameter(entityType, "o");
+        var columnMethod = typeof(SqlFunctions).GetMethod("Column", BindingFlags.Public | BindingFlags.Static)!
+            .MakeGenericMethod(typeof(int));
+        var columnCall = Expression.Call(null, columnMethod, outerParam, Expression.Constant(rankAlias));
+        var rankFilter = Expression.Lambda(Expression.Equal(columnCall, Expression.Constant(1)), outerParam);
+        outer.SetComponentPreparedCondition(rankFilter);
+
+        // Replace the original command state with the rebuilt outer command.
+        CopyCommandState(outer, cmd);
+        cmd.SetComponentPreparedCondition(rankFilter);
+    }
+
+    private static string MakeRankAlias(Type entityType)
+    {
+        const string seed = "__nextorm_ext_rn";
+        if (!DataContextCache.Metadata.TryGetValue(entityType, out var metadata))
+            return seed;
+
+        var name = seed;
+        while (true)
+        {
+            var collides = false;
+            foreach (var property in metadata.Properties)
+            {
+                if (string.Equals(property.ColumnName, name, StringComparison.OrdinalIgnoreCase))
+                {
+                    collides = true;
+                    break;
+                }
+            }
+            if (!collides)
+                return name;
+            name += "_";
+        }
+    }
+
+    private static void CopyCommandState(QueryCommand source, QueryCommand destination)
+    {
+        // QueryCommand has no public whole-state copy; copy the fields the render path needs.
+        destination.From = source.From;
+        destination.SetComponentSelectList(source.SelectList);
+        destination.SetComponentSorting(source.Sorting is null ? null : (Sorting[])source.Sorting.Clone());
+        destination.Paging = source.Paging;
+        // Preserve the original projection/order metadata already carried by destination.
+    }
+
+    private sealed class CapturedState
+    {
+        public CapturedState(ExternalExtremeKind kind, ExtremeRowTies ties, Expression valueSelector, Expression? groupBy, IEqualityComparer<Expression> comparer)
+        {
+            Kind = kind;
+            Ties = ties;
+            ValueSelector = valueSelector;
+            GroupBy = groupBy;
+            Comparer = comparer;
+        }
+
+        public ExternalExtremeKind Kind { get; }
+        public ExtremeRowTies Ties { get; }
+        public Expression ValueSelector { get; }
+        public Expression? GroupBy { get; }
+        public IEqualityComparer<Expression> Comparer { get; }
+    }
+
+    private sealed class Descriptor : IQueryComponentDescriptor
+    {
+        private readonly ExternalSelectWhereComponent<TEntity> _component;
+        private readonly CapturedState _state;
+
+        public Descriptor(ExternalSelectWhereComponent<TEntity> component, CapturedState state, int hash)
+        {
+            _component = component;
+            _state = state;
+            StructuralHash = hash;
+        }
+
+        public Type Slot => _component.Slot;
+        public Type ComponentType => _component.GetType();
+        public QueryComponentContribution Contribution => _component.Contribution;
+        public string Discriminator => _state.Kind == ExternalExtremeKind.Min ? "Min" : "Max";
+        public int StructuralHash { get; }
+
+        public bool StructurallyEquals(IQueryComponentDescriptor? other)
+        {
+            if (other is not Descriptor rhs)
+                return false;
+            if (Slot != rhs.Slot || ComponentType != rhs.ComponentType || Contribution != rhs.Contribution)
+                return false;
+            if (Discriminator != rhs.Discriminator || _state.Ties != rhs._state.Ties)
+                return false;
+            if (!_state.Comparer.Equals(_state.ValueSelector, rhs._state.ValueSelector))
+                return false;
+            if (_state.GroupBy is null || rhs._state.GroupBy is null)
+                return _state.GroupBy is null && rhs._state.GroupBy is null;
+            return _state.Comparer.Equals(_state.GroupBy, rhs._state.GroupBy);
+        }
+    }
+
+    private sealed class ParameterReplacer : ExpressionVisitor
+    {
+        private readonly ParameterExpression _oldParameter;
+        private readonly ParameterExpression _newParameter;
+
+        public ParameterReplacer(ParameterExpression oldParameter, ParameterExpression newParameter)
+        {
+            _oldParameter = oldParameter;
+            _newParameter = newParameter;
+        }
+
+        protected override Expression VisitParameter(ParameterExpression node)
+            => node == _oldParameter ? _newParameter : base.VisitParameter(node);
+    }
+}
+
+public sealed class AdditivePredicateComponent<TEntity> : IQueryComponent
+{
+    public Type Slot => typeof(AdditivePredicateComponent<TEntity>);
+    public QueryComponentContribution Contribution => QueryComponentContribution.AdditivePredicate;
+    public IQueryComponentDescriptor Prepare(IQueryComponentPrepareContext context) =>
+        new SimpleDescriptor(Slot, GetType(), Contribution, "Predicate", 0, (a, b) => true);
+    public void BuildQuery(IQueryComponentBuildContext context) { }
+}
+
+public sealed class ConflictingReshapeComponent<TEntity> : IQueryComponent
+{
+    public Type Slot => typeof(ConflictingReshapeComponent<TEntity>);
+    public QueryComponentContribution Contribution => QueryComponentContribution.ExclusiveRowSource;
+    public IQueryComponentDescriptor Prepare(IQueryComponentPrepareContext context) =>
+        new SimpleDescriptor(Slot, GetType(), Contribution, "Reshape", 0, (a, b) => true);
+    public void BuildQuery(IQueryComponentBuildContext context) { }
+}
+
+internal sealed class SimpleDescriptor : IQueryComponentDescriptor
+{
+    private readonly Func<IQueryComponentDescriptor, IQueryComponentDescriptor, bool> _equals;
+    public SimpleDescriptor(Type slot, Type componentType, QueryComponentContribution contribution, string discriminator, int hash, Func<IQueryComponentDescriptor, IQueryComponentDescriptor, bool> equals)
+    {
+        Slot = slot;
+        ComponentType = componentType;
+        Contribution = contribution;
+        Discriminator = discriminator;
+        StructuralHash = hash;
+        _equals = equals;
+    }
+    public Type Slot { get; }
+    public Type ComponentType { get; }
+    public QueryComponentContribution Contribution { get; }
+    public string Discriminator { get; }
+    public int StructuralHash { get; }
+    public bool StructurallyEquals(IQueryComponentDescriptor? other) => other is not null && _equals(this, other);
+}

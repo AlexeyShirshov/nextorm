@@ -669,6 +669,15 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// </summary>
     internal ExtremeRowClause? ExtremeRow { get; set; }
 
+    /// <summary>Sets the prepared projection columns. Engine-owned structural primitive for query components.</summary>
+    public void SetComponentSelectList(SelectExpression[]? value) => _selectList = value;
+
+    /// <summary>Sets the prepared WHERE predicate. Engine-owned structural primitive for query components.</summary>
+    public void SetComponentPreparedCondition(Expression? value) => PreparedCondition = value;
+
+    /// <summary>Sets the ORDER BY columns. Engine-owned structural primitive for query components.</summary>
+    public void SetComponentSorting(Sorting[]? value) => _sorting = value;
+
     /// <summary>The query components attached to this command, or <c>null</c> when there are none.</summary>
     public IReadOnlyList<IQueryComponent>? Components { get; set; }
 
