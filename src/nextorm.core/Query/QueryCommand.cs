@@ -668,6 +668,13 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// has none. A dialect that does not support it rejects the command when its SQL is built.
     /// </summary>
     internal ExtremeRowClause? ExtremeRow { get; set; }
+
+    /// <summary>The query components attached to this command, or <c>null</c> when there are none.</summary>
+    public IReadOnlyList<IQueryComponent>? Components { get; set; }
+
+    /// <summary>The prepared query-component descriptors, or <c>null</c> when there are none.</summary>
+    public IReadOnlyList<IQueryComponentDescriptor>? PreparedComponents { get; set; }
+
     /// <summary>The prepared value-selector columns of <see cref="ExtremeRow"/>, or <c>null</c> when there is none.</summary>
     internal SelectExpression[]? ExtremeRowColumns => _extremeRowColumns;
     /// <summary>The prepared group-by columns of <see cref="ExtremeRow"/>, or <c>null</c> when the clause has no group.</summary>
@@ -1146,6 +1153,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         _distinctOnColumns = null;
         _extremeRowColumns = null;
         _extremeRowGroupByColumns = null;
+        PreparedComponents = null;
         _perParentPartitionColumns = null;
         PreparedPreWhere = null;
         _preparedArrayJoin = null;

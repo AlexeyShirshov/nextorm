@@ -105,6 +105,8 @@ public partial class QueryCommand
         dst.DistinctOn = DistinctOn;
         dst._distinctOnColumns = _distinctOnColumns;
         dst.ExtremeRow = ExtremeRow;
+        dst.Components = Components is null ? null : new List<IQueryComponent>(Components);
+        dst.PreparedComponents = PreparedComponents is null ? null : new List<IQueryComponentDescriptor>(PreparedComponents);
         dst._extremeRowColumns = _extremeRowColumns;
         dst._extremeRowGroupByColumns = _extremeRowGroupByColumns;
         dst.PerParentPaging = PerParentPaging;

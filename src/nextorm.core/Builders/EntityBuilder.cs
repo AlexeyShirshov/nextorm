@@ -36,6 +36,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     private LimitByClause? _limitBy;
     private DistinctOnClause? _distinctOn;
     private ExtremeRowClause? _extremeRow;
+    private IReadOnlyList<IQueryComponent>? _components;
     private TableSampleClause? _tablesample;
     private TemporalClause? _temporal;
     private LockClause? _rowLock;
@@ -470,6 +471,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         cmd.LimitBy = LimitByClause;
         cmd.DistinctOn = _distinctOn;
         cmd.ExtremeRow = _extremeRow;
+        cmd.Components = _components is null ? null : new List<IQueryComponent>(_components);
         cmd.TableSample = _tablesample;
         cmd.Temporal = _temporal;
         cmd.RowLock = _rowLock;
@@ -3156,6 +3158,31 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
 
         return b;
     }
+    /// <summary>
+    /// Attaches a query component to this builder. Components with the same slot replace the previous
+    /// value in place; the builder is not mutated.
+    /// </summary>
+    /// <param name="component">The component to attach.</param>
+    /// <returns>A new builder with the component attached.</returns>
+    public EntityBuilder<TEntity> WithComponent(IQueryComponent component)
+    {
+        ArgumentNullException.ThrowIfNull(component);
+
+        var b = Clone();
+        var list = _components is null
+            ? new List<IQueryComponent>()
+            : new List<IQueryComponent>(_components);
+
+        var index = list.FindIndex(c => c.Slot == component.Slot);
+        if (index >= 0)
+            list[index] = component;
+        else
+            list.Add(component);
+
+        b._components = list;
+        return b;
+    }
+
     object ICloneable.Clone()
     {
         return CloneImp();
@@ -3226,6 +3253,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         dst.LimitByClause = LimitByClause;
         dst.DistinctOnClause = DistinctOnClause;
         dst.ExtremeRowClause = ExtremeRowClause;
+        dst._components = _components is null ? null : new List<IQueryComponent>(_components);
         dst.TableSampleClause = TableSampleClause;
         dst.TemporalClause = TemporalClause;
         dst.RowLockClause = RowLockClause;
@@ -3302,6 +3330,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         || _limitBy is not null
         || _distinctOn is not null
         || _extremeRow is not null
+        || _components is { Count: > 0 }
         || _preWhere is not null
         || _arrayJoins is { Count: > 0 }
         || _windows is { Count: > 0 }

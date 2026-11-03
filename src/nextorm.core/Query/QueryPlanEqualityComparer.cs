@@ -226,6 +226,8 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
         // when the SQL is identical, so two variants must never share a plan entry (#249 / T353).
         if (!x.CollectionSlotShape.Equals(y.CollectionSlotShape)) return false;
 
+        if (!ComponentsEqual(x.Components, y.Components, x, y)) return false;
+
         if (!IEqualityComparerExtensions.Equals(this, x.ReferencedQueries, y.ReferencedQueries)) return false;
 
         // The outer references are the actual expressions a correlated subquery points at (for
@@ -246,6 +248,40 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
         for (var (i, cnt) = (0, x.Count); i < cnt; i++)
         {
             if (!string.Equals(x[i], y[i], StringComparison.Ordinal)) return false;
+        }
+
+        return true;
+    }
+
+    private static bool ComponentsEqual(IReadOnlyList<IQueryComponent>? x, IReadOnlyList<IQueryComponent>? y, QueryCommand? xCommand, QueryCommand? yCommand)
+    {
+        // Prefer the prepared descriptors when both commands have them: they carry the full
+        // structural state that the component contract requires to be part of the key.
+        var xPrepared = xCommand?.PreparedComponents;
+        var yPrepared = yCommand?.PreparedComponents;
+        if (xPrepared is not null || yPrepared is not null)
+        {
+            if (xPrepared is null || yPrepared is null) return false;
+            if (xPrepared.Count != yPrepared.Count) return false;
+            for (var i = 0; i < xPrepared.Count; i++)
+            {
+                if (!xPrepared[i].StructurallyEquals(yPrepared[i])) return false;
+            }
+            return true;
+        }
+
+        if (ReferenceEquals(x, y)) return true;
+        if (x is null || y is null) return false;
+        if (x.Count != y.Count) return false;
+
+        for (var i = 0; i < x.Count; i++)
+        {
+            var a = x[i];
+            var b = y[i];
+            if (a is null || b is null) return false;
+            if (a.Slot != b.Slot) return false;
+            if (a.Contribution != b.Contribution) return false;
+            if (!a.Equals(b)) return false;
         }
 
         return true;
@@ -590,6 +626,19 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
             obj.EagerLoadShape.AddTo(ref hash);
 
             obj.CollectionSlotShape.AddTo(ref hash);
+
+            if (obj.PreparedComponents is { Count: > 0 } preparedComponents)
+            {
+                hash.Add(preparedComponents.Count);
+                foreach (var descriptor in preparedComponents)
+                    hash.Add(descriptor.StructuralHash);
+            }
+            else if (obj.Components is { Count: > 0 } components)
+            {
+                hash.Add(components.Count);
+                foreach (var component in components)
+                    hash.Add(component.GetHashCode());
+            }
 
             if (obj.WindowsPlanHash != 0)
                 hash.Add(obj.WindowsPlanHash);

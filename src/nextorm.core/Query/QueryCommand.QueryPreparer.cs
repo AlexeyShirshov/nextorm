@@ -98,6 +98,34 @@ public partial class QueryCommand
             // conflicting explicit setting. No-op for every other provider.
             NavigationExpansion.ApplyProviderOuterJoinNullSettings(cmd);
 
+            if (cmd.Components is { Count: > 0 } components)
+            {
+                var prepared = new List<IQueryComponentDescriptor>(components.Count);
+                foreach (var component in components)
+                {
+                    var descriptor = component.Prepare(new QueryComponentContext(cmd));
+                    if (descriptor is null)
+                        throw new BuildSqlCommandException("A query component returned a null prepared descriptor.");
+                    if (descriptor.Slot != component.Slot)
+                        throw new BuildSqlCommandException("A query component's prepared slot does not match its declared slot.");
+                    prepared.Add(descriptor);
+                }
+
+                var exclusiveSlots = prepared
+                    .Where(d => d.Contribution == QueryComponentContribution.ExclusiveRowSource)
+                    .Select(d => d.Slot)
+                    .Distinct()
+                    .Count();
+                if (exclusiveSlots > 1)
+                    throw new BuildSqlCommandException("Multiple distinct exclusive row-source reshape components are not supported.");
+
+                cmd.PreparedComponents = prepared;
+            }
+            else
+            {
+                cmd.PreparedComponents = null;
+            }
+
             FromExpression? from = cmd._from ?? cmd._dataContext.GetFrom(srcType, cmd);
             PrepareFrom(from, dontCalculateHash, cancellationToken, cmd);
             from = AttachPrimarySourceLock(cmd, from);

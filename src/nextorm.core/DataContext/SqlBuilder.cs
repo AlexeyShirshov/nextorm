@@ -34,6 +34,17 @@ internal readonly struct SqlBuilder
 
     public string? MakeSelect(QueryCommand cmd, string? selectInto = null)
     {
+        if (cmd.Components is { Count: > 0 } components)
+        {
+            var rebuilt = cmd.Clone();
+            rebuilt.Components = null;
+            rebuilt.PreparedComponents = cmd.PreparedComponents;
+            foreach (var component in components)
+                component.BuildQuery(new QueryComponentContext(rebuilt));
+
+            return new SqlBuilder(_ctx).MakeSelect(rebuilt, selectInto);
+        }
+
 #if DEBUG
         if (!cmd.IsPrepared)
             throw new InvalidOperationException("Command not prepared");

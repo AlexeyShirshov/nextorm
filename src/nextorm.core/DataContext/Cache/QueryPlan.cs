@@ -95,6 +95,18 @@ public sealed class QueryPlan : IEquatable<QueryPlan>
                 hash.Add((int)_eagerLoadMode);
                 _eagerLoadShape.AddTo(ref hash);
                 _collectionSlotShape.AddTo(ref hash);
+                if (cmd.PreparedComponents is { Count: > 0 } preparedComponents)
+                {
+                    hash.Add(preparedComponents.Count);
+                    foreach (var descriptor in preparedComponents)
+                        hash.Add(descriptor.StructuralHash);
+                }
+                else if (cmd.Components is { Count: > 0 } components)
+                {
+                    hash.Add(components.Count);
+                    foreach (var component in components)
+                        hash.Add(component.GetHashCode());
+                }
                 hash.Add(sql);
                 return hash.ToHashCode();
             }
