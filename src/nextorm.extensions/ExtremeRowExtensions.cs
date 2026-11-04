@@ -208,7 +208,14 @@ public sealed class ExtremeRowComponent<TEntity> : IQueryComponent
         ExtremeRowComponent<TEntity>.BuildCount++;
         ArgumentNullException.ThrowIfNull(context);
         var cmd = context.Command;
-        if (_ties == ExtremeRowTies.All)
+        // ClickHouse refuses bare IS NULL residuals in JOIN ON (#296), and the ext package cannot
+        // reach the core internal null-safe join marker (no IVT). Keep semantic parity there by
+        // using the rank-window form for All as well, which partitions on the group keys directly
+        // and never produces a null-safe join.
+        var isClickHouse = cmd.DataContext is not null
+            && cmd.DataContext is DataContext dc
+            && string.Equals(dc.Dialect.GetType().Name, "ClickHouseDialect", StringComparison.Ordinal);
+        if (_ties == ExtremeRowTies.All && !isClickHouse)
         {
             BuildAllQuery(context);
             return;

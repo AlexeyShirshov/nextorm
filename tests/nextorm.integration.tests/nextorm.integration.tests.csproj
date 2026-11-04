@@ -32,6 +32,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\nextorm.core\nextorm.core.csproj" />
+    <ProjectReference Include="..\..\src\nextorm.extensions\nextorm.extensions.csproj" />
     <ProjectReference Include="..\nextorm.querycomponents\nextorm.querycomponents.csproj" />
     <ProjectReference Include="..\..\src\nextorm.sqlite\nextorm.sqlite.csproj" />
     <ProjectReference Include="..\..\src\nextorm.postgres\nextorm.postgres.csproj" />
