@@ -173,7 +173,7 @@ All previous requirements remain in force. No architecture, specification, plan 
 - T366: in-progress; accepted step S1 baseline only `(239, 2/6, 0)`
 - integrated-tree verdict: none
 - issues #365, #366 both OPEN
-- commits made: `7abd2e1b`, `0320ecc3`, `091fddbd`, `80d900a0` (T365 bookkeeping + cycle work); T366 S1 commit pending
+- commits made: `7abd2e1b`, `0320ecc3`, `091fddbd`, `80d900a0` (T365 bookkeeping + cycle work); `7b75ff581ed0ba9330be062044e3ddc206191f50` (T366 S1 accepted baseline)
 
 ## Progress log
 
