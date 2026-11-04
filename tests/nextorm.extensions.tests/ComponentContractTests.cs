@@ -9,6 +9,7 @@ using Xunit;
 
 namespace NextORM.Extensions.Tests;
 
+[Collection("Query plan cache")]
 public class ComponentContractTests
 {
     private sealed class Entity

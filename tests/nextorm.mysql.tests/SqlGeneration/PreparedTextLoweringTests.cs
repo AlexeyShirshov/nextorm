@@ -15,6 +15,7 @@ namespace NextORM.MySql.Tests.SqlGeneration;
 /// the next execution. Every test inspects the command the context would execute (a recording
 /// connection, no database): the SQL text and the parameter list are both asserted.
 /// </summary>
+[Collection("DataContextCache clear")]
 public class PreparedTextLoweringTests
 {
     private static string Normalize(string sql) => sql.Replace("\r\n", "\n");
