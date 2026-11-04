@@ -32,7 +32,7 @@ jobs:
       # isolated; the previous 75 % was a cycle-10 measurement (81.49 % / 75.48 %) of a different suite.
       # The cycle-13 coverage campaign targets 76 %, at which point this number goes back up.
       MIN_INTEGRATION_LINE_COVERAGE: 65
-      MIN_INTEGRATION_BRANCH_COVERAGE: 74
+      MIN_INTEGRATION_BRANCH_COVERAGE: 75
 
     steps:
       - uses: actions/checkout@v7

@@ -43,7 +43,7 @@
 
 ## Coverage
 - Whole-solution gate: `coverage.settings.xml` covers only `nextorm.{core,sqlite,postgres,sqlserver}`; `MIN_LINE_COVERAGE=85` and `MIN_BRANCH_COVERAGE=75`, hard-failing on `main` only. The thresholds and the `dotnet-coverage` → `reportgenerator` steps live in `.github/workflows/dotnet.yml`.
-- The integration suite has its own gate: `coverage.integration.settings.xml` measures what `tests/nextorm.integration.tests` alone covers across every provider assembly it references (core, sqlite, postgres, sqlserver, mysql, mariadb, clickhouse, entityframeworkcore). Thresholds `MIN_INTEGRATION_LINE_COVERAGE=65` / `MIN_INTEGRATION_BRANCH_COVERAGE=74`, same main-only hard-fail. `NextORM.Core.InMemory*` is excluded from this gate's denominator (`reportgenerator -classfilters:"-NextORM.Core.InMemory*"`): the in-memory provider is unit-only by policy, so the integration suite can never execute those paths. The numbers are not comparable to 85/75 — unit-only paths are 0 % there by design. Reproduce:
+- The integration suite has its own gate: `coverage.integration.settings.xml` measures what `tests/nextorm.integration.tests` alone covers across every provider assembly it references (core, sqlite, postgres, sqlserver, mysql, mariadb, clickhouse, entityframeworkcore). Thresholds `MIN_INTEGRATION_LINE_COVERAGE=65` / `MIN_INTEGRATION_BRANCH_COVERAGE=75`, same main-only hard-fail. `NextORM.Core.InMemory*` is excluded from this gate's denominator (`reportgenerator -classfilters:"-NextORM.Core.InMemory*"`): the in-memory provider is unit-only by policy, so the integration suite can never execute those paths. In-memory-only members that live inside shared classes (`MergeBuilder.MergeInMemory`, `EntityBuilder.BuildInMemoryJoinIntos` and its two many-to-many builders, `EntityBuilder.RewriteInMemoryJoinIntoJoin`, `JunctionLinkSourceFactory.GetInMemorySource`) carry `[ExcludeFromCodeCoverage]`, which `dotnet-coverage` already honours (`coverage.integration.settings.xml`): they have no SQL entry point at all. A guard that merely returns early on the SQL path is **not** such a member — its remaining code is reachable, so it stays in the denominator. The numbers are not comparable to 85/75 — unit-only paths are 0 % there by design. Reproduce:
   ```bash
   DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock \
     dotnet tool run dotnet-coverage collect -s coverage.integration.settings.xml -f cobertura \
@@ -71,6 +71,14 @@
 ## Conventions
 - Async naming: use the `Async` suffix only when a method has a synchronous twin. A lone async method keeps the plain name.
 - Line endings: CRLF throughout (`core.autocrlf=true`). Preserve CRLF when writing/editing; never leave LF-only or mixed. Normalize after edits: `perl -pi -e 's/\r?\n/\r\n/g' <file>`.
+
+## PDCA: process defects get their own spec
+- When a PDCA cycle (project `.pdca/`, skill `nextorm-pdca`) reveals a **process** defect — an inflated or wrong criterion/floor, a plan that never reached the status file, counter drift (`N`/`r`/`n`), a guard oracle without a semantic marker, a frozen/built/measured package mismatch, a CHECK report reduced to a summary, a blind test batch — do not patch the skill mid-cycle and do not leave the finding only in the campaign status.
+- Write it as a separate internal spec under `docs/specs/design/` (one file per task/cycle, e.g. `docs/specs/design/D364-pdca-process-defects.md`). Per defect record a stable key, the symptom, the root cause, the effect on attempts/cycles, evidence pointers (`file:line`, status or evidence path) and the prevention measure.
+- The campaign status `#### Defect history` carries the key and a link to that spec; it does not duplicate the full analysis.
+- Product defects are not process defects: they go to a GitHub issue in the current milestone (duplicate search first).
+- Skills are not edited inside a running cycle (the source-of-truth rule above); a process rule reaches `nextorm-pdca` only through the normal skills workflow after the spec exists.
+- Specs are internal: no links to them from public docs.
 
 ## Brainstorming & GitHub tracking
 - In this repo, load `.opencode/skills/nextorm-brainstorming/SKILL.md` together with the global `brainstorming` skill before starting the brainstorm.
