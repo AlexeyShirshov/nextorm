@@ -141,9 +141,10 @@ All previous requirements remain in force. No architecture, specification, plan 
 ### Phase decisions
 
 - T365 PLAN persisted (`plan_state=ready`)
-- T366 charter pending
+- T366 charter prepared (`preparation_state=ready`)
 - ALL-barrier: not yet passed (T366 charter not prepared)
 - Schedule: T365 → T366, single lane, current worktree/branch, no worktree, no merge; revision vector T365@r1, T366@r1 (pending)
+- T366 S1 boundary: accepted on its own scope; baseline `(239, 2/6, 0)`; step2 opened with durable brief `.pdca/365-366-r2/items/T366/step2/brief.md`; floor calibrated; process defect `S1-EVIDENCE-HISTORY` deferred to `S2-AC0`.
 
 ### Groups
 
@@ -153,25 +154,26 @@ All previous requirements remain in force. No architecture, specification, plan 
 
 ### Items
 
-| item | group | branch | status | plan_state | preparation_state | form | contract | overlay | cycle_id | status path | plan_revision | attempt_n | disposition | evidence root |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| T365 | g1 | `collection/365-366` | incomplete | pending | — | cycle | pdca | coder+.NET + nextorm-pdca | T365-rc5-3 (N=3) | `.pdca/status/T365-rc5-3.md` | r2 | 1/3 | finalized; terminal=criteria-undetermined | `.pdca/365-366-r2/items/T365/rv2/` |
-| T366 | g1 | `collection/365-366` | pending | pending | pending | campaign | — | — | — | `.pdca/status/T366-rc5-1.md` (to be created at bootstrap) | — | — | paused (not started; remains pending) | `.pdca/365-366-r2/items/T366/step<k>/rv1/` |
+| item | group | branch | status | plan_state | preparation_state | preparation_ref | form | contract | overlay | cycle_id | status path | plan_revision | attempt_n | disposition | evidence root | campaign_status | campaign_ref |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| T365 | g1 | `collection/365-366` | incomplete | pending | — | — | cycle | pdca | coder+.NET + nextorm-pdca | T365-rc5-3 (N=3) | `.pdca/status/T365-rc5-3.md` | r2 | 1/3 | finalized; terminal=criteria-undetermined | `.pdca/365-366-r2/items/T365/rv2/` | — | — |
+| T366 | g1 | `collection/365-366` | in-progress | pending | ready | `.pdca/365-366-r2/items/T366/preparation.md@r1` | campaign | — | — | T366-rc5-1 (N=1 closed; next N=2) | `.pdca/status/T366-rc5-1.md` | r1 | 3/3 (r1) | active (S2 open) | `.pdca/365-366-r2/items/T366/step<k>/rv1/` | running | `.pdca/status/T366-rc5-1.md` |
 
 ### General verification and recovery
 
 - state: in-progress
-- last common CHECK: T365 not accepted (n=1/3); T365 subsequently finalized incomplete by PLAN terminal outcome
-- blocking reason: T365 plan-terminal: acceptance criteria cannot be determined (AC7 65/74 vs 65/75)
-- defect history: `AC6-six-warm-All-rows` (open); `WC-1-concurrent-writer` (closed by construction); `T365-N3-D0-fabricated-constraints` (fixed in both records: false constraint line replaced with the verbatim user line and its three constraints)
-- next allowed step: T366 remains pending; prepare/start T366 only under its existing collection authorization; T365 resumes only after explicit user decision on AC7
+- last common CHECK: T365 not accepted (plan-terminal; issue #365 OPEN); T366 S1 accepted on its own scope as current-state baseline `(239, 2/6, 0)`; T366 whole-goal not reached
+- blocking reason: none
+- defect history: `AC6-six-warm-All-rows` (open); `WC-1-concurrent-writer` (closed by construction); `T365-N3-D0-fabricated-constraints` (fixed in both records: false constraint line replaced with the verbatim user line and its three constraints); `S1-WARN-POLICY` (fixed); `S1-REGISTRY-BINDING` (fixed); `S1-FAILURE-ORIGIN` (fixed); `S1-CONTOUR-PROOF` (fixed); `S1-VM3-EXTENSIONS` (fixed); `S1-EVIDENCE-HISTORY` (deferred → `S2-AC0`)
+- next allowed step: T366 S2 per `.pdca/365-366-r2/items/T366/step2/brief.md`; S1 accepted baseline `(239, 2/6, 0)`, campaign remains running
 
 ### Completeness
 
 - 0/2 goals accepted
+- T366: in-progress; accepted step S1 baseline only `(239, 2/6, 0)`
 - integrated-tree verdict: none
 - issues #365, #366 both OPEN
-- commits made: none
+- commits made: `7abd2e1b`, `0320ecc3`, `091fddbd`, `80d900a0` (T365 bookkeeping + cycle work); T366 S1 commit pending
 
 ## Progress log
 
@@ -182,3 +184,7 @@ All previous requirements remain in force. No architecture, specification, plan 
 2026-11-04T18:40:19Z | T365 CHECK not accepted (n=1/3); next allowed step DO under r2 | `.pdca/status/T365-rc5-3.md`
 2026-11-04T18:51:47Z | T365 r2 evidence batch collected (AC8 diff, build, live suite, provenance, harness copy); AC6 shape work and final table still open
 2026-11-04T20:37:39Z | T365 incomplete; plan-terminal: acceptance criteria cannot be determined (AC7 65/74 vs 65/75); typed terminal=criteria-undetermined; group g1 remains in-progress, T366 pending | `.pdca/status/T365-rc5-3.md`; `.pdca/365-366-r2/items/T365/rv2/plan-terminal.md`
+2026-11-04T20:50:28Z | DO | T366@r1 | T366 charter prepared (`preparation_state=ready`); T366 remains pending; group g1 remains in-progress | `.pdca/365-366-r2/items/T366/preparation.md@r1`
+
+2026-11-04T20:51:10Z | ACT | T365 finalized incomplete (plan-terminal criteria-undetermined); T366 preparation ready; next: T366 step1 baseline
+2026-11-04T23:08:20Z | ACT | T366 S1 accepted; baseline (239, 2/6, 0); step2 opened with durable brief; evidence `.pdca/365-366-r2/items/T366/step1/rv1/`
