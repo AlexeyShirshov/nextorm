@@ -13,7 +13,9 @@
 
 «пдца по задачам 365 366 автономно автокомит»
 
-Ограничения: два файла статуса; продуктовый код не менять; не выполнять git add/commit; `.pdca/status/collection-365-366.md` и `T365-rc5-2.md` — намеренные read-only копии, игнорировать.
+«пдца по задачам 365 366 автономно автокомит»
+
+Ограничения: `по задачам 365 366`, `автономно`, `автокомит`.
 
 ### GitHub issue #365 (source: `gh issue view 365 --repo AlexeyShirshov/nextorm --json number,title,url,milestone,state,body`)
 
@@ -153,16 +155,16 @@ All previous requirements remain in force. No architecture, specification, plan 
 
 | item | group | branch | status | plan_state | preparation_state | form | contract | overlay | cycle_id | status path | plan_revision | attempt_n | disposition | evidence root |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| T365 | g1 | `collection/365-366` | in-progress | ready | — | cycle | pdca | coder+.NET + nextorm-pdca | T365-rc5-3 (N=3) | `.pdca/status/T365-rc5-3.md` | r1 | 0/3 | active | `.pdca/365-366-r2/items/T365/rv1/` |
+| T365 | g1 | `collection/365-366` | in-progress | ready | — | cycle | pdca | coder+.NET + nextorm-pdca | T365-rc5-3 (N=3) | `.pdca/status/T365-rc5-3.md` | r2 | 1/3 | active | `.pdca/365-366-r2/items/T365/rv2/` |
 | T366 | g1 | `collection/365-366` | pending | — | pending | campaign | — | — | — | `.pdca/status/T366-rc5-1.md` (to be created at bootstrap) | — | — | pending | `.pdca/365-366-r2/items/T366/step<k>/rv1/` |
 
 ### General verification and recovery
 
 - state: in-progress
-- last common CHECK: none
+- last common CHECK: T365 not accepted (n=1/3)
 - blocking reason: none
-- defect history: `AC6-six-warm-All-rows` (open); `WC-1-concurrent-writer` (closed by construction)
-- next allowed step: repair the AC6 harness and re-measure; then CHECK
+- defect history: `AC6-six-warm-All-rows` (open); `WC-1-concurrent-writer` (closed by construction); `T365-N3-D0-fabricated-constraints` (fixed in both records: false constraint line replaced with the verbatim user line and its three constraints)
+- next allowed step: DO under r2
 
 ### Completeness
 
@@ -175,3 +177,6 @@ All previous requirements remain in force. No architecture, specification, plan 
 
 2026-11-04T17:50:50Z | PLAN | T365@r1 | T365 PLAN persisted (plan_state=ready); collection prepared | `.pdca/status/T365-rc5-3.md`
 2026-11-04T18:22:22Z | T365 paused at clean boundary in DO (n=0/3); T366 not started
+2026-11-04T18:24:20Z | state correction D0 applied: fabricated constraints removed from collection Input and T365 Original task | `.pdca/status/T365-rc5-3.md`; `.pdca/status/collection-365-366-r2.md`
+
+2026-11-04T18:40:19Z | T365 CHECK not accepted (n=1/3); next allowed step DO under r2 | `.pdca/status/T365-rc5-3.md`
