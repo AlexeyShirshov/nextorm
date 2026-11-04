@@ -11,6 +11,7 @@
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/nextorm.clickhouse/nextorm.clickhouse.csproj" />
+    <Project Path="src/nextorm.extensions/nextorm.extensions.csproj" />
     <Project Path="src/nextorm.mariadb/nextorm.mariadb.csproj" />
     <Project Path="src/nextorm.mysql/nextorm.mysql.csproj" />
   </Folder>
@@ -30,6 +31,7 @@
   <Project Path="src/nextorm.sqlserver/nextorm.sqlserver.csproj" />
   <Project Path="tests/nextorm.alias.tests/nextorm.alias.tests.csproj" />
   <Project Path="tests/nextorm.core.tests/nextorm.core.tests.csproj" />
+  <Project Path="tests/nextorm.extensions.tests/nextorm.extensions.tests.csproj" />
   <Project Path="tests/nextorm.entityframeworkcore.tests/nextorm.entityframeworkcore.tests.csproj" />
   <Project Path="tests/nextorm.integration.tests/nextorm.integration.tests.csproj" />
   <Project Path="tests/nextorm.postgres.tests/nextorm.postgres.tests.csproj" />

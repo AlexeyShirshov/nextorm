@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>nextorm.extensions</PackageId>
+    <Title>Nextorm extensions</Title>
+    <Description>Public query-component extensions for Nextorm, including SelectWhereMinEx and SelectWhereMaxEx implemented entirely on the public IQueryComponent layer.</Description>
+    <PackageTags>$(PackageTags);extensions;query-components;extreme-row</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\nextorm.core\nextorm.core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="readme.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>
