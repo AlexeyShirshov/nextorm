@@ -180,3 +180,4 @@ All previous requirements remain in force. No architecture, specification, plan 
 2026-11-04T18:24:20Z | state correction D0 applied: fabricated constraints removed from collection Input and T365 Original task | `.pdca/status/T365-rc5-3.md`; `.pdca/status/collection-365-366-r2.md`
 
 2026-11-04T18:40:19Z | T365 CHECK not accepted (n=1/3); next allowed step DO under r2 | `.pdca/status/T365-rc5-3.md`
+2026-11-04T18:51:47Z | T365 r2 evidence batch collected (AC8 diff, build, live suite, provenance, harness copy); AC6 shape work and final table still open
