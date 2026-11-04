@@ -180,6 +180,9 @@ public static class ExtremeRowExtensions
 /// <typeparam name="TEntity">The mapped entity type the selectors are written over.</typeparam>
 public sealed class ExtremeRowComponent<TEntity> : IQueryComponent
 {
+    private readonly object _descriptorLock = new();
+    private IEqualityComparer<Expression>? _descriptorComparer;
+    private Descriptor? _cachedDescriptor;
     private readonly ExtremeKind _kind;
     private readonly LambdaExpression _valueSelector;
     private readonly ExtremeRowTies _ties;
@@ -297,18 +300,32 @@ public sealed class ExtremeRowComponent<TEntity> : IQueryComponent
         ValidateCompatibility(context.Command);
 
         var comparer = context.ExpressionComparer;
-        var discriminator = _kind == ExtremeKind.Min ? "Min" : "Max";
-        var hash = new HashCode();
-        hash.Add(Slot);
-        hash.Add(GetType());
-        hash.Add(discriminator);
-        hash.Add(_ties);
-        hash.Add(_valueSelector, comparer);
-        if (_groupBy is not null)
-            hash.Add(_groupBy, comparer);
+        var cached = Volatile.Read(ref _cachedDescriptor);
+        if (cached is not null && ReferenceEquals(_descriptorComparer, comparer))
+            return cached;
 
-        var captured = new CapturedState(_kind, _ties, _valueSelector, _groupBy, comparer);
-        return new Descriptor(this, captured, hash.ToHashCode());
+        lock (_descriptorLock)
+        {
+            cached = _cachedDescriptor;
+            if (cached is not null && ReferenceEquals(_descriptorComparer, comparer))
+                return cached;
+
+            var discriminator = _kind == ExtremeKind.Min ? "Min" : "Max";
+            var hash = new HashCode();
+            hash.Add(Slot);
+            hash.Add(GetType());
+            hash.Add(discriminator);
+            hash.Add(_ties);
+            hash.Add(_valueSelector, comparer);
+            if (_groupBy is not null)
+                hash.Add(_groupBy, comparer);
+
+            var captured = new CapturedState(_kind, _ties, _valueSelector, _groupBy, comparer);
+            cached = new Descriptor(this, captured, hash.ToHashCode());
+            _descriptorComparer = comparer;
+            Volatile.Write(ref _cachedDescriptor, cached);
+            return cached;
+        }
     }
 
     /// <summary>

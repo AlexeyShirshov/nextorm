@@ -508,7 +508,7 @@ public class ComponentContractTests
         using var ctxScope = ctx;
 
         int threshold = 0;
-        var counting = new CountingComponent<Entity>();
+        var counting = new CountingComponent<Entity>(new ExtremeRowComponent<Entity>(ExtremeKind.Min, (Expression<Func<Entity, int?>>)(x => x.Score), ExtremeRowTies.One, null));
         var command = (QueryCommand<Entity>)ctx.From<Entity>()
             .Where(x => x.Score > threshold)
             .WithComponent(counting);
@@ -521,7 +521,7 @@ public class ComponentContractTests
         counting.BuildCount.Should().Be(1, "warm hit must not call BuildQuery");
 
         // positional
-        var positional = new CountingComponent<Entity>();
+        var positional = new CountingComponent<Entity>(new ExtremeRowComponent<Entity>(ExtremeKind.Min, (Expression<Func<Entity, int?>>)(x => x.Score), ExtremeRowTies.One, null));
         var command2 = (QueryCommand<Entity>)ctx.From<Entity>()
             .Where(x => x.Score > SqlFunctions.Parameter<int>(0))
             .WithComponent(positional);
@@ -529,9 +529,34 @@ public class ComponentContractTests
         var p = Prepare(ctx, command2);
         positional.BuildCount.Should().Be(1, "cold miss must call BuildQuery exactly once");
         ctx.ToList(p, new object[] { 5 });
+        Prepare(ctx, command2);
         positional.BuildCount.Should().Be(1);
         ctx.ToList(p, new object[] { 15 });
         positional.BuildCount.Should().Be(1, "a warm positional execution must not call BuildQuery again");
+    }
+
+    [Fact]
+    public void NoComponentRegression_OrdinaryQueryKeepsItsShapeAndResults()
+    {
+        var (conn, ctx) = CreateContext(EntitySeed);
+        using var connScope = conn;
+        using var ctxScope = ctx;
+
+        var command = (QueryCommand<Entity>)ctx.From<Entity>().Where(x => x.Score > 10);
+        var sql = SqlOf(ctx, command);
+        sql.Should().NotContain("row_number()");
+        sql.Should().NotContain("__nextorm_ext_");
+        ctx.ToList(Prepare(ctx, command)).Select(x => x.Id).Should().Equal(3L, 5L);
+    }
+
+    [Fact]
+    public void NoComponentRegression_OrdinaryCountRemainsUsable()
+    {
+        var (conn, ctx) = CreateContext(EntitySeed);
+        using var connScope = conn;
+        using var ctxScope = ctx;
+
+        ctx.From<Entity>().Where(x => x.Score != null).Count().Should().Be(4);
     }
 
     // value leakage check between captured calls

@@ -481,6 +481,28 @@ INSERT INTO FloatEntity VALUES
         groupedNonNullableAll.Should().Contain(" join ").And.NotContain("rank(");
     }
 
+    [Fact]
+    public void S4_9_CompositeAllSqlTopology_MatchesLegacyStagedShape()
+    {
+        var (conn, ctx) = CreateContext();
+        using var connScope = conn;
+        using var ctxScope = ctx;
+        ctx.PurgeQueryCache();
+
+        var legacy = SqlOf(ctx, (QueryCommand<SemEntity>)ctx.From<SemEntity>()
+            .SelectWhereMin(x => new { x.Score, x.Name }, ExtremeRowTies.All, x => x.Id));
+        ctx.PurgeQueryCache();
+        var external = SqlOf(ctx, (QueryCommand<SemEntity>)ctx.From<SemEntity>()
+            .SelectWhereMinEx(x => new { x.Score, x.Name }, ExtremeRowTies.All, x => x.Id));
+
+        legacy.Should().Contain(" join ");
+        external.Should().Contain(" join ");
+        Regex.Matches(external, "\\bmin\\(", RegexOptions.IgnoreCase).Count
+            .Should().Be(Regex.Matches(legacy, "\\bmin\\(", RegexOptions.IgnoreCase).Count);
+        Regex.Matches(external, "\\bjoin\\b", RegexOptions.IgnoreCase).Count
+            .Should().Be(Regex.Matches(legacy, "\\bjoin\\b", RegexOptions.IgnoreCase).Count);
+    }
+
     /// <summary>
     /// A floating value key under <c>All</c> keeps the rank window instead of the aggregate + join-back
     /// shape: ClickHouse's aggregate and its ordering disagree about <c>NaN</c> (the server returns NaN

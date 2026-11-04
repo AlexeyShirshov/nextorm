@@ -65,43 +65,43 @@ internal sealed class SimpleDescriptor : IQueryComponentDescriptor
 /// </summary>
 internal sealed class CountingComponent<TEntity> : IQueryComponent
 {
+    private readonly ExtremeRowComponent<TEntity> _inner;
     private int _buildCount;
+
+    public CountingComponent(ExtremeRowComponent<TEntity> inner) => _inner = inner;
 
     public int BuildCount => Volatile.Read(ref _buildCount);
 
-    public Type Slot => typeof(CountingComponent<TEntity>);
+    public Type Slot => _inner.Slot;
 
-    public QueryComponentContribution Contribution => QueryComponentContribution.AdditivePredicate;
+    public QueryComponentContribution Contribution => _inner.Contribution;
 
     public IQueryComponentDescriptor Prepare(IQueryComponentPrepareContext context) =>
-        new CountingDescriptor(Slot, GetType(), Contribution);
+        new CountingDescriptor(_inner.Prepare(context));
 
-    public void BuildQuery(IQueryComponentBuildContext context) => Interlocked.Increment(ref _buildCount);
+    public void BuildQuery(IQueryComponentBuildContext context)
+    {
+        Interlocked.Increment(ref _buildCount);
+        _inner.BuildQuery(context);
+    }
 
     private sealed class CountingDescriptor : IQueryComponentDescriptor
     {
-        public CountingDescriptor(Type slot, Type componentType, QueryComponentContribution contribution)
-        {
-            Slot = slot;
-            ComponentType = componentType;
-            Contribution = contribution;
-        }
+        private readonly IQueryComponentDescriptor _inner;
+        public CountingDescriptor(IQueryComponentDescriptor inner) => _inner = inner;
 
-        public Type Slot { get; }
+        public Type Slot => _inner.Slot;
 
-        public Type ComponentType { get; }
+        public Type ComponentType => _inner.ComponentType;
 
-        public QueryComponentContribution Contribution { get; }
+        public QueryComponentContribution Contribution => _inner.Contribution;
 
-        public string Discriminator => "Count";
+        public string Discriminator => _inner.Discriminator;
 
-        public int StructuralHash => 0;
+        public int StructuralHash => _inner.StructuralHash;
 
         public bool StructurallyEquals(IQueryComponentDescriptor? other) =>
-            other is CountingDescriptor rhs
-            && Slot == rhs.Slot
-            && ComponentType == rhs.ComponentType
-            && Contribution == rhs.Contribution;
+            other is CountingDescriptor rhs && _inner.StructurallyEquals(rhs._inner);
     }
 }
 
