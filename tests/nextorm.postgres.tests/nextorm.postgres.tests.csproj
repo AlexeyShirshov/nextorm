@@ -18,6 +18,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\nextorm.core\nextorm.core.csproj" />
+    <ProjectReference Include="..\..\src\nextorm.extensions\nextorm.extensions.csproj" />
+
     <ProjectReference Include="..\..\src\nextorm.postgres\nextorm.postgres.csproj" />
     <!-- Reference the ClickHouse provider to call its Final/PreWhere/Settings/... extension methods
          when asserting that PostgreSQL rejects them at render time (issue #122). -->
@@ -38,4 +40,7 @@
                       ReferenceOutputAssembly="false" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="..\nextorm.extensions.provider.shared\ExtremeRowExSqlGenerationTestsBase.cs" Link="QueryComponents\ExtremeRowExSqlGenerationTestsBase.cs" />
+  </ItemGroup>
 </Project>

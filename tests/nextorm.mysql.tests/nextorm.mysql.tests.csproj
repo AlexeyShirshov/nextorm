@@ -18,6 +18,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\nextorm.core\nextorm.core.csproj" />
+    <ProjectReference Include="..\..\src\nextorm.extensions\nextorm.extensions.csproj" />
+
     <ProjectReference Include="..\..\src\nextorm.mysql\nextorm.mysql.csproj" />
     <!-- MariaDB SQL generation for #211 per-parent paging lives in this project's dialect family; the
          MariaDB dialect shares the MySQL connection behaviour but renders its own dialect. -->
@@ -37,4 +39,7 @@
                       ReferenceOutputAssembly="false" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="..\nextorm.extensions.provider.shared\ExtremeRowExSqlGenerationTestsBase.cs" Link="QueryComponents\ExtremeRowExSqlGenerationTestsBase.cs" />
+  </ItemGroup>
 </Project>

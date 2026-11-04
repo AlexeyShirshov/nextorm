@@ -18,6 +18,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\nextorm.core\nextorm.core.csproj" />
+    <ProjectReference Include="..\..\src\nextorm.extensions\nextorm.extensions.csproj" />
+
     <ProjectReference Include="..\..\src\nextorm.clickhouse\nextorm.clickhouse.csproj" />
     <!-- DistinctOn/Pivot moved to the PostgreSQL/SQL Server providers; the ClickHouse generation tests
          call them as public extension methods to assert the cross-dialect rejection. -->
@@ -31,4 +33,7 @@
                       ReferenceOutputAssembly="false" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="..\nextorm.extensions.provider.shared\ExtremeRowExSqlGenerationTestsBase.cs" Link="QueryComponents\ExtremeRowExSqlGenerationTestsBase.cs" />
+  </ItemGroup>
 </Project>
