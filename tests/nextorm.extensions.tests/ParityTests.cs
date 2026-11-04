@@ -347,8 +347,8 @@ INSERT INTO FloatEntity VALUES
         ctx.PurgeQueryCache();
 
         int threshold = 15;
-        // A nullable group key selects the rank-window `All` shape (no null-safe join), which reads the
-        // filtered source once even for a composite value key.
+        // SQLite advertises null-safe not-distinct comparison and no risky join capabilities, so the
+        // nullable group-key `All` shape uses aggregate+join; each composite stage applies the filter.
         var built = ctx.From<SemEntity>()
             .Where(x => x.Score > threshold)
             .SelectWhereMin(x => new { x.Score, x.Name }, ExtremeRowTies.All, x => x.GroupKey)
@@ -362,8 +362,8 @@ INSERT INTO FloatEntity VALUES
 
         AssertSameIds(built, ext, x => x.Id);
         ext.Should().NotBeEmpty();
-        CountPredicate(sql, @"Score\s*>\s*\$threshold").Should().Be(1, "the input condition is applied inside the ranked source exactly once");
-        sql.Should().Contain("rank()").And.NotContain(" join ");
+        CountPredicate(sql, @"Score\s*>\s*\$threshold").Should().Be(2, "the input condition is applied to both aggregate stages");
+        sql.Should().Contain(" join ").And.NotContain("rank()");
     }
 
     private static int CountPredicate(string sql, string pattern)
@@ -471,11 +471,10 @@ INSERT INTO FloatEntity VALUES
         var grouped = SqlOf(ctx, (QueryCommand<SemEntity>)ctx.From<SemEntity>().SelectWhereMinEx(x => x.Score, ExtremeRowTies.One, x => x.GroupKey));
         grouped.Should().Contain("partition by");
 
-        // `All` picks the shape by what the expression needs: a nullable group key can only be joined
-        // back with the null-safe predicate, which ClickHouse rejects inside JOIN ON, so it uses the
-        // rank window; a non-nullable group key keeps the aggregate+join lowering.
+        // `All` picks shape using public capability flags: SQLite's null-safe comparison and join
+        // capabilities permit the null-safe aggregate+join; floating values still use rank-window.
         var groupedNullableAll = SqlOf(ctx, (QueryCommand<SemEntity>)ctx.From<SemEntity>().SelectWhereMinEx(x => x.Score, ExtremeRowTies.All, x => x.GroupKey));
-        groupedNullableAll.Should().Contain("rank()").And.NotContain(" join ");
+        groupedNullableAll.Should().Contain(" join ").And.NotContain("rank()");
 
         var groupedNonNullableAll = SqlOf(ctx, (QueryCommand<SemEntity>)ctx.From<SemEntity>().SelectWhereMinEx(x => x.Score, ExtremeRowTies.All, x => x.Id));
         groupedNonNullableAll.Should().Contain(" join ").And.NotContain("rank(");

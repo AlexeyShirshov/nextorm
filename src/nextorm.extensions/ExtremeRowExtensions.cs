@@ -330,11 +330,9 @@ public sealed class ExtremeRowComponent<TEntity> : IQueryComponent
 
     /// <summary>
     /// Builds the component's structural contribution into the command. Runs on a plan-cache miss only:
-    /// <see cref="ExtremeRowTies.One"/> becomes a ranked derived source filtered on rank 1, a non-nullable
-    /// group key over a non-floating value key under <see cref="ExtremeRowTies.All"/> becomes the
-    /// aggregate+join lowering, and a nullable group key or a floating value key under
-    /// <see cref="ExtremeRowTies.All"/> uses the rank window (no null-safe join predicate is needed, and
-    /// the winner set follows the NaN-ranks-last ordering rather than a server aggregate).
+    /// <see cref="ExtremeRowTies.One"/> becomes a ranked derived source filtered on rank 1. Under
+    /// <see cref="ExtremeRowTies.All"/>, floating value keys and nullable group keys on dialects whose
+    /// public capabilities indicate risky join semantics use the rank window; other cases use aggregate+join.
     /// </summary>
     /// <param name="context">The command being built and the engine expression comparer.</param>
     /// <exception cref="ArgumentNullException"><paramref name="context"/> is <see langword="null"/>.</exception>
@@ -347,18 +345,11 @@ public sealed class ExtremeRowComponent<TEntity> : IQueryComponent
         var valueComponents = DecomposeSelector(_valueSelector, entityParam);
         var groupComponents = _groupBy is null ? Array.Empty<Expression>() : DecomposeSelector(_groupBy, entityParam);
 
-        // `All` is lowered to the aggregate+join shape, which joins every aggregate row back to the
-        // source. A nullable group key needs the null-safe `a = b or (a is null and b is null)` join
-        // predicate, and ClickHouse rejects a bare `IS NULL` residual in `JOIN ON` (#296) — a
-        // restriction no public dialect capability advertises. Rather than name a dialect, choose the
-        // shape by what the expression needs: a nullable group key uses the rank-window form, which
-        // partitions on the group keys directly and never emits a null-safe join; every other `All`
-        // shape keeps the aggregate+join lowering. A floating value key also keeps the rank-window
-        // form: its aggregate and its ordering disagree about NaN on ClickHouse (the server returns
-        // NaN as the aggregate maximum while ORDER BY ranks it last, the contract the rank window
-        // implements), and the component is built before any dialect is known.
+        // Capability proxy, not a dialect identity: use rank-window for nullable-key aggregate joins
+        // when the public dialect flags indicate join-specific behavior or null-safe not-distinct is
+        // unavailable. Unknown context/capability information fails safely to rank-window.
         if (_ties == ExtremeRowTies.All
-            && !NeedsNullSafeGroupJoin(groupComponents)
+            && !(NeedsNullSafeGroupJoin(groupComponents) && RequiresRankWindowForNullableJoin(cmd))
             && !HasFloatingComponent(valueComponents))
         {
             BuildAllQuery(context, entityParam, valueComponents, groupComponents);
@@ -463,6 +454,21 @@ public sealed class ExtremeRowComponent<TEntity> : IQueryComponent
         var columnCall = Expression.Call(null, ExtremeRowReflection.ColumnOfInt, outerParam, Expression.Constant(rankAlias));
         var rankFilter = Expression.Lambda(Expression.Equal(columnCall, Expression.Constant(1)), outerParam);
         cmd.SetComponentPreparedCondition(rankFilter);
+    }
+
+    private static bool RequiresRankWindowForNullableJoin(QueryCommand command)
+    {
+        if (command.DataContext is not DataContext dataContext)
+            return true;
+
+        var dialect = dataContext.Dialect;
+        var nullSafeComparison = dialect.NullSafeComparison;
+        return dialect.SupportsJoinStrictness
+            || dialect.SupportsGlobalJoin
+            || dialect.SupportsSemiAntiJoin
+            || dialect.SupportsPasteJoin
+            || nullSafeComparison is null
+            || !nullSafeComparison.SupportsNotDistinct;
     }
 
 
