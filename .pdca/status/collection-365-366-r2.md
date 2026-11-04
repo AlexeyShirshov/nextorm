@@ -149,22 +149,22 @@ All previous requirements remain in force. No architecture, specification, plan 
 
 | group | items | worktree | branch | ref | status | note |
 |---|---|---|---|---|---|---|
-| g1 | T365 | `/home/alex/sources/nextorm-365-366` | `collection/365-366` | `83c545767cdd46cb58d054445c3e` | in-progress | single lane |
+| g1 | T365 | `/home/alex/sources/nextorm-365-366` | `collection/365-366` | `83c545767cdd46cb58d054445c3e` | in-progress | T365 terminal PLAN; group continues to T366 |
 
 ### Items
 
 | item | group | branch | status | plan_state | preparation_state | form | contract | overlay | cycle_id | status path | plan_revision | attempt_n | disposition | evidence root |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| T365 | g1 | `collection/365-366` | in-progress | ready | — | cycle | pdca | coder+.NET + nextorm-pdca | T365-rc5-3 (N=3) | `.pdca/status/T365-rc5-3.md` | r2 | 1/3 | active | `.pdca/365-366-r2/items/T365/rv2/` |
-| T366 | g1 | `collection/365-366` | pending | — | pending | campaign | — | — | — | `.pdca/status/T366-rc5-1.md` (to be created at bootstrap) | — | — | pending | `.pdca/365-366-r2/items/T366/step<k>/rv1/` |
+| T365 | g1 | `collection/365-366` | incomplete | pending | — | cycle | pdca | coder+.NET + nextorm-pdca | T365-rc5-3 (N=3) | `.pdca/status/T365-rc5-3.md` | r2 | 1/3 | finalized; terminal=criteria-undetermined | `.pdca/365-366-r2/items/T365/rv2/` |
+| T366 | g1 | `collection/365-366` | pending | pending | pending | campaign | — | — | — | `.pdca/status/T366-rc5-1.md` (to be created at bootstrap) | — | — | paused (not started; remains pending) | `.pdca/365-366-r2/items/T366/step<k>/rv1/` |
 
 ### General verification and recovery
 
 - state: in-progress
-- last common CHECK: T365 not accepted (n=1/3)
-- blocking reason: none
+- last common CHECK: T365 not accepted (n=1/3); T365 subsequently finalized incomplete by PLAN terminal outcome
+- blocking reason: T365 plan-terminal: acceptance criteria cannot be determined (AC7 65/74 vs 65/75)
 - defect history: `AC6-six-warm-All-rows` (open); `WC-1-concurrent-writer` (closed by construction); `T365-N3-D0-fabricated-constraints` (fixed in both records: false constraint line replaced with the verbatim user line and its three constraints)
-- next allowed step: DO under r2
+- next allowed step: T366 remains pending; prepare/start T366 only under its existing collection authorization; T365 resumes only after explicit user decision on AC7
 
 ### Completeness
 
@@ -181,3 +181,4 @@ All previous requirements remain in force. No architecture, specification, plan 
 
 2026-11-04T18:40:19Z | T365 CHECK not accepted (n=1/3); next allowed step DO under r2 | `.pdca/status/T365-rc5-3.md`
 2026-11-04T18:51:47Z | T365 r2 evidence batch collected (AC8 diff, build, live suite, provenance, harness copy); AC6 shape work and final table still open
+2026-11-04T20:37:39Z | T365 incomplete; plan-terminal: acceptance criteria cannot be determined (AC7 65/74 vs 65/75); typed terminal=criteria-undetermined; group g1 remains in-progress, T366 pending | `.pdca/status/T365-rc5-3.md`; `.pdca/365-366-r2/items/T365/rv2/plan-terminal.md`
