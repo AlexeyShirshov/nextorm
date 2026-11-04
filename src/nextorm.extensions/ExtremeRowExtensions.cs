@@ -208,6 +208,11 @@ public sealed class ExtremeRowComponent<TEntity> : IQueryComponent
         ExtremeRowComponent<TEntity>.BuildCount++;
         ArgumentNullException.ThrowIfNull(context);
         var cmd = context.Command;
+        if (_ties == ExtremeRowTies.All)
+        {
+            BuildAllQuery(context);
+            return;
+        }
         var entityType = typeof(TEntity);
         var rankAlias = MakeRankAlias(entityType);
         var entityParam = Expression.Parameter(entityType, "x");
@@ -359,6 +364,275 @@ public sealed class ExtremeRowComponent<TEntity> : IQueryComponent
                 return name;
             name += "_";
         }
+    }
+
+    private void BuildAllQuery(IQueryComponentBuildContext context)
+    {
+        var cmd = context.Command;
+        var ctx = cmd.DataContext ?? throw new InvalidOperationException("DataContext is required.");
+        var entityType = typeof(TEntity);
+        var xParam = Expression.Parameter(entityType, "x");
+
+        var valueComponents = DecomposeSelector(_valueSelector, xParam);
+        var groupComponents = _groupBy is null ? Array.Empty<Expression>() : DecomposeSelector(_groupBy, xParam);
+        var valueCount = valueComponents.Length;
+        var groupCount = groupComponents.Length;
+
+        var valueStorages = new Expression[valueCount];
+        var valueTypes = new Type[valueCount];
+        for (var i = 0; i < valueCount; i++)
+        {
+            var (storage, type) = MakeValueStorage(valueComponents[i]);
+            valueStorages[i] = storage;
+            valueTypes[i] = type;
+        }
+
+        var preparedCondition = cmd.GetComponentPreparedCondition();
+        LambdaExpression? userLambda = preparedCondition as LambdaExpression;
+        if (userLambda is null && preparedCondition is not null)
+            userLambda = Expression.Lambda(preparedCondition, xParam);
+
+        Expression? notNull = null;
+        for (var i = 0; i < valueCount; i++)
+        {
+            if (!IsNullable(valueTypes[i]))
+                continue;
+            var nullConst = Expression.Constant(null, valueTypes[i]);
+            var cond = Expression.NotEqual(valueStorages[i], nullConst);
+            notNull = notNull is null ? cond : Expression.AndAlso(notNull, cond);
+        }
+
+        QueryCommand? lastStage = null;
+        for (var k = 1; k <= valueCount; k++)
+        {
+            var eParam = Expression.Parameter(entityType, "e");
+
+            var selectCount = groupCount + k;
+            var selects = new SelectExpression[selectCount];
+
+            for (var i = 0; i < groupCount; i++)
+            {
+                var alias = GroupAliasFor(valueCount, k, i);
+                var exprOverE = new ParameterReplacer(xParam, eParam).Visit(groupComponents[i])!;
+                selects[i] = new SelectExpression(groupComponents[i].Type)
+                {
+                    Index = i,
+                    PropertyName = alias,
+                    Expression = exprOverE,
+
+                };
+            }
+
+            for (var i = 0; i < k - 1; i++)
+            {
+                var alias = ValueAliasFor(valueCount, k, i + 1);
+                var exprOverE = new ParameterReplacer(xParam, eParam).Visit(valueStorages[i])!;
+                selects[groupCount + i] = new SelectExpression(valueTypes[i])
+                {
+                    Index = groupCount + i,
+                    PropertyName = alias,
+                    Expression = exprOverE,
+
+                };
+            }
+
+            var aggAlias = AggregateAliasFor(valueCount, k);
+            var aggValueOverE = new ParameterReplacer(xParam, eParam).Visit(valueStorages[k - 1])!;
+            var aggCall = MakeAggregate(_kind, valueTypes[k - 1], aggValueOverE);
+            selects[groupCount + k - 1] = new SelectExpression(valueTypes[k - 1])
+            {
+                Index = groupCount + k - 1,
+                PropertyName = aggAlias,
+                Expression = aggCall,
+            };
+
+            var groupExprs = new List<Expression>();
+            for (var i = 0; i < groupCount; i++)
+                groupExprs.Add(groupComponents[i]);
+            for (var i = 0; i < k - 1; i++)
+                groupExprs.Add(valueComponents[i]);
+
+            LambdaExpression? groupLambda = null;
+            if (groupExprs.Count > 0)
+            {
+                Expression body = groupExprs.Count == 1
+                    ? groupExprs[0]
+                    : BuildValueTuple(groupExprs);
+                groupLambda = Expression.Lambda(body, xParam);
+            }
+
+            Expression? stageCombined = notNull;
+            if (userLambda is not null)
+            {
+                var userOverX = userLambda.Parameters.Count > 0
+                    ? new ParameterReplacer(userLambda.Parameters[0], xParam).Visit(userLambda.Body)!
+                    : userLambda.Body;
+                stageCombined = stageCombined is null ? userOverX : Expression.AndAlso(stageCombined, userOverX);
+            }
+            var stageConditionLambda = stageCombined is null ? null : Expression.Lambda(stageCombined, xParam);
+
+            JoinExpression[]? joins = null;
+            if (k > 1 && lastStage is not null)
+            {
+                var prevParam = Expression.Parameter(entityType, "p");
+                Expression? joinBody = null;
+
+                for (var i = 0; i < groupCount; i++)
+                {
+                    var left = groupComponents[i];
+                    var right = MakeColumnCall(prevParam, groupComponents[i].Type, GroupAliasFor(valueCount, k - 1, i));
+                    var cond = IsNullable(groupComponents[i].Type)
+                        ? MakeNullSafeJoinEqual(left, right, groupComponents[i].Type, false)
+                        : Expression.Equal(left, right);
+                    joinBody = joinBody is null ? cond : Expression.AndAlso(joinBody, cond);
+                }
+
+                for (var i = 0; i < k - 1; i++)
+                {
+                    var left = valueStorages[i];
+                    var right = MakeColumnCall(prevParam, valueTypes[i], ValueAliasFor(valueCount, k - 1, i + 1));
+                    var cond = Expression.Equal(left, right);
+                    joinBody = joinBody is null ? cond : Expression.AndAlso(joinBody, cond);
+                }
+
+                var joinLambda = Expression.Lambda(joinBody!, xParam, prevParam);
+                var join = new JoinExpression(joinLambda, JoinType.Inner)
+                {
+                    From = new FromExpression(lastStage),
+                    EntityType = entityType,
+                };
+                joins = new[] { join };
+            }
+
+            var stageCmd = ctx.CreateCommand<TEntity>(new QueryDefinition
+            {
+                SrcType = entityType,
+                Condition = stageConditionLambda,
+                Joins = joins,
+                Group = groupLambda,
+            });
+            stageCmd.SetComponentSelectList(selects);
+            stageCmd.PrepareCommand(false, CancellationToken.None);
+            lastStage = stageCmd;
+        }
+
+        var outerX = Expression.Parameter(entityType, "o");
+        var outerP = Expression.Parameter(entityType, "p");
+        Expression? outerBody = null;
+
+        for (var i = 0; i < groupCount; i++)
+        {
+            var left = new ParameterReplacer(xParam, outerX).Visit(groupComponents[i])!;
+            var right = MakeColumnCall(outerP, groupComponents[i].Type, GroupAliasFor(valueCount, valueCount, i));
+            var cond = IsNullable(groupComponents[i].Type)
+                ? MakeNullSafeJoinEqual(left, right, groupComponents[i].Type, false)
+                : Expression.Equal(left, right);
+            outerBody = outerBody is null ? cond : Expression.AndAlso(outerBody, cond);
+        }
+
+        for (var i = 0; i < valueCount; i++)
+        {
+            var left = new ParameterReplacer(xParam, outerX).Visit(valueStorages[i])!;
+            var alias = ValueAliasFor(valueCount, valueCount, i + 1);
+            var right = MakeColumnCall(outerP, valueTypes[i], alias);
+            var cond = Expression.Equal(left, right);
+            outerBody = outerBody is null ? cond : Expression.AndAlso(outerBody, cond);
+        }
+
+        var outerJoinLambda = Expression.Lambda(outerBody!, outerX, outerP);
+        var outerJoin = new JoinExpression(outerJoinLambda, JoinType.Inner)
+        {
+            From = new FromExpression(lastStage!),
+            EntityType = entityType,
+        };
+
+        var innerCmd = ctx.CreateCommand<TEntity>(new QueryDefinition
+        {
+            SrcType = entityType,
+            Joins = new[] { outerJoin },
+            Condition = userLambda,
+        });
+        innerCmd.PrepareCommand(false, CancellationToken.None);
+
+        cmd.From = new FromExpression(innerCmd);
+    }
+
+    private static (Expression Expression, Type Type) MakeValueStorage(Expression raw)
+    {
+        var type = raw.Type;
+        if (type == typeof(bool))
+        {
+            var test = Expression.Equal(raw, Expression.Constant(true, type));
+            return (Expression.Condition(test, Expression.Constant(1), Expression.Constant(0)), typeof(int));
+        }
+
+        if (type != typeof(bool?))
+            return (raw, type);
+
+        var nullConstant = Expression.Constant(null, type);
+        var nullableInt = typeof(int?);
+        var isNull = Expression.Equal(raw, nullConstant);
+        var isTrue = Expression.Equal(raw, Expression.Constant(true, type));
+        var integer = Expression.Condition(isTrue, Expression.Constant(1), Expression.Constant(0));
+        return (
+            Expression.Condition(
+                isNull, Expression.Constant(null, nullableInt), Expression.Convert(integer, nullableInt)),
+            nullableInt);
+    }
+
+    private static Expression MakeNullSafeJoinEqual(Expression left, Expression right, Type type, bool nativeNullSafeJoin)
+    {
+        if (!IsNullable(type))
+            return Expression.Equal(left, right);
+
+        var nullConstant = Expression.Constant(null, type);
+        return Expression.OrElse(
+            Expression.Equal(left, right),
+            Expression.AndAlso(
+                Expression.Equal(left, nullConstant),
+                Expression.Equal(right, nullConstant)));
+    }
+
+    private static Expression MakeAggregate(ExtremeKind kind, Type valueType, Expression valueExpression)
+    {
+        var methodName = kind == ExtremeKind.Max ? "max" : "min";
+        var genericDefinition = typeof(CommonFunctions).GetMethods(BindingFlags.Public | BindingFlags.Instance)
+            .First(m => m.Name == methodName && m.IsGenericMethodDefinition && m.GetParameters().Length == 1);
+        var mi = genericDefinition.MakeGenericMethod(valueType);
+        var sqlProp = Expression.Property(null, typeof(SqlFunctions), "Sql");
+        return Expression.Call(sqlProp, mi, valueExpression);
+    }
+
+    private static Expression MakeColumnCall(ParameterExpression parameter, Type type, string alias)
+    {
+        var method = typeof(SqlFunctions).GetMethod("Column")!.MakeGenericMethod(type);
+        return Expression.Call(null, method, parameter, Expression.Constant(alias));
+    }
+
+    private static string GroupAliasFor(int valueCount, int stage, int index)
+        => valueCount == 1 ? $"__nextorm_ext_1_{index + 1}" : $"__nextorm_ext_{stage}_g{index}";
+
+    private static string ValueAliasFor(int valueCount, int stage, int index)
+        => valueCount == 1 ? "__nextorm_ext_1_0" : $"__nextorm_ext_{stage}_v{index}";
+
+    private static string AggregateAliasFor(int valueCount, int stage)
+        => valueCount == 1 ? "__nextorm_ext_1_0" : $"__nextorm_ext_{stage}_v{stage}";
+
+    private static Expression BuildValueTuple(List<Expression> exprs)
+    {
+        var types = exprs.Select(e => e.Type).ToArray();
+        Type tupleType = exprs.Count switch
+        {
+            2 => typeof(ValueTuple<,>).MakeGenericType(types),
+            3 => typeof(ValueTuple<,,>).MakeGenericType(types),
+            4 => typeof(ValueTuple<,,,>).MakeGenericType(types),
+            5 => typeof(ValueTuple<,,,,>).MakeGenericType(types),
+            6 => typeof(ValueTuple<,,,,,>).MakeGenericType(types),
+            7 => typeof(ValueTuple<,,,,,,>).MakeGenericType(types),
+            _ => throw new NotSupportedException("Too many components."),
+        };
+        var ctor = tupleType.GetConstructor(types)!;
+        return Expression.New(ctor, exprs);
     }
 
     private sealed class CapturedState
