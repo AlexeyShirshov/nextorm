@@ -9,8 +9,8 @@ Category A table and the tier-1 section keep the date of their own run). In each
 **bold** — the fastest in the time tables and the smallest allocation in the allocations table.
 <!-- benchmarks:conditions:end -->
 
-> **New (2026-10-17):** a warm-path-only feature report — no `Prepare()` arms, one table per tier,
-> competitors as columns — is in [Feature benchmarks — 2026-10-17](feature-benchmarks-2026-10-17.md).
+> **Feature-level view:** a per-feature, tiered comparison — no `Prepare()` arms, one table per tier,
+> competitors as columns — is in [Feature benchmarks](feature-benchmarks.md).
 
 ## End-to-end scenarios
 

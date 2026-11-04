@@ -351,5 +351,5 @@ Deferred register (всё осталось в `1.0.9-rc3`):
 | `acceptance-benchmarks.md` | Приёмочные сценарии и пороги (time/allocated ratio). |
 | `comparison-benchmark-scenarios.md` | As-built спека кросс-библиотечных сравнений tier-1 (#188): инвентарь армов, границы тайминга, fairness-правила. |
 | `iteration-15-cached-path-results.md`, `iteration-15-stage-a-report.md`, `m12-3-prepare-command-results.md` | Отчёты и evidence закрытых итераций; решения из них подняты сюда. |
-| `docs/comparisons/feature-benchmarks-2026-10-17.md` | Свежие сравнения по фичам и открытые loss-скоупы (#243–#247). |
+| `docs/comparisons/feature-benchmarks.md` | Свежие сравнения по фичам и открытые loss-скоупы (#243–#247). |
 | `feature-benchmark-followups-2026-10-17.md` | Индекс «случай → issue» для #243–#247 и решения по скоупу. |

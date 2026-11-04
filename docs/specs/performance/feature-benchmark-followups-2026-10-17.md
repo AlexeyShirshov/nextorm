@@ -1,6 +1,6 @@
 # Feature benchmark follow-ups — 2026-10-17
 
-Snapshot: `docs/comparisons/feature-benchmarks-2026-10-17.md` (release 1.0.9-rc2, branch
+Snapshot: `docs/comparisons/feature-benchmarks.md` (release 1.0.9-rc2, branch
 `1.0.9-rc3`, HEAD `881bf497`). Warm path only; no prepared arms were measured.
 
 The five rc3 tickets below were created from the cases where Nextorm is worse than linq2db. All URLs

@@ -1,9 +1,11 @@
-# Feature benchmarks — 2026-10-17 (1.0.9-rc2)
+# Feature benchmarks
 
-**Report date:** 2026-10-17 · **Release:** 1.0.9-rc2 (branch `1.0.9-rc3`, HEAD `881bf497`) · **Provider:** SQLite
+**Snapshot:** 2026-10-17 · **Release:** 1.0.9-rc2 (branch `1.0.9-rc3`, HEAD `881bf497`) · **Provider:** SQLite
 
-This is a dated, warm-path-only feature comparison. It is additive: the [benchmarks](benchmarks.md) page keeps
-its own dated tables; this page is a new 2026-10-17 snapshot with a different layout and scope.
+A per-feature comparison that answers "how fast is this query shape, and what does it allocate" instead of
+"which library wins an end-to-end request". The [benchmarks](benchmarks.md) page measures whole scenarios and
+the prepared/compiled path; this page splits the query surface into tiers and compares every row per query,
+with Nextorm on its implicit plan cache only.
 
 - **No prepared path.** Every Nextorm number comes from the implicit plan cache (`B_Nextorm_Cached_*`) or a
   direct terminal (`WriteJson`/`WriteCsv`). No `Prepare()` / `A_*` Nextorm arm is used.

@@ -253,7 +253,7 @@ sequences, row locking, generic CTAS/temporary tables, index/query hints, named 
 ## See also
 
 - [Capabilities](capabilities.md) — the construct-level matrix across Dapper, linq2db and EF Core.
-- [Benchmarks](benchmarks.md) and [Feature benchmarks (2026-10-17)](feature-benchmarks-2026-10-17.md).
+- [Benchmarks](benchmarks.md) and [Feature benchmarks](feature-benchmarks.md).
 - [Provider overview](../connecting-providers/overview.md).
 - [Provider-specific SQL](../guide/provider-specific-sql/overview.md).
 - [Scalar functions](../scalar-functions/index.md).

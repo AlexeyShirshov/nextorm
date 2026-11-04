@@ -3260,3 +3260,62 @@ inside the ±20% ShortRun noise band, so no row is reported as a regression.
 `artifacts/pdca/CCORR-201/rv1/E/benchmarks/` (the tracked `benchmarks/BenchmarkDotNet.Artifacts`
 files were restored to HEAD after the run).
 
+## Results 2026-10-20 — published comparison tables and feature snapshot (1.0.9-rc3)
+
+Запись закрывает разрыв между журналом и публичными страницами: итерация 18 закончилась 2026-10-17, а
+числа в `readme.md` и `docs/comparisons/benchmarks.md` собраны из прогонов 2026-10-17 … 2026-10-28.
+Значения ниже — те же, что опубликованы.
+
+Условия (общие для всех строк, кроме Category A): AMD Ryzen 7 5800HS (8 logical / 4 physical), Ubuntu
+22.04.5 LTS, .NET 10.0.12, BenchmarkDotNet 0.15.8, `ShortRun` + `InProcessEmitToolchain`, SQLite через
+`Microsoft.Data.Sqlite`, БД на tmpfs. Различия ниже ~20 % — шум.
+
+### Сквозные сценарии — время, быстрейший метод каждой библиотеки
+
+| Сценарий | Nextorm | Dapper | linq2db | EF Core |
+|---|---:|---:|---:|---:|
+| Data fetch | **10.29 μs** | 14.89 μs | 15.76 μs | 36.64 μs |
+| Wide data fetch | **8.331 ms** | 8.680 ms | 9.366 ms | 9.771 ms |
+| Where | **886.7 μs** | 1,369.6 μs | 1,412.3 μs | 3,199.6 μs |
+| Simulate work | **7.594 ms** | 26.432 ms | 393.986 ms | 110.812 ms |
+| Any | **889.9 μs** | 1,399.7 μs | 1,498.9 μs | 3,620.0 μs |
+| FirstOrDefault | **91.35 μs** | 146.41 μs | 388.41 μs | 351.03 μs |
+| SingleOrDefault | **90.87 μs** | 140.79 μs | 394.50 μs | 345.20 μs |
+
+### Сквозные сценарии — аллокации
+
+| Сценарий | Nextorm | Dapper | linq2db | EF Core |
+|---|---:|---:|---:|---:|
+| Data fetch | **792 B** | 1,904 B | 2,088 B | 10,224 B |
+| Wide data fetch | **2.14 MB** | 2.59 MB | **2.14 MB** | 4.28 MB |
+| Where | **92.43 KB** | 180.72 KB | 253.53 KB | 789.17 KB |
+| Simulate work | **6.25 MB** | 8.90 MB | 121.57 MB | 13.68 MB |
+| Any | **85.16 KB** | 139.07 KB | 233.60 KB | 807.05 KB |
+| FirstOrDefault | **8.63 KB** | 16.48 KB | 187.58 KB | 80.40 KB |
+| SingleOrDefault | **8.36 KB** | 16.40 KB | 187.82 KB | 80.40 KB |
+
+### Feature-тиры (2026-10-17)
+
+22 like-for-like строки в `docs/comparisons/feature-benchmarks.md`: Tier-1 (проекция, `Count`/`Sum`/
+`GroupBy`, пагинация, буферизованный и небуферизованный стриминг, синхронный raw reader), Tier-2 (CTE,
+рекурсивный CTE, 4-табличный join, LEFT JOIN, DISTINCT, IN-list), Tier-3 (`EXCEPT`, `INTERSECT`),
+Tier-4 (`CASE WHEN`, `Contains`, `ToUpper`, UDF, `ROW_NUMBER`, `SUM OVER`), Tier-5 (JSON и CSV на 10 000
+строк). Nextorm — только implicit-cache плечи (`B_Nextorm_Cached_*`), без `Prepare()`.
+Итог: Nextorm первый по времени на 9 строках, Dapper — на 12, linq2db — на 1; по аллокациям 5 / 17 / 0.
+
+### Category A и Category B
+
+Две таблицы публичной страницы (по 13 категорий) — единственное место, где зафиксированы эти числа.
+Category B (`B_*_Cached_*`) собрана из того же снимка, что и строки выше. Category A
+(`A_Nextorm_Prepared_*` против compiled linq2db/EF Core) датирована **2026-10-28**, и отчёт этого
+прогона в репозиторий не попал: числа существуют только в опубликованной странице и из коммита не
+воспроизводятся.
+
+### Источник и воспроизведение
+
+- Отчёты: `benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.{Iteration,LargeIteration,
+  Where,SimulateWork,Any,First,Single,FeaturesFair,FeaturesFairCached,Projection,Aggregates,Paging,
+  Streaming,WriteJson,Csv}-report-{github.md,csv}`, снимок коммита `957fcfe7` (2026-10-17).
+- Таблицы: `python3 tools/benchmarks/update_benchmark_tables.py --date 2026-10-20`.
+- Оговорка: Category A (2026-10-28) в снимке отсутствует — см. раздел выше.
+

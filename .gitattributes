@@ -11,3 +11,8 @@ tests/nextorm.sqlite.tests/Baselines/** -text
 # line: regionToName then returns "США\r" and the server refuses to load the geobase at all
 # (DICTIONARIES_WAS_NOT_LOADED). Never convert these bytes.
 tests/nextorm.integration.tests/ClickHouse/Fixtures/** -text
+
+# BenchmarkDotNet writes its markdown reports with trailing double-space line breaks, so the
+# committed report snapshots trip `git diff --check` on every change. They are generated output:
+# keep the default whitespace rules everywhere else.
+benchmarks/BenchmarkDotNet.Artifacts/results/*-report-github.md whitespace=-blank-at-eol

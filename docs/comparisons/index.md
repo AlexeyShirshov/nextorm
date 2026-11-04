@@ -19,8 +19,8 @@ The comparison has four parts:
 - **[Provider features](provider-features.md)** — per-engine API breadth against linq2db.
 - **[Benchmarks](benchmarks.md)** — the shipped SQLite scenarios, with links to the full BenchmarkDotNet
   reports.
-- **[Feature benchmarks (2026-10-17)](feature-benchmarks-2026-10-17.md)** — a warm-path-only, tiered
-  report: no `Prepare()` arms, one table per tier, competitors as columns.
+- **[Feature benchmarks](feature-benchmarks.md)** — a per-feature, tiered comparison: no `Prepare()` arms,
+  one table per tier, competitors as columns.
 
 ## How to read the marks
 
