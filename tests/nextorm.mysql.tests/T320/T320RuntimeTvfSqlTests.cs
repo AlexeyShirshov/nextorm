@@ -451,28 +451,33 @@ public class T320RuntimeTvfSqlTests(ITestOutputHelper output)
         using var ctx = MySqlTestContext.Create();
         ctx.PurgeQueryCache();
 
-        var before = QueryPlanStore.Values.Count();
-
+        // Plan sharing is asserted by reference identity of the prepared command, not by the size of
+        // QueryPlanStore: the store's generation is process-wide while the cache it invalidates is
+        // thread-local, so a parallel test class calling PurgeQueryCache() drops this thread's entries
+        // and makes any absolute count flaky.
         var alpha = Prepare(ctx, ctx.From(() => T320MyTvf.IdentityAlpha("raw")).Select(r => r.Id), true);
-        var afterAlpha = QueryPlanStore.Values.Count();
+        var alphaAgain = Prepare(ctx, ctx.From(() => T320MyTvf.IdentityAlpha("raw")).Select(r => r.Id), true);
 
         var beta = Prepare(ctx, ctx.From(() => T320MyTvf.IdentityBeta("raw")).Select(r => r.Id), true);
-        var afterBeta = QueryPlanStore.Values.Count();
-
         var schema = Prepare(ctx, ctx.From(() => T320MyTvf.IdentityOtherSchema("raw")).Select(r => r.Id), true);
         var verbatim = Prepare(ctx, ctx.From(() => T320MyTvf.IdentityVerbatim("raw")).Select(r => r.Id), true);
-        var afterAll = QueryPlanStore.Values.Count();
 
         output.WriteLine(
-            $"identity variants: plan store {before} -> {afterAlpha} -> {afterBeta} -> {afterAll}; "
+            $"identity variants: alphaAgain={ReferenceEquals(alpha, alphaAgain)}; beta={ReferenceEquals(alpha, beta)}; "
+            + $"schema={ReferenceEquals(alpha, schema)}; verbatim={ReferenceEquals(alpha, verbatim)}; "
             + $"alpha=<<{Normalize(alpha.DbCommand.CommandText)}>>; "
             + $"beta=<<{Normalize(beta.DbCommand.CommandText)}>>; "
             + $"schema=<<{Normalize(schema.DbCommand.CommandText)}>>; "
             + $"verbatim=<<{Normalize(verbatim.DbCommand.CommandText)}>>");
 
-        afterAlpha.Should().Be(before + 1, "the first identity stores exactly one plan entry");
-        afterBeta.Should().Be(afterAlpha + 1, "a different function name is a different SQL identity");
-        afterAll.Should().Be(afterBeta + 2, "a different schema and a different verbatim-argument shape are different identities");
+        ReferenceEquals(alpha, alphaAgain).Should().BeTrue(
+            "the same identity must reuse the cached plan instance");
+        ReferenceEquals(alpha, beta).Should().BeFalse(
+            "a different function name is a different SQL identity");
+        ReferenceEquals(alpha, schema).Should().BeFalse(
+            "a different schema is a different SQL identity");
+        ReferenceEquals(alpha, verbatim).Should().BeFalse(
+            "a different verbatim-argument shape is a different SQL identity");
 
         var statements = new[]
         {
@@ -486,7 +491,6 @@ public class T320RuntimeTvfSqlTests(ITestOutputHelper output)
         statements[1].Should().Contain("t320_other.t320_identity_beta");
         statements[2].Should().Contain("t320_elsewhere.t320_identity_alpha");
         statements[3].Should().Contain("(raw)", "a verbatim argument is emitted as SQL, not bound");
-        ReferenceEquals(alpha, beta).Should().BeFalse();
     }
 
     [Fact]
@@ -496,18 +500,18 @@ public class T320RuntimeTvfSqlTests(ITestOutputHelper output)
         ctx.PurgeQueryCache();
         var id = 5L;
 
-        var before = QueryPlanStore.Values.Count();
+        // Same reasoning as the identity test above: reference identity of the prepared command is the
+        // race-free oracle for plan sharing, an absolute store count is not.
         var one = Prepare(ctx, ctx.From(() => T320MyTvf.EquivalentOne(id)).Select(r => r.Id), true);
-        var afterOne = QueryPlanStore.Values.Count();
+        var oneAgain = Prepare(ctx, ctx.From(() => T320MyTvf.EquivalentOne(id)).Select(r => r.Id), true);
         var two = Prepare(ctx, ctx.From(() => T320MyTvf.EquivalentTwo(id)).Select(r => r.Id), true);
-        var afterTwo = QueryPlanStore.Values.Count();
 
         output.WriteLine(
-            $"equivalent identities: plan store {before} -> {afterOne} -> {afterTwo}; ReferenceEquals={ReferenceEquals(one, two)}; "
+            $"equivalent identities: oneAgain={ReferenceEquals(one, oneAgain)}; ReferenceEquals={ReferenceEquals(one, two)}; "
             + $"sql=<<{Normalize(two.DbCommand.CommandText)}>>");
 
-        afterOne.Should().Be(before + 1);
-        afterTwo.Should().Be(afterOne, "equivalent metadata and argument shapes must share one plan entry");
+        ReferenceEquals(one, oneAgain).Should().BeTrue(
+            "a repeated identical shape must hit the cached plan");
         ReferenceEquals(one, two).Should().BeTrue(
             "two distinct factories with the same SQL identity must reuse the cached plan instance");
         Normalize(two.DbCommand.CommandText).Should().Be(Normalize(one.DbCommand.CommandText));
