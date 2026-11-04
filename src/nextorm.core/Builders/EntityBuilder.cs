@@ -2606,6 +2606,9 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// <param name="specs">The stitching specifications, in declaration order.</param>
     /// <param name="source">The stored SQL joins, in declaration order, or <c>null</c> when there are none.</param>
     /// <returns>The joins the in-memory engine executes, or <c>null</c> when there are none.</returns>
+    // In-memory-only join-into builder: relational providers always take the SQL path, and the
+    // integration suite may not construct an InMemoryDataContext (unit-only by policy).
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
     private JoinExpression[]? BuildInMemoryJoinIntos(IReadOnlyList<IJoinIntoSpec<TEntity>> specs, List<JoinExpression>? source)
     {
         if (source is null)
@@ -2664,6 +2667,8 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// the junction instance. The condition is <c>(p, j) =&gt; p.principalKey == j.parentForeignKey</c> and
     /// is re-rooted onto the accumulated projection for any declaration after the first.
     /// </summary>
+    // In-memory-only many-to-many link join (see BuildInMemoryJoinIntos).
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
     private JoinExpression BuildInMemoryManyToManyLinkJoin(
         IJoinIntoManyToManySpec spec, JoinExpression stored, List<Type> precedingTypes)
     {
@@ -2705,6 +2710,8 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// where <c>ItemN</c> is the junction slot the link edge just appended. Unlike a direct declaration
     /// the left parameter is the accumulated projection, so the condition is <b>not</b> re-rooted again.
     /// </summary>
+    // In-memory-only many-to-many child join (see BuildInMemoryJoinIntos).
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
     private JoinExpression BuildInMemoryManyToManyChildJoin(
         IJoinIntoSpec<TEntity> spec, IJoinIntoManyToManySpec manyToMany, JoinExpression stored, List<Type> precedingTypes)
     {
@@ -2766,6 +2773,8 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// <param name="precedingTypes">The entity types already appended to the accumulated projection.</param>
     /// <param name="hasPreceding">Whether the accumulated projection already carries at least one item.</param>
     /// <returns>The join the in-memory engine executes.</returns>
+    // In-memory-only join-into rewrite (see BuildInMemoryJoinIntos).
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
     private JoinExpression RewriteInMemoryJoinIntoJoin(JoinExpression join, List<Type> precedingTypes, bool hasPreceding)
     {
         if (!hasPreceding || !join.IsJoinInto || join.JoinCondition is not { Parameters.Count: 2 } condition)
