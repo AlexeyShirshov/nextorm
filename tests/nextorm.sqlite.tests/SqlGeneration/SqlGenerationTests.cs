@@ -3462,15 +3462,22 @@ public class SqlGenerationTests
     }
 
     [Fact]
-    public void Tuple_ConstructorInOrderBy_ShouldThrowAtPreparation()
+    public void Tuple_ConstructorInOrderBy_ShouldExpandToMemberKeys()
     {
+        // T360: a composite ORDER BY selector (including Tuple.Create) expands into one key per
+        // member before SQL, so a flat-row provider never renders a row constructor in ORDER BY; the
+        // result is the same statement as the chained OrderBy/ThenBy equivalent.
         using var ctx = SqliteTestContext.Create();
 
-        var act = () => SqlOf(ctx, ctx.From<IComplexEntity>()
+        var composite = SqlOf(ctx, ctx.From<IComplexEntity>()
             .OrderBy(x => Tuple.Create(x.Id, x.String))
             .Select(x => new { x.Id }));
+        var chained = SqlOf(ctx, ctx.From<IComplexEntity>()
+            .OrderBy(x => x.Id)
+            .ThenBy(x => x.String)
+            .Select(x => new { x.Id }));
 
-        act.Should().Throw<NotSupportedException>().Which.Message.Should().Contain("SqliteDialect");
+        composite.Should().Be(chained);
     }
 
     [Fact]

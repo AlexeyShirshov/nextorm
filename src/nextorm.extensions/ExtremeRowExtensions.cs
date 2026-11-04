@@ -314,9 +314,10 @@ public sealed class ExtremeRowComponent<TEntity> : IQueryComponent
     /// <summary>
     /// Builds the component's structural contribution into the command. Runs on a plan-cache miss only:
     /// <see cref="ExtremeRowTies.One"/> becomes a ranked derived source filtered on rank 1, a non-nullable
-    /// group key under <see cref="ExtremeRowTies.All"/> becomes the aggregate+join lowering, and a
-    /// nullable group key under <see cref="ExtremeRowTies.All"/> uses the rank window so no null-safe
-    /// join predicate is needed.
+    /// group key over a non-floating value key under <see cref="ExtremeRowTies.All"/> becomes the
+    /// aggregate+join lowering, and a nullable group key or a floating value key under
+    /// <see cref="ExtremeRowTies.All"/> uses the rank window (no null-safe join predicate is needed, and
+    /// the winner set follows the NaN-ranks-last ordering rather than a server aggregate).
     /// </summary>
     /// <param name="context">The command being built and the engine expression comparer.</param>
     /// <exception cref="ArgumentNullException"><paramref name="context"/> is <see langword="null"/>.</exception>
@@ -335,8 +336,13 @@ public sealed class ExtremeRowComponent<TEntity> : IQueryComponent
         // restriction no public dialect capability advertises. Rather than name a dialect, choose the
         // shape by what the expression needs: a nullable group key uses the rank-window form, which
         // partitions on the group keys directly and never emits a null-safe join; every other `All`
-        // shape keeps the aggregate+join lowering.
-        if (_ties == ExtremeRowTies.All && !NeedsNullSafeGroupJoin(groupComponents))
+        // shape keeps the aggregate+join lowering. A floating value key also keeps the rank-window
+        // form: its aggregate and its ordering disagree about NaN on ClickHouse (the server returns
+        // NaN as the aggregate maximum while ORDER BY ranks it last, the contract the rank window
+        // implements), and the component is built before any dialect is known.
+        if (_ties == ExtremeRowTies.All
+            && !NeedsNullSafeGroupJoin(groupComponents)
+            && !HasFloatingComponent(valueComponents))
         {
             BuildAllQuery(context, entityParam, valueComponents, groupComponents);
             return;
@@ -472,6 +478,24 @@ public sealed class ExtremeRowComponent<TEntity> : IQueryComponent
         for (var i = 0; i < groupComponents.Length; i++)
         {
             if (IsNullable(groupComponents[i].Type))
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// True when at least one value component is a floating-point key (<c>float</c>/<c>double</c>,
+    /// nullable or not). Such a key keeps the rank-window form of <see cref="ExtremeRowTies.All"/> so the
+    /// winner set follows the ordering contract (NaN ranks last) instead of the server's aggregate
+    /// comparison, which disagrees with it on ClickHouse.
+    /// </summary>
+    private static bool HasFloatingComponent(Expression[] valueComponents)
+    {
+        for (var i = 0; i < valueComponents.Length; i++)
+        {
+            var type = Nullable.GetUnderlyingType(valueComponents[i].Type) ?? valueComponents[i].Type;
+            if (type == typeof(float) || type == typeof(double))
                 return true;
         }
 

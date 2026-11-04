@@ -26,6 +26,12 @@ public class ParityTests
         public string? Name { get; set; }
     }
 
+    private sealed class FloatEntity
+    {
+        public long Id { get; set; }
+        public double? Value { get; set; }
+    }
+
     private static (SqliteConnection Connection, SqliteDataContext Context) CreateContext()
     {
         var connection = new SqliteConnection("Data Source=:memory:");
@@ -47,7 +53,15 @@ INSERT INTO SemEntity VALUES
   (4, NULL, 'd', '2024-04-01T00:00:00', NULL, 'x'),
   (5, 20, 'e', '2024-05-01T00:00:00', 2, 'y'),
   (6, 30, 'f', '2024-06-01T00:00:00', 3, 'z'),
-  (7, 5, 'g', '2024-07-01T00:00:00', NULL, 'y');";
+  (7, 5, 'g', '2024-07-01T00:00:00', NULL, 'y');
+CREATE TABLE FloatEntity (
+  Id INTEGER PRIMARY KEY,
+  Value REAL NULL
+);
+INSERT INTO FloatEntity VALUES
+  (1, 1.5),
+  (2, 2.5),
+  (3, NULL);";
         cmd.ExecuteNonQuery();
         var ctx = new SqliteDataContext(connection, new DataContextBuilder());
         ctx.PurgeQueryCache();
@@ -465,5 +479,29 @@ INSERT INTO SemEntity VALUES
 
         var groupedNonNullableAll = SqlOf(ctx, (QueryCommand<SemEntity>)ctx.From<SemEntity>().SelectWhereMinEx(x => x.Score, ExtremeRowTies.All, x => x.Id));
         groupedNonNullableAll.Should().Contain(" join ").And.NotContain("rank(");
+    }
+
+    /// <summary>
+    /// A floating value key under <c>All</c> keeps the rank window instead of the aggregate + join-back
+    /// shape: ClickHouse's aggregate and its ordering disagree about <c>NaN</c> (the server returns NaN
+    /// as the maximum while ORDER BY ranks it last), and the winner set must follow the ordering. The
+    /// component decides by the expression alone, because it is built before any dialect is known.
+    /// </summary>
+    [Fact]
+    public void S4_9_FloatingValueKey_All_UsesTheRankWindow()
+    {
+        var (conn, ctx) = CreateContext();
+        using var connScope = conn; using var ctxScope = ctx;
+        ctx.PurgeQueryCache();
+
+        var all = SqlOf(ctx, (QueryCommand<FloatEntity>)ctx.From<FloatEntity>().SelectWhereMaxEx(x => x.Value, ExtremeRowTies.All));
+        all.Should().Contain("rank()").And.NotContain(" join ");
+
+        var groupedAll = SqlOf(ctx, (QueryCommand<FloatEntity>)ctx.From<FloatEntity>().SelectWhereMinEx(x => x.Value, ExtremeRowTies.All, x => x.Id));
+        groupedAll.Should().Contain("rank()").And.Contain("partition by").And.NotContain(" join ");
+
+        // One keeps its single-survivor window, unchanged.
+        var one = SqlOf(ctx, (QueryCommand<FloatEntity>)ctx.From<FloatEntity>().SelectWhereMaxEx(x => x.Value, ExtremeRowTies.One));
+        one.Should().Contain("row_number()");
     }
 }

@@ -276,7 +276,10 @@ condition ANDed with an `is not null` filter on the value. On PostgreSQL and Cli
 or shape keeps the portable window.
 
 [`All`](xref:NextORM.Core.ExtremeRowTies.All) lowers to an **aggregate** form. It never uses a ranking
-window: no `rank()`, no `row_number()` and no window `over (...)` appears in an `All` statement. Per
+window: no `rank()`, no `row_number()` and no window `over (...)` appears in an `All` statement, with one
+exception — a floating-point value key on ClickHouse keeps the ranking window, because that server's
+`max()`/`min()` treat `NaN` as the extreme value while its `ORDER BY` ranks `NaN` last, and the ranking
+window is the reference the contract is defined by. Per
 group it is `GROUP BY <group>` selecting the extreme value (plus the null-safe group key) and joined
 back to the source; globally it is a single scalar aggregate subquery joined back; a composite key is
 resolved component by component, lexicographically — each component's extremum is taken over the rows

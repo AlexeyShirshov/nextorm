@@ -379,9 +379,20 @@ internal static class SqlSourceRenderer
     // provider dialect is identified by its runtime type name — the existing core convention (see
     // AdvancedAggregateTranslator.ProviderLabel's dialect-name switch and SqlStringLiteralPolicies'
     // exact-type map). A user dialect is never mistaken for the built-in one unless it carries the
-    // same type name.
+    // same type name. The base-type walk covers a dialect that derives from the shipped one (for
+    // example a test double that keeps ClickHouse rendering but disables the optional native
+    // extreme-row renderer): it is still the ClickHouse dialect, so the ClickHouse-specific decisions
+    // must apply to it as well.
     internal static bool IsClickHouseDialect(ISqlDialect dialect)
-        => dialect.GetType().Name == "ClickHouseDialect";
+    {
+        for (var type = dialect.GetType(); type is not null; type = type.BaseType)
+        {
+            if (type.Name == "ClickHouseDialect")
+                return true;
+        }
+
+        return false;
+    }
 
     /// <summary>
     /// Depth-first scan of a join <c>ON</c> body for the atoms that would render as a bare

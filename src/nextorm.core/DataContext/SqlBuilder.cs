@@ -1169,8 +1169,13 @@ internal readonly struct SqlBuilder
         // OR-join per nullable key). S3 extends it to composite value keys (two or more components) as
         // a staged aggregate chain E_1..E_n + O, which is the only shape that keeps lexicographic
         // semantics without a window function. All other shapes (One) keep the existing paths.
+        //
+        // A floating value key on ClickHouse keeps the rank() lowering: the aggregate form there
+        // disagrees with the ordering the extreme-row contract is defined by (see
+        // KeepRankLoweringForFloatingAll).
         if (cmd.ExtremeRow is { Ties: ExtremeRowTies.All } extremeRow
-            && cmd.ExtremeRowColumns is { Length: > 0 } valueColumns)
+            && cmd.ExtremeRowColumns is { Length: > 0 } valueColumns
+            && !KeepRankLoweringForFloatingAll(valueColumns))
         {
             // ClickHouse refuses a bare IS NULL residual in JOIN ON (#296) but accepts its native
             // isNotDistinctFrom there; the lowering emits an internal marker for that case and the
@@ -1211,6 +1216,30 @@ internal readonly struct SqlBuilder
         }
 
         return MakePortableExtremeRowSelect(cmd);
+    }
+
+    /// <summary>
+    /// Whether a <see cref="ExtremeRowTies.All"/> command must keep the portable <c>rank()</c> lowering
+    /// instead of the aggregate + join-back form. ClickHouse is the only dialect where the two forms
+    /// disagree: its <c>max()</c>/<c>min()</c> return <c>NaN</c> as the extremum while its <c>ORDER BY</c>
+    /// ranks <c>NaN</c> last (and its hash join distinguishes <c>+0.0</c> from <c>-0.0</c>). The
+    /// extreme-row contract is defined by that ordering (the native <c>One</c> renderer adapts its key so
+    /// NaN ranks last), so a floating value key keeps the rank lowering there; every other provider keeps
+    /// the aggregate form, where the aggregate and the ordering agree.
+    /// </summary>
+    private bool KeepRankLoweringForFloatingAll(SelectExpression[] valueColumns)
+    {
+        if (!SqlSourceRenderer.IsClickHouseDialect(_ctx.Dialect))
+            return false;
+
+        for (var i = 0; i < valueColumns.Length; i++)
+        {
+            var type = Nullable.GetUnderlyingType(valueColumns[i].PropertyType) ?? valueColumns[i].PropertyType;
+            if (type == typeof(float) || type == typeof(double))
+                return true;
+        }
+
+        return false;
     }
 
     /// <summary>

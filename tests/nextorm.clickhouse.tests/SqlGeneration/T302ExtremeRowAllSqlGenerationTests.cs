@@ -709,6 +709,69 @@ public class T302ExtremeRowAllSqlGenerationTests
         norm.Should().NotContain("rank(");
         norm.Should().NotContain("row_number(");
     }
+
+    /// <summary>
+    /// ClickHouse is the one dialect where the aggregate form and the ordering contract disagree about
+    /// <c>NaN</c>: <c>max()</c> returns <c>NaN</c> as the extremum while <c>ORDER BY</c> ranks it last (and
+    /// the hash join also separates <c>+0.0</c> from <c>-0.0</c>). A floating value key therefore keeps
+    /// the rank() lowering on this dialect — the same shape the native <c>One</c> renderer adapts its key
+    /// to — in the global, grouped and composite forms alike.
+    /// </summary>
+    [Fact]
+    public void Max_All_FloatingValueKey_UsesTheRankLowering()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<T302ExtremeFloatEntity>();
+
+        var norm = SqlOf(ctx, e.SelectWhereMax(x => x.Score, ExtremeRowTies.All).ToCommand()).ToLowerInvariant();
+
+        norm.Should().Contain("rank(");
+        norm.Should().NotContain("max(");
+        norm.Should().NotContain("row_number(");
+        norm.Should().NotContain("join");
+    }
+
+    [Fact]
+    public void Min_All_GroupedFloatingValueKey_UsesTheRankLowering()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<T302ExtremeFloatEntity>();
+
+        var norm = SqlOf(ctx, e.SelectWhereMin(x => x.Score, ExtremeRowTies.All, x => x.Id).ToCommand()).ToLowerInvariant();
+
+        norm.Should().Contain("rank(");
+        norm.Should().Contain("partition by");
+        norm.Should().NotContain("min(");
+    }
+
+    [Fact]
+    public void Max_All_CompositeWithFloatingComponent_UsesTheRankLowering()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<T302ExtremeFloatEntity>();
+
+        var norm = SqlOf(ctx, e.SelectWhereMax(x => new { x.Id, x.Score }, ExtremeRowTies.All).ToCommand()).ToLowerInvariant();
+
+        norm.Should().Contain("rank(");
+        norm.Should().NotContain("max(");
+    }
+
+    /// <summary>
+    /// Control: the same shapes over an integral value key keep the aggregate + join-back lowering, so the
+    /// floating exception is scoped to floating keys and does not demote the integral path.
+    /// </summary>
+    [Fact]
+    public void Max_All_IntegralValueKeyOnTheSameEntity_KeepsTheAggregateLowering()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<T302ExtremeFloatEntity>();
+
+        var norm = SqlOf(ctx, e.SelectWhereMax(x => x.Id, ExtremeRowTies.All).ToCommand()).ToLowerInvariant();
+
+        norm.Should().Contain("max(");
+        norm.Should().Contain("join");
+        norm.Should().NotContain("rank(");
+    }
 }
 
 [SqlTable("t302_extreme_all")]
@@ -723,6 +786,15 @@ public sealed class T302ExtremeAllDto
 {
     public int Id { get; set; }
     public string? Cat { get; set; }
+}
+
+/// <summary>A floating value key, the shape that keeps the rank lowering for <c>All</c> on ClickHouse.</summary>
+[SqlTable("t302_extreme_float")]
+public sealed class T302ExtremeFloatEntity
+{
+    [Key][Column("id")] public int Id { get; set; }
+    [Column("score")] public double? Score { get; set; }
+    [Column("cat")] public string? Cat { get; set; }
 }
 
 public sealed record T302ExtremeAllRecord(int Id, string? Cat);

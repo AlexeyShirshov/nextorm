@@ -97,7 +97,7 @@ The contract matches the built-in operator:
 
 - a row whose extreme-key component is `null` never wins the extremum and never appears in the result;
 - a group whose key values are all `null` yields no rows at all, and the global form returns nothing when every value is `null`;
-- nullable **group** keys are preserved; a `null` group key forms its own group. An `All` selection over a nullable group key uses a partitioned rank window instead of the aggregate-and-join shape, so no null-safe join predicate is needed and those rows are kept on every provider, including ClickHouse;
+- nullable **group** keys are preserved; a `null` group key forms its own group. An `All` selection over a nullable group key uses a partitioned rank window instead of the aggregate-and-join shape, so no null-safe join predicate is needed and those rows are kept on every provider, including ClickHouse. A floating-point value key keeps the same partitioned rank window, because ClickHouse's aggregate and ordering disagree about `NaN`;
 - nullable payload columns are preserved unchanged.
 
 ## Projections, ordering and composition
