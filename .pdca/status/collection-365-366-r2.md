@@ -1,0 +1,177 @@
+# Collection status: 365-366-r2
+
+- collection-id: `365-366-r2`
+- form: `collection`
+- plan_cap: `4`
+- lane_cap: `1`
+- cap_reason: strict T365 → T366 dependency, shared nextorm.slnx / Directory.Packages.props / docs surface, single exclusive branch collection/365-366 without merge, and a quiet single-threaded stand required by the AC6 and acceptance-benchmark measurements
+- base_ref: `83c545767cdd46cb58d054445c3ce028d4d55b0d`
+- branch: `collection/365-366`
+- worktree: `/home/alex/sources/nextorm-365-366`
+
+## Input
+
+«пдца по задачам 365 366 автономно автокомит»
+
+Ограничения: два файла статуса; продуктовый код не менять; не выполнять git add/commit; `.pdca/status/collection-365-366.md` и `T365-rc5-2.md` — намеренные read-only копии, игнорировать.
+
+### GitHub issue #365 (source: `gh issue view 365 --repo AlexeyShirshov/nextorm --json number,title,url,milestone,state,body`)
+
+## Status and boundaries
+
+Scope agreed in conversation after #362 closed `incomplete` (AC7 infeasible while the component was required to emit the AC4 rank-window shape against an aggregate+join baseline). No written spec and no implementation plan yet; product implementation is **not started**. This issue is the tracking record for the next slice; it stays in milestone `1.0.9-rc5`.
+
+## Intent
+
+Ship a **product** extension package built entirely on the public query-component layer, next to the frozen built-in operator:
+
+- keep the current `SelectWhereMin` / `SelectWhereMax` implementation **untouched** as the compatibility path and as the performance **baseline**;
+- add `SelectWhereMinEx` / `SelectWhereMaxEx` that are implemented **only** through public query components (`IQueryComponent` + `EntityBuilder.WithComponent`), with **zero** intersection with the legacy implementation;
+- put the new implementation in a separate project/package `nextorm.extensions`.
+
+The component layer was already proven end-to-end in #362 by an external no-IVT library; this issue is the productization of that proof, not a new design.
+
+## Frozen legacy (must not change)
+
+`SelectWhereMin` / `SelectWhereMax`, `SqlBuilder.MakeExtremeRowSelect`, `MakePortableExtremeRowSelect`, `MakePortableExtremeRowInner`, `MakeNativeExtremeRowSelect`, `ExtremeRowLowering`, `ExtremeRowCompatibility`, the `QueryCommand.ExtremeRow*` fields, and the `InMemoryExtremeRow` path. Verified unchanged by diff in the implementing cycle. They serve two purposes only: compatibility and the benchmark baseline.
+
+## Design
+
+- **Project**: `src/nextorm.extensions`, a separate NuGet package that references `nextorm.core` only (no provider references, no `InternalsVisibleTo`, no raw SQL, no global handler registration).
+- **API**: `SelectWhereMinEx` / `SelectWhereMaxEx` as ordinary extension methods on `EntityBuilder<TEntity>`, attaching one query component with a stable slot; Min and Max share one slot (assignment replaces in place).
+- **No shared infrastructure with legacy**: no `ExtremeRow*` command fields, no new branches in `SqlBuilder.MakeSelect` / `InMemoryQueryBuilder`, no new rows in `QueryPlanEqualityComparer`, no reuse of `ExtremeRowLowering` / `ExtremeRowCompatibility`.
+- **SQL shape is free**: the component may emit the aggregate+join shape where it is faster (as legacy does for `All`) and a rank-window shape where that wins. The AC4 rank-window mandate from #362 was a *proof* constraint, not a product requirement, and it is **not** carried here.
+- **Seed implementation**: the proven `ExternalSelectWhereMin/Max` library under `tests/nextorm.querycomponents` (52 assertions, semantic parity matrix, six-provider SQL generation and live coverage). The no-friend test assembly keeps proving the packaged surface through an ordinary package reference (no IVT).
+- **Caching**: component state and semantics survive clones; structural hash **and** equality participate in the plan key; `BuildQuery` runs on the cache miss only and never on a confirmed warm hit; parameter rebinding (captured and positional) works with a warm cache and does not leak.
+
+## Acceptance criteria
+
+- **AC1 Packaging & surface** — `nextorm.extensions` builds and packs as its own package, references `nextorm.core` only, exposes `SelectWhereMinEx`/`SelectWhereMaxEx` and nothing else public beyond the component wiring; no IVT anywhere; no raw SQL; no global registration.
+- **AC2 Semantic parity with the frozen legacy** — `One`/`All`, scalar/composite values, global/grouped, NULL keys and NULL group keys, input `Where`, ties, scalar/DTO/anonymous projections, `.Select(...)` after, outer `OrderBy`/`ThenBy`, paging, and the same rejection boundaries (distinct, set operations, aggregates, unsupported shapes, in-memory policy), verified by paired execution against legacy on the same database.
+- **AC3 Component semantics** — multiple independent components, same-slot replacement (Min→Max, Max→Min) without nesting, explicit rejection of conflicting exclusive reshape slots, structural hash-collision discrimination via `Equals`, clone/`CloneForCache`/`ResetPreparation` parity, hidden-alias collision safety for user columns named `rn`/`rank`/`__nextorm_ext_rn`.
+- **AC4 Plan cache & rebinding** — `BuildQuery` only on a cache miss, zero calls on a confirmed warm hit (counter-asserted), changing captured/positional values with a warm cache rebind without leakage, no `queryCommand.Cache = false`, no cache disable.
+- **AC5 Providers** — SQL-generation tests plus a live integration matrix on PostgreSQL, SQL Server, MySQL, MariaDB, ClickHouse and SQLite; no component in the in-memory provider for integration; no-component regression tests for ordinary commands.
+- **AC6 Performance vs frozen legacy** — for every mandatory scenario (`Min/Max × One/All × global/grouped × scalar/composite` plus no-component controls): `CI99_upper(T_ex / T_legacy) <= 1.0` (or throughput `CI99_lower >= 1.0`) **and** `Alloc_ex <= Alloc_legacy`. SQL shape is free, the threshold is not; an inconclusive interval counts as unmet.
+- **AC7 Docs & hygiene** — EN + RU docs for the new package and API, no links to `docs/specs/**`, build `dotnet build nextorm.slnx -c Debug` = 0 warnings / 0 errors, CRLF, CPM, coverage thresholds 85/75 and 65/74 unchanged.
+- **AC8 Legacy untouched** — a diff check proves none of the frozen legacy files changed; only `nextorm.extensions`, its tests, docs and the solution membership are touched.
+
+## Out of scope
+
+- Migrating, deprecating or removing the legacy `SelectWhereMin/Max`.
+- Changing `#302` lowering.
+- A public opaque-SQL-fragment primitive (separate user-level decision; see #362).
+- Re-basing `#362`'s AC7 measurement.
+
+## Related
+
+- #362 — component proof; closed `incomplete` because AC4's rank-window mandate could not meet the aggregate+join baseline.
+- #302 — frozen internal lowering.
+- #153 — external no-IVT precedent.
+- #319 — build-once candidate.
+
+
+### GitHub issue #366 (source: `gh issue view 366 --repo AlexeyShirshov/nextorm --json number,title,url,milestone,state,body`)
+
+## Goal / agreed requirements
+Support nextorm under .NET 10 NativeAOT with functional parity for ALL currently supported nextorm features and provider/feature combinations, not just removal of the first MetadataToken crash. The user explicitly requires all capabilities to be covered; no SQLite-only or reduced-feature AOT support contract.
+
+## Reproduction context
+A .NET 10 file-based SQLite reporting application using nextorm/nextorm.sqlite 1.0.9-rc4 publishes as a small NativeAOT executable but fails on its first query with InvalidOperationException: There is no metadata token available for the given member, reported at NextORM.Core.MemberInfoExtensions.SameProperty. Its query shapes include interface entities, captured predicates, anonymous projections, nullable scalar mapping, SQLite json_extract, grouping and aggregates. The external application is ONLY an example; it is not a test fixture and its repository must not be modified.
+
+## Agreed test architecture requirements
+- Add a dedicated executable NativeAOT test project to the solution (not merely a normal JIT unit test).
+- Reuse existing integration databases, schemas, seed data, connection resolution and container lifecycle. Do not invent a separate test database infrastructure.
+- The integration host resolves/starts/seeds the existing provider once and passes the actual resolved connection to the native child process. In particular SQLite must use the parent's existing file rather than the child's process-derived default. The child must not independently reseed or manage containers.
+- Publish with PublishAot=true and run the resulting native executable. Compare semantic results against existing expected values/JIT behavior; successful compilation alone is insufficient. Cover runtime execution and failures in automation/CI.
+- Coverage must include every existing supported feature/provider combination and all public product surfaces, including core/in-memory, providers, nextorm.extensions and the EF integration surface. Preserve existing dialect capability differences; do not manufacture SQL features unsupported by a provider.
+- Missing AOT functionality/driver support is a blocker to full acceptance, not grounds for silently skipping or reducing the requirement.
+
+## Known investigation areas (facts, not a preapproved implementation)
+- Token-based property identity appears in SameProperty, insert member comparison, query-filter validation and preparer filter-member keys. Preserve inherited/reflected/hidden/interface-property semantics and plan-cache correctness.
+- Runtime Reflection.Emit for composite many-to-many junction carriers must have an AOT-capable implementation.
+- Runtime generic construction, metadata preservation/reflection and JSON serialization paths require NativeAOT analysis and runtime tests.
+- Expression.Compile is not categorically unavailable: .NET uses interpretation under NativeAOT. Source generation is a possible tool, not yet a universally required redesign.
+- There is a real JoinAliasGenerator alongside the empty AnonymousClassGenerator stub; do not assume the generator project is entirely inactive.
+- Native compatibility of each dependency/driver must be verified, not inferred from another driver's success.
+
+## Acceptance
+1. Repro-class queries and every supported public feature/provider combination execute correctly in published NativeAOT tests using existing integration infrastructure.
+2. CRUD, query translation and materialization, joins/eager loading (including composite junctions), filters/cache behavior, converters/JSON/CSV/streaming, advanced query constructs and provider-specific operations retain JIT semantics wherever currently supported.
+3. Normal JIT behavior, public API compatibility and existing test suites remain intact. Any required generation/registration contract must be explicitly designed and approved before implementation; no silent API narrowing.
+4. AOT/trim diagnostics are accounted for and root causes addressed. No blanket warning suppression, disabling trimming, or rooting the entire dependency graph as a substitute for compatibility.
+5. Automated gates run actual native binaries and report feature/provider evidence; unsupported dependencies or unexecuted cases are not reported green.
+6. Public documentation and its Russian mirror accurately describe the accepted support contract.
+
+## Open design questions
+- How to replace runtime-emitted carriers and guarantee required closed generic instantiations while preserving public behavior.
+- Whether source-generated metadata/materializers/registrations are required, and how they are discovered or explicitly declared for dynamically composed queries and external assemblies.
+- Exact reusable shared test-support boundary and feature/provider coverage ledger.
+- Third-party blockers, especially driver and EF integration behavior; no feature exclusions have been approved.
+
+## Status / gates
+Requirements above are agreed in conversation. Architecture/design and written specification are NOT approved. No implementation plan has been prepared; product implementation is NOT authorized. Issue creation is tracking only. Design draft: `docs/superpowers/specs/2026-11-04-nativeaot-full-compatibility-design.md` (local/uncommitted; builder check in progress; not approved). Implementation plan: not prepared. Milestone uses the verified current branch's exact matching existing milestone; this is not a promise of release readiness.
+
+
+## Additional agreed requirement — zero-configuration migration
+
+Added after the requirements above were agreed; it constrains *how* AOT support may be delivered. It does not relax or replace anything above.
+
+- Existing applications must reach full NativeAOT support by enabling `PublishAot=true` **only**. No manual listing or registration of entity, projection or query shapes; no per-type rooting configuration; no separate hand-authored AOT-specific code paths in the consuming application.
+- If source generation is needed, it must be delivered automatically through the nextorm package/analyzer (discovered and wired in as part of the normal package reference) and must require no new opt-in switch and no new consumer-written code.
+- Existing public API and runtime-composed query behavior must be preserved to the extent already supported; this requirement does not authorize narrowing the supported surface.
+- Any feasibility conflict with this zero-configuration constraint is an explicit **blocking finding** for the cycle/design, not permission to shrink the contract. It must be recorded and escalated, not silently resolved by requiring consumer configuration.
+- This answers the discovery half of the earlier open question "Whether source-generated metadata/materializers/registrations are required, and how they are discovered or explicitly declared for dynamically composed queries and external assemblies": where required, discovery must be automatic and cover dynamically composed queries and external assemblies without consumer declaration. The architectural mechanism itself remains unapproved.
+
+All previous requirements remain in force. No architecture, specification, plan or implementation is approved by this addition.
+
+
+
+### Entry PLAN (decision record)
+
+- form=collection
+- items: `T365 (cycle, N=3, r=1)`; `T366 (incremental, campaign C1)`
+- order: `T365 → T366`
+- lane_cap=1
+- overlay: `coder+.NET` + `nextorm-pdca`
+- paths: `.pdca/status/collection-365-366-r2.md`, `.pdca/status/T365-rc5-3.md`, `.pdca/status/T366-rc5-1.md`; evidence `.pdca/365-366-r2/items/T365/rv1/` and `.pdca/365-366-r2/items/T366/step<k>/rv1/`
+- Notice: the entry plan text was not transcribed verbatim into this record; the operative item contracts are verbatim at `.pdca/365-366-r2/items/T365/rv1/plan.md` (T365) and in the T366 charter once prepared. Criteria are the issue bodies above, verbatim.
+
+### Phase decisions
+
+- T365 PLAN persisted (`plan_state=ready`)
+- T366 charter pending
+- ALL-barrier: not yet passed (T366 charter not prepared)
+- Schedule: T365 → T366, single lane, current worktree/branch, no worktree, no merge; revision vector T365@r1, T366@r1 (pending)
+
+### Groups
+
+| group | items | worktree | branch | ref | status | note |
+|---|---|---|---|---|---|---|
+| g1 | T365 | `/home/alex/sources/nextorm-365-366` | `collection/365-366` | `83c545767cdd46cb58d054445c3e` | in-progress | single lane |
+
+### Items
+
+| item | group | branch | status | plan_state | preparation_state | form | contract | overlay | cycle_id | status path | plan_revision | attempt_n | disposition | evidence root |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| T365 | g1 | `collection/365-366` | in-progress | ready | — | cycle | pdca | coder+.NET + nextorm-pdca | T365-rc5-3 (N=3) | `.pdca/status/T365-rc5-3.md` | r1 | 0/3 | active | `.pdca/365-366-r2/items/T365/rv1/` |
+| T366 | g1 | `collection/365-366` | pending | — | pending | campaign | — | — | — | `.pdca/status/T366-rc5-1.md` (to be created at bootstrap) | — | — | pending | `.pdca/365-366-r2/items/T366/step<k>/rv1/` |
+
+### General verification and recovery
+
+- state: in-progress
+- last common CHECK: none
+- blocking reason: none
+- defect history: `AC6-six-warm-All-rows` (open); `WC-1-concurrent-writer` (closed by construction)
+- next allowed step: repair the AC6 harness and re-measure; then CHECK
+
+### Completeness
+
+- 0/2 goals accepted
+- integrated-tree verdict: none
+- issues #365, #366 both OPEN
+- commits made: none
+
+## Progress log
+
+2026-11-04T17:50:50Z | PLAN | T365@r1 | T365 PLAN persisted (plan_state=ready); collection prepared | `.pdca/status/T365-rc5-3.md`
+2026-11-04T18:22:22Z | T365 paused at clean boundary in DO (n=0/3); T366 not started
