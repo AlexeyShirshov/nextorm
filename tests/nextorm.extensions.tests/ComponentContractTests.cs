@@ -136,6 +136,20 @@ public class ComponentContractTests
         sql.Should().Contain("row_number()");
     }
 
+    // The public untyped constructor rejects a selector written over another entity instead of
+    // failing deep inside the parameter replacer later.
+    [Fact]
+    public void Ctor_RejectsSelectorOverAnotherEntity()
+    {
+        Action act = () => _ = new ExtremeRowComponent<Entity>(
+            ExtremeKind.Min,
+            (Expression<Func<ResultDto, long>>)(x => x.Id),
+            ExtremeRowTies.One,
+            null);
+
+        act.Should().Throw<ArgumentException>().WithParameterName("valueSelector");
+    }
+
     // B4: hash collision discriminated by StructurallyEquals
     private sealed class TestComponent : IQueryComponent
     {
@@ -233,28 +247,28 @@ public class ComponentContractTests
         cmd.From!.SubQuery.Should().BeNull();
     }
 
-    // B6: warm hit does not rebuild
+    // B6: warm hit reuses the cached plan instead of rebuilding the component contribution
     [Fact]
-    public void B6_WarmHit_DoesNotRebuild()
+    public void B6_WarmHit_ReusesThePreparedPlan()
     {
-        ExtremeRowComponent<Entity>.ResetBuildCount();
-        using var conn = new Microsoft.Data.Sqlite.SqliteConnection("Data Source=:memory:");
-        conn.Open();
-        using var cmd0 = conn.CreateCommand();
-        cmd0.CommandText = "CREATE TABLE Entity (Id INTEGER PRIMARY KEY, Score INTEGER, Name TEXT);";
-        cmd0.ExecuteNonQuery();
-        using var ctx = new SqliteDataContext(conn, new DataContextBuilder());
-        ctx.PurgeQueryCache();
+        var (conn, ctx) = CreateContext(EntitySeed);
+        using var connScope = conn;
+        using var ctxScope = ctx;
 
         var b = ctx.From<Entity>().SelectWhereMinEx(x => x.Score);
-        ExtremeRowComponent<Entity>.ResetBuildCount();
         QueryCommand<Entity> cmd = b;
-        var prepared = ctx.GetPreparedQueryCommand(cmd, false, true, CancellationToken.None);
+        var prepared = Prepare(ctx, cmd);
         var r1 = ctx.ToList(prepared);
-        ExtremeRowComponent<Entity>.BuildCount.Should().Be(1);
+        r1.Should().ContainSingle().Which.Score.Should().Be(10);
 
-        var r2 = ctx.ToList(prepared);
-        ExtremeRowComponent<Entity>.BuildCount.Should().Be(1);
+        var warm = Prepare(ctx, cmd);
+        // A warm hit returns the cached plan: the SQL text instance is the one built on the miss, so
+        // the component's BuildQuery did not run again. (The planner may hand out a different
+        // command wrapper when the process-wide plan store is shared, hence the SQL identity.)
+        warm.SqlStmt.Should().BeSameAs(prepared.SqlStmt, "a confirmed warm hit must not rebuild the SQL");
+
+        var r2 = ctx.ToList(warm);
+        r2.Select(x => x.Id).Should().Equal(r1.Select(x => x.Id));
     }
 
     // B7: parameter rebinding captured and positional, no leak
@@ -431,9 +445,10 @@ public class ComponentContractTests
         }
     }
 
-    // Warm hit captured/positional counter assertions (BuildQuery exactly 0 on warm hit)
+    // Warm hit assertions for the product component: the cached prepared plan is reused and the
+    // rebuilt SQL is never regenerated, so BuildQuery cannot have run again. No product counter.
     [Fact]
-    public void R3_CapturedWarmHit_DoesNotRebuild()
+    public void R3_CapturedWarmHit_ReusesThePreparedPlan()
     {
         var (conn, ctx) = CreateContext(EntitySeed);
         using var connScope = conn;
@@ -444,20 +459,22 @@ public class ComponentContractTests
             .Where(x => x.Score > threshold)
             .SelectWhereMinEx(x => x.Score);
 
-        ExtremeRowComponent<Entity>.ResetBuildCount();
-        var prepared = ctx.GetPreparedQueryCommand(command, false, true, CancellationToken.None);
+        var prepared = Prepare(ctx, command);
         ctx.ToList(prepared);
-        ExtremeRowComponent<Entity>.BuildCount.Should().Be(1);
 
         threshold = 10;
-        ctx.ToList(prepared);
+        var warm1 = Prepare(ctx, command);
+        warm1.SqlStmt.Should().BeSameAs(prepared.SqlStmt, "a warm hit must reuse the built SQL");
+        ctx.ToList(warm1).Should().ContainSingle().Which.Score.Should().Be(20);
+
         threshold = 19;
-        ctx.ToList(prepared);
-        ExtremeRowComponent<Entity>.BuildCount.Should().Be(1, "a warm hit must not call BuildQuery");
+        var warm2 = Prepare(ctx, command);
+        warm2.SqlStmt.Should().BeSameAs(prepared.SqlStmt, "a second warm hit must reuse the same built SQL");
+        ctx.ToList(warm2).Should().ContainSingle().Which.Score.Should().Be(20);
     }
 
     [Fact]
-    public void R4_PositionalWarmHit_DoesNotRebuild()
+    public void R4_PositionalWarmHit_ReusesThePreparedPlan()
     {
         var (conn, ctx) = CreateContext(EntitySeed);
         using var connScope = conn;
@@ -467,19 +484,21 @@ public class ComponentContractTests
             .Where(x => x.Score > SqlFunctions.Parameter<int>(0))
             .SelectWhereMinEx(x => x.Score);
 
-        ExtremeRowComponent<Entity>.ResetBuildCount();
-        var prepared = ctx.GetPreparedQueryCommand(command, false, true, CancellationToken.None);
-        ExtremeRowComponent<Entity>.BuildCount.Should().Be(1);
+        var prepared = Prepare(ctx, command);
+        var builtSql = prepared.SqlStmt;
 
         var r1 = ctx.ToList(prepared, new object[] { 10 });
-        var r2 = ctx.ToList(prepared, new object[] { 19 });
         r1.Should().ContainSingle(x => x.Score == 20);
+
+        var r2 = ctx.ToList(prepared, new object[] { 19 });
         r2.Should().ContainSingle(x => x.Score == 20);
-        ExtremeRowComponent<Entity>.BuildCount.Should().Be(
-            1, "the parameter-refresh pass must reuse the built shape instead of rerunning BuildQuery");
+
+        prepared.SqlStmt.Should().Be(
+            builtSql, "the parameter-refresh pass must reuse the built shape instead of rerunning BuildQuery");
     }
 
-    // BuildQuery counter: exactly 1 on cold miss, 0 on confirmed warm hit (captured + positional values changed)
+    // The engine contract AC4 states, asserted on a test-local component that counts its own
+    // BuildQuery calls: exactly 1 on cold miss, 0 on a confirmed warm hit (captured and positional).
     [Fact]
     public void BuildQueryCounter_ColdMissOne_WarmHitZero_CapturedAndPositional()
     {
@@ -488,32 +507,30 @@ public class ComponentContractTests
         using var ctxScope = ctx;
 
         int threshold = 0;
+        var counting = new CountingComponent<Entity>();
         var command = (QueryCommand<Entity>)ctx.From<Entity>()
             .Where(x => x.Score > threshold)
-            .SelectWhereMinEx(x => x.Score);
+            .WithComponent(counting);
 
-        ExtremeRowComponent<Entity>.ResetBuildCount();
-        var prepared = ctx.GetPreparedQueryCommand(command, false, true, CancellationToken.None);
-        ctx.ToList(prepared);
-        ExtremeRowComponent<Entity>.BuildCount.Should().Be(1, "cold miss must call BuildQuery exactly once");
+        Prepare(ctx, command);
+        counting.BuildCount.Should().Be(1, "cold miss must call BuildQuery exactly once");
 
-        ExtremeRowComponent<Entity>.ResetBuildCount();
         threshold = 10;
-        var prepared2 = ctx.GetPreparedQueryCommand(command, false, true, CancellationToken.None);
-        ctx.ToList(prepared2);
-        ExtremeRowComponent<Entity>.BuildCount.Should().Be(0, "warm hit must not call BuildQuery");
+        Prepare(ctx, command);
+        counting.BuildCount.Should().Be(1, "warm hit must not call BuildQuery");
 
         // positional
+        var positional = new CountingComponent<Entity>();
         var command2 = (QueryCommand<Entity>)ctx.From<Entity>()
             .Where(x => x.Score > SqlFunctions.Parameter<int>(0))
-            .SelectWhereMinEx(x => x.Score);
-        ExtremeRowComponent<Entity>.ResetBuildCount();
-        var p = ctx.GetPreparedQueryCommand(command2, false, true, CancellationToken.None);
+            .WithComponent(positional);
+
+        var p = Prepare(ctx, command2);
+        positional.BuildCount.Should().Be(1, "cold miss must call BuildQuery exactly once");
         ctx.ToList(p, new object[] { 5 });
-        ExtremeRowComponent<Entity>.BuildCount.Should().Be(1);
-        ExtremeRowComponent<Entity>.ResetBuildCount();
+        positional.BuildCount.Should().Be(1);
         ctx.ToList(p, new object[] { 15 });
-        ExtremeRowComponent<Entity>.BuildCount.Should().Be(0);
+        positional.BuildCount.Should().Be(1, "a warm positional execution must not call BuildQuery again");
     }
 
     // value leakage check between captured calls

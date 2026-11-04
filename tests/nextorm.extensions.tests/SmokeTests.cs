@@ -48,19 +48,18 @@ public class SmokeTests
     }
 
     [Fact]
-    public void BuildQuery_RunsOnce_OnMiss_AndZero_OnWarmHit()
+    public void WarmHit_ReusesThePreparedPlan_WithoutRebuilding()
     {
-        ExtremeRowComponent<Entity>.ResetBuildCount();
         using var ctx = new SqliteDataContext("Data Source=:memory:", new DataContextBuilder());
         var e = ctx.From<Entity>();
 
         var cmd = e.SelectWhereMinEx(x => x.Score).ToCommand();
-        _ = Prepare(ctx, cmd);
-        ExtremeRowComponent<Entity>.BuildCount.Should().Be(1);
+        var first = Prepare(ctx, cmd);
+        var second = Prepare(ctx, cmd);
 
-        ExtremeRowComponent<Entity>.ResetBuildCount();
-        _ = Prepare(ctx, cmd);
-        ExtremeRowComponent<Entity>.BuildCount.Should().Be(0);
+        // A confirmed warm hit returns the cached plan's SQL instance; the component's BuildQuery ran
+        // only while that plan was built. SQL identity is the observable that needs no product counter.
+        second.SqlStmt.Should().BeSameAs(first.SqlStmt);
     }
 
     [Fact]

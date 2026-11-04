@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
 using NextORM.Core;
@@ -230,6 +231,130 @@ INSERT INTO SemEntity VALUES
         ext[0].Score.Should().Be(30);
     }
 
+    // 5b. `All` + an input filter: the predicate belongs to the aggregated source only and must not
+    // render a second time around the reshape (the extra parameters were the audit's C4 finding).
+    [Fact]
+    public void S4_5_AllCapturedFilter_PredicateOnce_AndParity()
+    {
+        var (conn, ctx) = CreateContext();
+        using var connScope = conn; using var ctxScope = ctx;
+        ctx.PurgeQueryCache();
+
+        int threshold = 15;
+        var built = ctx.From<SemEntity>().Where(x => x.Score > threshold).SelectWhereMin(x => x.Score, ExtremeRowTies.All).ToList();
+        var extCmd = (QueryCommand<SemEntity>)ctx.From<SemEntity>()
+            .Where(x => x.Score > threshold)
+            .SelectWhereMinEx(x => x.Score, ExtremeRowTies.All);
+        var prepared = (DbPreparedQueryCommand<SemEntity>)ctx.GetPreparedQueryCommand(extCmd, false, true, CancellationToken.None);
+        var sql = prepared.SqlStmt!.Replace("\r\n", "\n");
+        var ext = ctx.ToList(prepared);
+
+        AssertSameIds(built, ext, x => x.Id);
+        ext.Should().NotBeEmpty();
+        CountPredicate(sql, @"Score\s*>\s*\$threshold").Should().Be(1, "the input condition is applied inside the aggregated source exactly once");
+    }
+
+    [Fact]
+    public void S4_5_AllConstantFilter_PredicateOnce_AndParity()
+    {
+        var (conn, ctx) = CreateContext();
+        using var connScope = conn; using var ctxScope = ctx;
+        ctx.PurgeQueryCache();
+
+        var built = ctx.From<SemEntity>().Where(x => x.Score > 15).SelectWhereMax(x => x.Score, ExtremeRowTies.All).ToList();
+        var extCmd = (QueryCommand<SemEntity>)ctx.From<SemEntity>()
+            .Where(x => x.Score > 15)
+            .SelectWhereMaxEx(x => x.Score, ExtremeRowTies.All);
+        var prepared = (DbPreparedQueryCommand<SemEntity>)ctx.GetPreparedQueryCommand(extCmd, false, true, CancellationToken.None);
+        var sql = prepared.SqlStmt!.Replace("\r\n", "\n");
+        var ext = ctx.ToList(prepared);
+
+        AssertSameIds(built, ext, x => x.Id);
+        ext.Should().NotBeEmpty();
+        CountPredicate(sql, @"Score\s*>\s*15").Should().Be(1, "the input condition is applied inside the aggregated source exactly once");
+    }
+
+    [Fact]
+    public void S4_5_AllGroupedFilter_PredicateOnce_AndParity()
+    {
+        var (conn, ctx) = CreateContext();
+        using var connScope = conn; using var ctxScope = ctx;
+        ctx.PurgeQueryCache();
+
+        int threshold = 15;
+        var built = ctx.From<SemEntity>().Where(x => x.Score > threshold).SelectWhereMin(x => x.Score, ExtremeRowTies.All, x => x.GroupKey2).ToList();
+        var extCmd = (QueryCommand<SemEntity>)ctx.From<SemEntity>()
+            .Where(x => x.Score > threshold)
+            .SelectWhereMinEx(x => x.Score, ExtremeRowTies.All, x => x.GroupKey2);
+        var prepared = (DbPreparedQueryCommand<SemEntity>)ctx.GetPreparedQueryCommand(extCmd, false, true, CancellationToken.None);
+        var sql = prepared.SqlStmt!.Replace("\r\n", "\n");
+        var ext = ctx.ToList(prepared);
+
+        AssertSameIds(built, ext, x => x.Id);
+        ext.Should().NotBeEmpty();
+        CountPredicate(sql, @"Score\s*>\s*\$threshold").Should().Be(1, "the input condition is applied inside the aggregated source exactly once");
+    }
+
+    [Fact]
+    public void S4_5_AllCompositeFilter_Parity_OuterProjectionFreeOfPredicate()
+    {
+        var (conn, ctx) = CreateContext();
+        using var connScope = conn; using var ctxScope = ctx;
+        ctx.PurgeQueryCache();
+
+        int threshold = 15;
+        var built = ctx.From<SemEntity>()
+            .Where(x => x.Score > threshold)
+            .SelectWhereMin(x => new { x.Score, x.Name }, ExtremeRowTies.All)
+            .ToList();
+        var extCmd = (QueryCommand<SemEntity>)ctx.From<SemEntity>()
+            .Where(x => x.Score > threshold)
+            .SelectWhereMinEx(x => new { x.Score, x.Name }, ExtremeRowTies.All);
+        var prepared = (DbPreparedQueryCommand<SemEntity>)ctx.GetPreparedQueryCommand(extCmd, false, true, CancellationToken.None);
+        var sql = prepared.SqlStmt!.Replace("\r\n", "\n");
+        var ext = ctx.ToList(prepared);
+
+        AssertSameIds(built, ext, x => x.Id);
+        ext.Should().NotBeEmpty();
+
+        // The composite `All` lowering aggregates one value component per stage; every stage reads the
+        // raw source, so the filter is required in each stage (the built-in lowering documents the same
+        // n+1 shape). The outer projection must not repeat it.
+        CountPredicate(sql, @"Score\s*>\s*\$threshold").Should().Be(2);
+        var outerSelect = sql[..sql.IndexOf("from (", StringComparison.Ordinal)];
+        CountPredicate(outerSelect, @"Score\s*>\s*\$threshold").Should().Be(0);
+    }
+
+    [Fact]
+    public void S4_5_AllCompositeGroupedFilter_PredicateOnce_AndParity()
+    {
+        var (conn, ctx) = CreateContext();
+        using var connScope = conn; using var ctxScope = ctx;
+        ctx.PurgeQueryCache();
+
+        int threshold = 15;
+        // A nullable group key selects the rank-window `All` shape (no null-safe join), which reads the
+        // filtered source once even for a composite value key.
+        var built = ctx.From<SemEntity>()
+            .Where(x => x.Score > threshold)
+            .SelectWhereMin(x => new { x.Score, x.Name }, ExtremeRowTies.All, x => x.GroupKey)
+            .ToList();
+        var extCmd = (QueryCommand<SemEntity>)ctx.From<SemEntity>()
+            .Where(x => x.Score > threshold)
+            .SelectWhereMinEx(x => new { x.Score, x.Name }, ExtremeRowTies.All, x => x.GroupKey);
+        var prepared = (DbPreparedQueryCommand<SemEntity>)ctx.GetPreparedQueryCommand(extCmd, false, true, CancellationToken.None);
+        var sql = prepared.SqlStmt!.Replace("\r\n", "\n");
+        var ext = ctx.ToList(prepared);
+
+        AssertSameIds(built, ext, x => x.Id);
+        ext.Should().NotBeEmpty();
+        CountPredicate(sql, @"Score\s*>\s*\$threshold").Should().Be(1, "the input condition is applied inside the ranked source exactly once");
+        sql.Should().Contain("rank()").And.NotContain(" join ");
+    }
+
+    private static int CountPredicate(string sql, string pattern)
+        => Regex.Matches(sql, pattern, RegexOptions.IgnoreCase).Count;
+
     // 6. Projection
     [Fact]
     public void S4_6_ScalarProjection_Parity()
@@ -331,5 +456,14 @@ INSERT INTO SemEntity VALUES
 
         var grouped = SqlOf(ctx, (QueryCommand<SemEntity>)ctx.From<SemEntity>().SelectWhereMinEx(x => x.Score, ExtremeRowTies.One, x => x.GroupKey));
         grouped.Should().Contain("partition by");
+
+        // `All` picks the shape by what the expression needs: a nullable group key can only be joined
+        // back with the null-safe predicate, which ClickHouse rejects inside JOIN ON, so it uses the
+        // rank window; a non-nullable group key keeps the aggregate+join lowering.
+        var groupedNullableAll = SqlOf(ctx, (QueryCommand<SemEntity>)ctx.From<SemEntity>().SelectWhereMinEx(x => x.Score, ExtremeRowTies.All, x => x.GroupKey));
+        groupedNullableAll.Should().Contain("rank()").And.NotContain(" join ");
+
+        var groupedNonNullableAll = SqlOf(ctx, (QueryCommand<SemEntity>)ctx.From<SemEntity>().SelectWhereMinEx(x => x.Score, ExtremeRowTies.All, x => x.Id));
+        groupedNonNullableAll.Should().Contain(" join ").And.NotContain("rank(");
     }
 }

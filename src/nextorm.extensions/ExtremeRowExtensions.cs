@@ -4,12 +4,13 @@ using NextORM.Core;
 
 namespace NextORM.Extensions;
 
-/// <summary>Component member.</summary>
+/// <summary>The direction of the extreme-row selection.</summary>
 public enum ExtremeKind
 {
-    /// <summary>Minimum extreme.</summary>
+    /// <summary>Keep the row(s) with the smallest value.</summary>
     Min,
-    /// <summary>Maximum extreme.</summary>
+
+    /// <summary>Keep the row(s) with the greatest value.</summary>
     Max
 }
 
@@ -20,31 +21,80 @@ public enum ExtremeKind
 /// </summary>
 internal static class ExtremeRowReflection
 {
-    internal static readonly MethodInfo Asc =
-        typeof(CommonFunctions).GetMethod("asc", BindingFlags.Public | BindingFlags.Instance)!;
+    internal static readonly MethodInfo Asc = RequireMethod(typeof(CommonFunctions), "asc", BindingFlags.Public | BindingFlags.Instance);
 
-    internal static readonly MethodInfo Desc =
-        typeof(CommonFunctions).GetMethod("desc", BindingFlags.Public | BindingFlags.Instance)!;
+    internal static readonly MethodInfo Desc = RequireMethod(typeof(CommonFunctions), "desc", BindingFlags.Public | BindingFlags.Instance);
 
-    internal static readonly MethodInfo RowNumber =
-        typeof(CommonFunctions).GetMethod("row_number", BindingFlags.Public | BindingFlags.Instance)!;
+    internal static readonly MethodInfo RowNumber = RequireMethod(typeof(CommonFunctions), "row_number", BindingFlags.Public | BindingFlags.Instance);
 
-    internal static readonly MethodInfo Rank =
-        typeof(CommonFunctions).GetMethod("rank", BindingFlags.Public | BindingFlags.Instance)!;
+    internal static readonly MethodInfo Rank = RequireMethod(typeof(CommonFunctions), "rank", BindingFlags.Public | BindingFlags.Instance);
 
-    internal static readonly MethodInfo ColumnOfInt =
-        typeof(SqlFunctions).GetMethod("Column", BindingFlags.Public | BindingFlags.Static)!.MakeGenericMethod(typeof(int));
+    internal static readonly MethodInfo ColumnDefinition =
+        RequireMethod(typeof(SqlFunctions), "Column", BindingFlags.Public | BindingFlags.Static);
 
-    internal static readonly MethodInfo Over =
-        typeof(WindowFunction<int>).GetMethod(
-            "Over",
-            new[] { typeof(Expression<Func<object?>>[]), typeof(WindowOrder[]), typeof(WindowFrame) })!;
+    internal static readonly MethodInfo ColumnOfInt = ColumnDefinition.MakeGenericMethod(typeof(int));
+
+    internal static readonly MethodInfo Over = RequireMethod(
+        typeof(WindowFunction<int>),
+        "Over",
+        new[] { typeof(Expression<Func<object?>>[]), typeof(WindowOrder[]), typeof(WindowFrame) });
+
+    internal static readonly MethodInfo MinAggregate = RequireAggregate("min");
+
+    internal static readonly MethodInfo MaxAggregate = RequireAggregate("max");
+
+    /// <summary>
+    /// Resolves a public engine member once for the process; a missing member is a version mismatch
+    /// between this package and <c>nextorm.core</c>, reported at first use instead of a silent null.
+    /// </summary>
+    private static MethodInfo RequireMethod(Type type, string name, BindingFlags flags)
+        => type.GetMethod(name, flags)
+            ?? throw new InvalidOperationException(
+                $"The nextorm.core member {type.FullName}.{name} was not found; nextorm.extensions targets a different nextorm.core version.");
+
+    /// <summary>Resolves a public engine member by exact parameter types, once for the process.</summary>
+    private static MethodInfo RequireMethod(Type type, string name, Type[] parameterTypes)
+        => type.GetMethod(name, parameterTypes)
+            ?? throw new InvalidOperationException(
+                $"The nextorm.core member {type.FullName}.{name}({string.Join(", ", parameterTypes.Select(t => t.Name))}) was not found; nextorm.extensions targets a different nextorm.core version.");
+
+    /// <summary>
+    /// Resolves an aggregate generic method definition of <see cref="CommonFunctions"/> once for the
+    /// process; each value type is closed over the cached definition at build time.
+    /// </summary>
+    private static MethodInfo RequireAggregate(string name)
+    {
+        var methods = typeof(CommonFunctions).GetMethods(BindingFlags.Public | BindingFlags.Instance);
+        for (var i = 0; i < methods.Length; i++)
+        {
+            var candidate = methods[i];
+            if (candidate.Name == name && candidate.IsGenericMethodDefinition && candidate.GetParameters().Length == 1)
+                return candidate;
+        }
+
+        throw new InvalidOperationException(
+            $"The nextorm.core aggregate CommonFunctions.{name} was not found; nextorm.extensions targets a different nextorm.core version.");
+    }
 }
 
-/// <summary>Component member.</summary>
+/// <summary>
+/// Extension methods that attach the <c>nextorm.extensions</c> extreme-row component: they keep the
+/// row(s) holding the smallest or greatest value, globally or per group, exactly like the built-in
+/// <c>SelectWhereMin</c>/<c>SelectWhereMax</c> but built entirely on the public query-component layer.
+/// </summary>
 public static class ExtremeRowExtensions
 {
-    /// <summary>Component member.</summary>
+    /// <summary>
+    /// Keeps the row(s) with the smallest <paramref name="valueSelector"/> value and returns the
+    /// builder so the query can continue.
+    /// </summary>
+    /// <typeparam name="TEntity">The mapped entity type.</typeparam>
+    /// <typeparam name="TValue">The value type compared for the extremum.</typeparam>
+    /// <param name="source">The builder the component is attached to.</param>
+    /// <param name="valueSelector">The value whose minimum is selected; a composite key is compared lexicographically.</param>
+    /// <param name="ties">Whether to keep one row or every row tied on the extreme value.</param>
+    /// <param name="groupBy">Optional grouping key; <c>null</c> selects across the whole source.</param>
+    /// <returns>The same query shape with the extreme-row component attached.</returns>
     public static EntityBuilder<TEntity> SelectWhereMinEx<TEntity, TValue>(
         this EntityBuilder<TEntity> source,
         Expression<Func<TEntity, TValue>> valueSelector,
@@ -52,7 +102,17 @@ public static class ExtremeRowExtensions
         Expression<Func<TEntity, object?>>? groupBy = null)
         => source.WithComponent(new ExtremeRowComponent<TEntity>(ExtremeKind.Min, valueSelector, ties, groupBy));
 
-    /// <summary>Component member.</summary>
+    /// <summary>
+    /// Keeps the row(s) with the greatest <paramref name="valueSelector"/> value and returns the
+    /// builder so the query can continue.
+    /// </summary>
+    /// <typeparam name="TEntity">The mapped entity type.</typeparam>
+    /// <typeparam name="TValue">The value type compared for the extremum.</typeparam>
+    /// <param name="source">The builder the component is attached to.</param>
+    /// <param name="valueSelector">The value whose maximum is selected; a composite key is compared lexicographically.</param>
+    /// <param name="ties">Whether to keep one row or every row tied on the extreme value.</param>
+    /// <param name="groupBy">Optional grouping key; <c>null</c> selects across the whole source.</param>
+    /// <returns>The same query shape with the extreme-row component attached.</returns>
     public static EntityBuilder<TEntity> SelectWhereMaxEx<TEntity, TValue>(
         this EntityBuilder<TEntity> source,
         Expression<Func<TEntity, TValue>> valueSelector,
@@ -60,7 +120,19 @@ public static class ExtremeRowExtensions
         Expression<Func<TEntity, object?>>? groupBy = null)
         => source.WithComponent(new ExtremeRowComponent<TEntity>(ExtremeKind.Max, valueSelector, ties, groupBy));
 
-    /// <summary>Component member.</summary>
+    /// <summary>
+    /// Keeps the row(s) with the smallest <paramref name="valueSelector"/> value and applies
+    /// <paramref name="projection"/> to each surviving row.
+    /// </summary>
+    /// <typeparam name="TEntity">The mapped entity type.</typeparam>
+    /// <typeparam name="TValue">The value type compared for the extremum.</typeparam>
+    /// <typeparam name="TResult">The projection result type.</typeparam>
+    /// <param name="source">The builder the component is attached to.</param>
+    /// <param name="valueSelector">The value whose minimum is selected.</param>
+    /// <param name="projection">The projection applied to each surviving row; it never participates in winner selection.</param>
+    /// <param name="ties">Whether to keep one row or every row tied on the extreme value.</param>
+    /// <param name="groupBy">Optional grouping key; <c>null</c> selects across the whole source.</param>
+    /// <returns>The projected query command.</returns>
     public static QueryCommand<TResult> SelectWhereMinEx<TEntity, TValue, TResult>(
         this EntityBuilder<TEntity> source,
         Expression<Func<TEntity, TValue>> valueSelector,
@@ -73,7 +145,19 @@ public static class ExtremeRowExtensions
             .Select(projection);
     }
 
-    /// <summary>Component member.</summary>
+    /// <summary>
+    /// Keeps the row(s) with the greatest <paramref name="valueSelector"/> value and applies
+    /// <paramref name="projection"/> to each surviving row.
+    /// </summary>
+    /// <typeparam name="TEntity">The mapped entity type.</typeparam>
+    /// <typeparam name="TValue">The value type compared for the extremum.</typeparam>
+    /// <typeparam name="TResult">The projection result type.</typeparam>
+    /// <param name="source">The builder the component is attached to.</param>
+    /// <param name="valueSelector">The value whose maximum is selected.</param>
+    /// <param name="projection">The projection applied to each surviving row; it never participates in winner selection.</param>
+    /// <param name="ties">Whether to keep one row or every row tied on the extreme value.</param>
+    /// <param name="groupBy">Optional grouping key; <c>null</c> selects across the whole source.</param>
+    /// <returns>The projected query command.</returns>
     public static QueryCommand<TResult> SelectWhereMaxEx<TEntity, TValue, TResult>(
         this EntityBuilder<TEntity> source,
         Expression<Func<TEntity, TValue>> valueSelector,
@@ -87,19 +171,29 @@ public static class ExtremeRowExtensions
     }
 }
 
-/// <summary>Component member.</summary>
+/// <summary>
+/// The public query component behind <see cref="ExtremeRowExtensions.SelectWhereMinEx{TEntity, TValue}(EntityBuilder{TEntity}, Expression{Func{TEntity, TValue}}, ExtremeRowTies, Expression{Func{TEntity, object?}})"/>
+/// and its siblings: an exclusive row-source reshape that keeps the extreme row(s). The extension
+/// methods construct and attach it; a caller that needs the component directly passes
+/// <see cref="ExtremeKind"/> explicitly.
+/// </summary>
+/// <typeparam name="TEntity">The mapped entity type the selectors are written over.</typeparam>
 public sealed class ExtremeRowComponent<TEntity> : IQueryComponent
 {
-    /// <summary>Component member.</summary>
-    public static int BuildCount;
-    /// <summary>Component member.</summary>
-    public static void ResetBuildCount() => BuildCount = 0;
     private readonly ExtremeKind _kind;
     private readonly LambdaExpression _valueSelector;
     private readonly ExtremeRowTies _ties;
     private readonly Expression<Func<TEntity, object?>>? _groupBy;
 
-    /// <summary>Component member.</summary>
+    /// <summary>
+    /// Creates the component for one direction and one selection state.
+    /// </summary>
+    /// <param name="kind">Whether the component keeps the minimum or the maximum value.</param>
+    /// <param name="valueSelector">The value selector; its single parameter must be typed <typeparamref name="TEntity"/>.</param>
+    /// <param name="ties">Whether to keep one row or every tied row.</param>
+    /// <param name="groupBy">Optional grouping key; <c>null</c> selects across the whole source.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="valueSelector"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="valueSelector"/> is not a single-parameter lambda over <typeparamref name="TEntity"/>.</exception>
     public ExtremeRowComponent(
         ExtremeKind kind,
         LambdaExpression valueSelector,
@@ -107,6 +201,10 @@ public sealed class ExtremeRowComponent<TEntity> : IQueryComponent
         Expression<Func<TEntity, object?>>? groupBy)
     {
         ArgumentNullException.ThrowIfNull(valueSelector);
+        if (valueSelector.Parameters.Count != 1 || valueSelector.Parameters[0].Type != typeof(TEntity))
+            throw new ArgumentException(
+                $"The value selector must be a single-parameter lambda over {typeof(TEntity).FullName}.",
+                nameof(valueSelector));
 
         _kind = kind;
         _valueSelector = valueSelector;
@@ -114,10 +212,10 @@ public sealed class ExtremeRowComponent<TEntity> : IQueryComponent
         _groupBy = groupBy;
     }
 
-    /// <summary>Component member.</summary>
+    /// <summary>The component slot: one stable slot per entity type, so a second extreme-row call replaces this component in place.</summary>
     public Type Slot => typeof(ExtremeRowComponent<TEntity>);
 
-    /// <summary>Component member.</summary>
+    /// <summary>The contribution kind: the component replaces the row source, so only one exclusive reshape may be present.</summary>
     public QueryComponentContribution Contribution => QueryComponentContribution.ExclusiveRowSource;
 
 
@@ -172,7 +270,18 @@ public sealed class ExtremeRowComponent<TEntity> : IQueryComponent
     private static BuildSqlCommandException NotCompatible(string modifier)
         => new($"SelectWhereMax/SelectWhereMin cannot be combined with {modifier}.");
 
-    /// <summary>Component member.</summary>
+    /// <summary>
+    /// Validates the component against the command and returns the immutable descriptor that joins the
+    /// plan key: the direction, the tie policy and both selectors, compared with the engine's expression
+    /// comparer. Preparation is also where the in-memory provider and the unsupported modifiers are
+    /// rejected.
+    /// </summary>
+    /// <param name="context">The command being prepared and the engine expression comparer.</param>
+    /// <returns>The component's structural descriptor.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="context"/> is <see langword="null"/>.</exception>
+    /// <exception cref="NotSupportedException">The command targets the in-memory provider.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The tie policy is not <see cref="ExtremeRowTies.One"/> or <see cref="ExtremeRowTies.All"/>.</exception>
+    /// <exception cref="BuildSqlCommandException">The command carries a modifier the reshape cannot express.</exception>
     public IQueryComponentDescriptor Prepare(IQueryComponentPrepareContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -202,30 +311,38 @@ public sealed class ExtremeRowComponent<TEntity> : IQueryComponent
         return new Descriptor(this, captured, hash.ToHashCode());
     }
 
-    /// <summary>Component member.</summary>
+    /// <summary>
+    /// Builds the component's structural contribution into the command. Runs on a plan-cache miss only:
+    /// <see cref="ExtremeRowTies.One"/> becomes a ranked derived source filtered on rank 1, a non-nullable
+    /// group key under <see cref="ExtremeRowTies.All"/> becomes the aggregate+join lowering, and a
+    /// nullable group key under <see cref="ExtremeRowTies.All"/> uses the rank window so no null-safe
+    /// join predicate is needed.
+    /// </summary>
+    /// <param name="context">The command being built and the engine expression comparer.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="context"/> is <see langword="null"/>.</exception>
     public void BuildQuery(IQueryComponentBuildContext context)
     {
-        ExtremeRowComponent<TEntity>.BuildCount++;
         ArgumentNullException.ThrowIfNull(context);
         var cmd = context.Command;
-        // ClickHouse refuses bare IS NULL residuals in JOIN ON (#296), and the ext package cannot
-        // reach the core internal null-safe join marker (no IVT). Keep semantic parity there by
-        // using the rank-window form for All as well, which partitions on the group keys directly
-        // and never produces a null-safe join.
-        var isClickHouse = cmd.DataContext is not null
-            && cmd.DataContext is DataContext dc
-            && string.Equals(dc.Dialect.GetType().Name, "ClickHouseDialect", StringComparison.Ordinal);
-        if (_ties == ExtremeRowTies.All && !isClickHouse)
-        {
-            BuildAllQuery(context);
-            return;
-        }
         var entityType = typeof(TEntity);
-        var rankAlias = MakeRankAlias(entityType);
         var entityParam = Expression.Parameter(entityType, "x");
         var valueComponents = DecomposeSelector(_valueSelector, entityParam);
         var groupComponents = _groupBy is null ? Array.Empty<Expression>() : DecomposeSelector(_groupBy, entityParam);
 
+        // `All` is lowered to the aggregate+join shape, which joins every aggregate row back to the
+        // source. A nullable group key needs the null-safe `a = b or (a is null and b is null)` join
+        // predicate, and ClickHouse rejects a bare `IS NULL` residual in `JOIN ON` (#296) — a
+        // restriction no public dialect capability advertises. Rather than name a dialect, choose the
+        // shape by what the expression needs: a nullable group key uses the rank-window form, which
+        // partitions on the group keys directly and never emits a null-safe join; every other `All`
+        // shape keeps the aggregate+join lowering.
+        if (_ties == ExtremeRowTies.All && !NeedsNullSafeGroupJoin(groupComponents))
+        {
+            BuildAllQuery(context, entityParam, valueComponents, groupComponents);
+            return;
+        }
+
+        var rankAlias = MakeRankAlias(entityType);
         var inner = cmd.Clone();
         inner.Components = null;
         // The hidden rank column is appended to the inner select list. An aggregate there would be
@@ -344,6 +461,23 @@ public sealed class ExtremeRowComponent<TEntity> : IQueryComponent
     private static bool IsNullable(Type type)
         => !type.IsValueType || Nullable.GetUnderlyingType(type) is not null;
 
+    /// <summary>
+    /// True when joining the aggregate back to the source needs the null-safe predicate
+    /// <c>a = b or (a is null and b is null)</c> for at least one group key. ClickHouse cannot render
+    /// that predicate inside <c>JOIN ON</c> (#296); such a shape is lowered through the rank window
+    /// instead, so the component never needs to know which dialect it is running on.
+    /// </summary>
+    private static bool NeedsNullSafeGroupJoin(Expression[] groupComponents)
+    {
+        for (var i = 0; i < groupComponents.Length; i++)
+        {
+            if (IsNullable(groupComponents[i].Type))
+                return true;
+        }
+
+        return false;
+    }
+
     private static Expression StripBoxing(Expression expression)
         => expression is UnaryExpression { NodeType: ExpressionType.Convert, Type: var type } convert && type == typeof(object)
             ? convert.Operand
@@ -373,15 +507,15 @@ public sealed class ExtremeRowComponent<TEntity> : IQueryComponent
         }
     }
 
-    private void BuildAllQuery(IQueryComponentBuildContext context)
+    private void BuildAllQuery(
+        IQueryComponentBuildContext context,
+        ParameterExpression xParam,
+        Expression[] valueComponents,
+        Expression[] groupComponents)
     {
         var cmd = context.Command;
         var ctx = cmd.DataContext ?? throw new InvalidOperationException("DataContext is required.");
         var entityType = typeof(TEntity);
-        var xParam = Expression.Parameter(entityType, "x");
-
-        var valueComponents = DecomposeSelector(_valueSelector, xParam);
-        var groupComponents = _groupBy is null ? Array.Empty<Expression>() : DecomposeSelector(_groupBy, xParam);
         var valueCount = valueComponents.Length;
         var groupCount = groupComponents.Length;
 
@@ -398,6 +532,10 @@ public sealed class ExtremeRowComponent<TEntity> : IQueryComponent
         LambdaExpression? userLambda = preparedCondition as LambdaExpression;
         if (userLambda is null && preparedCondition is not null)
             userLambda = Expression.Lambda(preparedCondition, xParam);
+        // The condition belongs to the aggregated source only. Leaving it on the outer command would
+        // render the same predicate a second time around the reshape, duplicating its parameters; the
+        // rank-window path replaces the outer condition the same way.
+        cmd.SetComponentPreparedCondition(null);
 
         Expression? notNull = null;
         for (var i = 0; i < valueCount; i++)
@@ -489,7 +627,7 @@ public sealed class ExtremeRowComponent<TEntity> : IQueryComponent
                     var left = groupComponents[i];
                     var right = MakeColumnCall(prevParam, groupComponents[i].Type, GroupAliasFor(valueCount, k - 1, i));
                     var cond = IsNullable(groupComponents[i].Type)
-                        ? MakeNullSafeJoinEqual(left, right, groupComponents[i].Type, false)
+                        ? MakeNullSafeJoinEqual(left, right, groupComponents[i].Type)
                         : Expression.Equal(left, right);
                     joinBody = joinBody is null ? cond : Expression.AndAlso(joinBody, cond);
                 }
@@ -532,7 +670,7 @@ public sealed class ExtremeRowComponent<TEntity> : IQueryComponent
             var left = new ParameterReplacer(xParam, outerX).Visit(groupComponents[i])!;
             var right = MakeColumnCall(outerP, groupComponents[i].Type, GroupAliasFor(valueCount, valueCount, i));
             var cond = IsNullable(groupComponents[i].Type)
-                ? MakeNullSafeJoinEqual(left, right, groupComponents[i].Type, false)
+                ? MakeNullSafeJoinEqual(left, right, groupComponents[i].Type)
                 : Expression.Equal(left, right);
             outerBody = outerBody is null ? cond : Expression.AndAlso(outerBody, cond);
         }
@@ -557,7 +695,6 @@ public sealed class ExtremeRowComponent<TEntity> : IQueryComponent
         {
             SrcType = entityType,
             Joins = new[] { outerJoin },
-            Condition = userLambda,
         });
         innerCmd.PrepareCommand(false, CancellationToken.None);
 
@@ -587,7 +724,7 @@ public sealed class ExtremeRowComponent<TEntity> : IQueryComponent
             nullableInt);
     }
 
-    private static Expression MakeNullSafeJoinEqual(Expression left, Expression right, Type type, bool nativeNullSafeJoin)
+    private static Expression MakeNullSafeJoinEqual(Expression left, Expression right, Type type)
     {
         if (!IsNullable(type))
             return Expression.Equal(left, right);
@@ -602,9 +739,9 @@ public sealed class ExtremeRowComponent<TEntity> : IQueryComponent
 
     private static Expression MakeAggregate(ExtremeKind kind, Type valueType, Expression valueExpression)
     {
-        var methodName = kind == ExtremeKind.Max ? "max" : "min";
-        var genericDefinition = typeof(CommonFunctions).GetMethods(BindingFlags.Public | BindingFlags.Instance)
-            .First(m => m.Name == methodName && m.IsGenericMethodDefinition && m.GetParameters().Length == 1);
+        var genericDefinition = kind == ExtremeKind.Max
+            ? ExtremeRowReflection.MaxAggregate
+            : ExtremeRowReflection.MinAggregate;
         var mi = genericDefinition.MakeGenericMethod(valueType);
         var sqlProp = Expression.Property(null, typeof(SqlFunctions), "Sql");
         return Expression.Call(sqlProp, mi, valueExpression);
@@ -612,7 +749,7 @@ public sealed class ExtremeRowComponent<TEntity> : IQueryComponent
 
     private static Expression MakeColumnCall(ParameterExpression parameter, Type type, string alias)
     {
-        var method = typeof(SqlFunctions).GetMethod("Column")!.MakeGenericMethod(type);
+        var method = ExtremeRowReflection.ColumnDefinition.MakeGenericMethod(type);
         return Expression.Call(null, method, parameter, Expression.Constant(alias));
     }
 
@@ -638,13 +775,14 @@ public sealed class ExtremeRowComponent<TEntity> : IQueryComponent
             7 => typeof(ValueTuple<,,,,,,>).MakeGenericType(types),
             _ => throw new NotSupportedException("Too many components."),
         };
-        var ctor = tupleType.GetConstructor(types)!;
+        var ctor = tupleType.GetConstructor(types)
+            ?? throw new InvalidOperationException(
+                $"The {tupleType.FullName} constructor for {exprs.Count} components was not found.");
         return Expression.New(ctor, exprs);
     }
 
     private sealed class CapturedState
     {
-        /// <summary>Component member.</summary>
         public CapturedState(ExtremeKind kind, ExtremeRowTies ties, Expression valueSelector, Expression? groupBy, IEqualityComparer<Expression> comparer)
         {
             Kind = kind;
@@ -654,15 +792,10 @@ public sealed class ExtremeRowComponent<TEntity> : IQueryComponent
             Comparer = comparer;
         }
 
-        /// <summary>Component member.</summary>
         public ExtremeKind Kind { get; }
-        /// <summary>Component member.</summary>
         public ExtremeRowTies Ties { get; }
-        /// <summary>Component member.</summary>
         public Expression ValueSelector { get; }
-        /// <summary>Component member.</summary>
         public Expression? GroupBy { get; }
-        /// <summary>Component member.</summary>
         public IEqualityComparer<Expression> Comparer { get; }
     }
 
@@ -671,7 +804,6 @@ public sealed class ExtremeRowComponent<TEntity> : IQueryComponent
         private readonly ExtremeRowComponent<TEntity> _component;
         private readonly CapturedState _state;
 
-        /// <summary>Component member.</summary>
         public Descriptor(ExtremeRowComponent<TEntity> component, CapturedState state, int hash)
         {
             _component = component;
@@ -679,18 +811,12 @@ public sealed class ExtremeRowComponent<TEntity> : IQueryComponent
             StructuralHash = hash;
         }
 
-        /// <summary>Component member.</summary>
         public Type Slot => _component.Slot;
-        /// <summary>Component member.</summary>
         public Type ComponentType => _component.GetType();
-        /// <summary>Component member.</summary>
         public QueryComponentContribution Contribution => _component.Contribution;
-        /// <summary>Component member.</summary>
         public string Discriminator => _state.Kind == ExtremeKind.Min ? "Min" : "Max";
-        /// <summary>Component member.</summary>
         public int StructuralHash { get; }
 
-        /// <summary>Component member.</summary>
         public bool StructurallyEquals(IQueryComponentDescriptor? other)
         {
             if (other is not Descriptor rhs)
@@ -740,103 +866,7 @@ public sealed class ExtremeRowComponent<TEntity> : IQueryComponent
         private readonly ParameterExpression _oldParameter;
         private readonly ParameterExpression _newParameter;
 
-        /// <summary>Component member.</summary>
         public ParameterReplacer(ParameterExpression oldParameter, ParameterExpression newParameter)
-        {
-            _oldParameter = oldParameter;
-            _newParameter = newParameter;
-        }
-
-        protected override Expression VisitParameter(ParameterExpression node)
-            => node == _oldParameter ? _newParameter : base.VisitParameter(node);
-    }
-}
-
-/// <summary>Component member.</summary>
-public sealed class ConflictingReshapeComponent<TEntity> : IQueryComponent
-{
-    /// <summary>Component member.</summary>
-    public Type Slot => typeof(ConflictingReshapeComponent<TEntity>);
-    /// <summary>Component member.</summary>
-    public QueryComponentContribution Contribution => QueryComponentContribution.ExclusiveRowSource;
-    /// <summary>Component member.</summary>
-    public IQueryComponentDescriptor Prepare(IQueryComponentPrepareContext context) =>
-        new SimpleDescriptor(Slot, GetType(), Contribution, "Reshape", 0, (a, b) => true);
-    /// <summary>Component member.</summary>
-    public void BuildQuery(IQueryComponentBuildContext context) { }
-}
-
-internal sealed class SimpleDescriptor : IQueryComponentDescriptor
-{
-    private readonly Func<IQueryComponentDescriptor, IQueryComponentDescriptor, bool> _equals;
-    /// <summary>Component member.</summary>
-    public SimpleDescriptor(Type slot, Type componentType, QueryComponentContribution contribution, string discriminator, int hash, Func<IQueryComponentDescriptor, IQueryComponentDescriptor, bool> equals)
-    {
-        Slot = slot;
-        ComponentType = componentType;
-        Contribution = contribution;
-        Discriminator = discriminator;
-        StructuralHash = hash;
-        _equals = equals;
-    }
-    /// <summary>Component member.</summary>
-    public Type Slot { get; }
-    /// <summary>Component member.</summary>
-    public Type ComponentType { get; }
-    /// <summary>Component member.</summary>
-    public QueryComponentContribution Contribution { get; }
-    /// <summary>Component member.</summary>
-    public string Discriminator { get; }
-    /// <summary>Component member.</summary>
-    public int StructuralHash { get; }
-    /// <summary>Component member.</summary>
-    public bool StructurallyEquals(IQueryComponentDescriptor? other) => other is not null && _equals(this, other);
-}
-/// <summary>Component member.</summary>
-public sealed class AdditivePredicateComponent<TEntity> : IQueryComponent
-{
-    private readonly LambdaExpression _predicate;
-
-    /// <summary>Component member.</summary>
-    public AdditivePredicateComponent(LambdaExpression predicate)
-    {
-        ArgumentNullException.ThrowIfNull(predicate);
-        _predicate = predicate;
-    }
-
-    /// <summary>Component member.</summary>
-    public Type Slot => typeof(AdditivePredicateComponent<TEntity>);
-    /// <summary>Component member.</summary>
-    public QueryComponentContribution Contribution => QueryComponentContribution.AdditivePredicate;
-
-    /// <summary>Component member.</summary>
-    public IQueryComponentDescriptor Prepare(IQueryComponentPrepareContext context)
-        => new SimpleDescriptor(Slot, GetType(), Contribution, "Predicate", 0, (a, b) => true);
-
-    /// <summary>Component member.</summary>
-    public void BuildQuery(IQueryComponentBuildContext context)
-    {
-        var cmd = context.Command;
-        var entityType = typeof(TEntity);
-        var param = Expression.Parameter(entityType, "x");
-
-        Expression? body = null;
-        var existing = cmd.GetComponentPreparedCondition();
-        if (existing is LambdaExpression existingLambda)
-            body = new Replacer(existingLambda.Parameters[0], param).Visit(existingLambda.Body);
-
-        var predicateBody = new Replacer(_predicate.Parameters[0], param).Visit(_predicate.Body);
-        var combined = body is null ? predicateBody : Expression.AndAlso(body, predicateBody);
-        cmd.SetComponentPreparedCondition(Expression.Lambda(combined, param));
-    }
-
-    private sealed class Replacer : ExpressionVisitor
-    {
-        private readonly ParameterExpression _oldParameter;
-        private readonly ParameterExpression _newParameter;
-
-        /// <summary>Component member.</summary>
-        public Replacer(ParameterExpression oldParameter, ParameterExpression newParameter)
         {
             _oldParameter = oldParameter;
             _newParameter = newParameter;
