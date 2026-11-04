@@ -246,6 +246,14 @@
 | [`EntityFrameworkCoreExtensions`](xref:NextORM.EntityFrameworkCore.EntityFrameworkCoreExtensions) | Мост из EF Core [`DbContext`](https://learn.microsoft.com/dotnet/api/microsoft.entityframeworkcore.dbcontext) в nextorm [`IDataContext`](xref:NextORM.Core.IDataContext): [`CreateNextOrmContext`](xref:NextORM.EntityFrameworkCore.EntityFrameworkCoreExtensions.CreateNextOrmContext(Microsoft.EntityFrameworkCore.DbContext,System.Action{NextORM.Core.DataContextBuilder})) переиспользует EF-соединение, встраивается в текущую транзакцию EF и регистрирует маппинг из EF-модели; необязательный колбэк `configure` переопределяет умолчания nextorm после выбора провайдера. См. [Интеграция с EF Core](integration-efcore.md). |
 | [`NextOrmModelMapper`](xref:NextORM.EntityFrameworkCore.NextOrmModelMapper) | Читает EF Core `IModel` через [`Register`](xref:NextORM.EntityFrameworkCore.NextOrmModelMapper.Register(Microsoft.EntityFrameworkCore.Metadata.IModel)) и записывает маппинг сущностей (таблица, схема, имена колонок, ключ, identity/computed) в процесс-глобальный кэш метаданных nextorm, поэтому классам сущностей не нужны nextorm-атрибуты; он также импортирует глобальные фильтры запросов модели (именованные/keyed и анонимные). См. [Интеграция с EF Core](integration-efcore.md#отображение-модели) и [Мост фильтров запросов EF Core](integration-efcore.md#глобальные-фильтры-запросов-из-ef-модели). |
 
+## Пространство имён [`NextORM.Extensions`](xref:NextORM.Extensions)
+
+| Тип | Описание |
+|---|---|
+| [`ExtremeRowExtensions`](xref:NextORM.Extensions.ExtremeRowExtensions) | Публичные операторы пакета `nextorm.extensions` — `SelectWhereMinEx` / `SelectWhereMaxEx` — в четырёх перегрузках. Формы на всю сущность принимают `Expression<Func<TEntity, TValue>> valueSelector`, `ExtremeRowTies ties = ExtremeRowTies.One` и `Expression<Func<TEntity, object?>>? groupBy = null` и возвращают [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1); формы с проекцией добавляют `Expression<Func<TEntity, TResult>> projection` и возвращают [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1). Пакет ссылается только на `nextorm.core` и не меняет встроенный оператор. См. [Пакет расширений](extensions-package.md). |
+| [`ExtremeRowComponent<TEntity>`](xref:NextORM.Extensions.ExtremeRowComponent`1) | Публичный [`IQueryComponent`](xref:NextORM.Core.IQueryComponent), который присоединяют операторы: `Slot` (один стабильный слот, вызов в тот же слот заменяет компонент на месте), `Contribution` (`ExclusiveRowSource`), `Prepare`/`BuildQuery` и дескриптор, чьи `StructuralHash`/`StructurallyEquals` участвуют в ключе плана. Поддерживает `ExtremeRowTies.One`/`All`, скалярные и составные ключи значения и группировки. |
+| [`ExtremeKind`](xref:NextORM.Extensions.ExtremeKind) | Направление, с которым создаётся компонент (`Min`/`Max`); его выбирают методы расширения, поэтому вызывающий код обычно не передаёт его напрямую. |
+
 ## См. также
 
 - [Provider overview](../connecting-providers/overview.md)
@@ -256,9 +264,10 @@
 - [MariaDB](../connecting-providers/mariadb.md)
 - [ClickHouse](../connecting-providers/clickhouse.md)
 - [In-memory](../connecting-providers/in-memory.md)
+- [Пакет расширений (`nextorm.extensions`)](extensions-package.md)
 
 ---
 
 Source: `src/nextorm.core/**`, `src/nextorm.sqlite/**`, `src/nextorm.postgres/**`,
 `src/nextorm.sqlserver/**`, `src/nextorm.mysql/**`, `src/nextorm.mariadb/**`,
-`src/nextorm.clickhouse/**`, `src/nextorm.entityframeworkcore/**` (XML doc comments are the authoritative API documentation).
+`src/nextorm.clickhouse/**`, `src/nextorm.entityframeworkcore/**`, `src/nextorm.extensions/**` (XML doc comments are the authoritative API documentation).

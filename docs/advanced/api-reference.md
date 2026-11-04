@@ -247,6 +247,14 @@ package adds a context, a dialect and a [`DataContextBuilder`](xref:NextORM.Core
 | [`EntityFrameworkCoreExtensions`](xref:NextORM.EntityFrameworkCore.EntityFrameworkCoreExtensions) | Bridge from an EF Core [`DbContext`](https://learn.microsoft.com/dotnet/api/microsoft.entityframeworkcore.dbcontext) to a nextorm [`IDataContext`](xref:NextORM.Core.IDataContext): [`CreateNextOrmContext`](xref:NextORM.EntityFrameworkCore.EntityFrameworkCoreExtensions.CreateNextOrmContext(Microsoft.EntityFrameworkCore.DbContext,System.Action{NextORM.Core.DataContextBuilder})) reuses the EF connection, enlists its current transaction and registers the EF model mapping; the optional `configure` callback overrides nextorm defaults after provider selection. See [EF Core integration](integration-efcore.md). |
 | [`NextOrmModelMapper`](xref:NextORM.EntityFrameworkCore.NextOrmModelMapper) | Reads an EF Core `IModel` with [`Register`](xref:NextORM.EntityFrameworkCore.NextOrmModelMapper.Register(Microsoft.EntityFrameworkCore.Metadata.IModel)) and writes the entity mapping (table, schema, column names, key, identity/computed) into nextorm's process-wide metadata cache, so entity classes need no nextorm attributes; it also imports the model's global query filters (named/keyed and anonymous). See [EF Core integration](integration-efcore.md#model-mapping) and [EF Core query-filter bridge](integration-efcore.md#global-query-filters-from-the-ef-model). |
 
+## Namespace [`NextORM.Extensions`](xref:NextORM.Extensions)
+
+| Type | Description |
+|---|---|
+| [`ExtremeRowExtensions`](xref:NextORM.Extensions.ExtremeRowExtensions) | The public operators of the `nextorm.extensions` package, `SelectWhereMinEx` / `SelectWhereMaxEx`, in four overloads. Whole-entity forms take `Expression<Func<TEntity, TValue>> valueSelector`, `ExtremeRowTies ties = ExtremeRowTies.One` and `Expression<Func<TEntity, object?>>? groupBy = null`, and return [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1); projection forms add `Expression<Func<TEntity, TResult>> projection` and return [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1). The package references `nextorm.core` only and leaves the built-in operator unchanged. See [Extensions package](extensions-package.md). |
+| [`ExtremeRowComponent<TEntity>`](xref:NextORM.Extensions.ExtremeRowComponent`1) | The public [`IQueryComponent`](xref:NextORM.Core.IQueryComponent) the operators attach: `Slot` (one stable slot, a same-slot call replaces it in place), `Contribution` (`ExclusiveRowSource`), `Prepare`/`BuildQuery`, and a descriptor whose `StructuralHash`/`StructurallyEquals` take part in the plan key. Supports `ExtremeRowTies.One`/`All`, scalar and composite value/group keys. |
+| [`ExtremeKind`](xref:NextORM.Extensions.ExtremeKind) | The direction the component is constructed with (`Min`/`Max`); the extension methods choose it, so callers normally never pass it directly. |
+
 ## See also
 
 - [Provider overview](../connecting-providers/overview.md)
@@ -257,9 +265,10 @@ package adds a context, a dialect and a [`DataContextBuilder`](xref:NextORM.Core
 - [MariaDB](../connecting-providers/mariadb.md)
 - [ClickHouse](../connecting-providers/clickhouse.md)
 - [In-memory](../connecting-providers/in-memory.md)
+- [Extensions package (`nextorm.extensions`)](extensions-package.md)
 
 ---
 
 Source: `src/nextorm.core/**`, `src/nextorm.sqlite/**`, `src/nextorm.postgres/**`,
 `src/nextorm.sqlserver/**`, `src/nextorm.mysql/**`, `src/nextorm.mariadb/**`,
-`src/nextorm.clickhouse/**`, `src/nextorm.entityframeworkcore/**` (XML doc comments are the authoritative API documentation).
+`src/nextorm.clickhouse/**`, `src/nextorm.entityframeworkcore/**`, `src/nextorm.extensions/**` (XML doc comments are the authoritative API documentation).

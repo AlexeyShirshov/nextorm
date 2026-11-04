@@ -184,5 +184,7 @@
       href: advanced/select-where-extrema-native.md
     - name: "Расширяемость: пользовательские SQL-диалекты и рендереры"
       href: advanced/extensibility.md
+    - name: Пакет расширений (`nextorm.extensions`)
+      href: advanced/extensions-package.md
     - name: Краткий справочник API
       href: advanced/api-reference.md

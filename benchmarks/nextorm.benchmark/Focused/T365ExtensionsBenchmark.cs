@@ -33,13 +33,19 @@ internal sealed class T365Config : ManualConfig
         AddExporter(CsvMeasurementsExporter.Default);
         AddExporter(JsonExporter.Full);
 
+        // #365 AC6 precision re-run. The noise-driven warm re-run sets T365_PRECISE=1 and gets the
+        // identical measurement and calculation method over a larger warmup/iteration sample, so the
+        // 99% ratio interval stops straddling 1.0 on noise alone (plan §4.1 allows raising the sample
+        // size, never the method). The default run — every case and category — keeps the T365 job.
+        var precise = Environment.GetEnvironmentVariable("T365_PRECISE") == "1";
+
         AddJob(Job.Default
-            .WithId("T365")
+            .WithId(precise ? "T365Precise" : "T365")
             .WithToolchain(InProcessEmitToolchain.Instance)
             .WithLaunchCount(1)
-            .WithWarmupCount(6)
-            .WithIterationCount(32)
-            .WithMinIterationTime(TimeInterval.Millisecond * 200));
+            .WithWarmupCount(precise ? 20 : 6)
+            .WithIterationCount(precise ? 128 : 32)
+            .WithMinIterationTime(TimeInterval.Millisecond * (precise ? 500 : 200)));
     }
 }
 

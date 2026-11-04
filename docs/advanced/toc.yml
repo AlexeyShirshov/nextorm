@@ -8,5 +8,7 @@
   href: select-where-extrema-native.md
 - name: "Extensibility: custom SQL dialects and renderers"
   href: extensibility.md
+- name: Extensions package (`nextorm.extensions`)
+  href: extensions-package.md
 - name: API quick reference
   href: api-reference.md
