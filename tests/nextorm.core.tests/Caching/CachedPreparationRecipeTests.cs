@@ -33,6 +33,7 @@ namespace NextORM.Core.Tests;
 /// <c>capture</c> block (tree identity, command, wall time) and records the file hash of the artifact.
 /// </para>
 /// </summary>
+[Collection("Query cache controls")] // clears the process-wide plan store; see Caching/QueryCacheControlsTests
 public sealed class CachedPreparationRecipeTests
 {
     private const string ExportPathEnv = "T201_API_EXPORT_PATH";

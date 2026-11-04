@@ -13,6 +13,7 @@ namespace NextORM.Sqlite.Tests;
 /// is a separate <c>WHERE ... IN (...)</c> command, the two statements are issued back to back (two round
 /// trips for at most one key chunk) and the results are stitched onto the parents.
 /// </summary>
+[Collection("Query plan cache")] // asserts plan-store contents; see PlanCache/QueryPlanCacheCollection
 public class EagerLoadingSqlGenerationTests
 {
     private sealed class SqlRecordingInterceptor : IQueryInterceptor

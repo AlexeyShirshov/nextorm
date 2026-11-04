@@ -66,6 +66,7 @@ internal static class T320ProbeTvf
 /// first factory declaration renders for identical metadata, and a user value must never be injected
 /// into the statement text. No database connection is opened: the SQLite connection string is a placeholder.
 /// </summary>
+[Collection("Query plan cache")] // asserts plan-store contents; see QueryPlanCacheCollection
 [Trait("Category", "T320")]
 public class T320RuntimeTvfSqlTests(ITestOutputHelper output)
 {

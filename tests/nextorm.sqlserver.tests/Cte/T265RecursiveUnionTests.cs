@@ -19,6 +19,7 @@ public sealed class T265CteRow
 /// <c>UnionAll</c>, a non-recursive distinct <c>UNION</c> and a non-union recursive declaration keep
 /// their existing behavior. No database is opened: the placeholder connection is never used.
 /// </summary>
+[Collection("DataContextCache clear")] // asserts plan-store contents; see SqlGeneration/RawSourceBindingSqlGenerationTests
 public class T265RecursiveUnionTests
 {
     private static string Normalize(string sql) => sql.Replace("\r\n", "\n");

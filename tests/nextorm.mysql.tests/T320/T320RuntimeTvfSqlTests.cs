@@ -91,6 +91,7 @@ internal static class T320MyJsonTableTvf
 /// open a database connection: the connection string is a placeholder, so they run on every build. The
 /// live counterpart is <c>T320MySqlTvfTests</c> in the integration project.
 /// </summary>
+[Collection("DataContextCache clear")] // asserts plan-store contents; see SqlGeneration/RawSourceBindingSqlGenerationTests
 [Trait("Category", "T320")]
 public class T320RuntimeTvfSqlTests(ITestOutputHelper output)
 {

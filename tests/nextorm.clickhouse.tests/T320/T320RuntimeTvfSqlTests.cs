@@ -68,6 +68,7 @@ internal static class T320ChTvf
 /// built-in gating, H cache-hit refresh and I SQL identity. The live counterpart is
 /// <c>T320ClickHouseTvfTests</c> in the integration project.
 /// </summary>
+[Collection("Query plan cache")] // asserts plan-store contents; see ExtremeRow/ExtremeRowNativeCacheStabilityTests
 [Trait("Category", "T320")]
 public class T320RuntimeTvfSqlTests(ITestOutputHelper output)
 {
