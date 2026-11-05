@@ -14,7 +14,7 @@ namespace NextORM.Integration.Tests;
 /// wait strategy never succeeds; the official <c>healthcheck.sh</c> is used instead.
 /// </para>
 /// </summary>
-internal static class MariaDbContainer
+public static class MariaDbContainer
 {
     public const string ConnectionStringVariable = "NEXTORM_MARIADB_CONNECTION";
 

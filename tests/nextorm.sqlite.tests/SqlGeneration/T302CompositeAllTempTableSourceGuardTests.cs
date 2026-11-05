@@ -25,7 +25,7 @@ public sealed class T302CompositeAllTempTableSourceGuardTests
             .AsTempTable();
 
         var command = ctx.From(source)
-            .SelectWhereMax(
+            .SelectWhereMaxOld(
                 t => new { V1 = t.GetInt32("v1"), V2 = t.GetInt32("v2") },
                 t => new { Id = t.GetInt32("id") },
                 ExtremeRowTies.All,
@@ -61,7 +61,7 @@ public sealed class T302CompositeAllTempTableSourceGuardTests
         var derived = ctx.From(ctx.From<IT302TempSourceEntity>());
 
         var command = derived
-            .SelectWhereMax(x => new { x.V1, x.V2 }, ExtremeRowTies.All)
+            .SelectWhereMaxOld(x => new { x.V1, x.V2 }, ExtremeRowTies.All)
             .ToCommand();
 
         FluentActions

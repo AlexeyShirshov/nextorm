@@ -78,7 +78,7 @@ public sealed class T302S4ParityAllSqliteTests : ProviderTestSuite
                 "(1, 'a', 10), (2, 'A', 20), (3, '0', 30)");
         try
         {
-            var max = TextSource().SelectWhereMax(e => e.Val, ExtremeRowTies.All)
+            var max = TextSource().SelectWhereMaxOld(e => e.Val, ExtremeRowTies.All)
                 .OrderBy(e => e.Id).ToList();
             var maxOracle = T302S4ParityOracle.RankedWinnerIds(
                 _sut.DataProvider, TextTableName, "val", descending: true);
@@ -89,7 +89,7 @@ public sealed class T302S4ParityAllSqliteTests : ProviderTestSuite
             max.Should().OnlyContain(r => r.Val == "a" || r.Val == "A");
             max.Should().NotContain(r => r.Id == 3);
 
-            var min = TextSource().SelectWhereMin(e => e.Val, ExtremeRowTies.All)
+            var min = TextSource().SelectWhereMinOld(e => e.Val, ExtremeRowTies.All)
                 .OrderBy(e => e.Id).ToList();
             var minOracle = T302S4ParityOracle.RankedWinnerIds(
                 _sut.DataProvider, TextTableName, "val", descending: false);
@@ -112,14 +112,14 @@ public sealed class T302S4ParityAllSqliteTests : ProviderTestSuite
                 "(1, 1.5, 10), (2, 1.5, 20), (3, 2.25, 30), (4, 3.5, 40), (5, null, 50)");
         try
         {
-            var max = FloatSource().SelectWhereMax(e => e.Val, ExtremeRowTies.All)
+            var max = FloatSource().SelectWhereMaxOld(e => e.Val, ExtremeRowTies.All)
                 .OrderBy(e => e.Id).ToList();
             var maxOracle = T302S4ParityOracle.RankedWinnerIds(
                 _sut.DataProvider, FloatTableName, "val", descending: true);
             max.Select(r => r.Id).Should().Equal(maxOracle);
             max.Select(r => r.Id).Should().ContainInOrder(4);
 
-            var min = FloatSource().SelectWhereMin(e => e.Val, ExtremeRowTies.All)
+            var min = FloatSource().SelectWhereMinOld(e => e.Val, ExtremeRowTies.All)
                 .OrderBy(e => e.Id).ToList();
             var minOracle = T302S4ParityOracle.RankedWinnerIds(
                 _sut.DataProvider, FloatTableName, "val", descending: false);
@@ -143,14 +143,14 @@ public sealed class T302S4ParityAllSqliteTests : ProviderTestSuite
                 "(1, 1.5, 10), (2, -2.5, 20), (3, 9e999, 30), (4, -9e999, 40), (5, null, 50)");
         try
         {
-            var max = FloatSource().SelectWhereMax(e => e.Val, ExtremeRowTies.All)
+            var max = FloatSource().SelectWhereMaxOld(e => e.Val, ExtremeRowTies.All)
                 .OrderBy(e => e.Id).ToList();
             var maxOracle = T302S4ParityOracle.RankedWinnerIds(
                 _sut.DataProvider, FloatTableName, "val", descending: true);
             max.Select(r => r.Id).Should().Equal(maxOracle);
             max.Select(r => r.Id).Should().ContainInOrder(3);
 
-            var min = FloatSource().SelectWhereMin(e => e.Val, ExtremeRowTies.All)
+            var min = FloatSource().SelectWhereMinOld(e => e.Val, ExtremeRowTies.All)
                 .OrderBy(e => e.Id).ToList();
             var minOracle = T302S4ParityOracle.RankedWinnerIds(
                 _sut.DataProvider, FloatTableName, "val", descending: false);

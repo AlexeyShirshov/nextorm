@@ -20,11 +20,11 @@ public abstract partial class CommonTestSuite
     [Fact]
     public void QueryComponents_MinOne_MaxAll_ShouldMatchBuiltIn()
     {
-        var builtMin = ExternalExtrema.SelectWhereMin(e => e.Score).ToList();
+        var builtMin = ExternalExtrema.SelectWhereMinOld(e => e.Score).ToList();
         var externalMin = ExternalExtrema.ExternalSelectWhereMin(e => e.Score).ToList();
         externalMin.Select(e => e.Score).Should().Equal(builtMin.Select(e => e.Score));
 
-        var builtMax = ExternalExtrema.SelectWhereMax(e => e.Score, ExtremeRowTies.All).ToList();
+        var builtMax = ExternalExtrema.SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All).ToList();
         var externalMax = ExternalExtrema.ExternalSelectWhereMax(e => e.Score, ExtremeRowTies.All).ToList();
         SameIds(builtMax, externalMax);
     }
@@ -32,11 +32,11 @@ public abstract partial class CommonTestSuite
     [Fact]
     public void QueryComponents_CompositeValue_ShouldMatchBuiltIn()
     {
-        var built = ExternalExtrema.SelectWhereMin(e => new { e.Category, e.Score }).ToList();
+        var built = ExternalExtrema.SelectWhereMinOld(e => new { e.Category, e.Score }).ToList();
         var external = ExternalExtrema.ExternalSelectWhereMin(e => new { e.Category, e.Score }).ToList();
         SameIds(built, external);
 
-        var builtMax = ExternalExtrema.SelectWhereMax(e => new { e.Category, e.Score }, ExtremeRowTies.All).ToList();
+        var builtMax = ExternalExtrema.SelectWhereMaxOld(e => new { e.Category, e.Score }, ExtremeRowTies.All).ToList();
         var externalMax = ExternalExtrema.ExternalSelectWhereMax(e => new { e.Category, e.Score }, ExtremeRowTies.All).ToList();
         SameIds(builtMax, externalMax);
     }
@@ -44,11 +44,11 @@ public abstract partial class CommonTestSuite
     [Fact]
     public void QueryComponents_GroupedSingleAndComposite_ShouldMatchBuiltIn()
     {
-        var built = ExternalExtrema.SelectWhereMax(e => e.Score, ExtremeRowTies.All, e => e.Category).ToList();
+        var built = ExternalExtrema.SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All, e => e.Category).ToList();
         var external = ExternalExtrema.ExternalSelectWhereMax(e => e.Score, ExtremeRowTies.All, e => e.Category).ToList();
         SameIds(built, external);
 
-        var builtComposite = ExternalExtrema.SelectWhereMin(e => e.Score, ExtremeRowTies.One, e => new { e.Category, e.Label }).ToList();
+        var builtComposite = ExternalExtrema.SelectWhereMinOld(e => e.Score, ExtremeRowTies.One, e => new { e.Category, e.Label }).ToList();
         var externalComposite = ExternalExtrema.ExternalSelectWhereMin(e => e.Score, ExtremeRowTies.One, e => new { e.Category, e.Label }).ToList();
         SameIds(builtComposite, externalComposite);
     }
@@ -56,7 +56,7 @@ public abstract partial class CommonTestSuite
     [Fact]
     public void QueryComponents_NullValueAndNullGroup_ShouldMatchBuiltIn()
     {
-        var built = ExternalExtrema.SelectWhereMax(e => e.Score, ExtremeRowTies.All, e => e.Category).ToList();
+        var built = ExternalExtrema.SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All, e => e.Category).ToList();
         var external = ExternalExtrema.ExternalSelectWhereMax(e => e.Score, ExtremeRowTies.All, e => e.Category).ToList();
         SameIds(built, external);
         external.Should().NotContain(e => e.Category == "d");
@@ -67,7 +67,7 @@ public abstract partial class CommonTestSuite
     public void QueryComponents_CapturedFilter_ShouldMatchBuiltInAndApplyBeforeRanking()
     {
         int threshold = 3;
-        var built = ExternalExtrema.Where(e => e.Score > threshold).SelectWhereMin(e => e.Score).ToList();
+        var built = ExternalExtrema.Where(e => e.Score > threshold).SelectWhereMinOld(e => e.Score).ToList();
         var external = ExternalExtrema.Where(e => e.Score > threshold).ExternalSelectWhereMin(e => e.Score).ToList();
         SameIds(built, external);
         external.Should().ContainSingle();
@@ -77,7 +77,7 @@ public abstract partial class CommonTestSuite
     [Fact]
     public void QueryComponents_Projection_ShouldMatchBuiltInAndHideRank()
     {
-        var built = ExternalExtrema.SelectWhereMin(e => e.Score, e => new ExtremaProjectionDto { Id = e.Id, Label = e.Label }, ExtremeRowTies.All).ToList();
+        var built = ExternalExtrema.SelectWhereMinOld(e => e.Score, e => new ExtremaProjectionDto { Id = e.Id, Label = e.Label }, ExtremeRowTies.All).ToList();
         var external = ExternalExtrema.ExternalSelectWhereMin(e => e.Score, e => new ExtremaProjectionDto { Id = e.Id, Label = e.Label }, ExtremeRowTies.All).ToList();
         external.Select(x => (x.Id, x.Label)).OrderBy(x => x.Id).Should().Equal(built.Select(x => (x.Id, x.Label)).OrderBy(x => x.Id));
     }
@@ -85,7 +85,7 @@ public abstract partial class CommonTestSuite
     [Fact]
     public void QueryComponents_OuterOrder_ShouldMatchBuiltIn()
     {
-        var built = ExternalExtrema.SelectWhereMin(e => e.Score, ExtremeRowTies.All).OrderBy(e => e.Id).ThenBy(e => e.Label).ToList();
+        var built = ExternalExtrema.SelectWhereMinOld(e => e.Score, ExtremeRowTies.All).OrderBy(e => e.Id).ThenBy(e => e.Label).ToList();
         var external = ExternalExtrema.ExternalSelectWhereMin(e => e.Score, ExtremeRowTies.All).OrderBy(e => e.Id).ThenBy(e => e.Label).ToList();
         external.Select(e => e.Id).Should().Equal(built.Select(e => e.Id));
     }
@@ -93,7 +93,7 @@ public abstract partial class CommonTestSuite
     [Fact]
     public void QueryComponents_Paging_ShouldMatchBuiltInRejection()
     {
-        var built = Record.Exception(() => ExternalExtrema.SelectWhereMin(e => e.Score).Limit(1).ToList());
+        var built = Record.Exception(() => ExternalExtrema.SelectWhereMinOld(e => e.Score).Limit(1).ToList());
         var external = Record.Exception(() => ExternalExtrema.ExternalSelectWhereMin(e => e.Score).Limit(1).ToList());
         built.Should().NotBeNull();
         external.Should().NotBeNull();
@@ -107,7 +107,7 @@ public abstract partial class CommonTestSuite
             .ExternalSelectWhereMin(e => e.Score)
             .ExternalSelectWhereMax(e => e.Score, ExtremeRowTies.All)
             .ToList();
-        var built = ExternalExtrema.SelectWhereMax(e => e.Score, ExtremeRowTies.All).ToList();
+        var built = ExternalExtrema.SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All).ToList();
         SameIds(built, replaced);
 
         var conflicting = ExternalExtrema

@@ -387,11 +387,11 @@ public sealed class PreparerBatteryBranchCoverage4Tests : ProviderTestSuite
         ResetPlanCache();
 
         QueryCommand<Pb4Main> MaxAll() => Context.From<Pb4Main>()
-            .SelectWhereMax(x => x.Score!, ExtremeRowTies.All, x => x.Grp);
+            .SelectWhereMaxOld(x => x.Score!, ExtremeRowTies.All, x => x.Grp);
         QueryCommand<Pb4Main> MaxOne() => Context.From<Pb4Main>()
-            .SelectWhereMax(x => x.Score!, ExtremeRowTies.One, x => x.Grp);
+            .SelectWhereMaxOld(x => x.Score!, ExtremeRowTies.One, x => x.Grp);
         QueryCommand<Pb4Main> MinAll() => Context.From<Pb4Main>()
-            .SelectWhereMin(x => x.Score!, ExtremeRowTies.All, x => x.Grp);
+            .SelectWhereMinOld(x => x.Score!, ExtremeRowTies.All, x => x.Grp);
 
         var maxAll = MaxAll();
         var maxOne = MaxOne();

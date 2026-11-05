@@ -120,7 +120,7 @@ public class TempTableSourceSqlGenerationTests
         var source = ctx.From<ISimpleEntity>().Select(x => new { x.Id }).AsTempTable();
 
         var sql = ctx.From(source)
-            .SelectWhereMax(t => t.GetInt32("id"), t => new { Id = t.GetInt32("id") })
+            .SelectWhereMaxOld(t => t.GetInt32("id"), t => new { Id = t.GetInt32("id") })
             .ToBatchSql();
 
         sql.Should().Contain("create temporary table " + source.Name + " as select id\n from simple_entity");

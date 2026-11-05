@@ -14,11 +14,11 @@ public sealed class ClickHouseQueryComponentsIntegrationTests : ProviderTestSuit
     [Fact]
     public void QueryComponents_ClickHouse_MinOne_MaxAll_MatchBuiltIn()
     {
-        var builtMin = E.SelectWhereMin(e => e.Score).ToList();
+        var builtMin = E.SelectWhereMinOld(e => e.Score).ToList();
         var extMin = E.ExternalSelectWhereMin(e => e.Score).ToList();
         extMin.Select(e => e.Score).Should().Equal(builtMin.Select(e => e.Score));
 
-        var builtMax = E.SelectWhereMax(e => e.Score, ExtremeRowTies.All).ToList();
+        var builtMax = E.SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All).ToList();
         var extMax = E.ExternalSelectWhereMax(e => e.Score, ExtremeRowTies.All).ToList();
         extMax.Select(e => e.Id).OrderBy(x => x).Should().Equal(builtMax.Select(e => e.Id).OrderBy(x => x));
     }
@@ -26,7 +26,7 @@ public sealed class ClickHouseQueryComponentsIntegrationTests : ProviderTestSuit
     [Fact]
     public void QueryComponents_ClickHouse_GroupedAndNull_MatchBuiltIn()
     {
-        var built = E.SelectWhereMax(e => e.Score, ExtremeRowTies.All, e => e.Category).ToList();
+        var built = E.SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All, e => e.Category).ToList();
         var ext = E.ExternalSelectWhereMax(e => e.Score, ExtremeRowTies.All, e => e.Category).ToList();
         ext.Select(e => e.Id).OrderBy(x => x).Should().Equal(built.Select(e => e.Id).OrderBy(x => x));
         ext.Should().NotContain(e => e.Category == "d");
@@ -35,7 +35,7 @@ public sealed class ClickHouseQueryComponentsIntegrationTests : ProviderTestSuit
     [Fact]
     public void QueryComponents_ClickHouse_Projection_MatchBuiltIn()
     {
-        var built = E.SelectWhereMin(e => e.Score, e => new { e.Id, e.Label }).ToList();
+        var built = E.SelectWhereMinOld(e => e.Score, e => new { e.Id, e.Label }).ToList();
         var ext = E.ExternalSelectWhereMin(e => e.Score, e => new { e.Id, e.Label }).ToList();
         ext.Select(x => (x.Id, x.Label)).Should().Equal(built.Select(x => (x.Id, x.Label)));
     }

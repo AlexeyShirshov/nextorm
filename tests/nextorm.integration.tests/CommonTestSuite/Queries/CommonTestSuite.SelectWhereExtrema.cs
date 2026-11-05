@@ -45,7 +45,7 @@ public abstract partial class CommonTestSuite
     [Fact]
     public void SelectWhereExtrema_Max_GlobalOne_ShouldReturnTheWholeExtremeRow()
     {
-        var rows = Extrema.SelectWhereMax(e => e.Score).ToList();
+        var rows = Extrema.SelectWhereMaxOld(e => e.Score).ToList();
 
         rows.Should().ContainSingle();
         rows[0].Score.Should().Be(9);
@@ -56,7 +56,7 @@ public abstract partial class CommonTestSuite
     [Fact]
     public void SelectWhereExtrema_Max_GlobalAll_ShouldReturnEveryTiedRow()
     {
-        var rows = Extrema.SelectWhereMax(e => e.Score, ExtremeRowTies.All).ToList();
+        var rows = Extrema.SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All).ToList();
 
         rows.Should().HaveCount(2);
         rows.Select(r => r.Id).Should().BeEquivalentTo([3, 4]);
@@ -66,7 +66,7 @@ public abstract partial class CommonTestSuite
     [Fact]
     public void SelectWhereExtrema_Min_GlobalOne_ShouldReturnTheWholeExtremeRow()
     {
-        var rows = Extrema.SelectWhereMin(e => e.Score).ToList();
+        var rows = Extrema.SelectWhereMinOld(e => e.Score).ToList();
 
         rows.Should().ContainSingle();
         rows[0].Score.Should().Be(1);
@@ -77,7 +77,7 @@ public abstract partial class CommonTestSuite
     [Fact]
     public void SelectWhereExtrema_Min_GlobalAll_ShouldReturnEveryTiedRow()
     {
-        var rows = Extrema.SelectWhereMin(e => e.Score, ExtremeRowTies.All).ToList();
+        var rows = Extrema.SelectWhereMinOld(e => e.Score, ExtremeRowTies.All).ToList();
 
         rows.Should().HaveCount(2);
         rows.Select(r => r.Id).Should().BeEquivalentTo([6, 10]);
@@ -89,7 +89,7 @@ public abstract partial class CommonTestSuite
     [Fact]
     public void SelectWhereExtrema_Max_GroupedOne_ShouldReturnOneWinnerPerGroup()
     {
-        var rows = Extrema.SelectWhereMax(e => e.Score, ExtremeRowTies.One, e => e.Category).ToList();
+        var rows = Extrema.SelectWhereMaxOld(e => e.Score, ExtremeRowTies.One, e => e.Category).ToList();
 
         // a, b, null and c each contribute a winner; the all-null group d contributes none.
         rows.Should().HaveCount(4);
@@ -107,7 +107,7 @@ public abstract partial class CommonTestSuite
     [Fact]
     public void SelectWhereExtrema_Max_GroupedAll_ShouldReturnEveryTiedRowPerGroup()
     {
-        var rows = Extrema.SelectWhereMax(e => e.Score, ExtremeRowTies.All, e => e.Category).ToList();
+        var rows = Extrema.SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All, e => e.Category).ToList();
 
         rows.Should().HaveCount(5);
         rows.Should().NotContain(r => r.Category == "d");
@@ -121,7 +121,7 @@ public abstract partial class CommonTestSuite
     [Fact]
     public void SelectWhereExtrema_Min_GroupedAll_ShouldReturnEveryTiedRowPerGroup()
     {
-        var rows = Extrema.SelectWhereMin(e => e.Score, ExtremeRowTies.All, e => e.Category).ToList();
+        var rows = Extrema.SelectWhereMinOld(e => e.Score, ExtremeRowTies.All, e => e.Category).ToList();
 
         // a keeps its minimum non-null row, b its two tied minima, and the null and c groups one each;
         // the all-null group d contributes none.
@@ -139,7 +139,7 @@ public abstract partial class CommonTestSuite
     [Fact]
     public void SelectWhereExtrema_Max_Projection_ShouldProjectTheExtremeRow()
     {
-        var rows = Extrema.SelectWhereMax(e => e.Score, e => new { e.Id, e.Label }).ToList();
+        var rows = Extrema.SelectWhereMaxOld(e => e.Score, e => new { e.Id, e.Label }).ToList();
 
         rows.Should().ContainSingle();
         (rows[0].Id, rows[0].Label).Should().BeOneOf((3, "three"), (4, "four"));
@@ -148,7 +148,7 @@ public abstract partial class CommonTestSuite
     [Fact]
     public void SelectWhereExtrema_Min_Projection_ShouldProjectTheExtremeRow()
     {
-        var rows = Extrema.SelectWhereMin(e => e.Score, e => new { e.Id, e.Label }).ToList();
+        var rows = Extrema.SelectWhereMinOld(e => e.Score, e => new { e.Id, e.Label }).ToList();
 
         rows.Should().ContainSingle();
         (rows[0].Id, rows[0].Label).Should().BeOneOf((6, "six"), (10, "ten"));
@@ -162,10 +162,10 @@ public abstract partial class CommonTestSuite
         // The value is the tuple (category, score): the SQL lowering filters every component IS NOT NULL
         // and orders by category then score, so the maximum is (c, 4) and the minimum is (a, 5). Ordering
         // by score alone would give 9 and 1 instead, and any null component would exclude the row.
-        var max = Extrema.SelectWhereMax(e => new { e.Category, e.Score }).ToList();
+        var max = Extrema.SelectWhereMaxOld(e => new { e.Category, e.Score }).ToList();
         max.Should().ContainSingle().Which.Id.Should().Be(9);
 
-        var min = Extrema.SelectWhereMin(e => new { e.Category, e.Score }).ToList();
+        var min = Extrema.SelectWhereMinOld(e => new { e.Category, e.Score }).ToList();
         min.Should().ContainSingle().Which.Id.Should().Be(2);
     }
 
@@ -174,10 +174,10 @@ public abstract partial class CommonTestSuite
     {
         // score ties (9 for ids 3 and 4, 1 for ids 6 and 10); the secondary label component decides the
         // extremum, so All keeps exactly one row rather than both.
-        var max = Extrema.SelectWhereMax(e => new { e.Score, e.Label }, ExtremeRowTies.All).ToList();
+        var max = Extrema.SelectWhereMaxOld(e => new { e.Score, e.Label }, ExtremeRowTies.All).ToList();
         max.Should().ContainSingle().Which.Id.Should().Be(3);
 
-        var min = Extrema.SelectWhereMin(e => new { e.Score, e.Label }, ExtremeRowTies.All).ToList();
+        var min = Extrema.SelectWhereMinOld(e => new { e.Score, e.Label }, ExtremeRowTies.All).ToList();
         min.Should().ContainSingle().Which.Id.Should().Be(6);
     }
 
@@ -186,25 +186,25 @@ public abstract partial class CommonTestSuite
     [Fact]
     public void SelectWhereExtrema_Max_NullComparisonValues_ShouldBeIgnored()
     {
-        var global = Extrema.SelectWhereMax(e => e.Score, ExtremeRowTies.All).ToList();
+        var global = Extrema.SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All).ToList();
         global.Select(r => r.Id).Should().BeEquivalentTo([3, 4]);
 
         // Group d has only null comparison values, so it must not surface in the grouped result.
-        var grouped = Extrema.SelectWhereMax(e => e.Score, ExtremeRowTies.All, e => e.Category).ToList();
+        var grouped = Extrema.SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All, e => e.Category).ToList();
         grouped.Should().NotContain(r => r.Category == "d");
     }
 
     [Fact]
     public void SelectWhereExtrema_Min_NullComparisonValues_ShouldBeIgnored()
     {
-        var global = Extrema.SelectWhereMin(e => e.Score, ExtremeRowTies.All).ToList();
+        var global = Extrema.SelectWhereMinOld(e => e.Score, ExtremeRowTies.All).ToList();
         global.Select(r => r.Id).Should().BeEquivalentTo([6, 10]);
     }
 
     [Fact]
     public void SelectWhereExtrema_Max_NullGroupKey_ShouldBeItsOwnGroup()
     {
-        var rows = Extrema.SelectWhereMax(e => e.Score, ExtremeRowTies.All, e => e.Category).ToList();
+        var rows = Extrema.SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All, e => e.Category).ToList();
 
         // The null key groups ids 7 (null score, ignored) and 8 (score 7).
         rows.Where(r => r.Category == null).Select(r => r.Id).Should().Equal(8);
@@ -216,11 +216,11 @@ public abstract partial class CommonTestSuite
     [Fact]
     public void SelectWhereExtrema_EmptySource_ShouldYieldNoRows()
     {
-        var global = Extrema.Where(e => e.Category == "no-such").SelectWhereMax(e => e.Score, ExtremeRowTies.All).ToList();
+        var global = Extrema.Where(e => e.Category == "no-such").SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All).ToList();
         global.Should().BeEmpty();
 
         var grouped = Extrema.Where(e => e.Category == "no-such")
-            .SelectWhereMax(e => e.Score, ExtremeRowTies.One, e => e.Category)
+            .SelectWhereMaxOld(e => e.Score, ExtremeRowTies.One, e => e.Category)
             .ToList();
         grouped.Should().BeEmpty();
     }

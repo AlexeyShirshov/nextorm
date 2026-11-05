@@ -213,7 +213,7 @@ public sealed class ClickHouseRenderingBranchCoverage5Tests : ProviderTestSuite
 
             var extreme = () => Context.From<Ch5rMarker>()
                 .LimitBy(1, x => x.Grp)
-                .SelectWhereMax(x => x.Num)
+                .SelectWhereMaxOld(x => x.Num)
                 .Select(x => x.Id)
                 .ToList();
             extreme.Should().Throw<BuildSqlCommandException>()

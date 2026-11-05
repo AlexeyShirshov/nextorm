@@ -24,7 +24,7 @@ public class T302ExtremeRowAllSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<T302ExtremeAllEntity>().Where(x => x.Score > 5);
 
-        var sql = SqlOf(ctx, e.SelectWhereMax(x => x.Score, ExtremeRowTies.All).ToCommand());
+        var sql = SqlOf(ctx, e.SelectWhereMaxOld(x => x.Score, ExtremeRowTies.All).ToCommand());
         var norm = sql.ToLowerInvariant();
 
         norm.Should().Contain("max(");
@@ -53,7 +53,7 @@ public class T302ExtremeRowAllSqlGenerationTests
         // group key, the value key and the payload alike; a stage that fell back to the attribute name
         // (or emitted an empty identifier) fails here.
         var norm = SqlOf(ctx,
-                e.SelectWhereMax(x => new { x.Score, x.Id }, ExtremeRowTies.All, x => x.Cat).ToCommand())
+                e.SelectWhereMaxOld(x => new { x.Score, x.Id }, ExtremeRowTies.All, x => x.Cat).ToCommand())
             .ToLowerInvariant();
 
         Matches(norm, @"max\(\W*?f_score\W*?\)").Should().BeTrue(norm);
@@ -79,7 +79,7 @@ public class T302ExtremeRowAllSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<T302ExtremeAllEntity>().Where(x => x.Score > 5);
 
-        var sql = SqlOf(ctx, e.SelectWhereMin(x => x.Score, ExtremeRowTies.All).ToCommand());
+        var sql = SqlOf(ctx, e.SelectWhereMinOld(x => x.Score, ExtremeRowTies.All).ToCommand());
         var norm = sql.ToLowerInvariant();
 
         norm.Should().Contain("min(");
@@ -97,14 +97,14 @@ public class T302ExtremeRowAllSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<T302ExtremeAllEntity>().Where(x => x.Score > 5);
 
-        var entitySql = SqlOf(ctx, e.SelectWhereMax(x => x.Score, ExtremeRowTies.All).ToCommand()).ToLowerInvariant();
-        var dtoSql = SqlOf(ctx, e.SelectWhereMax(x => x.Score,
+        var entitySql = SqlOf(ctx, e.SelectWhereMaxOld(x => x.Score, ExtremeRowTies.All).ToCommand()).ToLowerInvariant();
+        var dtoSql = SqlOf(ctx, e.SelectWhereMaxOld(x => x.Score,
             x => new T302ExtremeAllDto { Id = x.Id, Cat = x.Cat }, ExtremeRowTies.All)).ToLowerInvariant();
-        var anonSql = SqlOf(ctx, e.SelectWhereMax(x => x.Score,
+        var anonSql = SqlOf(ctx, e.SelectWhereMaxOld(x => x.Score,
             x => new { x.Id, x.Cat }, ExtremeRowTies.All)).ToLowerInvariant();
-        var recordSql = SqlOf(ctx, e.SelectWhereMax(x => x.Score,
+        var recordSql = SqlOf(ctx, e.SelectWhereMaxOld(x => x.Score,
             x => new T302ExtremeAllRecord(x.Id, x.Cat), ExtremeRowTies.All)).ToLowerInvariant();
-        var scalarSql = SqlOf(ctx, e.SelectWhereMax(x => x.Score,
+        var scalarSql = SqlOf(ctx, e.SelectWhereMaxOld(x => x.Score,
             x => x.Cat, ExtremeRowTies.All)).ToLowerInvariant();
 
         foreach (var norm in new[] { entitySql, dtoSql, anonSql, recordSql, scalarSql })
@@ -130,7 +130,7 @@ public class T302ExtremeRowAllSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<T302ExtremeAllEntity>().Where(x => x.Score > 5);
 
-        var norm = SqlOf(ctx, e.SelectWhereMax(x => x.Score, ExtremeRowTies.All)
+        var norm = SqlOf(ctx, e.SelectWhereMaxOld(x => x.Score, ExtremeRowTies.All)
             .Distinct()
             .OrderBy(x => x.Cat)
             .ThenBy(x => x.Id)
@@ -157,7 +157,7 @@ public class T302ExtremeRowAllSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<T302ExtremeAllCollisionEntity>();
 
-        var norm = SqlOf(ctx, e.SelectWhereMax(x => x.Score, ExtremeRowTies.All).ToCommand()).ToLowerInvariant();
+        var norm = SqlOf(ctx, e.SelectWhereMaxOld(x => x.Score, ExtremeRowTies.All).ToCommand()).ToLowerInvariant();
 
         norm.Should().Contain("max(");
         norm.Should().Contain("join");
@@ -179,7 +179,7 @@ public class T302ExtremeRowAllSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<T302ExtremeAllEntity>().Where(x => x.Score > 5);
 
-        var norm = SqlOf(ctx, e.SelectWhereMax(x => x.Score, ExtremeRowTies.All, x => x.Id).ToCommand()).ToLowerInvariant();
+        var norm = SqlOf(ctx, e.SelectWhereMaxOld(x => x.Score, ExtremeRowTies.All, x => x.Id).ToCommand()).ToLowerInvariant();
 
         // Aggregate E: max(score) as __nextorm_ext_1_0, non-nullable group key id as __nextorm_ext_1_1.
         norm.Should().Contain("max(");
@@ -205,7 +205,7 @@ public class T302ExtremeRowAllSqlGenerationTests
         // the group-key join uses that spelling; the user-facing #296 guard stays in force (see
         // T296bNullableComparisonSqlGenerationTests for the refused user predicates).
         var norm = SqlOf(ctx,
-                e.SelectWhereMax(x => x.Score, ExtremeRowTies.All, x => x.Cat).ToCommand())
+                e.SelectWhereMaxOld(x => x.Score, ExtremeRowTies.All, x => x.Cat).ToCommand())
             .ToLowerInvariant();
 
         norm.Should().Contain("max(");
@@ -226,7 +226,7 @@ public class T302ExtremeRowAllSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<T302ExtremeAllEntity>();
 
-        var norm = SqlOf(ctx, e.SelectWhereMin(x => x.Score, ExtremeRowTies.All, x => x.Id).ToCommand()).ToLowerInvariant();
+        var norm = SqlOf(ctx, e.SelectWhereMinOld(x => x.Score, ExtremeRowTies.All, x => x.Id).ToCommand()).ToLowerInvariant();
 
         norm.Should().Contain("min(");
         norm.Should().Contain("group by");
@@ -248,7 +248,7 @@ public class T302ExtremeRowAllSqlGenerationTests
         // Same S4 mechanism as the single nullable key: every nullable component of the group key is
         // joined with the native null-safe comparison, the non-nullable component with plain equality.
         var norm = SqlOf(ctx,
-                e.SelectWhereMax(x => x.Score, ExtremeRowTies.All, x => new { x.Cat, x.Id }).ToCommand())
+                e.SelectWhereMaxOld(x => x.Score, ExtremeRowTies.All, x => new { x.Cat, x.Id }).ToCommand())
             .ToLowerInvariant();
 
         norm.Should().Contain("max(");
@@ -272,7 +272,7 @@ public class T302ExtremeRowAllSqlGenerationTests
         // groups by both columns; O joins the aggregate back on both keys with plain equality, so no
         // null-safe OR arm appears anywhere.
         var norm = SqlOf(ctx,
-                e.SelectWhereMax(x => x.Score, ExtremeRowTies.All, x => new { x.Grp, x.Id }).ToCommand())
+                e.SelectWhereMaxOld(x => x.Score, ExtremeRowTies.All, x => new { x.Grp, x.Id }).ToCommand())
             .ToLowerInvariant();
 
         norm.Should().Contain("max(");
@@ -309,7 +309,7 @@ public class T302ExtremeRowAllSqlGenerationTests
 
         // Non-nullable group key keeps this fact off the ClickHouse JOIN ON guard (see the two
         // explicit refusal facts); the outer projection and ORDER BY still use the nullable payload.
-        var norm = SqlOf(ctx, e.SelectWhereMax(
+        var norm = SqlOf(ctx, e.SelectWhereMaxOld(
                 x => x.Score,
                 x => new T302ExtremeAllDto { Id = x.Id, Cat = x.Cat },
                 ExtremeRowTies.All,
@@ -336,7 +336,7 @@ public class T302ExtremeRowAllSqlGenerationTests
 
         // The value key's physical column is itself named like the lowering's aggregate alias; the
         // group key is non-nullable, so the join is plain equality apart from that collision.
-        var norm = SqlOf(ctx, e.SelectWhereMax(x => x.Collide, ExtremeRowTies.All, x => x.Id).ToCommand()).ToLowerInvariant();
+        var norm = SqlOf(ctx, e.SelectWhereMaxOld(x => x.Collide, ExtremeRowTies.All, x => x.Id).ToCommand()).ToLowerInvariant();
 
         norm.Should().Contain("max(");
         norm.Should().Contain("__nextorm_ext_1_0");
@@ -358,7 +358,7 @@ public class T302ExtremeRowAllSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<T302ExtremeCompositeEntity>().Where(x => x.Score > 5);
 
-        var norm = SqlOf(ctx, e.SelectWhereMax(x => new { x.Score, x.Sub }, ExtremeRowTies.All).ToCommand()).ToLowerInvariant();
+        var norm = SqlOf(ctx, e.SelectWhereMaxOld(x => new { x.Score, x.Sub }, ExtremeRowTies.All).ToCommand()).ToLowerInvariant();
 
         // E_1 aggregates v1 inside C; E_2 aggregates v2 inside the v1 prefix E_1 selected, so the
         // result is lexicographic ((9,2) beats (8,100)) instead of component-wise.
@@ -389,7 +389,7 @@ public class T302ExtremeRowAllSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<T302ExtremeCompositeEntity>().Where(x => x.Score > 5);
 
-        var norm = SqlOf(ctx, e.SelectWhereMin(x => new { x.Score, x.Sub }, ExtremeRowTies.All).ToCommand()).ToLowerInvariant();
+        var norm = SqlOf(ctx, e.SelectWhereMinOld(x => new { x.Score, x.Sub }, ExtremeRowTies.All).ToCommand()).ToLowerInvariant();
 
         norm.Should().Contain("min(score)");
         norm.Should().Contain("min(sub)");
@@ -411,7 +411,7 @@ public class T302ExtremeRowAllSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<T302ExtremeCompositeEntity>().Where(x => x.Score > 5);
 
-        var norm = SqlOf(ctx, e.SelectWhereMin(x => new { x.Score, x.Sub, x.Flag }, ExtremeRowTies.All).ToCommand()).ToLowerInvariant();
+        var norm = SqlOf(ctx, e.SelectWhereMinOld(x => new { x.Score, x.Sub, x.Flag }, ExtremeRowTies.All).ToCommand()).ToLowerInvariant();
 
         // Prefix-only aggregation with MIN: each component is aggregated exactly once, by its own stage,
         // and the surviving prefix is carried forward as an explicitly aliased pass-through.
@@ -448,7 +448,7 @@ public class T302ExtremeRowAllSqlGenerationTests
 
         // Composite non-nullable group key (grp, id): every stage carries both group aliases, groups by
         // them plus the surviving prefix, and joins back with plain equality.
-        var norm = SqlOf(ctx, e.SelectWhereMin(x => new { x.Score, x.Sub, x.Flag }, ExtremeRowTies.All, x => new { x.Grp, x.Id }).ToCommand()).ToLowerInvariant();
+        var norm = SqlOf(ctx, e.SelectWhereMinOld(x => new { x.Score, x.Sub, x.Flag }, ExtremeRowTies.All, x => new { x.Grp, x.Id }).ToCommand()).ToLowerInvariant();
 
         norm.Should().Contain("__nextorm_ext_1_g0");
         norm.Should().Contain("__nextorm_ext_1_g1");
@@ -478,7 +478,7 @@ public class T302ExtremeRowAllSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<T302ExtremeCompositeEntity>().Where(x => x.Score > 5);
 
-        var norm = SqlOf(ctx, e.SelectWhereMax(x => new { x.Score, x.Sub, x.Flag }, ExtremeRowTies.All).ToCommand()).ToLowerInvariant();
+        var norm = SqlOf(ctx, e.SelectWhereMaxOld(x => new { x.Score, x.Sub, x.Flag }, ExtremeRowTies.All).ToCommand()).ToLowerInvariant();
 
         // Prefix-only aggregation: each component is aggregated exactly once, by its own stage, and the
         // surviving prefix is carried forward as an explicitly aliased pass-through.
@@ -513,7 +513,7 @@ public class T302ExtremeRowAllSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<T302ExtremeCompositeEntity>().Where(x => x.Score > 5);
 
-        var norm = SqlOf(ctx, e.SelectWhereMax(x => new { x.Score, x.Sub }, ExtremeRowTies.All, x => x.Grp).ToCommand()).ToLowerInvariant();
+        var norm = SqlOf(ctx, e.SelectWhereMaxOld(x => new { x.Score, x.Sub }, ExtremeRowTies.All, x => x.Grp).ToCommand()).ToLowerInvariant();
 
         norm.Should().Contain("max(score)");
         norm.Should().Contain("max(sub)");
@@ -537,7 +537,7 @@ public class T302ExtremeRowAllSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<T302ExtremeCompositeEntity>().Where(x => x.Score > 5);
 
-        var norm = SqlOf(ctx, e.SelectWhereMin(x => new { x.Score, x.Sub }, ExtremeRowTies.All, x => x.Grp).ToCommand()).ToLowerInvariant();
+        var norm = SqlOf(ctx, e.SelectWhereMinOld(x => new { x.Score, x.Sub }, ExtremeRowTies.All, x => x.Grp).ToCommand()).ToLowerInvariant();
 
         norm.Should().Contain("min(score)");
         norm.Should().Contain("min(sub)");
@@ -561,7 +561,7 @@ public class T302ExtremeRowAllSqlGenerationTests
 
         // Composite non-nullable group key (grp, id): every stage carries both group aliases, groups by
         // them plus the surviving prefix, and joins back with plain equality.
-        var norm = SqlOf(ctx, e.SelectWhereMax(x => new { x.Score, x.Sub, x.Flag }, ExtremeRowTies.All, x => new { x.Grp, x.Id }).ToCommand()).ToLowerInvariant();
+        var norm = SqlOf(ctx, e.SelectWhereMaxOld(x => new { x.Score, x.Sub, x.Flag }, ExtremeRowTies.All, x => new { x.Grp, x.Id }).ToCommand()).ToLowerInvariant();
 
         norm.Should().Contain("__nextorm_ext_1_g0");
         norm.Should().Contain("__nextorm_ext_1_g1");
@@ -592,7 +592,7 @@ public class T302ExtremeRowAllSqlGenerationTests
         // S4: the composite lowering's group-key join-back uses the native null-safe comparison on
         // ClickHouse; the value-key equality stays plain `=` and the #296 guard is untouched.
         var norm = SqlOf(ctx,
-                e.SelectWhereMax(x => new { x.Score, x.Id }, ExtremeRowTies.All, x => x.Cat).ToCommand())
+                e.SelectWhereMaxOld(x => new { x.Score, x.Id }, ExtremeRowTies.All, x => x.Cat).ToCommand())
             .ToLowerInvariant();
 
         norm.Should().Contain("__nextorm_ext_1_v1");
@@ -614,7 +614,7 @@ public class T302ExtremeRowAllSqlGenerationTests
 
         // The first value component's physical column is itself named like an S1 lowering alias; the
         // S3 stage aliases stay distinct and the join-back reads those aliases, never the collision name.
-        var norm = SqlOf(ctx, e.SelectWhereMax(x => new { x.Collide, x.Score }, ExtremeRowTies.All, x => x.Id).ToCommand()).ToLowerInvariant();
+        var norm = SqlOf(ctx, e.SelectWhereMaxOld(x => new { x.Collide, x.Score }, ExtremeRowTies.All, x => x.Id).ToCommand()).ToLowerInvariant();
 
         norm.Should().Contain("__nextorm_ext_1_0");
         norm.Should().Contain("__nextorm_ext_1_v1");
@@ -633,7 +633,7 @@ public class T302ExtremeRowAllSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<T302ExtremeCompositeEntity>().Where(x => x.Score > 5);
 
-        var norm = SqlOf(ctx, e.SelectWhereMax(
+        var norm = SqlOf(ctx, e.SelectWhereMaxOld(
                 x => new { x.Score, x.Sub },
                 x => new T302ExtremeAllDto { Id = x.Id, Cat = x.Cat },
                 ExtremeRowTies.All,
@@ -666,7 +666,7 @@ public class T302ExtremeRowAllSqlGenerationTests
         // text column with the enum's numeric form.
         var e = ctx.From<T302ExtremeConvertedEntity>().Where(x => x.State == T302ExtremeConvertedState.Active);
 
-        var prepared = Prepared(ctx, e.SelectWhereMax(x => new { x.State, x.Sub }, ExtremeRowTies.All).ToCommand());
+        var prepared = Prepared(ctx, e.SelectWhereMaxOld(x => new { x.State, x.Sub }, ExtremeRowTies.All).ToCommand());
         var norm = Normalize(prepared.DbCommand.CommandText).ToLowerInvariant();
 
         // Every stage aggregates/reads the physical (provider) storage column and the join-back reads
@@ -694,7 +694,7 @@ public class T302ExtremeRowAllSqlGenerationTests
         // physical column, and the non-nullable model enum keeps the plain equality form.
         var e = ctx.From<T302ExtremeConvertedEntity>();
 
-        var norm = SqlOf(ctx, e.SelectWhereMax(x => new { x.State, x.Sub }, ExtremeRowTies.All, x => x.Grp).ToCommand()).ToLowerInvariant();
+        var norm = SqlOf(ctx, e.SelectWhereMaxOld(x => new { x.State, x.Sub }, ExtremeRowTies.All, x => x.Grp).ToCommand()).ToLowerInvariant();
 
         norm.Should().Contain("max(state)");
         norm.Should().Contain("max(sub)");
@@ -723,7 +723,7 @@ public class T302ExtremeRowAllSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<T302ExtremeFloatEntity>();
 
-        var norm = SqlOf(ctx, e.SelectWhereMax(x => x.Score, ExtremeRowTies.All).ToCommand()).ToLowerInvariant();
+        var norm = SqlOf(ctx, e.SelectWhereMaxOld(x => x.Score, ExtremeRowTies.All).ToCommand()).ToLowerInvariant();
 
         norm.Should().Contain("rank(");
         norm.Should().NotContain("max(");
@@ -737,7 +737,7 @@ public class T302ExtremeRowAllSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<T302ExtremeFloatEntity>();
 
-        var norm = SqlOf(ctx, e.SelectWhereMin(x => x.Score, ExtremeRowTies.All, x => x.Id).ToCommand()).ToLowerInvariant();
+        var norm = SqlOf(ctx, e.SelectWhereMinOld(x => x.Score, ExtremeRowTies.All, x => x.Id).ToCommand()).ToLowerInvariant();
 
         norm.Should().Contain("rank(");
         norm.Should().Contain("partition by");
@@ -750,7 +750,7 @@ public class T302ExtremeRowAllSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<T302ExtremeFloatEntity>();
 
-        var norm = SqlOf(ctx, e.SelectWhereMax(x => new { x.Id, x.Score }, ExtremeRowTies.All).ToCommand()).ToLowerInvariant();
+        var norm = SqlOf(ctx, e.SelectWhereMaxOld(x => new { x.Id, x.Score }, ExtremeRowTies.All).ToCommand()).ToLowerInvariant();
 
         norm.Should().Contain("rank(");
         norm.Should().NotContain("max(");
@@ -766,7 +766,7 @@ public class T302ExtremeRowAllSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<T302ExtremeFloatEntity>();
 
-        var norm = SqlOf(ctx, e.SelectWhereMax(x => x.Id, ExtremeRowTies.All).ToCommand()).ToLowerInvariant();
+        var norm = SqlOf(ctx, e.SelectWhereMaxOld(x => x.Id, ExtremeRowTies.All).ToCommand()).ToLowerInvariant();
 
         norm.Should().Contain("max(");
         norm.Should().Contain("join");

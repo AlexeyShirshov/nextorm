@@ -87,29 +87,66 @@ var top = ctx.From<Player>()
     .ToList();
 ```
 
-The public contract is six small types: [`IQueryComponent`](xref:NextORM.Core.IQueryComponent) (slot,
-contribution kind, `Prepare`, `BuildQuery`), [`IQueryComponentDescriptor`](xref:NextORM.Core.IQueryComponentDescriptor)
-(the immutable prepared state), [`QueryComponentContribution`](xref:NextORM.Core.QueryComponentContribution)
-(`AdditivePredicate` or `ExclusiveRowSource`) and the contexts
-[`IQueryComponentPrepareContext`](xref:NextORM.Core.IQueryComponentPrepareContext) /
-[`IQueryComponentBuildContext`](xref:NextORM.Core.IQueryComponentBuildContext), which the engine instantiates as
-[`QueryComponentContext`](xref:NextORM.Core.QueryComponentContext). The command exposes the attached components
-as [`QueryCommand.Components`](xref:NextORM.Core.QueryCommand.Components) and the prepared descriptors as
-[`QueryCommand.PreparedComponents`](xref:NextORM.Core.QueryCommand.PreparedComponents); both are engine-managed
-and a component author normally never touches them.
+### Why the contract exists
 
-- **Prepare/validate → an immutable prepared descriptor.** `Prepare` runs once per plan build against the
-  command being prepared. It validates the combination — an unsupported one throws instead of being composed
-  arbitrarily — and returns a descriptor carrying the slot, the concrete component type, the contribution kind,
-  a semantic `Discriminator`, a `StructuralHash` over the full state and `StructurallyEquals`. The descriptor is
-  immutable and shared by the cached plan, so it must not reference mutable component state.
-- **Structural construction on a cache miss only.** `BuildQuery` is called when the plan is created. It receives
-  the command through `IQueryComponentBuildContext` and rebuilds the statement from engine primitives: a derived
-  source (`FromExpression`), the original select list plus a hidden auxiliary column (`SelectExpression`,
+The engine renders SQL from its own expression tree, so a new query shape can normally be added in only three
+ways: change the core, take friend access, or emit SQL text. The component contract is the fourth way: you
+describe the *structure* the operator needs in terms of the engine's own primitives, and the engine decides
+**when** to call you — so your operator inherits the plan cache, the parameter binding and the
+provider-independence of an ordinary query instead of re-implementing them.
+
+Nothing here is a registry and nothing is global. A component is an object attached to one immutable builder:
+its lifetime is the lifetime of the query, and two components of the same slot never nest.
+
+### Who implements what, and who calls it
+
+| Type | You | The engine |
+|---|---|---|
+| [`IQueryComponent`](xref:NextORM.Core.IQueryComponent) | Implement it: one object per operator instance. | Reads `Slot` when the component is attached and when a plan key is compared; reads `Contribution` and calls `Prepare` while preparing; calls `BuildQuery` while rendering. |
+| [`IQueryComponentDescriptor`](xref:NextORM.Core.IQueryComponentDescriptor) | Return it from `Prepare`; it must be immutable and must not reference mutable component state. | Stores it in [`QueryCommand.PreparedComponents`](xref:NextORM.Core.QueryCommand.PreparedComponents), hashes it (`StructuralHash`) and compares it (`StructurallyEquals`) as part of the plan key, and drops it on a reset of the preparation. |
+| [`QueryComponentContribution`](xref:NextORM.Core.QueryComponentContribution) | Declare it once per operator: `AdditivePredicate` or `ExclusiveRowSource`. | Rejects a second `ExclusiveRowSource` slot while preparing and combines `AdditivePredicate` contributions with `AND`. |
+| [`IQueryComponentPrepareContext`](xref:NextORM.Core.IQueryComponentPrepareContext) | Consume it in `Prepare`. | Creates it over the command being prepared. |
+| [`IQueryComponentBuildContext`](xref:NextORM.Core.IQueryComponentBuildContext) | Consume it in `BuildQuery`. | Creates it over the rebuilt command (step 4 below). |
+| [`QueryComponentContext`](xref:NextORM.Core.QueryComponentContext) | Normally never touch it; it is public so tests can drive a component directly. | Implements both context interfaces and resolves `ExpressionComparer` from the command — compare selectors with it, not with `Expression.Equals`. |
+| [`IQueryComponentShape`](xref:NextORM.Core.IQueryComponentShape) | Optional: implement it to let the raw (pre-preparation) recipe cache serve your component — report its scalar state and its selectors. | Compares `ShapeState` with `Equals` and the selectors with the expression comparer when matching a fresh command against a cached raw shape; a component that does not implement it keeps the ordinary preparation route. |
+| [`WithComponent`](xref:NextORM.Core.EntityBuilder`1.WithComponent(NextORM.Core.IQueryComponent)) | Call it from your extension method. | Copies the builder and replaces a same-slot component in place. |
+| [`QueryCommand.Components`](xref:NextORM.Core.QueryCommand.Components) / [`PreparedComponents`](xref:NextORM.Core.QueryCommand.PreparedComponents) | Read only, for diagnostics. | Owned, published and cleared by the engine. |
+
+### When each call happens
+
+1. **Attach** — your extension method calls `WithComponent`. Copy-on-write: the builder is cloned, a same-slot
+   component is replaced, a different slot is appended. Nothing is validated at this point.
+2. **`Prepare`** — the planner calls it once for every attached component while preparing the command
+   (`src/nextorm.core/Query/QueryCommand.QueryPreparer.cs`), that is once per *preparation*, which is once per
+   plan build. It runs again only when the same command is prepared again — a second `DataContext`, a template
+   re-prepared from the cache, a reset of the preparation. This is where you validate and reject.
+3. **Descriptor → plan key** — the returned descriptor lands in `QueryCommand.PreparedComponents`; the plan key
+   hashes `StructuralHash` and compares descriptors with `StructurallyEquals` on a warm lookup
+   (`src/nextorm.core/Query/QueryPlanEqualityComparer.cs`, `src/nextorm.core/DataContext/Cache/QueryPlan.cs`).
+   Two structurally equal components therefore share one cached plan.
+4. **`BuildQuery`** — on the plan build only, `SqlBuilder.MakeSelect`
+   (`src/nextorm.core/DataContext/SqlBuilder.cs`) clones the prepared command, calls `BuildQuery` on the clone
+   for every component, and renders the clone. Your handler mutates a throwaway copy, never the command the
+   caller holds.
+5. **Execute** — the SQL is stored on the plan. A warm cache hit reuses it: `BuildQuery` is not called and the
+   descriptor is not rebuilt, while captured values and positional parameters are rebound against the original
+   command. The parameter-refresh re-render reuses the shape the miss built, so it does not call `BuildQuery`
+   again either.
+
+In practice: **you never call `Prepare` or `BuildQuery` yourself**, and SQL text never reaches your code.
+
+### Rules the contract imposes on your implementation
+
+- **Prepare/validate → an immutable prepared descriptor.** It validates the combination — an unsupported one
+  throws instead of being composed arbitrarily — and returns a descriptor carrying the slot, the concrete
+  component type, the contribution kind, a semantic `Discriminator`, a `StructuralHash` over the full state and
+  `StructurallyEquals`. The descriptor is immutable and shared by the cached plan, so it must not reference
+  mutable component state.
+- **Structural construction on the cache miss.** `BuildQuery` receives the command through
+  `IQueryComponentBuildContext` and rebuilds the statement from engine primitives: a derived source
+  (`FromExpression`), the original select list plus a hidden auxiliary column (`SelectExpression`,
   `SetComponentSelectList`), an optional rewritten predicate (`SetComponentPreparedCondition`) and cleared
-  sorting. On a confirmed **warm cache hit** the engine returns the cached plan, so `BuildQuery` is not called
-  again and the SQL is not rebuilt; captured values and positional parameters are re-bound by the normal
-  execution path against the original, unmodified command.
+  sorting. It never renders SQL text — the engine does.
 - **Slot identity.** `Slot` is the stable identity of a logical operator. Attaching a component whose slot is
   already present **replaces it in place**; the builder and the command never nest two components of one slot.
   `Min` and `Max` of the same operator family therefore share a slot and replace each other. `AdditivePredicate`
@@ -124,286 +161,68 @@ and a component author normally never touches them.
 - **No in-memory support.** A component whose semantics are SQL-only rejects `InMemoryDataContext` in `Prepare`
   with `NotSupportedException`; it must not silently degrade or return different rows.
 
-A complete `SelectWhereMin`-style operator — derived source, window, outer `rank = 1`, original result shape
-restored:
+### How a component travels through the engine
+
+![Query component lifecycle: your extension method attaches a component to the immutable builder; the engine prepares it once per plan, builds the statement on a cache miss and reuses the cached plan on a warm hit, then the executor runs the ordinary path.](../assets/diagrams/query-component-lifecycle.svg)
+
+The picture is the whole contract: your package contributes a component, the engine prepares it once per plan and
+builds the SQL from it, and every later call reuses the cached plan with `BuildQuery` never running again.
+
+A **synthetic** component — the smallest thing that shows the shape. It is deliberately not a working operator:
+the statement, the auxiliary column and the prepared state are the parts you design, and the
+[extensions package](extensions-package.md) is the shipped reference implementation of a complete one.
 
 ```csharp
-using System.Linq.Expressions;
-using System.Reflection;
-using NextORM.Core;
-
-namespace Acme.NextOrm;
-
-// 1. Public surface: ordinary extension methods. No registration, no core change, no raw SQL.
-public enum ExternalExtremeKind { Min, Max }
-
-public static class ExternalExtremeExtensions
+public static class MyOperatorExtensions
 {
-    public static EntityBuilder<TEntity> ExternalSelectWhereMin<TEntity, TValue>(
+    // An ordinary extension method: no registration, no core change, no raw SQL.
+    public static EntityBuilder<TEntity> SelectWhereBestEx<TEntity, TValue>(
         this EntityBuilder<TEntity> source,
-        Expression<Func<TEntity, TValue>> valueSelector,
-        ExtremeRowTies ties = ExtremeRowTies.One,
-        Expression<Func<TEntity, object?>>? groupBy = null)
-        => source.WithComponent(
-            new ExternalExtremeComponent<TEntity>(ExternalExtremeKind.Min, valueSelector, ties, groupBy));
-
-    public static EntityBuilder<TEntity> ExternalSelectWhereMax<TEntity, TValue>(
-        this EntityBuilder<TEntity> source,
-        Expression<Func<TEntity, TValue>> valueSelector,
-        ExtremeRowTies ties = ExtremeRowTies.One,
-        Expression<Func<TEntity, object?>>? groupBy = null)
-        => source.WithComponent(
-            new ExternalExtremeComponent<TEntity>(ExternalExtremeKind.Max, valueSelector, ties, groupBy));
+        Expression<Func<TEntity, TValue>> valueSelector)
+        => source.WithComponent(new BestRowComponent<TEntity>(valueSelector));
 }
 
-// 2. The engine primitives the component emits into its expression tree, resolved once per process.
-internal static class EngineHandles
+internal sealed class BestRowComponent<TEntity> : IQueryComponent
 {
-    public static readonly MethodInfo Asc =
-        typeof(CommonFunctions).GetMethod("asc", BindingFlags.Public | BindingFlags.Instance)!;
-    public static readonly MethodInfo Desc =
-        typeof(CommonFunctions).GetMethod("desc", BindingFlags.Public | BindingFlags.Instance)!;
-    public static readonly MethodInfo RowNumber =
-        typeof(CommonFunctions).GetMethod("row_number", BindingFlags.Public | BindingFlags.Instance)!;
-    public static readonly MethodInfo Rank =
-        typeof(CommonFunctions).GetMethod("rank", BindingFlags.Public | BindingFlags.Instance)!;
-    public static readonly MethodInfo ColumnOfInt =
-        typeof(SqlFunctions).GetMethod("Column", BindingFlags.Public | BindingFlags.Static)!
-            .MakeGenericMethod(typeof(int));
-    public static readonly MethodInfo Over = typeof(WindowFunction<int>).GetMethod("Over",
-        new[] { typeof(Expression<Func<object?>>[]), typeof(WindowOrder[]), typeof(WindowFrame) })!;
-}
-
-// 3. The component: slot identity, validation, prepared descriptor, structural build.
-public sealed class ExternalExtremeComponent<TEntity> : IQueryComponent
-{
-    private readonly ExternalExtremeKind _kind;
     private readonly LambdaExpression _valueSelector;
-    private readonly ExtremeRowTies _ties;
-    private readonly Expression<Func<TEntity, object?>>? _groupBy;
 
-    public ExternalExtremeComponent(ExternalExtremeKind kind, LambdaExpression valueSelector,
-        ExtremeRowTies ties, Expression<Func<TEntity, object?>>? groupBy)
-    {
-        ArgumentNullException.ThrowIfNull(valueSelector);
-        _kind = kind;
-        _valueSelector = valueSelector;
-        _ties = ties;
-        _groupBy = groupBy;
-    }
+    public BestRowComponent(LambdaExpression valueSelector) => _valueSelector = valueSelector;
 
-    // Min and Max declare the same slot on purpose: attaching one after the other replaces it in
-    // place instead of nesting. A second, different exclusive slot is rejected by the engine.
-    public Type Slot => typeof(ExternalExtremeComponent<TEntity>);
+    // One slot per logical operator: attaching another component of this family replaces it in place.
+    public Type Slot => typeof(BestRowComponent<TEntity>);
+
+    // What the operator contributes: an additive predicate or the single exclusive row source.
     public QueryComponentContribution Contribution => QueryComponentContribution.ExclusiveRowSource;
 
-    // Reject every modifier the ranked derived source cannot express. The engine additionally applies
-    // the built-in lowering's full boundary (prepared HAVING, LIMIT BY, ARRAY JOIN, DISTINCT ON,
-    // TABLESAMPLE, temporal clauses, source locks) to each exclusive reshape on its own.
-    private static void ValidateCompatibility(QueryCommand cmd)
-    {
-        if (cmd.Ctes is { Count: > 0 }) throw NotCompatible("common table expressions (WITH)");
-        if (cmd.Having is not null) throw NotCompatible("HAVING");
-        if (cmd.Windows is { Count: > 0 }) throw NotCompatible("named windows");
-        if (cmd.GroupingList is { Length: > 0 } || cmd.GroupBy is not null) throw NotCompatible("GROUP BY");
-        if (cmd.Joins is { Length: > 0 }) throw NotCompatible("joins");
-        if (cmd.PreWhere is not null) throw NotCompatible("PREWHERE");
-        if (!cmd.Paging.IsEmpty) throw NotCompatible("paging");
-        if (cmd.UnionQuery is not null) throw NotCompatible("a set operation");
-        if (cmd.TableHints is { Count: > 0 }) throw NotCompatible("table hints");
-        if (cmd.IndexHints is { Count: > 0 }) throw NotCompatible("index hints");
-        if (cmd.TablesInScopeHints is { Count: > 0 }) throw NotCompatible("tables-in-scope hints");
-        if (cmd.Hints is { Count: > 0 }) throw NotCompatible("query hints");
-        if (cmd.Final) throw NotCompatible("FINAL");
-        if (cmd.SampleRatio is not null) throw NotCompatible("SAMPLE");
-        if (cmd.Settings is { Count: > 0 }) throw NotCompatible("SETTINGS");
-        if (cmd.ForJsonClause is not null || cmd.ForXmlClause is not null) throw NotCompatible("FOR JSON/FOR XML");
-    }
-
-    private static BuildSqlCommandException NotCompatible(string modifier)
-        => new($"SelectWhereMax/SelectWhereMin cannot be combined with {modifier}.");
-
+    // Runs once per plan build, against the command being prepared. Reject what the shape cannot express
+    // (throw, never compose arbitrarily) and return immutable state the plan cache can key on.
     public IQueryComponentDescriptor Prepare(IQueryComponentPrepareContext context)
     {
-        ArgumentNullException.ThrowIfNull(context);
-        if (context.Command.DataContext is InMemoryDataContext)
-            throw new NotSupportedException(
-                "ExternalSelectWhereMin/Max is not supported by the in-memory provider.");
-        if (_ties is not (ExtremeRowTies.One or ExtremeRowTies.All))
-            throw new ArgumentOutOfRangeException(nameof(_ties), _ties, "Unknown ExtremeRowTies value.");
-
-        // Reject what the ranked derived source cannot express instead of composing arbitrarily.
-        // The engine re-applies the built-in lowering's own rejection boundary to every exclusive
-        // reshape, including the modifiers a component cannot see through the public surface.
-        ValidateCompatibility(context.Command);
-
-        var hash = new HashCode();
-        hash.Add(Slot);
-        hash.Add(GetType());
-        hash.Add(_kind);
-        hash.Add(_ties);
-        hash.Add(_valueSelector, context.ExpressionComparer);
-        if (_groupBy is not null)
-            hash.Add(_groupBy, context.ExpressionComparer);
-
-        return new Descriptor(this, hash.ToHashCode(), context.ExpressionComparer);
+        RejectUnsupportedModifiers(context.Command);
+        return new Descriptor(Slot, _valueSelector, context.ExpressionComparer);
+        //      ^ slot, contribution, discriminator, StructuralHash, StructurallyEquals
     }
 
+    // Runs on the cache miss only. Restate the query from engine primitives — never from SQL text.
     public void BuildQuery(IQueryComponentBuildContext context)
     {
-        var cmd = context.Command;
-        var entityType = typeof(TEntity);
-        var rankAlias = PickFreeAlias(entityType);
-        var entity = Expression.Parameter(entityType, "x");
-        var sql = Expression.Property(null, typeof(SqlFunctions), "Sql");
-
-        // 4. Derived source: the original command, its select list plus one hidden rank column.
-        var inner = cmd.Clone();
-        inner.Components = null;
-
-        var valueKeys = Decompose(_valueSelector, entity);
-
-        // A NULL in any value key never wins an extreme in the built-in portable lowering, so the rows
-        // are excluded inside the ranked source, before the window is evaluated.
-        Expression? filter = null;
-        foreach (var key in valueKeys)
-        {
-            if (!key.Type.IsValueType || Nullable.GetUnderlyingType(key.Type) is not null)
-                filter = And(filter, Expression.NotEqual(key, Expression.Constant(null, key.Type)));
-        }
-        if (inner.GetComponentPreparedCondition() is LambdaExpression condition
-            && condition.Parameters.Count > 0)
-        {
-            filter = And(filter, new ParameterReplacer(condition.Parameters[0], entity).Visit(condition.Body));
-        }
-        if (filter is not null)
-            inner.SetComponentPreparedCondition(Expression.Lambda(filter, entity));
-
-        var direction = _kind == ExternalExtremeKind.Max ? EngineHandles.Desc : EngineHandles.Asc;
-        var orderKeys = Expression.NewArrayInit(typeof(WindowOrder),
-            valueKeys.Select(v => (Expression)Expression.Call(sql, direction,
-                Expression.Quote(Expression.Lambda<Func<object?>>(
-                    Expression.Convert(v, typeof(object)))))).ToArray());
-
-        Expression partition = _groupBy is null
-            ? Expression.Constant(null, typeof(Expression<Func<object?>>[]))
-            : Expression.NewArrayInit(typeof(Expression<Func<object?>>),
-                Decompose(_groupBy, entity).Select(k => (Expression)Expression.Quote(
-                    Expression.Lambda<Func<object?>>(Expression.Convert(k, typeof(object))))).ToArray());
-
-        var rankMethod = _ties == ExtremeRowTies.All ? EngineHandles.Rank : EngineHandles.RowNumber;
-        var rank = Expression.Call(Expression.Call(sql, rankMethod), EngineHandles.Over,
-            partition, orderKeys, Expression.Constant(null, typeof(WindowFrame)));
-
-        var hidden = new SelectExpression(typeof(int))
-        {
-            Index = inner.SelectList?.Length ?? 0,
-            PropertyName = rankAlias,
-            Expression = rank,
-        };
-        inner.SetComponentSelectList(inner.SelectList is null
-            ? new[] { hidden }
-            : inner.SelectList.Append(hidden).ToArray());
-        inner.SetComponentSorting(null);
-
-        // 5. Outer statement: read the derived source, keep rank = 1, restore the original shape.
-        cmd.From = new FromExpression(inner);
-        var outer = Expression.Parameter(entityType, "o");
-        var rankColumn = Expression.Call(null, EngineHandles.ColumnOfInt, outer,
-            Expression.Constant(rankAlias));
-        cmd.SetComponentPreparedCondition(Expression.Lambda(
-            Expression.Equal(rankColumn, Expression.Constant(1)), outer));
-    }
-
-    private static Expression And(Expression? left, Expression right)
-        => left is null ? right : Expression.AndAlso(left, right);
-
-    private static Expression[] Decompose(LambdaExpression selector, ParameterExpression entity)
-    {
-        var body = selector.Body;
-        if (body is UnaryExpression { NodeType: ExpressionType.Convert } boxed && boxed.Type == typeof(object))
-            body = boxed.Operand;
-        var rewritten = new ParameterReplacer(selector.Parameters[0], entity).Visit(body)!;
-        // Anonymous types and ValueTuple contribute one key per argument, not one opaque key.
-        return rewritten is NewExpression { Arguments.Count: > 0 } composite
-            ? composite.Arguments.ToArray()
-            : new[] { rewritten };
-    }
-
-    private static string PickFreeAlias(Type entityType)
-    {
-        const string seed = "__nextorm_ext_rn";
-        if (!DataContextCache.Metadata.TryGetValue(entityType, out var metadata))
-            return seed;
-        var name = seed;
-        while (metadata.Properties.Any(p =>
-                   string.Equals(p.ColumnName, name, StringComparison.OrdinalIgnoreCase)))
-            name += "_";
-        return name;
-    }
-
-    private sealed class ParameterReplacer : ExpressionVisitor
-    {
-        private readonly ParameterExpression _from;
-        private readonly ParameterExpression _to;
-
-        public ParameterReplacer(ParameterExpression from, ParameterExpression to)
-        {
-            _from = from;
-            _to = to;
-        }
-
-        protected override Expression VisitParameter(ParameterExpression node)
-            => node == _from ? _to : base.VisitParameter(node);
-    }
-
-    private sealed class Descriptor : IQueryComponentDescriptor
-    {
-        private readonly LambdaExpression _valueSelector;
-        private readonly Expression? _groupBy;
-        private readonly ExtremeRowTies _ties;
-        private readonly IEqualityComparer<Expression> _comparer;
-
-        public Descriptor(ExternalExtremeComponent<TEntity> component, int hash,
-            IEqualityComparer<Expression> comparer)
-        {
-            Slot = component.Slot;
-            ComponentType = component.GetType();
-            Contribution = component.Contribution;
-            Discriminator = component._kind.ToString();
-            _valueSelector = component._valueSelector;
-            _groupBy = component._groupBy;
-            _ties = component._ties;
-            _comparer = comparer;
-            StructuralHash = hash;
-        }
-
-        public Type Slot { get; }
-        public Type ComponentType { get; }
-        public QueryComponentContribution Contribution { get; }
-        public string Discriminator { get; }
-        public int StructuralHash { get; }
-
-        public bool StructurallyEquals(IQueryComponentDescriptor? other)
-            => other is Descriptor rhs
-               && Slot == rhs.Slot && ComponentType == rhs.ComponentType
-               && Contribution == rhs.Contribution
-               && Discriminator == rhs.Discriminator && _ties == rhs._ties
-               && _comparer.Equals(_valueSelector, rhs._valueSelector)
-               && (_groupBy is null
-                   ? rhs._groupBy is null
-                   : rhs._groupBy is not null && _comparer.Equals(_groupBy, rhs._groupBy));
+        var inner = context.Command.Clone();            // derived source, payload preserved
+        // inner.SetComponentSelectList(<payload>, <auxiliary column>);
+        // inner.SetComponentPreparedCondition(<auxiliary column> == <surviving rows>);
+        inner.SetComponentSorting(null);                // ordering belongs to the operator
+        context.Command.From = new FromExpression(inner);
     }
 }
 ```
 
-The engine owns quoting, aliases and parameter binding; the component only assembles the logical tree, so the
-same operator renders on every SQL provider without dialect-specific code. The same operator — both directions,
-`One`/`All`, composite keys, NULL-value exclusion and the compatibility checks — is exercised end to end by the
-repository's query-component proof suite.
+Everything concrete stays yours: which rows survive, the auxiliary column you add and the alias you give it, the
+combinations you reject. The engine owns quoting, aliases and parameter binding, so the same component renders on
+every SQL provider without dialect-specific code — and on a warm cache hit it is not involved at all: the cached
+plan is returned and captured/positional parameters are rebound against the original, unmodified command.
 
 ## See also
 
+- [Extensions package (`nextorm.extensions`)](extensions-package.md) — a complete component-based operator
 - [Native extreme-row strategies (`SelectWhereMax` / `SelectWhereMin`)](select-where-extrema-native.md)
 - [API quick reference](api-reference.md)
 - [Provider overview](../connecting-providers/overview.md)

@@ -67,7 +67,7 @@ public class Stage10RecheckTests
         try
         {
             builtIds = ctx.From<Entity>()
-                .SelectWhereMin(x => x.Score, ExtremeRowTies.All)
+                .SelectWhereMinOld(x => x.Score, ExtremeRowTies.All)
                 .Distinct()
                 .Select(x => x.Id)
                 .ToList()
@@ -313,21 +313,21 @@ public class Stage10RecheckTests
         using var ctxScope = ctx;
 
         AssertRejectsLikeBuiltIn(
-            () => ctx.From<Entity>().ForUpdate().SelectWhereMin(x => x.Score).ToList(),
+            () => ctx.From<Entity>().ForUpdate().SelectWhereMinOld(x => x.Score).ToList(),
             () => ctx.From<Entity>().ForUpdate().ExternalSelectWhereMin(x => x.Score).ToList());
 
         AssertRejectsLikeBuiltIn(
             () => ctx.From<Entity>().ForSystemTime(TemporalClause.AsOf(new DateTime(2024, 1, 1)))
-                .SelectWhereMin(x => x.Score).ToList(),
+                .SelectWhereMinOld(x => x.Score).ToList(),
             () => ctx.From<Entity>().ForSystemTime(TemporalClause.AsOf(new DateTime(2024, 1, 1)))
                 .ExternalSelectWhereMin(x => x.Score).ToList());
 
         AssertRejectsLikeBuiltIn(
-            () => ctx.From<Entity>().Window("w").SelectWhereMin(x => x.Score).ToList(),
+            () => ctx.From<Entity>().Window("w").SelectWhereMinOld(x => x.Score).ToList(),
             () => ctx.From<Entity>().Window("w").ExternalSelectWhereMin(x => x.Score).ToList());
 
         AssertRejectsLikeBuiltIn(
-            () => ctx.From<Entity>().SelectWhereMin(x => x.Score).Limit(1).ToList(),
+            () => ctx.From<Entity>().SelectWhereMinOld(x => x.Score).Limit(1).ToList(),
             () => ctx.From<Entity>().ExternalSelectWhereMin(x => x.Score).Limit(1).ToList());
     }
 
@@ -342,7 +342,7 @@ public class Stage10RecheckTests
         // command in an outer projection). The external operator cannot reproduce that shape: its hidden
         // rank column would be appended to the aggregate select list and evaluated over the reshaped
         // rows. It therefore refuses aggregates explicitly instead of emitting a divergent statement.
-        var builtCount = ctx.From<Entity>().SelectWhereMin(x => x.Score).Count();
+        var builtCount = ctx.From<Entity>().SelectWhereMinOld(x => x.Score).Count();
         builtCount.Should().BeGreaterThan(0, "the built-in aggregate terminal must execute, otherwise the comparison is vacuous");
 
         Action external = () => _ = ctx.From<Entity>().ExternalSelectWhereMin(x => x.Score).Count();

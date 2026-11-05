@@ -95,11 +95,11 @@ public abstract class T302ExtremeRowBenchmarkBase
         _db = builder.CreateDataContext();
 
         var source = _db.From<ExtremeRowEntity>();
-        _all = source.SelectWhereMax(x => x.Score, ExtremeRowTies.All).Prepare();
-        _one = source.SelectWhereMax(x => x.Score, ExtremeRowTies.One).Prepare();
+        _all = source.SelectWhereMaxOld(x => x.Score, ExtremeRowTies.All).Prepare();
+        _one = source.SelectWhereMaxOld(x => x.Score, ExtremeRowTies.One).Prepare();
         _allValueOnly = _db.From<ExtremeRowEntity>()
             .Where(x => x.Score > ValueOnlyThreshold)
-            .SelectWhereMax(x => x.Score, ExtremeRowTies.All)
+            .SelectWhereMaxOld(x => x.Score, ExtremeRowTies.All)
             .Prepare();
 
         var all = _db.ToList(_all);

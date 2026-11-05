@@ -110,16 +110,16 @@ public sealed class ExtremaEagerBranchCoverage3Tests : ProviderTestSuite
     {
         var marker = Context.From<Pb3eMarker>();
 
-        var maxAll = marker.SelectWhereMax(e => e.Score, ExtremeRowTies.All).OrderBy(e => e.Id).ToList();
+        var maxAll = marker.SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All).OrderBy(e => e.Id).ToList();
         maxAll.Select(r => r.Id).Should().Equal(3, 4);
         maxAll.Should().OnlyContain(r => r.Score == 9);
 
-        var minOne = marker.SelectWhereMin(e => e.Score).ToList();
+        var minOne = marker.SelectWhereMinOld(e => e.Score).ToList();
         minOne.Should().ContainSingle();
         minOne[0].Score.Should().Be(3);
         minOne[0].Id.Should().BeOneOf(5, 6);
 
-        var minAll = marker.SelectWhereMin(e => e.Score, ExtremeRowTies.All).OrderBy(e => e.Id).ToList();
+        var minAll = marker.SelectWhereMinOld(e => e.Score, ExtremeRowTies.All).OrderBy(e => e.Id).ToList();
         minAll.Select(r => r.Id).Should().Equal(5, 6);
     }
 
@@ -132,7 +132,7 @@ public sealed class ExtremaEagerBranchCoverage3Tests : ProviderTestSuite
     {
         var nonNullableMax = Context.From<Pb3eMarker>()
             .Where(e => e.Grade >= 30)
-            .SelectWhereMax(e => e.Grade, ExtremeRowTies.All)
+            .SelectWhereMaxOld(e => e.Grade, ExtremeRowTies.All)
             .ToList();
         nonNullableMax.Should().ContainSingle();
         nonNullableMax[0].Id.Should().Be(7);
@@ -140,7 +140,7 @@ public sealed class ExtremaEagerBranchCoverage3Tests : ProviderTestSuite
 
         var nonNullableMin = Context.From<Pb3eMarker>()
             .Where(e => e.Grade >= 30)
-            .SelectWhereMin(e => e.Grade)
+            .SelectWhereMinOld(e => e.Grade)
             .ToList();
         nonNullableMin.Should().ContainSingle();
         nonNullableMin[0].Id.Should().Be(3);
@@ -148,7 +148,7 @@ public sealed class ExtremaEagerBranchCoverage3Tests : ProviderTestSuite
 
         var nullableMin = Context.From<Pb3eMarker>()
             .Where(e => e.Grade >= 30)
-            .SelectWhereMin(e => e.Score)
+            .SelectWhereMinOld(e => e.Score)
             .ToList();
         nullableMin.Should().ContainSingle();
         nullableMin[0].Score.Should().Be(3);
@@ -162,14 +162,14 @@ public sealed class ExtremaEagerBranchCoverage3Tests : ProviderTestSuite
     public void Extrema_ProjectionOverload_ShouldProjectTiedExtremeRows()
     {
         var projectedMax = Context.From<Pb3eMarker>()
-            .SelectWhereMax(e => e.Score, e => new { e.Id, e.Grade, e.Label }, ExtremeRowTies.All)
+            .SelectWhereMaxOld(e => e.Score, e => new { e.Id, e.Grade, e.Label }, ExtremeRowTies.All)
             .ToList();
 
         projectedMax.Select(r => (r.Id, r.Grade, r.Label)).Should()
             .BeEquivalentTo(new[] { (3, 30, "three"), (4, 40, "four") });
 
         var projectedMin = Context.From<Pb3eMarker>()
-            .SelectWhereMin(e => e.Score, e => new { e.Id, e.Label }, ExtremeRowTies.All)
+            .SelectWhereMinOld(e => e.Score, e => new { e.Id, e.Label }, ExtremeRowTies.All)
             .ToList();
 
         projectedMin.Select(r => r.Id).Should().BeEquivalentTo(new[] { 5, 6 });
@@ -185,19 +185,19 @@ public sealed class ExtremaEagerBranchCoverage3Tests : ProviderTestSuite
     {
         Context.From<Pb3eMarker>()
             .Where(e => e.Grade > 1000)
-            .SelectWhereMax(e => e.Score, ExtremeRowTies.All)
+            .SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All)
             .ToList()
             .Should().BeEmpty();
 
         Context.From<Pb3eMarker>()
             .Where(e => e.Grade > 1000)
-            .SelectWhereMin(e => e.Score)
+            .SelectWhereMinOld(e => e.Score)
             .ToList()
             .Should().BeEmpty();
 
         var liveMax = Context.From<Pb3eMarker>()
             .Where(e => e.Grade <= 20)
-            .SelectWhereMax(e => e.Score)
+            .SelectWhereMaxOld(e => e.Score)
             .ToList();
         liveMax.Should().ContainSingle();
         liveMax[0].Id.Should().Be(2);
@@ -205,7 +205,7 @@ public sealed class ExtremaEagerBranchCoverage3Tests : ProviderTestSuite
 
         var liveMin = Context.From<Pb3eMarker>()
             .Where(e => e.Grade <= 20)
-            .SelectWhereMin(e => e.Score)
+            .SelectWhereMinOld(e => e.Score)
             .ToList();
         liveMin.Should().ContainSingle();
         liveMin[0].Id.Should().Be(2);

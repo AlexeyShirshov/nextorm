@@ -139,8 +139,8 @@ internal static class T362Queries
             }
 
             return kind == ExternalExtremeKind.Min
-                ? builder.SelectWhereMin(e => new { e.Int, e.String }, ties, groupBy)
-                : builder.SelectWhereMax(e => new { e.Int, e.String }, ties, groupBy);
+                ? builder.SelectWhereMinOld(e => new { e.Int, e.String }, ties, groupBy)
+                : builder.SelectWhereMaxOld(e => new { e.Int, e.String }, ties, groupBy);
         }
 
         if (external)
@@ -151,8 +151,8 @@ internal static class T362Queries
         }
 
         return kind == ExternalExtremeKind.Min
-            ? builder.SelectWhereMin(e => e.Int, ties, groupBy)
-            : builder.SelectWhereMax(e => e.Int, ties, groupBy);
+            ? builder.SelectWhereMinOld(e => e.Int, ties, groupBy)
+            : builder.SelectWhereMaxOld(e => e.Int, ties, groupBy);
     }
 }
 

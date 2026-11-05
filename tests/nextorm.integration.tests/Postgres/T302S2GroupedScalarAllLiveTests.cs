@@ -142,7 +142,7 @@ public sealed class T302S2GroupedScalarAllPostgresTests : ProviderTestSuite
         {
             // g1: ids 1,2 (9); g2: id 4 (9, NULL value ignored for id 6); NULL key: id 7 (9,
             // all-NULL group member id 9 dropped); g3: ids 10,11 (3, NULL payload winner).
-            var rows = Source().SelectWhereMax(e => e.Score, ExtremeRowTies.All, e => e.Grp)
+            var rows = Source().SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All, e => e.Grp)
                 .OrderBy(e => e.Id).ToList();
 
             rows.Should().HaveCount(6);
@@ -152,21 +152,21 @@ public sealed class T302S2GroupedScalarAllPostgresTests : ProviderTestSuite
             rows.Select(r => r.Id).Should().NotContain(9);
 
             // Projection forms keep the same grouped winners.
-            var dtos = Source().SelectWhereMax(e => e.Score,
+            var dtos = Source().SelectWhereMaxOld(e => e.Score,
                     e => new Dto { Id = e.Id, Grp = e.Grp, Payload = e.Payload },
                     ExtremeRowTies.All, e => e.Grp)
                 .OrderBy(e => e.Id).ToList();
             dtos.Should().HaveCount(6);
             dtos.Select(r => r.Id).Should().ContainInOrder(1, 2, 4, 7, 10, 11);
 
-            var anon = Source().SelectWhereMax(e => e.Score,
+            var anon = Source().SelectWhereMaxOld(e => e.Score,
                     e => new { e.Id, e.Grp, e.Payload },
                     ExtremeRowTies.All, e => e.Grp)
                 .OrderBy(e => e.Id).ToList();
             anon.Should().HaveCount(6);
             anon.Select(r => r.Id).Should().ContainInOrder(1, 2, 4, 7, 10, 11);
 
-            var scalars = Source().SelectWhereMax(e => e.Score, e => e.Id, ExtremeRowTies.All, e => e.Grp)
+            var scalars = Source().SelectWhereMaxOld(e => e.Score, e => e.Id, ExtremeRowTies.All, e => e.Grp)
                 .ToList();
             scalars.Should().BeEquivalentTo(new[] { 1, 2, 4, 7, 10, 11 });
         }
@@ -179,7 +179,7 @@ public sealed class T302S2GroupedScalarAllPostgresTests : ProviderTestSuite
         CreateFixture();
         try
         {
-            var rows = Source().SelectWhereMin(e => e.Score, ExtremeRowTies.All, e => e.Grp)
+            var rows = Source().SelectWhereMinOld(e => e.Score, ExtremeRowTies.All, e => e.Grp)
                 .OrderBy(e => e.Id).ToList();
 
             rows.Should().HaveCount(5);
@@ -198,13 +198,13 @@ public sealed class T302S2GroupedScalarAllPostgresTests : ProviderTestSuite
             // In the NULL-key group only ids 7 (9) and 8 (7) have a non-null value; id 9 is a NULL
             // value row and must not create a winner of its own.
             var rows = Source().Where(e => e.Grp == null)
-                .SelectWhereMax(e => e.Score, ExtremeRowTies.All, e => e.Grp).ToList();
+                .SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All, e => e.Grp).ToList();
             rows.Should().HaveCount(1);
             rows[0].Id.Should().Be(7);
 
             // Filtering to rows whose value key is NULL leaves no eligible row for that group.
             var none = Source().Where(e => e.Grp == null && e.Score == null)
-                .SelectWhereMax(e => e.Score, ExtremeRowTies.All, e => e.Grp).ToList();
+                .SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All, e => e.Grp).ToList();
             none.Should().BeEmpty();
         }
         finally { DropFixture(); }
@@ -217,7 +217,7 @@ public sealed class T302S2GroupedScalarAllPostgresTests : ProviderTestSuite
         try
         {
             var rows = Source().Where(e => e.Id == -1)
-                .SelectWhereMax(e => e.Score, ExtremeRowTies.All, e => e.Grp).ToList();
+                .SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All, e => e.Grp).ToList();
             rows.Should().BeEmpty();
         }
         finally { DropFixture(); }
@@ -232,7 +232,7 @@ public sealed class T302S2GroupedScalarAllPostgresTests : ProviderTestSuite
             // The table-wide winner (9) is filtered out on both the aggregate and the payload side:
             // every group falls back to its best row inside the filtered population.
             var rows = Source().Where(e => e.Score < 9)
-                .SelectWhereMax(e => e.Score, ExtremeRowTies.All, e => e.Grp)
+                .SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All, e => e.Grp)
                 .OrderBy(e => e.Id).ToList();
 
             rows.Should().HaveCount(5);
@@ -248,7 +248,7 @@ public sealed class T302S2GroupedScalarAllPostgresTests : ProviderTestSuite
         CreateCompositeFixture();
         try
         {
-            var rows = Source().SelectWhereMax(e => e.Score, ExtremeRowTies.All, e => new { e.Grp, e.Flag })
+            var rows = Source().SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All, e => new { e.Grp, e.Flag })
                 .OrderBy(e => e.Id).ToList();
 
             // ('a',1): 1,2; ('b',NULL): 4,5; (NULL,9): 6,7; (NULL,NULL): 8; ('c',2): 11 (NULL value ignored).
@@ -272,10 +272,10 @@ public sealed class T302S2GroupedScalarAllPostgresTests : ProviderTestSuite
         CreateDuplicateFixture();
         try
         {
-            var all = Source().SelectWhereMax(e => e.Score, ExtremeRowTies.All, e => e.Grp).ToList();
+            var all = Source().SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All, e => e.Grp).ToList();
             all.Should().HaveCount(3);
 
-            var distinct = Source().SelectWhereMax(e => e.Score, ExtremeRowTies.All, e => e.Grp)
+            var distinct = Source().SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All, e => e.Grp)
                 .Distinct().ToList();
             distinct.Should().HaveCount(2);
             distinct.Should().OnlyContain(r => r.Score == 9);
@@ -291,14 +291,14 @@ public sealed class T302S2GroupedScalarAllPostgresTests : ProviderTestSuite
         try
         {
             // 'y' has only NULL value keys, so its aggregate is empty; 'x' keeps its winner (id 1).
-            var max = Source().SelectWhereMax(e => e.Score, ExtremeRowTies.All, e => e.Grp)
+            var max = Source().SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All, e => e.Grp)
                 .OrderBy(e => e.Id).ToList();
             max.Should().HaveCount(1);
             max[0].Id.Should().Be(1);
             max.Should().OnlyContain(r => r.Grp == "x");
             max.Select(r => r.Grp).Should().NotContain("y");
 
-            var min = Source().SelectWhereMin(e => e.Score, ExtremeRowTies.All, e => e.Grp)
+            var min = Source().SelectWhereMinOld(e => e.Score, ExtremeRowTies.All, e => e.Grp)
                 .OrderBy(e => e.Id).ToList();
             min.Should().HaveCount(1);
             min[0].Id.Should().Be(4);
@@ -313,8 +313,8 @@ public sealed class T302S2GroupedScalarAllPostgresTests : ProviderTestSuite
         try
         {
             // Every value key in every group is NULL: no group survives the non-null aggregate guard.
-            Source().SelectWhereMax(e => e.Score, ExtremeRowTies.All, e => e.Grp).ToList().Should().BeEmpty();
-            Source().SelectWhereMin(e => e.Score, ExtremeRowTies.All, e => e.Grp).ToList().Should().BeEmpty();
+            Source().SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All, e => e.Grp).ToList().Should().BeEmpty();
+            Source().SelectWhereMinOld(e => e.Score, ExtremeRowTies.All, e => e.Grp).ToList().Should().BeEmpty();
         }
         finally { DropFixture(); }
     }
@@ -325,14 +325,14 @@ public sealed class T302S2GroupedScalarAllPostgresTests : ProviderTestSuite
         CreateFixture();
         try
         {
-            var rows = Source().SelectWhereMax(e => e.Score, ExtremeRowTies.All, e => e.Grp)
+            var rows = Source().SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All, e => e.Grp)
                 .OrderBy(e => e.Id).ToList();
             rows.Select(r => r.Payload).Should().ContainInOrder(new int?[] { 90, 91, 92, 93, null, 31 });
             rows.Single(r => r.Id == 10).Payload.Should().BeNull(
                 "the projected NULL payload must survive the grouped aggregate join-back");
             rows.Single(r => r.Id == 11).Payload.Should().Be(31);
 
-            var desc = Source().SelectWhereMax(e => e.Score, ExtremeRowTies.All, e => e.Grp)
+            var desc = Source().SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All, e => e.Grp)
                 .OrderByDescending(e => e.Id).ToList();
             desc.Select(r => r.Id).Should().ContainInOrder(11, 10, 7, 4, 2, 1);
             desc.Select(r => r.Payload).Should().ContainInOrder(new int?[] { 31, null, 93, 92, 91, 90 });
@@ -349,7 +349,7 @@ public sealed class T302S2GroupedScalarAllPostgresTests : ProviderTestSuite
             // Positional record projection over the grouped aggregate: each winner's payload and its
             // group key are materialized positionally, including the NULL payload of id 10 and the
             // NULL group key of id 7.
-            var records = Source().SelectWhereMax(e => e.Score,
+            var records = Source().SelectWhereMaxOld(e => e.Score,
                     e => new WinnerRecord(e.Id, e.Grp, e.Payload),
                     ExtremeRowTies.All, e => e.Grp)
                 .OrderBy(e => e.Id).ToList();

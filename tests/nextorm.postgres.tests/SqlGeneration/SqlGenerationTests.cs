@@ -4611,7 +4611,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
 
         var act = () => SqlOf(ctx, ctx.From<ISimpleEntity>(o => o.ForUpdate())
-            .SelectWhereMax(x => x.Id).Select(x => new { x.Id }));
+            .SelectWhereMaxOld(x => x.Id).Select(x => new { x.Id }));
 
         act.Should().Throw<BuildSqlCommandException>();
     }
@@ -5200,7 +5200,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Datetime).Select(x => new { x.Id })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.Datetime).Select(x => new { x.Id })));
 
         norm.Should().Contain("row_number() over (order by dt desc)");
         norm.Should().Contain("where ").And.Contain("= 1");
@@ -5215,7 +5215,7 @@ public class SqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         var norm = Dequoted(SqlOf(ctx, e
-            .SelectWhereMax(x => x.Int, ExtremeRowTies.One, x => x.String)
+            .SelectWhereMaxOld(x => x.Int, ExtremeRowTies.One, x => x.String)
             .Select(x => new { x.Id })));
 
         norm.Should().Contain("row_number() over (partition by somestring order by nullableint desc)");
@@ -5231,7 +5231,7 @@ public class SqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         var norm = Dequoted(SqlOf(ctx, e
-            .SelectWhereMax(x => x.Int, ExtremeRowTies.All, x => x.String)
+            .SelectWhereMaxOld(x => x.Int, ExtremeRowTies.All, x => x.String)
             .Select(x => new { x.Id })));
 
         norm.Should().Contain("max(nullableint) as __nextorm_ext_1_0");
@@ -5250,7 +5250,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Datetime, x => new { x.Id, x.String })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.Datetime, x => new { x.Id, x.String })));
 
         norm.Should().Contain("row_number() over (order by dt desc)");
         norm.Should().Contain("= 1");
@@ -5265,7 +5265,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMin(x => x.Datetime, x => new { x.Id, x.String })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMinOld(x => x.Datetime, x => new { x.Id, x.String })));
 
         norm.Should().Contain("row_number() over (order by dt)");
         norm.Should().NotContain("dt desc");
@@ -5280,7 +5280,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.Where(x => x.Id > 0).SelectWhereMax(x => x.Int).Select(x => new { x.Id })));
+        var norm = Dequoted(SqlOf(ctx, e.Where(x => x.Id > 0).SelectWhereMaxOld(x => x.Int).Select(x => new { x.Id })));
 
         norm.Should().Contain("nullableint is not null and");
         norm.Should().Contain("id >");
@@ -5292,7 +5292,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        var act = () => SqlOf(ctx, e.DistinctOn(x => x.Id).SelectWhereMax(x => x.Int).Select(x => new { x.Id }));
+        var act = () => SqlOf(ctx, e.DistinctOn(x => x.Id).SelectWhereMaxOld(x => x.Int).Select(x => new { x.Id }));
 
         act.Should().Throw<BuildSqlCommandException>().WithMessage("*DISTINCT ON*");
     }
@@ -5303,7 +5303,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        var act = () => SqlOf(ctx, e.GroupBy(x => x.Int).SelectWhereMax(x => x.Int).Select(x => new { x.Int }));
+        var act = () => SqlOf(ctx, e.GroupBy(x => x.Int).SelectWhereMaxOld(x => x.Int).Select(x => new { x.Int }));
 
         act.Should().Throw<BuildSqlCommandException>().WithMessage("*GROUP BY*");
     }
@@ -5314,7 +5314,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var joined = ctx.From<ISimpleEntity>().Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id);
 
-        var act = () => SqlOf(ctx, joined.SelectWhereMax(p => p.Item2.Int, p => new { p.Item1.Id }));
+        var act = () => SqlOf(ctx, joined.SelectWhereMaxOld(p => p.Item2.Int, p => new { p.Item1.Id }));
 
         act.Should().Throw<BuildSqlCommandException>().WithMessage("*joins*");
     }
@@ -5325,7 +5325,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<SimpleEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Id).ToCommand()));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.Id).ToCommand()));
 
         var outer = OuterSelectList(norm);
         outer.Should().Contain("id");
@@ -5341,7 +5341,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<SimpleEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Id, ExtremeRowTies.One, x => x.Id).ToCommand()));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.Id, ExtremeRowTies.One, x => x.Id).ToCommand()));
 
         norm.Should().Contain("row_number() over (partition by id order by id desc)");
         norm.Should().Contain("id is not null");
@@ -5358,7 +5358,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<SimpleEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMin(x => x.Id, ExtremeRowTies.One, x => x.Id).ToCommand()));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMinOld(x => x.Id, ExtremeRowTies.One, x => x.Id).ToCommand()));
 
         norm.Should().Contain("row_number() over (partition by id order by id)");
         norm.Should().NotContain("id desc");
@@ -5374,7 +5374,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Int, x => new { x.Id, x.String }, ExtremeRowTies.One, x => x.String)));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.Int, x => new { x.Id, x.String }, ExtremeRowTies.One, x => x.String)));
 
         norm.Should().Contain("row_number() over (partition by somestring order by nullableint desc)");
         norm.Should().Contain("= 1");
@@ -5388,7 +5388,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMin(x => x.Int, x => new { x.Id, x.String }, ExtremeRowTies.One, x => x.String)));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMinOld(x => x.Int, x => new { x.Id, x.String }, ExtremeRowTies.One, x => x.String)));
 
         norm.Should().Contain("row_number() over (partition by somestring order by nullableint)");
         norm.Should().NotContain("nullableint desc");
@@ -5402,7 +5402,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Int, x => new { x.Id, x.String }, ExtremeRowTies.All, x => x.String)));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.Int, x => new { x.Id, x.String }, ExtremeRowTies.All, x => x.String)));
 
         norm.Should().Contain("max(nullableint) as __nextorm_ext_1_0");
         norm.Should().Contain("group by somestring");
@@ -5419,7 +5419,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Int, x => new { x.Id }, ExtremeRowTies.All)));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.Int, x => new { x.Id }, ExtremeRowTies.All)));
 
         norm.Should().Contain("max(nullableint) as __nextorm_ext_1_0");
         norm.Should().Contain("join (select max(nullableint)");
@@ -5434,7 +5434,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Int, x => new { x.Id }, ExtremeRowTies.One, x => new { x.String, x.Boolean })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.Int, x => new { x.Id }, ExtremeRowTies.One, x => new { x.String, x.Boolean })));
 
         norm.Should().Contain("partition by somestring, b");
         norm.Should().Contain("= 1");
@@ -5446,7 +5446,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.Where(x => x.Id == 1L).SelectWhereMax(x => x.Datetime).Select(x => new { x.Id })));
+        var norm = Dequoted(SqlOf(ctx, e.Where(x => x.Id == 1L).SelectWhereMaxOld(x => x.Datetime).Select(x => new { x.Id })));
 
         norm.Should().Contain("row_number() over (order by dt desc)");
         norm.Should().Contain("id = ");
@@ -5461,7 +5461,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.Distinct().SelectWhereMax(x => x.Datetime, x => new { x.Id })));
+        var norm = Dequoted(SqlOf(ctx, e.Distinct().SelectWhereMaxOld(x => x.Datetime, x => new { x.Id })));
 
         norm.Should().Contain("select distinct ");
         norm.Should().Contain("= 1");
@@ -5476,7 +5476,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var scope = ctx.With("c", ctx.From<ISimpleEntity>().Where(x => x.Id > 0).Select(x => new { x.Id }));
 
-        var act = () => SqlOf(ctx, scope.From("c").SelectWhereMax(t => t["id"].AsInt).Select(t => t["id"].AsInt));
+        var act = () => SqlOf(ctx, scope.From("c").SelectWhereMaxOld(t => t["id"].AsInt).Select(t => t["id"].AsInt));
 
         act.Should().Throw<BuildSqlCommandException>().WithMessage("*common table expressions*");
     }
@@ -5487,7 +5487,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        var act = () => SqlOf(ctx, e.SelectWhereMax(x => x.Int)
+        var act = () => SqlOf(ctx, e.SelectWhereMaxOld(x => x.Int)
             .Select(x => new { R = SqlFunctions.Sql.row_number().Over(partitionBy: () => x.Int) }));
 
         act.Should().Throw<BuildSqlCommandException>().WithMessage("*window functions*");
@@ -5499,7 +5499,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        var act = () => SqlOf(ctx, e.Having(x => x.Id > 0).SelectWhereMax(x => x.Int).Select(x => new { x.Id }));
+        var act = () => SqlOf(ctx, e.Having(x => x.Id > 0).SelectWhereMaxOld(x => x.Int).Select(x => new { x.Id }));
 
         act.Should().Throw<BuildSqlCommandException>().WithMessage("*HAVING*");
     }
@@ -5510,7 +5510,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>(o => o.TableSample(10));
 
-        var act = () => SqlOf(ctx, e.SelectWhereMax(x => x.Int).Select(x => new { x.Id }));
+        var act = () => SqlOf(ctx, e.SelectWhereMaxOld(x => x.Int).Select(x => new { x.Id }));
 
         act.Should().Throw<BuildSqlCommandException>().WithMessage("*TABLESAMPLE*");
     }
@@ -5521,7 +5521,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        var act = () => SqlOf(ctx, e.ForSystemTime(TemporalClause.All()).SelectWhereMax(x => x.Int).Select(x => new { x.Id }));
+        var act = () => SqlOf(ctx, e.ForSystemTime(TemporalClause.All()).SelectWhereMaxOld(x => x.Int).Select(x => new { x.Id }));
 
         act.Should().Throw<BuildSqlCommandException>().WithMessage("*FOR SYSTEM_TIME*");
     }
@@ -5532,7 +5532,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        var act = () => SqlOf(ctx, e.ForUpdate().SelectWhereMax(x => x.Int).Select(x => new { x.Id }));
+        var act = () => SqlOf(ctx, e.ForUpdate().SelectWhereMaxOld(x => x.Int).Select(x => new { x.Id }));
 
         act.Should().Throw<BuildSqlCommandException>().WithMessage("*row locking*");
     }
@@ -5543,7 +5543,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>(o => o.WithTableHint("SeqScan(t1)"));
 
-        var act = () => SqlOf(ctx, e.SelectWhereMax(x => x.Int).Select(x => new { x.Id }));
+        var act = () => SqlOf(ctx, e.SelectWhereMaxOld(x => x.Int).Select(x => new { x.Id }));
 
         act.Should().Throw<BuildSqlCommandException>().WithMessage("*table hints*");
     }
@@ -5554,7 +5554,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>(o => o.WithIndex("idx_id"));
 
-        var act = () => SqlOf(ctx, e.SelectWhereMax(x => x.Int).Select(x => new { x.Id }));
+        var act = () => SqlOf(ctx, e.SelectWhereMaxOld(x => x.Int).Select(x => new { x.Id }));
 
         act.Should().Throw<BuildSqlCommandException>().WithMessage("*index hints*");
     }
@@ -5565,7 +5565,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>().WithTablesInScopeHint("SeqScan(t1)");
 
-        var act = () => SqlOf(ctx, e.SelectWhereMax(x => x.Int).Select(x => new { x.Id }));
+        var act = () => SqlOf(ctx, e.SelectWhereMaxOld(x => x.Int).Select(x => new { x.Id }));
 
         act.Should().Throw<BuildSqlCommandException>().WithMessage("*tables-in-scope hints*");
     }
@@ -5576,7 +5576,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        var act = () => SqlOf(ctx, e.SelectWhereMax(x => x.Int).Select(x => new { x.Id }).Hint("SeqScan(t1)"));
+        var act = () => SqlOf(ctx, e.SelectWhereMaxOld(x => x.Int).Select(x => new { x.Id }).Hint("SeqScan(t1)"));
 
         act.Should().Throw<BuildSqlCommandException>().WithMessage("*query hints*");
     }
@@ -5587,7 +5587,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        var act = () => SqlOf(ctx, e.SelectWhereMax(x => x.Int).Select(x => new { x.Id })
+        var act = () => SqlOf(ctx, e.SelectWhereMaxOld(x => x.Int).Select(x => new { x.Id })
             .UnionAll(ctx.From<IComplexEntity>().Select(x => new { x.Id })));
 
         act.Should().Throw<BuildSqlCommandException>().WithMessage("*set operation*");
@@ -5599,7 +5599,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var derived = ctx.From(ctx.From<ISimpleEntity>().Select(x => new { x.Id }));
 
-        var act = () => SqlOf(ctx, derived.SelectWhereMax(x => x.Id, x => x.Id));
+        var act = () => SqlOf(ctx, derived.SelectWhereMaxOld(x => x.Id, x => x.Id));
 
         act.Should().Throw<BuildSqlCommandException>().WithMessage("*single physical-table source*");
     }

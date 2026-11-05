@@ -128,25 +128,25 @@ internal static class T365Queries
             if (external)
             {
                 return kind == ExtremeKind.Min
-                    ? builder.SelectWhereMinEx(e => new { e.Int, e.String }, ties, groupBy)
-                    : builder.SelectWhereMaxEx(e => new { e.Int, e.String }, ties, groupBy);
+                    ? ExtremeRowExtensions.SelectWhereMin(builder, e => new { e.Int, e.String }, ties, groupBy)
+                    : ExtremeRowExtensions.SelectWhereMax(builder, e => new { e.Int, e.String }, ties, groupBy);
             }
 
             return kind == ExtremeKind.Min
-                ? builder.SelectWhereMin(e => new { e.Int, e.String }, ties, groupBy)
-                : builder.SelectWhereMax(e => new { e.Int, e.String }, ties, groupBy);
+                ? builder.SelectWhereMinOld(e => new { e.Int, e.String }, ties, groupBy)
+                : builder.SelectWhereMaxOld(e => new { e.Int, e.String }, ties, groupBy);
         }
 
         if (external)
         {
             return kind == ExtremeKind.Min
-                ? builder.SelectWhereMinEx(e => e.Int, ties, groupBy)
-                : builder.SelectWhereMaxEx(e => e.Int, ties, groupBy);
+                ? ExtremeRowExtensions.SelectWhereMin(builder, e => e.Int, ties, groupBy)
+                : ExtremeRowExtensions.SelectWhereMax(builder, e => e.Int, ties, groupBy);
         }
 
         return kind == ExtremeKind.Min
-            ? builder.SelectWhereMin(e => e.Int, ties, groupBy)
-            : builder.SelectWhereMax(e => e.Int, ties, groupBy);
+            ? builder.SelectWhereMinOld(e => e.Int, ties, groupBy)
+            : builder.SelectWhereMaxOld(e => e.Int, ties, groupBy);
     }
 }
 

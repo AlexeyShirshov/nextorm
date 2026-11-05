@@ -95,7 +95,7 @@ public sealed class T302S1GlobalScalarAllSqlServerTests : ProviderTestSuite
         CreateFixture();
         try
         {
-            var rows = Source().SelectWhereMax(e => e.Score, ExtremeRowTies.All)
+            var rows = Source().SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All)
                 .OrderBy(e => e.Id).ToList();
 
             rows.Should().HaveCount(3);
@@ -112,7 +112,7 @@ public sealed class T302S1GlobalScalarAllSqlServerTests : ProviderTestSuite
         CreateFixture();
         try
         {
-            var rows = Source().SelectWhereMin(e => e.Score, ExtremeRowTies.All)
+            var rows = Source().SelectWhereMinOld(e => e.Score, ExtremeRowTies.All)
                 .OrderBy(e => e.Id).ToList();
 
             rows.Should().HaveCount(2);
@@ -128,10 +128,10 @@ public sealed class T302S1GlobalScalarAllSqlServerTests : ProviderTestSuite
         CreateFixture();
         try
         {
-            var all = Source().SelectWhereMax(e => e.Score, ExtremeRowTies.All).ToList();
+            var all = Source().SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All).ToList();
             all.Should().HaveCount(3);
 
-            var distinct = Source().SelectWhereMax(e => e.Score, ExtremeRowTies.All).Distinct().ToList();
+            var distinct = Source().SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All).Distinct().ToList();
             distinct.Should().HaveCount(2);
             distinct.Should().OnlyContain(r => r.Score == 9);
         }
@@ -144,7 +144,7 @@ public sealed class T302S1GlobalScalarAllSqlServerTests : ProviderTestSuite
         CreateFixture();
         try
         {
-            var rows = Source().SelectWhereMax(e => e.Score, ExtremeRowTies.All).ToList();
+            var rows = Source().SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All).ToList();
             rows.Should().NotBeEmpty();
             rows.Should().OnlyContain(r => r.Score.HasValue);
         }
@@ -158,7 +158,7 @@ public sealed class T302S1GlobalScalarAllSqlServerTests : ProviderTestSuite
         try
         {
             var rows = Source().Where(e => e.Score == null)
-                .SelectWhereMax(e => e.Score, ExtremeRowTies.All).ToList();
+                .SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All).ToList();
             rows.Should().BeEmpty();
         }
         finally { DropFixture(); }
@@ -171,7 +171,7 @@ public sealed class T302S1GlobalScalarAllSqlServerTests : ProviderTestSuite
         try
         {
             var rows = Source().Where(e => e.Id == -1)
-                .SelectWhereMax(e => e.Score, ExtremeRowTies.All).ToList();
+                .SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All).ToList();
             rows.Should().BeEmpty();
         }
         finally { DropFixture(); }
@@ -184,7 +184,7 @@ public sealed class T302S1GlobalScalarAllSqlServerTests : ProviderTestSuite
         try
         {
             var rows = Source().Where(e => e.Score < 9)
-                .SelectWhereMax(e => e.Score, ExtremeRowTies.All)
+                .SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All)
                 .OrderBy(e => e.Id).ToList();
 
             rows.Should().HaveCount(2);
@@ -200,23 +200,23 @@ public sealed class T302S1GlobalScalarAllSqlServerTests : ProviderTestSuite
         CreateFixture();
         try
         {
-            var entities = Source().SelectWhereMax(e => e.Score, ExtremeRowTies.All)
+            var entities = Source().SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All)
                 .OrderBy(e => e.Id).ToList();
             entities.Should().HaveCount(3);
 
-            var dtos = Source().SelectWhereMax(e => e.Score,
+            var dtos = Source().SelectWhereMaxOld(e => e.Score,
                 e => new Dto { Id = e.Id, Label = e.Label, Payload = e.Payload },
                 ExtremeRowTies.All).OrderBy(e => e.Id).ToList();
             dtos.Should().HaveCount(3);
             dtos[0].Label.Should().Be("nine-a");
 
-            var anon = Source().SelectWhereMax(e => e.Score,
+            var anon = Source().SelectWhereMaxOld(e => e.Score,
                 e => new { e.Id, e.Label, e.Payload },
                 ExtremeRowTies.All).OrderBy(e => e.Id).ToList();
             anon.Should().HaveCount(3);
             anon[0].Label.Should().Be("nine-a");
 
-            var scalars = Source().SelectWhereMax(e => e.Score,
+            var scalars = Source().SelectWhereMaxOld(e => e.Score,
                 e => e.Score, ExtremeRowTies.All).ToList();
             scalars.Should().HaveCount(3);
             scalars.Should().OnlyContain(v => v == 9);
@@ -233,7 +233,7 @@ public sealed class T302S1GlobalScalarAllSqlServerTests : ProviderTestSuite
             // The outer ORDER BY column (Id) is non-null and unique, so the ordered winner sequence is
             // deterministic on every provider; the projected NULL payload must survive the join-back on
             // its own row instead of forcing an assumption about NULLS FIRST/LAST.
-            var rows = Source().SelectWhereMax(e => e.Score, ExtremeRowTies.All)
+            var rows = Source().SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All)
                 .OrderBy(e => e.Id).ToList();
 
             rows.Should().HaveCount(3);
@@ -248,14 +248,14 @@ public sealed class T302S1GlobalScalarAllSqlServerTests : ProviderTestSuite
             rows.Single(r => r.Id == 4).Payload.Should().Be(91);
 
             // Descending on the same unambiguous column must reverse the exact sequence.
-            var desc = Source().SelectWhereMax(e => e.Score, ExtremeRowTies.All)
+            var desc = Source().SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All)
                 .OrderByDescending(e => e.Id).ToList();
             desc.Select(r => r.Id).Should().ContainInOrder(8, 4, 3);
             desc.Select(r => r.Payload).Should().ContainInOrder(new int?[] { null, 91, 90 });
             desc.Single(r => r.Id == 8).Payload.Should().BeNull();
 
             // A second outer ORDER BY column orders the same winners without touching payloads.
-            var labelDesc = Source().SelectWhereMax(e => e.Score, ExtremeRowTies.All)
+            var labelDesc = Source().SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All)
                 .OrderByDescending(e => e.Label).ToList();
             labelDesc.Select(r => r.Label).Should().ContainInOrder("nine-c", "nine-b", "nine-a");
         }

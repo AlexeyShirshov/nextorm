@@ -401,18 +401,18 @@ public sealed class PreparerBatteryBranchCoverage3Tests : ProviderTestSuite
         Context.From<Pa3Main>().OrderBy(x => x.Id).Offset(100).Limit(2).Select(x => x.Id).ToList().Should().BeEmpty();
 
         // Extrema with and without a predicate.
-        var globalMax = Context.From<Pa3Main>().SelectWhereMax(x => x.Qty).ToList();
+        var globalMax = Context.From<Pa3Main>().SelectWhereMaxOld(x => x.Qty).ToList();
         globalMax.Should().ContainSingle();
         globalMax[0].Id.Should().Be(3);
 
-        var activeMin = Context.From<Pa3Main>().Where(x => x.Active).SelectWhereMin(x => x.Qty).ToList();
+        var activeMin = Context.From<Pa3Main>().Where(x => x.Active).SelectWhereMinOld(x => x.Qty).ToList();
         activeMin.Should().ContainSingle();
         activeMin[0].Id.Should().Be(1);
         activeMin[0].Qty.Should().Be(2);
 
         var taggedMax = Context.From<Pa3Main>()
             .Where(x => x.Tag == 10)
-            .SelectWhereMax(x => x.Price, x => new { x.Id, x.Price })
+            .SelectWhereMaxOld(x => x.Price, x => new { x.Id, x.Price })
             .ToList();
         taggedMax.Should().ContainSingle();
         taggedMax[0].Id.Should().Be(3, "of the tag-10 rows (1 and 3) the higher price is row 3");

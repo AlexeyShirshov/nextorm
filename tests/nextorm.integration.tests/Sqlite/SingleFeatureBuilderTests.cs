@@ -96,10 +96,10 @@ public sealed class SingleFeatureBuilderTests : ProviderTestSuite
     [Fact]
     public void ExtremeRowQueries_ShouldExecute()
     {
-        var max = _sut.ComplexEntity.SelectWhereMax(x => x.Int, x => x.Id).ToList().First();
+        var max = _sut.ComplexEntity.SelectWhereMaxOld(x => x.Int, x => x.Id).ToList().First();
         max.Should().BeGreaterThan(0);
 
-        var min = _sut.ComplexEntity.SelectWhereMin(x => x.Int, x => x.Id).ToList().First();
+        var min = _sut.ComplexEntity.SelectWhereMinOld(x => x.Int, x => x.Id).ToList().First();
         min.Should().BeGreaterThan(0);
     }
 

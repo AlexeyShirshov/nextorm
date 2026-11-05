@@ -84,8 +84,8 @@ INSERT INTO FloatEntity VALUES
     {
         var (conn, ctx) = CreateContext();
         using var connScope = conn; using var ctxScope = ctx;
-        var built = ctx.From<SemEntity>().SelectWhereMin(x => x.Score, ExtremeRowTies.One).ToList();
-        var ext = ctx.From<SemEntity>().SelectWhereMinEx(x => x.Score, ExtremeRowTies.One).ToList();
+        var built = ctx.From<SemEntity>().SelectWhereMinOld(x => x.Score, ExtremeRowTies.One).ToList();
+        var ext = ExtremeRowExtensions.SelectWhereMin(ctx.From<SemEntity>(), x => x.Score, ExtremeRowTies.One).ToList();
         AssertSameIds(built, ext, x => x.Id);
     }
 
@@ -94,8 +94,8 @@ INSERT INTO FloatEntity VALUES
     {
         var (conn, ctx) = CreateContext();
         using var connScope = conn; using var ctxScope = ctx;
-        var built = ctx.From<SemEntity>().SelectWhereMin(x => x.Score, ExtremeRowTies.All).ToList();
-        var ext = ctx.From<SemEntity>().SelectWhereMinEx(x => x.Score, ExtremeRowTies.All).ToList();
+        var built = ctx.From<SemEntity>().SelectWhereMinOld(x => x.Score, ExtremeRowTies.All).ToList();
+        var ext = ExtremeRowExtensions.SelectWhereMin(ctx.From<SemEntity>(), x => x.Score, ExtremeRowTies.All).ToList();
         Ids(ext, x => x.Id).Should().Equal(Ids(built, x => x.Id));
     }
 
@@ -104,8 +104,8 @@ INSERT INTO FloatEntity VALUES
     {
         var (conn, ctx) = CreateContext();
         using var connScope = conn; using var ctxScope = ctx;
-        var built = ctx.From<SemEntity>().SelectWhereMax(x => x.Score, ExtremeRowTies.One).ToList();
-        var ext = ctx.From<SemEntity>().SelectWhereMaxEx(x => x.Score, ExtremeRowTies.One).ToList();
+        var built = ctx.From<SemEntity>().SelectWhereMaxOld(x => x.Score, ExtremeRowTies.One).ToList();
+        var ext = ExtremeRowExtensions.SelectWhereMax(ctx.From<SemEntity>(), x => x.Score, ExtremeRowTies.One).ToList();
         AssertSameIds(built, ext, x => x.Id);
     }
 
@@ -114,8 +114,8 @@ INSERT INTO FloatEntity VALUES
     {
         var (conn, ctx) = CreateContext();
         using var connScope = conn; using var ctxScope = ctx;
-        var built = ctx.From<SemEntity>().SelectWhereMax(x => x.Score, ExtremeRowTies.All).ToList();
-        var ext = ctx.From<SemEntity>().SelectWhereMaxEx(x => x.Score, ExtremeRowTies.All).ToList();
+        var built = ctx.From<SemEntity>().SelectWhereMaxOld(x => x.Score, ExtremeRowTies.All).ToList();
+        var ext = ExtremeRowExtensions.SelectWhereMax(ctx.From<SemEntity>(), x => x.Score, ExtremeRowTies.All).ToList();
         Ids(ext, x => x.Id).Should().Equal(Ids(built, x => x.Id));
     }
 
@@ -125,10 +125,10 @@ INSERT INTO FloatEntity VALUES
     {
         var (conn, ctx) = CreateContext();
         using var connScope = conn; using var ctxScope = ctx;
-        AssertSameIds(ctx.From<SemEntity>().SelectWhereMin(x => x.Name, ExtremeRowTies.One).ToList(),
-            ctx.From<SemEntity>().SelectWhereMinEx(x => x.Name, ExtremeRowTies.One).ToList(), x => x.Id);
-        AssertSameIds(ctx.From<SemEntity>().SelectWhereMax(x => x.Name, ExtremeRowTies.One).ToList(),
-            ctx.From<SemEntity>().SelectWhereMaxEx(x => x.Name, ExtremeRowTies.One).ToList(), x => x.Id);
+        AssertSameIds(ctx.From<SemEntity>().SelectWhereMinOld(x => x.Name, ExtremeRowTies.One).ToList(),
+            ctx.From<SemEntity>().SelectWhereMin(x => x.Name, ExtremeRowTies.One).ToList(), x => x.Id);
+        AssertSameIds(ctx.From<SemEntity>().SelectWhereMaxOld(x => x.Name, ExtremeRowTies.One).ToList(),
+            ctx.From<SemEntity>().SelectWhereMax(x => x.Name, ExtremeRowTies.One).ToList(), x => x.Id);
     }
 
     [Fact]
@@ -136,10 +136,10 @@ INSERT INTO FloatEntity VALUES
     {
         var (conn, ctx) = CreateContext();
         using var connScope = conn; using var ctxScope = ctx;
-        AssertSameIds(ctx.From<SemEntity>().SelectWhereMin(x => x.CreatedAt, ExtremeRowTies.One).ToList(),
-            ctx.From<SemEntity>().SelectWhereMinEx(x => x.CreatedAt, ExtremeRowTies.One).ToList(), x => x.Id);
-        AssertSameIds(ctx.From<SemEntity>().SelectWhereMax(x => x.CreatedAt, ExtremeRowTies.One).ToList(),
-            ctx.From<SemEntity>().SelectWhereMaxEx(x => x.CreatedAt, ExtremeRowTies.One).ToList(), x => x.Id);
+        AssertSameIds(ctx.From<SemEntity>().SelectWhereMinOld(x => x.CreatedAt, ExtremeRowTies.One).ToList(),
+            ExtremeRowExtensions.SelectWhereMin(ctx.From<SemEntity>(), x => x.CreatedAt, ExtremeRowTies.One).ToList(), x => x.Id);
+        AssertSameIds(ctx.From<SemEntity>().SelectWhereMaxOld(x => x.CreatedAt, ExtremeRowTies.One).ToList(),
+            ExtremeRowExtensions.SelectWhereMax(ctx.From<SemEntity>(), x => x.CreatedAt, ExtremeRowTies.One).ToList(), x => x.Id);
     }
 
     [Fact]
@@ -147,10 +147,10 @@ INSERT INTO FloatEntity VALUES
     {
         var (conn, ctx) = CreateContext();
         using var connScope = conn; using var ctxScope = ctx;
-        AssertSameIds(ctx.From<SemEntity>().SelectWhereMin(x => x.Score, ExtremeRowTies.One).ToList(),
-            ctx.From<SemEntity>().SelectWhereMinEx(x => x.Score, ExtremeRowTies.One).ToList(), x => x.Id);
-        AssertSameIds(ctx.From<SemEntity>().SelectWhereMax(x => x.Score, ExtremeRowTies.One).ToList(),
-            ctx.From<SemEntity>().SelectWhereMaxEx(x => x.Score, ExtremeRowTies.One).ToList(), x => x.Id);
+        AssertSameIds(ctx.From<SemEntity>().SelectWhereMinOld(x => x.Score, ExtremeRowTies.One).ToList(),
+            ExtremeRowExtensions.SelectWhereMin(ctx.From<SemEntity>(), x => x.Score, ExtremeRowTies.One).ToList(), x => x.Id);
+        AssertSameIds(ctx.From<SemEntity>().SelectWhereMaxOld(x => x.Score, ExtremeRowTies.One).ToList(),
+            ExtremeRowExtensions.SelectWhereMax(ctx.From<SemEntity>(), x => x.Score, ExtremeRowTies.One).ToList(), x => x.Id);
     }
 
     [Fact]
@@ -158,10 +158,10 @@ INSERT INTO FloatEntity VALUES
     {
         var (conn, ctx) = CreateContext();
         using var connScope = conn; using var ctxScope = ctx;
-        AssertSameIds(ctx.From<SemEntity>().SelectWhereMin(x => new { x.Score, x.Name }, ExtremeRowTies.One).ToList(),
-            ctx.From<SemEntity>().SelectWhereMinEx(x => new { x.Score, x.Name }, ExtremeRowTies.One).ToList(), x => x.Id);
-        AssertSameIds(ctx.From<SemEntity>().SelectWhereMax(x => new { x.Score, x.Name }, ExtremeRowTies.One).ToList(),
-            ctx.From<SemEntity>().SelectWhereMaxEx(x => new { x.Score, x.Name }, ExtremeRowTies.One).ToList(), x => x.Id);
+        AssertSameIds(ctx.From<SemEntity>().SelectWhereMinOld(x => new { x.Score, x.Name }, ExtremeRowTies.One).ToList(),
+            ExtremeRowExtensions.SelectWhereMin(ctx.From<SemEntity>(), x => new { x.Score, x.Name }, ExtremeRowTies.One).ToList(), x => x.Id);
+        AssertSameIds(ctx.From<SemEntity>().SelectWhereMaxOld(x => new { x.Score, x.Name }, ExtremeRowTies.One).ToList(),
+            ExtremeRowExtensions.SelectWhereMax(ctx.From<SemEntity>(), x => new { x.Score, x.Name }, ExtremeRowTies.One).ToList(), x => x.Id);
     }
 
     [Fact]
@@ -169,10 +169,10 @@ INSERT INTO FloatEntity VALUES
     {
         var (conn, ctx) = CreateContext();
         using var connScope = conn; using var ctxScope = ctx;
-        AssertSameIds(ctx.From<SemEntity>().SelectWhereMin(x => new ValueTuple<int?, string?>(x.Score, x.Name), ExtremeRowTies.One).ToList(),
-            ctx.From<SemEntity>().SelectWhereMinEx(x => new ValueTuple<int?, string?>(x.Score, x.Name), ExtremeRowTies.One).ToList(), x => x.Id);
-        AssertSameIds(ctx.From<SemEntity>().SelectWhereMax(x => new ValueTuple<int?, string?>(x.Score, x.Name), ExtremeRowTies.One).ToList(),
-            ctx.From<SemEntity>().SelectWhereMaxEx(x => new ValueTuple<int?, string?>(x.Score, x.Name), ExtremeRowTies.One).ToList(), x => x.Id);
+        AssertSameIds(ctx.From<SemEntity>().SelectWhereMinOld(x => new ValueTuple<int?, string?>(x.Score, x.Name), ExtremeRowTies.One).ToList(),
+            ctx.From<SemEntity>().SelectWhereMin(x => new ValueTuple<int?, string?>(x.Score, x.Name), ExtremeRowTies.One).ToList(), x => x.Id);
+        AssertSameIds(ctx.From<SemEntity>().SelectWhereMaxOld(x => new ValueTuple<int?, string?>(x.Score, x.Name), ExtremeRowTies.One).ToList(),
+            ctx.From<SemEntity>().SelectWhereMax(x => new ValueTuple<int?, string?>(x.Score, x.Name), ExtremeRowTies.One).ToList(), x => x.Id);
     }
 
     // 3. Grouping
@@ -181,10 +181,10 @@ INSERT INTO FloatEntity VALUES
     {
         var (conn, ctx) = CreateContext();
         using var connScope = conn; using var ctxScope = ctx;
-        AssertSameIds(ctx.From<SemEntity>().SelectWhereMin(x => x.Score, ExtremeRowTies.One, x => x.GroupKey).ToList(),
-            ctx.From<SemEntity>().SelectWhereMinEx(x => x.Score, ExtremeRowTies.One, x => x.GroupKey).ToList(), x => x.Id);
-        AssertSameIds(ctx.From<SemEntity>().SelectWhereMax(x => x.Score, ExtremeRowTies.All, x => x.GroupKey).ToList(),
-            ctx.From<SemEntity>().SelectWhereMaxEx(x => x.Score, ExtremeRowTies.All, x => x.GroupKey).ToList(), x => x.Id);
+        AssertSameIds(ctx.From<SemEntity>().SelectWhereMinOld(x => x.Score, ExtremeRowTies.One, x => x.GroupKey).ToList(),
+            ExtremeRowExtensions.SelectWhereMin(ctx.From<SemEntity>(), x => x.Score, ExtremeRowTies.One, x => x.GroupKey).ToList(), x => x.Id);
+        AssertSameIds(ctx.From<SemEntity>().SelectWhereMaxOld(x => x.Score, ExtremeRowTies.All, x => x.GroupKey).ToList(),
+            ExtremeRowExtensions.SelectWhereMax(ctx.From<SemEntity>(), x => x.Score, ExtremeRowTies.All, x => x.GroupKey).ToList(), x => x.Id);
     }
 
     [Fact]
@@ -192,10 +192,10 @@ INSERT INTO FloatEntity VALUES
     {
         var (conn, ctx) = CreateContext();
         using var connScope = conn; using var ctxScope = ctx;
-        AssertSameIds(ctx.From<SemEntity>().SelectWhereMin(x => x.Score, ExtremeRowTies.One, x => new { x.GroupKey, x.GroupKey2 }).ToList(),
-            ctx.From<SemEntity>().SelectWhereMinEx(x => x.Score, ExtremeRowTies.One, x => new { x.GroupKey, x.GroupKey2 }).ToList(), x => x.Id);
-        AssertSameIds(ctx.From<SemEntity>().SelectWhereMax(x => x.Score, ExtremeRowTies.All, x => new { x.GroupKey, x.GroupKey2 }).ToList(),
-            ctx.From<SemEntity>().SelectWhereMaxEx(x => x.Score, ExtremeRowTies.All, x => new { x.GroupKey, x.GroupKey2 }).ToList(), x => x.Id);
+        AssertSameIds(ctx.From<SemEntity>().SelectWhereMinOld(x => x.Score, ExtremeRowTies.One, x => new { x.GroupKey, x.GroupKey2 }).ToList(),
+            ExtremeRowExtensions.SelectWhereMin(ctx.From<SemEntity>(), x => x.Score, ExtremeRowTies.One, x => new { x.GroupKey, x.GroupKey2 }).ToList(), x => x.Id);
+        AssertSameIds(ctx.From<SemEntity>().SelectWhereMaxOld(x => x.Score, ExtremeRowTies.All, x => new { x.GroupKey, x.GroupKey2 }).ToList(),
+            ExtremeRowExtensions.SelectWhereMax(ctx.From<SemEntity>(), x => x.Score, ExtremeRowTies.All, x => new { x.GroupKey, x.GroupKey2 }).ToList(), x => x.Id);
     }
 
     // 4. NULL semantics
@@ -204,10 +204,10 @@ INSERT INTO FloatEntity VALUES
     {
         var (conn, ctx) = CreateContext();
         using var connScope = conn; using var ctxScope = ctx;
-        AssertSameIds(ctx.From<SemEntity>().SelectWhereMin(x => x.Score, ExtremeRowTies.All).ToList(),
-            ctx.From<SemEntity>().SelectWhereMinEx(x => x.Score, ExtremeRowTies.All).ToList(), x => x.Id);
-        AssertSameIds(ctx.From<SemEntity>().SelectWhereMax(x => x.Score, ExtremeRowTies.All).ToList(),
-            ctx.From<SemEntity>().SelectWhereMaxEx(x => x.Score, ExtremeRowTies.All).ToList(), x => x.Id);
+        AssertSameIds(ctx.From<SemEntity>().SelectWhereMinOld(x => x.Score, ExtremeRowTies.All).ToList(),
+            ExtremeRowExtensions.SelectWhereMin(ctx.From<SemEntity>(), x => x.Score, ExtremeRowTies.All).ToList(), x => x.Id);
+        AssertSameIds(ctx.From<SemEntity>().SelectWhereMaxOld(x => x.Score, ExtremeRowTies.All).ToList(),
+            ExtremeRowExtensions.SelectWhereMax(ctx.From<SemEntity>(), x => x.Score, ExtremeRowTies.All).ToList(), x => x.Id);
     }
 
     [Fact]
@@ -215,8 +215,8 @@ INSERT INTO FloatEntity VALUES
     {
         var (conn, ctx) = CreateContext();
         using var connScope = conn; using var ctxScope = ctx;
-        AssertSameIds(ctx.From<SemEntity>().SelectWhereMin(x => x.Score, ExtremeRowTies.All, x => x.GroupKey).ToList(),
-            ctx.From<SemEntity>().SelectWhereMinEx(x => x.Score, ExtremeRowTies.All, x => x.GroupKey).ToList(), x => x.Id);
+        AssertSameIds(ctx.From<SemEntity>().SelectWhereMinOld(x => x.Score, ExtremeRowTies.All, x => x.GroupKey).ToList(),
+            ExtremeRowExtensions.SelectWhereMin(ctx.From<SemEntity>(), x => x.Score, ExtremeRowTies.All, x => x.GroupKey).ToList(), x => x.Id);
     }
 
     // 5. Input filter
@@ -226,8 +226,8 @@ INSERT INTO FloatEntity VALUES
         var (conn, ctx) = CreateContext();
         using var connScope = conn; using var ctxScope = ctx;
         int threshold = 15;
-        var built = ctx.From<SemEntity>().Where(x => x.Score > threshold).SelectWhereMin(x => x.Score, ExtremeRowTies.One).ToList();
-        var ext = ctx.From<SemEntity>().Where(x => x.Score > threshold).SelectWhereMinEx(x => x.Score, ExtremeRowTies.One).ToList();
+        var built = ctx.From<SemEntity>().Where(x => x.Score > threshold).SelectWhereMinOld(x => x.Score, ExtremeRowTies.One).ToList();
+        var ext = ExtremeRowExtensions.SelectWhereMin(ctx.From<SemEntity>().Where(x => x.Score > threshold), x => x.Score, ExtremeRowTies.One).ToList();
         AssertSameIds(built, ext, x => x.Id);
         ext.Should().ContainSingle();
         ext[0].Score.Should().Be(20);
@@ -238,8 +238,8 @@ INSERT INTO FloatEntity VALUES
     {
         var (conn, ctx) = CreateContext();
         using var connScope = conn; using var ctxScope = ctx;
-        var built = ctx.From<SemEntity>().Where(x => x.Score > 15).SelectWhereMax(x => x.Score, ExtremeRowTies.One).ToList();
-        var ext = ctx.From<SemEntity>().Where(x => x.Score > 15).SelectWhereMaxEx(x => x.Score, ExtremeRowTies.One).ToList();
+        var built = ctx.From<SemEntity>().Where(x => x.Score > 15).SelectWhereMaxOld(x => x.Score, ExtremeRowTies.One).ToList();
+        var ext = ExtremeRowExtensions.SelectWhereMax(ctx.From<SemEntity>().Where(x => x.Score > 15), x => x.Score, ExtremeRowTies.One).ToList();
         AssertSameIds(built, ext, x => x.Id);
         ext.Should().ContainSingle();
         ext[0].Score.Should().Be(30);
@@ -255,10 +255,10 @@ INSERT INTO FloatEntity VALUES
         ctx.PurgeQueryCache();
 
         int threshold = 15;
-        var built = ctx.From<SemEntity>().Where(x => x.Score > threshold).SelectWhereMin(x => x.Score, ExtremeRowTies.All).ToList();
-        var extCmd = (QueryCommand<SemEntity>)ctx.From<SemEntity>()
+        var built = ctx.From<SemEntity>().Where(x => x.Score > threshold).SelectWhereMinOld(x => x.Score, ExtremeRowTies.All).ToList();
+        var extCmd = (QueryCommand<SemEntity>)ExtremeRowExtensions.SelectWhereMin(ctx.From<SemEntity>()
             .Where(x => x.Score > threshold)
-            .SelectWhereMinEx(x => x.Score, ExtremeRowTies.All);
+, x => x.Score, ExtremeRowTies.All);
         var prepared = (DbPreparedQueryCommand<SemEntity>)ctx.GetPreparedQueryCommand(extCmd, false, true, CancellationToken.None);
         var sql = prepared.SqlStmt!.Replace("\r\n", "\n");
         var ext = ctx.ToList(prepared);
@@ -275,10 +275,10 @@ INSERT INTO FloatEntity VALUES
         using var connScope = conn; using var ctxScope = ctx;
         ctx.PurgeQueryCache();
 
-        var built = ctx.From<SemEntity>().Where(x => x.Score > 15).SelectWhereMax(x => x.Score, ExtremeRowTies.All).ToList();
-        var extCmd = (QueryCommand<SemEntity>)ctx.From<SemEntity>()
+        var built = ctx.From<SemEntity>().Where(x => x.Score > 15).SelectWhereMaxOld(x => x.Score, ExtremeRowTies.All).ToList();
+        var extCmd = (QueryCommand<SemEntity>)ExtremeRowExtensions.SelectWhereMax(ctx.From<SemEntity>()
             .Where(x => x.Score > 15)
-            .SelectWhereMaxEx(x => x.Score, ExtremeRowTies.All);
+, x => x.Score, ExtremeRowTies.All);
         var prepared = (DbPreparedQueryCommand<SemEntity>)ctx.GetPreparedQueryCommand(extCmd, false, true, CancellationToken.None);
         var sql = prepared.SqlStmt!.Replace("\r\n", "\n");
         var ext = ctx.ToList(prepared);
@@ -296,10 +296,10 @@ INSERT INTO FloatEntity VALUES
         ctx.PurgeQueryCache();
 
         int threshold = 15;
-        var built = ctx.From<SemEntity>().Where(x => x.Score > threshold).SelectWhereMin(x => x.Score, ExtremeRowTies.All, x => x.GroupKey2).ToList();
-        var extCmd = (QueryCommand<SemEntity>)ctx.From<SemEntity>()
+        var built = ctx.From<SemEntity>().Where(x => x.Score > threshold).SelectWhereMinOld(x => x.Score, ExtremeRowTies.All, x => x.GroupKey2).ToList();
+        var extCmd = (QueryCommand<SemEntity>)ExtremeRowExtensions.SelectWhereMin(ctx.From<SemEntity>()
             .Where(x => x.Score > threshold)
-            .SelectWhereMinEx(x => x.Score, ExtremeRowTies.All, x => x.GroupKey2);
+, x => x.Score, ExtremeRowTies.All, x => x.GroupKey2);
         var prepared = (DbPreparedQueryCommand<SemEntity>)ctx.GetPreparedQueryCommand(extCmd, false, true, CancellationToken.None);
         var sql = prepared.SqlStmt!.Replace("\r\n", "\n");
         var ext = ctx.ToList(prepared);
@@ -319,11 +319,11 @@ INSERT INTO FloatEntity VALUES
         int threshold = 15;
         var built = ctx.From<SemEntity>()
             .Where(x => x.Score > threshold)
-            .SelectWhereMin(x => new { x.Score, x.Name }, ExtremeRowTies.All)
+            .SelectWhereMinOld(x => new { x.Score, x.Name }, ExtremeRowTies.All)
             .ToList();
-        var extCmd = (QueryCommand<SemEntity>)ctx.From<SemEntity>()
+        var extCmd = (QueryCommand<SemEntity>)ExtremeRowExtensions.SelectWhereMin(ctx.From<SemEntity>()
             .Where(x => x.Score > threshold)
-            .SelectWhereMinEx(x => new { x.Score, x.Name }, ExtremeRowTies.All);
+, x => new { x.Score, x.Name }, ExtremeRowTies.All);
         var prepared = (DbPreparedQueryCommand<SemEntity>)ctx.GetPreparedQueryCommand(extCmd, false, true, CancellationToken.None);
         var sql = prepared.SqlStmt!.Replace("\r\n", "\n");
         var ext = ctx.ToList(prepared);
@@ -351,11 +351,11 @@ INSERT INTO FloatEntity VALUES
         // filtered source once even for a composite value key.
         var built = ctx.From<SemEntity>()
             .Where(x => x.Score > threshold)
-            .SelectWhereMin(x => new { x.Score, x.Name }, ExtremeRowTies.All, x => x.GroupKey)
+            .SelectWhereMinOld(x => new { x.Score, x.Name }, ExtremeRowTies.All, x => x.GroupKey)
             .ToList();
-        var extCmd = (QueryCommand<SemEntity>)ctx.From<SemEntity>()
+        var extCmd = (QueryCommand<SemEntity>)ExtremeRowExtensions.SelectWhereMin(ctx.From<SemEntity>()
             .Where(x => x.Score > threshold)
-            .SelectWhereMinEx(x => new { x.Score, x.Name }, ExtremeRowTies.All, x => x.GroupKey);
+, x => new { x.Score, x.Name }, ExtremeRowTies.All, x => x.GroupKey);
         var prepared = (DbPreparedQueryCommand<SemEntity>)ctx.GetPreparedQueryCommand(extCmd, false, true, CancellationToken.None);
         var sql = prepared.SqlStmt!.Replace("\r\n", "\n");
         var ext = ctx.ToList(prepared);
@@ -375,8 +375,8 @@ INSERT INTO FloatEntity VALUES
     {
         var (conn, ctx) = CreateContext();
         using var connScope = conn; using var ctxScope = ctx;
-        var built = ctx.From<SemEntity>().SelectWhereMin(x => x.Score, x => x.Name, ExtremeRowTies.One).ToList();
-        var ext = ctx.From<SemEntity>().SelectWhereMinEx(x => x.Score, x => x.Name, ExtremeRowTies.One).ToList();
+        var built = ctx.From<SemEntity>().SelectWhereMinOld(x => x.Score, x => x.Name, ExtremeRowTies.One).ToList();
+        var ext = ctx.From<SemEntity>().SelectWhereMinOld(x => x.Score, x => x.Name, ExtremeRowTies.One).ToList();
         ext.Should().Equal(built);
     }
 
@@ -385,8 +385,8 @@ INSERT INTO FloatEntity VALUES
     {
         var (conn, ctx) = CreateContext();
         using var connScope = conn; using var ctxScope = ctx;
-        var built = ctx.From<SemEntity>().SelectWhereMin(x => x.Score, x => new Dto { Id = x.Id, Name = x.Name }, ExtremeRowTies.One).ToList();
-        var ext = ctx.From<SemEntity>().SelectWhereMinEx(x => x.Score, x => new Dto { Id = x.Id, Name = x.Name }, ExtremeRowTies.One).ToList();
+        var built = ctx.From<SemEntity>().SelectWhereMinOld(x => x.Score, x => new Dto { Id = x.Id, Name = x.Name }, ExtremeRowTies.One).ToList();
+        var ext = ExtremeRowExtensions.SelectWhereMin(ctx.From<SemEntity>(), x => x.Score, x => new Dto { Id = x.Id, Name = x.Name }, ExtremeRowTies.One).ToList();
         ext.Select(x => (x.Id, x.Name)).Should().Equal(built.Select(x => (x.Id, x.Name)));
     }
 
@@ -395,8 +395,8 @@ INSERT INTO FloatEntity VALUES
     {
         var (conn, ctx) = CreateContext();
         using var connScope = conn; using var ctxScope = ctx;
-        var built = ctx.From<SemEntity>().SelectWhereMin(x => x.Score, ExtremeRowTies.One).Select(x => new { x.Id, x.Name }).ToList();
-        var ext = ctx.From<SemEntity>().SelectWhereMinEx(x => x.Score, ExtremeRowTies.One).Select(x => new { x.Id, x.Name }).ToList();
+        var built = ctx.From<SemEntity>().SelectWhereMinOld(x => x.Score, ExtremeRowTies.One).Select(x => new { x.Id, x.Name }).ToList();
+        var ext = ExtremeRowExtensions.SelectWhereMin(ctx.From<SemEntity>(), x => x.Score, ExtremeRowTies.One).Select(x => new { x.Id, x.Name }).ToList();
         ext.Select(x => (x.Id, x.Name)).Should().Equal(built.Select(x => (x.Id, x.Name)));
     }
 
@@ -406,8 +406,8 @@ INSERT INTO FloatEntity VALUES
     {
         var (conn, ctx) = CreateContext();
         using var connScope = conn; using var ctxScope = ctx;
-        var built = ctx.From<SemEntity>().SelectWhereMin(x => x.Score, ExtremeRowTies.All).OrderBy(x => x.Score).ThenBy(x => x.Name).ToList();
-        var ext = ctx.From<SemEntity>().SelectWhereMinEx(x => x.Score, ExtremeRowTies.All).OrderBy(x => x.Score).ThenBy(x => x.Name).ToList();
+        var built = ctx.From<SemEntity>().SelectWhereMinOld(x => x.Score, ExtremeRowTies.All).OrderBy(x => x.Score).ThenBy(x => x.Name).ToList();
+        var ext = ctx.From<SemEntity>().SelectWhereMinOld(x => x.Score, ExtremeRowTies.All).OrderBy(x => x.Score).ThenBy(x => x.Name).ToList();
         ext.Select(x => x.Id).Should().Equal(built.Select(x => x.Id));
     }
 
@@ -416,8 +416,8 @@ INSERT INTO FloatEntity VALUES
     {
         var (conn, ctx) = CreateContext();
         using var connScope = conn; using var ctxScope = ctx;
-        Action built = () => _ = ctx.From<SemEntity>().SelectWhereMin(x => x.Score, ExtremeRowTies.One).Limit(1).ToList();
-        Action ext = () => _ = ctx.From<SemEntity>().SelectWhereMinEx(x => x.Score, ExtremeRowTies.One).Limit(1).ToList();
+        Action built = () => _ = ctx.From<SemEntity>().SelectWhereMinOld(x => x.Score, ExtremeRowTies.One).Limit(1).ToList();
+        Action ext = () => _ = ctx.From<SemEntity>().SelectWhereMinOld(x => x.Score, ExtremeRowTies.One).Limit(1).ToList();
         var b = Record.Exception(built);
         var e = Record.Exception(ext);
         b.Should().NotBeNull();
@@ -432,12 +432,12 @@ INSERT INTO FloatEntity VALUES
         var (conn, ctx) = CreateContext();
         using var connScope = conn; using var ctxScope = ctx;
 
-        Action builtGroup = () => _ = ctx.From<SemEntity>().GroupBy(x => x.GroupKey).SelectWhereMin(x => x.Score).ToList();
-        Action extGroup = () => _ = ctx.From<SemEntity>().GroupBy(x => x.GroupKey).SelectWhereMinEx(x => x.Score).ToList();
+        Action builtGroup = () => _ = ctx.From<SemEntity>().GroupBy(x => x.GroupKey).SelectWhereMinOld(x => x.Score).ToList();
+        Action extGroup = () => _ = ExtremeRowExtensions.SelectWhereMin(ctx.From<SemEntity>().GroupBy(x => x.GroupKey), x => x.Score).ToList();
         Record.Exception(builtGroup)!.GetType().Should().Be(Record.Exception(extGroup)!.GetType());
 
-        Action builtHaving = () => _ = ctx.From<SemEntity>().GroupBy(x => x.GroupKey).Having(x => x.Score > 1).SelectWhereMin(x => x.Score).ToList();
-        Action extHaving = () => _ = ctx.From<SemEntity>().GroupBy(x => x.GroupKey).Having(x => x.Score > 1).SelectWhereMinEx(x => x.Score).ToList();
+        Action builtHaving = () => _ = ctx.From<SemEntity>().GroupBy(x => x.GroupKey).Having(x => x.Score > 1).SelectWhereMinOld(x => x.Score).ToList();
+        Action extHaving = () => _ = ExtremeRowExtensions.SelectWhereMin(ctx.From<SemEntity>().GroupBy(x => x.GroupKey).Having(x => x.Score > 1), x => x.Score).ToList();
         Record.Exception(builtHaving)!.GetType().Should().Be(Record.Exception(extHaving)!.GetType());
     }
 
@@ -445,7 +445,7 @@ INSERT INTO FloatEntity VALUES
     public void S4_8_InMemory_Rejected()
     {
         using var ctx = new InMemoryDataContext();
-        Action act = () => _ = ctx.From<SemEntity>().SelectWhereMinEx(x => x.Score).ToList();
+        Action act = () => _ = ExtremeRowExtensions.SelectWhereMin(ctx.From<SemEntity>(), x => x.Score).ToList();
         act.Should().Throw<NotSupportedException>();
     }
 
@@ -457,27 +457,27 @@ INSERT INTO FloatEntity VALUES
         using var connScope = conn; using var ctxScope = ctx;
         ctx.PurgeQueryCache();
 
-        var oneMin = SqlOf(ctx, (QueryCommand<SemEntity>)ctx.From<SemEntity>().SelectWhereMinEx(x => x.Score, ExtremeRowTies.One));
+        var oneMin = SqlOf(ctx, (QueryCommand<SemEntity>)ExtremeRowExtensions.SelectWhereMin(ctx.From<SemEntity>(), x => x.Score, ExtremeRowTies.One));
         oneMin.Should().Contain("row_number()");
         oneMin.Should().NotContain(" partition by ");
         oneMin.Should().Contain("= 1");
 
-        var oneMax = SqlOf(ctx, (QueryCommand<SemEntity>)ctx.From<SemEntity>().SelectWhereMaxEx(x => x.Score, ExtremeRowTies.One));
+        var oneMax = SqlOf(ctx, (QueryCommand<SemEntity>)ExtremeRowExtensions.SelectWhereMax(ctx.From<SemEntity>(), x => x.Score, ExtremeRowTies.One));
         oneMax.Should().Contain(" desc");
 
-        var all = SqlOf(ctx, (QueryCommand<SemEntity>)ctx.From<SemEntity>().SelectWhereMinEx(x => x.Score, ExtremeRowTies.All));
+        var all = SqlOf(ctx, (QueryCommand<SemEntity>)ExtremeRowExtensions.SelectWhereMin(ctx.From<SemEntity>(), x => x.Score, ExtremeRowTies.All));
         all.Should().Contain("join");
 
-        var grouped = SqlOf(ctx, (QueryCommand<SemEntity>)ctx.From<SemEntity>().SelectWhereMinEx(x => x.Score, ExtremeRowTies.One, x => x.GroupKey));
+        var grouped = SqlOf(ctx, (QueryCommand<SemEntity>)ExtremeRowExtensions.SelectWhereMin(ctx.From<SemEntity>(), x => x.Score, ExtremeRowTies.One, x => x.GroupKey));
         grouped.Should().Contain("partition by");
 
         // `All` picks the shape by what the expression needs: a nullable group key can only be joined
         // back with the null-safe predicate, which ClickHouse rejects inside JOIN ON, so it uses the
         // rank window; a non-nullable group key keeps the aggregate+join lowering.
-        var groupedNullableAll = SqlOf(ctx, (QueryCommand<SemEntity>)ctx.From<SemEntity>().SelectWhereMinEx(x => x.Score, ExtremeRowTies.All, x => x.GroupKey));
+        var groupedNullableAll = SqlOf(ctx, (QueryCommand<SemEntity>)ExtremeRowExtensions.SelectWhereMin(ctx.From<SemEntity>(), x => x.Score, ExtremeRowTies.All, x => x.GroupKey));
         groupedNullableAll.Should().Contain("rank()").And.NotContain(" join ");
 
-        var groupedNonNullableAll = SqlOf(ctx, (QueryCommand<SemEntity>)ctx.From<SemEntity>().SelectWhereMinEx(x => x.Score, ExtremeRowTies.All, x => x.Id));
+        var groupedNonNullableAll = SqlOf(ctx, (QueryCommand<SemEntity>)ExtremeRowExtensions.SelectWhereMin(ctx.From<SemEntity>(), x => x.Score, ExtremeRowTies.All, x => x.Id));
         groupedNonNullableAll.Should().Contain(" join ").And.NotContain("rank(");
     }
 
@@ -490,10 +490,10 @@ INSERT INTO FloatEntity VALUES
         ctx.PurgeQueryCache();
 
         var legacy = SqlOf(ctx, (QueryCommand<SemEntity>)ctx.From<SemEntity>()
-            .SelectWhereMin(x => new { x.Score, x.Name }, ExtremeRowTies.All, x => x.Id));
+            .SelectWhereMinOld(x => new { x.Score, x.Name }, ExtremeRowTies.All, x => x.Id));
         ctx.PurgeQueryCache();
-        var external = SqlOf(ctx, (QueryCommand<SemEntity>)ctx.From<SemEntity>()
-            .SelectWhereMinEx(x => new { x.Score, x.Name }, ExtremeRowTies.All, x => x.Id));
+        var external = SqlOf(ctx, (QueryCommand<SemEntity>)ExtremeRowExtensions.SelectWhereMin(ctx.From<SemEntity>()
+, x => new { x.Score, x.Name }, ExtremeRowTies.All, x => x.Id));
 
         legacy.Should().Contain(" join ");
         external.Should().Contain(" join ");
@@ -516,14 +516,14 @@ INSERT INTO FloatEntity VALUES
         using var connScope = conn; using var ctxScope = ctx;
         ctx.PurgeQueryCache();
 
-        var all = SqlOf(ctx, (QueryCommand<FloatEntity>)ctx.From<FloatEntity>().SelectWhereMaxEx(x => x.Value, ExtremeRowTies.All));
+        var all = SqlOf(ctx, (QueryCommand<FloatEntity>)ExtremeRowExtensions.SelectWhereMax(ctx.From<FloatEntity>(), x => x.Value, ExtremeRowTies.All));
         all.Should().Contain("rank()").And.NotContain(" join ");
 
-        var groupedAll = SqlOf(ctx, (QueryCommand<FloatEntity>)ctx.From<FloatEntity>().SelectWhereMinEx(x => x.Value, ExtremeRowTies.All, x => x.Id));
+        var groupedAll = SqlOf(ctx, (QueryCommand<FloatEntity>)ExtremeRowExtensions.SelectWhereMin(ctx.From<FloatEntity>(), x => x.Value, ExtremeRowTies.All, x => x.Id));
         groupedAll.Should().Contain("rank()").And.Contain("partition by").And.NotContain(" join ");
 
         // One keeps its single-survivor window, unchanged.
-        var one = SqlOf(ctx, (QueryCommand<FloatEntity>)ctx.From<FloatEntity>().SelectWhereMaxEx(x => x.Value, ExtremeRowTies.One));
+        var one = SqlOf(ctx, (QueryCommand<FloatEntity>)ExtremeRowExtensions.SelectWhereMax(ctx.From<FloatEntity>(), x => x.Value, ExtremeRowTies.One));
         one.Should().Contain("row_number()");
     }
 }

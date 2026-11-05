@@ -25,7 +25,7 @@ internal enum ExtremeKind
 
 /// <summary>
 /// The <c>SelectWhereMax</c>/<c>SelectWhereMin</c> request attached to a query through
-/// <see cref="EntityBuilder{TEntity}.SelectWhereMax{TValue}(Expression{Func{TEntity, TValue}}, ExtremeRowTies, Expression{Func{TEntity, object?}}?)"/>:
+/// <see cref="EntityBuilder{TEntity}.SelectWhereMaxOld{TValue}(Expression{Func{TEntity, TValue}}, ExtremeRowTies, Expression{Func{TEntity, object?}}?)"/>:
 /// keeps the row(s) with the extreme value of <see cref="ValueSelector"/>, optionally per
 /// <see cref="GroupBy"/> group. Carried from the builder to the command and rendered by the dialect;
 /// <see cref="Projection"/> is set by the projection-typed overloads and otherwise <c>null</c>.

@@ -429,7 +429,7 @@ internal static class T287NullOrderingFixture
     /// <summary>Runs the extreme-row query (every tied survivor) and returns the outer ordering key.</summary>
     private static List<int?> ReadExtremeKeys(IDataContext ctx, OrderDirection direction, NullsPosition placement)
         => ctx.From<T287ExtremeRow>()
-            .SelectWhereMax(x => x.Score, ExtremeRowTies.All)
+            .SelectWhereMaxOld(x => x.Score, ExtremeRowTies.All)
             .OrderBy(x => x.Key, direction, placement)
             .ThenBy(x => x.Id)
             .Select(x => new { x.Key })

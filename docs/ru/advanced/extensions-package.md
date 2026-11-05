@@ -1,6 +1,6 @@
 # Пакет расширений (`nextorm.extensions`)
 
-> Отдельный продуктовый пакет, который добавляет `SelectWhereMinEx` / `SelectWhereMaxEx` — выбор экстремальной строки, построенный целиком на публичном слое компонентов запроса, — рядом с замороженными встроенными `SelectWhereMin` / `SelectWhereMax`.
+> Отдельный продуктовый пакет, который добавляет `SelectWhereMin` / `SelectWhereMax` — выбор экстремальной строки, построенный целиком на публичном слое компонентов запроса, — рядом с замороженными встроенными `SelectWhereMin` / `SelectWhereMax`.
 
 **Предварительные требования:** [Выбор экстремальной строки (`SelectWhereMax` / `SelectWhereMin`)](../guide/09-distinct.md) · [Расширяемость: пользовательские SQL-диалекты и рендереры](extensibility.md) · [Краткий справочник API](api-reference.md)
 
@@ -8,9 +8,9 @@
 
 `nextorm.extensions` — самостоятельный NuGet-пакет. Он ссылается только на `nextorm.core`: без пакета провайдера, без `InternalsVisibleTo`, без сырого SQL и без глобальной регистрации обработчиков. Всё, что он делает, идёт через публичную поверхность компонентов запроса ([`IQueryComponent`](xref:NextORM.Core.IQueryComponent) и [`EntityBuilder<TEntity>.WithComponent`](xref:NextORM.Core.EntityBuilder`1.WithComponent(NextORM.Core.IQueryComponent))).
 
-Пакет предоставляет два обычных метода расширения над построителем сущности — `SelectWhereMinEx` и `SelectWhereMaxEx` — и связку компонента, которую они присоединяют. Оба метода — **фильтр строк, а не агрегат**: выжившая строка сохраняет все колонки, ровно как у встроенного оператора.
+Пакет предоставляет два обычных метода расширения над построителем сущности — `SelectWhereMin` и `SelectWhereMax` — и связку компонента, которую они присоединяют. Оба метода — **фильтр строк, а не агрегат**: выжившая строка сохраняет все колонки, ровно как у встроенного оператора.
 
-Встроенные [`SelectWhereMin`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMin``1(System.Linq.Expressions.Expression{System.Func{`0,``0}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) / [`SelectWhereMax`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMax``1(System.Linq.Expressions.Expression{System.Func{`0,``0}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) этот пакет **не меняет, не оборачивает и не переписывает**. Они остаются путём совместимости и базой сравнения производительности; пакет расширений — независимая альтернатива на публичном слое, которая строит собственную форму запроса.
+Встроенные [`SelectWhereMin`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMinOld``1(System.Linq.Expressions.Expression{System.Func{`0,``0}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) / [`SelectWhereMax`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMaxOld``1(System.Linq.Expressions.Expression{System.Func{`0,``0}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) этот пакет **не меняет, не оборачивает и не переписывает**. Они остаются путём совместимости и базой сравнения производительности; пакет расширений — независимая альтернатива на публичном слое, которая строит собственную форму запроса.
 
 ## Установка
 
@@ -26,10 +26,10 @@ dotnet add package nextorm.extensions
 
 | Перегрузка | Возвращает | Назначение |
 |---|---|---|
-| `SelectWhereMinEx(source, valueSelector, ties = One, groupBy = null)` | `EntityBuilder<TEntity>` | Оставить строку(и) с наименьшим значением; продолжить построение запроса. |
-| `SelectWhereMaxEx(source, valueSelector, ties = One, groupBy = null)` | `EntityBuilder<TEntity>` | Оставить строку(и) с наибольшим значением; продолжить построение запроса. |
-| `SelectWhereMinEx(source, valueSelector, projection, ties = One, groupBy = null)` | `QueryCommand<TResult>` | Тот же выбор с проекцией, применённой к каждой выжившей строке. |
-| `SelectWhereMaxEx(source, valueSelector, projection, ties = One, groupBy = null)` | `QueryCommand<TResult>` | Тот же выбор с проекцией, применённой к каждой выжившей строке. |
+| `SelectWhereMin(source, valueSelector, ties = One, groupBy = null)` | `EntityBuilder<TEntity>` | Оставить строку(и) с наименьшим значением; продолжить построение запроса. |
+| `SelectWhereMax(source, valueSelector, ties = One, groupBy = null)` | `EntityBuilder<TEntity>` | Оставить строку(и) с наибольшим значением; продолжить построение запроса. |
+| `SelectWhereMin(source, valueSelector, projection, ties = One, groupBy = null)` | `QueryCommand<TResult>` | Тот же выбор с проекцией, применённой к каждой выжившей строке. |
+| `SelectWhereMax(source, valueSelector, projection, ties = One, groupBy = null)` | `QueryCommand<TResult>` | Тот же выбор с проекцией, применённой к каждой выжившей строке. |
 
 ```csharp
 using System.Linq.Expressions;
@@ -39,26 +39,26 @@ namespace NextORM.Extensions;
 
 public static class ExtremeRowExtensions
 {
-    public static EntityBuilder<TEntity> SelectWhereMinEx<TEntity, TValue>(
+    public static EntityBuilder<TEntity> SelectWhereMin<TEntity, TValue>(
         this EntityBuilder<TEntity> source,
         Expression<Func<TEntity, TValue>> valueSelector,
         ExtremeRowTies ties = ExtremeRowTies.One,
         Expression<Func<TEntity, object?>>? groupBy = null);
 
-    public static EntityBuilder<TEntity> SelectWhereMaxEx<TEntity, TValue>(
+    public static EntityBuilder<TEntity> SelectWhereMax<TEntity, TValue>(
         this EntityBuilder<TEntity> source,
         Expression<Func<TEntity, TValue>> valueSelector,
         ExtremeRowTies ties = ExtremeRowTies.One,
         Expression<Func<TEntity, object?>>? groupBy = null);
 
-    public static QueryCommand<TResult> SelectWhereMinEx<TEntity, TValue, TResult>(
+    public static QueryCommand<TResult> SelectWhereMin<TEntity, TValue, TResult>(
         this EntityBuilder<TEntity> source,
         Expression<Func<TEntity, TValue>> valueSelector,
         Expression<Func<TEntity, TResult>> projection,
         ExtremeRowTies ties = ExtremeRowTies.One,
         Expression<Func<TEntity, object?>>? groupBy = null);
 
-    public static QueryCommand<TResult> SelectWhereMaxEx<TEntity, TValue, TResult>(
+    public static QueryCommand<TResult> SelectWhereMax<TEntity, TValue, TResult>(
         this EntityBuilder<TEntity> source,
         Expression<Func<TEntity, TValue>> valueSelector,
         Expression<Func<TEntity, TResult>> projection,
@@ -87,7 +87,7 @@ public static class ExtremeRowExtensions
 ```csharp
 // По одной строке на (TeamId, Season) с наибольшим (Score, Assists).
 var best = dataContext.From<Player>()
-    .SelectWhereMaxEx(p => new { p.Score, p.Assists }, ExtremeRowTies.One, p => new { p.TeamId, p.Season })
+    .SelectWhereMax(p => new { p.Score, p.Assists }, ExtremeRowTies.One, p => new { p.TeamId, p.Season })
     .ToList();
 ```
 
@@ -106,7 +106,7 @@ var best = dataContext.From<Player>()
 - **Проекции** — строки сущности, скаляр, DTO или анонимный тип — работают и через перегрузки с проекцией, и через `.Select(...)` после перегрузок на всю сущность; проекция формирует только результат и никогда не участвует в выборе победителя.
 - **Внешняя сортировка** — `.OrderBy(...)` / `.ThenBy(...)` сортирует выжившие строки и никогда не участвует в выборе победителя.
 - **`Distinct`** — принимается так же, как на встроенном пути; дубликаты спроецированного кортежа удаляет общий построитель после перестройки запроса.
-- **Несколько компонентов** — независимый компонент (например, дополнительный фильтр) композируется. Оператор экстремальной строки занимает один стабильный слот: повторный `SelectWhereMinEx`/`SelectWhereMaxEx` на том же построителе **заменяет** его на месте (`Min → Max`, `Max → Min`, без вложенности), а чужой компонент, претендующий на тот же эксклюзивный слот перестройки, отвергается при подготовке.
+- **Несколько компонентов** — независимый компонент (например, дополнительный фильтр) композируется. Оператор экстремальной строки занимает один стабильный слот: повторный `SelectWhereMin`/`SelectWhereMax` на том же построителе **заменяет** его на месте (`Min → Max`, `Max → Min`, без вложенности), а чужой компонент, претендующий на тот же эксклюзивный слот перестройки, отвергается при подготовке.
 - **Имена скрытых колонок** — внутренняя служебная колонка компонента получает приватный алиас (`__nextorm_ext_rn` и суффиксы), выбранный так, чтобы не совпасть с пользовательской колонкой того же имени (`rn`, `rank`, …). Алиас никогда не попадает в результат.
 
 ## Границы отказа
@@ -128,7 +128,7 @@ var best = dataContext.From<Player>()
 
 ## Связь со встроенным оператором
 
-`SelectWhereMinEx` / `SelectWhereMaxEx` реализуют тот же наблюдаемый контракт, что `SelectWhereMin` / `SelectWhereMax` — `One`/`All`, скалярные/составные ключи, глобально/по группам, `NULL`-ключи, входной `Where`, проекции, внешняя сортировка и перечисленные границы отказа, — и проверяются против них парным исполнением на одной и той же базе. Это **не** внутренний алиас: они присоединяют публичный компонент запроса, порождают собственную форму SQL и не делят код с замороженной реализацией `ExtremeRow*`.
+`SelectWhereMin` / `SelectWhereMax` реализуют тот же наблюдаемый контракт, что `SelectWhereMin` / `SelectWhereMax` — `One`/`All`, скалярные/составные ключи, глобально/по группам, `NULL`-ключи, входной `Where`, проекции, внешняя сортировка и перечисленные границы отказа, — и проверяются против них парным исполнением на одной и той же базе. Это **не** внутренний алиас: они присоединяют публичный компонент запроса, порождают собственную форму SQL и не делят код с замороженной реализацией `ExtremeRow*`.
 
 Встроенный оператор остаётся значением по умолчанию и базой сравнения. Компонент расширения строит свой запрос один раз на план (на промахе кэша; подтверждённое попадание в прогретый кэш переиспользует план без перестроения), поэтому оба оператора можно сравнивать и использовать в одном приложении, не меняя поведение ни одного из них.
 
@@ -167,14 +167,14 @@ using var db = new SqliteDataContext("Data Source=app.db", new DataContextBuilde
 // как и у встроенного оператора).
 var top = db.From<Player>()
     .Where(p => p.Season == 2026)
-    .SelectWhereMaxEx(p => p.Score)
+    .SelectWhereMax(p => p.Score)
     .OrderByDescending(p => p.Score)
     .ToList();
 
 // Перегрузка с проекцией: все строки, разделившие лучший (Score, Assists) в каждом
 // (TeamId, Season), спроецированные на нужные колонки.
 var captains = db.From<Player>()
-    .SelectWhereMaxEx(
+    .SelectWhereMax(
         p => new { p.Score, p.Assists },
         p => new { p.Id, p.TeamId, p.Season, p.Score },
         ExtremeRowTies.All,
@@ -185,7 +185,7 @@ var captains = db.From<Player>()
 
 // Форма с построителем на всю сущность композируется с остальным fluent API.
 var ids = db.From<Player>()
-    .SelectWhereMinEx(p => p.Score)
+    .SelectWhereMin(p => p.Score)
     .Select(p => p.Id)
     .Distinct()
     .ToList();

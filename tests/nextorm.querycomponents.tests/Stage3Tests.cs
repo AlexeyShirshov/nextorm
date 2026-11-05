@@ -332,7 +332,7 @@ public class Stage3Tests
     public void C10_Distinct_ParityWithBuiltIn()
     {
         using var ctx = Ctx();
-        var builtIn = ctx.From<Entity>().SelectWhereMin(x => x.Score).Distinct();
+        var builtIn = ctx.From<Entity>().SelectWhereMinOld(x => x.Score).Distinct();
         var external = ctx.From<Entity>().ExternalSelectWhereMin(x => x.Score).Distinct();
 
         Action a1 = () => _ = SqlOf(ctx, (QueryCommand<Entity>)builtIn);

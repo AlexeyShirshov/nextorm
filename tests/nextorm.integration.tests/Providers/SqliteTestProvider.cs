@@ -7,7 +7,7 @@ namespace NextORM.Integration.Tests;
 /// Runs the integration suite against a throwaway SQLite database created in the temp folder.
 /// The schema and the seed rows mirror the data the suite was originally written against.
 /// </summary>
-internal sealed class SqliteTestProvider : ITestProvider
+public sealed class SqliteTestProvider : ITestProvider
 {
     public static readonly SqliteTestProvider Instance = new();
 

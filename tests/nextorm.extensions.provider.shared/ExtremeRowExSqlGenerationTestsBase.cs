@@ -46,8 +46,8 @@ public abstract class ExtremeRowExSqlGenerationTestsBase
         using var reference = CreateBuiltInReferenceContext();
         Reset(ctx);
         Reset(reference);
-        var ext = SqlOf(ctx, (QueryCommand<Entity>)ctx.From<Entity>().SelectWhereMinEx(x => x.Score, ExtremeRowTies.One));
-        var built = SqlOf(reference, (QueryCommand<Entity>)reference.From<Entity>().SelectWhereMin(x => x.Score, ExtremeRowTies.One));
+        var ext = SqlOf(ctx, (QueryCommand<Entity>)ExtremeRowExtensions.SelectWhereMin(ctx.From<Entity>(), x => x.Score, ExtremeRowTies.One));
+        var built = SqlOf(reference, (QueryCommand<Entity>)reference.From<Entity>().SelectWhereMinOld(x => x.Score, ExtremeRowTies.One));
 
         ext.Should().ContainEquivalentOf("row_number()");
         ext.Should().NotContainEquivalentOf("partition by");
@@ -69,8 +69,8 @@ public abstract class ExtremeRowExSqlGenerationTestsBase
         using var reference = CreateBuiltInReferenceContext();
         Reset(ctx);
         Reset(reference);
-        var ext = SqlOf(ctx, (QueryCommand<Entity>)ctx.From<Entity>().SelectWhereMaxEx(
-            x => new { x.Score, x.Name },
+        var ext = SqlOf(ctx, (QueryCommand<Entity>)ExtremeRowExtensions.SelectWhereMax(
+ctx.From<Entity>(), x => new { x.Score, x.Name },
             ExtremeRowTies.All,
             x => x.Id));
 
@@ -85,7 +85,7 @@ public abstract class ExtremeRowExSqlGenerationTestsBase
         ext.Should().ContainEquivalentOf("Score");
         ext.Should().ContainEquivalentOf("Name");
 
-        var built = SqlOf(reference, (QueryCommand<Entity>)reference.From<Entity>().SelectWhereMax(
+        var built = SqlOf(reference, (QueryCommand<Entity>)reference.From<Entity>().SelectWhereMaxOld(
             x => new { x.Score, x.Name },
             ExtremeRowTies.All,
             x => x.Id));
@@ -102,8 +102,8 @@ public abstract class ExtremeRowExSqlGenerationTestsBase
         // A nullable group key selects the rank-window `All` shape: it partitions on the group keys
         // directly and never emits the null-safe `IS NULL` join predicate, which ClickHouse rejects
         // inside JOIN ON (#296). No dialect-name check is involved.
-        var ext = SqlOf(ctx, (QueryCommand<Entity>)ctx.From<Entity>().SelectWhereMaxEx(
-            x => new { x.Score, x.Name },
+        var ext = SqlOf(ctx, (QueryCommand<Entity>)ExtremeRowExtensions.SelectWhereMax(
+ctx.From<Entity>(), x => new { x.Score, x.Name },
             ExtremeRowTies.All,
             x => new { x.GroupKey, x.Name }));
 
@@ -122,8 +122,8 @@ public abstract class ExtremeRowExSqlGenerationTestsBase
     {
         using var ctx = CreateContext();
         Reset(ctx);
-        var ext = SqlOf(ctx, ctx.From<Entity>().SelectWhereMinEx(
-            x => x.Score,
+        var ext = SqlOf(ctx, ExtremeRowExtensions.SelectWhereMin(
+ctx.From<Entity>(), x => x.Score,
             x => new { x.Id, x.Name },
             ExtremeRowTies.One));
 
@@ -141,12 +141,12 @@ public abstract class ExtremeRowExSqlGenerationTestsBase
         using var reference = CreateBuiltInReferenceContext();
         Reset(ctx);
         Reset(reference);
-        var ext = SqlOf(ctx, (QueryCommand<Entity>)ctx.From<Entity>()
+        var ext = SqlOf(ctx, (QueryCommand<Entity>)ExtremeRowExtensions.SelectWhereMin(ctx.From<Entity>()
             .Where(x => x.Score > 15)
-            .SelectWhereMinEx(x => x.Score, ExtremeRowTies.One));
+, x => x.Score, ExtremeRowTies.One));
         var built = SqlOf(reference, (QueryCommand<Entity>)reference.From<Entity>()
             .Where(x => x.Score > 15)
-            .SelectWhereMin(x => x.Score, ExtremeRowTies.One));
+            .SelectWhereMinOld(x => x.Score, ExtremeRowTies.One));
 
         var predicate = ext.IndexOf("15", StringComparison.Ordinal);
         var rankFilter = ext.IndexOf("= 1", StringComparison.Ordinal);

@@ -24,10 +24,10 @@ public class SmokeTests
         using var ctx = new SqliteDataContext("Data Source=:memory:", new DataContextBuilder());
         var e = ctx.From<Entity>();
 
-        var builder = e.SelectWhereMinEx(x => x.Score);
+        var builder = ExtremeRowExtensions.SelectWhereMin(e, x => x.Score);
         builder.Should().BeOfType<EntityBuilder<Entity>>();
 
-        var cmd = e.SelectWhereMinEx(x => x.Score, x => new { x.Id, x.Name });
+        var cmd = ExtremeRowExtensions.SelectWhereMin(e, x => x.Score, x => new { x.Id, x.Name });
         cmd.GetType().IsGenericType.Should().BeTrue();
         cmd.GetType().GetGenericTypeDefinition().Should().Be(typeof(QueryCommand<>));
     }
@@ -38,7 +38,7 @@ public class SmokeTests
         using var ctx = new SqliteDataContext("Data Source=:memory:", new DataContextBuilder());
         var e = ctx.From<Entity>();
 
-        var cmd = e.SelectWhereMinEx(x => x.Score).Select(x => new { x.Id, x.Name });
+        var cmd = ExtremeRowExtensions.SelectWhereMin(e, x => x.Score).Select(x => new { x.Id, x.Name });
         var sql = Normalize(Prepare(ctx, cmd).SqlStmt!);
 
         sql.Should().Contain("row_number()");
@@ -53,7 +53,7 @@ public class SmokeTests
         using var ctx = new SqliteDataContext("Data Source=:memory:", new DataContextBuilder());
         var e = ctx.From<Entity>();
 
-        var cmd = e.SelectWhereMinEx(x => x.Score).ToCommand();
+        var cmd = ExtremeRowExtensions.SelectWhereMin(e, x => x.Score).ToCommand();
         var first = Prepare(ctx, cmd);
         var second = Prepare(ctx, cmd);
 
@@ -68,7 +68,7 @@ public class SmokeTests
         using var ctx = new SqliteDataContext("Data Source=:memory:", new DataContextBuilder());
         var e = ctx.From<Entity>();
 
-        var builder = e.SelectWhereMinEx(x => x.Score).SelectWhereMaxEx(x => x.Score);
+        var builder = ExtremeRowExtensions.SelectWhereMax(ExtremeRowExtensions.SelectWhereMin(e, x => x.Score), x => x.Score);
         var cmd = builder.ToCommand();
 
         cmd.Components.Should().NotBeNull();
@@ -81,7 +81,7 @@ public class SmokeTests
     {
         using var ctx = new InMemoryDataContext();
         var e = ctx.From<Entity>();
-        var cmd = e.SelectWhereMinEx(x => x.Score).ToCommand();
+        var cmd = ExtremeRowExtensions.SelectWhereMin(e, x => x.Score).ToCommand();
 
         var act = () => Prepare(ctx, cmd);
         act.Should().Throw<NotSupportedException>();

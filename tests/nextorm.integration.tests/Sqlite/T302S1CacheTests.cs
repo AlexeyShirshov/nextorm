@@ -76,7 +76,7 @@ public sealed class T302S1CacheTests : IDisposable
         int capturedFlag = 1;
         var command = _ctx.From<CacheRow>()
             .Where(e => e.Flag == capturedFlag)
-            .SelectWhereMax(e => e.Score, ExtremeRowTies.All)
+            .SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All)
             .ToCommand();
 
         var first = Prepare(_ctx, command);
@@ -96,11 +96,11 @@ public sealed class T302S1CacheTests : IDisposable
         int captured = 1;
         var cmdA = _ctx.From<CacheRow>()
             .Where(e => e.Flag == captured)
-            .SelectWhereMax(e => e.Score, ExtremeRowTies.All)
+            .SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All)
             .ToCommand();
         var cmdB = _ctx.From<CacheRow>()
             .Where(e => e.Score > captured)
-            .SelectWhereMax(e => e.Score, ExtremeRowTies.All)
+            .SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All)
             .ToCommand();
 
         var pa = Prepare(_ctx, cmdA);
@@ -127,7 +127,7 @@ public sealed class T302S1CacheTests : IDisposable
 
         QueryCommand<CacheRow> Command() => _ctx.From<CacheRow>()
             .Where(e => e.Flag == 1)
-            .SelectWhereMax(selector, ExtremeRowTies.All)
+            .SelectWhereMaxOld(selector, ExtremeRowTies.All)
             .ToCommand();
 
         // Cold: before the first preparation the shape has no published candidate at all.
@@ -173,7 +173,7 @@ public sealed class T302S1CacheTests : IDisposable
         int capturedFlag = 1;
         var command = _ctx.From<CacheRow>()
             .Where(e => e.Flag == capturedFlag)
-            .SelectWhereMax(e => e.Score, ExtremeRowTies.All)
+            .SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All)
             .ToCommand();
 
         var prepared = Prepare(_ctx, command);
@@ -202,7 +202,7 @@ public sealed class T302S1CacheTests : IDisposable
         int capturedFlag = 1;
         var command = _ctx.From<CacheRow>()
             .Where(e => e.Flag == capturedFlag)
-            .SelectWhereMax(e => e.Score, ExtremeRowTies.All)
+            .SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All)
             .ToCommand();
 
         var first = Prepare(_ctx, command, storeInCache: true);

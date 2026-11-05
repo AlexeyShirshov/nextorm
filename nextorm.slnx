@@ -32,6 +32,7 @@
   <Project Path="tests/nextorm.alias.tests/nextorm.alias.tests.csproj" />
   <Project Path="tests/nextorm.core.tests/nextorm.core.tests.csproj" />
   <Project Path="tests/nextorm.extensions.tests/nextorm.extensions.tests.csproj" />
+  <Project Path="tests/nextorm.extensions.integration.tests/nextorm.extensions.integration.tests.csproj" />
   <Project Path="tests/nextorm.entityframeworkcore.tests/nextorm.entityframeworkcore.tests.csproj" />
   <Project Path="tests/nextorm.integration.tests/nextorm.integration.tests.csproj" />
   <Project Path="tests/nextorm.postgres.tests/nextorm.postgres.tests.csproj" />

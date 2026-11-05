@@ -316,7 +316,7 @@ public class T287NullOrderingTests
         foreach (var (direction, placement, _, _, extreme) in PlacementCells)
         {
             var sql = SqlOf(ctx, ctx.From<IT287ExtremeProbe>()
-                .SelectWhereMax(x => x.Score, ExtremeRowTies.All)
+                .SelectWhereMaxOld(x => x.Score, ExtremeRowTies.All)
                 .OrderBy(x => x.Key, direction, placement)
                 .ThenBy(x => x.Id)
                 .Select(x => new { x.Id, x.Key }));
@@ -330,7 +330,7 @@ public class T287NullOrderingTests
 
         // Control: the Default placement keeps the plain direction-only outer rendering.
         var controlSql = SqlOf(ctx, ctx.From<IT287ExtremeProbe>()
-            .SelectWhereMax(x => x.Score, ExtremeRowTies.All)
+            .SelectWhereMaxOld(x => x.Score, ExtremeRowTies.All)
             .OrderBy(x => x.Key)
             .ThenBy(x => x.Id)
             .Select(x => new { x.Id, x.Key }));

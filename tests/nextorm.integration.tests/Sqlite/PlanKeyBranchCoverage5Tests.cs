@@ -710,7 +710,7 @@ public sealed class SqlitePlanKeyBranchCoverage5Tests : ProviderTestSuite
         var comparer = Context.From<Pk5Marker>().Select(x => x.Id).GetQueryPlanEqualityComparer();
 
         QueryCommand<Pk5Marker> MaxByScore(ExtremeRowTies ties)
-            => Context.From<Pk5Marker>().SelectWhereMax(x => x.Score, ties).ToCommand();
+            => Context.From<Pk5Marker>().SelectWhereMaxOld(x => x.Score, ties).ToCommand();
 
         var maxAll = MaxByScore(ExtremeRowTies.All);
         var maxAllAgain = MaxByScore(ExtremeRowTies.All);
@@ -727,28 +727,28 @@ public sealed class SqlitePlanKeyBranchCoverage5Tests : ProviderTestSuite
         Prepare(maxOne).First(Context).Id.Should().Be(3);
         comparer.Equals(maxAll, maxOne).Should().BeFalse("a different ties mode is a different extreme-row plan");
 
-        var minOne = Context.From<Pk5Marker>().SelectWhereMin(x => x.Score).ToCommand();
+        var minOne = Context.From<Pk5Marker>().SelectWhereMinOld(x => x.Score).ToCommand();
         Prepare(minOne).First(Context).Id.Should().BeOneOf(new long[] { 1L, 2L }, "both rows carry the minimum score 5");
         comparer.Equals(maxOne, minOne).Should().BeFalse("a different extreme kind is a different extreme-row plan");
 
-        var maxTagAll = Context.From<Pk5Marker>().SelectWhereMax(x => x.Tag, ExtremeRowTies.All).ToCommand();
+        var maxTagAll = Context.From<Pk5Marker>().SelectWhereMaxOld(x => x.Tag, ExtremeRowTies.All).ToCommand();
         Rows(Prepare(maxTagAll)).Select(r => r.Id).OrderBy(id => id).Should()
             .Equal(new long[] { 2, 4 }, "both rows carry the maximum tag 20");
         comparer.Equals(maxAll, maxTagAll).Should().BeFalse("a different value selector is a different extreme-row plan");
 
         var idProjection = Context.From<Pk5Marker>()
-            .SelectWhereMax(x => x.Score, x => new { Value = (long?)x.Id }, ExtremeRowTies.All);
+            .SelectWhereMaxOld(x => x.Score, x => new { Value = (long?)x.Id }, ExtremeRowTies.All);
         var tagProjection = Context.From<Pk5Marker>()
-            .SelectWhereMax(x => x.Score, x => new { Value = (long?)x.Tag }, ExtremeRowTies.All);
+            .SelectWhereMaxOld(x => x.Score, x => new { Value = (long?)x.Tag }, ExtremeRowTies.All);
 
         Rows(Prepare(idProjection)).Select(r => r.Value).Should().Equal(new long?[] { 3 });
         Rows(Prepare(tagProjection)).Select(r => r.Value).Should().Equal(new long?[] { 10 }, "the same winning row reads its tag");
         comparer.Equals(idProjection, tagProjection).Should().BeFalse("a different extreme-row projection is a different plan");
 
         var ungrouped = Context.From<Pk5Marker>()
-            .SelectWhereMax(x => x.Score, x => new { Value = (long?)x.Id }, ExtremeRowTies.All);
+            .SelectWhereMaxOld(x => x.Score, x => new { Value = (long?)x.Id }, ExtremeRowTies.All);
         var grouped = Context.From<Pk5Marker>()
-            .SelectWhereMax(
+            .SelectWhereMaxOld(
                 x => x.Score,
                 x => new { Value = (long?)x.Id },
                 ExtremeRowTies.All,

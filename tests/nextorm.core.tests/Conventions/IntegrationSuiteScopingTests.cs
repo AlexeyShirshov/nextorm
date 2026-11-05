@@ -24,7 +24,12 @@ namespace NextORM.Core.Tests;
 /// </summary>
 public sealed class IntegrationSuiteScopingTests
 {
-    private const string IntegrationProjectDirectory = "nextorm.integration.tests";
+    /// <summary>Every project whose sources must be backed by a real database.</summary>
+    private static readonly string[] IntegrationProjectDirectories =
+    [
+        "nextorm.integration.tests",
+        "nextorm.extensions.integration.tests",
+    ];
 
     private static readonly HashSet<string> DatabaseEvidenceNames = new(StringComparer.Ordinal)
     {
@@ -52,10 +57,10 @@ public sealed class IntegrationSuiteScopingTests
     [Fact]
     public void IntegrationTests_ShouldNotUseTheInMemoryProvider()
     {
-        var integrationDirectory = Path.Combine(RepoRoot(), "tests", IntegrationProjectDirectory);
         var offenders = new List<string>();
 
-        foreach (var file in EnumerateSources(integrationDirectory))
+        foreach (var file in IntegrationProjectDirectories.SelectMany(directory =>
+                     EnumerateSources(Path.Combine(RepoRoot(), "tests", directory))))
         {
             var text = File.ReadAllText(file);
             // Cheap pre-filter before parsing: the only banned construct names this type.
@@ -89,8 +94,8 @@ public sealed class IntegrationSuiteScopingTests
     [Fact]
     public void IntegrationTestClasses_ShouldBeBackedByARealDatabase()
     {
-        var integrationDirectory = Path.Combine(RepoRoot(), "tests", IntegrationProjectDirectory);
-        var parsed = EnumerateSources(integrationDirectory)
+        var parsed = IntegrationProjectDirectories
+            .SelectMany(directory => EnumerateSources(Path.Combine(RepoRoot(), "tests", directory)))
             .Select(file => (File: file, Root: Parse(file, File.ReadAllText(file))))
             .ToList();
 

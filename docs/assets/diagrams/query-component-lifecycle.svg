@@ -1,0 +1,108 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1800 860" role="img" aria-labelledby="t d">
+<title id="t">Query component lifecycle: from a builder call to executed SQL</title>
+<desc id="d">Your code calls an extension method that attaches a component to the immutable builder. The engine prepares it once per plan build, returns an immutable descriptor, builds the statement on a cache miss and reuses the cached plan on a warm hit; the executor then runs the same path as any ordinary query.</desc>
+<defs>
+  <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#64748b"/></marker>
+  <style>
+    text { font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #f1f5f9; }
+    .chip { font-size: 11px; font-weight: 700; letter-spacing: 1.1px; fill: #8b9bb4; }
+    .card { fill: #121e32; stroke: #2b3a55; stroke-width: 1.4; }
+    .mono { font-family: Consolas, "Liberation Mono", monospace; }
+    .note { font-size: 12.5px; fill: #94a3b8; }
+    .step { font-size: 15px; font-weight: 700; }
+    .code { font-size: 15px; fill: #e2e8f0; }
+    .green { fill: #7ee0b4; } .purple { fill: #c084fc; } .cyan { fill: #55d6e8; }
+    .link { fill: none; stroke: #475569; stroke-width: 2; }
+  </style>
+</defs>
+
+<rect x="0" y="0" width="1800" height="860" rx="16" fill="#0b1220" stroke="#1e293b"/>
+<text x="44" y="48" font-size="21" font-weight="700">Query component lifecycle: from a builder call to executed SQL</text>
+<text x="44" y="74" font-size="12.5" class="note">One public contract, two paths through the engine — a cache miss builds the plan, a warm hit only binds values.</text>
+
+<!-- Row A: user code -> component -> command -->
+<rect class="card" x="40" y="140" width="300" height="88" rx="12"/>
+<text class="chip green" x="60" y="164">YOUR CODE</text>
+<text class="mono code" x="60" y="189">ctx.From&lt;Player&gt;()</text>
+<text class="note" x="60" y="211">fluent call, no SQL yet</text>
+
+<rect class="card" x="392" y="140" width="352" height="88" rx="12"/>
+<text class="chip green" x="412" y="164">YOUR PACKAGE</text>
+<text class="mono code" x="412" y="189">SelectWhereMinEx(...)</text>
+<text class="note" x="412" y="211">returns a new EntityBuilder</text>
+
+<rect class="card" x="796" y="140" width="310" height="88" rx="12"/>
+<text class="chip green" x="816" y="164">YOUR PACKAGE</text>
+<text class="mono code" x="816" y="189">IQueryComponent</text>
+<text class="note" x="816" y="211">slot · contribution · Prepare · BuildQuery</text>
+
+<rect class="card" x="1158" y="140" width="340" height="88" rx="12"/>
+<text class="chip cyan" x="1178" y="164">CORE API</text>
+<text class="mono code" x="1178" y="189">WithComponent(...)</text>
+<text class="note" x="1178" y="211">immutable: the same slot replaces in place</text>
+
+<rect class="card" x="1550" y="140" width="210" height="88" rx="12"/>
+<text class="chip cyan" x="1570" y="164">CORE API</text>
+<text class="mono code" x="1570" y="189" font-size="13">Command.Components</text>
+<text class="note" x="1570" y="211">engine-managed</text>
+
+<path class="link" marker-end="url(#a)" d="M340 184 H392"/>
+<path class="link" marker-end="url(#a)" d="M744 184 H796"/>
+<path class="link" marker-end="url(#a)" d="M1106 184 H1158"/>
+<path class="link" marker-end="url(#a)" d="M1498 184 H1550"/>
+
+<!-- A -> plan cache lookup -->
+<path class="link" marker-end="url(#a)" d="M1655 228 V270 H900 V300"/>
+
+<rect class="card" x="640" y="300" width="520" height="86" rx="12" stroke="#38bdf8"/>
+<text class="chip cyan" x="664" y="326">CORE API</text>
+<text class="step" x="664" y="352">Plan-cache lookup</text>
+<text class="note" x="664" y="374">key = slot · component type · contribution · discriminator · hash</text>
+
+<!-- branches -->
+<path class="link" marker-end="url(#a)" d="M790 386 V430"/>
+<path class="link" marker-end="url(#a)" d="M1050 386 V430"/>
+
+<!-- C1: Prepare -->
+<rect class="card" x="140" y="430" width="660" height="96" rx="12" stroke="#c084fc"/>
+<text class="chip purple" x="164" y="452">YOUR CODE · ONCE PER PLAN</text>
+<text class="step" x="164" y="476">Prepare → immutable descriptor</text>
+<text class="note" x="164" y="497">validates the combination: an unsupported one throws</text>
+<text class="note" x="164" y="515">returns the slot, the structural hash and structural equality</text>
+
+<!-- C2: BuildQuery -->
+<rect class="card" x="140" y="556" width="660" height="96" rx="12" stroke="#55d6e8"/>
+<text class="chip cyan" x="164" y="578">YOUR CODE · CACHE MISS ONLY</text>
+<text class="step" x="164" y="602">BuildQuery → statement</text>
+<text class="note" x="164" y="623">derived source · payload + one hidden auxiliary column</text>
+<text class="note" x="164" y="643">outer filter on that column · no SQL text, no dialect code</text>
+
+<path class="link" marker-end="url(#a)" d="M470 526 V556"/>
+
+<!-- C3: warm hit -->
+<rect class="card" x="1010" y="430" width="650" height="96" rx="12" stroke="#7ee0b4"/>
+<text class="chip green" x="1034" y="452">ENGINE · WARM HIT</text>
+<text class="step" x="1034" y="476">The cached plan is reused</text>
+<text class="note" x="1034" y="497">BuildQuery is not called — no rebuild, no revalidation</text>
+<text class="note" x="1034" y="515">captured and positional values are rebound to the command</text>
+
+<!-- C4: plan key -->
+<rect class="card" x="1010" y="556" width="650" height="96" rx="12"/>
+<text class="chip" x="1034" y="578">ENGINE · PLAN KEY</text>
+<text class="step" x="1034" y="602">Equal key ⇒ one plan</text>
+<text class="note" x="1034" y="623">equal components share the prepared plan</text>
+<text class="note" x="1034" y="643">a different slot or state builds a separate plan</text>
+
+<!-- merge -->
+<path class="link" d="M470 652 V676 H900"/>
+<path class="link" d="M1335 652 V676 H900"/>
+<circle cx="900" cy="676" r="4" fill="#64748b"/>
+<path class="link" marker-end="url(#a)" d="M900 676 V700"/>
+
+<rect class="card" x="640" y="700" width="520" height="86" rx="12"/>
+<text class="chip cyan" x="664" y="726">ENGINE</text>
+<text class="step" x="664" y="752">Query executor → rows</text>
+<text class="note" x="664" y="774">the same execution path as an ordinary query</text>
+
+<text x="900" y="820" text-anchor="middle" font-size="13" class="note">rows back to your ToList()</text>
+</svg>

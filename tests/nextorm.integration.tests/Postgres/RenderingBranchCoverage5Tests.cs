@@ -148,27 +148,27 @@ public sealed class PostgresRenderingBranchCoverage5Tests : ProviderTestSuite
         try
         {
             var maxAll = Context.From<Pg5rMarker>()
-                .SelectWhereMax(x => x.Num, ExtremeRowTies.All)
+                .SelectWhereMaxOld(x => x.Num, ExtremeRowTies.All)
                 .OrderBy(x => x.Id)
                 .ToList();
 
             maxAll.Select(r => r.Id).Should().Equal(new[] { 3, 4 }, "both rows carry the maximum 20");
             maxAll.Should().OnlyContain(r => r.Num == 20);
 
-            var maxOne = Context.From<Pg5rMarker>().SelectWhereMax(x => x.Num).ToList();
+            var maxOne = Context.From<Pg5rMarker>().SelectWhereMaxOld(x => x.Num).ToList();
             maxOne.Should().ContainSingle();
             maxOne[0].Num.Should().Be(20);
             maxOne[0].Id.Should().BeOneOf(3, 4);
 
             var minAll = Context.From<Pg5rMarker>()
-                .SelectWhereMin(x => x.Num, ExtremeRowTies.All)
+                .SelectWhereMinOld(x => x.Num, ExtremeRowTies.All)
                 .OrderBy(x => x.Id)
                 .ToList();
 
             minAll.Select(r => r.Id).Should().Equal(new[] { 1, 2 }, "both rows carry the minimum 10");
             minAll.Should().OnlyContain(r => r.Num == 10);
 
-            var minOne = Context.From<Pg5rMarker>().SelectWhereMin(x => x.Num).ToList();
+            var minOne = Context.From<Pg5rMarker>().SelectWhereMinOld(x => x.Num).ToList();
             minOne.Should().ContainSingle();
             minOne[0].Num.Should().Be(10);
             minOne[0].Id.Should().BeOneOf(1, 2);
@@ -274,7 +274,7 @@ public sealed class PostgresRenderingBranchCoverage5Tests : ProviderTestSuite
         {
             var maxOnePerGroup = Context.From<Pg5rMarker>()
                 .Where(x => x.Num != null)
-                .SelectWhereMax(x => x.Num, x => new { x.Id, x.Num, x.Grp }, ExtremeRowTies.One, x => x.Grp)
+                .SelectWhereMaxOld(x => x.Num, x => new { x.Id, x.Num, x.Grp }, ExtremeRowTies.One, x => x.Grp)
                 .OrderBy(r => r.Grp)
                 .ToList();
 
@@ -286,7 +286,7 @@ public sealed class PostgresRenderingBranchCoverage5Tests : ProviderTestSuite
 
             var minAllPerGroup = Context.From<Pg5rMarker>()
                 .Where(x => x.Num != null)
-                .SelectWhereMin(x => x.Num, x => new { x.Id, x.Num, x.Grp }, ExtremeRowTies.All, x => x.Grp)
+                .SelectWhereMinOld(x => x.Num, x => new { x.Id, x.Num, x.Grp }, ExtremeRowTies.All, x => x.Grp)
                 .OrderBy(r => r.Grp)
                 .OrderBy(r => r.Id)
                 .ToList();
@@ -358,7 +358,7 @@ public sealed class PostgresRenderingBranchCoverage5Tests : ProviderTestSuite
 
             var extreme = () => Context.From<Pg5rMarker>()
                 .DistinctOn(x => x.Grp)
-                .SelectWhereMax(x => x.Num)
+                .SelectWhereMaxOld(x => x.Num)
                 .Select(x => x.Id)
                 .ToList();
             extreme.Should().Throw<BuildSqlCommandException>()

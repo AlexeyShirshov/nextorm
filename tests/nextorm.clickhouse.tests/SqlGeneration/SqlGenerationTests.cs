@@ -3298,7 +3298,7 @@ public class SqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Int).Select(x => new { x.Id })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.Int).Select(x => new { x.Id })));
 
         norm.Should().Contain("row_number() over (order by nullableint desc)");
         norm.Should().Contain("= 1");
@@ -3312,7 +3312,7 @@ public class SqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Int, x => new { x.Id, x.String })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.Int, x => new { x.Id, x.String })));
 
         norm.Should().Contain("row_number() over (order by nullableint desc)");
         norm.Should().Contain("= 1");
@@ -3331,7 +3331,7 @@ public class SqlGenerationTests
 
         var act = () => SqlOf(ctx, e
             .LimitBy(2, x => x.Int)
-            .SelectWhereMax(x => x.Int)
+            .SelectWhereMaxOld(x => x.Int)
             .Select(x => new { x.Id }));
 
         act.Should().Throw<BuildSqlCommandException>()
@@ -3346,7 +3346,7 @@ public class SqlGenerationTests
 
         var act = () => SqlOf(ctx, a
             .ArrayJoin(x => x.Tags)
-            .SelectWhereMax(x => x.Id)
+            .SelectWhereMaxOld(x => x.Id)
             .Select(x => new { x.Id }));
 
         act.Should().Throw<BuildSqlCommandException>()
@@ -3361,7 +3361,7 @@ public class SqlGenerationTests
 
         var act = () => SqlOf(ctx, e
             .PreWhere(x => x.Id > 1L)
-            .SelectWhereMax(x => x.Int)
+            .SelectWhereMaxOld(x => x.Int)
             .Select(x => new { x.Id }));
 
         act.Should().Throw<BuildSqlCommandException>()

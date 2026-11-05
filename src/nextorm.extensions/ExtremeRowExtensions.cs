@@ -95,7 +95,7 @@ public static class ExtremeRowExtensions
     /// <param name="ties">Whether to keep one row or every row tied on the extreme value.</param>
     /// <param name="groupBy">Optional grouping key; <c>null</c> selects across the whole source.</param>
     /// <returns>The same query shape with the extreme-row component attached.</returns>
-    public static EntityBuilder<TEntity> SelectWhereMinEx<TEntity, TValue>(
+    public static EntityBuilder<TEntity> SelectWhereMin<TEntity, TValue>(
         this EntityBuilder<TEntity> source,
         Expression<Func<TEntity, TValue>> valueSelector,
         ExtremeRowTies ties = ExtremeRowTies.One,
@@ -113,7 +113,7 @@ public static class ExtremeRowExtensions
     /// <param name="ties">Whether to keep one row or every row tied on the extreme value.</param>
     /// <param name="groupBy">Optional grouping key; <c>null</c> selects across the whole source.</param>
     /// <returns>The same query shape with the extreme-row component attached.</returns>
-    public static EntityBuilder<TEntity> SelectWhereMaxEx<TEntity, TValue>(
+    public static EntityBuilder<TEntity> SelectWhereMax<TEntity, TValue>(
         this EntityBuilder<TEntity> source,
         Expression<Func<TEntity, TValue>> valueSelector,
         ExtremeRowTies ties = ExtremeRowTies.One,
@@ -133,7 +133,7 @@ public static class ExtremeRowExtensions
     /// <param name="ties">Whether to keep one row or every row tied on the extreme value.</param>
     /// <param name="groupBy">Optional grouping key; <c>null</c> selects across the whole source.</param>
     /// <returns>The projected query command.</returns>
-    public static QueryCommand<TResult> SelectWhereMinEx<TEntity, TValue, TResult>(
+    public static QueryCommand<TResult> SelectWhereMin<TEntity, TValue, TResult>(
         this EntityBuilder<TEntity> source,
         Expression<Func<TEntity, TValue>> valueSelector,
         Expression<Func<TEntity, TResult>> projection,
@@ -158,7 +158,7 @@ public static class ExtremeRowExtensions
     /// <param name="ties">Whether to keep one row or every row tied on the extreme value.</param>
     /// <param name="groupBy">Optional grouping key; <c>null</c> selects across the whole source.</param>
     /// <returns>The projected query command.</returns>
-    public static QueryCommand<TResult> SelectWhereMaxEx<TEntity, TValue, TResult>(
+    public static QueryCommand<TResult> SelectWhereMax<TEntity, TValue, TResult>(
         this EntityBuilder<TEntity> source,
         Expression<Func<TEntity, TValue>> valueSelector,
         Expression<Func<TEntity, TResult>> projection,
@@ -172,17 +172,14 @@ public static class ExtremeRowExtensions
 }
 
 /// <summary>
-/// The public query component behind <see cref="ExtremeRowExtensions.SelectWhereMinEx{TEntity, TValue}(EntityBuilder{TEntity}, Expression{Func{TEntity, TValue}}, ExtremeRowTies, Expression{Func{TEntity, object?}})"/>
+/// The public query component behind <see cref="ExtremeRowExtensions.SelectWhereMin{TEntity, TValue}(EntityBuilder{TEntity}, Expression{Func{TEntity, TValue}}, ExtremeRowTies, Expression{Func{TEntity, object?}})"/>
 /// and its siblings: an exclusive row-source reshape that keeps the extreme row(s). The extension
 /// methods construct and attach it; a caller that needs the component directly passes
 /// <see cref="ExtremeKind"/> explicitly.
 /// </summary>
 /// <typeparam name="TEntity">The mapped entity type the selectors are written over.</typeparam>
-public sealed class ExtremeRowComponent<TEntity> : IQueryComponent
+public sealed class ExtremeRowComponent<TEntity> : IQueryComponent, IQueryComponentShape
 {
-    private readonly object _descriptorLock = new();
-    private IEqualityComparer<Expression>? _descriptorComparer;
-    private Descriptor? _cachedDescriptor;
     private readonly ExtremeKind _kind;
     private readonly LambdaExpression _valueSelector;
     private readonly ExtremeRowTies _ties;
@@ -220,6 +217,29 @@ public sealed class ExtremeRowComponent<TEntity> : IQueryComponent
 
     /// <summary>The contribution kind: the component replaces the row source, so only one exclusive reshape may be present.</summary>
     public QueryComponentContribution Contribution => QueryComponentContribution.ExclusiveRowSource;
+
+    /// <summary>
+    /// The scalar half of the pre-preparation structural identity used by the engine's raw recipe cache:
+    /// the direction and the tie policy. Selectors travel through <see cref="GetShapeSelector"/>.
+    /// </summary>
+    public object? ShapeState => new ExtremeRowShape(_kind, _ties);
+
+    /// <summary>The selector count: the value selector, plus the group key when one is present.</summary>
+    public int ShapeSelectorCount => _groupBy is null ? 1 : 2;
+
+    /// <summary>Returns the value selector (index 0) or the group key (index 1).</summary>
+    /// <param name="index">Zero-based selector index.</param>
+    /// <returns>The selector expression.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The index is outside <see cref="ShapeSelectorCount"/>.</exception>
+    public LambdaExpression GetShapeSelector(int index) => index switch
+    {
+        0 => _valueSelector,
+        1 when _groupBy is not null => _groupBy,
+        _ => throw new ArgumentOutOfRangeException(nameof(index), index, "The component has no selector at this index."),
+    };
+
+    /// <summary>The scalar identity of one component: direction and tie policy.</summary>
+    private readonly record struct ExtremeRowShape(ExtremeKind Kind, ExtremeRowTies Ties);
 
 
     private static void ValidateCompatibility(QueryCommand cmd)
@@ -289,7 +309,7 @@ public sealed class ExtremeRowComponent<TEntity> : IQueryComponent
     {
         ArgumentNullException.ThrowIfNull(context);
         if (context.Command.DataContext is InMemoryDataContext)
-            throw new NotSupportedException("SelectWhereMinEx/Max is not supported by the in-memory provider.");
+            throw new NotSupportedException("SelectWhereMin/Max is not supported by the in-memory provider.");
 
         // The ties value is validated here rather than at construction: attaching a component must stay
         // as cheap as attaching the built-in clause (AC7 construction phase), while an unsupported
@@ -300,32 +320,18 @@ public sealed class ExtremeRowComponent<TEntity> : IQueryComponent
         ValidateCompatibility(context.Command);
 
         var comparer = context.ExpressionComparer;
-        var cached = Volatile.Read(ref _cachedDescriptor);
-        if (cached is not null && ReferenceEquals(_descriptorComparer, comparer))
-            return cached;
+        var discriminator = _kind == ExtremeKind.Min ? "Min" : "Max";
+        var hash = new HashCode();
+        hash.Add(Slot);
+        hash.Add(GetType());
+        hash.Add(discriminator);
+        hash.Add(_ties);
+        hash.Add(_valueSelector, comparer);
+        if (_groupBy is not null)
+            hash.Add(_groupBy, comparer);
 
-        lock (_descriptorLock)
-        {
-            cached = _cachedDescriptor;
-            if (cached is not null && ReferenceEquals(_descriptorComparer, comparer))
-                return cached;
-
-            var discriminator = _kind == ExtremeKind.Min ? "Min" : "Max";
-            var hash = new HashCode();
-            hash.Add(Slot);
-            hash.Add(GetType());
-            hash.Add(discriminator);
-            hash.Add(_ties);
-            hash.Add(_valueSelector, comparer);
-            if (_groupBy is not null)
-                hash.Add(_groupBy, comparer);
-
-            var captured = new CapturedState(_kind, _ties, _valueSelector, _groupBy, comparer);
-            cached = new Descriptor(this, captured, hash.ToHashCode());
-            _descriptorComparer = comparer;
-            Volatile.Write(ref _cachedDescriptor, cached);
-            return cached;
-        }
+        var captured = new CapturedState(_kind, _ties, _valueSelector, _groupBy, comparer);
+        return new Descriptor(this, captured, hash.ToHashCode());
     }
 
     /// <summary>

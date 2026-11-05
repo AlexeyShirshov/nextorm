@@ -168,7 +168,7 @@ public sealed class Cycle7SqlBuilderTests : ProviderTestSuite
     public void SelectWhereMaxAll_WithNullsAndNoFilter_ShouldKeepEveryTiedWinner()
     {
         var ties = Context.From<Sq7Marker>()
-            .SelectWhereMax(x => x.Score, ExtremeRowTies.All)
+            .SelectWhereMaxOld(x => x.Score, ExtremeRowTies.All)
             .OrderBy(x => x.Id)
             .ToList();
 
@@ -177,7 +177,7 @@ public sealed class Cycle7SqlBuilderTests : ProviderTestSuite
         ties.Select(x => x.Score).Should().Equal(new int?[] { 10, 10 });
 
         var one = Context.From<Sq7Marker>()
-            .SelectWhereMax(x => x.Score)
+            .SelectWhereMaxOld(x => x.Score)
             .ToList();
 
         one.Should().ContainSingle("ExtremeRowTies.One keeps a single extreme row");
@@ -193,7 +193,7 @@ public sealed class Cycle7SqlBuilderTests : ProviderTestSuite
     public void SelectWhereMaxAll_Grouped_ShouldReturnOneWinnerPerGroup()
     {
         var rows = Context.From<Sq7Marker>()
-            .SelectWhereMax(x => x.Score, ExtremeRowTies.All, x => x.Grp)
+            .SelectWhereMaxOld(x => x.Score, ExtremeRowTies.All, x => x.Grp)
             .OrderBy(x => x.Id)
             .ToList();
 

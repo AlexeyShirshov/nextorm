@@ -67,8 +67,8 @@ public class ComponentContractTests
     public void A1_MinToMax_ReplacesInPlace_AndSqlUsesDesc()
     {
         using var ctx = Ctx();
-        var b = ctx.From<Entity>().SelectWhereMinEx(x => x.Score);
-        var b2 = b.SelectWhereMaxEx(x => x.Score);
+        var b = ExtremeRowExtensions.SelectWhereMin(ctx.From<Entity>(), x => x.Score);
+        var b2 = ExtremeRowExtensions.SelectWhereMax(b, x => x.Score);
 
         QueryCommand<Entity> cmd = b2;
         cmd.Components.Should().HaveCount(1);
@@ -82,8 +82,8 @@ public class ComponentContractTests
     public void A1_MaxToMin_ReplacesInPlace_AndSqlHasNoDesc()
     {
         using var ctx = Ctx();
-        var b = ctx.From<Entity>().SelectWhereMaxEx(x => x.Score);
-        var b2 = b.SelectWhereMinEx(x => x.Score);
+        var b = ExtremeRowExtensions.SelectWhereMax(ctx.From<Entity>(), x => x.Score);
+        var b2 = ExtremeRowExtensions.SelectWhereMin(b, x => x.Score);
 
         QueryCommand<Entity> cmd = b2;
         cmd.Components.Should().HaveCount(1);
@@ -214,7 +214,7 @@ public class ComponentContractTests
     public void B5_Clones_CarryComponentsAndPreparedState()
     {
         using var ctx = Ctx();
-        var b = ctx.From<Entity>().SelectWhereMinEx(x => x.Score);
+        var b = ExtremeRowExtensions.SelectWhereMin(ctx.From<Entity>(), x => x.Score);
         QueryCommand<Entity> cmd = b;
         _ = SqlOf(ctx, cmd); // prepare
 
@@ -237,7 +237,7 @@ public class ComponentContractTests
     public void B5_LiveCommandKeepsOriginalSourceAfterPrepare()
     {
         using var ctx = Ctx();
-        var b = ctx.From<Entity>().SelectWhereMinEx(x => x.Score);
+        var b = ExtremeRowExtensions.SelectWhereMin(ctx.From<Entity>(), x => x.Score);
         var cmd = (QueryCommand<Entity>)b;
         cmd.Components.Should().HaveCount(1);
 
@@ -256,7 +256,7 @@ public class ComponentContractTests
         using var connScope = conn;
         using var ctxScope = ctx;
 
-        var b = ctx.From<Entity>().SelectWhereMinEx(x => x.Score);
+        var b = ExtremeRowExtensions.SelectWhereMin(ctx.From<Entity>(), x => x.Score);
         QueryCommand<Entity> cmd = b;
         var prepared = Prepare(ctx, cmd);
         var r1 = ctx.ToList(prepared);
@@ -284,7 +284,7 @@ public class ComponentContractTests
         using var ctx = new SqliteDataContext(conn, new DataContextBuilder());
 
         int threshold = 0;
-        var b = ctx.From<Entity>().Where(x => x.Score > threshold).SelectWhereMinEx(x => x.Score);
+        var b = ExtremeRowExtensions.SelectWhereMin(ctx.From<Entity>().Where(x => x.Score > threshold), x => x.Score);
         QueryCommand<Entity> cmd = b;
 
         threshold = 10;
@@ -309,7 +309,7 @@ public class ComponentContractTests
         using var ctx = new SqliteDataContext(conn, new DataContextBuilder());
         ctx.PurgeQueryCache();
 
-        var b = ctx.From<Entity>().Where(x => x.Score > SqlFunctions.Parameter<int>(0)).SelectWhereMinEx(x => x.Score);
+        var b = ExtremeRowExtensions.SelectWhereMin(ctx.From<Entity>().Where(x => x.Score > SqlFunctions.Parameter<int>(0)), x => x.Score);
         var cmd = (QueryCommand<Entity>)b;
         var prepared = ctx.GetPreparedQueryCommand(cmd, false, true, CancellationToken.None);
 
@@ -331,7 +331,7 @@ public class ComponentContractTests
         cmd0.ExecuteNonQuery();
         using var ctx = new SqliteDataContext(conn, new DataContextBuilder());
 
-        var b = ctx.From<Entity>().SelectWhereMinEx(x => x.Score, x => new ResultDto { Id = x.Id, Name = x.Name });
+        var b = ExtremeRowExtensions.SelectWhereMin(ctx.From<Entity>(), x => x.Score, x => new ResultDto { Id = x.Id, Name = x.Name });
         QueryCommand<ResultDto> cmd = b;
         var sql = SqlOf(ctx, cmd);
         var outerSelect = sql[..sql.IndexOf("from (", StringComparison.Ordinal)];
@@ -356,7 +356,7 @@ public class ComponentContractTests
         cmd0.ExecuteNonQuery();
         using var ctx = new SqliteDataContext(conn, new DataContextBuilder());
 
-        var b = ctx.From<AliasEntity>().SelectWhereMinEx(x => x.Score, x => new { x.Id, x.rn, x.rank, x.__nextorm_ext_rn });
+        var b = ExtremeRowExtensions.SelectWhereMin(ctx.From<AliasEntity>(), x => x.Score, x => new { x.Id, x.rn, x.rank, x.__nextorm_ext_rn });
         var sql = SqlOf(ctx, b);
         sql.Should().Contain("__nextorm_ext_rn_");
     }
@@ -371,8 +371,8 @@ public class ComponentContractTests
         cmd0.ExecuteNonQuery();
         using var ctx = new SqliteDataContext(conn, new DataContextBuilder());
 
-        var rows = ctx.From<AliasEntity>()
-            .SelectWhereMinEx(x => x.Score, x => new { x.Id, x.rn, x.rank, x.__nextorm_ext_rn })
+        var rows = ExtremeRowExtensions.SelectWhereMin(ctx.From<AliasEntity>()
+, x => x.Score, x => new { x.Id, x.rn, x.rank, x.__nextorm_ext_rn })
             .ToList();
 
         rows.Should().ContainSingle();
@@ -386,7 +386,7 @@ public class ComponentContractTests
     public void C10_InMemory_ThrowsNotSupported()
     {
         using var ctx = new NextORM.Core.InMemoryDataContext();
-        var b = ctx.From<Entity>().SelectWhereMinEx(x => x.Score);
+        var b = ExtremeRowExtensions.SelectWhereMin(ctx.From<Entity>(), x => x.Score);
         Action act = () => _ = b.ToList();
         act.Should().Throw<NotSupportedException>();
     }
@@ -407,7 +407,7 @@ public class ComponentContractTests
         try
         {
             builtIds = ctx.From<Entity>()
-                .SelectWhereMin(x => x.Score, ExtremeRowTies.All)
+                .SelectWhereMinOld(x => x.Score, ExtremeRowTies.All)
                 .Distinct()
                 .Select(x => x.Id)
                 .ToList()
@@ -422,7 +422,7 @@ public class ComponentContractTests
         try
         {
             externalIds = ctx.From<Entity>()
-                .SelectWhereMinEx(x => x.Score, ExtremeRowTies.All)
+                .SelectWhereMinOld(x => x.Score, ExtremeRowTies.All)
                 .Distinct()
                 .Select(x => x.Id)
                 .ToList()
@@ -456,9 +456,9 @@ public class ComponentContractTests
         using var ctxScope = ctx;
 
         int threshold = 0;
-        var command = (QueryCommand<Entity>)ctx.From<Entity>()
+        var command = (QueryCommand<Entity>)ExtremeRowExtensions.SelectWhereMin(ctx.From<Entity>()
             .Where(x => x.Score > threshold)
-            .SelectWhereMinEx(x => x.Score);
+, x => x.Score);
 
         var prepared = Prepare(ctx, command);
         ctx.ToList(prepared);
@@ -481,9 +481,9 @@ public class ComponentContractTests
         using var connScope = conn;
         using var ctxScope = ctx;
 
-        var command = (QueryCommand<Entity>)ctx.From<Entity>()
+        var command = (QueryCommand<Entity>)ExtremeRowExtensions.SelectWhereMin(ctx.From<Entity>()
             .Where(x => x.Score > SqlFunctions.Parameter<int>(0))
-            .SelectWhereMinEx(x => x.Score);
+, x => x.Score);
 
         var prepared = Prepare(ctx, command);
         var builtSql = prepared.SqlStmt;
@@ -568,9 +568,9 @@ public class ComponentContractTests
         using var ctxScope = ctx;
 
         int threshold = 5;
-        var command = (QueryCommand<Entity>)ctx.From<Entity>()
+        var command = (QueryCommand<Entity>)ExtremeRowExtensions.SelectWhereMin(ctx.From<Entity>()
             .Where(x => x.Score > threshold)
-            .SelectWhereMinEx(x => x.Score);
+, x => x.Score);
 
         threshold = 10;
         var p1 = ctx.GetPreparedQueryCommand(command, false, true, CancellationToken.None);
@@ -588,7 +588,7 @@ public class ComponentContractTests
     public void Clone_CarriesComponentState_ExtremeRow()
     {
         using var ctx = Ctx();
-        var b = ctx.From<Entity>().SelectWhereMaxEx(x => x.Score);
+        var b = ExtremeRowExtensions.SelectWhereMax(ctx.From<Entity>(), x => x.Score);
         QueryCommand<Entity> cmd = b;
         _ = SqlOf(ctx, cmd);
 
@@ -623,7 +623,7 @@ public class ComponentContractTests
     public void Aggregates_RejectedExplicitly()
     {
         using var ctx = Ctx();
-        Action external = () => _ = ctx.From<Entity>().SelectWhereMinEx(x => x.Score).Count();
+        Action external = () => _ = ExtremeRowExtensions.SelectWhereMin(ctx.From<Entity>(), x => x.Score).Count();
         external.Should().Throw<BuildSqlCommandException>()
             .Which.Message.Should().Contain("aggregates");
     }

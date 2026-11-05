@@ -20,7 +20,7 @@ public sealed class T302CompositeAllTableVariableSourceGuardTests
         var batch = CreateBatchWithCapture(ctx);
 
         var command = batch.FromOutput<T302TableVariableRow>("@t")
-            .SelectWhereMax(r => new { r.V1, r.V2 }, ExtremeRowTies.All)
+            .SelectWhereMaxOld(r => new { r.V1, r.V2 }, ExtremeRowTies.All)
             .ToCommand();
 
         var cacheBefore = command.Cache;
@@ -43,7 +43,7 @@ public sealed class T302CompositeAllTableVariableSourceGuardTests
         var batch = CreateBatchWithCapture(ctx);
 
         var command = batch.FromOutput<T302TableVariableRow>("@t")
-            .SelectWhereMax(
+            .SelectWhereMaxOld(
                 r => new { r.V1, r.V2 },
                 r => new { Id = r.Id },
                 ExtremeRowTies.All,

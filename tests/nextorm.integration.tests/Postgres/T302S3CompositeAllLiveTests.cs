@@ -203,7 +203,7 @@ public sealed class T302S3CompositeAllPostgresTests : ProviderTestSuite
         CreateMaxCounterexampleFixture();
         try
         {
-            var rows = Source().SelectWhereMax(e => new { e.V1, e.V2 }, ExtremeRowTies.All)
+            var rows = Source().SelectWhereMaxOld(e => new { e.V1, e.V2 }, ExtremeRowTies.All)
                 .OrderBy(e => e.Id).ToList();
 
             rows.Should().ContainSingle();
@@ -226,7 +226,7 @@ public sealed class T302S3CompositeAllPostgresTests : ProviderTestSuite
         CreateMinCounterexampleFixture();
         try
         {
-            var rows = Source().SelectWhereMin(e => new { e.V1, e.V2 }, ExtremeRowTies.All)
+            var rows = Source().SelectWhereMinOld(e => new { e.V1, e.V2 }, ExtremeRowTies.All)
                 .OrderBy(e => e.Id).ToList();
 
             rows.Should().ContainSingle();
@@ -252,7 +252,7 @@ public sealed class T302S3CompositeAllPostgresTests : ProviderTestSuite
             "(4, 9, 3, null, 'g', null, null, 9300)");
         try
         {
-            var rows = Source().SelectWhereMax(e => new { e.V1, e.V2, e.V3 }, ExtremeRowTies.All)
+            var rows = Source().SelectWhereMaxOld(e => new { e.V1, e.V2, e.V3 }, ExtremeRowTies.All)
                 .OrderBy(e => e.Id).ToList();
 
             rows.Should().ContainSingle();
@@ -280,7 +280,7 @@ public sealed class T302S3CompositeAllPostgresTests : ProviderTestSuite
             "(5, 8, 100, null, 'g', null, null, 5)");
         try
         {
-            var rows = Source().SelectWhereMax(e => new { e.V1, e.V2 }, ExtremeRowTies.All)
+            var rows = Source().SelectWhereMaxOld(e => new { e.V1, e.V2 }, ExtremeRowTies.All)
                 .OrderBy(e => e.Id).ToList();
 
             rows.Select(r => r.Id).Should().ContainInOrder(1, 2, 3);
@@ -303,7 +303,7 @@ public sealed class T302S3CompositeAllPostgresTests : ProviderTestSuite
         {
             // Global: every NULL-component row is excluded, so (5,2) beats (4,100) rather than a
             // NULL row leaking in through the aggregate.
-            var global = Source().SelectWhereMax(e => new { e.V1, e.V2 }, ExtremeRowTies.All).ToList();
+            var global = Source().SelectWhereMaxOld(e => new { e.V1, e.V2 }, ExtremeRowTies.All).ToList();
             global.Should().ContainSingle();
             global[0].Id.Should().Be(4);
             global.Should().OnlyContain(r => r.V1 != null && r.V2 != null,
@@ -311,7 +311,7 @@ public sealed class T302S3CompositeAllPostgresTests : ProviderTestSuite
 
             // Grouped: 'nullonly' has no eligible aggregate row at all and is omitted, while 'ok'
             // still returns its winner.
-            var grouped = Source().SelectWhereMax(e => new { e.V1, e.V2 }, ExtremeRowTies.All, e => e.Grp)
+            var grouped = Source().SelectWhereMaxOld(e => new { e.V1, e.V2 }, ExtremeRowTies.All, e => e.Grp)
                 .OrderBy(e => e.Id).ToList();
             grouped.Should().ContainSingle();
             grouped[0].Id.Should().Be(4);
@@ -332,7 +332,7 @@ public sealed class T302S3CompositeAllPostgresTests : ProviderTestSuite
             "(6, 9, 2, null, 'g', null, null, 60)");
         try
         {
-            var rows = Source().SelectWhereMax(e => new { e.V1, e.V2 }, ExtremeRowTies.All, e => e.Grp)
+            var rows = Source().SelectWhereMaxOld(e => new { e.V1, e.V2 }, ExtremeRowTies.All, e => e.Grp)
                 .OrderBy(e => e.Id).ToList();
 
             rows.Should().HaveCount(3);
@@ -353,11 +353,11 @@ public sealed class T302S3CompositeAllPostgresTests : ProviderTestSuite
         try
         {
             Source().Where(e => e.Id == -1)
-                .SelectWhereMax(e => new { e.V1, e.V2 }, ExtremeRowTies.All).ToList().Should().BeEmpty();
+                .SelectWhereMaxOld(e => new { e.V1, e.V2 }, ExtremeRowTies.All).ToList().Should().BeEmpty();
             Source().Where(e => e.Id == -1)
-                .SelectWhereMin(e => new { e.V1, e.V2 }, ExtremeRowTies.All).ToList().Should().BeEmpty();
+                .SelectWhereMinOld(e => new { e.V1, e.V2 }, ExtremeRowTies.All).ToList().Should().BeEmpty();
             Source().Where(e => e.Id == -1)
-                .SelectWhereMax(e => new { e.V1, e.V2 }, ExtremeRowTies.All, e => e.Grp).ToList().Should().BeEmpty();
+                .SelectWhereMaxOld(e => new { e.V1, e.V2 }, ExtremeRowTies.All, e => e.Grp).ToList().Should().BeEmpty();
         }
         finally { DropFixture(); }
     }
@@ -377,7 +377,7 @@ public sealed class T302S3CompositeAllPostgresTests : ProviderTestSuite
             // The unfiltered winner (9,2) is filtered out on every stage and on O, so the population's
             // own winner (8,100) must come back instead of a stale unfiltered aggregate.
             var filtered = Source().Where(e => e.V1 < 9 && e.Flg == capturedFlag)
-                .SelectWhereMax(e => new { e.V1, e.V2 }, ExtremeRowTies.All).ToList();
+                .SelectWhereMaxOld(e => new { e.V1, e.V2 }, ExtremeRowTies.All).ToList();
             filtered.Should().ContainSingle();
             filtered[0].Id.Should().Be(2);
             filtered.Should().NotContain(r => r.V1 == 9 && r.V2 == 2);
@@ -385,7 +385,7 @@ public sealed class T302S3CompositeAllPostgresTests : ProviderTestSuite
             // The same form with a different bound value returns the other population's winner.
             capturedFlag = 1;
             var second = Source().Where(e => e.V1 < 9 && e.Flg == capturedFlag)
-                .SelectWhereMax(e => new { e.V1, e.V2 }, ExtremeRowTies.All).ToList();
+                .SelectWhereMaxOld(e => new { e.V1, e.V2 }, ExtremeRowTies.All).ToList();
             second.Should().ContainSingle();
             second[0].Id.Should().Be(5);
         }
@@ -402,40 +402,40 @@ public sealed class T302S3CompositeAllPostgresTests : ProviderTestSuite
             "(4, 7, 1, null, 'c', null, null, 30)");
         try
         {
-            var entity = Source().SelectWhereMax(e => new { e.V1, e.V2 }, ExtremeRowTies.All)
+            var entity = Source().SelectWhereMaxOld(e => new { e.V1, e.V2 }, ExtremeRowTies.All)
                 .OrderBy(e => e.Id).ToList();
             entity.Select(r => r.Id).Should().ContainInOrder(1, 2);
 
-            var dto = Source().SelectWhereMax(e => new { e.V1, e.V2 },
+            var dto = Source().SelectWhereMaxOld(e => new { e.V1, e.V2 },
                     e => new Dto { Id = e.Id, Grp = e.Grp, Payload = e.Payload }, ExtremeRowTies.All)
                 .OrderBy(e => e.Id).ToList();
             dto.Select(r => r.Id).Should().ContainInOrder(1, 2);
 
-            var anon = Source().SelectWhereMax(e => new { e.V1, e.V2 },
+            var anon = Source().SelectWhereMaxOld(e => new { e.V1, e.V2 },
                     e => new { e.Id, e.Grp, e.Payload }, ExtremeRowTies.All)
                 .OrderBy(e => e.Id).ToList();
             anon.Select(r => r.Id).Should().ContainInOrder(1, 2);
 
-            var records = Source().SelectWhereMax(e => new { e.V1, e.V2 },
+            var records = Source().SelectWhereMaxOld(e => new { e.V1, e.V2 },
                     e => new WinnerRecord(e.Id, e.Grp, e.Payload), ExtremeRowTies.All)
                 .OrderBy(e => e.Id).ToList();
             records.Should().Equal(
                 new WinnerRecord(1, "b", 10),
                 new WinnerRecord(2, "b", 10));
 
-            var scalars = Source().SelectWhereMax(e => new { e.V1, e.V2 }, e => e.Payload, ExtremeRowTies.All)
+            var scalars = Source().SelectWhereMaxOld(e => new { e.V1, e.V2 }, e => e.Payload, ExtremeRowTies.All)
                 .ToList();
             scalars.Should().HaveCount(2).And.OnlyContain(v => v == 10);
 
-            var desc = Source().SelectWhereMax(e => new { e.V1, e.V2 }, ExtremeRowTies.All)
+            var desc = Source().SelectWhereMaxOld(e => new { e.V1, e.V2 }, ExtremeRowTies.All)
                 .OrderByDescending(e => e.Id).ToList();
             desc.Select(r => r.Id).Should().ContainInOrder(2, 1);
 
             // DISTINCT collapses the two exact duplicate winners into one.
-            var all = Source().SelectWhereMax(e => new { e.V1, e.V2 },
+            var all = Source().SelectWhereMaxOld(e => new { e.V1, e.V2 },
                     e => new { e.V1, e.V2, e.Payload }, ExtremeRowTies.All).ToList();
             all.Should().HaveCount(2);
-            var distinct = Source().SelectWhereMax(e => new { e.V1, e.V2 },
+            var distinct = Source().SelectWhereMaxOld(e => new { e.V1, e.V2 },
                     e => new { e.V1, e.V2, e.Payload }, ExtremeRowTies.All).Distinct().ToList();
             distinct.Should().ContainSingle()
                 .Which.Should().Be(new { V1 = (int?)9, V2 = (int?)2, Payload = (int?)10 });
@@ -455,7 +455,7 @@ public sealed class T302S3CompositeAllPostgresTests : ProviderTestSuite
             "(6, 9, 1, 1, null, 1, null, 910)");
         try
         {
-            var rows = Source().SelectWhereMax(e => new { e.V1, e.V2, e.V3 }, ExtremeRowTies.All,
+            var rows = Source().SelectWhereMaxOld(e => new { e.V1, e.V2, e.V3 }, ExtremeRowTies.All,
                     e => new { e.Grp, e.GKey })
                 .OrderBy(e => e.Id).ToList();
 
@@ -486,7 +486,7 @@ public sealed class T302S3CompositeAllPostgresTests : ProviderTestSuite
             "(9, null, 1, 1, 'b', 1, null, 510)");
         try
         {
-            var global = Source().SelectWhereMin(e => new { e.V1, e.V2, e.V3 }, ExtremeRowTies.All)
+            var global = Source().SelectWhereMinOld(e => new { e.V1, e.V2, e.V3 }, ExtremeRowTies.All)
                 .ToList();
             global.Should().ContainSingle();
             global[0].Id.Should().Be(6, "the lexicographic minimum over the whole population is (6,2,1)");
@@ -499,7 +499,7 @@ public sealed class T302S3CompositeAllPostgresTests : ProviderTestSuite
             global.Should().NotContain(r => r.V1 == null || r.V2 == null || r.V3 == null,
                 "a NULL value-key component is never a winner");
 
-            var grouped = Source().SelectWhereMin(e => new { e.V1, e.V2, e.V3 }, ExtremeRowTies.All,
+            var grouped = Source().SelectWhereMinOld(e => new { e.V1, e.V2, e.V3 }, ExtremeRowTies.All,
                     e => new { e.Grp, e.GKey })
                 .OrderBy(e => e.Id).ToList();
             grouped.Select(r => r.Id).Should().ContainInOrder(1, 6);
@@ -528,14 +528,14 @@ public sealed class T302S3CompositeAllPostgresTests : ProviderTestSuite
         try
         {
             var max = _sut.DataProvider.From<NonNullableGroupRow>()
-                .SelectWhereMax(e => new { e.V1, e.V2 }, ExtremeRowTies.All, e => e.GKey)
+                .SelectWhereMaxOld(e => new { e.V1, e.V2 }, ExtremeRowTies.All, e => e.GKey)
                 .OrderBy(e => e.Id).ToList();
             max.Select(r => r.Id).Should().ContainInOrder(1, 4);
             max.Select(r => r.GKey).Should().ContainInOrder(1, 2);
             max.Select(r => r.Payload).Should().ContainInOrder(new int?[] { 10, 40 });
 
             var min = _sut.DataProvider.From<NonNullableGroupRow>()
-                .SelectWhereMin(e => new { e.V1, e.V2 }, ExtremeRowTies.All, e => e.GKey)
+                .SelectWhereMinOld(e => new { e.V1, e.V2 }, ExtremeRowTies.All, e => e.GKey)
                 .OrderBy(e => e.Id).ToList();
             min.Select(r => r.Id).Should().ContainInOrder(2, 6);
             min.Select(r => r.GKey).Should().ContainInOrder(1, 2);
@@ -555,7 +555,7 @@ public sealed class T302S3CompositeAllPostgresTests : ProviderTestSuite
             "(5, 9, 1, 9, 'g', null, null, 888)");
         try
         {
-            var rows = Source().SelectWhereMax(e => new { e.V1, e.V2, e.V3 }, ExtremeRowTies.All)
+            var rows = Source().SelectWhereMaxOld(e => new { e.V1, e.V2, e.V3 }, ExtremeRowTies.All)
                 .OrderBy(e => e.Id).ToList();
 
             rows.Select(r => r.Id).Should().ContainInOrder(1, 2, 3);
@@ -585,7 +585,7 @@ public sealed class T302S3CompositeAllPostgresTests : ProviderTestSuite
             // Converted composite value key, global: the stages aggregate the physical text column and
             // the join-back compares the converted key, so Max picks the greatest (state name, sub) pair.
             var max = _sut.DataProvider.From<ConvertedRow>()
-                .SelectWhereMax(e => new { e.State, e.Sub }, ExtremeRowTies.All).ToList();
+                .SelectWhereMaxOld(e => new { e.State, e.Sub }, ExtremeRowTies.All).ToList();
             max.Should().ContainSingle();
             max[0].Id.Should().Be(4);
             max[0].State.Should().Be(ConvertedState.Charlie, "the converted value-key component round-trips");
@@ -593,14 +593,14 @@ public sealed class T302S3CompositeAllPostgresTests : ProviderTestSuite
             max[0].Payload.Should().Be(409);
 
             var min = _sut.DataProvider.From<ConvertedRow>()
-                .SelectWhereMin(e => new { e.State, e.Sub }, ExtremeRowTies.All).ToList();
+                .SelectWhereMinOld(e => new { e.State, e.Sub }, ExtremeRowTies.All).ToList();
             min.Should().ContainSingle();
             min[0].Id.Should().Be(1, "Alpha is the smallest converted state name and sub 2 the smallest inside it");
             min[0].State.Should().Be(ConvertedState.Alpha);
 
             // Converted group key, grouped: each converted group keeps its own converted composite winner.
             var grouped = _sut.DataProvider.From<ConvertedRow>()
-                .SelectWhereMax(e => new { e.State, e.Sub }, ExtremeRowTies.All, e => e.Grp)
+                .SelectWhereMaxOld(e => new { e.State, e.Sub }, ExtremeRowTies.All, e => e.Grp)
                 .OrderBy(e => e.Id).ToList();
             grouped.Select(r => r.Id).Should().ContainInOrder(3, 4);
             grouped.Select(r => r.Grp).Should().ContainInOrder(ConvertedGroup.Alpha, ConvertedGroup.Bravo);
@@ -624,7 +624,7 @@ public sealed class T302S3CompositeAllPostgresTests : ProviderTestSuite
         try
         {
             var global = _sut.DataProvider.From<MappedRow>()
-                .SelectWhereMax(e => new { e.V1, e.V2 }, ExtremeRowTies.All).ToList();
+                .SelectWhereMaxOld(e => new { e.V1, e.V2 }, ExtremeRowTies.All).ToList();
             global.Should().ContainSingle();
             global[0].Id.Should().Be(3);
             global[0].V1.Should().Be(9);
@@ -634,7 +634,7 @@ public sealed class T302S3CompositeAllPostgresTests : ProviderTestSuite
             global[0].Payload.Should().Be(930);
 
             var grouped = _sut.DataProvider.From<MappedRow>()
-                .SelectWhereMax(e => new { e.V1, e.V2 }, ExtremeRowTies.All, e => e.Grp)
+                .SelectWhereMaxOld(e => new { e.V1, e.V2 }, ExtremeRowTies.All, e => e.Grp)
                 .OrderBy(e => e.Id).ToList();
             grouped.Select(r => r.Id).Should().ContainInOrder(3, 4);
             grouped.Select(r => r.Grp).Should().ContainInOrder("a", "b");

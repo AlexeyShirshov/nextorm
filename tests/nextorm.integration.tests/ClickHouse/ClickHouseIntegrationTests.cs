@@ -2110,7 +2110,7 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
     [Fact]
     public void SelectWhereExtrema_Max_GlobalOne_ShouldReturnTheWholeExtremeRow()
     {
-        var rows = _sut.DataProvider.From<ExtremaEntity>().SelectWhereMax(e => e.Score).ToList();
+        var rows = _sut.DataProvider.From<ExtremaEntity>().SelectWhereMaxOld(e => e.Score).ToList();
 
         rows.Should().ContainSingle();
         rows[0].Score.Should().Be(9);
@@ -2125,7 +2125,7 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
     public void SelectWhereExtrema_Max_GroupedAll_ShouldReturnEveryTiedRowPerGroup()
     {
         var rows = _sut.DataProvider.From<ExtremaEntity>()
-            .SelectWhereMax(e => e.Score, ExtremeRowTies.All, e => e.Category)
+            .SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All, e => e.Category)
             .ToList();
 
         rows.Should().HaveCount(5);
@@ -2141,7 +2141,7 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
     public void SelectWhereExtrema_Max_Projection_ShouldProjectTheExtremeRow()
     {
         var rows = _sut.DataProvider.From<ExtremaEntity>()
-            .SelectWhereMax(e => e.Score, e => new { e.Id, e.Label })
+            .SelectWhereMaxOld(e => e.Score, e => new { e.Id, e.Label })
             .ToList();
 
         rows.Should().ContainSingle();
@@ -2156,7 +2156,7 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
     public void SelectWhereExtrema_Min_GlobalAll_ShouldReturnEveryTiedRow()
     {
         var rows = _sut.DataProvider.From<ExtremaEntity>()
-            .SelectWhereMin(e => e.Score, ExtremeRowTies.All)
+            .SelectWhereMinOld(e => e.Score, ExtremeRowTies.All)
             .ToList();
 
         rows.Should().HaveCount(2);

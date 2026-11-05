@@ -77,7 +77,7 @@ public sealed class T302S2GroupedCacheTests : IDisposable
         int capturedFlag = 1;
         var command = _ctx.From<CacheRow>()
             .Where(e => e.Flag == capturedFlag)
-            .SelectWhereMax(e => e.Score, ExtremeRowTies.All, e => e.Grp)
+            .SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All, e => e.Grp)
             .ToCommand();
 
         var first = Prepare(_ctx, command);
@@ -102,11 +102,11 @@ public sealed class T302S2GroupedCacheTests : IDisposable
         int floor = 5;
         var cmdA = _ctx.From<CacheRow>()
             .Where(e => e.Flag == flag)
-            .SelectWhereMax(e => e.Score, ExtremeRowTies.All, e => e.Grp)
+            .SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All, e => e.Grp)
             .ToCommand();
         var cmdB = _ctx.From<CacheRow>()
             .Where(e => e.Score > floor)
-            .SelectWhereMax(e => e.Score, ExtremeRowTies.All, e => e.Grp)
+            .SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All, e => e.Grp)
             .ToCommand();
 
         var pa = Prepare(_ctx, cmdA);
@@ -134,7 +134,7 @@ public sealed class T302S2GroupedCacheTests : IDisposable
 
         QueryCommand<CacheRow> Command() => _ctx.From<CacheRow>()
             .Where(e => e.Flag == 1)
-            .SelectWhereMax(selector, ExtremeRowTies.All, group)
+            .SelectWhereMaxOld(selector, ExtremeRowTies.All, group)
             .ToCommand();
 
         // Cold: before the first preparation the shape has no published candidate at all.
@@ -180,7 +180,7 @@ public sealed class T302S2GroupedCacheTests : IDisposable
         int capturedFlag = 1;
         var command = _ctx.From<CacheRow>()
             .Where(e => e.Flag == capturedFlag)
-            .SelectWhereMax(e => e.Score, ExtremeRowTies.All, e => e.Grp)
+            .SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All, e => e.Grp)
             .ToCommand();
 
         var prepared = Prepare(_ctx, command);
@@ -209,11 +209,11 @@ public sealed class T302S2GroupedCacheTests : IDisposable
         int capturedFlag = 1;
         var maxCommand = _ctx.From<CacheRow>()
             .Where(e => e.Flag == capturedFlag)
-            .SelectWhereMax(e => e.Score, ExtremeRowTies.All, e => e.Grp)
+            .SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All, e => e.Grp)
             .ToCommand();
         var minCommand = _ctx.From<CacheRow>()
             .Where(e => e.Flag == capturedFlag)
-            .SelectWhereMin(e => e.Score, ExtremeRowTies.All, e => e.Grp)
+            .SelectWhereMinOld(e => e.Score, ExtremeRowTies.All, e => e.Grp)
             .ToCommand();
 
         foreach (var command in new[] { maxCommand, minCommand })

@@ -4,6 +4,11 @@
 
 **Prerequisites:** [Querying and projections](../engine/index.md) · [Sorting and paging](06-sorting-and-paging.md) · [Set operations](08-set-operations.md)
 
+> **Deprecation note.** The built-in operators are now `SelectWhereMinOld` / `SelectWhereMaxOld`: they keep the
+> compatibility path (including the in-memory provider, which the packaged operator does not implement) and are
+> scheduled for removal. The recommended API is `SelectWhereMin` / `SelectWhereMax` from the
+> [extensions package](../advanced/extensions-package.md), built on the public query-component layer.
+
 ## Overview
 
 nextorm exposes two entry points for `SELECT DISTINCT`:
@@ -194,8 +199,8 @@ every other provider rejects it at SQL build time.
 
 ## Keeping the extreme row (`SelectWhereMax` / `SelectWhereMin`)
 
-[`SelectWhereMax`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMax``1(System.Linq.Expressions.Expression{System.Func{`0,``0}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) and
-[`SelectWhereMin`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMin``1(System.Linq.Expressions.Expression{System.Func{`0,``0}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) keep the row (or rows)
+[`SelectWhereMax`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMaxOld``1(System.Linq.Expressions.Expression{System.Func{`0,``0}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) and
+[`SelectWhereMin`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMinOld``1(System.Linq.Expressions.Expression{System.Func{`0,``0}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) keep the row (or rows)
 whose value under a selector is the greatest or smallest in the source. They are a row filter, not an
 aggregate: a surviving row keeps every column.
 
@@ -236,8 +241,8 @@ value. Ties are decided only by the selector, so an `All` result contains all of
 result exactly one arbitrary member.
 
 **Projection form.** The
-[`SelectWhereMax`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMax``2(System.Linq.Expressions.Expression{System.Func{`0,``0}},System.Linq.Expressions.Expression{System.Func{`0,``1}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) /
-[`SelectWhereMin`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMin``2(System.Linq.Expressions.Expression{System.Func{`0,``0}},System.Linq.Expressions.Expression{System.Func{`0,``1}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) overloads take a
+[`SelectWhereMax`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMaxOld``2(System.Linq.Expressions.Expression{System.Func{`0,``0}},System.Linq.Expressions.Expression{System.Func{`0,``1}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) /
+[`SelectWhereMin`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMinOld``2(System.Linq.Expressions.Expression{System.Func{`0,``0}},System.Linq.Expressions.Expression{System.Func{`0,``1}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) overloads take a
 projection and apply it to each surviving row, returning a typed query command:
 
 ```csharp

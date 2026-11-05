@@ -4,10 +4,15 @@
 
 **Предварительные требования:** [Выбор экстремальной строки](../guide/09-distinct.md) · [Обзор провайдеров](../connecting-providers/overview.md) · [Краткий справочник API](api-reference.md)
 
+> **Замечание об устаревании.** Встроенные операторы теперь называются `SelectWhereMinOld` /
+> `SelectWhereMaxOld`: они остаются путём совместимости (включая провайдер in-memory, который пакетный оператор
+> не реализует) и запланированы к удалению. Рекомендуемый API — `SelectWhereMin` / `SelectWhereMax` из
+> [пакета расширений](extensions-package.md), построенный на публичном слое компонентов запроса.
+
 ## Обзор
 
-[`SelectWhereMax`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMax``1(System.Linq.Expressions.Expression{System.Func{`0,``0}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) и
-[`SelectWhereMin`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMin``1(System.Linq.Expressions.Expression{System.Func{`0,``0}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) оставляют строку, значение которой под селектором наибольшее или наименьшее в источнике — глобально или по группам. Это фильтр строк, а не агрегат: выжившая строка сохраняет все колонки. Семантика не изменилась относительно переносимой реализации — полный контракт см. в разделе [Выбор экстремальной строки](../guide/09-distinct.md).
+[`SelectWhereMax`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMaxOld``1(System.Linq.Expressions.Expression{System.Func{`0,``0}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) и
+[`SelectWhereMin`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMinOld``1(System.Linq.Expressions.Expression{System.Func{`0,``0}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) оставляют строку, значение которой под селектором наибольшее или наименьшее в источнике — глобально или по группам. Это фильтр строк, а не агрегат: выжившая строка сохраняет все колонки. Семантика не изменилась относительно переносимой реализации — полный контракт см. в разделе [Выбор экстремальной строки](../guide/09-distinct.md).
 
 Эта страница описывает *то, как* запрос с `One` доходит до базы. Выбор стратегии автоматический и детерминированный **по провайдеру и форме/типу запроса**:
 

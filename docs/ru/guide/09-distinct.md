@@ -4,6 +4,11 @@
 
 **Предварительные требования:** [Запросы и проекции](../engine/index.md) · [Сортировка и постраничный вывод](06-sorting-and-paging.md) · [Операции над множествами](08-set-operations.md)
 
+> **Замечание об устаревании.** Встроенные операторы теперь называются `SelectWhereMinOld` /
+> `SelectWhereMaxOld`: они остаются путём совместимости (включая провайдер in-memory, который пакетный оператор
+> не реализует) и запланированы к удалению. Рекомендуемый API — `SelectWhereMin` / `SelectWhereMax` из
+> [пакета расширений](../advanced/extensions-package.md), построенный на публичном слое компонентов запроса.
+
 ## Обзор
 
 nextorm предоставляет две точки входа для `SELECT DISTINCT`:
@@ -195,8 +200,8 @@ select distinct on (somestring) id, somestring
 
 ## Выбор экстремальной строки (`SelectWhereMax` / `SelectWhereMin`)
 
-[`SelectWhereMax`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMax``1(System.Linq.Expressions.Expression{System.Func{`0,``0}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) и
-[`SelectWhereMin`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMin``1(System.Linq.Expressions.Expression{System.Func{`0,``0}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) оставляют строку (или строки),
+[`SelectWhereMax`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMaxOld``1(System.Linq.Expressions.Expression{System.Func{`0,``0}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) и
+[`SelectWhereMin`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMinOld``1(System.Linq.Expressions.Expression{System.Func{`0,``0}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) оставляют строку (или строки),
 значение которой по селектору максимально или минимально в источнике. Это фильтр строк, а не
 агрегат: выжившая строка сохраняет все колонки.
 
@@ -238,8 +243,8 @@ select t1.id, t1.score, t1.category, t1.label
 селектором, поэтому результат `All` содержит все такие строки, а `One` — ровно одну произвольную.
 
 **Форма с проекцией.** Перегрузки
-[`SelectWhereMax`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMax``2(System.Linq.Expressions.Expression{System.Func{`0,``0}},System.Linq.Expressions.Expression{System.Func{`0,``1}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) /
-[`SelectWhereMin`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMin``2(System.Linq.Expressions.Expression{System.Func{`0,``0}},System.Linq.Expressions.Expression{System.Func{`0,``1}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) принимают проекцию и применяют
+[`SelectWhereMax`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMaxOld``2(System.Linq.Expressions.Expression{System.Func{`0,``0}},System.Linq.Expressions.Expression{System.Func{`0,``1}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) /
+[`SelectWhereMin`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMinOld``2(System.Linq.Expressions.Expression{System.Func{`0,``0}},System.Linq.Expressions.Expression{System.Func{`0,``1}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) принимают проекцию и применяют
 её к каждой выжившей строке, возвращая типизированную команду запроса:
 
 ```csharp

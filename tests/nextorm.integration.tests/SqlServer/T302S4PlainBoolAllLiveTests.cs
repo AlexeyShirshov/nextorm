@@ -132,13 +132,13 @@ public sealed class T302S4PlainBoolAllSqlServerTests : ProviderTestSuite
             "(5, 0, null, null, 50)");
         try
         {
-            var max = Source().SelectWhereMax(e => e.Ok, ExtremeRowTies.All)
+            var max = Source().SelectWhereMaxOld(e => e.Ok, ExtremeRowTies.All)
                 .OrderBy(e => e.Id).ToList();
             max.Select(r => r.Id).Should().ContainInOrder(1, 2);
             max.Should().OnlyContain(r => r.Ok, "true must be the maximum of the bit domain");
             max.Select(r => r.Payload).Should().ContainInOrder(new int?[] { 10, null });
 
-            var min = Source().SelectWhereMin(e => e.Ok, ExtremeRowTies.All)
+            var min = Source().SelectWhereMinOld(e => e.Ok, ExtremeRowTies.All)
                 .OrderBy(e => e.Id).ToList();
             min.Select(r => r.Id).Should().ContainInOrder(3, 4, 5);
             min.Should().OnlyContain(r => !r.Ok, "false must be the minimum of the bit domain");
@@ -160,7 +160,7 @@ public sealed class T302S4PlainBoolAllSqlServerTests : ProviderTestSuite
             "(4, 0, null, 999, 4999)");
         try
         {
-            var max = Source().SelectWhereMax(e => new { e.Ok, e.Sub }, ExtremeRowTies.All).ToList();
+            var max = Source().SelectWhereMaxOld(e => new { e.Ok, e.Sub }, ExtremeRowTies.All).ToList();
             max.Should().ContainSingle();
             max[0].Id.Should().Be(1);
             max[0].Ok.Should().BeTrue();
@@ -170,7 +170,7 @@ public sealed class T302S4PlainBoolAllSqlServerTests : ProviderTestSuite
             max.Should().NotContain(r => r.Ok && r.Sub == 999,
                 "stage 2 aggregates inside the surviving boolean prefix, so (true,999) cannot be synthesized");
 
-            var min = Source().SelectWhereMin(e => new { e.Ok, e.Sub }, ExtremeRowTies.All).ToList();
+            var min = Source().SelectWhereMinOld(e => new { e.Ok, e.Sub }, ExtremeRowTies.All).ToList();
             min.Should().ContainSingle();
             min[0].Id.Should().Be(3);
             min[0].Ok.Should().BeFalse();
@@ -197,12 +197,12 @@ public sealed class T302S4PlainBoolAllSqlServerTests : ProviderTestSuite
             "(4, 0, 0, null, 40)");
         try
         {
-            var max = Source().SelectWhereMax(e => e.Nb, ExtremeRowTies.All)
+            var max = Source().SelectWhereMaxOld(e => e.Nb, ExtremeRowTies.All)
                 .OrderBy(e => e.Id).ToList();
             max.Select(r => r.Id).Should().ContainInOrder(2, 3);
             max.Should().OnlyContain(r => r.Nb == true);
 
-            var min = Source().SelectWhereMin(e => e.Nb, ExtremeRowTies.All)
+            var min = Source().SelectWhereMinOld(e => e.Nb, ExtremeRowTies.All)
                 .OrderBy(e => e.Id).ToList();
             min.Select(r => r.Id).Should().ContainInOrder(4);
             min[0].Nb.Should().BeFalse();
@@ -228,13 +228,13 @@ public sealed class T302S4PlainBoolAllSqlServerTests : ProviderTestSuite
             "(6, 1, null, 3, 26, 2)");
         try
         {
-            var max = Source().SelectWhereMax(e => e.Ok, ExtremeRowTies.All, e => e.Grp)
+            var max = Source().SelectWhereMaxOld(e => e.Ok, ExtremeRowTies.All, e => e.Grp)
                 .OrderBy(e => e.Id).ToList();
             max.Select(r => r.Id).Should().ContainInOrder(1, 2, 5, 6);
             max.Select(r => r.Grp).Should().Equal(1, 1, 2, 2);
             max.Should().OnlyContain(r => r.Ok, "true is the per-group maximum of the bit domain");
 
-            var min = Source().SelectWhereMin(e => e.Ok, ExtremeRowTies.All, e => e.Grp)
+            var min = Source().SelectWhereMinOld(e => e.Ok, ExtremeRowTies.All, e => e.Grp)
                 .OrderBy(e => e.Id).ToList();
             min.Select(r => r.Id).Should().ContainInOrder(3, 4);
             min.Select(r => r.Grp).Should().Equal(1, 2);
@@ -261,12 +261,12 @@ public sealed class T302S4PlainBoolAllSqlServerTests : ProviderTestSuite
             "(7, 0, 0, 8, 27, 2)");
         try
         {
-            var max = Source().SelectWhereMax(e => new { e.Nb, e.Sub }, ExtremeRowTies.All, e => e.Grp)
+            var max = Source().SelectWhereMaxOld(e => new { e.Nb, e.Sub }, ExtremeRowTies.All, e => e.Grp)
                 .OrderBy(e => e.Id).ToList();
             max.Select(r => r.Id).Should().ContainInOrder(2, 7);
             max.Should().OnlyContain(r => r.Nb != null, "a NULL value component is never a winner");
 
-            var min = Source().SelectWhereMin(e => new { e.Nb, e.Sub }, ExtremeRowTies.All, e => e.Grp)
+            var min = Source().SelectWhereMinOld(e => new { e.Nb, e.Sub }, ExtremeRowTies.All, e => e.Grp)
                 .OrderBy(e => e.Id).ToList();
             min.Select(r => r.Id).Should().ContainInOrder(4, 6);
             min.Should().OnlyContain(r => r.Nb != null, "a NULL value component is never a winner");
@@ -289,17 +289,17 @@ public sealed class T302S4PlainBoolAllSqlServerTests : ProviderTestSuite
             "(4, 0, 7, 14)");
         try
         {
-            var scalarMax = ConvertedSource().SelectWhereMax(e => e.Ok, ExtremeRowTies.All)
+            var scalarMax = ConvertedSource().SelectWhereMaxOld(e => e.Ok, ExtremeRowTies.All)
                 .OrderBy(e => e.Id).ToList();
             scalarMax.Select(r => r.Id).Should().ContainInOrder(1, 2);
             scalarMax.Should().OnlyContain(r => r.Ok, "true = 1 is the maximum of the converted domain");
 
-            var scalarMin = ConvertedSource().SelectWhereMin(e => e.Ok, ExtremeRowTies.All)
+            var scalarMin = ConvertedSource().SelectWhereMinOld(e => e.Ok, ExtremeRowTies.All)
                 .OrderBy(e => e.Id).ToList();
             scalarMin.Select(r => r.Id).Should().ContainInOrder(3, 4);
             scalarMin.Should().OnlyContain(r => !r.Ok, "false = 0 is the minimum of the converted domain");
 
-            var compositeMax = ConvertedSource().SelectWhereMax(e => new { e.Ok, e.Sub }, ExtremeRowTies.All)
+            var compositeMax = ConvertedSource().SelectWhereMaxOld(e => new { e.Ok, e.Sub }, ExtremeRowTies.All)
                 .ToList();
             compositeMax.Should().ContainSingle();
             compositeMax[0].Id.Should().Be(2);
@@ -308,7 +308,7 @@ public sealed class T302S4PlainBoolAllSqlServerTests : ProviderTestSuite
             compositeMax.Should().NotContain(r => !r.Ok,
                 "false is strictly below true, so no false row may win Max");
 
-            var compositeMin = ConvertedSource().SelectWhereMin(e => new { e.Ok, e.Sub }, ExtremeRowTies.All)
+            var compositeMin = ConvertedSource().SelectWhereMinOld(e => new { e.Ok, e.Sub }, ExtremeRowTies.All)
                 .ToList();
             compositeMin.Should().ContainSingle();
             compositeMin[0].Id.Should().Be(3);
@@ -336,24 +336,24 @@ public sealed class T302S4PlainBoolAllSqlServerTests : ProviderTestSuite
             "(6, 0, 4, 16, 2)");
         try
         {
-            var scalarMax = ConvertedSource().SelectWhereMax(e => e.Ok, ExtremeRowTies.All, e => e.Grp)
+            var scalarMax = ConvertedSource().SelectWhereMaxOld(e => e.Ok, ExtremeRowTies.All, e => e.Grp)
                 .OrderBy(e => e.Id).ToList();
             scalarMax.Select(r => r.Id).Should().ContainInOrder(2, 5);
             scalarMax.Should().OnlyContain(r => r.Ok, "true = 1 is the per-group maximum");
 
-            var scalarMin = ConvertedSource().SelectWhereMin(e => e.Ok, ExtremeRowTies.All, e => e.Grp)
+            var scalarMin = ConvertedSource().SelectWhereMinOld(e => e.Ok, ExtremeRowTies.All, e => e.Grp)
                 .OrderBy(e => e.Id).ToList();
             scalarMin.Select(r => r.Id).Should().ContainInOrder(3, 6);
             scalarMin.Should().OnlyContain(r => !r.Ok, "false = 0 is the per-group minimum");
 
             var compositeMax = ConvertedSource()
-                .SelectWhereMax(e => new { e.Ok, e.Sub }, ExtremeRowTies.All, e => e.Grp)
+                .SelectWhereMaxOld(e => new { e.Ok, e.Sub }, ExtremeRowTies.All, e => e.Grp)
                 .OrderBy(e => e.Id).ToList();
             compositeMax.Select(r => r.Id).Should().ContainInOrder(2, 5);
             compositeMax.Should().OnlyContain(r => r.Ok && r.Sub != null);
 
             var compositeMin = ConvertedSource()
-                .SelectWhereMin(e => new { e.Ok, e.Sub }, ExtremeRowTies.All, e => e.Grp)
+                .SelectWhereMinOld(e => new { e.Ok, e.Sub }, ExtremeRowTies.All, e => e.Grp)
                 .OrderBy(e => e.Id).ToList();
             compositeMin.Select(r => r.Id).Should().ContainInOrder(3, 6);
             compositeMin.Should().OnlyContain(r => !r.Ok);

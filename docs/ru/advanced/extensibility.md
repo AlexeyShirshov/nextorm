@@ -88,30 +88,66 @@ var top = ctx.From<Player>()
     .ToList();
 ```
 
-Публичный контракт — шесть небольших типов: [`IQueryComponent`](xref:NextORM.Core.IQueryComponent) (слот, вид
-вклада, `Prepare`, `BuildQuery`), [`IQueryComponentDescriptor`](xref:NextORM.Core.IQueryComponentDescriptor)
-(неизменяемое подготовленное состояние), [`QueryComponentContribution`](xref:NextORM.Core.QueryComponentContribution)
-(`AdditivePredicate` или `ExclusiveRowSource`) и контексты
-[`IQueryComponentPrepareContext`](xref:NextORM.Core.IQueryComponentPrepareContext) /
-[`IQueryComponentBuildContext`](xref:NextORM.Core.IQueryComponentBuildContext), которые ядро создаёт как
-[`QueryComponentContext`](xref:NextORM.Core.QueryComponentContext). Команда раскрывает присоединённые компоненты
-как [`QueryCommand.Components`](xref:NextORM.Core.QueryCommand.Components), а подготовленные дескрипторы — как
-[`QueryCommand.PreparedComponents`](xref:NextORM.Core.QueryCommand.PreparedComponents); обоими управляет ядро, и
-автор компонента обычно их не трогает.
+### Зачем нужен этот контракт
 
-- **Подготовка/валидация → неизменяемый подготовленный дескриптор.** `Prepare` выполняется один раз на
-  построение плана, против подготавливаемой команды. Он валидирует комбинацию — неподдерживаемая бросает
-  исключение, а не составляется произвольно, — и возвращает дескриптор со слотом, конкретным типом компонента,
-  видом вклада, смысловым `Discriminator`, `StructuralHash` по всему состоянию и `StructurallyEquals`.
-  Дескриптор неизменяем и разделяется кэшированным планом, поэтому не должен ссылаться на изменяемое состояние
-  компонента.
-- **Структурное построение только на промахе кэша.** `BuildQuery` вызывается при создании плана. Он получает
-  команду через `IQueryComponentBuildContext` и перестраивает утверждение из примитивов ядра: производный
-  источник (`FromExpression`), исходный список выборки плюс скрытая вспомогательная колонка (`SelectExpression`,
+Ядро рендерит SQL из собственного дерева выражений, поэтому новую форму запроса обычно можно добавить только
+тремя способами: изменить ядро, получить friend-доступ или собрать текст SQL. Компонентный контракт — четвёртый
+способ: вы описываете *структуру*, которая нужна оператору, в терминах примитивов самого ядра, а ядро решает,
+**когда** вас вызвать. Поэтому ваш оператор наследует кэш планов, привязку параметров и провайдеронезависимость
+обычного запроса, вместо того чтобы дублировать их.
+
+Здесь нет ни реестра, ни глобального состояния. Компонент — это объект, прикреплённый к одному неизменяемому
+построителю: его время жизни равно времени жизни запроса, и два компонента одного слота никогда не вкладываются.
+
+### Кто что реализует и кто это вызывает
+
+| Тип | Вы | Ядро |
+|---|---|---|
+| [`IQueryComponent`](xref:NextORM.Core.IQueryComponent) | Реализуете: один объект на экземпляр оператора. | Читает `Slot` при присоединении и при сравнении ключа плана; читает `Contribution` и вызывает `Prepare` на подготовке; вызывает `BuildQuery` на рендеринге. |
+| [`IQueryComponentDescriptor`](xref:NextORM.Core.IQueryComponentDescriptor) | Возвращаете из `Prepare`; он неизменяем и не должен ссылаться на изменяемое состояние компонента. | Хранит его в [`QueryCommand.PreparedComponents`](xref:NextORM.Core.QueryCommand.PreparedComponents), хэширует (`StructuralHash`) и сравнивает (`StructurallyEquals`) как часть ключа плана, сбрасывает при сбросе подготовки. |
+| [`QueryComponentContribution`](xref:NextORM.Core.QueryComponentContribution) | Объявляете один раз на оператор: `AdditivePredicate` или `ExclusiveRowSource`. | Отвергает второй слот `ExclusiveRowSource` на подготовке и объединяет `AdditivePredicate` через `AND`. |
+| [`IQueryComponentPrepareContext`](xref:NextORM.Core.IQueryComponentPrepareContext) | Используете в `Prepare`. | Создаёт его над подготавливаемой командой. |
+| [`IQueryComponentBuildContext`](xref:NextORM.Core.IQueryComponentBuildContext) | Используете в `BuildQuery`. | Создаёт его над перестроенной командой (шаг 4 ниже). |
+| [`QueryComponentContext`](xref:NextORM.Core.QueryComponentContext) | Обычно не трогаете; он публичный, чтобы тесты могли прогнать компонент напрямую. | Реализует оба контекста и получает `ExpressionComparer` из команды — сравнивайте селекторы им, а не `Expression.Equals`. |
+| [`IQueryComponentShape`](xref:NextORM.Core.IQueryComponentShape) | Необязательно: реализуйте, чтобы ваш компонент обслуживался «сырым» (pre-preparation) кэшем рецептов — сообщите его скалярное состояние и селекторы. | Сравнивает `ShapeState` через `Equals`, а селекторы — компаратором выражений, когда сопоставляет свежую команду с сохранённой сырой формой; без этого интерфейса компонент идёт обычным путём подготовки. |
+| [`WithComponent`](xref:NextORM.Core.EntityBuilder`1.WithComponent(NextORM.Core.IQueryComponent)) | Вызываете из своего метода-расширения. | Копирует построитель и заменяет компонент того же слота на месте. |
+| [`QueryCommand.Components`](xref:NextORM.Core.QueryCommand.Components) / [`PreparedComponents`](xref:NextORM.Core.QueryCommand.PreparedComponents) | Только чтение, для диагностики. | Владеет, публикует и очищает ядро. |
+
+### Когда происходит каждый вызов
+
+1. **Присоединение** — ваш метод-расширение вызывает `WithComponent`. Copy-on-write: построитель клонируется,
+   компонент того же слота заменяется, другой слот добавляется. Здесь ничего не валидируется.
+2. **`Prepare`** — планировщик вызывает его один раз для каждого присоединённого компонента при подготовке
+   команды (`src/nextorm.core/Query/QueryCommand.QueryPreparer.cs`), то есть один раз на *подготовку* = один раз
+   на построение плана. Повторно он выполняется, только если та же команда подготавливается снова: другой
+   `DataContext`, шаблон, повторно подготовленный из кэша, сброс подготовки. Здесь вы валидируете и отвергаете.
+3. **Дескриптор → ключ плана** — возвращённый дескриптор попадает в `QueryCommand.PreparedComponents`; ключ
+   плана хэширует `StructuralHash` и сравнивает дескрипторы через `StructurallyEquals` на тёплом поиске
+   (`src/nextorm.core/Query/QueryPlanEqualityComparer.cs`, `src/nextorm.core/DataContext/Cache/QueryPlan.cs`).
+   Поэтому два структурно равных компонента делят один кэшированный план.
+4. **`BuildQuery`** — только на построении плана: `SqlBuilder.MakeSelect`
+   (`src/nextorm.core/DataContext/SqlBuilder.cs`) клонирует подготовленную команду, вызывает `BuildQuery` на
+   клоне для каждого компонента и рендерит клон. Ваш обработчик меняет одноразовую копию, а не команду, которую
+   держит вызывающий.
+5. **Исполнение** — SQL сохранён в плане. Тёплое попадание переиспользует его: `BuildQuery` не вызывается,
+   дескриптор не перестраивается, а захваченные значения и позиционные параметры перепривязываются к исходной
+   команде. Повторный рендеринг для обновления параметров переиспользует форму, построенную на промахе, поэтому
+   `BuildQuery` там тоже не вызывается.
+
+Практически: **вы никогда не вызываете `Prepare` и `BuildQuery` сами**, и текст SQL никогда не попадает в ваш код.
+
+### Правила, которые контракт накладывает на реализацию
+
+- **Подготовка/валидация → неизменяемый подготовленный дескриптор.** Он валидирует комбинацию —
+  неподдерживаемая бросает исключение, а не составляется произвольно, — и возвращает дескриптор со слотом,
+  конкретным типом компонента, видом вклада, смысловым `Discriminator`, `StructuralHash` по всему состоянию и
+  `StructurallyEquals`. Дескриптор неизменяем и разделяется кэшированным планом, поэтому не должен ссылаться на
+  изменяемое состояние компонента.
+- **Структурное построение на промахе кэша.** `BuildQuery` получает команду через
+  `IQueryComponentBuildContext` и перестраивает утверждение из примитивов ядра: производный источник
+  (`FromExpression`), исходный список выборки плюс скрытая вспомогательная колонка (`SelectExpression`,
   `SetComponentSelectList`), необязательный переписанный предикат (`SetComponentPreparedCondition`) и
-  очищенная сортировка. На подтверждённом **попадании в тёплый кэш** ядро возвращает кэшированный план, поэтому
-  `BuildQuery` больше не вызывается и SQL не перестраивается; захваченные значения и позиционные параметры
-  перепривязываются обычным путём исполнения к исходной, неизменённой команде.
+  очищенная сортировка. Текст SQL он не рендерит — это делает ядро.
 - **Идентичность слота.** `Slot` — стабильная идентичность логического оператора. Присоединение компонента,
   чей слот уже присутствует, **заменяет его на месте**; построитель и команда никогда не вкладывают два
   компонента одного слота. Поэтому `Min` и `Max` одного семейства делят слот и заменяют друг друга. Компоненты
@@ -127,286 +163,69 @@ var top = ctx.From<Player>()
 - **Без поддержки in-memory.** Компонент, чья семантика существует только в SQL, отвергает `InMemoryDataContext`
   в `Prepare` через `NotSupportedException`; он не должен молча деградировать или возвращать другие строки.
 
-Полный оператор в стиле `SelectWhereMin` — производный источник, окно, внешний `rank = 1`, восстановленная
-исходная форма результата:
+### Как компонент проходит через ядро
+
+![Жизненный цикл компонента запроса: метод-расширение присоединяет компонент к неизменяемому построителю; ядро готовит его один раз на план, строит утверждение на промахе кэша и переиспользует кэшированный план на попадании, после чего исполнитель идёт обычным путём.](../assets/diagrams/query-component-lifecycle.svg)
+
+Картинка — это весь контракт: ваш пакет даёт компонент, ядро один раз на план готовит его и строит по нему
+SQL, а каждый следующий вызов переиспользует кэшированный план, и `BuildQuery` больше не выполняется.
+
+**Синтетический** компонент — минимальное, что показывает форму. Это намеренно не рабочий оператор:
+утверждение, вспомогательную колонку и подготовленное состояние проектируете вы, а
+[пакет расширений](extensions-package.md) — поставляемая эталонная реализация полного оператора.
 
 ```csharp
-using System.Linq.Expressions;
-using System.Reflection;
-using NextORM.Core;
-
-namespace Acme.NextOrm;
-
-// 1. Публичная поверхность: обычные методы-расширения. Без регистрации, без изменений ядра, без сырого SQL.
-public enum ExternalExtremeKind { Min, Max }
-
-public static class ExternalExtremeExtensions
+public static class MyOperatorExtensions
 {
-    public static EntityBuilder<TEntity> ExternalSelectWhereMin<TEntity, TValue>(
+    // Обычный метод-расширение: без регистрации, без изменений ядра, без сырого SQL.
+    public static EntityBuilder<TEntity> SelectWhereBestEx<TEntity, TValue>(
         this EntityBuilder<TEntity> source,
-        Expression<Func<TEntity, TValue>> valueSelector,
-        ExtremeRowTies ties = ExtremeRowTies.One,
-        Expression<Func<TEntity, object?>>? groupBy = null)
-        => source.WithComponent(
-            new ExternalExtremeComponent<TEntity>(ExternalExtremeKind.Min, valueSelector, ties, groupBy));
-
-    public static EntityBuilder<TEntity> ExternalSelectWhereMax<TEntity, TValue>(
-        this EntityBuilder<TEntity> source,
-        Expression<Func<TEntity, TValue>> valueSelector,
-        ExtremeRowTies ties = ExtremeRowTies.One,
-        Expression<Func<TEntity, object?>>? groupBy = null)
-        => source.WithComponent(
-            new ExternalExtremeComponent<TEntity>(ExternalExtremeKind.Max, valueSelector, ties, groupBy));
+        Expression<Func<TEntity, TValue>> valueSelector)
+        => source.WithComponent(new BestRowComponent<TEntity>(valueSelector));
 }
 
-// 2. Примитивы ядра, которые компонент вставляет в своё дерево выражений; разрешаются один раз на процесс.
-internal static class EngineHandles
+internal sealed class BestRowComponent<TEntity> : IQueryComponent
 {
-    public static readonly MethodInfo Asc =
-        typeof(CommonFunctions).GetMethod("asc", BindingFlags.Public | BindingFlags.Instance)!;
-    public static readonly MethodInfo Desc =
-        typeof(CommonFunctions).GetMethod("desc", BindingFlags.Public | BindingFlags.Instance)!;
-    public static readonly MethodInfo RowNumber =
-        typeof(CommonFunctions).GetMethod("row_number", BindingFlags.Public | BindingFlags.Instance)!;
-    public static readonly MethodInfo Rank =
-        typeof(CommonFunctions).GetMethod("rank", BindingFlags.Public | BindingFlags.Instance)!;
-    public static readonly MethodInfo ColumnOfInt =
-        typeof(SqlFunctions).GetMethod("Column", BindingFlags.Public | BindingFlags.Static)!
-            .MakeGenericMethod(typeof(int));
-    public static readonly MethodInfo Over = typeof(WindowFunction<int>).GetMethod("Over",
-        new[] { typeof(Expression<Func<object?>>[]), typeof(WindowOrder[]), typeof(WindowFrame) })!;
-}
-
-// 3. Компонент: идентичность слота, валидация, подготовленный дескриптор, структурное построение.
-public sealed class ExternalExtremeComponent<TEntity> : IQueryComponent
-{
-    private readonly ExternalExtremeKind _kind;
     private readonly LambdaExpression _valueSelector;
-    private readonly ExtremeRowTies _ties;
-    private readonly Expression<Func<TEntity, object?>>? _groupBy;
 
-    public ExternalExtremeComponent(ExternalExtremeKind kind, LambdaExpression valueSelector,
-        ExtremeRowTies ties, Expression<Func<TEntity, object?>>? groupBy)
-    {
-        ArgumentNullException.ThrowIfNull(valueSelector);
-        _kind = kind;
-        _valueSelector = valueSelector;
-        _ties = ties;
-        _groupBy = groupBy;
-    }
+    public BestRowComponent(LambdaExpression valueSelector) => _valueSelector = valueSelector;
 
-    // Min и Max намеренно объявляют один слот: присоединение одного после другого заменяет его
-    // на месте, а не вкладывает. Второй, другой эксклюзивный слот отвергается ядром.
-    public Type Slot => typeof(ExternalExtremeComponent<TEntity>);
+    // Один слот на логический оператор: присоединение другого компонента семейства заменяет его на месте.
+    public Type Slot => typeof(BestRowComponent<TEntity>);
+
+    // Что оператор привносит: аддитивный предикат либо единственный эксклюзивный источник строк.
     public QueryComponentContribution Contribution => QueryComponentContribution.ExclusiveRowSource;
 
-    // Отвергаем каждый модификатор, который не выражает ранжированный производный источник. Ядро
-    // дополнительно применяет к каждому эксклюзивному reshape полную границу встроенного спуска
-    // (подготовленный HAVING, LIMIT BY, ARRAY JOIN, DISTINCT ON, TABLESAMPLE, временные клаузы,
-    // блокировки источника).
-    private static void ValidateCompatibility(QueryCommand cmd)
-    {
-        if (cmd.Ctes is { Count: > 0 }) throw NotCompatible("common table expressions (WITH)");
-        if (cmd.Having is not null) throw NotCompatible("HAVING");
-        if (cmd.Windows is { Count: > 0 }) throw NotCompatible("named windows");
-        if (cmd.GroupingList is { Length: > 0 } || cmd.GroupBy is not null) throw NotCompatible("GROUP BY");
-        if (cmd.Joins is { Length: > 0 }) throw NotCompatible("joins");
-        if (cmd.PreWhere is not null) throw NotCompatible("PREWHERE");
-        if (!cmd.Paging.IsEmpty) throw NotCompatible("paging");
-        if (cmd.UnionQuery is not null) throw NotCompatible("a set operation");
-        if (cmd.TableHints is { Count: > 0 }) throw NotCompatible("table hints");
-        if (cmd.IndexHints is { Count: > 0 }) throw NotCompatible("index hints");
-        if (cmd.TablesInScopeHints is { Count: > 0 }) throw NotCompatible("tables-in-scope hints");
-        if (cmd.Hints is { Count: > 0 }) throw NotCompatible("query hints");
-        if (cmd.Final) throw NotCompatible("FINAL");
-        if (cmd.SampleRatio is not null) throw NotCompatible("SAMPLE");
-        if (cmd.Settings is { Count: > 0 }) throw NotCompatible("SETTINGS");
-        if (cmd.ForJsonClause is not null || cmd.ForXmlClause is not null) throw NotCompatible("FOR JSON/FOR XML");
-    }
-
-    private static BuildSqlCommandException NotCompatible(string modifier)
-        => new($"SelectWhereMax/SelectWhereMin cannot be combined with {modifier}.");
-
+    // Выполняется один раз на построение плана, против подготавливаемой команды. Отвергайте то, что форма
+    // выразить не может (исключение, а не произвольная композиция), и верните неизменяемое состояние для ключа кэша.
     public IQueryComponentDescriptor Prepare(IQueryComponentPrepareContext context)
     {
-        ArgumentNullException.ThrowIfNull(context);
-        if (context.Command.DataContext is InMemoryDataContext)
-            throw new NotSupportedException(
-                "ExternalSelectWhereMin/Max is not supported by the in-memory provider.");
-        if (_ties is not (ExtremeRowTies.One or ExtremeRowTies.All))
-            throw new ArgumentOutOfRangeException(nameof(_ties), _ties, "Unknown ExtremeRowTies value.");
-
-        // Отвергайте то, что ранжированный производный источник не умеет выразить, вместо
-        // произвольной композиции. Ядро повторно применяет полную границу встроенного спуска.
-        ValidateCompatibility(context.Command);
-
-        var hash = new HashCode();
-        hash.Add(Slot);
-        hash.Add(GetType());
-        hash.Add(_kind);
-        hash.Add(_ties);
-        hash.Add(_valueSelector, context.ExpressionComparer);
-        if (_groupBy is not null)
-            hash.Add(_groupBy, context.ExpressionComparer);
-
-        return new Descriptor(this, hash.ToHashCode(), context.ExpressionComparer);
+        RejectUnsupportedModifiers(context.Command);
+        return new Descriptor(Slot, _valueSelector, context.ExpressionComparer);
+        //      ^ слот, вид вклада, дискриминатор, StructuralHash, StructurallyEquals
     }
 
+    // Выполняется только на промахе кэша. Перестраивает запрос из примитивов ядра — не из текста SQL.
     public void BuildQuery(IQueryComponentBuildContext context)
     {
-        var cmd = context.Command;
-        var entityType = typeof(TEntity);
-        var rankAlias = PickFreeAlias(entityType);
-        var entity = Expression.Parameter(entityType, "x");
-        var sql = Expression.Property(null, typeof(SqlFunctions), "Sql");
-
-        // 4. Производный источник: исходная команда, её список выборки плюс одна скрытая колонка ранга.
-        var inner = cmd.Clone();
-        inner.Components = null;
-
-        var valueKeys = Decompose(_valueSelector, entity);
-
-        // NULL в любом ключе значения никогда не побеждает в крайнем значении встроенного переносного
-        // спуска, поэтому такие строки исключаются внутри ранжированного источника до окна.
-        Expression? filter = null;
-        foreach (var key in valueKeys)
-        {
-            if (!key.Type.IsValueType || Nullable.GetUnderlyingType(key.Type) is not null)
-                filter = And(filter, Expression.NotEqual(key, Expression.Constant(null, key.Type)));
-        }
-        if (inner.GetComponentPreparedCondition() is LambdaExpression condition
-            && condition.Parameters.Count > 0)
-        {
-            filter = And(filter, new ParameterReplacer(condition.Parameters[0], entity).Visit(condition.Body));
-        }
-        if (filter is not null)
-            inner.SetComponentPreparedCondition(Expression.Lambda(filter, entity));
-
-        var direction = _kind == ExternalExtremeKind.Max ? EngineHandles.Desc : EngineHandles.Asc;
-        var orderKeys = Expression.NewArrayInit(typeof(WindowOrder),
-            valueKeys.Select(v => (Expression)Expression.Call(sql, direction,
-                Expression.Quote(Expression.Lambda<Func<object?>>(
-                    Expression.Convert(v, typeof(object)))))).ToArray());
-
-        Expression partition = _groupBy is null
-            ? Expression.Constant(null, typeof(Expression<Func<object?>>[]))
-            : Expression.NewArrayInit(typeof(Expression<Func<object?>>),
-                Decompose(_groupBy, entity).Select(k => (Expression)Expression.Quote(
-                    Expression.Lambda<Func<object?>>(Expression.Convert(k, typeof(object))))).ToArray());
-
-        var rankMethod = _ties == ExtremeRowTies.All ? EngineHandles.Rank : EngineHandles.RowNumber;
-        var rank = Expression.Call(Expression.Call(sql, rankMethod), EngineHandles.Over,
-            partition, orderKeys, Expression.Constant(null, typeof(WindowFrame)));
-
-        var hidden = new SelectExpression(typeof(int))
-        {
-            Index = inner.SelectList?.Length ?? 0,
-            PropertyName = rankAlias,
-            Expression = rank,
-        };
-        inner.SetComponentSelectList(inner.SelectList is null
-            ? new[] { hidden }
-            : inner.SelectList.Append(hidden).ToArray());
-        inner.SetComponentSorting(null);
-
-        // 5. Внешнее утверждение: читаем производный источник, оставляем rank = 1, восстанавливаем форму.
-        cmd.From = new FromExpression(inner);
-        var outer = Expression.Parameter(entityType, "o");
-        var rankColumn = Expression.Call(null, EngineHandles.ColumnOfInt, outer,
-            Expression.Constant(rankAlias));
-        cmd.SetComponentPreparedCondition(Expression.Lambda(
-            Expression.Equal(rankColumn, Expression.Constant(1)), outer));
-    }
-
-    private static Expression And(Expression? left, Expression right)
-        => left is null ? right : Expression.AndAlso(left, right);
-
-    private static Expression[] Decompose(LambdaExpression selector, ParameterExpression entity)
-    {
-        var body = selector.Body;
-        if (body is UnaryExpression { NodeType: ExpressionType.Convert } boxed && boxed.Type == typeof(object))
-            body = boxed.Operand;
-        var rewritten = new ParameterReplacer(selector.Parameters[0], entity).Visit(body)!;
-        // Анонимные типы и ValueTuple дают по ключу на аргумент, а не один непрозрачный ключ.
-        return rewritten is NewExpression { Arguments.Count: > 0 } composite
-            ? composite.Arguments.ToArray()
-            : new[] { rewritten };
-    }
-
-    private static string PickFreeAlias(Type entityType)
-    {
-        const string seed = "__nextorm_ext_rn";
-        if (!DataContextCache.Metadata.TryGetValue(entityType, out var metadata))
-            return seed;
-        var name = seed;
-        while (metadata.Properties.Any(p =>
-                   string.Equals(p.ColumnName, name, StringComparison.OrdinalIgnoreCase)))
-            name += "_";
-        return name;
-    }
-
-    private sealed class ParameterReplacer : ExpressionVisitor
-    {
-        private readonly ParameterExpression _from;
-        private readonly ParameterExpression _to;
-
-        public ParameterReplacer(ParameterExpression from, ParameterExpression to)
-        {
-            _from = from;
-            _to = to;
-        }
-
-        protected override Expression VisitParameter(ParameterExpression node)
-            => node == _from ? _to : base.VisitParameter(node);
-    }
-
-    private sealed class Descriptor : IQueryComponentDescriptor
-    {
-        private readonly LambdaExpression _valueSelector;
-        private readonly Expression? _groupBy;
-        private readonly ExtremeRowTies _ties;
-        private readonly IEqualityComparer<Expression> _comparer;
-
-        public Descriptor(ExternalExtremeComponent<TEntity> component, int hash,
-            IEqualityComparer<Expression> comparer)
-        {
-            Slot = component.Slot;
-            ComponentType = component.GetType();
-            Contribution = component.Contribution;
-            Discriminator = component._kind.ToString();
-            _valueSelector = component._valueSelector;
-            _groupBy = component._groupBy;
-            _ties = component._ties;
-            _comparer = comparer;
-            StructuralHash = hash;
-        }
-
-        public Type Slot { get; }
-        public Type ComponentType { get; }
-        public QueryComponentContribution Contribution { get; }
-        public string Discriminator { get; }
-        public int StructuralHash { get; }
-
-        public bool StructurallyEquals(IQueryComponentDescriptor? other)
-            => other is Descriptor rhs
-               && Slot == rhs.Slot && ComponentType == rhs.ComponentType
-               && Contribution == rhs.Contribution
-               && Discriminator == rhs.Discriminator && _ties == rhs._ties
-               && _comparer.Equals(_valueSelector, rhs._valueSelector)
-               && (_groupBy is null
-                   ? rhs._groupBy is null
-                   : rhs._groupBy is not null && _comparer.Equals(_groupBy, rhs._groupBy));
+        var inner = context.Command.Clone();            // производный источник, payload сохранён
+        // inner.SetComponentSelectList(<payload>, <вспомогательная колонка>);
+        // inner.SetComponentPreparedCondition(<вспомогательная колонка> == <выжившие строки>);
+        inner.SetComponentSorting(null);                // порядок задаёт сам оператор
+        context.Command.From = new FromExpression(inner);
     }
 }
 ```
 
-Квотирование, псевдонимы и привязку параметров держит ядро; компонент только собирает логическое дерево,
-поэтому один и тот же оператор рендерится на каждом SQL-провайдере без диалект-специфичного кода. Тот же
-оператор — оба направления, `One`/`All`, композитные ключи, исключение NULL-значений и проверки
-совместимости — сквозным образом прогоняется набором доказательств компонентов запроса в репозитории.
+Всё конкретное остаётся вашим: какие строки выживают, какую вспомогательную колонку вы добавляете и какой
+псевдоним ей даёте, какие комбинации отвергаете. Квотирование, псевдонимы и привязку параметров держит ядро,
+поэтому один и тот же компонент рендерится на каждом SQL-провайдере без диалект-специфичного кода — а на
+попадании в тёплый кэш он вообще не участвует: кэшированный план возвращается, а захваченные и позиционные
+параметры перепривязываются к исходной, неизменённой команде.
 
 ## См. также
 
+- [Пакет расширений (`nextorm.extensions`)](extensions-package.md) — полный оператор на компонентах
 - [Нативные стратегии выбора экстремальной строки (`SelectWhereMax` / `SelectWhereMin`)](select-where-extrema-native.md)
 - [Краткий справочник API](api-reference.md)
 - [Обзор провайдеров](../connecting-providers/overview.md)

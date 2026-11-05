@@ -9,7 +9,7 @@ namespace NextORM.Integration.Tests;
 /// Testcontainers instance is started, so the suite runs out of the box wherever a container
 /// runtime is reachable. When neither is available the tests are skipped rather than failed.
 /// </summary>
-internal sealed class ClickHouseTestProvider : ITestProvider
+public sealed class ClickHouseTestProvider : ITestProvider
 {
     public static readonly ClickHouseTestProvider Instance = new();
 

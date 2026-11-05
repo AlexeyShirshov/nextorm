@@ -103,11 +103,11 @@ public sealed class T302S3CompositeAllCacheTests : IDisposable
         int floor = 7;
         var arity2 = _ctx.From<CacheRow>()
             .Where(e => e.Flag == capturedFlag && e.V1 >= floor)
-            .SelectWhereMax(e => new { e.V1, e.V2 }, ExtremeRowTies.All)
+            .SelectWhereMaxOld(e => new { e.V1, e.V2 }, ExtremeRowTies.All)
             .ToCommand();
         var arity3 = _ctx.From<CacheRow>()
             .Where(e => e.Flag == capturedFlag && e.V1 >= floor)
-            .SelectWhereMax(e => new { e.V1, e.V2, e.V3 }, ExtremeRowTies.All)
+            .SelectWhereMaxOld(e => new { e.V1, e.V2, e.V3 }, ExtremeRowTies.All)
             .ToCommand();
 
         foreach (var (command, expectedOccurrences) in new[] { (arity2, 3), (arity3, 4) })
@@ -147,7 +147,7 @@ public sealed class T302S3CompositeAllCacheTests : IDisposable
         int capturedFlag = 1;
         var command = _ctx.From<CacheRow>()
             .Where(e => e.Flag == capturedFlag)
-            .SelectWhereMax(e => new { e.V1, e.V2 }, ExtremeRowTies.All)
+            .SelectWhereMaxOld(e => new { e.V1, e.V2 }, ExtremeRowTies.All)
             .ToCommand();
 
         var first = Prepare(_ctx, command);
@@ -170,11 +170,11 @@ public sealed class T302S3CompositeAllCacheTests : IDisposable
         int captured = 1;
         var cmdA = _ctx.From<CacheRow>()
             .Where(e => e.Flag == captured)
-            .SelectWhereMax(e => new { e.V1, e.V2 }, ExtremeRowTies.All)
+            .SelectWhereMaxOld(e => new { e.V1, e.V2 }, ExtremeRowTies.All)
             .ToCommand();
         var cmdB = _ctx.From<CacheRow>()
             .Where(e => e.V2 > 50 && e.V1 < 9)
-            .SelectWhereMax(e => new { e.V1, e.V2 }, ExtremeRowTies.All)
+            .SelectWhereMaxOld(e => new { e.V1, e.V2 }, ExtremeRowTies.All)
             .ToCommand();
 
         var pa = Prepare(_ctx, cmdA);
@@ -201,7 +201,7 @@ public sealed class T302S3CompositeAllCacheTests : IDisposable
 
         QueryCommand<CacheRow> Command() => _ctx.From<CacheRow>()
             .Where(e => e.Flag == 1)
-            .SelectWhereMax(selector, ExtremeRowTies.All)
+            .SelectWhereMaxOld(selector, ExtremeRowTies.All)
             .ToCommand();
 
         // Cold: before the first preparation the shape has no published candidate at all.
@@ -246,7 +246,7 @@ public sealed class T302S3CompositeAllCacheTests : IDisposable
         int capturedFlag = 1;
         var command = _ctx.From<CacheRow>()
             .Where(e => e.Flag == capturedFlag)
-            .SelectWhereMax(e => new { e.V1, e.V2 }, ExtremeRowTies.All)
+            .SelectWhereMaxOld(e => new { e.V1, e.V2 }, ExtremeRowTies.All)
             .ToCommand();
 
         var prepared = Prepare(_ctx, command);
@@ -277,7 +277,7 @@ public sealed class T302S3CompositeAllCacheTests : IDisposable
         int capturedFlag = 1;
         var command = _ctx.From<CacheRow>()
             .Where(e => e.Flag == capturedFlag)
-            .SelectWhereMax(e => new { e.V1, e.V2 }, ExtremeRowTies.All, e => e.Grp)
+            .SelectWhereMaxOld(e => new { e.V1, e.V2 }, ExtremeRowTies.All, e => e.Grp)
             .ToCommand();
 
         var first = Prepare(_ctx, command);
@@ -305,7 +305,7 @@ public sealed class T302S3CompositeAllCacheTests : IDisposable
         int capturedFlag = 1;
         var command = _ctx.From<CacheRow>()
             .Where(e => e.Flag == capturedFlag)
-            .SelectWhereMax(e => new { e.V1, e.V2, e.V3 }, ExtremeRowTies.All)
+            .SelectWhereMaxOld(e => new { e.V1, e.V2, e.V3 }, ExtremeRowTies.All)
             .ToCommand();
 
         var first = Prepare(_ctx, command);
@@ -341,14 +341,14 @@ public sealed class T302S3CompositeAllCacheTests : IDisposable
 
         var command = _ctx.From<CacheRow>()
             .Where(e => e.Flag == 1)
-            .SelectWhereMax(e => new { e.V1, e.V2 }, ExtremeRowTies.All, e => e.Grp)
+            .SelectWhereMaxOld(e => new { e.V1, e.V2 }, ExtremeRowTies.All, e => e.Grp)
             .OrderBy(e => e.Id)
             .ToCommand();
         var preparedRows = _ctx.ToList(Prepare(_ctx, command));
 
         var freshRows = _ctx.From<CacheRow>()
             .Where(e => e.Flag == 1)
-            .SelectWhereMax(e => new { e.V1, e.V2 }, ExtremeRowTies.All, e => e.Grp)
+            .SelectWhereMaxOld(e => new { e.V1, e.V2 }, ExtremeRowTies.All, e => e.Grp)
             .OrderBy(e => e.Id)
             .ToList();
 
@@ -374,7 +374,7 @@ public sealed class T302S3CompositeAllCacheTests : IDisposable
 
         var command = _ctx.From<CacheRow>()
             .Where(e => e.Flag == 1)
-            .SelectWhereMax(e => new { e.V1, e.V2 }, e => new { e.V1, e.V2, e.Payload }, ExtremeRowTies.All, e => e.Grp)
+            .SelectWhereMaxOld(e => new { e.V1, e.V2 }, e => new { e.V1, e.V2, e.Payload }, ExtremeRowTies.All, e => e.Grp)
             .Distinct()
             .OrderBy(e => e.Payload);
 

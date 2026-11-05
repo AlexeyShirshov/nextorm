@@ -468,7 +468,7 @@ public class JoinIntoChildWhereTests
             ChildShape.GroupBy => plain.GroupBy(c => c.ParentId),
             ChildShape.Having => plain.Having(c => c.Id > 0),
             ChildShape.DistinctOn => plain.DistinctOn(c => c.Id),
-            ChildShape.SelectWhereExtreme => plain.SelectWhereMax(c => c.Id),
+            ChildShape.SelectWhereExtreme => plain.SelectWhereMaxOld(c => c.Id),
             ChildShape.LimitBy => plain.LimitBy(1, c => c.Id),
             ChildShape.Join => plain.SemiJoin(ctx.From<CwChild>(), (c, other) => c.Id == other.Id),
             ChildShape.Final => plain.Final(),

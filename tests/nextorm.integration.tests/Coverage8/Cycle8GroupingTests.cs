@@ -293,7 +293,7 @@ public sealed class Cycle8GroupingTests : ProviderTestSuite
                 var threshold = floor;
                 return context.From<C8gMarker>()
                     .Where(x => x.Num >= threshold)
-                    .SelectWhereMax(x => x.Num, ExtremeRowTies.All)
+                    .SelectWhereMaxOld(x => x.Num, ExtremeRowTies.All)
                     .OrderBy(x => x.Id)
                     .ToList()
                     .Select(row => row.Id)
@@ -318,7 +318,7 @@ public sealed class Cycle8GroupingTests : ProviderTestSuite
                 var limit = ceiling;
                 return context.From<C8gMarker>()
                     .Where(x => x.Num <= limit)
-                    .SelectWhereMin(x => x.Num, x => new { x.Id, x.Num }, ExtremeRowTies.All)
+                    .SelectWhereMinOld(x => x.Num, x => new { x.Id, x.Num }, ExtremeRowTies.All)
                     .OrderBy(1, OrderDirection.Asc)
                     .ToList()
                     .Select(row => row.Id)

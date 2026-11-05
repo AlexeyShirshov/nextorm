@@ -24,15 +24,15 @@ public sealed class T302CompositeAllGuardSqlGenerationTests
         foreach (var command in new[]
                  {
                      context.From<GuardCompositeEntity>()
-                         .SelectWhereMax(x => new { x.V1, x.V2 }, ExtremeRowTies.All)
+                         .SelectWhereMaxOld(x => new { x.V1, x.V2 }, ExtremeRowTies.All)
                          .Limit(1)
                          .ToCommand(),
                      context.From<GuardCompositeEntity>()
-                         .SelectWhereMin(x => new { x.V1, x.V2 }, ExtremeRowTies.All)
+                         .SelectWhereMinOld(x => new { x.V1, x.V2 }, ExtremeRowTies.All)
                          .Offset(1)
                          .ToCommand(),
                      context.From<GuardCompositeEntity>()
-                         .SelectWhereMax(x => new { x.V1, x.V2 }, ExtremeRowTies.All)
+                         .SelectWhereMaxOld(x => new { x.V1, x.V2 }, ExtremeRowTies.All)
                          .Page(1, 1)
                          .ToCommand(),
                  })
@@ -51,7 +51,7 @@ public sealed class T302CompositeAllGuardSqlGenerationTests
         var context = SqliteTestContext.CreateSqlite();
         var command = context.From<GuardCompositeEntity>()
             .GroupBy(x => x.V1)
-            .SelectWhereMax(x => new { x.V1, x.V2 }, ExtremeRowTies.All)
+            .SelectWhereMaxOld(x => new { x.V1, x.V2 }, ExtremeRowTies.All)
             .ToCommand();
 
         FluentActions
@@ -67,7 +67,7 @@ public sealed class T302CompositeAllGuardSqlGenerationTests
         var context = SqliteTestContext.CreateSqlite();
         var command = context.From<GuardCompositeEntity>()
             .Where(x => x.V1 > 1)
-            .SelectWhereMax(x => new { x.V1, x.V2 }, ExtremeRowTies.All, x => x.Grp)
+            .SelectWhereMaxOld(x => new { x.V1, x.V2 }, ExtremeRowTies.All, x => x.Grp)
             .ToCommand();
 
         var prepared = (DbPreparedQueryCommand<GuardCompositeEntity>)context.GetPreparedQueryCommand(

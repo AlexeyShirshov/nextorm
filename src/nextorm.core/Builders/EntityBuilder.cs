@@ -2925,7 +2925,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// <param name="valueSelector">The value whose maximum is compared.</param>
     /// <param name="ties">Whether to keep a single row or every tied row.</param>
     /// <param name="groupBy">Optional grouping key; <c>null</c> selects across the whole result.</param>
-    public EntityBuilder<TEntity> SelectWhereMax<TValue>(
+    public EntityBuilder<TEntity> SelectWhereMaxOld<TValue>(
         Expression<Func<TEntity, TValue>> valueSelector,
         ExtremeRowTies ties = ExtremeRowTies.One,
         Expression<Func<TEntity, object?>>? groupBy = null)
@@ -2940,7 +2940,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// <param name="valueSelector">The value whose minimum is compared.</param>
     /// <param name="ties">Whether to keep a single row or every tied row.</param>
     /// <param name="groupBy">Optional grouping key; <c>null</c> selects across the whole result.</param>
-    public EntityBuilder<TEntity> SelectWhereMin<TValue>(
+    public EntityBuilder<TEntity> SelectWhereMinOld<TValue>(
         Expression<Func<TEntity, TValue>> valueSelector,
         ExtremeRowTies ties = ExtremeRowTies.One,
         Expression<Func<TEntity, object?>>? groupBy = null)
@@ -2957,7 +2957,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// <param name="projection">The projection applied to the surviving row(s).</param>
     /// <param name="ties">Whether to keep a single row or every tied row.</param>
     /// <param name="groupBy">Optional grouping key; <c>null</c> selects across the whole result.</param>
-    public QueryCommand<TResult> SelectWhereMax<TValue, TResult>(
+    public QueryCommand<TResult> SelectWhereMaxOld<TValue, TResult>(
         Expression<Func<TEntity, TValue>> valueSelector,
         Expression<Func<TEntity, TResult>> projection,
         ExtremeRowTies ties = ExtremeRowTies.One,
@@ -2975,7 +2975,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// <param name="projection">The projection applied to the surviving row(s).</param>
     /// <param name="ties">Whether to keep a single row or every tied row.</param>
     /// <param name="groupBy">Optional grouping key; <c>null</c> selects across the whole result.</param>
-    public QueryCommand<TResult> SelectWhereMin<TValue, TResult>(
+    public QueryCommand<TResult> SelectWhereMinOld<TValue, TResult>(
         Expression<Func<TEntity, TValue>> valueSelector,
         Expression<Func<TEntity, TResult>> projection,
         ExtremeRowTies ties = ExtremeRowTies.One,

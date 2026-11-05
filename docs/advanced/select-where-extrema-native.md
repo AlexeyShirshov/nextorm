@@ -4,10 +4,15 @@
 
 **Prerequisites:** [Keeping the extreme row](../guide/09-distinct.md) · [Provider overview](../connecting-providers/overview.md) · [API quick reference](api-reference.md)
 
+> **Deprecation note.** The built-in operators are now `SelectWhereMinOld` / `SelectWhereMaxOld`: they keep the
+> compatibility path (including the in-memory provider, which the packaged operator does not implement) and are
+> scheduled for removal. The recommended API is `SelectWhereMin` / `SelectWhereMax` from the
+> [extensions package](extensions-package.md), built on the public query-component layer.
+
 ## Overview
 
-[`SelectWhereMax`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMax``1(System.Linq.Expressions.Expression{System.Func{`0,``0}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) and
-[`SelectWhereMin`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMin``1(System.Linq.Expressions.Expression{System.Func{`0,``0}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) keep the row whose value under a selector is the greatest or smallest in the source, globally or per group. They are a row filter, not an aggregate: a surviving row keeps every column. The semantics are unchanged from the portable implementation — see [Keeping the extreme row](../guide/09-distinct.md) for the full contract.
+[`SelectWhereMax`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMaxOld``1(System.Linq.Expressions.Expression{System.Func{`0,``0}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) and
+[`SelectWhereMin`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMinOld``1(System.Linq.Expressions.Expression{System.Func{`0,``0}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) keep the row whose value under a selector is the greatest or smallest in the source, globally or per group. They are a row filter, not an aggregate: a surviving row keeps every column. The semantics are unchanged from the portable implementation — see [Keeping the extreme row](../guide/09-distinct.md) for the full contract.
 
 What this page adds is *how* the `One` request reaches the database. Selection is automatic and deterministic **by provider and query form/type**:
 

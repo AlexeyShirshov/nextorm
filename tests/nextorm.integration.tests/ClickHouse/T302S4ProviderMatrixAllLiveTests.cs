@@ -144,13 +144,13 @@ public sealed class T302S4ProviderMatrixAllClickHouseTests : ProviderTestSuite
             "(5, null, null, null, 'g', null, null, 100)");
         try
         {
-            var max = Source().SelectWhereMax(e => e.V1, ExtremeRowTies.All)
+            var max = Source().SelectWhereMaxOld(e => e.V1, ExtremeRowTies.All)
                 .OrderBy(e => e.Id).ToList();
             max.Select(r => r.Id).Should().ContainInOrder(1, 2, 3);
             max.Select(r => r.Payload).Should().ContainInOrder(new int?[] { 900, null, 902 });
             max.Should().OnlyContain(r => r.V1 == 9, "the NULL value key is never a winner");
 
-            var min = Source().SelectWhereMin(e => e.V1, ExtremeRowTies.All)
+            var min = Source().SelectWhereMinOld(e => e.V1, ExtremeRowTies.All)
                 .OrderBy(e => e.Id).ToList();
             min.Select(r => r.Id).Should().ContainInOrder(4);
             min[0].Payload.Should().Be(500);
@@ -177,7 +177,7 @@ public sealed class T302S4ProviderMatrixAllClickHouseTests : ProviderTestSuite
             "(7, 4, null, null, 'a', null, null, 70)");
         try
         {
-            var rows = Source().SelectWhereMax(e => e.V1, ExtremeRowTies.All, e => e.Grp)
+            var rows = Source().SelectWhereMaxOld(e => e.V1, ExtremeRowTies.All, e => e.Grp)
                 .OrderBy(e => e.Id).ToList();
 
             rows.Select(r => r.Id).Should().ContainInOrder(1, 3, 6);
@@ -204,7 +204,7 @@ public sealed class T302S4ProviderMatrixAllClickHouseTests : ProviderTestSuite
             "(6, 9, null, null, 'g', null, null, 6900)");
         try
         {
-            var max = Source().SelectWhereMax(e => new { e.V1, e.V2 }, ExtremeRowTies.All).ToList();
+            var max = Source().SelectWhereMaxOld(e => new { e.V1, e.V2 }, ExtremeRowTies.All).ToList();
             max.Should().ContainSingle();
             max[0].Id.Should().Be(1);
             max[0].Payload.Should().Be(900);
@@ -224,7 +224,7 @@ public sealed class T302S4ProviderMatrixAllClickHouseTests : ProviderTestSuite
             "(6, 8, null, null, 'g', null, null, 6800)");
         try
         {
-            var min = Source().SelectWhereMin(e => new { e.V1, e.V2 }, ExtremeRowTies.All).ToList();
+            var min = Source().SelectWhereMinOld(e => new { e.V1, e.V2 }, ExtremeRowTies.All).ToList();
             min.Should().ContainSingle();
             min[0].Id.Should().Be(2);
             min.Should().NotContain(r => r.V1 == 9 && r.V2 == 2);
@@ -252,7 +252,7 @@ public sealed class T302S4ProviderMatrixAllClickHouseTests : ProviderTestSuite
         try
         {
             var rows = Source()
-                .SelectWhereMax(e => new { e.V1, e.V2 }, ExtremeRowTies.All, e => new { e.Grp, e.GKey })
+                .SelectWhereMaxOld(e => new { e.V1, e.V2 }, ExtremeRowTies.All, e => new { e.Grp, e.GKey })
                 .OrderBy(e => e.Id).ToList();
 
             rows.Select(r => r.Id).Should().ContainInOrder(1, 3, 5, 6);
@@ -282,13 +282,13 @@ public sealed class T302S4ProviderMatrixAllClickHouseTests : ProviderTestSuite
             "(5, 4, 100, null, 'ok', null, null, 50)");
         try
         {
-            var global = Source().SelectWhereMax(e => new { e.V1, e.V2 }, ExtremeRowTies.All).ToList();
+            var global = Source().SelectWhereMaxOld(e => new { e.V1, e.V2 }, ExtremeRowTies.All).ToList();
             global.Should().ContainSingle();
             global[0].Id.Should().Be(4);
             global.Should().OnlyContain(r => r.V1 != null && r.V2 != null);
 
             var grouped = Source()
-                .SelectWhereMax(e => new { e.V1, e.V2 }, ExtremeRowTies.All, e => e.Grp)
+                .SelectWhereMaxOld(e => new { e.V1, e.V2 }, ExtremeRowTies.All, e => e.Grp)
                 .OrderBy(e => e.Id).ToList();
             grouped.Should().ContainSingle();
             grouped[0].Grp.Should().Be("ok");
@@ -316,21 +316,21 @@ public sealed class T302S4ProviderMatrixAllClickHouseTests : ProviderTestSuite
         {
             var capturedFlag = 0;
             var first = Source().Where(e => e.V1 < 9 && e.Flg == capturedFlag)
-                .SelectWhereMax(e => new { e.V1, e.V2 }, ExtremeRowTies.All).ToList();
+                .SelectWhereMaxOld(e => new { e.V1, e.V2 }, ExtremeRowTies.All).ToList();
             first.Should().ContainSingle();
             first[0].Id.Should().Be(2);
             first.Should().NotContain(r => r.V1 == 9 && r.V2 == 2);
 
             capturedFlag = 1;
             var second = Source().Where(e => e.V1 < 9 && e.Flg == capturedFlag)
-                .SelectWhereMax(e => new { e.V1, e.V2 }, ExtremeRowTies.All).ToList();
+                .SelectWhereMaxOld(e => new { e.V1, e.V2 }, ExtremeRowTies.All).ToList();
             second.Should().ContainSingle();
             second[0].Id.Should().Be(5);
 
             // The same shape bound back to the first value must not reuse the second value's aggregate.
             capturedFlag = 0;
             var again = Source().Where(e => e.V1 < 9 && e.Flg == capturedFlag)
-                .SelectWhereMax(e => new { e.V1, e.V2 }, ExtremeRowTies.All).ToList();
+                .SelectWhereMaxOld(e => new { e.V1, e.V2 }, ExtremeRowTies.All).ToList();
             again.Select(r => r.Id).Should().Equal(first.Select(r => r.Id),
                 "the captured value is re-bound on every execution, so the plan cannot leak a stale winner");
         }
@@ -351,36 +351,36 @@ public sealed class T302S4ProviderMatrixAllClickHouseTests : ProviderTestSuite
             "(4, 7, 1, null, 'c', null, null, 30)");
         try
         {
-            var entity = Source().SelectWhereMax(e => new { e.V1, e.V2 }, ExtremeRowTies.All)
+            var entity = Source().SelectWhereMaxOld(e => new { e.V1, e.V2 }, ExtremeRowTies.All)
                 .OrderBy(e => e.Id).ToList();
             entity.Select(r => r.Id).Should().ContainInOrder(1, 2);
             entity.Single(r => r.Payload is null).Id.Should().Be(2,
                 "the NULL payload survives the join-back unchanged");
 
-            var dto = Source().SelectWhereMax(e => new { e.V1, e.V2 },
+            var dto = Source().SelectWhereMaxOld(e => new { e.V1, e.V2 },
                     e => new Dto { Id = e.Id, Grp = e.Grp, Payload = e.Payload }, ExtremeRowTies.All)
                 .OrderBy(e => e.Id).ToList();
             dto.Select(r => r.Id).Should().ContainInOrder(1, 2);
 
-            var anon = Source().SelectWhereMax(e => new { e.V1, e.V2 },
+            var anon = Source().SelectWhereMaxOld(e => new { e.V1, e.V2 },
                     e => new { e.Id, e.Grp, e.Payload }, ExtremeRowTies.All)
                 .OrderBy(e => e.Id).ToList();
             anon.Select(r => r.Id).Should().ContainInOrder(1, 2);
 
-            var records = Source().SelectWhereMax(e => new { e.V1, e.V2 },
+            var records = Source().SelectWhereMaxOld(e => new { e.V1, e.V2 },
                     e => new WinnerRecord(e.Id, e.Grp, e.Payload), ExtremeRowTies.All)
                 .OrderBy(e => e.Id).ToList();
             records.Should().Equal(new WinnerRecord(1, "b", 10), new WinnerRecord(2, "b", null));
 
-            var scalars = Source().SelectWhereMax(e => new { e.V1, e.V2 }, e => e.Payload, ExtremeRowTies.All)
+            var scalars = Source().SelectWhereMaxOld(e => new { e.V1, e.V2 }, e => e.Payload, ExtremeRowTies.All)
                 .ToList();
             scalars.Should().HaveCount(2).And.Contain(new int?[] { 10, null });
 
-            var ordered = Source().SelectWhereMax(e => new { e.V1, e.V2 }, ExtremeRowTies.All)
+            var ordered = Source().SelectWhereMaxOld(e => new { e.V1, e.V2 }, ExtremeRowTies.All)
                 .OrderBy(e => e.Grp).ThenBy(e => e.Id).ToList();
             ordered.Select(r => r.Id).Should().ContainInOrder(1, 2);
 
-            var distinct = Source().SelectWhereMax(e => new { e.V1, e.V2 },
+            var distinct = Source().SelectWhereMaxOld(e => new { e.V1, e.V2 },
                     e => new { e.V1, e.V2, e.Grp }, ExtremeRowTies.All).Distinct().ToList();
             distinct.Should().ContainSingle()
                 .Which.Should().Be(new { V1 = (int?)9, V2 = (int?)2, Grp = (string?)"b" });
@@ -402,7 +402,7 @@ public sealed class T302S4ProviderMatrixAllClickHouseTests : ProviderTestSuite
                 "(1, 'a', 10), (2, 'A', 20), (3, '0', 30)");
         try
         {
-            var max = TextSource().SelectWhereMax(e => e.Val, ExtremeRowTies.All)
+            var max = TextSource().SelectWhereMaxOld(e => e.Val, ExtremeRowTies.All)
                 .OrderBy(e => e.Id).ToList();
             var maxOracle = T302S4ParityOracle.RankedWinnerIds(
                 _sut.DataProvider, TextTableName, "val", descending: true);
@@ -413,7 +413,7 @@ public sealed class T302S4ProviderMatrixAllClickHouseTests : ProviderTestSuite
             max.Should().ContainSingle("ClickHouse String comparison is byte-wise, so 'a' and 'A' are distinct");
             max[0].Val.Should().Be("a");
 
-            var min = TextSource().SelectWhereMin(e => e.Val, ExtremeRowTies.All)
+            var min = TextSource().SelectWhereMinOld(e => e.Val, ExtremeRowTies.All)
                 .OrderBy(e => e.Id).ToList();
             var minOracle = T302S4ParityOracle.RankedWinnerIds(
                 _sut.DataProvider, TextTableName, "val", descending: false);
@@ -436,14 +436,14 @@ public sealed class T302S4ProviderMatrixAllClickHouseTests : ProviderTestSuite
                 "(1, 1.5, 10), (2, 1.5, 20), (3, 2.25, 30), (4, 3.5, 40), (5, null, 50)");
         try
         {
-            var max = FloatSource().SelectWhereMax(e => e.Val, ExtremeRowTies.All)
+            var max = FloatSource().SelectWhereMaxOld(e => e.Val, ExtremeRowTies.All)
                 .OrderBy(e => e.Id).ToList();
             var maxOracle = T302S4ParityOracle.RankedWinnerIds(
                 _sut.DataProvider, FloatTableName, "val", descending: true);
             max.Select(r => r.Id).Should().Equal(maxOracle);
             max.Select(r => r.Id).Should().ContainInOrder(4);
 
-            var min = FloatSource().SelectWhereMin(e => e.Val, ExtremeRowTies.All)
+            var min = FloatSource().SelectWhereMinOld(e => e.Val, ExtremeRowTies.All)
                 .OrderBy(e => e.Id).ToList();
             var minOracle = T302S4ParityOracle.RankedWinnerIds(
                 _sut.DataProvider, FloatTableName, "val", descending: false);
@@ -467,14 +467,14 @@ public sealed class T302S4ProviderMatrixAllClickHouseTests : ProviderTestSuite
                 "(1, 1.5, 10), (2, -2.5, 20), (3, inf, 30), (4, -inf, 40), (5, null, 50)");
         try
         {
-            var max = FloatSource().SelectWhereMax(e => e.Val, ExtremeRowTies.All)
+            var max = FloatSource().SelectWhereMaxOld(e => e.Val, ExtremeRowTies.All)
                 .OrderBy(e => e.Id).ToList();
             var maxOracle = T302S4ParityOracle.RankedWinnerIds(
                 _sut.DataProvider, FloatTableName, "val", descending: true);
             max.Select(r => r.Id).Should().Equal(maxOracle);
             max.Select(r => r.Id).Should().ContainInOrder(3);
 
-            var min = FloatSource().SelectWhereMin(e => e.Val, ExtremeRowTies.All)
+            var min = FloatSource().SelectWhereMinOld(e => e.Val, ExtremeRowTies.All)
                 .OrderBy(e => e.Id).ToList();
             var minOracle = T302S4ParityOracle.RankedWinnerIds(
                 _sut.DataProvider, FloatTableName, "val", descending: false);
@@ -483,13 +483,13 @@ public sealed class T302S4ProviderMatrixAllClickHouseTests : ProviderTestSuite
 
             Execute($"insert into {FloatTableName} (id, val, payload) values (6, nan, 60)");
 
-            var nanMax = FloatSource().SelectWhereMax(e => e.Val, ExtremeRowTies.All)
+            var nanMax = FloatSource().SelectWhereMaxOld(e => e.Val, ExtremeRowTies.All)
                 .OrderBy(e => e.Id).ToList();
             var nanMaxOracle = T302S4ParityOracle.RankedWinnerIds(
                 _sut.DataProvider, FloatTableName, "val", descending: true);
             nanMax.Select(r => r.Id).Should().Equal(nanMaxOracle);
 
-            var nanMin = FloatSource().SelectWhereMin(e => e.Val, ExtremeRowTies.All)
+            var nanMin = FloatSource().SelectWhereMinOld(e => e.Val, ExtremeRowTies.All)
                 .OrderBy(e => e.Id).ToList();
             var nanMinOracle = T302S4ParityOracle.RankedWinnerIds(
                 _sut.DataProvider, FloatTableName, "val", descending: false);

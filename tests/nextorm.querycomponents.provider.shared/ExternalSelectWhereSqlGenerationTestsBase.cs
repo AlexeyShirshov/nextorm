@@ -47,7 +47,7 @@ public abstract class ExternalSelectWhereSqlGenerationTestsBase
         Reset(ctx);
         Reset(reference);
         var ext = SqlOf(ctx, (QueryCommand<Entity>)ctx.From<Entity>().ExternalSelectWhereMin(x => x.Score, ExtremeRowTies.One));
-        var built = SqlOf(reference, (QueryCommand<Entity>)reference.From<Entity>().SelectWhereMin(x => x.Score, ExtremeRowTies.One));
+        var built = SqlOf(reference, (QueryCommand<Entity>)reference.From<Entity>().SelectWhereMinOld(x => x.Score, ExtremeRowTies.One));
 
         ext.Should().ContainEquivalentOf("row_number()");
         ext.Should().NotContainEquivalentOf("partition by");
@@ -80,7 +80,7 @@ public abstract class ExternalSelectWhereSqlGenerationTestsBase
         ext.Should().MatchRegex(@"=\s*1");
         OuterSelect(ext).Should().NotContainEquivalentOf("__nextorm_ext_rn");
 
-        var built = SqlOf(reference, (QueryCommand<Entity>)reference.From<Entity>().SelectWhereMax(
+        var built = SqlOf(reference, (QueryCommand<Entity>)reference.From<Entity>().SelectWhereMaxOld(
             x => new { x.Score, x.Name },
             ExtremeRowTies.All,
             x => new { x.GroupKey, x.Name }));
@@ -120,7 +120,7 @@ public abstract class ExternalSelectWhereSqlGenerationTestsBase
             .ExternalSelectWhereMin(x => x.Score, ExtremeRowTies.One));
         var built = SqlOf(reference, (QueryCommand<Entity>)reference.From<Entity>()
             .Where(x => x.Score > 15)
-            .SelectWhereMin(x => x.Score, ExtremeRowTies.One));
+            .SelectWhereMinOld(x => x.Score, ExtremeRowTies.One));
 
         var predicate = ext.IndexOf("15", StringComparison.Ordinal);
         var rankFilter = ext.IndexOf("= 1", StringComparison.Ordinal);
