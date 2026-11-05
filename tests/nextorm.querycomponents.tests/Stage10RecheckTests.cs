@@ -52,58 +52,23 @@ public class Stage10RecheckTests
         "INSERT INTO AliasEntity (Id, Score, rn, rank, __nextorm_ext_rn) VALUES (1,10,7,8,9);";
 
     // ---- R1: Distinct is executed, not merely compared by "throws or not". ----------------------
+    // EntitySeed scores are 10,10,20,NULL,20, so the global minimum 10 is tied between ids 1 and 2.
     [Fact]
-    public void R1_Distinct_ExecutedSemantics_MatchBuiltIn()
+    public void R1_Distinct_IsAcceptedAndKeepsTheWinningRows()
     {
         var (conn, ctx) = CreateContext(EntitySeed);
         using var connScope = conn;
         using var ctxScope = ctx;
 
-        Exception? builtError = null;
-        Exception? externalError = null;
-        long[] builtIds = [];
-        long[] externalIds = [];
+        var distinctIds = ctx.From<Entity>()
+            .ExternalSelectWhereMin(x => x.Score, ExtremeRowTies.All)
+            .Distinct()
+            .Select(x => x.Id)
+            .ToList()
+            .OrderBy(x => x)
+            .ToArray();
 
-        try
-        {
-            builtIds = ctx.From<Entity>()
-                .SelectWhereMinOld(x => x.Score, ExtremeRowTies.All)
-                .Distinct()
-                .Select(x => x.Id)
-                .ToList()
-                .OrderBy(x => x)
-                .ToArray();
-        }
-        catch (Exception ex)
-        {
-            builtError = ex;
-        }
-
-        try
-        {
-            externalIds = ctx.From<Entity>()
-                .ExternalSelectWhereMin(x => x.Score, ExtremeRowTies.All)
-                .Distinct()
-                .Select(x => x.Id)
-                .ToList()
-                .OrderBy(x => x)
-                .ToArray();
-        }
-        catch (Exception ex)
-        {
-            externalError = ex;
-        }
-
-        (externalError is null).Should().Be(builtError is null, "Distinct must be accepted or rejected by both arms");
-        if (builtError is null)
-        {
-            builtIds.Should().NotBeEmpty("the Distinct arm must return rows, otherwise the comparison is vacuous");
-            externalIds.Should().Equal(builtIds);
-        }
-        else
-        {
-            externalError!.GetType().Should().Be(builtError.GetType());
-        }
+        distinctIds.Should().Equal(1, 2);
     }
 
     // ---- R2: the user's colliding alias columns keep their own values. --------------------------
@@ -304,31 +269,24 @@ public class Stage10RecheckTests
         act.Should().Throw<BuildSqlCommandException>().Which.Message.Should().Contain("declared slot");
     }
 
-    // ---- R9: the built-in rejection boundaries hold for the external operator. -----------------
+    // ---- R9: the rejection boundary holds for the external operator. ----------------------------
     [Fact]
-    public void R9_RowLock_Temporal_NamedWindow_Paging_RejectLikeBuiltIn()
+    public void R9_RowLock_Temporal_NamedWindow_Paging_AreRejected()
     {
         var (conn, ctx) = CreateContext(EntitySeed);
         using var connScope = conn;
         using var ctxScope = ctx;
 
-        AssertRejectsLikeBuiltIn(
-            () => ctx.From<Entity>().ForUpdate().SelectWhereMinOld(x => x.Score).ToList(),
-            () => ctx.From<Entity>().ForUpdate().ExternalSelectWhereMin(x => x.Score).ToList());
+        Action rowLock = () => _ = ctx.From<Entity>().ForUpdate().ExternalSelectWhereMin(x => x.Score).ToList();
+        Action temporal = () => _ = ctx.From<Entity>().ForSystemTime(TemporalClause.AsOf(new DateTime(2024, 1, 1)))
+            .ExternalSelectWhereMin(x => x.Score).ToList();
+        Action namedWindow = () => _ = ctx.From<Entity>().Window("w").ExternalSelectWhereMin(x => x.Score).ToList();
+        Action paging = () => _ = ctx.From<Entity>().ExternalSelectWhereMin(x => x.Score).Limit(1).ToList();
 
-        AssertRejectsLikeBuiltIn(
-            () => ctx.From<Entity>().ForSystemTime(TemporalClause.AsOf(new DateTime(2024, 1, 1)))
-                .SelectWhereMinOld(x => x.Score).ToList(),
-            () => ctx.From<Entity>().ForSystemTime(TemporalClause.AsOf(new DateTime(2024, 1, 1)))
-                .ExternalSelectWhereMin(x => x.Score).ToList());
-
-        AssertRejectsLikeBuiltIn(
-            () => ctx.From<Entity>().Window("w").SelectWhereMinOld(x => x.Score).ToList(),
-            () => ctx.From<Entity>().Window("w").ExternalSelectWhereMin(x => x.Score).ToList());
-
-        AssertRejectsLikeBuiltIn(
-            () => ctx.From<Entity>().SelectWhereMinOld(x => x.Score).Limit(1).ToList(),
-            () => ctx.From<Entity>().ExternalSelectWhereMin(x => x.Score).Limit(1).ToList());
+        rowLock.Should().Throw<BuildSqlCommandException>();
+        temporal.Should().Throw<BuildSqlCommandException>();
+        namedWindow.Should().Throw<BuildSqlCommandException>();
+        paging.Should().Throw<BuildSqlCommandException>();
     }
 
     [Fact]
@@ -338,25 +296,11 @@ public class Stage10RecheckTests
         using var connScope = conn;
         using var ctxScope = ctx;
 
-        // The built-in portable lowering accepts an aggregate terminal (Count wraps the extreme-row
-        // command in an outer projection). The external operator cannot reproduce that shape: its hidden
-        // rank column would be appended to the aggregate select list and evaluated over the reshaped
-        // rows. It therefore refuses aggregates explicitly instead of emitting a divergent statement.
-        var builtCount = ctx.From<Entity>().SelectWhereMinOld(x => x.Score).Count();
-        builtCount.Should().BeGreaterThan(0, "the built-in aggregate terminal must execute, otherwise the comparison is vacuous");
-
+        // An aggregate terminal cannot reproduce the reshape: the hidden rank column would be appended to
+        // the aggregate select list and evaluated over the reshaped rows, so aggregates are refused.
         Action external = () => _ = ctx.From<Entity>().ExternalSelectWhereMin(x => x.Score).Count();
         external.Should().Throw<BuildSqlCommandException>()
             .Which.Message.Should().Contain("aggregates");
     }
 
-    private static void AssertRejectsLikeBuiltIn(Action builtIn, Action external)
-    {
-        var builtError = Record.Exception(builtIn);
-        var externalError = Record.Exception(external);
-
-        builtError.Should().NotBeNull("the built-in operator must reject the combination this arm exercises");
-        externalError.Should().NotBeNull("the external operator must preserve the built-in rejection boundary");
-        externalError!.GetType().Should().Be(builtError!.GetType());
-    }
 }

@@ -10,8 +10,6 @@ public abstract class ExternalSelectWhereSqlGenerationTestsBase
 {
     protected abstract IDataContext CreateContext();
 
-    protected virtual IDataContext CreateBuiltInReferenceContext() => CreateContext();
-
     protected sealed class Entity
     {
         public long Id { get; set; }
@@ -43,11 +41,8 @@ public abstract class ExternalSelectWhereSqlGenerationTestsBase
     public void Ext_Provider_MinOneScalarGlobal_Structure()
     {
         using var ctx = CreateContext();
-        using var reference = CreateBuiltInReferenceContext();
         Reset(ctx);
-        Reset(reference);
         var ext = SqlOf(ctx, (QueryCommand<Entity>)ctx.From<Entity>().ExternalSelectWhereMin(x => x.Score, ExtremeRowTies.One));
-        var built = SqlOf(reference, (QueryCommand<Entity>)reference.From<Entity>().SelectWhereMinOld(x => x.Score, ExtremeRowTies.One));
 
         ext.Should().ContainEquivalentOf("row_number()");
         ext.Should().NotContainEquivalentOf("partition by");
@@ -58,17 +53,17 @@ public abstract class ExternalSelectWhereSqlGenerationTestsBase
         ext.Should().ContainEquivalentOf("Score");
         ext.Should().ContainEquivalentOf("Name");
 
-        Count(ext, "from").Should().Be(Count(built, "from"));
-        Count(ext, "join").Should().Be(Count(built, "join"));
+        // One derived source: the outer select reads it, the ranked select reads the table.
+        Count(ext, "from").Should().Be(2);
+        Count(ext, "join").Should().Be(0);
+        Count(ext, "group by").Should().Be(0);
     }
 
     [Fact]
     public void Ext_Provider_MaxAllCompositeGrouped_Structure()
     {
         using var ctx = CreateContext();
-        using var reference = CreateBuiltInReferenceContext();
         Reset(ctx);
-        Reset(reference);
         var ext = SqlOf(ctx, (QueryCommand<Entity>)ctx.From<Entity>().ExternalSelectWhereMax(
             x => new { x.Score, x.Name },
             ExtremeRowTies.All,
@@ -80,15 +75,9 @@ public abstract class ExternalSelectWhereSqlGenerationTestsBase
         ext.Should().MatchRegex(@"=\s*1");
         OuterSelect(ext).Should().NotContainEquivalentOf("__nextorm_ext_rn");
 
-        var built = SqlOf(reference, (QueryCommand<Entity>)reference.From<Entity>().SelectWhereMaxOld(
-            x => new { x.Score, x.Name },
-            ExtremeRowTies.All,
-            x => new { x.GroupKey, x.Name }));
-
-        // The built-in All arm uses aggregate lowering; the external arm uses RANK. The external arm
-        // must never add joins/scans relative to the reference even though the strategies differ.
-        Count(ext, "join").Should().BeLessThanOrEqualTo(Count(built, "join"));
-        Count(ext, "from").Should().BeLessThanOrEqualTo(Count(built, "from"));
+        // A nullable group key selects the rank-window shape: one derived source, no join-back.
+        Count(ext, "join").Should().Be(0);
+        Count(ext, "from").Should().Be(2);
     }
 
     [Fact]
@@ -112,22 +101,19 @@ public abstract class ExternalSelectWhereSqlGenerationTestsBase
     public void Ext_Provider_Filter_Structure()
     {
         using var ctx = CreateContext();
-        using var reference = CreateBuiltInReferenceContext();
         Reset(ctx);
-        Reset(reference);
         var ext = SqlOf(ctx, (QueryCommand<Entity>)ctx.From<Entity>()
             .Where(x => x.Score > 15)
             .ExternalSelectWhereMin(x => x.Score, ExtremeRowTies.One));
-        var built = SqlOf(reference, (QueryCommand<Entity>)reference.From<Entity>()
-            .Where(x => x.Score > 15)
-            .SelectWhereMinOld(x => x.Score, ExtremeRowTies.One));
 
         var predicate = ext.IndexOf("15", StringComparison.Ordinal);
         var rankFilter = ext.IndexOf("= 1", StringComparison.Ordinal);
         predicate.Should().BeGreaterThan(0);
         rankFilter.Should().BeGreaterThan(0);
-        predicate.Should().BeLessThan(rankFilter);
-        Count(ext, "join").Should().Be(Count(built, "join"));
+        predicate.Should().BeLessThan(rankFilter, "the input condition filters the source before the window is evaluated");
+        Count(ext, "join").Should().Be(0);
+        Count(ext, "from").Should().Be(2);
+        Count(ext, "15").Should().Be(1);
     }
 
     [Fact]

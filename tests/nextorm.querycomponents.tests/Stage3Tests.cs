@@ -329,20 +329,17 @@ public class Stage3Tests
     }
 
     [Fact]
-    public void C10_Distinct_ParityWithBuiltIn()
+    public void C10_Distinct_IsAcceptedOverTheReshape()
     {
         using var ctx = Ctx();
-        var builtIn = ctx.From<Entity>().SelectWhereMinOld(x => x.Score).Distinct();
         var external = ctx.From<Entity>().ExternalSelectWhereMin(x => x.Score).Distinct();
 
-        Action a1 = () => _ = SqlOf(ctx, (QueryCommand<Entity>)builtIn);
-        Action a2 = () => _ = SqlOf(ctx, (QueryCommand<Entity>)external);
+        // DISTINCT applies to the outer projection of the derived source, so the reshape accepts it and
+        // the statement still filters on the hidden rank column.
+        var sql = SqlOf(ctx, (QueryCommand<Entity>)external);
 
-        // both should throw (or both should not); assert same outcome
-        var t1 = Record.Exception(a1);
-        var t2 = Record.Exception(a2);
-        (t1 is null).Should().Be(t2 is null);
-        if (t1 is not null)
-            t2.Should().BeOfType(t1.GetType());
+        sql.Should().ContainEquivalentOf("row_number()");
+        sql.Should().ContainEquivalentOf("distinct");
+        sql.Should().MatchRegex(@"=\s*1");
     }
 }
