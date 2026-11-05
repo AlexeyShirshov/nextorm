@@ -36,6 +36,36 @@ public interface IQueryComponent
 }
 
 /// <summary>
+/// Optional pre-preparation structural identity of a query component, used by the engine's raw
+/// (pre-preparation) recipe cache. The engine captures a command's value-free raw shape before it is
+/// prepared and may then reuse another command's prepared plan, so a component that wants that fast
+/// path must describe, without a prepare context, which of its state changes the statement it produces.
+/// Two components that report an equal <see cref="ShapeState"/> and structurally equal selectors must
+/// render the same statement for the same command; that is the contract this interface carries.
+/// </summary>
+/// <remarks>
+/// A component that does not implement this interface stays eligible for every other path but is
+/// excluded from the raw recipe cache: its state is invisible before preparation, and reusing a plan
+/// prepared for a different component would silently change the SQL it renders.
+/// </remarks>
+public interface IQueryComponentShape
+{
+    /// <summary>
+    /// The scalar part of the structural identity — direction, tie policy, flags. Compared with
+    /// <see cref="object.Equals(object)"/>, so the value must implement a stable equality and hash code.
+    /// </summary>
+    object? ShapeState { get; }
+
+    /// <summary>The number of selector expressions that participate in the structural identity.</summary>
+    int ShapeSelectorCount { get; }
+
+    /// <summary>Returns the selector expression at <paramref name="index"/>; compared with the engine expression comparer.</summary>
+    /// <param name="index">Zero-based selector index, below <see cref="ShapeSelectorCount"/>.</param>
+    /// <returns>The selector expression.</returns>
+    LambdaExpression GetShapeSelector(int index);
+}
+
+/// <summary>
 /// Immutable prepared state of a query component. It participates in the plan-cache key through
 /// <see cref="StructuralHash"/> and <see cref="StructurallyEquals"/>.
 /// </summary>

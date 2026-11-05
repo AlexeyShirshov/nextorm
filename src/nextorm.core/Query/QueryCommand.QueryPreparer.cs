@@ -4071,9 +4071,20 @@ public partial class QueryCommand
         internal UnionType UnionType;
         internal RawShape? Union;
         internal CteShape[]? Ctes;
+        // Query components, described by IQueryComponentShape: null when the command carries none.
+        internal ComponentShape[]? Components;
 
         /// <summary>Structural fingerprint used only to partition candidates into buckets.</summary>
         internal int Fingerprint;
+
+        /// <summary>One component's pre-preparation structural identity.</summary>
+        internal sealed class ComponentShape
+        {
+            internal Type Slot = null!;
+            internal QueryComponentContribution Contribution;
+            internal object? State;
+            internal LambdaExpression[] Selectors = [];
+        }
 
         internal sealed class CteShape
         {
@@ -4082,6 +4093,35 @@ public partial class QueryCommand
             internal int? MaxRecursion;
             internal bool TypedProjection;
             internal RawShape Body = null!;
+        }
+
+        /// <summary>
+        /// Compares the component part of two raw shapes. Selectors go through the expression comparer of
+        /// the fresh command, exactly like every other expression-bearing member; the scalar identity is
+        /// compared with <see cref="object.Equals(object)"/>.
+        /// </summary>
+        private static bool ComponentsMatch(ComponentShape[]? x, ComponentShape[]? y, QueryCommand comparerSource)
+        {
+            if (x is null || y is null) return x is null && y is null;
+            if (x.Length != y.Length) return false;
+
+            var comparer = comparerSource.GetExpressionPlanEqualityComparer();
+            for (var i = 0; i < x.Length; i++)
+            {
+                if (x[i].Slot != y[i].Slot) return false;
+                if (x[i].Contribution != y[i].Contribution) return false;
+                if (!Equals(x[i].State, y[i].State)) return false;
+
+                var left = x[i].Selectors;
+                var right = y[i].Selectors;
+                if (left.Length != right.Length) return false;
+                for (var j = 0; j < left.Length; j++)
+                {
+                    if (!comparer.Equals(left[j], right[j])) return false;
+                }
+            }
+
+            return true;
         }
 
         /// <summary>
@@ -4116,6 +4156,7 @@ public partial class QueryCommand
             if (!Equals(TableSample, other.TableSample) || !Equals(Temporal, other.Temporal)) return false;
             if (!Equals(RowLock, other.RowLock) || !Equals(SourceLockClause, other.SourceLockClause)) return false;
             if (!Equals(LimitBy, other.LimitBy) || !Equals(DistinctOn, other.DistinctOn) || !Equals(ExtremeRow, other.ExtremeRow)) return false;
+            if (!ComponentsMatch(Components, other.Components, comparerSource)) return false;
             if (!FilterScopeEqual(FilterScope, other.FilterScope)) return false;
 
             // The seven RawDescriptorDifferential settings.
@@ -4296,6 +4337,33 @@ public partial class QueryCommand
         if (cmd._referencedQueries is { Count: > 0 } || cmd._outerRefs is { Count: > 0 }) return null;
         if (cmd.HasDataModifyingCte || cmd.HasTemporaryTableSource()) return null;
 
+        // A query component carries structural state that only it can describe before preparation. A
+        // component that implements IQueryComponentShape names that state (slot, contribution, scalar
+        // flags, selectors), and it becomes part of the raw shape; one that does not is invisible here,
+        // so the whole graph stays ineligible for the recipe path — reusing a plan prepared for a
+        // different component would silently change the rendered SQL.
+        RawShape.ComponentShape[]? components = null;
+        if (cmd._componentState?.Components is { Count: > 0 } declared)
+        {
+            components = new RawShape.ComponentShape[declared.Count];
+            for (var i = 0; i < declared.Count; i++)
+            {
+                if (declared[i] is not IQueryComponentShape described) return null;
+
+                var selectors = new LambdaExpression[described.ShapeSelectorCount];
+                for (var j = 0; j < selectors.Length; j++)
+                    selectors[j] = described.GetShapeSelector(j);
+
+                components[i] = new RawShape.ComponentShape
+                {
+                    Slot = declared[i].Slot,
+                    Contribution = declared[i].Contribution,
+                    State = described.ShapeState,
+                    Selectors = selectors,
+                };
+            }
+        }
+
         // The set-operation operand's descriptor is captured ONCE and travels on the root shape below.
         // Re-capturing it here just to test eligibility allocated a complete second RawShape (plus its
         // nested nodes) per set-op query and threw it away; the retained capture is the same descriptor
@@ -4414,6 +4482,7 @@ public partial class QueryCommand
             UnionType = cmd._unionType,
             Union = union,
             Ctes = ctes,
+            Components = components,
         };
 
         // Closure / literal-vs-parameter classification: a captured member access (a compiler
@@ -4621,6 +4690,19 @@ public partial class QueryCommand
                 scan.Scan(arrayJoins[i]);
         }
 
+        // A component selector can capture a value the same way a command lambda can, and the prepared
+        // statement folds that value in. Such a shape is ineligible, exactly like a captured command
+        // expression.
+        if (shape.Components is { Length: > 0 } components)
+        {
+            for (var i = 0; i < components.Length; i++)
+            {
+                var selectors = components[i].Selectors;
+                for (var j = 0; j < selectors.Length; j++)
+                    scan.Scan(selectors[j]);
+            }
+        }
+
         if (scan.Found) return true;
 
         if (shape.Union is not null && HasCapturedValue(shape.Union)) return true;
@@ -4740,6 +4822,19 @@ public partial class QueryCommand
 
             if (shape.Union is not null)
                 hash.Add(shape.Union.Fingerprint);
+
+            if (shape.Components is { Length: > 0 } components)
+            {
+                for (var i = 0; i < components.Length; i++)
+                {
+                    hash.Add(components[i].Slot);
+                    hash.Add((int)components[i].Contribution);
+                    hash.Add(components[i].State?.GetHashCode() ?? 0);
+                    var selectors = components[i].Selectors;
+                    for (var j = 0; j < selectors.Length; j++)
+                        hash.Add(exp.GetHashCode(selectors[j]));
+                }
+            }
 
             return hash.ToHashCode();
         }
