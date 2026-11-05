@@ -391,59 +391,32 @@ public class ComponentContractTests
         act.Should().Throw<NotSupportedException>();
     }
 
-    // Distinct parity executed semantics
+    // DISTINCT is expressible on top of the reshape: the derived source already yields distinct winning
+    // rows, so the outer DISTINCT must not change the set (and must not be rejected).
     [Fact]
-    public void R1_Distinct_ExecutedSemantics_MatchBuiltIn()
+    public void R1_Distinct_IsAcceptedAndKeepsTheWinningRows()
     {
         var (conn, ctx) = CreateContext(EntitySeed);
         using var connScope = conn;
         using var ctxScope = ctx;
 
-        Exception? builtError = null;
-        Exception? externalError = null;
-        long[] builtIds = [];
-        long[] externalIds = [];
+        var plain = ctx.From<Entity>()
+            .SelectWhereMin(x => x.Score, ExtremeRowTies.All)
+            .Select(x => x.Id)
+            .ToList()
+            .OrderBy(x => x)
+            .ToArray();
 
-        try
-        {
-            builtIds = ctx.From<Entity>()
-                .SelectWhereMinOld(x => x.Score, ExtremeRowTies.All)
-                .Distinct()
-                .Select(x => x.Id)
-                .ToList()
-                .OrderBy(x => x)
-                .ToArray();
-        }
-        catch (Exception ex)
-        {
-            builtError = ex;
-        }
+        var distinct = ctx.From<Entity>()
+            .SelectWhereMin(x => x.Score, ExtremeRowTies.All)
+            .Distinct()
+            .Select(x => x.Id)
+            .ToList()
+            .OrderBy(x => x)
+            .ToArray();
 
-        try
-        {
-            externalIds = ctx.From<Entity>()
-                .SelectWhereMinOld(x => x.Score, ExtremeRowTies.All)
-                .Distinct()
-                .Select(x => x.Id)
-                .ToList()
-                .OrderBy(x => x)
-                .ToArray();
-        }
-        catch (Exception ex)
-        {
-            externalError = ex;
-        }
-
-        (externalError is null).Should().Be(builtError is null, "Distinct must be accepted or rejected by both arms");
-        if (builtError is null)
-        {
-            builtIds.Should().NotBeEmpty("the Distinct arm must return rows, otherwise the comparison is vacuous");
-            externalIds.Should().Equal(builtIds);
-        }
-        else
-        {
-            externalError!.GetType().Should().Be(builtError.GetType());
-        }
+        plain.Should().NotBeEmpty("otherwise the comparison below is vacuous");
+        distinct.Should().Equal(plain);
     }
 
     // Warm hit assertions for the product component: the cached prepared plan is reused and the

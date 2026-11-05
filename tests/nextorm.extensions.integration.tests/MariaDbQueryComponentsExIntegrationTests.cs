@@ -48,46 +48,48 @@ insert into extrema_entity (id, score, category, label) values
 
     public void Dispose() => _ctx.Dispose();
 
-    [Fact]
-    public void QueryComponentsEx_MariaDb_MinOne_MaxAll_MatchBuiltIn()
-    {
-        var builtMin = E.SelectWhereMinOld(e => e.Score).ToList();
-        var exMin = ExtremeRowExtensions.SelectWhereMin(E, e => e.Score).ToList();
-        // Global minimum (score 1) is tied between ids 6 and 10; tolerate the tie.
-        builtMin.Should().ContainSingle();
-        exMin.Should().ContainSingle();
-        builtMin[0].Score.Should().Be(1);
-        exMin[0].Score.Should().Be(1);
-        builtMin[0].Id.Should().BeOneOf(6, 10);
-        exMin[0].Id.Should().BeOneOf(6, 10);
+    private static int[] Ids(IEnumerable<ExtremaEntity> rows) => rows.Select(e => e.Id).OrderBy(id => id).ToArray();
 
-        var builtMax = E.SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All).ToList();
-        var exMax = ExtremeRowExtensions.SelectWhereMax(E, e => e.Score, ExtremeRowTies.All).ToList();
-        exMax.Select(e => e.Id).OrderBy(x => x).Should().Equal(builtMax.Select(e => e.Id).OrderBy(x => x));
+    [Fact]
+    public void MinOne_And_MaxAll_Scalar_Global()
+    {
+        var min = E.SelectWhereMin(e => e.Score).ToList();
+        min.Should().ContainSingle();
+        min[0].Score.Should().Be(1);
+        min[0].Id.Should().BeOneOf(6, 10);
+
+        var max = E.SelectWhereMax(e => e.Score, ExtremeRowTies.All).ToList();
+        Ids(max).Should().Equal(3, 4);
     }
 
     [Fact]
-    public void QueryComponentsEx_MariaDb_CompositeAndGrouped_MatchBuiltIn()
+    public void CompositeKey_Grouped_ComparesLexicographicallyPerGroup()
     {
-        var built = E.SelectWhereMaxOld(e => new { e.Category, e.Score }, ExtremeRowTies.All, e => new { e.Category, e.Label }).ToList();
-        var ex = ExtremeRowExtensions.SelectWhereMax(E, e => new { e.Category, e.Score }, ExtremeRowTies.All, e => new { e.Category, e.Label }).ToList();
-        ex.Select(e => e.Id).OrderBy(x => x).Should().Equal(built.Select(e => e.Id).OrderBy(x => x));
+        // The group key is (Category, Label), so every row is its own group; the value key is
+        // (Category, Score), so any row with a NULL in either key is excluded (1, 7, 8, 11). `All`
+        // therefore keeps exactly the remaining rows.
+        var rows = E.SelectWhereMax(
+            e => new { e.Category, e.Score },
+            ExtremeRowTies.All,
+            e => new { e.Category, e.Label }).ToList();
+
+        Ids(rows).Should().Equal(2, 3, 4, 5, 6, 9, 10);
     }
 
     [Fact]
-    public void QueryComponentsEx_MariaDb_Projection_MatchBuiltIn()
+    public void Projection_All_KeepsTheTiedWinners()
     {
-        var built = E.SelectWhereMinOld(e => e.Score, e => new { e.Id, e.Label }, ExtremeRowTies.All).ToList();
-        var ex = ExtremeRowExtensions.SelectWhereMin(E, e => e.Score, e => new { e.Id, e.Label }, ExtremeRowTies.All).ToList();
-        ex.Select(x => (x.Id, x.Label)).OrderBy(x => x.Id).Should().Equal(built.Select(x => (x.Id, x.Label)).OrderBy(x => x.Id));
+        var rows = E.SelectWhereMin(e => e.Score, e => new { e.Id, e.Label }, ExtremeRowTies.All).ToList();
+
+        rows.Select(x => (x.Id, x.Label)).OrderBy(x => x.Id).Should().Equal((6, "six"), (10, "ten"));
     }
 
     [Fact]
-    public void QueryComponentsEx_MariaDb_NullGroup_Parity()
+    public void GroupedAll_KeepsTheNullGroup()
     {
-        var built = E.SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All, e => e.Category).ToList();
-        var ex = ExtremeRowExtensions.SelectWhereMax(E, e => e.Score, ExtremeRowTies.All, e => e.Category).ToList();
-        ex.Select(e => e.Id).OrderBy(x => x).Should().Equal(built.Select(e => e.Id).OrderBy(x => x));
-        ex.Should().Contain(e => e.Category == null);
+        var rows = E.SelectWhereMax(e => e.Score, ExtremeRowTies.All, e => e.Category).ToList();
+
+        Ids(rows).Should().Equal(3, 4, 5, 8, 9);
+        rows.Should().Contain(e => e.Category == null);
     }
 }

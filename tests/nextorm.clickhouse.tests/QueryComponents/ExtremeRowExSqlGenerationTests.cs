@@ -7,10 +7,6 @@ namespace NextORM.ClickHouse.Tests.QueryComponents;
 public sealed class ExtremeRowExSqlGenerationTests : ExtremeRowExSqlGenerationTestsBase
 {
     protected override IDataContext CreateContext() => new ForcedPortableClickHouseContext(ClickHouseTestContext.CreateClickHouse());
-
-    protected override IDataContext CreateBuiltInReferenceContext()
-        => new ForcedPortableClickHouseContext(ClickHouseTestContext.CreateClickHouse());
-
     private sealed class ForcedPortableClickHouseContext : ClickHouseDataContext
     {
         private readonly ISqlDialect _dialect;

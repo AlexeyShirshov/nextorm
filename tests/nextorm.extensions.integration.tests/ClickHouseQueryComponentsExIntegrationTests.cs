@@ -4,6 +4,11 @@ using NextORM.Extensions;
 
 namespace NextORM.Integration.Tests;
 
+/// <summary>
+/// Live behaviour of <c>SelectWhereMin</c>/<c>SelectWhereMax</c> on ClickHouse, asserted against the pinned
+/// <c>extrema_entity</c> fixture (see <see cref="ExtensionsQueryComponentsLiveTests"/>) rather than against
+/// another implementation.
+/// </summary>
 [Collection("ClickHouse")]
 public sealed class ClickHouseQueryComponentsExIntegrationTests : ProviderTestSuite
 {
@@ -11,46 +16,47 @@ public sealed class ClickHouseQueryComponentsExIntegrationTests : ProviderTestSu
 
     private EntityBuilder<ExtremaEntity> E => _sut.DataProvider.From<ExtremaEntity>();
 
-    [Fact]
-    public void QueryComponentsEx_ClickHouse_MinOne_MaxAll_MatchBuiltIn()
-    {
-        var builtMin = E.SelectWhereMinOld(e => e.Score).ToList();
-        var exMin = ExtremeRowExtensions.SelectWhereMin(E, e => e.Score).ToList();
-        // Global minimum (score 1) is tied between ids 6 and 10; tolerate the tie.
-        builtMin.Should().ContainSingle();
-        exMin.Should().ContainSingle();
-        builtMin[0].Score.Should().Be(1);
-        exMin[0].Score.Should().Be(1);
-        builtMin[0].Id.Should().BeOneOf(6, 10);
-        exMin[0].Id.Should().BeOneOf(6, 10);
+    private static int[] Ids(IEnumerable<ExtremaEntity> rows) => rows.Select(e => e.Id).OrderBy(id => id).ToArray();
 
-        var builtMax = E.SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All).ToList();
-        var exMax = ExtremeRowExtensions.SelectWhereMax(E, e => e.Score, ExtremeRowTies.All).ToList();
-        exMax.Select(e => e.Id).OrderBy(x => x).Should().Equal(builtMax.Select(e => e.Id).OrderBy(x => x));
+    [Fact]
+    public void MinOne_And_MaxAll_Scalar_Global()
+    {
+        var min = E.SelectWhereMin(e => e.Score).ToList();
+        min.Should().ContainSingle();
+        min[0].Score.Should().Be(1);
+        min[0].Id.Should().BeOneOf(6, 10);
+
+        var max = E.SelectWhereMax(e => e.Score, ExtremeRowTies.All).ToList();
+        Ids(max).Should().Equal(3, 4);
     }
 
     [Fact]
-    public void QueryComponentsEx_ClickHouse_GroupedAndNull_MatchBuiltIn()
+    public void GroupedAll_WithNullGroupKey()
     {
-        var built = E.SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All, e => e.Category).ToList();
-        var ex = ExtremeRowExtensions.SelectWhereMax(E, e => e.Score, ExtremeRowTies.All, e => e.Category).ToList();
-        ex.Select(e => e.Id).OrderBy(x => x).Should().Equal(built.Select(e => e.Id).OrderBy(x => x));
-        ex.Should().NotContain(e => e.Category == "d");
+        // a → 9 tied (3,4); b → 3 (5); c → 4 (9); NULL → 7 (8); d holds only a NULL score.
+        var rows = E.SelectWhereMax(e => e.Score, ExtremeRowTies.All, e => e.Category).ToList();
+
+        Ids(rows).Should().Equal(3, 4, 5, 8, 9);
+        rows.Should().NotContain(e => e.Category == "d");
     }
 
     [Fact]
-    public void QueryComponentsEx_ClickHouse_Composite_MatchBuiltIn()
+    public void CompositeKey_Global_ComparesLexicographically()
     {
-        var built = E.SelectWhereMinOld(e => new { e.Category, e.Score }).ToList();
-        var ex = ExtremeRowExtensions.SelectWhereMin(E, e => new { e.Category, e.Score }).ToList();
-        ex.Select(e => e.Id).OrderBy(x => x).Should().Equal(built.Select(e => e.Id).OrderBy(x => x));
+        // Both key components are value keys, so a NULL in either excludes the row: (a,5) is the minimum
+        // and (c,4) the maximum of the remaining rows.
+        var min = E.SelectWhereMin(e => new { e.Category, e.Score }).ToList();
+        min.Should().ContainSingle().Which.Id.Should().Be(2);
+
+        var max = E.SelectWhereMax(e => new { e.Category, e.Score }).ToList();
+        max.Should().ContainSingle().Which.Id.Should().Be(9);
     }
 
     [Fact]
-    public void QueryComponentsEx_ClickHouse_Projection_MatchBuiltIn()
+    public void Projection_All_KeepsTheTiedWinners()
     {
-        var built = E.SelectWhereMinOld(e => e.Score, e => new { e.Id, e.Label }, ExtremeRowTies.All).ToList();
-        var ex = ExtremeRowExtensions.SelectWhereMin(E, e => e.Score, e => new { e.Id, e.Label }, ExtremeRowTies.All).ToList();
-        ex.Select(x => (x.Id, x.Label)).Should().Equal(built.Select(x => (x.Id, x.Label)));
+        var rows = E.SelectWhereMin(e => e.Score, e => new { e.Id, e.Label }, ExtremeRowTies.All).ToList();
+
+        rows.Select(x => (x.Id, x.Label)).OrderBy(x => x.Id).Should().Equal((6, "six"), (10, "ten"));
     }
 }

@@ -5,236 +5,233 @@ using NextORM.Extensions;
 namespace NextORM.Integration.Tests;
 
 /// <summary>
-/// Live parity of the <c>nextorm.extensions</c> operators (<c>SelectWhereMinEx</c>/<c>SelectWhereMaxEx</c>)
-/// against the built-in operator on every SQL provider. Kept in its own project, separate from
-/// <c>nextorm.integration.tests</c>, so the package's live coverage has one owner and one run.
+/// Live behaviour of the <c>nextorm.extensions</c> operators on every SQL provider, asserted against the
+/// pinned <c>extrema_entity</c> fixture rather than against another implementation. The fixture is the same
+/// on every provider:
+/// <code>
+/// id score category label
+///  1  NULL  a        one
+///  2     5  a        two
+///  3     9  a        three
+///  4     9  a        four
+///  5     3  b        five
+///  6     1  b        six
+///  7  NULL  NULL     seven
+///  8     7  NULL     eight
+///  9     4  c        nine
+/// 10     1  b        ten
+/// 11  NULL  d        eleven
+/// </code>
+/// A NULL value key never wins an extreme, so ids 1, 7 and 11 are excluded from every value comparison.
 /// </summary>
 public abstract class ExtensionsQueryComponentsLiveTests : ProviderTestSuite
 {
     private EntityBuilder<ExtremaEntity> Extrema => _sut.DataProvider.From<ExtremaEntity>();
 
-    private EntityBuilder<ExtremaEntity> ExExtrema => _sut.DataProvider.From<ExtremaEntity>();
-
-    private static void SameExIds(IEnumerable<ExtremaEntity> builtIn, IEnumerable<ExtremaEntity> external)
-        => external.Select(e => e.Id).OrderBy(id => id).Should().Equal(builtIn.Select(e => e.Id).OrderBy(id => id));
+    private static int[] Ids(IEnumerable<ExtremaEntity> rows) => rows.Select(e => e.Id).OrderBy(id => id).ToArray();
 
     [Fact]
-    public void QueryComponentsEx_MinOne_ScalarGlobal_Parity()
+    public void MinOne_Scalar_Global_KeepsOneOfTheTiedMinimumRows()
     {
-        var built = Extrema.SelectWhereMinOld(e => e.Score).ToList();
-        var ex = ExtremeRowExtensions.SelectWhereMin(ExExtrema, e => e.Score).ToList();
+        var rows = Extrema.SelectWhereMin(e => e.Score).ToList();
 
-        // Global minimum (score 1) is tied between ids 6 and 10; row_number() over distinct physical
-        // plans may pick either tied row, so tolerate the tie exactly as the legacy tests do.
-        built.Should().ContainSingle();
-        ex.Should().ContainSingle();
-        built[0].Score.Should().Be(1);
-        ex[0].Score.Should().Be(1);
-        built[0].Id.Should().BeOneOf(6, 10);
-        ex[0].Id.Should().BeOneOf(6, 10);
+        rows.Should().ContainSingle();
+        rows[0].Score.Should().Be(1);
+        rows[0].Id.Should().BeOneOf(6, 10);
     }
 
     [Fact]
-    public void QueryComponentsEx_MaxAll_ScalarGlobal_Parity()
+    public void MaxAll_Scalar_Global_KeepsEveryTiedMaximumRow()
     {
-        var built = Extrema.SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All).ToList();
-        var ex = ExtremeRowExtensions.SelectWhereMax(ExExtrema, e => e.Score, ExtremeRowTies.All).ToList();
+        var rows = Extrema.SelectWhereMax(e => e.Score, ExtremeRowTies.All).ToList();
 
-        ex.Select(e => e.Id).OrderBy(x => x).Should().Equal(built.Select(e => e.Id).OrderBy(x => x));
+        Ids(rows).Should().Equal(3, 4);
+        rows.Should().OnlyContain(e => e.Score == 9);
     }
 
     [Fact]
-    public void QueryComponentsEx_GroupedScalar_Parity()
+    public void GroupedScalar_All_KeepsEveryTiedWinnerPerGroup()
     {
-        var builtMin = Extrema.SelectWhereMinOld(e => e.Score, ExtremeRowTies.All, e => e.Category).ToList();
-        var exMin = ExtremeRowExtensions.SelectWhereMin(ExExtrema, e => e.Score, ExtremeRowTies.All, e => e.Category).ToList();
-        SameExIds(builtMin, exMin);
+        // Categories: a → 5 (id 2); b → 1 tied (6, 10); c → 4 (9); d → only a NULL score, excluded;
+        // NULL → 7 (id 8, id 7 has a NULL score).
+        var rows = Extrema.SelectWhereMin(e => e.Score, ExtremeRowTies.All, e => e.Category).ToList();
 
-        var builtMax = Extrema.SelectWhereMaxOld(e => e.Score, ExtremeRowTies.One, e => e.Category).ToList();
-        var exMax = ExtremeRowExtensions.SelectWhereMax(ExExtrema, e => e.Score, ExtremeRowTies.One, e => e.Category).ToList();
-        // Group 'a' has a tied maximum (ids 3 and 4); row_number() may pick either tied row, so the
-        // winner for 'a' is tolerated as BeOneOf exactly as the legacy tests do.
-        exMax.Should().HaveCount(builtMax.Count);
-        exMax.Select(e => e.Category).OrderBy(x => x).Should().Equal(builtMax.Select(e => e.Category).OrderBy(x => x));
-        foreach (var g in exMax.Where(e => e.Category != "a"))
-        {
-            var b = builtMax.Single(e => e.Category == g.Category);
-            g.Id.Should().Be(b.Id);
-            g.Score.Should().Be(b.Score);
-        }
-        exMax.Single(e => e.Category == "a").Score.Should().Be(9);
-        exMax.Single(e => e.Category == "a").Id.Should().BeOneOf(3, 4);
-        builtMax.Single(e => e.Category == "a").Id.Should().BeOneOf(3, 4);
+        Ids(rows).Should().Equal(2, 6, 8, 9, 10);
     }
 
     [Fact]
-    public void QueryComponentsEx_CompositeAnonymous_GlobalAndGrouped_Parity()
+    public void GroupedScalar_One_KeepsOneRowPerGroup()
     {
-        var builtG = Extrema.SelectWhereMinOld(e => new { e.Category, e.Score }).ToList();
-        var exG = ExtremeRowExtensions.SelectWhereMin(ExExtrema, e => new { e.Category, e.Score }).ToList();
-        SameExIds(builtG, exG);
+        // a → 9 tied between 3 and 4; b → 3 (id 5); c → 4 (id 9); NULL → 7 (id 8); d has no non-NULL score.
+        var rows = Extrema.SelectWhereMax(e => e.Score, ExtremeRowTies.One, e => e.Category).ToList();
 
-        var builtMax = Extrema.SelectWhereMaxOld(e => new { e.Category, e.Score }, ExtremeRowTies.All, e => e.Category).ToList();
-        var exMax = ExtremeRowExtensions.SelectWhereMax(ExExtrema, e => new { e.Category, e.Score }, ExtremeRowTies.All, e => e.Category).ToList();
-        SameExIds(builtMax, exMax);
+        rows.Should().HaveCount(4);
+        Ids(rows.Where(e => e.Category != "a")).Should().Equal(5, 8, 9);
+        rows.Single(e => e.Category == "a").Id.Should().BeOneOf(3, 4);
+        rows.Single(e => e.Category == "a").Score.Should().Be(9);
     }
 
     [Fact]
-    public void QueryComponentsEx_CompositeValueTuple_GlobalAndGrouped_Parity()
+    public void CompositeKey_Global_ComparesLexicographically()
     {
-        var builtG = Extrema.SelectWhereMinOld(e => new ValueTuple<int?, string?>(e.Score, e.Label)).ToList();
-        var exG = ExExtrema.SelectWhereMin(e => new ValueTuple<int?, string?>(e.Score, e.Label)).ToList();
-        SameExIds(builtG, exG);
+        // (1,'six') beats (1,'ten') on the label; (9,'three') beats (9,'four') on the maximum side.
+        var min = Extrema.SelectWhereMin(e => new { e.Score, e.Label }).ToList();
+        min.Should().ContainSingle();
+        min[0].Id.Should().Be(6);
+        min[0].Label.Should().Be("six");
 
-        var builtMax = Extrema.SelectWhereMaxOld(e => new ValueTuple<int?, string?>(e.Score, e.Label), ExtremeRowTies.All, e => new { e.Category, e.Label }).ToList();
-        var exMax = ExExtrema.SelectWhereMax(e => new ValueTuple<int?, string?>(e.Score, e.Label), ExtremeRowTies.All, e => new { e.Category, e.Label }).ToList();
-        SameExIds(builtMax, exMax);
+        var max = Extrema.SelectWhereMax(e => new { e.Score, e.Label }).ToList();
+        max.Should().ContainSingle();
+        max[0].Id.Should().Be(3);
+        max[0].Label.Should().Be("three");
     }
 
     [Fact]
-    public void QueryComponentsEx_NullValueKey_Excluded_Parity()
+    public void CompositeKey_Grouped_ComparesLexicographicallyPerGroup()
     {
-        var built = Extrema.SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All).ToList();
-        var ex = ExtremeRowExtensions.SelectWhereMax(ExExtrema, e => e.Score, ExtremeRowTies.All).ToList();
+        var rows = Extrema
+            .SelectWhereMax(e => new { e.Score, e.Label }, ExtremeRowTies.All, e => e.Category).ToList();
 
-        ex.Should().NotContain(e => e.Score == null);
-        SameExIds(built, ex);
+        // a → (9,'three') beats (9,'four'); b → (3,'five'); c → (4,'nine'); NULL → (7,'eight');
+        // d has only a NULL score and never wins.
+        Ids(rows).Should().Equal(3, 5, 8, 9);
     }
 
     [Fact]
-    public void QueryComponentsEx_NullGroupKey_Parity()
+    public void ValueTupleKey_Global_ComparesLexicographically()
     {
-        var built = Extrema.SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All, e => e.Category).ToList();
-        var ex = ExtremeRowExtensions.SelectWhereMax(ExExtrema, e => e.Score, ExtremeRowTies.All, e => e.Category).ToList();
+        var min = Extrema
+            .SelectWhereMin(e => new ValueTuple<int?, string?>(e.Score, e.Label)).ToList();
+        min.Should().ContainSingle().Which.Id.Should().Be(6);
 
-        SameExIds(built, ex);
-        ex.Should().Contain(e => e.Category == null);
+        var max = Extrema
+            .SelectWhereMax(e => new ValueTuple<int?, string?>(e.Score, e.Label)).ToList();
+        max.Should().ContainSingle().Which.Id.Should().Be(3);
     }
 
     [Fact]
-    public void QueryComponentsEx_CapturedFilter_BeforeExtremum_Parity()
+    public void NullValueKeys_AreExcluded()
+    {
+        var rows = Extrema.SelectWhereMax(e => e.Score, ExtremeRowTies.All).ToList();
+
+        rows.Should().NotContain(e => e.Score == null);
+        Ids(rows).Should().Equal(3, 4);
+    }
+
+    [Fact]
+    public void NullGroupKey_IsItsOwnGroup()
+    {
+        var rows = Extrema.SelectWhereMin(e => e.Score, ExtremeRowTies.All, e => e.Category).ToList();
+
+        rows.Should().Contain(e => e.Category == null);
+        Ids(rows.Where(e => e.Category == null)).Should().Equal(8);
+    }
+
+    [Fact]
+    public void CapturedFilter_IsAppliedBeforeTheExtremum()
     {
         int threshold = 3;
-        var built = Extrema.Where(e => e.Score > threshold).SelectWhereMinOld(e => e.Score).ToList();
-        var ex = ExtremeRowExtensions.SelectWhereMin(ExExtrema.Where(e => e.Score > threshold), e => e.Score).ToList();
-
-        ex.Select(e => e.Id).Should().Equal(built.Select(e => e.Id));
-        ex.Should().ContainSingle();
-        ex[0].Score.Should().Be(4);
+        var first = Extrema.Where(e => e.Score > threshold).SelectWhereMin(e => e.Score).ToList();
+        first.Should().ContainSingle();
+        first[0].Score.Should().Be(4);
+        first[0].Id.Should().Be(9);
 
         threshold = 8;
-        var built2 = Extrema.Where(e => e.Score > threshold).SelectWhereMinOld(e => e.Score).ToList();
-        var ex2 = ExtremeRowExtensions.SelectWhereMin(ExExtrema.Where(e => e.Score > threshold), e => e.Score).ToList();
-        // score 9 is tied between ids 3 and 4 after the filter; tolerate the tie as the legacy tests do.
-        built2.Should().ContainSingle();
-        ex2.Should().ContainSingle();
-        built2[0].Score.Should().Be(9);
-        ex2[0].Score.Should().Be(9);
-        built2[0].Id.Should().BeOneOf(3, 4);
-        ex2[0].Id.Should().BeOneOf(3, 4);
+        var second = Extrema.Where(e => e.Score > threshold).SelectWhereMin(e => e.Score).ToList();
+        second.Should().ContainSingle();
+        second[0].Score.Should().Be(9);
+        second[0].Id.Should().BeOneOf(3, 4);
     }
 
     [Fact]
-    public void QueryComponentsEx_ScalarProjection_Parity()
+    public void ScalarProjection_ReturnsTheWinningValues()
     {
-        var built = Extrema.SelectWhereMinOld(e => e.Score, e => e.Score, ExtremeRowTies.All).ToList();
-        var ex = ExtremeRowExtensions.SelectWhereMin(ExExtrema, e => e.Score, e => e.Score, ExtremeRowTies.All).ToList();
+        var scores = Extrema.SelectWhereMin(e => e.Score, e => e.Score, ExtremeRowTies.All).ToList();
 
-        ex.OrderBy(x => x).Should().Equal(built.OrderBy(x => x));
+        scores.OrderBy(x => x).Should().Equal(1, 1);
     }
 
     [Fact]
-    public void QueryComponentsEx_DtoProjection_Parity()
+    public void DtoProjection_ReturnsTheWinningRows()
     {
-        var built = Extrema.SelectWhereMinOld(e => e.Score, e => new ExtremaProjectionDto { Id = e.Id, Label = e.Label }, ExtremeRowTies.All).ToList();
-        var ex = ExtremeRowExtensions.SelectWhereMin(ExExtrema, e => e.Score, e => new ExtremaProjectionDto { Id = e.Id, Label = e.Label }, ExtremeRowTies.All).ToList();
+        var rows = Extrema
+            .SelectWhereMin(e => e.Score, e => new ExtremaProjectionDto { Id = e.Id, Label = e.Label }, ExtremeRowTies.All)
+            .ToList();
 
-        ex.Select(x => (x.Id, x.Label)).OrderBy(x => x.Id).Should().Equal(built.Select(x => (x.Id, x.Label)).OrderBy(x => x.Id));
+        rows.Select(x => (x.Id, x.Label)).OrderBy(x => x.Id).Should().Equal((6, "six"), (10, "ten"));
     }
 
     [Fact]
-    public void QueryComponentsEx_ChainedSelect_Parity()
+    public void ChainedSelect_KeepsTheWinningRows()
     {
-        var built = Extrema.SelectWhereMinOld(e => e.Score, ExtremeRowTies.All).Select(e => new { e.Id, e.Label }).ToList();
-        var ex = ExtremeRowExtensions.SelectWhereMin(ExExtrema, e => e.Score, ExtremeRowTies.All).Select(e => new { e.Id, e.Label }).ToList();
+        var rows = Extrema.SelectWhereMin(e => e.Score, ExtremeRowTies.All)
+            .Select(e => new { e.Id, e.Label }).ToList();
 
-        ex.Select(x => (x.Id, x.Label)).OrderBy(x => x.Id).Should().Equal(built.Select(x => (x.Id, x.Label)).OrderBy(x => x.Id));
+        rows.Select(x => (x.Id, x.Label)).OrderBy(x => x.Id).Should().Equal((6, "six"), (10, "ten"));
     }
 
     [Fact]
-    public void QueryComponentsEx_OuterOrderBy_Parity()
+    public void OuterOrdering_OrdersTheSurvivingRows()
     {
-        var built = Extrema.SelectWhereMinOld(e => e.Score, ExtremeRowTies.All).OrderBy(e => e.Id).ThenBy(e => e.Label).ToList();
-        var ex = ExExtrema.SelectWhereMinOld(e => e.Score, ExtremeRowTies.All).OrderBy(e => e.Id).ThenBy(e => e.Label).ToList();
+        var rows = Extrema.SelectWhereMin(e => e.Score, ExtremeRowTies.All)
+            .OrderBy(e => e.Id).ThenBy(e => e.Label).ToList();
 
-        ex.Select(e => e.Id).Should().Equal(built.Select(e => e.Id));
+        Ids(rows).Should().Equal(6, 10);
     }
 
     [Fact]
-    public void QueryComponentsEx_PagingRejection_Parity()
+    public void Paging_IsRejected()
     {
-        var built = Record.Exception(() => Extrema.SelectWhereMinOld(e => e.Score).Limit(1).ToList());
-        var ex = Record.Exception(() => ExExtrema.SelectWhereMinOld(e => e.Score).Limit(1).ToList());
+        Action act = () => _ = Extrema.SelectWhereMin(e => e.Score).Limit(1).ToList();
 
-        built.Should().NotBeNull();
-        ex.Should().NotBeNull();
-        ex!.GetType().Should().Be(built!.GetType());
+        act.Should().Throw<BuildSqlCommandException>();
     }
 
     [Fact]
-    public void QueryComponentsEx_DistinctRejection_Parity()
+    public void DistinctOverTheReshape_KeepsTheWinningRows()
     {
-        Exception? builtError = null;
-        Exception? exError = null;
-        try { Extrema.SelectWhereMinOld(e => e.Score, ExtremeRowTies.All).Distinct().Select(e => e.Id).ToList(); }
-        catch (Exception e) { builtError = e; }
-        try { ExtremeRowExtensions.SelectWhereMin(ExExtrema, e => e.Score, ExtremeRowTies.All).Distinct().Select(e => e.Id).ToList(); }
-        catch (Exception e) { exError = e; }
+        // DISTINCT is expressible on top of the reshape: the derived source already yields the winning
+        // rows, so the outer DISTINCT cannot change the set.
+        var rows = Extrema.SelectWhereMin(e => e.Score, ExtremeRowTies.All)
+            .Distinct().Select(e => e.Id).ToList();
 
-        (exError is null).Should().Be(builtError is null);
-        if (builtError is not null)
-            exError!.GetType().Should().Be(builtError.GetType());
-        else
-        {
-            // both succeeded; sanity: non-empty
-        }
+        rows.OrderBy(x => x).Should().Equal(6, 10);
     }
 
     [Fact]
-    public void QueryComponentsEx_SlotReplacement_MinToMax_Parity()
+    public void SlotReplacement_MinToMax_ReplacesInPlace()
     {
-        var replaced = ExExtrema
+        var rows = Extrema
             .SelectWhereMin(e => e.Score)
             .SelectWhereMax(e => e.Score, ExtremeRowTies.All)
             .ToList();
-        var built = Extrema.SelectWhereMaxOld(e => e.Score, ExtremeRowTies.All).ToList();
 
-        SameExIds(built, replaced);
+        Ids(rows).Should().Equal(3, 4);
     }
 }
 
-/// <summary>Runs the extensions live parity suite against PostgreSQL.</summary>
+/// <summary>Runs the extensions live suite against PostgreSQL.</summary>
 [Collection("Query plan cache")]
 public sealed class PostgresExtensionsQueryComponentsTests : ExtensionsQueryComponentsLiveTests
 {
     protected override ITestProvider Provider => PostgresTestProvider.Instance;
 }
 
-/// <summary>Runs the extensions live parity suite against SQL Server.</summary>
+/// <summary>Runs the extensions live suite against SQL Server.</summary>
 [Collection("Query plan cache")]
 public sealed class SqlServerExtensionsQueryComponentsTests : ExtensionsQueryComponentsLiveTests
 {
     protected override ITestProvider Provider => SqlServerTestProvider.Instance;
 }
 
-/// <summary>Runs the extensions live parity suite against MySQL.</summary>
+/// <summary>Runs the extensions live suite against MySQL.</summary>
 [Collection("Query plan cache")]
 public sealed class MySqlExtensionsQueryComponentsTests : ExtensionsQueryComponentsLiveTests
 {
     protected override ITestProvider Provider => MySqlTestProvider.Instance;
 }
 
-/// <summary>Runs the extensions live parity suite against SQLite.</summary>
+/// <summary>Runs the extensions live suite against SQLite.</summary>
 [Collection("Query plan cache")]
 public sealed class SqliteExtensionsQueryComponentsTests : ExtensionsQueryComponentsLiveTests
 {

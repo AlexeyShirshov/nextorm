@@ -6,11 +6,14 @@ using Xunit;
 
 namespace NextORM.Extensions.ProviderTests;
 
+/// <summary>
+/// SQL-generation contract of <c>SelectWhereMin</c>/<c>SelectWhereMax</c> on every provider. The expected
+/// statement structure is asserted directly; nothing here compares against the compatibility operator,
+/// which is scheduled for removal and is therefore not an oracle.
+/// </summary>
 public abstract class ExtremeRowExSqlGenerationTestsBase
 {
     protected abstract IDataContext CreateContext();
-
-    protected virtual IDataContext CreateBuiltInReferenceContext() => CreateContext();
 
     protected sealed class Entity
     {
@@ -43,11 +46,8 @@ public abstract class ExtremeRowExSqlGenerationTestsBase
     public void Ex_Provider_MinOneScalarGlobal_Structure()
     {
         using var ctx = CreateContext();
-        using var reference = CreateBuiltInReferenceContext();
         Reset(ctx);
-        Reset(reference);
-        var ext = SqlOf(ctx, (QueryCommand<Entity>)ExtremeRowExtensions.SelectWhereMin(ctx.From<Entity>(), x => x.Score, ExtremeRowTies.One));
-        var built = SqlOf(reference, (QueryCommand<Entity>)reference.From<Entity>().SelectWhereMinOld(x => x.Score, ExtremeRowTies.One));
+        var ext = SqlOf(ctx, (QueryCommand<Entity>)ctx.From<Entity>().SelectWhereMin(x => x.Score, ExtremeRowTies.One));
 
         ext.Should().ContainEquivalentOf("row_number()");
         ext.Should().NotContainEquivalentOf("partition by");
@@ -58,19 +58,19 @@ public abstract class ExtremeRowExSqlGenerationTestsBase
         ext.Should().ContainEquivalentOf("Score");
         ext.Should().ContainEquivalentOf("Name");
 
-        Count(ext, "from").Should().Be(Count(built, "from"));
-        Count(ext, "join").Should().Be(Count(built, "join"));
+        // One derived source over the table: the outer select reads it, the ranked select reads the table.
+        Count(ext, "from").Should().Be(2);
+        Count(ext, "join").Should().Be(0);
+        Count(ext, "group by").Should().Be(0);
     }
 
     [Fact]
     public void Ex_Provider_MaxAllCompositeGrouped_Structure()
     {
         using var ctx = CreateContext();
-        using var reference = CreateBuiltInReferenceContext();
         Reset(ctx);
-        Reset(reference);
-        var ext = SqlOf(ctx, (QueryCommand<Entity>)ExtremeRowExtensions.SelectWhereMax(
-ctx.From<Entity>(), x => new { x.Score, x.Name },
+        var ext = SqlOf(ctx, (QueryCommand<Entity>)ctx.From<Entity>().SelectWhereMax(
+            x => new { x.Score, x.Name },
             ExtremeRowTies.All,
             x => x.Id));
 
@@ -85,13 +85,9 @@ ctx.From<Entity>(), x => new { x.Score, x.Name },
         ext.Should().ContainEquivalentOf("Score");
         ext.Should().ContainEquivalentOf("Name");
 
-        var built = SqlOf(reference, (QueryCommand<Entity>)reference.From<Entity>().SelectWhereMaxOld(
-            x => new { x.Score, x.Name },
-            ExtremeRowTies.All,
-            x => x.Id));
-
-        Count(ext, "Entity").Should().Be(Count(built, "Entity"));
-        Count(ext, "join").Should().Be(Count(built, "join"));
+        // One aggregate stage per value component, each joined back to the source.
+        Count(ext, "max(").Should().Be(2);
+        Count(ext, "join").Should().Be(2);
     }
 
     [Fact]
@@ -102,8 +98,8 @@ ctx.From<Entity>(), x => new { x.Score, x.Name },
         // A nullable group key selects the rank-window `All` shape: it partitions on the group keys
         // directly and never emits the null-safe `IS NULL` join predicate, which ClickHouse rejects
         // inside JOIN ON (#296). No dialect-name check is involved.
-        var ext = SqlOf(ctx, (QueryCommand<Entity>)ExtremeRowExtensions.SelectWhereMax(
-ctx.From<Entity>(), x => new { x.Score, x.Name },
+        var ext = SqlOf(ctx, (QueryCommand<Entity>)ctx.From<Entity>().SelectWhereMax(
+            x => new { x.Score, x.Name },
             ExtremeRowTies.All,
             x => new { x.GroupKey, x.Name }));
 
@@ -122,10 +118,7 @@ ctx.From<Entity>(), x => new { x.Score, x.Name },
     {
         using var ctx = CreateContext();
         Reset(ctx);
-        var ext = SqlOf(ctx, ExtremeRowExtensions.SelectWhereMin(
-ctx.From<Entity>(), x => x.Score,
-            x => new { x.Id, x.Name },
-            ExtremeRowTies.One));
+        var ext = SqlOf(ctx, ctx.From<Entity>().SelectWhereMin(x => x.Score, x => new { x.Id, x.Name }, ExtremeRowTies.One));
 
         ext.Should().ContainEquivalentOf("row_number()");
         ext.Should().MatchRegex(@"=\s*1");
@@ -138,23 +131,20 @@ ctx.From<Entity>(), x => x.Score,
     public void Ex_Provider_Filter_Structure()
     {
         using var ctx = CreateContext();
-        using var reference = CreateBuiltInReferenceContext();
         Reset(ctx);
-        Reset(reference);
-        var ext = SqlOf(ctx, (QueryCommand<Entity>)ExtremeRowExtensions.SelectWhereMin(ctx.From<Entity>()
+        var ext = SqlOf(ctx, (QueryCommand<Entity>)ctx.From<Entity>()
             .Where(x => x.Score > 15)
-, x => x.Score, ExtremeRowTies.One));
-        var built = SqlOf(reference, (QueryCommand<Entity>)reference.From<Entity>()
-            .Where(x => x.Score > 15)
-            .SelectWhereMinOld(x => x.Score, ExtremeRowTies.One));
+            .SelectWhereMin(x => x.Score, ExtremeRowTies.One));
 
         var predicate = ext.IndexOf("15", StringComparison.Ordinal);
         var rankFilter = ext.IndexOf("= 1", StringComparison.Ordinal);
         predicate.Should().BeGreaterThan(0);
         rankFilter.Should().BeGreaterThan(0);
-        predicate.Should().BeLessThan(rankFilter);
-        Count(ext, "join").Should().Be(Count(built, "join"));
-        Count(ext, "from").Should().Be(Count(built, "from"));
+        predicate.Should().BeLessThan(rankFilter, "the input condition filters the source before the window is evaluated");
+
+        Count(ext, "join").Should().Be(0);
+        Count(ext, "from").Should().Be(2);
+        Count(ext, "15").Should().Be(1);
     }
 
     [Fact]
