@@ -150,26 +150,26 @@ All previous requirements remain in force. No architecture, specification, plan 
 
 | group | items | worktree | branch | ref | status | note |
 |---|---|---|---|---|---|---|
-| g1 | T365 | `/home/alex/sources/nextorm-365-366` | `collection/365-366` | `83c545767cdd46cb58d054445c3e` | in-progress | T365 terminal PLAN; group continues to T366 |
+| g1 | T365 | `/home/alex/sources/nextorm-365-366` | `collection/365-366` | `83c545767cdd46cb58d054445c3e` | in-progress | T365 terminal execution-incomplete; T366 S2 next by explicit user instruction; default group-stop superseded by that explicit instruction |
 
 ### Items
 
 | item | group | branch | status | plan_state | preparation_state | preparation_ref | form | contract | overlay | cycle_id | status path | plan_revision | attempt_n | disposition | evidence root | campaign_status | campaign_ref |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| T365 | g1 | `collection/365-366` | incomplete | pending | — | — | cycle | pdca | coder+.NET + nextorm-pdca | T365-rc5-3 (N=3) | `.pdca/status/T365-rc5-3.md` | r2 | 1/3 | finalized; terminal=criteria-undetermined | `.pdca/365-366-r2/items/T365/rv2/` | — | — |
+| T365 | g1 | collection/365-366 | incomplete | ready | — | — | cycle | pdca | coder+.NET + nextorm-pdca | T365-rc5-4 (N=4) | .pdca/status/T365-rc5-4.md | r1 | 1/3 | finalized; terminal=execution (AC6 unmet; user-declared no further AC6 attempts) | .pdca/365-366-r2/items/T365/rv3/ | — | — |
 | T366 | g1 | `collection/365-366` | in-progress | pending | ready | `.pdca/365-366-r2/items/T366/preparation.md@r1` | campaign | — | — | T366-rc5-1 (N=1 closed; next N=2) | `.pdca/status/T366-rc5-1.md` | r1 | 3/3 (r1) | active (S2 open) | `.pdca/365-366-r2/items/T366/step<k>/rv1/` | running | `.pdca/status/T366-rc5-1.md` |
 
 ### General verification and recovery
 
 - state: in-progress
-- last common CHECK: T365 not accepted (plan-terminal; issue #365 OPEN); T366 S1 accepted on its own scope as current-state baseline `(239, 2/6, 0)`; T366 whole-goal not reached
+- last common CHECK: T365 terminal not accepted (AC6 unmet; AC1–AC5/AC7 unverified; AC8 met; expert found no criteria defect); T366 S1 accepted on its own scope as current-state baseline `(239, 2/6, 0)`; T366 whole-goal not reached
 - blocking reason: none
 - defect history: `AC6-six-warm-All-rows` (open); `WC-1-concurrent-writer` (closed by construction); `T365-N3-D0-fabricated-constraints` (fixed in both records: false constraint line replaced with the verbatim user line and its three constraints); `S1-WARN-POLICY` (fixed); `S1-REGISTRY-BINDING` (fixed); `S1-FAILURE-ORIGIN` (fixed); `S1-CONTOUR-PROOF` (fixed); `S1-VM3-EXTENSIONS` (fixed); `S1-EVIDENCE-HISTORY` (deferred → `S2-AC0`)
-- next allowed step: T366 S2 per `.pdca/365-366-r2/items/T366/step2/brief.md`; S1 accepted baseline `(239, 2/6, 0)`, campaign remains running
+- next allowed step: T366 S2 per explicit user instruction and `.pdca/365-366-r2/items/T366/step2/brief.md`; default group-stop superseded by explicit instruction; S1 accepted baseline `(239, 2/6, 0)`, campaign remains running
 
 ### Completeness
 
-- 0/2 goals accepted
+- 0/2 accepted
 - T366: in-progress; accepted step S1 baseline only `(239, 2/6, 0)`
 - integrated-tree verdict: none
 - issues #365, #366 both OPEN
@@ -189,3 +189,6 @@ All previous requirements remain in force. No architecture, specification, plan 
 2026-11-04T20:51:10Z | ACT | T365 finalized incomplete (plan-terminal criteria-undetermined); T366 preparation ready; next: T366 step1 baseline
 2026-11-04T23:08:20Z | ACT | T366 S1 accepted; baseline (239, 2/6, 0); step2 opened with durable brief; evidence `.pdca/365-366-r2/items/T366/step1/rv1/`
 ACT bookkeeping commit 6bead8227f695de02c53ebafef1ad9c90219dc74 (status record only); tip = 6bead8227f695de02c53ebafef1ad9c90219dc74; no push, no merge
+2026-11-05T17:59:32Z | T365 re-entry by explicit user input «п1»: AC7 = 85/75 и 65/75 unchanged; prior terminal=criteria-undetermined superseded; new cycle N=4 (r1, n=1/3), status T365-rc5-4.md | .pdca/status/T365-rc5-4.md
+
+2026-11-06T00:00:00Z | T365 ACT closed incomplete/STOP (user authority boundary; AC6 unmet; AC1–AC5/AC7 unverified; AC8 met); T366 S2 next per explicit user instruction; issue #365 OPEN
