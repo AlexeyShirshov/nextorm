@@ -724,7 +724,7 @@ public class ParamRefreshRecipeTests
         }
     }
 
-    private sealed class RecipeTestContext : DataContext
+    internal sealed class RecipeTestContext : DataContext
     {
         private readonly FakeConnection _connection = new();
 

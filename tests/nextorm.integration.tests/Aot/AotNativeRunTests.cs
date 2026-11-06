@@ -94,6 +94,14 @@ public sealed class AotNativeRunTests
         scenarioLines.Should().HaveCount(ScenarioIds.Length, "the runner must report exactly once per declared scenario");
         scenarioLines.Select(line => line.Split('\t')[0].Replace("scenario=", "", StringComparison.Ordinal))
             .Should().BeEquivalentTo(ScenarioIds, options => options.WithStrictOrdering());
+        var componentReports = reports
+            .Where(line => line.StartsWith("component-slice=", StringComparison.Ordinal))
+            .Select(ParseReport)
+            .ToDictionary(report => report.GetValueOrDefault("component-slice", ""), StringComparer.Ordinal);
+        componentReports.Should().ContainKey("nextorm.extensions.SelectWhereMinEx");
+        componentReports["nextorm.extensions.SelectWhereMinEx"].GetValueOrDefault("status").Should().Be("pass");
+        componentReports.Should().ContainKey("nextorm.extensions.SelectWhereMaxEx");
+        componentReports["nextorm.extensions.SelectWhereMaxEx"].GetValueOrDefault("status").Should().Be("pass");
         reportedConnection.Should().Be($"connection={databasePath}", "the child must report the parent's database path");
         File.Exists(childDatabasePath).Should().BeFalse("the child must not derive its own process-specific database");
     }
