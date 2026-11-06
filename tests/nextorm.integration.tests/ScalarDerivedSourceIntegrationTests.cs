@@ -47,7 +47,7 @@ public sealed class ScalarDerivedSourceIntegrationTests : ProviderTestSuite
 
         Context.From(left).ToList().Should().Equal(1, 2);
 
-        Context.From(left.UnionAll(right)).ToList().Should().Equal(1, 2, 2, 3);
+        Context.From(left.UnionAll(right)).ToList().Should().BeEquivalentTo(new[] { 1, 2, 2, 3 });
     }
 
     /// <summary>
@@ -59,7 +59,7 @@ public sealed class ScalarDerivedSourceIntegrationTests : ProviderTestSuite
     {
         ClearScalarCache();
 
-        Context.From(Left().UnionAll(Right())).ToList().Should().Equal(1, 2, 2, 3);
+        Context.From(Left().UnionAll(Right())).ToList().Should().BeEquivalentTo(new[] { 1, 2, 2, 3 });
     }
 
     /// <summary>
@@ -97,7 +97,7 @@ public sealed class ScalarDerivedSourceIntegrationTests : ProviderTestSuite
         Context.From(left).ToList().Should().Equal(1, 2);
         var warm = Context.From(left.UnionAll(right)).ToList();
 
-        warm.Should().Equal(cold);
+        warm.Should().BeEquivalentTo(cold);
     }
 
     /// <summary>
@@ -115,7 +115,7 @@ public sealed class ScalarDerivedSourceIntegrationTests : ProviderTestSuite
 
         try
         {
-            Context.From(Left().UnionAll(Right())).ToList().Should().Equal(1, 2, 2, 3);
+            Context.From(Left().UnionAll(Right())).ToList().Should().BeEquivalentTo(new[] { 1, 2, 2, 3 });
             DataContextCache.SelectListCache[typeof(int)].Should().BeSameAs(
                 poison, "the derived branch must not read or replace the type-keyed select-list entry");
         }
@@ -134,8 +134,8 @@ public sealed class ScalarDerivedSourceIntegrationTests : ProviderTestSuite
         var repeated = Context.From(Left().UnionAll(Right())).ToList();
         var reversed = Context.From(Right().UnionAll(Left())).ToList();
 
-        first.Should().Equal(1, 2, 2, 3);
-        repeated.Should().Equal(first);
+        first.Should().BeEquivalentTo(new[] { 1, 2, 2, 3 });
+        repeated.Should().BeEquivalentTo(first);
         reversed.Should().BeEquivalentTo(first);
     }
 
@@ -149,7 +149,7 @@ public sealed class ScalarDerivedSourceIntegrationTests : ProviderTestSuite
         ClearScalarCache();
         var nullableLeft = Context.From<IComplexEntity>().Where(c => c.Id <= 2).Select(c => (int?)c.Id);
         var nullableRight = Context.From<IComplexEntity>().Where(c => c.Id >= 2 && c.Id <= 3).Select(c => (int?)c.Id);
-        Context.From(nullableLeft.UnionAll(nullableRight)).ToList().Should().Equal(1, 2, 2, 3);
+        Context.From(nullableLeft.UnionAll(nullableRight)).ToList().Should().BeEquivalentTo(new int?[] { 1, 2, 2, 3 });
 
         ClearScalarCache();
         var stringLeft = Context.From<IComplexEntity>().Where(c => c.Id <= 2).Select(c => c.String);
@@ -167,11 +167,11 @@ public sealed class ScalarDerivedSourceIntegrationTests : ProviderTestSuite
     {
         ClearScalarCache();
         var array = Context.From(Left().UnionAll(Right())).ToArray();
-        array.Should().Equal(1, 2, 2, 3);
+        array.Should().BeEquivalentTo(new[] { 1, 2, 2, 3 });
 
         ClearScalarCache();
         var list = await Context.From(Left().UnionAll(Right())).ToListAsync();
-        list.Should().Equal(1, 2, 2, 3);
+        list.Should().BeEquivalentTo(new[] { 1, 2, 2, 3 });
     }
 
     /// <summary>AC4: a direct object projection over the entity source keeps its existing shape.</summary>
@@ -351,7 +351,7 @@ public sealed class T300ScalarDerivedSourceLiveMatrix
 
         DataContextCache.SelectListCache.Remove(typeof(int?));
         context.From(NullableLeft(context).UnionAll(NullableRight(context))).ToList()
-            .Should().Equal(1, 2, 2, 3);
+            .Should().BeEquivalentTo(new int?[] { 1, 2, 2, 3 });
     }
 
     /// <summary>
