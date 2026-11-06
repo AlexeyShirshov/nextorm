@@ -438,7 +438,7 @@ internal static class SelectGroupExpressionAnalyzer
                 return true;
             }
 
-            if (name is nameof(CommonFunctions.@in) or nameof(ClickHouseFunctions.global_in)
+            if (name is nameof(CommonFunctions.@in) or "inUntyped" or nameof(ClickHouseFunctions.global_in)
                 && node.Arguments.Count > 1
                 && node.Arguments[1].Type.IsAssignableTo(typeof(QueryCommand)))
             {

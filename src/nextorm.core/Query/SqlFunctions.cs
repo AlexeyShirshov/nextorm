@@ -1237,6 +1237,15 @@ public static partial class SqlFunctions
         /// <param name="cmd">The subquery producing candidate values.</param>
         public bool @in<T>(T column, QueryCommand<T> cmd) => default!;
 
+        /// <summary>
+        /// <c>column in (subquery)</c>: untyped variant used by the junction/correlated path, where the
+        /// result type is carried by the command at runtime instead of a generic argument. Semantically
+        /// identical to <see cref="@in{T}(T, QueryCommand{T})"/>.
+        /// </summary>
+        /// <param name="column">The value to test (boxed).</param>
+        /// <param name="cmd">The subquery producing candidate values.</param>
+        internal bool inUntyped(object? column, QueryCommand cmd) => default!;
+
         /// <summary><c>column in (values)</c>: true when <paramref name="column"/> equals one of the in-memory values.</summary>
         /// <typeparam name="T">The compared value type.</typeparam>
         /// <param name="column">The value to test.</param>

@@ -137,6 +137,38 @@
 - **Evidence:** `.pdca/365-366-r2/items/T366/step4/rv1/aot-diagnostics-final.md` / `.tsv` (регенерированы из `attempts/publish-revertB.log`, sha256=536442f0b081a5f0dee1b4061d00574d29322bd1ad40d2646d7061cda5697015; 237 unique, IL2070 35->33); `.pdca/365-366-r2/items/T366/step4/rv1/delta-s3-to-s4.md` (unchanged=237, moved=0, vanished=2, new=0); `.pdca/365-366-r2/items/T366/step4/rv1/frozen-product.diff` (git diff 66c8f112 -- src/, rc=0, HEAD=9f679d2f); `.pdca/365-366-r2/items/T366/step4/rv1/identity.md`; `.pdca/365-366-r2/items/T366/step4/rv1/attempts/build.log` (rc=0, 0 Warning(s)/0 Error(s)); `.pdca/365-366-r2/items/T366/step4/rv1/attempts/no-suppression.log` (4 путей: status T366, status collection, spec D366, src file).
 - **Предотвращение:** перед CHECK сверять registry с финальным publish по sha256 и прогонять tuple-level reconciliation против предыдущего шага; фиксировать HEAD/базу и product diff отдельным receipt (frozen-product.diff + identity.md); пересчитывать manifest tree/rows и gate-логи после любого evidence re-gather; держать 4 пути no-suppression.log согласованными с manifest footprint (продуктовый src + unit status file; остальные — cycle/collection records).
 
+### S6-PLAN-MISSING — план S6 r1 не был персистирован в статус
+
+- **Симптом:** CHECK обнаружил `not reached: no S6 PLAN persisted` в статусе T366; DO измерялся по критериям, существовавшим только в диспатче; план-ревизия r2 потребовалась для устранения дефекта. В r2 контракт был персистирован verbatim под `### Step S6` → `#### PLAN record`.
+- **Корневая причина:** диспатч S6 r1 запустил DO без записи плана в `.pdca/status/T366-rc5-1.md`; критерии существовали только во входном брифе, не в статусе, поэтому CHECK не мог проверить персистированный план как предусловие.
+- **Эффект на попытки/циклы:** CHECK → PLAN, план-ревизия r2, без засчитанной попытки (n остаётся 1/3); DO r1 был измерен по критериям вне статуса. Закрыто в r2 персистенцией плана и проверкой CHECK.
+- **Evidence:** `.pdca/status/T366-rc5-1.md` §Step S6 до r2 (блок `#### PLAN record` отсутствовал; строка `not reached: no S6 PLAN persisted`); `.pdca/365-366-r2/items/T366/step6/rv2/plan-r2.md` (персистированный план r2); `.pdca/status/T366-rc5-1.md` §Step S6 `#### CHECK record` (accepted, r2).
+- **Предотвращение:** персистировать PLAN verbatim в запись шага до начала DO; CHECK обязан проверять наличие персистированного плана как предусловие перед оценкой критериев.
+
+### S6-NATIVE-DENOMINATOR-DRIFT — неверный знаменатель native-критерия
+
+- **Симптом:** r1 AC4 читал `6/6 across the 6 provider cells`, тогда как знаменатель кампании — 6 SQLite native-сценариев; критерий был сформулирован в терминах шага, а не кампании.
+- **Корневая причина:** знаменатель native-метрики был переописан в терминах шага вместо цитирования из устава кампании; отсутствовала привязка к принятому denominator'у.
+- **Эффект на попытки/циклы:** критериальный дефект направлен в PLAN и исправлен в r2 (AC4 переписан на 6 SQLite native-сценариев); без увеличения n.
+- **Evidence:** `.pdca/status/T366-rc5-1.md` §Step S6 PLAN record r2 §Contract revision (пункт 2, `S6-AC4` denominator defect); `.pdca/365-366-r2/items/T366/preparation.md@r1` §Measurement method (denominator 6 SQLite scenarios); `.pdca/status/T366-rc5-1.md` §Step S6 `#### CHECK record` (S6-AC4 met).
+- **Предотвращение:** цитировать знаменатель метрики кампании из устава verbatim, никогда не переописывать его в терминах шага.
+
+### S6-EVIDENCE-CONTRACT-DRIFT — AC-строки без наблюдаемых артефактов
+
+- **Симптом:** матрица r1 DO заполняла AC2/AC4/AC5 описаниями реализации и summary-only `new_sites=0` вместо привязанных к наблюдаемым артефактам; CHECK отклонил r1 и потребовал frozen diff + hash-bound site reconciliation + raw logs.
+- **Корневая причина:** критерии были сформулированы в терминах реализации, а не наблюдаемых; отсутствовала привязка к артефактам и tuple-level reconciliation.
+- **Эффект на попытки/циклы:** CHECK отклонил r1 (not accepted → PLAN); r2 потребовал observable-based criteria rows, frozen product diff, site-level reconciliation и raw logs в `rv2/`; без увеличения n.
+- **Evidence:** `.pdca/status/T366-rc5-1.md` §Step S6 DO result r1 (AC statuses с implementation descriptions); `.pdca/365-366-r2/items/T366/step6/rv2/reconciliation.md`; `.pdca/365-366-r2/items/T366/step6/rv2/frozen-product.diff`; `.pdca/status/T366-rc5-1.md` §Step S6 `#### CHECK record` (S6-AC2 met, 0 new sites).
+- **Предотвращение:** каждая AC-строка должна называть наблюдаемый и путь к артефакту; reconciliation должен быть tuple-level и hash-bound; запрещены summary-only строки.
+
+### S6-COLLISION-EVIDENCE — коллизия контейнеров при полном integration-прогоне
+
+- **Симптом:** полный integration-прогон столкнулся с параллельным solution-wide `dotnet test` в `/home/alex/sources/nextorm` против тех же reused-контейнеров, дав 117 затем 1352 ошибок `Table … doesn't exist`, которые были представлены как наблюдение AC5.
+- **Корневая причина:** отсутствовал preflight на конкурирующие testhost/coverage-процессы; красный container-run был ошибочно представлен как валидное свидетельство AC5.
+- **Эффект на попытки/циклы:** AC5 был непригоден до collision-free rerun; приёмка задержана; expert consultation потребовалась; финальный чистый прогон 8675/8474/0/201 rc=0 закрыл AC5.
+- **Evidence:** `.pdca/365-366-r2/items/T366/step6/rv2/attempts/jit-integration.log` (117 failures, SUPERSEDED); `.pdca/365-366-r2/items/T366/step6/rv2/attempts/jit-integration-r2.log` (1352 failures, SUPERSEDED); `.pdca/365-366-r2/items/T366/step6/rv2/attempts/jit-integration-clean.log` (8675/8474/0/201 rc=0); `.pdca/status/T366-rc5-1.md` §Step S6 DO result (Superseded logs note).
+- **Предотвращение:** preflight `pgrep -af "dotnet test|testhost|dotnet-coverage"` записывать в начале каждого container-suite лога; красный container-run недействителен как свидетельство до collision-free rerun.
+
 ## 2. Общий вывод
 
 Для повторяемых прогонов требуется раздельная идентичность raw-артефактов по попытке; для структурированных доказательств — проверяемая цепочка от первичного измерения до manifest и receipt. Согласованность только между производными артефактами не доказывает их соответствие первичному источнику.

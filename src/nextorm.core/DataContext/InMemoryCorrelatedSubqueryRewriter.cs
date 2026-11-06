@@ -126,7 +126,7 @@ internal sealed class InMemoryCorrelatedSubqueryRewriter : ExpressionVisitor
                 terminal = CorrelatedTerminal.Exists;
                 index = GetReferencedQueryIndex(call.Arguments[0]);
             }
-            else if (call.Method.Name == nameof(CommonFunctions.@in) || call.Method.Name == nameof(ClickHouseFunctions.global_in))
+            else if (call.Method.Name == nameof(CommonFunctions.@in) || call.Method.Name == nameof(CommonFunctions.inUntyped) || call.Method.Name == nameof(ClickHouseFunctions.global_in))
             {
                 terminal = CorrelatedTerminal.In;
                 inValue = call.Arguments[0];
@@ -314,7 +314,7 @@ internal sealed class InMemoryCorrelatedSubqueryRewriter : ExpressionVisitor
                 && call.Arguments is [Expression arg])
                 return IsReferencedQueryIndex(arg);
 
-            if (call.Method.Name is (nameof(CommonFunctions.@in) or nameof(ClickHouseFunctions.global_in))
+            if (call.Method.Name is (nameof(CommonFunctions.@in) or nameof(CommonFunctions.inUntyped) or nameof(ClickHouseFunctions.global_in))
                 && call.Arguments is [_, Expression cmdArg])
                 return IsReferencedQueryIndex(cmdArg);
         }

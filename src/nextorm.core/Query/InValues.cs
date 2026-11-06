@@ -201,6 +201,7 @@ internal static class InValues
         if ((node.Method.DeclaringType == typeof(CommonFunctions)
                 || node.Method.DeclaringType == typeof(ClickHouseFunctions))
             && (node.Method.Name == nameof(CommonFunctions.@in)
+                || node.Method.Name == nameof(CommonFunctions.inUntyped)
                 || node.Method.Name == nameof(ClickHouseFunctions.global_in)))
         {
             if (node.Arguments is not [Expression inColumn, Expression inValues]

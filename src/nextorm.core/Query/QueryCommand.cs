@@ -257,6 +257,18 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// </summary>
     /// <param name="dataProvider">The context that executes the command, or <c>null</c> for an unbound clone.</param>
     /// <param name="definition">The shape to copy from.</param>
+    /// <param name="resultType">The runtime result/projection type carried by this untyped command.</param>
+    internal QueryCommand(IDataContext? dataProvider, QueryDefinition definition, Type resultType)
+        : this(dataProvider, definition)
+    {
+        ResultType = resultType;
+    }
+
+    /// <summary>
+    /// Initializes a command from a query shape, optionally taking ownership of the shape's joins.
+    /// </summary>
+    /// <param name="dataProvider">The context that executes the command, or <c>null</c> for an unbound clone.</param>
+    /// <param name="definition">The shape to copy from.</param>
     /// <param name="ownJoins">
     /// When <c>true</c>, <see cref="QueryDefinition.Joins"/> was produced by this command's own
     /// construction path (the self-clone path and the fluent builders) and is not reachable from any

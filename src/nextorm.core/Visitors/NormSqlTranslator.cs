@@ -326,6 +326,7 @@ internal static class NormSqlTranslator
             return;
         }
         else if ((node.Method.Name == nameof(CommonFunctions.@in)
+            || node.Method.Name == nameof(CommonFunctions.inUntyped)
             || node.Method.Name == nameof(ClickHouseFunctions.global_in))
             && node.Arguments is [Expression parExp, Expression cmdExp] && cmdExp.Type.IsAssignableTo(typeof(QueryCommand)))
         {
