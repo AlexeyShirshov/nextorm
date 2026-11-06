@@ -55,13 +55,13 @@ internal static class ExtremeRowReflection
     /// Resolves a public engine member once for the process; a missing member is a version mismatch
     /// between this package and <c>nextorm.core</c>, reported at first use instead of a silent null.
     /// </summary>
-    private static MethodInfo RequireMethod(Type type, string name, BindingFlags flags)
+    private static MethodInfo RequireMethod([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicMethods | DynamicallyAccessedMemberTypes.NonPublicMethods)] Type type, string name, BindingFlags flags)
         => type.GetMethod(name, flags)
             ?? throw new InvalidOperationException(
                 $"The nextorm.core member {type.FullName}.{name} was not found; nextorm.extensions targets a different nextorm.core version.");
 
     /// <summary>Resolves a public engine member by exact parameter types, once for the process.</summary>
-    private static MethodInfo RequireMethod(Type type, string name, Type[] parameterTypes)
+    private static MethodInfo RequireMethod([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicMethods)] Type type, string name, Type[] parameterTypes)
         => type.GetMethod(name, parameterTypes)
             ?? throw new InvalidOperationException(
                 $"The nextorm.core member {type.FullName}.{name}({string.Join(", ", parameterTypes.Select(t => t.Name))}) was not found; nextorm.extensions targets a different nextorm.core version.");

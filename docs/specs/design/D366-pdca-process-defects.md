@@ -129,6 +129,14 @@
 - **Evidence:** `.pdca/365-366-r2/items/T366/step2/rv4/check-report-r4.md:12,22,33`; `.pdca/status/T366-rc5-1.md:143-149`; r5 plan `.pdca/365-366-r2/items/T366/step2/rv5/plan-r5.md`.
 - **Предотвращение:** брать baseline только из принятой записи кампании и проверять её до вычисления дельт; не выводить знаменатель из нового прогона.
 
+### S4-EVIDENCE-IDENTITY — реестр/identity не согласованы с финальным publish и HEAD
+
+- **Симптом:** registry `E/aot-diagnostics.md/.tsv` описывал 239-строчное измерение, тогда как `E/ac1-ac5.md` утверждал 237; HEAD (9f679d2f) и продукт-база (66c8f112) не были явно согласованы; `no-suppression.log` содержал 4 изменённых пути при 2 в manifest footprint; gate-логи требовали перезапуска после re-gather.
+- **Корневая причина:** evidence-артефакты S4 были собраны из разных publish-логов (publish.log 239 vs cluster A 237) без явной привязки к финальному publish; identity HEAD/базы и 4-путий diff не были зафиксированы отдельным receipt; manifest tree/rows не были пересчитаны после re-gather.
+- **Эффект на попытки/циклы:** CHECK S4 вернул evidence defects D1-D3; требуется один re-gather раунд без продуктового фикса и без увеличения `n` (n остаётся 1/3). Критерии AC1-AC5 не переоткрываются; только evidence-слой.
+- **Evidence:** `.pdca/365-366-r2/items/T366/step4/rv1/aot-diagnostics-final.md` / `.tsv` (регенерированы из `attempts/publish-revertB.log`, sha256=536442f0b081a5f0dee1b4061d00574d29322bd1ad40d2646d7061cda5697015; 237 unique, IL2070 35->33); `.pdca/365-366-r2/items/T366/step4/rv1/delta-s3-to-s4.md` (unchanged=237, moved=0, vanished=2, new=0); `.pdca/365-366-r2/items/T366/step4/rv1/frozen-product.diff` (git diff 66c8f112 -- src/, rc=0, HEAD=9f679d2f); `.pdca/365-366-r2/items/T366/step4/rv1/identity.md`; `.pdca/365-366-r2/items/T366/step4/rv1/attempts/build.log` (rc=0, 0 Warning(s)/0 Error(s)); `.pdca/365-366-r2/items/T366/step4/rv1/attempts/no-suppression.log` (4 путей: status T366, status collection, spec D366, src file).
+- **Предотвращение:** перед CHECK сверять registry с финальным publish по sha256 и прогонять tuple-level reconciliation против предыдущего шага; фиксировать HEAD/базу и product diff отдельным receipt (frozen-product.diff + identity.md); пересчитывать manifest tree/rows и gate-логи после любого evidence re-gather; держать 4 пути no-suppression.log согласованными с manifest footprint (продуктовый src + unit status file; остальные — cycle/collection records).
+
 ## 2. Общий вывод
 
 Для повторяемых прогонов требуется раздельная идентичность raw-артефактов по попытке; для структурированных доказательств — проверяемая цепочка от первичного измерения до manifest и receipt. Согласованность только между производными артефактами не доказывает их соответствие первичному источнику.

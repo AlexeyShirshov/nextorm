@@ -316,7 +316,7 @@ All previous requirements remain in force. No architecture, specification, plan 
 
 | T365 | g1 | collection/365-366 | incomplete | ready | — | — | cycle | pdca | coder+.NET + nextorm-pdca | T365-rc5-4 (N=4) | .pdca/status/T365-rc5-4.md | r1 | 1/3 | finalized; terminal=execution (AC6 unmet; user-declared no further AC6 attempts) | .pdca/365-366-r2/items/T365/rv3/ | — | — |
 
-| T366 | g1 | `collection/365-366` | in-progress | pending | ready | `.pdca/365-366-r2/items/T366/preparation.md@r1` | campaign | — | — | T366-rc5-1 (N=2; S1/S2/S3 accepted; next S4) | `.pdca/status/T366-rc5-1.md` | r1 | 2/3 | running (S3 accepted post-merge baseline) | `.pdca/365-366-r2/items/T366/step<k>/rv1/` | running | `.pdca/status/T366-rc5-1.md` |
+| T366 | g1 | `collection/365-366` | in-progress | pending | ready | `.pdca/365-366-r2/items/T366/preparation.md@r1` | campaign | — | — | T366-rc5-1 (N=2; S1/S2/S3/S4 accepted; next S5) | `.pdca/status/T366-rc5-1.md` | r1 | 2/3 | running (S4 accepted step-local) | `.pdca/365-366-r2/items/T366/step<k>/rv1/` | running | `.pdca/status/T366-rc5-1.md` |
 
 
 
@@ -326,13 +326,13 @@ All previous requirements remain in force. No architecture, specification, plan 
 
 - state: paused
 
-- last common CHECK: T365 terminal not accepted (AC6 unmet; AC1–AC5/AC7 unverified; AC8 met; expert found no criteria defect); T366 S1 accepted on its own scope as current-state baseline `(239, 2/6, 0)`; T366 S2 CHECK r6 accepted on charter floor `(238, 6/6, 0)` per `USER-ACCEPT-S2-FLOOR`; T366 S3 accepted (post-merge baseline `(239 unique / 245 raw, 6/6, 0)` on `66c8f112`) — step scope only, whole-goal not reached; T366 whole-goal not reached
+- last common CHECK: T365 terminal not accepted (AC6 unmet; AC1–AC5/AC7 unverified; AC8 met; expert found no criteria defect); T366 S1 accepted on its own scope as current-state baseline `(239, 2/6, 0)`; T366 S2 CHECK r6 accepted on charter floor `(238, 6/6, 0)` per `USER-ACCEPT-S2-FLOOR`; T366 S3 accepted (post-merge baseline `(239 unique / 245 raw, 6/6, 0)` on `66c8f112`) — step scope only, whole-goal not reached; T366 S4 accepted step-local (`(237 unique / 243 raw, 6/6, 0)`, Δ −2 vs S3; cluster B reverted) — step scope only, whole-goal not reached; T366 whole-goal not reached
 
 - blocking reason: none
 
 - defect history: `AC6-six-warm-All-rows` (open); `WC-1-concurrent-writer` (closed by construction); `T365-N3-D0-fabricated-constraints` (fixed in both records: false constraint line replaced with the verbatim user line and its three constraints); `S1-WARN-POLICY` (fixed); `S1-REGISTRY-BINDING` (fixed); `S1-FAILURE-ORIGIN` (fixed); `S1-CONTOUR-PROOF` (fixed); `S1-VM3-EXTENSIONS` (fixed); `S1-EVIDENCE-HISTORY` (deferred → `S2-AC0`); S2-SMOKE-CRITERION (open; spec docs/specs/design/D366-pdca-process-defects.md); S2-CHECK-EVIDENCE (open); S2-EVIDENCE-CONSISTENCY (open)
 
-- next allowed step: T366 S4 from accepted basis S3 (239 unique / 245 raw, 6/6, 0) on 66c8f112; S3 accepted (post-merge baseline); campaign running
+- next allowed step: T366 S5 from accepted basis S4 (237 unique / 243 raw, 6/6, 0) on 66c8f112; S4 accepted step-local (cluster B reverted); campaign running
 
 
 
@@ -340,9 +340,9 @@ All previous requirements remain in force. No architecture, specification, plan 
 
 
 
-- 3/3 accepted for T366 steps (S1, S2, S3); T365 incomplete
+- 4/4 accepted for T366 steps (S1, S2, S3, S4); T365 incomplete
 
-- T366: running; accepted S1 `(239, 2/6, 0)`, S2 `(238, 6/6, 0)` on charter floor, S3 `(239 unique / 245 raw, 6/6, 0)` on `66c8f112`; next S4
+- T366: running; accepted S1 `(239, 2/6, 0)`, S2 `(238, 6/6, 0)` on charter floor, S3 `(239 unique / 245 raw, 6/6, 0)` on `66c8f112`, S4 `(237 unique / 243 raw, 6/6, 0)` step-local; next S5
 
 - integrated-tree verdict: none
 
@@ -404,3 +404,4 @@ ACT bookkeeping commit 6bead8227f695de02c53ebafef1ad9c90219dc74 (status record o
 
 
 2026-11-06T12:00:00Z | ACT | T366 S3 accepted post-merge baseline (239 unique / 245 raw, 6/6, 0) on 66c8f112; next S4 | `.pdca/status/T366-rc5-1.md`
+2026-11-06T11:23:07Z | ACT | T366 S4 | accepted −2 (237 unique / 243 raw, 6/6, 0); next S5 | `.pdca/status/T366-rc5-1.md`
