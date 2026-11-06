@@ -162,10 +162,10 @@ All previous requirements remain in force. No architecture, specification, plan 
 ### General verification and recovery
 
 - state: paused
-- last common CHECK: T365 terminal not accepted (AC6 unmet; AC1–AC5/AC7 unverified; AC8 met; expert found no criteria defect); T366 S1 accepted on its own scope as current-state baseline `(239, 2/6, 0)`; T366 whole-goal not reached
+- last common CHECK: T365 terminal not accepted (AC6 unmet; AC1–AC5/AC7 unverified; AC8 met; expert found no criteria defect); T366 S1 accepted on its own scope as current-state baseline `(239, 2/6, 0)`; T366 S2 CHECK r6 accepted on charter floor `(238, 6/6, 0)` per `USER-ACCEPT-S2-FLOOR` — step scope only, whole-goal not reached; T366 whole-goal not reached
 - blocking reason: none
-- defect history: `AC6-six-warm-All-rows` (open); `WC-1-concurrent-writer` (closed by construction); `T365-N3-D0-fabricated-constraints` (fixed in both records: false constraint line replaced with the verbatim user line and its three constraints); `S1-WARN-POLICY` (fixed); `S1-REGISTRY-BINDING` (fixed); `S1-FAILURE-ORIGIN` (fixed); `S1-CONTOUR-PROOF` (fixed); `S1-VM3-EXTENSIONS` (fixed); `S1-EVIDENCE-HISTORY` (deferred → `S2-AC0`)
-- next allowed step: T366 S2 per explicit user instruction and `.pdca/365-366-r2/items/T366/step2/brief.md`; default group-stop superseded by explicit instruction; S1 accepted baseline `(239, 2/6, 0)`, campaign remains running
+- defect history: `AC6-six-warm-All-rows` (open); `WC-1-concurrent-writer` (closed by construction); `T365-N3-D0-fabricated-constraints` (fixed in both records: false constraint line replaced with the verbatim user line and its three constraints); `S1-WARN-POLICY` (fixed); `S1-REGISTRY-BINDING` (fixed); `S1-FAILURE-ORIGIN` (fixed); `S1-CONTOUR-PROOF` (fixed); `S1-VM3-EXTENSIONS` (fixed); `S1-EVIDENCE-HISTORY` (deferred → `S2-AC0`); S2-SMOKE-CRITERION (open; spec docs/specs/design/D366-pdca-process-defects.md); S2-CHECK-EVIDENCE (open); S2-EVIDENCE-CONSISTENCY (open)
+- next allowed step: T366 S3 from accepted basis S2 (238, 6/6, 0); default group-stop снят явной инструкцией; campaign remains running/paused (S2 was accepted at r6)
 
 ### Completeness
 
@@ -173,7 +173,7 @@ All previous requirements remain in force. No architecture, specification, plan 
 - T366: paused; accepted S1 `(239, 2/6, 0)` and S2 `(238, 6/6, 0)` on charter floor; next S3
 - integrated-tree verdict: none
 - issues #365 CLOSED (limited: AC6 unmet), #366 OPEN
-- commits made: `7abd2e1b`, `0320ecc3`, `091fddbd`, `80d900a0` (T365 bookkeeping + cycle work); `7b75ff581ed0ba9330be062044e3ddc206191f50` (T366 S1 accepted baseline)
+- commits made: `7abd2e1b`, `0320ecc3`, `091fddbd`, `80d900a0` (T365 bookkeeping + cycle work); `7b75ff581ed0ba9330be062044e3ddc206191f50` (T366 S1 accepted baseline); `53e8c5a4` (finalize #365/#366: statuses) and this reconciliation follow-up commit (see `git log -2 --oneline`)
 
 ## Progress log
 
@@ -197,5 +197,5 @@ ACT bookkeeping commit 6bead8227f695de02c53ebafef1ad9c90219dc74 (status record o
 
 ## Git state
 
-- `.pdca/status/collection-365-366-r2.md` — modified in this cycle; tracked; commit pending.
-- `.pdca/status/T366-rc5-1.md` — modified in this cycle; tracked; commit pending.
+- `.pdca/status/collection-365-366-r2.md` — modified in this cycle; tracked; committed in `53e8c5a4` and the follow-up reconciliation commit; working tree clean for this path after commit.
+- `.pdca/status/T366-rc5-1.md` — modified in this cycle; tracked; committed in `53e8c5a4` and the follow-up reconciliation commit; working tree clean for this path after commit.
