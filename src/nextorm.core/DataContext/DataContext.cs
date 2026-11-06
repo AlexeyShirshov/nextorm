@@ -343,6 +343,19 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         => GetPreparedQueryCommand(queryCommand, createEnumerator, storeInCache, PreparedCommandCache.Connection, streamingRows: false, cancellationToken);
 
     /// <summary>
+    /// Prepares a non-generic command through the boxed row path. The runtime
+    /// <see cref="QueryCommand.ResultType"/> drives materialization and each row is boxed; the overload
+    /// exists so a runtime-typed command can be prepared without inferring a generic argument.
+    /// </summary>
+    /// <param name="queryCommand">The command to prepare; it must carry a result type.</param>
+    /// <param name="createEnumerator">When <see langword="true"/>, compiles a streaming row enumerator as part of preparation.</param>
+    /// <param name="storeInCache">When <see langword="true"/> (and <see cref="QueryCacheEnabled"/> is set), stores the prepared command in the plan cache.</param>
+    /// <param name="cancellationToken">Token used to cancel preparation.</param>
+    /// <returns>The prepared command, ready to execute.</returns>
+    internal IPreparedQueryCommand<object?> GetPreparedQueryCommand(QueryCommand queryCommand, bool createEnumerator, bool storeInCache, CancellationToken cancellationToken)
+        => GetObjectPreparedQueryCommand(queryCommand, createEnumerator, storeInCache, PreparedCommandCache.Connection, cancellationToken);
+
+    /// <summary>
     /// Prepares <paramref name="queryCommand"/> against the current dialect with an explicit command-reuse
     /// policy, optionally building a streaming enumerator and storing the plan in the cache.
     /// </summary>
@@ -1695,7 +1708,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             throw new InvalidOperationException(
                 $"The result set at index {resultIndex} projects '{spec.Query.ResultType?.Name ?? "unknown"}', not '{typeof(TResult).Name}'.");
 
-        return RowMapperFactory.GetOrBuild(query, spec.Sql, GetType(), Logger, MapColumnExpression);
+        return RowMapperFactory.GetOrBuild<TResult>(query, spec.Sql, GetType(), Logger, MapColumnExpression);
     }
 
     List<TResult> IBatchExecutor.ExecuteBatch<TResult>(BatchPlan plan, Func<IDataRecord, TResult> mapper)
@@ -1897,6 +1910,57 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// <returns>The materialised rows; empty when the query yields none.</returns>
     public List<TResult> ToList<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, ReadOnlySpan<object?> @params)
         => _executor.ToList(preparedQueryCommand, @params);
+
+    /// <summary>
+    /// Prepares a non-generic command for boxed row materialization: the statement is planned exactly
+    /// as the typed path plans it, and each row is materialized as its runtime
+    /// <see cref="QueryCommand.ResultType"/> and boxed to <see cref="object"/>.
+    /// </summary>
+    /// <param name="queryCommand">The command to prepare; it must carry a result type.</param>
+    /// <param name="createEnumerator">When <see langword="true"/>, compiles a streaming row enumerator.</param>
+    /// <param name="storeInCache">When <see langword="true"/> (and the cache is enabled), stores the plan.</param>
+    /// <param name="cache">The command-reuse policy.</param>
+    /// <param name="cancellationToken">Token used to cancel preparation.</param>
+    /// <returns>The prepared boxed command.</returns>
+    internal IPreparedQueryCommand<object?> GetObjectPreparedQueryCommand(QueryCommand queryCommand, bool createEnumerator, bool storeInCache, PreparedCommandCache cache, CancellationToken cancellationToken)
+    {
+        RequireNoBatchOutputSource(queryCommand);
+
+        // A lazy temporary-table source is a batch (DROP + CREATE TEMPORARY TABLE + read) that must run on
+        // one session; the boxed path mirrors the typed one: prepare the read plan uncached and attach the
+        // pending batch, so behaviour is identical for a runtime-typed command.
+        if (queryCommand.HasTemporaryTableSource())
+        {
+            var tempTables = new List<ITempTableSource>();
+            queryCommand.CollectTempTableSources(tempTables);
+            var prepared = (DbPreparedQueryCommand<object?>)_planner.GetObjectPreparedQueryCommand(queryCommand, createEnumerator, storeInCache: false, cache, cancellationToken);
+            prepared.PendingBatch = BuildTemporaryTableBatch(queryCommand, tempTables);
+            return prepared;
+        }
+
+        return _planner.GetObjectPreparedQueryCommand(queryCommand, createEnumerator, (storeInCache && cache != PreparedCommandCache.None) && QueryCacheEnabled, cache, cancellationToken);
+    }
+
+    /// <summary>Executes a non-generic command and returns its rows boxed to <see cref="object"/>.</summary>
+    /// <param name="queryCommand">The command to execute; it must carry a result type.</param>
+    /// <param name="params">Positional parameter values.</param>
+    /// <returns>The materialized rows, boxed.</returns>
+    internal List<object?> ToObjectList(QueryCommand queryCommand, ReadOnlySpan<object?> @params)
+    {
+        var prepared = GetObjectPreparedQueryCommand(queryCommand, createEnumerator: false, storeInCache: true, PreparedCommandCache.Connection, CancellationToken.None);
+        return _executor.ToList<object?>(prepared, @params);
+    }
+
+    /// <summary>Asynchronous counterpart of <see cref="ToObjectList(QueryCommand, ReadOnlySpan{object?})"/>.</summary>
+    /// <param name="queryCommand">The command to execute; it must carry a result type.</param>
+    /// <param name="params">Positional parameter values.</param>
+    /// <param name="cancellationToken">A token to cancel the query.</param>
+    /// <returns>A task producing the materialized rows, boxed.</returns>
+    internal async Task<List<object?>> ToObjectListAsync(QueryCommand queryCommand, object[] @params, CancellationToken cancellationToken)
+    {
+        var prepared = GetObjectPreparedQueryCommand(queryCommand, createEnumerator: false, storeInCache: true, PreparedCommandCache.Connection, cancellationToken);
+        return await _executor.ToListAsync<object?>(prepared, @params, cancellationToken).ConfigureAwait(false);
+    }
 
     // ConvertScalar lives in QueryExecutor together with the scalar terminal (the execution axis).
     /// <summary>Executes the command and converts the first column of the first row to <typeparamref name="TResult"/>.</summary>

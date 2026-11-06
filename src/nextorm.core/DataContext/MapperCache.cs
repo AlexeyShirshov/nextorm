@@ -14,7 +14,7 @@ namespace NextORM.Core;
 /// that contains a streaming LOB accessor must never reuse the buffered mapper compiled for the
 /// same SQL shape, and vice versa.
 /// </summary>
-internal readonly record struct MapperCacheKey(Type ProviderType, Type ResultType, string Sql, int ColumnsSignature, bool OneColumn, bool Streaming);
+internal readonly record struct MapperCacheKey(Type ProviderType, Type ResultType, string Sql, int ColumnsSignature, bool OneColumn, bool Streaming, bool Boxed = false);
 
 /// <summary>
 /// The record/composite shape a raw mapper was built for. <see cref="None"/> is every ordinary

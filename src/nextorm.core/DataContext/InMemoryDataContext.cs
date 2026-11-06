@@ -442,6 +442,43 @@ public partial class InMemoryDataContext : IDataContext
     public List<TResult> ToList<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, ReadOnlySpan<object?> @params)
         => _executor.ToList(preparedQueryCommand, @params);
 
+    /// <summary>
+    /// Prepares a non-generic command for boxed row materialization: the shape is planned exactly as the
+    /// typed path plans it, while each row is materialized as its runtime
+    /// <see cref="QueryCommand.ResultType"/> and boxed to <see cref="object"/>. The wrapper carries the real
+    /// result type on <see cref="QueryCommand.BoxedResultType"/>, so the row materializer builds the correct
+    /// projection instead of <see cref="object"/>.
+    /// </summary>
+    /// <param name="queryCommand">The command to prepare; it must carry a result type.</param>
+    /// <param name="cancellationToken">Token used to cancel preparation.</param>
+    /// <returns>The prepared boxed command.</returns>
+    internal IPreparedQueryCommand<object?> GetObjectPreparedQueryCommand(QueryCommand queryCommand, CancellationToken cancellationToken)
+    {
+        var wrapper = new QueryCommand<object?>(this, queryCommand, forCache: false)
+        {
+            BoxedResultType = queryCommand.ResultType,
+        };
+
+        // Uncached: the boxed wrapper is a per-call adapter over the original command's shape, so it must
+        // never occupy the plan-cache slot of the typed command it mirrors.
+        return GetPreparedQueryCommand(wrapper, createEnumerator: false, storeInCache: false, cancellationToken);
+    }
+
+    /// <summary>Executes a non-generic command and returns its rows boxed to <see cref="object"/>.</summary>
+    /// <param name="queryCommand">The command to execute; it must carry a result type.</param>
+    /// <param name="params">Positional parameter values.</param>
+    /// <returns>The materialized rows, boxed.</returns>
+    internal List<object?> ToObjectList(QueryCommand queryCommand, ReadOnlySpan<object?> @params)
+        => _executor.ToList<object?>(GetObjectPreparedQueryCommand(queryCommand, CancellationToken.None), @params);
+
+    /// <summary>Asynchronous counterpart of <see cref="ToObjectList(QueryCommand, ReadOnlySpan{object?})"/>.</summary>
+    /// <param name="queryCommand">The command to execute; it must carry a result type.</param>
+    /// <param name="params">Positional parameter values.</param>
+    /// <param name="cancellationToken">A token to cancel the query.</param>
+    /// <returns>A task producing the materialized rows, boxed.</returns>
+    internal Task<List<object?>> ToObjectListAsync(QueryCommand queryCommand, object[] @params, CancellationToken cancellationToken)
+        => _executor.ToListAsync<object?>(GetObjectPreparedQueryCommand(queryCommand, cancellationToken), @params, cancellationToken);
+
     /// <summary>Executes the command and converts the first column of the first row to <typeparamref name="TResult"/>.</summary>
     /// <typeparam name="TResult">The scalar type to convert the value to.</typeparam>
     /// <param name="preparedQueryCommand">The prepared command to execute.</param>

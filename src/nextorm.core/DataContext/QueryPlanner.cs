@@ -722,6 +722,63 @@ internal sealed class QueryPlanner : IQueryPlanner
         => GetPreparedQueryCommand(queryCommand, createEnumerator, storeInCache, cache, sequentialAccess, streamingRowsRequested, suppressLobLocator: false, cancellationToken);
 
     internal IPreparedQueryCommand<TResult> GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, PreparedCommandCache cache, bool sequentialAccess, bool streamingRowsRequested, bool suppressLobLocator, CancellationToken cancellationToken)
+        => GetPreparedQueryCommandCore<TResult>(
+            queryCommand,
+            boxed: false,
+            boxedResultType: null,
+            createEnumerator,
+            storeInCache,
+            cache,
+            sequentialAccess,
+            streamingRowsRequested,
+            suppressLobLocator,
+            cancellationToken);
+
+    /// <summary>
+    /// Boxed counterpart of <see cref="GetPreparedQueryCommand{TResult}(QueryCommand{TResult}, bool, bool, PreparedCommandCache, bool, bool, bool, CancellationToken)"/>
+    /// for a non-generic <see cref="QueryCommand"/>: the statement is planned exactly as the typed path
+    /// would plan it, but the row mapper materializes <see cref="QueryCommand.ResultType"/> and boxes each
+    /// row, so the prepared command can be held as <see cref="IPreparedQueryCommand{TResult}"/> of
+    /// <see cref="object"/> without constructing a generic command type at runtime.
+    /// </summary>
+    internal IPreparedQueryCommand<object?> GetObjectPreparedQueryCommand(QueryCommand queryCommand, bool createEnumerator, bool storeInCache, PreparedCommandCache cache, CancellationToken cancellationToken)
+    {
+        var resultType = queryCommand.ResultType
+            ?? throw new InvalidOperationException("A non-generic query command must carry a result type before it can be prepared for boxed execution.");
+
+        return GetPreparedQueryCommandCore<object?>(
+            queryCommand,
+            boxed: true,
+            boxedResultType: resultType,
+            createEnumerator,
+            storeInCache,
+            cache,
+            sequentialAccess: false,
+            streamingRowsRequested: false,
+            suppressLobLocator: false,
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Resolves the row mapper for one preparation. Kept as a direct call (not a delegate parameter) so a
+    /// warm execution path allocates nothing for the choice between the typed and boxed mapper.
+    /// </summary>
+    private Func<IDataRecord, TRow> BuildMap<TRow>(QueryCommand queryCommand, string? sql, bool streaming, bool boxed, Type? boxedResultType)
+        => boxed
+            ? (Func<IDataRecord, TRow>)(object)RowMapperFactory.GetOrBuildBoxed(queryCommand, boxedResultType!, sql, _contextType, _logger, _mapColumn, streaming)
+            : GetMapCached<TRow>(queryCommand, sql, streaming);
+
+    private IPreparedQueryCommand<TRow> GetPreparedQueryCommandCore<TRow>(
+        QueryCommand queryCommand,
+        bool boxed,
+        Type? boxedResultType,
+        bool createEnumerator,
+        bool storeInCache,
+        PreparedCommandCache cache,
+        bool sequentialAccess,
+        bool streamingRowsRequested,
+        bool suppressLobLocator,
+        CancellationToken cancellationToken)
     {
         // The command-reuse policy travels as this call's parameter only. None means a command per
         // execution, so the plan cache is neither read nor filled; clearing the local storeInCache keeps
@@ -890,11 +947,11 @@ internal sealed class QueryPlanner : IQueryPlanner
 
             // A streaming row projection needs a compiled mapper (it materializes the row, including
             // the streaming column); the single-column LOB terminals keep the map-less path below.
-            Func<IDataRecord, TResult>? map = streamingRows
-                ? GetMapCached(queryCommand, sql, streaming: true)
+            Func<IDataRecord, TRow>? map = streamingRows
+                ? BuildMap<TRow>(queryCommand, sql, true, boxed, boxedResultType)
                 : queryCommand.DocumentMode || sequentialAccess || (queryCommand.SingleRow && queryCommand.OneColumn)
                     ? null
-                    : GetMapCached(queryCommand, sql, streaming: false);
+                    : BuildMap<TRow>(queryCommand, sql, false, boxed, boxedResultType);
 
             var noParams = !(@params?.Count > 0);
             var needsParamRefresh = false;
@@ -928,7 +985,7 @@ internal sealed class QueryPlanner : IQueryPlanner
             // there to avoid a duplicated clause.
             var singleRow = queryCommand.SingleRow && _dialect().SupportsCommandBehaviorSingleRow;
 
-            var compiledQuery = new DbPreparedQueryCommand<TResult>(factory, planParameters, map, new PreparedCommandOptions(singleRow, ext is null ? sql! : null, noParams, needsParamRefresh)
+            var compiledQuery = new DbPreparedQueryCommand<TRow>(factory, planParameters, map, new PreparedCommandOptions(singleRow, ext is null ? sql! : null, noParams, needsParamRefresh)
             {
                 SequentialAccess = sequentialAccess,
                 Cache = cache,
@@ -989,7 +1046,7 @@ internal sealed class QueryPlanner : IQueryPlanner
             // same command would replay it outside its owning preparation.
             queryCommand.PendingRawSourceFilterSkips = null;
 
-            var compiledQuery = (DbPreparedQueryCommand<TResult>)planCache;
+            var compiledQuery = (DbPreparedQueryCommand<TRow>)planCache;
 
             if (queryCommand.CustomData is RawSqlOverride)
             {
@@ -1118,9 +1175,9 @@ internal sealed class QueryPlanner : IQueryPlanner
             return null;
     }
 
-    private Func<IDataRecord, TResult> GetMapCached<TResult>(QueryCommand<TResult> queryCommand, string? sql, bool streaming)
+    private Func<IDataRecord, TResult> GetMapCached<TResult>(QueryCommand queryCommand, string? sql, bool streaming)
     {
-        return RowMapperFactory.GetOrBuild(queryCommand, sql, _contextType, _logger, _mapColumn, streaming);
+        return RowMapperFactory.GetOrBuild<TResult>(queryCommand, sql, _contextType, _logger, _mapColumn, streaming);
     }
 
     /// <summary>

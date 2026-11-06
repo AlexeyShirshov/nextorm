@@ -137,6 +137,12 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// </summary>
     internal int WindowsPlanHash;
     internal Type? ResultType;
+    /// <summary>
+    /// The real projection type carried by a boxed wrapper command. A non-generic command is executed
+    /// through a <see cref="QueryCommand{TResult}"/> wrapper closed over <see cref="object"/>; that wrapper's
+    /// generic argument would otherwise hide the runtime result type the row materializer must build for.
+    /// </summary>
+    internal Type? BoxedResultType;
     /// <summary>The paging state (<c>LIMIT</c>/<c>OFFSET</c>) applied to the query.</summary>
     public Paging Paging;
     /// <summary>
@@ -1550,20 +1556,43 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
 
     /// <summary>
     /// Executes the command and returns its rows boxed, so a runtime-built projection command can be
-    /// stitched by <c>JoinInto</c> without a compile-time result type. Overridden by
-    /// <see cref="QueryCommand{TResult}"/>.
+    /// stitched by <c>JoinInto</c> without a compile-time result type. A typed command overrides this
+    /// with its own materializer; the base implementation is the <see cref="ResultType"/>-driven boxed
+    /// path used by a non-generic command.
     /// </summary>
     /// <param name="params">Positional parameter values.</param>
     /// <returns>The materialized rows, boxed.</returns>
     internal virtual List<object?> ToObjectList(ReadOnlySpan<object?> @params)
-        => throw new NotSupportedException("Only a typed query command can be executed for JoinInto stitching.");
+    {
+        if (ResultType is null)
+            throw new NotSupportedException("Only a query command with a result type can be executed for JoinInto stitching.");
+
+        if (_dataContext is InMemoryDataContext inMemoryContext)
+            return inMemoryContext.ToObjectList(this, @params);
+
+        if (_dataContext is DataContext dataContext)
+            return dataContext.ToObjectList(this, @params);
+
+        throw new NotSupportedException("The untyped (boxed) execution path requires a database context.");
+    }
 
     /// <summary>Asynchronous counterpart of <see cref="ToObjectList"/>.</summary>
     /// <param name="params">Positional parameter values.</param>
     /// <param name="cancellationToken">A token to cancel the query.</param>
     /// <returns>A task producing the materialized rows, boxed.</returns>
-    internal virtual Task<List<object?>> ToObjectListAsync(object[] @params, CancellationToken cancellationToken)
-        => throw new NotSupportedException("Only a typed query command can be executed for JoinInto stitching.");
+    internal virtual async Task<List<object?>> ToObjectListAsync(object[] @params, CancellationToken cancellationToken)
+    {
+        if (ResultType is null)
+            throw new NotSupportedException("Only a query command with a result type can be executed for JoinInto stitching.");
+
+        if (_dataContext is InMemoryDataContext inMemoryContext)
+            return await inMemoryContext.ToObjectListAsync(this, @params, cancellationToken).ConfigureAwait(false);
+
+        if (_dataContext is DataContext dataContext)
+            return await dataContext.ToObjectListAsync(this, @params, cancellationToken).ConfigureAwait(false);
+
+        throw new NotSupportedException("The untyped (boxed) execution path requires a database context.");
+    }
 
 }
 

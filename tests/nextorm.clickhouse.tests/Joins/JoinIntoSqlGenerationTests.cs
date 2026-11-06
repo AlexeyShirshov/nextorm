@@ -18,6 +18,9 @@ public class JoinIntoSqlGenerationTests
     private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd)
         => Normalize(((DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(cmd, false, false, CancellationToken.None)).DbCommand.CommandText);
 
+    private static string SqlOf(IDataContext ctx, QueryCommand cmd)
+        => Normalize(((DbPreparedQueryCommand<object?>)((DataContext)ctx).GetPreparedQueryCommand(cmd, false, false, CancellationToken.None)).DbCommand.CommandText);
+
     private static EntityBuilder<ChJoinParent> Parents(IDataContext ctx) =>
         ctx.From<ChJoinParent>(b => b.HasMany(p => p.Children, c => c.ParentId));
 

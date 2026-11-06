@@ -48,7 +48,9 @@ public class ImplicitNavigationR24Tests
         {
             var plan = entry.Value!;
             var command0 = (QueryCommand)plan.GetType().GetProperty("Command")!.GetValue(plan)!;
-            var resultType = command0.GetType().IsGenericType ? command0.GetType().GetGenericArguments()[0] : null;
+            // The command may be typed (QueryCommand<T>) or the non-generic QueryCommand created for a
+            // runtime result type; ResultType carries the same information in both shapes (#366 S8).
+            var resultType = command0.ResultType;
             if (resultType != typeof(long))
                 continue;
 

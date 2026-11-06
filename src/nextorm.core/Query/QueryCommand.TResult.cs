@@ -21,7 +21,7 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     public QueryCommand(IDataContext? dataProvider, QueryDefinition definition)
         : base(dataProvider, definition)
     {
-
+        ResultType = typeof(TResult);
     }
     /// <summary>
     /// Initializes a command of type <typeparamref name="TResult"/>, optionally taking ownership of the
@@ -30,7 +30,7 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     internal QueryCommand(IDataContext? dataProvider, QueryDefinition definition, bool ownJoins)
         : base(dataProvider, definition, ownJoins)
     {
-
+        ResultType = typeof(TResult);
     }
     /// <summary>
     /// Initializes a command of type <typeparamref name="TResult"/> by transferring the shape of an
@@ -40,7 +40,7 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     internal QueryCommand(IDataContext? dataProvider, QueryCommand source, bool forCache)
         : base(dataProvider, source, forCache)
     {
-
+        ResultType = typeof(TResult);
     }
     /// <summary>
     /// Initializes a command of type <typeparamref name="TResult"/> from a stack-only
@@ -49,7 +49,7 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     internal QueryCommand(IDataContext? dataProvider, QueryShape shape, bool ownJoins)
         : base(dataProvider, shape, ownJoins)
     {
-
+        ResultType = typeof(TResult);
     }
     /// <summary>
     /// Prepares the command and records <typeparamref name="TResult"/> in the result plan. The result

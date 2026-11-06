@@ -8,6 +8,24 @@ public partial class QueryCommand
 {
 
     /// <summary>
+    /// Copies the complete live state (including preparation-derived state) of this command into
+    /// <paramref name="dst"/>. Used when a non-generic command must be adopted by a typed wrapper without
+    /// re-preparing it — the correlated evaluator executes a clone whose condition has already been
+    /// rewritten to parameter placeholders, so preparing it again would discard that rewrite.
+    /// </summary>
+    /// <param name="dst">The target command; it must be assignable from this command's runtime state.</param>
+    internal void CopyAllStateTo(QueryCommand dst)
+    {
+        CopyTo(dst, copyAll: true);
+
+        // These two are project state rather than plan state, so CopyTo does not carry them; a wrapper
+        // that inherits a prepared flag without them would compile the wrong row shape (a scalar command
+        // would try to construct the scalar type from its columns).
+        dst.OneColumn = OneColumn;
+        dst.IgnoreColumns = IgnoreColumns;
+    }
+
+    /// <summary>
     /// Copies the shared plan state of this command into <paramref name="dst"/>. When
     /// <paramref name="copyAll"/> is <c>true</c> the mutable query state (custom data, referenced
     /// queries, union, from and CTEs) is copied by reference for a live clone; otherwise those parts
@@ -37,6 +55,7 @@ public partial class QueryCommand
         dst.HasUnkeyedTupleInValues = HasUnkeyedTupleInValues;
         dst.HasUnkeyedScalarInValues = HasUnkeyedScalarInValues;
         dst.ResultPlanHash = ResultPlanHash;
+        dst.BoxedResultType = BoxedResultType;
         dst.GroupingPlanHash = GroupingPlanHash;
         // From/Union/ReferencedQueries hashes must travel with the clone too: QueryPlanEqualityComparer
         // .GetHashCode() reads them, and QueryPlan.Equals() considers the cloned members equal, so the

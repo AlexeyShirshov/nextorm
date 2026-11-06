@@ -237,18 +237,51 @@ internal static class RowMapperFactory
     /// </param>
     /// <returns>The compiled row mapper.</returns>
     public static Func<IDataRecord, TResult> GetOrBuild<TResult>(
-        QueryCommand<TResult> queryCommand,
+        QueryCommand queryCommand,
         string? sql,
         Type providerType,
         ILogger? logger,
         Func<SelectExpression, Expression, Expression> mapColumn,
         bool streaming = false)
     {
-        var key = BuildKey(queryCommand, sql, providerType, streaming);
+        var key = BuildKey(queryCommand, typeof(TResult), sql, providerType, streaming);
         if (MapperCache.TryGet(key, out var cached))
             return (Func<IDataRecord, TResult>)cached;
 
-        var map = Build(queryCommand, logger, mapColumn, streaming);
+        var map = Build<TResult>(queryCommand, logger, mapColumn, streaming);
+        MapperCache.Add(key, map);
+        return map;
+    }
+
+    /// <summary>
+    /// Returns a compiled mapper that materializes the command's runtime result type and boxes every row
+    /// to <see cref="object"/>, so a non-generic <see cref="QueryCommand"/> can materialize rows for
+    /// <c>JoinInto</c> stitching. The expression body is <c>RowMaterializerBuilder.Build(Type, ...)</c>
+    /// wrapped in a box conversion, and the entry is cached under a key discriminated by
+    /// <see cref="MapperCacheKey.Boxed"/> so it never collides with the typed mapper for the same shape.
+    /// </summary>
+    /// <param name="queryCommand">The prepared command whose projection is mapped.</param>
+    /// <param name="resultType">The command's runtime result type.</param>
+    /// <param name="sql">The rendered statement text, used as part of the cache key.</param>
+    /// <param name="providerType">The concrete context type; its column-mapping policy is part of the cache key.</param>
+    /// <param name="logger">The logger used to trace the compiled expression, or <see langword="null"/>.</param>
+    /// <param name="mapColumn">The provider's column accessor factory.</param>
+    /// <param name="streaming">Whether a streaming LOB projection is mapped.</param>
+    /// <returns>The compiled boxed row mapper.</returns>
+    public static Func<IDataRecord, object?> GetOrBuildBoxed(
+        QueryCommand queryCommand,
+        Type resultType,
+        string? sql,
+        Type providerType,
+        ILogger? logger,
+        Func<SelectExpression, Expression, Expression> mapColumn,
+        bool streaming = false)
+    {
+        var key = BuildKey(queryCommand, resultType, sql, providerType, streaming, boxed: true);
+        if (MapperCache.TryGet(key, out var cached))
+            return (Func<IDataRecord, object?>)cached;
+
+        var map = BuildBoxed(queryCommand, resultType, logger, mapColumn, streaming);
         MapperCache.Add(key, map);
         return map;
     }
@@ -327,7 +360,7 @@ internal static class RowMapperFactory
     }
 
     private static Func<IDataRecord, TResult> Build<TResult>(
-        QueryCommand<TResult> queryCommand,
+        QueryCommand queryCommand,
         ILogger? logger,
         Func<SelectExpression, Expression, Expression> mapColumn,
         bool streaming)
@@ -337,6 +370,64 @@ internal static class RowMapperFactory
             throw new InvalidOperationException("Command not prepared");
 #endif
         return Build<TResult>(queryCommand.SelectList!, queryCommand.OneColumn, logger, mapColumn, streaming);
+    }
+
+    /// <summary>
+    /// Builds the boxed counterpart of <see cref="Build{TResult}(QueryCommand, ILogger?, Func{SelectExpression, Expression, Expression}, bool)"/>:
+    /// the same projection materializer for <paramref name="resultType"/>, with each row converted to
+    /// <see cref="object"/> (required for value-typed projections) so the delegate can be held by a
+    /// non-generic prepared command.
+    /// </summary>
+    private static Func<IDataRecord, object?> BuildBoxed(
+        QueryCommand queryCommand,
+        Type resultType,
+        ILogger? logger,
+        Func<SelectExpression, Expression, Expression> mapColumn,
+        bool streaming)
+    {
+#if DEBUG
+        if (!queryCommand.IsPrepared)
+            throw new InvalidOperationException("Command not prepared");
+#endif
+        var selectList = queryCommand.SelectList!;
+        var param = Expression.Parameter(typeof(IDataRecord));
+
+        // Mirror Build<TResult>: a streaming LOB column uses the sequential accessor; MapColumn rejects
+        // it with a clear error on the buffered path.
+        Expression Accessor(SelectExpression column)
+            => column.IsLobStreaming
+                ? (streaming ? MapStreamingColumn(column, param) : MapColumn(column, param))
+                : mapColumn(column, param);
+
+        Expression body;
+        if (queryCommand.OneColumn)
+        {
+            body = Accessor(selectList[0]);
+            if (body.Type != resultType)
+                body = ArrayResultConverter.EmitConvert(body, resultType);
+        }
+        else
+        {
+            body = RowMaterializerBuilder.Build(
+                resultType,
+                param,
+                selectList,
+                ignoreColumns: false,
+                column => Accessor(column),
+                (column, startIndex, dynamicColumns) => Expression.Call(
+                    Expression.Constant(dynamicColumns),
+                    DynamicColumnsReadMI,
+                    param,
+                    Expression.Constant(startIndex)),
+                column => Expression.Call(param, IsDBNullMI, Expression.Constant(column.Index)));
+        }
+
+        var boxed = body.Type == typeof(object) ? body : Expression.Convert(body, typeof(object));
+        var lambda = Expression.Lambda<Func<IDataRecord, object?>>(boxed, param);
+
+        if (logger?.IsEnabled(LogLevel.Debug) ?? false) logger.LogDebug("Get instance of {type} as: {exp}", resultType, lambda);
+
+        return lambda.Compile();
     }
 
     private static Func<IDataRecord, TResult> Build<TResult>(
@@ -418,10 +509,18 @@ internal static class RowMapperFactory
     }
 
     /// <summary>
+    /// Typed forwarding overload of <see cref="BuildKey(QueryCommand, Type, string?, Type, bool, bool)"/>:
+    /// keeps the historically generic shape available to callers and tests that bind to it by reflection,
+    /// while the real key is built from the runtime <see cref="Type"/>.
+    /// </summary>
+    private static MapperCacheKey BuildKey<TResult>(QueryCommand<TResult> queryCommand, string? sql, Type providerType, bool streaming)
+        => BuildKey(queryCommand, typeof(TResult), sql, providerType, streaming);
+
+    /// <summary>
     /// Builds a cheap cache key from the generated SQL plus a column signature. SQL is already
     /// available at the call site, so this is far cheaper than hashing the expression tree.
     /// </summary>
-    private static MapperCacheKey BuildKey<TResult>(QueryCommand<TResult> queryCommand, string? sql, Type providerType, bool streaming)
+    private static MapperCacheKey BuildKey(QueryCommand queryCommand, Type resultType, string? sql, Type providerType, bool streaming, bool boxed = false)
     {
         var signature = BuildSignature(queryCommand.SelectList);
         unchecked
@@ -429,7 +528,7 @@ internal static class RowMapperFactory
             signature = signature * 31 + (queryCommand.EntityType?.GetHashCode() ?? 0);
         }
 
-        return new MapperCacheKey(providerType, typeof(TResult), sql ?? string.Empty, signature, queryCommand.OneColumn, streaming);
+        return new MapperCacheKey(providerType, resultType, sql ?? string.Empty, signature, queryCommand.OneColumn, streaming, boxed);
     }
 
     /// <summary>

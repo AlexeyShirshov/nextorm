@@ -26,7 +26,8 @@ internal static class InMemoryRowMaterializer
         // if (!(_dataProvider as SqlDataProvider).MapCache.TryGetValue(key, out var del))
         // {
         //     if (Logger?.IsEnabled(LogLevel.Information) ?? false) Logger.LogInformation("Map delegate cache miss for: {exp}", _exp);
-        var resultType = typeof(TResult);
+        var resultType = queryCommand.BoxedResultType ?? typeof(TResult);
+        var boxed = resultType != typeof(TResult);
 
         // An entity-sourced command (for example ctx.From(scalarSubquery) or From<Entity>()) materialises
         // the source rows as-is: the in-memory data is already TResult, so no row materializer is needed.
@@ -43,13 +44,26 @@ internal static class InMemoryRowMaterializer
                 if (queryCommand.OneColumn)
                 {
                     var corVisitor = new CorrelatedQueryExpressionVisitor(context, queryCommand, typeof(TEntity), context.Logger);
-                    lambda = (Expression<Func<TEntity, TResult>>)corVisitor.Visit(queryCommand.SelectList![0].Expression)!;
+                    var visited = corVisitor.Visit(queryCommand.SelectList![0].Expression)!;
+                    if (boxed)
+                    {
+                        // Boxed path: materialize the runtime result type, then box the row to object.
+                        var boxParam = Expression.Parameter(typeof(TEntity));
+                        var visitedBody = visited is LambdaExpression { Parameters.Count: 1 } visitedLambda
+                            ? new ReplaceParameterExpressionVisitor(boxParam).Visit(visitedLambda.Body)!
+                            : new ReplaceParameterExpressionVisitor(boxParam).Visit(visited)!;
+                        lambda = Expression.Lambda<Func<TEntity, TResult>>(EnsureType(visitedBody, typeof(TResult)), boxParam);
+                    }
+                    else
+                    {
+                        lambda = (Expression<Func<TEntity, TResult>>)visited;
+                    }
                 }
                 else
                 {
                     var param = Expression.Parameter(typeof(TEntity));
                     var body = RowMaterializerBuilder.Build(resultType, param, queryCommand.SelectList!, queryCommand.IgnoreColumns, column => context.MapColumn(column, param), BuildDynamicColumnsAccessor<TEntity>(param));
-                    lambda = Expression.Lambda<Func<TEntity, TResult>>(body, param);
+                    lambda = Expression.Lambda<Func<TEntity, TResult>>(EnsureType(body, typeof(TResult)), param);
                 }
             }
             else
@@ -59,11 +73,11 @@ internal static class InMemoryRowMaterializer
                 {
                     var rewritten = rewriter.Rewrite(queryCommand.SelectList![0].Expression!);
                     if (rewritten is LambdaExpression { Parameters.Count: 1 } single && single.Parameters[0].Type == typeof(TEntity))
-                        lambda = Expression.Lambda<Func<TEntity, TResult>>(EnsureType(single.Body, resultType), single.Parameters[0]);
+                        lambda = Expression.Lambda<Func<TEntity, TResult>>(EnsureType(single.Body, typeof(TResult)), single.Parameters[0]);
                     else
                     {
                         var param = Expression.Parameter(typeof(TEntity));
-                        lambda = Expression.Lambda<Func<TEntity, TResult>>(EnsureType(rewritten, resultType), param);
+                        lambda = Expression.Lambda<Func<TEntity, TResult>>(EnsureType(rewritten, typeof(TResult)), param);
                     }
                 }
                 else
@@ -83,7 +97,7 @@ internal static class InMemoryRowMaterializer
                         },
                         BuildDynamicColumnsAccessor<TEntity>(param));
 
-                    lambda = Expression.Lambda<Func<TEntity, TResult>>(body, param);
+                    lambda = Expression.Lambda<Func<TEntity, TResult>>(EnsureType(body, typeof(TResult)), param);
                 }
             }
 
