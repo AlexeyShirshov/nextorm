@@ -157,11 +157,11 @@ All previous requirements remain in force. No architecture, specification, plan 
 | item | group | branch | status | plan_state | preparation_state | preparation_ref | form | contract | overlay | cycle_id | status path | plan_revision | attempt_n | disposition | evidence root | campaign_status | campaign_ref |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | T365 | g1 | collection/365-366 | incomplete | ready | — | — | cycle | pdca | coder+.NET + nextorm-pdca | T365-rc5-4 (N=4) | .pdca/status/T365-rc5-4.md | r1 | 1/3 | finalized; terminal=execution (AC6 unmet; user-declared no further AC6 attempts) | .pdca/365-366-r2/items/T365/rv3/ | — | — |
-| T366 | g1 | `collection/365-366` | in-progress | pending | ready | `.pdca/365-366-r2/items/T366/preparation.md@r1` | campaign | — | — | T366-rc5-1 (N=1 closed; next N=2) | `.pdca/status/T366-rc5-1.md` | r1 | 3/3 (r1) | active (S2 open) | `.pdca/365-366-r2/items/T366/step<k>/rv1/` | running | `.pdca/status/T366-rc5-1.md` |
+| T366 | g1 | `collection/365-366` | in-progress | pending | ready | `.pdca/365-366-r2/items/T366/preparation.md@r1` | campaign | — | — | T366-rc5-1 (N=2; S1/S2 accepted; next S3) | `.pdca/status/T366-rc5-1.md` | r6 | 1/3 | paused (S2 accepted on charter floor) | `.pdca/365-366-r2/items/T366/step<k>/rv1/` | paused | `.pdca/status/T366-rc5-1.md` |
 
 ### General verification and recovery
 
-- state: in-progress
+- state: paused
 - last common CHECK: T365 terminal not accepted (AC6 unmet; AC1–AC5/AC7 unverified; AC8 met; expert found no criteria defect); T366 S1 accepted on its own scope as current-state baseline `(239, 2/6, 0)`; T366 whole-goal not reached
 - blocking reason: none
 - defect history: `AC6-six-warm-All-rows` (open); `WC-1-concurrent-writer` (closed by construction); `T365-N3-D0-fabricated-constraints` (fixed in both records: false constraint line replaced with the verbatim user line and its three constraints); `S1-WARN-POLICY` (fixed); `S1-REGISTRY-BINDING` (fixed); `S1-FAILURE-ORIGIN` (fixed); `S1-CONTOUR-PROOF` (fixed); `S1-VM3-EXTENSIONS` (fixed); `S1-EVIDENCE-HISTORY` (deferred → `S2-AC0`)
@@ -169,10 +169,10 @@ All previous requirements remain in force. No architecture, specification, plan 
 
 ### Completeness
 
-- 0/2 accepted
-- T366: in-progress; accepted step S1 baseline only `(239, 2/6, 0)`
+- 1/2 accepted (T366 S1/S2 steps accepted; T365 incomplete)
+- T366: paused; accepted S1 `(239, 2/6, 0)` and S2 `(238, 6/6, 0)` on charter floor; next S3
 - integrated-tree verdict: none
-- issues #365, #366 both OPEN
+- issues #365 CLOSED (limited: AC6 unmet), #366 OPEN
 - commits made: `7abd2e1b`, `0320ecc3`, `091fddbd`, `80d900a0` (T365 bookkeeping + cycle work); `7b75ff581ed0ba9330be062044e3ddc206191f50` (T366 S1 accepted baseline)
 
 ## Progress log
@@ -192,3 +192,10 @@ ACT bookkeeping commit 6bead8227f695de02c53ebafef1ad9c90219dc74 (status record o
 2026-11-05T17:59:32Z | T365 re-entry by explicit user input «п1»: AC7 = 85/75 и 65/75 unchanged; prior terminal=criteria-undetermined superseded; new cycle N=4 (r1, n=1/3), status T365-rc5-4.md | .pdca/status/T365-rc5-4.md
 
 2026-11-06T00:00:00Z | T365 ACT closed incomplete/STOP (user authority boundary; AC6 unmet; AC1–AC5/AC7 unverified; AC8 met); T366 S2 next per explicit user instruction; issue #365 OPEN
+
+2026-11-06T06:44:59Z | ACT | Collection paused: T365 issue #365 CLOSED limited (AC6 unmet); #366 OPEN. T366 accepted increments S1 (239, 2/6, 0), S2 (238, 6/6, 0); residual 238 unique diagnostics (244 raw) + unmeasured provider/EF/JSON-CSV matrix; next S3. | `.pdca/status/T366-rc5-1.md`
+
+## Git state
+
+- `.pdca/status/collection-365-366-r2.md` — modified in this cycle; tracked; commit pending.
+- `.pdca/status/T366-rc5-1.md` — modified in this cycle; tracked; commit pending.
