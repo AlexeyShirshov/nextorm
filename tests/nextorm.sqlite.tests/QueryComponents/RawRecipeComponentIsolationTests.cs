@@ -153,6 +153,17 @@ public sealed class RawRecipeComponentIsolationTests
 
         public int ShapeSelectorCount => 1;
 
+        private LambdaExpression[]? _shapeSelectors;
+        public LambdaExpression[] ShapeSelectors
+        {
+            get
+            {
+                if (_shapeSelectors is null)
+                    _shapeSelectors = new[] { Selector };
+                return _shapeSelectors;
+            }
+        }
+
         public LambdaExpression GetShapeSelector(int index) => index == 0
             ? Selector
             : throw new ArgumentOutOfRangeException(nameof(index), index, "No selector at this index.");

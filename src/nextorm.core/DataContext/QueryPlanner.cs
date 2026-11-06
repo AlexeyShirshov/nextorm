@@ -39,7 +39,7 @@ internal sealed class QueryPlanner : IQueryPlanner
 
     // D201-3 recipe diagnostics: how many pre-preparation candidates were published after a successful
     // cacheable Set, how many fresh commands actually reused one (staged apply passed validation), and
-    // how many eligible probes were rejected (capture ineligible or staged-key/owner mismatch).
+    // how many eligible probes were rejected (ineligible graph or staged-key/owner mismatch).
     private static int _recipePublishes;
     private static int _recipeReuses;
     private static int _recipeRejections;
@@ -54,7 +54,7 @@ internal sealed class QueryPlanner : IQueryPlanner
     /// <summary>Number of fresh commands that reused a recipe candidate. Diagnostic only.</summary>
     internal static int RecipeReuses => Volatile.Read(ref _recipeReuses);
 
-    /// <summary>Number of eligible probes rejected (ineligible capture or staged mismatch). Diagnostic only.</summary>
+    /// <summary>Number of eligible probes rejected (ineligible graph or staged mismatch). Diagnostic only.</summary>
     internal static int RecipeRejections => Volatile.Read(ref _recipeRejections);
 
     /// <summary>Number of staged applies rejected by the normalized-key/owner validation. Diagnostic only.</summary>
@@ -103,6 +103,28 @@ internal sealed class QueryPlanner : IQueryPlanner
     // closures) need to be re-extracted on every cached execution.
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsRuntimeParam(string name) => NormParam.IsName(name);
+
+    /// <summary>
+    /// Whether a plan that needs parameter refresh may join the raw recipe store: only when the raw
+    /// shape carries a captured-closure identity and every refreshed parameter is a captured member.
+    /// A hit on the same closure instance reads the live members and binds their current values, so the
+    /// statement can be reused. A parameter with no captured source (an ambient/static read) has no
+    /// identity key, so such a plan keeps the ordinary route exactly as before.
+    /// </summary>
+    private static bool CanPublishCapturedRecipe(QueryCommand.RawShape shape, List<Parameter>? parameters)
+    {
+        if (shape.Closures is not { Length: > 0 } || parameters is null)
+            return false;
+
+        for (var i = 0; i < parameters.Count; i++)
+        {
+            var parameter = parameters[i];
+            if (IsRuntimeParam(parameter.Name) || parameter.Stable) continue;
+            if (parameter.CapturedKey is null) return false;
+        }
+
+        return true;
+    }
 
     // Renders a standalone SELECT (the source of an INSERT ... SELECT) to SQL plus its parameters, and
     // hoists any CTE the source declares out of the SELECT. A data-modifying CTE must sit at the top
@@ -935,11 +957,12 @@ internal sealed class QueryPlanner : IQueryPlanner
                 QueryPlanStore.Set(_contextType, queryPlan!.GetCacheVersion(), compiledQuery);
 
                 // Publication happens ONLY after ordinary preparation succeeded, the normalized key
-                // was constructed and the cacheable holder was stored through Set — and only for a
-                // value-independent plan (no refreshed parameter, no captured-collection shape), so
-                // the applied preparation data can never carry a per-call value.
+                // was constructed and the cacheable holder was stored through Set. A value-independent
+                // plan is always publishable; a plan with refreshed parameters is publishable only when
+                // the raw shape is keyed by the captured closure identities (a hit reads the same live
+                // closures, so it binds their current values), never for a captured-collection shape.
                 if (recipeShape is not null
-                    && !needsParamRefresh
+                    && (!needsParamRefresh || CanPublishCapturedRecipe(recipeShape, @params))
                     && queryCommand.InValuesShapeHash == 0
                     && queryCommand.PreWhereShapeHash == 0
                     && !queryCommand.HasTopLevelInValues

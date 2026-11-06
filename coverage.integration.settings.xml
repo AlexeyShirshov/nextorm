@@ -12,7 +12,7 @@
   <CodeCoverage>
     <ModulePaths>
       <Include>
-        <ModulePath>.*nextorm\.(core|sqlite|postgres|sqlserver|mysql|mariadb|clickhouse|entityframeworkcore)\.dll$</ModulePath>
+        <ModulePath>.*nextorm\.(core|sqlite|postgres|sqlserver|mysql|mariadb|clickhouse|entityframeworkcore|extensions)\.dll$</ModulePath>
       </Include>
     </ModulePaths>
 

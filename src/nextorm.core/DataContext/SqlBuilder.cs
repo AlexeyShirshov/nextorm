@@ -298,7 +298,9 @@ internal readonly struct SqlBuilder
                 // A key-less constant projection has no group, so a validated row-independent HAVING is a
                 // pre-group filter and belongs in the WHERE position of that statement. Every other mode
                 // (including the legacy ungrouped HAVING, which stays dropped) keeps its WHERE rendering.
-                var preGroupHaving = IsConstantProjection(cmd) ? cmd.PreparedHaving ?? cmd.Having : null;
+                var preGroupHaving = IsConstantProjection(cmd)
+                    ? (cmd.EffectiveHaving ?? cmd.PreparedHaving ?? cmd.Having)
+                    : null;
 
                 if (cmd.PreparedCondition is not null)
                 {
@@ -402,23 +404,31 @@ internal readonly struct SqlBuilder
                         sqlBuilder.Append(groupingSql);
                     }
 
-                    var having = cmd.PreparedHaving ?? cmd.Having;
+                    var having = cmd.EffectiveHavingMode == QueryPreparationHavingMode.Replace && cmd.EffectiveHaving is not null
+                        ? cmd.EffectiveHaving
+                        : (cmd.PreparedHaving ?? cmd.Having);
                     if (having is not null)
                     {
                         if (!_ctx.ParamMode) sqlBuilder!.Append(SqlText.NewLine).Append(Kw(" having "));
                         SqlSourceRenderer.MakeWhere(in _ctx, sqlBuilder, entityType, having, 0, dontNeedAlias, root);
                     }
                 }
-                else if (cmd.IsSelectGroup
-                    && cmd.SelectGroupMode == SelectGroupMode.GlobalAggregate
-                    && (cmd.PreparedHaving ?? cmd.Having) is { } globalHaving)
+                else if (cmd.EffectiveGroupingKeys is not null
+                    && cmd.EffectiveGroupingKeys.Count == 0
+                    && cmd.EffectiveHavingMode != QueryPreparationHavingMode.Clear
+                    && cmd.EffectiveHavingMode != QueryPreparationHavingMode.Unchanged
+                    && cmd.EffectiveHaving is { } effGlobalHaving)
                 {
-                    // A global aggregate groups the whole source: there is no GROUP BY list, and HAVING
-                    // filters the single aggregate row (`select sum(amount) from t having sum(amount) > @p`).
-                    // The branch is gated on IsSelectGroup, so a legacy ungrouped HAVING keeps its
-                    // historical behaviour of not being rendered at all.
                     if (!_ctx.ParamMode) sqlBuilder!.Append(SqlText.NewLine).Append(Kw(" having "));
-                    SqlSourceRenderer.MakeWhere(in _ctx, sqlBuilder, entityType, globalHaving, 0, dontNeedAlias, root);
+                    SqlSourceRenderer.MakeWhere(in _ctx, sqlBuilder, entityType, effGlobalHaving, 0, dontNeedAlias, root);
+                }
+                else if (cmd.EffectiveGroupingKeys is not null
+                    && cmd.EffectiveGroupingKeys.Count == 0
+                    && cmd.EffectiveHavingMode == QueryPreparationHavingMode.Unchanged
+                    && (cmd.PreparedHaving ?? cmd.Having) is { } effUnchangedHaving)
+                {
+                    if (!_ctx.ParamMode) sqlBuilder!.Append(SqlText.NewLine).Append(Kw(" having "));
+                    SqlSourceRenderer.MakeWhere(in _ctx, sqlBuilder, entityType, effUnchangedHaving, 0, dontNeedAlias, root);
                 }
 
                 var windows = cmd.Windows;
@@ -643,7 +653,7 @@ internal readonly struct SqlBuilder
                 // ("select distinct top(n) ..."), so the flag is emitted before the select-list branch.
                 // A key-less constant projection is rendered through DISTINCT without mutating the
                 // command's own IsDistinct (which is source state and part of the plan key).
-                else if (cmd.IsDistinct || IsConstantProjection(cmd))
+                else if (cmd.IsDistinct || IsConstantProjection(cmd) || cmd.EffectiveRequireDistinct)
                     selectBuilder.Append(Kw("distinct "));
             }
             if (cmd.IgnoreColumns || selectList is null)
@@ -1833,7 +1843,9 @@ internal readonly struct SqlBuilder
     /// so every output is row-independent and the statement renders as <c>select distinct ...</c>.
     /// </summary>
     private static bool IsConstantProjection(QueryCommand cmd)
-        => cmd.IsSelectGroup && cmd.SelectGroupMode == SelectGroupMode.ConstantProjection;
+        => cmd.EffectiveGroupingKeys is not null
+            && cmd.EffectiveGroupingKeys.Count == 0
+            && cmd.EffectiveHavingMode == QueryPreparationHavingMode.Clear;
 
     /// <summary>
     /// Renders one predicate of a composed <c>WHERE</c> clause inside parentheses. Used only by the

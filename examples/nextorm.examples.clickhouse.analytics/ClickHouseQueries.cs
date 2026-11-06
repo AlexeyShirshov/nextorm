@@ -1,5 +1,6 @@
 using System.Text.Json;
 using NextORM.Core;
+using NextORM.Extensions;
 using NextORM.Generated.nextorm_examples_clickhouse_analytics;
 
 namespace NextORM.Examples.ClickHouse.Analytics;

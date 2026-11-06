@@ -4,6 +4,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 using System.Linq;
 using FluentAssertions;
 using NextORM.Core;
+using NextORM.Extensions;
 
 namespace NextORM.Integration.Tests;
 

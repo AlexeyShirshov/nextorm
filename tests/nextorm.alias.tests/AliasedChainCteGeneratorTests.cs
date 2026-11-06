@@ -45,6 +45,7 @@ public sealed class AliasedChainCteGeneratorTests
 
     private const string Header =
         "using NextORM.Core;\n" +
+        "using NextORM.Extensions;\n" +
         "using NextORM.Generated.AliasHarness;\n" +
         "namespace Harness;\n" +
         "public sealed class Order { public int Id { get; set; } }\n" +

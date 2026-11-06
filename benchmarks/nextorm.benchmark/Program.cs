@@ -12,6 +12,12 @@ using System.Runtime.InteropServices;
         hasTieredSwitch ? tieredSwitch.ToString() : "(unset)", envTiered ?? "(unset)");
 }
 
+if (args.Length > 0 && args[0] == "--d362-sql-parity")
+    return D362SqlParity.Run();
+
+if (args.Length > 0 && args[0] == "--d362-alloc-probe")
+    return D362AllocProbe.Run();
+
 // BenchmarkRunner.Run<ExpressionsExperiments>();
 // BenchmarkRunner.Run<BenchmarkQueryCommand>();
 // BenchmarkRunner.Run<InMemoryBenchmarkIteration>();

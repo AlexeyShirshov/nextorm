@@ -1,18 +1,15 @@
 using FluentAssertions;
 using NextORM.ClickHouse;
 using NextORM.Core;
+using NextORM.Extensions;
 
 namespace NextORM.ClickHouse.Tests;
 
 /// <summary>
-/// T323 (#323) D5a: ClickHouse generation parity between a <c>SelectGroup</c> projection and the
-/// equivalent explicit <c>GroupBy</c>/<c>Select</c> form, the two key-less modes that are observable
-/// in SQL, and the composition guards. Only preparation runs: the context carries a placeholder
-/// connection, so no database is opened.
-/// <para>
-/// The <c>date_trunc</c> key cell is present: the ClickHouse dialect renders
-/// <c>SqlFunctions.Sql.date_trunc</c> as <c>dateTrunc(part, value)</c> (<c>SupportsDateTrunc</c> is true).
-/// </para>
+/// T323 (#323) D5a: exact clickhouse SQL for the <c>SelectGroup</c> projection, the two key-less modes that are
+/// observable in SQL, and the composition guards. Only preparation runs: the context carries a
+/// placeholder connection, so no database is opened. Every statement is asserted in full against the
+/// expected clickhouse rendering; no other implementation is used as the oracle.
 /// </summary>
 public class T323SelectGroupSqlTests
 {
@@ -25,84 +22,89 @@ public class T323SelectGroupSqlTests
 
     private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd) => Normalize(Prepare(ctx, cmd).DbCommand.CommandText);
 
+    /// <summary>The expected literal uses the file's line endings; generated SQL always uses LF.</summary>
+    private static string Lf(string sql) => sql.ReplaceLineEndings("\n");
+
     [Fact]
-    public void SingleKey_ShouldEqualExplicitSql()
+    public void SingleKey_ExactSql()
     {
         using var ctx = ClickHouseTestContext.Create();
 
-        var inferred = ctx.From<T323SelectGroupEntity>()
-            .SelectGroup(x => new { x.Id, C = SqlFunctions.Sql.count() });
-        var explicitForm = ctx.From<T323SelectGroupEntity>()
-            .GroupBy(x => x.Id)
-            .Select(x => new { x.Id, C = SqlFunctions.Sql.count() });
+        var sql = SqlOf(ctx, ctx.From<T323LegacyEntity>()
+            .SelectGroup(x => new { x.Id, C = SqlFunctions.Sql.count() }));
 
-        SqlOf(ctx, inferred).Should().Be(SqlOf(ctx, explicitForm));
+        sql.Should().Be(Lf("""
+select Id, toInt32(count(*)) as `C`
+ from T323LegacyEntity
+ group by Id
+"""));
     }
 
     [Fact]
-    public void TwoKeysTwoAggregates_ShouldEqualExplicitSql()
+    public void TwoKeysTwoAggregates_ExactSql()
     {
         using var ctx = ClickHouseTestContext.Create();
 
-        var inferred = ctx.From<T323SelectGroupEntity>()
-            .SelectGroup(x => new { x.Id, x.Group2, S = SqlFunctions.Sql.sum(x.Amount), C = SqlFunctions.Sql.count() });
-        var explicitForm = ctx.From<T323SelectGroupEntity>()
-            .GroupBy(x => new { x.Id, x.Group2 })
-            .Select(x => new { x.Id, x.Group2, S = SqlFunctions.Sql.sum(x.Amount), C = SqlFunctions.Sql.count() });
+        var sql = SqlOf(ctx, ctx.From<T323LegacyEntity>()
+            .SelectGroup(x => new { x.Id, x.Group2, S = SqlFunctions.Sql.sum(x.Amount), C = SqlFunctions.Sql.count() }));
 
-        SqlOf(ctx, inferred).Should().Be(SqlOf(ctx, explicitForm));
+        sql.Should().Be(Lf("""
+select Id, Group2, sum(Amount) as `S`, toInt32(count(*)) as `C`
+ from T323LegacyEntity
+ group by Id, Group2
+"""));
     }
 
     [Fact]
-    public void JoinedAggregate_ShouldEqualExplicitSql()
-    {
-        using var ctx = ClickHouseTestContext.Create();
-        var joined = ctx.From<T323SelectGroupEntity>().Join(ctx.From<IComplexEntity>(), (a, b) => a.Id == b.Id);
-
-        var inferred = joined
-            .SelectGroup(p => new { p.Item1.Id, S = SqlFunctions.Sql.sum(p.Item1.Amount) });
-        var explicitForm = joined
-            .GroupBy(p => p.Item1.Id)
-            .Select(p => new { p.Item1.Id, S = SqlFunctions.Sql.sum(p.Item1.Amount) });
-
-        SqlOf(ctx, inferred).Should().Be(SqlOf(ctx, explicitForm));
-    }
-
-    [Fact]
-    public void JoinedKeyAndAggregateAcrossItems_ShouldEqualExplicitSql()
-    {
-        using var ctx = ClickHouseTestContext.Create();
-        var joined = ctx.From<T323SelectGroupEntity>().Join(ctx.From<IComplexEntity>(), (a, b) => a.Id == b.Id);
-
-        var inferred = joined
-            .SelectGroup(p => new { p.Item2.String, S = SqlFunctions.Sql.sum(p.Item1.Amount) });
-        var explicitForm = joined
-            .GroupBy(p => p.Item2.String)
-            .Select(p => new { p.Item2.String, S = SqlFunctions.Sql.sum(p.Item1.Amount) });
-
-        SqlOf(ctx, inferred).Should().Be(SqlOf(ctx, explicitForm));
-    }
-
-    [Fact]
-    public void DateTruncAndSum_ShouldEqualExplicitSql()
+    public void DateTruncAndSum_ExactSql()
     {
         using var ctx = ClickHouseTestContext.Create();
 
-        var inferred = ctx.From<T323SelectGroupEntity>()
-            .SelectGroup(x => new
-            {
+        var sql = SqlOf(ctx, ctx.From<T323LegacyEntity>()
+            .SelectGroup(x => new {
                 Q = SqlFunctions.Sql.date_trunc("quarter", x.OrderedAt),
                 S = SqlFunctions.Sql.sum(x.Amount),
-            });
-        var explicitForm = ctx.From<T323SelectGroupEntity>()
-            .GroupBy(x => SqlFunctions.Sql.date_trunc("quarter", x.OrderedAt))
-            .Select(x => new
-            {
-                Q = SqlFunctions.Sql.date_trunc("quarter", x.OrderedAt),
-                S = SqlFunctions.Sql.sum(x.Amount),
-            });
+            }));
 
-        SqlOf(ctx, inferred).Should().Be(SqlOf(ctx, explicitForm));
+        sql.Should().Be(Lf("""
+select dateTrunc('quarter', OrderedAt) as `Q`, sum(Amount) as `S`
+ from T323LegacyEntity
+ group by dateTrunc('quarter', OrderedAt)
+"""));
+    }
+
+    [Fact]
+    public void JoinedAggregate_ExactSql()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var joined = ctx.From<T323LegacyEntity>().Join(ctx.From<IComplexEntity>(), (a, b) => a.Id == b.Id);
+
+        var sql = SqlOf(ctx, joined
+            .SelectGroup(p => new { p.Item1.Id, S = SqlFunctions.Sql.sum(p.Item1.Amount) }));
+
+        sql.Should().Be(Lf("""
+select t1.Id, sum(t1.Amount) as `S`
+ from T323LegacyEntity as `t1`
+ join complex_entity as `t2` on cast(t1.Id as Int64) = t2.id
+ group by t1.Id
+"""));
+    }
+
+    [Fact]
+    public void JoinedKeyAndAggregateAcrossItems_ExactSql()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var joined = ctx.From<T323LegacyEntity>().Join(ctx.From<IComplexEntity>(), (a, b) => a.Id == b.Id);
+
+        var sql = SqlOf(ctx, joined
+            .SelectGroup(p => new { p.Item2.String, S = SqlFunctions.Sql.sum(p.Item1.Amount) }));
+
+        sql.Should().Be(Lf("""
+select t2.somestring as `String`, sum(t1.Amount) as `S`
+ from T323LegacyEntity as `t1`
+ join complex_entity as `t2` on cast(t1.Id as Int64) = t2.id
+ group by t2.somestring
+"""));
     }
 
     [Fact]
@@ -110,7 +112,7 @@ public class T323SelectGroupSqlTests
     {
         using var ctx = ClickHouseTestContext.Create();
 
-        var sql = SqlOf(ctx, ctx.From<T323SelectGroupEntity>()
+        var sql = SqlOf(ctx, ctx.From<T323LegacyEntity>()
             .Having(x => SqlFunctions.Sql.sum(x.Amount) > 0)
             .SelectGroup(x => new { S = SqlFunctions.Sql.sum(x.Amount) }));
 
@@ -124,13 +126,13 @@ public class T323SelectGroupSqlTests
     {
         using var ctx = ClickHouseTestContext.Create();
 
-        var grouped = SqlOf(ctx, ctx.From<T323SelectGroupEntity>().SelectGroup(x => new { V = 1 }));
+        var grouped = SqlOf(ctx, ctx.From<T323LegacyEntity>().SelectGroup(x => new { V = 1 }));
 
         grouped.TrimStart().StartsWith("select distinct", StringComparison.OrdinalIgnoreCase)
             .Should().BeTrue($"a key-less constant projection must collapse to one row, got: {grouped}");
         grouped.Should().NotContain("group by");
 
-        var legacy = SqlOf(ctx, ctx.From<T323SelectGroupEntity>().Select(x => new { V = 1 }));
+        var legacy = SqlOf(ctx, ctx.From<T323LegacyEntity>().Select(x => new { V = 1 }));
         legacy.Should().NotContain("distinct", "the DISTINCT rendering is gated on the SelectGroup mode");
     }
 
@@ -139,7 +141,7 @@ public class T323SelectGroupSqlTests
     {
         using var ctx = ClickHouseTestContext.Create();
 
-        var sql = SqlOf(ctx, ctx.From<T323SelectGroupEntity>()
+        var sql = SqlOf(ctx, ctx.From<T323LegacyEntity>()
             .Having(x => x.Id > 1)
             .Select(x => new { x.Id }));
 
@@ -150,29 +152,19 @@ public class T323SelectGroupSqlTests
     public void Guards_ShouldRejectExplicitGrouping()
     {
         using var ctx = ClickHouseTestContext.Create();
-        var e = ctx.From<T323SelectGroupEntity>();
+        var e = ctx.From<T323LegacyEntity>();
 
-        FluentActions.Invoking(() => e.GroupBy(x => x.Id).SelectGroup(x => new { x.Id }))
+        FluentActions.Invoking(() => { var _c = e.GroupBy(x => x.Id).SelectGroup(x => new { x.Id }); ctx.GetPreparedQueryCommand(_c, false, true, CancellationToken.None); })
             .Should().Throw<QueryPreparationException>().WithMessage("*cannot be combined with explicit grouping*");
-        FluentActions.Invoking(() => e.GroupByRollup(x => x.Id).SelectGroup(x => new { x.Id }))
+        FluentActions.Invoking(() => { var _c = e.GroupByRollup(x => x.Id).SelectGroup(x => new { x.Id }); ctx.GetPreparedQueryCommand(_c, false, true, CancellationToken.None); })
             .Should().Throw<QueryPreparationException>().WithMessage("*cannot be combined with explicit grouping*");
-        FluentActions.Invoking(() => e.GroupByCube(x => x.Id).SelectGroup(x => new { x.Id }))
+        FluentActions.Invoking(() => { var _c = e.GroupByCube(x => x.Id).SelectGroup(x => new { x.Id }); ctx.GetPreparedQueryCommand(_c, false, true, CancellationToken.None); })
             .Should().Throw<QueryPreparationException>().WithMessage("*cannot be combined with explicit grouping*");
-        FluentActions.Invoking(() => e.GroupByGroupingSets(x => new { x.Id, x.Group2 }, [0], [1]).SelectGroup(x => new { x.Id }))
+        FluentActions.Invoking(() => { var _c = e.GroupByGroupingSets(x => new { x.Id, x.Group2 }, [0], [1]).SelectGroup(x => new { x.Id }); ctx.GetPreparedQueryCommand(_c, false, true, CancellationToken.None); })
             .Should().Throw<QueryPreparationException>().WithMessage("*cannot be combined with explicit grouping*");
-        FluentActions.Invoking(() => e.WithTotals().SelectGroup(x => new { x.Id }))
+        FluentActions.Invoking(() => { var c = e.WithTotals().SelectGroup(x => new { x.Id }); ctx.GetPreparedQueryCommand(c, false, true, CancellationToken.None); })
             .Should().Throw<QueryPreparationException>().WithMessage("*cannot be combined with explicit grouping*");
-        FluentActions.Invoking(() => ctx.From<T323SelectGroupEntity>().SelectGroup<int>(null!))
+        FluentActions.Invoking(() => { var _c = ctx.From<T323LegacyEntity>().SelectGroup<T323LegacyEntity, int>(null!); ctx.GetPreparedQueryCommand(_c, false, true, CancellationToken.None); })
             .Should().Throw<ArgumentNullException>();
     }
-}
-
-/// <summary>The row shape of the D5a parity cells; <c>OrderedAt</c> feeds the <c>date_trunc</c> key.</summary>
-public class T323SelectGroupEntity
-{
-    public int Id { get; set; }
-    public int? Group2 { get; set; }
-    public decimal Amount { get; set; }
-    public string? Name { get; set; }
-    public DateTime OrderedAt { get; set; }
 }

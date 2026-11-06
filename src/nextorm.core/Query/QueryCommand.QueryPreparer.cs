@@ -1,11 +1,26 @@
 using Microsoft.Extensions.Logging;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 
 namespace NextORM.Core;
 
 public partial class QueryCommand
 {
+    /// <summary>AND-combines two single-parameter source predicates over a shared parameter.</summary>
+    private static LambdaExpression CombinePredicates(LambdaExpression left, LambdaExpression right)
+    {
+        var param = left.Parameters.Count > 0 ? left.Parameters[0] : right.Parameters[0];
+        var leftBody = left.Parameters.Count > 0
+            ? new ParameterReplacer(left.Parameters[0], param).Visit(left.Body)
+            : left.Body;
+        var rightBody = right.Parameters.Count > 0
+            ? new ParameterReplacer(right.Parameters[0], param).Visit(right.Body)
+            : right.Body;
+        var combined = Expression.AndAlso(leftBody!, rightBody!);
+        return Expression.Lambda(combined, param);
+    }
+
     /// <summary>
     /// The build pipeline of a <see cref="QueryCommand"/>: turns the configured expression tree into the
     /// prepared pieces (<c>from</c>, joins, columns, <c>where</c>, grouping, sorting, CTEs and set
@@ -134,6 +149,74 @@ public partial class QueryCommand
 
                 cmd.PreparedComponents = prepared;
 
+                // D362: populate the effective (separate) preparation state from any contribution
+                // descriptors. Raw command fields are never touched here.
+                cmd.EffectiveGroupingKeys = null;
+                cmd.EffectiveHavingMode = QueryPreparationHavingMode.Unchanged;
+                cmd.EffectiveHaving = null;
+                cmd.EffectiveSourcePredicate = null;
+                cmd.EffectiveRequireDistinct = false;
+
+                IQueryPreparationDescriptor? groupingOwner = null;
+                foreach (var descriptor in prepared)
+                {
+                    if (descriptor is not IQueryPreparationDescriptor contribution)
+                        continue;
+
+                    var prep = contribution.Preparation;
+
+                    // ExclusiveGrouping slot ownership: same slot replaces, distinct slots reject.
+                    if (descriptor.Contribution == QueryComponentContribution.ExclusiveGrouping)
+                    {
+                        if (groupingOwner is null)
+                        {
+                            groupingOwner = contribution;
+                        }
+                        else if (groupingOwner.Slot != contribution.Slot)
+                        {
+                            throw new BuildSqlCommandException(
+                                "Multiple distinct exclusive grouping components are not supported: " +
+                                $"'{groupingOwner.Slot.Name}' and '{contribution.Slot.Name}'.");
+                        }
+                    }
+
+                    // Additive source predicate: AND all contributions.
+                    if (prep.SourcePredicate is not null)
+                    {
+                        cmd.EffectiveSourcePredicate = cmd.EffectiveSourcePredicate is null
+                            ? prep.SourcePredicate
+                            : CombinePredicates(cmd.EffectiveSourcePredicate, prep.SourcePredicate);
+                    }
+
+                    // RequireDistinct: monotonic OR.
+                    if (prep.RequireDistinct)
+                        cmd.EffectiveRequireDistinct = true;
+                }
+
+                if (groupingOwner is not null)
+                {
+                    var prep = groupingOwner.Preparation;
+                    cmd.EffectiveGroupingKeys = prep.GroupingKeys;
+                    cmd.EffectiveHavingMode = prep.HavingMode;
+                    // Ownership rule: Replace carries only the ADDED condition, so the engine combines
+                    // the raw source Having with it exactly once (either side may be absent). Clear
+                    // carries the full replacement (used as-is, e.g. the constant projection lowers it
+                    // into the pre-group WHERE).
+                    if (prep.HavingMode == QueryPreparationHavingMode.Replace)
+                        cmd.EffectiveHaving = cmd.Having is null ? prep.Having
+                            : prep.Having is null ? cmd.Having
+                            : CombinePredicates(cmd.Having, prep.Having);
+                    else
+                        cmd.EffectiveHaving = prep.Having;
+                }
+
+                // ExclusiveGrouping and ExclusiveRowSource are mutually exclusive.
+                if (groupingOwner is not null && prepared.Any(d => d.Contribution == QueryComponentContribution.ExclusiveRowSource))
+                {
+                    throw new BuildSqlCommandException(
+                        "An exclusive grouping component cannot be combined with an exclusive row-source reshape.");
+                }
+
                 // #362: an exclusive reshape is the same ranked-derived-source shape the built-in
                 // lowering refuses to compose, so the engine (not the component) enforces the full
                 // rejection boundary. The check is repeated at render time, where the prepared select
@@ -143,30 +226,27 @@ public partial class QueryCommand
             else
             {
                 cmd.PreparedComponents = null;
+                cmd.EffectiveGroupingKeys = null;
+                cmd.EffectiveHavingMode = QueryPreparationHavingMode.Unchanged;
+                cmd.EffectiveHaving = null;
+                cmd.EffectiveSourcePredicate = null;
+                cmd.EffectiveRequireDistinct = false;
             }
 
             FromExpression? from = cmd._from ?? cmd._dataContext.GetFrom(srcType, cmd);
             PrepareFrom(from, dontCalculateHash, cancellationToken, cmd);
             from = AttachPrimarySourceLock(cmd, from);
             var joinPlanHash = PrepareJoin(cmd, dontCalculateHash, cancellationToken);
-            // #323 D1: a SelectGroup command infers its grouping keys from the raw projection before
-            // the columns are prepared. The analysis also rejects unsupported shapes and validates
-            // HAVING/ORDER BY against the inferred keys, so an invalid shape never reaches SQL building.
-            if (cmd.IsSelectGroup)
-            {
-                var projection = cmd._exp ?? throw new QueryPreparationException("SelectGroup requires a projection.");
-                var (selectGroupKeys, selectGroupOutputs, selectGroupMode) = SelectGroupExpressionAnalyzer.Analyze(
-                    projection, cmd._having, cmd._sorting, cancellationToken);
-                cmd.SelectGroupKeys = selectGroupKeys;
-                cmd.SelectGroupOutputs = selectGroupOutputs;
-                cmd.SelectGroupMode = selectGroupMode;
-            }
-
             var (selectList, columnsPlanHash) = PrepareColumns(cmd, dontCalculateHash, srcType, cancellationToken);
             // #148-B D5/A7: reject an unlifted non-nullable value scalar read through a reference
             // navigation, naming the path and result type instead of materializing a silent default.
             NavigationExpansion.ValidateProjectionNullability(cmd, selectList);
-            var wherePlanHash = PrepareWhere(cmd, InjectMainSourceFilters(cmd, srcType), dontCalculateHash, cancellationToken);
+            var baseCondition = InjectMainSourceFilters(cmd, srcType);
+            if (cmd.EffectiveSourcePredicate is not null && baseCondition is not null)
+                baseCondition = CombinePredicates(baseCondition, cmd.EffectiveSourcePredicate);
+            else if (cmd.EffectiveSourcePredicate is not null)
+                baseCondition = cmd.EffectiveSourcePredicate;
+            var wherePlanHash = PrepareWhere(cmd, baseCondition, dontCalculateHash, cancellationToken);
             PreparePreWhere(cmd, dontCalculateHash, cancellationToken);
             PrepareArrayJoin(cmd, cancellationToken);
 
@@ -3890,48 +3970,29 @@ public partial class QueryCommand
                 groupingList = columns;
                 groupingPlanHash = ApplyKeyColumnPlanHashes(cmd, columns, noHash, groupingPlanHash, cancellationToken);
             }
-            else if (cmd.IsSelectGroup && groupingList is null)
+            else if (cmd.EffectiveGroupingKeys is not null && groupingList is null)
             {
-                switch (cmd.SelectGroupMode)
+                // D362: generic contribution path (additive). EffectiveGroupingKeys non-null means an
+                // active grouping contribution; empty list = explicit global aggregation.
+                var keys = cmd.EffectiveGroupingKeys;
+                if (keys.Count > 0)
                 {
-                    case SelectGroupMode.Keyed:
-                        var keys = cmd.SelectGroupKeys
-                            ?? throw new QueryPreparationException("SelectGroup projection analysis is missing.");
-                        var columns = new SelectExpression[keys.Count];
-                        for (var idx = 0; idx < columns.Length; idx++)
+                    var columns = new SelectExpression[keys.Count];
+                    for (var idx = 0; idx < columns.Length; idx++)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        var key = keys[idx];
+                        columns[idx] = new SelectExpression(key.Type)
                         {
-                            cancellationToken.ThrowIfCancellationRequested();
-
-                            var key = keys[idx];
-                            columns[idx] = new SelectExpression(key.Type)
-                            {
-                                Index = idx,
-                                PropertyName = $"sg_key_{idx}",
-                                Expression = key,
-                            };
-                        }
-
-                        groupingList = columns;
-                        groupingPlanHash = ApplyKeyColumnPlanHashes(cmd, columns, noHash, groupingPlanHash, cancellationToken);
-                        break;
-
-                    case SelectGroupMode.GlobalAggregate:
-                        // No keys: the whole source is one group, so the statement carries no GROUP BY
-                        // list and a HAVING renders as a global filter over the aggregate projection
-                        // (DataContext/SqlBuilder.cs). There are no keys to validate the predicate
-                        // against, so the analyzer already refused every row-dependent HAVING shape;
-                        // only aggregate calls and row-independent expressions reach the renderer.
-                        break;
-
-                    case SelectGroupMode.ConstantProjection:
-                        // No keys and no aggregates: the projection references no row, the statement
-                        // renders `select distinct ...` and a validated row-independent HAVING is a
-                        // pre-group filter, rendered in the WHERE position (DataContext/SqlBuilder.cs).
-                        break;
-
-                    default:
-                        throw new QueryPreparationException("SelectGroup projection analysis is missing.");
+                            Index = idx,
+                            PropertyName = $"eg_key_{idx}",
+                            Expression = key,
+                        };
+                    }
+                    groupingList = columns;
+                    groupingPlanHash = ApplyKeyColumnPlanHashes(cmd, columns, noHash, groupingPlanHash, cancellationToken);
                 }
+                // Global aggregation (empty keys): no GROUP BY list; HAVING renders as global filter.
             }
 
             if (cmd._having is not null)
@@ -4073,6 +4134,10 @@ public partial class QueryCommand
         internal CteShape[]? Ctes;
         // Query components, described by IQueryComponentShape: null when the command carries none.
         internal ComponentShape[]? Components;
+        // Identity of every captured closure the raw expressions read, in first-appearance order. A
+        // recipe can be reused only for the very same closure instances: the captured members are then
+        // read live at execution, which rebinds a changed value into the same prepared statement.
+        internal object[]? Closures;
 
         /// <summary>Structural fingerprint used only to partition candidates into buckets.</summary>
         internal int Fingerprint;
@@ -4157,6 +4222,7 @@ public partial class QueryCommand
             if (!Equals(RowLock, other.RowLock) || !Equals(SourceLockClause, other.SourceLockClause)) return false;
             if (!Equals(LimitBy, other.LimitBy) || !Equals(DistinctOn, other.DistinctOn) || !Equals(ExtremeRow, other.ExtremeRow)) return false;
             if (!ComponentsMatch(Components, other.Components, comparerSource)) return false;
+            if (!ClosureIdentitiesEqual(Closures, other.Closures)) return false;
             if (!FilterScopeEqual(FilterScope, other.FilterScope)) return false;
 
             // The seven RawDescriptorDifferential settings.
@@ -4195,6 +4261,23 @@ public partial class QueryCommand
 
         private static bool NestedEqual(RawShape? a, RawShape? b, QueryCommand src)
             => a is null ? b is null : b is not null && a.Matches(b, src);
+
+        /// <summary>
+        /// Reference identity of the captured closures, in first-appearance order. A different instance
+        /// (even with equal members) must not share a raw recipe: its captured members are read live, so
+        /// only the same instance proves the prepared statement still describes it.
+        /// </summary>
+        private static bool ClosureIdentitiesEqual(object[]? a, object[]? b)
+        {
+            if (a is null || a.Length == 0) return b is null || b.Length == 0;
+            if (b is null || b.Length != a.Length) return false;
+            for (var i = 0; i < a.Length; i++)
+            {
+                if (!ReferenceEquals(a[i], b[i])) return false;
+            }
+
+            return true;
+        }
 
         private static bool CtesEqual(CteShape[]? a, CteShape[]? b, QueryCommand src)
         {
@@ -4319,6 +4402,13 @@ public partial class QueryCommand
     /// required identity cannot be obtained and proved before preparation — such a shape is
     /// <b>ineligible</b> and must take the ordinary path, never an optimistic hit.
     /// </summary>
+    /// <remarks>
+    /// A captured closure does not make a graph ineligible by itself: the captured values are bound as
+    /// parameters at execution, so the shape records the captured <b>closure identities</b> and a hit is
+    /// only possible for the very same instances, whose live members then rebind the fresh values. A
+    /// captured <see cref="QueryCommand"/> still makes the graph ineligible (it can change the rendered
+    /// statement without changing this shape).
+    /// </remarks>
     internal static RawShape? CaptureRawShape(QueryCommand cmd) => CaptureRawShape(cmd, 0);
 
     private static RawShape? CaptureRawShape(QueryCommand cmd, int depth)
@@ -4326,10 +4416,6 @@ public partial class QueryCommand
         // Deep/cyclic graphs and any already-mutated command are ineligible.
         if (depth > 8 || cmd._isPrepared) return null;
         if (cmd._customData is not null) return null;
-        // A captured (closure) value makes the shape ineligible. Scan the raw expressions before
-        // materializing the RawShape: the descriptor is large and the parameterized path (a captured
-        // loop variable in WHERE) is common, so this keeps it allocation-free.
-        if (HasCapturedValue(cmd)) return null;
         // A bare entity select has a trivial prepared plan, so the raw-descriptor probe costs more than
         // the preparation it can skip. Only the root probe is suppressed; a nested CTE/union body still
         // contributes its shape to the outer descriptor.
@@ -4350,16 +4436,12 @@ public partial class QueryCommand
             {
                 if (declared[i] is not IQueryComponentShape described) return null;
 
-                var selectors = new LambdaExpression[described.ShapeSelectorCount];
-                for (var j = 0; j < selectors.Length; j++)
-                    selectors[j] = described.GetShapeSelector(j);
-
                 components[i] = new RawShape.ComponentShape
                 {
                     Slot = declared[i].Slot,
                     Contribution = declared[i].Contribution,
                     State = described.ShapeState,
-                    Selectors = selectors,
+                    Selectors = described.ShapeSelectors,
                 };
             }
         }
@@ -4485,10 +4567,13 @@ public partial class QueryCommand
             Components = components,
         };
 
-        // Closure / literal-vs-parameter classification: a captured member access (a compiler
-        // closure or a captured command) can fold a per-call value into the prepared state, which a
-        // value-independent expression comparison would not distinguish. Such a shape is ineligible.
-        if (HasCapturedValue(shape)) return null;
+        // A captured closure keeps the graph eligible only when its identity travels in the shape: the
+        // captured values are bound as parameters at execution, so the same closure instance rebinds a
+        // changed value into the same recipe while a different instance must build its own shape. A
+        // captured QueryCommand can change the rendered statement without changing this shape, so it
+        // stays ineligible exactly as before.
+        if (!TryCollectClosureKey(shape, out var closures)) return null;
+        shape.Closures = closures;
 
         shape.Fingerprint = Fingerprint(shape, cmd);
         return shape;
@@ -4637,47 +4722,23 @@ public partial class QueryCommand
         => entityType is null || QueryFilterResolver.GetFilters(entityType, scope, dataContext).Count != 0;
 
     /// <summary>
-    /// Cheap pre-check for the raw-descriptor path: scans the command's raw expressions (the same set
-    /// <see cref="HasCapturedValue(RawShape)"/> inspects) before the <see cref="RawShape"/> is built.
-    /// A captured closure value makes the shape ineligible, so building the descriptor first would only
-    /// allocate it to throw it away.
+    /// Collects the identity of every captured closure the raw shape reads (a member access whose
+    /// receiver is a constant, i.e. a compiler closure or a captured instance) and rejects a captured
+    /// <see cref="QueryCommand"/>, which can change the rendered statement without changing this shape.
+    /// The identities are compared by reference on every raw-candidate match; the captured members are
+    /// read live at execution, so a value change inside the same closure rebinds into the same recipe.
     /// </summary>
-    private static bool HasCapturedValue(QueryCommand cmd)
+    // The closure scan runs for every eligible raw shape, including plain component-free queries. A
+    // thread-static reusable scanner keeps that path allocation-free: the scan object and its list are
+    // created once per thread and reset per capture, and a closure array is built only when a closure is
+    // actually found (null otherwise).
+    [ThreadStatic]
+    private static ClosureKeyScan? _tlsClosureScan;
+
+    private static bool TryCollectClosureKey(RawShape shape, out object[]? closures)
     {
-        var scan = new CapturedValueScan();
-        scan.Scan(cmd._exp);
-        scan.Scan(cmd._condition);
-        scan.Scan(cmd._groupExp);
-        scan.Scan(cmd._having);
-        scan.Scan(cmd._preWhere);
-        scan.Scan(cmd.PerParentPartition);
-        if (cmd._arrayJoins is { Length: > 0 } arrayJoins)
-        {
-            for (var i = 0; i < arrayJoins.Length; i++)
-                scan.Scan(arrayJoins[i]);
-        }
-
-        if (scan.Found) return true;
-
-        if (cmd._union is not null && HasCapturedValue(cmd._union)) return true;
-
-        if (cmd._ctes is { Count: > 0 } ctes)
-        {
-            for (var i = 0; i < ctes.Count; i++)
-            {
-                if (HasCapturedValue(ctes[i].Query)) return true;
-            }
-        }
-
-        return false;
-    }
-
-    /// <summary>
-    /// Scans the captured raw lambdas for a captured member access or a captured command constant.
-    /// </summary>
-    private static bool HasCapturedValue(RawShape shape)
-    {
-        var scan = new CapturedValueScan();
+        var scan = _tlsClosureScan ??= new ClosureKeyScan();
+        scan.Reset();
         scan.Scan(shape.Exp);
         scan.Scan(shape.Condition);
         scan.Scan(shape.Group);
@@ -4690,9 +4751,32 @@ public partial class QueryCommand
                 scan.Scan(arrayJoins[i]);
         }
 
-        // A component selector can capture a value the same way a command lambda can, and the prepared
-        // statement folds that value in. Such a shape is ineligible, exactly like a captured command
-        // expression.
+        if (shape.Sorting is { Length: > 0 } sorting)
+        {
+            for (var i = 0; i < sorting.Length; i++)
+                scan.Scan(sorting[i].SortExpression);
+        }
+
+        if (shape.Joins is { Length: > 0 } joins)
+        {
+            for (var i = 0; i < joins.Length; i++)
+                scan.Scan(joins[i].JoinCondition);
+        }
+
+        if (shape.Windows is { Count: > 0 } windows)
+        {
+            for (var i = 0; i < windows.Count; i++)
+            {
+                var window = windows[i];
+                for (var p = 0; p < window.PartitionBy.Count; p++)
+                    scan.Scan(window.PartitionBy[p]);
+                for (var o = 0; o < window.OrderBy.Count; o++)
+                    scan.Scan(window.OrderBy[o].Expression);
+            }
+        }
+
+        // A component selector carries the operator's own raw lambdas (e.g. a grouping condition), so it
+        // is part of the same identity.
         if (shape.Components is { Length: > 0 } components)
         {
             for (var i = 0; i < components.Length; i++)
@@ -4703,36 +4787,47 @@ public partial class QueryCommand
             }
         }
 
-        if (scan.Found) return true;
-
-        if (shape.Union is not null && HasCapturedValue(shape.Union)) return true;
-
-        if (shape.Ctes is { Length: > 0 } ctes)
-        {
-            for (var i = 0; i < ctes.Length; i++)
-            {
-                if (HasCapturedValue(ctes[i].Body)) return true;
-            }
-        }
-
-        return false;
+        closures = scan.Snapshot();
+        return !scan.HasCapturedCommand;
     }
 
-    private sealed class CapturedValueScan : ExpressionVisitor
+    /// <summary>
+    /// Records the receiver constant of every captured member access and flags a captured command.
+    /// Distinct receivers collapse by reference identity, in first-appearance order, so the raw shape
+    /// carries a stable list for the same closure instances.
+    /// </summary>
+    private sealed class ClosureKeyScan : ExpressionVisitor
     {
-        internal bool Found;
+        private readonly List<object> _closures = new();
+        internal bool HasCapturedCommand { get; private set; }
+
+        internal void Reset()
+        {
+            _closures.Clear();
+            HasCapturedCommand = false;
+        }
+
+        internal object[]? Snapshot() => _closures.Count == 0 ? null : _closures.ToArray();
 
         internal void Scan(Expression? expression)
         {
-            if (Found || expression is null) return;
+            if (HasCapturedCommand || expression is null) return;
             Visit(expression);
         }
 
         protected override Expression VisitMember(MemberExpression node)
         {
-            if (node.Expression is ConstantExpression)
+            // A member whose value is a command is a captured subquery: its own plan can change while
+            // this shape stays identical, so the graph stays ineligible.
+            if (typeof(QueryCommand).IsAssignableFrom(node.Type))
             {
-                Found = true;
+                HasCapturedCommand = true;
+                return node;
+            }
+
+            if (node.Expression is ConstantExpression receiver)
+            {
+                Add(receiver.Value);
                 return node;
             }
 
@@ -4743,11 +4838,22 @@ public partial class QueryCommand
         {
             if (node.Value is QueryCommand)
             {
-                Found = true;
+                HasCapturedCommand = true;
                 return node;
             }
 
             return base.VisitConstant(node);
+        }
+
+        private void Add(object? value)
+        {
+            if (value is null) return;
+            for (var i = 0; i < _closures.Count; i++)
+            {
+                if (ReferenceEquals(_closures[i], value)) return;
+            }
+
+            _closures.Add(value);
         }
     }
 
@@ -4834,6 +4940,14 @@ public partial class QueryCommand
                     for (var j = 0; j < selectors.Length; j++)
                         hash.Add(exp.GetHashCode(selectors[j]));
                 }
+            }
+
+            // Closure identity partitions the bucket, so a shape captured from one closure instance is
+            // never compared against (or published over) another instance's recipe.
+            if (shape.Closures is { Length: > 0 } closures)
+            {
+                for (var i = 0; i < closures.Length; i++)
+                    hash.Add(RuntimeHelpers.GetHashCode(closures[i]));
             }
 
             return hash.ToHashCode();

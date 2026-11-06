@@ -17,4 +17,5 @@
     <PackageReference Include="Testcontainers.ClickHouse" />
   </ItemGroup>
 
+  <ItemGroup><ProjectReference Include="../../src/nextorm.extensions/nextorm.extensions.csproj" /></ItemGroup>
 </Project>

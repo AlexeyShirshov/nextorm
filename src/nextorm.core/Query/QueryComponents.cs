@@ -14,6 +14,9 @@ public enum QueryComponentContribution
 
     /// <summary>An exclusive reshape of the row source.</summary>
     ExclusiveRowSource = 1,
+
+    /// <summary>An exclusive grouping slot: at most one owner per command; a second owner is rejected.</summary>
+    ExclusiveGrouping = 2,
 }
 
 /// <summary>
@@ -58,6 +61,12 @@ public interface IQueryComponentShape
 
     /// <summary>The number of selector expressions that participate in the structural identity.</summary>
     int ShapeSelectorCount { get; }
+
+    /// <summary>
+    /// The selector expressions that participate in the structural identity, as a cached array. Implementations
+    /// should cache this once per component instance to avoid per-capture allocation.
+    /// </summary>
+    LambdaExpression[] ShapeSelectors { get; }
 
     /// <summary>Returns the selector expression at <paramref name="index"/>; compared with the engine expression comparer.</summary>
     /// <param name="index">Zero-based selector index, below <see cref="ShapeSelectorCount"/>.</param>
@@ -157,4 +166,68 @@ internal static class QueryComponentCompatibility
             }
         }
     }
+}
+/// <summary>
+/// The three-state handling of the effective HAVING clause by a grouping contribution.
+/// </summary>
+public enum QueryPreparationHavingMode
+{
+    /// <summary>Leave the effective HAVING unchanged.</summary>
+    Unchanged = 0,
+
+    /// <summary>Clear the effective HAVING (used by a constant projection).</summary>
+    Clear = 1,
+
+    /// <summary>Replace the effective HAVING with the contribution's condition.</summary>
+    Replace = 2,
+}
+
+/// <summary>
+/// An immutable declarative contribution to query preparation. Carried by an
+/// <see cref="IQueryPreparationDescriptor"/>; the engine applies it to a separate effective
+/// preparation state before <c>PrepareColumns</c>/<c>PrepareGrouping</c> and never mutates the
+/// raw <see cref="QueryCommand"/> fields. An active contribution with an empty
+/// <see cref="GroupingKeys"/> vector denotes an explicit global aggregation.
+/// </summary>
+public sealed class QueryPreparationContribution
+{
+    /// <summary>Creates an immutable contribution.</summary>
+    public QueryPreparationContribution(
+        IReadOnlyList<LambdaExpression> groupingKeys,
+        QueryPreparationHavingMode havingMode,
+        LambdaExpression? having,
+        LambdaExpression? sourcePredicate,
+        bool requireDistinct)
+    {
+        GroupingKeys = groupingKeys ?? throw new ArgumentNullException(nameof(groupingKeys));
+        HavingMode = havingMode;
+        Having = having;
+        SourcePredicate = sourcePredicate;
+        RequireDistinct = requireDistinct;
+    }
+
+    /// <summary>Ordered scalar lambda keys of the grouping (empty = explicit global aggregation when active).</summary>
+    public IReadOnlyList<LambdaExpression> GroupingKeys { get; }
+
+    /// <summary>How the effective HAVING is handled.</summary>
+    public QueryPreparationHavingMode HavingMode { get; }
+
+    /// <summary>The replacement HAVING condition when <see cref="HavingMode"/> is <see cref="QueryPreparationHavingMode.Replace"/>.</summary>
+    public LambdaExpression? Having { get; }
+
+    /// <summary>An additive source predicate AND-ed into the effective source condition.</summary>
+    public LambdaExpression? SourcePredicate { get; }
+
+    /// <summary>Whether DISTINCT is required (monotonic OR on the effective state).</summary>
+    public bool RequireDistinct { get; }
+}
+
+/// <summary>
+/// Optional prepared descriptor carrying a <see cref="QueryPreparationContribution"/>. Components
+/// that do not implement this interface leave the raw preparation state untouched (legacy fallback).
+/// </summary>
+public interface IQueryPreparationDescriptor : IQueryComponentDescriptor
+{
+    /// <summary>The immutable declarative contribution to apply during preparation.</summary>
+    QueryPreparationContribution Preparation { get; }
 }

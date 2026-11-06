@@ -103,7 +103,7 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
 
     /// <summary>
     /// Operators that preserve the current query element type; used to walk back to the operator that
-    /// establishes it (<c>Select</c> or the query root) when resolving an element type from syntax.
+    /// establishes it (a projection or the query root) when resolving an element type from syntax.
     /// </summary>
     private static readonly HashSet<string> ElementPreservingOperators = new(StringComparer.Ordinal)
     {
@@ -430,9 +430,9 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
 
     /// <summary>
     /// Best-effort recovery of a query's element type from syntax, used only when the semantic type is
-    /// unavailable (error type). Walks back through element-preserving operators to the <c>Select</c> that
-    /// establishes the projection (its lambda body type), or to the query root's explicit type argument /
-    /// source element type. Returns <c>null</c> when the shape cannot be recovered.
+    /// unavailable (error type). Walks back through element-preserving operators to the projection that
+    /// establishes the element type (its lambda body type), or to the query root's explicit type argument
+    /// / source element type. Returns <c>null</c> when the shape cannot be recovered.
     /// </summary>
     private static ITypeSymbol? ResolveQueryElementType(ExpressionSyntax expression, SemanticModel semanticModel, CancellationToken ct)
     {
@@ -446,20 +446,6 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
             && memberAccess.Name is SimpleNameSyntax name)
         {
             var operation = name.Identifier.ValueText;
-
-            // Select and SelectGroup both establish the query element type from their lambda body; the
-            // latter is the key-inferring projection (same lambda shape, same projected type).
-            if (operation is "Select" or "SelectGroup")
-            {
-                var arguments = invocation.ArgumentList.Arguments;
-                if (arguments.Count > 0 && GetLambdaBody(arguments[arguments.Count - 1].Expression) is { } body
-                    && semanticModel.GetTypeInfo(body, ct).Type is { } projected)
-                {
-                    return projected;
-                }
-
-                return UnwrapElement(semanticModel.GetTypeInfo(invocation, ct).Type);
-            }
 
             if (ElementPreservingOperators.Contains(operation))
                 return ResolveQueryElementType(memberAccess.Expression, semanticModel, ct);
@@ -479,11 +465,59 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
                 return null;
             }
 
-            return UnwrapElement(semanticModel.GetTypeInfo(invocation, ct).Type);
+            // No operator-name knowledge: an operator that establishes a new query element type reports
+            // it through its resolved return type (`QueryCommand<T>`, `EntityBuilder<T>`, `Cte<T>`, …),
+            // whatever it is called. On the generator's input pass that return type is often unavailable,
+            // because the receiver is a builder type this same generator emits (error type), and an
+            // unresolved extension call surfaces as a bare type parameter (`QueryCommand<TResult>`); in
+            // both cases the projection lambda in the arguments carries the element type.
+            var elementType = UnwrapElement(semanticModel.GetTypeInfo(invocation, ct).Type);
+
+            if (elementType is { TypeKind: not TypeKind.Error and not TypeKind.TypeParameter })
+                return elementType;
+
+            // A join's lambdas are sources and conditions, never projections: it extends the slot list
+            // instead of establishing a new element type, so it must not be read through the projection rule.
+            if (JoinOperators.Contains(operation))
+                return elementType;
+
+            // A bare type parameter stays when no projection lambda exists: it is the element type of a
+            // legitimately generic query helper rather than an unresolved operator.
+            return ResolveProjectionElementType(invocation, semanticModel, ct) ?? elementType;
         }
 
         return UnwrapElement(semanticModel.GetTypeInfo(expression, ct).Type);
     }
+
+    /// <summary>
+    /// Recovers the projection type of an operator from its own arguments, without knowing the operator's
+    /// name: the first single-parameter lambda whose body is a value. A predicate lambda returns
+    /// <c>bool</c>, and a join predicate takes two parameters, so neither is mistaken for a projection.
+    /// Used only when the invocation's resolved return type is unavailable or unbound.
+    /// </summary>
+    private static ITypeSymbol? ResolveProjectionElementType(InvocationExpressionSyntax invocation, SemanticModel semanticModel, CancellationToken ct)
+    {
+        foreach (var argument in invocation.ArgumentList.Arguments)
+        {
+            if (LambdaParameterCount(argument.Expression) != 1) continue;
+            if (GetLambdaBody(argument.Expression) is not { } body) continue;
+
+            if (semanticModel.GetTypeInfo(body, ct).Type is { TypeKind: not TypeKind.Error } projected
+                && projected.SpecialType is not SpecialType.System_Boolean and not SpecialType.System_Void)
+            {
+                return projected;
+            }
+        }
+
+        return null;
+    }
+
+    private static int LambdaParameterCount(ExpressionSyntax expression) => expression switch
+    {
+        SimpleLambdaExpressionSyntax => 1,
+        ParenthesizedLambdaExpressionSyntax parenthesized => parenthesized.ParameterList.Parameters.Count,
+        _ => 0
+    };
 
     /// <summary>Resolves a local variable initializer or a parameter's declared type to its element type.</summary>
     private static ITypeSymbol? ResolveIdentifierElementType(IdentifierNameSyntax identifier, SemanticModel semanticModel, CancellationToken ct)

@@ -1,5 +1,6 @@
 using FluentAssertions;
 using NextORM.Core;
+using NextORM.Extensions;
 using NextORM.Generated.nextorm_alias_tests;
 
 namespace NextORM.AliasTests;

@@ -1,6 +1,7 @@
 ﻿using System.Linq.Expressions;
 using System.Text.Json;
 using NextORM.Core;
+using NextORM.Extensions;
 using NextORM.Generated.nextorm_examples_mssql_adventureworks;
 using NextORM.SqlServer;
 

@@ -1,14 +1,42 @@
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using NextORM.Core;
 
-namespace NextORM.Core;
+[assembly: InternalsVisibleTo("nextorm.extensions.tests")]
+
+namespace NextORM.Extensions;
+
+/// <summary>
+/// Test-only counters for the packaged grouping operators. The type is <c>internal</c> and visible to the
+/// test assembly alone (<see cref="InternalsVisibleToAttribute"/>); no product code reads it and no part
+/// of it is public.
+/// </summary>
+/// <remarks>
+/// The counter is thread-static so the assertion cannot be polluted by other tests running in parallel:
+/// preparation is synchronous, so one test's cold prepare and warm raw hit always land on its own thread.
+/// The increment is a single field write on the cold preparation path, never on execution or a warm hit.
+/// </remarks>
+internal static class SelectGroupDiagnostics
+{
+    [ThreadStatic]
+    private static int _analyzeCalls;
+
+    /// <summary>The number of <see cref="SelectGroupExpressionAnalyzer.Analyze"/> runs on this thread.</summary>
+    internal static int AnalyzeCalls => _analyzeCalls;
+
+    /// <summary>Records one analyzer run: the inference visitor is about to run.</summary>
+    internal static void RecordAnalyzeCall() => _analyzeCalls++;
+
+    /// <summary>Clears this thread's counter so a test starts from a known state.</summary>
+    internal static void Reset() => _analyzeCalls = 0;
+}
 
 /// <summary>
 /// The execution shape a <c>SelectGroup</c> projection analysis resolves: keys inferred from the
 /// projection, a group-less global aggregate, or a projection that references no row at all.
 /// </summary>
-internal enum SelectGroupMode
+public enum SelectGroupMode
 {
     /// <summary>The analysis has not run (the command is not a <c>SelectGroup</c> command).</summary>
     None = 0,
@@ -34,42 +62,6 @@ internal enum SelectGroupMode
 /// </summary>
 internal static class SelectGroupExpressionAnalyzer
 {
-    // The built-in aggregate surface of CommonFunctions (and its provider-derived surfaces). The
-    // *_distinct spellings are added below; names that WindowSql maps to a window function are never
-    // treated as aggregates, because the same CLR name is also a window member (sum_over, ...).
-    private static readonly string[] BuiltinAggregateNames =
-    [
-        "count",
-        "count_big",
-        "min",
-        "max",
-        "avg",
-        "sum",
-        "stdev",
-        "stdevp",
-        "var",
-        "varp",
-        "any_agg",
-        "string_agg",
-        "corr",
-        "covar_pop",
-        "covar_samp",
-    ];
-
-    private static readonly HashSet<string> AggregateNameSet = BuildAggregateNameSet();
-
-    private static HashSet<string> BuildAggregateNameSet()
-    {
-        var names = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var name in BuiltinAggregateNames)
-        {
-            names.Add(name);
-            names.Add(name + "_distinct");
-        }
-
-        return names;
-    }
-
     /// <summary>
     /// Analyzes a <c>SelectGroup</c> projection and returns the inferred keys in first-appearance order,
     /// the ordered raw scalar outputs the keys and mode were derived from, and the execution mode.
@@ -90,6 +82,8 @@ internal static class SelectGroupExpressionAnalyzer
         Sorting[]? sorting,
         CancellationToken cancellationToken)
     {
+        SelectGroupDiagnostics.RecordAnalyzeCall();
+
         // 1. Unconditional rejection pass. It runs first so an unsupported shape is reported as such
         // instead of being (mis)classified as a key; it traverses through aggregate calls and their
         // FILTER lambda, and never descends into a nested query scope (it throws on the call node).
@@ -107,7 +101,7 @@ internal static class SelectGroupExpressionAnalyzer
         }
 
         // 2. Scalar outputs of the projection, derived exactly like PrepareColumns derives its columns.
-        var body = TypeFacts.UnwrapConvert(projection.Body);
+        var body = AggregateClassification.UnwrapConvert(projection.Body);
         if (ReferenceEquals(body, projection.Parameters[0]))
         {
             throw new QueryPreparationException(
@@ -116,7 +110,7 @@ internal static class SelectGroupExpressionAnalyzer
 
         IReadOnlyList<Expression> outputs = projection.Body switch
         {
-            NewExpression { Members: not null } ctor when !TypeFacts.IsSingleColumnProjection(ctor.Type) => ctor.Arguments,
+            NewExpression { Members: not null } ctor when !AggregateClassification.IsSingleColumnProjection(ctor.Type) => ctor.Arguments,
             MemberInitExpression init => GetMemberInitExpressions(init),
             _ => [projection.Body],
         };
@@ -165,7 +159,7 @@ internal static class SelectGroupExpressionAnalyzer
     /// Classifies an expression as an aggregate call: an effective <see cref="SqlFunctionAttribute"/>
     /// whose <see cref="SqlFunctionAttribute.IsAggregate"/> is set, a provider-advanced aggregate
     /// family the renderer translates
-    /// (<see cref="AdvancedAggregateTranslator.IsAdvancedAggregateMethod"/>) or a built-in
+    /// (<see cref="AggregateClassification.IsAdvancedAggregateMethod"/>) or a built-in
     /// <see cref="CommonFunctions"/> aggregate. A window member is excluded by the same name map the
     /// renderer's window guard uses, and only after the attribute and the provider families: an
     /// explicit annotation always wins, and a provider aggregate that shares a window member's name
@@ -174,38 +168,8 @@ internal static class SelectGroupExpressionAnalyzer
     /// </summary>
     /// <param name="expression">The expression to classify.</param>
     /// <returns><see langword="true"/> when the expression is an aggregate call.</returns>
-    internal static bool IsAggregateCall(Expression expression)
-    {
-        if (expression is not MethodCallExpression call)
-            return false;
-
-        // (1) An explicit annotation wins over every name-based rule. A method attribute replaces the
-        // declaring-type attribute entirely (ScalarFunctionTranslator resolves exactly one of them),
-        // so an unset IsAggregate on the method never inherits the class value.
-        if (ScalarFunctionTranslator.ResolveSqlFunctionAttribute(call.Method)?.IsAggregate == true)
-            return true;
-
-        var declaringType = call.Method.DeclaringType;
-        if (declaringType is null || !declaringType.IsAssignableTo(typeof(CommonFunctions)))
-            return false;
-
-        // (2) The provider-advanced families the engine translates (PostgreSQL boolean/bitwise/
-        // regression/range/ordered-set aggregates, the ClickHouse catalogue and quantile/topK/array/
-        // sequence aggregates). Checked before the window names because a provider surface member can
-        // carry the same name as a window member while being the aggregate form.
-        if (AdvancedAggregateTranslator.IsAdvancedAggregateMethod(call))
-            return true;
-
-        // (3) A name WindowSql maps to a window function is a window member, not an aggregate: the
-        // renderer refuses the bare call as an incomplete window (sum_over, exponential_time_decayed_sum).
-        // Where such a name is also an aggregate family, the family check above already claimed it.
-        var name = call.Method.Name;
-        if (WindowSql.MapWindowFunctionName(name) is not null)
-            return false;
-
-        // (4) The built-in aggregate surface, including the *_distinct spellings.
-        return AggregateNameSet.Contains(name);
-    }
+    public static bool IsAggregateCall(Expression expression)
+        => AggregateClassification.IsAggregate(expression);
 
     private static IReadOnlyList<Expression> GetMemberInitExpressions(MemberInitExpression init)
     {
@@ -260,7 +224,7 @@ internal static class SelectGroupExpressionAnalyzer
 
     private static void AddKey(Expression key, List<Expression> keys, IEqualityComparer<Expression> comparer)
     {
-        if (!TypeFacts.IsSingleColumnProjection(key.Type))
+        if (!AggregateClassification.IsSingleColumnProjection(key.Type))
         {
             throw new QueryPreparationException(
                 $"SelectGroup cannot group by the non-scalar expression '{key}'.");

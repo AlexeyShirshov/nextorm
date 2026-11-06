@@ -197,7 +197,8 @@ sort, SQLite last), which is why the sort example excludes the `NULL` group.
 
 ## Grouping inferred from the projection: SelectGroup
 
-`SelectGroup` takes the same projection lambda as `Select`, but instead of requiring an explicit
+`SelectGroup` is shipped in the `NextORM.Extensions` package (`using NextORM.Extensions;`). It takes
+the same projection lambda as `Select`, but instead of requiring an explicit
 `GroupBy` it infers the grouping keys from that projection. Every row-dependent expression that
 contains no aggregate becomes a key; the aggregate calls fold each group. The projection keeps its
 exact shape - there is no client-side grouping, no dynamic type and no reflection-emit merging of a
@@ -267,6 +268,31 @@ The following combinations throw `QueryPreparationException`:
 The in-memory provider executes the inferred grouping within its existing aggregate surface: the
 supported aggregates behave as they do for an explicit `GroupBy`, while provider-surface scalar
 functions and custom functions are rejected explicitly instead of being evaluated in process.
+
+### Breaking change
+
+`SelectGroup` moved out of `nextorm.core` into `nextorm.extensions`. The call site is unchanged for
+inferred calls (`.SelectGroup(p => ...)`) - add `using NextORM.Extensions;`. The explicit single-argument
+form `.SelectGroup<TResult>(...)` is no longer supported: specify both generic arguments
+(`.SelectGroup<TEntity, TResult>(...)`) or omit them. No `*Old`/`Ex` compatibility shim is provided.
+
+### SelectGroupHaving
+
+`SelectGroupHaving(projection, condition)` uses the same key inference as `SelectGroup` and ANDs
+`condition` into the effective `HAVING`. `condition` is typed on the source entity (`TEntity`), never
+on the projection result. Keys are inferred **only** from `projection`; `condition` never adds a key.
+An existing source `Having` is AND-ed with `condition` before validation. An uncovered row expression in
+`projection` or in the effective `HAVING` fails with `QueryPreparationException` before the database is
+reached. The three outcomes (keyed grouping, global aggregation, constant projection) are the same as
+for `SelectGroup`.
+
+Both operators throw `NotSupportedException` (message contains `in-memory`) when executed against an
+`InMemoryDataContext`; in-memory support was explicitly dropped and is not a regression.
+
+The packaged operators are themselves ordinary query components built on the public
+[`IQueryComponent`](xref:NextORM.Core.IQueryComponent) contract: a third-party package can add its own
+structural operator the same way, without friend access, a registry or raw SQL. See
+[Extending query construction with query components](../advanced/extensibility.md#extending-query-construction-with-query-components).
 
 ## ROLLUP and CUBE
 

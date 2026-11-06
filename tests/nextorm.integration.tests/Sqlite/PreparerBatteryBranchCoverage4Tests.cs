@@ -477,24 +477,38 @@ public sealed class PreparerBatteryBranchCoverage4Tests : ProviderTestSuite
     {
         ResetPlanCache();
 
-        QueryCommand<int> Cross(int maxId) => Context.From<Pb4Main>()
+        // Policy (P5a): a cross join over plain table sources is capturable; the old null shape came
+        // from the captured maxId (a closure made every shape ineligible), not from the join kind. The
+        // raw key is now the closure identity and the live member rebinds on reuse.
+        var maxId = 2;
+        QueryCommand<int> Cross() => Context.From<Pb4Main>()
             .CrossJoin(Context.From<Pb4Line>())
             .Where(p => p.Item1.Id <= maxId)
             .OrderBy(p => p.Item1.Id)
-            .OrderBy(p => p.Item2.Id)
             .Select(p => p.Item1.Id);
 
-        var two = Cross(2);
-        var twoAgain = Cross(2);
-        var three = Cross(3);
+        var two = Cross();
+        var twoShape = Shape(two);
+        twoShape.Should().NotBeNull("a cross join over plain table sources is a capturable raw shape");
 
-        // Recorded (never fabricated): a cross-join graph is not capture-eligible, so only the live part
-        // of this fact drives the preparer (same disposition as the root derived/raw-SQL sources).
-        Shape(two).Should().BeNull("a cross-join graph is not a capturable raw shape");
+        var twoPrepared = Prepare(two);
+        Rows(twoPrepared).Should().HaveCount(8, "two main rows times four line rows");
 
-        Run(two).Should().HaveCount(8, "two main rows times four line rows");
-        Run(three).Should().HaveCount(12, "three main rows times four line rows");
-        Run(twoAgain).Should().HaveCount(8, "the identical cross join is a live query, not a rejected one");
+        maxId = 3;
+        var three = Cross();
+        Shape(three)!.Matches(twoShape!, three)
+            .Should().BeTrue("the same closure instance is the same raw key even when its value changed");
+
+        var threePrepared = Prepare(three);
+        threePrepared.Should().BeSameAs(twoPrepared, "the raw hit serves the same prepared plan");
+        Rows(threePrepared).Should().HaveCount(12, "three main rows times four line rows, rebound from the closure");
+
+        // A fresh closure instance is a distinct key and still reads the correct rows.
+        static QueryCommand<int> CrossFresh(EntityBuilder<Pb4Main> main, EntityBuilder<Pb4Line> line, int max)
+            => main.CrossJoin(line).Where(p => p.Item1.Id <= max).OrderBy(p => p.Item1.Id).Select(p => p.Item1.Id);
+
+        Rows(Prepare(CrossFresh(Context.From<Pb4Main>(), Context.From<Pb4Line>(), 2)))
+            .Should().HaveCount(8, "a distinct closure instance still produces the right live rows");
     }
 
     // ---------------------------------------------------------------------------------------------

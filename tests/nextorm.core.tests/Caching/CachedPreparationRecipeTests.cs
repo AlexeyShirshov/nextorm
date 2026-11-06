@@ -638,18 +638,51 @@ public sealed class CachedPreparationRecipeTests
         var first = PrepareCommand(ctx, ctx.From<SimpleEntity>().Where(x => x.Id > threshold).Select(x => x.Id));
         first.DbCommand.Parameters[0].Value.Should().Be(10);
 
-        // A closure-bearing shape is ineligible: the captured value can never be served from a
-        // value-independent descriptor, so it keeps the ordinary route and binds the fresh value.
-        QueryPlanner.RecipePublishes.Should().Be(0);
+        // P5a policy: a closure-bearing graph is a provable raw identity — the shape carries the closure
+        // instances, so a hit is possible only for those very instances and the captured members are read
+        // live. This test still protects FRESHNESS: the reused statement must carry the new value.
+        QueryPlanner.RecipePublishes.Should().Be(1);
         QueryPlanner.RecipeReuses.Should().Be(0);
         QueryCommand.CaptureRawShape(ctx.From<SimpleEntity>().Where(x => x.Id > threshold).Select(x => x.Id))
-            .Should().BeNull("a captured member access is not a provable raw identity");
+            .Should().NotBeNull("the closure identity is a provable raw identity");
 
         threshold = 99;
         var second = PrepareCommand(ctx, ctx.From<SimpleEntity>().Where(x => x.Id > threshold).Select(x => x.Id));
-        second.DbCommand.Parameters[0].Value.Should().Be(99);
+        QueryPlanner.RecipeReuses.Should().Be(1, "the same closure instance reuses the published recipe");
+        second.Should().BeSameAs(first, "the raw hit serves the published prepared command");
+        second.DbCommand.Parameters[0].Value.Should().Be(
+            99, "the hit must rebind the fresh captured value, never serve the stale one");
+    }
+
+    /// <summary>
+    /// Safety boundary of the P5a policy: a plan is published with a captured closure only when every
+    /// refreshed parameter is a captured member (<c>Parameter.CapturedKey</c>), because only those can be
+    /// rebound by reading the same closure instance on a hit. A client-evaluated method call is folded
+    /// into one parameter with no captured key and is re-evaluated on every render, so the plan must stay
+    /// out of the raw store even though the shape carries the closure identity of its argument.
+    /// </summary>
+    [Fact]
+    public void Recipe_RefreshParameterWithoutCapturedKey_IsNotPublished()
+    {
+        ResetRecipeCache();
+        using var ctx = CreateSqlServerContext();
+
+        var offset = 5;
+        var first = PrepareCommand(ctx, ctx.From<SimpleEntity>().Where(x => x.Id > ThresholdPlus(offset)).Select(x => x.Id));
+        first.DbCommand.Parameters[0].Value.Should().Be(6);
+        QueryCommand.CaptureRawShape(ctx.From<SimpleEntity>().Where(x => x.Id > ThresholdPlus(offset)).Select(x => x.Id))
+            .Should().NotBeNull("the closure identity alone is a provable raw identity");
+        QueryPlanner.RecipePublishes.Should().Be(
+            0, "a refresh parameter with no captured key cannot be rebound by identity");
+
+        offset = 50;
+        var second = PrepareCommand(ctx, ctx.From<SimpleEntity>().Where(x => x.Id > ThresholdPlus(offset)).Select(x => x.Id));
+        second.DbCommand.Parameters[0].Value.Should().Be(51);
         QueryPlanner.RecipeReuses.Should().Be(0);
     }
+
+    /// <summary>A client-evaluated call: folded into one parameter with no captured key.</summary>
+    private static int ThresholdPlus(int offset) => offset + 1;
 
     // --- 4. lifetime: Clear and thread separation -----------------------------------------------------
 

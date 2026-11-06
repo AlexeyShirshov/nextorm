@@ -227,6 +227,24 @@ public sealed class ExtremeRowComponent<TEntity> : IQueryComponent, IQueryCompon
     /// <summary>The selector count: the value selector, plus the group key when one is present.</summary>
     public int ShapeSelectorCount => _groupBy is null ? 1 : 2;
 
+    /// <summary>Cached shape selectors.</summary>
+    private LambdaExpression[]? _shapeSelectors;
+    /// <summary>Cached shape selectors.</summary>
+    public LambdaExpression[] ShapeSelectors
+    {
+        get
+        {
+            if (_shapeSelectors is null)
+            {
+                var arr = new LambdaExpression[ShapeSelectorCount];
+                for (var i = 0; i < arr.Length; i++)
+                    arr[i] = GetShapeSelector(i);
+                _shapeSelectors = arr;
+            }
+            return _shapeSelectors;
+        }
+    }
+
     /// <summary>Returns the value selector (index 0) or the group key (index 1).</summary>
     /// <param name="index">Zero-based selector index.</param>
     /// <returns>The selector expression.</returns>

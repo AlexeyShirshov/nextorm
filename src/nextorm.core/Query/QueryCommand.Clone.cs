@@ -91,15 +91,7 @@ public partial class QueryCommand
         dst.GroupingType = GroupingType;
         dst.GroupingSets = GroupingSets;
         dst.GroupByWithTotals = GroupByWithTotals;
-        dst.IsSelectGroup = IsSelectGroup;
         // The inferred SelectGroup state is derived at preparation, but `_isPrepared` travels with the
-        // clone, so the planner never re-derives it (`if (!IsPrepared) PrepareCommand(...)`). The mode
-        // is read by the renderer (DISTINCT for a constant projection, the global HAVING arm), the
-        // grouping list carries the inferred keys, and the raw keys/outputs are what a reset would
-        // re-derive from — all of them must therefore travel like the grouping list itself.
-        dst.SelectGroupMode = SelectGroupMode;
-        dst.SelectGroupKeys = SelectGroupKeys;
-        dst.SelectGroupOutputs = SelectGroupOutputs;
         dst.LimitBy = LimitBy;
         dst._limitByColumns = _limitByColumns;
         dst.DistinctOn = DistinctOn;
@@ -109,6 +101,15 @@ public partial class QueryCommand
         // in place (the preparer and the render path only read them, every write assigns a new list),
         // so the copy shares those instances instead of paying two list copies on every clone.
         dst._componentState = _componentState?.Clone();
+        // The effective state the component contributions produced during preparation. The clone
+        // constructor already copies it; a staged raw apply (ApplyPreparationFrom) targets a fresh
+        // command, so it must arrive through here or the hit cannot re-extract captured parameters from
+        // the component's replacement HAVING/grouping.
+        dst.EffectiveGroupingKeys = EffectiveGroupingKeys;
+        dst.EffectiveHavingMode = EffectiveHavingMode;
+        dst.EffectiveHaving = EffectiveHaving;
+        dst.EffectiveSourcePredicate = EffectiveSourcePredicate;
+        dst.EffectiveRequireDistinct = EffectiveRequireDistinct;
         dst._extremeRowColumns = _extremeRowColumns;
         dst._extremeRowGroupByColumns = _extremeRowGroupByColumns;
         dst.PerParentPaging = PerParentPaging;

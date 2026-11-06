@@ -132,7 +132,7 @@ scalar. It defaults to `false`:
 public static decimal MySum(decimal value) => throw new NotSupportedException();
 ```
 
-`IsAggregate = true` makes the call an opaque aggregate boundary for `SelectGroup`: its arguments,
+`IsAggregate = true` makes the call an opaque aggregate boundary for `SelectGroup` (in `NextORM.Extensions`): its arguments,
 its `DISTINCT` input and its `FILTER` predicate never become grouping keys, and a projection without
 any row-dependent member becomes a global aggregate. A scalar function - no attribute, or
 `IsAggregate = false` - may instead be inferred as a whole grouping key.

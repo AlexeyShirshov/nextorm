@@ -289,7 +289,6 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         _sorting = definition.Sorting;
         _groupExp = definition.Group;
         _having = definition.Having;
-        IsSelectGroup = definition.IsSelectGroup;
         Logger = definition.Logger;
         IsDistinct = definition.IsDistinct;
         GroupByWithTotals = definition.GroupByWithTotals;
@@ -341,9 +340,15 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         _sorting = source._sorting;
         _groupExp = forCache ? null : source._groupExp;
         _having = source._having;
-        IsSelectGroup = source.IsSelectGroup;
         Logger = source.Logger;
         IsDistinct = source.IsDistinct;
+        // Effective preparation state travels with both clones (it is preparation-derived identity,
+        // not raw source state), so a cache clone keeps the packaged component's effective shape.
+        EffectiveGroupingKeys = source.EffectiveGroupingKeys;
+        EffectiveHavingMode = source.EffectiveHavingMode;
+        EffectiveHaving = source.EffectiveHaving;
+        EffectiveSourcePredicate = source.EffectiveSourcePredicate;
+        EffectiveRequireDistinct = source.EffectiveRequireDistinct;
         GroupByWithTotals = source.GroupByWithTotals;
         LimitBy = source.LimitBy;
         DistinctOn = source.DistinctOn;
@@ -433,7 +438,6 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
             Sorting = _sorting,
             Group = group,
             Having = _having,
-            IsSelectGroup = IsSelectGroup,
             Logger = Logger,
             IsDistinct = IsDistinct,
             GroupByWithTotals = GroupByWithTotals,
@@ -525,22 +529,25 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     public SelectExpression[]? SelectList => _selectList;
     /// <summary>The prepared <c>GROUP BY</c> columns, or <c>null</c> when the query has no grouping.</summary>
     public SelectExpression[]? GroupingList => _groupingList;
+
     /// <summary>
-    /// The grouping keys inferred from a <c>SelectGroup</c> projection during preparation, or
-    /// <c>null</c> before preparation (and for every command that is not a <c>SelectGroup</c> command).
+    /// Effective grouping keys derived from <see cref="IQueryPreparationDescriptor"/> contributions,
+    /// separate from the raw <c>_group</c> field. <c>null</c> when no grouping contribution is present.
+    /// An empty (non-null) list denotes an explicit global aggregation.
     /// </summary>
-    internal IReadOnlyList<Expression>? SelectGroupKeys { get; set; }
-    /// <summary>
-    /// The ordered raw scalar-output expressions of the <c>SelectGroup</c> projection, as derived during
-    /// preparation (the expressions the grouping keys and the mode were inferred from), or <c>null</c>
-    /// before preparation (and for every command that is not a <c>SelectGroup</c> command).
-    /// </summary>
-    internal IReadOnlyList<Expression>? SelectGroupOutputs { get; set; }
-    /// <summary>
-    /// The execution mode the <c>SelectGroup</c> projection analysis resolved during preparation
-    /// (<see cref="NextORM.Core.SelectGroupMode.None"/> for a command that is not a <c>SelectGroup</c>).
-    /// </summary>
-    internal SelectGroupMode SelectGroupMode { get; set; }
+    internal IReadOnlyList<LambdaExpression>? EffectiveGroupingKeys { get; set; }
+
+    /// <summary>How the effective HAVING is handled by the grouping contribution.</summary>
+    internal QueryPreparationHavingMode EffectiveHavingMode { get; set; } = QueryPreparationHavingMode.Unchanged;
+
+    /// <summary>The replacement HAVING when <see cref="EffectiveHavingMode"/> is <see cref="QueryPreparationHavingMode.Replace"/>.</summary>
+    internal LambdaExpression? EffectiveHaving { get; set; }
+
+    /// <summary>An additive source predicate AND-ed into the effective source condition.</summary>
+    internal LambdaExpression? EffectiveSourcePredicate { get; set; }
+
+    /// <summary>Whether DISTINCT is required (monotonic OR) by any contribution.</summary>
+    internal bool EffectiveRequireDistinct { get; set; }
     /// <summary>The entity type the command reads from, or <c>null</c> for a command without a source type.</summary>
     public Type? EntityType => _srcType;
     /// <summary>Whether the command has been prepared and its cached plan hashes are current.</summary>
@@ -643,7 +650,6 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// from the projection's scalar outputs instead of a <see cref="GroupBy"/> lambda. Part of the plan
     /// key, so a <c>SelectGroup</c> plan never shares an entry with an equivalent explicit form.
     /// </summary>
-    internal bool IsSelectGroup { get; set; }
     /// <summary>
     /// Whether the grouping carries the <c>WITH TOTALS</c> modifier (ClickHouse). Only meaningful when
     /// the command has a grouping list; a dialect that does not support it rejects the command when its
@@ -1278,9 +1284,11 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         _isPrepared = false;
         _selectList = null;
         _groupingList = null;
-        SelectGroupKeys = null;
-        SelectGroupOutputs = null;
-        SelectGroupMode = NextORM.Core.SelectGroupMode.None;
+        EffectiveGroupingKeys = null;
+        EffectiveHavingMode = QueryPreparationHavingMode.Unchanged;
+        EffectiveHaving = null;
+        EffectiveSourcePredicate = null;
+        EffectiveRequireDistinct = false;
         _limitByColumns = null;
         _distinctOnColumns = null;
         _extremeRowColumns = null;

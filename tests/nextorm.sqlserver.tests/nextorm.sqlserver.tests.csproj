@@ -35,4 +35,7 @@
   <ItemGroup>
     <Compile Include="..\nextorm.extensions.provider.shared\ExtremeRowExSqlGenerationTestsBase.cs" Link="QueryComponents\ExtremeRowExSqlGenerationTestsBase.cs" />
   </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\nextorm.extensions.provider.shared\SelectGroupSqlGenerationTestsBase.cs" Link="QueryComponents\SelectGroupSqlGenerationTestsBase.cs" />
+  </ItemGroup>
 </Project>
