@@ -22,11 +22,24 @@ public sealed class AotNativeRunTests
     [Fact]
     public async Task PublishedNativeRunner_UsesParentSqliteDatabase_AndReportsEveryScenario()
     {
-        SqliteTestProvider.Instance.EnsureSeeded();
-        var databasePath = SqliteTestProvider.DatabasePath;
         var repositoryRoot = FindRepositoryRoot();
         var binaryPath = Path.Combine(repositoryRoot, "tests", "nextorm.aot.runner", "bin", "linux", "Release", "net10.0", "linux-x64", "publish", "nextorm.aot.runner");
-        File.Exists(binaryPath).Should().BeTrue($"the published native binary must exist at {binaryPath}");
+        // The NativeAOT runner is a published evidence artifact, not part of the ordinary build:
+        // `dotnet build` never produces it and CI does not publish it. Skip unless the binary is
+        // there, and fail loudly when a run explicitly asks for this harness
+        // (NEXTORM_AOT_EVIDENCE=1), so the opt-in path can never degrade into a silent skip.
+        const string publishCommand = "dotnet publish tests/nextorm.aot.runner -c Release -r linux-x64";
+        if (!File.Exists(binaryPath))
+        {
+            if (Environment.GetEnvironmentVariable("NEXTORM_AOT_EVIDENCE") == "1")
+                throw new InvalidOperationException(
+                    $"NEXTORM_AOT_EVIDENCE=1 requires the published native binary at {binaryPath}; publish it with `{publishCommand}`.");
+
+            Assert.Skip($"the published NativeAOT runner is missing at {binaryPath}; publish it with `{publishCommand}` (or set NEXTORM_AOT_EVIDENCE=1 to require it).");
+        }
+
+        SqliteTestProvider.Instance.EnsureSeeded();
+        var databasePath = SqliteTestProvider.DatabasePath;
         if (!OperatingSystem.IsWindows())
         {
             (File.GetUnixFileMode(binaryPath) & (UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute))
