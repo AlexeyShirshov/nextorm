@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Reflection;
+using System.Collections.Generic;
 
 namespace NextORM.Core;
 /// <summary>
@@ -109,14 +110,66 @@ public static class MemberInfoExtensions
 
     /// <summary>
     /// Whether two <see cref="PropertyInfo"/> instances denote the same declared property. Reflection
-    /// creates distinct instances whose equality includes <see cref="MemberInfo.ReflectedType"/>: a
-    /// property inherited by a derived entity is reflected as the base declaration, while metadata built
-    /// for the derived entity holds the same token reflected against the derived type. Comparing the
-    /// module and metadata token treats both as the same mapping.
+    /// can return distinct instances for the same inherited declaration; identity is therefore based
+    /// on the declaring type and property signature, not the reflection object or reflected type.
     /// </summary>
     internal static bool SameProperty(PropertyInfo left, PropertyInfo right)
         => ReferenceEquals(left, right)
-            || (left.Module == right.Module && left.MetadataToken == right.MetadataToken);
+            || PropertyIdentity.From(left).Equals(PropertyIdentity.From(right));
+
+    internal readonly struct PropertyIdentity : IEquatable<PropertyIdentity>
+    {
+        private readonly Type _declaringType;
+        private readonly string _name;
+        private readonly Type _propertyType;
+        private readonly Type[] _indexParameterTypes;
+
+        private PropertyIdentity(Type declaringType, string name, Type propertyType, Type[] indexParameterTypes)
+        {
+            _declaringType = declaringType;
+            _name = name;
+            _propertyType = propertyType;
+            _indexParameterTypes = indexParameterTypes;
+        }
+
+        internal static PropertyIdentity From(PropertyInfo property)
+        {
+            var parameters = property.GetIndexParameters();
+            var types = new Type[parameters.Length];
+            for (var i = 0; i < parameters.Length; i++)
+                types[i] = parameters[i].ParameterType;
+
+            return new PropertyIdentity(property.DeclaringType ?? property.ReflectedType!, property.Name, property.PropertyType, types);
+        }
+
+        public bool Equals(PropertyIdentity other)
+        {
+            if (_declaringType != other._declaringType || _name != other._name || _propertyType != other._propertyType
+                || _indexParameterTypes.Length != other._indexParameterTypes.Length)
+                return false;
+
+            for (var i = 0; i < _indexParameterTypes.Length; i++)
+            {
+                if (_indexParameterTypes[i] != other._indexParameterTypes[i])
+                    return false;
+            }
+
+            return true;
+        }
+
+        public override bool Equals(object? obj) => obj is PropertyIdentity other && Equals(other);
+
+        public override int GetHashCode()
+        {
+            var hash = new HashCode();
+            hash.Add(_declaringType);
+            hash.Add(_name);
+            hash.Add(_propertyType);
+            for (var i = 0; i < _indexParameterTypes.Length; i++)
+                hash.Add(_indexParameterTypes[i]);
+            return hash.ToHashCode();
+        }
+    }
     /// <summary>
     /// Looks up the metadata for <paramref name="pi"/> in the entity metadata registered for
     /// <paramref name="type"/>. Because the metadata is keyed by type, the property is matched by

@@ -2800,7 +2800,7 @@ public partial class QueryCommand
 
         // Walks one filter predicate and reports the SQL column names it reads off its entity parameter.
         // It is intentionally filter-specific: it maps the *root* property of each member chain (unwrapping
-        // nullable/`Value` chains) through the effective entity metadata by (DeclaringType, MetadataToken),
+        // nullable/`Value` chains) through the effective entity metadata by canonical property identity,
         // so it never becomes a general SQL-expression column extractor. A captured/context read is not a
         // column; opaque whole-entity use, dynamic access or an unmapped member makes the whole filter
         // undetermined (conservative best-effort skip).
@@ -2826,8 +2826,7 @@ public partial class QueryCommand
                 for (var i = 0; i < metadata.Properties.Count; i++)
                 {
                     var property = metadata.Properties[i].PropertyInfo;
-                    if (property.DeclaringType is { } declaringType)
-                        _byMember[new FilterMemberKey(declaringType, property.MetadataToken)] = metadata.Properties[i];
+                    _byMember[new FilterMemberKey(MemberInfoExtensions.PropertyIdentity.From(property))] = metadata.Properties[i];
                 }
             }
 
@@ -3001,8 +3000,8 @@ public partial class QueryCommand
             private bool TryMapColumn(PropertyInfo property, out string column)
             {
                 IPropertyMetadata? mapped = null;
-                if (_byMember is not null && property.DeclaringType is { } declaringType
-                    && _byMember.TryGetValue(new FilterMemberKey(declaringType, property.MetadataToken), out var indexed))
+                if (_byMember is not null
+                    && _byMember.TryGetValue(new FilterMemberKey(MemberInfoExtensions.PropertyIdentity.From(property)), out var indexed))
                     mapped = indexed;
 
                 mapped ??= _metadata is null ? null : MemberTranslator.FindProperty(_metadata, property);
@@ -3016,8 +3015,8 @@ public partial class QueryCommand
             private bool TryMapAnyColumn(PropertyInfo property, out string column)
             {
                 IPropertyMetadata? mapped = null;
-                if (_byMember is not null && property.DeclaringType is { } declaringType
-                    && _byMember.TryGetValue(new FilterMemberKey(declaringType, property.MetadataToken), out var indexed))
+                if (_byMember is not null
+                    && _byMember.TryGetValue(new FilterMemberKey(MemberInfoExtensions.PropertyIdentity.From(property)), out var indexed))
                     mapped = indexed;
 
                 mapped ??= MemberTranslator.ResolveProperty(property, _metadata);
@@ -3041,7 +3040,7 @@ public partial class QueryCommand
             }
         }
 
-        private readonly record struct FilterMemberKey(Type DeclaringType, int MetadataToken);
+        private readonly record struct FilterMemberKey(MemberInfoExtensions.PropertyIdentity Identity);
 
         private readonly record struct FilterColumnRequirements(bool Undetermined, IReadOnlyList<string> Columns);
 

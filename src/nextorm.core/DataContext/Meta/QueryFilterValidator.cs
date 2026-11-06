@@ -211,7 +211,7 @@ internal static class QueryFilterValidator
         // Key the written columns by the property resolved on the concrete entity type, not by the
         // PropertyInfo instance: a filter may read its property through an interface, a base type or a
         // new-hidden member, and each of those reflection instances differs from the mapped column. The
-        // canonical (DeclaringType, MetadataToken) pair is what identifies the member, so the concrete
+        // canonical declaring type and property signature identify the member, so the concrete
         // resolution of both sides matches (ReflectedType is deliberately ignored).
         var indexByProperty = new Dictionary<PropertyKey, int>(writtenColumns.Count);
         for (var i = 0; i < writtenColumns.Count; i++)
@@ -251,9 +251,8 @@ internal static class QueryFilterValidator
         return predicates;
     }
 
-    // The identity of a mapped member, independent of the reflection type it was read through: the
-    // declaring type plus the metadata token (ReflectedType is not part of the member's identity).
-    private readonly record struct PropertyKey(Type DeclaringType, int MetadataToken);
+    // The identity of a mapped member, independent of the reflection type it was read through.
+    private readonly record struct PropertyKey(MemberInfoExtensions.PropertyIdentity Identity);
 
     private static PropertyKey CanonicalPropertyKey(Type entityType, PropertyInfo property)
         => PropertyKeyOf(ResolveOnConcreteType(entityType, property));
@@ -261,7 +260,7 @@ internal static class QueryFilterValidator
     // The canonical identity of an already-resolved member: the declaring type plus the metadata token
     // (ReflectedType is not part of the member's identity).
     private static PropertyKey PropertyKeyOf(PropertyInfo property)
-        => new(property.DeclaringType ?? property.ReflectedType!, property.MetadataToken);
+        => new(MemberInfoExtensions.PropertyIdentity.From(property));
 
     // The same property as seen on the concrete entity type, so an interface-, base- or new-hidden
     // member read by a filter resolves to the mapped column. A public member named like the filter's

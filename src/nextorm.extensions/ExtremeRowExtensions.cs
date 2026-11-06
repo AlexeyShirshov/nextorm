@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Diagnostics.CodeAnalysis;
 using NextORM.Core;
 
 namespace NextORM.Extensions;
@@ -21,6 +22,13 @@ public enum ExtremeKind
 /// </summary>
 internal static class ExtremeRowReflection
 {
+    [DynamicDependency(DynamicallyAccessedMemberTypes.PublicMethods, typeof(CommonFunctions))]
+    [DynamicDependency(DynamicallyAccessedMemberTypes.PublicMethods, typeof(SqlFunctions))]
+    [DynamicDependency(DynamicallyAccessedMemberTypes.PublicMethods, typeof(WindowFunction<int>))]
+    static ExtremeRowReflection()
+    {
+    }
+
     internal static readonly MethodInfo Asc = RequireMethod(typeof(CommonFunctions), "asc", BindingFlags.Public | BindingFlags.Instance);
 
     internal static readonly MethodInfo Desc = RequireMethod(typeof(CommonFunctions), "desc", BindingFlags.Public | BindingFlags.Instance);
@@ -95,7 +103,7 @@ public static class ExtremeRowExtensions
     /// <param name="ties">Whether to keep one row or every row tied on the extreme value.</param>
     /// <param name="groupBy">Optional grouping key; <c>null</c> selects across the whole source.</param>
     /// <returns>The same query shape with the extreme-row component attached.</returns>
-    public static EntityBuilder<TEntity> SelectWhereMinEx<TEntity, TValue>(
+    public static EntityBuilder<TEntity> SelectWhereMinEx<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] TEntity, TValue>(
         this EntityBuilder<TEntity> source,
         Expression<Func<TEntity, TValue>> valueSelector,
         ExtremeRowTies ties = ExtremeRowTies.One,
@@ -113,7 +121,7 @@ public static class ExtremeRowExtensions
     /// <param name="ties">Whether to keep one row or every row tied on the extreme value.</param>
     /// <param name="groupBy">Optional grouping key; <c>null</c> selects across the whole source.</param>
     /// <returns>The same query shape with the extreme-row component attached.</returns>
-    public static EntityBuilder<TEntity> SelectWhereMaxEx<TEntity, TValue>(
+    public static EntityBuilder<TEntity> SelectWhereMaxEx<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] TEntity, TValue>(
         this EntityBuilder<TEntity> source,
         Expression<Func<TEntity, TValue>> valueSelector,
         ExtremeRowTies ties = ExtremeRowTies.One,
@@ -133,7 +141,7 @@ public static class ExtremeRowExtensions
     /// <param name="ties">Whether to keep one row or every row tied on the extreme value.</param>
     /// <param name="groupBy">Optional grouping key; <c>null</c> selects across the whole source.</param>
     /// <returns>The projected query command.</returns>
-    public static QueryCommand<TResult> SelectWhereMinEx<TEntity, TValue, TResult>(
+    public static QueryCommand<TResult> SelectWhereMinEx<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] TEntity, TValue, TResult>(
         this EntityBuilder<TEntity> source,
         Expression<Func<TEntity, TValue>> valueSelector,
         Expression<Func<TEntity, TResult>> projection,
@@ -158,7 +166,7 @@ public static class ExtremeRowExtensions
     /// <param name="ties">Whether to keep one row or every row tied on the extreme value.</param>
     /// <param name="groupBy">Optional grouping key; <c>null</c> selects across the whole source.</param>
     /// <returns>The projected query command.</returns>
-    public static QueryCommand<TResult> SelectWhereMaxEx<TEntity, TValue, TResult>(
+    public static QueryCommand<TResult> SelectWhereMaxEx<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] TEntity, TValue, TResult>(
         this EntityBuilder<TEntity> source,
         Expression<Func<TEntity, TValue>> valueSelector,
         Expression<Func<TEntity, TResult>> projection,
@@ -178,7 +186,7 @@ public static class ExtremeRowExtensions
 /// <see cref="ExtremeKind"/> explicitly.
 /// </summary>
 /// <typeparam name="TEntity">The mapped entity type the selectors are written over.</typeparam>
-public sealed class ExtremeRowComponent<TEntity> : IQueryComponent
+public sealed class ExtremeRowComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] TEntity> : IQueryComponent
 {
     private readonly object _descriptorLock = new();
     private IEqualityComparer<Expression>? _descriptorComparer;

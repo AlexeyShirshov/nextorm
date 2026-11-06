@@ -67,7 +67,7 @@ static void RunComponentSlices(string databasePath)
     }
     catch (Exception ex)
     {
-        Console.WriteLine($"component-slice=nextorm.extensions\tstatus=fail\texception={Escape(ex.GetType().FullName ?? ex.GetType().Name)}\tmessage={Escape(ex.Message)}");
+        Console.WriteLine($"component-slice=nextorm.extensions\tstatus=fail\texception={Escape(ex.GetType().FullName ?? ex.GetType().Name)}\tmessage={Escape(ex.Message)}\tdetails={Escape(ex.ToString())}");
     }
 
     try

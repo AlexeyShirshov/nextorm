@@ -65,8 +65,13 @@ public sealed class AotNativeRunTests
         var jitResults = RunJitScenarios(databasePath);
         var oracle = BuildOracle(repositoryRoot, databasePath, childPid, jitResults, nativeReports);
 
-        var evidencePath = Path.Combine(repositoryRoot, ".pdca", "365-366-r2", "items", "T366", "step1", "rv1", "attempts", "native-run-3.log");
-        Directory.CreateDirectory(Path.GetDirectoryName(evidencePath)!);
+        var evidenceDirectory = Environment.GetEnvironmentVariable("NEXTORM_AOT_EVIDENCE_DIR");
+        if (string.IsNullOrWhiteSpace(evidenceDirectory))
+            evidenceDirectory = Path.Combine("/tmp/opencode", "nextorm-aot", Guid.NewGuid().ToString("N"));
+
+        Directory.CreateDirectory(evidenceDirectory);
+        var evidencePath = Path.Combine(evidenceDirectory, "native-run.log");
+        var oraclePath = Path.Combine(evidenceDirectory, "oracle.md");
         var log = new StringBuilder()
             .AppendLine($"command: {binaryPath}")
             .AppendLine($"args[0]: {databasePath}")
@@ -82,8 +87,8 @@ public sealed class AotNativeRunTests
             .AppendLine(string.Join(Environment.NewLine, jitResults.Select(FormatJitReport)))
             .AppendLine($"--- child-specific db check: {childDatabasePath}; exists={File.Exists(childDatabasePath)} ---")
             .ToString();
-        await File.WriteAllTextAsync(evidencePath, log, cancellationToken);
-        await File.WriteAllTextAsync(Path.Combine(repositoryRoot, ".pdca", "365-366-r2", "items", "T366", "step1", "rv1", "oracle.md"), oracle, cancellationToken);
+        await WriteNewEvidenceAsync(evidencePath, log, cancellationToken);
+        await WriteNewEvidenceAsync(oraclePath, oracle, cancellationToken);
 
         process.ExitCode.Should().Be(0, $"the harness must complete; raw child output is in {evidencePath}");
         scenarioLines.Should().HaveCount(ScenarioIds.Length, "the runner must report exactly once per declared scenario");
@@ -91,6 +96,13 @@ public sealed class AotNativeRunTests
             .Should().BeEquivalentTo(ScenarioIds, options => options.WithStrictOrdering());
         reportedConnection.Should().Be($"connection={databasePath}", "the child must report the parent's database path");
         File.Exists(childDatabasePath).Should().BeFalse("the child must not derive its own process-specific database");
+    }
+
+    private static async Task WriteNewEvidenceAsync(string path, string contents, CancellationToken cancellationToken)
+    {
+        await using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+        var bytes = Encoding.UTF8.GetBytes(contents);
+        await stream.WriteAsync(bytes, cancellationToken);
     }
 
     private static string FindRepositoryRoot()
