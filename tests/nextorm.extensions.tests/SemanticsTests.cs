@@ -380,7 +380,7 @@ INSERT INTO FloatEntity VALUES
     }
 
     [Fact]
-    public void CompositeGroupedAllWithFilter_UsesTheRankWindowAndOnePredicate()
+    public void CompositeGroupedAllWithFilter_UsesAggregateJoinAndTwoPredicates()
     {
         var (conn, ctx) = CreateContext();
         using var connScope = conn; using var ctxScope = ctx;
@@ -396,8 +396,9 @@ INSERT INTO FloatEntity VALUES
 
         // Group 2 keeps (20,'c') and drops (20,'e') on the second key; group 3 keeps (30,'f').
         Ids(rows, x => x.Id).Should().Equal(3, 6);
-        CountMatches(sql, @"Score\s*>\s*\$threshold").Should().Be(1);
-        sql.Should().Contain("rank()").And.NotContain(" join ");
+        CountMatches(sql, @"Score\s*>\s*\$threshold").Should().Be(2,
+            "the input condition is applied to both aggregate stages");
+        sql.Should().Contain(" join ").And.NotContain("rank()");
     }
 
     // 6. Projections
@@ -512,11 +513,12 @@ INSERT INTO FloatEntity VALUES
             .SelectWhereMin(x => x.Score, ExtremeRowTies.One, x => x.GroupKey));
         grouped.Should().Contain("partition by");
 
-        // A nullable group key cannot be joined back with a null-safe predicate the providers all accept,
-        // so `All` uses the rank window; a non-nullable group key keeps the aggregate + join-back shape.
+        // SQLite advertises null-safe not-distinct comparison and no risky join capabilities, so the
+        // nullable group-key `All` shape uses the aggregate+join lowering; a non-nullable group key
+        // keeps the same aggregate + join-back shape.
         var nullableGroupAll = SqlOf(ctx, (QueryCommand<SemEntity>)ctx.From<SemEntity>()
             .SelectWhereMin(x => x.Score, ExtremeRowTies.All, x => x.GroupKey));
-        nullableGroupAll.Should().Contain("rank()").And.NotContain(" join ");
+        nullableGroupAll.Should().Contain(" join ").And.NotContain("rank()");
 
         var nonNullableGroupAll = SqlOf(ctx, (QueryCommand<SemEntity>)ctx.From<SemEntity>()
             .SelectWhereMin(x => x.Score, ExtremeRowTies.All, x => x.Id));

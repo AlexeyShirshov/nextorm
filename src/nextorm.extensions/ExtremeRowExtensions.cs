@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Diagnostics.CodeAnalysis;
 using NextORM.Core;
 
 namespace NextORM.Extensions;
@@ -21,6 +22,13 @@ public enum ExtremeKind
 /// </summary>
 internal static class ExtremeRowReflection
 {
+    [DynamicDependency(DynamicallyAccessedMemberTypes.PublicMethods, typeof(CommonFunctions))]
+    [DynamicDependency(DynamicallyAccessedMemberTypes.PublicMethods, typeof(SqlFunctions))]
+    [DynamicDependency(DynamicallyAccessedMemberTypes.PublicMethods, typeof(WindowFunction<int>))]
+    static ExtremeRowReflection()
+    {
+    }
+
     internal static readonly MethodInfo Asc = RequireMethod(typeof(CommonFunctions), "asc", BindingFlags.Public | BindingFlags.Instance);
 
     internal static readonly MethodInfo Desc = RequireMethod(typeof(CommonFunctions), "desc", BindingFlags.Public | BindingFlags.Instance);
@@ -95,7 +103,7 @@ public static class ExtremeRowExtensions
     /// <param name="ties">Whether to keep one row or every row tied on the extreme value.</param>
     /// <param name="groupBy">Optional grouping key; <c>null</c> selects across the whole source.</param>
     /// <returns>The same query shape with the extreme-row component attached.</returns>
-    public static EntityBuilder<TEntity> SelectWhereMin<TEntity, TValue>(
+    public static EntityBuilder<TEntity> SelectWhereMin<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] TEntity, TValue>(
         this EntityBuilder<TEntity> source,
         Expression<Func<TEntity, TValue>> valueSelector,
         ExtremeRowTies ties = ExtremeRowTies.One,
@@ -113,7 +121,7 @@ public static class ExtremeRowExtensions
     /// <param name="ties">Whether to keep one row or every row tied on the extreme value.</param>
     /// <param name="groupBy">Optional grouping key; <c>null</c> selects across the whole source.</param>
     /// <returns>The same query shape with the extreme-row component attached.</returns>
-    public static EntityBuilder<TEntity> SelectWhereMax<TEntity, TValue>(
+    public static EntityBuilder<TEntity> SelectWhereMax<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] TEntity, TValue>(
         this EntityBuilder<TEntity> source,
         Expression<Func<TEntity, TValue>> valueSelector,
         ExtremeRowTies ties = ExtremeRowTies.One,
@@ -133,7 +141,7 @@ public static class ExtremeRowExtensions
     /// <param name="ties">Whether to keep one row or every row tied on the extreme value.</param>
     /// <param name="groupBy">Optional grouping key; <c>null</c> selects across the whole source.</param>
     /// <returns>The projected query command.</returns>
-    public static QueryCommand<TResult> SelectWhereMin<TEntity, TValue, TResult>(
+    public static QueryCommand<TResult> SelectWhereMin<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] TEntity, TValue, TResult>(
         this EntityBuilder<TEntity> source,
         Expression<Func<TEntity, TValue>> valueSelector,
         Expression<Func<TEntity, TResult>> projection,
@@ -158,7 +166,7 @@ public static class ExtremeRowExtensions
     /// <param name="ties">Whether to keep one row or every row tied on the extreme value.</param>
     /// <param name="groupBy">Optional grouping key; <c>null</c> selects across the whole source.</param>
     /// <returns>The projected query command.</returns>
-    public static QueryCommand<TResult> SelectWhereMax<TEntity, TValue, TResult>(
+    public static QueryCommand<TResult> SelectWhereMax<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] TEntity, TValue, TResult>(
         this EntityBuilder<TEntity> source,
         Expression<Func<TEntity, TValue>> valueSelector,
         Expression<Func<TEntity, TResult>> projection,
@@ -178,7 +186,7 @@ public static class ExtremeRowExtensions
 /// <see cref="ExtremeKind"/> explicitly.
 /// </summary>
 /// <typeparam name="TEntity">The mapped entity type the selectors are written over.</typeparam>
-public sealed class ExtremeRowComponent<TEntity> : IQueryComponent, IQueryComponentShape
+public sealed class ExtremeRowComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] TEntity> : IQueryComponent, IQueryComponentShape
 {
     private readonly ExtremeKind _kind;
     private readonly LambdaExpression _valueSelector;
@@ -354,11 +362,9 @@ public sealed class ExtremeRowComponent<TEntity> : IQueryComponent, IQueryCompon
 
     /// <summary>
     /// Builds the component's structural contribution into the command. Runs on a plan-cache miss only:
-    /// <see cref="ExtremeRowTies.One"/> becomes a ranked derived source filtered on rank 1, a non-nullable
-    /// group key over a non-floating value key under <see cref="ExtremeRowTies.All"/> becomes the
-    /// aggregate+join lowering, and a nullable group key or a floating value key under
-    /// <see cref="ExtremeRowTies.All"/> uses the rank window (no null-safe join predicate is needed, and
-    /// the winner set follows the NaN-ranks-last ordering rather than a server aggregate).
+    /// <see cref="ExtremeRowTies.One"/> becomes a ranked derived source filtered on rank 1. Under
+    /// <see cref="ExtremeRowTies.All"/>, floating value keys and nullable group keys on dialects whose
+    /// public capabilities indicate risky join semantics use the rank window; other cases use aggregate+join.
     /// </summary>
     /// <param name="context">The command being built and the engine expression comparer.</param>
     /// <exception cref="ArgumentNullException"><paramref name="context"/> is <see langword="null"/>.</exception>
@@ -371,18 +377,11 @@ public sealed class ExtremeRowComponent<TEntity> : IQueryComponent, IQueryCompon
         var valueComponents = DecomposeSelector(_valueSelector, entityParam);
         var groupComponents = _groupBy is null ? Array.Empty<Expression>() : DecomposeSelector(_groupBy, entityParam);
 
-        // `All` is lowered to the aggregate+join shape, which joins every aggregate row back to the
-        // source. A nullable group key needs the null-safe `a = b or (a is null and b is null)` join
-        // predicate, and ClickHouse rejects a bare `IS NULL` residual in `JOIN ON` (#296) — a
-        // restriction no public dialect capability advertises. Rather than name a dialect, choose the
-        // shape by what the expression needs: a nullable group key uses the rank-window form, which
-        // partitions on the group keys directly and never emits a null-safe join; every other `All`
-        // shape keeps the aggregate+join lowering. A floating value key also keeps the rank-window
-        // form: its aggregate and its ordering disagree about NaN on ClickHouse (the server returns
-        // NaN as the aggregate maximum while ORDER BY ranks it last, the contract the rank window
-        // implements), and the component is built before any dialect is known.
+        // Capability proxy, not a dialect identity: use rank-window for nullable-key aggregate joins
+        // when the public dialect flags indicate join-specific behavior or null-safe not-distinct is
+        // unavailable. Unknown context/capability information fails safely to rank-window.
         if (_ties == ExtremeRowTies.All
-            && !NeedsNullSafeGroupJoin(groupComponents)
+            && !(NeedsNullSafeGroupJoin(groupComponents) && RequiresRankWindowForNullableJoin(cmd))
             && !HasFloatingComponent(valueComponents))
         {
             BuildAllQuery(context, entityParam, valueComponents, groupComponents);
@@ -487,6 +486,21 @@ public sealed class ExtremeRowComponent<TEntity> : IQueryComponent, IQueryCompon
         var columnCall = Expression.Call(null, ExtremeRowReflection.ColumnOfInt, outerParam, Expression.Constant(rankAlias));
         var rankFilter = Expression.Lambda(Expression.Equal(columnCall, Expression.Constant(1)), outerParam);
         cmd.SetComponentPreparedCondition(rankFilter);
+    }
+
+    private static bool RequiresRankWindowForNullableJoin(QueryCommand command)
+    {
+        if (command.DataContext is not DataContext dataContext)
+            return true;
+
+        var dialect = dataContext.Dialect;
+        var nullSafeComparison = dialect.NullSafeComparison;
+        return dialect.SupportsJoinStrictness
+            || dialect.SupportsGlobalJoin
+            || dialect.SupportsSemiAntiJoin
+            || dialect.SupportsPasteJoin
+            || nullSafeComparison is null
+            || !nullSafeComparison.SupportsNotDistinct;
     }
 
 

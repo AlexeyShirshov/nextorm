@@ -601,6 +601,18 @@ public class ComponentContractTests
             .Which.Message.Should().Contain("aggregates");
     }
 
+    [Fact]
+    public void SetOperation_RejectedForExtremeRow_WithReason()
+    {
+        using var ctx = Ctx();
+        var left = (QueryCommand<Entity>)ctx.From<Entity>().SelectWhereMin(x => x.Score);
+        var right = (QueryCommand<Entity>)ctx.From<Entity>().SelectWhereMin(x => x.Score);
+        Action act = () => _ = left.Union(right).ToList();
+
+        act.Should().Throw<BuildSqlCommandException>()
+            .Which.Message.Should().Contain("set operation");
+    }
+
 
     // Distinct parity already R1; unsupported selector shapes -> handled by compile; skip
 }
