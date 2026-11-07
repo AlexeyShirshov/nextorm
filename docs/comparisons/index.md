@@ -59,6 +59,11 @@ Across the shared surface Nextorm matches or exceeds the three libraries, and on
   captured-collection lookup and an optional mapped entity type.
 - **Configurable SQL output**: opt-in identifier quoting, naming conventions and keyword casing,
   overridable per command — whereas linq2db quotes by default and fixes names in its mapping schema.
+- **Extensibility as a first-class contract**: query components let a third party add a new operator that
+  changes the generated SQL (an added predicate, a reshaped row source) while keeping the plan cache,
+  parameter binding and provider independence of an ordinary query — no friend access, no global
+  registry, no raw SQL. linq2db and EF Core expose interceptors and function mappings, but no
+  structural component contract with plan-cache integration.
 - **Benchmarked performance**: fastest on every end-to-end scenario, fastest on every prepared feature
   (with the smallest allocations on all but the IN-list), and ahead of regular linq2db and EF Core on
   the warm path (see [Benchmarks](benchmarks.md)).

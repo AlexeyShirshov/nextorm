@@ -92,7 +92,7 @@ provider list is not scored). The per-engine API breadth is on [Provider feature
 | `SelectMany` / `GroupJoin` | partial (in-memory only; SQL providers reject) | yes (SQL translation) | yes |
 | In-memory provider (query-only, registered CLR datasets) | yes | partial | partial |
 | Connection lifecycle (`IConnectionManager`: supplied vs owned, reuse, disposal) | yes | yes | yes |
-| Extensibility (dialect, `[SqlFunction]`/`TvfEntityBuilder<T>` factories, interceptors, global query filters, raw SQL) | yes | yes (extensive) | yes |
+| Extensibility (dialect, `[SqlFunction]`/`TvfEntityBuilder<T>` factories, interceptors, global query filters, raw SQL; plus **query components** — reusable structural operators added by third parties without friend access, keeping the plan cache and parameter binding) | yes (query components) | partial (`Sql.Ext`/`Sql.Function`/interceptors; no structural component contract) | partial (interceptors, global filters; no structural component contract) |
 | **Total** | 73 / 5 / 3 | 49 / 22 / 10 | 28 / 27 / 25 |
 
 ## Where Nextorm leads
