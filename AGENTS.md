@@ -44,14 +44,22 @@
 
 ## Coverage
 - Whole-solution gate: `coverage.settings.xml` covers only `nextorm.{core,sqlite,postgres,sqlserver}`; `MIN_LINE_COVERAGE=85` and `MIN_BRANCH_COVERAGE=75`, hard-failing on `main` only. The thresholds and the `dotnet-coverage` → `reportgenerator` steps live in `.github/workflows/dotnet.yml`.
-- The integration suite has its own gate: `coverage.integration.settings.xml` measures what `tests/nextorm.integration.tests` alone covers across every provider assembly it references (core, sqlite, postgres, sqlserver, mysql, mariadb, clickhouse, entityframeworkcore). Thresholds `MIN_INTEGRATION_LINE_COVERAGE=65` / `MIN_INTEGRATION_BRANCH_COVERAGE=75`, same main-only hard-fail. `NextORM.Core.InMemory*` is excluded from this gate's denominator (`reportgenerator -classfilters:"-NextORM.Core.InMemory*"`): the in-memory provider is unit-only by policy, so the integration suite can never execute those paths. In-memory-only members that live inside shared classes (`MergeBuilder.MergeInMemory`, `EntityBuilder.BuildInMemoryJoinIntos` and its two many-to-many builders, `EntityBuilder.RewriteInMemoryJoinIntoJoin`, `JunctionLinkSourceFactory.GetInMemorySource`) carry `[ExcludeFromCodeCoverage]`, which `dotnet-coverage` already honours (`coverage.integration.settings.xml`): they have no SQL entry point at all. A guard that merely returns early on the SQL path is **not** such a member — its remaining code is reachable, so it stays in the denominator. The numbers are not comparable to 85/75 — unit-only paths are 0 % there by design. Reproduce:
+- The integration suite has its own gate: `coverage.integration.settings.xml` measures what the two live suites (`tests/nextorm.integration.tests` and `tests/nextorm.extensions.integration.tests`) cover together across every provider assembly they reference (core, sqlite, postgres, sqlserver, mysql, mariadb, clickhouse, entityframeworkcore, extensions). Thresholds `MIN_INTEGRATION_LINE_COVERAGE=65` / `MIN_INTEGRATION_BRANCH_COVERAGE=75`, same main-only hard-fail. `NextORM.Core.InMemory*` is excluded from this gate's denominator (`reportgenerator -classfilters:"-NextORM.Core.InMemory*"`): the in-memory provider is unit-only by policy, so the live suites can never execute those paths. In-memory-only members that live inside shared classes (`MergeBuilder.MergeInMemory`, `EntityBuilder.BuildInMemoryJoinIntos` and its two many-to-many builders, `EntityBuilder.RewriteInMemoryJoinIntoJoin`, `JunctionLinkSourceFactory.GetInMemorySource`) carry `[ExcludeFromCodeCoverage]`, which `dotnet-coverage` already honours (`coverage.integration.settings.xml`): they have no SQL entry point at all. A guard that merely returns early on the SQL path is **not** such a member — its remaining code is reachable, so it stays in the denominator. The numbers are not comparable to 85/75 — unit-only paths are 0 % there by design. Reproduce:
   ```bash
   DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock \
     dotnet tool run dotnet-coverage collect -s coverage.integration.settings.xml -f cobertura \
-      -o tests/coverage/integration.cobertura.xml \
+      -o tests/coverage/integration-builtin.cobertura.xml \
       "dotnet test tests/nextorm.integration.tests --no-build --verbosity normal"
-  dotnet tool run reportgenerator -reports:tests/coverage/integration.cobertura.xml \
+  DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock \
+    dotnet tool run dotnet-coverage collect -s coverage.integration.settings.xml -f cobertura \
+      -o tests/coverage/integration-extensions.cobertura.xml \
+      "dotnet test tests/nextorm.extensions.integration.tests --no-build --verbosity normal"
+  # ReportGenerator unions the two reports; do not merge them with dotnet-coverage
+  # (its cobertura output drops branch data).
+  dotnet tool run reportgenerator \
+    -reports:"tests/coverage/integration-builtin.cobertura.xml;tests/coverage/integration-extensions.cobertura.xml" \
     -targetdir:tests/coverage/integration-report -reporttypes:"Html;TextSummary" \
+    -classfilters:"-NextORM.Core.InMemory*" \
     -riskhotspotassemblyfilters:"+nextorm.*"
   ```
 - The accepted measurement and its accounting (baselines, branch deltas, skip budget) live in the cycle's status record under `docs/specs/status/**`; keep the thresholds unchanged.

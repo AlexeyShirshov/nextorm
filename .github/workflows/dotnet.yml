@@ -59,11 +59,18 @@ jobs:
       - name: Integration coverage (dedicated gate)
         run: |
           mkdir -p tests/coverage
-          dotnet tool run dotnet-coverage collect -s coverage.integration.settings.xml -f cobertura -o tests/coverage/integration.cobertura.xml "dotnet test tests/nextorm.integration.tests --no-build --verbosity normal --filter-not-trait Category=Diagnostic"
+          # Both live suites contribute to this gate: the built-in operators project and the
+          # extensions project (SelectGroup/SelectGroupHaving). They share the reused Testcontainers
+          # instances and seed the same tables, so they run sequentially.
+          # Each suite is collected as cobertura, and ReportGenerator unions the two reports:
+          # dotnet-coverage merge cannot be used here — its cobertura output drops branch data
+          # (covered/total branches come out as 0/0), which understates the branch gate.
+          dotnet tool run dotnet-coverage collect -s coverage.integration.settings.xml -f cobertura -o tests/coverage/integration-builtin.cobertura.xml "dotnet test tests/nextorm.integration.tests --no-build --verbosity normal --filter-not-trait Category=Diagnostic"
+          dotnet tool run dotnet-coverage collect -s coverage.integration.settings.xml -f cobertura -o tests/coverage/integration-extensions.cobertura.xml "dotnet test tests/nextorm.extensions.integration.tests --no-build --verbosity normal --filter-not-trait Category=Diagnostic"
           # The in-memory provider is unit-only by policy (AGENTS.md "Tests"), so its paths are outside
-          # what the integration suite can or should cover; excluded from this gate's denominator only.
+          # what the live suites can or should cover; excluded from this gate's denominator only.
           dotnet tool run reportgenerator \
-            -reports:tests/coverage/integration.cobertura.xml \
+            -reports:"tests/coverage/integration-builtin.cobertura.xml;tests/coverage/integration-extensions.cobertura.xml" \
             -targetdir:tests/coverage/integration-report \
             -reporttypes:"Html;TextSummary" \
             -classfilters:"-NextORM.Core.InMemory*" \

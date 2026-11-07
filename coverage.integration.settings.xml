@@ -3,8 +3,11 @@
   Coverage settings for the DEDICATED INTEGRATION-SUITE GATE.
 
   Unlike coverage.settings.xml (the whole-solution gate limited to the four modules that CI
-  publishes), the integration suite is the only test project that exercises every provider against a
-  live server, so its gate measures all provider assemblies the integration project references.
+  publishes), the live integration suites (tests/nextorm.integration.tests and
+  tests/nextorm.extensions.integration.tests) are the only test projects that exercise every provider
+  against a live server, so this gate measures all provider and extension assemblies they reference.
+  Both suites are collected separately against the same reused containers and unioned by
+  ReportGenerator before reporting (dotnet-coverage's merge/cobertura export drops branch data).
   Everything else mirrors coverage.settings.xml: test assemblies are excluded and unused/legacy code
   is dropped through the same attributes.
 -->
