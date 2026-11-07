@@ -68,11 +68,29 @@ DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.so
     -class nextorm.integration.tests.PostgresIntegrationTests -noColor
   ```
 
-- **Run provider suites one at a time, never in parallel.** Four concurrent test projects (plus build + editors) saturate 8 vCPU and push disk reads to ~1.9 GiB/s for minutes. Serialise them.
+- **Run provider suites one at a time, never in parallel.** Four concurrent test projects (plus build + editors) saturate 8 vCPU and push disk reads to ~1.9 GiB/s for minutes. Serialise them — `tools/integration/run-integration-capped.py` (below) does this and also caps the run's memory.
 - **A solution-wide `dotnet test` needs `--max-parallel-test-modules 1`.** `nextorm.integration.tests` and `nextorm.extensions.integration.tests` both resolve the *same* reused containers (same `reuse-id` label) and both seed the same tables, so when their modules overlap they collide with `Table '...' already exists` / `Unable to connect to any of the specified MySQL hosts`, and the first module to finish stops the containers under the second. `dotnet test nextorm.slnx --no-build --filter-not-trait Category=Diagnostic --max-parallel-test-modules 1` runs all 16 modules one after another (~4.5 min of test time) and is green; this is what CI does. Per-project runs (`dotnet test tests/nextorm.integration.tests`) are unaffected.
 - **Never re-run the same filter.** Each distinct `--dotnet-test-pipe /tmp/<id>` is a real execution; re-issuing `--filter FullyQualifiedName~Csv` (or the same `-class`) is wasted work — run it once. For a provider subset use a single `--filter "FullyQualifiedName~Csv&FullyQualifiedName~<Provider>IntegrationTests"` instead of repeating.
 - **Scope the run to the change.** For a core/CSV-streaming change the relevant targets are `nextorm.integration.tests --filter FullyQualifiedName~Csv` and `nextorm.core.tests`; the per-provider SQL-generation suites (`tests/nextorm.*.tests`) need no database and need not all run for such a change. Reserve a full sweep for final validation, once.
 - Repeated `[.NET TP Worker]` / `[RequestBuilder]` children under a `dotnet run`/`dotnet test` mean you are rebuilding — switch to `--no-build`.
+
+### Capped per-provider runs — the safe default on a memory-tight host
+
+The Podman machine is a **second WSL2 distro** and inherits the *global* `.wslconfig` memory limit (its own `Resources.Memory` is ignored by the WSL provider). On a 16 GB host a full sweep therefore holds two ~12 GB VMs next to Windows: the run spills into the Windows pagefile, WSL interop stalls (`UtilAcceptVsock ... abnormally long accept` in `dmesg`) and the OpenCode server is killed together with the VM. `tools/integration/run-integration-capped.py` runs one class at a time inside a cgroup:
+
+```bash
+python3 tools/integration/run-integration-capped.py --providers postgres
+python3 tools/integration/run-integration-capped.py             # all providers, sqlite -> clickhouse
+python3 tools/integration/run-integration-capped.py --dry-run    # print the commands only
+```
+
+- `systemd-run --user --scope` caps memory (`MemoryHigh=3G` / `MemoryMax=4G` / `MemorySwapMax=1G`); CPU (`cpu.max`) and the BFQ weight (`io.bfq.weight`) are written into the scope by a shim, because systemd 249 ignores `CPUQuota=`/`IOWeight=` on transient *user* scopes. It needs `systemd=true` and `/run/user/<uid>/bus`, and falls back to plain execution with a warning.
+- `ionice -c 2 -n 7` on the child as well: BFQ is the active scheduler and honours per-process I/O priority.
+- `setsid --wait`, so a run survives an OpenCode server restart instead of dying with the parent shell.
+- one `-class` per process, so the previous provider's container is stopped by the `DatabaseContainers` fixture before the next one starts.
+- refuses to start while another suite is already running (it scans `/proc` for the test host), because both would share the reused containers.
+
+Per-class runs are local iteration, not evidence: the pinned skip budget still needs the canonical full-suite command above.
 
 ## Behaviour and gotchas
 
@@ -102,3 +120,6 @@ DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.so
 - Testcontainers hangs or fails to connect → confirm the machine is running (`podman.exe machine list`, expect `Currently running`) and the socket exists: `ls -l /mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock`. Start the machine with `"/mnt/c/Program Files/RedHat/Podman/podman.exe" machine start` (Podman Desktop may be closed).
 - Sanity-check the socket without Testcontainers:
   `curl -s --unix-socket /mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock http://d/v1.40/_ping` → `OK`.
+- **`container state improper` on SQL Server.** SQL Server ignores SIGTERM, so the stop path SIGKILLs it (exit 137) and Podman can leave the reused container unstartable: the next run fails closed within ~6 s with the whole class red. Remove that container and rerun — Testcontainers recreates it:
+  `"/mnt/c/Program Files/RedHat/Podman/podman.exe" --connection podman-machine-default rm -f <id>`
+  (the capped wrapper prints the exact command from the failure log). Exit 137 on a *normal* stop is the SIGKILL, not an OOM kill — do not read it as memory pressure.
