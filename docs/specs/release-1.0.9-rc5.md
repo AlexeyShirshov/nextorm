@@ -108,6 +108,21 @@ test container`). Это ограничение окружения, а не де
 - Integration coverage (оба live-проекта): line 81.1 % (67508/83214), branch 75.3 % (40227/53396);
   `nextorm.extensions` — 68.7 %.
 
+### 2.6. Флейк, поймавшийся на гейте (исправлен)
+
+CI run [`42398374420`](https://github.com/AlexeyShirshov/nextorm/actions/runs/42398374420) упал на
+`nextorm.mysql.tests`: `QueryFilterSqlGenerationTests.FuncFilter_CachedPlan_SecondExecution_ShouldBindChangedValue`
+— `ReferenceEquals(first, second)` ложно. Это известное семейство [#344](https://github.com/AlexeyShirshov/nextorm/issues/344):
+поколение `QueryPlanStore` процессное, а кэш потоковый, поэтому `PurgeQueryCache()` на другом потоке
+превращает тёплый hit в miss. Причина не в релизном коммите (продуктовый код не менялся; предыдущий
+прогон той же кодовой базы был зелёным).
+
+Прошлый проход сериализации (`e644ac5c`, `8ddda541`) покрыл postgres-копию этого класса, но пропустил
+копии в mariadb, mysql, sqlserver и clickhouse. Все четыре добавлены в
+`[Collection("DataContextCache clear")]` (`DisableParallelization = true`) — тот же приём, что уже
+применён к остальным классам, утверждающим идентичность плана. Проверено локально: полные сборки
+mariadb/mysql/sqlserver/clickhouse зелёные (`-parallel all`).
+
 ## 3. Изменения в репозитории
 
 ### 3.1. Версия и публикация
@@ -175,3 +190,6 @@ test container`). Это ограничение окружения, а не де
 - **#245** закрыт с принятым остатком (EXCEPT/INTERSECT 1.27–1.35× linq2db по аллокациям).
 - **Skip-budget checker** не разбирает формат summary текущего тест-раннера; нужен фикс парсера
   (`Skipped: N` + `[SKIP]` → `skipped: N` + `skipped <test>`).
+- **[#344](https://github.com/AlexeyShirshov/nextorm/issues/344) остаётся открытым**: копии
+  `QueryFilterSqlGenerationTests` в четырёх провайдерных проектах сериализованы этим релизом, но
+  аудит остальных проектов на «purge caller рядом с plan-identity assert» не закрыт.

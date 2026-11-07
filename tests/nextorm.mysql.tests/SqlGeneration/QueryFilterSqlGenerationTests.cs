@@ -10,7 +10,14 @@ namespace NextORM.MySql.Tests;
 /// a selective ignore drops only the named predicate, the target filter is ANDed to the UPDATE/DELETE
 /// <c>WHERE</c>, an INSERT target is never filtered and an INSERT ... SELECT filters only its source.
 /// No database connection is opened.
+/// <para>
+/// Joins the serialized "DataContextCache clear" collection: <c>FuncFilter_CachedPlan_SecondExecution_*</c>
+/// asserts plan identity across two prepares, and <c>QueryPlanStore</c>'s generation is
+/// process-wide while its cache is thread-local, so a purge on another thread turns the warm hit into a
+/// miss (the hazard tracked by #344, already applied to the other plan-identity classes).
+/// </para>
 /// </summary>
+[Collection("DataContextCache clear")]
 public class QueryFilterSqlGenerationTests
 {
     private const string TenantKey = "qf_tenant_mysql_sqlgen";
