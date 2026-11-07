@@ -79,15 +79,19 @@ tag-triggered job `publish`. Локальный прогон (тесты, covera
 интеграционная сюита fail-closed падает на `Provider.IsAvailable` (`Could not start a SQL Server
 test container`). Это ограничение окружения, а не дефект продукта; такие прогоны заменяет CI.
 
-### 2.2. CI, job `build` (`dotnet.yml`, запускается на push в любую ветку) — выполняется на мердже
+### 2.2. CI, job `build` (`dotnet.yml`, запускается на push в любую ветку)
 
-- [ ] `dotnet restore` + `dotnet build --no-restore`.
-- [ ] Solution-wide `dotnet test` всех 16 модулей под `dotnet-coverage`
+- [x] `dotnet restore` + `dotnet build --no-restore`.
+- [x] Solution-wide `dotnet test` всех 16 модулей под `dotnet-coverage`
       (`--filter-not-trait Category=Diagnostic --max-parallel-test-modules 1`).
-- [ ] Unit-гейт: line 85 % / branch 75 % (hard-fail на `main`).
-- [ ] Integration-гейт: **оба** live-проекта (built-in + extensions), union через ReportGenerator,
-      пороги 65 % / 75 % (hard-fail на `main`).
-- [ ] Self-tests генератора benchmark-таблиц.
+- [x] Unit-гейт: **line 89.2 % / branch 83.7 %** при порогах 85 / 75.
+- [x] Integration-гейт: **оба** live-проекта (built-in + extensions), union через ReportGenerator,
+      **line 81.1 % / branch 75.3 %** при порогах 65 / 75.
+- [x] Self-tests генератора benchmark-таблиц.
+
+Подтверждено run [`42400977470`](https://github.com/AlexeyShirshov/nextorm/actions/runs/42400977470)
+(ветка `1.0.9-rc5`, commit `f8b95a9e`) — success, 11m57s, `Coverage OK` + `Integration coverage OK`.
+На ветке гейты дают warning при недоборе, hard-fail — только на `main`; это и есть проверка мерджа.
 
 ### 2.3. CI, workflow `Docs` (push в `main`, paths `docs/**`, `src/**`)
 
@@ -105,8 +109,7 @@ test container`). Это ограничение окружения, а не де
 - Skip-budget: 197 = `totalSkipped` из pinned `tests/nextorm.integration.tests/skip-budget.json`;
   штатный `check-integration-skip-budget.py` не парсит формат summary текущего раннера
   (`skipped: N` вместо `Skipped: N`) — дефект парсера, §6.
-- Integration coverage (оба live-проекта): line 81.1 % (67508/83214), branch 75.3 % (40227/53396);
-  `nextorm.extensions` — 68.7 %.
+- Запас integration-гейта по ветвям — **0.3 п.п.** (75.3 против 75).
 
 ### 2.6. Флейк, поймавшийся на гейте (исправлен)
 
@@ -120,8 +123,10 @@ CI run [`42398374420`](https://github.com/AlexeyShirshov/nextorm/actions/runs/42
 Прошлый проход сериализации (`e644ac5c`, `8ddda541`) покрыл postgres-копию этого класса, но пропустил
 копии в mariadb, mysql, sqlserver и clickhouse. Все четыре добавлены в
 `[Collection("DataContextCache clear")]` (`DisableParallelization = true`) — тот же приём, что уже
-применён к остальным классам, утверждающим идентичность плана. Проверено локально: полные сборки
-mariadb/mysql/sqlserver/clickhouse зелёные (`-parallel all`).
+применён к остальным классам, утверждающим идентичность плана (**`f8b95a9e`**). Проверено локально:
+полные сборки mariadb/mysql/sqlserver/clickhouse зелёные (`-parallel all`), а повторный CI-прогон
+[`42400977470`](https://github.com/AlexeyShirshov/nextorm/actions/runs/42400977470) — success.
+Новое доказательство добавлено в [#344](https://github.com/AlexeyShirshov/nextorm/issues/344#issuecomment-6711272432).
 
 ## 3. Изменения в репозитории
 
