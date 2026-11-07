@@ -24,6 +24,9 @@ with no change tracking and no mandatory entity class.
 * **Native extreme-row selection** — [`SelectWhereMax`/`SelectWhereMin`](https://alexeyshirshov.github.io/nextorm/advanced/select-where-extrema-native.html)
   automatically use PostgreSQL `DISTINCT ON`/`LIMIT 1` and ClickHouse `argMin`/`argMax`, with a
   portable window-function fallback elsewhere.
+* **Extensible without forking** — public query components (`IQueryComponent` + `WithComponent`),
+  global query filters, value converters, SQL functions, interceptors, custom dialects and renderers.
+  No `InternalsVisibleTo`, no translator registry and no global mutable state.
 
 ## Installation
 
@@ -44,6 +47,7 @@ All current releases are prereleases, so `--prerelease` is required. Package Man
 | `nextorm.mysql` | MySQL | `MySqlConnector` |
 | `nextorm.mariadb` | MariaDB | `MySqlConnector` |
 | `nextorm.clickhouse` | ClickHouse | `ClickHouse.Driver` |
+| `nextorm.extensions` | Query components: `SelectWhereMin`/`SelectWhereMax`, `SelectGroup`/`SelectGroupHaving` | — |
 
 ## Quick start
 
@@ -87,6 +91,39 @@ Avoid rebuilding a query plan on every execution in two independent ways: the **
 [`IPreparedQueryCommand<TResult>`](https://alexeyshirshov.github.io/nextorm/api/NextORM.Core.IPreparedQueryCommand-1.html).
 They differ in cost, lifetime and thread-safety rules — see
 [Query reuse: cache vs Prepare](https://alexeyshirshov.github.io/nextorm/engine/03-plan-cache-and-reuse.html).
+
+## Extensibility
+
+Extensibility is a first-class part of the design, not a set of internal escape hatches. Every hook
+is public and usable from a separate assembly — there is no `InternalsVisibleTo`, no translator
+registry and no global mutable state.
+
+- **Query components (structural operators).** Implement
+  [`IQueryComponent`](https://alexeyshirshov.github.io/nextorm/advanced/extensibility.html#extending-query-construction-with-query-components)
+  and attach it with `WithComponent`. A component validates itself in `Prepare`, contributes SQL
+  structure in `BuildQuery` and carries a descriptor that participates in the plan key, so a warm
+  plan-cache hit does not rebuild it. The
+  [`nextorm.extensions`](https://alexeyshirshov.github.io/nextorm/advanced/extensions-package.html)
+  package is built entirely on this surface:
+
+  ```csharp
+  using NextORM.Extensions;
+
+  var leaders = dataContext.From<Player>()
+                           .SelectWhereMax(p => p.Score, groupBy: p => p.TeamId)
+                           .Select(p => new { p.Id, p.TeamId, p.Score });
+  ```
+
+  `SelectWhereMax`/`SelectWhereMin` and `SelectGroup`/`SelectGroupHaving` are ordinary components —
+  your own package can add operators the same way, with the same plan cache and parameter binding.
+
+- **Configuration hooks** — global query filters (tenant isolation, soft delete), value converters,
+  naming conventions, `[SqlFunction]` declarations and query/connection interceptors.
+- **Custom dialects and renderers** — subclass a provider context and its dialect (and, on
+  PostgreSQL and ClickHouse, the native extreme-row renderer) when the emitted SQL itself must change.
+
+The complete guide — which hook to choose, who calls it and when, and a working example for each —
+is [Extensibility](https://alexeyshirshov.github.io/nextorm/advanced/extensibility.html).
 
 ## Benchmarks
 

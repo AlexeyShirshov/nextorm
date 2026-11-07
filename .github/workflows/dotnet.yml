@@ -26,11 +26,11 @@ jobs:
     env:
       MIN_LINE_COVERAGE: 85
       MIN_BRANCH_COVERAGE: 75
-      # Dedicated gate for tests/nextorm.integration.tests (real databases only).
-      # Branch threshold is a hard 74 %. rc4 measured 79.8 % line / 74.4 % branch counted on 67ba9494
-      # (`40874052265`), after the ClickHouse retry harness was removed and the ClickHouse lane was
-      # isolated; the previous 75 % was a cycle-10 measurement (81.49 % / 75.48 %) of a different suite.
-      # The cycle-13 coverage campaign targets 76 %, at which point this number goes back up.
+      # Dedicated gate for the two live suites (built-in operators + extensions, real databases only).
+      # #364 raised the branch threshold back to a hard 75 % after measuring 75.6 % on the built-in
+      # suite (39595/52349). Adding nextorm.extensions.integration.tests keeps it at 75.3 % on
+      # 2026-11-07. The 80 % campaign target was not reached: the remaining pool is structurally
+      # unreachable or rare-refusal cases (#364 closing comment).
       MIN_INTEGRATION_LINE_COVERAGE: 65
       MIN_INTEGRATION_BRANCH_COVERAGE: 75
 
@@ -199,7 +199,8 @@ jobs:
             src/nextorm.postgres/nextorm.postgres.csproj \
             src/nextorm.mysql/nextorm.mysql.csproj \
             src/nextorm.mariadb/nextorm.mariadb.csproj \
-            src/nextorm.clickhouse/nextorm.clickhouse.csproj
+            src/nextorm.clickhouse/nextorm.clickhouse.csproj \
+            src/nextorm.extensions/nextorm.extensions.csproj
           do
             dotnet pack "$project" -c Release -p:Version="$VERSION" -o ./nupkgs
           done

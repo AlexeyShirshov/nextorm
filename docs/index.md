@@ -119,7 +119,7 @@ Nextorm uses protocol-level libraries (for example, SqlClient for Microsoft SQL 
 
 ## Status
 
-The current status (1.0.9-rc4) is a prof of concept.
+The current status (1.0.9-rc5) is a prof of concept.
 
 ## Installation
 
@@ -148,6 +148,37 @@ They differ in cost, lifetime and thread-safety rules. Which one to use, what ea
 its limitations are covered in the [plan cache and reuse guide](engine/03-plan-cache-and-reuse.md).
 
 ## Releases
+
+### 1.0.9-rc5
+
+- **Breaking:** `SelectWhereMin`/`SelectWhereMax` и `SelectGroup`/`SelectGroupHaving` переехали в новый пакет `nextorm.extensions`; в core остались совместимые `SelectWhereMinOld`/`SelectWhereMaxOld`, `SelectGroup` удалён (in-memory для группирующих операторов не поддерживается).
+- [Warm `EXCEPT`/`INTERSECT`: аллокации приближены к linq2db (принятый остаток)](https://github.com/AlexeyShirshov/nextorm/issues/245)
+- [JSON streaming: пропускная способность на 10k строк доведена до паритета с linq2db](https://github.com/AlexeyShirshov/nextorm/issues/247)
+- [CSV-терминал больше не пересобирает план колонок на каждый экспорт](https://github.com/AlexeyShirshov/nextorm/issues/250)
+- [Снижены аллокации примера PG DelayPercentilesByModel](https://github.com/AlexeyShirshov/nextorm/issues/267)
+- [Снижены аллокации примеров PG AircraftDelayChains](https://github.com/AlexeyShirshov/nextorm/issues/268)
+- [Снижены аллокации примера PG AirportOnTimePerformance](https://github.com/AlexeyShirshov/nextorm/issues/269)
+- [Снижены аллокации примера CH Funnel](https://github.com/AlexeyShirshov/nextorm/issues/270)
+- [Снижены аллокации примера CH Sessions](https://github.com/AlexeyShirshov/nextorm/issues/272)
+- [Снижены аллокации примера CH SessionDepth](https://github.com/AlexeyShirshov/nextorm/issues/273)
+- [Снижены аллокации примера CH RollingActivity](https://github.com/AlexeyShirshov/nextorm/issues/274)
+- [`SelectWhereMax/Min`: пересмотрена портативная lowering-стратегия (GROUP BY / join-back)](https://github.com/AlexeyShirshov/nextorm/issues/302)
+- [JSON streaming: noise-robust ratio-oracle и парная приёмка в одной сессии](https://github.com/AlexeyShirshov/nextorm/issues/311)
+- [План-кэш: хэш/фингерпринт мемоизируются на версию описания (warm path)](https://github.com/AlexeyShirshov/nextorm/issues/317)
+- [`QueryCommand.Clone()` больше не копирует пустые коллекции](https://github.com/AlexeyShirshov/nextorm/issues/318)
+- [Build-once query construction (lazy descriptor chain): эпик закрыт как кандидат без расписания](https://github.com/AlexeyShirshov/nextorm/issues/319)
+- [MariaDB 11.4: `xxh3`/`xxh32` больше не рекламируются — серверных функций нет](https://github.com/AlexeyShirshov/nextorm/issues/352)
+- [Core: рукописные `ManyToOne`-метаданные с `FK.Count > PrincipalKey.Count` дают именную диагностику вместо `IndexOutOfRangeException`](https://github.com/AlexeyShirshov/nextorm/issues/353)
+- [ClickHouse: `group_array` по элементу `Tuple` рендерит валидный `Array(Nullable(Tuple))`](https://github.com/AlexeyShirshov/nextorm/issues/359)
+- [Core: составной ключ `OrderBy(p => new { … })` раскрывается в колонки, а не склеивается в невалидный SQL](https://github.com/AlexeyShirshov/nextorm/issues/360)
+- [Join aliases: CTE-дескриптор из aliased-цепочки больше не теряет `Alias.X`](https://github.com/AlexeyShirshov/nextorm/issues/361)
+- [Публичные query-компоненты: `SelectWhereMin/Max` доказаны вне core; декларативный механизм подготовки запросов (`IQueryPreparationDescriptor`, `QueryPreparationContribution`)](https://github.com/AlexeyShirshov/nextorm/issues/362)
+- [Raw pre-preparation recipe теперь применим к derived subquery-источникам — свежий вызов больше не платит полный prepare](https://github.com/AlexeyShirshov/nextorm/issues/363)
+- [Integration branch coverage поднят с 74.4 % до 75.6 %; порог CI `74 → 75`](https://github.com/AlexeyShirshov/nextorm/issues/364)
+- [`nextorm.extensions`: `SelectWhereMin`/`SelectWhereMax` на публичных query-компонентах (legacy-путь заморожен как baseline)](https://github.com/AlexeyShirshov/nextorm/issues/365)
+- [`SelectGroup`/`SelectGroupHaving` в `nextorm.extensions`; накладные расходы компонентных операторов измерены и приняты](https://github.com/AlexeyShirshov/nextorm/issues/368)
+- [Тесты: `T300 NullableScalarMaterialize_Live` больше не зависит от порядка строк `UNION ALL` (ClickHouse flake)](https://github.com/AlexeyShirshov/nextorm/issues/369)
+- Принятые ограничения (закрыты как `not_planned`): [raw reader `ToDataReader` медленнее linq2db](https://github.com/AlexeyShirshov/nextorm/issues/246), [пример CH Retention всё ещё аллоцирует 3.02× linq2db](https://github.com/AlexeyShirshov/nextorm/issues/271), [NativeAOT parity — остаток вынесен в #370](https://github.com/AlexeyShirshov/nextorm/issues/366), [трекинг SelectGroup в extensions — выполнен в рамках #362/#368](https://github.com/AlexeyShirshov/nextorm/issues/367).
 
 ### 1.0.9-rc4
 
