@@ -9,12 +9,12 @@ Job=ShortRun  Toolchain=InProcessEmitToolchain  IterationCount=3
 LaunchCount=1  WarmupCount=3  
 
 ```
-| Method           | Categories | Mean       | Error       | StdDev   | Gen0     | Gen1    | Allocated  |
-|----------------- |----------- |-----------:|------------:|---------:|---------:|--------:|-----------:|
-| Nextorm_Prepared |            |   889.9 μs |    37.86 μs |  2.07 μs |   9.7656 |       - |   85.16 KB |
-| Dapper           |            | 1,399.7 μs |   182.27 μs |  9.99 μs |  15.6250 |       - |  139.07 KB |
-| Linq2Db_Compiled |            | 1,498.9 μs |   118.96 μs |  6.52 μs |  27.3438 |       - |   233.6 KB |
-| Nextorm_Cached   | acceptance | 1,839.6 μs |   149.21 μs |  8.18 μs |  64.4531 |       - |  533.63 KB |
-| Linq2Db          |            | 2,672.7 μs |   526.45 μs | 28.86 μs |  46.8750 |       - |  401.58 KB |
-| EFCore_Compiled  |            | 3,620.0 μs |   855.35 μs | 46.88 μs |  97.6563 | 46.8750 |  807.05 KB |
-| EFCore           |            | 6,133.7 μs | 1,046.21 μs | 57.35 μs | 140.6250 | 46.8750 | 1211.83 KB |
+| Method           | Categories | Mean     | Error      | StdDev    | Gen0     | Gen1    | Allocated  |
+|----------------- |----------- |---------:|-----------:|----------:|---------:|--------:|-----------:|
+| Nextorm_Prepared |            | 1.024 ms |  0.1588 ms | 0.0087 ms |   9.7656 |       - |   85.16 KB |
+| Dapper           |            | 1.536 ms |  0.3240 ms | 0.0178 ms |  15.6250 |       - |  139.07 KB |
+| Linq2Db_Compiled |            | 1.699 ms |  0.4269 ms | 0.0234 ms |  27.3438 |       - |   233.6 KB |
+| Nextorm_Cached   | acceptance | 2.208 ms |  0.5449 ms | 0.0299 ms |  74.2188 |       - |  618.04 KB |
+| Linq2Db          |            | 2.952 ms |  0.3190 ms | 0.0175 ms |  46.8750 |       - |  401.58 KB |
+| EFCore_Compiled  |            | 4.213 ms |  2.1794 ms | 0.1195 ms |  93.7500 | 46.8750 |  807.06 KB |
+| EFCore           |            | 7.671 ms | 25.7019 ms | 1.4088 ms | 125.0000 | 31.2500 | 1211.89 KB |

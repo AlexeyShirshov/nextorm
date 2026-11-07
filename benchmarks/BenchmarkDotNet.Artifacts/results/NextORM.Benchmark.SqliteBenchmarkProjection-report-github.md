@@ -11,12 +11,12 @@ IterationCount=3  LaunchCount=1  WarmupCount=3
 ```
 | Method                         | Categories                | Mean     | Gen0     | Gen1     | Gen2    | Allocated |
 |------------------------------- |-------------------------- |---------:|---------:|---------:|--------:|----------:|
-| A_Nextorm_Prepared_ToListAsync | A_Projection              | 4.011 ms | 156.2500 | 109.3750 |       - |    1.3 MB |
-| A_EFCore_Compiled_ToListAsync  | A_Projection              | 5.608 ms | 414.0625 |        - |       - |   3.36 MB |
-| A_Linq2Db_Compiled_ToList      | A_Projection              | 5.988 ms | 218.7500 | 210.9375 | 54.6875 |   1.47 MB |
+| A_Nextorm_Prepared_ToListAsync | A_Projection              | 4.284 ms | 156.2500 | 109.3750 |       - |    1.3 MB |
+| A_EFCore_Compiled_ToListAsync  | A_Projection              | 5.531 ms | 414.0625 |        - |       - |   3.36 MB |
+| A_Linq2Db_Compiled_ToList      | A_Projection              | 6.327 ms | 218.7500 | 210.9375 | 54.6875 |   1.47 MB |
 |                                |                           |          |          |          |         |           |
-| A_Dapper_ToListAsync           | A_Projection,B_Projection | 7.286 ms | 257.8125 | 250.0000 | 62.5000 |    1.7 MB |
+| A_Dapper_ToListAsync           | A_Projection,B_Projection | 7.435 ms | 257.8125 | 250.0000 | 62.5000 |    1.7 MB |
 |                                |                           |          |          |          |         |           |
-| B_Nextorm_Cached_ToListAsync   | B_Projection              | 4.047 ms | 156.2500 | 101.5625 |       - |    1.3 MB |
-| B_Linq2Db_ToListAsync          | B_Projection              | 5.958 ms | 218.7500 | 210.9375 | 54.6875 |   1.48 MB |
-| B_EFCore_ToListAsync           | B_Projection              | 9.881 ms | 515.6250 | 312.5000 | 78.1250 |   3.62 MB |
+| B_Nextorm_Cached_ToListAsync   | B_Projection              | 4.370 ms | 156.2500 | 101.5625 |       - |    1.3 MB |
+| B_Linq2Db_ToListAsync          | B_Projection              | 6.597 ms | 218.7500 | 210.9375 | 54.6875 |   1.48 MB |
+| B_EFCore_ToListAsync           | B_Projection              | 9.956 ms | 515.6250 | 312.5000 | 78.1250 |   3.62 MB |
