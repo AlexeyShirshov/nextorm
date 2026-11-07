@@ -29,6 +29,23 @@ public sealed class SelectExpression //: IEquatable<SelectExpression>
     internal PropertyInfo? PropertyInfo { get; set; }
 
     /// <summary>
+    /// The CLR member the row materializer binds this column to when the projection has to be assembled
+    /// member by member. It is populated by the projector from the projection expression (an anonymous
+    /// type's <c>NewExpression.Members</c>, a DTO's member-init binding), so the materializer never
+    /// re-resolves the member from the runtime-typed result type by name.
+    /// <para>
+    /// Deliberately separate from <see cref="PropertyInfo"/>: that one marks a whole-entity or
+    /// expanded-entity column and is consumed by the JSON shape and CSV writers, whereas a projected
+    /// anonymous/DTO column is not entity-derived. Folding the two changed JSON enum-attribute and
+    /// native-streaming decisions.
+    /// </para>
+    /// </summary>
+    internal PropertyInfo? MaterializerMember { get; set; }
+
+    /// <summary>The member the materializer binds this column to, if the projector resolved one.</summary>
+    internal PropertyInfo? BoundMember => PropertyInfo ?? MaterializerMember;
+
+    /// <summary>
     /// The declared storage unit of a <see cref="TimeSpan"/> column on a provider without a native
     /// duration type, or <c>null</c> for a native column. Populated from the entity property metadata;
     /// the provider's column mapper decides whether it applies (see

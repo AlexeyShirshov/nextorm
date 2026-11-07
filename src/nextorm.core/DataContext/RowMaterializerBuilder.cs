@@ -265,11 +265,16 @@ internal static class RowMaterializerBuilder
         return mapColumn(column);
     }
 
-    /// <summary>Resolves the projection member a non-item column is bound to in the member-init fallback.</summary>
+    /// <summary>
+    /// Resolves the projection member a non-item column is bound to in the member-init fallback. The
+    /// member travels on the column itself (the projector resolves it from the entity metadata or from
+    /// the projection expression), so the materializer never re-derives it from the result type by name —
+    /// that lookup is a trimming hazard on a runtime-typed <see cref="Type"/>.
+    /// </summary>
     private static MemberInfo ResolveNonItemMember(Type resultType, SelectExpression column)
-        => (MemberInfo?)column.PropertyInfo
-            ?? resultType.GetProperty(column.PropertyName!)
-            ?? throw new QueryPreparationException($"Cannot bind projection item {column.PropertyName} of {resultType.Name}");
+        => (MemberInfo?)column.BoundMember
+            ?? throw new QueryPreparationException(
+                $"Cannot bind projection item {column.PropertyName} of {resultType.Name}: the column carries no member metadata.");
 
     private static Expression BuildEntityItem(
         ProjectionEntityItem item,
@@ -444,7 +449,9 @@ internal static class RowMaterializerBuilder
 
             if (column.IsDynamicColumnsStore)
             {
-                var storeProperty = column.PropertyInfo ?? resultType.GetProperty(column.PropertyName!)!;
+                var storeProperty = column.BoundMember
+                    ?? throw new QueryPreparationException(
+                        $"The dynamic-columns store {column.PropertyName} of {resultType.Name} is projected without member metadata.");
                 bindings.Add(Expression.Bind(storeProperty, mapDynamicColumns!(column, starStart, dynamicColumns!)));
                 continue;
             }
@@ -453,7 +460,9 @@ internal static class RowMaterializerBuilder
             if (column.RangeColumnRole == RangeColumnRole.Upper)
                 continue;
 
-            var propInfo = column.PropertyInfo ?? resultType.GetProperty(column.PropertyName!)!;
+            var propInfo = column.BoundMember
+                ?? throw new QueryPreparationException(
+                    $"Cannot bind projection item {column.PropertyName} of {resultType.Name}: the column carries no member metadata.");
 
             if (column.RangeColumnRole == RangeColumnRole.Lower)
             {

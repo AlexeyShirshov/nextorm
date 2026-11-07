@@ -940,6 +940,15 @@ public partial class QueryCommand
                             {
                                 Index = expanded.Count,
                                 PropertyName = ctorParam.Name!,
+                                // A NewExpression that constructs a property-carrying type (an anonymous
+                                // type, a positional record/DTO) exposes the target members here. The row
+                                // materializer binds a non-item value through this member, so it travels
+                                // with the column instead of being re-resolved from the result type by
+                                // name (a trimming hazard on the runtime-typed result type). It is not
+                                // PropertyInfo: a projected anonymous/DTO column is not entity-derived.
+                                MaterializerMember = ctor.Members is { } members && idx < members.Count
+                                    ? members[idx] as PropertyInfo
+                                    : null,
                                 Expression = innerQueryVisitor.Visit(arg),
                                 DurationUnit = durationUnit,
                                 DurationPrecision = durationPrecision,
@@ -1034,6 +1043,11 @@ public partial class QueryCommand
                             {
                                 Index = idx,
                                 PropertyName = binding.Member.Name!,
+                                // The member is already resolved here; carry it for the materializer so it
+                                // binds the member-init slot through the column instead of re-resolving
+                                // it from the runtime-typed result type by name. Not PropertyInfo: a
+                                // projected DTO column is not entity-derived.
+                                MaterializerMember = binding.Member as PropertyInfo,
                                 Expression = innerQueryVisitor.Visit(binding.Expression),
                                 DurationUnit = bindingDurationUnit,
                                 DurationPrecision = bindingDurationPrecision,
@@ -1877,6 +1891,10 @@ public partial class QueryCommand
             {
                 Index = src.Index,
                 PropertyName = src.PropertyName,
+                // The consumer binds through the same member the source column carries; the clone must
+                // not drop it, or the materializer falls back to resolving the member by name.
+                PropertyInfo = src.PropertyInfo,
+                MaterializerMember = src.MaterializerMember,
                 Expression = src.Expression,
                 OutputName = outputName,
                 IsProjectionOutputReference = true,
