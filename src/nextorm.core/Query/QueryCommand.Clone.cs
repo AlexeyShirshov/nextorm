@@ -116,10 +116,13 @@ public partial class QueryCommand
         dst.DistinctOn = DistinctOn;
         dst._distinctOnColumns = _distinctOnColumns;
         dst.ExtremeRow = ExtremeRow;
-        // #362 AC7: the holder is copied in one step. Its component/descriptor lists are never mutated
-        // in place (the preparer and the render path only read them, every write assigns a new list),
-        // so the copy shares those instances instead of paying two list copies on every clone.
-        dst._componentState = _componentState?.Clone();
+        // #368: component state is stored flat; share the immutable component/prepared lists and views,
+        // and drop the render-scoped shape on the clone (it belongs to the source instance).
+        dst._components = _components;
+        dst._componentsView = _componentsView;
+        dst._preparedComponents = _preparedComponents;
+        dst._preparedComponentsView = _preparedComponentsView;
+        dst._componentRenderShape = null;
         // The effective state the component contributions produced during preparation. The clone
         // constructor already copies it; a staged raw apply (ApplyPreparationFrom) targets a fresh
         // command, so it must arrive through here or the hit cannot re-extract captured parameters from

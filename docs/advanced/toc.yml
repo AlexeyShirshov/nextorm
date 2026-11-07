@@ -6,7 +6,7 @@
   href: limitations.md
 - name: Native extreme-row strategies
   href: select-where-extrema-native.md
-- name: "Extensibility: custom SQL dialects and renderers"
+- name: "Extensibility"
   href: extensibility.md
 - name: Extensions package (`nextorm.extensions`)
   href: extensions-package.md

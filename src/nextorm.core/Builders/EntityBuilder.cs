@@ -444,15 +444,15 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         cmd.LimitBy = LimitByClause;
         cmd.DistinctOn = _distinctOn;
         cmd.ExtremeRow = _extremeRow;
-        // A single component is materialized as a one-element array; two or more share the list
-        // instance, which is never mutated in place (WithComponent copies before writing).
-        cmd.Components = _componentState switch
+        // #368: forward the component state without allocating a one-element array or a holder.
+        // A single component is stored as-is; lists are shared (never mutated in place).
+        cmd.SetComponents(_componentState switch
         {
             null => null,
-            IQueryComponent single => new IQueryComponent[] { single },
             IReadOnlyList<IQueryComponent> list => list,
+            IQueryComponent single => single,
             _ => null,
-        };
+        });
         cmd.TableSample = _tablesample;
         cmd.Temporal = _temporal;
         cmd.RowLock = _rowLock;
