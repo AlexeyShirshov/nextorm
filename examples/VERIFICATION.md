@@ -1,6 +1,6 @@
 # Examples verification report
 
-> **Last verified: 2026-11-01** (the examples are now **comparison projects**: native comparison queries have
+> **Last verified: 2026-11-08** (the examples are now **comparison projects**: native comparison queries have
 > nextorm and linq2db arms, and both are executed against the same dataset; BenchmarkDotNet runs
 > through `--benchmark`). Re-run the examples whenever the engine gains features and update the tables
 > below. This file is the source of truth for "what works / what does not and why"; the topics are owned
@@ -8,11 +8,9 @@
 > [`docs/specs/`](../docs/specs). Run mechanics live in
 > [`.opencode/skills/running-examples/SKILL.md`](../.opencode/skills/running-examples/SKILL.md).
 >
-> **The numbers below are from 2026-10-30**, observed after the four remaining anonymous chains were
-> converted to named projections and aliased joins (#231) and `NextOrmVersion` was bumped to
-> `1.0.9-rc4`, the release that ships the fix for the CTE-alias defect those chains exposed (#350).
-> The mssql example still builds the `ProjectReference` to `src/` (#232); postgres and clickhouse use
-> the published rc4 packages.
+> **The numbers below are from 2026-11-08**, the run that bumped `NextOrmVersion` to `1.0.9-rc5`.
+> All four examples (postgres, mssql, clickhouse, oc-report) now consume the **published `1.0.9-rc5`
+> packages**; the mssql `ProjectReference` for the typed `Pivot` surface (#232) is still in place.
 
 ## Environment
 
@@ -38,18 +36,19 @@ as `FAIL`; any other exception aborts the run. Comparison arms must be native on
 | `nextorm.examples.mssql.adventureworks` | **11/11** | — |
 | `nextorm.examples.clickhouse.analytics` | **9/9** | — |
 
-`nextorm.examples.oc-report` is not a two-arm comparison: it is the NativeAOT reference app. Verified
-2026-11-08 (13 GB `opencode.db`, 3-day window, warm page cache, median of three runs): JIT 0.42 s →
-NativeAOT 0.12 s, 8.2 MB binary, 30 MB RSS; byte-identical output against the app's Python twin and
-against the EF Core / Dapper.AOT arms. See its [README](nextorm.examples.oc-report/README.md).
+`nextorm.examples.oc-report` is not a two-arm comparison: it is the NativeAOT reference app, and since
+`1.0.9-rc5` it builds against the published `nextorm` / `nextorm.sqlite` packages instead of `src/`.
+Re-verified 2026-11-08 on that switch: `dotnet publish -c Release -r linux-x64` → native binary
+8,414,024 bytes, JIT and NativeAOT output byte-identical on the synthetic database. The
+real-world numbers (13 GB `opencode.db`, 3-day window, warm page cache, median of three runs) remain
+JIT 0.42 s → NativeAOT 0.12 s, 30 MB RSS, byte-identical against the app's Python twin and against the
+EF Core / Dapper.AOT arms. See its [README](nextorm.examples.oc-report/README.md).
 
-Query-by-query counts on 2026-10-30 (warm volumes, Podman):
+Query-by-query counts on 2026-11-08 (warm volumes, Podman, published `1.0.9-rc5`):
 
 * postgres: aircraft delay chains 30, occupancy matrix 8, no-show 0, rolling revenue 91, ABC/XYZ 614,
-  top routes 186, airport OTP 63, percentiles 8, frequent flyers 10, passenger growth 2, cancellations 15.
-  All queries return matching row counts; full-value equality is verified separately where noted below.
-  `AircraftDelayChains` is the query the named-alias conversion rewrote and the one #350 broke; it now
-  returns 30 rows again.
+  top routes 186, airport OTP 63, frequent flyers 10, passenger growth 2, cancellations 15.
+  All ten queries return matching row counts; full-value equality is verified separately where noted below.
 * mssql: 146, 364, 0, 266, 4, 12, 40, 20, 14, 364, 40 — identical in both arms.
 * clickhouse: array analytics 10, funnel 3, sessions 100, daily traffic 7, top landing pages 10, device
   split 2, top referrers 10, session depth 5, rolling activity 7; `Retention` (nextorm-only) is excluded from comparison; `Incremental` was removed with the whole-query `FromSql` cleanup.
@@ -58,7 +57,7 @@ Query-by-query counts on 2026-10-30 (warm volumes, Podman):
 
 | Query | Why it fails | Tracked in |
 |---|---|---|
-| CH `Retention` | rc4 wraps every array result in `cast(… as Array(...))`; for a tuple element the type renderer falls back to the CLR name including its arity, so the SQL says ``Array(Nullable(Tuple`2))`` and ClickHouse rejects it (`Code: 62. Back quoted string is not closed`). The alias conversion is not involved — the positional form emits the same cast. Not present in rc3, which emitted the bare `groupArray(...)`. The query is nextorm-only since the 2026-11-01 comparison withdrawal. | [#359](https://github.com/AlexeyShirshov/nextorm/issues/359) |
+| CH `Retention` | rc4 wrapped every array result in `cast(… as Array(...))`; for a tuple element the type renderer fell back to the CLR name including its arity, so the SQL said ``Array(Nullable(Tuple`2))`` and ClickHouse rejected it (`Code: 62. Back quoted string is not closed`). **Fixed in `1.0.9-rc5`** (#359): a `group_array` over a `Tuple` element now renders a valid `Array(Nullable(Tuple))`. The query stays out of the comparison (nextorm-only since the 2026-11-01 withdrawal), so the fix is not exercised by the run above. | [#359](https://github.com/AlexeyShirshov/nextorm/issues/359) — closed |
 
 CH `Incremental` is no longer part of the example: `uniqMerge` (the `-Merge` combinator over an
 `AggregateFunction(uniq, …)` state column) has no nextorm LINQ surface in the released packages — the
@@ -69,6 +68,16 @@ MSSQL `QuarterlyPivot` is no longer a failure: the native `PIVOT` now accepts a 
 reference `WITH OrderMargins AS (<5-table join>) ... PIVOT (...)` is expressed directly.
 
 ## Actuality changes made on this verification
+
+* **Re-verified against the `1.0.9-rc5` packages (2026-11-08).** `NextOrmVersion` bumped
+  `1.0.9-rc4 → 1.0.9-rc5` and `Directory.Build.props` `<Version>` with it, so postgres, mssql
+  (package arms) and clickhouse build against what is on nuget.org. `nextorm.examples.oc-report`
+  switched from `ProjectReference` to the published `nextorm` / `nextorm.sqlite` `1.0.9-rc5` — the
+  first release that carries the NativeAOT fix it demonstrates — and still publishes a working native
+  binary (8,414,024 bytes, JIT/AOT output identical). Results on warm volumes: postgres **10/10**,
+  mssql **11/11**, clickhouse **9/9**, no `[DIFF]` and no `[FAIL]`; the per-query row counts are
+  unchanged from the 2026-10-30 run. `Retention` (#359, the tuple-array cast) and `Incremental` are no
+  longer part of the clickhouse comparison, so the run has no documented gap left.
 
  * **T271 CH Retention source binding and projection measurement (2026-10-31).** Comparison withdrawn on 2026-11-01 (#271, whole-query `FromSql` rule). NextORM-only historical figures: workspace-source baselines 87.46 KB / 186.1 ms and 87.81 KB / 187.1 ms; final projection 197.47 KB / 190.5 ms and 87.37 KB / 190.7 ms. The `SelectGroup` projection was subsequently reverted; source references and tuple-rendering test remain. SQL and row snapshots were byte-identical before/after. Evidence: `.pdca/rc5/items/T271/rv1/`.
 

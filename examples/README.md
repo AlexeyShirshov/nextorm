@@ -19,15 +19,15 @@ it — start there to understand how to translate a query in either direction.
 | [`nextorm.examples.clickhouse.analytics`](nextorm.examples.clickhouse.analytics/README.md) | `nextorm.clickhouse` | ClickHouse `datasets.hits_v1` | [Sql/](nextorm.examples.clickhouse.analytics/Sql) |
 | [`nextorm.examples.oc-report`](nextorm.examples.oc-report/README.md) | `nextorm.sqlite` | OpenCode `opencode.db` (or [`seed.sql`](nextorm.examples.oc-report/seed.sql)) | — (NativeAOT reference, no linq2db arm) |
 
-> The postgres and clickhouse projects consume the **published `nextorm.*` NuGet packages** (version
-> pinned by `NextOrmVersion` in [`Directory.Packages.props`](../Directory.Packages.props)) instead of
-> referencing `src/` directly, so they double as a real consumer of what ships on nuget.org.
+> The postgres, clickhouse and oc-report projects consume the **published `nextorm.*` NuGet packages**
+> (version pinned by `NextOrmVersion` in [`Directory.Packages.props`](../Directory.Packages.props))
+> instead of referencing `src/` directly, so they double as a real consumer of what ships on nuget.org.
 > **`nextorm.examples.mssql.adventureworks` is an explicit exception** (#232): it references
 > `nextorm.core`/`nextorm.sqlserver` from `src/` via `ProjectReference` so it can demonstrate the
 > current-checkout typed `Pivot`/`Unpivot` surface, which is not in a published package yet. Its run
 > and build commands are the same as the other examples.
-> **`nextorm.examples.oc-report` is also a `ProjectReference` exception**: it is the NativeAOT reference
-> app, and the AOT fix it demonstrates is in the current checkout, not in a published package yet.
+> `nextorm.examples.oc-report` moved from `ProjectReference` to the published packages with `1.0.9-rc5`,
+> the first release that carries the NativeAOT fix it demonstrates.
 
 ## Running
 
