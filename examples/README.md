@@ -1,12 +1,12 @@
 # nextorm examples
 
-Three runnable **comparison** console applications over realistic demo databases. Each query in a
-project is implemented twice — with nextorm and with [linq2db](https://github.com/linq2db/linq2db) —
-and both arms are executed against the same provisioned database, then benchmarked with
-BenchmarkDotNet. Each example provisions its database with
+Three runnable **comparison** console applications over realistic demo databases, plus a **NativeAOT
+reference application**. Each query in a comparison project is implemented twice — with nextorm and with
+[linq2db](https://github.com/linq2db/linq2db) — and both arms are executed against the same provisioned
+database, then benchmarked with BenchmarkDotNet. Each example provisions its database with
 [Testcontainers](https://dotnet.testcontainers.org/) on first run (downloading and caching the official
 dataset into a named Docker volume); the examples only read, so the loaded database is reused on later
-runs.
+runs. The AOT reference reads a local SQLite file (or a synthetic one) and needs no container.
 
 The model SQL lives next to the code, in each project's `Sql/` folder, and every C# method pair names
 the file it models. Each project README maps every SQL construct to the nextorm construct that replaces
@@ -17,6 +17,7 @@ it — start there to understand how to translate a query in either direction.
 | [`nextorm.examples.postgres.aviasales`](nextorm.examples.postgres.aviasales/README.md) | `nextorm.postgres` | PostgreSQL Pro demo «Авиаперевозки» (schema `bookings`), 2025-09-01 | [Sql/](nextorm.examples.postgres.aviasales/Sql) |
 | [`nextorm.examples.mssql.adventureworks`](nextorm.examples.mssql.adventureworks/README.md) | `nextorm.sqlserver` | AdventureWorks 2022 | [Sql/](nextorm.examples.mssql.adventureworks/Sql) |
 | [`nextorm.examples.clickhouse.analytics`](nextorm.examples.clickhouse.analytics/README.md) | `nextorm.clickhouse` | ClickHouse `datasets.hits_v1` | [Sql/](nextorm.examples.clickhouse.analytics/Sql) |
+| [`nextorm.examples.oc-report`](nextorm.examples.oc-report/README.md) | `nextorm.sqlite` | OpenCode `opencode.db` (or [`seed.sql`](nextorm.examples.oc-report/seed.sql)) | — (NativeAOT reference, no linq2db arm) |
 
 > The postgres and clickhouse projects consume the **published `nextorm.*` NuGet packages** (version
 > pinned by `NextOrmVersion` in [`Directory.Packages.props`](../Directory.Packages.props)) instead of
@@ -25,6 +26,8 @@ it — start there to understand how to translate a query in either direction.
 > `nextorm.core`/`nextorm.sqlserver` from `src/` via `ProjectReference` so it can demonstrate the
 > current-checkout typed `Pivot`/`Unpivot` surface, which is not in a published package yet. Its run
 > and build commands are the same as the other examples.
+> **`nextorm.examples.oc-report` is also a `ProjectReference` exception**: it is the NativeAOT reference
+> app, and the AOT fix it demonstrates is in the current checkout, not in a published package yet.
 
 ## Running
 

@@ -138,7 +138,8 @@ serialization rows compare a direct writer with materialize-then-serialize arms,
 caveat.
 
 This report intentionally says nothing about the prepared path. For that comparison, including Category A,
-see the dated [benchmarks](benchmarks.md) page.
+see the dated [benchmarks](benchmarks.md) page. It also does not measure startup or NativeAOT: the
+zero-config AOT reference and its JIT/AOT numbers are in the same [benchmarks](benchmarks.md) page.
 
 ## Optimization follow-ups
 

@@ -276,6 +276,16 @@ CSV (`large_table` slice, 10,000 rows; Ratio relative to `Nextorm_ToList`):
 | Linq2Db_ToList_ManualCsv | 14.635 ms | 1.77 | 4,321.92 KB |
 | EFCore_ToList_ManualCsv | 16.190 ms | 1.96 | 6,516.91 KB |
 
+### NativeAOT startup (reference, not a query benchmark)
+
+AOT moves the cost from every start to publish time. On the `oc-report` case (13 GB SQLite, 3-day window)
+the same report runs in 0.42 s under JIT and 0.12 s as a NativeAOT binary; EF Core 10 goes 1.03 s →
+0.23 s and Dapper 0.26 s → 0.12 s. The SQL and row counts are identical across the three, and the
+measurement is dominated by one `session_message` scan — read it as startup cost, not query throughput.
+Only nextorm publishes with `PublishAot=true` alone; the nextorm arm ships as
+[`examples/nextorm.examples.oc-report`](https://github.com/AlexeyShirshov/nextorm/tree/main/examples/nextorm.examples.oc-report),
+see the [NativeAOT guide](../infrastructure/05-nativeaot.md).
+
 ## Reading the numbers
 
 - Every participant uses the same ADO.NET provider (`Microsoft.Data.Sqlite`), so the comparison is

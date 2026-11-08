@@ -128,6 +128,57 @@ CI run [`42398374420`](https://github.com/AlexeyShirshov/nextorm/actions/runs/42
 [`42400977470`](https://github.com/AlexeyShirshov/nextorm/actions/runs/42400977470) — success.
 Новое доказательство добавлено в [#344](https://github.com/AlexeyShirshov/nextorm/issues/344#issuecomment-6711272432).
 
+### 2.7. CI, job `aot` (новый гейт NativeAOT)
+
+- [x] `dotnet publish tests/nextorm.aot.runner -c Release -r linux-x64` (native-тулчейн
+      `clang` + `zlib1g-dev`).
+- [x] `AotNativeRunTests` с `NEXTORM_AOT_EVIDENCE=1`: отсутствие бинарника — падение, а не skip.
+- [x] Job `publish` теперь зависит от `build` **и** `aot` — тег не публикует пакеты без зелёного
+      нативного прогона.
+- [x] Локальная проверка 08.11.2026: publish rc=0, harness `1/1 passed` (4.9 s); прогон
+      выполняется без контейнеров (SQLite + ленивый `DatabaseContainers`).
+- Покрытие job'а сознательно частичное и описано в `docs/infrastructure/05-nativeaot.md`;
+  расширение матрицы — Stream B [#370](https://github.com/AlexeyShirshov/nextorm/issues/370).
+
+### 2.8. Сравнение на реальном кейсе (`oc-report`, NativeAOT)
+
+`oc-report` (утилита отчётов по `opencode.db` на 13 ГБ) переписан в трёх вариантах и опубликован
+с NativeAOT на одной машине. Окно 3 дня, `agent=pdca-executor`, тёплый page cache, медиана трёх
+прогонов; вывод сверен с Python-двойником `oc-report.py` (3 дня и 7 дней `--all`) — побайтно
+идентичен у всех шести прогонов.
+
+| Вариант | JIT | AOT | Нативный бинарник | IL-предупреждения |
+| --- | --- | --- | --- | --- |
+| nextorm (типизированные запросы) | 0.42 s / 70.8 MB | **0.12 s / 30.2 MB** | 8.2 MB | 158 unique |
+| EF Core 10.0.14 (LINQ + compiled model + precompiled queries) | 1.03 s / 89.7 MB | 0.23 s / 41.9 MB | 17.3 MB | 565 unique |
+| Dapper 2.1.89 + Dapper.AOT 1.1.0 (ручной SQL) | 0.26 s / 51.5 MB | **0.12 s / 19.0 MB** | 3.5 MB | 0 |
+
+Что выяснилось:
+
+- **nextorm** — единственный вариант, которому для AOT не понадобилось ни одной правки исходника:
+  в csproj добавлен только `PublishAot=true`. Это подтверждает заявленный zero-configuration
+  контракт для данного среза (SQLite, три запроса, включая `json_extract`).
+- **EF Core** — `PublishAot=true` в том же проекте ломает даже JIT-запуск
+  (`Model building is not supported when publishing with NativeAOT`, нужен compiled model).
+  Сам publish упал на багах кодогенерации 10.0.14: (1) сущность в CLR-пространстве имён даёт
+  невалидный идентификатор `var ocReport.Ef.SessionRowPrimaryKeyProperties`; (2) `sealed`-сущность
+  даёт `CS0030` на касте к `IInjectableService`. После переноса сущностей в global namespace и
+  снятия `sealed` publish проходит. Плюс `CS9270`: EF 10.0.14 генерирует старую форму
+  `InterceptsLocation(string,int,int)`, которую текущий Roslyn помечает как неподдерживаемую;
+  precompiled SQL при этом в бинарнике присутствует.
+- **Dapper.AOT** — работает, но требует `[module: DapperAot]` и
+  `InterceptorsNamespaces=$(InterceptorsNamespaces);Dapper.AOT`; запросы обязаны быть ручным SQL
+  с константным текстом, non-generic API и runtime-конфигурация не поддерживаются.
+- Цифры не являются общим бенчмарком: Dapper не умеет композицию запросов, EF — статический
+  precompile, nextorm — runtime-композицию. Артефакты эксперимента лежат вне репозитория
+  (`/tmp/opencode/oc-report-compare`), в поставку не входят.
+
+Эталонное приложение теперь **в репозитории**: `examples/nextorm.examples.oc-report` (тот же
+`Program.cs`, `ProjectReference` на `src/` — как у mssql-примера, потому что AOT-фикс ещё не в
+опубликованном пакете). `seed.sql` создаёт детерминированную синтетическую базу с теми же двумя
+таблицами, поэтому приложение можно прогнать без приватной 13 ГБ базы. Проверено: JIT и AOT на
+синтетической базе дают побайтно одинаковый отчёт, publish → 8.4 MB native.
+
 ## 3. Изменения в репозитории
 
 ### 3.1. Версия и публикация
@@ -160,6 +211,26 @@ CI run [`42398374420`](https://github.com/AlexeyShirshov/nextorm/actions/runs/42
 - **`docs/specs/release-1.0.9-rc5.md`** — этот план.
 - **`NextormConfig.cs`** (`5e2dc343`) — `NEXTORM_BENCH_FULL=1` остаётся на in-process toolchain.
 
+### 3.5. NativeAOT: частичная поддержка (docs + CI)
+
+- **`readme.md`** — новый раздел `## NativeAOT`: частичная/экспериментальная поддержка (SQLite,
+  `net10.0`, `linux-x64`), перечисление проверенных форм запросов, ссылки на гайд и #370.
+- **`docs/infrastructure/05-nativeaot.md`** + **`docs/ru/infrastructure/05-nativeaot.md`** —
+  что проверено, что нет, таблица 230 unique / 236 raw диагностик, сравнение на `oc-report`,
+  как попробовать, как сообщить о падении. Записи в `docs/infrastructure/toc.yml` и `docs/ru/toc.yml`.
+- **`docs/infrastructure/03-value-converters.md`** (+RU) — ссылка на новую страницу из оговорки про
+  `JsonTypeInfo<T>`.
+- **`docs/index.md`** — пункт rc5 о частичной поддержке NativeAOT.
+- **`AotNativeRunTests.cs`** — комментарий приведён в соответствие: раннер теперь публикует CI
+  (job `aot`), а не «CI does not publish it».
+- **`examples/nextorm.examples.oc-report`** — AOT-эталон в репозитории: `Program.cs` (типизированные
+  запросы, `json_extract`, runtime-фильтр), `seed.sql` (детерминированная синтетическая база),
+  `README.md` (запуск JIT/AOT и таблица сравнения). Добавлен в `nextorm.slnx`; помечен как
+  `ProjectReference`-исключение в `examples/README.md` и `examples/VERIFICATION.md`.
+- **`docs/comparisons/*`** (+RU) — во всех страницах сравнения (index, capabilities, benchmarks,
+  provider-features) явно зафиксирован zero-config контракт NativeAOT и ссылка на эталон;
+  внутренняя `docs/specs/comparison/capability-matrix.md` — новый раздел «NativeAOT migration cost».
+
 ## 4. Публикация (шаги владельца)
 
 - [ ] Закоммитить подготовленный объём (§3) на ветке `1.0.9-rc5` и запушить её.
@@ -182,6 +253,8 @@ CI run [`42398374420`](https://github.com/AlexeyShirshov/nextorm/actions/runs/42
 - [ ] Тег `v1.0.9-rc5` запушен; CI отправил 8 пакетов на nuget.org (включая `nextorm.extensions`).
 - [ ] GitHub Release (prerelease) с заполненным описанием.
 - [ ] Docs EN/RU задеплоены; якорь `#109-rc5` доступен.
+- [ ] CI job `aot` зелёный: нативный раннер опубликован, `AotNativeRunTests` прошёл под
+      `NEXTORM_AOT_EVIDENCE=1`.
 - [ ] Milestone 1.0.9-rc5 закрыт.
 
 ## 6. Открытые вопросы

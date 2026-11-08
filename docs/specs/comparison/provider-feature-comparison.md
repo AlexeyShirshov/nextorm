@@ -14,6 +14,10 @@ dialects, `SqlFunctions.<Provider>` libraries, docs) with `file:line`. linq2db f
 its source on GitHub (`linq2db/linq2db`, `master`, commit `5dfadd7eccb99fe18b6b2195897d21103f897eba`)
 at file level, with absence claims explicitly marked as source-search findings.
 
+**Out of scope:** NativeAOT. It is a cross-provider contract, not a per-engine API surface; the
+zero-config AOT comparison lives in `docs/infrastructure/05-nativeaot.md`, the reference app in
+`examples/nextorm.examples.oc-report`, and the public pages under `docs/comparisons/`.
+
 ## Legend
 
 - `yes` — first-class provider API present.

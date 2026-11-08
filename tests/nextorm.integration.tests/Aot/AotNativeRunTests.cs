@@ -25,9 +25,9 @@ public sealed class AotNativeRunTests
         var repositoryRoot = FindRepositoryRoot();
         var binaryPath = Path.Combine(repositoryRoot, "tests", "nextorm.aot.runner", "bin", "linux", "Release", "net10.0", "linux-x64", "publish", "nextorm.aot.runner");
         // The NativeAOT runner is a published evidence artifact, not part of the ordinary build:
-        // `dotnet build` never produces it and CI does not publish it. Skip unless the binary is
-        // there, and fail loudly when a run explicitly asks for this harness
-        // (NEXTORM_AOT_EVIDENCE=1), so the opt-in path can never degrade into a silent skip.
+        // `dotnet build` never produces it. The CI job `aot` publishes it and runs this harness with
+        // NEXTORM_AOT_EVIDENCE=1; a local run without that variable skips when the binary is absent,
+        // while the explicit opt-in path never degrades into a silent skip.
         const string publishCommand = "dotnet publish tests/nextorm.aot.runner -c Release -r linux-x64";
         if (!File.Exists(binaryPath))
         {

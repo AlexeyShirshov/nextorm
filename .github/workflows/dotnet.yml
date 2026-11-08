@@ -160,11 +160,51 @@ jobs:
           path: tests/coverage/
           if-no-files-found: ignore
 
+  aot:
+    # NativeAOT gate. Ordinary builds never produce the native binary and the harness skips itself
+    # in that case, so this job publishes the runner and runs the harness with
+    # NEXTORM_AOT_EVIDENCE=1, which turns the skip into a hard failure.
+    # Coverage is deliberately partial and documented in docs/infrastructure/05-nativeaot.md:
+    # .NET 10 / linux-x64 / SQLite scenarios plus extension component slices. The remaining
+    # providers, the compile-time query pipeline and the residual IL2xxx/IL3xxx diagnostics are
+    # tracked in #370; this job fails if the published binary stops starting or stops matching
+    # the JIT oracle.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v7
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - name: Install NativeAOT prerequisites
+        run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
+      - name: Restore dependencies
+        run: dotnet restore
+      - name: Publish the NativeAOT runner
+        shell: bash
+        run: |
+          set -o pipefail
+          dotnet publish tests/nextorm.aot.runner -c Release -r linux-x64 2>&1 \
+            | tee "$RUNNER_TEMP/aot-publish.log"
+      - name: Run the published native binary
+        env:
+          NEXTORM_AOT_EVIDENCE: "1"
+        run: dotnet test tests/nextorm.integration.tests --filter "FullyQualifiedName~AotNativeRunTests" --verbosity normal
+      - name: Upload the NativeAOT diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: aot-publish-log
+          path: ${{ runner.temp }}/aot-publish.log
+          if-no-files-found: ignore
+
   publish:
     # A tag push publishes to nuget.org; a manual run re-publishes an existing tag. Ordinary
     # branch pushes only build and test.
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
-    needs: build
+    needs: [build, aot]
     runs-on: ubuntu-latest
     permissions:
       contents: read

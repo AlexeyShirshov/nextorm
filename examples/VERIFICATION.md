@@ -38,6 +38,11 @@ as `FAIL`; any other exception aborts the run. Comparison arms must be native on
 | `nextorm.examples.mssql.adventureworks` | **11/11** | — |
 | `nextorm.examples.clickhouse.analytics` | **9/9** | — |
 
+`nextorm.examples.oc-report` is not a two-arm comparison: it is the NativeAOT reference app. Verified
+2026-11-08 (13 GB `opencode.db`, 3-day window, warm page cache, median of three runs): JIT 0.42 s →
+NativeAOT 0.12 s, 8.2 MB binary, 30 MB RSS; byte-identical output against the app's Python twin and
+against the EF Core / Dapper.AOT arms. See its [README](nextorm.examples.oc-report/README.md).
+
 Query-by-query counts on 2026-10-30 (warm volumes, Podman):
 
 * postgres: aircraft delay chains 30, occupancy matrix 8, no-show 0, rolling revenue 91, ABC/XYZ 614,

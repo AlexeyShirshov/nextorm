@@ -27,6 +27,10 @@ with no change tracking and no mandatory entity class.
 * **Extensible without forking** — public query components (`IQueryComponent` + `WithComponent`),
   global query filters, value converters, SQL functions, interceptors, custom dialects and renderers.
   No `InternalsVisibleTo`, no translator registry and no global mutable state.
+* **Zero-config NativeAOT** — `PublishAot=true` is the only change: no compiled model, no precompilation
+  step, no interceptor opt-in and no manual entity/query registration. Partial coverage today (SQLite,
+  .NET 10 / `linux-x64`); see the
+  [NativeAOT guide](https://alexeyshirshov.github.io/nextorm/infrastructure/05-nativeaot.html).
 
 ## Installation
 
@@ -124,6 +128,25 @@ registry and no global mutable state.
 
 The complete guide — which hook to choose, who calls it and when, and a working example for each —
 is [Extensibility](https://alexeyshirshov.github.io/nextorm/advanced/extensibility.html).
+
+## NativeAOT
+
+Partial and experimental: published native binaries run with the SQLite provider on `net10.0`
+(`linux-x64`), with JIT-parity checks for interface entities, captured predicates, anonymous
+projections, nullable scalars, SQLite JSON functions and grouped aggregates. Every push publishes
+the native runner and executes it in CI. The remaining providers, the EF Core bridge and the
+residual AOT/trim diagnostics are tracked in
+[#370](https://github.com/AlexeyShirshov/nextorm/issues/370); see the
+[NativeAOT guide](https://alexeyshirshov.github.io/nextorm/infrastructure/05-nativeaot.html).
+
+That is the lightest AOT migration contract among the compared libraries. EF Core needs a compiled model
+plus interceptor-based query precompilation and rejects dynamically composed queries; Dapper needs
+`Dapper.AOT` with `[module: DapperAot]`, an `InterceptorsNamespaces` opt-in and statically known SQL;
+linq2db does not officially support NativeAOT. On a 13 GB SQLite reporting app nextorm published natively
+with no source changes — 8.2 MB binary, 0.12 s, 30 MB RSS — against EF Core's 17.3 MB, 0.23 s and 42 MB
+after two code-generation workarounds (Dapper.AOT reaches 3.5 MB and 0.12 s only with hand-written SQL).
+The reference app ships in the repository:
+[`examples/nextorm.examples.oc-report`](https://github.com/AlexeyShirshov/nextorm/tree/main/examples/nextorm.examples.oc-report).
 
 ## Benchmarks
 

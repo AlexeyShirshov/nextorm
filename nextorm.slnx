@@ -7,6 +7,7 @@
   <Folder Name="/examples/">
     <Project Path="examples/nextorm.examples.clickhouse.analytics/nextorm.examples.clickhouse.analytics.csproj" />
     <Project Path="examples/nextorm.examples.mssql.adventureworks/nextorm.examples.mssql.adventureworks.csproj" />
+    <Project Path="examples/nextorm.examples.oc-report/nextorm.examples.oc-report.csproj" />
     <Project Path="examples/nextorm.examples.postgres.aviasales/nextorm.examples.postgres.aviasales.csproj" />
   </Folder>
   <Folder Name="/src/">

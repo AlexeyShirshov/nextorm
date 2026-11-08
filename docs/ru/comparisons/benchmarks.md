@@ -279,6 +279,16 @@ CSV (срез `large_table`, 10 000 строк; Ratio — относительн
 | Linq2Db_ToList_ManualCsv | 14.635 ms | 1.77 | 4,321.92 KB |
 | EFCore_ToList_ManualCsv | 16.190 ms | 1.96 | 6,516.91 KB |
 
+### Startup с NativeAOT (справочно, не бенчмарк запросов)
+
+AOT переносит стоимость со старта на публикацию. На кейсе `oc-report` (SQLite 13 ГБ, окно 3 дня) один и
+тот же отчёт идёт 0.42 s под JIT и 0.12 s нативным бинарником; EF Core 10 — 1.03 s → 0.23 s, Dapper —
+0.26 s → 0.12 s. SQL и число строк одинаковы у всех трёх, а замер упирается в один scan
+`session_message` — читайте его как стоимость старта, а не пропускную способность запросов. Только
+nextorm публикуется с одним `PublishAot=true`; эталонное приложение —
+[`examples/nextorm.examples.oc-report`](https://github.com/AlexeyShirshov/nextorm/tree/main/examples/nextorm.examples.oc-report),
+см. [руководство по NativeAOT](../infrastructure/05-nativeaot.md).
+
 ## Как читать числа
 
 - Все участники используют один и тот же ADO.NET-провайдер (`Microsoft.Data.Sqlite`), поэтому сравнение
