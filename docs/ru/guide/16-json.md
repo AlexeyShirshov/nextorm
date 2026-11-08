@@ -551,8 +551,8 @@ select json_value(jsonb_build_object('a', 1), cast('$.a' as jsonpath)) as "Value
 
 ---
 
-Source: `src/nextorm.core/Visitors/JsonSqlTranslator.cs`, `src/nextorm.core/Query/SqlFunctions.Postgres.cs`,
-`src/nextorm.core/Query/SqlFunctions.SqlServer.cs`, `src/nextorm.core/Expressions/ForJson.cs`,
+Source: `src/nextorm.core/Visitors/Structured/JsonSqlTranslator.cs`, `src/nextorm.core/Query/SqlFunctions/SqlFunctions.Postgres.cs`,
+`src/nextorm.core/Query/SqlFunctions/SqlFunctions.SqlServer.cs`, `src/nextorm.core/Expressions/Formats/ForJson.cs`,
 `src/nextorm.core/DataContext/Dialect/ISqlDialect.cs`, `src/nextorm.sqlserver/SqlServerDialect.cs`,
 `src/nextorm.postgres/PostgresDialect.cs`; tests `tests/nextorm.sqlserver.tests/SqlGeneration/SqlGenerationTests.cs:443,695,1313,1390`,
 `tests/nextorm.postgres.tests/SqlGeneration/SqlGenerationTests.cs:848,868,887,930,950,1831,1861`,

@@ -149,7 +149,7 @@ public class IdentifierSafetyTests
     /// compiles the projection rather than translating it, so <see cref="SqlFunctions.Column{T}"/>
     /// itself throws once a row is present. Pins exactly the behaviour of
     /// <c>InMemoryTests.ColumnByName_ShouldThrowClearNotSupported</c>
-    /// (<c>tests/nextorm.core.tests/InMemory/InMemoryTests.cs:1021</c>) — no product change here.
+    /// (<c>tests/nextorm.core.tests/InMemory/Queries/InMemoryTests.cs:1021</c>) — no product change here.
     /// </summary>
     [Fact]
     public void InMemory_ColumnByName_IsStillRejected()

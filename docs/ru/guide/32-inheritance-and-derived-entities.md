@@ -12,7 +12,7 @@
 
 Единица маппинга — **CLR-тип**. Когда строятся метаданные для `T`, отображаются его публичные
 записываемые свойства, включая унаследованные от базового класса (`GetProperties(FlattenHierarchy | Public | Instance)`,
-см. `src/nextorm.core/DataContext/Meta/EntityMetadataBuilder.cs`). Это даёт обычное CLR-наследование
+см. `src/nextorm.core/DataContext/Meta/Entities/EntityMetadataBuilder.cs`). Это даёт обычное CLR-наследование
 бесплатно: базовый класс может держать общие колонки, а каждый конкретный тип мапится на свою таблицу.
 
 Чего движок **не** делает — не интерпретирует иерархию:

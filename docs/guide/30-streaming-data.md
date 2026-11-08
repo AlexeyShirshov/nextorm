@@ -470,4 +470,4 @@ await ctx.From<Order>().WriteCsvAsync(file);
 
 ---
 
-Source: `src/nextorm.core/Query/QueryCommand.TResult.cs`, `src/nextorm.core/Query/QueryCommandExtensions.cs`, `src/nextorm.core/Builders/EntityBuilderExtensions.cs`, `src/nextorm.core/Query/Json/JsonStreamOptions.cs`, `src/nextorm.core/Query/CsvStreamOptions.cs`.
+Source: `src/nextorm.core/Query/Commands/QueryCommand.TResult.cs`, `src/nextorm.core/Query/Commands/QueryCommandExtensions.cs`, `src/nextorm.core/Builders/Entity/EntityBuilderExtensions.cs`, `src/nextorm.core/Query/Json/JsonStreamOptions.cs`, `src/nextorm.core/Query/CsvStreamOptions.cs`.

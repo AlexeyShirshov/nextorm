@@ -93,7 +93,7 @@ can silently bind to an `options = null` overload instead of the named one.
   literal passed to the required parameter is **CS8625** — the intended
   compile-time gate.
 - **Reference case:** name-less `ToTempTable`/`ToTempTableAsync` in
-  `src/nextorm.core/Builders/TempTableExtensions.cs` — split into a parameterless
+  `src/nextorm.core/Builders/TempTables/TempTableExtensions.cs` — split into a parameterless
   overload + a required-`CreateTableAsOptions` overload so `ToTempTable(null)` fails
   to compile.
 

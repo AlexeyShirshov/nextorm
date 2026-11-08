@@ -7,7 +7,7 @@ Rules that apply to every projection:
 * Constructor arguments, tuple items and member-initialiser assignments all map to select-list entries; the runtime materialiser builds the object from the reader.
 * On the in-memory provider no SQL exists; the same expression is compiled and run over the in-memory data set.
 
-The `Output:` tables below show the rows returned by each example against the integration-test seed data: `simple_entity` holds ids `1`-`10` and `complex_entity` three rows (`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).
+The `Output:` tables below show the rows returned by each example against the integration-test seed data: `simple_entity` holds ids `1`-`10` and `complex_entity` three rows (`tests/nextorm.integration.tests/Providers/TestProviders/SqliteTestProvider.cs`).
 
 ## Anonymous type
 

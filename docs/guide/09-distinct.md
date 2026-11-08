@@ -48,7 +48,7 @@ select distinct nullableint as 'Int'
  from complex_entity
 ```
 
-The `Output:` tables below show the rows returned by each example against the integration-test seed data (`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).
+The `Output:` tables below show the rows returned by each example against the integration-test seed data (`tests/nextorm.integration.tests/Providers/TestProviders/SqliteTestProvider.cs`).
 
 Output:
 
@@ -356,10 +356,10 @@ derived-table lowering cannot express: [`DistinctOn`](xref:NextORM.Postgres.Post
 
 ---
 
-Source: `tests/nextorm.integration.tests/CommonTestSuite/Queries/CommonTestSuite.Distinct.cs:9`,
+Source: `tests/nextorm.integration.tests/CommonTestSuite/Queries/Rows/CommonTestSuite.Distinct.cs:9`,
 `tests/nextorm.sqlite.tests/SqlGeneration/SqlGenerationTests.cs:26`,
 `tests/nextorm.sqlserver.tests/SqlGeneration/SqlGenerationTests.cs:26,35`,
 `tests/nextorm.postgres.tests/SqlGeneration/SqlGenerationTests.cs:25`,
-`tests/nextorm.integration.tests/CommonTestSuite/Queries/CommonTestSuite.SelectWhereExtrema.cs:41`,
-`tests/nextorm.sqlite.tests/SqlGeneration/T302ExtremeRowAllSqlGenerationTests.cs:27`,
-`tests/nextorm.integration.tests/ClickHouse/ClickHouseIntegrationTests.cs:1353`.
+`tests/nextorm.integration.tests/CommonTestSuite/Queries/Rows/CommonTestSuite.SelectWhereExtrema.cs:41`,
+`tests/nextorm.sqlite.tests/SqlGeneration/Sources/T302ExtremeRowAllSqlGenerationTests.cs:27`,
+`tests/nextorm.integration.tests/ClickHouse/Integration/ClickHouseIntegrationTests.cs:1353`.

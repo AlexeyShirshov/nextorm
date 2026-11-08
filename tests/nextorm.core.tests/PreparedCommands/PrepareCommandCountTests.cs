@@ -8,7 +8,7 @@ namespace NextORM.Core.Tests.PreparedCommands;
 /// AC05b-1 of plan r=4 — deterministic counting of prepared-command mints over <b>K = 5</b> executions,
 /// with no timing, allocation or log-text observation. The count is read from the existing
 /// per-(plan, connection) mint seam <c>DbPreparedQueryCommand&lt;TResult&gt;.CreatedCommandCount</c>
-/// (<c>src/nextorm.core/DataContext/Cache/DbPreparedQueryCommand.cs:108</c>), incremented inside
+/// (<c>src/nextorm.core/DataContext/Cache/Commands/DbPreparedQueryCommand.cs:108</c>), incremented inside
 /// <c>Acquire</c> right after the one command-creation call site
 /// <c>PreparedCommandFactory.Create</c> (<c>:232</c> / <c>:241</c> call, <c>:249</c> increment). The kept
 /// numbers are exact integers, so an off-by-one in any of them fails the case; a <c>None</c> policy that

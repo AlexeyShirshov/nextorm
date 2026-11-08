@@ -62,7 +62,7 @@ select t1.id, t2.requiredstring
  join complex_entity as 't2' on cast(t1.id as bigint) = t2.id
 ```
 
-Таблицы `Вывод:` ниже показывают строки, которые возвращает каждый пример на сид-данных интеграционных тестов (`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).
+Таблицы `Вывод:` ниже показывают строки, которые возвращает каждый пример на сид-данных интеграционных тестов (`tests/nextorm.integration.tests/Providers/TestProviders/SqliteTestProvider.cs`).
 
 Вывод:
 
@@ -1113,7 +1113,7 @@ select t1.id
 
 Провайдер in-memory компилирует условие соединения в делегат и выполняет цикл, поэтому он не
 генерирует SQL; он поддерживает соединения [`Inner`](xref:NextORM.Core.JoinType.Inner), [`Left`](xref:NextORM.Core.JoinType.Left), [`Right`](xref:NextORM.Core.JoinType.Right), [`Full`](xref:NextORM.Core.JoinType.Full) и [`Cross`](xref:NextORM.Core.JoinType.Cross) (см.
-`tests/nextorm.core.tests/InMemory/InMemoryJoinTests.cs`). [`CrossApply`](xref:NextORM.Core.EntityBuilder`1.CrossApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions}))/[`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions})) существуют только для SQL и
+`tests/nextorm.core.tests/InMemory/Queries/InMemoryJoinTests.cs`). [`CrossApply`](xref:NextORM.Core.EntityBuilder`1.CrossApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions}))/[`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions})) существуют только для SQL и
 выбрасывают `NotSupportedException` в провайдере in-memory, как и остальные неподдерживаемые типы
 соединений. Соединения через `JoinedEntityBuilder<T1..T8>` разрешаются на этапе построения запроса у каждого
 провайдера.
@@ -1132,7 +1132,7 @@ select t1.id
 ---
 
 Source: `tests/nextorm.integration.tests/CommonTestSuite/Joins/CommonTestSuite.Join.cs:9`,
-`tests/nextorm.core.tests/InMemory/InMemoryJoinTests.cs:14`,
+`tests/nextorm.core.tests/InMemory/Queries/InMemoryJoinTests.cs:14`,
 `tests/nextorm.sqlite.tests/SqlGeneration/SqlGenerationTests.cs:320`,
 `tests/nextorm.sqlserver.tests/SqlGeneration/SqlGenerationTests.cs:379`,
 `tests/nextorm.postgres.tests/SqlGeneration/SqlGenerationTests.cs:312`

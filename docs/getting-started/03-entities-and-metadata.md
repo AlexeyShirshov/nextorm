@@ -371,10 +371,10 @@ provider-side quoting instead.
 
 ---
 
-Source: `tests/nextorm.integration.tests/Support/Entities.cs:7`;
+Source: `tests/nextorm.integration.tests/Support/Entities/Entities.cs:7`;
 `tests/nextorm.integration.tests/CommonTestSuite/Raw/CommonTestSuite.SqlCommand.cs:37`;
 `tests/nextorm.sqlite.tests/Metadata/MetadataRegistrationTests.cs:18`;
-`src/nextorm.core/DataContext/Meta/EntityMetadataBuilder.cs:111`;
-`src/nextorm.core/DataContext/Meta/EntityPropertyBuilder.cs:16`;
-`src/nextorm.core/DataContext/DataContextCache.cs:20`;
+`src/nextorm.core/DataContext/Meta/Entities/EntityMetadataBuilder.cs:111`;
+`src/nextorm.core/DataContext/Meta/Entities/EntityPropertyBuilder.cs:16`;
+`src/nextorm.core/DataContext/Caches/DataContextCache.cs:20`;
 `tests/nextorm.sqlite.tests/SqlGeneration/SqlGenerationTests.cs:116`.

@@ -7,7 +7,7 @@
 ## Overview
 
 The in-memory provider is built into `nextorm` (no extra package) and lives in
-`src/nextorm.core/DataContext/InMemoryDataContext.cs`. The public type is [`InMemoryDataContext`](xref:NextORM.Core.InMemoryDataContext), which
+`src/nextorm.core/DataContext/InMemory/InMemoryDataContext.cs`. The public type is [`InMemoryDataContext`](xref:NextORM.Core.InMemoryDataContext), which
 implements [`IDataContext`](xref:NextORM.Core.IDataContext) directly — it has no dialect, no connection and no SQL, and evaluates the
 query expression tree over the data you attach to it.
 
@@ -174,8 +174,8 @@ The provider fails loudly instead of returning wrong results:
 
 ---
 
-Source: `tests/nextorm.core.tests/InMemory/InMemoryTests.cs:28,46,55,212,226,244,349,374`,
-`tests/nextorm.core.tests/InMemory/InMemoryJoinTests.cs:14,47,64,107,145,162`,
-`tests/nextorm.core.tests/InMemory/InMemorySelectManyTests.cs`,
-`src/nextorm.core/DataContext/InMemoryDataContext.cs`,
+Source: `tests/nextorm.core.tests/InMemory/Queries/InMemoryTests.cs:28,46,55,212,226,244,349,374`,
+`tests/nextorm.core.tests/InMemory/Queries/InMemoryJoinTests.cs:14,47,64,107,145,162`,
+`tests/nextorm.core.tests/InMemory/Queries/InMemorySelectManyTests.cs`,
+`src/nextorm.core/DataContext/InMemory/InMemoryDataContext.cs`,
 `src/nextorm.core/Builders/InMemoryCommandBuilder.cs`.

@@ -549,7 +549,7 @@ select t1.id, t1.name, t2.id, t2.order_id, t2.name
 
 ---
 
-Источник: `tests/nextorm.sqlite.tests/Joins/JoinIntoSqlGenerationTests.cs:23`,
-`tests/nextorm.sqlite.tests/Joins/JoinIntoExecutionTests.cs:43`,
-`tests/nextorm.core.tests/JoinInto/JoinIntoInMemoryTests.cs:31`,
-`tests/nextorm.core.tests/Metadata/RelationshipMetadataTests.cs:173`.
+Источник: `tests/nextorm.sqlite.tests/Joins/JoinInto/JoinIntoSqlGenerationTests.cs:23`,
+`tests/nextorm.sqlite.tests/Joins/JoinInto/JoinIntoExecutionTests.cs:43`,
+`tests/nextorm.core.tests/JoinInto/InMemory/JoinIntoInMemoryTests.cs:31`,
+`tests/nextorm.core.tests/Metadata/Relationships/RelationshipMetadataTests.cs:173`.

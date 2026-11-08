@@ -7,7 +7,7 @@
 ## Обзор
 
 Провайдер in-memory встроен в `nextorm` (без дополнительного пакета) и находится в
-`src/nextorm.core/DataContext/InMemoryDataContext.cs`. Публичный тип — [`InMemoryDataContext`](xref:NextORM.Core.InMemoryDataContext), который
+`src/nextorm.core/DataContext/InMemory/InMemoryDataContext.cs`. Публичный тип — [`InMemoryDataContext`](xref:NextORM.Core.InMemoryDataContext), который
 напрямую реализует [`IDataContext`](xref:NextORM.Core.IDataContext) — у него нет диалекта, нет соединения и нет SQL, и он вычисляет
 дерево выражений запроса по данным, которые вы к нему присоединяете.
 
@@ -174,7 +174,7 @@ static async IAsyncEnumerable<SimpleEntity> GetRows()
 
 ---
 
-Source: `tests/nextorm.core.tests/InMemory/InMemoryTests.cs:28,46,55,212,226,244,349,374`,
-`tests/nextorm.core.tests/InMemory/InMemoryJoinTests.cs:14,47,64,107,145,162`,
-`src/nextorm.core/DataContext/InMemoryDataContext.cs`,
+Source: `tests/nextorm.core.tests/InMemory/Queries/InMemoryTests.cs:28,46,55,212,226,244,349,374`,
+`tests/nextorm.core.tests/InMemory/Queries/InMemoryJoinTests.cs:14,47,64,107,145,162`,
+`src/nextorm.core/DataContext/InMemory/InMemoryDataContext.cs`,
 `src/nextorm.core/Builders/InMemoryCommandBuilder.cs`.

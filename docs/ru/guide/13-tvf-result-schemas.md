@@ -125,6 +125,6 @@ by this provider.` Тип строки без отображённых свой�
 
 ---
 
-Source: `src/nextorm.core/Expressions/TableFunctionSchema.cs`, `src/nextorm.core/DataContext/SqlSourceRenderer.cs` (`RenderResultSchema`), `src/nextorm.core/Query/SqlFunctions.ClickHouse.cs`, `src/nextorm.core/Query/SqlFunctions.Postgres.cs`;
+Source: `src/nextorm.core/Expressions/Sources/TableFunctionSchema.cs`, `src/nextorm.core/DataContext/Sql/SqlSourceRenderer.cs` (`RenderResultSchema`), `src/nextorm.core/Query/SqlFunctions/SqlFunctions.ClickHouse.cs`, `src/nextorm.core/Query/SqlFunctions/SqlFunctions.Postgres.cs`;
 диалекты провайдеров `src/nextorm.postgres/PostgresDialect.cs`, `src/nextorm.clickhouse/ClickHouseDialect.cs`;
 тесты: `tests/nextorm.<provider>.tests/T320/T320RuntimeTvfSqlTests.cs`, `tests/nextorm.integration.tests/T320/T320ClickHouseTvfTests.cs`.

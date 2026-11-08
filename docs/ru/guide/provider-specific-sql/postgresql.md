@@ -519,5 +519,5 @@ select a, b
 
 ---
 
-Source: `src/nextorm.postgres/PostgresDialect.cs`, `src/nextorm.core/Query/SqlFunctions.Postgres.cs`,
+Source: `src/nextorm.postgres/PostgresDialect.cs`, `src/nextorm.core/Query/SqlFunctions/SqlFunctions.Postgres.cs`,
 `tests/nextorm.postgres.tests/SqlGeneration/SqlGenerationTests.cs`.

@@ -596,5 +596,5 @@ the portable `CommonFunctions.any_agg` is unaffected on the providers that enabl
 
 ---
 
-Source: `src/nextorm.sqlserver/SqlServerDialect.cs`, `src/nextorm.core/Query/SqlFunctions.SqlServer.cs`,
+Source: `src/nextorm.sqlserver/SqlServerDialect.cs`, `src/nextorm.core/Query/SqlFunctions/SqlFunctions.SqlServer.cs`,
 `tests/nextorm.sqlserver.tests/SqlGeneration/SqlGenerationTests.cs`.

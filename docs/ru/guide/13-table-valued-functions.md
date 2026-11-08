@@ -42,7 +42,7 @@ select value
 привязывается к контексту только тогда, когда его потребляет `From`, соединение или APPLY. nextorm
 только генерирует вызов — функция уже должна существовать в целевой базе данных.
 
-Таблицы `Вывод:` ниже показывают строки, которые возвращает каждый пример на сид-данных интеграционных тестов (`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).
+Таблицы `Вывод:` ниже показывают строки, которые возвращает каждый пример на сид-данных интеграционных тестов (`tests/nextorm.integration.tests/Providers/TestProviders/SqliteTestProvider.cs`).
 
 Вывод:
 
@@ -755,7 +755,7 @@ SQLite включает `json_each`/`json_tree`/`fts5`, а любой друго
 
 ---
 
-Source: `src/nextorm.core/Builders/TvfEntityBuilder.cs`, `src/nextorm.core/Builders/SourceExpressionLowerer.cs`, `src/nextorm.core/Builders/TvfJoinSourceExtensions.cs`, `src/nextorm.core/DataContext/SqlSourceRenderer.cs`;
-`tests/nextorm.core.tests/Builders/T320RuntimeTvfTests.cs`, `tests/nextorm.core.tests/Builders/T320RuntimeTvfIdentityTests.cs`;
+Source: `src/nextorm.core/Builders/Tvf/TvfEntityBuilder.cs`, `src/nextorm.core/Builders/Tvf/SourceExpressionLowerer.cs`, `src/nextorm.core/Builders/Tvf/TvfJoinSourceExtensions.cs`, `src/nextorm.core/DataContext/Sql/SqlSourceRenderer.cs`;
+`tests/nextorm.core.tests/Builders/Tvf/T320RuntimeTvfTests.cs`, `tests/nextorm.core.tests/Builders/Tvf/T320RuntimeTvfIdentityTests.cs`;
 `tests/nextorm.integration.tests/T320/T320MariaDbTvfTests.cs`;
 сгенерированный SQL: `tests/nextorm.sqlite.tests/T320/T320RuntimeTvfSqlTests.cs`, `tests/nextorm.sqlserver.tests/T320/T320RuntimeTvfSqlTests.cs`, `tests/nextorm.postgres.tests/T320/T320RuntimeTvfSqlTests.cs`, `tests/nextorm.mysql.tests/T320/T320RuntimeTvfSqlTests.cs`, `tests/nextorm.clickhouse.tests/T320/T320RuntimeTvfSqlTests.cs`.

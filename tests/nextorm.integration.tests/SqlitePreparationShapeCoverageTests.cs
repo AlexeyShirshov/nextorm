@@ -10,7 +10,7 @@ namespace NextORM.Integration.Tests;
 /// Preparation/projection shape coverage against a live SQLite database. Every fact prepares and
 /// executes at least one real query through the inherited <see cref="ProviderTestSuite"/> repository,
 /// so the projection/preparation branches of <c>QueryCommand.QueryPreparer</c>
-/// (<c>src/nextorm.core/Query/QueryCommand.QueryPreparer.cs</c>) are exercised end to end: scalar,
+/// (<c>src/nextorm.core/Query/Commands/QueryCommand.QueryPreparer.cs</c>) are exercised end to end: scalar,
 /// entity, anonymous, nullable, computed, typed-CTE and grouped shapes on the live path, and the
 /// publicly reachable rejection guards next to a live valid counterpart of the same shape.
 /// </summary>

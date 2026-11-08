@@ -515,5 +515,5 @@ Exercising the server/cluster table functions (`url`, `s3`, `file`, `remote`, `r
 
 ---
 
-Source: `src/nextorm.clickhouse/ClickHouseDialect.cs`, `src/nextorm.core/Query/SqlFunctions.ClickHouse.cs`,
+Source: `src/nextorm.clickhouse/ClickHouseDialect.cs`, `src/nextorm.core/Query/SqlFunctions/SqlFunctions.ClickHouse.cs`,
 `tests/nextorm.clickhouse.tests/SqlGeneration/SqlGenerationTests.cs`.

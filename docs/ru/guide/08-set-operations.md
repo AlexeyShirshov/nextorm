@@ -208,7 +208,7 @@ from System.Int32`, тогда как холодное чтение работа
 
 ---
 
-Source: `tests/nextorm.integration.tests/CommonTestSuite/Queries/CommonTestSuite.SetOperations.cs:8`,
+Source: `tests/nextorm.integration.tests/CommonTestSuite/Queries/Rows/CommonTestSuite.SetOperations.cs:8`,
 `tests/nextorm.integration.tests/CommonTestSuite/Raw/CommonTestSuite.SqlCommand.cs:743,761`,
 `tests/nextorm.sqlite.tests/SqlGeneration/SqlGenerationTests.cs:49,69,89`,
 `tests/nextorm.sqlserver.tests/SqlGeneration/SqlGenerationTests.cs:62,102`,

@@ -124,6 +124,6 @@ key/value expansion functions `jsonb_each`/`jsonb_each_text`/`jsonb_object_keys`
 
 ---
 
-Source: `src/nextorm.core/Expressions/TableFunctionSchema.cs`, `src/nextorm.core/DataContext/SqlSourceRenderer.cs` (`RenderResultSchema`), `src/nextorm.core/Query/SqlFunctions.ClickHouse.cs`, `src/nextorm.core/Query/SqlFunctions.Postgres.cs`;
+Source: `src/nextorm.core/Expressions/Sources/TableFunctionSchema.cs`, `src/nextorm.core/DataContext/Sql/SqlSourceRenderer.cs` (`RenderResultSchema`), `src/nextorm.core/Query/SqlFunctions/SqlFunctions.ClickHouse.cs`, `src/nextorm.core/Query/SqlFunctions/SqlFunctions.Postgres.cs`;
 provider dialects `src/nextorm.postgres/PostgresDialect.cs`, `src/nextorm.clickhouse/ClickHouseDialect.cs`;
 tests: `tests/nextorm.<provider>.tests/T320/T320RuntimeTvfSqlTests.cs`, `tests/nextorm.integration.tests/T320/T320ClickHouseTvfTests.cs`.

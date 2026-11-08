@@ -41,7 +41,7 @@ The descriptor is context-independent: it carries no `DataContext`, composes wit
 a context only when it is consumed by `From`, a join or an APPLY. nextorm only emits the call — the
 function must already exist in the target database.
 
-The `Output:` tables below show the rows returned by each example against the integration-test seed data (`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).
+The `Output:` tables below show the rows returned by each example against the integration-test seed data (`tests/nextorm.integration.tests/Providers/TestProviders/SqliteTestProvider.cs`).
 
 Output:
 
@@ -750,7 +750,7 @@ The result-schema forms each provider can render are listed in
 
 ---
 
-Source: `src/nextorm.core/Builders/TvfEntityBuilder.cs`, `src/nextorm.core/Builders/SourceExpressionLowerer.cs`, `src/nextorm.core/Builders/TvfJoinSourceExtensions.cs`, `src/nextorm.core/DataContext/SqlSourceRenderer.cs`;
-`tests/nextorm.core.tests/Builders/T320RuntimeTvfTests.cs`, `tests/nextorm.core.tests/Builders/T320RuntimeTvfIdentityTests.cs`;
+Source: `src/nextorm.core/Builders/Tvf/TvfEntityBuilder.cs`, `src/nextorm.core/Builders/Tvf/SourceExpressionLowerer.cs`, `src/nextorm.core/Builders/Tvf/TvfJoinSourceExtensions.cs`, `src/nextorm.core/DataContext/Sql/SqlSourceRenderer.cs`;
+`tests/nextorm.core.tests/Builders/Tvf/T320RuntimeTvfTests.cs`, `tests/nextorm.core.tests/Builders/Tvf/T320RuntimeTvfIdentityTests.cs`;
 `tests/nextorm.integration.tests/T320/T320MariaDbTvfTests.cs`;
 generated SQL: `tests/nextorm.sqlite.tests/T320/T320RuntimeTvfSqlTests.cs`, `tests/nextorm.sqlserver.tests/T320/T320RuntimeTvfSqlTests.cs`, `tests/nextorm.postgres.tests/T320/T320RuntimeTvfSqlTests.cs`, `tests/nextorm.mysql.tests/T320/T320RuntimeTvfSqlTests.cs`, `tests/nextorm.clickhouse.tests/T320/T320RuntimeTvfSqlTests.cs`.

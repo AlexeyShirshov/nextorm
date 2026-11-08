@@ -40,7 +40,7 @@ select id
  from simple_entity order by id desc limit 1
 ```
 
-Таблицы `Вывод:` ниже показывают строки, которые возвращает каждый пример на сид-данных интеграционных тестов (`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).
+Таблицы `Вывод:` ниже показывают строки, которые возвращает каждый пример на сид-данных интеграционных тестов (`tests/nextorm.integration.tests/Providers/TestProviders/SqliteTestProvider.cs`).
 
 Вывод:
 
@@ -488,7 +488,7 @@ Source: `tests/nextorm.integration.tests/CommonTestSuite/Raw/CommonTestSuite.Sql
 `tests/nextorm.integration.tests/CommonTestSuite/Raw/CommonTestSuite.SqlCommand.cs:573`,
 `tests/nextorm.integration.tests/CommonTestSuite/Raw/CommonTestSuite.SqlCommand.cs:592`,
 `tests/nextorm.integration.tests/CommonTestSuite/Raw/CommonTestSuite.SqlCommand.cs:602`,
-`tests/nextorm.integration.tests/CommonTestSuite/Queries/CommonTestSuite.LinqExtensions.cs:8`,
+`tests/nextorm.integration.tests/CommonTestSuite/Queries/Structure/CommonTestSuite.LinqExtensions.cs:8`,
 `tests/nextorm.integration.tests/Postgres/PostgresSpecificTests.cs:24`,
 `tests/nextorm.integration.tests/SqlServer/SqlServerSpecificTests.cs:24`,
 `tests/nextorm.integration.tests/SqlServer/SqlServerSpecificTests.cs:43`,
@@ -500,5 +500,5 @@ generated SQL: `tests/nextorm.sqlite.tests/SqlGeneration/SqlGenerationTests.cs:1
 `tests/nextorm.sqlserver.tests/SqlGeneration/SqlGenerationTests.cs:173`,
 `tests/nextorm.postgres.tests/SqlGeneration/SqlGenerationTests.cs:130`,
 `tests/nextorm.postgres.tests/SqlGeneration/SqlGenerationTests.cs:139`;
-`src/nextorm.core/Query/QueryCommand.TResult.cs:147`,
-`src/nextorm.core/Query/QueryCommand.TResult.cs:197`.
+`src/nextorm.core/Query/Commands/QueryCommand.TResult.cs:147`,
+`src/nextorm.core/Query/Commands/QueryCommand.TResult.cs:197`.
