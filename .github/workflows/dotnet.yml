@@ -19,6 +19,13 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Least privilege for the GITHUB_TOKEN. The build job only reads the repository; the tag-triggered
+# `publish` job re-declares its own block and adds `id-token: write` on top of this. Declared
+# explicitly so the scope is documented and stays restricted if the repository default ever changes
+# (CodeQL `actions/missing-workflow-permissions`).
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest

@@ -231,6 +231,22 @@ CI run [`42398374420`](https://github.com/AlexeyShirshov/nextorm/actions/runs/42
   provider-features) явно зафиксирован zero-config контракт NativeAOT и ссылка на эталон;
   внутренняя `docs/specs/comparison/capability-matrix.md` — новый раздел «NativeAOT migration cost».
 
+### 3.6. Синхронизация с `main` перед мержем (PR #371)
+
+К моменту PR #371 в `main` ушли 8 коммитов, которых нет на ветке: CodeQL в advanced setup
+(`.github/workflows/codeql.yml`, `.github/codeql/codeql-config.yml`, #355–#356), least-privilege
+`permissions: contents: read` в `.github/workflows/dotnet.yml` (#358) и рефреш бенчмарк-таблиц от
+2026-10-30 (#357). Разрешено так:
+
+- **CodeQL и `permissions`** — взяты из `main`. `dotnet.yml` смерджился без конфликта: блок
+  `permissions` стоит на уровне workflow, job `aot` работает с `contents: read`.
+- **Рефреш бенчмарков от 2026-10-30 — отброшен**: на ветке лежит более свежий прогон 2026-11-07
+  (`chore(benchmarks): refresh comparison reports and tables`), он же источник чисел в `readme.md`,
+  `docs/comparisons/benchmarks.md` и RU-зеркале. Конфликты в отчётах BenchmarkDotNet решены в пользу
+  ветки; `*-report.html` остаются вне индекса (политика 1e31331d «артефакты локально»).
+- **Текстовые конфликты** (`readme.md`, `docs/comparisons/benchmarks.md`, RU-зеркало) — везде сторона
+  ветки: она содержит и новые числа, и секции NativeAOT, которых в `main` нет.
+
 ## 4. Публикация (шаги владельца)
 
 - [ ] Закоммитить подготовленный объём (§3) на ветке `1.0.9-rc5` и запушить её.
