@@ -20,4 +20,14 @@ var cmd = ctx.From<Order>()
     .Select(x => new { x.Id, x.Amount });
 ```
 
+```csharp
+using NextORM.Core;
+using NextORM.Extensions;
+
+// No explicit GroupBy: the aggregate-free, row-dependent parts of the projection become the keys.
+var byCustomer = ctx.From<Order>()
+    .SelectGroup(x => new { x.CustomerId, Total = SqlFunctions.Sql.sum(x.Amount) })
+    .ToList();
+```
+
 Guide: <https://alexeyshirshov.github.io/nextorm/advanced/extensions-package.html>.

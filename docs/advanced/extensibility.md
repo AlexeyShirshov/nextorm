@@ -201,7 +201,7 @@ var rows = ctx.From<Player>()
 |---|---|---|
 | `IQueryComponent` | One object per operator instance. | Reads `Slot` on attach and plan-key compare; reads `Contribution`; calls `Prepare` while preparing; calls `BuildQuery` while rendering. |
 | `IQueryComponentDescriptor` | Return from `Prepare`; immutable, no mutable component state. | Stores in `QueryCommand.PreparedComponents`; hashes `StructuralHash`; compares with `StructurallyEquals`; drops on preparation reset. |
-| `QueryComponentContribution` | Declare once: `AdditivePredicate` or `ExclusiveRowSource`. | Rejects a second `ExclusiveRowSource` slot while preparing. Additive predicates are **not** auto-combined: the component must AND them itself (see rules). |
+| `QueryComponentContribution` | Declare once: `AdditivePredicate`, `ExclusiveRowSource` or `ExclusiveGrouping`. | Rejects a second `ExclusiveRowSource` slot and a second distinct `ExclusiveGrouping` owner while preparing, and treats the two exclusive modes as mutually exclusive. Additive predicates are **not** auto-combined: the component must AND them itself (see rules). |
 | `IQueryComponentPrepareContext` | Consume in `Prepare`. | Creates over the command being prepared. |
 | `IQueryComponentBuildContext` | Consume in `BuildQuery`. | Creates over the rebuilt command. |
 | `QueryComponentContext` | Usually never touch; public for direct tests. | Implements both contexts; resolves `ExpressionComparer` from the command. |
@@ -217,8 +217,9 @@ See [SQL lifecycle](#sql-lifecycle-preparation-rendering-and-cache). In short: a
 
 - **Prepare/validate → immutable descriptor.** Reject unsupported combinations by throwing; return a descriptor carrying slot, concrete component type, contribution, a string `Discriminator`, `StructuralHash` over full state, and `StructurallyEquals`. The descriptor is shared by the cached plan, so it must not reference mutable component state. Captured values must be bound as parameters; any SQL-affecting state must be included in `StructuralHash`, `StructurallyEquals` and (where useful) `Discriminator` — the engine does not compare captured values or runtime state magically.
 - **Exclusive reshape on the miss.** Applies to an `ExclusiveRowSource` component: `BuildQuery` receives the command via `IQueryComponentBuildContext` and rebuilds from engine primitives: derived source (`FromExpression`), original select list plus a hidden auxiliary column (`SelectExpression`, `SetComponentSelectList`), an optional rewritten predicate (`SetComponentPreparedCondition`), cleared sorting. It never renders SQL text. An additive component only calls `SetComponentPreparedCondition`.
+- **Grouping is declared, not rewritten.** A grouping component returns an `IQueryPreparationDescriptor` carrying a `QueryPreparationContribution`: the ordered grouping-key lambdas, a `QueryPreparationHavingMode` (`Unchanged`, `Clear` or `Replace`) with an optional HAVING lambda, an optional source predicate and `RequireDistinct`. The engine applies it to a separate effective preparation state before column and grouping preparation and never mutates the raw [`QueryCommand`](xref:NextORM.Core.QueryCommand) fields; an active contribution with an empty key vector is an explicit global aggregation. A `Replace` contribution carries only the *added* condition — the engine ANDs the raw source `Having` with it exactly once.
 - **Additive predicates are combined by you.** The engine does **not** AND them automatically. Take the existing `LambdaExpression`, reuse its parameter (or create `Expression.Parameter(typeof(Player), "p")`), AND the bodies, then wrap the result in a new lambda: `SetComponentPreparedCondition(Expression.Lambda(Expression.AndAlso(existingBody, predicateBody), param))`. Never `Expression.AndAlso(existingLambda, predicateLambda)`.
-- **Slot identity.** `Slot` is the stable identity of a logical operator. Attaching a component whose slot is present replaces it in place; the builder/command never nest two components of one slot. `Min` and `Max` of one family share a slot. At most one `ExclusiveRowSource` slot may be present; two distinct exclusive slots are rejected during preparation with `BuildSqlCommandException`.
+- **Slot identity.** `Slot` is the stable identity of a logical operator. Attaching a component whose slot is present replaces it in place; the builder/command never nest two components of one slot. `Min` and `Max` of one family share a slot. At most one `ExclusiveRowSource` slot and one `ExclusiveGrouping` owner may be present; a second distinct exclusive slot or grouping owner is rejected during preparation with `BuildSqlCommandException`, and a grouping owner cannot be combined with a row-source reshape.
 - **Hidden-column alias safety.** An auxiliary column must not leak or collide. The component author must choose a unique alias (for example derived from target metadata via `DataContextCache.Metadata`), keep it out of the outer select list, and read it back via `SqlFunctions.Column<T>`. The engine does not automatically guarantee that an arbitrary user column cannot collide; exclude the alias from any outer projection and check metadata.
 - **No in-memory support unless you add it.** A SQL-only component rejects `InMemoryDataContext` in `Prepare` with `NotSupportedException`; it must not silently degrade.
 - **Shape (optional).** Implement `IQueryComponentShape` to let the raw recipe cache serve your component: report immutable scalar state in `ShapeState` (with stable `Equals`/`GetHashCode`) and selectors via `ShapeSelectorCount`/`GetShapeSelector`. Two components with equal shape state and structurally equal selectors must render the same statement. Without it, the ordinary preparation route.
@@ -314,6 +315,19 @@ var rows = ctx.From<Player>()
 ```
 
 The package implements the full reshape (derived source, auxiliary column, prepared condition, cleared sorting) on the public component contract. See [Extensions package](extensions-package.md) and [Native extreme-row strategies](select-where-extrema-native.md).
+
+`ExclusiveGrouping` is the sibling exclusive mode: the component owns the grouping of the command and contributes keys and `HAVING` declaratively instead of reshaping rows. `SelectGroup`/`SelectGroupHaving` from the same package are its shipped example:
+
+```csharp example
+using NextORM.Core;
+using NextORM.Extensions;
+
+var rows = ctx.From<Order>()
+    .SelectGroup(o => new { o.CustomerId, Total = SqlFunctions.Sql.sum(o.Amount) })
+    .ToList();
+```
+
+See [Extensions package § Inferred grouping](extensions-package.md) for the inference rules and the rejection boundaries.
 
 ## Advanced: custom SQL dialects and renderers
 

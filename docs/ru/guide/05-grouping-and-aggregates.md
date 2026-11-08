@@ -105,7 +105,7 @@ var rows = dataContext.From<IComplexEntity>()
     .ToList();
 ```
 
-Таблицы `Вывод:` ниже показывают строки, которые возвращает каждый пример на сид-данных интеграционных тестов (`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).
+Таблицы `Вывод:` ниже показывают строки, которые возвращает каждый пример на сид-данных интеграционных тестов (`tests/nextorm.integration.tests/Providers/TestProviders/SqliteTestProvider.cs`).
 
 Вывод:
 
@@ -269,9 +269,8 @@ pre-group-фильтром и не участвует в выводе.
   агрегатов и внутри `FILTER`-предиката. Это отклонение безусловно и не зависит от вывода ключей;
   подзапрос в `Where` по-прежнему поддерживается.
 
-Провайдер in-memory выполняет выведенную группировку в пределах существующей поверхности агрегатов:
-поддерживаемые агрегаты ведут себя так же, как при явном `GroupBy`, а скалярные функции поверхности
-провайдера и пользовательские функции отклоняются явно, а не вычисляются в процессе.
+Провайдер in-memory не поддерживается: оба оператора бросают `NotSupportedException` ещё до построения
+плана, поэтому выведенная группировка всегда выполняется на реальной базе данных.
 
 ### Ломающее изменение
 
@@ -816,7 +815,7 @@ MySQL/MariaDB и не в провайдере in-memory. `WITH TOTALS` — то�
 
 ---
 
-Source: `tests/nextorm.integration.tests/CommonTestSuite/Queries/CommonTestSuite.GroupBy.cs:9`,
+Source: `tests/nextorm.integration.tests/CommonTestSuite/Queries/Rows/CommonTestSuite.GroupBy.cs:9`,
 `tests/nextorm.integration.tests/CommonTestSuite/Functions/CommonTestSuite.Aggregates.cs:9`,
 `tests/nextorm.sqlite.tests/SqlGeneration/SqlGenerationTests.cs:185`,
 `tests/nextorm.sqlserver.tests/SqlGeneration/SqlGenerationTests.cs:240`,

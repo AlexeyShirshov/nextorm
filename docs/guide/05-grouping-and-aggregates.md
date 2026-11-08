@@ -103,7 +103,7 @@ var rows = dataContext.From<IComplexEntity>()
     .ToList();
 ```
 
-The `Output:` tables below show the rows returned by each example against the integration-test seed data (`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).
+The `Output:` tables below show the rows returned by each example against the integration-test seed data (`tests/nextorm.integration.tests/Providers/TestProviders/SqliteTestProvider.cs`).
 
 Output:
 
@@ -265,9 +265,7 @@ The following combinations throw `QueryPreparationException`:
   inside a `FILTER` predicate. That rejection is unconditional and independent of key inference; a
   subquery in `Where` remains supported.
 
-The in-memory provider executes the inferred grouping within its existing aggregate surface: the
-supported aggregates behave as they do for an explicit `GroupBy`, while provider-surface scalar
-functions and custom functions are rejected explicitly instead of being evaluated in process.
+The in-memory provider is not supported: both operators throw `NotSupportedException` before any plan is built, so inferred grouping always runs on a real database.
 
 ### Breaking change
 
@@ -812,7 +810,7 @@ it as well as `ROLLUP`/`CUBE`.
 
 ---
 
-Source: `tests/nextorm.integration.tests/CommonTestSuite/Queries/CommonTestSuite.GroupBy.cs:9`,
+Source: `tests/nextorm.integration.tests/CommonTestSuite/Queries/Rows/CommonTestSuite.GroupBy.cs:9`,
 `tests/nextorm.integration.tests/CommonTestSuite/Functions/CommonTestSuite.Aggregates.cs:9`,
 `tests/nextorm.sqlite.tests/SqlGeneration/SqlGenerationTests.cs:185`,
 `tests/nextorm.sqlserver.tests/SqlGeneration/SqlGenerationTests.cs:240`,
