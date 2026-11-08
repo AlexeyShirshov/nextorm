@@ -89,6 +89,10 @@ public sealed class FromExpression
      {
           RawSqlSource = rawSqlSource;
      }
+     internal FromExpression(DerivedFragmentExpression derivedFragment)
+     {
+          DerivedFragment = derivedFragment;
+     }
      internal FromExpression(XmlNodesExpression xmlNodes)
      {
           XmlNodes = xmlNodes;
@@ -152,6 +156,12 @@ public sealed class FromExpression
      /// </summary>
      internal readonly XmlNodesExpression? XmlNodes;
      /// <summary>
+     /// Set when this source is an opaque derived fragment (see <see cref="DerivedFragmentExpression"/>).
+     /// Mutually exclusive with <see cref="Table"/>, <see cref="SubQuery"/>, <see cref="RawSqlSource"/>
+     /// and the other source kinds.
+     /// </summary>
+     internal readonly DerivedFragmentExpression? DerivedFragment;
+     /// <summary>
      /// Whether <see cref="Table"/> names a same-batch table variable (a batch <c>OUTPUT ... INTO</c>
      /// capture source). A table variable is addressed by its bare <c>@name</c> and must never be
      /// identifier-quoted, unlike every other physical table source.
@@ -164,6 +174,14 @@ public sealed class FromExpression
      /// rejects a query hint on a subselect, so the command is rejected there.
      /// </summary>
      internal string? SubQueryHint { get; init; }
+     /// <summary>
+     /// Set only on the derived sources the composite <c>All</c> lowering joins: the derived table's
+     /// output aliases are also read by the enclosing command's own join predicate, so the occurrence
+     /// must bind by parameter identity instead of the positional same-type lookup. Without it an
+     /// earlier-registered projection source shifts the positional index and the reference resolves to
+     /// the base table (or to nothing). Never part of a source's plan identity.
+     /// </summary>
+     internal bool BindOccurrenceByParameter { get; init; }
      /// <summary>
      /// Optional source-level row lock attached to this physical source, or <c>null</c> when the source
      /// carries none. Set through <see cref="FromOptions.ForUpdate()"/>/<see cref="FromOptions.ForShare()"/>
@@ -228,6 +246,7 @@ public sealed class FromExpression
           LinqSource = source.LinqSource;
           RawSqlSource = source.RawSqlSource;
           XmlNodes = source.XmlNodes;
+          DerivedFragment = source.DerivedFragment;
           TableNameOverride = tableName ?? source.TableNameOverride;
           SchemaOverride = schema ?? source.SchemaOverride;
           DatabaseOverride = database ?? source.DatabaseOverride;
@@ -238,6 +257,7 @@ public sealed class FromExpression
           SourceBinding = sourceBinding ?? source.SourceBinding;
           RecursiveOwner = source.RecursiveOwner;
           IsTableVariableSource = source.IsTableVariableSource;
+          BindOccurrenceByParameter = source.BindOccurrenceByParameter;
      }
 
      /// <summary>
@@ -303,11 +323,11 @@ public sealed class FromExpression
           if (Pivot is not null)
           {
                var pivot = Pivot.CloneForCache();
-               return ReferenceEquals(pivot, Pivot) ? this : new FromExpression(pivot) { SubQueryHint = SubQueryHint, SourceBinding = SourceBinding, SourceLock = SourceLock };
+               return ReferenceEquals(pivot, Pivot) ? this : new FromExpression(pivot) { SubQueryHint = SubQueryHint, SourceBinding = SourceBinding, SourceLock = SourceLock, BindOccurrenceByParameter = BindOccurrenceByParameter };
           }
 
-          if (!string.IsNullOrEmpty(Table) || SourceType is not null || TableFunction is not null || LinqSource is not null || RawSqlSource is not null || XmlNodes is not null) return this;
+          if (!string.IsNullOrEmpty(Table) || SourceType is not null || TableFunction is not null || LinqSource is not null || RawSqlSource is not null || XmlNodes is not null || DerivedFragment is not null) return this;
 
-          return new FromExpression(SubQuery!.CloneForCache()) { SubQueryHint = SubQueryHint, SourceBinding = SourceBinding, SourceLock = SourceLock };// { TableAlias = TableAlias };
+          return new FromExpression(SubQuery!.CloneForCache()) { SubQueryHint = SubQueryHint, SourceBinding = SourceBinding, SourceLock = SourceLock, BindOccurrenceByParameter = BindOccurrenceByParameter };// { TableAlias = TableAlias };
      }
 }

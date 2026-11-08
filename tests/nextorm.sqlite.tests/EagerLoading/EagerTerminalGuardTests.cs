@@ -16,6 +16,7 @@ namespace NextORM.Sqlite.Tests;
 /// keeps its existing behaviour for a plain <c>LoadWith</c>, and an inherited (context-default)
 /// <c>Correlated</c> does not trigger the terminal guard.
 /// </summary>
+[Collection("Query plan cache")] // asserts plan-store contents; see PlanCache/QueryPlanCacheCollection
 public class EagerTerminalGuardTests
 {
     private sealed class SqlRecordingInterceptor : IQueryInterceptor

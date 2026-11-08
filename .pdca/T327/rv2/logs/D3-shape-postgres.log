@@ -1,7 +1,0 @@
-xUnit.net v3 In-Process Runner v4.0.1+8ed8aa354c (64-bit .NET 10.0.12)
-  Discovering: nextorm.postgres.tests
-  Discovered:  nextorm.postgres.tests
-  Starting:    nextorm.postgres.tests
-  Finished:    nextorm.postgres.tests (ID = 'babcec15f5f58726e4348b7981257a30738b497d93623171b2855d8bf1bd4cb4')
-=== TEST EXECUTION SUMMARY ===
-   nextorm.postgres.tests  Total: 24, Errors: 0, Failed: 0, Skipped: 0, Not Run: 0, Time: 0.409s

@@ -147,8 +147,9 @@ public sealed class MariaDbDialect : MySqlDialect
     /// <c>MONTHS_BETWEEN</c>, <c>TO_CHAR</c>/<c>TO_DATE</c>/<c>TO_NUMBER</c>, <c>KDF</c>,
     /// <c>XXH3</c>/<c>XXH32</c>, <c>JSON_DETAILED</c>/<c>JSON_COMPACT</c>, the JSON canonicalisation pair
     /// <c>JSON_EQUALS</c>/<c>JSON_NORMALIZE</c>, sequence access and <c>ROWNUM</c>). <c>MONTHS_BETWEEN</c>,
-    /// <c>TO_DATE</c> and <c>TO_NUMBER</c> carry their own version minima, so an unversioned dialect
-    /// rejects them.
+    /// <c>TO_DATE</c>, <c>TO_NUMBER</c> and <c>XXH3</c>/<c>XXH32</c> carry their own version minima
+    /// (12.2.1 / 12.3 / 12.2.1 / 13.1), so an unversioned dialect — and every server below the minimum —
+    /// refuses them before any SQL is emitted.
     /// </summary>
     public override IMySqlFunctions MySqlFunctions => _mySqlFunctions;
 }
@@ -163,9 +164,10 @@ public sealed class MariaDbDialect : MySqlDialect
 /// sequence access, <c>rownum</c> and <c>binlog_gtid_pos</c>). MySQL's renderer does not report the
 /// MariaDB-only names, so MySQL rejects them.
 /// <para>
-/// <c>months_between</c> (12.2.1), <c>to_date</c> (12.3) and <c>to_number</c> (12.2.1) are absent from
-/// MariaDB 11.4, so they are enabled only when the dialect was built with a version at or above the
-/// per-name minimum; an unversioned dialect refuses them instead of emitting SQL the server rejects.
+/// <c>months_between</c> (12.2.1), <c>to_date</c> (12.3), <c>to_number</c> (12.2.1) and
+/// <c>xxh3</c>/<c>xxh32</c> (13.1) are absent from MariaDB 11.4, so they are enabled only when the
+/// dialect was built with a version at or above the per-name minimum; an unversioned dialect refuses
+/// them instead of emitting SQL the server rejects.
 /// </para>
 /// </summary>
 internal sealed class MariaDbNativeFunctions : IMySqlFunctions
@@ -178,6 +180,17 @@ internal sealed class MariaDbNativeFunctions : IMySqlFunctions
     private static readonly Version ToDateMinVersion = new(12, 3);
     private static readonly Version ToNumberMinVersion = new(12, 2, 1);
 
+    // #352: XXH3 and XXH32 were added in MariaDB 13.1, so the pinned 11.4 baseline answers both with
+    // error 1305. Source: MariaDB documentation, numeric-functions reference — "XXH3 was added in
+    // MariaDB 13.1." (https://mariadb.com/docs/server/reference/sql-functions/numeric-functions/xxh3)
+    // and "XXH32 was added in MariaDB 13.1."
+    // (https://mariadb.com/docs/server/reference/sql-functions/numeric-functions/xxh32), corroborated by
+    // the 13.1 "Changes & Improvements" new-feature line "XXH3 and XXH32 hash functions (MDEV-38180)"
+    // (https://mariadb.com/docs/release-notes/community-server/13.1/mariadb-13.1-changes-and-improvements);
+    // accessed 2026-10-30. They used to be advertised unconditionally, which emitted SQL the server
+    // rejected at execution time instead of refusing the call during preparation.
+    private static readonly Version XxhMinVersion = new(13, 1);
+
     private readonly Version? _version;
 
     /// <summary>Creates the renderer for <paramref name="serverVersion"/>; unset refuses the version-gated names.</summary>
@@ -188,7 +201,7 @@ internal sealed class MariaDbNativeFunctions : IMySqlFunctions
         "regexp_substr" or "regexp_instr" or "regexp_replace" or
         "nvl" or "nvl2" or "add_months" or
         "to_char" or "kdf" or
-        "xxh3" or "xxh32" or "json_detailed" or "json_compact" or
+        "json_detailed" or "json_compact" or
         "json_equals" or "json_normalize" or
         "next_value_for" or "nextval" or "setval" or "lastval" or
         "previous_value_for" or "rownum" or "binlog_gtid_pos" or
@@ -211,6 +224,7 @@ internal sealed class MariaDbNativeFunctions : IMySqlFunctions
         "months_between" => MonthsBetweenMinVersion,
         "to_date" => ToDateMinVersion,
         "to_number" => ToNumberMinVersion,
+        "xxh3" or "xxh32" => XxhMinVersion,
         _ => null
     };
 
@@ -245,8 +259,8 @@ internal sealed class MariaDbNativeFunctions : IMySqlFunctions
         "to_date" => RenderGated(name, $"to_date({args[0]}, {args[1]})"),
         "to_number" => RenderGated(name, $"to_number({args[0]}, {args[1]})"),
         "kdf" => $"kdf({args[0]}, {args[1]}, {args[2]}, {args[3]})",
-        "xxh3" => $"xxh3({args[0]})",
-        "xxh32" => $"xxh32({args[0]})",
+        "xxh3" => RenderGated(name, $"xxh3({args[0]})"),
+        "xxh32" => RenderGated(name, $"xxh32({args[0]})"),
         "json_detailed" => $"json_detailed({args[0]})",
         "json_compact" => $"json_compact({args[0]})",
         "json_equals" => $"json_equals({args[0]}, {args[1]})",

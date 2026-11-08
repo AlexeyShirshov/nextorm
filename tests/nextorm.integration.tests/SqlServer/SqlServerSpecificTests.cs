@@ -452,7 +452,7 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
         AssertRejected(b => b.ForShare(), "ForShare");
         AssertRejected(b => b.ForSystemTime(TemporalClause.All()), "ForSystemTime");
         AssertRejected(b => b.Window("gate_window"), "Window");
-        AssertRejected(b => b.SelectWhereMax(s => s.Quarter), "SelectWhereMax");
+        AssertRejected(b => b.SelectWhereMaxOld(s => s.Quarter), "SelectWhereMax");
         AssertRejected(b => b.Settings(("max_threads", "1")), "Settings");
         AssertRejected(b => b.PreWhere(s => s.Quarter == 1), "PreWhere");
         AssertRejected(b => b.LimitBy(1, s => s.Quarter), "LimitBy");

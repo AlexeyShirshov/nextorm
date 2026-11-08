@@ -6,3 +6,5 @@
   href: 03-value-converters.md
 - name: Logging
   href: 04-logging.md
+- name: NativeAOT (partial support)
+  href: 05-nativeaot.md

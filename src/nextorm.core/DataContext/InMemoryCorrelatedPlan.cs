@@ -143,37 +143,26 @@ internal static class InMemoryCorrelatedEvaluator
 {
     private static readonly MethodInfo BuildTypedMI = typeof(InMemoryCorrelatedEvaluator)
         .GetMethod(nameof(BuildTyped), BindingFlags.NonPublic | BindingFlags.Static)!;
-    private static readonly MethodInfo GetPreparedMI = ResolveGetPreparedMethod();
-    private static readonly MethodInfo GetEnumerableMI = typeof(InMemoryDataContext)
-        .GetMethod(nameof(InMemoryDataContext.GetEnumerable))!;
-
-    // The context carries more than one GetPreparedQueryCommand overload (the policy overload adds a
-    // PreparedCommandCache parameter), so the policy-less four-parameter one is resolved explicitly
-    // instead of by name alone.
-    private static MethodInfo ResolveGetPreparedMethod()
-    {
-        foreach (var method in typeof(InMemoryDataContext).GetMethods(BindingFlags.Public | BindingFlags.Instance))
-        {
-            if (method.Name == nameof(InMemoryDataContext.GetPreparedQueryCommand) && method.GetParameters().Length == 4)
-                return method;
-        }
-
-        throw new MissingMethodException(typeof(InMemoryDataContext).FullName, nameof(InMemoryDataContext.GetPreparedQueryCommand));
-    }
 
     /// <summary>Builds (or returns) the plan for <paramref name="cmd"/> on <paramref name="context"/>.</summary>
+    /// <remarks>
+    /// Both the source element type and the projected result type are closed here, at the single dispatch
+    /// point, so the correlated clone can be executed as a typed command built from the command's own
+    /// shape — a non-generic <see cref="QueryCommand"/> created for a runtime result type executes without
+    /// any further generic dispatch. The typed preparation and enumeration calls in the closed method are
+    /// ordinary generic calls whose type argument is fixed at that dispatch point.
+    /// </remarks>
     public static InMemoryCorrelatedPlan Build(InMemoryDataContext context, QueryCommand cmd)
     {
         var entityType = cmd.EntityType
             ?? throw new NotSupportedException("A correlated subquery without a source entity is not supported by the in-memory provider.");
-        return (InMemoryCorrelatedPlan)Invoke(BuildTypedMI.MakeGenericMethod(entityType), null, [context, cmd])!;
-    }
-
-    private static InMemoryCorrelatedPlan BuildTyped<TInner>(InMemoryDataContext context, QueryCommand cmd)
-    {
         var resultType = cmd.ResultType
             ?? throw new NotSupportedException("A correlated subquery without a result type is not supported by the in-memory provider.");
+        return (InMemoryCorrelatedPlan)Invoke(BuildTypedMI.MakeGenericMethod(entityType, resultType), null, [context, cmd])!;
+    }
 
+    private static InMemoryCorrelatedPlan BuildTyped<TInner, TResult>(InMemoryDataContext context, QueryCommand cmd)
+    {
         // The command's source may be a projection rather than the raw entity (an INSERT ... SELECT
         // pre-check wraps the source query, so `TInner` is the projected row type). Such a source has no
         // entry of its own in Data; only a raw entity source can be async, so a missing entry is not an
@@ -216,10 +205,20 @@ internal static class InMemoryCorrelatedEvaluator
             }
         }
 
-        var prepared = Invoke(GetPreparedMI.MakeGenericMethod(resultType), context, [clone, false, false, CancellationToken.None])!;
-        var getEnumerable = GetEnumerableMI.MakeGenericMethod(resultType);
+        // Execute the clone as a typed command over its own (already prepared) shape: the generic argument
+        // is closed here, so a non-generic command materialized by the runtime factory still runs. The
+        // clone's prepared state is adopted verbatim — re-preparing would discard the outer-reference
+        // rewrite applied above.
+        var typed = clone as QueryCommand<TResult>;
+        if (typed is null)
+        {
+            typed = new QueryCommand<TResult>(context, clone, forCache: false);
+            clone.CopyAllStateTo(typed);
+        }
+
+        var prepared = context.GetPreparedQueryCommand(typed, false, false, CancellationToken.None);
         Func<object?[], IEnumerator> enumerate = values =>
-            ((IEnumerable)Invoke(getEnumerable, context, [prepared, values])!).GetEnumerator();
+            context.GetEnumerable(prepared, (object[])values).GetEnumerator();
 
         return new InMemoryCorrelatedPlan
         {
@@ -229,6 +228,7 @@ internal static class InMemoryCorrelatedEvaluator
             DefaultOnEmpty = cmd.DefaultOnEmpty,
         };
     }
+
 
     private static object? Invoke(MethodInfo method, object? target, object?[] arguments)
     {

@@ -154,7 +154,7 @@ MariaDB differs from [MySQL](mysql.md) in the set-operation capability, the wind
 | Median (analytic) | `SqlFunctions.MySql.median(v).Over(...)` → `percentile_cont(0.5) within group (order by v) over (...)`: one row per input row; partition-only `OVER` (window `ORDER BY`/frame refused) |
 | Generic percentile | not supported: `SqlFunctions.MySql.percentile(fraction, v)` throws `NotSupportedException("The percentile function is not supported by MariaDB.")` |
 | Percentile fraction | `double` in `[0, 1]` (not a percentage), validated before rendering; an out-of-range or non-finite value throws `ArgumentOutOfRangeException` |
-| Native functions | the `SqlFunctions.MySql` surface inherited from MySQL **minus** `uuid_to_bin`/`bin_to_uuid`, **plus** the MariaDB-only names (extended regexp, `nvl`/`nvl2`, `add_months`/`months_between`, `to_char`/`to_date`/`to_number`, `kdf`, `xxh3`/`xxh32`, `json_detailed`/`json_compact`, sequence access) |
+| Native functions | the `SqlFunctions.MySql` surface inherited from MySQL **minus** `uuid_to_bin`/`bin_to_uuid`, **plus** the MariaDB-only names (extended regexp, `nvl`/`nvl2`, `add_months`/`months_between`, `to_char`/`to_date`/`to_number`, `kdf`, `xxh3`/`xxh32`, `json_detailed`/`json_compact`, sequence access). `months_between`/`to_date`/`to_number` (12.2.1 / 12.3 / 12.2.1) and `xxh3`/`xxh32` (13.1) are version-gated: an unversioned context, or a server below the minimum, refuses them with `NotSupportedException` before any SQL is emitted |
 | LOB streaming (`ToStream`/`ToTextReader`) | `NotSupportedException` |
 
 ## See also

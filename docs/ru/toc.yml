@@ -126,6 +126,8 @@
       href: infrastructure/03-value-converters.md
     - name: Логирование
       href: infrastructure/04-logging.md
+    - name: NativeAOT (частичная поддержка)
+      href: infrastructure/05-nativeaot.md
 - name: Скалярные функции
   items:
     - name: Обзор
@@ -182,7 +184,9 @@
       href: advanced/limitations.md
     - name: Нативные стратегии выбора экстремальной строки
       href: advanced/select-where-extrema-native.md
-    - name: "Расширяемость: пользовательские SQL-диалекты и рендереры"
+    - name: "Расширяемость"
       href: advanced/extensibility.md
+    - name: Пакет расширений (`nextorm.extensions`)
+      href: advanced/extensions-package.md
     - name: Краткий справочник API
       href: advanced/api-reference.md

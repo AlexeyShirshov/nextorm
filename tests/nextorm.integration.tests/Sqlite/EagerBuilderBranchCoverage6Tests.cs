@@ -287,7 +287,7 @@ public sealed class EagerBuilderBranchCoverage6Tests : ProviderTestSuite
             .Where(p => p.Id == 9601)
             .LoadWith(
                 p => p.Children,
-                c => c.From<Eb6Child>().SelectWhereMax(x => x.SortKey),
+                c => c.From<Eb6Child>().SelectWhereMaxOld(x => x.SortKey),
                 p => p.Id,
                 c => c.ParentId,
                 EagerLoadMode.SingleQuery)
@@ -571,7 +571,7 @@ public sealed class EagerBuilderBranchCoverage6Tests : ProviderTestSuite
 
         FluentActions
             .Invoking(() => Context.From("eb6_parent")
-                .SelectWhereMax(t => t["id"].AsInt)
+                .SelectWhereMaxOld(t => t["id"].AsInt)
                 .BindEntity<Eb6Flat>(new[] { "id", "name" }))
             .Should().Throw<InvalidOperationException>();
 

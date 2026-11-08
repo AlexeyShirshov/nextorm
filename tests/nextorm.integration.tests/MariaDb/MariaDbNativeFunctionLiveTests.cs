@@ -30,10 +30,10 @@ namespace NextORM.Integration.Tests;
 /// emitting SQL the server answers with 1305.
 /// </description></item>
 /// <item><description>
-/// the three version-gated names (<c>months_between</c>, <c>to_date</c>, <c>to_number</c>), which are
-/// absent from the 11.4 baseline: an unversioned dialect must refuse them and a dialect built for
-/// 12.3 must render them. The renderer contract is asserted directly because the pinned server cannot
-/// execute a 12.3 function.
+/// the version-gated names (<c>months_between</c>, <c>to_date</c>, <c>to_number</c>, <c>xxh3</c>,
+/// <c>xxh32</c>), which are absent from the 11.4 baseline: an unversioned dialect must refuse them and a
+/// dialect built for the declared minimum must render them. The renderer contract is asserted directly
+/// because the pinned server cannot execute a 12.3/13.1 function.
 /// </description></item>
 /// </list>
 ///
@@ -185,19 +185,25 @@ public sealed class MariaDbNativeFunctionLiveTests : IDisposable
     }
 
     /// <summary>
-    /// The <c>xxh3</c>/<c>xxh32</c> arms execute against the pinned server, which does not implement
-    /// either name: the observed behaviour is the server's own refusal (1305), and that refusal is the
-    /// defect tracked in <see href="https://github.com/AlexeyShirshov/nextorm/issues/352">#352</see>
-    /// (the capability gate should exclude the names for 11.4, as it already does for the other absent
-    /// names). Asserting the refusal keeps the observation live instead of hiding it behind a skip.
+    /// <c>xxh3</c>/<c>xxh32</c> were added in MariaDB 13.1 (MariaDB documentation, numeric-functions
+    /// reference: "XXH3 was added in MariaDB 13.1." / "XXH32 was added in MariaDB 13.1.",
+    /// https://mariadb.com/docs/server/reference/sql-functions/numeric-functions/xxh3 and …/xxh32,
+    /// accessed 2026-10-30), so the pinned 11.4 server has neither: the capability gate must refuse both by
+    /// name during preparation, so no <c>xxh3(...)</c>/<c>xxh32(...)</c> statement ever reaches the server
+    /// and no execution-time 1305 can happen (#352). The version pin is asserted on the live server (the
+    /// 11.4 side of the boundary is observed here; the 13.1 minimum is documentary) and the capability is
+    /// read from the default (unversioned) dialect, which is the target this baseline configures.
     /// </summary>
     [Theory]
     [InlineData("xxh3")]
     [InlineData("xxh32")]
-    public void AdvertisedXxhNames_ShouldBeRefusedByThePinnedServer(string name)
+    public void XxhNames_ShouldBeRefusedByTheCapabilityGate_BeforeAnySql(string name)
     {
         Convert.ToString(Vendor("select version()"), CultureInfo.InvariantCulture)
             .Should().StartWith("11.4", "the pinned integration image is MariaDB 11.4");
+
+        MariaDbDialect.Instance.MySqlFunctions!.Supports(name)
+            .Should().BeFalse($"{name} is absent from MariaDB 11.4 and only exists from 13.1, per the MariaDB docs");
 
         Func<MariaDbDataContext, object?> call = name switch
         {
@@ -207,9 +213,9 @@ public sealed class MariaDbNativeFunctionLiveTests : IDisposable
         };
 
         FluentActions.Invoking(() => call(_ctx!))
-            .Should().Throw<MySqlConnector.MySqlException>(
-                $"{name} is advertised by MariaDbNativeFunctions but MariaDB 11.4 has no such function (#352)")
-            .Which.Number.Should().Be(1305, "the server answers 'FUNCTION ... does not exist'");
+            .Should().Throw<NotSupportedException>(
+                $"{name} must be refused before any SQL is emitted instead of failing with a server 1305")
+            .WithMessage($"*The {name} function is not supported by this provider.*");
     }
 
     /// <summary>

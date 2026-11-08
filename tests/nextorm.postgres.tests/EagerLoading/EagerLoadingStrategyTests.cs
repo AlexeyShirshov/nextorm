@@ -30,7 +30,7 @@ public class EagerLoadingStrategyTests
         => ctx.From<EagerStratParent>(b => b.HasMany(p => p.Children, c => c.ParentId));
 
     private static string SqlOf(IDataContext ctx, QueryCommand cmd)
-        => ((dynamic)ctx.GetPreparedQueryCommand((dynamic)cmd, false, false, CancellationToken.None)).DbCommand.CommandText;
+        => ((DbPreparedQueryCommand<object?>)((DataContext)ctx).GetPreparedQueryCommand(cmd, false, false, CancellationToken.None)).DbCommand.CommandText;
 
     [Fact]
     public void ContextDefaultSplitQuery_KeepsTheSplitPath()

@@ -17,4 +17,5 @@
     <PackageReference Include="Testcontainers.PostgreSql" />
   </ItemGroup>
 
+  <ItemGroup><ProjectReference Include="../../src/nextorm.extensions/nextorm.extensions.csproj" /></ItemGroup>
 </Project>

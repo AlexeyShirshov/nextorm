@@ -69,12 +69,16 @@ public class RowMaterializerBuilderTests
             {
                 Index = 0,
                 PropertyName = nameof(Part.Id),
+                PropertyInfo = typeof(Part).GetProperty(nameof(Part.Id)),
                 ProjectionItem = item,
             },
             new SelectExpression(typeof(int))
             {
                 Index = 1,
                 PropertyName = nameof(Shape.Second),
+                // The projector resolves the bound member from the projection expression and carries it on
+                // the column; the materializer no longer re-resolves it from the result type by name.
+                MaterializerMember = resultType.GetProperty(nameof(Shape.Second)),
             },
         ];
     }
@@ -120,9 +124,9 @@ public class RowMaterializerBuilderTests
         };
         var selectList = new SelectExpression[]
         {
-            new SelectExpression(typeof(int)) { Index = 0, PropertyName = nameof(Part.Id), ProjectionItem = item },
+            new SelectExpression(typeof(int)) { Index = 0, PropertyName = nameof(Part.Id), PropertyInfo = typeof(Part).GetProperty(nameof(Part.Id)), ProjectionItem = item },
             store,
-            new SelectExpression(typeof(int)) { Index = 2, PropertyName = nameof(Shape.Second) },
+            new SelectExpression(typeof(int)) { Index = 2, PropertyName = nameof(Shape.Second), MaterializerMember = typeof(Shape).GetProperty(nameof(Shape.Second)) },
         };
 
         var storeCalls = 0;
@@ -178,7 +182,7 @@ public class RowMaterializerBuilderTests
             0, typeof(Part), typeof(StoreWithoutParameterlessCtor).GetProperty(nameof(StoreWithoutParameterlessCtor.Nested)));
         var projectionSelectList = new SelectExpression[]
         {
-            new SelectExpression(typeof(int)) { Index = 0, PropertyName = nameof(Part.Id), ProjectionItem = item },
+            new SelectExpression(typeof(int)) { Index = 0, PropertyName = nameof(Part.Id), PropertyInfo = typeof(Part).GetProperty(nameof(Part.Id)), ProjectionItem = item },
             new SelectExpression(typeof(object))
             {
                 Index = 1,
@@ -206,7 +210,7 @@ public class RowMaterializerBuilderTests
         var item = new ProjectionEntityItem(0, typeof(Part), member: null);
         var selectList = new SelectExpression[]
         {
-            new SelectExpression(typeof(int)) { Index = 0, PropertyName = nameof(Part.Id), ProjectionItem = item },
+            new SelectExpression(typeof(int)) { Index = 0, PropertyName = nameof(Part.Id), PropertyInfo = typeof(Part).GetProperty(nameof(Part.Id)), ProjectionItem = item },
             new SelectExpression(typeof(int)) { Index = 1, PropertyName = nameof(Shape.Second) },
         };
 
@@ -227,7 +231,7 @@ public class RowMaterializerBuilderTests
         var item = new ProjectionEntityItem(0, typeof(Part), member: null);
         var selectList = new SelectExpression[]
         {
-            new SelectExpression(typeof(int)) { Index = 0, PropertyName = nameof(Part.Id), ProjectionItem = item },
+            new SelectExpression(typeof(int)) { Index = 0, PropertyName = nameof(Part.Id), PropertyInfo = typeof(Part).GetProperty(nameof(Part.Id)), ProjectionItem = item },
         };
         Func<SelectExpression, Expression> map = column => Expression.Constant(7, column.PropertyType);
 

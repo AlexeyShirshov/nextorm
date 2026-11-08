@@ -51,6 +51,9 @@ public sealed class RawShapeBranchCoverage2Tests : ProviderTestSuite
     private static QueryCommand.RawShape? Shape<TResult>(QueryCommand<TResult> command)
         => QueryCommand.CaptureRawShape(command);
 
+    /// <summary>A client-evaluated call folded into a parameter that carries no captured key.</summary>
+    private static int ThresholdPlus(int value) => value + 1;
+
     // ---------------------------------------------------------------------------------------------
     // 1. Reference/absence short circuits, candidate publication and the purge cycle
     // ---------------------------------------------------------------------------------------------
@@ -137,49 +140,87 @@ public sealed class RawShapeBranchCoverage2Tests : ProviderTestSuite
     }
 
     // ---------------------------------------------------------------------------------------------
-    // 4. Parameterised (closure) shape: ineligible descriptor, live rebinding
+    // 4. Parameterised (closure) shape: the raw key is the closure identity, the value rebinds
     // ---------------------------------------------------------------------------------------------
 
     [Fact]
-    public void RawShape_ClosureValue_ShouldBeIneligibleAndRebindLiveRows()
+    public void RawShape_ClosureIdentity_ShouldKeyThePlanAndRebindLiveRows()
     {
         ResetPlanCache();
 
-        static QueryCommand<int> Above(EntityBuilder<ISimpleEntity> entities, int floor)
-            => entities.Where(x => x.Id > floor).Select(x => x.Id);
+        // Policy (P5a): a closure-bearing graph is eligible, and the raw key is the *identity* of the
+        // captured closure, not its value. The same closure instance is one key; its live member is
+        // re-read on the hit, so the reused statement returns the new rows.
+        var floor = 5;
+        QueryCommand<int> Above() => _sut.SimpleEntity.Where(x => x.Id > floor).Select(x => x.Id);
 
-        var first = Above(_sut.SimpleEntity, 5);
-        Shape(first).Should().BeNull("a captured (closure) value makes the shape ineligible for reuse");
+        var first = Above();
+        var firstShape = Shape(first);
+        firstShape.Should().NotBeNull("a captured value is a capturable raw identity (closure instance)");
 
         var firstPrepared = Prepare(first);
         Rows(firstPrepared).Should().Equal(6, 7, 8, 9, 10);
 
-        var second = Above(_sut.SimpleEntity, 8);
-        Shape(second).Should().BeNull("the parameterised shape is ineligible on every call");
+        floor = 8;
+        var second = Above();
+        var secondShape = Shape(second)!;
+        secondShape.Matches(firstShape!, second)
+            .Should().BeTrue("the same closure instance is the same raw key even when its value changed");
 
         var secondPrepared = Prepare(second);
-        secondPrepared.Should().BeSameAs(firstPrepared, "a captured value is not part of the plan key");
+        secondPrepared.Should().BeSameAs(firstPrepared, "the raw hit serves the same prepared plan");
         Rows(secondPrepared).Should().Equal(new[] { 9, 10 }, "the reused plan re-binds the current closure value");
+
+        // A different closure instance (same value) is a distinct key: identity, not value, is the key.
+        static QueryCommand<int> AboveFresh(EntityBuilder<ISimpleEntity> entities, int floor)
+            => entities.Where(x => x.Id > floor).Select(x => x.Id);
+
+        var instanceA = AboveFresh(_sut.SimpleEntity, 5);
+        var instanceB = AboveFresh(_sut.SimpleEntity, 5);
+        Shape(instanceB)!.Matches(Shape(instanceA)!, instanceB)
+            .Should().BeFalse("a different closure instance is a different raw key");
+        Rows(Prepare(instanceA)).Should().Equal(6, 7, 8, 9, 10);
+        Rows(Prepare(instanceB)).Should().Equal(new[] { 6, 7, 8, 9, 10 }, "the distinct key still reads the right rows");
     }
 
     // ---------------------------------------------------------------------------------------------
-    // 5. Literal vs closure: the same SQL text, different eligibility
+    // 5. Literal vs closure: both capturable, different keys; a folded parameter is not publishable
     // ---------------------------------------------------------------------------------------------
 
     [Fact]
-    public void RawShape_LiteralVersusClosure_ShouldDifferInEligibilityOnly()
+    public void RawShape_LiteralVersusClosure_ShouldBeDistinctKeys()
     {
         ResetPlanCache();
 
+        // Policy (P5a): an inlined literal is compared by value; a captured member is keyed by the
+        // closure instance and rebound from the live member. They render the same SQL text but are
+        // different raw keys, and both execute correctly.
         var floor = 5;
         var literal = _sut.SimpleEntity.Where(x => x.Id > 5).Select(x => x.Id);
         var closure = _sut.SimpleEntity.Where(x => x.Id > floor).Select(x => x.Id);
 
-        Shape(literal).Should().NotBeNull("an inlined literal keeps the descriptor value-free");
-        Shape(closure).Should().BeNull("the same SQL text with a captured bound is ineligible");
+        var literalShape = Shape(literal);
+        var closureShape = Shape(closure);
+        literalShape.Should().NotBeNull("an inlined literal keeps a value-free descriptor");
+        closureShape.Should().NotBeNull("a captured bound is capturable through its closure identity");
+        closureShape!.Matches(literalShape!, closure)
+            .Should().BeFalse("a literal and a captured member are different raw keys");
 
         Run(literal).Should().Equal(6, 7, 8, 9, 10);
         Run(closure).Should().Equal(new[] { 6, 7, 8, 9, 10 }, "both forms read the same rows from the database");
+
+        // Safety boundary (P5a): a client-evaluated call is folded into one parameter that carries no
+        // CapturedKey; such a plan must stay out of the raw store even though the shape is capturable.
+        var offset = 5;
+        QueryCommand<int> Folded() => _sut.SimpleEntity.Where(x => x.Id > ThresholdPlus(offset)).Select(x => x.Id);
+
+        var folded = Folded();
+        Shape(folded).Should().NotBeNull("the closure identity alone is capturable");
+        Rows(Prepare(folded)).Should().Equal(new[] { 7, 8, 9, 10 }, "id > offset + 1");
+
+        var probe = Folded();
+        QueryPlanStore.TryGetRaw(Context.GetType(), Shape(probe)!, probe, out _).Should()
+            .BeFalse("a folded parameter without CapturedKey is never published to the raw store");
     }
 
     // ---------------------------------------------------------------------------------------------

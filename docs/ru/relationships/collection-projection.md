@@ -376,7 +376,7 @@ a reference navigation requires at most one related row per parent.
 |---|---|---|
 | `GroupBy` внутри адаптера | `p.Comments.AsEntityBuilder<Comment>().GroupBy(c => c.AuthorId)…` | белый список операторов адаптера |
 | `Distinct`, `Union`, `Except`, `Intersect` или соединение внутри адаптера | `…AsEntityBuilder<Comment>().Distinct()…` | белый список операторов адаптера |
-| явная группировка, скомпонованная с проекцией | `GroupBy` / `SelectGroup` вместе со слотом | *"cannot be combined with grouping"* |
+| явная группировка, скомпонованная с проекцией | `GroupBy` / `SelectGroup` (NextORM.Extensions) вместе со слотом | *"cannot be combined with grouping"* |
 | внешний терминал, отличный от `ToList`/`ToArray` | `.ToEnumerable()` на команде со слотом | *"supports only ToList() and ToArray()"* |
 | провайдер in-memory | любой слот над `InMemoryDataContext` | *"requires a SQL provider"* |
 | неподдерживаемая форма назначения | `HashSet<T>`, `object`, собственный коллекционный тип | список семи форм |

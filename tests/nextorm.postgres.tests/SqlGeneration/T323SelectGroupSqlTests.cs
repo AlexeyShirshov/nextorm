@@ -1,6 +1,7 @@
 using FluentAssertions;
 using NextORM.ClickHouse;
 using NextORM.Core;
+using NextORM.Extensions;
 
 namespace NextORM.Postgres.Tests;
 
@@ -21,6 +22,9 @@ public class T323SelectGroupSqlTests
 
     private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd) => Normalize(Prepare(ctx, cmd).DbCommand.CommandText);
 
+    /// <summary>The expected literal uses the file's line endings; generated SQL always uses LF.</summary>
+    private static string Lf(string sql) => sql.ReplaceLineEndings("\n");
+
     /// <summary>
     /// Extracts the rendered <c>GROUP BY</c> line. Assertions on the key list must not be satisfied by
     /// an aggregate's argument in the select list, which precedes the clause.
@@ -34,83 +38,86 @@ public class T323SelectGroupSqlTests
     }
 
     [Fact]
-    public void SingleKey_ShouldEqualExplicitSql()
+    public void SingleKey_ExactSql()
     {
         using var ctx = PostgresTestContext.Create();
 
-        var inferred = ctx.From<T323LegacyEntity>()
-            .SelectGroup(x => new { x.Id, C = SqlFunctions.Sql.count() });
-        var explicitForm = ctx.From<T323LegacyEntity>()
-            .GroupBy(x => x.Id)
-            .Select(x => new { x.Id, C = SqlFunctions.Sql.count() });
+        var sql = SqlOf(ctx, ctx.From<T323LegacyEntity>()
+            .SelectGroup(x => new { x.Id, C = SqlFunctions.Sql.count() }));
 
-        SqlOf(ctx, inferred).Should().Be(SqlOf(ctx, explicitForm));
+        sql.Should().Be(Lf("""
+select Id, count(*) as "C"
+ from T323LegacyEntity
+ group by Id
+"""));
     }
 
     [Fact]
-    public void TwoKeysTwoAggregates_ShouldEqualExplicitSql()
+    public void TwoKeysTwoAggregates_ExactSql()
     {
         using var ctx = PostgresTestContext.Create();
 
-        var inferred = ctx.From<T323LegacyEntity>()
-            .SelectGroup(x => new { x.Id, x.Group2, S = SqlFunctions.Sql.sum(x.Amount), C = SqlFunctions.Sql.count() });
-        var explicitForm = ctx.From<T323LegacyEntity>()
-            .GroupBy(x => new { x.Id, x.Group2 })
-            .Select(x => new { x.Id, x.Group2, S = SqlFunctions.Sql.sum(x.Amount), C = SqlFunctions.Sql.count() });
+        var sql = SqlOf(ctx, ctx.From<T323LegacyEntity>()
+            .SelectGroup(x => new { x.Id, x.Group2, S = SqlFunctions.Sql.sum(x.Amount), C = SqlFunctions.Sql.count() }));
 
-        SqlOf(ctx, inferred).Should().Be(SqlOf(ctx, explicitForm));
+        sql.Should().Be(Lf("""
+select Id, Group2, sum(Amount) as "S", count(*) as "C"
+ from T323LegacyEntity
+ group by Id, Group2
+"""));
     }
 
     [Fact]
-    public void DateTruncAndSum_ShouldEqualExplicitSql()
+    public void DateTruncAndSum_ExactSql()
     {
         using var ctx = PostgresTestContext.Create();
 
-        var inferred = ctx.From<T323LegacyEntity>()
+        var sql = SqlOf(ctx, ctx.From<T323LegacyEntity>()
             .SelectGroup(x => new
             {
                 Q = SqlFunctions.Sql.date_trunc("quarter", x.OrderedAt),
                 S = SqlFunctions.Sql.sum(x.Amount),
-            });
-        var explicitForm = ctx.From<T323LegacyEntity>()
-            .GroupBy(x => SqlFunctions.Sql.date_trunc("quarter", x.OrderedAt))
-            .Select(x => new
-            {
-                Q = SqlFunctions.Sql.date_trunc("quarter", x.OrderedAt),
-                S = SqlFunctions.Sql.sum(x.Amount),
-            });
+            }));
 
-        SqlOf(ctx, inferred).Should().Be(SqlOf(ctx, explicitForm));
+        sql.Should().Be(Lf("""
+select date_trunc('quarter', OrderedAt) as "Q", sum(Amount) as "S"
+ from T323LegacyEntity
+ group by date_trunc('quarter', OrderedAt)
+"""));
     }
 
     [Fact]
-    public void JoinedAggregate_ShouldEqualExplicitSql()
+    public void JoinedAggregate_ExactSql()
     {
         using var ctx = PostgresTestContext.Create();
         var joined = ctx.From<T323LegacyEntity>().Join(ctx.From<IComplexEntity>(), (a, b) => a.Id == b.Id);
 
-        var inferred = joined
-            .SelectGroup(p => new { p.Item1.Id, S = SqlFunctions.Sql.sum(p.Item1.Amount) });
-        var explicitForm = joined
-            .GroupBy(p => p.Item1.Id)
-            .Select(p => new { p.Item1.Id, S = SqlFunctions.Sql.sum(p.Item1.Amount) });
+        var sql = SqlOf(ctx, joined
+            .SelectGroup(p => new { p.Item1.Id, S = SqlFunctions.Sql.sum(p.Item1.Amount) }));
 
-        SqlOf(ctx, inferred).Should().Be(SqlOf(ctx, explicitForm));
+        sql.Should().Be(Lf("""
+select t1.Id, sum(t1.Amount) as "S"
+ from T323LegacyEntity as "t1"
+ join complex_entity as "t2" on cast(t1.Id as bigint) = t2.id
+ group by t1.Id
+"""));
     }
 
     [Fact]
-    public void JoinedKeyAndAggregateAcrossItems_ShouldEqualExplicitSql()
+    public void JoinedKeyAndAggregateAcrossItems_ExactSql()
     {
         using var ctx = PostgresTestContext.Create();
         var joined = ctx.From<T323LegacyEntity>().Join(ctx.From<IComplexEntity>(), (a, b) => a.Id == b.Id);
 
-        var inferred = joined
-            .SelectGroup(p => new { p.Item2.String, S = SqlFunctions.Sql.sum(p.Item1.Amount) });
-        var explicitForm = joined
-            .GroupBy(p => p.Item2.String)
-            .Select(p => new { p.Item2.String, S = SqlFunctions.Sql.sum(p.Item1.Amount) });
+        var sql = SqlOf(ctx, joined
+            .SelectGroup(p => new { p.Item2.String, S = SqlFunctions.Sql.sum(p.Item1.Amount) }));
 
-        SqlOf(ctx, inferred).Should().Be(SqlOf(ctx, explicitForm));
+        sql.Should().Be(Lf("""
+select t2.somestring as "String", sum(t1.Amount) as "S"
+ from T323LegacyEntity as "t1"
+ join complex_entity as "t2" on cast(t1.Id as bigint) = t2.id
+ group by t2.somestring
+"""));
     }
 
     [Fact]
@@ -120,21 +127,10 @@ public class T323SelectGroupSqlTests
 
         // The aggregate comes first in the anonymous shape, so the keys appear in the order the row
         // expressions are visited: Group2, then Id.
-        var inferred = ctx.From<T323LegacyEntity>()
-            .SelectGroup(x => new { C = SqlFunctions.Sql.count(), G = x.Group2, I = x.Id });
-        var sameOrder = ctx.From<T323LegacyEntity>()
-            .GroupBy(x => new { x.Group2, x.Id })
-            .Select(x => new { C = SqlFunctions.Sql.count(), G = x.Group2, I = x.Id });
-        var reversed = ctx.From<T323LegacyEntity>()
-            .GroupBy(x => new { x.Id, x.Group2 })
-            .Select(x => new { C = SqlFunctions.Sql.count(), G = x.Group2, I = x.Id });
+        var sql = SqlOf(ctx, ctx.From<T323LegacyEntity>()
+            .SelectGroup(x => new { C = SqlFunctions.Sql.count(), G = x.Group2, I = x.Id }));
 
-        var inferredSql = SqlOf(ctx, inferred);
-        var sameOrderSql = SqlOf(ctx, sameOrder);
-
-        inferredSql.Should().Be(sameOrderSql);
-        GroupByLine(inferredSql).Should().Be(GroupByLine(sameOrderSql));
-        GroupByLine(inferredSql).Should().NotBe(GroupByLine(SqlOf(ctx, reversed)));
+        GroupByLine(sql).Should().Be("group by Group2, Id");
     }
 
     [Fact]
@@ -156,17 +152,17 @@ public class T323SelectGroupSqlTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<T323LegacyEntity>();
 
-        FluentActions.Invoking(() => e.GroupBy(x => x.Id).SelectGroup(x => new { x.Id }))
+        FluentActions.Invoking(() => { var _c = e.GroupBy(x => x.Id).SelectGroup(x => new { x.Id }); ctx.GetPreparedQueryCommand(_c, false, true, CancellationToken.None); })
             .Should().Throw<QueryPreparationException>().WithMessage("*cannot be combined with explicit grouping*");
-        FluentActions.Invoking(() => e.GroupByRollup(x => x.Id).SelectGroup(x => new { x.Id }))
+        FluentActions.Invoking(() => { var _c = e.GroupByRollup(x => x.Id).SelectGroup(x => new { x.Id }); ctx.GetPreparedQueryCommand(_c, false, true, CancellationToken.None); })
             .Should().Throw<QueryPreparationException>().WithMessage("*cannot be combined with explicit grouping*");
-        FluentActions.Invoking(() => e.GroupByCube(x => x.Id).SelectGroup(x => new { x.Id }))
+        FluentActions.Invoking(() => { var _c = e.GroupByCube(x => x.Id).SelectGroup(x => new { x.Id }); ctx.GetPreparedQueryCommand(_c, false, true, CancellationToken.None); })
             .Should().Throw<QueryPreparationException>().WithMessage("*cannot be combined with explicit grouping*");
-        FluentActions.Invoking(() => e.GroupByGroupingSets(x => new { x.Id, x.Group2 }, [0], [1]).SelectGroup(x => new { x.Id }))
+        FluentActions.Invoking(() => { var _c = e.GroupByGroupingSets(x => new { x.Id, x.Group2 }, [0], [1]).SelectGroup(x => new { x.Id }); ctx.GetPreparedQueryCommand(_c, false, true, CancellationToken.None); })
             .Should().Throw<QueryPreparationException>().WithMessage("*cannot be combined with explicit grouping*");
-        FluentActions.Invoking(() => e.WithTotals().SelectGroup(x => new { x.Id }))
+        FluentActions.Invoking(() => { var c = e.WithTotals().SelectGroup(x => new { x.Id }); ctx.GetPreparedQueryCommand(c, false, true, CancellationToken.None); })
             .Should().Throw<QueryPreparationException>().WithMessage("*cannot be combined with explicit grouping*");
-        FluentActions.Invoking(() => e.SelectGroup<int>(null!))
+        FluentActions.Invoking(() => { var _c = e.SelectGroup<T323LegacyEntity, int>(null!); ctx.GetPreparedQueryCommand(_c, false, true, CancellationToken.None); })
             .Should().Throw<ArgumentNullException>();
     }
 
@@ -175,7 +171,7 @@ public class T323SelectGroupSqlTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        FluentActions.Invoking(() => SqlOf(ctx, ctx.From<T323LegacyEntity>().SelectGroup(x => x)))
+        FluentActions.Invoking(() => { var _c = ctx.From<T323LegacyEntity>().SelectGroup(x => x); ctx.GetPreparedQueryCommand(_c, false, true, CancellationToken.None); })
             .Should().Throw<QueryPreparationException>()
             .WithMessage("*identity projection*");
     }
@@ -212,6 +208,9 @@ public class T323SelectGroupAggregateAttributeTests
 
     private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd) => Normalize(Prepare(ctx, cmd).DbCommand.CommandText);
 
+    /// <summary>The expected literal uses the file's line endings; generated SQL always uses LF.</summary>
+    private static string Lf(string sql) => sql.ReplaceLineEndings("\n");
+
     /// <summary>
     /// Extracts the rendered <c>GROUP BY</c> line. Assertions on the key list must not be satisfied by
     /// an aggregate's argument in the select list, which precedes the clause.
@@ -233,13 +232,13 @@ public class T323SelectGroupAggregateAttributeTests
         // legitimate grouping key and the whole call becomes the key.
         var inferred = ctx.From<T323AggEntity>()
             .SelectGroup(x => new { V = T323ScalarUdf.F(x.Amount) });
-        var explicitForm = ctx.From<T323AggEntity>()
-            .GroupBy(x => T323ScalarUdf.F(x.Amount))
-            .Select(x => new { V = T323ScalarUdf.F(x.Amount) });
-
         var sql = SqlOf(ctx, inferred);
 
-        sql.Should().Be(SqlOf(ctx, explicitForm));
+        sql.Should().Be(Lf("""
+select t323_f(Amount) as "V"
+ from T323AggEntity
+ group by t323_f(Amount)
+"""));
         sql.Should().Contain("t323_f(");
         GroupByLine(sql).Should().ContainEquivalentOf(
             "amount",
@@ -255,13 +254,13 @@ public class T323SelectGroupAggregateAttributeTests
         // IsAggregate, and the SQL name falls back to the CLR method name.
         var inferred = ctx.From<T323AggEntity>()
             .SelectGroup(x => new { x.Id, V = T323ClassAggregateUdf.T323ClsAgg(x.Amount) });
-        var explicitForm = ctx.From<T323AggEntity>()
-            .GroupBy(x => x.Id)
-            .Select(x => new { x.Id, V = T323ClassAggregateUdf.T323ClsAgg(x.Amount) });
-
         var sql = SqlOf(ctx, inferred);
 
-        sql.Should().Be(SqlOf(ctx, explicitForm));
+        sql.Should().Be(Lf("""
+select Id, T323ClsAgg(Amount) as "V"
+ from T323AggEntity
+ group by Id
+"""));
         sql.Should().Contain("T323ClsAgg(");
         GroupByLine(sql).Should().NotContainEquivalentOf(
             "amount",
@@ -277,13 +276,13 @@ public class T323SelectGroupAggregateAttributeTests
         // entirely instead of merging with it.
         var inferred = ctx.From<T323AggEntity>()
             .SelectGroup(x => new { V = T323MixedUdf.M(x.Amount) });
-        var explicitForm = ctx.From<T323AggEntity>()
-            .GroupBy(x => T323MixedUdf.M(x.Amount))
-            .Select(x => new { V = T323MixedUdf.M(x.Amount) });
-
         var sql = SqlOf(ctx, inferred);
 
-        sql.Should().Be(SqlOf(ctx, explicitForm));
+        sql.Should().Be(Lf("""
+select meth_fn(Amount) as "V"
+ from T323AggEntity
+ group by meth_fn(Amount)
+"""));
         sql.Should().Contain("meth_fn(");
         sql.Should().NotContain("cls_fn", "the method attribute replaces the type attribute, it never merges");
         GroupByLine(sql).Should().ContainEquivalentOf(
@@ -300,13 +299,13 @@ public class T323SelectGroupAggregateAttributeTests
         // renders its declared SQL name and stays a scalar key source.
         var inferred = ctx.From<T323AggEntity>()
             .SelectGroup(x => new { V = T323CollisionUdf.sum(x.Amount) });
-        var explicitForm = ctx.From<T323AggEntity>()
-            .GroupBy(x => T323CollisionUdf.sum(x.Amount))
-            .Select(x => new { V = T323CollisionUdf.sum(x.Amount) });
-
         var sql = SqlOf(ctx, inferred);
 
-        sql.Should().Be(SqlOf(ctx, explicitForm));
+        sql.Should().Be(Lf("""
+select t323_my_scalar(Amount) as "V"
+ from T323AggEntity
+ group by t323_my_scalar(Amount)
+"""));
         sql.Should().Contain("t323_my_scalar(");
         sql.Should().Contain("group by");
         sql.Should().NotContain("sum(", "the CLR name never reaches the SQL text through the attribute");
@@ -319,13 +318,13 @@ public class T323SelectGroupAggregateAttributeTests
 
         var inferred = ctx.From<T323AggEntity>()
             .SelectGroup(x => new { x.Id, V = T323CollisionAggregateUdf.sum(x.Amount) });
-        var explicitForm = ctx.From<T323AggEntity>()
-            .GroupBy(x => x.Id)
-            .Select(x => new { x.Id, V = T323CollisionAggregateUdf.sum(x.Amount) });
-
         var sql = SqlOf(ctx, inferred);
 
-        sql.Should().Be(SqlOf(ctx, explicitForm));
+        sql.Should().Be(Lf("""
+select Id, t323_my_scalar(Amount) as "V"
+ from T323AggEntity
+ group by Id
+"""));
         sql.Should().Contain("t323_my_scalar(");
         GroupByLine(sql).Should().NotContainEquivalentOf(
             "amount",
@@ -374,13 +373,13 @@ public class T323SelectGroupAggregateAttributeTests
         // renderer: its argument is not a key.
         var inferred = ctx.From<T323AggEntity>()
             .SelectGroup(x => new { x.Id, B = SqlFunctions.Postgres.bool_and(x.Flag) });
-        var explicitForm = ctx.From<T323AggEntity>()
-            .GroupBy(x => x.Id)
-            .Select(x => new { x.Id, B = SqlFunctions.Postgres.bool_and(x.Flag) });
-
         var sql = SqlOf(ctx, inferred);
 
-        sql.Should().Be(SqlOf(ctx, explicitForm));
+        sql.Should().Be(Lf("""
+select Id, bool_and(Flag) as "B"
+ from T323AggEntity
+ group by Id
+"""));
         sql.Should().Contain("bool_and(");
         GroupByLine(sql).Should().NotContainEquivalentOf(
             "flag",
@@ -451,6 +450,9 @@ public class T323SelectGroupDegenerateModesTests
     }
 
     private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd) => Normalize(Prepare(ctx, cmd).DbCommand.CommandText);
+
+    /// <summary>The expected literal uses the file's line endings; generated SQL always uses LF.</summary>
+    private static string Lf(string sql) => sql.ReplaceLineEndings("\n");
 
     [Fact]
     public void GlobalAggregateHaving_ShouldEmitHaving()

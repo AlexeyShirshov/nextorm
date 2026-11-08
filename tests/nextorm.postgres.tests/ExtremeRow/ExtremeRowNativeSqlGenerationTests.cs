@@ -48,7 +48,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<ExtremeNativeEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Int).ToCommand()));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.Int).ToCommand()));
 
         norm.Should().Contain("order by nullableint desc limit 1");
         norm.Should().Contain("nullableint is not null");
@@ -63,7 +63,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<ExtremeNativeEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMin(x => x.Int).ToCommand()));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMinOld(x => x.Int).ToCommand()));
 
         norm.Should().Contain("order by nullableint limit 1");
         norm.Should().NotContain("nullableint desc");
@@ -77,7 +77,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Int, x => new { x.Id, x.String })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.Int, x => new { x.Id, x.String })));
 
         norm.Should().Contain("order by nullableint desc limit 1");
         norm.Should().NotContain("row_number()");
@@ -90,7 +90,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMin(x => x.Int, x => new { x.Id, x.String })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMinOld(x => x.Int, x => new { x.Id, x.String })));
 
         norm.Should().Contain("order by nullableint limit 1");
         norm.Should().NotContain("nullableint desc");
@@ -106,7 +106,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<ExtremeNativeEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Int, ExtremeRowTies.One, x => new { x.Id }).ToCommand()));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.Int, ExtremeRowTies.One, x => new { x.Id }).ToCommand()));
 
         norm.Should().Contain("distinct on (id)");
         norm.Should().Contain("order by id, nullableint desc");
@@ -122,7 +122,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<ExtremeNativeEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMin(x => x.Int, ExtremeRowTies.One, x => new { x.Id }).ToCommand()));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMinOld(x => x.Int, ExtremeRowTies.One, x => new { x.Id }).ToCommand()));
 
         norm.Should().Contain("distinct on (id)");
         norm.Should().Contain("order by id, nullableint");
@@ -137,7 +137,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Int, x => new { x.Id, x.String }, ExtremeRowTies.One, x => new { x.Id })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.Int, x => new { x.Id, x.String }, ExtremeRowTies.One, x => new { x.Id })));
 
         norm.Should().Contain("distinct on (id)");
         norm.Should().Contain("order by id, nullableint desc");
@@ -151,7 +151,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMin(x => x.Int, x => new { x.Id, x.String }, ExtremeRowTies.One, x => new { x.Id })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMinOld(x => x.Int, x => new { x.Id, x.String }, ExtremeRowTies.One, x => new { x.Id })));
 
         norm.Should().Contain("distinct on (id)");
         norm.Should().Contain("order by id, nullableint");
@@ -168,7 +168,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => new { x.Int, x.Id }, x => new { x.Id })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => new { x.Int, x.Id }, x => new { x.Id })));
 
         norm.Should().Contain("order by nullableint desc, id desc limit 1");
         norm.Should().NotContain("row_number()");
@@ -180,7 +180,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMin(x => new { x.Int, x.Id }, x => new { x.Id })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMinOld(x => new { x.Int, x.Id }, x => new { x.Id })));
 
         norm.Should().Contain("order by nullableint, id limit 1");
         norm.Should().NotContain("desc");
@@ -193,7 +193,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Int, x => new { x.Id }, ExtremeRowTies.One, x => new { x.Id, x.Int })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.Int, x => new { x.Id }, ExtremeRowTies.One, x => new { x.Id, x.Int })));
 
         norm.Should().Contain("distinct on (id, nullableint)");
         norm.Should().Contain("order by id, nullableint, nullableint desc");
@@ -208,7 +208,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<ExtremeNativeEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Int, ExtremeRowTies.One, x => new { x.Id }).ToCommand()));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.Int, ExtremeRowTies.One, x => new { x.Id }).ToCommand()));
 
         // The selectors are the CLR properties Int/Id; the native clauses must carry the mapped
         // physical names nullableint/id.
@@ -222,7 +222,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = PostgresTestContext.CreateQuoted();
         var e = ctx.From<ExtremeNativeEntity>();
 
-        var sql = SqlOf(ctx, e.SelectWhereMax(x => x.Int, ExtremeRowTies.One, x => new { x.Id }).ToCommand());
+        var sql = SqlOf(ctx, e.SelectWhereMaxOld(x => x.Int, ExtremeRowTies.One, x => new { x.Id }).ToCommand());
 
         sql.Should().Contain("distinct on (\"id\")");
         sql.Should().Contain("order by \"id\", \"nullableint\" desc");
@@ -236,7 +236,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.OrderBy(x => x.Id).SelectWhereMax(x => x.Int, x => new { x.Id })));
+        var norm = Dequoted(SqlOf(ctx, e.OrderBy(x => x.Id).SelectWhereMaxOld(x => x.Int, x => new { x.Id })));
 
         var innerOrder = norm.IndexOf("order by nullableint desc limit 1", StringComparison.Ordinal);
         var derivedTableEnd = norm.IndexOf(") as t1", StringComparison.Ordinal);
@@ -245,37 +245,45 @@ public class ExtremeRowNativeSqlGenerationTests
         innerOrder.Should().BeGreaterThanOrEqualTo(0);
         derivedTableEnd.Should().BeGreaterThan(innerOrder);
         outerOrder.Should().BeGreaterThan(derivedTableEnd);
-        norm.Should().Contain("limit 1) as t1 order by");
+        norm.Should().Contain("limit 1) as t1  order by");
         // The user's output ordering is not woven into the tie-winner ordering.
         norm.Should().NotContain("order by nullableint desc, id");
     }
 
-    // --- fallback: All and ineligible key types keep the portable window path ----------------
+    // --- fallback: grouped All and ineligible key types keep the portable window path --------
 
     [Fact]
-    public void SelectWhereMax_AllTies_ShouldKeepPortableWindowLowering()
+    public void SelectWhereMax_AllTiesGlobal_ShouldLowerToAggregateJoin()
     {
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Int, x => new { x.Id }, ExtremeRowTies.All)));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.Int, x => new { x.Id }, ExtremeRowTies.All)));
 
-        norm.Should().Contain("rank() over (order by nullableint desc)");
-        norm.Should().Contain("= 1");
+        norm.Should().Contain("max(nullableint) as __nextorm_ext_1_0");
+        norm.Should().Contain("join (select max(nullableint)");
+        norm.Should().Contain("on t1.nullableint = __nextorm_ext_1_0");
+        norm.Should().Contain("where nullableint is not null");
+        norm.Should().NotContain("rank()");
+        norm.Should().NotContain("row_number()");
         norm.Should().NotContain("limit 1");
         norm.Should().NotContain("distinct on");
     }
 
     [Fact]
-    public void SelectWhereMax_AllTiesGrouped_ShouldKeepPortableWindowLowering()
+    public void SelectWhereMax_AllTiesGrouped_ShouldLowerToAggregateJoin()
     {
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Int, ExtremeRowTies.All, x => x.Id).Select(x => new { x.Id })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.Int, ExtremeRowTies.All, x => x.Id).Select(x => new { x.Id })));
 
-        norm.Should().Contain("rank() over (partition by id order by nullableint desc)");
-        norm.Should().Contain("= 1");
+        norm.Should().Contain("max(nullableint) as __nextorm_ext_1_0");
+        norm.Should().Contain("group by id");
+        norm.Should().Contain("__nextorm_ext_1_1");
+        norm.Should().Contain("join");
+        norm.Should().NotContain("rank()");
+        norm.Should().NotContain("row_number()");
         norm.Should().NotContain("limit 1");
         norm.Should().NotContain("distinct on");
     }
@@ -286,7 +294,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.String, x => new { x.Id })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.String, x => new { x.Id })));
 
         norm.Should().Contain("row_number() over (order by somestring desc)");
         norm.Should().NotContain("limit 1");
@@ -299,7 +307,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Datetime, x => new { x.Id })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.Datetime, x => new { x.Id })));
 
         norm.Should().Contain("row_number() over (order by dt desc)");
         norm.Should().NotContain("limit 1");
@@ -313,7 +321,7 @@ public class ExtremeRowNativeSqlGenerationTests
 
         // A computed expression is not a direct mapped column, so it is not natively eligible even
         // though the result is integral.
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Int + 1, x => new { x.Id })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.Int + 1, x => new { x.Id })));
 
         norm.Should().Contain("row_number() over (order by");
         norm.Should().NotContain("limit 1");
@@ -325,7 +333,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IFloatEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.D, x => new { x.Id })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.D, x => new { x.Id })));
 
         norm.Should().Contain("row_number() over (order by d desc)");
         norm.Should().NotContain("limit 1");
@@ -338,7 +346,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IFloatEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => new { x.D, x.Id }, x => new { x.Id })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => new { x.D, x.Id }, x => new { x.Id })));
 
         norm.Should().Contain("row_number() over (order by d desc, id desc)");
         norm.Should().NotContain("limit 1");
@@ -352,7 +360,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        var act = () => SqlOf(ctx, e.Limit(1).SelectWhereMax(x => x.Int).Select(x => new { x.Id }));
+        var act = () => SqlOf(ctx, e.Limit(1).SelectWhereMaxOld(x => x.Int).Select(x => new { x.Id }));
 
         act.Should().Throw<BuildSqlCommandException>().WithMessage("*paging*");
     }
@@ -363,7 +371,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        var act = () => SqlOf(ctx, e.DistinctOn(x => x.Id).SelectWhereMax(x => x.Int).Select(x => new { x.Id }));
+        var act = () => SqlOf(ctx, e.DistinctOn(x => x.Id).SelectWhereMaxOld(x => x.Int).Select(x => new { x.Id }));
 
         act.Should().Throw<BuildSqlCommandException>().WithMessage("*DISTINCT ON*");
     }
@@ -374,7 +382,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var joined = ctx.From<ISimpleEntity>().Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Int);
 
-        var act = () => SqlOf(ctx, joined.SelectWhereMax(p => p.Item2.Int, p => new { p.Item1.Id }));
+        var act = () => SqlOf(ctx, joined.SelectWhereMaxOld(p => p.Item2.Int, p => new { p.Item1.Id }));
 
         act.Should().Throw<BuildSqlCommandException>().WithMessage("*joins*");
     }
@@ -391,7 +399,7 @@ public class ExtremeRowNativeSqlGenerationTests
 
         // CanRender accepted the command, so the native path is taken; its renderer throwing must
         // surface the exception rather than silently retrying the portable window lowering.
-        var act = () => SqlOf(ctx, e.SelectWhereMax(x => x.Int).ToCommand());
+        var act = () => SqlOf(ctx, e.SelectWhereMaxOld(x => x.Int).ToCommand());
 
         act.Should().Throw<InvalidOperationException>().WithMessage("native renderer boom");
     }
@@ -408,7 +416,7 @@ public class ExtremeRowNativeSqlGenerationTests
         // mapped payload metadata the native DISTINCT ON / LIMIT renderer could describe. The pre-existing
         // policy for such a source is the portable window lowering; the native capability must decline
         // rather than fail the whole batch with "requires a mapped entity source".
-        var command = ctx.From(temp).SelectWhereMax(t => t.GetInt32("id"), t => new { Id = t.GetInt32("id") });
+        var command = ctx.From(temp).SelectWhereMaxOld(t => t.GetInt32("id"), t => new { Id = t.GetInt32("id") });
 
         var sql = command.ToBatchSql();
 
@@ -428,7 +436,7 @@ public class ExtremeRowNativeSqlGenerationTests
         // The compatibility guard runs before the native/portable decision, so a forbidden modifier is
         // still rejected for a temp-table source and is never legalized by the native inner LIMIT.
         var command = ctx.From(temp).Limit(1)
-            .SelectWhereMax(t => t.GetInt32("id"), t => new { Id = t.GetInt32("id") });
+            .SelectWhereMaxOld(t => t.GetInt32("id"), t => new { Id = t.GetInt32("id") });
 
         var act = () => command.ToBatchSql();
 
@@ -447,7 +455,7 @@ public class ExtremeRowNativeSqlGenerationTests
         // alias. Reusing it verbatim would make the ORDER BY on that column ambiguous against the table
         // alias, so the renderer must extend the alias until it no longer collides with any source
         // column.
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Extreme, ExtremeRowTies.One, x => new { x.G }).ToCommand()));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.Extreme, ExtremeRowTies.One, x => new { x.G }).ToCommand()));
 
         norm.Should().Contain(") __nextorm_extreme_ order by");
         norm.Should().NotContain(") __nextorm_extreme order by");
@@ -463,7 +471,7 @@ public class ExtremeRowNativeSqlGenerationTests
 
         // The global form renders no derived table alias, so a key column named like the alias base is
         // referenced unchanged.
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Extreme).ToCommand()));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.Extreme).ToCommand()));
 
         norm.Should().Contain("order by __nextorm_extreme desc limit 1");
         norm.Should().NotContain("row_number()");
@@ -481,7 +489,7 @@ public class ExtremeRowNativeSqlGenerationTests
         // bound parameter: the native source rebuild must not inline it while re-rendering the WHERE.
         var command = Prepare(ctx, e
             .Where(x => x.Int == SqlFunctions.Parameter<int>(0))
-            .SelectWhereMax(x => x.Int).ToCommand());
+            .SelectWhereMaxOld(x => x.Int).ToCommand());
 
         var sql = Dequoted(Normalize(command.DbCommand.CommandText));
 

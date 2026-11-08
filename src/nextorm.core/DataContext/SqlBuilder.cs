@@ -34,6 +34,32 @@ internal readonly struct SqlBuilder
 
     public string? MakeSelect(QueryCommand cmd, string? selectInto = null)
     {
+        if (cmd.Components is { Count: > 0 } components)
+        {
+            // Render-time half of the engine-side rejection boundary: the prepared select list is
+            // available here, so the window-function rule is observable too.
+            QueryComponentCompatibility.EnsureExclusiveReshapeCompatible(cmd);
+
+            // The parameter-refresh pass re-renders the same command to re-extract parameter values,
+            // reaching this method outside the cache-hit fast path. Reusing the shape the miss render
+            // built keeps that pass from re-running every component's BuildQuery: the parameter set is
+            // identical because the shape is identical, and a captured closure read at render time still
+            // yields the current value.
+            if (_ctx.ParamMode && cmd.ComponentRenderShape is { } builtShape)
+                return new SqlBuilder(_ctx).MakeSelect(builtShape, selectInto);
+
+            var rebuilt = cmd.Clone();
+            rebuilt.Components = null;
+            rebuilt.PreparedComponents = cmd.PreparedComponents;
+            foreach (var component in components)
+                component.BuildQuery(new QueryComponentContext(rebuilt));
+
+            if (!_ctx.ParamMode)
+                cmd.ComponentRenderShape = rebuilt;
+
+            return new SqlBuilder(_ctx).MakeSelect(rebuilt, selectInto);
+        }
+
 #if DEBUG
         if (!cmd.IsPrepared)
             throw new InvalidOperationException("Command not prepared");
@@ -132,7 +158,8 @@ internal readonly struct SqlBuilder
                 && Array.Exists(selectList, static item => item.IsDynamicColumnsStore);
             var needAlias = hasJoins || _ctx.QueryProvider.OuterReferences?.Count > 0
                 || (hasDynamicStore && _ctx.Dialect.RequiresQualifiedSelectStar)
-                || from?.SourceLock is not null;
+                || from?.SourceLock is not null
+                || from?.DerivedFragment is not null;
 
             // Source-level row locking is fail-closed: a dialect whose lock renderer does not opt in
             // (MariaDB, SQLite, ClickHouse, in-memory) must reject it instead of silently emitting a
@@ -162,6 +189,7 @@ internal readonly struct SqlBuilder
                 && from.TableExpressionOverride is null
                 && from.Pivot is null
                 && from.XmlNodes is null
+                && from.DerivedFragment is null
                 && !((from.RawSqlSource is not null || from.TableFunction is not null) && _ctx.Dialect.RequireSubqueryAlias);
 
             // Tables-in-scope hints are structural on SQL Server (a WITH(...) on every physical table)
@@ -270,7 +298,9 @@ internal readonly struct SqlBuilder
                 // A key-less constant projection has no group, so a validated row-independent HAVING is a
                 // pre-group filter and belongs in the WHERE position of that statement. Every other mode
                 // (including the legacy ungrouped HAVING, which stays dropped) keeps its WHERE rendering.
-                var preGroupHaving = IsConstantProjection(cmd) ? cmd.PreparedHaving ?? cmd.Having : null;
+                var preGroupHaving = IsConstantProjection(cmd)
+                    ? (cmd.EffectiveHaving ?? cmd.PreparedHaving ?? cmd.Having)
+                    : null;
 
                 if (cmd.PreparedCondition is not null)
                 {
@@ -374,23 +404,31 @@ internal readonly struct SqlBuilder
                         sqlBuilder.Append(groupingSql);
                     }
 
-                    var having = cmd.PreparedHaving ?? cmd.Having;
+                    var having = cmd.EffectiveHavingMode == QueryPreparationHavingMode.Replace && cmd.EffectiveHaving is not null
+                        ? cmd.EffectiveHaving
+                        : (cmd.PreparedHaving ?? cmd.Having);
                     if (having is not null)
                     {
                         if (!_ctx.ParamMode) sqlBuilder!.Append(SqlText.NewLine).Append(Kw(" having "));
                         SqlSourceRenderer.MakeWhere(in _ctx, sqlBuilder, entityType, having, 0, dontNeedAlias, root);
                     }
                 }
-                else if (cmd.IsSelectGroup
-                    && cmd.SelectGroupMode == SelectGroupMode.GlobalAggregate
-                    && (cmd.PreparedHaving ?? cmd.Having) is { } globalHaving)
+                else if (cmd.EffectiveGroupingKeys is not null
+                    && cmd.EffectiveGroupingKeys.Count == 0
+                    && cmd.EffectiveHavingMode != QueryPreparationHavingMode.Clear
+                    && cmd.EffectiveHavingMode != QueryPreparationHavingMode.Unchanged
+                    && cmd.EffectiveHaving is { } effGlobalHaving)
                 {
-                    // A global aggregate groups the whole source: there is no GROUP BY list, and HAVING
-                    // filters the single aggregate row (`select sum(amount) from t having sum(amount) > @p`).
-                    // The branch is gated on IsSelectGroup, so a legacy ungrouped HAVING keeps its
-                    // historical behaviour of not being rendered at all.
                     if (!_ctx.ParamMode) sqlBuilder!.Append(SqlText.NewLine).Append(Kw(" having "));
-                    SqlSourceRenderer.MakeWhere(in _ctx, sqlBuilder, entityType, globalHaving, 0, dontNeedAlias, root);
+                    SqlSourceRenderer.MakeWhere(in _ctx, sqlBuilder, entityType, effGlobalHaving, 0, dontNeedAlias, root);
+                }
+                else if (cmd.EffectiveGroupingKeys is not null
+                    && cmd.EffectiveGroupingKeys.Count == 0
+                    && cmd.EffectiveHavingMode == QueryPreparationHavingMode.Unchanged
+                    && (cmd.PreparedHaving ?? cmd.Having) is { } effUnchangedHaving)
+                {
+                    if (!_ctx.ParamMode) sqlBuilder!.Append(SqlText.NewLine).Append(Kw(" having "));
+                    SqlSourceRenderer.MakeWhere(in _ctx, sqlBuilder, entityType, effUnchangedHaving, 0, dontNeedAlias, root);
                 }
 
                 var windows = cmd.Windows;
@@ -615,7 +653,7 @@ internal readonly struct SqlBuilder
                 // ("select distinct top(n) ..."), so the flag is emitted before the select-list branch.
                 // A key-less constant projection is rendered through DISTINCT without mutating the
                 // command's own IsDistinct (which is source state and part of the plan key).
-                else if (cmd.IsDistinct || IsConstantProjection(cmd))
+                else if (cmd.IsDistinct || IsConstantProjection(cmd) || cmd.EffectiveRequireDistinct)
                     selectBuilder.Append(Kw("distinct "));
             }
             if (cmd.IgnoreColumns || selectList is null)
@@ -1135,6 +1173,32 @@ internal readonly struct SqlBuilder
 
         EnsureExtremeRowCompatible(cmd, selectInto);
 
+        // S1: All global scalar (Ties == All, no grouping, one value key) is lowered to an aggregate
+        // command E joined back to the source O through the common MakeSelect pipeline. S2 extends the
+        // same topology to the grouped scalar form (one value key, one or more group keys, null-safe
+        // OR-join per nullable key). S3 extends it to composite value keys (two or more components) as
+        // a staged aggregate chain E_1..E_n + O, which is the only shape that keeps lexicographic
+        // semantics without a window function. All other shapes (One) keep the existing paths.
+        //
+        // A floating value key on ClickHouse keeps the rank() lowering: the aggregate form there
+        // disagrees with the ordering the extreme-row contract is defined by (see
+        // KeepRankLoweringForFloatingAll).
+        if (cmd.ExtremeRow is { Ties: ExtremeRowTies.All } extremeRow
+            && cmd.ExtremeRowColumns is { Length: > 0 } valueColumns
+            && !KeepRankLoweringForFloatingAll(valueColumns))
+        {
+            // ClickHouse refuses a bare IS NULL residual in JOIN ON (#296) but accepts its native
+            // isNotDistinctFrom there; the lowering emits an internal marker for that case and the
+            // renderer chooses the form, so every other dialect keeps the byte-identical OR-form.
+            var nativeNullSafeJoin = SqlSourceRenderer.IsClickHouseDialect(_ctx.Dialect);
+            var lowered = valueColumns.Length == 1
+                ? extremeRow.GroupBy is null
+                    ? ExtremeRowLowering.BuildAllGlobalScalar(cmd)
+                    : ExtremeRowLowering.BuildAllGroupedScalar(cmd, nativeNullSafeJoin)
+                : ExtremeRowLowering.BuildAllComposite(cmd, nativeNullSafeJoin);
+            return new SqlBuilder(_ctx).MakeSelect(lowered, selectInto);
+        }
+
         // Native generation is an optional dialect capability, limited to the single-row One form: All
         // keeps every tied winner and stays on the portable rank lowering. The eligibility decision is
         // made from a side-effect-free description BEFORE any build-context/parameter/alias work; a
@@ -1165,6 +1229,30 @@ internal readonly struct SqlBuilder
     }
 
     /// <summary>
+    /// Whether a <see cref="ExtremeRowTies.All"/> command must keep the portable <c>rank()</c> lowering
+    /// instead of the aggregate + join-back form. ClickHouse is the only dialect where the two forms
+    /// disagree: its <c>max()</c>/<c>min()</c> return <c>NaN</c> as the extremum while its <c>ORDER BY</c>
+    /// ranks <c>NaN</c> last (and its hash join distinguishes <c>+0.0</c> from <c>-0.0</c>). The
+    /// extreme-row contract is defined by that ordering (the native <c>One</c> renderer adapts its key so
+    /// NaN ranks last), so a floating value key keeps the rank lowering there; every other provider keeps
+    /// the aggregate form, where the aggregate and the ordering agree.
+    /// </summary>
+    private bool KeepRankLoweringForFloatingAll(SelectExpression[] valueColumns)
+    {
+        if (!SqlSourceRenderer.IsClickHouseDialect(_ctx.Dialect))
+            return false;
+
+        for (var i = 0; i < valueColumns.Length; i++)
+        {
+            var type = Nullable.GetUnderlyingType(valueColumns[i].PropertyType) ?? valueColumns[i].PropertyType;
+            if (type == typeof(float) || type == typeof(double))
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// Builds the portable lowering: the ranked inner derived table plus the outer statement that
     /// projects the select list and keeps <c>rn = 1</c>.
     /// </summary>
@@ -1173,8 +1261,25 @@ internal readonly struct SqlBuilder
         var entityType = cmd.EntityType!;
         var from = cmd.From!;
         var rankColumn = MakeExtremeRowRankName(entityType);
-        var innerSql = MakePortableExtremeRowInner(cmd, entityType, from, rankColumn);
-        return MakeExtremeRowOuter(cmd, entityType, innerSql, rankColumn);
+
+        // Keep the inner derived table's rendering unchanged, but expose it as an opaque fragment
+        // source so the outer statement is rendered through the common MakeSelect pipeline.
+        var self = this;
+        var fragment = new DerivedFragmentExpression(entityType, ctx => self.MakePortableExtremeRowInner(cmd, entityType, from, rankColumn));
+
+        var oCommand = cmd.Clone();
+        oCommand.ExtremeRow = null;
+        oCommand.From = new FromExpression(fragment);
+
+        var oParameter = Expression.Parameter(entityType, "o");
+        var columnMethod = typeof(SqlFunctions).GetMethod(nameof(SqlFunctions.Column))!.MakeGenericMethod(typeof(int));
+        var columnCall = Expression.Call(null, columnMethod, oParameter, Expression.Constant(rankColumn));
+        oCommand.PreparedCondition = Expression.Lambda(Expression.Equal(columnCall, Expression.Constant(1)), oParameter);
+
+        if (cmd.IgnoreColumns || cmd.SelectList is null || cmd.SelectList.Length == 0)
+            oCommand.SetSelectList(BuildExtremeRowEntitySelectList(entityType));
+
+        return new SqlBuilder(_ctx).MakeSelect(oCommand);
     }
 
     /// <summary>
@@ -1270,12 +1375,43 @@ internal readonly struct SqlBuilder
         var entityType = cmd.EntityType!;
         var from = cmd.From!;
 
+        // Keep the native winner's SQL production (source filter + renderer) inside an opaque fragment
+        // so the outer statement is rendered through the common MakeSelect pipeline, mirroring the
+        // portable lowering. The fragment delegate walks the source expressions in both modes; the
+        // renderer is invoked in SQL mode only.
+        var self = this;
+        var fragment = new DerivedFragmentExpression(entityType, ctx => self.MakeNativeExtremeRowWinner(
+            cmd, renderer, entityType, from, entitySelectList, keyColumns));
+
+        var oCommand = cmd.Clone();
+        oCommand.ExtremeRow = null;
+        oCommand.From = new FromExpression(fragment);
+        oCommand.PreparedCondition = null;
+
+        if (oCommand.IgnoreColumns || oCommand.SelectList is null || oCommand.SelectList.Length == 0)
+            oCommand.SetSelectList(BuildExtremeRowEntitySelectList(entityType));
+
+        return new SqlBuilder(_ctx).MakeSelect(oCommand);
+    }
+
+    /// <summary>
+    /// Builds the native strategy's winning-row source: the same filtered source as the portable
+    /// lowering (without the rank), handed to the renderer. Returns the rendered winner SQL in SQL
+    /// mode and performs the source expression walk in parameter mode, emitting nothing.
+    /// </summary>
+    private string? MakeNativeExtremeRowWinner(
+        QueryCommand cmd,
+        IExtremeRowRenderer renderer,
+        Type entityType,
+        FromExpression from,
+        SelectExpression[] entitySelectList,
+        IReadOnlyList<ExtremeRowRenderColumn> keyColumns)
+    {
         var sourceSql = MakeNativeExtremeRowSource(cmd, entityType, from);
 
-        // Parameter mode emits no SQL; the outer call still walks the projection and ordering so the
-        // collected parameters stay in step with the SQL pass.
+        // Parameter mode emits no SQL; the source walk has already happened above.
         if (_ctx.ParamMode || sourceSql is null)
-            return MakeExtremeRowOuter(cmd, entityType, null, rankColumn: null, entitySelectList);
+            return null;
 
         var (payloadAliases, keyAliases, groupAliases) = MakeExtremeRowAliases(cmd, entitySelectList);
         var winnerSql = renderer.Render(new ExtremeRowRenderRequest(
@@ -1288,7 +1424,7 @@ internal readonly struct SqlBuilder
             groupAliases,
             _ctx.KeywordCase));
 
-        return MakeExtremeRowOuter(cmd, entityType, winnerSql, rankColumn: null, entitySelectList);
+        return winnerSql;
     }
 
     /// <summary>
@@ -1443,126 +1579,6 @@ internal readonly struct SqlBuilder
 
         var (columns, _) = EntitySelectListBuilder.Build(entityType, entityMeta, CancellationToken.None);
         return columns;
-    }
-
-    /// <summary>
-    /// Wraps the already-rendered <paramref name="innerSql"/> (the portable ranked derived table or the
-    /// native winning-row source) in the outer statement: the command's projection, DISTINCT, the
-    /// user's output ordering, and - for the portable strategy - the <c>rn = 1</c> filter on
-    /// <paramref name="rankColumn"/>. <paramref name="rankColumn"/> is <see langword="null"/> for the
-    /// native strategy, whose source already selects the winners. <paramref name="entitySelectList"/> is
-    /// the projection built once by the native dispatch and reused here; the portable path passes
-    /// <see langword="null"/> and the projection is built on demand.
-    /// </summary>
-    private string? MakeExtremeRowOuter(
-        QueryCommand cmd,
-        Type entityType,
-        string? innerSql,
-        string? rankColumn,
-        SelectExpression[]? entitySelectList = null)
-    {
-        // --- outer statement over the derived table ---
-        string? result = null;
-        _ctx.ColumnsProvider.PushSourceScope();
-        try
-        {
-            string? alias = null;
-            if (!_ctx.ParamMode)
-            {
-                // Register the derived table as a physical-shaped source so member access of the
-                // command's select list resolves to its aliased columns; the inner `select *` exposes
-                // the source's physical column names.
-                _ctx.ColumnsProvider.Add(entityType, false);
-                alias = _ctx.AliasProvider!.GetNextAlias(new FromExpression(entityType));
-            }
-
-            var outer = _ctx.ParamMode ? null : StringBuilderPool.Shared.Get();
-            try
-            {
-                var selectList = cmd.SelectList;
-
-                if (!_ctx.ParamMode)
-                {
-                    outer!.Append(Kw("select "));
-
-                    if (cmd.Tag is { Length: > 0 } tag)
-                        outer.Append(MakeTagComment(tag)).Append(' ');
-
-                    if (cmd.IsDistinct)
-                        outer.Append(Kw("distinct "));
-
-                    if (cmd.IgnoreColumns || selectList is null || selectList.Length == 0)
-                    {
-                        // The inner derived table selects the source columns plus the synthetic rank
-                        // column, so a bare `*` here would leak that rank column into the result. With no
-                        // explicit projection, expand the entity's mapped columns explicitly (the same
-                        // shape the normal whole-row select path prepares) so the rank is dropped. The
-                        // native dispatch hands its single projection in; the portable path builds it.
-                        var entityColumns = entitySelectList ?? BuildExtremeRowEntitySelectList(entityType);
-                        for (var i = 0; i < entityColumns.Length; i++)
-                        {
-                            if (i > 0) outer.Append(", ");
-
-                            var item = entityColumns[i];
-                            var (needAliasForColumn, column) = SqlSourceRenderer.MakeColumn(in _ctx, item, entityType, dontNeedAlias: false, renameAware: true);
-                            outer.Append(column);
-
-                            if (needAliasForColumn)
-                                outer.Append(_ctx.Dialect.MakeColumnAlias(item.PropertyName, _ctx.KeywordCase));
-                        }
-                    }
-                    else
-                    {
-                        for (var i = 0; i < selectList.Length; i++)
-                        {
-                            if (i > 0) outer.Append(", ");
-
-                            var item = selectList[i];
-                            var (needAliasForColumn, column) = SqlSourceRenderer.MakeColumn(in _ctx, item, entityType, dontNeedAlias: false, renameAware: true);
-                            outer.Append(column);
-
-                            if (needAliasForColumn)
-                                outer.Append(_ctx.Dialect.MakeColumnAlias(item.PropertyName, _ctx.KeywordCase));
-                        }
-                    }
-
-                    outer.Append(SqlText.NewLine).Append(Kw(" from ")).Append('(').Append(innerSql).Append(')')
-                        .Append(_ctx.Dialect.MakeTableAlias(alias!, _ctx.KeywordCase));
-
-                    if (rankColumn is not null)
-                    {
-                        outer.Append(SqlText.NewLine).Append(Kw(" where ")).Append(alias).Append('.')
-                            .Append(_ctx.Dialect.MakeColumnReference(rankColumn)).Append(" = 1");
-                    }
-
-                    AppendOrderBy(cmd, entityType, outer);
-                }
-                else
-                {
-                    // Parameter pass: walk the same expressions in the same order as the SQL pass.
-                    if (!cmd.IgnoreColumns && selectList is not null)
-                    {
-                        for (var i = 0; i < selectList.Length; i++)
-                            SqlSourceRenderer.MakeColumn(in _ctx, selectList[i], entityType, dontNeedAlias: false, renameAware: true);
-                    }
-
-                    if (cmd.Sorting is { Length: > 0 } sorting)
-                        WalkOrderByParameters(cmd, entityType, sorting);
-                }
-
-                result = outer?.ToString();
-            }
-            finally
-            {
-                if (outer is not null) StringBuilderPool.Shared.Return(outer);
-            }
-        }
-        finally
-        {
-            _ctx.ColumnsProvider.PopSourceScope();
-        }
-
-        return result;
     }
 
     /// <summary>
@@ -1827,7 +1843,9 @@ internal readonly struct SqlBuilder
     /// so every output is row-independent and the statement renders as <c>select distinct ...</c>.
     /// </summary>
     private static bool IsConstantProjection(QueryCommand cmd)
-        => cmd.IsSelectGroup && cmd.SelectGroupMode == SelectGroupMode.ConstantProjection;
+        => cmd.EffectiveGroupingKeys is not null
+            && cmd.EffectiveGroupingKeys.Count == 0
+            && cmd.EffectiveHavingMode == QueryPreparationHavingMode.Clear;
 
     /// <summary>
     /// Renders one predicate of a composed <c>WHERE</c> clause inside parentheses. Used only by the

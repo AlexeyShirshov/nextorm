@@ -4,10 +4,15 @@
 
 **Prerequisites:** [Keeping the extreme row](../guide/09-distinct.md) · [Provider overview](../connecting-providers/overview.md) · [API quick reference](api-reference.md)
 
+> **Deprecation note.** The built-in operators are now `SelectWhereMinOld` / `SelectWhereMaxOld`: they keep the
+> compatibility path (including the in-memory provider, which the packaged operator does not implement) and are
+> scheduled for removal. The recommended API is `SelectWhereMin` / `SelectWhereMax` from the
+> [extensions package](extensions-package.md), built on the public query-component layer.
+
 ## Overview
 
-[`SelectWhereMax`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMax``1(System.Linq.Expressions.Expression{System.Func{`0,``0}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) and
-[`SelectWhereMin`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMin``1(System.Linq.Expressions.Expression{System.Func{`0,``0}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) keep the row whose value under a selector is the greatest or smallest in the source, globally or per group. They are a row filter, not an aggregate: a surviving row keeps every column. The semantics are unchanged from the portable implementation — see [Keeping the extreme row](../guide/09-distinct.md) for the full contract.
+[`SelectWhereMax`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMaxOld``1(System.Linq.Expressions.Expression{System.Func{`0,``0}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) and
+[`SelectWhereMin`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMinOld``1(System.Linq.Expressions.Expression{System.Func{`0,``0}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) keep the row whose value under a selector is the greatest or smallest in the source, globally or per group. They are a row filter, not an aggregate: a surviving row keeps every column. The semantics are unchanged from the portable implementation — see [Keeping the extreme row](../guide/09-distinct.md) for the full contract.
 
 What this page adds is *how* the `One` request reaches the database. Selection is automatic and deterministic **by provider and query form/type**:
 
@@ -15,7 +20,7 @@ What this page adds is *how* the `One` request reaches the database. Selection i
 - on ClickHouse, a native-eligible key, group and payload render a single `argMin`/`argMax` aggregate;
 - every other combination keeps the portable window-function lowering.
 
-There is no opt-in, no per-instance or per-query switch, and no retry-on-error: once the dialect accepts a request it renders it, and a rendering failure is surfaced instead of silently re-running the portable path. `ExtremeRowTies.All` is never rendered natively.
+There is no opt-in, no per-instance or per-query switch, and no retry-on-error: once the dialect accepts a request it renders it, and a rendering failure is surfaced instead of silently re-running the portable path. The hook covers `ExtremeRowTies.One` only: there is no native `All` renderer, so an `All` request takes the aggregate lowering described in [Keeping the extreme row](../guide/09-distinct.md) — `GROUP BY` plus a join-back per group, a scalar aggregate plus a join-back globally, component by component for a composite key. The one exception is a floating-point value key on ClickHouse, which keeps the ranking window: that server's `max()`/`min()` and its `ORDER BY` disagree about `NaN` (the aggregate returns `NaN` as the extremum while the ordering ranks it last), so the aggregate form would return a different winner set than the contract the window implements.
 
 ## Usage
 
@@ -42,7 +47,8 @@ var perTeam = dataContext.From<Player>()
 | PostgreSQL | global `One` | an inner `ORDER BY <extreme key> ASC/DESC LIMIT 1` |
 | ClickHouse | global `One` | one `argMin`/`argMax(tuple(<payload columns>), <extreme key>)`, plus `HAVING count() > 0` to suppress the empty-input default row |
 | ClickHouse | grouped `One` | one `argMin`/`argMax(tuple(<payload columns>), <extreme key>)` next to the group columns and a `GROUP BY` |
-| Any other provider, or a non-eligible request | any | the portable window-function lowering |
+| Any other provider, or a non-eligible `One` request | any | the portable window-function lowering |
+| Every provider, `ExtremeRowTies.All` | any | the aggregate lowering: `GROUP BY` + join-back per group, a scalar aggregate + join-back globally, component by component for a composite key; a floating-point value key on ClickHouse keeps the ranking window instead (the server's aggregate and ordering disagree about `NaN`) |
 
 The PostgreSQL grouped form keeps the first row per group under the ordering, so ordering the group components first and the full extreme key after them selects the extreme row per group. The ClickHouse aggregate picks a whole payload tuple and projects its elements back to the canonical payload aliases. In both cases the shared builder still applies the outer projection, `DISTINCT` and the user's output ordering afterwards.
 
@@ -94,9 +100,9 @@ Eligibility is intentionally narrow, and is decided from a prepared description 
 | Extreme key | a direct mapped column bound to `short`/`int`/`long` or `float`/`double` (including nullable), or a composite of such components; a composite that contains a floating component is limited to three components, while a purely integral composite has no arity limit; a floating component is adapted NaN-safe |
 | Group key | the same integral types as the extreme key (`short`/`int`/`long`, including nullable), or a composite of those of any arity; a floating group key keeps the portable path |
 | ClickHouse payload | integral types (`sbyte`/`byte`/`short`/`ushort`/`int`/`uint`/`long`/`ulong`, including nullable), floating-point types (`float`/`double`, including nullable) and `string` |
-| Everything else | the portable window-function lowering |
+| Everything else (an `All` request, whatever its keys) | the portable lowering of that tie policy: the window for `One`, the aggregate form for `All` — except a floating-point value key on ClickHouse, which keeps the window |
 
-A composite key is compared lexicographically component by component. A `Float32`/`Float64` component of the extreme key is adapted in the same query instead of being passed to `argMin`/`argMax` verbatim: a leading `isNaN` rank keeps NaN last in both directions, matching the portable contract, and a `Float32` component is widened to `Float64` for the comparison. The raw direct aggregate is deliberately not used, because ClickHouse seeds it with the first row and `x > NaN`/`x < NaN` are both false, so a leading NaN would otherwise win. The adaptation covers single, two- and three-component keys across `Min`/`Max`, global/grouped, and nullable/non-nullable components. The arity limits are deliberately asymmetric: a purely integral extreme key or group key is a plain lexicographic tuple and is not arity-capped, while only a key that contains a floating component is capped at three components, because only that adaptation was proven arity by arity. The group selector must be compound (`e => new { e.TeamId }`); a bare single-column group selector keeps the portable path. Everything outside the table above keeps the portable lowering with the same results contract: the other providers, `ExtremeRowTies.All`, floating-point group keys, floating extreme keys with more than three components, `Float16`/`Decimal` keys, value converters, computed expressions, and other key or payload types.
+A composite key is compared lexicographically component by component. A `Float32`/`Float64` component of the extreme key is adapted in the same query instead of being passed to `argMin`/`argMax` verbatim: a leading `isNaN` rank keeps NaN last in both directions, matching the portable contract, and a `Float32` component is widened to `Float64` for the comparison. The raw direct aggregate is deliberately not used, because ClickHouse seeds it with the first row and `x > NaN`/`x < NaN` are both false, so a leading NaN would otherwise win. The adaptation covers single, two- and three-component keys across `Min`/`Max`, global/grouped, and nullable/non-nullable components. The arity limits are deliberately asymmetric: a purely integral extreme key or group key is a plain lexicographic tuple and is not arity-capped, while only a key that contains a floating component is capped at three components, because only that adaptation was proven arity by arity. The group selector must be compound (`e => new { e.TeamId }`); a bare single-column group selector keeps the portable path. Everything outside the table above keeps the portable lowering with the same results contract: the other providers, every `ExtremeRowTies.All` request (which takes the aggregate form, since there is no native `All` renderer, except a floating-point value key on ClickHouse — that server's `max()`/`min()` treat `NaN` as the extreme value while its `ORDER BY` ranks it last, so the rank window stays the reference there), floating-point group keys, floating extreme keys with more than three components, `Float16`/`Decimal` keys, value converters, computed expressions, and other key or payload types.
 
 ## Semantics
 

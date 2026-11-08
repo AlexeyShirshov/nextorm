@@ -8,6 +8,24 @@ public partial class QueryCommand
 {
 
     /// <summary>
+    /// Copies the complete live state (including preparation-derived state) of this command into
+    /// <paramref name="dst"/>. Used when a non-generic command must be adopted by a typed wrapper without
+    /// re-preparing it — the correlated evaluator executes a clone whose condition has already been
+    /// rewritten to parameter placeholders, so preparing it again would discard that rewrite.
+    /// </summary>
+    /// <param name="dst">The target command; it must be assignable from this command's runtime state.</param>
+    internal void CopyAllStateTo(QueryCommand dst)
+    {
+        CopyTo(dst, copyAll: true);
+
+        // These two are project state rather than plan state, so CopyTo does not carry them; a wrapper
+        // that inherits a prepared flag without them would compile the wrong row shape (a scalar command
+        // would try to construct the scalar type from its columns).
+        dst.OneColumn = OneColumn;
+        dst.IgnoreColumns = IgnoreColumns;
+    }
+
+    /// <summary>
     /// Copies the shared plan state of this command into <paramref name="dst"/>. When
     /// <paramref name="copyAll"/> is <c>true</c> the mutable query state (custom data, referenced
     /// queries, union, from and CTEs) is copied by reference for a live clone; otherwise those parts
@@ -37,6 +55,7 @@ public partial class QueryCommand
         dst.HasUnkeyedTupleInValues = HasUnkeyedTupleInValues;
         dst.HasUnkeyedScalarInValues = HasUnkeyedScalarInValues;
         dst.ResultPlanHash = ResultPlanHash;
+        dst.BoxedResultType = BoxedResultType;
         dst.GroupingPlanHash = GroupingPlanHash;
         // From/Union/ReferencedQueries hashes must travel with the clone too: QueryPlanEqualityComparer
         // .GetHashCode() reads them, and QueryPlan.Equals() considers the cloned members equal, so the
@@ -91,20 +110,28 @@ public partial class QueryCommand
         dst.GroupingType = GroupingType;
         dst.GroupingSets = GroupingSets;
         dst.GroupByWithTotals = GroupByWithTotals;
-        dst.IsSelectGroup = IsSelectGroup;
         // The inferred SelectGroup state is derived at preparation, but `_isPrepared` travels with the
-        // clone, so the planner never re-derives it (`if (!IsPrepared) PrepareCommand(...)`). The mode
-        // is read by the renderer (DISTINCT for a constant projection, the global HAVING arm), the
-        // grouping list carries the inferred keys, and the raw keys/outputs are what a reset would
-        // re-derive from — all of them must therefore travel like the grouping list itself.
-        dst.SelectGroupMode = SelectGroupMode;
-        dst.SelectGroupKeys = SelectGroupKeys;
-        dst.SelectGroupOutputs = SelectGroupOutputs;
         dst.LimitBy = LimitBy;
         dst._limitByColumns = _limitByColumns;
         dst.DistinctOn = DistinctOn;
         dst._distinctOnColumns = _distinctOnColumns;
         dst.ExtremeRow = ExtremeRow;
+        // #368: component state is stored flat; share the immutable component/prepared lists and views,
+        // and drop the render-scoped shape on the clone (it belongs to the source instance).
+        dst._components = _components;
+        dst._componentsView = _componentsView;
+        dst._preparedComponents = _preparedComponents;
+        dst._preparedComponentsView = _preparedComponentsView;
+        dst._componentRenderShape = null;
+        // The effective state the component contributions produced during preparation. The clone
+        // constructor already copies it; a staged raw apply (ApplyPreparationFrom) targets a fresh
+        // command, so it must arrive through here or the hit cannot re-extract captured parameters from
+        // the component's replacement HAVING/grouping.
+        dst.EffectiveGroupingKeys = EffectiveGroupingKeys;
+        dst.EffectiveHavingMode = EffectiveHavingMode;
+        dst.EffectiveHaving = EffectiveHaving;
+        dst.EffectiveSourcePredicate = EffectiveSourcePredicate;
+        dst.EffectiveRequireDistinct = EffectiveRequireDistinct;
         dst._extremeRowColumns = _extremeRowColumns;
         dst._extremeRowGroupByColumns = _extremeRowGroupByColumns;
         dst.PerParentPaging = PerParentPaging;

@@ -44,7 +44,6 @@ static async Task RunComparison(string[] args)
         ("RouteNetworkAbcXyz", ct => AviasalesQueries.RouteNetworkAbcXyz(ctx, ct), ct => Linq2DbQueries.RouteNetworkAbcXyz(l2db, ct)),
         ("TopRoutesByCity", ct => AviasalesQueries.TopRoutesByCity(ctx, ct), ct => Linq2DbQueries.TopRoutesByCity(l2db, ct)),
         ("AirportOnTimePerformance", ct => AviasalesQueries.AirportOnTimePerformance(ctx, ct), ct => Linq2DbQueries.AirportOnTimePerformance(l2db, ct)),
-        ("DelayPercentilesByModel", ct => AviasalesQueries.DelayPercentilesByModel(ctx, ct), ct => Linq2DbQueries.DelayPercentilesByModel(l2db, ct)),
         ("FrequentFlyers", ct => AviasalesQueries.FrequentFlyers(ctx, ct), ct => Linq2DbQueries.FrequentFlyers(l2db, ct)),
         ("PassengerGrowth", ct => AviasalesQueries.PassengerGrowth(ctx, ct), ct => Linq2DbQueries.PassengerGrowth(l2db, ct)),
         ("CancellationByRoute", ct => AviasalesQueries.CancellationByRoute(ctx, ct), ct => Linq2DbQueries.CancellationByRoute(l2db, ct)),

@@ -178,3 +178,26 @@ still marks **no** is tracked in [#287](https://github.com/AlexeyShirshov/nextor
 ([#289](https://github.com/AlexeyShirshov/nextorm/issues/289)) are implemented and their rows now read **yes**.
 For per-provider
 details see `docs/providers/*.md`.
+
+## NativeAOT migration cost (zero-config contract)
+
+NativeAOT is not a SQL construct, so it stays outside the 124-row table. The contract is
+**zero-config for the consumer**: within the verified surface (SQLite, .NET 10 / `linux-x64`) the only
+change is `PublishAot=true` — no compiled model, no precompilation step, no analyzer/interceptor
+opt-in, no entity or query registration, no linker descriptors or roots. CI job `aot` publishes the
+native runner and executes it against SQLite on every push.
+
+| Aspect | nextorm | linq2db | EF Core |
+|---|---|---|---|
+| Status | **partial** (SQLite), tracked in [#370](https://github.com/AlexeyShirshov/nextorm/issues/370) | **not supported officially** — roadmap entry #4387: "we still doesn't support NativeAOT officially" | **experimental** — docs: "not yet suited for production use… recommend against deploying EF NativeAOT applications in production" |
+| Consumer change | `PublishAot=true` only | — | compiled model + `Microsoft.EntityFrameworkCore.Tasks` (query precompilation) + `InterceptorsNamespaces`; dynamically composed queries unsupported |
+| Real-world check (`oc-report`, 13 GB SQLite, 3-day window) | 8.2 MB binary, 0.12 s, 30 MB RSS, **no source changes** | not measured (no official AOT contract) | 17.3 MB, 0.23 s, 42 MB, 565 unique IL warnings, two 10.0.14 codegen workarounds (global namespace, non-sealed entity) |
+| Evidence | `docs/infrastructure/05-nativeaot.md`, `examples/nextorm.examples.oc-report`, `tests/nextorm.aot.runner` + `AotNativeRunTests`, workflow job `aot` | [linq2db#4387](https://github.com/linq2db/linq2db/issues/4387) | EF Core NativeAOT docs + local reproduction 2026-11-08 |
+
+Dapper is compared on the public pages: vanilla Dapper is not AOT-compatible; `Dapper.AOT` needs
+`[module: DapperAot]` + `InterceptorsNamespaces` and supports statically known SQL only. It matches
+nextorm on runtime (0.12 s) and is smaller (3.5 MB / 19 MB RSS), but only because it executes
+hand-written SQL rather than a composed query.
+
+The reference app is `examples/nextorm.examples.oc-report`; its `seed.sql` generates a deterministic
+synthetic database with the same two tables, so the comparison reproduces without private data.

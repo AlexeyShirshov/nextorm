@@ -457,7 +457,7 @@ public class T287NullOrderingTests
         ]);
 
         var rows = ctx.From<T287ExtremeProbe>()
-            .SelectWhereMax(x => x.Score, ExtremeRowTies.All)
+            .SelectWhereMaxOld(x => x.Score, ExtremeRowTies.All)
             .OrderBy(x => x.Key, NullsPosition.First)
             .ThenBy(x => x.Id)
             .ToList();

@@ -133,7 +133,7 @@ select Lower(somestring) as 'V'
 public static decimal MySum(decimal value) => throw new NotSupportedException();
 ```
 
-`IsAggregate = true` делает вызов непрозрачной агрегатной границей для `SelectGroup`: его
+`IsAggregate = true` делает вызов непрозрачной агрегатной границей для `SelectGroup` (в `NextORM.Extensions`): его
 аргументы, его `DISTINCT`-вход и его `FILTER`-предикат никогда не становятся ключами группировки, а
 проекция без зависящих от строки членов становится глобальной агрегацией. Скалярная функция — без
 атрибута или с `IsAggregate = false` — может, наоборот, быть выведена как целый ключ группировки.

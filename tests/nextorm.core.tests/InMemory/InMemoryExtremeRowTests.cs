@@ -37,7 +37,7 @@ public class InMemoryExtremeRowTests
             new ExtremeRowEntity { Id = 2, Score = 9 },
             new ExtremeRowEntity { Id = 3, Score = 2 });
 
-        var rows = source.SelectWhereMax(it => it.Score).ToList();
+        var rows = source.SelectWhereMaxOld(it => it.Score).ToList();
 
         rows.Should().ContainSingle().Which.Id.Should().Be(2);
     }
@@ -50,7 +50,7 @@ public class InMemoryExtremeRowTests
             new ExtremeRowEntity { Id = 2, Score = 9 },
             new ExtremeRowEntity { Id = 3, Score = 2 });
 
-        var rows = source.SelectWhereMin(it => it.Score).ToList();
+        var rows = source.SelectWhereMinOld(it => it.Score).ToList();
 
         rows.Should().ContainSingle().Which.Id.Should().Be(3);
     }
@@ -63,7 +63,7 @@ public class InMemoryExtremeRowTests
             new ExtremeRowEntity { Id = 2, Score = 1 },
             new ExtremeRowEntity { Id = 3, Score = 9 });
 
-        var rows = source.SelectWhereMax(it => it.Score, ExtremeRowTies.All).ToList();
+        var rows = source.SelectWhereMaxOld(it => it.Score, ExtremeRowTies.All).ToList();
 
         rows.Should().HaveCount(2);
         rows.Select(r => r.Id).Should().BeEquivalentTo([1, 3]);
@@ -77,7 +77,7 @@ public class InMemoryExtremeRowTests
             new ExtremeRowEntity { Id = 2, Score = 3 },
             new ExtremeRowEntity { Id = 3, Score = 8 });
 
-        var rows = source.SelectWhereMin(it => it.Score, ExtremeRowTies.All).ToList();
+        var rows = source.SelectWhereMinOld(it => it.Score, ExtremeRowTies.All).ToList();
 
         rows.Should().HaveCount(2);
         rows.Select(r => r.Id).Should().BeEquivalentTo([1, 2]);
@@ -90,7 +90,7 @@ public class InMemoryExtremeRowTests
             new ExtremeRowEntity { Id = 1, Score = 4, Payload = 10 },
             new ExtremeRowEntity { Id = 2, Score = 8, Payload = 20 });
 
-        var rows = source.SelectWhereMax(it => it.Score, it => new { it.Id, it.Payload }).ToList();
+        var rows = source.SelectWhereMaxOld(it => it.Score, it => new { it.Id, it.Payload }).ToList();
 
         rows.Should().ContainSingle();
         rows[0].Id.Should().Be(2);
@@ -105,7 +105,7 @@ public class InMemoryExtremeRowTests
             new ExtremeRowEntity { Id = 2, Score = 8, Payload = 20 },
             new ExtremeRowEntity { Id = 3, Score = 4, Payload = 30 });
 
-        var rows = source.SelectWhereMin(it => it.Score, it => new { it.Id, it.Payload }, ExtremeRowTies.All).ToList();
+        var rows = source.SelectWhereMinOld(it => it.Score, it => new { it.Id, it.Payload }, ExtremeRowTies.All).ToList();
 
         rows.Should().HaveCount(2);
         rows.Should().BeEquivalentTo([new { Id = 1, Payload = 10 }, new { Id = 3, Payload = 30 }]);
@@ -120,7 +120,7 @@ public class InMemoryExtremeRowTests
             new ExtremeRowEntity { Id = 3, Score = 1, Category = "b" },
             new ExtremeRowEntity { Id = 4, Score = 7, Category = "b" });
 
-        var rows = source.SelectWhereMax(it => it.Score, ExtremeRowTies.One, it => it.Category).ToList();
+        var rows = source.SelectWhereMaxOld(it => it.Score, ExtremeRowTies.One, it => it.Category).ToList();
 
         rows.Should().HaveCount(2);
         rows.Select(r => r.Category).Should().BeEquivalentTo(["a", "b"]);
@@ -138,7 +138,7 @@ public class InMemoryExtremeRowTests
             new ExtremeRowEntity { Id = 4, Score = 8, Category = "b" },
             new ExtremeRowEntity { Id = 5, Score = 3, Category = "b" });
 
-        var rows = source.SelectWhereMin(it => it.Score, ExtremeRowTies.All, it => it.Category).ToList();
+        var rows = source.SelectWhereMinOld(it => it.Score, ExtremeRowTies.All, it => it.Category).ToList();
 
         rows.Should().HaveCount(3);
         rows.Where(r => r.Category == "a").Select(r => r.Id).Should().BeEquivalentTo([2, 3]);
@@ -153,7 +153,7 @@ public class InMemoryExtremeRowTests
             new ExtremeRowEntity { Id = 2, Score = 6, Category = "a", Payload = 20 },
             new ExtremeRowEntity { Id = 3, Score = 4, Category = "b", Payload = 30 });
 
-        var rows = source.SelectWhereMax(it => it.Score, it => new { it.Id, it.Payload }, ExtremeRowTies.One, it => it.Category).ToList();
+        var rows = source.SelectWhereMaxOld(it => it.Score, it => new { it.Id, it.Payload }, ExtremeRowTies.One, it => it.Category).ToList();
 
         rows.Should().HaveCount(2);
         rows.Should().BeEquivalentTo([new { Id = 2, Payload = 20 }, new { Id = 3, Payload = 30 }]);
@@ -167,7 +167,7 @@ public class InMemoryExtremeRowTests
             new ExtremeRowEntity { Id = 2, Score = 9, Category = null },
             new ExtremeRowEntity { Id = 3, Score = 5, Category = "a" });
 
-        var rows = source.SelectWhereMax(it => it.Score, ExtremeRowTies.All, it => it.Category).ToList();
+        var rows = source.SelectWhereMaxOld(it => it.Score, ExtremeRowTies.All, it => it.Category).ToList();
 
         rows.Should().HaveCount(2);
         rows.Select(r => r.Id).Should().BeEquivalentTo([2, 3]);
@@ -182,7 +182,7 @@ public class InMemoryExtremeRowTests
             new ExtremeRowEntity { Id = 3, Score = 9, Category = "a", Flag = false },
             new ExtremeRowEntity { Id = 4, Score = 1, Category = "a", Flag = false });
 
-        var rows = source.SelectWhereMax(it => it.Score, ExtremeRowTies.All, it => new { it.Category, it.Flag }).ToList();
+        var rows = source.SelectWhereMaxOld(it => it.Score, ExtremeRowTies.All, it => new { it.Category, it.Flag }).ToList();
 
         rows.Should().HaveCount(2);
         rows.Select(r => r.Id).Should().BeEquivalentTo([2, 3]);
@@ -199,10 +199,10 @@ public class InMemoryExtremeRowTests
             new ExtremeRowEntity { Id = 3, Category = "c", Score = 1 },
             new ExtremeRowEntity { Id = 4, Category = "a", Score = 1 });
 
-        source.SelectWhereMax(it => new { it.Category, it.Score }).ToList()
+        source.SelectWhereMaxOld(it => new { it.Category, it.Score }).ToList()
             .Should().ContainSingle().Which.Id.Should().Be(3);
 
-        source.SelectWhereMin(it => new { it.Category, it.Score }).ToList()
+        source.SelectWhereMinOld(it => new { it.Category, it.Score }).ToList()
             .Should().ContainSingle().Which.Id.Should().Be(4);
     }
 
@@ -217,9 +217,9 @@ public class InMemoryExtremeRowTests
             new ExtremeRowEntity { Id = 3, Category = "a", Score = null },
             new ExtremeRowEntity { Id = 4, Category = null, Score = 1 });
 
-        source.SelectWhereMax(it => new { it.Category, it.Score }).ToList()
+        source.SelectWhereMaxOld(it => new { it.Category, it.Score }).ToList()
             .Should().ContainSingle().Which.Id.Should().Be(2);
-        source.SelectWhereMin(it => new { it.Category, it.Score }).ToList()
+        source.SelectWhereMinOld(it => new { it.Category, it.Score }).ToList()
             .Should().ContainSingle().Which.Id.Should().Be(2);
     }
 
@@ -231,7 +231,7 @@ public class InMemoryExtremeRowTests
             new ExtremeRowEntity { Id = 2, Category = "a", Score = 9 },
             new ExtremeRowEntity { Id = 3, Category = "a", Score = 5 });
 
-        var rows = source.SelectWhereMax(it => new { it.Category, it.Score }, ExtremeRowTies.All).ToList();
+        var rows = source.SelectWhereMaxOld(it => new { it.Category, it.Score }, ExtremeRowTies.All).ToList();
 
         rows.Select(r => r.Id).Should().BeEquivalentTo([1, 2]);
     }
@@ -246,8 +246,8 @@ public class InMemoryExtremeRowTests
             new ExtremeRowEntity { Id = 2, Score = 4 },
             new ExtremeRowEntity { Id = 3, Score = 9 });
 
-        source.SelectWhereMax(it => new { it.Score }).ToList().Should().ContainSingle().Which.Id.Should().Be(3);
-        source.SelectWhereMin(it => new { it.Score }).ToList().Should().ContainSingle().Which.Id.Should().Be(2);
+        source.SelectWhereMaxOld(it => new { it.Score }).ToList().Should().ContainSingle().Which.Id.Should().Be(3);
+        source.SelectWhereMinOld(it => new { it.Score }).ToList().Should().ContainSingle().Which.Id.Should().Be(2);
     }
 
     [Fact]
@@ -256,7 +256,7 @@ public class InMemoryExtremeRowTests
         // The extreme path used to early-return before the normal path's cache bookkeeping, so a cached
         // plan had neither the resolved source nor the per-call resolver; both must be populated.
         var source = Source(new ExtremeRowEntity { Id = 1, Score = 7 });
-        QueryCommand<ExtremeRowEntity> command = source.SelectWhereMax(it => it.Score);
+        QueryCommand<ExtremeRowEntity> command = source.SelectWhereMaxOld(it => it.Score);
 
         var prepared = _sut.DataProvider.GetPreparedQueryCommand(command, createEnumerator: false, storeInCache: true, TestContext.Current.CancellationToken);
 
@@ -270,8 +270,8 @@ public class InMemoryExtremeRowTests
     {
         var source = Source();
 
-        source.SelectWhereMax(it => it.Score).ToList().Should().BeEmpty();
-        source.SelectWhereMax(it => it.Score, ExtremeRowTies.All, it => it.Category).ToList().Should().BeEmpty();
+        source.SelectWhereMaxOld(it => it.Score).ToList().Should().BeEmpty();
+        source.SelectWhereMaxOld(it => it.Score, ExtremeRowTies.All, it => it.Category).ToList().Should().BeEmpty();
     }
 
     [Fact]
@@ -279,7 +279,7 @@ public class InMemoryExtremeRowTests
     {
         var source = Source(new ExtremeRowEntity { Id = 1, Score = 7, Category = "a" });
 
-        var rows = source.SelectWhereMin(it => it.Score).ToList();
+        var rows = source.SelectWhereMinOld(it => it.Score).ToList();
 
         rows.Should().ContainSingle().Which.Id.Should().Be(1);
     }
@@ -292,8 +292,8 @@ public class InMemoryExtremeRowTests
             new ExtremeRowEntity { Id = 2, Score = 4 },
             new ExtremeRowEntity { Id = 3, Score = null });
 
-        source.SelectWhereMax(it => it.Score).ToList().Should().ContainSingle().Which.Id.Should().Be(2);
-        source.SelectWhereMax(it => it.Score, ExtremeRowTies.All).ToList().Should().ContainSingle().Which.Id.Should().Be(2);
+        source.SelectWhereMaxOld(it => it.Score).ToList().Should().ContainSingle().Which.Id.Should().Be(2);
+        source.SelectWhereMaxOld(it => it.Score, ExtremeRowTies.All).ToList().Should().ContainSingle().Which.Id.Should().Be(2);
     }
 
     [Fact]
@@ -304,7 +304,7 @@ public class InMemoryExtremeRowTests
             new ExtremeRowEntity { Id = 2, Score = null, Category = "a" },
             new ExtremeRowEntity { Id = 3, Score = 5, Category = "b" });
 
-        var rows = source.SelectWhereMax(it => it.Score, ExtremeRowTies.All, it => it.Category).ToList();
+        var rows = source.SelectWhereMaxOld(it => it.Score, ExtremeRowTies.All, it => it.Category).ToList();
 
         rows.Should().ContainSingle().Which.Id.Should().Be(3);
     }
@@ -316,12 +316,12 @@ public class InMemoryExtremeRowTests
             new ExtremeRowEntity { Id = 1, Score = 3, Payload = null },
             new ExtremeRowEntity { Id = 2, Score = 9, Payload = 42 });
 
-        var rows = source.SelectWhereMax(it => it.Score, it => it.Payload).ToList();
+        var rows = source.SelectWhereMaxOld(it => it.Score, it => it.Payload).ToList();
 
         rows.Should().ContainSingle().Which.Should().Be(42);
 
         var nullSource = Source(new ExtremeRowEntity { Id = 1, Score = 9, Payload = null });
-        var nullRows = nullSource.SelectWhereMax(it => it.Score, it => it.Payload).ToList();
+        var nullRows = nullSource.SelectWhereMaxOld(it => it.Score, it => it.Payload).ToList();
         nullRows.Should().ContainSingle().Which.Should().BeNull();
     }
 
@@ -333,7 +333,7 @@ public class InMemoryExtremeRowTests
             new ExtremeRowEntity { Id = 2, Score = 9 },
             new ExtremeRowEntity { Id = 3, Score = 7 });
 
-        var rows = source.Where(it => it.Id != 2).SelectWhereMax(it => it.Score).ToList();
+        var rows = source.Where(it => it.Id != 2).SelectWhereMaxOld(it => it.Score).ToList();
 
         rows.Should().ContainSingle().Which.Id.Should().Be(3);
     }
@@ -345,7 +345,7 @@ public class InMemoryExtremeRowTests
             new ExtremeRowEntity { Id = 1, Score = 5 },
             new ExtremeRowEntity { Id = 2, Score = 9 });
 
-        var act = () => source.SelectWhereMax(it => it.Score).Page(1, 0).ToList();
+        var act = () => source.SelectWhereMaxOld(it => it.Score).Page(1, 0).ToList();
 
         act.Should().Throw<BuildSqlCommandException>().WithMessage("*paging*");
     }
@@ -356,7 +356,7 @@ public class InMemoryExtremeRowTests
         _sut.SimpleEntity.WithData([new SimpleEntity { Id = 1 }, new SimpleEntity { Id = 2 }]);
         var joined = _sut.SimpleEntity.Join(_sut.SimpleEntity, (a, b) => a.Id == b.Id);
 
-        var act = () => joined.SelectWhereMax(p => p.Item1.Id, p => new { p.Item1.Id }).ToList();
+        var act = () => joined.SelectWhereMaxOld(p => p.Item1.Id, p => new { p.Item1.Id }).ToList();
 
         act.Should().Throw<BuildSqlCommandException>().WithMessage("*joins*");
     }
@@ -371,7 +371,7 @@ public class InMemoryExtremeRowTests
     {
         var source = Source(new ExtremeRowEntity { Id = 1, Score = 7 });
 
-        var act = () => source.Having(it => it.Id > 0).SelectWhereMax(it => it.Score).ToList();
+        var act = () => source.Having(it => it.Id > 0).SelectWhereMaxOld(it => it.Score).ToList();
 
         act.Should().Throw<BuildSqlCommandException>().WithMessage("*HAVING*");
     }
@@ -381,7 +381,7 @@ public class InMemoryExtremeRowTests
     {
         var source = Source(new ExtremeRowEntity { Id = 1, Score = 7 });
 
-        var act = () => source.SelectWhereMax(it => it.Score)
+        var act = () => source.SelectWhereMaxOld(it => it.Score)
             .Select(it => new { R = SqlFunctions.Sql.row_number().Over(partitionBy: () => it.Score) })
             .ToList();
 
@@ -394,7 +394,7 @@ public class InMemoryExtremeRowTests
     public void Clone_ShouldPreserveTheExtremeClause()
     {
         var source = Source(new ExtremeRowEntity { Id = 1, Score = 7, Category = "a" });
-        var command = source.SelectWhereMax(it => it.Score, ExtremeRowTies.All, it => it.Category).ToCommand();
+        var command = source.SelectWhereMaxOld(it => it.Score, ExtremeRowTies.All, it => it.Category).ToCommand();
 
         var clone = command.Clone();
 
@@ -410,7 +410,7 @@ public class InMemoryExtremeRowTests
     {
         var source = Source(new ExtremeRowEntity { Id = 1, Score = 7 });
 
-        QueryCommand<ExtremeRowEntity> Build() => source.SelectWhereMax(it => it.Score, ExtremeRowTies.All, it => it.Category).ToCommand();
+        QueryCommand<ExtremeRowEntity> Build() => source.SelectWhereMaxOld(it => it.Score, ExtremeRowTies.All, it => it.Category).ToCommand();
 
         var first = _sut.DataProvider.GetPreparedQueryCommand(Build(), false, true, TestContext.Current.CancellationToken);
         var second = _sut.DataProvider.GetPreparedQueryCommand(Build(), false, true, TestContext.Current.CancellationToken);
@@ -425,11 +425,11 @@ public class InMemoryExtremeRowTests
 
         IPreparedQueryCommand<T> Prepare<T>(QueryCommand<T> cmd) => _sut.DataProvider.GetPreparedQueryCommand(cmd, false, true, TestContext.Current.CancellationToken);
 
-        var max = Prepare(source.SelectWhereMax(it => it.Score, ExtremeRowTies.All, it => it.Category).ToCommand());
-        var min = Prepare(source.SelectWhereMin(it => it.Score, ExtremeRowTies.All, it => it.Category).ToCommand());
-        var oneTie = Prepare(source.SelectWhereMax(it => it.Score, ExtremeRowTies.One, it => it.Category).ToCommand());
-        var otherSelector = Prepare(source.SelectWhereMax(it => it.Payload, ExtremeRowTies.All, it => it.Category).ToCommand());
-        var noGroup = Prepare(source.SelectWhereMax(it => it.Score, ExtremeRowTies.All).ToCommand());
+        var max = Prepare(source.SelectWhereMaxOld(it => it.Score, ExtremeRowTies.All, it => it.Category).ToCommand());
+        var min = Prepare(source.SelectWhereMinOld(it => it.Score, ExtremeRowTies.All, it => it.Category).ToCommand());
+        var oneTie = Prepare(source.SelectWhereMaxOld(it => it.Score, ExtremeRowTies.One, it => it.Category).ToCommand());
+        var otherSelector = Prepare(source.SelectWhereMaxOld(it => it.Payload, ExtremeRowTies.All, it => it.Category).ToCommand());
+        var noGroup = Prepare(source.SelectWhereMaxOld(it => it.Score, ExtremeRowTies.All).ToCommand());
 
         ReferenceEquals(max, min).Should().BeFalse("Max and Min are different extrema");
         ReferenceEquals(max, oneTie).Should().BeFalse("different tie semantics must not share a plan");
@@ -444,8 +444,8 @@ public class InMemoryExtremeRowTests
 
         IPreparedQueryCommand<T> Prepare<T>(QueryCommand<T> cmd) => _sut.DataProvider.GetPreparedQueryCommand(cmd, false, true, TestContext.Current.CancellationToken);
 
-        var score = Prepare(source.SelectWhereMax(it => it.Score, it => new { V = it.Score }));
-        var payload = Prepare(source.SelectWhereMax(it => it.Score, it => new { V = it.Payload }));
+        var score = Prepare(source.SelectWhereMaxOld(it => it.Score, it => new { V = it.Score }));
+        var payload = Prepare(source.SelectWhereMaxOld(it => it.Score, it => new { V = it.Payload }));
 
         ReferenceEquals(score, payload).Should().BeFalse("different projections must not share a plan");
     }

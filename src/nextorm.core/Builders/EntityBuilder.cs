@@ -36,6 +36,12 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     private LimitByClause? _limitBy;
     private DistinctOnClause? _distinctOn;
     private ExtremeRowClause? _extremeRow;
+    // #362 AC7: the attached components live in one reference field, never two: null means none, a
+    // single `IQueryComponent` means exactly one (the common case, no list), and a
+    // `List<IQueryComponent>` means two or more. Keeping the no-component builder at one added
+    // reference instead of two is what keeps the untouched construction path as close to the
+    // pre-cycle allocation as the class layout allows.
+    private object? _componentState;
     private TableSampleClause? _tablesample;
     private TemporalClause? _temporal;
     private LockClause? _rowLock;
@@ -367,43 +373,12 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         return SelectCore(exp);
     }
     /// <summary>
-    /// Projects each row with <paramref name="projection"/> and groups the result by the keys inferred
-    /// from that projection, so <c>GROUP BY</c> does not have to be repeated in a separate
-    /// <c>GroupBy</c> call.
+    /// Builds the projection command without the public composition guards.
     /// </summary>
-    /// <remarks>
-    /// The grouping keys are inferred from the projection's scalar outputs (constructor arguments,
-    /// member-init bindings or the lambda body) at preparation time: each maximal row-dependent,
-    /// aggregate-free subexpression becomes one key, in first-appearance order, and an aggregate call's
-    /// arguments never become keys. <see cref="GroupBy"/> and the rollup/cube/grouping-sets/with-totals
-    /// modifiers cannot be combined with this form. <see cref="Having"/> and an expression
-    /// <c>OrderBy</c> must reference either an inferred key or an aggregate, otherwise preparation fails
-    /// with <see cref="QueryPreparationException"/>.
-    /// </remarks>
-    /// <typeparam name="TResult">The projection type; its scalar outputs also define the grouping keys.</typeparam>
-    /// <param name="projection">The projection expression.</param>
-    /// <returns>The command that produces one row per distinct key combination.</returns>
-    /// <exception cref="QueryPreparationException">The query also carries an explicit grouping.</exception>
-    public QueryCommand<TResult> SelectGroup<TResult>(Expression<Func<TEntity, TResult>> projection)
-    {
-        EnsureNoJoinIntos(nameof(SelectGroup));
-        EnsureNoEagerLoadState(nameof(SelectGroup));
-
-        if (_group is not null || GroupingType != NextORM.Core.GroupingType.None || GroupingSets is { Count: > 0 } || GroupByWithTotals)
-            throw new QueryPreparationException(
-                "SelectGroup cannot be combined with explicit grouping: " +
-                (_group is not null ? "GroupBy" : GroupingType != NextORM.Core.GroupingType.None ? GroupingType.ToString() : GroupByWithTotals ? "GroupByWithTotals" : "GroupingSets") + ".");
-
-        ArgumentNullException.ThrowIfNull(projection);
-
-        return SelectCore(projection, selectGroup: true);
-    }
-    /// <summary>
-    /// Builds the projection command without the public composition guards. Used by <see cref="Select"/>
-    /// (after the guards) and by the scalar terminal helpers (<c>Count</c>/<c>Any</c>), which project
-    /// the parent and deliberately ignore any eager-load state.
-    /// </summary>
-    private QueryCommand<TResult> SelectCore<TResult>(Expression<Func<TEntity, TResult>> exp, bool selectGroup = false)
+    /// <typeparam name="TResult">The projection type.</typeparam>
+    /// <param name="exp">The projection expression.</param>
+    /// <returns>The command that produces projected rows.</returns>
+    private QueryCommand<TResult> SelectCore<TResult>(Expression<Func<TEntity, TResult>> exp)
     {
         var cmd = RequireContext.CreateCommand<TResult>(new QueryDefinition
         {
@@ -416,7 +391,6 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
             Sorting = _sorting?.ToArray(),
             Group = _group,
             Having = _having,
-            IsSelectGroup = selectGroup,
             Logger = Logger,
             IsDistinct = IsDistinct,
             Final = IsFinal,
@@ -445,7 +419,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
             this,
             exp,
             cmd,
-            selectGroup || _group is not null || GroupingType != NextORM.Core.GroupingType.None || GroupingSets is { Count: > 0 } || GroupByWithTotals);
+            _group is not null || GroupingType != NextORM.Core.GroupingType.None || GroupingSets is { Count: > 0 } || GroupByWithTotals);
 
         return cmd;
     }
@@ -470,6 +444,15 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         cmd.LimitBy = LimitByClause;
         cmd.DistinctOn = _distinctOn;
         cmd.ExtremeRow = _extremeRow;
+        // #368: forward the component state without allocating a one-element array or a holder.
+        // A single component is stored as-is; lists are shared (never mutated in place).
+        cmd.SetComponents(_componentState switch
+        {
+            null => null,
+            IReadOnlyList<IQueryComponent> list => list,
+            IQueryComponent single => single,
+            _ => null,
+        });
         cmd.TableSample = _tablesample;
         cmd.Temporal = _temporal;
         cmd.RowLock = _rowLock;
@@ -2591,6 +2574,9 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// <param name="specs">The stitching specifications, in declaration order.</param>
     /// <param name="source">The stored SQL joins, in declaration order, or <c>null</c> when there are none.</param>
     /// <returns>The joins the in-memory engine executes, or <c>null</c> when there are none.</returns>
+    // In-memory-only join-into builder: relational providers always take the SQL path, and the
+    // integration suite may not construct an InMemoryDataContext (unit-only by policy).
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
     private JoinExpression[]? BuildInMemoryJoinIntos(IReadOnlyList<IJoinIntoSpec<TEntity>> specs, List<JoinExpression>? source)
     {
         if (source is null)
@@ -2649,6 +2635,8 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// the junction instance. The condition is <c>(p, j) =&gt; p.principalKey == j.parentForeignKey</c> and
     /// is re-rooted onto the accumulated projection for any declaration after the first.
     /// </summary>
+    // In-memory-only many-to-many link join (see BuildInMemoryJoinIntos).
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
     private JoinExpression BuildInMemoryManyToManyLinkJoin(
         IJoinIntoManyToManySpec spec, JoinExpression stored, List<Type> precedingTypes)
     {
@@ -2690,6 +2678,8 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// where <c>ItemN</c> is the junction slot the link edge just appended. Unlike a direct declaration
     /// the left parameter is the accumulated projection, so the condition is <b>not</b> re-rooted again.
     /// </summary>
+    // In-memory-only many-to-many child join (see BuildInMemoryJoinIntos).
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
     private JoinExpression BuildInMemoryManyToManyChildJoin(
         IJoinIntoSpec<TEntity> spec, IJoinIntoManyToManySpec manyToMany, JoinExpression stored, List<Type> precedingTypes)
     {
@@ -2751,6 +2741,8 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// <param name="precedingTypes">The entity types already appended to the accumulated projection.</param>
     /// <param name="hasPreceding">Whether the accumulated projection already carries at least one item.</param>
     /// <returns>The join the in-memory engine executes.</returns>
+    // In-memory-only join-into rewrite (see BuildInMemoryJoinIntos).
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
     private JoinExpression RewriteInMemoryJoinIntoJoin(JoinExpression join, List<Type> precedingTypes, bool hasPreceding)
     {
         if (!hasPreceding || !join.IsJoinInto || join.JoinCondition is not { Parameters.Count: 2 } condition)
@@ -2901,7 +2893,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// <param name="valueSelector">The value whose maximum is compared.</param>
     /// <param name="ties">Whether to keep a single row or every tied row.</param>
     /// <param name="groupBy">Optional grouping key; <c>null</c> selects across the whole result.</param>
-    public EntityBuilder<TEntity> SelectWhereMax<TValue>(
+    public EntityBuilder<TEntity> SelectWhereMaxOld<TValue>(
         Expression<Func<TEntity, TValue>> valueSelector,
         ExtremeRowTies ties = ExtremeRowTies.One,
         Expression<Func<TEntity, object?>>? groupBy = null)
@@ -2916,7 +2908,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// <param name="valueSelector">The value whose minimum is compared.</param>
     /// <param name="ties">Whether to keep a single row or every tied row.</param>
     /// <param name="groupBy">Optional grouping key; <c>null</c> selects across the whole result.</param>
-    public EntityBuilder<TEntity> SelectWhereMin<TValue>(
+    public EntityBuilder<TEntity> SelectWhereMinOld<TValue>(
         Expression<Func<TEntity, TValue>> valueSelector,
         ExtremeRowTies ties = ExtremeRowTies.One,
         Expression<Func<TEntity, object?>>? groupBy = null)
@@ -2933,7 +2925,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// <param name="projection">The projection applied to the surviving row(s).</param>
     /// <param name="ties">Whether to keep a single row or every tied row.</param>
     /// <param name="groupBy">Optional grouping key; <c>null</c> selects across the whole result.</param>
-    public QueryCommand<TResult> SelectWhereMax<TValue, TResult>(
+    public QueryCommand<TResult> SelectWhereMaxOld<TValue, TResult>(
         Expression<Func<TEntity, TValue>> valueSelector,
         Expression<Func<TEntity, TResult>> projection,
         ExtremeRowTies ties = ExtremeRowTies.One,
@@ -2951,7 +2943,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// <param name="projection">The projection applied to the surviving row(s).</param>
     /// <param name="ties">Whether to keep a single row or every tied row.</param>
     /// <param name="groupBy">Optional grouping key; <c>null</c> selects across the whole result.</param>
-    public QueryCommand<TResult> SelectWhereMin<TValue, TResult>(
+    public QueryCommand<TResult> SelectWhereMinOld<TValue, TResult>(
         Expression<Func<TEntity, TValue>> valueSelector,
         Expression<Func<TEntity, TResult>> projection,
         ExtremeRowTies ties = ExtremeRowTies.One,
@@ -3156,6 +3148,63 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
 
         return b;
     }
+    /// <summary>
+    /// Attaches a query component to this builder. Components with the same slot replace the previous
+    /// value in place; the builder is not mutated.
+    /// </summary>
+    /// <param name="component">The component to attach.</param>
+    /// <returns>A new builder with the component attached.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="component"/> is <see langword="null"/>.</exception>
+    public EntityBuilder<TEntity> WithComponent(IQueryComponent component)
+    {
+        ArgumentNullException.ThrowIfNull(component);
+
+        var b = Clone();
+
+        switch (_componentState)
+        {
+            case null:
+                // 0 -> 1 stays allocation-free beyond the component itself.
+                b._componentState = component;
+                return b;
+
+            case IQueryComponent single:
+                // 1 -> 1 same-slot replacement and 1 -> 2 are both allocation-light: only the
+                // two-element list allocates, and only when a second independent slot appears.
+                b._componentState = single.Slot == component.Slot
+                    ? component
+                    : new List<IQueryComponent>(2) { single, component };
+                return b;
+
+            case List<IQueryComponent> list:
+                // Clone shares the list instance, so the replacement/addition is written to a copy.
+                var copy = new List<IQueryComponent>(list.Count + 1);
+                var replaced = false;
+                foreach (var existing in list)
+                {
+                    if (!replaced && existing.Slot == component.Slot)
+                    {
+                        copy.Add(component);
+                        replaced = true;
+                    }
+                    else
+                    {
+                        copy.Add(existing);
+                    }
+                }
+
+                if (!replaced)
+                    copy.Add(component);
+
+                b._componentState = copy;
+                return b;
+
+            default:
+                b._componentState = component;
+                return b;
+        }
+    }
+
     object ICloneable.Clone()
     {
         return CloneImp();
@@ -3226,6 +3275,9 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         dst.LimitByClause = LimitByClause;
         dst.DistinctOnClause = DistinctOnClause;
         dst.ExtremeRowClause = ExtremeRowClause;
+        // The component state is immutable by convention: WithComponent copies before it writes, so a
+        // fork may share the reference and a later attach never reaches the parent's state.
+        dst._componentState = _componentState;
         dst.TableSampleClause = TableSampleClause;
         dst.TemporalClause = TemporalClause;
         dst.RowLockClause = RowLockClause;
@@ -3302,6 +3354,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         || _limitBy is not null
         || _distinctOn is not null
         || _extremeRow is not null
+        || _componentState is not null
         || _preWhere is not null
         || _arrayJoins is { Count: > 0 }
         || _windows is { Count: > 0 }
@@ -5171,11 +5224,16 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// <returns>A builder with the added ordering key.</returns>
     public EntityBuilder<TEntity> OrderBy(Expression<Func<TEntity, object?>> orderExp, OrderDirection direction)
     {
+        if (orderExp is null) throw new ArgumentNullException(nameof(orderExp));
+        // Expand composite selectors (anonymous type / ValueTuple / Tuple / MemberInit) into one
+        // Sorting per member in declaration/binding order before any clone or state change, so a
+        // non-expandable composite shape fails closed with a NotSupportedException before SQL.
+        var keys = BuildSortKeys(orderExp, direction, NullsPosition.Default);
         var b = Clone();
-        var key = new Sorting(orderExp) { Direction = direction };
         // _sorting is shared with the parent/siblings after a clone; detach with a new list before
         // appending so a fork never grows the parent's ordering.
-        b._sorting = b._sorting is null ? [key] : [.. b._sorting, key];
+        var existing = b._sorting;
+        b._sorting = existing is null ? [.. keys] : [.. existing, .. keys];
         return b;
     }
     /// <summary>Adds an ascending ordering key by <paramref name="orderExp"/>.</summary>
@@ -5395,16 +5453,236 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// </summary>
     private EntityBuilder<TEntity> AppendOrdering(Expression? expression, int? columnIdx, OrderDirection direction, NullsPosition nullsPosition)
     {
-        var key = expression is not null
-            ? new Sorting(expression, nullsPosition) { Direction = direction }
-            : new Sorting(columnIdx!.Value, nullsPosition) { Direction = direction };
+        if (columnIdx.HasValue)
+        {
+            var key = new Sorting(columnIdx.Value, nullsPosition) { Direction = direction };
 
-        var b = Clone();
-        // _sorting is shared with the parent/siblings after a clone; detach with a new list before
-        // appending so a fork never grows the parent's ordering.
-        b._sorting = b._sorting is null ? [key] : [.. b._sorting, key];
-        return b;
+            var b = Clone();
+            // _sorting is shared with the parent/siblings after a clone; detach with a new list before
+            // appending so a fork never grows the parent's ordering.
+            b._sorting = b._sorting is null ? [key] : [.. b._sorting, key];
+            return b;
+        }
+
+        if (expression is null) throw new ArgumentNullException(nameof(expression));
+        var orderExp = (Expression<Func<TEntity, object?>>)expression;
+        // Expand composite selectors before any clone or state change.
+        var keys = BuildSortKeys(orderExp, direction, nullsPosition);
+
+        var bb = Clone();
+        var existing = bb._sorting;
+        bb._sorting = existing is null ? [.. keys] : [.. existing, .. keys];
+        return bb;
     }
+
+    private static List<Sorting> BuildSortKeys(Expression<Func<TEntity, object?>> orderExp, OrderDirection direction, NullsPosition nullsPosition)
+    {
+        var bodies = ExpandSortKey(orderExp.Body);
+        var list = new List<Sorting>(bodies.Count);
+        foreach (var e in bodies)
+        {
+            Expression body = e.Type.IsValueType ? Expression.Convert(e, typeof(object)) : e;
+            var lambda = Expression.Lambda<Func<TEntity, object?>>(body, orderExp.Parameters[0]);
+            list.Add(new Sorting(lambda, nullsPosition) { Direction = direction });
+        }
+        return list;
+    }
+
+    private static Expression StripConvert(Expression e)
+    {
+        while (e is UnaryExpression ue
+               && (ue.NodeType == ExpressionType.Convert || ue.NodeType == ExpressionType.ConvertChecked)
+               && ue.Type == typeof(object))
+        {
+            e = ue.Operand;
+        }
+        return e;
+    }
+
+    private static List<Expression> ExpandSortKey(Expression body)
+    {
+        body = StripConvert(body);
+
+        // Fail-closed: reject any expression whose static type is a composite type but which is not an
+        // expandable NewExpression or a static ValueTuple/Tuple.Create call (e.g. a helper method call
+        // returning a tuple, a member access or an invocation). This runs before any state change.
+        if (body is MethodCallExpression mceGuard && !IsTupleCreate(mceGuard) && IsCompositeType(mceGuard.Type))
+            throw Unsupported($"non-expandable method call '{mceGuard.Method.Name}' returning composite");
+        if (body is MemberExpression meGuard && IsCompositeType(meGuard.Type))
+            throw Unsupported($"non-expandable member access '{meGuard.Member.Name}' returning composite");
+        if (body is InvocationExpression ieGuard && IsCompositeType(ieGuard.Type))
+            throw Unsupported("non-expandable invocation returning composite");
+
+        // Anonymous type: new { ... }
+        if (body is NewExpression ne && IsAnonymousType(ne.Type))
+        {
+            if (ne.Arguments.Count == 0)
+                throw Unsupported("empty anonymous type");
+            var list = new List<Expression>();
+            foreach (var arg in ne.Arguments)
+                list.AddRange(ExpandSortKey(arg));
+            if (list.Count == 0)
+                throw Unsupported("empty anonymous type");
+            return list;
+        }
+
+        // Tuple NewExpression: ValueTuple<...> / Tuple<...>
+        if (body is NewExpression tne && IsTupleType(tne.Type))
+        {
+            if (tne.Arguments.Count == 0)
+                throw Unsupported("empty tuple");
+            var list = new List<Expression>();
+            foreach (var arg in FlattenTupleArgs(tne))
+                list.AddRange(ExpandSortKey(arg));
+            if (list.Count == 0)
+                throw Unsupported("empty tuple");
+            return list;
+        }
+
+        // Tuple.Create / ValueTuple.Create
+        if (body is MethodCallExpression mce && IsTupleCreate(mce))
+        {
+            if (mce.Arguments.Count == 0)
+                throw Unsupported("empty tuple");
+            var list = new List<Expression>();
+            foreach (var arg in mce.Arguments)
+                list.AddRange(ExpandSortKey(arg));
+            if (list.Count == 0)
+                throw Unsupported("empty tuple");
+            return list;
+        }
+
+        // MemberInitExpression: new KeyDto { A = ..., B = ... }
+        if (body is MemberInitExpression mie)
+        {
+            if (mie.NewExpression.Arguments.Count != 0)
+                throw Unsupported("member init mixing constructor arguments with member bindings");
+            if (mie.Bindings.Count == 0)
+                throw Unsupported("empty member init");
+            if (mie.Bindings.Any(b => b is not MemberAssignment))
+                throw Unsupported("member init with non-assignment binding");
+            var list = new List<Expression>();
+            foreach (var b in mie.Bindings)
+            {
+                var ma = (MemberAssignment)b;
+                list.AddRange(ExpandSortKey(ma.Expression));
+            }
+            if (list.Count == 0)
+                throw Unsupported("empty member init");
+            return list;
+        }
+
+        // Known scalar value constructions stay a single key.
+        if (body is NewExpression sneScalar && IsKnownScalarConstruction(sneScalar))
+        {
+            return new List<Expression> { body };
+        }
+
+        // Non-expandable composite shapes (any remaining NewExpression is non-expandable).
+        if (body is NewExpression sne2)
+            throw Unsupported($"non-expandable constructor '{sne2.Type.Name}'");
+        if (body is NewArrayExpression)
+            throw Unsupported("array composite");
+        if (body is ListInitExpression)
+            throw Unsupported("list composite");
+
+        // Fail-closed: any remaining composite-typed expression is non-expandable.
+        if (IsCompositeType(body.Type))
+            throw Unsupported($"non-expandable composite '{body.Type.Name}'");
+
+        // Otherwise a scalar expression: single key.
+        return new List<Expression> { body };
+    }
+
+    private static IEnumerable<Expression> FlattenTupleArgs(NewExpression ne)
+    {
+        if (ne.Arguments.Count < 8)
+            return ne.Arguments;
+        var result = new List<Expression>(ne.Arguments.Take(7));
+        var rest = StripConvert(ne.Arguments[7]);
+        if (rest is NewExpression restNe && IsTupleType(restNe.Type))
+            result.AddRange(FlattenTupleArgs(restNe));
+        else
+            result.Add(rest);
+        return result;
+    }
+
+    private static bool IsAnonymousType(Type t)
+    {
+        if (t is null || !t.IsClass || t.IsAbstract || t.IsNested || !t.IsGenericType)
+            return false;
+        if (!Attribute.IsDefined(t, typeof(CompilerGeneratedAttribute), false))
+            return false;
+        var name = t.Name;
+        if (!(name.StartsWith("<>f__AnonymousType", StringComparison.Ordinal)
+              || name.StartsWith("VB$AnonymousType", StringComparison.Ordinal)))
+            return false;
+        // Constructor parameters must match the declared properties (compiler-generated anonymous types).
+        var ctor = t.GetConstructors().FirstOrDefault();
+        if (ctor is null) return false;
+        var props = t.GetProperties();
+        if (ctor.GetParameters().Length != props.Length) return false;
+        return true;
+    }
+
+    private static bool IsTupleType(Type t)
+    {
+        if (t is null || !t.IsGenericType) return false;
+        var def = t.GetGenericTypeDefinition();
+        var fullName = def.FullName;
+        if (string.IsNullOrEmpty(fullName)) return false;
+        return fullName!.StartsWith("System.ValueTuple`", StringComparison.Ordinal)
+            || fullName!.StartsWith("System.Tuple`", StringComparison.Ordinal);
+    }
+
+    private static bool IsCompositeType(Type t)
+    {
+        if (t is null) return false;
+        if (IsAnonymousType(t)) return true;
+        if (IsTupleType(t)) return true;
+        try
+        {
+            return typeof(ITuple).IsAssignableFrom(t);
+        }
+        catch (ArgumentException)
+        {
+            // Invalid generic/type arguments supplied to reflection.
+            return false;
+        }
+        catch (AmbiguousMatchException)
+        {
+            // Reflection could not uniquely resolve a member.
+            return false;
+        }
+        catch (TargetInvocationException)
+        {
+            // A reflected invocation threw while probing the type.
+            return false;
+        }
+        catch (InvalidOperationException)
+        {
+            // The type is not in a state that supports the query.
+            return false;
+        }
+    }
+
+    private static bool IsTupleCreate(MethodCallExpression mce)
+    {
+        if (mce.Method.Name != "Create") return false;
+        var dt = mce.Method.DeclaringType;
+        if (dt is null) return false;
+        return dt == typeof(ValueTuple) || dt == typeof(Tuple);
+    }
+
+    private static bool IsKnownScalarConstruction(NewExpression ne)
+    {
+        var t = ne.Type;
+        return t == typeof(DateTime) || t == typeof(DateTimeOffset) || t == typeof(DateOnly)
+            || t == typeof(TimeOnly) || t == typeof(TimeSpan) || t == typeof(Guid) || t == typeof(decimal);
+    }
+
+    private static NotSupportedException Unsupported(string shape)
+        => new NotSupportedException($"Composite ORDER BY selector of shape '{shape}' is not supported; expand it into individual OrderBy/ThenBy keys or use a scalar selector.");
 }
 
 /// <summary>

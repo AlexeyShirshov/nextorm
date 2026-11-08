@@ -13,6 +13,7 @@ namespace NextORM.Core.Tests;
 /// side-effect-free <c>EntityBuilderEagerLoading.ValidateLoadWithForJoinInto</c>; it only rejects an
 /// explicit mode (never a context default) and never materializes a collection.
 /// </summary>
+[Collection("Query cache controls")] // clears the process-wide plan store; see Caching/QueryCacheControlsTests
 public class EagerTerminalGuardTests : IDisposable
 {
     /// <summary>

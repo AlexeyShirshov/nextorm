@@ -577,4 +577,145 @@ public class ClickHouseDialectTests
         Dialect.UuidGenerators!.Render("gen_random_uuid").Should().Be("generateUUIDv4()");
         Dialect.UuidGenerators!.Render("uuidv7").Should().Be("generateUUIDv7()");
     }
+
+    [Fact]
+    public void MakeArrayResult_TupleElement_ShouldRenderTupleWithoutNullableWrapperOrClrArity()
+    {
+        // reference tuple element
+        Dialect.MakeArrayResult("group_array", "groupArray(t)", typeof(Tuple<int, string>[]))
+            .Should().Be("cast(groupArray(t) as Array(Tuple(Int32, String)))");
+
+        // value tuple element
+        Dialect.MakeArrayResult("group_array", "groupArray(t)", typeof((int, string)[]))
+            .Should().Be("cast(groupArray(t) as Array(Tuple(Int32, String)))");
+
+        // nested tuple with a nullable value field
+        Dialect.MakeArrayResult("group_array", "groupArray(t)", typeof(Tuple<Tuple<int?, string>, (long, (byte, byte?))>[]))
+            .Should().Be("cast(groupArray(t) as Array(Tuple(Tuple(Nullable(Int32), String), Tuple(Int64, Tuple(UInt8, Nullable(UInt8))))))");
+
+        // non-tuple guard: string array rendering is unchanged
+        Dialect.MakeArrayResult("group_array", "groupArray(s)", typeof(string[]))
+            .Should().Be("cast(groupArray(s) as Array(Nullable(String)))");
+    }
+
+    [Fact]
+    public void MakeArrayResult_GroupArrayRetentionTuple_ShouldUseWellFormedClickHouseTupleType()
+    {
+        var sql = Dialect.MakeArrayResult(
+            "group_array",
+            "groupArray(tuple(week, retention))",
+            typeof(Tuple<byte, double>[]));
+
+        sql.Should().Be("cast(groupArray(tuple(week, retention)) as Array(Tuple(UInt8, Float64)))");
+        sql.Should().NotContain("`");
+        sql.Should().NotContain("Tuple`2");
+    }
+
+    [Fact]
+    public void MakeArrayResult_NullableTupleElement_ShouldRenderTupleWithoutNullableWrapper()
+    {
+        // (a) nullable value-tuple element: no Nullable(...) wrapper around the tuple
+        Dialect.MakeArrayResult("group_array", "groupArray(t)", typeof(Nullable<(int, string)>[]))
+            .Should().Be("cast(groupArray(t) as Array(Tuple(Int32, String)))");
+
+        // (b) nullable fields inside the tuple still render Nullable(T)
+        Dialect.MakeArrayResult("group_array", "groupArray(t)", typeof(Nullable<(int?, string)>[]))
+            .Should().Be("cast(groupArray(t) as Array(Tuple(Nullable(Int32), String)))");
+
+        // nested tuple whose nullable fields still render Nullable(T)
+        Dialect.MakeArrayResult("group_array", "groupArray(t)", typeof(Tuple<Tuple<int?, string>, (long, (byte, byte?))>[]))
+            .Should().Be("cast(groupArray(t) as Array(Tuple(Tuple(Nullable(Int32), String), Tuple(Int64, Tuple(UInt8, Nullable(UInt8))))))");
+    }
+
+    [Fact]
+    public void MakeArrayResult_HighArityTupleElement_ShouldRenderTupleWithoutClrArity()
+    {
+        // (c) arity-8 / nested rest: valid Tuple(...), no Tuple`8
+        Dialect.MakeArrayResult("group_array", "groupArray(t)", typeof((int, int, int, int, int, int, int, int)[]))
+            .Should().Be("cast(groupArray(t) as Array(Tuple(Int32, Int32, Int32, Int32, Int32, Int32, Int32, Tuple(Int32))))");
+    }
+
+    [Fact]
+    public void MakeArrayResult_NonGenericITupleElement_ShouldRenderTupleWithoutNullableWrapperOrClrArity()
+    {
+        // non-generic reference type implementing ITuple (subclass of Tuple<int,string>)
+        Dialect.MakeArrayResult("group_array", "groupArray(t)", typeof(NonGenericTuple[]))
+            .Should().Be("cast(groupArray(t) as Array(Tuple(Int32, String)))");
+    }
+
+    [Fact]
+    public void MakeArrayResult_TaggedTupleElement_ShouldResolveBaseTupleComponents()
+    {
+        // generic ITuple subclass whose own generic parameter list is NOT the component list:
+        // TaggedTuple<long> : Tuple<int, string> must render the base tuple's components.
+        Dialect.MakeArrayResult("group_array", "groupArray(t)", typeof(TaggedTuple<long>[]))
+            .Should().Be("cast(groupArray(t) as Array(Tuple(Int32, String)))");
+
+        // standalone (non-array) rendering via the shared tuple-aware renderer.
+        ClickHouseDialect.TypeName(ClickHouseDialect.Instance, typeof(TaggedTuple<long>))
+            .Should().Be("Tuple(Int32, String)");
+    }
+
+    [Fact]
+    public void TypeName_TaggedTuple_ShouldResolveBaseTupleComponents()
+    {
+        ClickHouseDialect.TypeName(ClickHouseDialect.Instance, typeof(TaggedTuple<int>))
+            .Should().Be("Tuple(Int32, String)");
+    }
+
+    [Fact]
+    public void MakeArrayResult_CustomItupleWithItems_ShouldResolveFromItemMembers()
+    {
+        // custom ITuple (not inheriting Tuple/ValueTuple) exposing Item1..ItemN.
+        Dialect.MakeArrayResult("group_array", "groupArray(t)", typeof(CustomItemTuple[]))
+            .Should().Be("cast(groupArray(t) as Array(Tuple(Int32, String)))");
+
+        ClickHouseDialect.TypeName(ClickHouseDialect.Instance, typeof(CustomItemTuple))
+            .Should().Be("Tuple(Int32, String)");
+    }
+
+    [Fact]
+    public void MakeArrayResult_BareItuple_ShouldThrowNotSupportedException()
+    {
+        var act = () => Dialect.MakeArrayResult("group_array", "groupArray(t)", typeof(System.Runtime.CompilerServices.ITuple[]));
+        act.Should().Throw<NotSupportedException>();
+
+        var act2 = () => ClickHouseDialect.TypeName(ClickHouseDialect.Instance, typeof(System.Runtime.CompilerServices.ITuple));
+        act2.Should().Throw<NotSupportedException>();
+    }
+
+    [Fact]
+    public void MakeArrayResult_EmptyItuple_ShouldThrowNotSupportedException()
+    {
+        var act = () => Dialect.MakeArrayResult("group_array", "groupArray(t)", typeof(EmptyItuple[]));
+        act.Should().Throw<NotSupportedException>();
+
+        var act2 = () => ClickHouseDialect.TypeName(ClickHouseDialect.Instance, typeof(EmptyItuple));
+        act2.Should().Throw<NotSupportedException>();
+    }
+
+    private sealed class NonGenericTuple : Tuple<int, string>
+    {
+        public NonGenericTuple(int item1, string item2) : base(item1, item2) { }
+    }
+
+    private sealed class TaggedTuple<T> : Tuple<int, string>
+    {
+        public T Tag { get; }
+        public TaggedTuple(int item1, string item2, T tag) : base(item1, item2) { Tag = tag; }
+    }
+
+    private sealed class CustomItemTuple : System.Runtime.CompilerServices.ITuple
+    {
+        public int Item1 { get; }
+        public string Item2 { get; } = string.Empty;
+        public int Length => 2;
+        public object? this[int index] => index == 0 ? Item1 : Item2;
+    }
+
+    private sealed class EmptyItuple : System.Runtime.CompilerServices.ITuple
+    {
+        public int Length => 0;
+        public object? this[int index] => throw new IndexOutOfRangeException();
+    }
 }

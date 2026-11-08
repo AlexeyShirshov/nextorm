@@ -589,8 +589,7 @@ public sealed partial class InsertBuilder<TEntity>
     }
 
     private static bool SameMember(PropertyInfo left, PropertyInfo right)
-        => left == right
-            || (left.DeclaringType == right.DeclaringType && left.MetadataToken == right.MetadataToken);
+        => MemberInfoExtensions.SameProperty(left, right);
 
     /// <summary>Builds the insert command for use as a side-effecting step of a batch.</summary>
     /// <returns>The insert command.</returns>

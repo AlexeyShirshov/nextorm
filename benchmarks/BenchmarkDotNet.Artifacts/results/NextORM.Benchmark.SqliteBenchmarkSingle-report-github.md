@@ -1,20 +1,20 @@
 ```
 
-BenchmarkDotNet v0.15.8, Linux Ubuntu 24.04.5 LTS (Noble Numbat)
-AMD EPYC 9V74 3.68GHz, 1 CPU, 4 logical and 2 physical cores
-.NET SDK 10.0.403
-  [Host] : .NET 10.0.14 (10.0.14, 10.0.1426.52326), X64 RyuJIT x86-64-v4
+BenchmarkDotNet v0.15.8, Linux Ubuntu 22.04.5 LTS (Jammy Jellyfish)
+AMD Ryzen 7 5800HS with Radeon Graphics 3.19GHz, 1 CPU, 8 logical and 4 physical cores
+.NET SDK 10.0.401
+  [Host] : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
 
 Job=ShortRun  Toolchain=InProcessEmitToolchain  IterationCount=3  
 LaunchCount=1  WarmupCount=3  
 
 ```
-| Method                           | Mean      | Error     | StdDev   | Ratio | RatioSD | Gen0    | Gen1   | Allocated | Alloc Ratio |
-|--------------------------------- |----------:|----------:|---------:|------:|--------:|--------:|-------:|----------:|------------:|
-| Nextorm_Prepared_SingleOrDefault |  86.57 μs |  3.443 μs | 0.189 μs |  1.00 |    0.00 |  0.4883 |      - |   8.36 KB |        1.00 |
-| Dapper_SingleOrDefault           | 118.70 μs |  5.306 μs | 0.291 μs |  1.37 |    0.00 |  0.9766 |      - |   16.4 KB |        1.96 |
-| Nextorm_Cached_SingleOrDefault   | 127.84 μs | 12.691 μs | 0.696 μs |  1.48 |    0.01 |  2.9297 |      - |  54.85 KB |        6.56 |
-| Linq2Db_Compiled_SingleOrDefault | 228.30 μs | 27.374 μs | 1.500 μs |  2.64 |    0.02 | 11.4746 |      - | 187.58 KB |       22.44 |
-| EFCore_Compiled_SingleOrDefault  | 246.69 μs | 39.981 μs | 2.192 μs |  2.85 |    0.02 |  4.8828 | 2.4414 |   80.4 KB |        9.62 |
-| Linq2Db_SingleOrDefault          | 331.85 μs |  4.889 μs | 0.268 μs |  3.83 |    0.01 | 13.1836 |      - | 221.01 KB |       26.44 |
-| EFCore_SingleOrDefault           | 396.09 μs | 47.425 μs | 2.600 μs |  4.58 |    0.03 |  8.7891 | 4.3945 | 149.64 KB |       17.90 |
+| Method                           | Mean     | Error     | StdDev   | Ratio | RatioSD | Gen0    | Gen1   | Allocated | Alloc Ratio |
+|--------------------------------- |---------:|----------:|---------:|------:|--------:|--------:|-------:|----------:|------------:|
+| Nextorm_Prepared_SingleOrDefault | 102.7 μs |   5.58 μs |  0.31 μs |  1.00 |    0.00 |  0.9766 |      - |   8.36 KB |        1.00 |
+| Dapper_SingleOrDefault           | 157.2 μs |  17.40 μs |  0.95 μs |  1.53 |    0.01 |  1.9531 |      - |   16.4 KB |        1.96 |
+| Nextorm_Cached_SingleOrDefault   | 200.2 μs | 127.37 μs |  6.98 μs |  1.95 |    0.06 |  5.8594 |      - |  55.55 KB |        6.65 |
+| EFCore_Compiled_SingleOrDefault  | 401.2 μs | 641.57 μs | 35.17 μs |  3.91 |    0.30 |  9.7656 | 4.8828 |   80.4 KB |        9.62 |
+| Linq2Db_Compiled_SingleOrDefault | 407.9 μs |  51.67 μs |  2.83 μs |  3.97 |    0.03 | 22.9492 |      - | 187.58 KB |       22.44 |
+| Linq2Db_SingleOrDefault          | 652.2 μs |  76.80 μs |  4.21 μs |  6.35 |    0.04 | 26.3672 |      - | 221.01 KB |       26.44 |
+| EFCore_SingleOrDefault           | 755.1 μs | 103.33 μs |  5.66 μs |  7.35 |    0.05 | 17.5781 | 5.8594 | 149.65 KB |       17.90 |

@@ -257,7 +257,7 @@ index/query hints, именованные окна.
 ## См. также
 
 - [«Возможности»](capabilities.md) — матрица на уровне конструктов для Dapper, linq2db и EF Core.
-- [Бенчмарки](benchmarks.md) и [Feature-бенчмарки (2026-10-17)](feature-benchmarks-2026-10-17.md).
+- [Бенчмарки](benchmarks.md) и [Feature-бенчмарки](feature-benchmarks.md).
 - [Обзор провайдеров](../connecting-providers/overview.md).
 - [Провайдер-специфичный SQL](../guide/provider-specific-sql/overview.md).
 - [Скалярные функции](../scalar-functions/index.md).

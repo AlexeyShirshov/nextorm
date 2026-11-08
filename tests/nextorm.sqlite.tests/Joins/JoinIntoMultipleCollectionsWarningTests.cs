@@ -23,6 +23,10 @@ public class JoinIntoMultipleCollectionsWarningTests
     private static string[] JoinIntoWarnings(WarningCapture capture) =>
         [.. capture.Warnings.Where(static w => w.Contains("JoinInto.MultipleCollections"))];
 
+    /// <summary>Prepares a runtime-created (non-generic) pair command through the boxed row path.</summary>
+    private static void Prepare(IDataContext ctx, QueryCommand cmd)
+        => _ = ((DataContext)ctx).GetPreparedQueryCommand(cmd, false, false, CancellationToken.None);
+
     [Fact]
     public void TwoCollectionNavigations_ShouldWarnExactlyOnce()
     {
@@ -33,8 +37,8 @@ public class JoinIntoMultipleCollectionsWarningTests
             .JoinInto(ctx.From<WarnChild>(), (p, c) => p.Id == c.ParentId, p => p.Second)
             .CreateJoinIntoPairCommand();
 
-        _ = ctx.GetPreparedQueryCommand(cmd, false, false, CancellationToken.None);
-        _ = ctx.GetPreparedQueryCommand(cmd, false, false, CancellationToken.None);
+        Prepare(ctx, cmd);
+        Prepare(ctx, cmd);
 
         JoinIntoWarnings(capture).Should().ContainSingle("the diagnostic must fire at most once per command");
     }
@@ -49,7 +53,7 @@ public class JoinIntoMultipleCollectionsWarningTests
             .JoinInto(ctx.From<WarnChild>(), (p, c) => p.Id == c.ParentId, p => p.Primary)
             .CreateJoinIntoPairCommand();
 
-        _ = ctx.GetPreparedQueryCommand(cmd, false, false, CancellationToken.None);
+        Prepare(ctx, cmd);
 
         JoinIntoWarnings(capture).Should().BeEmpty("a one-to-one reference is not a collection navigation");
     }
@@ -64,7 +68,7 @@ public class JoinIntoMultipleCollectionsWarningTests
             .JoinInto(ctx.From<WarnChild>(), (p, c) => p.Id == c.ParentId, p => p.Second)
             .CreateJoinIntoPairCommand();
 
-        _ = ctx.GetPreparedQueryCommand(cmd, false, false, CancellationToken.None);
+        Prepare(ctx, cmd);
 
         JoinIntoWarnings(capture).Should().BeEmpty("the fluent suppression carries to the whole command");
     }

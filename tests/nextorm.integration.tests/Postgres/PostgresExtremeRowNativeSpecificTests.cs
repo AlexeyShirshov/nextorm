@@ -48,13 +48,13 @@ public sealed class PostgresExtremeRowNativeSpecificTests : ProviderTestSuite
     [Fact]
     public void ForcedPortableContext_ShouldRenderTheWindowLowering_WhileNativeRendersTheNativeOne()
     {
-        var nativeCommand = Source(_sut.DataProvider).SelectWhereMax(e => e.Amount, e => new { e.Id });
+        var nativeCommand = Source(_sut.DataProvider).SelectWhereMaxOld(e => e.Amount, e => new { e.Id });
         var nativeSql = SqlOf(_sut.DataProvider, nativeCommand);
         nativeSql.Should().Contain("limit 1");
         nativeSql.Should().NotContain("row_number()");
 
         using var portable = Portable();
-        var portableCommand = Source(portable).SelectWhereMax(e => e.Amount, e => new { e.Id });
+        var portableCommand = Source(portable).SelectWhereMaxOld(e => e.Amount, e => new { e.Id });
         var portableSql = SqlOf(portable, portableCommand);
         portableSql.Should().Contain("row_number()");
         portableSql.Should().NotContain("limit 1");
@@ -64,7 +64,7 @@ public sealed class PostgresExtremeRowNativeSpecificTests : ProviderTestSuite
     public void NativeGroupedSql_ShouldUseMappedPhysicalColumnNames()
     {
         var command = Source(_sut.DataProvider)
-            .SelectWhereMax(e => e.Amount, e => new { e.Id }, ExtremeRowTies.One, e => new { e.Category });
+            .SelectWhereMaxOld(e => e.Amount, e => new { e.Id }, ExtremeRowTies.One, e => new { e.Category });
 
         var sql = SqlOf(_sut.DataProvider, command);
 
@@ -78,10 +78,10 @@ public sealed class PostgresExtremeRowNativeSpecificTests : ProviderTestSuite
     [Fact]
     public void UniqueKey_Global_ShouldReturnTheSameWinnerOnBothPaths()
     {
-        var native = Source(_sut.DataProvider).SelectWhereMax(e => e.Amount).ToList();
+        var native = Source(_sut.DataProvider).SelectWhereMaxOld(e => e.Amount).ToList();
 
         using var portable = Portable();
-        var forced = Source(portable).SelectWhereMax(e => e.Amount).ToList();
+        var forced = Source(portable).SelectWhereMaxOld(e => e.Amount).ToList();
 
         native.Should().ContainSingle();
         forced.Should().ContainSingle();
@@ -98,12 +98,12 @@ public sealed class PostgresExtremeRowNativeSpecificTests : ProviderTestSuite
     public void UniqueKey_Grouped_ShouldReturnTheSameWinnerPerGroupOnBothPaths()
     {
         var native = Source(_sut.DataProvider)
-            .SelectWhereMax(e => e.Amount, ExtremeRowTies.One, e => new { e.Category })
+            .SelectWhereMaxOld(e => e.Amount, ExtremeRowTies.One, e => new { e.Category })
             .ToList();
 
         using var portable = Portable();
         var forced = Source(portable)
-            .SelectWhereMax(e => e.Amount, ExtremeRowTies.One, e => new { e.Category })
+            .SelectWhereMaxOld(e => e.Amount, ExtremeRowTies.One, e => new { e.Category })
             .ToList();
 
         native.Should().HaveCount(4);
@@ -126,18 +126,18 @@ public sealed class PostgresExtremeRowNativeSpecificTests : ProviderTestSuite
     public void CompositeKey_MinAndMax_ShouldReturnTheSameWinnerOnBothPaths()
     {
         var nativeMax = Source(_sut.DataProvider)
-            .SelectWhereMax(e => new { e.Amount, e.TieBreak }, e => new { e.Id })
+            .SelectWhereMaxOld(e => new { e.Amount, e.TieBreak }, e => new { e.Id })
             .ToList();
         var nativeMin = Source(_sut.DataProvider)
-            .SelectWhereMin(e => new { e.Amount, e.TieBreak }, e => new { e.Id })
+            .SelectWhereMinOld(e => new { e.Amount, e.TieBreak }, e => new { e.Id })
             .ToList();
 
         using var portable = Portable();
         var forcedMax = Source(portable)
-            .SelectWhereMax(e => new { e.Amount, e.TieBreak }, e => new { e.Id })
+            .SelectWhereMaxOld(e => new { e.Amount, e.TieBreak }, e => new { e.Id })
             .ToList();
         var forcedMin = Source(portable)
-            .SelectWhereMin(e => new { e.Amount, e.TieBreak }, e => new { e.Id })
+            .SelectWhereMinOld(e => new { e.Amount, e.TieBreak }, e => new { e.Id })
             .ToList();
 
         nativeMax.Should().ContainSingle().Which.Id.Should().Be(7); // (5, 5) dominates on k1
@@ -154,7 +154,7 @@ public sealed class PostgresExtremeRowNativeSpecificTests : ProviderTestSuite
         using var portable = Portable();
 
         // The portable All form is the oracle: every row tied on the minimum k1=1 (ids 1, 2, 3, 10).
-        var validSet = Source(portable).SelectWhereMin(e => e.Amount, ExtremeRowTies.All).ToList();
+        var validSet = Source(portable).SelectWhereMinOld(e => e.Amount, ExtremeRowTies.All).ToList();
         var expected = new (int Id, int? Category, int? Amount, int? TieBreak, string? Label, int? N)[]
         {
             (1, 10, 1, 99, null, null),
@@ -164,8 +164,8 @@ public sealed class PostgresExtremeRowNativeSpecificTests : ProviderTestSuite
         };
         validSet.Select(Whole).Should().BeEquivalentTo(expected);
 
-        var native = Source(_sut.DataProvider).SelectWhereMin(e => e.Amount).ToList();
-        var forced = Source(portable).SelectWhereMin(e => e.Amount).ToList();
+        var native = Source(_sut.DataProvider).SelectWhereMinOld(e => e.Amount).ToList();
+        var forced = Source(portable).SelectWhereMinOld(e => e.Amount).ToList();
 
         native.Should().ContainSingle();
         forced.Should().ContainSingle();
@@ -183,7 +183,7 @@ public sealed class PostgresExtremeRowNativeSpecificTests : ProviderTestSuite
         using var portable = Portable();
 
         var oracle = Source(portable)
-            .SelectWhereMax(e => e.Amount, ExtremeRowTies.All, e => new { e.Category })
+            .SelectWhereMaxOld(e => e.Amount, ExtremeRowTies.All, e => new { e.Category })
             .ToList();
 
         var group10Winners = oracle.Where(e => GroupKey(e.Category) == 10).Select(Whole).ToList();
@@ -196,7 +196,7 @@ public sealed class PostgresExtremeRowNativeSpecificTests : ProviderTestSuite
         group10Winners.Should().BeEquivalentTo(expected);
 
         var native = Source(_sut.DataProvider)
-            .SelectWhereMax(e => e.Amount, ExtremeRowTies.One, e => new { e.Category })
+            .SelectWhereMaxOld(e => e.Amount, ExtremeRowTies.One, e => new { e.Category })
             .ToList();
 
         var nativeGroup10 = native.Single(e => GroupKey(e.Category) == 10);
@@ -208,13 +208,13 @@ public sealed class PostgresExtremeRowNativeSpecificTests : ProviderTestSuite
     [Fact]
     public void NullableKeyComponents_ShouldBeExcludedBeforeSelection()
     {
-        var native = Source(_sut.DataProvider).SelectWhereMax(e => e.Amount).ToList();
+        var native = Source(_sut.DataProvider).SelectWhereMaxOld(e => e.Amount).ToList();
         native.Should().ContainSingle();
         native[0].Id.Should().Be(7);
 
         // Rows 4, 8 and 9 each carry a NULL extreme-key component under the k1 selector; none may win.
         var grouped = Source(_sut.DataProvider)
-            .SelectWhereMax(e => e.Amount, ExtremeRowTies.One, e => new { e.Category })
+            .SelectWhereMaxOld(e => e.Amount, ExtremeRowTies.One, e => new { e.Category })
             .ToList();
         grouped.Select(e => e.Id).Should().NotContain([4, 8, 9]);
     }
@@ -225,10 +225,10 @@ public sealed class PostgresExtremeRowNativeSpecificTests : ProviderTestSuite
         using var portable = Portable();
 
         var native = Source(_sut.DataProvider)
-            .SelectWhereMax(e => e.Amount, ExtremeRowTies.One, e => new { e.Category })
+            .SelectWhereMaxOld(e => e.Amount, ExtremeRowTies.One, e => new { e.Category })
             .ToList();
         var forced = Source(portable)
-            .SelectWhereMax(e => e.Amount, ExtremeRowTies.One, e => new { e.Category })
+            .SelectWhereMaxOld(e => e.Amount, ExtremeRowTies.One, e => new { e.Category })
             .ToList();
 
         // Group 30 holds only k1-NULL rows (ids 8 and 9) and must vanish from both paths.
@@ -244,12 +244,12 @@ public sealed class PostgresExtremeRowNativeSpecificTests : ProviderTestSuite
         // The k2 selector makes id 1 the unique maximum of group 10; its label is NULL and the NULL
         // must survive inside the winning whole row. The NULL group key must remain its own group.
         var native = Source(_sut.DataProvider)
-            .SelectWhereMax(e => e.TieBreak, ExtremeRowTies.One, e => new { e.Category })
+            .SelectWhereMaxOld(e => e.TieBreak, ExtremeRowTies.One, e => new { e.Category })
             .ToList();
 
         using var portable = Portable();
         var forced = Source(portable)
-            .SelectWhereMax(e => e.TieBreak, ExtremeRowTies.One, e => new { e.Category })
+            .SelectWhereMaxOld(e => e.TieBreak, ExtremeRowTies.One, e => new { e.Category })
             .ToList();
 
         var nativeByGroup = native.ToDictionary(e => GroupKey(e.Category));
@@ -271,17 +271,17 @@ public sealed class PostgresExtremeRowNativeSpecificTests : ProviderTestSuite
     public void EmptyGlobalAndGrouped_ShouldReturnZeroRows()
     {
         var nativeGlobal = Source(_sut.DataProvider).Where(e => e.Label == "no-such")
-            .SelectWhereMax(e => e.Amount).ToList();
+            .SelectWhereMaxOld(e => e.Amount).ToList();
         var nativeGrouped = Source(_sut.DataProvider).Where(e => e.Label == "no-such")
-            .SelectWhereMax(e => e.Amount, ExtremeRowTies.One, e => new { e.Category }).ToList();
+            .SelectWhereMaxOld(e => e.Amount, ExtremeRowTies.One, e => new { e.Category }).ToList();
         nativeGlobal.Should().BeEmpty();
         nativeGrouped.Should().BeEmpty();
 
         using var portable = Portable();
         var forcedGlobal = Source(portable).Where(e => e.Label == "no-such")
-            .SelectWhereMax(e => e.Amount).ToList();
+            .SelectWhereMaxOld(e => e.Amount).ToList();
         var forcedGrouped = Source(portable).Where(e => e.Label == "no-such")
-            .SelectWhereMax(e => e.Amount, ExtremeRowTies.One, e => new { e.Category }).ToList();
+            .SelectWhereMaxOld(e => e.Amount, ExtremeRowTies.One, e => new { e.Category }).ToList();
         forcedGlobal.Should().BeEmpty();
         forcedGrouped.Should().BeEmpty();
     }
@@ -290,11 +290,11 @@ public sealed class PostgresExtremeRowNativeSpecificTests : ProviderTestSuite
     public void WhereRemovingThePreviousMaximum_ShouldChangeTheWinner()
     {
         var native = Source(_sut.DataProvider).Where(e => e.Id != 7)
-            .SelectWhereMax(e => e.Amount).ToList();
+            .SelectWhereMaxOld(e => e.Amount).ToList();
 
         using var portable = Portable();
         var forced = Source(portable).Where(e => e.Id != 7)
-            .SelectWhereMax(e => e.Amount).ToList();
+            .SelectWhereMaxOld(e => e.Amount).ToList();
 
         native.Should().ContainSingle().Which.Id.Should().Be(6); // k1=3 becomes the maximum
         forced.Should().ContainSingle().Which.Id.Should().Be(6);
@@ -306,10 +306,10 @@ public sealed class PostgresExtremeRowNativeSpecificTests : ProviderTestSuite
     [Fact]
     public void ScalarProjection_ShouldProjectTheSelectedWinner()
     {
-        var native = Source(_sut.DataProvider).SelectWhereMax(e => e.Amount, e => e.Label).ToList();
+        var native = Source(_sut.DataProvider).SelectWhereMaxOld(e => e.Amount, e => e.Label).ToList();
 
         using var portable = Portable();
-        var forced = Source(portable).SelectWhereMax(e => e.Amount, e => e.Label).ToList();
+        var forced = Source(portable).SelectWhereMaxOld(e => e.Amount, e => e.Label).ToList();
 
         native.Should().Equal(forced).And.Equal(["null-group"]);
     }
@@ -318,24 +318,24 @@ public sealed class PostgresExtremeRowNativeSpecificTests : ProviderTestSuite
     public void ObjectAndNoDefaultCtorProjections_ShouldProjectTheSelectedWinner()
     {
         var nativeObject = Source(_sut.DataProvider)
-            .SelectWhereMax(e => e.Amount, e => new { e.Id, e.Label, e.N })
+            .SelectWhereMaxOld(e => e.Amount, e => new { e.Id, e.Label, e.N })
             .ToList();
         var nativeDto = Source(_sut.DataProvider)
-            .SelectWhereMax(e => e.Amount, e => new ExtremeRowParityDto(e.Id, e.Amount, e.Label))
+            .SelectWhereMaxOld(e => e.Amount, e => new ExtremeRowParityDto(e.Id, e.Amount, e.Label))
             .ToList();
         var nativeRecord = Source(_sut.DataProvider)
-            .SelectWhereMax(e => e.Amount, e => new ExtremeRowParityRecord(e.Id, e.Amount, e.Label))
+            .SelectWhereMaxOld(e => e.Amount, e => new ExtremeRowParityRecord(e.Id, e.Amount, e.Label))
             .ToList();
 
         using var portable = Portable();
         var forcedObject = Source(portable)
-            .SelectWhereMax(e => e.Amount, e => new { e.Id, e.Label, e.N })
+            .SelectWhereMaxOld(e => e.Amount, e => new { e.Id, e.Label, e.N })
             .ToList();
         var forcedDto = Source(portable)
-            .SelectWhereMax(e => e.Amount, e => new ExtremeRowParityDto(e.Id, e.Amount, e.Label))
+            .SelectWhereMaxOld(e => e.Amount, e => new ExtremeRowParityDto(e.Id, e.Amount, e.Label))
             .ToList();
         var forcedRecord = Source(portable)
-            .SelectWhereMax(e => e.Amount, e => new ExtremeRowParityRecord(e.Id, e.Amount, e.Label))
+            .SelectWhereMaxOld(e => e.Amount, e => new ExtremeRowParityRecord(e.Id, e.Amount, e.Label))
             .ToList();
 
         nativeObject.Should().Equal(forcedObject);
@@ -353,7 +353,7 @@ public sealed class PostgresExtremeRowNativeSpecificTests : ProviderTestSuite
         // Grouped Max k1 yields one row per group. Projecting only k1 gives the multiset {1, 1, 3, 5};
         // the DISTINCT is an outer post-selection step, so it collapses the two k1=1 rows.
         var command = Source(_sut.DataProvider)
-            .SelectWhereMax(e => e.Amount, e => new { e.Amount }, ExtremeRowTies.One, e => new { e.Category });
+            .SelectWhereMaxOld(e => e.Amount, e => new { e.Amount }, ExtremeRowTies.One, e => new { e.Category });
 
         command.ToList().Should().HaveCount(4);
         command.Distinct().ToList().Should().HaveCount(3);
@@ -373,7 +373,7 @@ public sealed class PostgresExtremeRowNativeSpecificTests : ProviderTestSuite
         // alias; the collision-free alias must let the native grouped query execute and return the real
         // per-group winner (group 10 -> id 2 with the key 7; group 20 -> id 3).
         var rows = _sut.DataProvider.From<ExtremeRowAliasEntity>()
-            .SelectWhereMax(e => e.DerivedAlias, ExtremeRowTies.One, e => new { e.G })
+            .SelectWhereMaxOld(e => e.DerivedAlias, ExtremeRowTies.One, e => new { e.G })
             .ToList();
 
         rows.Should().HaveCount(2);

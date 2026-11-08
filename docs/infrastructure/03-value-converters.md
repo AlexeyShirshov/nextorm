@@ -178,6 +178,7 @@ b.Property(x => x.Address).JsonColumn(o =>
 
 The options object is held by reference and must not be mutated after the mapping is built. Source
 generated `JsonTypeInfo<T>` (Native AOT/trimming) is out of scope; use reflection-based serialization.
+See [NativeAOT (partial support)](05-nativeaot.md) for the verified surface.
 
 Inserting a row serializes the mapped object into the document stored in the column. Members such as
 `DateTimeOffset` need no converter — `System.Text.Json` writes them as ISO 8601:

@@ -9,7 +9,7 @@ namespace NextORM.Integration.Tests;
 /// Testcontainers instance is started, so the suite runs out of the box wherever a container
 /// runtime is reachable. When neither is available the tests are skipped rather than failed.
 /// </summary>
-internal sealed class SqlServerTestProvider : ITestProvider
+public sealed class SqlServerTestProvider : ITestProvider
 {
     public static readonly SqlServerTestProvider Instance = new();
 
@@ -88,6 +88,10 @@ internal sealed class SqlServerTestProvider : ITestProvider
             conn.Open();
             using var cmd = conn.CreateCommand();
             cmd.CommandText = SeedSql;
+            // First container start on this host can exceed the default 30 s command timeout while
+            // SQL Server finishes recovery and the seed script runs; keep the allowance local to
+            // the test fixture so product contexts keep their provider default.
+            cmd.CommandTimeout = 180;
             cmd.ExecuteNonQuery();
 
             _seeded = true;

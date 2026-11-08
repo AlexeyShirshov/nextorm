@@ -379,9 +379,20 @@ internal static class SqlSourceRenderer
     // provider dialect is identified by its runtime type name — the existing core convention (see
     // AdvancedAggregateTranslator.ProviderLabel's dialect-name switch and SqlStringLiteralPolicies'
     // exact-type map). A user dialect is never mistaken for the built-in one unless it carries the
-    // same type name.
-    private static bool IsClickHouseDialect(ISqlDialect dialect)
-        => dialect.GetType().Name == "ClickHouseDialect";
+    // same type name. The base-type walk covers a dialect that derives from the shipped one (for
+    // example a test double that keeps ClickHouse rendering but disables the optional native
+    // extreme-row renderer): it is still the ClickHouse dialect, so the ClickHouse-specific decisions
+    // must apply to it as well.
+    internal static bool IsClickHouseDialect(ISqlDialect dialect)
+    {
+        for (var type = dialect.GetType(); type is not null; type = type.BaseType)
+        {
+            if (type.Name == "ClickHouseDialect")
+                return true;
+        }
+
+        return false;
+    }
 
     /// <summary>
     /// Depth-first scan of a join <c>ON</c> body for the atoms that would render as a bare
@@ -766,6 +777,9 @@ internal static class SqlSourceRenderer
         if (from.RawSqlSource is not null)
             return MakeRawSqlSource(in ctx, from, needAlias, entityType, hasJoins);
 
+        if (from.DerivedFragment is not null)
+            return MakeDerivedFragment(in ctx, from, needAlias, entityType, hasJoins);
+
         if (from.TableExpressionOverride is not null)
             return MakeTableExpression(in ctx, from, options, entityType);
 
@@ -893,7 +907,18 @@ internal static class SqlSourceRenderer
 
                 if (ctx.ParamMode) return string.Empty;
 
-                ctx.ColumnsProvider.Add(cmd, false);
+                // A composite-All stage joins a derived table and also reads that stage's output aliases
+                // from its own predicate; registering the occurrence by parameter identity lets those
+                // references resolve to the derived source even when a projection source was registered
+                // before the join and the positional same-type lookup would no longer reach it. Only the
+                // sources the lowering marks need this: every other derived source keeps the positional
+                // behaviour (and therefore the same SQL it had before the composite lowering).
+                if (sourceParameter is not null
+                    && from.BindOccurrenceByParameter
+                    && ctx.ColumnsProvider is DefaultColumnsProvider nestedSources)
+                    nestedSources.AddNestedSource(cmd, false, sourceParameter);
+                else
+                    ctx.ColumnsProvider.Add(cmd, false);
 
                 var sqlBuilder = StringBuilderPool.Shared.Get();
                 try
@@ -962,6 +987,41 @@ internal static class SqlSourceRenderer
         for (var i = 0; i < extra.Count; i++)
             combined[hints.Count + i] = extra[i];
         return combined;
+    }
+
+    /// <summary>
+    /// Renders an opaque derived fragment as <c>(&lt;fragment&gt;) AS alias</c>. The fragment's render
+    /// delegate produces the SQL text in SQL mode and performs the matching parameter walk in parameter
+    /// mode (emitting nothing). The entity type is registered as a physical-shaped source so member
+    /// access resolves against the fragment's columns.
+    /// </summary>
+    private static string MakeDerivedFragment(in SqlBuildContext ctx, FromExpression from, bool needAlias, Type? entityType, bool hasJoins)
+    {
+        var fragment = from.DerivedFragment!;
+
+        if (ctx.ParamMode)
+        {
+            ctx.ColumnsProvider.Add(fragment.EntityType, false);
+            fragment.Render(ctx);
+            return string.Empty;
+        }
+
+        var sqlBuilder = StringBuilderPool.Shared.Get();
+        try
+        {
+            var innerSql = fragment.Render(ctx) ?? string.Empty;
+            sqlBuilder.Append('(').Append(innerSql).Append(')');
+
+            ctx.ColumnsProvider.Add(fragment.EntityType, false);
+
+            sqlBuilder.Append(ctx.Dialect.MakeTableAlias(ctx.AliasProvider!.GetNextAlias(from), ctx.KeywordCase));
+
+            return sqlBuilder.ToString();
+        }
+        finally
+        {
+            StringBuilderPool.Shared.Return(sqlBuilder);
+        }
     }
 
     /// <summary>

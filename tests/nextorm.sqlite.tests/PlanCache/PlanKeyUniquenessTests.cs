@@ -27,6 +27,7 @@ namespace NextORM.Sqlite.Tests;
 /// FOR JSON/XML, PIVOT/UNPIVOT, xml.nodes): the builder sets them on any context, and the comparer is
 /// provider independent, so a single SQLite context exercises the whole key surface.
 /// </summary>
+[Collection("Query plan cache")] // asserts plan-store contents; see QueryPlanCacheCollection
 public class PlanKeyUniquenessTests
 {
     /// <summary>The common result shape every variant projects, so the comparison walks past the early

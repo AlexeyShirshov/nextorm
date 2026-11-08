@@ -1,7 +1,0 @@
-# captured: 2026-10-18T15:57:18Z
-# expected: 32bf10a08291f25afff934f42c378215b6e8f76b8568d6afd519a53a92d72295
-32bf10a08291f25afff934f42c378215b6e8f76b8568d6afd519a53a92d72295  /tmp/nextorm-bench/test.db
-32bf10a08291f25afff934f42c378215b6e8f76b8568d6afd519a53a92d72295  benchmarks/nextorm.benchmark/data/test.db
---- stat ---
-/tmp/nextorm-bench/test.db 753664
-benchmarks/nextorm.benchmark/data/test.db 753664

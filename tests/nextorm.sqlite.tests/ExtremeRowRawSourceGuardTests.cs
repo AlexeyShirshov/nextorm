@@ -29,7 +29,7 @@ public class ExtremeRowRawSourceGuardTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        var act = () => Prepare(ctx, ctx.From("simple_entity").SelectWhereMax(t => t["id"].AsInt).ToCommand());
+        var act = () => Prepare(ctx, ctx.From("simple_entity").SelectWhereMaxOld(t => t["id"].AsInt).ToCommand());
 
         act.Should().Throw<BuildSqlCommandException>().WithMessage(MappedSourceMessage);
     }
@@ -39,7 +39,7 @@ public class ExtremeRowRawSourceGuardTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        var act = () => Prepare(ctx, ctx.From("simple_entity").SelectWhereMin(t => t["id"].AsInt).ToCommand());
+        var act = () => Prepare(ctx, ctx.From("simple_entity").SelectWhereMinOld(t => t["id"].AsInt).ToCommand());
 
         act.Should().Throw<BuildSqlCommandException>().WithMessage(MappedSourceMessage);
     }
@@ -50,7 +50,7 @@ public class ExtremeRowRawSourceGuardTests
         using var ctx = SqliteTestContext.Create();
 
         var sql = Normalize(Prepare(ctx, ctx.From("simple_entity")
-            .SelectWhereMax(t => t["id"].AsInt, t => new { Id = t["id"].AsInt }))
+            .SelectWhereMaxOld(t => t["id"].AsInt, t => new { Id = t["id"].AsInt }))
             .DbCommand.CommandText);
 
         sql.Should().Contain("row_number() over (order by id desc)");
@@ -64,7 +64,7 @@ public class ExtremeRowRawSourceGuardTests
         using var ctx = SqliteTestContext.Create();
 
         var sql = Normalize(Prepare(ctx, ctx.From("simple_entity")
-            .SelectWhereMin(t => t["id"].AsInt, t => new { Id = t["id"].AsInt }))
+            .SelectWhereMinOld(t => t["id"].AsInt, t => new { Id = t["id"].AsInt }))
             .DbCommand.CommandText);
 
         sql.Should().Contain("row_number() over (order by id)");
@@ -77,7 +77,7 @@ public class ExtremeRowRawSourceGuardTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        var sql = Normalize(Prepare(ctx, ctx.From<ExplicitlyMappedEntity>().SelectWhereMax(x => x.Value).ToCommand())
+        var sql = Normalize(Prepare(ctx, ctx.From<ExplicitlyMappedEntity>().SelectWhereMaxOld(x => x.Value).ToCommand())
             .DbCommand.CommandText);
 
         sql.Should().Contain("row_number() over (order by ExplicitColumn desc)");
@@ -90,7 +90,7 @@ public class ExtremeRowRawSourceGuardTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        var sql = Normalize(Prepare(ctx, ctx.From<ExplicitlyMappedEntity>().SelectWhereMin(x => x.Value).ToCommand())
+        var sql = Normalize(Prepare(ctx, ctx.From<ExplicitlyMappedEntity>().SelectWhereMinOld(x => x.Value).ToCommand())
             .DbCommand.CommandText);
 
         sql.Should().Contain("row_number() over (order by ExplicitColumn)");

@@ -271,21 +271,22 @@ public class VersionGateTests
     [Fact]
     public void GatedCapabilities_DirectSupportsAndRender_ShouldAgree()
     {
-        (Version? Version, bool Months, bool Date, bool Number, bool Uuid)[] matrix =
+        (Version? Version, bool Months, bool Date, bool Number, bool Xxh, bool Uuid)[] matrix =
         [
-            (null, false, false, false, false),
-            (new Version(11, 4), false, false, false, false),
-            (new Version(11, 7), false, false, false, true),
-            (new Version(12, 1), false, false, false, true),
-            (new Version(12, 2), false, false, false, true),
-            (new Version(12, 2, 0), false, false, false, true),
-            (new Version(12, 2, 1), true, false, true, true),
-            (new Version(12, 3), true, true, true, true),
-            (new Version(12, 3, 0), true, true, true, true),
-            (new Version(13, 0), true, true, true, true)
+            (null, false, false, false, false, false),
+            (new Version(11, 4), false, false, false, false, false),
+            (new Version(11, 7), false, false, false, false, true),
+            (new Version(12, 1), false, false, false, false, true),
+            (new Version(12, 2), false, false, false, false, true),
+            (new Version(12, 2, 0), false, false, false, false, true),
+            (new Version(12, 2, 1), true, false, true, false, true),
+            (new Version(12, 3), true, true, true, false, true),
+            (new Version(12, 3, 0), true, true, true, false, true),
+            (new Version(13, 0), true, true, true, false, true),
+            (new Version(13, 1), true, true, true, true, true)
         ];
 
-        foreach (var (version, months, date, number, uuid) in matrix)
+        foreach (var (version, months, date, number, xxh, uuid) in matrix)
         {
             var dialect = new MariaDbDialect(version);
             var functions = dialect.MySqlFunctions!;
@@ -293,12 +294,18 @@ public class VersionGateTests
             functions.Supports("months_between").Should().Be(months, $"months_between at {version?.ToString() ?? "unset"}");
             functions.Supports("to_date").Should().Be(date, $"to_date at {version?.ToString() ?? "unset"}");
             functions.Supports("to_number").Should().Be(number, $"to_number at {version?.ToString() ?? "unset"}");
+            // xxh3/xxh32: MariaDB documentation, "XXH3 was added in MariaDB 13.1." and "XXH32 was added in
+            // MariaDB 13.1." (…/sql-functions/numeric-functions/xxh3, …/xxh32; accessed 2026-10-30).
+            functions.Supports("xxh3").Should().Be(xxh, $"xxh3 at {version?.ToString() ?? "unset"}");
+            functions.Supports("xxh32").Should().Be(xxh, $"xxh32 at {version?.ToString() ?? "unset"}");
             dialect.UuidGenerators!.Supports("gen_random_uuid").Should().Be(uuid, $"gen_random_uuid at {version?.ToString() ?? "unset"}");
             dialect.UuidGenerators!.Supports("uuidv7").Should().Be(uuid, $"uuidv7 at {version?.ToString() ?? "unset"}");
 
             AssertRenderAgrees(functions, "months_between", months);
             AssertRenderAgrees(functions, "to_date", date);
             AssertRenderAgrees(functions, "to_number", number);
+            AssertRenderAgrees(functions, "xxh3", xxh);
+            AssertRenderAgrees(functions, "xxh32", xxh);
             AssertUuidRenderAgrees(dialect.UuidGenerators!, "gen_random_uuid", uuid);
             AssertUuidRenderAgrees(dialect.UuidGenerators!, "uuidv7", uuid);
         }

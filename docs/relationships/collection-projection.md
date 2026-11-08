@@ -368,7 +368,7 @@ statements** and is a `NotSupportedException`:
 |---|---|---|
 | `GroupBy` inside the adapter | `p.Comments.AsEntityBuilder<Comment>().GroupBy(c => c.AuthorId)…` | the adapter's operator whitelist |
 | `Distinct`, `Union`, `Except`, `Intersect` or a join inside the adapter | `…AsEntityBuilder<Comment>().Distinct()…` | the adapter's operator whitelist |
-| explicit grouping composed with the projection | `GroupBy` / `SelectGroup` plus a slot | *"cannot be combined with grouping"* |
+| explicit grouping composed with the projection | `GroupBy` / `SelectGroup` (NextORM.Extensions) plus a slot | *"cannot be combined with grouping"* |
 | an outer terminal other than `ToList`/`ToArray` | `.ToEnumerable()` on the slot-bearing command | *"supports only ToList() and ToArray()"* |
 | the in-memory provider | any slot over `InMemoryDataContext` | *"requires a SQL provider"* |
 | an unsupported destination shape | `HashSet<T>`, `object`, a custom collection | the seven-shape list |

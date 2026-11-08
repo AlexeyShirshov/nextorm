@@ -92,7 +92,7 @@ provider list is not scored). The per-engine API breadth is on [Provider feature
 | `SelectMany` / `GroupJoin` | partial (in-memory only; SQL providers reject) | yes (SQL translation) | yes |
 | In-memory provider (query-only, registered CLR datasets) | yes | partial | partial |
 | Connection lifecycle (`IConnectionManager`: supplied vs owned, reuse, disposal) | yes | yes | yes |
-| Extensibility (dialect, `[SqlFunction]`/`TvfEntityBuilder<T>` factories, interceptors, global query filters, raw SQL) | yes | yes (extensive) | yes |
+| Extensibility (dialect, `[SqlFunction]`/`TvfEntityBuilder<T>` factories, interceptors, global query filters, raw SQL; plus **query components** — reusable structural operators added by third parties without friend access, keeping the plan cache and parameter binding) | yes (query components) | partial (`Sql.Ext`/`Sql.Function`/interceptors; no structural component contract) | partial (interceptors, global filters; no structural component contract) |
 | **Total** | 73 / 5 / 3 | 49 / 22 / 10 | 28 / 27 / 25 |
 
 ## Where Nextorm leads
@@ -118,6 +118,16 @@ Against the shared surface Nextorm matches or exceeds linq2db; on top of that it
   navigation, with global query filters applied to children at every level.
 - An EF Core integration package (`nextorm.entityframeworkcore`) sharing the EF connection, model mapping and
   transaction.
+- **Zero-config NativeAOT migration.** Inside the verified surface (SQLite, .NET 10 / `linux-x64`) the
+  only consumer change is `PublishAot=true`: no compiled model, no precompilation step, no
+  analyzer/interceptor opt-in, no entity or query registration, no linker descriptors or roots. EF Core
+  requires a compiled model plus interceptor-based query precompilation and rejects dynamically
+  composed queries; Dapper requires `Dapper.AOT` with `[module: DapperAot]`, an `InterceptorsNamespaces`
+  opt-in and statically known SQL; linq2db does not support NativeAOT officially. On a 13 GB SQLite
+  reporting app nextorm published natively with no source changes (8.2 MB, 0.12 s, 30 MB RSS), while
+  EF Core needed 17.3 MB / 0.23 s / 42 MB after two code-generation workarounds. Coverage is partial
+  (SQLite only; [#370](https://github.com/AlexeyShirshov/nextorm/issues/370)); the advantage is the
+  migration contract. See the [NativeAOT guide](../infrastructure/05-nativeaot.md).
 - Cross-provider row values, portable range-over-scalar-pairs (`[RangeColumns]`), index hints, configurable
   keyword casing, full-text search including the SQLite FTS3/4/5 query surface and the FTS5
   maintenance/control builder, and CLR `Regex` translation.
@@ -160,7 +170,9 @@ choice: it covers essentially the whole analytic query surface linq2db offers �
 families, the ClickHouse-specific constructs, cross-provider row values, table-valued functions and more —
 with a smaller allocation footprint, benchmark results at or above Dapper, EF Core and linq2db on the shipped
 scenarios, and more configurable SQL output (identifier quoting, naming conventions and keyword casing are
-opt-in and overridable per command). linq2db remains the better fit only when the same layer must also track
+opt-in and overridable per command). NativeAOT migration is zero-config — `PublishAot=true` and nothing
+else — while EF Core needs a compiled model plus precompilation and Dapper needs an opt-in AOT package.
+linq2db remains the better fit only when the same layer must also track
 changes or generate the data layer from a live schema — the deliberate boundaries listed above.
 
 ## See also

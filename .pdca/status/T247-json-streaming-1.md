@@ -449,6 +449,270 @@ References:
 - `pdca-dotnet`: Versioned evidence contract
 - project AGENTS.md; running-integration-tests skill
 
+## Current state
+
+- task: `T247` · form: `cycle` · specialized skill: `pdca-dotnet` (`coder+.NET`, inherits `pdca-coder`)
+- mode: `autonomous` (collection `rc5` lane, auto-commit authorized)
+- cycle: `N=1` · revision: `r=2` · attempt: `n=2/3`
+- scope: the whole item goal of issue `#247` — the fixed-cost and streaming-pipeline architecture of `WriteJson`/`WriteJsonAsync`: bounded thread-safe `JsonShapePlan` + compiled `JsonRowWriter` cache, document-mode prepared-descriptor reuse (`storeInCache: false`, never mutating the caller's command or sticky `QueryCommand.Cache`), array-mode flush batching (NDJSON per-record flushing preserved), `JsonStreamWriter`/`Utf8JsonWriter` setup reduction, the 1k/10k/100k phase-attribution benchmark plus the `ToList_Dto + JsonSerializer.Serialize` control arm, unit/correctness coverage, and paired same-session performance evaluation closing on the 2026-10-20 two-tier policy (`AC-247-01..06`) on snapshot `1e31331d`, branch `1.0.9-rc5` · status path: `.pdca/status/T247-json-streaming-1.md`
+- goal: the #247 JSON streaming pipeline stops paying rebuild-per-call and per-row flush cost, closing the task either on the global target (`10k rows ≤ 1.00×` linq2db time and `≤ 1.20×` linq2db allocations; 1k fixed-cost gap materially reduced; 100k non-regressing) or on a measured same-round one-axis local win with no regression on the other axis (residual gap recorded), while JSON output bytes, array/NDJSON/root/IgnoreNull semantics, cancellation and partial-output/error policy stay intact — the §PLAN record `r2` and §Original task are authoritative
+- phase: `ACT` · record: `completed` · outcome: `done` (user-directed closure, not an independent CHECK acceptance) · accepted scope: "target met by already-landed caches; this item delivered zero product change by design" (issue #247 closed by the user; basis = already-landed TerminalPlanCache + JsonRowWriterCache, commit c9aa8690; measured 1k 611.2 µs/51.45 KB, 10k 7 870.3 µs/403.1 KB, 100k 79 049.0 µs/3 919.49 KB; residual per-row GetString ≈44 B/row + 1k fixed-cost gap reduced but not eliminated; caveat linq2db ratio cross-round)
+- source: issue `#247` (`AlexeyShirshov/nextorm`), milestone `1.0.9-rc5`; re-opened by collection `rc5` (new revision `r+1` in this existing rc4 record, `AC-COL-04`) · context refs: `.pdca/status/collection-rc5.md` §`## Input` → `### #247 — Perf: JSON streaming is slower than linq2db at 10k rows` (authoritative task text), `docs/specs/status/D247-json-streaming-2.md` (earlier terminal attempt, carried by reference, read-only), baseline `1e31331d`
+- criteria: `AC-247-01`, `AC-247-02`, `AC-247-03`, `AC-247-04`, `AC-247-05`, `AC-247-06` — exact text in §PLAN record `r2` §4, not retyped here; measurement method in §PLAN record `r2` §5 (same-session paired/ABBA against baseline `1e31331d`, exact `MemoryDiagnoser` bytes, pre-registered time noise band, no historical-number substitution) · evidence root: `.pdca/T247/rv3/` (contract revision `rv3`), DO attempts under `.pdca/T247/rv3/attempts/`; `.pdca/T247/rv2/` belongs to the earlier attempt and is read-only
+- supersession note (executor, append-only): the earlier plan block `## Plan (r=1)` above is **superseded by `r=2`** and is kept byte-identical as history. Reason: a genuine contract revision — the 2026-10-20 two-tier acceptance policy (global target vs local one-axis acceptance) replaces the retired single-tier `R247-01..20` row set, and an explicit scope boundary is drawn against `T311` (10k per-row throughput lever, same-session paired acceptance baseline harness, noise-robust ratio oracle) and `T250` (CSV terminal plan cache). The `r=1` dependency gate on the `T311` handoff is removed: `T247` neither depends on `T311` to start or close under the local-acceptance policy, and does not re-litigate `T247`'s thresholds.
+- fidelity note: the `r2` report is recorded verbatim from `pdca-planner`; no wording altered, edited, translated or reconstructed.
+
+## Original task
+
+Reference (the readable complete original, not repeated here): `.pdca/status/collection-rc5.md` §`## Input` → `### #247 — Perf: JSON streaming is slower than linq2db at 10k rows` (line 959 of that file) — the complete verbatim issue body in its original language, including the 2026-10-17 benchmark table (1k `2.132 ms / 84.01 KB` vs `0.562 ms / 90.39 KB`; 10k `10.352 ms / 435.64 KB` vs `9.150 ms / 963.56 KB`; 100k `82.891 ms` vs `86.797 ms`), the root-cause analysis (`DataContext.cs:353-420` `PrepareJsonStream`, `JsonStreamWriter.cs:47-65` per-row flush, per-row `IDataRecord.GetString`), the six proposed work items, the user-supplied 2026-10-20 two-tier acceptance block, the mandatory correctness/evidence list and the three constraints, sourced verbatim from `/tmp/nextorm-rc5-issues.md`.
+
+## PLAN record
+
+### r1
+
+`superseded by r2 — kept byte-identical above as §Plan (r=1)` — the complete `r1` report is the `## Plan (r=1)` block earlier in this file; DO never ran on it and no attempt was consumed.
+
+### r2
+
+````markdown
+# PLAN Report — Collection Item `T247` (`#247`)
+
+## 1. Required Cycle Identity and Counter Accounting
+- **Status path**: `.pdca/status/T247-json-streaming-1.md`
+- **Cycle identity**: `N = 1`, `r = 2`, `n = 1/3` (anchored to snapshot `1e31331d` on branch `1.0.9-rc5`)
+- **Counter rationale**: The existing status record `.pdca/status/T247-json-streaming-1.md` is at `N = 1`, `r = 1`, `n = 1/3` (`State: PLAN ready (r=1) … DO not started; dependency gate T311 pending`), with its declared evidence root `.pdca/T247/rv3/` absent and `R247-01…R247-20` unexecuted because the upstream group stopped before DO. Meanwhile, the earlier legacy record `docs/specs/status/D247-json-streaming-2.md` closed `incomplete (terminal measured GAP)`. Under the revision accounting rules and the repository re-entry rule, re-planning `T247` in `.pdca/status/T247-json-streaming-1.md` to incorporate the two-tier acceptance contract and explicit scope boundary against `T311` (and `T250`), while retiring the legacy unmapped `R247-*`/`E247-*` scaffolding from `r = 1`, is a genuine contract revision (`r = 2`). Because DO never started on `N = 1`, the execution attempt counter remains `n = 1/3`.
+
+## 2. Prior Cause Carried Forward, Re-entry Justification, and Sibling Boundary (`T311`, `T250`)
+- **Prior terminal cause carried forward**: In `docs/specs/status/D247-json-streaming-2.md:557`, the attempt ended `incomplete (terminal measured GAP)`:
+  1. **Product-red arm**: 10,000-row `WriteJson_Array_Dto` time ratio was `1.04546 / 0.91917` against a strict single-tier target of `0.81079` (Fixed-cost caching and flush batching dramatically improved 1,000-row setup cost, but at 10,000 rows per-row string extraction and serialization overhead dominated).
+  2. **Evidence-red arm**: `0/7 acceptance cases captured` because the old compare script exited `1` and the same-session paired acceptance baseline was not executed.
+- **How re-entry is justified (both arms resolved)**:
+  1. **Criterion / Oracle Reformulation (User-supplied 2026-10-20 Two-Tier Policy)**: The brief now supplies the explicit two-tier acceptance policy: while the ≤1.00× time and ≤1.20× allocation ratios at 10,000 rows remain the *Global target (milestone-level)*, *Local acceptance (task closure)* is achieved when the measured change is a real one-axis win with no regression on the other against the same-round paired/ABBA baseline (specifically: 10k allocations are already below linq2db, so a time-only win beyond the pre-registered noise band with allocations not increasing—or an allocation reduction with time within the noise band—closes the task while recording the residual gap to the global target).
+  2. **Decisive Evidence Obtainability**: Same-session, same-round paired/ABBA measurements on a pinned SQLite database and the 7-case `--anyCategories=acceptance` benchmark run are directly executable in a single process without relying on the broken historical compare script or cross-session numbers.
+- **Explicit Boundary Against `T311` and `T250`**:
+  - **Against `T311`**: `T247` owns the **fixed-cost and streaming-pipeline architecture** specified in #247 Proposed Work items 1–6: phase attribution benchmark (1k/10k/100k), bounded thread-safe `JsonShapePlan` + compiled `JsonRowWriter` cache with metadata/options invalidation, array-mode flush batching in `JsonStreamWriter.WriteRow` (preserving NDJSON per-record flushes and bounded memory), document-mode prepared descriptor reuse (`storeInCache: false`, never mutating the caller's command or sticky `QueryCommand.Cache`), `JsonStreamWriter`/`Utf8JsonWriter` setup reduction, the `ToList_Dto + JsonSerializer.Serialize` control arm, and explicit documentation/explanation of the per-row `IDataRecord.GetString` allocation. `T311` owns the follow-up **10k per-row throughput lever**, the standalone same-session paired acceptance baseline harness, and the new noise-robust ratio oracle. `T247` does **not** depend on `T311` to start or close under the 2026-10-20 two-tier policy, and does **not** re-litigate `T247`'s thresholds.
+  - **Against `T250`**: `T250` covers the CSV terminal plan cache (`WriteCsv`). `T247` is strictly scoped to the JSON streaming pipeline (`PrepareJsonStream`, `JsonShapePlan`, `JsonRowWriterFactory`, `JsonStreamWriter`) and JSON benchmarks/reports.
+
+## 3. Form, Specialized Skill, and Entry Scope
+- **Form**: `cycle` (ordinary cycle)
+- **Specialized skill**: `pdca-dotnet` (`coder+.NET`)
+- **One-line form rationale**: The optimization mechanisms (caching immutable `JsonShapePlan` and compiled `JsonRowWriter` delegates, batching `Utf8JsonWriter`/sink flushes in array mode, reusing document-mode prepared descriptors without mutating `QueryCommand`, and adding phase/control benchmarks) are concrete, well-understood C#/.NET transformations bounded to `src/nextorm.core` (`DataContext`, `Query/Json/*`), `tests/nextorm.core.tests`, and `benchmarks/nextorm.benchmark`.
+- **Entry scope**: End-to-end delivery of the #247 JSON streaming optimizations, phase attribution and control-arm benchmarks (1k/10k/100k), unit/correctness coverage, and paired same-session performance evaluation in a single cycle anchored at `1e31331d`.
+
+## 4. Goal, Requested Result, and Acceptance Criteria
+
+### Verbatim Task
+`### #247 — Perf: JSON streaming is slower than linq2db at 10k rows` (full verbatim brief as provided in dispatch).
+
+### Requested Result & Delivered Result
+- **Requested result**: An optimized Nextorm `WriteJson`/`WriteJsonAsync` streaming pipeline (caching `JsonShapePlan`/`JsonRowWriter`, batching array-mode flushes, reducing per-call document-mode preparation overhead without mutating shared commands) accompanied by 1k/10k/100k phase attribution and `ToList_Dto + JsonSerializer` control benchmarks, explicit explanation of per-row string allocation, full preservation of JSON streaming semantics, and measured performance satisfying the 2026-10-20 two-tier acceptance policy.
+- **Delivered result**: The exact same object—updated JSON streaming implementation in `src/nextorm.core`, unit tests in `tests/nextorm.core.tests`, 1k/10k/100k phase and control benchmarks in `benchmarks/nextorm.benchmark`, updated benchmark report explaining per-row string allocations and recording the paired same-session 1k/10k/100k measurements and residual gap (if any) to the global target.
+
+### Acceptance Criteria (User-Supplied Set Reproduced Verbatim, with Stable IDs & Kinds)
+
+- **`AC-247-01` (Performance — Two-Tier Policy: Global Target & Local Acceptance)**:
+  > **Global target (milestone-level):** at 10,000 rows, `WriteJson_Array_Dto` ≤ **1.00×** linq2db time and ≤ **1.20×** linq2db allocations; at 1,000 rows, the fixed-cost gap is materially reduced; 100k rows do not regress. The original **9.150 ms / 435.64 KB** and ≤1.2× 1k targets remain the global/stretch reference.
+  >
+  > **Local acceptance (task closure):** if the chosen method cannot reach the global target, accept it when the measured change is a real one-axis win with no regression on the other:
+  > - allocations decrease vs the same-round baseline and time does not worsen beyond the pre-registered noise band; **or**
+  > - time improves beyond the pre-registered noise band and allocations do not increase.
+  >
+  > A method that improves neither axis, or improves one while regressing the other, is rejected and reverted. Reaching the global ratios is **not** required to close the task: record the residual gap to the global target and the measured local win.
+
+- **`AC-247-02` (Measurement Governance — State-Dependent / Comparative)**:
+  > **Measurement rules:** same session/round and pinned DB, paired/ABBA measurement; no historical-number substitution; no threshold/tolerance/denominator edits after measurement. Allocation changes are judged by exact byte counts; time changes by the pre-registered noise band.
+  >
+  > Note: 10k allocations are already below linq2db, so a **time-only win with allocations not increasing** is sufficient for local acceptance.
+
+- **`AC-247-03` (Mandatory Correctness & Behavioral Preservation — Functional + Negative)**:
+  > No public API/output change: valid JSON, same DTO payload, array/NDJSON/root/IgnoreNull semantics, cancellation and partial-output/error policy preserved.
+
+- **`AC-247-04` (Mandatory Benchmark & Control-Arm Coverage — Deliverable)**:
+  > Add JSON 1k/10k/100k rows to the performance gate; include the `ToList_Dto + JsonSerializer` control in the report.
+
+- **`AC-247-05` (Mandatory Allocation Explanation — Deliverable + Negative)**:
+  > Explain the remaining per-row string allocation explicitly; “zero materialization” is not claimed as zero allocation.
+
+- **`AC-247-06` (Mandatory Architectural Constraints — Negative)**:
+  > - Do not switch the public `WriteJson` contract to materialize DTOs; direct streaming must remain the default.
+  > - Do not weaken JSON validation, cancellation, or error policy for speed.
+  > - No benchmark-specific payload checks; cache keys must be general and bounded.
+
+## 5. Measurement Method
+- **Metrics and units**:
+  1. **Execution time**: Mean execution time per invocation in milliseconds (`ms`) / microseconds (`μs`) / nanoseconds (`ns`) reported by BenchmarkDotNet.
+  2. **Allocated memory**: Exact managed bytes allocated per invocation (`B` / `KB`) reported by BenchmarkDotNet `[MemoryDiagnoser]`.
+  3. **Relative ratios (Global reference)**: `Mean(Nextorm WriteJson_Array_Dto) / Mean(linq2db materialize + JsonSerializer)` for time, and `Allocated(Nextorm WriteJson_Array_Dto) / Allocated(linq2db materialize + JsonSerializer)` for memory at `RowCount ∈ {1000, 10000, 100000}`.
+  4. **Local acceptance delta**: `ΔTime = (Mean_candidate - Mean_baseline) / Mean_baseline` and `ΔAlloc = Allocated_candidate - Allocated_baseline` across `RowCount ∈ {1000, 10000, 100000}` for `WriteJson_Array_Dto` (plus phase attribution breakdown and `ToList_Dto + JsonSerializer` control arm).
+- **Denominator**:
+  - For local acceptance (`AC-247-01` / `AC-247-02`): Same-round, same-session pre-change baseline (`1e31331d`) measured in a paired/ABBA interleaving on the identical pinned SQLite dataset and sink.
+  - For global target tracking (`AC-247-01`): Same-round, same-session `linq2db` materialize + `JsonSerializer.Serialize` benchmark on the identical DTO payload, row count (`1,000`, `10,000`, `100,000`), and sink.
+- **Inclusion / Exclusion Filters**:
+  - Included: `SqliteBenchmarkWriteJson` (and the new JSON phase attribution benchmark + `ToList_Dto + JsonSerializer` control arm) at `RowCount ∈ {1000, 10000, 100000}`, plus the 7-case repository query-path acceptance suite (`--anyCategories=acceptance`).
+  - Excluded: Historical numbers from `feature-benchmarks-2026-10-17.md` or earlier sessions (`rv2`) are never substituted as the baseline denominator for local acceptance (they serve only as the stated background context).
+- **Comparability Conditions**:
+  - Strictly one benchmark or container process running at a time (no concurrent CPU/IO contention).
+  - `Release` configuration (`-c Release`), identical .NET 10 runtime, identical SQLite database state and schema, identical UTF-8 sink and `JsonStreamOptions`.
+  - Paired/ABBA run order within the same session/round so thermal/frequency drift is balanced across baseline and candidate.
+- **Thresholds and Provenance** (User-supplied 2026-10-20 two-tier policy + repo standing rule):
+  - **Pre-registered time noise band**: Repository standing benchmark rule designates deltas `< ~20%` on the general suite as noise; for paired/ABBA same-session microbenchmark comparisons on `SqliteBenchmarkWriteJson`, the pre-registered noise band for a statistically meaningful time change is fixed before measurement by the paired ABBA run's confidence/noise bound (and for the 7-case `--anyCategories=acceptance` gate, no regression `≥ 20%`).
+  - **Allocation threshold**: Exact byte count (`ΔAlloc ≤ 0 B` for no allocation increase; `ΔAlloc < 0 B` for an allocation decrease).
+  - **Local acceptance**: At 10,000 rows (and 1,000 rows fixed-cost), time improves beyond the pre-registered noise band with `ΔAlloc ≤ 0 B` (or `ΔAlloc < 0 B` with time not worsening beyond the noise band), and 100,000 rows does not regress beyond the noise band or increase per-row allocations.
+  - **Global target (stretch/milestone reference)**: At 10,000 rows, `WriteJson_Array_Dto ≤ 1.00×` linq2db time and `≤ 1.20×` linq2db allocations; 1,000-row fixed-cost gap materially reduced; 100,000 rows non-regressing. If local acceptance is met without reaching the global ratio, the exact residual gap to `≤ 1.00×` is recorded.
+
+## 6. Constraints and Assumptions
+- **Constraints**:
+  - Direct streaming (`WriteJson`/`WriteJsonAsync`) remains the default; never materialize `List<TResult>` to implement `WriteJson`.
+  - Never mutate the caller's `QueryCommand` or touch the sticky `QueryCommand.Cache` / `_dontCache` property on shared commands; use `storeInCache: false` when preparing non-cached commands.
+  - Shape/writer cache keys must be general, immutable, thread-safe, bounded, and invalidated (or naturally Partitioned by immutable key) when metadata or `JsonStreamOptions`/naming policy differ; no benchmark-specific payload checks.
+  - Array mode may batch `Utf8JsonWriter.Flush()` and `_sink.Flush()` based on buffer threshold and `Complete()`, whereas NDJSON mode (`JsonStreamFormat.Ndjson`) must preserve per-record flushing and boundaries.
+  - Build must pass with `0` warnings and `0` errors (`TreatWarningsAsErrors=true`), CRLF line endings preserved, and all test assertions written with FluentAssertions (`tests/nextorm.core.tests/Conventions/AssertionStyleTests.cs`).
+  - Live integration tests (`tests/nextorm.integration.tests`) are fail-closed and require `DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock`.
+  - Git policy: milestone `1.0.9-rc5` never moves; no push, no merge to `main`, no tags; auto-commit only for item-touched files on `collection/**` branches.
+- **Assumptions**:
+  - Caching `JsonShapePlan` and the compiled `JsonRowWriter` delegate together with batching array-mode flushes and avoiding redundant per-call command clone/compile overhead will eliminate the ~1.5 ms fixed per-call setup penalty (visible at 1,000 rows) and yield a measurable time improvement at 10,000 rows without increasing managed allocations.
+- **Known Resource and Access Constraints**:
+  - Local CPU/memory environment and Podman socket (`unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock`) are available; benchmark and container runs must be serialized (strictly one process at a time) to prevent measurement invalidation.
+
+## 7. Gaps Closure Table
+| Statement Gap | Resolution Type | Closure |
+|---|---|---|
+| Prior status record `.pdca/status/T247-json-streaming-1.md` was left at `r=1` with `T311` dependency gate and missing `.pdca/T247/rv3/` evidence | Evidence (supplied in dispatch) | Upgraded to `r=2` (`N=1, n=1/3`); legacy `R247-*`/`E247-*` rows superseded by `AC-247-01..06`; `T311` dependency gate removed because `T247` closes under the 2026-10-20 two-tier local acceptance policy while `T311` handles the follow-up 10k per-row throughput lever. |
+| Exact buffer threshold for array-mode flush batching in `JsonStreamWriter.WriteRow` | Assumption (means, not outcome) | Flush `Utf8JsonWriter` to `_sink` when `Utf8JsonWriter.BytesPending` reaches a bounded threshold (e.g., 16 KB / 32 KB matching pooled buffer sizing) and at `Complete()`, keeping memory bounded and verified by a buffer-size threshold unit test. |
+| Whether per-row `IDataRecord.GetString` should be replaced by `GetChars` in `T247` | Evidence (brief item 5 & boundary with `T311`) | Brief item 5 states: *"measure before deciding whether the per-row string extraction needs a `GetChars`/pooled-char path"* and mandatory evidence requires *"Explain the remaining per-row string allocation explicitly"*, while `T311` owns the 10k per-row throughput lever. `T247` measures phase attribution first, optimizes plan/writer caching, descriptor reuse, and flush batching, and explicitly documents the remaining `GetString` allocation. |
+
+## 8. Minimal Solution and Alternatives
+- **Chosen Minimal Solution**:
+  1. **Bounded Shape + Writer Cache**: Introduce a thread-safe, bounded cache for `(JsonShapePlan, JsonRowWriter)` keyed by query projection shape (entity/projection type, selected column/expression signature, provider dialect/metadata token) and normalized `JsonStreamOptions` (format, naming policy, root property name, ignore-nulls, indentation).
+  2. **Document-Mode Preparation Reuse**: In `DataContext.PrepareJsonStream` (`src/nextorm.core/DataContext/DataContext.cs:353-420`), avoid re-running full command clone + expression preparation + shape compilation on every call when the prepared SQL/command recipe and `JsonShapePlan`/`JsonRowWriter` are already cached for the shape, while strictly preserving `storeInCache: false` and never mutating the caller's `QueryCommand`.
+  3. **Array-Mode Flush Batching**: In `JsonStreamWriter.WriteRow` (`src/nextorm.core/Query/Json/JsonStreamWriter.cs:47-65`), keep per-row `Flush()` for `Ndjson` mode, but in `Array` mode only flush `Utf8JsonWriter` and `_sink` when `BytesPending` exceeds a fixed buffer threshold or during `Complete()` / `CompleteAsync()`, preserving cancellation, partial-output/error guarantees, and bounded memory.
+  4. **Phase Attribution & Control Benchmarks**: Add the 1k/10k/100k JSON phase benchmark (separating command clone/prepare, shape-plan build, row-writer compile, per-row `WriteRow`, and flush) and the `ToList_Dto + JsonSerializer.Serialize` control arm to `benchmarks/nextorm.benchmark`, and update the benchmark report with paired ABBA numbers and the explicit per-row `GetString` allocation explanation.
+- **Alternatives Considered**:
+  - *Unbounded `ConcurrentDictionary` keyed only by `Type`*: Rejected because anonymous/ad-hoc projections or varying `JsonStreamOptions` would either collide or leak memory; a bounded cache with a composite structural key satisfies the constraint *"cache keys must be general and bounded"*.
+  - *Mutating `QueryCommand.Cache = false` on the input command*: Rejected; violates the repository's standing rule against mutating sticky `_dontCache` on shared commands.
+
+## 9. Plan-to-DO Handoff
+- **Target identity**: `T247`, `N = 1`, `r = 2`, `n = 1/3`, status file `.pdca/status/T247-json-streaming-1.md`, base commit `1e31331d`.
+- **In-scope components**:
+  - `src/nextorm.core/DataContext/DataContext.cs` (`PrepareJsonStream` and supporting cache/preparation helpers)
+  - `src/nextorm.core/Query/Json/JsonShapePlan.cs`, `JsonRowWriterFactory.cs`, `JsonStreamWriter.cs` (and any bounded cache helper under `src/nextorm.core/Query/Json/`)
+  - `tests/nextorm.core.tests` (unit tests for shape/writer cache hit/invalidation/bounds, array-mode buffer-size threshold flushing vs NDJSON per-row flushing, cancellation/error/IgnoreNull/root semantics, and non-mutation of shared `QueryCommand`)
+  - `benchmarks/nextorm.benchmark` (1k/10k/100k phase attribution benchmark, `ToList_Dto + JsonSerializer` control arm, and `SqliteBenchmarkWriteJson` 1k/10k/100k gate coverage)
+  - `docs/comparisons/feature-benchmarks-2026-10-17.md` (or the designated benchmark report artifact) documenting the control arm, paired results, residual gap to global target, and explicit per-row `GetString` allocation explanation.
+- **Mandatory Prohibitions**:
+  - Do not materialize DTOs in `WriteJson`/`WriteJsonAsync`.
+  - Do not mutate `QueryCommand.Cache` / `_dontCache`.
+  - Do not weaken JSON validation, cancellation, or error handling.
+  - Do not introduce benchmark-specific payload checks.
+  - Do not run concurrent benchmark or container processes.
+  - Do not leave LF line endings; normalize edited files to CRLF.
+
+## 10. Risks and Stop Conditions
+- **Risks**:
+  - *Cache key collision across different projections of the same CLR type* (e.g., two queries projecting different subsets of columns into `Dto`): Mitigated by including the resolved column/projection signature in the cache key alongside CLR type and `JsonStreamOptions`.
+  - *Buffered bytes in array mode not flushed on exception/cancellation Rules*: Mitigated by ensuring `Complete`/`CompleteAsync` and disposal/error paths follow the exact existing partial-output/error contract and testing cancellation/error mid-stream.
+  - *Thermal/CPU throttling during 100k-row benchmarks*: Mitigated by paired/ABBA execution in a single serialized process.
+- **Stop Conditions**:
+  - If every legitimate caching and flush-batching candidate either regresses allocations (`ΔAlloc > 0 B`) or fails to improve time beyond the noise band at 1k/10k rows (or regresses 100k rows), revert the candidate and stop rather than weakening correctness or faking cache keys.
+  - If the 7-case `--anyCategories=acceptance` suite shows a query-path regression `≥ 20%` caused by the change that cannot be resolved within `n ≤ 3`, revert and stop.
+
+## 11. Confidence and Gaps
+- **Verified**:
+  - Root causes in `DataContext.cs:353-420` (`PrepareJsonStream`) and `JsonStreamWriter.cs:47-65` (`WriteRow` per-row flush) are directly identified in the brief.
+  - Prior failure modes (`D247-json-streaming-2.md` single-tier ratio gap and unexecuted compare script, plus unstarted `r=1` in `.pdca/status/T247-json-streaming-1.md`) and the `T311`/`T250` boundaries are fully accounted for.
+  - The 2026-10-20 two-tier acceptance criteria and measurement method are determinate and executable with available tools.
+- **Remaining Assumptions**:
+  - Exact millisecond/byte improvement of the combined shape/writer cache + array flush batching at 10,000 rows will be established by the paired ABBA benchmark run during DO/CHECK.
+````
+
+## Approval record
+
+`not applicable: autonomous mode` — no ordinary plan approval was required or invented for this cycle (base §Control modes; the plan was produced and consumed inside the authorized `rc5` collection run, `plan_state=ready`).
+
+In-force auto-commit policy (verbatim, repo `AGENTS.md` §Git): "a `pdca-collection` cycle started with explicit auto-commit permission may (a) commit on `collection/**` branches inside the cycle worktree and (b) `git merge --no-ff` a group branch into the current branch." No `git push`, no merge into `main`, no tag; a commit touches only the files changed by item `T247`.
+
+## DO result
+
+### Attempt n=2/3 (r=2)
+
+`blocked: no safe implementation lever identified across all three mechanisms` — M1 bounded shape-plan/row-writer cache already present in code (commit c9aa8690, TerminalPlanCache + JsonRowWriterCache adapter; reused, not rebuilt). M2 document-mode prepared-descriptor reuse cannot be implemented safely without a pre-preparation key and risks temp-table/param correctness; not attempted. M3 JsonStreamWriter/Utf8JsonWriter setup reduction has no safe lever that does not touch array-mode flush semantics (AC-247-03) or risk correctness; not attempted. Build green (0W/0E); core JSON 188/188; sqlite JSON 135/135; integration 7733 passed/0 failed/201 skipped. Baseline captured: WriteJson_Array_Dto 1k 611.2 us/51.45 KB, 10k 7870.3 us/403.1 KB, 100k 79049.0 us/3919.49 KB. No candidate produced; residual to ACT. Evidence: `.pdca/T247/rv3/attempts/attempt2/`.
+
+## CHECK record
+
+`not run: no DO candidate existed for this revision` — no independent CHECK was dispatched and no candidate was produced; CHECK is recorded as absent, never as a pass. No verdict, no per-criterion matrix, no findings. The two DO attempts are recorded under §DO result and in the progress log; neither produced a candidate that could be checked.
+
+## ACT record
+
+`incomplete` — DO → ACT, no candidate produced, no CHECK ran, no PASS, no `done`, no credit.
+
+Outcome: `incomplete` (terminal, no accepted scope). `N=1`, `r=2`, `n=2/3`; attempts exhausted (2 of 3 consumed; the third was not opened because no permitted continuation remained — all three planned mechanisms non-moving).
+
+Both attempts, with their commits:
+- attempt 1 (`42dc4a59`, status only): array-mode flush batching broke the partial-output/error-policy tests (AC-247-03) — altered the completed-row prefix / Flush=0 contract; reverted; no candidate; no axis moved.
+- attempt 2 (`d1aebc3e`, status only, zero product change): all three planned mechanisms exhausted without moving an axis:
+  - M1 bounded shape-plan/row-writer cache — **already exists** in code (`TerminalPlanCache` + `JsonRowWriterCache` adapter, from the earlier #180 work, commit `c9aa8690`); reused, not rebuilt. No new lever.
+  - M2 document-mode prepared-descriptor reuse — judged **not safely implementable**: no pre-preparation key, temp-table/parameter correctness risk; not attempted.
+  - M3 `JsonStreamWriter`/`Utf8JsonWriter` setup reduction — **no safe lever** without touching the AC-247-03 flush semantics or risking correctness; not attempted.
+
+Candidate == baseline (no axis moved): `WriteJson_Array_Dto` 1 k **611.2 µs / 51.45 KB** (ratio 1.000), 10 k **7 870.3 µs / 403.1 KB** (1.000), 100 k **79 049.0 µs / 3 919.49 KB** (1.000). Neither Tier A nor Tier B is met (no time move beyond the pre-registered noise band, no allocation decrease).
+
+Derived allocation bar (from the cold-vs-warm decomposition, per the #250 forward obligation — never a copied `≥8 KB/column` figure): `ΔAlloc ≤ 0 B` on `WriteJson_Array_Dto`, with a time move beyond the pre-registered noise band. Decomposition: `.pdca/T247/rv3/attempts/attempt2/decomposition.md`.
+
+Residual to the global target: `1.000×` time / `1.000×` alloc vs baseline ⇒ the 10 k `≤1.00×` linq2db ratio remains **unmeasured in this item** — no paired same-session linq2db arm was run here, so the global ratio is neither met nor refuted by this item; the residual gap to `≤ 1.00×` is not quantified in this cycle.
+
+Gates recorded at the current identity: build `0 W / 0 E`; core JSON **188/188**; sqlite JSON **135/135**; fail-closed integration **7 733 passed / 0 failed / 201 skipped**; `status_lint` rc 0. Evidence root `.pdca/T247/rv3/` (`attempts/attempt1/`, `attempts/attempt2/`, `decomposition.md`).
+
+"Must never claim" list (no win, no Tier A/B credit, no verified ratio, no closure): no local-acceptance win on either axis; no Tier A or Tier B credit; no verified `≤1.00×` linq2db ratio at 10 k; no closure of issue #247; no `done`. The three mechanisms are recorded as non-moving, not as implemented. Issue #247 stays OPEN.
+
+Handoff (next authorized action): a new authorized PLAN under §State machine and counters is required to reopen this item; this cycle is closed as `incomplete` and is not reopened automatically. The residual per-row `IDataRecord.GetString` allocation and any future lever belong to a separate `P:` task (issue #311 owns the 10 k per-row throughput lever).
+
+### User-directed finalization (explicit user instruction, not an independent CHECK acceptance)
+
+- Issue `#247` closed by the user: the ticket's global target is met by machinery already in the tree (`TerminalPlanCache` + `JsonRowWriterCache`, commit `c9aa8690`), with no new lever and zero product change by this item. This is a user decision, not a CHECK verdict.
+- Accepted basis: already-landed `TerminalPlanCache` + `JsonRowWriterCache` (`c9aa8690`).
+- Measured numbers: `1k 611.2 µs / 51.45 KB`, `10k 7 870.3 µs / 403.1 KB`, `100k 79 049.0 µs / 3 919.49 KB`.
+- Residual: per-row `GetString` ≈44 B/row and a 1k fixed-cost gap reduced but not eliminated.
+- Caveat: the linq2db ratio was cross-round, not same-round (same-round corroboration will be appended when run).
+- No attempt/defect counter changes: `N=1`, `r=2`, `n=2/3` unchanged; no new attempt consumed; defect history unchanged.
+- No criterion was rewritten; `AC-247-01..06` remain as recorded.
+- This closure does not claim an independent CHECK verdict: no CHECK ran on this item; the verdict is the user's explicit instruction.
+
+## Revision history
+
+2026-10-30T07:05:59Z | N=1 r=1 → N=1 r=2 | genuine contract revision inside the same cycle `N=1`: the 2026-10-20 two-tier acceptance policy (global target vs local one-axis acceptance) replaces the retired single-tier `R247-01..20` row set with `AC-247-01..06`, and an explicit scope boundary is drawn against siblings `T311` (10k per-row throughput lever, same-session paired acceptance baseline harness, noise-robust ratio oracle) and `T250` (CSV terminal plan cache); the `r=1` dependency gate on the `T311` handoff is removed because `T247` closes under the local-acceptance policy. Outgoing attempt identity: `N=1, r=1, n=1/3` — DO never ran on `r=1` and no attempt was consumed, so `n` stays `1/3`.
+
+## Defect history
+
+Finalized for this cycle (DO → ACT, incomplete, no candidate). No stable defect key produced a fix that survived; both attempts are recorded as unaccepted:
+- `T247-D1` | observed revisions/attempts: r=2 / n=1 (attempt 1); fixes applied: 0 (reverted) | evidence: `.pdca/T247/rv3/attempts/attempt1/`, commit `42dc4a59` | last recurrence/escalation: attempt 1 reverted — array-mode flush batching broke AC-247-03 (partial-output/error policy: completed-row prefix + Flush=0); no candidate.
+- `T247-D2` | observed revisions/attempts: r=2 / n=2 (attempt 2); fixes applied: 0 | evidence: `.pdca/T247/rv3/attempts/attempt2/`, commit `d1aebc3e`, decomposition `.pdca/T247/rv3/attempts/attempt2/decomposition.md` | last recurrence/escalation: all three mechanisms non-moving (M1 cache already present c9aa8690; M2 not safely implementable; M3 no safe lever without touching AC-247-03); candidate == baseline; no axis moved; no Tier A/B credit.
+Carried by reference, never re-litigated: the earlier attempt's terminal arms in `docs/specs/status/D247-json-streaming-2.md:557` (10k time ratio `1.04546 / 0.91917` vs the strict single-tier `0.81079`; `0/7` acceptance cases captured) — contextual evidence for the `r=2` reformulation, not a defect row of this record.
+
+## Changed files
+
+Task-owned records only: `.pdca/status/T247-json-streaming-1.md` (this file, ACT finalization — phase `ACT`, `incomplete`, no candidate, no CHECK); `.pdca/T247/rv3/attempts/attempt1/`, `.pdca/T247/rv3/attempts/attempt2/` (including `decomposition.md`, `baseline.md`) — local evidence, gitignored. `.pdca/status/collection-rc5.md` (queue row T247 + §Done/Verified/Incomplete + progress log) updated in the same commit. No product, test or benchmark file changed.
+
+## Git state
+
+`status path: .pdca/status/T247-json-streaming-1.md — modified this cycle (ACT finalization) · tracked (durable on disk, pending commit)` — branch `1.0.9-rc5`, baseline `1e31331d`. Evidence under `.pdca/T247/rv3/attempts/` untracked/local. No product, test or benchmark file changed. Work outside this item's delta untouched and unclaimed. Commit authorized for this status file plus `.pdca/status/collection-rc5.md` only (explicit paths, no `-A`), subject `#247 T247 ACT: incomplete — no candidate, all three planned mechanisms non-moving; derived allocation bar from cold-vs-warm decomposition; no credit; evidence .pdca/T247/rv3/`. No push.
+
 ## Progress log
 
 - PLAN ready (r=1) — collection handoff at PLAN→DO; DO not started; dependency gate T311 pending
+
+2026-10-30T07:05:59Z | PLAN | revision r=2 | attempt n=1 | PLAN r2 completed — handoff at PLAN→DO boundary (form=cycle, overlay=coder+.NET, N=1, r=2, n=1/3, plan_state=ready; criteria AC-247-01..06; r1 superseded by a genuine contract revision — two-tier acceptance + explicit scope boundary against T311/T250; DO never ran, no attempt consumed) | `.pdca/status/T247-json-streaming-1.md` §PLAN record r2, §Revision history; evidence root `.pdca/T247/rv3/`
+2026-10-31T04:25:00Z | DO | attempt n=1 | blocked | no safe implementation lever; flush batching reverted (partial-output AC); build 0W/0E, core JSON 188/188; no candidate; residual to ACT | `.pdca/status/T247-json-streaming-1.md` §DO result
+
+2026-10-31T05:30:00Z | DO | attempt n=2/3 | blocked | all three mechanisms exhausted (M1 cache already present, M2 not safely implementable, M3 no safe lever); build 0W/0E; core JSON 188/188; sqlite JSON 135/135; integration 7733 passed/0 failed; baseline 1k 611.2us/51.45KB 10k 7870.3us/403.1KB 100k 79049us/3919.49KB; no candidate; residual to ACT | `.pdca/status/T247-json-streaming-1.md` §DO result; `.pdca/T247/rv3/attempts/attempt2/
+2026-10-31T06:00:00Z | ACT | revision r=2 | attempt n=2/3 | incomplete (DO -> ACT, no candidate, no CHECK): attempt 1 (42dc4a59) flush batching reverted (AC-247-03); attempt 2 (d1aebc3e) all three mechanisms non-moving (M1 cache already present c9aa8690, M2 not safely implementable, M3 no safe lever); candidate == baseline 1k 611.2us/51.45KB 10k 7870.3us/403.1KB 100k 79049.0us/3919.49KB; no Tier A/B credit; derived bar DeltaAlloc <= 0 B with time move beyond noise band (attempts/attempt2/decomposition.md); gates build 0W/0E, core JSON 188/188, sqlite JSON 135/135, integration 7733/0/201; issue #247 stays OPEN | `.pdca/status/T247-json-streaming-1.md` section ACT record; `.pdca/T247/rv3/`
+2026-10-31T06:30:00Z | ACT | revision r=2 | attempt n=2/3 | user-directed finalization: issue #247 closed by the user — global target met by already-landed TerminalPlanCache + JsonRowWriterCache (c9aa8690), zero product change by this item; outcome done; no CHECK verdict claimed; no counter/criterion change | `.pdca/status/T247-json-streaming-1.md` §ACT record (user-directed finalization block)
+2026-10-31T06:40:06Z | DO (corroboration) | same-round nextorm-vs-linq2db measurement 1k/10k/100k rc 0, process count 1; time ratios 1.1161x/0.9125x/0.9163x, alloc ratios 0.5691x/0.4183x/0.4314x; 10k time<=1.00x and alloc<=1.20x met; 1k gap reduced (1.1161x vs historical 3.79x); 100k no regression; evidence .pdca/rc5/items/T247/rv-corroboration/; no product change; issue #247 stays closed
+
+### Corroboration (same-round, user-directed)
+
+- Same-round paired measurement (single process, rc 0): arms `WriteJson_Array_Dto` (nextorm), `Linq2Db_ToList_Json` (linq2db), `Nextorm_ToList_Dto_Json` (control) at 1k/10k/100k rows.
+- Time ratios nextorm/linq2db: 1k 1.1161x, 10k 0.9125x, 100k 0.9163x. Allocation ratios: 1k 0.5691x, 10k 0.4183x, 100k 0.4314x.
+- 10k satisfies time <= 1.00x and allocations <= 1.20x. 1k fixed-cost gap materially reduced (3.79x -> 1.1161x). 100k shows no regression.
+- No cross-round caveat: both arms ran in the same process/round.
+- Evidence: `.pdca/rc5/items/T247/rv-corroboration/` (`bdn.log`, `summary.md`); BenchmarkDotNet.Artifacts at `benchmarks/BenchmarkDotNet.Artifacts/` per repo policy.
+- This run is corroboration only: it neither reopens nor gates the closure of #247; no CHECK verdict claimed; no counter/criterion change.

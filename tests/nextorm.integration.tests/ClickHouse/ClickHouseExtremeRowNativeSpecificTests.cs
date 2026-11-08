@@ -148,14 +148,14 @@ public sealed class ClickHouseExtremeRowNativeSpecificTests : ProviderTestSuite
     [Fact]
     public void ForcedPortableContext_ShouldRenderTheWindowLowering_WhileNativeRendersArgMax()
     {
-        var nativeCommand = Source(_sut.DataProvider).SelectWhereMax(e => e.Amount, e => new { e.Id });
+        var nativeCommand = Source(_sut.DataProvider).SelectWhereMaxOld(e => e.Amount, e => new { e.Id });
         var nativeSql = SqlOf(_sut.DataProvider, nativeCommand);
         nativeSql.Should().Contain("argMax(tuple(");
         nativeSql.Should().Contain("having count() > 0");
         nativeSql.Should().NotContain("row_number()");
 
         using var portable = Portable();
-        var portableCommand = Source(portable).SelectWhereMax(e => e.Amount, e => new { e.Id });
+        var portableCommand = Source(portable).SelectWhereMaxOld(e => e.Amount, e => new { e.Id });
         var portableSql = SqlOf(portable, portableCommand);
         portableSql.Should().Contain("row_number()");
         portableSql.Should().NotContain("argMax");
@@ -164,10 +164,10 @@ public sealed class ClickHouseExtremeRowNativeSpecificTests : ProviderTestSuite
     [Fact]
     public void NativeParity_UniqueGlobal_ShouldReturnTheSameWinnerOnBothPaths()
     {
-        var native = Source(_sut.DataProvider).SelectWhereMax(e => e.Amount).ToList();
+        var native = Source(_sut.DataProvider).SelectWhereMaxOld(e => e.Amount).ToList();
 
         using var portable = Portable();
-        var forced = Source(portable).SelectWhereMax(e => e.Amount).ToList();
+        var forced = Source(portable).SelectWhereMaxOld(e => e.Amount).ToList();
 
         native.Should().ContainSingle();
         forced.Should().ContainSingle();
@@ -184,7 +184,7 @@ public sealed class ClickHouseExtremeRowNativeSpecificTests : ProviderTestSuite
         using var portable = Portable();
 
         // The portable All form is the oracle: every row tied on the minimum k1=1 (ids 1, 2, 3, 10).
-        var validSet = Source(portable).SelectWhereMin(e => e.Amount, ExtremeRowTies.All).ToList();
+        var validSet = Source(portable).SelectWhereMinOld(e => e.Amount, ExtremeRowTies.All).ToList();
         var expected = new (int Id, int? Category, int? Amount, int? TieBreak, string? Label, int? N)[]
         {
             (1, 10, 1, 99, null, null),
@@ -194,8 +194,8 @@ public sealed class ClickHouseExtremeRowNativeSpecificTests : ProviderTestSuite
         };
         validSet.Select(Whole).Should().BeEquivalentTo(expected);
 
-        var native = Source(_sut.DataProvider).SelectWhereMin(e => e.Amount).ToList();
-        var forced = Source(portable).SelectWhereMin(e => e.Amount).ToList();
+        var native = Source(_sut.DataProvider).SelectWhereMinOld(e => e.Amount).ToList();
+        var forced = Source(portable).SelectWhereMinOld(e => e.Amount).ToList();
 
         native.Should().ContainSingle();
         forced.Should().ContainSingle();
@@ -208,12 +208,12 @@ public sealed class ClickHouseExtremeRowNativeSpecificTests : ProviderTestSuite
     public void NativeParity_Grouped_ShouldDropTheAllNullPartitionAndKeepTheNullableGroup()
     {
         var native = Source(_sut.DataProvider)
-            .SelectWhereMax(e => e.Amount, ExtremeRowTies.One, e => new { e.Category })
+            .SelectWhereMaxOld(e => e.Amount, ExtremeRowTies.One, e => new { e.Category })
             .ToList();
 
         using var portable = Portable();
         var forced = Source(portable)
-            .SelectWhereMax(e => e.Amount, ExtremeRowTies.One, e => new { e.Category })
+            .SelectWhereMaxOld(e => e.Amount, ExtremeRowTies.One, e => new { e.Category })
             .ToList();
 
         native.Should().HaveCount(4);
@@ -238,12 +238,12 @@ public sealed class ClickHouseExtremeRowNativeSpecificTests : ProviderTestSuite
         // The k2 selector makes id 1 the unique maximum of group 10; its label/n are NULL and must
         // survive the native argMax(payload, key) tuple extraction.
         var native = Source(_sut.DataProvider)
-            .SelectWhereMax(e => e.TieBreak, ExtremeRowTies.One, e => new { e.Category })
+            .SelectWhereMaxOld(e => e.TieBreak, ExtremeRowTies.One, e => new { e.Category })
             .ToList();
 
         using var portable = Portable();
         var forced = Source(portable)
-            .SelectWhereMax(e => e.TieBreak, ExtremeRowTies.One, e => new { e.Category })
+            .SelectWhereMaxOld(e => e.TieBreak, ExtremeRowTies.One, e => new { e.Category })
             .ToList();
 
         var nativeGroup10 = native.Single(e => GroupKey(e.Category) == 10);
@@ -261,17 +261,17 @@ public sealed class ClickHouseExtremeRowNativeSpecificTests : ProviderTestSuite
         // The native global aggregate would return one default tuple on an empty input; the renderer
         // suppresses it by counting the filtered source, so both paths return zero rows.
         var nativeGlobal = Source(_sut.DataProvider).Where(e => e.Label == "no-such")
-            .SelectWhereMax(e => e.Amount).ToList();
+            .SelectWhereMaxOld(e => e.Amount).ToList();
         var nativeGrouped = Source(_sut.DataProvider).Where(e => e.Label == "no-such")
-            .SelectWhereMax(e => e.Amount, ExtremeRowTies.One, e => new { e.Category }).ToList();
+            .SelectWhereMaxOld(e => e.Amount, ExtremeRowTies.One, e => new { e.Category }).ToList();
         nativeGlobal.Should().BeEmpty();
         nativeGrouped.Should().BeEmpty();
 
         using var portable = Portable();
         var forcedGlobal = Source(portable).Where(e => e.Label == "no-such")
-            .SelectWhereMax(e => e.Amount).ToList();
+            .SelectWhereMaxOld(e => e.Amount).ToList();
         var forcedGrouped = Source(portable).Where(e => e.Label == "no-such")
-            .SelectWhereMax(e => e.Amount, ExtremeRowTies.One, e => new { e.Category }).ToList();
+            .SelectWhereMaxOld(e => e.Amount, ExtremeRowTies.One, e => new { e.Category }).ToList();
         forcedGlobal.Should().BeEmpty();
         forcedGrouped.Should().BeEmpty();
     }
@@ -282,11 +282,11 @@ public sealed class ClickHouseExtremeRowNativeSpecificTests : ProviderTestSuite
         // The global maximum k1=5 is id 7; excluding it makes k1=3 (id 6) the new maximum. The source
         // condition is shared by the native and the portable source, so both paths move to id 6.
         var native = Source(_sut.DataProvider).Where(e => e.Id != 7)
-            .SelectWhereMax(e => e.Amount).ToList();
+            .SelectWhereMaxOld(e => e.Amount).ToList();
 
         using var portable = Portable();
         var forced = Source(portable).Where(e => e.Id != 7)
-            .SelectWhereMax(e => e.Amount).ToList();
+            .SelectWhereMaxOld(e => e.Amount).ToList();
 
         native.Should().ContainSingle().Which.Id.Should().Be(6);
         forced.Should().ContainSingle().Which.Id.Should().Be(6);
@@ -300,7 +300,7 @@ public sealed class ClickHouseExtremeRowNativeSpecificTests : ProviderTestSuite
         // The DISTINCT is an outer post-selection step, so it collapses the two k1=1 rows (groups 10
         // and 40); the user's OrderBy is likewise applied to the output only.
         var command = Source(_sut.DataProvider)
-            .SelectWhereMax(e => e.Amount, e => new { e.Amount }, ExtremeRowTies.One, e => new { e.Category });
+            .SelectWhereMaxOld(e => e.Amount, e => new { e.Amount }, ExtremeRowTies.One, e => new { e.Category });
 
         command.ToList().Should().HaveCount(4);
         command.Distinct().ToList().Should().HaveCount(3);
@@ -313,7 +313,7 @@ public sealed class ClickHouseExtremeRowNativeSpecificTests : ProviderTestSuite
     public void NativeGroupedSql_ShouldUseMappedPhysicalColumnNames()
     {
         var command = Source(_sut.DataProvider)
-            .SelectWhereMax(e => e.Amount, e => new { e.Id }, ExtremeRowTies.One, e => new { e.Category });
+            .SelectWhereMaxOld(e => e.Amount, e => new { e.Id }, ExtremeRowTies.One, e => new { e.Category });
 
         var sql = SqlOf(_sut.DataProvider, command);
 
@@ -327,21 +327,21 @@ public sealed class ClickHouseExtremeRowNativeSpecificTests : ProviderTestSuite
     [Fact]
     public void NativeParity_ScalarAndObjectAndNoDefaultCtorProjections_ShouldMatchPortable()
     {
-        var nativeScalar = Source(_sut.DataProvider).SelectWhereMax(e => e.Amount, e => e.Label).ToList();
+        var nativeScalar = Source(_sut.DataProvider).SelectWhereMaxOld(e => e.Amount, e => e.Label).ToList();
         var nativeObject = Source(_sut.DataProvider)
-            .SelectWhereMax(e => e.Amount, e => new { e.Id, e.Label, e.N })
+            .SelectWhereMaxOld(e => e.Amount, e => new { e.Id, e.Label, e.N })
             .ToList();
         var nativeDto = Source(_sut.DataProvider)
-            .SelectWhereMax(e => e.Amount, e => new ExtremeRowParityDto(e.Id, e.Amount, e.Label))
+            .SelectWhereMaxOld(e => e.Amount, e => new ExtremeRowParityDto(e.Id, e.Amount, e.Label))
             .ToList();
 
         using var portable = Portable();
-        var forcedScalar = Source(portable).SelectWhereMax(e => e.Amount, e => e.Label).ToList();
+        var forcedScalar = Source(portable).SelectWhereMaxOld(e => e.Amount, e => e.Label).ToList();
         var forcedObject = Source(portable)
-            .SelectWhereMax(e => e.Amount, e => new { e.Id, e.Label, e.N })
+            .SelectWhereMaxOld(e => e.Amount, e => new { e.Id, e.Label, e.N })
             .ToList();
         var forcedDto = Source(portable)
-            .SelectWhereMax(e => e.Amount, e => new ExtremeRowParityDto(e.Id, e.Amount, e.Label))
+            .SelectWhereMaxOld(e => e.Amount, e => new ExtremeRowParityDto(e.Id, e.Amount, e.Label))
             .ToList();
 
         nativeScalar.Should().Equal(forcedScalar).And.Equal(["null-group"]);
@@ -560,7 +560,7 @@ public sealed class ClickHouseExtremeRowNativeSpecificTests : ProviderTestSuite
         // duplicate tuple alias; the collision-free aliases must let the query execute and return the
         // real whole winner row (k=3 is id 2, with all payload fields from that same row).
         var rows = _sut.DataProvider.From<ExtremeRowAliasEntity>()
-            .SelectWhereMax(e => e.K)
+            .SelectWhereMaxOld(e => e.K)
             .ToList();
 
         rows.Should().ContainSingle();
@@ -600,15 +600,15 @@ public sealed class ClickHouseExtremeRowNativeSpecificTests : ProviderTestSuite
     {
         using var portable = Portable();
         var oracle = (isMax
-                ? FloatSource(portable).Where(e => e.Dataset == dataset).SelectWhereMax(key, ExtremeRowTies.All)
-                : FloatSource(portable).Where(e => e.Dataset == dataset).SelectWhereMin(key, ExtremeRowTies.All))
+                ? FloatSource(portable).Where(e => e.Dataset == dataset).SelectWhereMaxOld(key, ExtremeRowTies.All)
+                : FloatSource(portable).Where(e => e.Dataset == dataset).SelectWhereMinOld(key, ExtremeRowTies.All))
             .ToList()
             .Select(WholeFloat)
             .ToHashSet();
 
         var native = (isMax
-                ? FloatSource(_sut.DataProvider).Where(e => e.Dataset == dataset).SelectWhereMax(key, ExtremeRowTies.One)
-                : FloatSource(_sut.DataProvider).Where(e => e.Dataset == dataset).SelectWhereMin(key, ExtremeRowTies.One))
+                ? FloatSource(_sut.DataProvider).Where(e => e.Dataset == dataset).SelectWhereMaxOld(key, ExtremeRowTies.One)
+                : FloatSource(_sut.DataProvider).Where(e => e.Dataset == dataset).SelectWhereMinOld(key, ExtremeRowTies.One))
             .ToList()
             .Select(WholeFloat)
             .ToList();
@@ -642,12 +642,12 @@ public sealed class ClickHouseExtremeRowNativeSpecificTests : ProviderTestSuite
 
         using var portable = Portable();
         var oracle = (isMax
-                ? FloatSource(portable).Where(e => e.Dataset == dataset).SelectWhereMax(key, ExtremeRowTies.All, group)
-                : FloatSource(portable).Where(e => e.Dataset == dataset).SelectWhereMin(key, ExtremeRowTies.All, group))
+                ? FloatSource(portable).Where(e => e.Dataset == dataset).SelectWhereMaxOld(key, ExtremeRowTies.All, group)
+                : FloatSource(portable).Where(e => e.Dataset == dataset).SelectWhereMinOld(key, ExtremeRowTies.All, group))
             .ToList();
         var native = (isMax
-                ? FloatSource(_sut.DataProvider).Where(e => e.Dataset == dataset).SelectWhereMax(key, ExtremeRowTies.One, group)
-                : FloatSource(_sut.DataProvider).Where(e => e.Dataset == dataset).SelectWhereMin(key, ExtremeRowTies.One, group))
+                ? FloatSource(_sut.DataProvider).Where(e => e.Dataset == dataset).SelectWhereMaxOld(key, ExtremeRowTies.One, group)
+                : FloatSource(_sut.DataProvider).Where(e => e.Dataset == dataset).SelectWhereMinOld(key, ExtremeRowTies.One, group))
             .ToList();
 
         var oracleByGroup = oracle.GroupBy(e => FloatGroupKey(e.Grp))
@@ -769,10 +769,10 @@ public sealed class ClickHouseExtremeRowNativeSpecificTests : ProviderTestSuite
     [Fact]
     public void FloatNativeParity_UniqueGlobal_ShouldReturnTheSameWinnerOnBothPaths()
     {
-        var native = FloatSource(_sut.DataProvider).Where(e => e.Dataset == "mixednan").SelectWhereMax(e => e.F64).ToList();
+        var native = FloatSource(_sut.DataProvider).Where(e => e.Dataset == "mixednan").SelectWhereMaxOld(e => e.F64).ToList();
 
         using var portable = Portable();
-        var forced = FloatSource(portable).Where(e => e.Dataset == "mixednan").SelectWhereMax(e => e.F64).ToList();
+        var forced = FloatSource(portable).Where(e => e.Dataset == "mixednan").SelectWhereMaxOld(e => e.F64).ToList();
 
         native.Should().ContainSingle();
         forced.Should().ContainSingle();
@@ -789,13 +789,13 @@ public sealed class ClickHouseExtremeRowNativeSpecificTests : ProviderTestSuite
         using var portable = Portable();
 
         // The finite maximum f64=10 ties ids 3 and 5; the minimum -12.75 ties ids 4 and 7.
-        var maxSet = FloatSource(portable).Where(e => e.Dataset == "finite").SelectWhereMax(e => e.F64, ExtremeRowTies.All).ToList();
+        var maxSet = FloatSource(portable).Where(e => e.Dataset == "finite").SelectWhereMaxOld(e => e.F64, ExtremeRowTies.All).ToList();
         maxSet.Select(e => e.Id).Should().BeEquivalentTo(new[] { 3, 5 });
-        var minSet = FloatSource(portable).Where(e => e.Dataset == "finite").SelectWhereMin(e => e.F64, ExtremeRowTies.All).ToList();
+        var minSet = FloatSource(portable).Where(e => e.Dataset == "finite").SelectWhereMinOld(e => e.F64, ExtremeRowTies.All).ToList();
         minSet.Select(e => e.Id).Should().BeEquivalentTo(new[] { 4, 7 });
 
-        var nativeMax = FloatSource(_sut.DataProvider).Where(e => e.Dataset == "finite").SelectWhereMax(e => e.F64).ToList();
-        var nativeMin = FloatSource(_sut.DataProvider).Where(e => e.Dataset == "finite").SelectWhereMin(e => e.F64).ToList();
+        var nativeMax = FloatSource(_sut.DataProvider).Where(e => e.Dataset == "finite").SelectWhereMaxOld(e => e.F64).ToList();
+        var nativeMin = FloatSource(_sut.DataProvider).Where(e => e.Dataset == "finite").SelectWhereMinOld(e => e.F64).ToList();
         nativeMax.Should().ContainSingle();
         nativeMin.Should().ContainSingle();
         maxSet.Select(WholeFloat).Should().Contain(WholeFloat(nativeMax[0]));
@@ -808,8 +808,8 @@ public sealed class ClickHouseExtremeRowNativeSpecificTests : ProviderTestSuite
             ("zeros", [40, 41])
         })
         {
-            var oracle = FloatSource(portable).Where(e => e.Dataset == dataset).SelectWhereMax(e => e.F64, ExtremeRowTies.All).ToList();
-            var native = FloatSource(_sut.DataProvider).Where(e => e.Dataset == dataset).SelectWhereMax(e => e.F64).ToList();
+            var oracle = FloatSource(portable).Where(e => e.Dataset == dataset).SelectWhereMaxOld(e => e.F64, ExtremeRowTies.All).ToList();
+            var native = FloatSource(_sut.DataProvider).Where(e => e.Dataset == dataset).SelectWhereMaxOld(e => e.F64).ToList();
             oracle.Select(e => e.Id).Should().BeEquivalentTo(expectedIds);
             native.Should().ContainSingle();
             oracle.Select(WholeFloat).Should().Contain(WholeFloat(native[0]));
@@ -819,10 +819,10 @@ public sealed class ClickHouseExtremeRowNativeSpecificTests : ProviderTestSuite
     [Fact]
     public void FloatNativeParity_NullablePayloadAndNullGroup_ShouldBePreserved()
     {
-        var native = FloatSource(_sut.DataProvider).Where(e => e.Dataset == "nullgrp").SelectWhereMax(e => e.F64).ToList();
+        var native = FloatSource(_sut.DataProvider).Where(e => e.Dataset == "nullgrp").SelectWhereMaxOld(e => e.F64).ToList();
 
         using var portable = Portable();
-        var forced = FloatSource(portable).Where(e => e.Dataset == "nullgrp").SelectWhereMax(e => e.F64).ToList();
+        var forced = FloatSource(portable).Where(e => e.Dataset == "nullgrp").SelectWhereMaxOld(e => e.F64).ToList();
 
         // The unique maximum f64=5 (id 141) carries a NULL payload that must survive the tuple.
         native.Should().ContainSingle().Which.Id.Should().Be(141);
@@ -832,9 +832,9 @@ public sealed class ClickHouseExtremeRowNativeSpecificTests : ProviderTestSuite
 
         // Grouped: the NULL group is its own group (id 140) and group 10 keeps the NULL-payload winner.
         var nativeGrouped = FloatSource(_sut.DataProvider).Where(e => e.Dataset == "nullgrp")
-            .SelectWhereMax(e => e.F64, ExtremeRowTies.One, e => new { e.Grp }).ToList();
+            .SelectWhereMaxOld(e => e.F64, ExtremeRowTies.One, e => new { e.Grp }).ToList();
         var forcedGrouped = FloatSource(portable).Where(e => e.Dataset == "nullgrp")
-            .SelectWhereMax(e => e.F64, ExtremeRowTies.One, e => new { e.Grp }).ToList();
+            .SelectWhereMaxOld(e => e.F64, ExtremeRowTies.One, e => new { e.Grp }).ToList();
         var nativeByGroup = nativeGrouped.ToDictionary(e => FloatGroupKey(e.Grp));
         var forcedByGroup = forcedGrouped.ToDictionary(e => FloatGroupKey(e.Grp));
 
@@ -848,9 +848,9 @@ public sealed class ClickHouseExtremeRowNativeSpecificTests : ProviderTestSuite
         // Min over the same dataset: the NULL group keeps id 140 (f64=3) and group 10 moves to the
         // minimum id 142 (f64=1). Only the Max direction was pinned before.
         var nativeMin = FloatSource(_sut.DataProvider).Where(e => e.Dataset == "nullgrp")
-            .SelectWhereMin(e => e.F64, ExtremeRowTies.One, e => new { e.Grp }).ToList();
+            .SelectWhereMinOld(e => e.F64, ExtremeRowTies.One, e => new { e.Grp }).ToList();
         var forcedMin = FloatSource(portable).Where(e => e.Dataset == "nullgrp")
-            .SelectWhereMin(e => e.F64, ExtremeRowTies.One, e => new { e.Grp }).ToList();
+            .SelectWhereMinOld(e => e.F64, ExtremeRowTies.One, e => new { e.Grp }).ToList();
         var nativeMinByGroup = nativeMin.ToDictionary(e => FloatGroupKey(e.Grp));
         var forcedMinByGroup = forcedMin.ToDictionary(e => FloatGroupKey(e.Grp));
 
@@ -864,16 +864,16 @@ public sealed class ClickHouseExtremeRowNativeSpecificTests : ProviderTestSuite
     [Fact]
     public void FloatNativeParity_EmptyGlobalAndGrouped_ShouldReturnZeroRows()
     {
-        var nativeGlobal = FloatSource(_sut.DataProvider).Where(e => e.Dataset == "empty").SelectWhereMax(e => e.F64).ToList();
+        var nativeGlobal = FloatSource(_sut.DataProvider).Where(e => e.Dataset == "empty").SelectWhereMaxOld(e => e.F64).ToList();
         var nativeGrouped = FloatSource(_sut.DataProvider).Where(e => e.Dataset == "empty")
-            .SelectWhereMax(e => e.F64, ExtremeRowTies.One, e => new { e.Grp }).ToList();
+            .SelectWhereMaxOld(e => e.F64, ExtremeRowTies.One, e => new { e.Grp }).ToList();
         nativeGlobal.Should().BeEmpty();
         nativeGrouped.Should().BeEmpty();
 
         using var portable = Portable();
-        var forcedGlobal = FloatSource(portable).Where(e => e.Dataset == "empty").SelectWhereMax(e => e.F64).ToList();
+        var forcedGlobal = FloatSource(portable).Where(e => e.Dataset == "empty").SelectWhereMaxOld(e => e.F64).ToList();
         var forcedGrouped = FloatSource(portable).Where(e => e.Dataset == "empty")
-            .SelectWhereMax(e => e.F64, ExtremeRowTies.One, e => new { e.Grp }).ToList();
+            .SelectWhereMaxOld(e => e.F64, ExtremeRowTies.One, e => new { e.Grp }).ToList();
         forcedGlobal.Should().BeEmpty();
         forcedGrouped.Should().BeEmpty();
     }
@@ -882,15 +882,15 @@ public sealed class ClickHouseExtremeRowNativeSpecificTests : ProviderTestSuite
     public void FloatNativeParity_ScalarAndObjectProjections_ShouldMatchPortable()
     {
         var nativeScalar = FloatSource(_sut.DataProvider).Where(e => e.Dataset == "mixednan")
-            .SelectWhereMax(e => e.F64, e => e.Payload).ToList();
+            .SelectWhereMaxOld(e => e.F64, e => e.Payload).ToList();
         var nativeObject = FloatSource(_sut.DataProvider).Where(e => e.Dataset == "mixednan")
-            .SelectWhereMax(e => e.F64, e => new { e.Id, e.Payload, e.F64 }).ToList();
+            .SelectWhereMaxOld(e => e.F64, e => new { e.Id, e.Payload, e.F64 }).ToList();
 
         using var portable = Portable();
         var forcedScalar = FloatSource(portable).Where(e => e.Dataset == "mixednan")
-            .SelectWhereMax(e => e.F64, e => e.Payload).ToList();
+            .SelectWhereMaxOld(e => e.F64, e => e.Payload).ToList();
         var forcedObject = FloatSource(portable).Where(e => e.Dataset == "mixednan")
-            .SelectWhereMax(e => e.F64, e => new { e.Id, e.Payload, e.F64 }).ToList();
+            .SelectWhereMaxOld(e => e.F64, e => new { e.Id, e.Payload, e.F64 }).ToList();
 
         nativeScalar.Should().Equal(forcedScalar).And.Equal(["m3"]);
         nativeObject.Should().BeEquivalentTo(forcedObject);
@@ -920,14 +920,14 @@ public sealed class ClickHouseExtremeRowNativeSpecificTests : ProviderTestSuite
 
         // The shipped direction-aware adaptation ignores NaN and matches the forced-portable winner.
         using var portable = Portable();
-        var shipped = FloatSource(_sut.DataProvider).Where(e => e.Dataset == "nanfirst").SelectWhereMax(e => e.F64).ToList();
-        var forced = FloatSource(portable).Where(e => e.Dataset == "nanfirst").SelectWhereMax(e => e.F64).ToList();
+        var shipped = FloatSource(_sut.DataProvider).Where(e => e.Dataset == "nanfirst").SelectWhereMaxOld(e => e.F64).ToList();
+        var forced = FloatSource(portable).Where(e => e.Dataset == "nanfirst").SelectWhereMaxOld(e => e.F64).ToList();
         shipped.Should().ContainSingle().Which.Id.Should().Be(92);
         forced.Should().ContainSingle().Which.Id.Should().Be(92);
         shipped.Select(WholeFloat).Should().Equal(forced.Select(WholeFloat));
 
-        var shippedF32 = FloatSource(_sut.DataProvider).Where(e => e.Dataset == "f32").SelectWhereMax(e => e.F32).ToList();
-        var forcedF32 = FloatSource(portable).Where(e => e.Dataset == "f32").SelectWhereMax(e => e.F32).ToList();
+        var shippedF32 = FloatSource(_sut.DataProvider).Where(e => e.Dataset == "f32").SelectWhereMaxOld(e => e.F32).ToList();
+        var forcedF32 = FloatSource(portable).Where(e => e.Dataset == "f32").SelectWhereMaxOld(e => e.F32).ToList();
         shippedF32.Should().ContainSingle().Which.Id.Should().Be(82);
         forcedF32.Should().ContainSingle().Which.Id.Should().Be(82);
     }
@@ -949,14 +949,14 @@ public sealed class ClickHouseExtremeRowNativeSpecificTests : ProviderTestSuite
             .Should().Be(100);
 
         using var portable = Portable();
-        var shipped = FloatSource(_sut.DataProvider).Where(e => e.Dataset == "nanfirst").SelectWhereMin(e => e.F64).ToList();
-        var forced = FloatSource(portable).Where(e => e.Dataset == "nanfirst").SelectWhereMin(e => e.F64).ToList();
+        var shipped = FloatSource(_sut.DataProvider).Where(e => e.Dataset == "nanfirst").SelectWhereMinOld(e => e.F64).ToList();
+        var forced = FloatSource(portable).Where(e => e.Dataset == "nanfirst").SelectWhereMinOld(e => e.F64).ToList();
         shipped.Should().ContainSingle().Which.Id.Should().Be(91);
         forced.Should().ContainSingle().Which.Id.Should().Be(91);
         shipped.Select(WholeFloat).Should().Equal(forced.Select(WholeFloat));
 
-        var shippedNanInf = FloatSource(_sut.DataProvider).Where(e => e.Dataset == "naninf").SelectWhereMin(e => e.F64).ToList();
-        var forcedNanInf = FloatSource(portable).Where(e => e.Dataset == "naninf").SelectWhereMin(e => e.F64).ToList();
+        var shippedNanInf = FloatSource(_sut.DataProvider).Where(e => e.Dataset == "naninf").SelectWhereMinOld(e => e.F64).ToList();
+        var forcedNanInf = FloatSource(portable).Where(e => e.Dataset == "naninf").SelectWhereMinOld(e => e.F64).ToList();
         shippedNanInf.Should().ContainSingle().Which.Id.Should().Be(102);
         forcedNanInf.Should().ContainSingle().Which.Id.Should().Be(102);
     }
@@ -980,13 +980,13 @@ public sealed class ClickHouseExtremeRowNativeSpecificTests : ProviderTestSuite
             .Should().Be(80);
 
         using var portable = Portable();
-        var shippedMixed = FloatSource(_sut.DataProvider).Where(e => e.Dataset == "mixednan").SelectWhereMax(e => e.F64).ToList();
-        var forcedMixed = FloatSource(portable).Where(e => e.Dataset == "mixednan").SelectWhereMax(e => e.F64).ToList();
+        var shippedMixed = FloatSource(_sut.DataProvider).Where(e => e.Dataset == "mixednan").SelectWhereMaxOld(e => e.F64).ToList();
+        var forcedMixed = FloatSource(portable).Where(e => e.Dataset == "mixednan").SelectWhereMaxOld(e => e.F64).ToList();
         shippedMixed.Should().ContainSingle().Which.Id.Should().Be(12);
         forcedMixed.Should().ContainSingle().Which.Id.Should().Be(12);
 
-        var shippedF32 = FloatSource(_sut.DataProvider).Where(e => e.Dataset == "f32").SelectWhereMax(e => e.F32).ToList();
-        var forcedF32 = FloatSource(portable).Where(e => e.Dataset == "f32").SelectWhereMax(e => e.F32).ToList();
+        var shippedF32 = FloatSource(_sut.DataProvider).Where(e => e.Dataset == "f32").SelectWhereMaxOld(e => e.F32).ToList();
+        var forcedF32 = FloatSource(portable).Where(e => e.Dataset == "f32").SelectWhereMaxOld(e => e.F32).ToList();
         shippedF32.Should().ContainSingle().Which.Id.Should().Be(82);
         forcedF32.Should().ContainSingle().Which.Id.Should().Be(82);
     }
@@ -999,40 +999,40 @@ public sealed class ClickHouseExtremeRowNativeSpecificTests : ProviderTestSuite
         // Floating group key: only integral group keys are in the native allowlist, so the renderer must
         // refuse and keep the portable window lowering, executed and matched against the oracle.
         var floatingGroupCommand = FloatSource(_sut.DataProvider).Where(e => e.Dataset == "finite")
-            .SelectWhereMax(e => e.F64, ExtremeRowTies.One, e => new { e.F64 }).ToCommand();
+            .SelectWhereMaxOld(e => e.F64, ExtremeRowTies.One, e => new { e.F64 }).ToCommand();
         SqlOf(_sut.DataProvider, floatingGroupCommand).Should().Contain("row_number()").And.NotContain("argMax");
 
         var floatingGroupNative = FloatSource(_sut.DataProvider).Where(e => e.Dataset == "finite")
-            .SelectWhereMax(e => e.F64, ExtremeRowTies.One, e => new { e.F64 }).ToList();
+            .SelectWhereMaxOld(e => e.F64, ExtremeRowTies.One, e => new { e.F64 }).ToList();
         var floatingGroupPortable = FloatSource(portable).Where(e => e.Dataset == "finite")
-            .SelectWhereMax(e => e.F64, ExtremeRowTies.One, e => new { e.F64 }).ToList();
+            .SelectWhereMaxOld(e => e.F64, ExtremeRowTies.One, e => new { e.F64 }).ToList();
         floatingGroupNative.Select(WholeFloat).Should().BeEquivalentTo(floatingGroupPortable.Select(WholeFloat));
 
         // Arity > 3 with a floating component: the floating key cap is a deferred shape, so the
         // integral-only 4-component key is native but this one must stay portable.
         var wideKeyCommand = FloatSource(_sut.DataProvider).Where(e => e.Dataset == "threecomp")
-            .SelectWhereMax(e => new { e.Id, e.I1, e.I2, e.F64 }, e => new { e.Payload });
+            .SelectWhereMaxOld(e => new { e.Id, e.I1, e.I2, e.F64 }, e => new { e.Payload });
         SqlOf(_sut.DataProvider, wideKeyCommand).Should().Contain("row_number()").And.NotContain("argMax");
 
         var wideKeyNative = FloatSource(_sut.DataProvider).Where(e => e.Dataset == "threecomp")
-            .SelectWhereMax(e => new { e.Id, e.I1, e.I2, e.F64 }, e => new { e.Payload }).ToList();
+            .SelectWhereMaxOld(e => new { e.Id, e.I1, e.I2, e.F64 }, e => new { e.Payload }).ToList();
         var wideKeyPortable = FloatSource(portable).Where(e => e.Dataset == "threecomp")
-            .SelectWhereMax(e => new { e.Id, e.I1, e.I2, e.F64 }, e => new { e.Payload }).ToList();
+            .SelectWhereMaxOld(e => new { e.Id, e.I1, e.I2, e.F64 }, e => new { e.Payload }).ToList();
         wideKeyNative.Should().BeEquivalentTo(wideKeyPortable);
 
         // Decimal key: outside the allowlist, must stay portable and match on the real server.
-        var decimalCommand = DecimalSource(_sut.DataProvider).SelectWhereMax(e => e.Dec).ToCommand();
+        var decimalCommand = DecimalSource(_sut.DataProvider).SelectWhereMaxOld(e => e.Dec).ToCommand();
         SqlOf(_sut.DataProvider, decimalCommand).Should().Contain("row_number()").And.NotContain("argMax");
 
-        var decimalNative = DecimalSource(_sut.DataProvider).SelectWhereMax(e => e.Dec).ToList();
-        var decimalPortable = DecimalSource(portable).SelectWhereMax(e => e.Dec).ToList();
+        var decimalNative = DecimalSource(_sut.DataProvider).SelectWhereMaxOld(e => e.Dec).ToList();
+        var decimalPortable = DecimalSource(portable).SelectWhereMaxOld(e => e.Dec).ToList();
         decimalNative.Select(WholeDecimal).Should().Equal(decimalPortable.Select(WholeDecimal));
         decimalNative.Should().ContainSingle().Which.Id.Should().Be(2);
 
         // Float16 (CLR Half) has no ClickHouse column mapping at all, so only the SQL refusal is
         // verifiable; the portable query cannot be executed because there is no physical Half column to
         // create or read back. This is an intentional documented restriction, not a silent demotion.
-        var half = _sut.DataProvider.From<ExtremeRowHalfEntity>().SelectWhereMax(e => e.H, x => new { x.Id });
+        var half = _sut.DataProvider.From<ExtremeRowHalfEntity>().SelectWhereMaxOld(e => e.H, x => new { x.Id });
         SqlOf(_sut.DataProvider, half).Should().Contain("row_number()").And.NotContain("argMax");
     }
 }

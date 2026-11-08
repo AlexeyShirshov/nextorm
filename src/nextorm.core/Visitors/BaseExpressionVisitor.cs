@@ -547,6 +547,9 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         if (NormSqlTranslator.TryTranslateColumnReference(this, node))
             return node;
 
+        if (ExtremeRowNullSafeJoinTranslator.TryTranslate(this, node))
+            return node;
+
         if (ScalarFunctionTranslator.TryTranslateBuiltIn(this, node))
             return node;
 
@@ -971,9 +974,12 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
             // which PostgreSQL rejects and the other providers transport with their measured recipe.
             _builder!.Append(RenderStringLiteral(v.ToString()!));
         }
-        else if (t.IsPrimitive || t == typeof(decimal))
+        else if (t.IsPrimitive || t == typeof(decimal) || t == typeof(bool?))
         {
-            if (t == typeof(bool))
+            // A nullable bool constant boxes to the underlying non-nullable value, so it renders
+            // through the same dialect bool spelling. Without this arm the constant would fall
+            // through and emit nothing, leaving a truncated predicate such as `ok =  then`.
+            if (t == typeof(bool) || t == typeof(bool?))
                 _builder!.Append(_dialect.MakeBool((bool)v));
             else
                 // SQL literals must not depend on the current culture (ru-RU would render 0.2

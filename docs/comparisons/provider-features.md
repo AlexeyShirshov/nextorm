@@ -249,11 +249,14 @@ sequences, row locking, generic CTAS/temporary tables, index/query hints, named 
 - linq2db's provider surfaces evolve; the marks are dated **2026-10-04**.
 - MySQL and MariaDB are separate Nextorm providers but a single linq2db provider, so the MySQL/MariaDB table
   folds both libraries' shapes into one list.
+- NativeAOT is not a per-provider row: linq2db does not officially support it, while Nextorm's zero-config
+  contract (`PublishAot=true` only) is verified on SQLite today — see the
+  [NativeAOT guide](../infrastructure/05-nativeaot.md).
 
 ## See also
 
 - [Capabilities](capabilities.md) — the construct-level matrix across Dapper, linq2db and EF Core.
-- [Benchmarks](benchmarks.md) and [Feature benchmarks (2026-10-17)](feature-benchmarks-2026-10-17.md).
+- [Benchmarks](benchmarks.md) and [Feature benchmarks](feature-benchmarks.md).
 - [Provider overview](../connecting-providers/overview.md).
 - [Provider-specific SQL](../guide/provider-specific-sql/overview.md).
 - [Scalar functions](../scalar-functions/index.md).

@@ -1,4 +1,5 @@
 using System.Collections.Frozen;
+using System.Reflection;
 using System.Text;
 using NextORM.Core;
 
@@ -265,6 +266,15 @@ public class ClickHouseDialect : SqlDialectBase
     // Array(Array(Nullable(String))) and never Nullable(Array(...)).
     private string MakeArrayElementType(Type type)
     {
+        // Tuple element types (any arity, including Nullable<...> tuples and nested tuples) are
+        // routed through the tuple-aware renderer TypeName(Type), so they emit Tuple(...) without
+        // the CLR arity name and without an outer Nullable(...) wrapper around the tuple itself.
+        // Non-tuple behaviour is byte-identical to the previous implementation.
+        if (TypeFacts.IsTupleRenderingType(type))
+        {
+            return TypeName(this, type);
+        }
+
         if (Nullable.GetUnderlyingType(type) is { IsValueType: true } underlying)
             return $"Nullable({MakeTypeName(underlying)})";
 
@@ -272,6 +282,124 @@ public class ClickHouseDialect : SqlDialectBase
             return $"Array({MakeArrayElementType(type.GetElementType()!)})";
 
         return type.IsValueType ? MakeTypeName(type) : $"Nullable({MakeTypeName(type)})";
+    }
+
+    /// <summary>
+    /// Tuple-aware ClickHouse type renderer shared by <see cref="MakeArrayElementType"/> and the
+    /// aggregate renderer's <c>TypeName</c>: handles nullable, array and the <see cref="Tuple"/> /
+    /// <see cref="ValueTuple"/> families (including nested tuples and value-/reference-typed fields).
+    /// </summary>
+    internal static string TypeName(ClickHouseDialect dialect, Type type)
+    {
+        // Tuple types (any arity, including Nullable<...> wrappers) render as Tuple(...)
+        // WITHOUT an outer Nullable(...) wrapper around the tuple itself; nullable fields
+        // inside keep their own Nullable(T) rendering via the recursive call below.
+        if (TypeFacts.IsTupleRenderingType(type))
+        {
+            var tupleType = Nullable.GetUnderlyingType(type) is { } tupleUnderlying
+                && TypeFacts.IsTupleRenderingType(tupleUnderlying)
+                ? tupleUnderlying
+                : type;
+            var componentTypes = GetTupleComponentTypes(tupleType);
+            if (componentTypes is not null && componentTypes.Length > 0)
+                return "Tuple(" + string.Join(", ", componentTypes.Select(a => TypeName(dialect, a))) + ")";
+            // A bare ITuple or an ITuple with no discoverable Item1..ItemN members has no
+            // components to render. Refuse explicitly instead of emitting invalid ClickHouse
+            // DDL `Tuple()` (T359-C7).
+            throw new NotSupportedException(
+                $"ClickHouse tuple type '{type.FullName ?? type.Name}' has no discoverable components " +
+                $"(a bare System.Runtime.CompilerServices.ITuple or an ITuple without public Item1..ItemN members is not supported).");
+        }
+
+        if (Nullable.GetUnderlyingType(type) is { IsValueType: true } underlying)
+            return $"Nullable({TypeName(dialect, underlying)})";
+
+        if (type.IsArray)
+            return $"Array({TypeName(dialect, type.GetElementType()!)})";
+
+        return dialect.MakeTypeName(type);
+    }
+
+    /// <summary>
+    /// Resolves the component types of a tuple-shaped type, including a non-generic type that
+    /// implements <see cref="System.Runtime.CompilerServices.ITuple"/> (e.g. a non-generic subclass
+    /// of <see cref="System.Tuple{T1, T2}"/>). Returns <c>null</c> when no components can be
+    /// discovered.
+    /// </summary>
+    private static Type[]? GetTupleComponentTypes(Type type)
+    {
+        type = System.Nullable.GetUnderlyingType(type) ?? type;
+
+        if (type.IsGenericType)
+        {
+            var args = type.GetGenericArguments();
+            if (args.Length > 0)
+            {
+                var defName = type.GetGenericTypeDefinition().FullName;
+                // Direct generic-argument extraction applies only when `type` itself is a
+                // constructed System.Tuple<...>/System.ValueTuple<...>. A generic ITuple subclass
+                // (e.g. TaggedTuple<long> : Tuple<int, string>) must resolve components from its
+                // Tuple/ValueTuple base, never from its own generic argument list (T359-C7).
+                if (defName is null
+                    || defName.StartsWith("System.Tuple`", System.StringComparison.Ordinal)
+                    || defName.StartsWith("System.ValueTuple`", System.StringComparison.Ordinal))
+                {
+                    return args;
+                }
+            }
+        }
+
+        for (var bt = type.BaseType; bt is not null && bt != typeof(object); bt = bt.BaseType)
+        {
+            if (!bt.IsGenericType)
+                continue;
+            var baseDef = bt.GetGenericTypeDefinition().FullName;
+            if (baseDef is not null
+                && (baseDef.StartsWith("System.Tuple`", System.StringComparison.Ordinal)
+                    || baseDef.StartsWith("System.ValueTuple`", System.StringComparison.Ordinal)))
+            {
+                var args = bt.GetGenericArguments();
+                if (args.Length > 0)
+                    return args;
+            }
+        }
+
+        // Custom ITuple implementations: discover Item1..ItemN properties (then fields).
+        var numbered = new System.Collections.Generic.List<(int n, Type t)>();
+        foreach (var p in type.GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
+        {
+            if (!p.Name.StartsWith("Item", System.StringComparison.Ordinal))
+                continue;
+            var suffix = p.Name.Substring(4);
+            if (suffix.Length == 0)
+                continue;
+            if (int.TryParse(suffix, out var n))
+                numbered.Add((n, p.PropertyType));
+        }
+        if (numbered.Count > 0)
+        {
+            numbered.Sort((a, b) => a.n.CompareTo(b.n));
+            return numbered.Select(x => x.t).ToArray();
+        }
+
+        numbered.Clear();
+        foreach (var f in type.GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
+        {
+            if (!f.Name.StartsWith("Item", System.StringComparison.Ordinal))
+                continue;
+            var suffix = f.Name.Substring(4);
+            if (suffix.Length == 0)
+                continue;
+            if (int.TryParse(suffix, out var n))
+                numbered.Add((n, f.FieldType));
+        }
+        if (numbered.Count > 0)
+        {
+            numbered.Sort((a, b) => a.n.CompareTo(b.n));
+            return numbered.Select(x => x.t).ToArray();
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -1356,28 +1484,10 @@ internal sealed class ClickHouseAggregateRenderer(ClickHouseDialect dialect) : I
 
     /// <summary>
     /// Renders a ClickHouse type name for a CLR type, covering the nullable, array and
-    /// <see cref="Tuple"/> family shapes the aggregate results declare.
+    /// <see cref="Tuple"/> / <see cref="ValueTuple"/> family shapes the aggregate results declare.
+    /// Delegates to the shared tuple-aware renderer <see cref="ClickHouseDialect.TypeName(ClickHouseDialect, Type)"/>.
     /// </summary>
-    private string TypeName(Type type)
-    {
-        if (Nullable.GetUnderlyingType(type) is { IsValueType: true } underlying)
-            return $"Nullable({TypeName(underlying)})";
-
-        if (type.IsArray)
-            return $"Array({TypeName(type.GetElementType()!)})";
-
-        if (type.IsGenericType && TupleArities.Contains(type.GetGenericTypeDefinition()))
-            return "Tuple(" + string.Join(", ", type.GetGenericArguments().Select(TypeName)) + ")";
-
-        return dialect.MakeTypeName(type);
-    }
-
-    /// <summary>The <see cref="Tuple"/> generic arities the row materializer supports.</summary>
-    private static readonly HashSet<Type> TupleArities =
-    [
-        typeof(Tuple<>), typeof(Tuple<,>), typeof(Tuple<,,>), typeof(Tuple<,,,>),
-        typeof(Tuple<,,,,>), typeof(Tuple<,,,,,>), typeof(Tuple<,,,,,,>)
-    ];
+    private string TypeName(Type type) => ClickHouseDialect.TypeName(dialect, type);
 }
 
 internal sealed class ClickHouseSequenceAggregateRenderer : ISequenceAggregateRenderer

@@ -41,15 +41,38 @@ public sealed class SqlBuilderGuardTests : ProviderTestSuite
     public void ExtremeRow_WithPaging_ShouldThrow()
     {
         FluentActions
-            .Invoking(() => _sut.ComplexEntity.SelectWhereMax(x => x.Int, x => x.Id).Limit(1).ToList())
+            .Invoking(() => _sut.ComplexEntity.SelectWhereMaxOld(x => x.Int, x => x.Id).Limit(1).ToList())
             .Should().Throw<BuildSqlCommandException>();
 
         FluentActions
-            .Invoking(() => _sut.ComplexEntity.SelectWhereMin(x => x.Int, x => x.Id).Offset(1).ToList())
+            .Invoking(() => _sut.ComplexEntity.SelectWhereMinOld(x => x.Int, x => x.Id).Offset(1).ToList())
             .Should().Throw<BuildSqlCommandException>();
 
         FluentActions
-            .Invoking(() => _sut.ComplexEntity.SelectWhereMax(x => x.Int, x => x.Id).Page(1, 1).ToList())
+            .Invoking(() => _sut.ComplexEntity.SelectWhereMaxOld(x => x.Int, x => x.Id).Page(1, 1).ToList())
+            .Should().Throw<BuildSqlCommandException>();
+    }
+
+    [Fact]
+    public void ExtremeRow_GlobalAll_WithPaging_ShouldThrow()
+    {
+        // S1/T302: the global All shape is lowered after the guard, so the user-command modifier must
+        // still be rejected before any lowering runs.
+        FluentActions
+            .Invoking(() => _sut.SimpleEntity.SelectWhereMaxOld(x => x.Id, ExtremeRowTies.All).Limit(1).ToList())
+            .Should().Throw<BuildSqlCommandException>();
+    }
+
+    [Fact]
+    public void ExtremeRow_GroupedAll_WithPaging_ShouldThrow()
+    {
+        // S2/T302: the grouped All shape is lowered after the guard, so the user-command modifier must
+        // still be rejected before any aggregate + join-back lowering runs.
+        FluentActions
+            .Invoking(() => _sut.SimpleEntity
+                .SelectWhereMaxOld(x => x.Id, ExtremeRowTies.All, x => x.Id)
+                .Limit(1)
+                .ToList())
             .Should().Throw<BuildSqlCommandException>();
     }
 
@@ -59,7 +82,7 @@ public sealed class SqlBuilderGuardTests : ProviderTestSuite
         FluentActions
             .Invoking(() => _sut.ComplexEntity
                 .GroupBy(x => x.Int)
-                .SelectWhereMax(x => x.Int, x => x.Id)
+                .SelectWhereMaxOld(x => x.Int, x => x.Id)
                 .ToList())
             .Should().Throw<BuildSqlCommandException>();
 
@@ -67,7 +90,7 @@ public sealed class SqlBuilderGuardTests : ProviderTestSuite
             .Invoking(() => _sut.ComplexEntity
                 .GroupBy(x => x.Int)
                 .Having(g => SqlFunctions.Sql.count() > 0)
-                .SelectWhereMax(x => x.Int, x => x.Id)
+                .SelectWhereMaxOld(x => x.Int, x => x.Id)
                 .ToList())
             .Should().Throw<BuildSqlCommandException>();
     }
@@ -78,7 +101,7 @@ public sealed class SqlBuilderGuardTests : ProviderTestSuite
         FluentActions
             .Invoking(() => _sut.ComplexEntity
                 .Join(_sut.SimpleEntity, (c, s) => c.Id == s.Id)
-                .SelectWhereMax(x => x.Item1.Int, x => x.Item1.Id)
+                .SelectWhereMaxOld(x => x.Item1.Int, x => x.Item1.Id)
                 .ToList())
             .Should().Throw<BuildSqlCommandException>();
     }
@@ -90,7 +113,7 @@ public sealed class SqlBuilderGuardTests : ProviderTestSuite
         var cte = ctx.From<IComplexEntity>().Select(x => new { x.Id, x.Int }).AsCte("extreme_source");
 
         FluentActions
-            .Invoking(() => ctx.From(cte).SelectWhereMax(x => x.Int, x => x.Id).ToList())
+            .Invoking(() => ctx.From(cte).SelectWhereMaxOld(x => x.Int, x => x.Id).ToList())
             .Should().Throw<BuildSqlCommandException>();
     }
 }

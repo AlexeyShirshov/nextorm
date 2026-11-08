@@ -20,7 +20,7 @@ public sealed class MariaDbEagerLoadPerParentPagingTests
     private static IDataContext CreateCtx() => new MariaDbDataContext(ConnectionString, new DataContextBuilder());
 
     private static string SqlOf(IDataContext ctx, QueryCommand cmd)
-        => ((dynamic)ctx.GetPreparedQueryCommand((dynamic)cmd, false, false, CancellationToken.None)).DbCommand.CommandText;
+        => ((DbPreparedQueryCommand<object?>)((DataContext)ctx).GetPreparedQueryCommand(cmd, false, false, CancellationToken.None)).DbCommand.CommandText;
 
     [Fact]
     public void MariaDb_Split_SkipAndTake_RendersPartitionedRanking()
@@ -104,7 +104,7 @@ public sealed class MariaDbNestedEagerLoadingTests
     private static IDataContext CreateMariaDb() => new MariaDbDataContext(ConnectionString, new DataContextBuilder());
 
     private static string SqlOf(IDataContext ctx, QueryCommand cmd)
-        => ((dynamic)ctx.GetPreparedQueryCommand((dynamic)cmd, false, false, CancellationToken.None)).DbCommand.CommandText;
+        => ((DbPreparedQueryCommand<object?>)((DataContext)ctx).GetPreparedQueryCommand(cmd, false, false, CancellationToken.None)).DbCommand.CommandText;
 
     private static EntityBuilder<EagerStratNestedParent> Nested(IDataContext ctx)
         => ctx.From<EagerStratNestedParent>(b => b.HasMany(p => p.Mids, m => m.ParentId))

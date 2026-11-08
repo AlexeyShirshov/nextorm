@@ -13,10 +13,13 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+    <Compile Include="..\nextorm.querycomponents.provider.shared\ExternalSelectWhereSqlGenerationTestsBase.cs" Link="QueryComponents\ExternalSelectWhereSqlGenerationTestsBase.cs" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\nextorm.core\nextorm.core.csproj" />
+    <ProjectReference Include="..\..\src\nextorm.extensions\nextorm.extensions.csproj" />
+
     <ProjectReference Include="..\..\src\nextorm.sqlite\nextorm.sqlite.csproj" />
     <!-- Provider extensions moved out of nextorm.core; the dialect-gating SQL-generation tests call the
          ClickHouse/PostgreSQL/SQL Server fluent members as public extension methods. -->
@@ -25,9 +28,16 @@
     <ProjectReference Include="..\..\src\nextorm.sqlserver\nextorm.sqlserver.csproj" />
     <!-- The join-alias generator runs as an analyzer over this test assembly so Alias.Buyer and the
          generated projection/builder types bind in JoinAliasSqlGenerationTests. -->
+    <ProjectReference Include="..\nextorm.querycomponents\nextorm.querycomponents.csproj" />
     <ProjectReference Include="..\..\src\nextorm.core.sourcegenerator\nextorm.core.sourcegenerator.csproj"
                       OutputItemType="Analyzer"
                       ReferenceOutputAssembly="false" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="..\nextorm.extensions.provider.shared\ExtremeRowExSqlGenerationTestsBase.cs" Link="QueryComponents\ExtremeRowExSqlGenerationTestsBase.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\nextorm.extensions.provider.shared\SelectGroupSqlGenerationTestsBase.cs" Link="QueryComponents\SelectGroupSqlGenerationTestsBase.cs" />
+  </ItemGroup>
 </Project>

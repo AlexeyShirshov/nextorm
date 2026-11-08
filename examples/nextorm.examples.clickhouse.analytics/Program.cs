@@ -28,8 +28,6 @@ static async Task RunComparison(string[] args)
     {
         ("ArrayAnalytics", ct => ClickHouseQueries.ArrayAnalytics(ctx, ct), ct => Linq2DbQueries.ArrayAnalytics(l2db, ct)),
         ("Funnel", ct => ClickHouseQueries.Funnel(ctx, ct), ct => Linq2DbQueries.Funnel(l2db, ct)),
-        ("Incremental", ct => ClickHouseQueries.Incremental(ctx, ct), ct => Linq2DbQueries.Incremental(l2db, ct)),
-        ("Retention", ct => ClickHouseQueries.Retention(ctx, ct), ct => Linq2DbQueries.Retention(l2db, ct)),
         ("Sessions", ct => ClickHouseQueries.Sessions(ctx, ct), ct => Linq2DbQueries.Sessions(l2db, ct)),
         ("DailyTraffic", ct => ClickHouseQueries.DailyTraffic(ctx, ct), ct => Linq2DbQueries.DailyTraffic(l2db, ct)),
         ("TopLandingPages", ct => ClickHouseQueries.TopLandingPages(ctx, ct), ct => Linq2DbQueries.TopLandingPages(l2db, ct)),

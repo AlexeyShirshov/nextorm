@@ -624,7 +624,7 @@ public sealed class PlanEqualityDifferentialBranchCoverage4Tests : ProviderTestS
         comparer.Equals(plainIds, distinctOn).Should().BeFalse(
             "a DISTINCT ON clause present on one side only is a different plan key");
 
-        var extremeRow = Context.From<Pd4Marker>().SelectWhereMin<int?, long>(x => x.Score, x => x.Id);
+        var extremeRow = Context.From<Pd4Marker>().SelectWhereMinOld<int?, long>(x => x.Score, x => x.Id);
         Resolve(extremeRow);
 
         comparer.Equals(plainIds, extremeRow).Should().BeFalse(

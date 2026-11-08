@@ -1,0 +1,33 @@
+{
+  "generated_utc": "2026-11-01T11:33:25Z",
+  "spec_sha256_docs": "4c9937da13b55a214f576c1fac655b3630126affd38e23856294c0ef556e9a18",
+  "spec_sha256_copy": "4c9937da13b55a214f576c1fac655b3630126affd38e23856294c0ef556e9a18",
+  "spec_sha_equal": true,
+  "collector_sha256_script": "1a7d68e9366bca1ee6810994e34518a36e3950797a418598e1b13076fcdb09ca",
+  "collector_sha256_mirror": "1a7d68e9366bca1ee6810994e34518a36e3950797a418598e1b13076fcdb09ca",
+  "collector_sha_equal": true,
+  "validator_sha256": "1a7d68e9366bca1ee6810994e34518a36e3950797a418598e1b13076fcdb09ca",
+  "capture_collector_sha256": "9e98ad130ad6afeb1eec986414cbae14d9dc7d98439641a324ce3568716ea0a5",
+  "git_diff_t247_and_status_command": "git diff HEAD -- .pdca/scripts/perf/t247_json_gate.py .pdca/scripts/perf/t247_measure.py docs/specs/status/ .pdca/status/T246-raw-datareader-3.md",
+  "git_diff_t247_and_status_output": "",
+  "git_diff_t247_and_status_empty": true,
+  "host_git_status_porcelain": "?? .pdca/status/T311-json-streaming-3.md\n?? docs/assets/diagrams/selectwheremin-current.svg\n?? docs/specs/performance/t311-oracle-rv4/\n?? docs/superpowers/specs/2026-11-01-query-components-proof-design.md\n",
+  "host_git_diff_src_tests_benchmarks_empty": true,
+  "host_git_diff_src_tests_benchmarks_output": "",
+  "untouchable_user_files_untracked": true,
+  "crlf_proof": {
+    "lone_lf_files": [],
+    "all_crlf": true
+  },
+  "status_lint_command": "python3 .pdca/scripts/status_lint.py .pdca/status/T311-json-streaming-3.md",
+  "status_lint_stdout": "status-lint: OK (.pdca/status/T311-json-streaming-3.md: 1 tables, 3 rows)\n",
+  "status_lint_rc": 0,
+  "historical_ac_311_03_record": {
+    "status": "unmet",
+    "citations": [
+      ".pdca/status/T311-json-streaming-1.md:503,541-545,566-569",
+      ".pdca/T311/rv2/"
+    ],
+    "note": "Prior lever cycle captured its acceptance baseline after the lever commit and left attribution unverified; a retained-tree measurement cannot repair that chronology."
+  }
+}

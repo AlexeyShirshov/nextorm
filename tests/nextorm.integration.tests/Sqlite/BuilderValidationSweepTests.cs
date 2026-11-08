@@ -49,7 +49,7 @@ public sealed class BuilderValidationSweepTests : ProviderTestSuite
     public void ExtremeRow_ShouldSelectTheMaxRow()
     {
         var ids = _sut.ComplexEntity
-            .SelectWhereMax(x => x.Id)
+            .SelectWhereMaxOld(x => x.Id)
             .Select(x => x.Id)
             .ToList();
 
@@ -177,11 +177,11 @@ public sealed class BuilderValidationSweepTests : ProviderTestSuite
         var ctx = _sut.DataProvider;
 
         FluentActions
-            .Invoking(() => ctx.From("simple_entity").SelectWhereMax(t => t["id"].AsInt).ToList())
+            .Invoking(() => ctx.From("simple_entity").SelectWhereMaxOld(t => t["id"].AsInt).ToList())
             .Should().Throw<BuildSqlCommandException>()
             .WithMessage("SelectWhereMax/SelectWhereMin requires a mapped entity source.");
 
-        _sut.ComplexEntity.SelectWhereMax(x => x.Id).Select(x => x.Id).ToList().Should().Equal(3L);
+        _sut.ComplexEntity.SelectWhereMaxOld(x => x.Id).Select(x => x.Id).ToList().Should().Equal(3L);
     }
 
     /// <summary>
@@ -209,11 +209,11 @@ public sealed class BuilderValidationSweepTests : ProviderTestSuite
         var derived = ctx.From(ctx.From<IComplexEntity>());
 
         FluentActions
-            .Invoking(() => derived.SelectWhereMax(x => x.Id).ToList())
+            .Invoking(() => derived.SelectWhereMaxOld(x => x.Id).ToList())
             .Should().Throw<BuildSqlCommandException>()
             .WithMessage("*requires a single physical-table source*");
 
-        _sut.ComplexEntity.SelectWhereMax(x => x.Id).Select(x => x.Id).ToList().Should().Equal(3L);
+        _sut.ComplexEntity.SelectWhereMaxOld(x => x.Id).Select(x => x.Id).ToList().Should().Equal(3L);
     }
 
     /// <summary>EntityBuilder.cs:3851 — a blank tables-in-scope hint list is rejected.</summary>

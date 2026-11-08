@@ -55,6 +55,7 @@ internal interface IT320PgRecordRow
     string? Label { get; set; }
 }
 
+[Collection("Query plan cache")] // asserts plan-store contents; see Cte/DataModifyingCtePlanCacheTests
 [Trait("Category", "T320")]
 public class T320RuntimeTvfSqlTests
 {

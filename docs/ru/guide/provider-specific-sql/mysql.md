@@ -210,7 +210,8 @@ var updated = dataContext.From<IComplexEntity>()
 | `json_equals(json1, json2)` | `json_equals(...)` | `1`, если JSON-документы равны (порядок ключей объекта не важен), `0`, если различаются, `null` при SQL NULL; базовая версия MariaDB 11.4, MySQL отклоняет |
 | `json_normalize(json)` | `json_normalize(...)` | канонический текст JSON (ключи объекта отсортированы, лишние пробелы удалены, идемпотентно), `null` при SQL NULL; базовая версия MariaDB 11.4, MySQL отклоняет |
 
-Эти три Oracle-совместимые конверсии (`months_between`, `to_date`, `to_number`) **зависят от версии**:
+Эти три Oracle-совместимые конверсии (`months_between`, `to_date`, `to_number`) и пара xxHash
+(`xxh3`, `xxh32`; MariaDB 13.1+) **зависят от версии**:
 в MariaDB 11.4 их нет, поэтому `MariaDbDialect` рендерит каждую только тогда, когда контекст создан с явно
 заданной версией сервера не ниже её минимума. **Без версии** (конструктор по умолчанию с двумя аргументами)
 MariaDB-контекст отклоняет вызов с `NotSupportedException` при подготовке, вместо того чтобы эмитить SQL,

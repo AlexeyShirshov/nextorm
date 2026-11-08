@@ -101,7 +101,7 @@ public class ExternalDialectExtensibilityTests
         using var ctx = new CustomPostgresDataContext(PostgresConnectionString, new DataContextBuilder(), renderer);
         var e = ctx.From<PublicExtensionEntity>();
 
-        var sql = SqlOf(ctx, e.SelectWhereMax(x => x.Score).ToCommand());
+        var sql = SqlOf(ctx, e.SelectWhereMaxOld(x => x.Score).ToCommand());
 
         renderer.CanRenderCalls.Should().BeGreaterThan(0);
         renderer.RenderCalls.Should().Be(1);
@@ -116,7 +116,7 @@ public class ExternalDialectExtensibilityTests
         using var ctx = new CustomClickHouseDataContext(ClickHouseConnectionString, new DataContextBuilder(), renderer);
         var e = ctx.From<PublicExtensionEntity>();
 
-        var sql = SqlOf(ctx, e.SelectWhereMax(x => x.Score).ToCommand());
+        var sql = SqlOf(ctx, e.SelectWhereMaxOld(x => x.Score).ToCommand());
 
         renderer.CanRenderCalls.Should().BeGreaterThan(0);
         renderer.RenderCalls.Should().Be(1);
@@ -133,7 +133,7 @@ public class ExternalDialectExtensibilityTests
         using var ctx = new CustomPostgresDataContext(PostgresConnectionString, new DataContextBuilder(), renderer);
         var e = ctx.From<PublicExtensionEntity>();
 
-        var sql = SqlOf(ctx, e.SelectWhereMax(x => x.Score).ToCommand());
+        var sql = SqlOf(ctx, e.SelectWhereMaxOld(x => x.Score).ToCommand());
 
         renderer.CanRenderCalls.Should().BeGreaterThan(0);
         renderer.RenderCalls.Should().Be(0);
@@ -148,7 +148,7 @@ public class ExternalDialectExtensibilityTests
         using var ctx = new CustomClickHouseDataContext(ClickHouseConnectionString, new DataContextBuilder(), renderer);
         var e = ctx.From<PublicExtensionEntity>();
 
-        var sql = SqlOf(ctx, e.SelectWhereMax(x => x.Score).ToCommand());
+        var sql = SqlOf(ctx, e.SelectWhereMaxOld(x => x.Score).ToCommand());
 
         renderer.CanRenderCalls.Should().BeGreaterThan(0);
         renderer.RenderCalls.Should().Be(0);
@@ -164,7 +164,7 @@ public class ExternalDialectExtensibilityTests
         using var ctx = new CustomPostgresDataContext(PostgresConnectionString, new DataContextBuilder(), renderer: null);
         var e = ctx.From<PublicExtensionEntity>();
 
-        var sql = SqlOf(ctx, e.SelectWhereMax(x => x.Score).ToCommand());
+        var sql = SqlOf(ctx, e.SelectWhereMaxOld(x => x.Score).ToCommand());
 
         sql.Should().Contain("row_number()");
         sql.Should().NotContain("distinct on");
@@ -177,7 +177,7 @@ public class ExternalDialectExtensibilityTests
         using var ctx = new CustomClickHouseDataContext(ClickHouseConnectionString, new DataContextBuilder(), renderer: null);
         var e = ctx.From<PublicExtensionEntity>();
 
-        var sql = SqlOf(ctx, e.SelectWhereMax(x => x.Score).ToCommand());
+        var sql = SqlOf(ctx, e.SelectWhereMaxOld(x => x.Score).ToCommand());
 
         sql.Should().Contain("row_number()");
         sql.Should().NotContain("argMax");

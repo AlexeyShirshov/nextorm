@@ -26,4 +26,5 @@
     <ProjectReference Include="../../src/nextorm.core.sourcegenerator/nextorm.core.sourcegenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
+  <ItemGroup><ProjectReference Include="../../src/nextorm.extensions/nextorm.extensions.csproj" /></ItemGroup>
 </Project>

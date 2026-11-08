@@ -1,2 +1,0 @@
-.pdca/status/T297-cow-1.md
-docs/specs/status/D297-structural-cte-graph-1.md

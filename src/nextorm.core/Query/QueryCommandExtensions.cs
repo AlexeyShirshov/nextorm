@@ -427,8 +427,9 @@ public static class QueryCommandExtensions
             // Binding happens after the reader is open so the provider can pick a typed getter from the
             // storage type; the plan (and every guard) is still built before the header is written. The
             // applied sequential mode travels with the reader so the binary path can be admitted only on
-            // a confirmed sequential reader.
-            var plan = CsvStreamWriter.Build(command.SelectList, reader.Owner.Reader, context.MapTypedColumn, reader.SequentialAccess, dialectOptions);
+            // a confirmed sequential reader. A compiled plan is reused from the bounded per-context
+            // terminal cache when its structural key matches; ValueTransform always bypasses it.
+            var plan = ResolveCsvPlan(command, reader, context, dialectOptions);
             CsvStreamWriter.Write(reader.Owner.Reader, destination, plan, dialectOptions, cancellationToken);
         }
         finally
@@ -471,14 +472,25 @@ public static class QueryCommandExtensions
             // Binding happens after the reader is open so the provider can pick a typed getter from the
             // storage type; the plan (and every guard) is still built before the header is written. The
             // applied sequential mode travels with the reader so the binary path can be admitted only on
-            // a confirmed sequential reader.
-            var plan = CsvStreamWriter.Build(command.SelectList, reader.Owner.Reader, context.MapTypedColumn, reader.SequentialAccess, dialectOptions);
+            // a confirmed sequential reader. A compiled plan is reused from the bounded per-context
+            // terminal cache when its structural key matches; ValueTransform always bypasses it.
+            var plan = ResolveCsvPlan(command, reader, context, dialectOptions);
             await CsvStreamWriter.WriteAsync(reader.Owner.Reader, destination, plan, dialectOptions, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
             await reader.Owner.DisposeAsync().ConfigureAwait(false);
         }
+    }
+
+    private static CsvPlan ResolveCsvPlan<TResult>(QueryCommand<TResult> command, CsvResultReader reader, DataContext context, CsvStreamOptions dialectOptions)
+    {
+        var key = CsvPlanCacheKey.Build(context.GetType(), command.SelectList, reader.Owner.Reader, reader.SequentialAccess, dialectOptions);
+        if (key is null)
+            return CsvStreamWriter.Build(command.SelectList, reader.Owner.Reader, context.MapTypedColumn, reader.SequentialAccess, dialectOptions);
+
+        return (CsvPlan)context.TerminalPlans.GetOrBuild("csv:" + key, () =>
+            CsvStreamWriter.Build(command.SelectList, reader.Owner.Reader, context.MapTypedColumn, reader.SequentialAccess, dialectOptions));
     }
 
     internal const string DataReaderTerminalName = "ToDataReader/ToDataReaderAsync";

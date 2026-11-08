@@ -16,7 +16,7 @@ namespace NextORM.Integration.Tests;
 /// is exiting makes the test host report leftover foreground threads, which fails the run with a
 /// non-zero exit code even though every test passed.
 /// </remarks>
-internal sealed class DatabaseContainers : IAsyncLifetime
+public sealed class DatabaseContainers : IAsyncLifetime
 {
     public ValueTask InitializeAsync() => ValueTask.CompletedTask;
 

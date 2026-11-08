@@ -181,14 +181,47 @@ public class MySqlFunctionsSqlGenerationTests
 
         SqlOf(ctx, e.Select(x => SqlFunctions.MySql.kdf("foo", "bar", "info", "hkdf")))
             .Should().Contain("kdf(_utf8mb4 X'666f6f', _utf8mb4 X'626172', _utf8mb4 X'696e666f', _utf8mb4 X'686b6466')");
-        SqlOf(ctx, e.Select(x => SqlFunctions.MySql.xxh3(x.String)))
-            .Should().Contain("xxh3(somestring)");
-        SqlOf(ctx, e.Select(x => SqlFunctions.MySql.xxh32(x.String)))
-            .Should().Contain("xxh32(somestring)");
         SqlOf(ctx, e.Select(x => SqlFunctions.MySql.json_detailed("{}")))
             .Should().Contain("json_detailed(_utf8mb4 X'7b7d')");
         SqlOf(ctx, e.Select(x => SqlFunctions.MySql.json_compact("{}")))
             .Should().Contain("json_compact(_utf8mb4 X'7b7d')");
+    }
+
+    /// <summary>
+    /// #352: <c>xxh3</c>/<c>xxh32</c> were added in MariaDB 13.1 — "XXH3 was added in MariaDB 13.1." and
+    /// "XXH32 was added in MariaDB 13.1.", MariaDB documentation, numeric-functions reference
+    /// (https://mariadb.com/docs/server/reference/sql-functions/numeric-functions/xxh3, …/xxh32; accessed
+    /// 2026-10-30) — so on the 11.4 baseline, and on an unversioned context, the capability gate refuses
+    /// the call during preparation, before any SQL is emitted. The renderer opens only for a 13.1+ dialect.
+    /// </summary>
+    [Fact]
+    public void T352_XxhFunctions_ShouldBeRefusedBeforeSqlEmission_OnTheMariaDb11_4Baseline()
+    {
+        using var unset = MariaDbTestContext.Create();
+        var unsetEntity = unset.From<IComplexEntity>();
+
+        var unsetXxh3 = () => SqlOf(unset, unsetEntity.Select(x => SqlFunctions.MySql.xxh3(x.String)));
+        var unsetXxh32 = () => SqlOf(unset, unsetEntity.Select(x => SqlFunctions.MySql.xxh32(x.String)));
+
+        unsetXxh3.Should().Throw<NotSupportedException>().WithMessage("*xxh3*not supported*");
+        unsetXxh32.Should().Throw<NotSupportedException>().WithMessage("*xxh32*not supported*");
+
+        using var baseline = MariaDbTestContext.Create(new Version(11, 4));
+        var baselineEntity = baseline.From<IComplexEntity>();
+
+        var baselineXxh3 = () => SqlOf(baseline, baselineEntity.Select(x => SqlFunctions.MySql.xxh3(x.String)));
+        var baselineXxh32 = () => SqlOf(baseline, baselineEntity.Select(x => SqlFunctions.MySql.xxh32(x.String)));
+
+        baselineXxh3.Should().Throw<NotSupportedException>().WithMessage("*xxh3*not supported*");
+        baselineXxh32.Should().Throw<NotSupportedException>().WithMessage("*xxh32*not supported*");
+
+        using var enabled = MariaDbTestContext.Create(new Version(13, 1));
+        var enabledEntity = enabled.From<IComplexEntity>();
+
+        SqlOf(enabled, enabledEntity.Select(x => SqlFunctions.MySql.xxh3(x.String)))
+            .Should().Contain("xxh3(somestring)");
+        SqlOf(enabled, enabledEntity.Select(x => SqlFunctions.MySql.xxh32(x.String)))
+            .Should().Contain("xxh32(somestring)");
     }
 
     [Fact]

@@ -19,6 +19,7 @@ internal static class ScalarFunctionTranslator
     // set is fixed for the lifetime of the MethodInfo.
     private static readonly ConcurrentDictionary<MethodInfo, SqlFunctionAttribute?> _sqlFunctionAttributes = new();
 
+    /// <summary>Resolves the effective <see cref="SqlFunctionAttribute"/> for <paramref name="method"/>.</summary>
     internal static SqlFunctionAttribute? ResolveSqlFunctionAttribute(MethodInfo method)
         => _sqlFunctionAttributes.GetOrAdd(
             method,

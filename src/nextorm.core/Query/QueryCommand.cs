@@ -1,4 +1,6 @@
 using Microsoft.Extensions.Logging;
+using System.Collections;
+using System.Collections.ObjectModel;
 using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
 
@@ -136,6 +138,12 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// </summary>
     internal int WindowsPlanHash;
     internal Type? ResultType;
+    /// <summary>
+    /// The real projection type carried by a boxed wrapper command. A non-generic command is executed
+    /// through a <see cref="QueryCommand{TResult}"/> wrapper closed over <see cref="object"/>; that wrapper's
+    /// generic argument would otherwise hide the runtime result type the row materializer must build for.
+    /// </summary>
+    internal Type? BoxedResultType;
     /// <summary>The paging state (<c>LIMIT</c>/<c>OFFSET</c>) applied to the query.</summary>
     public Paging Paging;
     /// <summary>
@@ -256,6 +264,18 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// </summary>
     /// <param name="dataProvider">The context that executes the command, or <c>null</c> for an unbound clone.</param>
     /// <param name="definition">The shape to copy from.</param>
+    /// <param name="resultType">The runtime result/projection type carried by this untyped command.</param>
+    internal QueryCommand(IDataContext? dataProvider, QueryDefinition definition, Type resultType)
+        : this(dataProvider, definition)
+    {
+        ResultType = resultType;
+    }
+
+    /// <summary>
+    /// Initializes a command from a query shape, optionally taking ownership of the shape's joins.
+    /// </summary>
+    /// <param name="dataProvider">The context that executes the command, or <c>null</c> for an unbound clone.</param>
+    /// <param name="definition">The shape to copy from.</param>
     /// <param name="ownJoins">
     /// When <c>true</c>, <see cref="QueryDefinition.Joins"/> was produced by this command's own
     /// construction path (the self-clone path and the fluent builders) and is not reachable from any
@@ -288,7 +308,6 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         _sorting = definition.Sorting;
         _groupExp = definition.Group;
         _having = definition.Having;
-        IsSelectGroup = definition.IsSelectGroup;
         Logger = definition.Logger;
         IsDistinct = definition.IsDistinct;
         GroupByWithTotals = definition.GroupByWithTotals;
@@ -340,9 +359,15 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         _sorting = source._sorting;
         _groupExp = forCache ? null : source._groupExp;
         _having = source._having;
-        IsSelectGroup = source.IsSelectGroup;
         Logger = source.Logger;
         IsDistinct = source.IsDistinct;
+        // Effective preparation state travels with both clones (it is preparation-derived identity,
+        // not raw source state), so a cache clone keeps the packaged component's effective shape.
+        EffectiveGroupingKeys = source.EffectiveGroupingKeys;
+        EffectiveHavingMode = source.EffectiveHavingMode;
+        EffectiveHaving = source.EffectiveHaving;
+        EffectiveSourcePredicate = source.EffectiveSourcePredicate;
+        EffectiveRequireDistinct = source.EffectiveRequireDistinct;
         GroupByWithTotals = source.GroupByWithTotals;
         LimitBy = source.LimitBy;
         DistinctOn = source.DistinctOn;
@@ -432,7 +457,6 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
             Sorting = _sorting,
             Group = group,
             Having = _having,
-            IsSelectGroup = IsSelectGroup,
             Logger = Logger,
             IsDistinct = IsDistinct,
             GroupByWithTotals = GroupByWithTotals,
@@ -524,22 +548,25 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     public SelectExpression[]? SelectList => _selectList;
     /// <summary>The prepared <c>GROUP BY</c> columns, or <c>null</c> when the query has no grouping.</summary>
     public SelectExpression[]? GroupingList => _groupingList;
+
     /// <summary>
-    /// The grouping keys inferred from a <c>SelectGroup</c> projection during preparation, or
-    /// <c>null</c> before preparation (and for every command that is not a <c>SelectGroup</c> command).
+    /// Effective grouping keys derived from <see cref="IQueryPreparationDescriptor"/> contributions,
+    /// separate from the raw <c>_group</c> field. <c>null</c> when no grouping contribution is present.
+    /// An empty (non-null) list denotes an explicit global aggregation.
     /// </summary>
-    internal IReadOnlyList<Expression>? SelectGroupKeys { get; set; }
-    /// <summary>
-    /// The ordered raw scalar-output expressions of the <c>SelectGroup</c> projection, as derived during
-    /// preparation (the expressions the grouping keys and the mode were inferred from), or <c>null</c>
-    /// before preparation (and for every command that is not a <c>SelectGroup</c> command).
-    /// </summary>
-    internal IReadOnlyList<Expression>? SelectGroupOutputs { get; set; }
-    /// <summary>
-    /// The execution mode the <c>SelectGroup</c> projection analysis resolved during preparation
-    /// (<see cref="NextORM.Core.SelectGroupMode.None"/> for a command that is not a <c>SelectGroup</c>).
-    /// </summary>
-    internal SelectGroupMode SelectGroupMode { get; set; }
+    internal IReadOnlyList<LambdaExpression>? EffectiveGroupingKeys { get; set; }
+
+    /// <summary>How the effective HAVING is handled by the grouping contribution.</summary>
+    internal QueryPreparationHavingMode EffectiveHavingMode { get; set; } = QueryPreparationHavingMode.Unchanged;
+
+    /// <summary>The replacement HAVING when <see cref="EffectiveHavingMode"/> is <see cref="QueryPreparationHavingMode.Replace"/>.</summary>
+    internal LambdaExpression? EffectiveHaving { get; set; }
+
+    /// <summary>An additive source predicate AND-ed into the effective source condition.</summary>
+    internal LambdaExpression? EffectiveSourcePredicate { get; set; }
+
+    /// <summary>Whether DISTINCT is required (monotonic OR) by any contribution.</summary>
+    internal bool EffectiveRequireDistinct { get; set; }
     /// <summary>The entity type the command reads from, or <c>null</c> for a command without a source type.</summary>
     public Type? EntityType => _srcType;
     /// <summary>Whether the command has been prepared and its cached plan hashes are current.</summary>
@@ -642,7 +669,6 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// from the projection's scalar outputs instead of a <see cref="GroupBy"/> lambda. Part of the plan
     /// key, so a <c>SelectGroup</c> plan never shares an entry with an equivalent explicit form.
     /// </summary>
-    internal bool IsSelectGroup { get; set; }
     /// <summary>
     /// Whether the grouping carries the <c>WITH TOTALS</c> modifier (ClickHouse). Only meaningful when
     /// the command has a grouping list; a dialect that does not support it rejects the command when its
@@ -668,6 +694,169 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// has none. A dialect that does not support it rejects the command when its SQL is built.
     /// </summary>
     internal ExtremeRowClause? ExtremeRow { get; set; }
+
+    /// <summary>Sets the prepared projection columns. Engine-owned structural primitive for query components.</summary>
+    public void SetComponentSelectList(SelectExpression[]? value) => _selectList = value;
+
+    /// <summary>Sets the prepared WHERE predicate. Engine-owned structural primitive for query components.</summary>
+    public void SetComponentPreparedCondition(Expression? value) => PreparedCondition = value;
+
+    /// <summary>Gets the prepared WHERE predicate. Engine-owned structural primitive for query components.</summary>
+    public Expression? GetComponentPreparedCondition() => PreparedCondition;
+
+    /// <summary>Sets the ORDER BY columns. Engine-owned structural primitive for query components.</summary>
+    public void SetComponentSorting(Sorting[]? value) => _sorting = value;
+
+    // #368: component state is stored flat — no per-command holder allocation and no one-element array.
+    // `_components` is polymorphic: none, a single `IQueryComponent`, or an `IReadOnlyList<IQueryComponent>`.
+    // The read-only view is cached on the first read of the public property; the render shape is
+    // render-scoped and never shared by Clone.
+    private ComponentSet _components;
+    private IReadOnlyList<IQueryComponent>? _componentsView;
+    private IReadOnlyList<IQueryComponentDescriptor>? _preparedComponents;
+    private IReadOnlyList<IQueryComponentDescriptor>? _preparedComponentsView;
+    private QueryCommand? _componentRenderShape;
+
+    /// <summary>
+    /// The query components attached to this command, or <c>null</c> when there are none. Assigning a
+    /// different list is an identity change: the memoized plan key is dropped together with the prepared
+    /// descriptors computed under it, so a caller can never leave a stale prepared identity attached.
+    /// The returned list is a read-only view over the shared backing list, so a downcast cannot mutate
+    /// the list every clone sees; a single component is exposed through a one-item view object, never a
+    /// one-element array.
+    /// </summary>
+    public IReadOnlyList<IQueryComponent>? Components
+    {
+        get
+        {
+            if (_components.IsEmpty) return null;
+            if (_componentsView is not null) return _componentsView;
+            return _componentsView = _components.State is IReadOnlyList<IQueryComponent> list
+                ? AsReadOnly(list)
+                : new SingleComponentList(_components[0]);
+        }
+        set
+        {
+            if (ReferenceEquals(_components.State, value)) return;
+            _components = new ComponentSet(value);
+            _componentsView = null;
+            InvalidatePlanKey();
+        }
+    }
+
+    /// <summary>
+    /// Allocation-free access to the same state for the capture, comparison and fingerprint paths:
+    /// no one-element array and no view object is materialised on the way in.
+    /// </summary>
+    internal ComponentSet ComponentsState => _components;
+
+    /// <summary>
+    /// Stores the component state without allocating a one-element array or a holder. Accepts a single
+    /// <see cref="IQueryComponent"/>, an <see cref="IReadOnlyList{T}"/> of components, or <c>null</c>.
+    /// </summary>
+    internal void SetComponents(object? state)
+    {
+        if (ReferenceEquals(_components.State, state)) return;
+        _components = new ComponentSet(state);
+        _componentsView = null;
+        InvalidatePlanKey();
+    }
+
+    /// <summary>
+    /// Allocation-free component state: none, a single component, or an immutable component list. The
+    /// struct lives inside the command, so a one-component command pays neither a holder object nor a
+    /// one-element array.
+    /// </summary>
+    internal readonly struct ComponentSet
+    {
+        private readonly object? _state;
+
+        internal ComponentSet(object? state) => _state = state;
+
+        internal object? State => _state;
+
+        internal int Count => _state switch
+        {
+            null => 0,
+            IReadOnlyList<IQueryComponent> list => list.Count,
+            _ => 1,
+        };
+
+        internal bool IsEmpty => _state is null || _state is IReadOnlyList<IQueryComponent> { Count: 0 };
+
+        internal IQueryComponent this[int index] => _state is IReadOnlyList<IQueryComponent> list
+            ? list[index]
+            : (IQueryComponent)_state!;
+    }
+
+    /// <summary>One-item read-only view, so a single component needs no one-element array.</summary>
+    private sealed class SingleComponentList : IReadOnlyList<IQueryComponent>
+    {
+        private readonly IQueryComponent _component;
+
+        internal SingleComponentList(IQueryComponent component) => _component = component;
+
+        public int Count => 1;
+
+        public IQueryComponent this[int index] => index == 0
+            ? _component
+            : throw new ArgumentOutOfRangeException(nameof(index));
+
+        public IEnumerator<IQueryComponent> GetEnumerator() => Enumerate();
+
+        private IEnumerator<IQueryComponent> Enumerate()
+        {
+            yield return _component;
+        }
+
+        IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
+    /// <summary>
+    /// The prepared query-component descriptors, or <c>null</c> when there are none. The engine owns the
+    /// list; assigning it re-keys the command because the descriptors are part of the plan identity. The
+    /// returned list is a read-only view over the shared backing list.
+    /// </summary>
+    public IReadOnlyList<IQueryComponentDescriptor>? PreparedComponents
+    {
+        get
+        {
+            if (_preparedComponents is null) return null;
+            return _preparedComponentsView ??= AsReadOnly(_preparedComponents);
+        }
+        set
+        {
+            _preparedComponents = value;
+            _preparedComponentsView = null;
+
+            // Descriptors are part of the plan identity: a memoized key built under the previous list
+            // must not survive the assignment. Cleared unconditionally, exactly as before the
+            // component state moved into its holder.
+            _planKey = null;
+            _planKeySql = null;
+        }
+    }
+
+    private static IReadOnlyList<T>? AsReadOnly<T>(IReadOnlyList<T>? source)
+        => source switch
+        {
+            null => null,
+            ReadOnlyCollection<T> view => view,
+            IList<T> list => new ReadOnlyCollection<T>(list),
+            _ => new ReadOnlyCollection<T>(new List<T>(source)),
+        };
+
+    /// <summary>
+    /// The command shape the attached components produced on the cache-miss render, reused by the
+    /// parameter-refresh pass instead of re-running <see cref="IQueryComponent.BuildQuery"/>. Render-scoped
+    /// engine state: dropped with the plan key and on reset, never part of the plan identity.
+    /// </summary>
+    internal QueryCommand? ComponentRenderShape
+    {
+        get => _componentRenderShape;
+        set => _componentRenderShape = value;
+    }
+
     /// <summary>The prepared value-selector columns of <see cref="ExtremeRow"/>, or <c>null</c> when there is none.</summary>
     internal SelectExpression[]? ExtremeRowColumns => _extremeRowColumns;
     /// <summary>The prepared group-by columns of <see cref="ExtremeRow"/>, or <c>null</c> when the clause has no group.</summary>
@@ -1107,6 +1296,30 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     }
 
     /// <summary>
+    /// Sets the prepared projection columns. Used only by internal lowering paths that build detached
+    /// command variants; never mutates the original command.
+    /// </summary>
+    internal void SetSelectList(SelectExpression[]? value) => _selectList = value;
+
+    /// <summary>
+    /// Sets the prepared grouping columns. Used only by internal lowering paths that build detached
+    /// command variants; never mutates the original command.
+    /// </summary>
+    internal void SetGroupingList(SelectExpression[]? value) => _groupingList = value;
+
+    /// <summary>
+    /// Sets the prepared join list. Used only by internal lowering paths that build detached command
+    /// variants; never mutates the original command.
+    /// </summary>
+    internal void SetJoins(JoinExpression[]? value) => _joins = value;
+
+    /// <summary>
+    /// Sets the prepared sorting. Used only by internal lowering paths that build detached command
+    /// variants; never mutates the original command.
+    /// </summary>
+    internal void SetSorting(Sorting[]? value) => _sorting = value;
+
+    /// <summary>
     /// Discards every prepared piece (from, columns, grouping, conditions, array joins and hashes) so the
     /// command is prepared again on its next execution. Called after a clone is mutated.
     /// </summary>
@@ -1115,13 +1328,17 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         _isPrepared = false;
         _selectList = null;
         _groupingList = null;
-        SelectGroupKeys = null;
-        SelectGroupOutputs = null;
-        SelectGroupMode = NextORM.Core.SelectGroupMode.None;
+        EffectiveGroupingKeys = null;
+        EffectiveHavingMode = QueryPreparationHavingMode.Unchanged;
+        EffectiveHaving = null;
+        EffectiveSourcePredicate = null;
+        EffectiveRequireDistinct = false;
         _limitByColumns = null;
         _distinctOnColumns = null;
         _extremeRowColumns = null;
         _extremeRowGroupByColumns = null;
+        PreparedComponents = null;
+        ComponentRenderShape = null;
         _perParentPartitionColumns = null;
         PreparedPreWhere = null;
         _preparedArrayJoin = null;
@@ -1365,20 +1582,43 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
 
     /// <summary>
     /// Executes the command and returns its rows boxed, so a runtime-built projection command can be
-    /// stitched by <c>JoinInto</c> without a compile-time result type. Overridden by
-    /// <see cref="QueryCommand{TResult}"/>.
+    /// stitched by <c>JoinInto</c> without a compile-time result type. A typed command overrides this
+    /// with its own materializer; the base implementation is the <see cref="ResultType"/>-driven boxed
+    /// path used by a non-generic command.
     /// </summary>
     /// <param name="params">Positional parameter values.</param>
     /// <returns>The materialized rows, boxed.</returns>
     internal virtual List<object?> ToObjectList(ReadOnlySpan<object?> @params)
-        => throw new NotSupportedException("Only a typed query command can be executed for JoinInto stitching.");
+    {
+        if (ResultType is null)
+            throw new NotSupportedException("Only a query command with a result type can be executed for JoinInto stitching.");
+
+        if (_dataContext is InMemoryDataContext inMemoryContext)
+            return inMemoryContext.ToObjectList(this, @params);
+
+        if (_dataContext is DataContext dataContext)
+            return dataContext.ToObjectList(this, @params);
+
+        throw new NotSupportedException("The untyped (boxed) execution path requires a database context.");
+    }
 
     /// <summary>Asynchronous counterpart of <see cref="ToObjectList"/>.</summary>
     /// <param name="params">Positional parameter values.</param>
     /// <param name="cancellationToken">A token to cancel the query.</param>
     /// <returns>A task producing the materialized rows, boxed.</returns>
-    internal virtual Task<List<object?>> ToObjectListAsync(object[] @params, CancellationToken cancellationToken)
-        => throw new NotSupportedException("Only a typed query command can be executed for JoinInto stitching.");
+    internal virtual async Task<List<object?>> ToObjectListAsync(object[] @params, CancellationToken cancellationToken)
+    {
+        if (ResultType is null)
+            throw new NotSupportedException("Only a query command with a result type can be executed for JoinInto stitching.");
+
+        if (_dataContext is InMemoryDataContext inMemoryContext)
+            return await inMemoryContext.ToObjectListAsync(this, @params, cancellationToken).ConfigureAwait(false);
+
+        if (_dataContext is DataContext dataContext)
+            return await dataContext.ToObjectListAsync(this, @params, cancellationToken).ConfigureAwait(false);
+
+        throw new NotSupportedException("The untyped (boxed) execution path requires a database context.");
+    }
 
 }
 

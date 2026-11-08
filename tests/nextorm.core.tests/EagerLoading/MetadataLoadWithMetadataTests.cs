@@ -504,6 +504,44 @@ public sealed class MetadataLoadWithMetadataTests
     }
 
     [Fact]
+    public void MetadataLoadWith_InvalidMetadata_ManyToOneLongerForeignKey_FailsClosedWithTheNamedRefusal()
+    {
+        // #353: a hand-written ManyToOne whose foreign key carries more components than the principal key
+        // must reach the named arity refusal — description plus both arities — and never the raw
+        // IndexOutOfRangeException the component mapping used to raise past its array size.
+        var navigation = Navigation<Ticket>(nameof(Ticket.Owner));
+        DataContextCache.Metadata[typeof(Ticket)] = new EntityMetadata(
+            typeof(Ticket).Name,
+            Props<Ticket>().Where(p => p.PropertyInfo != navigation).ToList(),
+            relationships:
+            [
+                FakeRelationship(
+                    RelationshipKind.ManyToOne,
+                    typeof(Ticket),
+                    typeof(TicketOwner),
+                    navigation,
+                    isCollection: false,
+                    foreignKeys: [Prop<Ticket>(nameof(Ticket.OwnerTenantId)), Prop<Ticket>(nameof(Ticket.OwnerId))],
+                    principalKeys: [Prop<TicketOwner>(nameof(TicketOwner.Id))])
+            ]);
+        DataContextCache.Metadata[typeof(TicketOwner)] = new EntityMetadata(typeof(TicketOwner).Name, Props<TicketOwner>());
+
+        using var context = new InMemoryDataContext();
+        var builder = context.From<Ticket>();
+
+        var rejection = FluentActions
+            .Invoking(() => builder.LoadWith(t => t.Owner))
+            .Should().Throw<NotSupportedException>(
+                "mismatched key arity is a named refusal for hand-written metadata, not a bare index failure")
+            .Which;
+
+        rejection.Message.Should().Contain("Ticket.Owner", "the refusal names the relationship");
+        rejection.Message.Should().Contain("2", "the refusal reports the foreign-key arity");
+        rejection.Message.Should().Contain("1", "the refusal reports the principal-key arity");
+        rejection.Message.Should().Contain("arities must match", "the refusal is the existing arity diagnosis");
+    }
+
+    [Fact]
     public void MetadataLoadWith_InvalidMetadata_DuplicateComponent_FailsClosed()
     {
         RegisterFakeComposite(FakeRelationship(

@@ -12,6 +12,7 @@ namespace NextORM.SqlServer.Tests;
 /// projection type; preparing them on one context must never let the second adopt the first SQL.
 /// These tests use the placeholder connection string and open no connection.
 /// </summary>
+[Collection("DataContextCache clear")]
 public class T316ApplyPlanCacheTests
 {
     [SqlTable("t316_marker")]

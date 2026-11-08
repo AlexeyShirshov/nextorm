@@ -5,6 +5,10 @@ public sealed partial class MergeBuilder<TEntity>
     // In-memory key upsert: match each source row against the registered sequence on the declared key(s),
     // mutate the matched instance's non-key columns or add the source row otherwise. Only the key-upsert
     // form is supported; the full-MERGE branches and a query source have no in-memory counterpart.
+    // Only ever called with an InMemoryDataContext, which the integration suite may not construct
+    // (InMemoryDataContext is unit-only by policy). Excluded so the integration gate does not count
+    // branches it can never reach.
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
     private int MergeInMemory(InMemoryDataContext inMemory)
     {
         // The in-memory provider writes same-named columns only; an explicit assignment set has no in-memory

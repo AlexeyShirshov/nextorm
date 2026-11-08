@@ -25,15 +25,10 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
     private static readonly PropertyInfo ItemPI = typeof(IReadOnlyList<QueryCommand>).GetProperty("Item")!;
     private static readonly PropertyInfo SQLPI = typeof(SqlFunctions).GetProperty(nameof(SqlFunctions.Sql))!;
     private static readonly MethodInfo CountBigMI = typeof(CommonFunctions).GetMethod(nameof(CommonFunctions.count_big), [typeof(object[])])!;
-    // #148-B R2.1: `SqlFunctions.Sql.@in<T>(column, QueryCommand<T>)`, the child-key existence
+    // #148-B R2.1: `SqlFunctions.Sql.inUntyped(column, QueryCommand)`, the child-key existence
     // predicate appended to a many-to-many correlation on the SQL providers.
-    private static readonly MethodInfo InCommandMI = typeof(CommonFunctions)
-        .GetMethods(BindingFlags.Public | BindingFlags.Instance)
-        .First(m => m.Name == nameof(CommonFunctions.@in)
-            && m.IsGenericMethodDefinition
-            && m.GetParameters().Length == 2
-            && m.GetParameters()[1].ParameterType.IsGenericType
-            && m.GetParameters()[1].ParameterType.GetGenericTypeDefinition() == typeof(QueryCommand<>));
+    private static readonly MethodInfo InUntypedMI = typeof(CommonFunctions)
+        .GetMethod(nameof(CommonFunctions.inUntyped), BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!;
     // #148-B D-R3-5: resolves the principal key that feeds a collection reached through a reference
     // prefix, walking the registered datasets at execution time.
     private static readonly MethodInfo ResolveReferencePrefixKeyMI = typeof(InMemoryNavigationChainEvaluator)
@@ -236,6 +231,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
                 }
             }
             else if ((node.Method.Name == nameof(CommonFunctions.@in)
+                || node.Method.Name == nameof(CommonFunctions.inUntyped)
                 || node.Method.Name == nameof(ClickHouseFunctions.global_in))
                 && node.Arguments is [Expression propExp, Expression cmdExp] && cmdExp.Type.IsAssignableTo(typeof(QueryCommand)))
             {
@@ -939,18 +935,18 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
             var childForeignKey = childForeignKeys[component].PropertyInfo;
             var childKeyType = childKey.PropertyType;
             var childParameter = Expression.Parameter(childType, "child");
-            var childCommand = ((IDataContext)_dataProvider).CreateCommand(childKeyType, new QueryDefinition
+            var childCommand = new QueryCommand((IDataContext)_dataProvider, new QueryDefinition
             {
                 Exp = Expression.Lambda(Expression.Property(childParameter, childKey), childParameter),
                 SrcType = childType,
                 Logger = _logger,
-            });
+            }, childKeyType);
 
             var exists = Expression.Call(
                 Expression.Property(null, SQLPI),
-                InCommandMI.MakeGenericMethod(childKeyType),
-                Expression.Property(navigation, childForeignKey),
-                Expression.Constant(childCommand, typeof(QueryCommand<>).MakeGenericType(childKeyType)));
+                InUntypedMI,
+                Expression.Convert(Expression.Property(navigation, childForeignKey), typeof(object)),
+                Expression.Constant(childCommand, typeof(QueryCommand)));
 
             body = body is null ? exists : Expression.AndAlso(body, exists);
         }

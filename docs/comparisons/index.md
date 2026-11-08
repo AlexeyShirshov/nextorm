@@ -19,8 +19,8 @@ The comparison has four parts:
 - **[Provider features](provider-features.md)** — per-engine API breadth against linq2db.
 - **[Benchmarks](benchmarks.md)** — the shipped SQLite scenarios, with links to the full BenchmarkDotNet
   reports.
-- **[Feature benchmarks (2026-10-17)](feature-benchmarks-2026-10-17.md)** — a warm-path-only, tiered
-  report: no `Prepare()` arms, one table per tier, competitors as columns.
+- **[Feature benchmarks](feature-benchmarks.md)** — a per-feature, tiered comparison: no `Prepare()` arms,
+  one table per tier, competitors as columns.
 
 ## How to read the marks
 
@@ -59,6 +59,23 @@ Across the shared surface Nextorm matches or exceeds the three libraries, and on
   captured-collection lookup and an optional mapped entity type.
 - **Configurable SQL output**: opt-in identifier quoting, naming conventions and keyword casing,
   overridable per command — whereas linq2db quotes by default and fixes names in its mapping schema.
+- **Extensibility as a first-class contract**: query components let a third party add a new operator that
+  changes the generated SQL (an added predicate, a reshaped row source) while keeping the plan cache,
+  parameter binding and provider independence of an ordinary query — no friend access, no global
+  registry, no raw SQL. linq2db and EF Core expose interceptors and function mappings, but no
+  structural component contract with plan-cache integration.
+- **Zero-config NativeAOT migration.** Inside the verified surface (SQLite, .NET 10 / `linux-x64`) the
+  only consumer change is `PublishAot=true`: no compiled model, no precompilation step, no
+  analyzer/interceptor opt-in, no entity or query registration, no linker descriptors or roots. The
+  competitors' contracts are heavier: EF Core requires a compiled model plus interceptor-based query
+  precompilation and does not support dynamically composed queries; Dapper requires the `Dapper.AOT`
+  package, a `[module: DapperAot]` opt-in, an `InterceptorsNamespaces` property and statically known
+  SQL; linq2db does not support NativeAOT officially. Measured on a 13 GB SQLite reporting app:
+  nextorm published natively with no source changes (8.2 MB binary, 0.12 s, 30 MB RSS) against EF
+  Core's 17.3 MB / 0.23 s / 42 MB after two code-generation workarounds. Coverage is still partial
+  (SQLite only; [#370](https://github.com/AlexeyShirshov/nextorm/issues/370)) — the advantage is
+  migration cost, not full AOT feature parity yet. See the
+  [NativeAOT guide](../infrastructure/05-nativeaot.md).
 - **Benchmarked performance**: fastest on every end-to-end scenario, fastest on every prepared feature
   (with the smallest allocations on all but the IN-list), and ahead of regular linq2db and EF Core on
   the warm path (see [Benchmarks](benchmarks.md)).
@@ -103,7 +120,10 @@ boundaries, not missing SQL capabilities — the supported forms are covered by 
 For reading, reporting and explicit data modification over an existing schema, Nextorm is the stronger
 choice: portable SQL across SQL Server, PostgreSQL, MySQL/MariaDB, SQLite and ClickHouse, a broadly
 complete query surface, an explicit write surface with no change-tracking overhead, and benchmark results
-at or above Dapper, EF Core and linq2db on the shipped scenarios. Dapper stays the lightest option for
+at or above Dapper, EF Core and linq2db on the shipped scenarios. It also has the lightest NativeAOT
+migration contract — `PublishAot=true` and nothing else — where EF Core needs a compiled model plus query
+precompilation and Dapper needs the `Dapper.AOT` package with an interceptor opt-in. Dapper stays the
+lightest option for
 hand-written SQL with object mapping; linq2db and EF Core remain the better fit when the same layer must
 also model relationships, track changes or generate the data layer from a live schema — surface Nextorm
 deliberately leaves out.

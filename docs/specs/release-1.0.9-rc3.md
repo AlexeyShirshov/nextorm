@@ -76,7 +76,7 @@ pre-quoted имён (#237); `OPTION (MAXRECURSION n)` больше не теря
 Новые страницы документации: раздел `docs/engine/**` (+RU), `docs/relationships/**` (+RU),
 `docs/scalar-functions/09-system-functions.md`, `10-sequences.md` (+RU),
 `docs/guide/32-inheritance-and-derived-entities.md` (+RU), `docs/advanced/extensibility.md` (+RU),
-`docs/comparisons/feature-benchmarks-2026-10-17.md` (+RU). Остальные правки — существующие EN/RU-страницы.
+`docs/comparisons/feature-benchmarks.md` (+RU). Остальные правки — существующие EN/RU-страницы.
 
 Итог по пакетам: `nextorm` (core + in-memory) и провайдеры `nextorm.sqlite`, `nextorm.sqlserver`,
 `nextorm.postgres`, `nextorm.mysql`, `nextorm.mariadb`, `nextorm.clickhouse` (7 пакетов).

@@ -774,7 +774,7 @@ public class SqlGenerationTests
         using var ctx = MariaDbTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Int).Select(x => new { x.Id })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.Int).Select(x => new { x.Id })));
 
         norm.Should().Contain("row_number() over (order by nullableint desc)");
         norm.Should().Contain("= 1");
@@ -788,7 +788,7 @@ public class SqlGenerationTests
         using var ctx = MariaDbTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Int, x => new { x.Id, x.String })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.Int, x => new { x.Id, x.String })));
 
         norm.Should().Contain("row_number() over (order by nullableint desc)");
         norm.Should().Contain("= 1");
@@ -878,15 +878,22 @@ public class SqlGenerationTests
     }
 
     [Fact]
-    public void Tuple_ConstructorInOrderBy_ShouldThrowAtPreparation()
+    public void Tuple_ConstructorInOrderBy_ShouldExpandToMemberKeys()
     {
+        // T360: a composite ORDER BY selector (including Tuple.Create) expands into one key per
+        // member before SQL, so a flat-row provider never renders a row constructor in ORDER BY; the
+        // result is the same statement as the chained OrderBy/ThenBy equivalent.
         using var ctx = MariaDbTestContext.Create();
 
-        var act = () => SqlOf(ctx, ctx.From<IComplexEntity>()
+        var composite = SqlOf(ctx, ctx.From<IComplexEntity>()
             .OrderBy(x => Tuple.Create(x.Id, x.String))
             .Select(x => new { x.Id }));
+        var chained = SqlOf(ctx, ctx.From<IComplexEntity>()
+            .OrderBy(x => x.Id)
+            .ThenBy(x => x.String)
+            .Select(x => new { x.Id }));
 
-        act.Should().Throw<NotSupportedException>().Which.Message.Should().Contain("MariaDbDialect");
+        composite.Should().Be(chained);
     }
 
     [Fact]

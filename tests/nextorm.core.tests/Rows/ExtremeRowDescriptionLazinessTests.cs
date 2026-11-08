@@ -153,8 +153,8 @@ public class ExtremeRowDescriptionLazinessTests
             new ExtremeRowValueEntity { Id = 3, Score = 2 },
         ]);
 
-        source.SelectWhereMax(it => it.Score).ToList().Should().ContainSingle().Which.Id.Should().Be(2);
-        source.SelectWhereMin(it => it.Score).ToList().Should().ContainSingle().Which.Id.Should().Be(3);
+        source.SelectWhereMaxOld(it => it.Score).ToList().Should().ContainSingle().Which.Id.Should().Be(2);
+        source.SelectWhereMinOld(it => it.Score).ToList().Should().ContainSingle().Which.Id.Should().Be(3);
     }
 }
 

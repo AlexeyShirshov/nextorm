@@ -48,7 +48,7 @@ public static class DataContextExtensions
     /// <param name="definition">The query shape.</param>
     /// <returns>The untyped command.</returns>
     internal static QueryCommand CreateCommand(this IDataContext dataContext, Type resultType, QueryDefinition definition)
-        => (QueryCommand)Activator.CreateInstance(typeof(QueryCommand<>).MakeGenericType(resultType), dataContext, definition)!;
+        => new QueryCommand(dataContext, definition, resultType);
 
     /// <summary>
     /// Asynchronously executes a raw command text without parameters. Convenience overload of

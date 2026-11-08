@@ -12,7 +12,8 @@
             "nextorm.mysql/nextorm.mysql.csproj",
             "nextorm.mariadb/nextorm.mariadb.csproj",
             "nextorm.clickhouse/nextorm.clickhouse.csproj",
-            "nextorm.entityframeworkcore/nextorm.entityframeworkcore.csproj"
+            "nextorm.entityframeworkcore/nextorm.entityframeworkcore.csproj",
+            "nextorm.extensions/nextorm.extensions.csproj"
           ]
         }
       ],

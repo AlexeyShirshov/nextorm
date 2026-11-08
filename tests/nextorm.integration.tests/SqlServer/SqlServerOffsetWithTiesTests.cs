@@ -93,7 +93,7 @@ public sealed class SqlServerOffsetWithTiesTests : ProviderTestSuite
                 .Offset(1)
                 .Limit(2)
                 .WithTies()
-                .SelectWhereMax(x => x.Score)
+                .SelectWhereMaxOld(x => x.Score)
                 .ToCommand();
 
             FluentActions.Invoking(() => Prepare((DataContext)_sut.DataProvider, extreme))

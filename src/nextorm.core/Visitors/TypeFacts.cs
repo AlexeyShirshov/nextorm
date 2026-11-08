@@ -186,7 +186,7 @@ internal static class TypeFacts
             return call.Method.Name is nameof(System.Text.RegularExpressions.Regex.IsMatch);
 
         return call.Method.Name is nameof(CommonFunctions.exists) or nameof(CommonFunctions.any)
-            or nameof(CommonFunctions.all) or nameof(CommonFunctions.@in) or nameof(ClickHouseFunctions.global_in)
+            or nameof(CommonFunctions.all) or nameof(CommonFunctions.@in) or nameof(CommonFunctions.inUntyped) or nameof(ClickHouseFunctions.global_in)
             or "Contains"
             or nameof(CommonFunctions.contains) or nameof(CommonFunctions.freetext)
             or nameof(SqlServerFunctions.isjson)
@@ -258,6 +258,22 @@ internal static class TypeFacts
 
     /// <summary>True for either the <see cref="Tuple"/> or the <see cref="ValueTuple"/> family.</summary>
     internal static bool IsTupleLike(Type type) => IsTupleType(type) || IsValueTupleType(type);
+
+    /// <summary>
+    /// True for any tuple-shaped type the ClickHouse type renderer can decompose into a
+    /// <c>Tuple(...)</c> definition: the <see cref="Tuple"/>/<see cref="ValueTuple"/> families
+    /// at any arity (including the 8-element <c>Rest</c> form), a <see cref="Nullable{T}"/>
+    /// wrapping one of them, and any generic type implementing
+    /// <see cref="System.Runtime.CompilerServices.ITuple"/>. Used so tuple elements never fall
+    /// through to the CLR name ``Tuple`N``.
+    /// </summary>
+    internal static bool IsTupleRenderingType(Type type)
+    {
+        type = Nullable.GetUnderlyingType(type) ?? type;
+        if (IsTupleFamily(type))
+            return true;
+        return typeof(System.Runtime.CompilerServices.ITuple).IsAssignableFrom(type);
+    }
 
     /// <summary>
     /// True for any arity of the <see cref="System.Tuple"/> / <see cref="System.ValueTuple"/> families,

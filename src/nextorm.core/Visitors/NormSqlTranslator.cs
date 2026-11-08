@@ -16,13 +16,6 @@ namespace NextORM.Core;
 /// </summary>
 internal static class NormSqlTranslator
 {
-    // The exact generic method *definitions* of the translation-only markers. Recognition compares
-    // the declaring method against these, so an unrelated type with a same-named Value/Name method
-    // (or a non-generic method) is never translated as a marker.
-    private static readonly MethodInfo s_pivotValue = MarkerDefinition(typeof(PivotValues), nameof(PivotValues.Value));
-    private static readonly MethodInfo s_unpivotValue = MarkerDefinition(typeof(UnpivotValues), nameof(UnpivotValues.Value));
-    private static readonly MethodInfo s_unpivotName = MarkerDefinition(typeof(UnpivotValues), nameof(UnpivotValues.Name));
-
     /// <summary>
     /// Returns <c>false</c> for a call whose declaring type is neither <see cref="SqlFunctions"/> nor
     /// <see cref="CommonFunctions"/>; otherwise translates it (or throws, like the original branches)
@@ -62,14 +55,6 @@ internal static class NormSqlTranslator
 
         TranslateColumn(visitor, node);
         return true;
-    }
-
-    /// <summary>Returns the generic method definition of the single-argument marker accessor.</summary>
-    private static MethodInfo MarkerDefinition(Type markerType, string name)
-    {
-        var method = markerType.GetMethod(name, [typeof(string)])
-            ?? throw new InvalidOperationException($"The marker accessor {markerType.Name}.{name}(string) was not found.");
-        return method.IsGenericMethodDefinition ? method : method.GetGenericMethodDefinition();
     }
 
     /// <summary>
@@ -130,14 +115,15 @@ internal static class NormSqlTranslator
     /// <summary>The marker type name for an exactly recognised accessor, or <c>null</c>.</summary>
     private static string? MarkerOf(MethodInfo method)
     {
-        if (!method.IsGenericMethod)
+        if (!method.IsGenericMethod || method.DeclaringType is not { } declaringType)
             return null;
 
         var definition = method.GetGenericMethodDefinition();
-        if (definition == s_pivotValue)
+        if (declaringType == typeof(PivotValues) && definition.Name == nameof(PivotValues.Value))
             return nameof(PivotValues);
 
-        if (definition == s_unpivotValue || definition == s_unpivotName)
+        if (declaringType == typeof(UnpivotValues)
+            && definition.Name is nameof(UnpivotValues.Value) or nameof(UnpivotValues.Name))
             return nameof(UnpivotValues);
 
         return null;
@@ -340,6 +326,7 @@ internal static class NormSqlTranslator
             return;
         }
         else if ((node.Method.Name == nameof(CommonFunctions.@in)
+            || node.Method.Name == nameof(CommonFunctions.inUntyped)
             || node.Method.Name == nameof(ClickHouseFunctions.global_in))
             && node.Arguments is [Expression parExp, Expression cmdExp] && cmdExp.Type.IsAssignableTo(typeof(QueryCommand)))
         {

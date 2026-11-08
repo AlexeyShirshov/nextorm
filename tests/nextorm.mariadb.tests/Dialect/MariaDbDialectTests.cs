@@ -162,7 +162,6 @@ public class MariaDbDialectTests
         Dialect.MySqlFunctions!.Supports("nvl").Should().BeTrue();
         Dialect.MySqlFunctions!.Supports("add_months").Should().BeTrue();
         Dialect.MySqlFunctions!.Supports("kdf").Should().BeTrue();
-        Dialect.MySqlFunctions!.Supports("xxh3").Should().BeTrue();
         Dialect.MySqlFunctions!.Supports("next_value_for").Should().BeTrue();
 
         Dialect.MySqlFunctions!.Render("regexp_instr", ["a", "'b'"]).Should().Be("regexp_instr(a, 'b')");
@@ -173,8 +172,6 @@ public class MariaDbDialectTests
         Dialect.MySqlFunctions!.Render("add_months", ["d", "2"]).Should().Be("add_months(d, 2)");
         Dialect.MySqlFunctions!.Render("to_char", ["d", "'YYYY'"]).Should().Be("to_char(d, 'YYYY')");
         Dialect.MySqlFunctions!.Render("kdf", ["'p'", "'s'", "'i'", "'hkdf'"]).Should().Be("kdf('p', 's', 'i', 'hkdf')");
-        Dialect.MySqlFunctions!.Render("xxh3", ["x"]).Should().Be("xxh3(x)");
-        Dialect.MySqlFunctions!.Render("xxh32", ["x"]).Should().Be("xxh32(x)");
         Dialect.MySqlFunctions!.Render("json_detailed", ["j"]).Should().Be("json_detailed(j)");
         Dialect.MySqlFunctions!.Render("json_compact", ["j"]).Should().Be("json_compact(j)");
 
@@ -209,5 +206,36 @@ public class MariaDbDialectTests
 
         var unknown = () => versioned.MySqlFunctions!.Render("no_such_function", ["a"]);
         unknown.Should().Throw<NotSupportedException>();
+    }
+
+    [Fact]
+    public void T352_XxhHooks_ShouldFollowTheConfiguredVersion()
+    {
+        // #352: XXH3/XXH32 were added in MariaDB 13.1 — MariaDB documentation, numeric-functions
+        // reference: "XXH3 was added in MariaDB 13.1." and "XXH32 was added in MariaDB 13.1."
+        // (https://mariadb.com/docs/server/reference/sql-functions/numeric-functions/xxh3, …/xxh32;
+        // accessed 2026-10-30). The pinned 11.4 baseline has neither, so the gate stays closed for it
+        // and for an unversioned dialect instead of emitting SQL the server rejects. The source states
+        // the minimum; the 11.4 half of the boundary is also observed live in the integration suite.
+        var enabled = new MariaDbDialect(new Version(13, 1));
+        var below = new MariaDbDialect(new Version(13, 0));
+
+        foreach (var name in new[] { "xxh3", "xxh32" })
+        {
+            enabled.MySqlFunctions!.Supports(name).Should().BeTrue(name);
+            below.MySqlFunctions!.Supports(name).Should().BeFalse(
+                $"{name} is documented as MariaDB 13.1+ (mariadb.com/docs/server/reference/sql-functions/numeric-functions/{name})");
+            new MariaDbDialect(new Version(11, 4)).MySqlFunctions!.Supports(name).Should().BeFalse(name);
+            Dialect.MySqlFunctions!.Supports(name).Should().BeFalse(name);
+
+            var unset = () => Dialect.MySqlFunctions!.Render(name, ["x"]);
+            unset.Should().Throw<NotSupportedException>().WithMessage($"*{name}*requires MariaDB*");
+
+            var tooOld = () => below.MySqlFunctions!.Render(name, ["x"]);
+            tooOld.Should().Throw<NotSupportedException>().WithMessage($"*{name}*requires MariaDB*");
+        }
+
+        enabled.MySqlFunctions!.Render("xxh3", ["x"]).Should().Be("xxh3(x)");
+        enabled.MySqlFunctions!.Render("xxh32", ["x"]).Should().Be("xxh32(x)");
     }
 }

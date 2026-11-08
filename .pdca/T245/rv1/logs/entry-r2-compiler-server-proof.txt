@@ -1,3 +1,0 @@
-    PID ELAPSED     TIME %CPU COMMAND
-2131786     735 00:03:12 26.1 /home/alex/.dotnet/sdk/10.0.401/Roslyn/bincore/VBCSCompiler -pipename:M+KMsHyl5r4zCzaG9m1LzxYTPX1eOsKCiPzp3joPMBE
-cpu_seconds_at_18:12:35_snapshot: 59.1% x 324s = 191.5s

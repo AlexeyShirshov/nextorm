@@ -324,14 +324,15 @@ internal sealed class LobDataReader : DbDataReader
         if (disposing && !_disposed)
         {
             _disposed = true;
-            try
-            {
+            // Exact-once ownership (correctness repair ported from T246-R1-F7): the
+            // CommandReaderOwner disposes the provider reader AND the per-call command;
+            // do NOT dispose _inner separately (same object) — that would be a duplicate.
+            var owner = _owner;
+            _owner = null;
+            if (owner is not null)
+                owner.Dispose();
+            else
                 _inner.Dispose();
-            }
-            finally
-            {
-                ReleaseOwner();
-            }
 
             GC.SuppressFinalize(this);
         }
@@ -346,17 +347,13 @@ internal sealed class LobDataReader : DbDataReader
             return;
 
         _disposed = true;
-        try
-        {
+        // Exact-once ownership (correctness repair ported from T246-R1-F7).
+        var owner = _owner;
+        _owner = null;
+        if (owner is not null)
+            await owner.DisposeAsync().ConfigureAwait(false);
+        else
             await _inner.DisposeAsync().ConfigureAwait(false);
-        }
-        finally
-        {
-            var owner = _owner;
-            _owner = null;
-            if (owner is not null)
-                await owner.DisposeAsync().ConfigureAwait(false);
-        }
 
         GC.SuppressFinalize(this);
     }
@@ -371,10 +368,4 @@ internal sealed class LobDataReader : DbDataReader
     private void ThrowIfDisposed()
         => ObjectDisposedException.ThrowIf(_disposed, this);
 
-    private void ReleaseOwner()
-    {
-        var owner = _owner;
-        _owner = null;
-        owner?.Dispose();
-    }
 }

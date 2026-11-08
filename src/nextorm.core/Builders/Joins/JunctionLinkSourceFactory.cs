@@ -84,6 +84,8 @@ internal static class JunctionLinkSourceFactory
     /// </summary>
     /// <param name="relationship">The many-to-many relationship carrying the junction metadata.</param>
     /// <returns>The junction <c>FROM</c> source.</returns>
+    // In-memory-only junction source (the SQL path uses the derived row_number() link source).
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
     internal static FromExpression GetInMemorySource(IRelationshipMetadata relationship)
     {
         ArgumentNullException.ThrowIfNull(relationship);

@@ -34,4 +34,5 @@
     <ProjectReference Include="..\..\src\nextorm.mariadb\nextorm.mariadb.csproj" />
   </ItemGroup>
 
+  <ItemGroup><ProjectReference Include="../../src/nextorm.extensions/nextorm.extensions.csproj" /></ItemGroup>
 </Project>

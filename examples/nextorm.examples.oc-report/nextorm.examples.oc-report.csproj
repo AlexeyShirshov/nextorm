@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>nextorm.examples.oc-report</AssemblyName>
+    <RootNamespace>NextORM.Examples.OcReport</RootNamespace>
+    <!--
+      NativeAOT is the only AOT-specific input in this project; the code and the query pipeline are
+      the ordinary ones. The property lives here rather than on the command line because a global
+      `-p:PublishAot=true` would also be forced onto the analyzer ProjectReference
+      (nextorm.core.sourcegenerator, netstandard2.0), which NativeAOT cannot compile.
+    -->
+    <PublishAot>true</PublishAot>
+    <!--
+      Repository policy, not nextorm configuration: this repository sets TreatWarningsAsErrors=true,
+      so ILC diagnostics are exempted from the build gate here. An application outside this
+      repository needs none of these properties.
+    -->
+    <IlcTreatWarningsAsErrors>false</IlcTreatWarningsAsErrors>
+    <WarningsNotAsErrors>IL2*;IL3*</WarningsNotAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      The SDK's default ILCompiler 10.0.12 carries a NuGet audit advisory (NU1903), which this
+      repository's warnings-as-errors gate turns into an error. Pin the fixed patch, exactly as
+      tests/nextorm.aot.runner does.
+    -->
+    <PackageReference Update="Microsoft.DotNet.ILCompiler" Version="10.0.14" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <KnownILCompilerPack Update="Microsoft.DotNet.ILCompiler">
+      <ILCompilerPackVersion>10.0.14</ILCompilerPackVersion>
+    </KnownILCompilerPack>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" />
+    <!--
+      Dev-time ProjectReference, like nextorm.examples.mssql.adventureworks (#232): the NativeAOT fix
+      this example demonstrates is in the current checkout and is not in a published package yet.
+      Move it to the `nextorm` / `nextorm.sqlite` PackageReference once the release that carries the
+      fix is on nuget.org.
+    -->
+    <ProjectReference Include="../../src/nextorm.core/nextorm.core.csproj" />
+    <ProjectReference Include="../../src/nextorm.sqlite/nextorm.sqlite.csproj" />
+  </ItemGroup>
+
+</Project>

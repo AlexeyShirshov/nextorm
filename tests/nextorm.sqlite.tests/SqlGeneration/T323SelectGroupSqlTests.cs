@@ -1,19 +1,15 @@
 using FluentAssertions;
 using NextORM.ClickHouse;
 using NextORM.Core;
+using NextORM.Extensions;
 
 namespace NextORM.Sqlite.Tests;
 
 /// <summary>
-/// T323 (#323) D5a: SQLite generation parity between a <c>SelectGroup</c> projection and the
-/// equivalent explicit <c>GroupBy</c>/<c>Select</c> form, the two key-less modes that are observable
-/// in SQL, and the composition guards. Only preparation runs: the context carries a placeholder
-/// connection, so no database is opened.
-/// <para>
-/// The <c>date_trunc</c> key cell is absent for this provider: the SQLite dialect cannot render
-/// <c>SqlFunctions.Sql.date_trunc</c> (<c>SupportsDateTrunc</c> stays at its false default), so the
-/// cell would be an unsupported render rather than a parity assertion.
-/// </para>
+/// T323 (#323) D5a: exact SQLite SQL for the <c>SelectGroup</c> projection, the two key-less modes that
+/// are observable in SQL, and the composition guards. Only preparation runs: the context carries a
+/// placeholder connection, so no database is opened. Every statement is asserted in full against the
+/// expected SQLite rendering; no other implementation is used as the oracle.
 /// </summary>
 public class T323SelectGroupSqlTests
 {
@@ -26,62 +22,71 @@ public class T323SelectGroupSqlTests
 
     private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd) => Normalize(Prepare(ctx, cmd).DbCommand.CommandText);
 
+    /// <summary>The expected literal uses the file's line endings; generated SQL always uses LF.</summary>
+    private static string Lf(string sql) => sql.ReplaceLineEndings("\n");
+
     [Fact]
-    public void SingleKey_ShouldEqualExplicitSql()
+    public void SingleKey_ExactSql()
     {
         using var ctx = SqliteTestContext.Create();
 
-        var inferred = ctx.From<T323SelectGroupEntity>()
-            .SelectGroup(x => new { x.Id, C = SqlFunctions.Sql.count() });
-        var explicitForm = ctx.From<T323SelectGroupEntity>()
-            .GroupBy(x => x.Id)
-            .Select(x => new { x.Id, C = SqlFunctions.Sql.count() });
+        var sql = SqlOf(ctx, ctx.From<T323SelectGroupEntity>()
+            .SelectGroup(x => new { x.Id, C = SqlFunctions.Sql.count() }));
 
-        SqlOf(ctx, inferred).Should().Be(SqlOf(ctx, explicitForm));
+        sql.Should().Be(Lf("""
+select Id, count(*) as 'C'
+ from T323SelectGroupEntity
+ group by Id
+"""));
     }
 
     [Fact]
-    public void TwoKeysTwoAggregates_ShouldEqualExplicitSql()
+    public void TwoKeysTwoAggregates_ExactSql()
     {
         using var ctx = SqliteTestContext.Create();
 
-        var inferred = ctx.From<T323SelectGroupEntity>()
-            .SelectGroup(x => new { x.Id, x.Group2, S = SqlFunctions.Sql.sum(x.Amount), C = SqlFunctions.Sql.count() });
-        var explicitForm = ctx.From<T323SelectGroupEntity>()
-            .GroupBy(x => new { x.Id, x.Group2 })
-            .Select(x => new { x.Id, x.Group2, S = SqlFunctions.Sql.sum(x.Amount), C = SqlFunctions.Sql.count() });
+        var sql = SqlOf(ctx, ctx.From<T323SelectGroupEntity>()
+            .SelectGroup(x => new { x.Id, x.Group2, S = SqlFunctions.Sql.sum(x.Amount), C = SqlFunctions.Sql.count() }));
 
-        SqlOf(ctx, inferred).Should().Be(SqlOf(ctx, explicitForm));
+        sql.Should().Be(Lf("""
+select Id, Group2, sum(Amount) as 'S', count(*) as 'C'
+ from T323SelectGroupEntity
+ group by Id, Group2
+"""));
     }
 
     [Fact]
-    public void JoinedAggregate_ShouldEqualExplicitSql()
+    public void JoinedAggregate_ExactSql()
     {
         using var ctx = SqliteTestContext.Create();
         var joined = ctx.From<T323SelectGroupEntity>().Join(ctx.From<IComplexEntity>(), (a, b) => a.Id == b.Id);
 
-        var inferred = joined
-            .SelectGroup(p => new { p.Item1.Id, S = SqlFunctions.Sql.sum(p.Item1.Amount) });
-        var explicitForm = joined
-            .GroupBy(p => p.Item1.Id)
-            .Select(p => new { p.Item1.Id, S = SqlFunctions.Sql.sum(p.Item1.Amount) });
+        var sql = SqlOf(ctx, joined
+            .SelectGroup(p => new { p.Item1.Id, S = SqlFunctions.Sql.sum(p.Item1.Amount) }));
 
-        SqlOf(ctx, inferred).Should().Be(SqlOf(ctx, explicitForm));
+        sql.Should().Be(Lf("""
+select t1.Id, sum(t1.Amount) as 'S'
+ from T323SelectGroupEntity as 't1'
+ join complex_entity as 't2' on cast(t1.Id as bigint) = t2.id
+ group by t1.Id
+"""));
     }
 
     [Fact]
-    public void JoinedKeyAndAggregateAcrossItems_ShouldEqualExplicitSql()
+    public void JoinedKeyAndAggregateAcrossItems_ExactSql()
     {
         using var ctx = SqliteTestContext.Create();
         var joined = ctx.From<T323SelectGroupEntity>().Join(ctx.From<IComplexEntity>(), (a, b) => a.Id == b.Id);
 
-        var inferred = joined
-            .SelectGroup(p => new { p.Item2.String, S = SqlFunctions.Sql.sum(p.Item1.Amount) });
-        var explicitForm = joined
-            .GroupBy(p => p.Item2.String)
-            .Select(p => new { p.Item2.String, S = SqlFunctions.Sql.sum(p.Item1.Amount) });
+        var sql = SqlOf(ctx, joined
+            .SelectGroup(p => new { p.Item2.String, S = SqlFunctions.Sql.sum(p.Item1.Amount) }));
 
-        SqlOf(ctx, inferred).Should().Be(SqlOf(ctx, explicitForm));
+        sql.Should().Be(Lf("""
+select t2.somestring as 'String', sum(t1.Amount) as 'S'
+ from T323SelectGroupEntity as 't1'
+ join complex_entity as 't2' on cast(t1.Id as bigint) = t2.id
+ group by t2.somestring
+"""));
     }
 
     [Fact]
@@ -131,22 +136,22 @@ public class T323SelectGroupSqlTests
         using var ctx = SqliteTestContext.Create();
         var e = ctx.From<T323SelectGroupEntity>();
 
-        FluentActions.Invoking(() => e.GroupBy(x => x.Id).SelectGroup(x => new { x.Id }))
+        FluentActions.Invoking(() => { var _c = e.GroupBy(x => x.Id).SelectGroup(x => new { x.Id }); ctx.GetPreparedQueryCommand(_c, false, true, CancellationToken.None); })
             .Should().Throw<QueryPreparationException>().WithMessage("*cannot be combined with explicit grouping*");
-        FluentActions.Invoking(() => e.GroupByRollup(x => x.Id).SelectGroup(x => new { x.Id }))
+        FluentActions.Invoking(() => { var _c = e.GroupByRollup(x => x.Id).SelectGroup(x => new { x.Id }); ctx.GetPreparedQueryCommand(_c, false, true, CancellationToken.None); })
             .Should().Throw<QueryPreparationException>().WithMessage("*cannot be combined with explicit grouping*");
-        FluentActions.Invoking(() => e.GroupByCube(x => x.Id).SelectGroup(x => new { x.Id }))
+        FluentActions.Invoking(() => { var _c = e.GroupByCube(x => x.Id).SelectGroup(x => new { x.Id }); ctx.GetPreparedQueryCommand(_c, false, true, CancellationToken.None); })
             .Should().Throw<QueryPreparationException>().WithMessage("*cannot be combined with explicit grouping*");
-        FluentActions.Invoking(() => e.GroupByGroupingSets(x => new { x.Id, x.Group2 }, [0], [1]).SelectGroup(x => new { x.Id }))
+        FluentActions.Invoking(() => { var _c = e.GroupByGroupingSets(x => new { x.Id, x.Group2 }, [0], [1]).SelectGroup(x => new { x.Id }); ctx.GetPreparedQueryCommand(_c, false, true, CancellationToken.None); })
             .Should().Throw<QueryPreparationException>().WithMessage("*cannot be combined with explicit grouping*");
-        FluentActions.Invoking(() => e.WithTotals().SelectGroup(x => new { x.Id }))
+        FluentActions.Invoking(() => { var c = e.WithTotals().SelectGroup(x => new { x.Id }); ctx.GetPreparedQueryCommand(c, false, true, CancellationToken.None); })
             .Should().Throw<QueryPreparationException>().WithMessage("*cannot be combined with explicit grouping*");
-        FluentActions.Invoking(() => ctx.From<T323SelectGroupEntity>().SelectGroup<int>(null!))
+        FluentActions.Invoking(() => { var _c = ctx.From<T323SelectGroupEntity>().SelectGroup<T323SelectGroupEntity, int>(null!); ctx.GetPreparedQueryCommand(_c, false, true, CancellationToken.None); })
             .Should().Throw<ArgumentNullException>();
     }
 }
 
-/// <summary>The row shape of the D5a parity cells; <c>OrderedAt</c> feeds the <c>date_trunc</c> key.</summary>
+/// <summary>The row shape of the D5a cells; <c>OrderedAt</c> feeds the <c>date_trunc</c> key.</summary>
 public class T323SelectGroupEntity
 {
     public int Id { get; set; }
