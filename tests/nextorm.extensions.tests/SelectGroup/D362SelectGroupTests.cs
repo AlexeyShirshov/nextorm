@@ -68,8 +68,76 @@ public class D362SelectGroupTests
     {
         using var ctx = new InMemoryDataContext();
         var e = ctx.From<Entity>();
-        var cmd = SelectGroupExtensions.SelectGroupHaving(e, (Expression<Func<Entity, object>>)(x => new { x.Category, Total = x.Score }), x => x.Score > 0);
+        var cmd = SelectGroupExtensions.SelectGroupHaving(e, x => new { x.Category, Total = x.Score }, r => r.Total > 0);
         var act = () => ctx.GetPreparedQueryCommand(cmd, false, true, CancellationToken.None);
         act.Should().Throw<NotSupportedException>().WithMessage("*in-memory*");
+    }
+
+    private sealed class ProjectedRow
+    {
+        public long Id { get; set; }
+        public int Rows { get; set; }
+        public int Unbound { get; set; }
+    }
+
+    /// <summary>
+    /// The condition is typed on the projection result: its member stands for the projection expression,
+    /// so an aliased aggregate in <c>HAVING</c> renders the same statement as the underlying aggregate in
+    /// a source <c>Having</c>.
+    /// </summary>
+    [Fact]
+    public void SelectGroupHaving_ProjectionAlias_MatchesUnderlyingAggregateHaving()
+    {
+        using var ctx = new SqliteDataContext("Data Source=:memory:", new DataContextBuilder());
+        var e = ctx.From<Entity>();
+
+        var aliased = e.SelectGroupHaving(
+            x => new { x.Category, Rows = SqlFunctions.Sql.count(x.Id) }, r => r.Rows > 1);
+        var chained = e.Having(x => SqlFunctions.Sql.count(x.Id) > 1)
+            .SelectGroup(x => new { x.Category, Rows = SqlFunctions.Sql.count(x.Id) });
+
+        Normalize(Prepare(ctx, aliased).SqlStmt ?? string.Empty)
+            .Should().Be(Normalize(Prepare(ctx, chained).SqlStmt ?? string.Empty));
+    }
+
+    /// <summary>A scalar projection makes the condition parameter the projected value itself.</summary>
+    [Fact]
+    public void SelectGroupHaving_ScalarProjection_ParameterIsTheValue()
+    {
+        var threshold = 5;
+        using var ctx = new SqliteDataContext("Data Source=:memory:", new DataContextBuilder());
+        var e = ctx.From<Entity>();
+
+        var cmd = SelectGroupExtensions.SelectGroupHaving(
+            e, (Expression<Func<Entity, long>>)(x => x.Id), f => f > threshold);
+        var sql = Normalize(Prepare(ctx, cmd).SqlStmt ?? string.Empty);
+
+        sql.Should().Contain("having");
+    }
+
+    /// <summary>A member the projection does not bind fails closed, before any SQL.</summary>
+    [Fact]
+    public void SelectGroupHaving_UnboundMember_Throws()
+    {
+        using var ctx = new SqliteDataContext("Data Source=:memory:", new DataContextBuilder());
+        var e = ctx.From<Entity>();
+        var cmd = SelectGroupExtensions.SelectGroupHaving(
+            e, (Expression<Func<Entity, ProjectedRow>>)(x => new ProjectedRow { Id = x.Id }), r => r.Unbound > 0);
+
+        FluentActions.Invoking(() => Prepare(ctx, cmd))
+            .Should().Throw<QueryPreparationException>().WithMessage("*Unbound*");
+    }
+
+    /// <summary>Referencing the result as a whole is not a HAVING predicate and fails closed.</summary>
+    [Fact]
+    public void SelectGroupHaving_WholeResultReference_Throws()
+    {
+        using var ctx = new SqliteDataContext("Data Source=:memory:", new DataContextBuilder());
+        var e = ctx.From<Entity>();
+        var cmd = SelectGroupExtensions.SelectGroupHaving(
+            e, (Expression<Func<Entity, ProjectedRow>>)(x => new ProjectedRow { Id = x.Id }), r => r != null);
+
+        FluentActions.Invoking(() => Prepare(ctx, cmd))
+            .Should().Throw<QueryPreparationException>().WithMessage("*whole*");
     }
 }

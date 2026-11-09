@@ -80,6 +80,11 @@ reference `WITH OrderMargins AS (<5-table join>) ... PIVOT (...)` is expressed d
   `SupplyChain` returns 0 rows on this dataset in both arms, as before, so its ordering is exercised only
   by the SQL-generation tests.
 
+  `FrequentFlyers` now states its predicate as `r => r.Flights >= 5` through `SelectGroupHaving`
+  ([#380](https://github.com/AlexeyShirshov/nextorm/issues/380)), whose condition is typed on the
+  projection result: the emitted statement is unchanged (`having (count(*) >= 5)`, `--log-sql`) and the
+  query still returns the same 10 rows in both arms.
+
 * **Re-verified against the `1.0.9-rc5` packages (2026-11-08).** `NextOrmVersion` bumped
   `1.0.9-rc4 → 1.0.9-rc5` and `Directory.Build.props` `<Version>` with it, so postgres, mssql
   (package arms) and clickhouse build against what is on nuget.org. `nextorm.examples.oc-report`

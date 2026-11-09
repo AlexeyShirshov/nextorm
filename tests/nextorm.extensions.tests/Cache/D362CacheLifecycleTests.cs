@@ -30,7 +30,7 @@ public class D362CacheLifecycleTests
         using var ctx = new SqliteDataContext("Data Source=:memory:", new DataContextBuilder());
         var e = ctx.From<E>();
         var sg = SelectGroupExtensions.SelectGroup(e, (Expression<Func<E, long>>)(x => x.Id));
-        var sgh = SelectGroupExtensions.SelectGroupHaving(e, (Expression<Func<E, long>>)(x => x.Id), x => x.Id > 5);
+        var sgh = SelectGroupExtensions.SelectGroupHaving(e, (Expression<Func<E, long>>)(x => x.Id), f => f > 5);
         var sql1 = Normalize(Prepare(ctx, sg).SqlStmt ?? string.Empty);
         var sql2 = Normalize(Prepare(ctx, sgh).SqlStmt ?? string.Empty);
         sql1.Should().NotBe(sql2);
@@ -43,8 +43,8 @@ public class D362CacheLifecycleTests
     {
         using var ctx = new SqliteDataContext("Data Source=:memory:", new DataContextBuilder());
         var e = ctx.From<E>();
-        var a = SelectGroupExtensions.SelectGroupHaving(e, (Expression<Func<E, long>>)(x => x.Id), x => x.Id > 5);
-        var b = SelectGroupExtensions.SelectGroupHaving(e, (Expression<Func<E, long>>)(x => x.Id), x => x.Id > 10);
+        var a = SelectGroupExtensions.SelectGroupHaving(e, (Expression<Func<E, long>>)(x => x.Id), f => f > 5);
+        var b = SelectGroupExtensions.SelectGroupHaving(e, (Expression<Func<E, long>>)(x => x.Id), f => f > 10);
         var sqlA = Normalize(Prepare(ctx, a).SqlStmt ?? string.Empty);
         var sqlB = Normalize(Prepare(ctx, b).SqlStmt ?? string.Empty);
         sqlA.Should().NotBe(sqlB);
@@ -94,7 +94,7 @@ public class D362CacheLifecycleTests
         int threshold = 5;
         using var ctx = new SqliteDataContext("Data Source=:memory:", new DataContextBuilder());
         var e = ctx.From<E>();
-        var cmd = SelectGroupExtensions.SelectGroupHaving(e, (Expression<Func<E, long>>)(x => x.Id), x => x.Id > threshold);
+        var cmd = SelectGroupExtensions.SelectGroupHaving(e, (Expression<Func<E, long>>)(x => x.Id), f => f > threshold);
         var sql1 = Normalize(Prepare(ctx, cmd).SqlStmt ?? string.Empty);
         threshold = 10;
         cmd.ResetPreparation();

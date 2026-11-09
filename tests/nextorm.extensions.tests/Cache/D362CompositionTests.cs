@@ -255,7 +255,7 @@ public class D362CompositionTests
             .Having(x => SqlFunctions.Sql.count(x.Id) > a)
             .SelectGroupHaving(
                 x => new { x.Category, Total = SqlFunctions.Sql.count(x.Id) },
-                x => SqlFunctions.Sql.count(x.Id) > b));
+                r => r.Total > b));
 
         CountOf(sql, "having").Should().Be(1);
         CountOf(sql, "count(Id) >").Should().Be(2, "each of the two aggregate predicates appears once");
@@ -288,7 +288,7 @@ public class D362CompositionTests
 
         var sql = SqlOf(ctx, ctx.From<E>()
             .Having(x => a > 0)
-            .SelectGroupHaving(x => new { Constant = 7 }, x => b > 0));
+            .SelectGroupHaving(x => new { Constant = 7 }, r => b > 0));
 
         CountOf(sql, "having").Should().Be(0, "the constant outcome lowers the predicate into WHERE");
         CountOf(sql, "where").Should().Be(1);

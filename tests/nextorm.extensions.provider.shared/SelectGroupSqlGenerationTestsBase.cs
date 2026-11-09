@@ -73,7 +73,7 @@ public abstract class SelectGroupSqlGenerationTestsBase
         using var ctx = CreateContext();
         var (sql, parameters) = Prepare(ctx, ctx.From<Entity>().SelectGroupHaving(
             x => new { x.Category, x.Group2, x.Score, Total = SqlFunctions.Sql.count(x.Id) },
-            x => SqlFunctions.Sql.count(x.Id) > 5));
+            r => r.Total > 5));
 
         sql.Should().Be(Lf(Expected.ThreeKeyGroupBy), "the whole statement, key list and order included");
         parameters.Should().BeEmpty();
@@ -85,7 +85,7 @@ public abstract class SelectGroupSqlGenerationTestsBase
         using var ctx = CreateContext();
         var (sql, parameters) = Prepare(ctx, ctx.From<Entity>().SelectGroupHaving(
             x => new { Total = SqlFunctions.Sql.count(x.Id) },
-            x => SqlFunctions.Sql.count(x.Id) > 5));
+            r => r.Total > 5));
 
         sql.Should().Be(Lf(Expected.GlobalHaving), "a zero-key aggregate keeps a real HAVING and no GROUP BY");
         parameters.Should().BeEmpty();
@@ -110,7 +110,7 @@ public abstract class SelectGroupSqlGenerationTestsBase
         var state = "active";
         var (sql, parameters) = Prepare(ctx, ctx.From<Entity>().SelectGroupHaving(
             x => new { x.Code, Total = SqlFunctions.Sql.count(x.Id) },
-            x => x.Code == state));
+            r => r.Code == state));
 
         sql.Should().Be(Lf(Expected.ConverterKey), "a converter-mapped scalar is an ordinary key column");
         parameters.Should().Be("state=ACTIVE", "the converter maps the model value to the provider representation");
@@ -135,7 +135,7 @@ public abstract class SelectGroupSqlGenerationTestsBase
         var floor = 5;
         var (sql, parameters) = Prepare(ctx, ctx.From<Entity>().SelectGroupHaving(
             x => new { x.Category, Total = SqlFunctions.Sql.count(x.Id) },
-            x => x.Category != skip && SqlFunctions.Sql.count(x.Id) > floor));
+            r => r.Category != skip && r.Total > floor));
 
         sql.Should().Be(Lf(Expected.TwoParameters), "HAVING carries both predicates in order");
         parameters.Should().Be("skip=x;floor=5", "the bound parameter names and values, in occurrence order");
@@ -160,7 +160,7 @@ public abstract class SelectGroupSqlGenerationTestsBase
             .OrderBy(x => x.Category)
             .SelectGroupHaving(
                 x => new { x.Category, Total = SqlFunctions.Sql.count(x.Id) },
-                x => SqlFunctions.Sql.count(x.Id) > 5));
+                r => r.Total > 5));
 
         sql.Should().Be(Lf(Expected.Ordering), "ORDER BY renders after GROUP BY and HAVING");
         parameters.Should().BeEmpty();

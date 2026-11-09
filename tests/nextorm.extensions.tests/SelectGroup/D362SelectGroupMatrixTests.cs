@@ -63,7 +63,7 @@ public class D362SelectGroupMatrixTests
         var cmd = SelectGroupExtensions.SelectGroupHaving(
             e,
             (Expression<Func<Entity, int>>)(x => SqlFunctions.Sql.count(x.Id)),
-            x => SqlFunctions.Sql.count(x.Id) > 5);
+            f => f > 5);
         var sql = Normalize(Prepare(ctx, cmd).SqlStmt ?? string.Empty);
 
         sql.Should().NotContain("group by", "a global aggregate over zero keys has no GROUP BY list");
@@ -115,7 +115,7 @@ public class D362SelectGroupMatrixTests
     {
         using var ctx = new SqliteDataContext("Data Source=:memory:", new DataContextBuilder());
         var e = ctx.From<Entity>();
-        var cmd = SelectGroupExtensions.SelectGroupHaving(e, (Expression<Func<Entity, long>>)(x => x.Id), x => x.Id > 5);
+        var cmd = SelectGroupExtensions.SelectGroupHaving(e, (Expression<Func<Entity, long>>)(x => x.Id), f => f > 5);
         var sql = Normalize(Prepare(ctx, cmd).SqlStmt ?? string.Empty);
         sql.Should().Contain("having");
     }
@@ -136,7 +136,7 @@ public class D362SelectGroupMatrixTests
     {
         using var ctx = new InMemoryDataContext();
         var e = ctx.From<Entity>();
-        var cmd = SelectGroupExtensions.SelectGroupHaving(e, (Expression<Func<Entity, long>>)(x => x.Id), x => x.Score > 0);
+        var cmd = SelectGroupExtensions.SelectGroupHaving(e, (Expression<Func<Entity, long>>)(x => x.Id), f => f > 0);
         var act = () => ctx.GetPreparedQueryCommand(cmd, false, true, CancellationToken.None);
         act.Should().Throw<NotSupportedException>().WithMessage("*in-memory*");
     }

@@ -26,6 +26,12 @@ public class D362ValidationMatrixTests
         public int Value { get; set; }
     }
 
+    private sealed class IdRow
+    {
+        public long Id { get; set; }
+        public int? Unbound { get; set; }
+    }
+
     private static DbPreparedQueryCommand<T> Prepare<T>(IDataContext ctx, QueryCommand<T> cmd)
         => (DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(cmd, false, true, CancellationToken.None);
 
@@ -111,13 +117,13 @@ public class D362ValidationMatrixTests
             .Should().Throw<ArgumentNullException>();
     }
 
-    // 4. HAVING uncovered row member -> rejected
+    // 4. HAVING member the projection does not bind -> rejected
     [Fact]
     public void Having_UncoveredRowMember_Rejected()
     {
         using var ctx = new SqliteDataContext("Data Source=:memory:", new DataContextBuilder());
         var e = ctx.From<E>();
-        Reject(ctx, () => { var c = SelectGroupExtensions.SelectGroupHaving(e, (Expression<Func<E, object>>)(x => x.Id), x => x.Score > 5); ctx.GetPreparedQueryCommand(c, false, true, CancellationToken.None); });
+        Reject(ctx, () => { var c = SelectGroupExtensions.SelectGroupHaving(e, (Expression<Func<E, IdRow>>)(x => new IdRow { Id = x.Id }), r => r.Unbound > 5); ctx.GetPreparedQueryCommand(c, false, true, CancellationToken.None); });
     }
 
     // 5. HAVING using whole key -> valid
@@ -126,7 +132,7 @@ public class D362ValidationMatrixTests
     {
         using var ctx = new SqliteDataContext("Data Source=:memory:", new DataContextBuilder());
         var e = ctx.From<E>();
-        var cmd = SelectGroupExtensions.SelectGroupHaving(e, (Expression<Func<E, long>>)(x => x.Id), x => x.Id > 5);
+        var cmd = SelectGroupExtensions.SelectGroupHaving(e, (Expression<Func<E, long>>)(x => x.Id), f => f > 5);
         var sql = Normalize(Prepare(ctx, cmd).SqlStmt ?? string.Empty);
         sql.Should().Contain("having");
     }
@@ -155,21 +161,26 @@ public class D362ValidationMatrixTests
     {
         using var ctx = new SqliteDataContext("Data Source=:memory:", new DataContextBuilder());
         var e = ctx.From<E>();
-        // Condition referencing an uncovered row member is rejected, not silently rewritten.
-        FluentActions.Invoking(() =>
-        {
-            var c = SelectGroupExtensions.SelectGroupHaving(e, (Expression<Func<E, long>>)(x => x.Id), x => x.Amount > 0);
-            ctx.GetPreparedQueryCommand(c, false, true, CancellationToken.None);
-        }).Should().Throw<QueryPreparationException>();
+        // A projected non-key member (an aggregate) can be narrowed by the condition without joining GROUP BY.
+        var cmd = SelectGroupExtensions.SelectGroupHaving(
+            e, x => new { x.Id, S = SqlFunctions.Sql.sum(x.Amount) }, r => r.S > 0m);
+        var sql = Normalize(Prepare(ctx, cmd).SqlStmt ?? string.Empty);
+        var groupBy = sql[(sql.IndexOf("group by", StringComparison.Ordinal) + "group by".Length)..];
+        var having = groupBy.IndexOf(" having ", StringComparison.Ordinal);
+        if (having >= 0)
+            groupBy = groupBy[..having];
+
+        groupBy.Should().Contain("Id");
+        groupBy.Should().NotContain("Amount", "the aggregate member of the result never becomes a grouping key");
     }
 
-    // 9. global aggregation with uncovered HAVING row ref -> rejected
+    // 9. global aggregation with a member the projection does not bind -> rejected
     [Fact]
     public void GlobalAgg_UncoveredHaving_Rejected()
     {
         using var ctx = new SqliteDataContext("Data Source=:memory:", new DataContextBuilder());
         var e = ctx.From<E>();
-        Reject(ctx, () => { var c = SelectGroupExtensions.SelectGroupHaving(e, (Expression<Func<E, object>>)(x => SqlFunctions.Sql.count()), x => x.Score > 5); ctx.GetPreparedQueryCommand(c, false, true, CancellationToken.None); });
+        Reject(ctx, () => { var c = SelectGroupExtensions.SelectGroupHaving(e, (Expression<Func<E, IdRow>>)(x => new IdRow { Id = SqlFunctions.Sql.count(x.Id) }), r => r.Unbound > 5); ctx.GetPreparedQueryCommand(c, false, true, CancellationToken.None); });
     }
 
     // 10. captured threshold valid
@@ -179,7 +190,7 @@ public class D362ValidationMatrixTests
         int threshold = 5;
         using var ctx = new SqliteDataContext("Data Source=:memory:", new DataContextBuilder());
         var e = ctx.From<E>();
-        var cmd = SelectGroupExtensions.SelectGroupHaving(e, (Expression<Func<E, long>>)(x => x.Id), x => x.Id > threshold);
+        var cmd = SelectGroupExtensions.SelectGroupHaving(e, (Expression<Func<E, long>>)(x => x.Id), f => f > threshold);
         var sql = Normalize(Prepare(ctx, cmd).SqlStmt ?? string.Empty);
         sql.Should().Contain("having");
     }
@@ -280,7 +291,7 @@ public class D362ValidationMatrixTests
         using var ctx = new SqliteDataContext("Data Source=:memory:", new DataContextBuilder());
         var e = ctx.From<E>();
         var other = ctx.From<Other>();
-        Reject(ctx, () => { var c = SelectGroupExtensions.SelectGroupHaving(e, (Expression<Func<E, object>>)(x => new { x.Id, S = SqlFunctions.Sql.sum(x.Amount) }), x => SqlFunctions.Sql.exists(other.Where(o => o.Id == x.Id))); ctx.GetPreparedQueryCommand(c, false, true, CancellationToken.None); });
+        Reject(ctx, () => { var c = SelectGroupExtensions.SelectGroupHaving(e, x => new { x.Id, S = SqlFunctions.Sql.sum(x.Amount) }, r => SqlFunctions.Sql.exists(other.Where(o => o.Id == r.Id))); ctx.GetPreparedQueryCommand(c, false, true, CancellationToken.None); });
     }
 
     // subquery in ORDER BY -> rejected

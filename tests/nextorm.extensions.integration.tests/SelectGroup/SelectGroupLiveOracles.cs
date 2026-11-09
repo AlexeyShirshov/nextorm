@@ -53,7 +53,7 @@ internal static class SelectGroupLiveOracles
     {
         var rows = e.SelectGroupHaving(
             x => new { x.Category, Rows = SqlFunctions.Sql.count(x.Id) },
-            x => SqlFunctions.Sql.count(x.Id) > 1).ToList();
+            r => r.Rows > 1).ToList();
 
         rows.Select(r => r.Category).Should().BeEquivalentTo(["a", "b", null]);
         rows.Should().NotContain(r => r.Category == "c", "the c group has one row and is filtered by HAVING");
@@ -72,12 +72,12 @@ internal static class SelectGroupLiveOracles
     {
         var passing = e.SelectGroupHaving(
             x => new { Total = SqlFunctions.Sql.count(x.Id) },
-            x => SqlFunctions.Sql.count(x.Id) > 10).ToList();
+            r => r.Total > 10).ToList();
         passing.Should().ContainSingle().Which.Total.Should().Be(11);
 
         var failing = e.SelectGroupHaving(
             x => new { Total = SqlFunctions.Sql.count(x.Id) },
-            x => SqlFunctions.Sql.count(x.Id) > 11).ToList();
+            r => r.Total > 11).ToList();
         failing.Should().BeEmpty("the aggregate condition is a real HAVING");
     }
 
@@ -90,12 +90,12 @@ internal static class SelectGroupLiveOracles
 
         var nonEmpty = e.SelectGroupHaving(
             x => new { Constant = "constant" },
-            x => threshold > 0).ToList();
+            r => threshold > 0).ToList();
         nonEmpty.Should().ContainSingle().Which.Constant.Should().Be("constant");
 
         var empty = e.Where(x => x.Id < 0).SelectGroupHaving(
             x => new { Constant = "constant" },
-            x => threshold > 0).ToList();
+            r => threshold > 0).ToList();
         empty.Should().BeEmpty("a constant projection over an empty source keeps zero rows");
     }
 
@@ -105,7 +105,7 @@ internal static class SelectGroupLiveOracles
         var rows = e.Having(x => SqlFunctions.Sql.count(x.Id) > 1)
             .SelectGroupHaving(
                 x => new { x.Category, Rows = SqlFunctions.Sql.count(x.Id) },
-                x => x.Category != "d")
+                r => r.Category != "d")
             .ToList();
 
         // AND: count > 1 AND category <> 'd' -> a, b. The NULL group has count 2 but `NULL <> 'd'`
@@ -127,12 +127,12 @@ internal static class SelectGroupLiveOracles
 
         var passing = e.SelectGroupHaving(
             x => new { Total = SqlFunctions.Sql.count(x.Id) },
-            x => SqlFunctions.Sql.count(x.Id) > 10).ToList();
+            r => r.Total > 10).ToList();
         passing.Should().ContainSingle().Which.Total.Should().Be(11);
 
         var failing = e.SelectGroupHaving(
             x => new { Total = SqlFunctions.Sql.count(x.Id) },
-            x => SqlFunctions.Sql.count(x.Id) > 11).ToList();
+            r => r.Total > 11).ToList();
         failing.Should().BeEmpty();
     }
 
@@ -176,7 +176,7 @@ internal static class SelectGroupLiveOracles
             .OrderBy(x => x.Category)
             .SelectGroupHaving(
                 x => new { x.Category, Rows = SqlFunctions.Sql.count(x.Id) },
-                x => x.Category != "d")
+                r => r.Category != "d")
             .Limit(2)
             .ToList();
 

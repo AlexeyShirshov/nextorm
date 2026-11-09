@@ -59,7 +59,7 @@ public class D362CacheLifecycleBTests
             .Where(x => x.Amount > min)
             .SelectGroupHaving(
                 x => new GrpRow { Category = x.Category, Total = SqlFunctions.Sql.count(x.Id) },
-                x => SqlFunctions.Sql.count(x.Id) > 0);
+                r => r.Total > 0);
 
         var preparedOriginal = Prepare(ctx, original);
         var sql = Normalize(preparedOriginal.SqlStmt!);
@@ -197,7 +197,7 @@ public class D362CacheLifecycleBTests
         var cold = ctx.From<Grp>()
             .SelectGroupHaving(
                 x => new { x.Category, Total = SqlFunctions.Sql.count() },
-                x => x.Category != null)
+                r => r.Category != null)
             .ToList();
         SelectGroupDiagnostics.AnalyzeCalls.Should().Be(1, "the cold preparation runs the inference once");
         cold.Should().BeEquivalentTo(new[]
@@ -209,7 +209,7 @@ public class D362CacheLifecycleBTests
         var warm = ctx.From<Grp>()
             .SelectGroupHaving(
                 x => new { x.Category, Total = SqlFunctions.Sql.count() },
-                x => x.Category != null)
+                r => r.Category != null)
             .ToList();
         SelectGroupDiagnostics.AnalyzeCalls.Should().Be(
             1, "a confirmed raw-cache hit must run the inference visitor zero times");
@@ -263,10 +263,10 @@ public class D362CacheLifecycleBTests
         SelectGroupDiagnostics.Reset();
 
         _ = ctx.From<Grp>()
-            .SelectGroupHaving(x => new GrpRow { Category = x.Category, Total = SqlFunctions.Sql.count(x.Id) }, x => x.Category == "a")
+            .SelectGroupHaving(x => new GrpRow { Category = x.Category, Total = SqlFunctions.Sql.count(x.Id) }, r => r.Category == "a")
             .ToList();
         _ = ctx.From<Grp>()
-            .SelectGroupHaving(x => new GrpRow { Category = x.Category, Total = SqlFunctions.Sql.count(x.Id) }, x => x.Category == "b")
+            .SelectGroupHaving(x => new GrpRow { Category = x.Category, Total = SqlFunctions.Sql.count(x.Id) }, r => r.Category == "b")
             .ToList();
 
         SelectGroupDiagnostics.AnalyzeCalls.Should().Be(2, "a different condition literal is a different raw shape");
@@ -284,7 +284,7 @@ public class D362CacheLifecycleBTests
             .SelectGroup(x => new GrpRow { Category = x.Category, Total = SqlFunctions.Sql.count(x.Id) })
             .ToList();
         _ = ctx.From<Grp>()
-            .SelectGroupHaving(x => new GrpRow { Category = x.Category, Total = SqlFunctions.Sql.count(x.Id) }, x => x.Category != null)
+            .SelectGroupHaving(x => new GrpRow { Category = x.Category, Total = SqlFunctions.Sql.count(x.Id) }, r => r.Category != null)
             .ToList();
 
         SelectGroupDiagnostics.AnalyzeCalls.Should().Be(2, "SelectGroup and SelectGroupHaving carry different component state");
@@ -302,7 +302,7 @@ public class D362CacheLifecycleBTests
         var cmd = ctx.From<Grp>()
             .SelectGroupHaving(
                 x => new GrpRow { Category = x.Category, Total = SqlFunctions.Sql.count(x.Id) },
-                x => x.Category != "z");
+                r => r.Category != "z");
 
         var first = Normalize(((DbPreparedQueryCommand<GrpRow>)ctx.GetPreparedQueryCommand(cmd, false, true, CancellationToken.None)).SqlStmt!);
         cmd.ResetPreparation();
@@ -379,7 +379,7 @@ public class D362CacheLifecycleBTests
         QueryCommand<GrpRow> Build() => ctx.From<Grp>()
             .SelectGroupHaving(
                 x => new GrpRow { Category = x.Category, Total = SqlFunctions.Sql.count(x.Id) },
-                x => SqlFunctions.Sql.count(x.Id) > SqlFunctions.Parameter<int>(0));
+                r => r.Total > SqlFunctions.Parameter<int>(0));
 
         var first = Prepare(ctx, Build());
         SelectGroupDiagnostics.AnalyzeCalls.Should().Be(1, "cold preparation infers once");
@@ -447,7 +447,7 @@ public class D362CacheLifecycleBTests
         var cold = ctx.From<Grp>()
             .SelectGroupHaving(
                 x => new { x.Category, Total = SqlFunctions.Sql.count() },
-                x => x.Category == category)
+                r => r.Category == category)
             .ToList();
         SelectGroupDiagnostics.AnalyzeCalls.Should().Be(1, "the cold preparation runs the inference once");
         cold.Should().BeEquivalentTo(new[] { new { Category = (string?)"a", Total = 2 } });
@@ -456,7 +456,7 @@ public class D362CacheLifecycleBTests
         var warm = ctx.From<Grp>()
             .SelectGroupHaving(
                 x => new { x.Category, Total = SqlFunctions.Sql.count() },
-                x => x.Category == category)
+                r => r.Category == category)
             .ToList();
         SelectGroupDiagnostics.AnalyzeCalls.Should().Be(
             1, "the same closure instance must hit the raw recipe with zero inference runs");

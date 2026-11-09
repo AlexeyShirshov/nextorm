@@ -438,10 +438,9 @@ public static class AviasalesQueries
             .Join<IAirportData>((p, dep) => p.Flight.DepartureAirport == dep.AirportCode, Alias.Departure)
             .Join<IAirportData>((p, arr) => p.Flight.ArrivalAirport == arr.AirportCode, Alias.Arrival)
             .Where(p => p.Flight.Status == "Departed" || p.Flight.Status == "Arrived")
-            .Having(g => SqlFunctions.Sql.count() >= 5)
             .OrderByDescending(g => SqlFunctions.Sql.count())
             .Limit(10)
-            .SelectGroup(g => new
+            .SelectGroupHaving(g => new
             {
                 g.Ticket.PassengerId,
                 g.Ticket.PassengerName,
@@ -450,7 +449,7 @@ public static class AviasalesQueries
                     SqlFunctions.Postgres.json_get_text(g.Departure.City, "ru")
                     + " -> " + SqlFunctions.Postgres.json_get_text(g.Arrival.City, "ru"),
                     ", ")
-            })
+            }, r => r.Flights >= 5)
             .ToListAsync(ct);
 
         return rows;
