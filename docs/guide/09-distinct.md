@@ -4,10 +4,6 @@
 
 **Prerequisites:** [Querying and projections](../engine/index.md) · [Sorting and paging](06-sorting-and-paging.md) · [Set operations](08-set-operations.md)
 
-> **Operator names.** The built-in operators are `SelectWhereMinOld` / `SelectWhereMaxOld`; they cover the
-> compatibility path, including the in-memory provider. `SelectWhereMin` / `SelectWhereMax` from the
-> [extensions package](../advanced/extensions-package.md) are built on the public query-component layer.
-
 ## Overview
 
 nextorm exposes two entry points for `SELECT DISTINCT`:
@@ -196,145 +192,6 @@ select distinct on (somestring) id, somestring
 The key may be an anonymous type to key on several columns. Only PostgreSQL implements `DISTINCT ON`;
 every other provider rejects it at SQL build time.
 
-## Keeping the extreme row (`SelectWhereMax` / `SelectWhereMin`)
-
-[`SelectWhereMax`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMaxOld``1(System.Linq.Expressions.Expression{System.Func{`0,``0}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) and
-[`SelectWhereMin`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMinOld``1(System.Linq.Expressions.Expression{System.Func{`0,``0}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) keep the row (or rows)
-whose value under a selector is the greatest or smallest in the source. They are a row filter, not an
-aggregate: a surviving row keeps every column.
-
-**Global vs per-group.** Without a group key the extremum is taken over the whole source; with a group
-key the extreme row(s) are selected within each distinct group. A `null` key is a group of its own.
-
-```csharp
-// Global: the single row with the greatest score.
-var top = dataContext.From<ExtremaEntity>()
-    .SelectWhereMax(e => e.Score)
-    .ToList();
-
-// Per group: one extreme row per category.
-var perGroup = dataContext.From<ExtremaEntity>()
-    .SelectWhereMax(e => e.Score, ExtremeRowTies.One, e => e.Category)
-    .ToList();
-```
-
-```sql
--- PostgreSQL
--- global: an eligible integral key renders the native ORDER BY ... LIMIT 1
-select t1.id, t1.score, t1.category, t1.label
- from (select *
- from extrema_entity
- where score is not null order by "score" desc limit 1) as "t1"
-
--- per group: a string group key is not native-eligible, so the portable window lowering is kept
-select t1.id, t1.score, t1.category, t1.label
- from (select *, row_number() over (partition by category order by score desc) as "__nextorm_rn"
- from extrema_entity
- where score is not null) as "t1"
- where t1."__nextorm_rn" = 1
-```
-
-[`ExtremeRowTies`](xref:NextORM.Core.ExtremeRowTies) controls ties. [`One`](xref:NextORM.Core.ExtremeRowTies.One) (the default) keeps a single
-row — when values tie the provider picks one — while [`All`](xref:NextORM.Core.ExtremeRowTies.All) keeps every row tied on the extreme
-value. Ties are decided only by the selector, so an `All` result contains all of them and a `One`
-result exactly one arbitrary member.
-
-**Projection form.** The
-[`SelectWhereMax`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMaxOld``2(System.Linq.Expressions.Expression{System.Func{`0,``0}},System.Linq.Expressions.Expression{System.Func{`0,``1}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) /
-[`SelectWhereMin`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMinOld``2(System.Linq.Expressions.Expression{System.Func{`0,``0}},System.Linq.Expressions.Expression{System.Func{`0,``1}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) overloads take a
-projection and apply it to each surviving row, returning a typed query command:
-
-```csharp
-var projected = dataContext.From<ExtremaEntity>()
-    .SelectWhereMax(e => e.Score, e => new { e.Id, e.Label })
-    .ToList();
-```
-
-```sql
--- PostgreSQL
-select t1.id, t1.label
- from (select *
- from extrema_entity
- where score is not null order by "score" desc limit 1) as "t1"
-```
-
-**Mapped source.** The projection-less overloads return whole entity rows, so their source must be a
-mapped entity type (`From<TEntity>()`, or another source that carries entity metadata). A name-addressed
-raw source such as `From("orders")` has no mapped columns to materialise, so preparation rejects it with
-`BuildSqlCommandException` ("SelectWhereMax/SelectWhereMin requires a mapped entity source.") instead of a
-misleading projection error. For a raw named source use the projected overloads above — the projection
-supplies the result shape — wherever the dialect supports the operation.
-
-**NULL semantics.** `null` comparison values are ignored, so they never win the extremum and never
-appear in a result. A group whose comparison value is always `null` yields no rows at all, and the
-global form returns nothing when every value is `null`.
-
-**How the request is lowered.** `SelectWhereMax`/`SelectWhereMin` are SQL-side syntactic sugar: the
-logical request is lowered inside the shared query pipeline, and the shape depends on the tie policy.
-
-[`One`](xref:NextORM.Core.ExtremeRowTies.One) lowers to a window-function derived table —
-`row_number()` over `(partition by <group> order by <value> [desc])` — filtered to `1`, with the source
-condition ANDed with an `is not null` filter on the value. On PostgreSQL and ClickHouse a native-eligible
-`One` request is rendered natively instead, automatically, from the provider and the query form — see
-[Native extreme-row strategies](../advanced/select-where-extrema-native.md) — and every other provider
-or shape keeps the portable window.
-
-[`All`](xref:NextORM.Core.ExtremeRowTies.All) lowers to an **aggregate** form. It never uses a ranking
-window: no `rank()`, no `row_number()` and no window `over (...)` appears in an `All` statement, with one
-exception — a floating-point value key on ClickHouse keeps the ranking window, because that server's
-`max()`/`min()` treat `NaN` as the extreme value while its `ORDER BY` ranks `NaN` last, and the ranking
-window is the reference the contract is defined by. Per
-group it is `GROUP BY <group>` selecting the extreme value (plus the null-safe group key) and joined
-back to the source; globally it is a single scalar aggregate subquery joined back; a composite key is
-resolved component by component, lexicographically — each component's extremum is taken over the rows
-that already match the selected prefix — so `(9, 2)` beats `(8, 100)`.
-
-```sql
--- All, global: one scalar aggregate, joined back to the source
-select t1.id, t1.score, t1.category, t1.label
- from extrema_entity as "t1"
- join (select max(score) as "__nextorm_ext_1_0"
- from extrema_entity) as "t2" on t1.score = t2."__nextorm_ext_1_0"
-
--- All, per group: the null-safe group key and the extreme value, grouped and joined back
-select t1.id, t1.score, t1.category, t1.label
- from extrema_entity as "t1"
- join (select category as "__nextorm_ext_1_1", max(score) as "__nextorm_ext_1_0"
- from extrema_entity
- group by category) as "t2" on ((t1.category = t2."__nextorm_ext_1_1" or (t1.category is null and t2."__nextorm_ext_1_1" is null)) and t1.score = t2."__nextorm_ext_1_0")
-
--- One, per group (portable): rank the source rows, then keep rank 1
-select t1.id, t1.score, t1.category, t1.label
- from (select *, row_number() over (partition by category order by score desc) as "__nextorm_rn"
- from extrema_entity
- where score is not null) as "t1"
- where t1."__nextorm_rn" = 1
-```
-
-Both shapes keep the caller's source condition and the `null` semantics: a `null` comparison value never
-wins the extremum. The window form filters with `is not null` before ranking; the aggregate form relies on
-the aggregate and the key comparison discarding `null`, and renders that same `is not null` filter inside
-the aggregate when the key is nullable:
-
-```sql
--- All, global, nullable key: the aggregate filters nulls itself
-select t1.id, t1.score, t1.category
- from extrema_nullable as "t1"
- join (select max(score) as "__nextorm_ext_1_0"
- from extrema_nullable
- where score is not null) as "t2" on t1.score = t2."__nextorm_ext_1_0"
-```
-
-Both shapes are produced by the same pipeline step, so the result contract above — whole-entity rows, the
-projection overloads, the mapped-source requirement and the `null` semantics — is identical for every tie
-policy and every SQL provider (SQLite, SQL Server, PostgreSQL, MySQL, MariaDB and ClickHouse). The
-in-memory provider evaluates the same contract directly over its own enumerator and renders no SQL at
-all.
-
-The request is rejected at SQL build time when combined with another row-shaping modifier the
-derived-table lowering cannot express: [`DistinctOn`](xref:NextORM.Postgres.PostgresEntityBuilderExtensions.DistinctOn``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}})), [`GroupBy`](xref:NextORM.Core.EntityBuilder`1.GroupBy``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), a join, `Having`, named windows,
-`LimitBy`, `ArrayJoin`, `PreWhere`, paging, a set operation or a non-physical source.
-
 ## Provider differences
 
 | Provider | `DISTINCT` + limit | `DISTINCT` over a join |
@@ -351,6 +208,7 @@ derived-table lowering cannot express: [`DistinctOn`](xref:NextORM.Postgres.Post
 
 - [Set operations](08-set-operations.md) - [`Union`](xref:NextORM.Core.QueryCommand`1.Union``1(NextORM.Core.QueryCommand{``0})) already removes duplicates; [`UnionAll`](xref:NextORM.Core.QueryCommand`1.UnionAll``1(NextORM.Core.QueryCommand{``0})) does not.
 - [Sorting and paging](06-sorting-and-paging.md) - [`Limit`](xref:NextORM.Core.Paging.Limit), [`Offset`](xref:NextORM.Core.Paging.Offset) and [`Page`](xref:NextORM.Core.EntityBuilder`1.Page(System.Int32,System.Int32)).
+- [Grouping and aggregates](05-grouping-and-aggregates.md) - keeping the extreme row with `SelectWhereMax` / `SelectWhereMin`.
 - [Querying and projections](../engine/index.md)
 
 ---
@@ -358,7 +216,4 @@ derived-table lowering cannot express: [`DistinctOn`](xref:NextORM.Postgres.Post
 Source: `tests/nextorm.integration.tests/CommonTestSuite/Queries/Rows/CommonTestSuite.Distinct.cs:9`,
 `tests/nextorm.sqlite.tests/SqlGeneration/SqlGenerationTests.cs:26`,
 `tests/nextorm.sqlserver.tests/SqlGeneration/SqlGenerationTests.cs:26,35`,
-`tests/nextorm.postgres.tests/SqlGeneration/SqlGenerationTests.cs:25`,
-`tests/nextorm.integration.tests/CommonTestSuite/Queries/Rows/CommonTestSuite.SelectWhereExtrema.cs:41`,
-`tests/nextorm.sqlite.tests/SqlGeneration/Sources/T302ExtremeRowAllSqlGenerationTests.cs:27`,
-`tests/nextorm.integration.tests/ClickHouse/Integration/ClickHouseIntegrationTests.cs:1353`.
+`tests/nextorm.postgres.tests/SqlGeneration/SqlGenerationTests.cs:25`.

@@ -2,7 +2,7 @@
 
 > For a `SelectWhereMax`/`SelectWhereMin` request with `ExtremeRowTies.One`, PostgreSQL and ClickHouse render a native SQL strategy instead of the portable window-function lowering — automatically, from the provider and the query form, with no opt-in and no per-instance switch.
 
-**Prerequisites:** [Keeping the extreme row](../guide/09-distinct.md) · [Provider overview](../connecting-providers/overview.md) · [API quick reference](api-reference.md)
+**Prerequisites:** [Keeping the extreme row](../guide/05-grouping-and-aggregates.md#keeping-the-extreme-row-selectwheremax--selectwheremin) · [Provider overview](../connecting-providers/overview.md) · [API quick reference](api-reference.md)
 
 > **Operator names.** The built-in operators are `SelectWhereMinOld` / `SelectWhereMaxOld`; they cover the
 > compatibility path, including the in-memory provider. `SelectWhereMin` / `SelectWhereMax` from the
@@ -11,7 +11,7 @@
 ## Overview
 
 [`SelectWhereMax`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMaxOld``1(System.Linq.Expressions.Expression{System.Func{`0,``0}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) and
-[`SelectWhereMin`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMinOld``1(System.Linq.Expressions.Expression{System.Func{`0,``0}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) keep the row whose value under a selector is the greatest or smallest in the source, globally or per group. They are a row filter, not an aggregate: a surviving row keeps every column. The semantics are unchanged from the portable implementation — see [Keeping the extreme row](../guide/09-distinct.md) for the full contract.
+[`SelectWhereMin`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMinOld``1(System.Linq.Expressions.Expression{System.Func{`0,``0}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) keep the row whose value under a selector is the greatest or smallest in the source, globally or per group. They are a row filter, not an aggregate: a surviving row keeps every column. The semantics are unchanged from the portable implementation — see [Keeping the extreme row](../guide/05-grouping-and-aggregates.md#keeping-the-extreme-row-selectwheremax--selectwheremin) for the full contract.
 
 What this page adds is *how* the `One` request reaches the database. Selection is automatic and deterministic **by provider and query form/type**:
 
@@ -19,7 +19,7 @@ What this page adds is *how* the `One` request reaches the database. Selection i
 - on ClickHouse, a native-eligible key, group and payload render a single `argMin`/`argMax` aggregate;
 - every other combination keeps the portable window-function lowering.
 
-There is no opt-in, no per-instance or per-query switch, and no retry-on-error: once the dialect accepts a request it renders it, and a rendering failure is surfaced instead of silently re-running the portable path. The hook covers `ExtremeRowTies.One` only: there is no native `All` renderer, so an `All` request takes the aggregate lowering described in [Keeping the extreme row](../guide/09-distinct.md) — `GROUP BY` plus a join-back per group, a scalar aggregate plus a join-back globally, component by component for a composite key. The one exception is a floating-point value key on ClickHouse, which keeps the ranking window: that server's `max()`/`min()` and its `ORDER BY` disagree about `NaN` (the aggregate returns `NaN` as the extremum while the ordering ranks it last), so the aggregate form would return a different winner set than the contract the window implements.
+There is no opt-in, no per-instance or per-query switch, and no retry-on-error: once the dialect accepts a request it renders it, and a rendering failure is surfaced instead of silently re-running the portable path. The hook covers `ExtremeRowTies.One` only: there is no native `All` renderer, so an `All` request takes the aggregate lowering described in [Keeping the extreme row](../guide/05-grouping-and-aggregates.md#keeping-the-extreme-row-selectwheremax--selectwheremin) — `GROUP BY` plus a join-back per group, a scalar aggregate plus a join-back globally, component by component for a composite key. The one exception is a floating-point value key on ClickHouse, which keeps the ranking window: that server's `max()`/`min()` and its `ORDER BY` disagree about `NaN` (the aggregate returns `NaN` as the extremum while the ordering ranks it last), so the aggregate form would return a different winner set than the contract the window implements.
 
 ## Usage
 
@@ -121,7 +121,7 @@ To build such a dialect and register it on a context, see [Extensibility: custom
 
 ## See also
 
-- [Keeping the extreme row (`SelectWhereMax` / `SelectWhereMin`)](../guide/09-distinct.md)
+- [Keeping the extreme row (`SelectWhereMax` / `SelectWhereMin`)](../guide/05-grouping-and-aggregates.md#keeping-the-extreme-row-selectwheremax--selectwheremin)
 - [Extensibility: custom SQL dialects and renderers](extensibility.md)
 - [API quick reference](api-reference.md)
 - [Provider overview](../connecting-providers/overview.md)

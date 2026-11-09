@@ -421,6 +421,80 @@ samples for the public renames, sweep the full matrix, both live suites, and bot
   New harness: `benchmarks/nextorm.benchmark/Issue319/Issue319PreparationProbe.cs`
   (`--issue319-prep-probe <outDir>`), which attributes construction, fingerprint, raw lookup,
   prepared-state apply and plan-key build.
+- **2026-11-09 — I6 attribution delivered; T7 closed; T1 improved; T2/T4 blocked on the core.**
+  New harness `benchmarks/nextorm.benchmark/Issue319/Issue319TargetsProbe.cs`
+  (`--issue319-targets <outDir>`) decomposes the four remaining frozen targets into
+  builder/command, preparation (raw-recipe reuse or full prepare), plan-key lookup and execution,
+  both per call and in the benchmark's own shape (one operation = the whole iteration loop, with the
+  captured value hoisted into one display class per operation). Measured attribution (B/op):
+  - **Any (T1)** 6,025 = builder 1,024 + `ToParentCommand` 552 + subcommand full prepare 1,232 +
+    plan hit 2,448 + execution 760. The plan hit was **not** the store lookup (80 + 48 B); it was
+    `RefreshParameters` falling back to `ExtractParams`, i.e. **re-rendering the whole statement**
+    on every execution, because the parameter recipe never supported a capture that lives inside the
+    referenced subquery the shared `Any`/`Count`/`All` wrapper renders.
+  - **Where (T2)** 6,155 = builder 1,024 + `Select` (tree + command) 1,624 + preparation 2,592 +
+    execution 1,018. The preparation is a full prepare on every operation because the D201 recipe
+    keys captured closures by **identity**, and a benchmark operation hoists a new display class:
+    the recipe can never hit, so the arm measures its cold path. When the closure is stable the hit
+    costs 848 B (fingerprint 424, apply 232, key 160).
+  - **GroupByCount (T4)** 9,175 = caller expression trees 2,656 + builder/command 912 + recipe hit
+    816 + execution 4,656. It reuses the recipe correctly (0 mismatches); the remaining overage is
+    entirely the apply+key+hash work on a fresh command.
+  - **PageAsync (T7)** 21,304 = command 4,832 + preparation 2,216 + execution 14,256, and the
+    preparation was a **rejected apply on every call** (`RecipeApplyMismatches` = one per call).
+  Three product defects found by the attribution were fixed:
+  1. **A sorted query could never reuse the raw recipe.** `Sorting.PreparedExpression` is filled in
+     place by preparation and is part of the normalized key, while the fresh command's sort keys are
+     still raw; the staged apply therefore built a key that differed from the stored one and
+     discarded the candidate every time. `ApplyPreparationFrom` now adopts the stored sort array
+     (and `DiscardStagedPreparation` restores the caller's). Regression test:
+     `Recipe_SortedPageShape_ReusesInsteadOfRejectingTheStagedKey`.
+  2. **A capture inside a referenced subquery forced a full SQL re-render per execution.**
+     `ParamRefreshRecipe` now collects captures from a referenced query's prepared condition and
+     projection (root kind + index travel with each parameter), so the shared `Any`/`Count`/`All`
+     wrapper binds the current subquery's closure value positionally instead of re-rendering the
+     statement. A captured `QueryCommand` member is not counted as a value capture (it is a
+     referenced query, never a bound parameter). Regression test:
+     `ReferencedQueryCapture_OnCacheHit_ShouldBindFreshValueWithoutReRendering`.
+  3. **The raw fingerprint could not tell two `ORDER BY` members apart.** It hashed
+     `Sorting.PreparedExpression` through the plan comparer, but a fresh command's sort keys are still
+     unprepared, so every key contributed a null prepared expression and two different sort members
+     shared one bucket. It now hashes the raw sort key (direction, null placement, column index, raw
+     expression). This was latent before (a false candidate was rejected by the staged key, wasting an
+     apply), but fix 1 makes the staged key match, so without it an invalid `ORDER BY` member would
+     reuse a valid plan instead of throwing. Caught by
+     `SqlitePreparationShapeCoverageTests.OrderByProjectedMember_ShouldRunAndUnknownMember_ShouldBeRejected`;
+     regression test `Fingerprint_DistinguishesDifferentOrderByMembers`.
+  Result on the frozen manifest (paired, same round; linq2db denominator re-measured):
+  | target | linq2db | before | after | ratio before -> after | 1.20x limit |
+  | --- | ---: | ---: | ---: | ---: | ---: |
+  | T1 Any | 233.61 KB | 588.36 KB | **370.35 KB** | 2.518 -> **1.585** | 280.33 KB |
+  | T2 Where | 253.53 KB | 601.06 KB | 601.06 KB | 2.371 -> 2.371 | 304.24 KB |
+  | T4 GroupByCount | 6.85 KB | 8.96 KB | 8.96 KB | 1.308 -> 1.308 | 8.22 KB |
+  | T7 PageAsync | 17.61 KB | 20.81 KB | **19.10 KB** | 1.182 -> **1.085** | 21.13 KB |
+  **T7 is closed.** The cached-control sweep is unchanged or better (`Cte` 92.9 KB, `Join4` 97.43 KB,
+  `Except` 41.33 KB, `Intersect` 41.17 KB, `RecursiveCte` 98.60 KB, `CaseWhen` 26.80 KB); no control
+  regressed. Time: `Any` 2.345 -> 2.014 ms (the removed re-render), `Page` 110.1 -> 103.1 us, no
+  positive regression on the others.
+  **T1/T2/T4 remaining work is the design's core, not cleanup.** Per target, the arithmetic of the
+  remaining gap:
+  - `T1 Any`: 3,784 -> 2,870 B/call needs -914. Builder+closure tree (1,024), subcommand command
+    (552), and execution (760) are 2,336 of the budget; the entire subquery preparation+hit
+    (1,448) must therefore fall to ~534, i.e. the subquery must not be built and fully prepared
+    from scratch at all.
+  - `T2 Where`: even with a recipe hit the arm is 4,410 B (builder 1,024 + tree/command 1,624 +
+    hit 848 + execution 1,018) against 3,042; the closure-identity key means a fresh display class
+    per operation is a guaranteed full prepare today.
+  - `T4 GroupByCount`: with the recipe hit at zero it would be 8,224 B, just inside 8,417, so it
+    needs only the execute-the-stored-plan-without-applying-state route for parameter-free shapes.
+  All three need the raw-handle/execution-binding core of design §4/§6/§7: a compact raw result from
+  `Select`/`ToCommand` (so the 552-1,624 B command is not built), a value-agnostic raw key, and
+  execution of the stored plan with freshly bound values instead of staging prepared state into a
+  fresh command. That is the I3-I5 bulk and is **not** part of I6 cleanup. Per design §12 / plan I6
+  this is raised as the narrow owner decision rather than relaxing the 1.20 floor:
+  **(a)** authorize the raw-handle core migration (staged, per-route, keeping SQL/row parity), or
+  **(b)** accept T1/T2/T4 as documented residuals of the current architecture with the measured
+  attribution above.
 - **Next — I3b group 4.** Time re-measurement on a quiet machine (the noise contract still governs),
   then the raw-field consolidation proper (the remaining ~40 inline raw fields) for the non-initial
   targets (Any/Where/GroupByCount/PageAsync) in I6.

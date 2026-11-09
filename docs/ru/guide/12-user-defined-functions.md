@@ -129,14 +129,32 @@ select Lower(somestring) as 'V'
 скалярное значение. По умолчанию свойство равно `false`:
 
 ```csharp
-[SqlFunction("my_sum", IsAggregate = true)]
-public static decimal MySum(decimal value) => throw new NotSupportedException();
+private static class Udf
+{
+    [SqlFunction("my_sum", IsAggregate = true)]
+    public static long MySum(long value) => throw new NotSupportedException();
+}
+
+var rows = dataContext.From<IComplexEntity>()
+    .SelectGroup(e => new { e.Int, Total = Udf.MySum(e.Id) })
+    .ToList();
+```
+
+```sql
+-- SQLite
+select nullableint as 'Int', my_sum(id) as 'Total'
+ from complex_entity
+ group by nullableint
 ```
 
 `IsAggregate = true` делает вызов непрозрачной агрегатной границей для `SelectGroup` (в `NextORM.Extensions`): его
 аргументы, его `DISTINCT`-вход и его `FILTER`-предикат никогда не становятся ключами группировки, а
 проекция без зависящих от строки членов становится глобальной агрегацией. Скалярная функция — без
 атрибута или с `IsAggregate = false` — может, наоборот, быть выведена как целый ключ группировки.
+
+Ключом стал только `nullableint`: вызов `my_sum(id)` — непрозрачная агрегатная граница, поэтому его
+аргумент не попал в `GROUP BY`. Без `IsAggregate = true` тот же вызов был бы скалярным и сам стал бы
+ключом — `group by nullableint, my_sum(id)`.
 
 Эффективная аннотация — это **либо** собственный атрибут метода, **либо**, когда у метода его нет,
 атрибут объявляющего типа, и никогда их слияние. Поэтому атрибут метода заменяет атрибут типа

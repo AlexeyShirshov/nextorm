@@ -2,7 +2,7 @@
 
 > A separate product package that adds two families of query-component operators — extreme-row selection (`SelectWhereMin` / `SelectWhereMax`) and grouping inferred from a projection (`SelectGroup` / `SelectGroupHaving`) — built entirely on the public query-component layer, next to the frozen built-in `SelectWhereMin` / `SelectWhereMax`.
 
-**Prerequisites:** [Keeping the extreme row (`SelectWhereMax` / `SelectWhereMin`)](../guide/09-distinct.md) · [Grouping and aggregates](../guide/05-grouping-and-aggregates.md) · [Extensibility: custom SQL dialects and renderers](extensibility.md) · [API quick reference](api-reference.md)
+**Prerequisites:** [Grouping and aggregates](../guide/05-grouping-and-aggregates.md) (including [keeping the extreme row](../guide/05-grouping-and-aggregates.md#keeping-the-extreme-row-selectwheremax--selectwheremin)) · [Extensibility: custom SQL dialects and renderers](extensibility.md) · [API quick reference](api-reference.md)
 
 ## Overview
 
@@ -262,7 +262,7 @@ var byTeam = db.From<Player>()
 
 ## See also
 
-- [Keeping the extreme row (`SelectWhereMax` / `SelectWhereMin`)](../guide/09-distinct.md) — the shared result contract
+- [Keeping the extreme row (`SelectWhereMax` / `SelectWhereMin`)](../guide/05-grouping-and-aggregates.md#keeping-the-extreme-row-selectwheremax--selectwheremin) — the shared result contract
 - [Grouping and aggregates](../guide/05-grouping-and-aggregates.md) — the inference rules behind `SelectGroup` / `SelectGroupHaving`
 - [Native extreme-row strategies](select-where-extrema-native.md) — how the built-in operator renders `One` natively on some providers
 - [Extensibility: custom SQL dialects and renderers](extensibility.md)

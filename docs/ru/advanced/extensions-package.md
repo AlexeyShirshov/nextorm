@@ -2,7 +2,7 @@
 
 > Отдельный продуктовый пакет, который добавляет два семейства операторов-компонентов запроса — выбор экстремальной строки (`SelectWhereMin` / `SelectWhereMax`) и группировку, выведенную из проекции (`SelectGroup` / `SelectGroupHaving`), — построенных целиком на публичном слое компонентов запроса, рядом с замороженными встроенными `SelectWhereMin` / `SelectWhereMax`.
 
-**Предварительные требования:** [Выбор экстремальной строки (`SelectWhereMax` / `SelectWhereMin`)](../guide/09-distinct.md) · [Группировка и агрегаты](../guide/05-grouping-and-aggregates.md) · [Расширяемость: пользовательские SQL-диалекты и рендереры](extensibility.md) · [Краткий справочник API](api-reference.md)
+**Предварительные требования:** [Группировка и агрегаты](../guide/05-grouping-and-aggregates.md) (включая [выбор экстремальной строки](../guide/05-grouping-and-aggregates.md#выбор-экстремальной-строки-selectwheremax--selectwheremin)) · [Расширяемость: пользовательские SQL-диалекты и рендереры](extensibility.md) · [Краткий справочник API](api-reference.md)
 
 ## Обзор
 
@@ -263,7 +263,7 @@ var byTeam = db.From<Player>()
 
 ## См. также
 
-- [Выбор экстремальной строки (`SelectWhereMax` / `SelectWhereMin`)](../guide/09-distinct.md) — общий контракт результата
+- [Выбор экстремальной строки (`SelectWhereMax` / `SelectWhereMin`)](../guide/05-grouping-and-aggregates.md#выбор-экстремальной-строки-selectwheremax--selectwheremin) — общий контракт результата
 - [Группировка и агрегаты](../guide/05-grouping-and-aggregates.md) — правила вывода `SelectGroup` / `SelectGroupHaving`
 - [Нативные стратегии выбора экстремальной строки](select-where-extrema-native.md) — как встроенный оператор рендерит `One` нативно у некоторых провайдеров
 - [Расширяемость: пользовательские SQL-диалекты и рендереры](extensibility.md)

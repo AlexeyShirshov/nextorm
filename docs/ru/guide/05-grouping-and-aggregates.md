@@ -402,6 +402,155 @@ select distinct on (somestring) id, somestring
 только PostgreSQL — остальные провайдеры отклоняют его на этапе построения SQL. Полная поверхность —
 в разделе [SELECT DISTINCT](09-distinct.md#distinct-on-postgresql).
 
+## Выбор экстремальной строки (`SelectWhereMax` / `SelectWhereMin`)
+
+> **Имена операторов.** Встроенные операторы — `SelectWhereMinOld` / `SelectWhereMaxOld`; они покрывают
+> путь совместимости, включая провайдер in-memory. `SelectWhereMin` / `SelectWhereMax` из
+> [пакета расширений](../advanced/extensions-package.md) построены на публичном слое компонентов запроса.
+
+[`SelectWhereMax`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMaxOld``1(System.Linq.Expressions.Expression{System.Func{`0,``0}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) и
+[`SelectWhereMin`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMinOld``1(System.Linq.Expressions.Expression{System.Func{`0,``0}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) оставляют строку (или строки),
+значение которой по селектору максимально или минимально в источнике. Это фильтр строк, а не
+агрегат: выжившая строка сохраняет все колонки.
+
+**Глобально и по группам.** Без ключа группировки экстремум берётся по всему источнику; с ключом
+группировки экстремальные строки выбираются внутри каждой отдельной группы. Ключ `null` — это
+отдельная группа.
+
+```csharp
+// Глобально: единственная строка с максимальным score.
+var top = dataContext.From<ExtremaEntity>()
+    .SelectWhereMax(e => e.Score)
+    .ToList();
+
+// По группам: одна экстремальная строка на категорию.
+var perGroup = dataContext.From<ExtremaEntity>()
+    .SelectWhereMax(e => e.Score, ExtremeRowTies.One, e => e.Category)
+    .ToList();
+```
+
+```sql
+-- PostgreSQL
+-- глобально: целочисленный ключ проходит нативно — ORDER BY ... LIMIT 1
+select t1.id, t1.score, t1.category, t1.label
+ from (select *
+ from extrema_entity
+ where score is not null order by "score" desc limit 1) as "t1"
+
+-- по группам: строковый ключ группировки не проходит нативно, остаётся переносимое оконное понижение
+select t1.id, t1.score, t1.category, t1.label
+ from (select *, row_number() over (partition by category order by score desc) as "__nextorm_rn"
+ from extrema_entity
+ where score is not null) as "t1"
+ where t1."__nextorm_rn" = 1
+```
+
+[`ExtremeRowTies`](xref:NextORM.Core.ExtremeRowTies) управляет обработкой совпадающих значений. [`One`](xref:NextORM.Core.ExtremeRowTies.One) (по умолчанию)
+оставляет одну строку — при равенстве значений провайдер выбирает одну из них, — а [`All`](xref:NextORM.Core.ExtremeRowTies.All)
+оставляет все строки, совпадающие по экстремальному значению. Совпадение определяется только
+селектором, поэтому результат `All` содержит все такие строки, а `One` — ровно одну произвольную.
+
+**Форма с проекцией.** Перегрузки
+[`SelectWhereMax`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMaxOld``2(System.Linq.Expressions.Expression{System.Func{`0,``0}},System.Linq.Expressions.Expression{System.Func{`0,``1}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) /
+[`SelectWhereMin`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMinOld``2(System.Linq.Expressions.Expression{System.Func{`0,``0}},System.Linq.Expressions.Expression{System.Func{`0,``1}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) принимают проекцию и применяют
+её к каждой выжившей строке, возвращая типизированную команду запроса:
+
+```csharp
+var projected = dataContext.From<ExtremaEntity>()
+    .SelectWhereMax(e => e.Score, e => new { e.Id, e.Label })
+    .ToList();
+```
+
+```sql
+-- PostgreSQL
+select t1.id, t1.label
+ from (select *
+ from extrema_entity
+ where score is not null order by "score" desc limit 1) as "t1"
+```
+
+**Источник с маппингом.** Перегрузки без проекции возвращают строки сущности целиком, поэтому источник
+должен быть типом с маппингом (`From<TEntity>()` или другой источник, несущий метаданные сущности).
+У именованного «сырого» источника вроде `From("orders")` нет маппированных колонок для материализации,
+поэтому подготовка отклоняет его через `BuildSqlCommandException`
+("SelectWhereMax/SelectWhereMin requires a mapped entity source.") вместо вводящей в заблуждение ошибки
+проекции. Для «сырого» именованного источника используйте перегрузки с проекцией выше — форму
+результата задаёт проекция, — если диалект поддерживает операцию.
+
+**Семантика NULL.** Сравниваемые значения `null` игнорируются, поэтому они никогда не выигрывают
+экстремум и не попадают в результат. Группа, у которой сравниваемое значение всегда `null`, не даёт
+ни одной строки, а глобальная форма возвращает пустой результат, когда все значения `null`.
+
+**Как понижается запрос.** `SelectWhereMax`/`SelectWhereMin` — это синтаксический сахар на стороне
+SQL: логический запрос понижается внутри общего конвейера, и форма зависит только от политики
+совпадений.
+
+[`One`](xref:NextORM.Core.ExtremeRowTies.One) понижается до производной таблицы с оконной функцией —
+`row_number()` над `(partition by <группа> order by <значение> [desc])` — с фильтром по `1`, а условие
+источника объединяется через `AND` с фильтром `is not null` по значению. На PostgreSQL и ClickHouse
+нативно подходящий запрос с `One` вместо этого рендерится нативно, автоматически, по провайдеру и
+форме запроса — см.
+[Нативные стратегии выбора экстремальной строки](../advanced/select-where-extrema-native.md), — а любой
+другой провайдер или форма сохраняет переносимое окно.
+
+[`All`](xref:NextORM.Core.ExtremeRowTies.All) понижается до **агрегатной** формы. Ранжирующее окно не
+используется никогда: в запросе с `All` нет ни `rank()`, ни `row_number()`, ни оконного
+`over (...)`, — за одним исключением: ключ экстремума с плавающей точкой на ClickHouse сохраняет
+ранжирующее окно, потому что `max()`/`min()` этого сервера считают `NaN` экстремальным значением,
+а `ORDER BY` ставит `NaN` последним, и эталоном контракта служит именно окно. По группам это
+`GROUP BY <группа>` с выбором экстремального значения (и null-safe ключа
+группы) и соединением обратно с источником; глобально — одна скалярная агрегатная подзапрос-выборка,
+соединённая обратно; составной ключ разрешается покомпонентно, лексикографически — экстремум каждого
+следующего компонента берётся по строкам, уже совпавшим с выбранным префиксом, — поэтому `(9, 2)`
+побеждает `(8, 100)`.
+
+```sql
+-- All, глобально: один скалярный агрегат, соединённый обратно с источником
+select t1.id, t1.score, t1.category, t1.label
+ from extrema_entity as "t1"
+ join (select max(score) as "__nextorm_ext_1_0"
+ from extrema_entity) as "t2" on t1.score = t2."__nextorm_ext_1_0"
+
+-- All, по группам: null-safe ключ группы и экстремальное значение, сгруппированные и соединённые обратно
+select t1.id, t1.score, t1.category, t1.label
+ from extrema_entity as "t1"
+ join (select category as "__nextorm_ext_1_1", max(score) as "__nextorm_ext_1_0"
+ from extrema_entity
+ group by category) as "t2" on ((t1.category = t2."__nextorm_ext_1_1" or (t1.category is null and t2."__nextorm_ext_1_1" is null)) and t1.score = t2."__nextorm_ext_1_0")
+
+-- One, по группам (переносимая форма): ранжируем строки источника, затем оставляем ранг 1
+select t1.id, t1.score, t1.category, t1.label
+ from (select *, row_number() over (partition by category order by score desc) as "__nextorm_rn"
+ from extrema_entity
+ where score is not null) as "t1"
+ where t1."__nextorm_rn" = 1
+```
+
+Обе формы сохраняют условие источника от вызывающего кода и семантику `null`: сравнимое значение
+`null` никогда не выигрывает экстремум. Оконная форма фильтрует `is not null` перед ранжированием;
+агрегатная форма полагается на то, что агрегат и сравнение ключа отбрасывают `null` сами, а при
+nullable-ключе рендерит тот же фильтр `is not null` внутри агрегата:
+
+```sql
+-- All, глобально, nullable-ключ: агрегат сам отфильтровывает null
+select t1.id, t1.score, t1.category
+ from extrema_nullable as "t1"
+ join (select max(score) as "__nextorm_ext_1_0"
+ from extrema_nullable
+ where score is not null) as "t2" on t1.score = t2."__nextorm_ext_1_0"
+```
+
+Обе формы порождаются одним и тем же шагом конвейера, поэтому контракт результата выше — целые
+строки сущности, перегрузки с проекцией, требование отображённого источника и семантика `null` —
+одинаков для любой политики совпадений и любого SQL-провайдера (SQLite, SQL Server, PostgreSQL, MySQL,
+MariaDB и ClickHouse). Провайдер in-memory вычисляет тот же контракт напрямую своим перечислителем и
+SQL не рендерит вовсе.
+
+Запрос отклоняется на этапе построения SQL при сочетании с другим модификатором формы строк, который
+не выражается через производную таблицу: [`DistinctOn`](xref:NextORM.Postgres.PostgresEntityBuilderExtensions.DistinctOn``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}})), [`GroupBy`](xref:NextORM.Core.EntityBuilder`1.GroupBy``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), соединение, `Having`,
+именованные окна, `LimitBy`, `ArrayJoin`, `PreWhere`, постраничный вывод, операция над множествами
+или нефизический источник.
+
 ## Агрегаты без группировки
 
 Агрегат по всей таблице — это проекция без [`GroupBy`](xref:NextORM.Core.EntityBuilder`1.GroupBy``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})):
@@ -843,4 +992,7 @@ Source: `tests/nextorm.integration.tests/CommonTestSuite/Queries/Rows/CommonTest
 `tests/nextorm.integration.tests/CommonTestSuite/Functions/CommonTestSuite.Aggregates.cs:9`,
 `tests/nextorm.sqlite.tests/SqlGeneration/SqlGenerationTests.cs:185`,
 `tests/nextorm.sqlserver.tests/SqlGeneration/SqlGenerationTests.cs:240`,
-`tests/nextorm.postgres.tests/SqlGeneration/SqlGenerationTests.cs:181`.
+`tests/nextorm.postgres.tests/SqlGeneration/SqlGenerationTests.cs:181`,
+`tests/nextorm.integration.tests/CommonTestSuite/Queries/Rows/CommonTestSuite.SelectWhereExtrema.cs:41`,
+`tests/nextorm.sqlite.tests/SqlGeneration/Sources/T302ExtremeRowAllSqlGenerationTests.cs:27`,
+`tests/nextorm.integration.tests/ClickHouse/Integration/ClickHouseIntegrationTests.cs:1353`.
