@@ -17,11 +17,10 @@ NextORM is split into a small, driver-free core package and one package per rela
   ([`SqliteDataContext`](xref:NextORM.Sqlite.SqliteDataContext), [`SqlServerDataContext`](xref:NextORM.SqlServer.SqlServerDataContext), [`PostgresDataContext`](xref:NextORM.Postgres.PostgresDataContext), [`MySqlDataContext`](xref:NextORM.MySql.MySqlDataContext), [`MariaDbDataContext`](xref:NextORM.MariaDb.MariaDbDataContext),
   [`ClickHouseDataContext`](xref:NextORM.ClickHouse.ClickHouseDataContext)) and a `Use…` registration extension.
   The provider packages depend on `nextorm` transitively.
-
-> **Note:** `nextorm` no longer references `OneOf`. The dependency was unused and has been
-> removed, so `OneOf` is no longer provided transitively. If your own code used `OneOf` types that
-> were previously available through `nextorm`, add a direct `OneOf` `PackageReference` to your
-> project.
+* `nextorm.extensions` is an optional product package that adds the query-component operators
+  `SelectWhereMin` / `SelectWhereMax` and `SelectGroup` / `SelectGroupHaving` on top of the public
+  query-component layer. It references `nextorm.core` only, needs no provider package of its own and
+  works with every provider; see [Extensions package](../advanced/extensions-package.md).
 
 All current releases are prereleases, so every install command must opt in to
 prerelease versions.
@@ -43,6 +42,14 @@ dotnet add package nextorm.mariadb --prerelease
 dotnet add package nextorm.clickhouse --prerelease
 ```
 
+The `nextorm.extensions` package is optional. Add it when you need the component-based
+`SelectWhereMin` / `SelectWhereMax` or the inferred-grouping `SelectGroup` / `SelectGroupHaving`; it
+works with any provider:
+
+```bash
+dotnet add package nextorm.extensions --prerelease
+```
+
 The Package Manager Console equivalent:
 
 ```powershell
@@ -61,6 +68,7 @@ Install-Package nextorm.sqlite -Prerelease
 | MySQL | `nextorm.mysql` | [`MySqlDataContext`](xref:NextORM.MySql.MySqlDataContext), [`UseMySql`](xref:NextORM.MySql.MySqlDataContextOptionsBuilderExtensions.UseMySql(NextORM.Core.DataContextBuilder,System.Data.Common.DbConnection)) | `MySqlConnector` |
 | MariaDB | `nextorm.mariadb` | [`MariaDbDataContext`](xref:NextORM.MariaDb.MariaDbDataContext), [`UseMariaDb`](xref:NextORM.MariaDb.MariaDbDataContextOptionsBuilderExtensions.UseMariaDb(NextORM.Core.DataContextBuilder,System.Data.Common.DbConnection)) | `MySqlConnector` |
 | ClickHouse | `nextorm.clickhouse` | [`ClickHouseDataContext`](xref:NextORM.ClickHouse.ClickHouseDataContext), [`UseClickHouse`](xref:NextORM.ClickHouse.ClickHouseDataContextOptionsBuilderExtensions.UseClickHouse(NextORM.Core.DataContextBuilder,System.Data.Common.DbConnection)) | `ClickHouse.Driver` |
+| Extensions (optional) | `nextorm.extensions` | [`SelectWhereMin`](xref:NextORM.Extensions.ExtremeRowExtensions) / [`SelectWhereMax`](xref:NextORM.Extensions.ExtremeRowExtensions) and [`SelectGroup`](xref:NextORM.Extensions.SelectGroupExtensions) / [`SelectGroupHaving`](xref:NextORM.Extensions.SelectGroupExtensions), on top of `nextorm.core` | — |
 
 The in-memory provider lives in the core package, so it is available without installing a provider.
 
@@ -83,6 +91,8 @@ The packages target `net10.0` and enable implicit usings and nullable reference 
   entity-free [`TableAlias`](xref:NextORM.Core.TableAlias) mode.
 * [Dependency injection](04-dependency-injection.md) - registering a context with [`AddNextOrmContext`](xref:NextORM.Core.ServiceCollectionExtensions.AddNextOrmContext(Microsoft.Extensions.DependencyInjection.IServiceCollection,System.Action{NextORM.Core.DataContextBuilder}))
   and the provider `Use…` methods.
+* [Extensions package](../advanced/extensions-package.md) - the optional
+  `nextorm.extensions` operators and when to use them instead of the built-in ones.
 
 ---
 

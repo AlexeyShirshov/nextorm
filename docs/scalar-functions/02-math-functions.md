@@ -185,8 +185,8 @@ constant and the CLR arithmetic operators, not ClickHouse-only members.
 
 The remaining math functions are part of the extended scalar library
 ([`SupportsExtendedScalarFunctions`](xref:NextORM.Core.ISqlDialect.SupportsExtendedScalarFunctions), PostgreSQL only).
-`degrees`/`radians`/`pi` are no longer provider-specific — use the portable
-[`SqlFunctions.Sql`](xref:NextORM.Core.SqlFunctions.Sql) spellings above:
+`degrees`/`radians`/`pi` are part of the portable
+[`SqlFunctions.Sql`](xref:NextORM.Core.SqlFunctions.Sql) surface above:
 
 | C# | SQL |
 |---|---|

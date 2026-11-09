@@ -66,8 +66,8 @@ var rows = dataContext.From<IComplexEntity>()
 | SQLite, PostgreSQL, MySQL, MariaDB, ClickHouse | `avg(id)` |
 | SQL Server | `avg(cast(id as float))` |
 
-Nullable-результат и расширение аргумента — намеренное ломающее изменение исходного кода, а не
-бинарно-совместимое:
+Результат nullable: `Avg` возвращает `double?` (или `float?`/`decimal?` для соответствующих входов).
+Сохраняйте nullable-результат или разворачивайте его явно; целочисленная цель не компилируется:
 
 ```csharp
 int average = dataContext.From<ISimpleEntity>().Avg(e => e.Id);        // не компилируется
@@ -75,10 +75,7 @@ var average = dataContext.From<ISimpleEntity>().Avg(e => e.Id);        // double
 var direct  = dataContext.From<ISimpleEntity>().Select(e => SqlFunctions.Sql.avg(e.Id)).First(); // double?
 ```
 
-Явные generic-аргументы, называвшие старую усекающую форму (`Avg<TEntity, TResult>` с целочисленным
-`TResult`, `avg<T>(...)`), тоже больше не компилируются; позвольте перегрузке выбрать объявление по
-типу селектора и читайте значение через `double?` (или `float?`/`decimal?` для соответствующих
-входов).
+Позвольте перегрузке выбрать объявление по типу селектора, а не указывайте generic-аргументы явно.
 
 ## GroupBy
 
@@ -205,7 +202,8 @@ var top = dataContext.From<IComplexEntity>()
 ключи группировки из самой проекции. Каждое зависящее от строки выражение без агрегата становится
 ключом, а агрегатные вызовы сворачивают каждую группу. Проекция сохраняет ровно свою форму — нет ни
 клиентской группировки, ни динамического типа, ни reflection-emit слияния плоского типа результата.
-Это квартальный пример из issue:
+Проекция типизирована по исходной сущности: указывайте оба generic-аргумента
+(`.SelectGroup<TEntity, TResult>(...)`) или опускайте их. Квартальный пример:
 
 ```csharp
 ctx.From<Product>()
@@ -221,7 +219,21 @@ ctx.From<Product>()
 
 `ProductID`, `ProductName` и весь вызов `date_trunc('quarter', OrderDate)` становятся ключами
 `GROUP BY`, а два вызова `sum` остаются агрегатами. Результаты и SQL эквивалентны явной форме
-`GroupBy(...).Select(...)` с теми же ключами.
+`GroupBy(...).Select(...)` с теми же ключами. Компактный пример и его SQL:
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .SelectGroup(e => new { e.Int, Total = SqlFunctions.Sql.sum(e.Id) })
+    .ToList();
+```
+
+```sql
+select nullableint as 'Int', sum(id) as 'Total'
+ from complex_entity
+ group by nullableint
+```
+
+Единственным ключом стал `nullableint`, а `sum(id)` остался агрегатом — явный `GroupBy` не нужен.
 
 Правила вывода:
 
@@ -272,25 +284,39 @@ pre-group-фильтром и не участвует в выводе.
 Провайдер in-memory не поддерживается: оба оператора бросают `NotSupportedException` ещё до построения
 плана, поэтому выведенная группировка всегда выполняется на реальной базе данных.
 
-### Ломающее изменение
-
-`SelectGroup` переехал из `nextorm.core` в `nextorm.extensions`. Для выводимых вызовов место вызова
-не меняется (добавьте `using NextORM.Extensions;`). Явная одиночная форма `.SelectGroup<TResult>(...)`
-больше не поддерживается: указывайте оба generic-аргумента (`.SelectGroup<TEntity, TResult>(...)`) или
-опускайте их. Совместимой обёртки `*Old`/`Ex` не предоставляется.
-
 ### SelectGroupHaving
 
 `SelectGroupHaving(projection, condition)` использует тот же вывод ключей, что и `SelectGroup`, и
-добавляет `condition` в эффективный `HAVING` через `AND`. `condition` типизирован по исходной сущности
-(`TEntity`), а не по типу проекции. Ключи выводятся **только** из `projection`; `condition` никогда не
-добавляет ключей. Существующий `Having` источника объединяется с `condition` через `AND` до валидации.
-Непокрытое ссылкой на строку выражение в `projection` или в эффективном `HAVING` завершается
-`QueryPreparationException` до обращения к БД. Три исхода (ключевая группировка, глобальная агрегация,
-проекция-константа) те же, что и у `SelectGroup`.
+добавляет `condition` в эффективный `HAVING` через `AND`. `condition` типизирован по результату
+проекции (`TResult`), а не по исходной сущности: каждый член результата перед валидацией заменяется
+выражением проекции, которое его производит, поэтому `r => r.Rows > 1` — это тот же `HAVING`, что и
+нижележащее `count(...) > 1`, а при скалярной проекции параметр условия — само спроецированное значение
+(`f => f > 5`). Ключи выводятся **только** из `projection`; `condition` никогда не добавляет ключей.
+Существующий `Having` источника объединяется с `condition` через `AND` до валидации. Член условия,
+который проекция не связывает (или результат целиком), а также непокрытое ссылкой на строку выражение в
+`projection` или в эффективном `HAVING` завершаются `QueryPreparationException` до обращения к БД. Три
+исхода (ключевая группировка, глобальная агрегация, проекция-константа) те же, что и у `SelectGroup`.
+
+Пример: `r => r.Count > 1` становится `HAVING` по нижележащему `count(*)`, а ключ по-прежнему
+выводится только из проекции:
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .SelectGroupHaving(
+        e => new { e.Int, Count = SqlFunctions.Sql.count() },
+        r => r.Count > 1)
+    .ToList();
+```
+
+```sql
+select nullableint as 'Int', count(*) as 'Count'
+ from complex_entity
+ group by nullableint
+ having (count(*) > 1)
+```
 
 Оба оператора бросают `NotSupportedException` (сообщение содержит `in-memory`) при выполнении на
-`InMemoryDataContext`; поддержка in-memory была явно отброшена и не является регрессией.
+`InMemoryDataContext`.
 
 Упакованные операторы сами являются обычными компонентами запроса на публичном контракте
 [`IQueryComponent`](xref:NextORM.Core.IQueryComponent): сторонний пакет может добавить свой структурный
@@ -613,11 +639,9 @@ var variance = dataContext.From<ISimpleEntity>().Select(x => SqlFunctions.Sql.va
 результат по одной строке — `0.0`. `null` возвращается только для неопределённого результата и
 никогда не подменяется придуманным нулём.
 
-Поскольку результат теперь настоящий `Nullable<T>`, а не аннотация поверх обычного `double`,
-изменение ломает исходный код тех вызывающих, кто присваивает терминал в non-nullable
-`int`/`double`. Сохраняйте nullable-результат (`double?`) либо разворачивайте его явно.
-`?? 0` уместен только там, где ноль действительно означает «нет разброса»: иначе возвращается
-придуманный ноль для неопределённого случая.
+Результат — настоящий `Nullable<T>`: сохраняйте его (`double?`) либо разворачивайте явно.
+Присваивание терминала в non-nullable `int`/`double` не компилируется. `?? 0` уместен только там,
+где ноль действительно означает «нет разброса»: иначе он подставляет ноль для неопределённого случая.
 
 ## Логические, битовые, статистические и упорядоченные агрегаты
 

@@ -185,8 +185,8 @@ var rows = dataContext.From<IComplexEntity>()
 
 Остальные математические функции входят в расширенную библиотеку скалярных функций
 ([`SupportsExtendedScalarFunctions`](xref:NextORM.Core.ISqlDialect.SupportsExtendedScalarFunctions), только PostgreSQL).
-Функции `degrees`/`radians`/`pi` больше не специфичны для PostgreSQL — используйте переносимые
-написания [`SqlFunctions.Sql`](xref:NextORM.Core.SqlFunctions.Sql) выше:
+Функции `degrees`/`radians`/`pi` входят в переносимую поверхность
+[`SqlFunctions.Sql`](xref:NextORM.Core.SqlFunctions.Sql) выше:
 
 | C# | SQL |
 |---|---|

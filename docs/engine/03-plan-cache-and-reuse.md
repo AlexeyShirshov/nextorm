@@ -168,26 +168,16 @@ A `Cache` value that is not defined in the enum is rejected by `Prepare` with an
 
 > **Sharing rules.** A prepared command may be shared across threads and contexts as long as each execution runs on its own connection; on a single connection, execute it sequentially and dispose every streaming result. Parameter values, the transaction and the reader belong to one execution on one connection, never to the prepared object. The implicit cache has a different rule: it is per thread.
 
-### Migrating from the boolean `Prepare` overload
+### Inspecting and executing a prepared command
 
-The boolean overloads were removed in this prerelease, with no obsolete shim. Map the old call by intent:
+The concrete database prepared command ([`DbPreparedQueryCommand<TResult>`](xref:NextORM.Core.DbPreparedQueryCommand`1)) exposes [`SqlStmt`](xref:NextORM.Core.DbPreparedQueryCommand`1.SqlStmt) and [`Behavior`](xref:NextORM.Core.DbPreparedQueryCommand`1.Behavior) for inspection; the command an execution acquires on its connection is an implementation detail. Every execution acquires the command for its own connection — applying the parameter values, the transaction binding and the execution lease there — and never exposes it, so nothing on the prepared object holds a connection, a transaction, a context or a reader.
 
-| Old call | New call |
+| Need | Use |
 |---|---|
-| `Prepare()` or `Prepare(true)` | `Prepare()` (equivalently `Prepare(default, cancellationToken)`) — buffered |
-| `Prepare(false)` | `Prepare(new PrepareOptions { Streaming = true })` |
-| `Prepare(<bool>, cancellationToken)` | `Prepare(new PrepareOptions { Streaming = <negated bool> }, cancellationToken)` |
-
-`EntityBuilderExtensions.Prepare` has the same shape, so `EntityBuilder<T>.Prepare(...)` migrates identically.
-
-The removed prepared state has no replacement member; use the execution surface instead:
-
-| Removed member | Use instead |
-|---|---|
-| `DbPreparedQueryCommand<TResult>.DbCommand`, `.DbCommandParams`, `.GetDbCommand(...)` | `SqlStmt` / `Behavior` for inspection, the execution terminals for running. Execution uses a per-connection command that is never exposed. |
-| `DbPreparedQueryCommand<TResult>.Enumerator` (and the in-memory prepared command's `Enumerator`) | `CreateEnumerator(...)` / `CreateAsyncEnumerator(...)` on [`IPreparedQueryCommand<TResult>`](xref:NextORM.Core.IPreparedQueryCommand`1) |
-| `DbPreparedQueryCommand<TResult>.LastRowCount` (and the in-memory one) | the result of the terminal that executed the query (`ToList`, `First`, `ExecuteScalar`, ...); there is no stateful row count |
-| `DbPreparedQueryCommand<TResult>.ResetConnection(...)` | nothing to reset: the per-connection state is released together with its connection; prepare the query again for another connection |
+| the prepared SQL text and the requested reader behavior | `SqlStmt` / `Behavior` on the prepared command |
+| rows, a single row or a scalar | the typed terminals on [`IPreparedQueryCommand<TResult>`](xref:NextORM.Core.IPreparedQueryCommand`1): `ToList(...)`, `First(...)`, `Single(...)`, `ExecuteScalar(...)` and their async forms |
+| a streaming result | `ToAsyncEnumerable(...)`, `ToEnumerable(...)`, `CreateEnumerator(...)` / `CreateAsyncEnumerator(...)` |
+| running the query on another connection | execute the same prepared command against a context on that connection; its per-connection state is created on demand and released with the connection |
 
 ### Streaming requires `Streaming = true`
 

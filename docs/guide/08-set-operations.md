@@ -174,10 +174,8 @@ var rows = dataContext.From(left.UnionAll(right)).ToList(); // 1, 2, 2, 3
 ```
 
 This result is the same whether the type's process-wide select-list cache is cold or has already been
-populated by an earlier scalar read. Previously the cached projection was reused for the derived source;
-with a warm cache the read then failed with `QueryPreparationException: Cannot get ctor from
-System.Int32`, while the cold-cache read worked. The derived read now builds its own one-column shape
-and does not reuse or overwrite that cache entry. A derived source with more than one column still
+populated by an earlier scalar read: the derived read builds its own one-column shape and does not
+reuse or overwrite that cache entry. A derived source with more than one column still
 needs an explicit outer `Select` (see [Subqueries](07-subqueries.md#subquery-as-a-from-source)).
 
 ## Provider differences

@@ -136,7 +136,7 @@ The built-in operator stays the default and the baseline. The extension componen
 
 ## Inferred grouping (`SelectGroup` / `SelectGroupHaving`)
 
-`SelectGroup` and `SelectGroupHaving` ship in the same package and replace the operator that lived in `nextorm.core` before 1.0.9-rc5. They take the same projection lambda as `Select`, but instead of requiring an explicit `GroupBy` they infer the grouping keys from that projection: every aggregate-free expression that depends on the current row becomes a key, and the aggregate calls fold each group. The projection keeps its exact shape — no client-side grouping, no dynamic type and no reflection-emit merging of a flat result type. The full inference rules and the worked quarterly example are in [Grouping and aggregates](../guide/05-grouping-and-aggregates.md#grouping-inferred-from-the-projection-selectgroup).
+`SelectGroup` and `SelectGroupHaving` ship in the same package. They take the same projection lambda as `Select`, but instead of requiring an explicit `GroupBy` they infer the grouping keys from that projection: every aggregate-free expression that depends on the current row becomes a key, and the aggregate calls fold each group. The projection keeps its exact shape — no client-side grouping, no dynamic type and no reflection-emit merging of a flat result type. The full inference rules and the worked quarterly example are in [Grouping and aggregates](../guide/05-grouping-and-aggregates.md#grouping-inferred-from-the-projection-selectgroup).
 
 ### API
 
@@ -162,11 +162,11 @@ public static class SelectGroupExtensions
     public static QueryCommand<TResult> SelectGroupHaving<TEntity, TResult>(
         this EntityBuilder<TEntity> source,
         Expression<Func<TEntity, TResult>> projection,
-        Expression<Func<TEntity, bool>> condition);
+        Expression<Func<TResult, bool>> condition);
 }
 ```
 
-Both return a typed command whose terminal methods (`ToList`, `First`, …) execute it, so `Where`, `Having` and an outer `OrderBy` composed before the terminal call still apply. The projection is typed on the source entity: name both generic arguments (`.SelectGroup<TEntity, TResult>(...)`) or omit them. The single-argument form `.SelectGroup<TResult>(...)` that core used to accept is gone, and no `*Old`/`Ex` shim is provided.
+Both return a typed command whose terminal methods (`ToList`, `First`, …) execute it, so `Where`, `Having` and an outer `OrderBy` composed before the terminal call still apply. The projection is typed on the source entity: name both generic arguments (`.SelectGroup<TEntity, TResult>(...)`) or omit them.
 
 ### The three outcomes
 
@@ -176,7 +176,7 @@ Both return a typed command whose terminal methods (`ToList`, `First`, …) exec
 | aggregates only, no keys | a global aggregation, no `GROUP BY` | exactly one row, with the provider's empty-input behaviour for `count`, `sum` and `NULL` |
 | no keys, no aggregates | `DISTINCT`-like | each distinct value once; an empty source returns zero rows |
 
-`SelectGroupHaving(projection, condition)` uses the same inference and ANDs `condition` into the effective `HAVING`. `condition` is typed on the source entity (`TEntity`), never on the projection result; keys are inferred **only** from `projection`, and an existing source `Having` is AND-ed with `condition` before validation.
+`SelectGroupHaving(projection, condition)` uses the same inference and ANDs `condition` into the effective `HAVING`. `condition` is typed on the projection result (`TResult`), never on the source entity: every member of the result is rebound to the projection expression that produces it before validation, so `r => r.Rows > 1` is the same `HAVING` as the underlying `count(...) > 1`, while a scalar projection makes the condition parameter the projected value itself (`f => f > 5`). Keys are inferred **only** from `projection`, and an existing source `Having` is AND-ed with `condition` before validation. A member the projection does not bind, or the result as a whole, throws `QueryPreparationException` before any SQL is produced.
 
 ### Validation and rejection boundaries
 

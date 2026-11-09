@@ -4,10 +4,9 @@
 
 **Prerequisites:** [Querying and projections](../engine/index.md) · [Sorting and paging](06-sorting-and-paging.md) · [Set operations](08-set-operations.md)
 
-> **Deprecation note.** The built-in operators are now `SelectWhereMinOld` / `SelectWhereMaxOld`: they keep the
-> compatibility path (including the in-memory provider, which the packaged operator does not implement) and are
-> scheduled for removal. The recommended API is `SelectWhereMin` / `SelectWhereMax` from the
-> [extensions package](../advanced/extensions-package.md), built on the public query-component layer.
+> **Operator names.** The built-in operators are `SelectWhereMinOld` / `SelectWhereMaxOld`; they cover the
+> compatibility path, including the in-memory provider. `SelectWhereMin` / `SelectWhereMax` from the
+> [extensions package](../advanced/extensions-package.md) are built on the public query-component layer.
 
 ## Overview
 

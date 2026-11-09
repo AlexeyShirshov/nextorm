@@ -64,8 +64,8 @@ argument. The policy applies to `avg`, `avg_distinct` and the windowed `avg_over
 | SQLite, PostgreSQL, MySQL, MariaDB, ClickHouse | `avg(id)` |
 | SQL Server | `avg(cast(id as float))` |
 
-The nullable result and the widening are an intentional source break, not a binary-compatible
-change:
+The result is nullable: `Avg` returns `double?` (or `float?`/`decimal?` for those inputs). Keep the
+nullable result or unwrap it explicitly; an integral target does not compile:
 
 ```csharp
 int average = dataContext.From<ISimpleEntity>().Avg(e => e.Id);        // does not compile
@@ -73,10 +73,8 @@ var average = dataContext.From<ISimpleEntity>().Avg(e => e.Id);        // double
 var direct  = dataContext.From<ISimpleEntity>().Select(e => SqlFunctions.Sql.avg(e.Id)).First(); // double?
 ```
 
-Explicit generic arguments that named the old truncating form (`Avg<TEntity, TResult>` with an
-integral `TResult`, `avg<T>(...)`) no longer compile either; let overload resolution pick the
-declaration from the selector type and read the value through `double?` (or `float?`/`decimal?` for
-those inputs).
+Let overload resolution pick the declaration from the selector type rather than naming the generic
+arguments explicitly.
 
 ## GroupBy
 
@@ -202,7 +200,8 @@ the same projection lambda as `Select`, but instead of requiring an explicit
 `GroupBy` it infers the grouping keys from that projection. Every row-dependent expression that
 contains no aggregate becomes a key; the aggregate calls fold each group. The projection keeps its
 exact shape - there is no client-side grouping, no dynamic type and no reflection-emit merging of a
-flat result type. This is the issue's quarterly example:
+flat result type. The projection is typed on the source entity: call it with both generic arguments
+(`.SelectGroup<TEntity, TResult>(...)`) or omit them. A quarterly example:
 
 ```csharp
 ctx.From<Product>()
@@ -218,7 +217,21 @@ ctx.From<Product>()
 
 `ProductID`, `ProductName` and the whole `date_trunc('quarter', OrderDate)` call become `GROUP BY`
 keys, while the two `sum` calls stay aggregates. Results and SQL are equivalent to the explicit
-`GroupBy(...).Select(...)` form with the same keys.
+`GroupBy(...).Select(...)` form with the same keys. A compact example and its SQL:
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .SelectGroup(e => new { e.Int, Total = SqlFunctions.Sql.sum(e.Id) })
+    .ToList();
+```
+
+```sql
+select nullableint as 'Int', sum(id) as 'Total'
+ from complex_entity
+ group by nullableint
+```
+
+The only key became `nullableint` while `sum(id)` stayed an aggregate - no explicit `GroupBy` is needed.
 
 Inference rules:
 
@@ -267,25 +280,40 @@ The following combinations throw `QueryPreparationException`:
 
 The in-memory provider is not supported: both operators throw `NotSupportedException` before any plan is built, so inferred grouping always runs on a real database.
 
-### Breaking change
-
-`SelectGroup` moved out of `nextorm.core` into `nextorm.extensions`. The call site is unchanged for
-inferred calls (`.SelectGroup(p => ...)`) - add `using NextORM.Extensions;`. The explicit single-argument
-form `.SelectGroup<TResult>(...)` is no longer supported: specify both generic arguments
-(`.SelectGroup<TEntity, TResult>(...)`) or omit them. No `*Old`/`Ex` compatibility shim is provided.
-
 ### SelectGroupHaving
 
 `SelectGroupHaving(projection, condition)` uses the same key inference as `SelectGroup` and ANDs
-`condition` into the effective `HAVING`. `condition` is typed on the source entity (`TEntity`), never
-on the projection result. Keys are inferred **only** from `projection`; `condition` never adds a key.
-An existing source `Having` is AND-ed with `condition` before validation. An uncovered row expression in
-`projection` or in the effective `HAVING` fails with `QueryPreparationException` before the database is
-reached. The three outcomes (keyed grouping, global aggregation, constant projection) are the same as
-for `SelectGroup`.
+`condition` into the effective `HAVING`. `condition` is typed on the projection result (`TResult`),
+never on the source entity: every member of the result is rebound to the projection expression that
+produces it before validation, so `r => r.Rows > 1` becomes the same `HAVING` as the underlying
+`count(...) > 1`, while a scalar projection makes the condition parameter the projected value itself
+(`f => f > 5`). Keys are inferred **only** from `projection`; `condition` never adds a key.
+An existing source `Having` is AND-ed with `condition` before validation. A condition member the
+projection does not bind (or the result as a whole), and an uncovered row expression in `projection` or
+in the effective `HAVING`, fail with `QueryPreparationException` before the database is reached. The
+three outcomes (keyed grouping, global aggregation, constant projection) are the same as for
+`SelectGroup`.
+
+For example, `r => r.Count > 1` becomes a `HAVING` over the underlying `count(*)`, while the key is
+still inferred from the projection only:
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .SelectGroupHaving(
+        e => new { e.Int, Count = SqlFunctions.Sql.count() },
+        r => r.Count > 1)
+    .ToList();
+```
+
+```sql
+select nullableint as 'Int', count(*) as 'Count'
+ from complex_entity
+ group by nullableint
+ having (count(*) > 1)
+```
 
 Both operators throw `NotSupportedException` (message contains `in-memory`) when executed against an
-`InMemoryDataContext`; in-memory support was explicitly dropped and is not a regression.
+`InMemoryDataContext`.
 
 The packaged operators are themselves ordinary query components built on the public
 [`IQueryComponent`](xref:NextORM.Core.IQueryComponent) contract: a third-party package can add its own
@@ -609,10 +637,9 @@ non-null values after `DISTINCT`:
 A defined zero stays zero: two or more identical values fold to `0.0`, and a one-row population
 result is `0.0`. Only an undefined result is `null` — it is never replaced by an invented zero.
 
-Because the result is now a real `Nullable<T>` instead of an annotation on a plain `double`, the
-change is source-breaking for callers that assign the terminal to a non-nullable `int`/`double`.
-Keep the nullable result (`double?`) or unwrap it explicitly. Use `?? 0` only where zero genuinely
-means "no spread": it re-introduces the invented zero for the undefined case.
+The result is a real `Nullable<T>`: keep it (`double?`) or unwrap it explicitly. Assigning the
+terminal to a non-nullable `int`/`double` does not compile. Use `?? 0` only where zero genuinely
+means "no spread": it substitutes a zero for the undefined case.
 
 ## Boolean, bitwise, statistical and ordered-set aggregates
 

@@ -231,19 +231,15 @@ ctx.CreateMergeBuilder<IDest>()
 * Провайдеры без рендеринга присваиваний вообще (ClickHouse, in-memory-контекст) отказывают fail-closed: `Provider '<provider>' does not support MERGE assignment expressions.` Key upsert без аргументов в in-memory продолжает работать.
 * При активном фильтре цели выражение `INSERT` отклоняется до выполнения на **каждой** поддерживаемой форме присваиваний и у каждого провайдера — планируемая строка строится из выражений, и проверить её против фильтра до выполнения инструкции нельзя. `IgnoreFilters()` явно отключает это поведение (см. [Изоляция цели записи](../advanced/query-filters.md#изоляция-цели-записи)).
 
-### Миграция с удалённого селектора колонок
+### Селекторы присваиваний
 
-Старый одно-параметрический селектор обновления (`ThenUpdate(x => new { x.Name })`, `WhenMatchedUpdate(x => new { x.Name })`, `WhenMatched().ThenUpdate(x => new { x.Name })`) **удалён**; это намеренное ломающее изменение. Замена явно читает роль source:
+Присваивание при обновлении явно читает роль source — через лямбду с двумя параметрами `(target, source)` или тремя `(target, source, excluded)`:
 
 ```csharp
-// было (не компилируется)
-.WhenMatched().ThenUpdate(x => new { x.Name })
-
-// стало
 .WhenMatched().ThenUpdate((target, source) => new { Name = source.Name })
 ```
 
-`ThenInsert(x => new { x.Name })` по-прежнему компилируется — та же сигнатура теперь читается как присваивание `Name = source.Name`. Тело-голый-член (`ThenInsert(x => x.Name)`), пустой инициализатор или тело, не являющееся инициализатором, отклоняются во время выполнения с `ArgumentException` (параметр `assignments`): набор присваиваний insert обязан быть инициализатором.
+`ThenInsert(x => new { x.Name })` читается как присваивание `Name = source.Name`. Тело-голый-член (`ThenInsert(x => x.Name)`), пустой инициализатор или тело, не являющееся инициализатором, отклоняются во время выполнения с `ArgumentException` (параметр `assignments`): набор присваиваний insert обязан быть инициализатором.
 
 ## Просмотр SQL
 

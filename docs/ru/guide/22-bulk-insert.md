@@ -83,11 +83,8 @@ var written = ctx.CreateBulkInsertBuilder<IOrder>(o => o.Mode(BulkInsertMode.Por
 `Returning*` всегда пишет через портируемый путь, потому что нативные bulk API не возвращают строки;
 запрос `Mode.Native` вместе с возвращающим терминалом отклоняется, а не понижается молча.
 
-> **Совместимость:** Auto may switch existing MySQL/MariaDB/ClickHouse calls to native; Portable restores SQL-batch selection. Previously ignored unsupported options now validate strictly.
->
-> По-русски: `Auto` может перевести существующие вызовы MySQL/MariaDB/ClickHouse на нативный путь;
-> `Portable` возвращает выбор SQL-батча. Ранее игнорировавшиеся неподдерживаемые опции теперь
-> валидируются строго.
+> **Совместимость:** `Auto` может выбрать нативный путь для MySQL/MariaDB/ClickHouse; `Portable`
+> выбирает путь SQL-батча. Неподдерживаемые опции валидируются строго.
 
 ## Источники-стримы
 
@@ -317,10 +314,8 @@ var written = await ctx.CreateBulkInsertBuilder<IOrder>(o => o.Timeout(TimeSpan.
 - Истёкший бюджет сообщается как `TimeoutException`.
 - `CancellationToken` вызывающего всегда побеждает: отмена пользователем проявляется как
   `OperationCanceledException`, а не как таймаут, даже когда события гоняются.
-- `Timeout` — единственная поверхность таймаута: прежняя опция `TimeoutSeconds` и метод builder
-  `Timeout(int)` **удалены без shims**, поэтому переходите на `TimeSpan`
-  (`Timeout(TimeSpan.FromSeconds(30))`). Бюджет теперь действует на всех путях, а не только на нативном
-  SQL Server, и прежнее ограничение PostgreSQL «таймаут не поддерживается» больше не существует.
+- `Timeout` — единственная поверхность таймаута и принимает `TimeSpan`
+  (`Timeout(TimeSpan.FromSeconds(30))`); бюджет действует на всех путях, включая PostgreSQL.
 
 ## Явные значения identity и пропуск дублей
 

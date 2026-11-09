@@ -168,7 +168,7 @@ mapped column (or its converter), not from the runtime null, so a SQL Server par
 ### Not covered
 
 The rewrite is deliberately limited to a DB column compared with a captured nullable/string variable.
-The following keep their previous behaviour and are **not** automatically null-safe:
+The following are **not** automatically null-safe:
 
 * a nullable column compared with another nullable column — in `WHERE`, a `SELECT` projection or
   `JOIN ON`;

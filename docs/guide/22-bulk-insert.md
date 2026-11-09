@@ -84,7 +84,7 @@ var written = ctx.CreateBulkInsertBuilder<IOrder>(o => o.Mode(BulkInsertMode.Por
 `Returning*` always writes through the portable path, because the native bulk APIs cannot return rows; a
 `Mode.Native` request combined with a returning terminal is refused instead of being silently downgraded.
 
-> **Compatibility:** Auto may switch existing MySQL/MariaDB/ClickHouse calls to native; Portable restores SQL-batch selection. Previously ignored unsupported options now validate strictly.
+> **Compatibility:** `Auto` may select the native path for MySQL/MariaDB/ClickHouse; `Portable` selects the SQL-batch path. Unsupported options are validated strictly.
 
 ## Streaming sources
 
@@ -308,10 +308,8 @@ var written = await ctx.CreateBulkInsertBuilder<IOrder>(o => o.Timeout(TimeSpan.
 - An expired budget is reported as `TimeoutException`.
 - The caller's `CancellationToken` always wins: a user cancellation surfaces as `OperationCanceledException`,
   never as a timeout, even when both race.
-- `Timeout` is the only timeout surface: the former `TimeoutSeconds` option and the `Timeout(int)` builder
-  method are **removed without shims**, so migrate by passing a `TimeSpan`
-  (`Timeout(TimeSpan.FromSeconds(30))`). The budget now applies to every path, not only to the SQL Server
-  native one, and the old PostgreSQL "timeout is not supported" limitation no longer exists.
+- `Timeout` is the only timeout surface and takes a `TimeSpan`
+  (`Timeout(TimeSpan.FromSeconds(30))`); the budget applies to every path, including PostgreSQL.
 
 ## Explicit identity values and skipping duplicates
 

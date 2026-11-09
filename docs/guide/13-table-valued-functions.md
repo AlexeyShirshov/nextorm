@@ -51,31 +51,6 @@ Output:
 | 2     |
 | 3     |
 
-### Breaking change in 1.0.9-rc4
-
-The previous static surface was removed **without a compatibility shim**:
-
-* the `[SqlTableFunction]` attribute and the `IQueryable<T>`-returning stub methods it annotated;
-* the table-function `From`/`CreateQueryBuilder…From` entry points that took
-  `Expression<Func<IQueryable<T>>>`.
-
-Every table-valued function is now a runtime factory as described below. Migrating an existing
-declaration replaces the attribute and the stub body with the descriptor, and the call site with a lambda
-source:
-
-```csharp
-// 1.0.9-rc4
-public static TvfEntityBuilder<ITvfRow> ById(long id) => new("rows_by_id");
-
-var rows = dataContext
-    .From(() => Tvf.ById(id))
-    .Select(r => new { r.Id })
-    .ToList();
-```
-
-The `[SqlTableFunction]` metadata (name, schema, `WithClause`, `CallClause`, verbatim indices, result
-schema) moves into the descriptor constructor unchanged; see [Declaring a runtime factory](#declaring-a-runtime-factory).
-
 ## Declaring a runtime factory
 
 The descriptor has three constructors: `TvfEntityBuilder(string name)`, `TvfEntityBuilder(string name,

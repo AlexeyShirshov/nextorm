@@ -97,10 +97,10 @@ they throw `NotSupportedException` immediately (see [Limitations](../advanced/li
 
 ## Aggregate null semantics
 
-For the four variability families the in-memory provider now matches the SQL providers: `Stdev` and
+For the four variability families the in-memory provider matches the SQL providers: `Stdev` and
 `Var` return `null` for zero or one contributing non-null value, `Stdevp` and `Varp` return `null`
 for zero and `0.0` for one, and two or more values keep the established formula. An undefined result
-is no longer substituted with zero, so the same query returns the same shape on both backends.
+is `null`, never a substituted zero, so the same query returns the same shape on both backends.
 
 ## LOB streaming
 

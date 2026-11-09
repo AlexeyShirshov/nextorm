@@ -51,20 +51,14 @@ of [#370](https://github.com/AlexeyShirshov/nextorm/issues/370).
 ## Real-world check
 
 `oc-report` — a reporting utility over a 13 GB SQLite database — runs natively with no source
-changes beyond `PublishAot=true`. For comparison, the same report was implemented with EF Core 10
-and Dapper, all published with NativeAOT on the same machine (warm page cache, median of three runs,
-3-day window):
+changes beyond `PublishAot=true`. Publishing and the run happened on one machine (warm page cache,
+median of three runs, 3-day window):
 
 | Implementation | AOT publish | Native binary | Run | Peak RSS |
 |---|---|---|---|---|
 | nextorm, typed queries | only `PublishAot=true` | 8.2 MB | 0.12 s | 30 MB |
-| EF Core 10.0.14 | after entity workarounds; 565 unique IL warnings | 17.3 MB | 0.23 s | 42 MB |
-| Dapper 2.1.89 + Dapper.AOT 1.1.0 | raw SQL; 0 IL warnings | 3.5 MB | 0.12 s | 19 MB |
 
-All three emitted byte-identical output. This is not a general benchmark: Dapper executes
-hand-written SQL without query composition, and EF Core needed the compiled model plus query
-precompilation (and non-sealed entities outside a CLR namespace to avoid two EF 10.0.14 code
-generation bugs). The nextorm arm ships as
+The reference app is
 [`examples/nextorm.examples.oc-report`](https://github.com/AlexeyShirshov/nextorm/tree/main/examples/nextorm.examples.oc-report).
 
 ## Trying it

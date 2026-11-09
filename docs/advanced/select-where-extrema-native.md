@@ -4,10 +4,9 @@
 
 **Prerequisites:** [Keeping the extreme row](../guide/09-distinct.md) · [Provider overview](../connecting-providers/overview.md) · [API quick reference](api-reference.md)
 
-> **Deprecation note.** The built-in operators are now `SelectWhereMinOld` / `SelectWhereMaxOld`: they keep the
-> compatibility path (including the in-memory provider, which the packaged operator does not implement) and are
-> scheduled for removal. The recommended API is `SelectWhereMin` / `SelectWhereMax` from the
-> [extensions package](extensions-package.md), built on the public query-component layer.
+> **Operator names.** The built-in operators are `SelectWhereMinOld` / `SelectWhereMaxOld`; they cover the
+> compatibility path, including the in-memory provider. `SelectWhereMin` / `SelectWhereMax` from the
+> [extensions package](extensions-package.md) are built on the public query-component layer.
 
 ## Overview
 

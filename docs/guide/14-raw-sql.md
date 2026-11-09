@@ -461,7 +461,7 @@ IReadOnlyList<EntityRow> rows = result.Read<EntityRow>();
 nextorm adds no public API, no global driver mapper, and the connection-string path (nextorm's own
 `CreateDbConnection`) is unchanged.
 
-Composite classification is authoritative: a column is treated as a named composite only when the loaded Npgsql type catalog says so, never from a dotted data type name or an exception shape. On a clean catalog an unmapped non-composite type (for example `hstore` or `ltree`) now yields the ordinary "None of the result-set columns (...) matches a mapped property" error rather than the named-composite diagnostic; a genuine composite whose type is not in the loaded catalog degrades to the same ordinary error until authoritative type metadata is available (a deliberate trade-off — a cold catalog gives no composite verdict instead of a misleading one). A composite registered through `MapComposite<T>` still materialises, and a warm-catalog unregistered composite still reports the composite-specific guard (it must be registered before it can be read). nextorm contexts share a process-wide implicit Npgsql data source keyed by connection string; a type reload must target the source associated with the same connection string used by the context.
+Composite classification is authoritative: a column is treated as a named composite only when the loaded Npgsql type catalog says so, never from a dotted data type name or an exception shape. On a clean catalog an unmapped non-composite type (for example `hstore` or `ltree`) yields the ordinary "None of the result-set columns (...) matches a mapped property" error rather than the named-composite diagnostic; a genuine composite whose type is not in the loaded catalog degrades to the same ordinary error until authoritative type metadata is available (a deliberate trade-off — a cold catalog gives no composite verdict instead of a misleading one). A composite registered through `MapComposite<T>` still materialises, and a warm-catalog unregistered composite still reports the composite-specific guard (it must be registered before it can be read). nextorm contexts share a process-wide implicit Npgsql data source keyed by connection string; a type reload must target the source associated with the same connection string used by the context.
 
 NULL semantics:
 
@@ -496,7 +496,7 @@ using var result = dataContext.ExecuteRaw("select 1 as a; select 2 as b");
 
 IReadOnlyList<int> first = result.Read<int>();   // [1]
 IReadOnlyList<int> second = result.Read<int>();  // [2]
-// result.Read<int>(); now throws InvalidOperationException
+// result.Read<int>(); throws InvalidOperationException
 ```
 
 #### Result-set cursors

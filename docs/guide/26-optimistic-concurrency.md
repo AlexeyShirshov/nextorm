@@ -182,9 +182,8 @@ ctx.CreateMergeBuilder<IOrder>()
     .Merge();
 ```
 
-The assignment-expression overload replaced the former column-list selector: each anonymous-initializer
-assignment names its destination and an explicit right-hand side, so `ThenUpdate(o => new { o.Status })`
-migrates to `ThenUpdate((t, s) => new { Status = s.Status })`.
+Each update assignment names its destination and an explicit right-hand side:
+`.ThenUpdate((t, s) => new { Status = s.Status })`.
 
 ```sql
 -- SQL Server

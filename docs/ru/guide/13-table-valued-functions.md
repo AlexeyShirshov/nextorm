@@ -52,31 +52,6 @@ select value
 | 2     |
 | 3     |
 
-### Ломающее изменение в 1.0.9-rc4
-
-Прежняя статическая поверхность удалена **без shim-совместимости**:
-
-* атрибут `[SqlTableFunction]` и методы-заглушки, возвращавшие `IQueryable<T>`, которые он помечал;
-* точки входа табличной функции `From`/`CreateQueryBuilder…From`, принимавшие
-  `Expression<Func<IQueryable<T>>>`.
-
-Каждая табличная функция теперь — runtime-фабрика, описанная ниже. Миграция существующего объявления
-заменяет атрибут и тело заглушки на дескриптор, а место вызова — на lambda-источник:
-
-```csharp
-// 1.0.9-rc4
-public static TvfEntityBuilder<ITvfRow> ById(long id) => new("rows_by_id");
-
-var rows = dataContext
-    .From(() => Tvf.ById(id))
-    .Select(r => new { r.Id })
-    .ToList();
-```
-
-Метаданные `[SqlTableFunction]` (имя, схема, `WithClause`, `CallClause`, индексы verbatim-аргументов,
-схема результата) переносятся в конструктор дескриптора без изменений; см.
-[Объявление runtime-фабрики](#объявление-runtime-фабрики).
-
 ## Объявление runtime-фабрики
 
 У дескриптора три конструктора: `TvfEntityBuilder(string name)`, `TvfEntityBuilder(string name,
