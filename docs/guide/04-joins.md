@@ -898,14 +898,15 @@ joined type still resolves through its entity metadata.
 
 ## Chained joins and arity 2..8
 
-Each chained call adds one table. The condition receives the projection accumulated so far and the
-new entity:
+Each chained call adds one table; the joined entity is named by type (`Join<T>`, see
+[Source-less (type-only) joins](#source-less-type-only-joins)), so no source builder is passed. The
+condition receives the projection accumulated so far and the new entity:
 
 ```csharp
 var rows = dataContext.From<ISimpleEntity>()
-    .Join(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id)          // JoinedEntityBuilder<SimpleEntity, ComplexEntity>
-    .Join(dataContext.From<ISimpleEntity>(), (p, s) => p.Item2.Id == s.Id)        // JoinedEntityBuilder<...>
-    .Join(dataContext.From<IComplexEntity>(), (p, c) => p.Item3.Id == c.Id)       // JoinedEntityBuilder<...>
+    .Join<IComplexEntity>((s, c) => s.Id == c.Id)          // JoinedEntityBuilder<SimpleEntity, ComplexEntity>
+    .Join<ISimpleEntity>((p, s) => p.Item2.Id == s.Id)     // JoinedEntityBuilder<...>
+    .Join<IComplexEntity>((p, c) => p.Item3.Id == c.Id)    // JoinedEntityBuilder<...>
     .Select(p => new { A = p.Item1.Id, B = p.Item2.RequiredString, C = p.Item3.Id, D = p.Item4.RequiredString })
     .ToList();
 ```
@@ -922,22 +923,14 @@ The same pattern extends the arity up to `JoinedEntityBuilder<T1..T8>` (eight ta
 the projection exposes `Item1`..[`Item8`](xref:NextORM.Core.Projection`8.Item8):
 
 ```csharp
-var e = new[]
-{
-    dataContext.From<ISimpleEntity>(), dataContext.From<ISimpleEntity>(),
-    dataContext.From<ISimpleEntity>(), dataContext.From<ISimpleEntity>(),
-    dataContext.From<ISimpleEntity>(), dataContext.From<ISimpleEntity>(),
-    dataContext.From<ISimpleEntity>(), dataContext.From<ISimpleEntity>(),
-};
-
-var sql = e[0]
-    .Join(e[1], (a, b) => a.Id == b.Id)
-    .Join(e[2], (p, c) => p.Item2.Id == c.Id)
-    .Join(e[3], (p, c) => p.Item3.Id == c.Id)
-    .Join(e[4], (p, c) => p.Item4.Id == c.Id)
-    .Join(e[5], (p, c) => p.Item5.Id == c.Id)
-    .Join(e[6], (p, c) => p.Item6.Id == c.Id)
-    .Join(e[7], (p, c) => p.Item7.Id == c.Id)
+var sql = dataContext.From<ISimpleEntity>()
+    .Join<ISimpleEntity>((a, b) => a.Id == b.Id)
+    .Join<ISimpleEntity>((p, c) => p.Item2.Id == c.Id)
+    .Join<ISimpleEntity>((p, c) => p.Item3.Id == c.Id)
+    .Join<ISimpleEntity>((p, c) => p.Item4.Id == c.Id)
+    .Join<ISimpleEntity>((p, c) => p.Item5.Id == c.Id)
+    .Join<ISimpleEntity>((p, c) => p.Item6.Id == c.Id)
+    .Join<ISimpleEntity>((p, c) => p.Item7.Id == c.Id)
     .Select(p => new { A = p.Item1.Id, B = p.Item2.Id, C = p.Item3.Id, D = p.Item4.Id,
                        E = p.Item5.Id, F = p.Item6.Id, G = p.Item7.Id, H = p.Item8.Id });
 ```
