@@ -69,6 +69,17 @@ reference `WITH OrderMargins AS (<5-table join>) ... PIVOT (...)` is expressed d
 
 ## Actuality changes made on this verification
 
+* **Re-verified after collapsing chained ordering calls into composite selectors (2026-11-08).** The
+  same-direction ordering pairs in `SupplyChain`, `ProductAbcXyz`, `TerritoryYearOverYear`,
+  `TerritoryGrowthMonthOverMonth` (mssql) and `AircraftDelayChains`, `TopRoutesByCity` (postgres) are now
+  single `OrderBy`/`OrderByDescending` calls over `new { … }`; mixed-direction pairs stay chained. Warm
+  volumes, Podman: postgres **10/10**, mssql **11/11**, no `[DIFF]` and no `[FAIL]`; every per-query row
+  count is unchanged from the 2026-11-08 `1.0.9-rc5` run (`0, 266, 4, 12, 40, 20, 14, 364, 40` for the
+  mssql ordered queries, `30, 186` for the two postgres ones), and the printed leading rows of each
+  changed query are identical between the nextorm and linq2db arms, so the two-key order is preserved.
+  `SupplyChain` returns 0 rows on this dataset in both arms, as before, so its ordering is exercised only
+  by the SQL-generation tests.
+
 * **Re-verified against the `1.0.9-rc5` packages (2026-11-08).** `NextOrmVersion` bumped
   `1.0.9-rc4 → 1.0.9-rc5` and `Directory.Build.props` `<Version>` with it, so postgres, mssql
   (package arms) and clickhouse build against what is on nuget.org. `nextorm.examples.oc-report`
