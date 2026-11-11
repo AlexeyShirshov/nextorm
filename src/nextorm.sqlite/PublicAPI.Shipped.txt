@@ -1,0 +1,89 @@
+#nullable enable
+NextORM.Sqlite.SqliteDataContext
+NextORM.Sqlite.SqliteDataContext.SqliteDataContext(string! connectionString, NextORM.Core.DataContextBuilder! optionsBuilder) -> void
+NextORM.Sqlite.SqliteDataContext.SqliteDataContext(System.Data.Common.DbConnection! connection, NextORM.Core.DataContextBuilder! optionsBuilder) -> void
+NextORM.Sqlite.SqliteDataContextOptionsBuilderExtensions
+NextORM.Sqlite.SqliteDialect
+NextORM.Sqlite.SqliteDialect.SqliteDialect() -> void
+override NextORM.Sqlite.SqliteDataContext.CreateDbConnection(string? connectionString) -> System.Data.Common.DbConnection!
+override NextORM.Sqlite.SqliteDataContext.CreateParam(string! name, object? value) -> System.Data.Common.DbParameter!
+override NextORM.Sqlite.SqliteDataContext.CreateProcedureParameter(NextORM.Core.ProcedureParameter parameter) -> System.Data.Common.DbParameter!
+override NextORM.Sqlite.SqliteDataContext.Dialect.get -> NextORM.Core.ISqlDialect!
+override NextORM.Sqlite.SqliteDataContext.OnConnectionCreated(System.Data.Common.DbConnection! connection) -> void
+override NextORM.Sqlite.SqliteDataContext.TimeOnlyProjectionRefusal.get -> string?
+override NextORM.Sqlite.SqliteDialect.AggregateFilterStyle.get -> NextORM.Core.AggregateFilterStyle
+override NextORM.Sqlite.SqliteDialect.ConcatStringOperator.get -> string!
+override NextORM.Sqlite.SqliteDialect.EnforcesScalarSubqueryCardinality.get -> bool
+override NextORM.Sqlite.SqliteDialect.Iif.get -> NextORM.Core.IIifRenderer!
+override NextORM.Sqlite.SqliteDialect.IndexHints.get -> NextORM.Core.IIndexHintRenderer?
+override NextORM.Sqlite.SqliteDialect.LobLocatorColumn.get -> string?
+override NextORM.Sqlite.SqliteDialect.MakeCoalesce(string! v1, string! v2) -> string!
+override NextORM.Sqlite.SqliteDialect.MakeCollate(string! value, string! collation, NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> string!
+override NextORM.Sqlite.SqliteDialect.MakeDateAdd(string! field, string! amount, string! value) -> string!
+override NextORM.Sqlite.SqliteDialect.MakeDateDiff(string! field, string! start, string! end) -> string!
+override NextORM.Sqlite.SqliteDialect.MakeDateFromParts(string! year, string! month, string! day) -> string!
+override NextORM.Sqlite.SqliteDialect.MakeDatePart(string! part, string! value) -> string!
+override NextORM.Sqlite.SqliteDialect.MakeDateTimeOffsetNow(bool utc) -> string!
+override NextORM.Sqlite.SqliteDialect.MakeEndOfMonth(string! value) -> string!
+override NextORM.Sqlite.SqliteDialect.MakeGreatest(System.Collections.Generic.IReadOnlyList<string!>! args) -> string!
+override NextORM.Sqlite.SqliteDialect.MakeLeast(System.Collections.Generic.IReadOnlyList<string!>! args) -> string!
+override NextORM.Sqlite.SqliteDialect.MakeMathFunction(string! name, System.Collections.Generic.IReadOnlyList<string!>! args) -> string!
+override NextORM.Sqlite.SqliteDialect.MakeNow(bool utc) -> string!
+override NextORM.Sqlite.SqliteDialect.MakeOrdinal(string! value, bool ignoreCase) -> string!
+override NextORM.Sqlite.SqliteDialect.MakePage(NextORM.Core.Paging paging, System.Text.StringBuilder! sqlBuilder, NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> void
+override NextORM.Sqlite.SqliteDialect.MakeParam(string! name) -> string!
+override NextORM.Sqlite.SqliteDialect.MakeQualifiedTableName(string? server, string? database, string? schema, string! table) -> string!
+override NextORM.Sqlite.SqliteDialect.MakeRegexMatch(string! value, string! pattern, bool ignoreCase) -> string!
+override NextORM.Sqlite.SqliteDialect.MakeRegexReplace(string! value, string! pattern, string! replacement, bool ignoreCase) -> string!
+override NextORM.Sqlite.SqliteDialect.MakeRepeat(string! value, string! count) -> string!
+override NextORM.Sqlite.SqliteDialect.MakeStringAgg(string! value, string! delimiter) -> string!
+override NextORM.Sqlite.SqliteDialect.NullSafeComparison.get -> NextORM.Core.INullSafeComparisonRenderer?
+override NextORM.Sqlite.SqliteDialect.RenderOrderBy(string! expressionSql, NextORM.Core.OrderDirection direction, NextORM.Core.NullsPosition nullsPosition) -> string!
+override NextORM.Sqlite.SqliteDialect.ScalarFunctions.get -> NextORM.Core.IScalarFunctions!
+override NextORM.Sqlite.SqliteDialect.SessionInfoFunctions.get -> NextORM.Core.ISessionInfoFunctions!
+override NextORM.Sqlite.SqliteDialect.SqliteFunctions.get -> NextORM.Core.ISqliteFunctions!
+override NextORM.Sqlite.SqliteDialect.StringFormats.get -> NextORM.Core.IStringFormatFunctions?
+override NextORM.Sqlite.SqliteDialect.SupportsBatch.get -> bool
+override NextORM.Sqlite.SqliteDialect.SupportsBulkCopy.get -> bool
+override NextORM.Sqlite.SqliteDialect.SupportsCollation.get -> bool
+override NextORM.Sqlite.SqliteDialect.SupportsCreateTableAsSelect.get -> bool
+override NextORM.Sqlite.SqliteDialect.SupportsCreateTableAsSelectIfNotExists.get -> bool
+override NextORM.Sqlite.SqliteDialect.SupportsCrossDatabase.get -> bool
+override NextORM.Sqlite.SqliteDialect.SupportsCube.get -> bool
+override NextORM.Sqlite.SqliteDialect.SupportsDateArithmetic.get -> bool
+override NextORM.Sqlite.SqliteDialect.SupportsDatePart(string! part) -> bool
+override NextORM.Sqlite.SqliteDialect.SupportsDateTimeOffsetTranslation.get -> bool
+override NextORM.Sqlite.SqliteDialect.SupportsDefaultValues.get -> bool
+override NextORM.Sqlite.SqliteDialect.SupportsGreatestLeast.get -> bool
+override NextORM.Sqlite.SqliteDialect.SupportsGroupingSets.get -> bool
+override NextORM.Sqlite.SqliteDialect.SupportsInsertIgnore.get -> bool
+override NextORM.Sqlite.SqliteDialect.SupportsLastInsertId.get -> bool
+override NextORM.Sqlite.SqliteDialect.SupportsNamedWindows.get -> bool
+override NextORM.Sqlite.SqliteDialect.SupportsNthValue.get -> bool
+override NextORM.Sqlite.SqliteDialect.SupportsNullsOrdering.get -> bool
+override NextORM.Sqlite.SqliteDialect.SupportsOnConflict.get -> bool
+override NextORM.Sqlite.SqliteDialect.SupportsOnConflictDoNothing.get -> bool
+override NextORM.Sqlite.SqliteDialect.SupportsOrdinalComparison.get -> bool
+override NextORM.Sqlite.SqliteDialect.SupportsOrdinalLike.get -> bool
+override NextORM.Sqlite.SqliteDialect.SupportsPercentRankCumeDist.get -> bool
+override NextORM.Sqlite.SqliteDialect.SupportsRangeColumns.get -> bool
+override NextORM.Sqlite.SqliteDialect.SupportsRawSqlSource.get -> bool
+override NextORM.Sqlite.SqliteDialect.SupportsRegex.get -> bool
+override NextORM.Sqlite.SqliteDialect.SupportsReturning.get -> bool
+override NextORM.Sqlite.SqliteDialect.SupportsRollup.get -> bool
+override NextORM.Sqlite.SqliteDialect.SupportsSavepoints.get -> bool
+override NextORM.Sqlite.SqliteDialect.SupportsSelectWhereMinMax.get -> bool
+override NextORM.Sqlite.SqliteDialect.SupportsSequentialAccess.get -> bool
+override NextORM.Sqlite.SqliteDialect.SupportsStoredProcedures.get -> bool
+override NextORM.Sqlite.SqliteDialect.SupportsStringAgg.get -> bool
+override NextORM.Sqlite.SqliteDialect.SupportsTableFunction(string! name) -> bool
+override NextORM.Sqlite.SqliteDialect.SupportsTableValuedParameters.get -> bool
+override NextORM.Sqlite.SqliteDialect.SupportsUpdateJoin.get -> bool
+override NextORM.Sqlite.SqliteDialect.SupportsWindowFrameExclusion.get -> bool
+override NextORM.Sqlite.SqliteDialect.SupportsWindowFrameGroups.get -> bool
+override NextORM.Sqlite.SqliteDialect.Tuple.get -> NextORM.Core.ITupleRenderer?
+override NextORM.Sqlite.SqliteDialect.UpdateJoinRequiresFrom.get -> bool
+override NextORM.Sqlite.SqliteDialect.WrapTableFunction(string! name, string! call, System.Collections.Generic.IReadOnlyList<string!>! arguments) -> string!
+static NextORM.Sqlite.SqliteDataContextOptionsBuilderExtensions.UseSqlite(this NextORM.Core.DataContextBuilder! builder, string! filepath) -> NextORM.Core.DataContextBuilder!
+static NextORM.Sqlite.SqliteDataContextOptionsBuilderExtensions.UseSqlite(this NextORM.Core.DataContextBuilder! builder, System.Data.Common.DbConnection! connection) -> NextORM.Core.DataContextBuilder!
+static readonly NextORM.Sqlite.SqliteDialect.Instance -> NextORM.Sqlite.SqliteDialect!

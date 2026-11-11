@@ -237,7 +237,7 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual ITopKAggregateRenderer? TopKAggregates => null;
 
     /// <summary>Defaults to <c>false</c>; ClickHouse opts into the <c>any</c>/<c>anyLast</c> aggregates.</summary>
-    public virtual bool SupportsAnyAggregates => false;
+    public virtual bool SupportsAnyLastAggregate => false;
 
     /// <summary>Defaults to <c>false</c>; MySQL/MariaDB and ClickHouse opt into the arbitrary-value aggregate.</summary>
     public virtual bool SupportsAnyValueAggregate => false;

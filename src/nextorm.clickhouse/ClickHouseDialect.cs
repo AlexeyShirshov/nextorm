@@ -501,7 +501,7 @@ public class ClickHouseDialect : SqlDialectBase
     public override IClickHouseAggregateRenderer ClickHouseAggregates => _clickHouseAggregates;
 
     /// <summary>ClickHouse implements the <c>any</c>/<c>anyLast</c> row-picking aggregates.</summary>
-    public override bool SupportsAnyAggregates => true;
+    public override bool SupportsAnyLastAggregate => true;
 
     /// <summary>ClickHouse renders the arbitrary-value aggregate as <c>any(x)</c>.</summary>
     public override bool SupportsAnyValueAggregate => true;

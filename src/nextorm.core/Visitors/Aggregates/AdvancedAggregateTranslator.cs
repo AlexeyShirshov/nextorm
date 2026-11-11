@@ -200,7 +200,7 @@ internal static class AdvancedAggregateTranslator
 
             case AdvancedAggregateKind.AnyLast:
 
-                EmitSimple(visitor, node, "any_last", () => visitor.Dialect.SupportsAnyAggregates, "anyLast");
+                EmitSimple(visitor, node, "any_last", () => visitor.Dialect.SupportsAnyLastAggregate, "anyLast");
                 return true;
 
             case AdvancedAggregateKind.WindowFunnel:

@@ -206,7 +206,7 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
             .Where(x => x.Id == 1L)
             .Select(x => new
             {
-                F = SqlFunctions.ClickHouse.any_agg(x.RequiredString),
+                F = SqlFunctions.Sql.any_agg(x.RequiredString),
                 L = SqlFunctions.ClickHouse.any_last(x.RequiredString)
             })
             .First();

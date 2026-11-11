@@ -1,0 +1,13 @@
+#nullable enable
+NextORM.EntityFrameworkCore.EntityFrameworkCoreExtensions
+NextORM.EntityFrameworkCore.NextOrmDbContextExtensions
+NextORM.EntityFrameworkCore.NextOrmModelMapper
+NextORM.EntityFrameworkCore.NextOrmQueryableExtensions
+static NextORM.EntityFrameworkCore.EntityFrameworkCoreExtensions.CreateNextOrmContext(this Microsoft.EntityFrameworkCore.DbContext! dbContext, System.Action<NextORM.Core.DataContextBuilder!>? configure = null) -> NextORM.Core.IDataContext!
+static NextORM.EntityFrameworkCore.NextOrmDbContextExtensions.AddNextOrmFromDbContext<TDbContext>(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<NextORM.Core.DataContextBuilder!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static NextORM.EntityFrameworkCore.NextOrmDbContextExtensions.GetNextOrmContext(this Microsoft.EntityFrameworkCore.DbContext! dbContext) -> NextORM.Core.IDataContext!
+static NextORM.EntityFrameworkCore.NextOrmDbContextExtensions.UseNextOrm(this Microsoft.EntityFrameworkCore.DbContextOptionsBuilder! optionsBuilder, System.Action<NextORM.Core.DataContextBuilder!>? configure = null) -> Microsoft.EntityFrameworkCore.DbContextOptionsBuilder!
+static NextORM.EntityFrameworkCore.NextOrmDbContextExtensions.UseNextOrm<TContext>(this Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<TContext!>! optionsBuilder, System.Action<NextORM.Core.DataContextBuilder!>? configure = null) -> Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<TContext!>!
+static NextORM.EntityFrameworkCore.NextOrmModelMapper.Register(Microsoft.EntityFrameworkCore.Metadata.IModel! model) -> void
+static NextORM.EntityFrameworkCore.NextOrmQueryableExtensions.ToNextOrm<T>(this Microsoft.EntityFrameworkCore.DbSet<T!>! source) -> NextORM.Core.EntityBuilder<T!>!
+static NextORM.EntityFrameworkCore.NextOrmQueryableExtensions.ToNextOrm<T>(this System.Linq.IQueryable<T!>! source, Microsoft.EntityFrameworkCore.DbContext! dbContext) -> NextORM.Core.EntityBuilder<T!>!

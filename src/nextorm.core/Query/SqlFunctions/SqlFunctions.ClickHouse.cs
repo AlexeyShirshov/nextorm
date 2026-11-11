@@ -150,7 +150,7 @@ namespace NextORM.Core;
 
         /// <summary>
         /// <c>anyLast(value)</c>: the <paramref name="value"/> of an arbitrary last row. Requires a
-        /// provider that supports it (see <see cref="ISqlDialect.SupportsAnyAggregates"/>; ClickHouse).
+        /// provider that supports it (see <see cref="ISqlDialect.SupportsAnyLastAggregate"/>; ClickHouse).
         /// The arbitrary-value aggregate without the last-row restriction is the cross-provider
         /// <see cref="CommonFunctions.any_agg{T}"/>.
         /// </summary>

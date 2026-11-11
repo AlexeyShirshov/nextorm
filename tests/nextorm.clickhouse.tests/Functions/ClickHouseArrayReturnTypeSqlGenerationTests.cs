@@ -233,7 +233,7 @@ public class ClickHouseArrayReturnTypeSqlGenerationTests
 
         var aggregateSql = SqlOf(ctx, complex.Select(x => new
         {
-            Any = SqlFunctions.ClickHouse.any_agg(x.String),
+            Any = SqlFunctions.Sql.any_agg(x.String),
             Funnel = SqlFunctions.ClickHouse.window_funnel(3600, x.Datetime, x.Id <= 2, x.Id <= 5)
         }));
 

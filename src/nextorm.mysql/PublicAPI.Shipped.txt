@@ -1,0 +1,118 @@
+#nullable enable
+NextORM.MySql.MySqlDataContext
+NextORM.MySql.MySqlDataContext.MySqlDataContext(string! connectionString, NextORM.Core.DataContextBuilder! optionsBuilder) -> void
+NextORM.MySql.MySqlDataContext.MySqlDataContext(string? connectionString, System.Data.Common.DbConnection? providedConnection, NextORM.Core.DataContextBuilder! optionsBuilder, System.Version? serverVersion) -> void
+NextORM.MySql.MySqlDataContext.MySqlDataContext(System.Data.Common.DbConnection! connection, NextORM.Core.DataContextBuilder! optionsBuilder) -> void
+NextORM.MySql.MySqlDataContextOptionsBuilderExtensions
+NextORM.MySql.MySqlDialect
+NextORM.MySql.MySqlDialect.MySqlDialect() -> void
+override NextORM.MySql.MySqlDataContext.CreateDbConnection(string? connectionString) -> System.Data.Common.DbConnection!
+override NextORM.MySql.MySqlDataContext.CreateParam(string! name, object? value) -> System.Data.Common.DbParameter!
+override NextORM.MySql.MySqlDataContext.CreateParam(System.Data.Common.DbCommand! command, string! name, object? value) -> System.Data.Common.DbParameter!
+override NextORM.MySql.MySqlDataContext.CreateProcedureParameter(NextORM.Core.ProcedureParameter parameter) -> System.Data.Common.DbParameter!
+override NextORM.MySql.MySqlDataContext.CreateProcedureParameter(System.Data.Common.DbCommand! command, NextORM.Core.ProcedureParameter parameter) -> System.Data.Common.DbParameter!
+override NextORM.MySql.MySqlDataContext.Dialect.get -> NextORM.Core.ISqlDialect!
+override NextORM.MySql.MySqlDataContext.TimeOnlyProjectionRefusal.get -> string?
+override NextORM.MySql.MySqlDialect.Escape(string! keyword) -> string!
+override NextORM.MySql.MySqlDialect.Iif.get -> NextORM.Core.IIifRenderer!
+override NextORM.MySql.MySqlDialect.IndexHints.get -> NextORM.Core.IIndexHintRenderer?
+override NextORM.MySql.MySqlDialect.Lock.get -> NextORM.Core.ILockRenderer!
+override NextORM.MySql.MySqlDialect.MakeAggregate(string! name) -> string!
+override NextORM.MySql.MySqlDialect.MakeBase64Decode(string! value) -> string!
+override NextORM.MySql.MySqlDialect.MakeBase64Encode(string! value) -> string!
+override NextORM.MySql.MySqlDialect.MakeCoalesce(string! v1, string! v2) -> string!
+override NextORM.MySql.MySqlDialect.MakeCollate(string! value, string! collation, NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> string!
+override NextORM.MySql.MySqlDialect.MakeColumnReference(string! name) -> string!
+override NextORM.MySql.MySqlDialect.MakeConcat(System.Collections.Generic.IReadOnlyList<string!>! parts) -> string!
+override NextORM.MySql.MySqlDialect.MakeCryptGenRandom(string! length) -> string!
+override NextORM.MySql.MySqlDialect.MakeDateAdd(string! field, string! amount, string! value) -> string!
+override NextORM.MySql.MySqlDialect.MakeDateAdd(string! field, string! amount, string! value, bool isDateTimeOffset) -> string!
+override NextORM.MySql.MySqlDialect.MakeDateDiff(string! field, string! start, string! end) -> string!
+override NextORM.MySql.MySqlDialect.MakeDateFromParts(string! year, string! month, string! day) -> string!
+override NextORM.MySql.MySqlDialect.MakeDatePart(string! part, string! value) -> string!
+override NextORM.MySql.MySqlDialect.MakeDateTimeOffsetNow(bool utc) -> string!
+override NextORM.MySql.MySqlDialect.MakeDefaultValues(NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> string!
+override NextORM.MySql.MySqlDialect.MakeDurationType(NextORM.Core.DurationUnit? unit, int precision = 0) -> string!
+override NextORM.MySql.MySqlDialect.MakeEndOfMonth(string! value) -> string!
+override NextORM.MySql.MySqlDialect.MakeFullText(string! functionName, string! column, string! search) -> string!
+override NextORM.MySql.MySqlDialect.MakeGrouping(string! columns, NextORM.Core.GroupingType groupingType, NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> string!
+override NextORM.MySql.MySqlDialect.MakeInsertIgnoreInto(NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> string!
+override NextORM.MySql.MySqlDialect.MakeIsJson(string! value, bool asPredicate) -> string!
+override NextORM.MySql.MySqlDialect.MakeLastInsertId(NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> string!
+override NextORM.MySql.MySqlDialect.MakeNow(bool utc) -> string!
+override NextORM.MySql.MySqlDialect.MakeOnesComplement(string! operand) -> string!
+override NextORM.MySql.MySqlDialect.MakeOrdinal(string! value, bool ignoreCase) -> string!
+override NextORM.MySql.MySqlDialect.MakePage(NextORM.Core.Paging paging, System.Text.StringBuilder! sqlBuilder, NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> void
+override NextORM.MySql.MySqlDialect.MakeParam(string! name) -> string!
+override NextORM.MySql.MySqlDialect.MakeQualifiedTableName(string? server, string? database, string? schema, string! table) -> string!
+override NextORM.MySql.MySqlDialect.MakeRegexMatch(string! value, string! pattern, bool ignoreCase) -> string!
+override NextORM.MySql.MySqlDialect.MakeRegexReplace(string! value, string! pattern, string! replacement, bool ignoreCase) -> string!
+override NextORM.MySql.MySqlDialect.MakeRepeat(string! value, string! count) -> string!
+override NextORM.MySql.MySqlDialect.MakeStringAgg(string! value, string! delimiter) -> string!
+override NextORM.MySql.MySqlDialect.MakeStringLength(string! value) -> string!
+override NextORM.MySql.MySqlDialect.MakeStringPosition(string! value, string! substring) -> string!
+override NextORM.MySql.MySqlDialect.MakeStringPosition(string! value, string! substring, string! start) -> string!
+override NextORM.MySql.MySqlDialect.MakeStringReverse(string! value) -> string!
+override NextORM.MySql.MySqlDialect.MakeStuff(string! value, string! start, string? count, string! newValue) -> string!
+override NextORM.MySql.MySqlDialect.MakeTextJsonFunction(string! name, System.Collections.Generic.IReadOnlyList<string!>! args) -> string!
+override NextORM.MySql.MySqlDialect.MakeTypeName(System.Type! type) -> string!
+override NextORM.MySql.MySqlDialect.MakeUpdateJoin(string! target, string! targetAlias, string! assignments, string! fromAndJoins, string! usingSources, string! joinConditions, string? whereSql, NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> string!
+override NextORM.MySql.MySqlDialect.MakeUpsertValueReference(string! column, NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> string!
+override NextORM.MySql.MySqlDialect.MySqlFunctions.get -> NextORM.Core.IMySqlFunctions!
+override NextORM.MySql.MySqlDialect.NullSafeComparison.get -> NextORM.Core.INullSafeComparisonRenderer?
+override NextORM.MySql.MySqlDialect.QuoteIdentifier(string! name) -> string!
+override NextORM.MySql.MySqlDialect.RenderQueryHints(string! sql, System.Collections.Generic.IReadOnlyList<string!>! hints, string? maxRecursionOption, NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> string!
+override NextORM.MySql.MySqlDialect.RequiresQualifiedSelectStar.get -> bool
+override NextORM.MySql.MySqlDialect.RequireSubqueryAlias.get -> bool
+override NextORM.MySql.MySqlDialect.ScalarFunctions.get -> NextORM.Core.IScalarFunctions!
+override NextORM.MySql.MySqlDialect.SessionInfoFunctions.get -> NextORM.Core.ISessionInfoFunctions!
+override NextORM.MySql.MySqlDialect.StringFormats.get -> NextORM.Core.IStringFormatFunctions?
+override NextORM.MySql.MySqlDialect.SupportsAnyValueAggregate.get -> bool
+override NextORM.MySql.MySqlDialect.SupportsApply.get -> bool
+override NextORM.MySql.MySqlDialect.SupportsBase64Decode.get -> bool
+override NextORM.MySql.MySqlDialect.SupportsBase64Encode.get -> bool
+override NextORM.MySql.MySqlDialect.SupportsBatch.get -> bool
+override NextORM.MySql.MySqlDialect.SupportsBulkCopy.get -> bool
+override NextORM.MySql.MySqlDialect.SupportsCollation.get -> bool
+override NextORM.MySql.MySqlDialect.SupportsColumnDefault.get -> bool
+override NextORM.MySql.MySqlDialect.SupportsCreateTableAsSelect.get -> bool
+override NextORM.MySql.MySqlDialect.SupportsCreateTableAsSelectColumnList.get -> bool
+override NextORM.MySql.MySqlDialect.SupportsCreateTableAsSelectIfNotExists.get -> bool
+override NextORM.MySql.MySqlDialect.SupportsCrossDatabase.get -> bool
+override NextORM.MySql.MySqlDialect.SupportsCryptGenRandom.get -> bool
+override NextORM.MySql.MySqlDialect.SupportsDateArithmetic.get -> bool
+override NextORM.MySql.MySqlDialect.SupportsDatePart(string! part) -> bool
+override NextORM.MySql.MySqlDialect.SupportsDateTimeOffsetTranslation.get -> bool
+override NextORM.MySql.MySqlDialect.SupportsDefaultValues.get -> bool
+override NextORM.MySql.MySqlDialect.SupportsDeleteJoin.get -> bool
+override NextORM.MySql.MySqlDialect.SupportsDirectApplyTableFunction.get -> bool
+override NextORM.MySql.MySqlDialect.SupportsFullJoin.get -> bool
+override NextORM.MySql.MySqlDialect.SupportsFullText.get -> bool
+override NextORM.MySql.MySqlDialect.SupportsGreatestLeast.get -> bool
+override NextORM.MySql.MySqlDialect.SupportsInlineHints.get -> bool
+override NextORM.MySql.MySqlDialect.SupportsInsertIgnore.get -> bool
+override NextORM.MySql.MySqlDialect.SupportsLastInsertId.get -> bool
+override NextORM.MySql.MySqlDialect.SupportsNamedWindows.get -> bool
+override NextORM.MySql.MySqlDialect.SupportsNativeDuration.get -> bool
+override NextORM.MySql.MySqlDialect.SupportsNthValue.get -> bool
+override NextORM.MySql.MySqlDialect.SupportsOnDuplicateKey.get -> bool
+override NextORM.MySql.MySqlDialect.SupportsOrdinalComparison.get -> bool
+override NextORM.MySql.MySqlDialect.SupportsPercentRankCumeDist.get -> bool
+override NextORM.MySql.MySqlDialect.SupportsQueryHints.get -> bool
+override NextORM.MySql.MySqlDialect.SupportsRangeColumns.get -> bool
+override NextORM.MySql.MySqlDialect.SupportsRawSqlSource.get -> bool
+override NextORM.MySql.MySqlDialect.SupportsRegex.get -> bool
+override NextORM.MySql.MySqlDialect.SupportsRollup.get -> bool
+override NextORM.MySql.MySqlDialect.SupportsSavepoints.get -> bool
+override NextORM.MySql.MySqlDialect.SupportsSelectWhereMinMax.get -> bool
+override NextORM.MySql.MySqlDialect.SupportsStoredProcedures.get -> bool
+override NextORM.MySql.MySqlDialect.SupportsStringAgg.get -> bool
+override NextORM.MySql.MySqlDialect.SupportsSubQueryHints.get -> bool
+override NextORM.MySql.MySqlDialect.SupportsTableValuedParameters.get -> bool
+override NextORM.MySql.MySqlDialect.SupportsTextJson.get -> bool
+override NextORM.MySql.MySqlDialect.SupportsTruncate.get -> bool
+override NextORM.MySql.MySqlDialect.SupportsUpdateJoin.get -> bool
+override NextORM.MySql.MySqlDialect.Tuple.get -> NextORM.Core.ITupleRenderer?
+static NextORM.MySql.MySqlDataContextOptionsBuilderExtensions.UseMySql(this NextORM.Core.DataContextBuilder! builder, string! connectionString) -> NextORM.Core.DataContextBuilder!
+static NextORM.MySql.MySqlDataContextOptionsBuilderExtensions.UseMySql(this NextORM.Core.DataContextBuilder! builder, System.Data.Common.DbConnection! connection) -> NextORM.Core.DataContextBuilder!
+static readonly NextORM.MySql.MySqlDialect.Instance -> NextORM.MySql.MySqlDialect!
