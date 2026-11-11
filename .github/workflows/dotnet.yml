@@ -247,7 +247,8 @@ jobs:
             src/nextorm.mysql/nextorm.mysql.csproj \
             src/nextorm.mariadb/nextorm.mariadb.csproj \
             src/nextorm.clickhouse/nextorm.clickhouse.csproj \
-            src/nextorm.extensions/nextorm.extensions.csproj
+            src/nextorm.extensions/nextorm.extensions.csproj \
+            src/nextorm.entityframeworkcore/nextorm.entityframeworkcore.csproj
           do
             dotnet pack "$project" -c Release -p:Version="$VERSION" -o ./nupkgs
           done
