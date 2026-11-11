@@ -21,25 +21,28 @@ NextORM разделён на небольшой основной пакет, н
   запроса `SelectWhereMin` / `SelectWhereMax` и `SelectGroup` / `SelectGroupHaving` поверх публичного
   слоя компонентов запроса. Он ссылается только на `nextorm.core`, не требует собственного пакета
   провайдера и работает с любым провайдером; см. [Пакет расширений](../advanced/extensions-package.md).
+* `nextorm.entityframeworkcore` — необязательный пакет-мост, который выполняет запросы и команды
+  nextorm поверх существующего соединения и транзакции EF Core `DbContext`, переиспользуя маппинг
+  модели EF (`db.CreateNextOrmContext()`); см. [Интеграция с EF Core](../advanced/integration-efcore.md).
 
-Все текущие релизы являются пререлизами, поэтому в каждой команде установки
-нужно явно разрешить пререлизные версии.
+1.0.9 — первый стабильный релиз, поэтому в командах установки ниже флаг `--prerelease` больше не
+нужен. Для пререлизных сборок (`1.0.10-a.x` и новее) он по-прежнему обязателен.
 
 ## Установка основного пакета
 
 ```bash
-dotnet add package nextorm --prerelease
+dotnet add package nextorm
 ```
 
 Затем добавьте ровно один пакет провайдера для целевой базы данных:
 
 ```bash
-dotnet add package nextorm.sqlite --prerelease
-dotnet add package nextorm.sqlserver --prerelease
-dotnet add package nextorm.postgres --prerelease
-dotnet add package nextorm.mysql --prerelease
-dotnet add package nextorm.mariadb --prerelease
-dotnet add package nextorm.clickhouse --prerelease
+dotnet add package nextorm.sqlite
+dotnet add package nextorm.sqlserver
+dotnet add package nextorm.postgres
+dotnet add package nextorm.mysql
+dotnet add package nextorm.mariadb
+dotnet add package nextorm.clickhouse
 ```
 
 Пакет `nextorm.extensions` необязателен. Добавляйте его, когда нужны компонентные
@@ -47,14 +50,21 @@ dotnet add package nextorm.clickhouse --prerelease
 `SelectGroupHaving`; пакет работает с любым провайдером:
 
 ```bash
-dotnet add package nextorm.extensions --prerelease
+dotnet add package nextorm.extensions
+```
+
+Пакет `nextorm.entityframeworkcore` тоже необязателен — он нужен, когда в приложении уже есть
+`DbContext` EF Core и запросы nextorm должны идти по тому же соединению:
+
+```bash
+dotnet add package nextorm.entityframeworkcore
 ```
 
 Эквивалент в консоли диспетчера пакетов:
 
 ```powershell
-Install-Package nextorm -Prerelease
-Install-Package nextorm.sqlite -Prerelease
+Install-Package nextorm
+Install-Package nextorm.sqlite
 ```
 
 ## Ссылка на пакет
@@ -69,19 +79,22 @@ Install-Package nextorm.sqlite -Prerelease
 | MariaDB | `nextorm.mariadb` | [`MariaDbDataContext`](xref:NextORM.MariaDb.MariaDbDataContext), [`UseMariaDb`](xref:NextORM.MariaDb.MariaDbDataContextOptionsBuilderExtensions.UseMariaDb(NextORM.Core.DataContextBuilder,System.Data.Common.DbConnection)) | `MySqlConnector` |
 | ClickHouse | `nextorm.clickhouse` | [`ClickHouseDataContext`](xref:NextORM.ClickHouse.ClickHouseDataContext), [`UseClickHouse`](xref:NextORM.ClickHouse.ClickHouseDataContextOptionsBuilderExtensions.UseClickHouse(NextORM.Core.DataContextBuilder,System.Data.Common.DbConnection)) | `ClickHouse.Driver` |
 | Расширения (необязательно) | `nextorm.extensions` | [`SelectWhereMin`](xref:NextORM.Extensions.ExtremeRowExtensions) / [`SelectWhereMax`](xref:NextORM.Extensions.ExtremeRowExtensions) и [`SelectGroup`](xref:NextORM.Extensions.SelectGroupExtensions) / [`SelectGroupHaving`](xref:NextORM.Extensions.SelectGroupExtensions) поверх `nextorm.core` | — |
+| EF Core (необязательно) | `nextorm.entityframeworkcore` | [`CreateNextOrmContext`](xref:NextORM.EntityFrameworkCore.EntityFrameworkCoreExtensions.CreateNextOrmContext(Microsoft.EntityFrameworkCore.DbContext,System.Action{NextORM.Core.DataContextBuilder})) — запросы nextorm поверх существующего соединения и транзакции `DbContext` | `Microsoft.EntityFrameworkCore.Relational` |
 
 Провайдер in-memory находится в основном пакете, поэтому доступен без установки провайдера.
 
 ## Целевая платформа
 
-Пакеты мультитаргетят `net10.0` и `net11.0`, поэтому NuGet сам подбирает ассет под целевую платформу потребляющего проекта, и включают неявные using-директивы (implicit usings) и nullable reference types. `PackageReference` выглядит так (`*-*` подтягивает последний пререлиз):
+Пакеты мультитаргетят `net10.0` и `net11.0`, поэтому NuGet сам подбирает ассет под целевую платформу потребляющего проекта, и включают неявные using-директивы (implicit usings) и nullable reference types. `PackageReference` выглядит так:
 
 ```xml
 <ItemGroup>
-  <PackageReference Include="nextorm" Version="*-*" />
-  <PackageReference Include="nextorm.sqlite" Version="*-*" />
+  <PackageReference Include="nextorm" Version="1.0.9" />
+  <PackageReference Include="nextorm.sqlite" Version="1.0.9" />
 </ItemGroup>
 ```
+
+Для пререлизной сборки подтяните последний пререлиз через `Version="*-*"`.
 
 ## Что читать дальше
 
