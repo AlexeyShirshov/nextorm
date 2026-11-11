@@ -27,7 +27,7 @@ public sealed class T296NullableNullComparisonTests : IDisposable
             Path.GetTempPath(),
             $"nextorm.t296.nullable.{Environment.ProcessId}.{Guid.NewGuid():N}.db");
 
-        _ctx = new SqliteDataContext($"Data Source='{_databasePath}'", new DataContextBuilder());
+        _ctx = new SqliteDataContext($"Data Source='{_databasePath}';Pooling=False", new DataContextBuilder());
         ((DataContext)_ctx).EnsureConnectionOpen();
         Execute(
             """
