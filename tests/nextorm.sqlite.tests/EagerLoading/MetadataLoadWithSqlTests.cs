@@ -61,7 +61,7 @@ public class MetadataLoadWithSqlTests
     private static (SqliteDataContext Ctx, string Path) CreateDb()
     {
         var path = Path.Combine(Path.GetTempPath(), $"nextorm-metadata-sql-{Guid.NewGuid():N}.db");
-        using (var conn = new SqliteConnection($"Data Source={path}"))
+        using (var conn = new SqliteConnection($"Data Source={path};Pooling=False"))
         {
             conn.Open();
             foreach (var statement in Schema)
@@ -72,7 +72,7 @@ public class MetadataLoadWithSqlTests
             }
         }
 
-        var ctx = new SqliteDataContext($"Data Source={path}", new DataContextBuilder());
+        var ctx = new SqliteDataContext($"Data Source={path};Pooling=False", new DataContextBuilder());
         Register(ctx);
         return (ctx, path);
     }

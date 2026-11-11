@@ -46,7 +46,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: 11.0.x
       - name: Restore dependencies
         run: dotnet restore
       - name: Build
@@ -184,9 +184,28 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: 11.0.x
+      # clang and the zlib headers ship with the GitHub-hosted Ubuntu image; apt-get is only a
+      # fallback for image drift. When it is needed it has to retry: the runner's DNS lookup of
+      # security.ubuntu.com fails intermittently ("Temporary failure resolving ...", exit 100),
+      # which is a network blip on the host, not a defect of this repository.
       - name: Install NativeAOT prerequisites
-        run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
+        shell: bash
+        run: |
+          set -uo pipefail
+          if command -v clang >/dev/null 2>&1 && [ -e /usr/include/zlib.h ]; then
+            echo "already present: $(clang --version | head -n1); /usr/include/zlib.h"
+            exit 0
+          fi
+          for attempt in 1 2 3; do
+            if sudo apt-get update && sudo apt-get install -y --no-install-recommends clang zlib1g-dev; then
+              exit 0
+            fi
+            echo "::warning::apt attempt ${attempt} failed, retrying in 20s"
+            sleep 20
+          done
+          echo "::error::clang/zlib1g-dev could not be installed after 3 attempts"
+          exit 1
       - name: Restore dependencies
         run: dotnet restore
       - name: Publish the NativeAOT runner
@@ -224,7 +243,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: 11.0.x
       - name: Determine version
         id: version
         shell: bash
@@ -247,7 +266,8 @@ jobs:
             src/nextorm.mysql/nextorm.mysql.csproj \
             src/nextorm.mariadb/nextorm.mariadb.csproj \
             src/nextorm.clickhouse/nextorm.clickhouse.csproj \
-            src/nextorm.extensions/nextorm.extensions.csproj
+            src/nextorm.extensions/nextorm.extensions.csproj \
+            src/nextorm.entityframeworkcore/nextorm.entityframeworkcore.csproj
           do
             dotnet pack "$project" -c Release -p:Version="$VERSION" -o ./nupkgs
           done

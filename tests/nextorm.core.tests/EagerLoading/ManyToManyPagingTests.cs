@@ -76,7 +76,7 @@ public sealed class ManyToManyPagingTests
         EagerLoadMode mode = EagerLoadMode.SplitQuery)
     {
         var path = Path.Combine(Path.GetTempPath(), $"nextorm-t357-mn-paging-{Guid.NewGuid():N}.db");
-        using (var conn = new SqliteConnection($"Data Source={path}"))
+        using (var conn = new SqliteConnection($"Data Source={path};Pooling=False"))
         {
             conn.Open();
             using var cmd = conn.CreateCommand();
@@ -92,7 +92,7 @@ public sealed class ManyToManyPagingTests
         }
 
         var context = new SqliteDataContext(
-            $"Data Source={path}",
+            $"Data Source={path};Pooling=False",
             new DataContextBuilder().UseEagerLoadMode(mode));
         var recorder = new SqlRecordingInterceptor();
         context.AddInterceptor(recorder);

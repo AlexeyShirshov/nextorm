@@ -160,7 +160,7 @@ var streamed = ctx.From<ISimpleEntity>().Select(x => x.Id)
 
 Значение `Cache`, которого нет в перечислении, отклоняется в `Prepare` исключением `ArgumentOutOfRangeException` до каких-либо аллокаций. Ни одна из политик не сохраняет план в неявный кэш.
 
-**Состояние на соединение.** Подготовленная команда больше не владеет одним изменяемым `DbCommand`. Всё, что зависит от соединения, на котором идёт выполнение, — команда, позиции параметров, привязка транзакции и лиз выполнения, — хранится в состоянии на соединение, которое подготовленная команда держит слабо, с ключом по соединению: запись освобождается, как только её соединение становится собираемым, и ничто в подготовленной команде не удерживает соединение, транзакцию, контекст или reader. Поэтому конкуренция между соединениями работает: один и тот же подготовленный объект может одновременно выполняться на двух разных соединениях, каждое со своими параметрами и своим reader'ом.
+**Состояние на соединение.** Подготовленная команда не владеет одним изменяемым `DbCommand`. Всё, что зависит от соединения, на котором идёт выполнение, — команда, позиции параметров, привязка транзакции и лиз выполнения, — хранится в состоянии на соединение, которое подготовленная команда держит слабо, с ключом по соединению: запись освобождается, как только её соединение становится собираемым, и ничто в подготовленной команде не удерживает соединение, транзакцию, контекст или reader. Поэтому конкуренция между соединениями работает: один и тот же подготовленный объект может одновременно выполняться на двух разных соединениях, каждое со своими параметрами и своим reader'ом.
 
 **Ограничение на одно соединение.** Два *перекрывающихся* выполнения одного подготовленного объекта на **одном** соединении немедленно завершаются `InvalidOperationException` до изменения какого-либо состояния команды; другие команды и неявный кэш планов на этом соединении не затронуты, потому что это не планировщик уровня соединения. Последовательные выполнения на этом соединении допустимы.
 
@@ -168,26 +168,16 @@ var streamed = ctx.From<ISimpleEntity>().Select(x => x.Id)
 
 > **Правила совместного использования.** Подготовленную команду можно разделять между потоками и контекстами, если каждое выполнение идёт по своему соединению; на одном соединении выполняйте её последовательно и освобождайте каждый потоковый результат. Значения параметров, транзакция и reader принадлежат одному выполнению на одном соединении, а не подготовленному объекту. У неявного кэша другое правило: он привязан к потоку.
 
-### Переход с булевой перегрузки `Prepare`
+### Инспекция и выполнение подготовленной команды
 
-Булевы перегрузки удалены в этом пререлизе, без устаревшей заглушки. Сопоставляйте старый вызов по смыслу:
+Конкретная подготовленная команда провайдера ([`DbPreparedQueryCommand<TResult>`](xref:NextORM.Core.DbPreparedQueryCommand`1)) выставляет для инспекции [`SqlStmt`](xref:NextORM.Core.DbPreparedQueryCommand`1.SqlStmt) и [`Behavior`](xref:NextORM.Core.DbPreparedQueryCommand`1.Behavior); команда, которую выполнение берёт на своём соединении, — деталь реализации. Каждое выполнение берёт команду для своего соединения — с применением там значений параметров, привязки транзакции и лиза выполнения — и никогда не выставляет её наружу, поэтому ничто в подготовленном объекте не удерживает соединение, транзакцию, контекст или reader.
 
-| Старый вызов | Новый вызов |
+| Что нужно | Что использовать |
 |---|---|
-| `Prepare()` или `Prepare(true)` | `Prepare()` (эквивалентно `Prepare(default, cancellationToken)`) — буферизация |
-| `Prepare(false)` | `Prepare(new PrepareOptions { Streaming = true })` |
-| `Prepare(<bool>, cancellationToken)` | `Prepare(new PrepareOptions { Streaming = <инвертированный bool> }, cancellationToken)` |
-
-`EntityBuilderExtensions.Prepare` имеет ту же форму, поэтому `EntityBuilder<T>.Prepare(...)` мигрирует так же.
-
-У удалённого состояния подготовленной команды нет заменяющего члена; используйте поверхность выполнения:
-
-| Удалённый член | Что использовать |
-|---|---|
-| `DbPreparedQueryCommand<TResult>.DbCommand`, `.DbCommandParams`, `.GetDbCommand(...)` | `SqlStmt` / `Behavior` для инспекции, терминалы выполнения — для запуска. Выполнение использует команду на соединение, которая никогда не выставляется наружу. |
-| `DbPreparedQueryCommand<TResult>.Enumerator` (и `Enumerator` подготовленной команды in-memory провайдера) | `CreateEnumerator(...)` / `CreateAsyncEnumerator(...)` на [`IPreparedQueryCommand<TResult>`](xref:NextORM.Core.IPreparedQueryCommand`1) |
-| `DbPreparedQueryCommand<TResult>.LastRowCount` (и аналогичный член in-memory) | результат терминала, выполнившего запрос (`ToList`, `First`, `ExecuteScalar`, ...); состояния «число строк» больше нет |
-| `DbPreparedQueryCommand<TResult>.ResetConnection(...)` | сбрасывать нечего: состояние на соединение освобождается вместе со своим соединением; подготовьте запрос заново для другого соединения |
+| подготовленный SQL-текст и запрошенное поведение reader'а | `SqlStmt` / `Behavior` на подготовленной команде |
+| строки, одна строка или скаляр | типизированные терминалы [`IPreparedQueryCommand<TResult>`](xref:NextORM.Core.IPreparedQueryCommand`1): `ToList(...)`, `First(...)`, `Single(...)`, `ExecuteScalar(...)` и их async-формы |
+| потоковый результат | `ToAsyncEnumerable(...)`, `ToEnumerable(...)`, `CreateEnumerator(...)` / `CreateAsyncEnumerator(...)` |
+| выполнение запроса на другом соединении | выполните ту же подготовленную команду против контекста на этом соединении; её состояние на соединение создаётся по требованию и освобождается вместе с соединением |
 
 ### Потоковая передача требует `Streaming = true`
 
@@ -327,8 +317,8 @@ Source: `tests/nextorm.sqlite.tests/PlanCache/PlanCacheTests.cs:48` (buffered th
 `tests/nextorm.core.tests/Caching/QueryCacheControlsTests.cs:45` (clear, disable without mutating `Cache`, sliding expiration);
 `tests/nextorm.sqlite.tests/PlanCache/DataContextCacheClearTests.cs:31` (`DataContextCache.Clear` invalidates the plan cache);
 `tests/nextorm.integration.tests/CommonTestSuite/Caching/CommonTestSuite.Cache.cs:6`;
-`src/nextorm.core/Query/QueryCommand.TResult.cs:81` ([`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},NextORM.Core.PrepareOptions,System.Threading.CancellationToken))),
-`src/nextorm.core/DataContext/Cache/PrepareOptions.cs:6` (`PreparedCommandCache` / `PrepareOptions`),
-`src/nextorm.core/DataContext/Cache/DbPreparedQueryCommand.cs:199` (`Acquire`: состояние на соединение и отказ при перекрытии на одном соединении),
-`src/nextorm.core/DataContext/Cache/IPreparedQueryCommand.cs:5` (prepared terminals),
+`src/nextorm.core/Query/Commands/QueryCommand.TResult.cs:81` ([`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},NextORM.Core.PrepareOptions,System.Threading.CancellationToken))),
+`src/nextorm.core/DataContext/Cache/Preparation/PrepareOptions.cs:6` (`PreparedCommandCache` / `PrepareOptions`),
+`src/nextorm.core/DataContext/Cache/Commands/DbPreparedQueryCommand.cs:199` (`Acquire`: состояние на соединение и отказ при перекрытии на одном соединении),
+`src/nextorm.core/DataContext/Cache/Commands/IPreparedQueryCommand.cs:5` (prepared terminals),
 `src/nextorm.core/DataContext/DataContext.cs:315` (`GetPreparedQueryCommand`).

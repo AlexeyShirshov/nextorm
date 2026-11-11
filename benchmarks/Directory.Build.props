@@ -1,0 +1,14 @@
+<Project>
+
+  <!--
+    A nested Directory.Build.props stops MSBuild's automatic upward search, so the repository-wide
+    file must be imported explicitly. Benchmarks are never published and run on the newest supported
+    runtime, the same one the test suites use.
+  -->
+  <Import Project="$(MSBuildThisFileDirectory)../Directory.Build.props" />
+
+  <PropertyGroup>
+    <TargetFramework>$(NextormHostTargetFramework)</TargetFramework>
+  </PropertyGroup>
+
+</Project>

@@ -119,6 +119,54 @@ public class JoinedEntityBuilder<T1, T2> : EntityBuilder<Projection<T1, T2>>
     /// <returns>A builder over the projection extended with <typeparamref name="T3"/>.</returns>
     public new JoinedEntityBuilder<T1, T2, T3> OuterApply<T3>(EntityBuilder<T3> _, Action<JoinOptions>? options = null)
         => JoinCore(_, JoinType.OuterApply, null, options);
+
+    /// <inheritdoc/>
+    public new JoinedEntityBuilder<T1, T2, T3> CrossJoin<T3>(Action<JoinOptions>? options = null)
+        => CrossJoin(DataProvider.From<T3>(), options);
+    /// <inheritdoc/>
+    public new JoinedEntityBuilder<T1, T2, T3> CrossApply<T3>(Action<JoinOptions>? options = null)
+        => CrossApply(DataProvider.From<T3>(), options);
+    /// <inheritdoc/>
+    public new JoinedEntityBuilder<T1, T2, T3> OuterApply<T3>(Action<JoinOptions>? options = null)
+        => OuterApply(DataProvider.From<T3>(), options);
+
+    /// <inheritdoc/>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
+    public new JoinedEntityBuilder<T1, T2, TableAlias> Join(string table, Expression<Func<Projection<T1, T2>, TableAlias, bool>> joinCondition, Action<JoinOptions>? options = null)
+    {
+        return JoinCore<TableAlias>(new EntityBuilder<TableAlias>(DataProvider, table), JoinType.Inner, joinCondition, options);
+    }
+    /// <inheritdoc/>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
+    public new JoinedEntityBuilder<T1, T2, TableAlias> LeftJoin(string table, Expression<Func<Projection<T1, T2>, TableAlias, bool>> joinCondition, Action<JoinOptions>? options = null)
+    {
+        return JoinCore<TableAlias>(new EntityBuilder<TableAlias>(DataProvider, table), JoinType.Left, joinCondition, options);
+    }
+    /// <inheritdoc/>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
+    public new JoinedEntityBuilder<T1, T2, TableAlias> RightJoin(string table, Expression<Func<Projection<T1, T2>, TableAlias, bool>> joinCondition, Action<JoinOptions>? options = null)
+    {
+        return JoinCore<TableAlias>(new EntityBuilder<TableAlias>(DataProvider, table), JoinType.Right, joinCondition, options);
+    }
+    /// <inheritdoc/>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
+    public new JoinedEntityBuilder<T1, T2, TableAlias> FullJoin(string table, Expression<Func<Projection<T1, T2>, TableAlias, bool>> joinCondition, Action<JoinOptions>? options = null)
+    {
+        return JoinCore<TableAlias>(new EntityBuilder<TableAlias>(DataProvider, table), JoinType.Full, joinCondition, options);
+    }
+    /// <inheritdoc/>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
+    public new JoinedEntityBuilder<T1, T2, TableAlias> CrossJoin(string table, Action<JoinOptions>? options = null)
+        => JoinCore<TableAlias>(new EntityBuilder<TableAlias>(DataProvider, table), JoinType.Cross, null, options);
+    /// <inheritdoc/>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
+    public new JoinedEntityBuilder<T1, T2, TableAlias> CrossApply(string table, Action<JoinOptions>? options = null)
+        => JoinCore<TableAlias>(new EntityBuilder<TableAlias>(DataProvider, table), JoinType.CrossApply, null, options);
+    /// <inheritdoc/>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
+    public new JoinedEntityBuilder<T1, T2, TableAlias> OuterApply(string table, Action<JoinOptions>? options = null)
+        => JoinCore<TableAlias>(new EntityBuilder<TableAlias>(DataProvider, table), JoinType.OuterApply, null, options);
+
     /// <summary>Applies a correlated <c>CROSS APPLY</c> source per left-hand row of this 2-source join, adding it as one more flat slot.</summary>
     /// <typeparam name="T3">The element type yielded by the applied source.</typeparam>
     /// <param name="source">Builds the applied source from the flattened left-hand row; it may reference every preceding slot.</param>
@@ -447,6 +495,54 @@ public class JoinedEntityBuilder<T1, T2, T3> : EntityBuilder<Projection<T1, T2, 
     /// <returns>A builder over the projection extended with <typeparamref name="T4"/>.</returns>
     public new JoinedEntityBuilder<T1, T2, T3, T4> OuterApply<T4>(EntityBuilder<T4> _, Action<JoinOptions>? options = null)
         => JoinCore(_, JoinType.OuterApply, null, options);
+
+    /// <inheritdoc/>
+    public new JoinedEntityBuilder<T1, T2, T3, T4> CrossJoin<T4>(Action<JoinOptions>? options = null)
+        => CrossJoin(DataProvider.From<T4>(), options);
+    /// <inheritdoc/>
+    public new JoinedEntityBuilder<T1, T2, T3, T4> CrossApply<T4>(Action<JoinOptions>? options = null)
+        => CrossApply(DataProvider.From<T4>(), options);
+    /// <inheritdoc/>
+    public new JoinedEntityBuilder<T1, T2, T3, T4> OuterApply<T4>(Action<JoinOptions>? options = null)
+        => OuterApply(DataProvider.From<T4>(), options);
+
+    /// <inheritdoc/>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
+    public new JoinedEntityBuilder<T1, T2, T3, TableAlias> Join(string table, Expression<Func<Projection<T1, T2, T3>, TableAlias, bool>> joinCondition, Action<JoinOptions>? options = null)
+    {
+        return JoinCore<TableAlias>(new EntityBuilder<TableAlias>(DataProvider, table), JoinType.Inner, joinCondition, options);
+    }
+    /// <inheritdoc/>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
+    public new JoinedEntityBuilder<T1, T2, T3, TableAlias> LeftJoin(string table, Expression<Func<Projection<T1, T2, T3>, TableAlias, bool>> joinCondition, Action<JoinOptions>? options = null)
+    {
+        return JoinCore<TableAlias>(new EntityBuilder<TableAlias>(DataProvider, table), JoinType.Left, joinCondition, options);
+    }
+    /// <inheritdoc/>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
+    public new JoinedEntityBuilder<T1, T2, T3, TableAlias> RightJoin(string table, Expression<Func<Projection<T1, T2, T3>, TableAlias, bool>> joinCondition, Action<JoinOptions>? options = null)
+    {
+        return JoinCore<TableAlias>(new EntityBuilder<TableAlias>(DataProvider, table), JoinType.Right, joinCondition, options);
+    }
+    /// <inheritdoc/>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
+    public new JoinedEntityBuilder<T1, T2, T3, TableAlias> FullJoin(string table, Expression<Func<Projection<T1, T2, T3>, TableAlias, bool>> joinCondition, Action<JoinOptions>? options = null)
+    {
+        return JoinCore<TableAlias>(new EntityBuilder<TableAlias>(DataProvider, table), JoinType.Full, joinCondition, options);
+    }
+    /// <inheritdoc/>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
+    public new JoinedEntityBuilder<T1, T2, T3, TableAlias> CrossJoin(string table, Action<JoinOptions>? options = null)
+        => JoinCore<TableAlias>(new EntityBuilder<TableAlias>(DataProvider, table), JoinType.Cross, null, options);
+    /// <inheritdoc/>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
+    public new JoinedEntityBuilder<T1, T2, T3, TableAlias> CrossApply(string table, Action<JoinOptions>? options = null)
+        => JoinCore<TableAlias>(new EntityBuilder<TableAlias>(DataProvider, table), JoinType.CrossApply, null, options);
+    /// <inheritdoc/>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
+    public new JoinedEntityBuilder<T1, T2, T3, TableAlias> OuterApply(string table, Action<JoinOptions>? options = null)
+        => JoinCore<TableAlias>(new EntityBuilder<TableAlias>(DataProvider, table), JoinType.OuterApply, null, options);
+
     /// <summary>Applies a correlated <c>CROSS APPLY</c> source per left-hand row of this 3-source join, adding it as one more flat slot.</summary>
     /// <typeparam name="T4">The element type yielded by the applied source.</typeparam>
     /// <param name="source">Builds the applied source from the flattened left-hand row; it may reference every preceding slot.</param>
@@ -759,6 +855,54 @@ public class JoinedEntityBuilder<T1, T2, T3, T4> : EntityBuilder<Projection<T1, 
     /// <returns>A builder over the projection extended with <typeparamref name="T5"/>.</returns>
     public new JoinedEntityBuilder<T1, T2, T3, T4, T5> OuterApply<T5>(EntityBuilder<T5> _, Action<JoinOptions>? options = null)
         => JoinCore(_, JoinType.OuterApply, null, options);
+
+    /// <inheritdoc/>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5> CrossJoin<T5>(Action<JoinOptions>? options = null)
+        => CrossJoin(DataProvider.From<T5>(), options);
+    /// <inheritdoc/>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5> CrossApply<T5>(Action<JoinOptions>? options = null)
+        => CrossApply(DataProvider.From<T5>(), options);
+    /// <inheritdoc/>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5> OuterApply<T5>(Action<JoinOptions>? options = null)
+        => OuterApply(DataProvider.From<T5>(), options);
+
+    /// <inheritdoc/>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, TableAlias> Join(string table, Expression<Func<Projection<T1, T2, T3, T4>, TableAlias, bool>> joinCondition, Action<JoinOptions>? options = null)
+    {
+        return JoinCore<TableAlias>(new EntityBuilder<TableAlias>(DataProvider, table), JoinType.Inner, joinCondition, options);
+    }
+    /// <inheritdoc/>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, TableAlias> LeftJoin(string table, Expression<Func<Projection<T1, T2, T3, T4>, TableAlias, bool>> joinCondition, Action<JoinOptions>? options = null)
+    {
+        return JoinCore<TableAlias>(new EntityBuilder<TableAlias>(DataProvider, table), JoinType.Left, joinCondition, options);
+    }
+    /// <inheritdoc/>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, TableAlias> RightJoin(string table, Expression<Func<Projection<T1, T2, T3, T4>, TableAlias, bool>> joinCondition, Action<JoinOptions>? options = null)
+    {
+        return JoinCore<TableAlias>(new EntityBuilder<TableAlias>(DataProvider, table), JoinType.Right, joinCondition, options);
+    }
+    /// <inheritdoc/>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, TableAlias> FullJoin(string table, Expression<Func<Projection<T1, T2, T3, T4>, TableAlias, bool>> joinCondition, Action<JoinOptions>? options = null)
+    {
+        return JoinCore<TableAlias>(new EntityBuilder<TableAlias>(DataProvider, table), JoinType.Full, joinCondition, options);
+    }
+    /// <inheritdoc/>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, TableAlias> CrossJoin(string table, Action<JoinOptions>? options = null)
+        => JoinCore<TableAlias>(new EntityBuilder<TableAlias>(DataProvider, table), JoinType.Cross, null, options);
+    /// <inheritdoc/>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, TableAlias> CrossApply(string table, Action<JoinOptions>? options = null)
+        => JoinCore<TableAlias>(new EntityBuilder<TableAlias>(DataProvider, table), JoinType.CrossApply, null, options);
+    /// <inheritdoc/>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, TableAlias> OuterApply(string table, Action<JoinOptions>? options = null)
+        => JoinCore<TableAlias>(new EntityBuilder<TableAlias>(DataProvider, table), JoinType.OuterApply, null, options);
+
     /// <summary>Applies a correlated <c>CROSS APPLY</c> source per left-hand row of this 4-source join, adding it as one more flat slot.</summary>
     /// <typeparam name="T5">The element type yielded by the applied source.</typeparam>
     /// <param name="source">Builds the applied source from the flattened left-hand row; it may reference every preceding slot.</param>
@@ -1071,6 +1215,54 @@ public class JoinedEntityBuilder<T1, T2, T3, T4, T5> : EntityBuilder<Projection<
     /// <returns>A builder over the projection extended with <typeparamref name="T6"/>.</returns>
     public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> OuterApply<T6>(EntityBuilder<T6> _, Action<JoinOptions>? options = null)
         => JoinCore(_, JoinType.OuterApply, null, options);
+
+    /// <inheritdoc/>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> CrossJoin<T6>(Action<JoinOptions>? options = null)
+        => CrossJoin(DataProvider.From<T6>(), options);
+    /// <inheritdoc/>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> CrossApply<T6>(Action<JoinOptions>? options = null)
+        => CrossApply(DataProvider.From<T6>(), options);
+    /// <inheritdoc/>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> OuterApply<T6>(Action<JoinOptions>? options = null)
+        => OuterApply(DataProvider.From<T6>(), options);
+
+    /// <inheritdoc/>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, TableAlias> Join(string table, Expression<Func<Projection<T1, T2, T3, T4, T5>, TableAlias, bool>> joinCondition, Action<JoinOptions>? options = null)
+    {
+        return JoinCore<TableAlias>(new EntityBuilder<TableAlias>(DataProvider, table), JoinType.Inner, joinCondition, options);
+    }
+    /// <inheritdoc/>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, TableAlias> LeftJoin(string table, Expression<Func<Projection<T1, T2, T3, T4, T5>, TableAlias, bool>> joinCondition, Action<JoinOptions>? options = null)
+    {
+        return JoinCore<TableAlias>(new EntityBuilder<TableAlias>(DataProvider, table), JoinType.Left, joinCondition, options);
+    }
+    /// <inheritdoc/>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, TableAlias> RightJoin(string table, Expression<Func<Projection<T1, T2, T3, T4, T5>, TableAlias, bool>> joinCondition, Action<JoinOptions>? options = null)
+    {
+        return JoinCore<TableAlias>(new EntityBuilder<TableAlias>(DataProvider, table), JoinType.Right, joinCondition, options);
+    }
+    /// <inheritdoc/>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, TableAlias> FullJoin(string table, Expression<Func<Projection<T1, T2, T3, T4, T5>, TableAlias, bool>> joinCondition, Action<JoinOptions>? options = null)
+    {
+        return JoinCore<TableAlias>(new EntityBuilder<TableAlias>(DataProvider, table), JoinType.Full, joinCondition, options);
+    }
+    /// <inheritdoc/>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, TableAlias> CrossJoin(string table, Action<JoinOptions>? options = null)
+        => JoinCore<TableAlias>(new EntityBuilder<TableAlias>(DataProvider, table), JoinType.Cross, null, options);
+    /// <inheritdoc/>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, TableAlias> CrossApply(string table, Action<JoinOptions>? options = null)
+        => JoinCore<TableAlias>(new EntityBuilder<TableAlias>(DataProvider, table), JoinType.CrossApply, null, options);
+    /// <inheritdoc/>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, TableAlias> OuterApply(string table, Action<JoinOptions>? options = null)
+        => JoinCore<TableAlias>(new EntityBuilder<TableAlias>(DataProvider, table), JoinType.OuterApply, null, options);
+
     /// <summary>Applies a correlated <c>CROSS APPLY</c> source per left-hand row of this 5-source join, adding it as one more flat slot.</summary>
     /// <typeparam name="T6">The element type yielded by the applied source.</typeparam>
     /// <param name="source">Builds the applied source from the flattened left-hand row; it may reference every preceding slot.</param>
@@ -1383,6 +1575,54 @@ public class JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> : EntityBuilder<Project
     /// <returns>A builder over the projection extended with <typeparamref name="T7"/>.</returns>
     public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> OuterApply<T7>(EntityBuilder<T7> _, Action<JoinOptions>? options = null)
         => JoinCore(_, JoinType.OuterApply, null, options);
+
+    /// <inheritdoc/>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> CrossJoin<T7>(Action<JoinOptions>? options = null)
+        => CrossJoin(DataProvider.From<T7>(), options);
+    /// <inheritdoc/>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> CrossApply<T7>(Action<JoinOptions>? options = null)
+        => CrossApply(DataProvider.From<T7>(), options);
+    /// <inheritdoc/>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> OuterApply<T7>(Action<JoinOptions>? options = null)
+        => OuterApply(DataProvider.From<T7>(), options);
+
+    /// <inheritdoc/>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, TableAlias> Join(string table, Expression<Func<Projection<T1, T2, T3, T4, T5, T6>, TableAlias, bool>> joinCondition, Action<JoinOptions>? options = null)
+    {
+        return JoinCore<TableAlias>(new EntityBuilder<TableAlias>(DataProvider, table), JoinType.Inner, joinCondition, options);
+    }
+    /// <inheritdoc/>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, TableAlias> LeftJoin(string table, Expression<Func<Projection<T1, T2, T3, T4, T5, T6>, TableAlias, bool>> joinCondition, Action<JoinOptions>? options = null)
+    {
+        return JoinCore<TableAlias>(new EntityBuilder<TableAlias>(DataProvider, table), JoinType.Left, joinCondition, options);
+    }
+    /// <inheritdoc/>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, TableAlias> RightJoin(string table, Expression<Func<Projection<T1, T2, T3, T4, T5, T6>, TableAlias, bool>> joinCondition, Action<JoinOptions>? options = null)
+    {
+        return JoinCore<TableAlias>(new EntityBuilder<TableAlias>(DataProvider, table), JoinType.Right, joinCondition, options);
+    }
+    /// <inheritdoc/>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, TableAlias> FullJoin(string table, Expression<Func<Projection<T1, T2, T3, T4, T5, T6>, TableAlias, bool>> joinCondition, Action<JoinOptions>? options = null)
+    {
+        return JoinCore<TableAlias>(new EntityBuilder<TableAlias>(DataProvider, table), JoinType.Full, joinCondition, options);
+    }
+    /// <inheritdoc/>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, TableAlias> CrossJoin(string table, Action<JoinOptions>? options = null)
+        => JoinCore<TableAlias>(new EntityBuilder<TableAlias>(DataProvider, table), JoinType.Cross, null, options);
+    /// <inheritdoc/>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, TableAlias> CrossApply(string table, Action<JoinOptions>? options = null)
+        => JoinCore<TableAlias>(new EntityBuilder<TableAlias>(DataProvider, table), JoinType.CrossApply, null, options);
+    /// <inheritdoc/>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, TableAlias> OuterApply(string table, Action<JoinOptions>? options = null)
+        => JoinCore<TableAlias>(new EntityBuilder<TableAlias>(DataProvider, table), JoinType.OuterApply, null, options);
+
     /// <summary>Applies a correlated <c>CROSS APPLY</c> source per left-hand row of this 6-source join, adding it as one more flat slot.</summary>
     /// <typeparam name="T7">The element type yielded by the applied source.</typeparam>
     /// <param name="source">Builds the applied source from the flattened left-hand row; it may reference every preceding slot.</param>
@@ -1695,6 +1935,54 @@ public class JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> : EntityBuilder<Pro
     /// <returns>A builder over the projection extended with <typeparamref name="T8"/>.</returns>
     public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> OuterApply<T8>(EntityBuilder<T8> _, Action<JoinOptions>? options = null)
         => JoinCore(_, JoinType.OuterApply, null, options);
+
+    /// <inheritdoc/>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> CrossJoin<T8>(Action<JoinOptions>? options = null)
+        => CrossJoin(DataProvider.From<T8>(), options);
+    /// <inheritdoc/>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> CrossApply<T8>(Action<JoinOptions>? options = null)
+        => CrossApply(DataProvider.From<T8>(), options);
+    /// <inheritdoc/>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> OuterApply<T8>(Action<JoinOptions>? options = null)
+        => OuterApply(DataProvider.From<T8>(), options);
+
+    /// <inheritdoc/>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, TableAlias> Join(string table, Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7>, TableAlias, bool>> joinCondition, Action<JoinOptions>? options = null)
+    {
+        return JoinCore<TableAlias>(new EntityBuilder<TableAlias>(DataProvider, table), JoinType.Inner, joinCondition, options);
+    }
+    /// <inheritdoc/>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, TableAlias> LeftJoin(string table, Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7>, TableAlias, bool>> joinCondition, Action<JoinOptions>? options = null)
+    {
+        return JoinCore<TableAlias>(new EntityBuilder<TableAlias>(DataProvider, table), JoinType.Left, joinCondition, options);
+    }
+    /// <inheritdoc/>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, TableAlias> RightJoin(string table, Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7>, TableAlias, bool>> joinCondition, Action<JoinOptions>? options = null)
+    {
+        return JoinCore<TableAlias>(new EntityBuilder<TableAlias>(DataProvider, table), JoinType.Right, joinCondition, options);
+    }
+    /// <inheritdoc/>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, TableAlias> FullJoin(string table, Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7>, TableAlias, bool>> joinCondition, Action<JoinOptions>? options = null)
+    {
+        return JoinCore<TableAlias>(new EntityBuilder<TableAlias>(DataProvider, table), JoinType.Full, joinCondition, options);
+    }
+    /// <inheritdoc/>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, TableAlias> CrossJoin(string table, Action<JoinOptions>? options = null)
+        => JoinCore<TableAlias>(new EntityBuilder<TableAlias>(DataProvider, table), JoinType.Cross, null, options);
+    /// <inheritdoc/>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, TableAlias> CrossApply(string table, Action<JoinOptions>? options = null)
+        => JoinCore<TableAlias>(new EntityBuilder<TableAlias>(DataProvider, table), JoinType.CrossApply, null, options);
+    /// <inheritdoc/>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, TableAlias> OuterApply(string table, Action<JoinOptions>? options = null)
+        => JoinCore<TableAlias>(new EntityBuilder<TableAlias>(DataProvider, table), JoinType.OuterApply, null, options);
+
     /// <summary>Applies a correlated <c>CROSS APPLY</c> source per left-hand row of this 7-source join, adding it as one more flat slot.</summary>
     /// <typeparam name="T8">The element type yielded by the applied source.</typeparam>
     /// <param name="source">Builds the applied source from the flattened left-hand row; it may reference every preceding slot.</param>

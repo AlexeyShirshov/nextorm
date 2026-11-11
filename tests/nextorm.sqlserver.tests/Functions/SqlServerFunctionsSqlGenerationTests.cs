@@ -6,6 +6,20 @@ using NextORM.Core;
 namespace NextORM.SqlServer.Tests;
 
 /// <summary>SQL generation for the SQL Server-only T-SQL scalar functions (no database).</summary>
+/// <remarks>
+/// Runs in the serialized "DataContextCache clear" collection
+/// (<see cref="CollectionDefinitionAttribute.DisableParallelization"/>): its identity fact
+/// (<c>Quotename_ParameterizedArguments_ShouldPreserveBindings</c>) asserts prepared-command
+/// <em>identity</em> across a capture change, while a concurrent <c>PurgeQueryCache()</c> (or
+/// <see cref="DataContextCache.Clear"/>) anywhere in the process bumps the process-wide plan-store
+/// generation and evicts every thread's thread-local plan dictionary. The next "cache hit" then
+/// legitimately re-prepares and returns a different <c>DbPreparedQueryCommand</c> — correct product
+/// behaviour, but not the identity this regression test is about, so the class must not overlap another
+/// collection. Same mechanism and remedy as DEF-08 (#327), T296b and the sibling instances tracked on
+/// #339; the collection definition lives in
+/// <c>SqlGeneration/Sources/RawSourceBindingSqlGenerationTests.cs</c>.
+/// </remarks>
+[Collection("DataContextCache clear")]
 public class SqlServerFunctionsSqlGenerationTests
 {
     private static string Normalize(string sql) => sql.Replace("\r\n", "\n");

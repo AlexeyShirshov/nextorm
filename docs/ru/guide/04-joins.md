@@ -62,7 +62,7 @@ select t1.id, t2.requiredstring
  join complex_entity as 't2' on cast(t1.id as bigint) = t2.id
 ```
 
-Таблицы `Вывод:` ниже показывают строки, которые возвращает каждый пример на сид-данных интеграционных тестов (`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).
+Таблицы `Вывод:` ниже показывают строки, которые возвращает каждый пример на сид-данных интеграционных тестов (`tests/nextorm.integration.tests/Providers/TestProviders/SqliteTestProvider.cs`).
 
 Вывод:
 
@@ -446,7 +446,13 @@ var full = dataContext.From<ISimpleEntity>()
 
 Четыре условных оператора имеют форму без явного источника, которая разрешает присоединяемую
 сущность через тот же контекст данных. Вместо передачи `dataContext.From<TJoinEntity>()` укажите
-присоединяемый тип как generic-аргумент и передайте только условие:
+присоединяемый тип как generic-аргумент и передайте только условие. Эти условные формы по типу
+сохраняют защиту `ArgumentNullException.ThrowIfNull`, поэтому `null`-predicate отвергается с
+`ArgumentNullException` сразу при вызове построителя. У явных по источнику перегрузок
+(`Join/LeftJoin/RightJoin/FullJoin(EntityBuilder<TJoinEntity>, predicate, options)`) такой защиты нет —
+predicate передаётся в ядро соединения; строковые формы без источника (см. «Соединения с
+необработанной таблицей без источника» ниже) ведут себя так же: `null`-predicate **принимается** и
+не генерирует `ON`. Соединение по типу записывается без аргумента-источника:
 
 ```csharp
 var rows = dataContext.From<ISimpleEntity>()
@@ -483,31 +489,39 @@ var sql = dataContext.From<ISimpleEntity>()
 * **Нетипизированная лямбда без выводимого типа — ошибка компиляции.** `Join((a, b) => …)` не может
   вывести `TJoinEntity` из своих параметров и не переходит к другой перегрузке; укажите generic-аргумент
   или типизируйте лямбду.
-* **Условие `null`.** `null`-predicate, переданный в форму без источника, отклоняется
-  `ArgumentNullException` до разрешения источника, на каждом приёмнике и операторе. Это сознательное
-  отличие от формы с явным источником, **а не** паритет:
-  `Join(dataContext.From<TJoinEntity>(), null)` принимается (`JoinCore` берёт nullable `LambdaExpression`),
-  поэтому join с null-условием выражается только через форму с явным источником. Утверждение
-  об эквивалентности выше касается только не-null predicate.
+* **Условие `null`.** Условные формы по типу сохраняют защиту `ThrowIfNull`, поэтому `null`-predicate
+  бросает `ArgumentNullException` (см. выше). Приём `null`-predicate относится к форме с явным
+  источником (`Join(dataContext.From("table"), null)`) и к строковым формам без источника
+  (`Join/LeftJoin/RightJoin/FullJoin(string table, predicate, options)`), где `null`-predicate не
+  генерирует `ON`.
+* **`null` / пустое / пробельное имя таблицы.** Имя таблицы `null`, пустое или состоящее только из
+  пробелов, переданное через значение типа `string`, отклоняется на месте вызова с
+  `ArgumentNullException` (`null`) или `ArgumentException` (пустое / пробельное), `ParamName == "table"`,
+  идентично явной форме `ctx.From(table)`. Чтобы явно выразить нужную перегрузку, передавайте каст
+  или типизированную переменную.
 * **Недопустимая пара «всё null».** Нетипизированная пара `joined.Join<T>(null, null)` компилируется:
   разрешение перегрузки связывает её с существующей двухаргументной перегрузкой
   `Join<TJoinEntity>(Cte<TJoinEntity>, Expression<…>)`, которая затем отклоняет null-CTE с
-  `ArgumentNullException` (`Parameter 'cte'`). Это не новая неоднозначность, внесённая формой без
+  `ArgumentNullException` (`Parameter 'cte'`). Такое связывание существует независимо от формы без
   источника; используйте типизированный аргумент, чтобы выразить намерение.
 
 ### Границы
 
-Форма без источника ограничена четырьмя операторами с predicate. `CrossJoin`, `CrossApply` и
-`OuterApply` не имеют predicate и **не** предоставляются без источника; форма без источника над
-необработанной таблицей (`From("table")`) также **не** предоставляется. Форма доступна на приёмнике
-`EntityBuilder<T>` (арность 2) и на приёмниках `JoinedEntityBuilder<T1..Tn>` арности 2–7
-(результирующая арность 3–8). **Ни одной новой** перегрузки без источника не
-*объявлено* на терминальном `JoinedEntityBuilder<T1..T8>` — это граница области плоской
-цепочки арности, которая останавливается на арности 8. Это **не** отказ на компиляции:
-терминальный построитель всё равно наследует члены generic-базы `EntityBuilder<Projection<T1..T8>>`, поэтому
-дальнейший join без источника (как и дальнейший join с явным источником) *компилируется*,
-рассматривая накопленную восьмитабличную проекцию как `Item1`. Используйте `As`/`From(query)`,
-чтобы назвать проекцию, когда плоская цепочка больше не подходит. Те же четыре оператора принимают и
+Форма по типу выше охватывает четыре оператора с predicate. Кроме того, `CrossJoin`, `CrossApply` и
+`OuterApply` теперь тоже имеют форму без источника — и **по типу**
+(`CrossJoin<TJoinEntity>()`, `CrossApply<TJoinEntity>()`, `OuterApply<TJoinEntity>(Action<JoinOptions>? options = null)`),
+и **по имени таблицы** (`CrossJoin/CrossApply/OuterApply(string table, Action<JoinOptions>? options = null)`),
+при этом правая сторона становится `TJoinEntity` или `TableAlias` соответственно. Те же строковые
+перегрузки есть и у четырёх операторов с predicate (`Join/LeftJoin/RightJoin/FullJoin(string table, predicate, options)`),
+так что необработанную таблицу можно соединить без явного источника `From("table")` на обоих уровнях
+построителей. Все они доступны на приёмнике `EntityBuilder<T>` (арность 2) и на приёмниках
+`JoinedEntityBuilder<T1..Tn>` арности 2–7 (результирующая арность 3–8); терминальный
+`JoinedEntityBuilder<T1..T8>` сохраняет только унаследованные члены generic-базы (граница области
+плоской цепочки арности останавливается на арности 8 и **не** является отказом на компиляции —
+дальнейший join без источника всё равно компилируется, рассматривая накопленную восьмитабличную
+проекцию как `Item1`). Строковые формы `Join/LeftJoin/RightJoin/FullJoin(string table, predicate, options)` также принимают
+`null`-predicate, ведя себя идентично форме с явным источником (без `ON`); условные формы по типу
+сохраняют защиту `ThrowIfNull` и **не** принимают. Четыре оператора с predicate дополнительно принимают
 маркер `Alias.<Name>` — с необязательными опциями соединения после него — на каждом из этих
 получателей; см. [Псевдонимы без явного источника](#псевдонимы-без-явного-источника).
 
@@ -530,6 +544,25 @@ select count(*)
 | Count |
 |-------|
 | 30 |
+
+### Перекрёстные соединения без явного источника
+
+`CrossJoin` также доступен без явного источника — по типу и по имени таблицы, на обоих уровнях
+построителей:
+
+```csharp
+var byType = dataContext.From<ISimpleEntity>()
+    .CrossJoin<IComplexEntity>()
+    .Count();
+
+var byTable = dataContext.From<ISimpleEntity>()
+    .CrossJoin("complex_entity")
+    .Count();
+```
+
+Обе формы принимают необязательный `Action<JoinOptions>` и дают тот же SQL, что и явные формы
+`dataContext.From<IComplexEntity>()` / `dataContext.From("complex_entity")`. `CrossApply` и `OuterApply`
+следуют тому же шаблону (см. [APPLY и LATERAL](#apply-и-lateral)).
 
 ## APPLY и LATERAL
 
@@ -567,6 +600,28 @@ select t1.id, t2.somestring
  from simple_entity as t1
  cross join complex_entity as t2
 ```
+
+### APPLY без явного источника
+
+`CrossApply` и `OuterApply` также доступны без явного источника — по типу и по имени таблицы, на обоих
+уровнях построителей (правая сторона становится `TJoinEntity` или `TableAlias`):
+
+```csharp
+var byType = dataContext.From<ISimpleEntity>()
+    .CrossApply<IComplexEntity>()
+    .Select(p => new { p.Item1.Id, p.Item2.RequiredString })
+    .ToList();
+
+var byTable = dataContext.From<ISimpleEntity>()
+    .OuterApply("complex_entity")
+    .Select(p => new { p.Item1.Id, p.Item2.RequiredString })
+    .ToList();
+```
+
+Обе формы принимают необязательный `Action<JoinOptions>`. Границы провайдеров не меняются: диалекты с
+`SupportsApply == false` (SQLite, ClickHouse, MariaDB 11.4) и in-memory-провайдер по-прежнему отклоняют
+любой `CrossApply`/`OuterApply` с `NotSupportedException`, точно как в форме с явным источником. APPLY над
+необработанным источником `TableAlias` сохраняет те же семантику чтения колонок, что и явная форма.
 
 `OUTER APPLY` по производной таблице:
 
@@ -805,7 +860,7 @@ select t1.id, t2.value
 ## Соединение с подзапросом
 
 `QueryCommand<T>` можно присоединить напрямую. Он заключается в скобки и получает псевдоним как
-производная таблица; псевдоним теперь выдаётся всегда (даже в SQLite, где он необязателен), чтобы все
+производная таблица; псевдоним выдаётся всегда (даже в SQLite, где он необязателен), чтобы все
 ссылки на производный источник — условие `ON`, `WHERE`, `ORDER BY` и проекция — разрешались через одну
 идентичность псевдонима. Член, который проекция производной таблицы переименовывает (`c.String`,
 отображённый на `requiredstring`), экспонируется под именем проекции (`requiredstring as 'String'`) и
@@ -907,7 +962,7 @@ var mixed = dataContext
     .ToList();
 ```
 
-Соединение с необработанной таблицей (`TableAlias`) теперь учитывает явно заданный источник на
+Соединение с необработанной таблицей (`TableAlias`) учитывает явно заданный источник на
 присоединяемом построителе. Если присоединяемая сторона — это необработанный SQL (`FromSql`),
 переопределение таблицы (`b => b.Table("...")` / `WithTableName`), производный запрос
 (`From(query)`), табличная функция (`From(() => ...)`) или типизированный CTE (`Cte<T>`), в
@@ -916,16 +971,42 @@ var mixed = dataContext
 `SemiJoin`/`AntiJoin` не затрагиваются: присоединяемый тип по-прежнему разрешается через метаданные
 сущности.
 
-## Цепочки соединений и арность 2..8
+### Соединения с необработанной таблицей без явного источника
 
-Каждый вызов в цепочке добавляет одну таблицу. Условие получает накопленную на данный момент
-проекцию и новую сущность:
+Строковые перегрузки позволяют соединить необработанную таблицу без явного источника `From("table")`.
+Правая сторона становится `TableAlias` и читается через индексатор точно как в явной форме, на обоих
+уровнях построителей (арность 1 и в цепочке):
 
 ```csharp
 var rows = dataContext.From<ISimpleEntity>()
-    .Join(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id)          // JoinedEntityBuilder<SimpleEntity, ComplexEntity>
-    .Join(dataContext.From<ISimpleEntity>(), (p, s) => p.Item2.Id == s.Id)        // JoinedEntityBuilder<...>
-    .Join(dataContext.From<IComplexEntity>(), (p, c) => p.Item3.Id == c.Id)       // JoinedEntityBuilder<...>
+    .Join("complex_entity", (s, c) => s.Id == c["id"].AsInt)
+    .Select(p => new { p.Item1.Id, Str = p.Item2["someString"].AsString })
+    .ToList();
+
+var chained = dataContext.From("simple_entity")
+    .Join("complex_entity", (s, c) => s["id"] == c["id"])
+    .CrossJoin("other_table")
+    .Select(p => new { Id = p.Item1["id"].AsInt, Str = p.Item2["someString"].AsString });
+```
+
+`Join`, `LeftJoin`, `RightJoin`, `FullJoin` принимают predicate; `CrossJoin`, `CrossApply`, `OuterApply` —
+только имя таблицы и необязательный `Action<JoinOptions>`. `null`-predicate принимается и не генерирует
+`ON`, идентично явной форме `From("table")`. Имя таблицы `null`, пустое или состоящее только из пробелов
+бросает `ArgumentNullException` / `ArgumentException` (`ParamName == "table"`) на месте вызова — так же, как
+явная форма `From("table")`.
+
+## Цепочки соединений и арность 2..8
+
+Каждый вызов в цепочке добавляет одну таблицу; присоединяемая сущность называется типом (`Join<T>`,
+см. [Соединения без явного источника (по типу)](#соединения-без-явного-источника-по-типу)), поэтому
+построитель источника не передаётся. Условие получает накопленную на данный момент проекцию и новую
+сущность:
+
+```csharp
+var rows = dataContext.From<ISimpleEntity>()
+    .Join<IComplexEntity>((s, c) => s.Id == c.Id)          // JoinedEntityBuilder<SimpleEntity, ComplexEntity>
+    .Join<ISimpleEntity>((p, s) => p.Item2.Id == s.Id)     // JoinedEntityBuilder<...>
+    .Join<IComplexEntity>((p, c) => p.Item3.Id == c.Id)    // JoinedEntityBuilder<...>
     .Select(p => new { A = p.Item1.Id, B = p.Item2.RequiredString, C = p.Item3.Id, D = p.Item4.RequiredString })
     .ToList();
 ```
@@ -942,22 +1023,14 @@ select t1.id as 'A', t2.requiredstring as 'B', t3.id as 'C', t4.requiredstring a
 таблицах проекция предоставляет `Item1`..[`Item8`](xref:NextORM.Core.Projection`8.Item8):
 
 ```csharp
-var e = new[]
-{
-    dataContext.From<ISimpleEntity>(), dataContext.From<ISimpleEntity>(),
-    dataContext.From<ISimpleEntity>(), dataContext.From<ISimpleEntity>(),
-    dataContext.From<ISimpleEntity>(), dataContext.From<ISimpleEntity>(),
-    dataContext.From<ISimpleEntity>(), dataContext.From<ISimpleEntity>(),
-};
-
-var sql = e[0]
-    .Join(e[1], (a, b) => a.Id == b.Id)
-    .Join(e[2], (p, c) => p.Item2.Id == c.Id)
-    .Join(e[3], (p, c) => p.Item3.Id == c.Id)
-    .Join(e[4], (p, c) => p.Item4.Id == c.Id)
-    .Join(e[5], (p, c) => p.Item5.Id == c.Id)
-    .Join(e[6], (p, c) => p.Item6.Id == c.Id)
-    .Join(e[7], (p, c) => p.Item7.Id == c.Id)
+var sql = dataContext.From<ISimpleEntity>()
+    .Join<ISimpleEntity>((a, b) => a.Id == b.Id)
+    .Join<ISimpleEntity>((p, c) => p.Item2.Id == c.Id)
+    .Join<ISimpleEntity>((p, c) => p.Item3.Id == c.Id)
+    .Join<ISimpleEntity>((p, c) => p.Item4.Id == c.Id)
+    .Join<ISimpleEntity>((p, c) => p.Item5.Id == c.Id)
+    .Join<ISimpleEntity>((p, c) => p.Item6.Id == c.Id)
+    .Join<ISimpleEntity>((p, c) => p.Item7.Id == c.Id)
     .Select(p => new { A = p.Item1.Id, B = p.Item2.Id, C = p.Item3.Id, D = p.Item4.Id,
                        E = p.Item5.Id, F = p.Item6.Id, G = p.Item7.Id, H = p.Item8.Id });
 ```
@@ -1113,7 +1186,7 @@ select t1.id
 
 Провайдер in-memory компилирует условие соединения в делегат и выполняет цикл, поэтому он не
 генерирует SQL; он поддерживает соединения [`Inner`](xref:NextORM.Core.JoinType.Inner), [`Left`](xref:NextORM.Core.JoinType.Left), [`Right`](xref:NextORM.Core.JoinType.Right), [`Full`](xref:NextORM.Core.JoinType.Full) и [`Cross`](xref:NextORM.Core.JoinType.Cross) (см.
-`tests/nextorm.core.tests/InMemory/InMemoryJoinTests.cs`). [`CrossApply`](xref:NextORM.Core.EntityBuilder`1.CrossApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions}))/[`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions})) существуют только для SQL и
+`tests/nextorm.core.tests/InMemory/Queries/InMemoryJoinTests.cs`). [`CrossApply`](xref:NextORM.Core.EntityBuilder`1.CrossApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions}))/[`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions})) существуют только для SQL и
 выбрасывают `NotSupportedException` в провайдере in-memory, как и остальные неподдерживаемые типы
 соединений. Соединения через `JoinedEntityBuilder<T1..T8>` разрешаются на этапе построения запроса у каждого
 провайдера.
@@ -1132,7 +1205,7 @@ select t1.id
 ---
 
 Source: `tests/nextorm.integration.tests/CommonTestSuite/Joins/CommonTestSuite.Join.cs:9`,
-`tests/nextorm.core.tests/InMemory/InMemoryJoinTests.cs:14`,
+`tests/nextorm.core.tests/InMemory/Queries/InMemoryJoinTests.cs:14`,
 `tests/nextorm.sqlite.tests/SqlGeneration/SqlGenerationTests.cs:320`,
 `tests/nextorm.sqlserver.tests/SqlGeneration/SqlGenerationTests.cs:379`,
 `tests/nextorm.postgres.tests/SqlGeneration/SqlGenerationTests.cs:312`

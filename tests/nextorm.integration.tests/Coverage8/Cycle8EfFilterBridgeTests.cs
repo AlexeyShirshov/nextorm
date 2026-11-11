@@ -548,7 +548,7 @@ public sealed class Cycle8EfFilterBridgeTests
     private sealed class PrimaryContext : DbContext
     {
         public PrimaryContext(string path)
-            : base(new DbContextOptionsBuilder<PrimaryContext>().UseSqlite($"Data Source={path}").Options)
+            : base(new DbContextOptionsBuilder<PrimaryContext>().UseSqlite($"Data Source={path};Pooling=False").Options)
         {
         }
 
@@ -641,7 +641,7 @@ public sealed class Cycle8EfFilterBridgeTests
     private sealed class RegisterOnlyContext : DbContext
     {
         public RegisterOnlyContext(string path)
-            : base(new DbContextOptionsBuilder<RegisterOnlyContext>().UseSqlite($"Data Source={path}").Options)
+            : base(new DbContextOptionsBuilder<RegisterOnlyContext>().UseSqlite($"Data Source={path};Pooling=False").Options)
         {
         }
 
@@ -660,7 +660,7 @@ public sealed class Cycle8EfFilterBridgeTests
     private sealed class DuplicateKeyContext : DbContext
     {
         public DuplicateKeyContext(string path)
-            : base(new DbContextOptionsBuilder<DuplicateKeyContext>().UseSqlite($"Data Source={path}").Options)
+            : base(new DbContextOptionsBuilder<DuplicateKeyContext>().UseSqlite($"Data Source={path};Pooling=False").Options)
         {
         }
 
@@ -681,7 +681,7 @@ public sealed class Cycle8EfFilterBridgeTests
     private sealed class WhitespaceKeyContext : DbContext
     {
         public WhitespaceKeyContext(string path)
-            : base(new DbContextOptionsBuilder<WhitespaceKeyContext>().UseSqlite($"Data Source={path}").Options)
+            : base(new DbContextOptionsBuilder<WhitespaceKeyContext>().UseSqlite($"Data Source={path};Pooling=False").Options)
         {
         }
 
@@ -699,7 +699,7 @@ public sealed class Cycle8EfFilterBridgeTests
     private sealed class ClosureCaptureContext : DbContext
     {
         public ClosureCaptureContext(string path)
-            : base(new DbContextOptionsBuilder<ClosureCaptureContext>().UseSqlite($"Data Source={path}").Options)
+            : base(new DbContextOptionsBuilder<ClosureCaptureContext>().UseSqlite($"Data Source={path};Pooling=False").Options)
         {
         }
 
@@ -718,7 +718,7 @@ public sealed class Cycle8EfFilterBridgeTests
     private sealed class StaticCaptureContext : DbContext
     {
         public StaticCaptureContext(string path)
-            : base(new DbContextOptionsBuilder<StaticCaptureContext>().UseSqlite($"Data Source={path}").Options)
+            : base(new DbContextOptionsBuilder<StaticCaptureContext>().UseSqlite($"Data Source={path};Pooling=False").Options)
         {
         }
 
@@ -736,7 +736,7 @@ public sealed class Cycle8EfFilterBridgeTests
     private sealed class EfPropertyContext : DbContext
     {
         public EfPropertyContext(string path)
-            : base(new DbContextOptionsBuilder<EfPropertyContext>().UseSqlite($"Data Source={path}").Options)
+            : base(new DbContextOptionsBuilder<EfPropertyContext>().UseSqlite($"Data Source={path};Pooling=False").Options)
         {
         }
 
@@ -754,7 +754,7 @@ public sealed class Cycle8EfFilterBridgeTests
     private sealed class EfFunctionsContext : DbContext
     {
         public EfFunctionsContext(string path)
-            : base(new DbContextOptionsBuilder<EfFunctionsContext>().UseSqlite($"Data Source={path}").Options)
+            : base(new DbContextOptionsBuilder<EfFunctionsContext>().UseSqlite($"Data Source={path};Pooling=False").Options)
         {
         }
 
@@ -772,7 +772,7 @@ public sealed class Cycle8EfFilterBridgeTests
     private sealed class NestedQueryContext : DbContext
     {
         public NestedQueryContext(string path)
-            : base(new DbContextOptionsBuilder<NestedQueryContext>().UseSqlite($"Data Source={path}").Options)
+            : base(new DbContextOptionsBuilder<NestedQueryContext>().UseSqlite($"Data Source={path};Pooling=False").Options)
         {
         }
 
@@ -798,7 +798,7 @@ public sealed class Cycle8EfFilterBridgeTests
     private sealed class ReferenceNavigationContext : DbContext
     {
         public ReferenceNavigationContext(string path)
-            : base(new DbContextOptionsBuilder<ReferenceNavigationContext>().UseSqlite($"Data Source={path}").Options)
+            : base(new DbContextOptionsBuilder<ReferenceNavigationContext>().UseSqlite($"Data Source={path};Pooling=False").Options)
         {
         }
 
@@ -823,7 +823,7 @@ public sealed class Cycle8EfFilterBridgeTests
     private sealed class CollectionNavigationContext : DbContext
     {
         public CollectionNavigationContext(string path)
-            : base(new DbContextOptionsBuilder<CollectionNavigationContext>().UseSqlite($"Data Source={path}").Options)
+            : base(new DbContextOptionsBuilder<CollectionNavigationContext>().UseSqlite($"Data Source={path};Pooling=False").Options)
         {
         }
 
@@ -848,7 +848,7 @@ public sealed class Cycle8EfFilterBridgeTests
     private sealed class NullSlotContext : DbContext
     {
         public NullSlotContext(string path)
-            : base(new DbContextOptionsBuilder<NullSlotContext>().UseSqlite($"Data Source={path}").Options)
+            : base(new DbContextOptionsBuilder<NullSlotContext>().UseSqlite($"Data Source={path};Pooling=False").Options)
         {
         }
 
@@ -869,7 +869,7 @@ public sealed class Cycle8EfFilterBridgeTests
     private sealed class EfFunctionsObjectMemberContext : DbContext
     {
         public EfFunctionsObjectMemberContext(string path)
-            : base(new DbContextOptionsBuilder<EfFunctionsObjectMemberContext>().UseSqlite($"Data Source={path}").Options)
+            : base(new DbContextOptionsBuilder<EfFunctionsObjectMemberContext>().UseSqlite($"Data Source={path};Pooling=False").Options)
         {
         }
 

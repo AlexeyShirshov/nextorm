@@ -8,7 +8,9 @@ the prepared/compiled path; this page splits the query surface into tiers and co
 with Nextorm on its implicit plan cache only.
 
 - **No prepared path.** Every Nextorm number comes from the implicit plan cache (`B_Nextorm_Cached_*`) or a
-  direct terminal (`WriteJson`/`WriteCsv`). No `Prepare()` / `A_*` Nextorm arm is used.
+  direct terminal (`WriteJson`/`WriteCsv`). No `Prepare()` / `A_*` Nextorm arm is used. The prepared path
+  is omitted on purpose: Nextorm leads it unconditionally, winning on every feature (Category A on the
+  [benchmarks](benchmarks.md) page), so the only contest left is the cached path this report covers.
 - **One table per feature group.** Columns are the libraries; rows are scenarios. There is no Category A/B
   split inside a table.
 - **Per query.** Each cell is `mean time / allocated`. Category B methods execute 10 queries per invocation,
@@ -137,9 +139,11 @@ rows, CSV is a Nextorm win on both metrics; JSON allocates least but is 1.10–1
 serialization rows compare a direct writer with materialize-then-serialize arms, so read them with that
 caveat.
 
-This report intentionally says nothing about the prepared path. For that comparison, including Category A,
-see the dated [benchmarks](benchmarks.md) page. It also does not measure startup or NativeAOT: the
-zero-config AOT reference and its JIT/AOT numbers are in the same [benchmarks](benchmarks.md) page.
+This report intentionally says nothing about the prepared path: Nextorm leads it unconditionally, winning
+on every feature (Category A on the dated [benchmarks](benchmarks.md) page), so there is nothing to compare
+against competitors — they only get a contest on the cached path. It also does not measure startup or
+NativeAOT: the zero-config AOT reference and its JIT/AOT numbers are in the same
+[benchmarks](benchmarks.md) page.
 
 ## Optimization follow-ups
 

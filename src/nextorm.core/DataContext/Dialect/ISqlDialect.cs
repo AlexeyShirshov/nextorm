@@ -716,7 +716,7 @@ public interface ISqlDialect
     /// ClickHouse opts in today. The arbitrary-value aggregate without the last-row restriction is
     /// <see cref="SupportsAnyValueAggregate"/>.
     /// </summary>
-    bool SupportsAnyAggregates { get; }
+    bool SupportsAnyLastAggregate { get; }
 
     /// <summary>
     /// True when the provider can render the arbitrary-value aggregate

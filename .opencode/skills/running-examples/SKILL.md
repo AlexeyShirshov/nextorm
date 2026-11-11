@@ -45,7 +45,7 @@ poll the log** instead of blocking the shell:
 
 ```bash
 setsid env DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock \
-  dotnet examples/nextorm.examples.<name>/bin/linux/Debug/net10.0/nextorm.examples.<name>.dll \
+  dotnet examples/nextorm.examples.<name>/bin/linux/Debug/net11.0/nextorm.examples.<name>.dll \
   > /tmp/opencode/<name>.log 2>&1 < /dev/null & disown
 # then poll
 grep -aE "^\[ OK \]|^\[FAIL\]|^\[DIFF\]|queries matched" /tmp/opencode/<name>.log
@@ -66,7 +66,7 @@ has a `Nextorm_*` baseline and a `Linq2Db_*` arm; `Incremental` on ClickHouse is
 
 ```bash
 DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock \
-  dotnet examples/nextorm.examples.postgres.aviasales/bin/linux/Debug/net10.0/nextorm.examples.postgres.aviasales.dll \
+  dotnet examples/nextorm.examples.postgres.aviasales/bin/linux/Debug/net11.0/nextorm.examples.postgres.aviasales.dll \
   --benchmark --filter '*AircraftDelayChains*'
 ```
 

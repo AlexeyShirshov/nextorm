@@ -1,6 +1,6 @@
 # NativeAOT (partial support)
 
-> Publish applications with `PublishAot=true` on .NET 10 for `linux-x64` and the SQLite provider.
+> Publish applications with `PublishAot=true` on .NET 11 for `linux-x64` and the SQLite provider.
 > Support is **partial and experimental**: a measured subset of the engine runs natively, and the
 > rest is tracked in [#370](https://github.com/AlexeyShirshov/nextorm/issues/370).
 
@@ -14,7 +14,7 @@ and executes it on every push, and the `publish` job requires that gate.
 
 | Area | Status |
 |---|---|
-| Target | `net10.0`, `linux-x64` |
+| Target | `net11.0`, `linux-x64` |
 | Providers | SQLite |
 | Query surface | interface entities, captured predicates, anonymous projections, nullable scalar materialization, SQLite JSON functions (`json_extract`/`json_get_text`), `GROUP BY` with aggregates and `HAVING` |
 | `nextorm.extensions` | `SelectWhereMin`/`SelectWhereMax` and `SelectGroup`/`SelectGroupHaving` component slices |
@@ -51,20 +51,14 @@ of [#370](https://github.com/AlexeyShirshov/nextorm/issues/370).
 ## Real-world check
 
 `oc-report` — a reporting utility over a 13 GB SQLite database — runs natively with no source
-changes beyond `PublishAot=true`. For comparison, the same report was implemented with EF Core 10
-and Dapper, all published with NativeAOT on the same machine (warm page cache, median of three runs,
-3-day window):
+changes beyond `PublishAot=true`. Publishing and the run happened on one machine (warm page cache,
+median of three runs, 3-day window):
 
 | Implementation | AOT publish | Native binary | Run | Peak RSS |
 |---|---|---|---|---|
 | nextorm, typed queries | only `PublishAot=true` | 8.2 MB | 0.12 s | 30 MB |
-| EF Core 10.0.14 | after entity workarounds; 565 unique IL warnings | 17.3 MB | 0.23 s | 42 MB |
-| Dapper 2.1.89 + Dapper.AOT 1.1.0 | raw SQL; 0 IL warnings | 3.5 MB | 0.12 s | 19 MB |
 
-All three emitted byte-identical output. This is not a general benchmark: Dapper executes
-hand-written SQL without query composition, and EF Core needed the compiled model plus query
-precompilation (and non-sealed entities outside a CLR namespace to avoid two EF 10.0.14 code
-generation bugs). The nextorm arm ships as
+The reference app is
 [`examples/nextorm.examples.oc-report`](https://github.com/AlexeyShirshov/nextorm/tree/main/examples/nextorm.examples.oc-report).
 
 ## Trying it

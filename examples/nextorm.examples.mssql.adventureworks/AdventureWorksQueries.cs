@@ -165,8 +165,7 @@ public static class AdventureWorksQueries
 
         var rows = await ctx.From(productionImpact).WithAlias(Alias.ProductionImpact)
             .Join(supplierDelays, (pi, sd) => pi.ProductionImpact.ProductID == sd.ProductID, Alias.Supplier)
-            .OrderByDescending(p => p.ProductionImpact.ProdDelayDays)
-            .OrderByDescending(p => p.Supplier.DelayDays)
+            .OrderByDescending(p => new { p.ProductionImpact.ProdDelayDays, p.Supplier.DelayDays })
             .Select(p => new
             {
                 Component = p.ProductionImpact.ProductName,
@@ -321,8 +320,7 @@ public static class AdventureWorksQueries
 
         var rows = await ctx.From(ranked)
             .Where(p => p.Place <= 3)
-            .OrderBy(p => p.Category)
-            .OrderBy(p => p.Place)
+            .OrderBy(p => new { p.Category, p.Place })
             .Select(p => new
             {
                 p.Category,
@@ -359,8 +357,7 @@ public static class AdventureWorksQueries
             });
 
         var rows = await ctx.From(withPrevious)
-            .OrderBy(y => y.Region)
-            .OrderBy(y => y.Year)
+            .OrderBy(y => new { y.Region, y.Year })
             .Select(y => new
             {
                 y.Region,
@@ -466,8 +463,7 @@ public static class AdventureWorksQueries
             });
 
         var rows = await ctx.From(withPrevious)
-            .OrderBy(m => m.Region)
-            .OrderBy(m => m.SalesMonth)
+            .OrderBy(m => new { m.Region, m.SalesMonth })
             .Select(m => new
             {
                 m.Region,

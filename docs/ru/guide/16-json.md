@@ -253,7 +253,7 @@ select id
  from complex_entity where ((@norm_p0 ->> 'name') = 'Alice')
 ```
 
-Привязка параметров провайдером не меняется: обычная строка с JSON по-прежнему привязывается как `text`.
+Привязка параметров провайдером: обычная строка с JSON привязывается как `text`.
 Исключение — шесть аксессоров `json_get`, `json_get_text`, `json_get_path` и `json_get_path_text` (обе
 перегрузки: по строковому ключу и по целочисленному индексу): они применяют **контекстную SQL-типизацию** —
 сырое клиентское значение документа (литерал, захваченное значение или явный параметр) разбирается как
@@ -306,11 +306,11 @@ public sealed class Customer
   скаляров, как в скалярной (`Select(x => x.Data)`), так и в составной проекции. SQL `NULL` и
   JSON-литерал `null` оба становятся CLR `null`. Объявленные свойства `JsonObject`/`JsonArray` и «голая»
   *скалярная* проекция `JsonDocument`/`JsonElement` в эту поддержку не входят — отображайте их через
-  `[JsonColumn]` или проецируйте в именованной форме. Параметр `JsonNode` по-прежнему привязывается как
+  `[JsonColumn]` или проецируйте в именованной форме. Параметр `JsonNode` привязывается как
   `jsonb`.
 * Обычная `string` отображается на `text`. Шесть аксессоров выше (`json_get`, `json_get_text`,
-  `json_get_path`, `json_get_path_text`, перегрузки по строковому ключу и по индексу) по-прежнему
-  принимают сырую строку документа — литерал, захваченное значение или явный параметр, — потому что
+  `json_get_path`, `json_get_path_text`, перегрузки по строковому ключу и по индексу) принимают
+  сырую строку документа — литерал, захваченное значение или явный параметр, — потому что
   применяют контекстную SQL-типизацию и разбирают её как `jsonb` в сгенерированном SQL, типизируя
   ключ/индекс/путь как `text`/`integer`/`text[]`. Нативная колонка `json`/`jsonb` или серверное
   JSON-выражение остаются без приведения, поэтому их типы операнда и результата не меняются. Для любой
@@ -417,8 +417,7 @@ var groups = dataContext.From<IComplexEntity>()
 `json`/`jsonb` или серверное JSON-выражение выводятся без приведения (`doc -> cast('a' as text)`), сохраняя
 типы операнда и результата. Ключ/индекс/путь всегда типизируется по перегрузке: `cast(<key> as text)`,
 `cast(<index> as integer)`, `cast(<path> as text[])` — литеральный ключ встраивается как
-`cast('a' as text)`. Сама привязка параметров не меняется: обычный параметр-`string` по-прежнему
-привязывается как `text`.
+`cast('a' as text)`. Обычный параметр-`string` привязывается как `text`.
 
 Операнд `path`/`keys` — это `string[]`, привязываемый одним параметром-массивом, поэтому
 `json_get_path(json, new[] { "a", "b" })` отрисует `json #> cast(@p0 as text[])`. Функции JSONPath
@@ -551,8 +550,8 @@ select json_value(jsonb_build_object('a', 1), cast('$.a' as jsonpath)) as "Value
 
 ---
 
-Source: `src/nextorm.core/Visitors/JsonSqlTranslator.cs`, `src/nextorm.core/Query/SqlFunctions.Postgres.cs`,
-`src/nextorm.core/Query/SqlFunctions.SqlServer.cs`, `src/nextorm.core/Expressions/ForJson.cs`,
+Source: `src/nextorm.core/Visitors/Structured/JsonSqlTranslator.cs`, `src/nextorm.core/Query/SqlFunctions/SqlFunctions.Postgres.cs`,
+`src/nextorm.core/Query/SqlFunctions/SqlFunctions.SqlServer.cs`, `src/nextorm.core/Expressions/Formats/ForJson.cs`,
 `src/nextorm.core/DataContext/Dialect/ISqlDialect.cs`, `src/nextorm.sqlserver/SqlServerDialect.cs`,
 `src/nextorm.postgres/PostgresDialect.cs`; tests `tests/nextorm.sqlserver.tests/SqlGeneration/SqlGenerationTests.cs:443,695,1313,1390`,
 `tests/nextorm.postgres.tests/SqlGeneration/SqlGenerationTests.cs:848,868,887,930,950,1831,1861`,

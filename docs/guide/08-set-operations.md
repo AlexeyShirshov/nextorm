@@ -9,18 +9,21 @@
 Every [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) exposes six set-operation methods that take another command and return
 a new command:
 
-| Method | SQL keyword | Keeps duplicates |
-|---|---|---|
-| `Union(query)` | `union` | no |
-| `UnionAll(query)` | `union all` | yes |
-| `Intersect(query)` | `intersect` | no |
-| `IntersectAll(query)` | `intersect all` | yes |
-| `Except(query)` | `except` | no |
-| `ExceptAll(query)` | `except all` | yes |
+| Method | SQL keyword | Keeps duplicates | Right side by selector |
+|---|---|---|---|
+| `Union(query)` / `Union<TEntity>(selector)` | `union` | no | `Union<TEntity>(selector)` |
+| `UnionAll(query)` / `UnionAll<TEntity>(selector)` | `union all` | yes | `UnionAll<TEntity>(selector)` |
+| `Intersect(query)` / `Intersect<TEntity>(selector)` | `intersect` | no | `Intersect<TEntity>(selector)` |
+| `IntersectAll(query)` / `IntersectAll<TEntity>(selector)` | `intersect all` | yes | `IntersectAll<TEntity>(selector)` |
+| `Except(query)` / `Except<TEntity>(selector)` | `except` | no | `Except<TEntity>(selector)` |
+| `ExceptAll(query)` / `ExceptAll<TEntity>(selector)` | `except all` | yes | `ExceptAll<TEntity>(selector)` |
 
 The right-hand command may project a different element type: the method is generic over the other
 side (`Union<T>(QueryCommand<T>)`), so `SimpleEntity.Select(it => it.Id).Union(ComplexEntity.Select(it => (int)it.Id))`
-is valid as long as the shapes line up.
+is valid as long as the shapes line up. The selector form (`Union<TEntity>(selector)` and friends) fixes
+the element type of the right side to the left side's `TResult` and projects `TEntity` to `TResult`
+through the selector; use the explicit `Union<T>(QueryCommand<T>)` form when the right side needs a
+different CLR type.
 
 The result is itself a [`QueryCommand`](xref:NextORM.Core.QueryCommand), so it can be executed through `From(result)` or have another
 set operation chained onto it. **Chaining applies left to right**: each new operation combines the
@@ -64,11 +67,11 @@ integration suite `SimpleEntity` (ids `1..10`) is unioned with `ComplexEntity` (
 ```csharp
 var distinctCount = dataContext.From(
     dataContext.From<ISimpleEntity>().Select(it => it.Id)
-        .Union(dataContext.From<IComplexEntity>().Select(it => (int)it.Id))).Count(); // 10
+        .Union<IComplexEntity>(it => (int)it.Id)).Count(); // 10
 
 var allCount = dataContext.From(
     dataContext.From<ISimpleEntity>().Select(it => it.Id)
-        .UnionAll(dataContext.From<IComplexEntity>().Select(it => (int)it.Id))).Count(); // 13
+        .UnionAll<IComplexEntity>(it => (int)it.Id)).Count(); // 13
 ```
 
 ## Intersect and Except
@@ -174,10 +177,8 @@ var rows = dataContext.From(left.UnionAll(right)).ToList(); // 1, 2, 2, 3
 ```
 
 This result is the same whether the type's process-wide select-list cache is cold or has already been
-populated by an earlier scalar read. Previously the cached projection was reused for the derived source;
-with a warm cache the read then failed with `QueryPreparationException: Cannot get ctor from
-System.Int32`, while the cold-cache read worked. The derived read now builds its own one-column shape
-and does not reuse or overwrite that cache entry. A derived source with more than one column still
+populated by an earlier scalar read: the derived read builds its own one-column shape and does not
+reuse or overwrite that cache entry. A derived source with more than one column still
 needs an explicit outer `Select` (see [Subqueries](07-subqueries.md#subquery-as-a-from-source)).
 
 ## Provider differences
@@ -204,7 +205,7 @@ to render an `*ALL` set operation for them.
 
 ---
 
-Source: `tests/nextorm.integration.tests/CommonTestSuite/Queries/CommonTestSuite.SetOperations.cs:8`,
+Source: `tests/nextorm.integration.tests/CommonTestSuite/Queries/Rows/CommonTestSuite.SetOperations.cs:8`,
 `tests/nextorm.integration.tests/CommonTestSuite/Raw/CommonTestSuite.SqlCommand.cs:743,761`,
 `tests/nextorm.sqlite.tests/SqlGeneration/SqlGenerationTests.cs:49,69,89`,
 `tests/nextorm.sqlserver.tests/SqlGeneration/SqlGenerationTests.cs:62,102`,

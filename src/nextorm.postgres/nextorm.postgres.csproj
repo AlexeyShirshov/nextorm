@@ -25,4 +25,15 @@
     <None Include="readme.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!--
+      Public API tracking (issue #53, IF6). Every change to the public surface must be declared in
+      PublicAPI.Unshipped.txt: RS0016 (member missing from the file) and RS0017 (stale entry) are
+      build errors here, because the repository treats warnings as errors everywhere.
+    -->
+    <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
+    <AdditionalFiles Include="PublicAPI.Shipped.txt" />
+    <AdditionalFiles Include="PublicAPI.Unshipped.txt" />
+  </ItemGroup>
+
 </Project>

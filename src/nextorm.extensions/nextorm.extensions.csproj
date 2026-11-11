@@ -3,8 +3,8 @@
   <PropertyGroup>
     <PackageId>nextorm.extensions</PackageId>
     <Title>Nextorm extensions</Title>
-    <Description>Public query-component extensions for Nextorm, including SelectWhereMinEx and SelectWhereMaxEx implemented entirely on the public IQueryComponent layer.</Description>
-    <PackageTags>$(PackageTags);extensions;query-components;extreme-row</PackageTags>
+    <Description>Public query-component operators for Nextorm: SelectWhereMin / SelectWhereMax (extreme-row selection) and SelectGroup / SelectGroupHaving (grouping inferred from a projection), implemented entirely on the public IQueryComponent layer.</Description>
+    <PackageTags>$(PackageTags);extensions;query-components;extreme-row;grouping</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>
@@ -13,6 +13,17 @@
 
   <ItemGroup>
     <None Include="readme.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Public API tracking (issue #53, IF6). Every change to the public surface must be declared in
+      PublicAPI.Unshipped.txt: RS0016 (member missing from the file) and RS0017 (stale entry) are
+      build errors here, because the repository treats warnings as errors everywhere.
+    -->
+    <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
+    <AdditionalFiles Include="PublicAPI.Shipped.txt" />
+    <AdditionalFiles Include="PublicAPI.Unshipped.txt" />
   </ItemGroup>
 
 </Project>

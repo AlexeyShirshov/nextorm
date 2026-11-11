@@ -1,77 +1,77 @@
 ```
 
-BenchmarkDotNet v0.15.8, Linux Ubuntu 26.04.1 LTS (Resolute Raccoon)
-AMD EPYC 9V74 3.68GHz, 1 CPU, 4 logical and 2 physical cores
-.NET SDK 10.0.403
-  [Host] : .NET 10.0.14 (10.0.14, 10.0.1426.52326), X64 RyuJIT x86-64-v4
+BenchmarkDotNet v0.15.8, Linux Ubuntu 22.04.5 LTS (Jammy Jellyfish)
+AMD Ryzen 7 5800HS with Radeon Graphics 3.19GHz, 1 CPU, 8 logical and 4 physical cores
+.NET SDK 11.0.100
+  [Host] : .NET 11.0.0 (11.0.0, 11.0.26.53018), X64 RyuJIT x86-64-v3
 
 Job=ShortRun  Toolchain=InProcessEmitToolchain  IterationCount=3  
 LaunchCount=1  WarmupCount=3  
 
 ```
-| Method                          | Categories        | Mean      | Gen0   | Gen1   | Allocated |
-|-------------------------------- |------------------ |----------:|-------:|-------:|----------:|
-| A_Nextorm_Prepared_CaseWhen     | A_CaseWhen        |  88.23 μs | 0.3662 |      - |   6.56 KB |
-| A_Dapper_CaseWhen               | A_CaseWhen        | 121.96 μs | 0.7324 |      - |  13.44 KB |
-| A_Linq2Db_Compiled_CaseWhen     | A_CaseWhen        | 125.98 μs | 0.7324 |      - |  15.94 KB |
-| A_EFCore_Compiled_CaseWhen      | A_CaseWhen        | 243.03 μs | 4.3945 | 1.9531 |  78.99 KB |
-|                                 |                   |           |        |        |           |
-| A_Nextorm_Prepared_Cte          | A_Cte             |  91.72 μs | 0.3662 |      - |   7.03 KB |
-| A_Dapper_Cte                    | A_Cte             | 165.98 μs | 0.7324 |      - |   15.7 KB |
-| A_Linq2Db_Compiled_Cte          | A_Cte             | 166.36 μs | 0.9766 |      - |  17.74 KB |
-|                                 |                   |           |        |        |           |
-| A_Nextorm_Prepared_Distinct     | A_Distinct        | 101.87 μs | 0.3662 |      - |   6.56 KB |
-| A_Linq2Db_Compiled_Distinct     | A_Distinct        | 134.96 μs | 0.7324 |      - |  15.94 KB |
-| A_Dapper_Distinct               | A_Distinct        | 138.67 μs | 0.7324 |      - |  15.55 KB |
-| A_EFCore_Compiled_Distinct      | A_Distinct        | 263.48 μs | 4.3945 | 1.9531 |  76.64 KB |
-|                                 |                   |           |        |        |           |
-| A_Nextorm_Prepared_Except       | A_Except          | 102.36 μs | 0.3662 |      - |   6.72 KB |
-| A_Dapper_Except                 | A_Except          | 145.39 μs | 0.7324 |      - |  14.38 KB |
-| A_Linq2Db_Compiled_Except       | A_Except          | 161.59 μs | 0.9766 |      - |   16.8 KB |
-| A_EFCore_Compiled_Except        | A_Except          | 293.81 μs | 5.3711 | 2.4414 |  88.13 KB |
-|                                 |                   |           |        |        |           |
-| A_Nextorm_Prepared_In           | A_InList          | 111.74 μs | 0.8545 |      - |  15.63 KB |
-| A_Nextorm_Prepared_ListContains | A_InList          | 111.94 μs | 0.8545 |      - |  15.63 KB |
-| A_Dapper_In                     | A_InList          | 140.01 μs | 0.7324 |      - |  12.66 KB |
-| A_Linq2Db_Compiled_In           | A_InList          | 247.96 μs | 9.2773 |      - | 152.35 KB |
-| A_EFCore_Compiled_In            | A_InList          | 381.56 μs | 8.7891 | 4.3945 | 147.74 KB |
-|                                 |                   |           |        |        |           |
-| A_Nextorm_Prepared_Intersect    | A_Intersect       |  95.74 μs | 0.3662 |      - |   6.56 KB |
-| A_Dapper_Intersect              | A_Intersect       | 135.77 μs | 0.7324 |      - |  12.89 KB |
-| A_Linq2Db_Compiled_Intersect    | A_Intersect       | 151.52 μs | 0.9766 |      - |  16.33 KB |
-| A_EFCore_Compiled_Intersect     | A_Intersect       | 279.80 μs | 4.3945 | 1.9531 |  79.38 KB |
-|                                 |                   |           |        |        |           |
-| A_Nextorm_Prepared_Join4        | A_Join4           | 119.52 μs | 0.4883 |      - |   9.84 KB |
-| A_Linq2Db_Compiled_Join4        | A_Join4           | 188.66 μs | 1.2207 |      - |   20.7 KB |
-| A_Dapper_Join4                  | A_Join4           | 211.81 μs | 1.2207 |      - |  20.24 KB |
-| A_EFCore_Compiled_Join4         | A_Join4           | 330.39 μs | 4.8828 | 2.4414 |  84.92 KB |
-|                                 |                   |           |        |        |           |
-| A_Nextorm_Prepared_LeftJoin     | A_LeftJoin        | 115.16 μs | 0.6104 |      - |  11.33 KB |
-| A_Dapper_LeftJoin               | A_LeftJoin        | 167.88 μs | 1.2207 |      - |  22.19 KB |
-| A_Linq2Db_Compiled_LeftJoin     | A_LeftJoin        | 169.89 μs | 1.2207 |      - |   23.2 KB |
-| A_EFCore_Compiled_LeftJoin      | A_LeftJoin        | 293.02 μs | 5.8594 | 2.9297 |  99.22 KB |
-|                                 |                   |           |        |        |           |
-| A_Nextorm_Prepared_RecursiveCte | A_RecursiveCte    | 110.81 μs | 0.3662 |      - |   6.64 KB |
-| A_Dapper_RecursiveCte           | A_RecursiveCte    | 178.79 μs | 0.7324 |      - |  15.31 KB |
-| A_Linq2Db_Compiled_RecursiveCte | A_RecursiveCte    | 189.13 μs | 0.9766 |      - |  17.81 KB |
-|                                 |                   |           |        |        |           |
-| A_Nextorm_Prepared_Contains     | A_StringFunctions |  87.20 μs | 0.3662 |      - |   6.49 KB |
-| A_Nextorm_Prepared_ToUpper      | A_StringFunctions |  87.94 μs | 0.3662 |      - |    6.8 KB |
-| A_Dapper_ToUpper                | A_StringFunctions | 119.39 μs | 0.7324 |      - |  12.81 KB |
-| A_Linq2Db_Compiled_ToUpper      | A_StringFunctions | 125.22 μs | 0.9766 |      - |  16.41 KB |
-| A_Linq2Db_Compiled_Contains     | A_StringFunctions | 129.17 μs | 0.9766 |      - |  16.17 KB |
-| A_Dapper_Contains               | A_StringFunctions | 148.32 μs | 0.9766 |      - |  17.19 KB |
-| A_EFCore_Compiled_ToUpper       | A_StringFunctions | 241.40 μs | 4.3945 | 2.1973 |  74.92 KB |
-| A_EFCore_Compiled_Contains      | A_StringFunctions | 251.13 μs | 4.3945 | 1.9531 |  74.69 KB |
-|                                 |                   |           |        |        |           |
-| A_Nextorm_Prepared_Udf          | A_Udf             |  87.35 μs | 0.3662 |      - |    6.8 KB |
-| A_Dapper_Udf                    | A_Udf             | 119.51 μs | 0.7324 |      - |  12.81 KB |
-| A_Linq2Db_Compiled_Udf          | A_Udf             | 125.10 μs | 0.9766 |      - |  16.41 KB |
-| A_EFCore_Compiled_Udf           | A_Udf             | 241.16 μs | 4.3945 | 2.1973 |  74.92 KB |
-|                                 |                   |           |        |        |           |
-| A_Nextorm_Prepared_RowNumber    | A_Window          | 124.55 μs | 0.2441 |      - |   7.58 KB |
-| A_Nextorm_Prepared_SumOver      | A_Window          | 126.88 μs | 0.2441 |      - |   7.81 KB |
-| A_Dapper_SumOver                | A_Window          | 204.32 μs | 0.7324 |      - |  15.47 KB |
-| A_Dapper_RowNumber              | A_Window          | 205.75 μs | 0.7324 |      - |  15.39 KB |
-| A_Linq2Db_Compiled_SumOver      | A_Window          | 211.33 μs | 0.9766 |      - |  17.42 KB |
-| A_Linq2Db_Compiled_RowNumber    | A_Window          | 213.01 μs | 0.9766 |      - |  17.34 KB |
+| Method                          | Categories        | Mean      | Gen0    | Gen1   | Allocated |
+|-------------------------------- |------------------ |----------:|--------:|-------:|----------:|
+| A_Nextorm_Prepared_CaseWhen     | A_CaseWhen        |  96.37 μs |  0.7324 |      - |   6.48 KB |
+| A_Dapper_CaseWhen               | A_CaseWhen        | 140.72 μs |  1.4648 |      - |  13.36 KB |
+| A_Linq2Db_Compiled_CaseWhen     | A_CaseWhen        | 154.73 μs |  1.7090 |      - |  15.86 KB |
+| A_EFCore_Compiled_CaseWhen      | A_CaseWhen        | 337.00 μs |  8.7891 | 4.3945 |  74.61 KB |
+|                                 |                   |           |         |        |           |
+| A_Nextorm_Prepared_Cte          | A_Cte             | 101.28 μs |  0.7324 |      - |   6.95 KB |
+| A_Dapper_Cte                    | A_Cte             | 215.98 μs |  1.7090 |      - |  15.63 KB |
+| A_Linq2Db_Compiled_Cte          | A_Cte             | 220.39 μs |  1.9531 |      - |  17.66 KB |
+|                                 |                   |           |         |        |           |
+| A_Nextorm_Prepared_Distinct     | A_Distinct        | 115.41 μs |  0.7324 |      - |   6.49 KB |
+| A_Dapper_Distinct               | A_Distinct        | 178.39 μs |  1.7090 |      - |  14.45 KB |
+| A_Linq2Db_Compiled_Distinct     | A_Distinct        | 181.63 μs |  1.7090 |      - |  15.86 KB |
+| A_EFCore_Compiled_Distinct      | A_Distinct        | 389.03 μs |  8.7891 | 4.3945 |  72.27 KB |
+|                                 |                   |           |         |        |           |
+| A_Nextorm_Prepared_Except       | A_Except          | 111.56 μs |  0.7324 |      - |   6.64 KB |
+| A_Dapper_Except                 | A_Except          | 173.19 μs |  1.7090 |      - |   14.3 KB |
+| A_Linq2Db_Compiled_Except       | A_Except          | 211.98 μs |  1.9531 |      - |  16.72 KB |
+| A_EFCore_Compiled_Except        | A_Except          | 426.13 μs |  9.7656 | 4.8828 |  83.75 KB |
+|                                 |                   |           |         |        |           |
+| A_Nextorm_Prepared_In           | A_InList          | 128.99 μs |  1.8311 |      - |  15.47 KB |
+| A_Nextorm_Prepared_ListContains | A_InList          | 131.24 μs |  1.7090 |      - |  15.47 KB |
+| A_Dapper_In                     | A_InList          | 181.47 μs |  1.4648 |      - |  12.58 KB |
+| A_Linq2Db_Compiled_In           | A_InList          | 430.83 μs | 16.6016 |      - | 136.33 KB |
+| A_EFCore_Compiled_In            | A_InList          | 590.01 μs | 16.6016 | 4.8828 | 143.37 KB |
+|                                 |                   |           |         |        |           |
+| A_Nextorm_Prepared_Intersect    | A_Intersect       | 101.17 μs |  0.7324 |      - |   6.49 KB |
+| A_Dapper_Intersect              | A_Intersect       | 166.63 μs |  1.4648 |      - |  12.81 KB |
+| A_Linq2Db_Compiled_Intersect    | A_Intersect       | 203.33 μs |  1.9531 |      - |  16.25 KB |
+| A_EFCore_Compiled_Intersect     | A_Intersect       | 394.80 μs |  8.7891 | 4.3945 |     75 KB |
+|                                 |                   |           |         |        |           |
+| A_Nextorm_Prepared_Join4        | A_Join4           | 129.82 μs |  0.9766 |      - |   9.77 KB |
+| A_Linq2Db_Compiled_Join4        | A_Join4           | 241.92 μs |  2.4414 |      - |  20.63 KB |
+| A_Dapper_Join4                  | A_Join4           | 258.44 μs |  2.4414 |      - |  20.16 KB |
+| A_EFCore_Compiled_Join4         | A_Join4           | 453.79 μs |  9.7656 | 4.8828 |  80.55 KB |
+|                                 |                   |           |         |        |           |
+| A_Nextorm_Prepared_LeftJoin     | A_LeftJoin        | 126.81 μs |  1.2207 |      - |  11.25 KB |
+| A_Dapper_LeftJoin               | A_LeftJoin        | 200.04 μs |  2.6855 |      - |  22.11 KB |
+| A_Linq2Db_Compiled_LeftJoin     | A_LeftJoin        | 209.59 μs |  2.6855 |      - |  23.13 KB |
+| A_EFCore_Compiled_LeftJoin      | A_LeftJoin        | 404.89 μs | 11.2305 | 5.3711 |  94.85 KB |
+|                                 |                   |           |         |        |           |
+| A_Nextorm_Prepared_RecursiveCte | A_RecursiveCte    | 124.86 μs |  0.7324 |      - |   6.56 KB |
+| A_Dapper_RecursiveCte           | A_RecursiveCte    | 241.75 μs |  1.7090 |      - |  15.24 KB |
+| A_Linq2Db_Compiled_RecursiveCte | A_RecursiveCte    | 270.72 μs |  1.9531 |      - |  17.74 KB |
+|                                 |                   |           |         |        |           |
+| A_Nextorm_Prepared_Contains     | A_StringFunctions |  94.69 μs |  0.7324 |      - |   6.41 KB |
+| A_Nextorm_Prepared_ToUpper      | A_StringFunctions |  96.43 μs |  0.7324 |      - |   6.72 KB |
+| A_Dapper_ToUpper                | A_StringFunctions | 148.62 μs |  1.4648 |      - |  12.74 KB |
+| A_Linq2Db_Compiled_ToUpper      | A_StringFunctions | 163.69 μs |  1.9531 |      - |  16.33 KB |
+| A_Linq2Db_Compiled_Contains     | A_StringFunctions | 166.14 μs |  1.9531 |      - |  16.09 KB |
+| A_Dapper_Contains               | A_StringFunctions | 200.57 μs |  1.9531 |      - |  17.11 KB |
+| A_EFCore_Compiled_ToUpper       | A_StringFunctions | 332.12 μs |  8.3008 | 3.9063 |  70.55 KB |
+| A_EFCore_Compiled_Contains      | A_StringFunctions | 344.14 μs |  8.3008 | 3.9063 |  70.32 KB |
+|                                 |                   |           |         |        |           |
+| A_Nextorm_Prepared_Udf          | A_Udf             |  95.36 μs |  0.7324 |      - |   6.72 KB |
+| A_Dapper_Udf                    | A_Udf             | 141.24 μs |  1.4648 |      - |  12.74 KB |
+| A_Linq2Db_Compiled_Udf          | A_Udf             | 151.33 μs |  1.9531 |      - |  16.33 KB |
+| A_EFCore_Compiled_Udf           | A_Udf             | 341.58 μs |  8.3008 | 3.9063 |  70.55 KB |
+|                                 |                   |           |         |        |           |
+| A_Nextorm_Prepared_SumOver      | A_Window          | 144.54 μs |  0.7324 |      - |   7.74 KB |
+| A_Nextorm_Prepared_RowNumber    | A_Window          | 148.17 μs |  0.7324 |      - |    7.5 KB |
+| A_Dapper_RowNumber              | A_Window          | 296.95 μs |  1.4648 |      - |  15.32 KB |
+| A_Linq2Db_Compiled_SumOver      | A_Window          | 319.77 μs |  1.9531 |      - |  17.35 KB |
+| A_Dapper_SumOver                | A_Window          | 321.21 μs |  1.4648 |      - |  15.39 KB |
+| A_Linq2Db_Compiled_RowNumber    | A_Window          | 326.70 μs |  1.9531 |      - |  17.27 KB |

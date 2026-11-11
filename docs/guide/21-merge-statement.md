@@ -231,19 +231,15 @@ The proposed row is the one the engine itself would insert: it carries the inser
 * Providers with no assignment rendering at all (ClickHouse, the in-memory context) fail closed with `Provider '<provider>' does not support MERGE assignment expressions.` The no-argument key upsert keeps working in memory.
 * Under an active target filter, an expression `INSERT` is refused before execution on **every** supported assignment form and provider — the planned row is built from expressions and cannot be validated against the filter before the statement runs. `IgnoreFilters()` opts out explicitly (see [Write-target isolation](../advanced/query-filters.md#write-target-isolation)).
 
-### Migrating from the removed column selector
+### Assignment selectors
 
-The old one-parameter update selector (`ThenUpdate(x => new { x.Name })`, `WhenMatchedUpdate(x => new { x.Name })`, `WhenMatched().ThenUpdate(x => new { x.Name })`) is **removed**; this is an intentional breaking change. The replacement reads the source role explicitly:
+An update assignment reads the source role explicitly, through a two-parameter `(target, source)` or three-parameter `(target, source, excluded)` lambda:
 
 ```csharp
-// before (does not compile)
-.WhenMatched().ThenUpdate(x => new { x.Name })
-
-// after
 .WhenMatched().ThenUpdate((target, source) => new { Name = source.Name })
 ```
 
-`ThenInsert(x => new { x.Name })` still compiles — the same signature is now read as the assignment `Name = source.Name`. A bare-member body (`ThenInsert(x => x.Name)`), an empty initializer or a non-initializer body is rejected at runtime with `ArgumentException` (parameter `assignments`): an insert assignment set must be an initializer.
+`ThenInsert(x => new { x.Name })` reads the same shape as the assignment `Name = source.Name`. A bare-member body (`ThenInsert(x => x.Name)`), an empty initializer or a non-initializer body is rejected at runtime with `ArgumentException` (parameter `assignments`): an insert assignment set must be an initializer.
 
 ## Inspecting the SQL
 

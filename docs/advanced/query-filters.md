@@ -565,7 +565,7 @@ public interface IQueryFilterMetadata
 
 `Key` is [`QueryFilters.AnonymousKey`](xref:NextORM.Core.QueryFilters.AnonymousKey) for an anonymous filter and the declared key for a named one. A predicate filter reports its predicate in `Lambda` and `null` in `Func`; a builder-function filter reports `null` in `Lambda` and the `Func<EntityBuilder<T>, IDataContext, EntityBuilder<T>>` declaration in `Func`. A filter that reports both non-null is rejected.
 
-`Func` has a default interface implementation returning `null`, so an external implementation that does not declare `Func` keeps compiling. The member's return type changed from `LambdaExpression?` to `Delegate?` while it was unreleased, so an implementation that explicitly declared the earlier shape must update the return type; released consumers are unaffected because the member never shipped.
+`Func` has a default interface implementation returning `null`, so an external implementation that does not declare `Func` keeps compiling.
 
 ## Limitations
 

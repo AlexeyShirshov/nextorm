@@ -52,10 +52,9 @@ internal static class CollectionSlotBinder
         QueryCommand<TResult> command,
         bool groupingComposed)
     {
-        Func<Type, PropertyInfo, RelationshipKind?> relationshipKind = (parentType, property) =>
-            MetadataEagerLoadResolver.DeclaredRelationshipKind(builder.DataProvider, parentType, property);
-
-        var recognition = CollectionSlotRecognizer.Recognize(projection, relationshipKind);
+        // No delegate capture: the recognizer reads the provider directly, so an ordinary scalar
+        // projection (the overwhelmingly common case) binds without allocating a closure.
+        var recognition = CollectionSlotRecognizer.Recognize(projection, builder.DataProvider);
         if (recognition is null)
             return;
 

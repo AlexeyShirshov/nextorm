@@ -46,14 +46,20 @@ The only AOT-specific input is the switch itself:
 
 ```bash
 dotnet publish examples/nextorm.examples.oc-report -c Release -r linux-x64
-./examples/nextorm.examples.oc-report/bin/linux/Release/net10.0/linux-x64/publish/nextorm.examples.oc-report 3
+./examples/nextorm.examples.oc-report/bin/linux/Release/net11.0/linux-x64/publish/nextorm.examples.oc-report 3
 ```
 
-`PublishAot=true` is the only AOT-specific input, and it lives in the csproj because a *global*
-`-p:PublishAot=true` would be forced onto the analyzer `ProjectReference` too (a `netstandard2.0`
-project that NativeAOT cannot compile). The csproj also carries
-`IlcTreatWarningsAsErrors=false` and `WarningsNotAsErrors=IL2*;IL3*` for **repository policy only**
-(`TreatWarningsAsErrors=true` is global here), not because nextorm needs them.
+`PublishAot=true` is the only AOT-specific input. It lives in the csproj so a plain `dotnet publish`
+of the project is the whole command; a consumer app sets the same property in its own csproj or on the
+command line. The csproj also carries `IlcTreatWarningsAsErrors=false` and
+`WarningsNotAsErrors=IL2*;IL3*` for **repository policy only** (`TreatWarningsAsErrors=true` is global
+here) and pins `Microsoft.DotNet.ILCompiler` 11.0.0, matching the repository's NativeAOT runner — the
+pin exists because a historical SDK default carried a NuGet audit advisory (NU1903) that the
+warnings-as-errors gate turned into an error; nextorm itself needs none of that.
+
+The project consumes the published `nextorm` / `nextorm.sqlite` `1.0.9-rc5` packages (version pinned by
+`NextOrmVersion` in [`Directory.Packages.props`](../Directory.Packages.props)), like the postgres and
+clickhouse examples.
 
 ## Reference numbers
 

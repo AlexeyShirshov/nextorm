@@ -50,9 +50,9 @@ JSONPath-скаляры `json_value`/`json_query`/`json_exists` и функци�
 
 ---
 
-Source: `src/nextorm.core/Visitors/BaseExpressionVisitor.cs:541`, `:1157`, `:1204`, `:1752`;
-`src/nextorm.core/Visitors/BuiltinFunctionTranslator.cs`, `src/nextorm.core/Visitors/AggregateFilter.cs`;
-`src/nextorm.core/Query/SqlFunctions.cs`;
+Source: `src/nextorm.core/Visitors/Core/BaseExpressionVisitor.cs:541`, `:1157`, `:1204`, `:1752`;
+`src/nextorm.core/Visitors/Functions/BuiltinFunctionTranslator.cs`, `src/nextorm.core/Visitors/Aggregates/AggregateFilter.cs`;
+`src/nextorm.core/Query/SqlFunctions/SqlFunctions.cs`;
 `src/nextorm.core/DataContext/Dialect/SqlDialectBase.cs:57`;
 `tests/nextorm.integration.tests/CommonTestSuite/Functions/CommonTestSuite.Functions.cs:8`, `:19`, `:43`, `:54`, `:65`, `:76`, `:87`, `:98`, `:117`;
 generated SQL: `tests/nextorm.sqlite.tests/SqlGeneration/SqlGenerationTests.cs:695`, `:775`, `:801`, `:811`, `:832`, `:852`, `:861`, `:872`, `:882`, `:892`, `:912`, `:921`, `:931`, `:940`, `:950`, `:960`, `:974`, `:985`;

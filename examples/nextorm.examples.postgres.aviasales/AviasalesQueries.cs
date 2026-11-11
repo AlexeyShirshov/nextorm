@@ -59,8 +59,7 @@ public static class AviasalesQueries
             .Join<IAirplaneData>(
                 (dc, ac) => dc.DelayChain.AirplaneCode == ac.AirplaneCode, Alias.Airplane)
             .Where(p => p.DelayChain.DelayMinutes > 30 && p.DelayChain.PrevDelayMinutes > 30)
-            .OrderBy(p => p.DelayChain.AirplaneCode)
-            .OrderBy(p => p.DelayChain.ScheduledDeparture)
+            .OrderBy(p => new { p.DelayChain.AirplaneCode, p.DelayChain.ScheduledDeparture })
             .Select(p => new
             {
                 Model = SqlFunctions.Postgres.json_get_text(p.Airplane.Model, "ru"),
@@ -344,8 +343,7 @@ public static class AviasalesQueries
 
         var rows = await ctx.From(ranked)
             .Where(r => r.Place <= 3)
-            .OrderBy(r => r.DepartureCity)
-            .OrderBy(r => r.Place)
+            .OrderBy(r => new { r.DepartureCity, r.Place })
             .Select(r => new
             {
                 r.DepartureCity,
@@ -440,10 +438,9 @@ public static class AviasalesQueries
             .Join<IAirportData>((p, dep) => p.Flight.DepartureAirport == dep.AirportCode, Alias.Departure)
             .Join<IAirportData>((p, arr) => p.Flight.ArrivalAirport == arr.AirportCode, Alias.Arrival)
             .Where(p => p.Flight.Status == "Departed" || p.Flight.Status == "Arrived")
-            .Having(g => SqlFunctions.Sql.count() >= 5)
             .OrderByDescending(g => SqlFunctions.Sql.count())
             .Limit(10)
-            .SelectGroup(g => new
+            .SelectGroupHaving(g => new
             {
                 g.Ticket.PassengerId,
                 g.Ticket.PassengerName,
@@ -452,7 +449,7 @@ public static class AviasalesQueries
                     SqlFunctions.Postgres.json_get_text(g.Departure.City, "ru")
                     + " -> " + SqlFunctions.Postgres.json_get_text(g.Arrival.City, "ru"),
                     ", ")
-            })
+            }, r => r.Flights >= 5)
             .ToListAsync(ct);
 
         return rows;

@@ -40,7 +40,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: 11.0.x
       - name: Restore benchmark project
         run: dotnet restore benchmarks/nextorm.benchmark
       - name: Build benchmark project (Release)

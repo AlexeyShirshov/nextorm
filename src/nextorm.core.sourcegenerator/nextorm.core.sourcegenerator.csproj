@@ -1,6 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <!-- The generator is a Roslyn analyzer: it always compiles to netstandard2.0, so the
+         multi-targeted consumer frameworks inherited from src/Directory.Build.props are cleared. -->
+    <TargetFrameworks></TargetFrameworks>
     <TargetFramework>netstandard2.0</TargetFramework>
     <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
     <IsPackable>false</IsPackable>
@@ -18,7 +21,14 @@
   </ItemGroup>
 
   <ItemGroup>
-    <AdditionalFiles Include="AnalyzerReleases.Shipped.md" />
-    <AdditionalFiles Include="AnalyzerReleases.Unshipped.md" />
+    <!--
+      Public API tracking (issue #53, IF6). Every change to the public surface must be declared in
+      PublicAPI.Unshipped.txt: RS0016 (member missing from the file) and RS0017 (stale entry) are
+      build errors here, because the repository treats warnings as errors everywhere.
+    -->
+    <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
+    <AdditionalFiles Include="PublicAPI.Shipped.txt" />
+    <AdditionalFiles Include="PublicAPI.Unshipped.txt" />
   </ItemGroup>
+
 </Project>

@@ -23,7 +23,7 @@ public sealed class AotNativeRunTests
     public async Task PublishedNativeRunner_UsesParentSqliteDatabase_AndReportsEveryScenario()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var binaryPath = Path.Combine(repositoryRoot, "tests", "nextorm.aot.runner", "bin", "linux", "Release", "net10.0", "linux-x64", "publish", "nextorm.aot.runner");
+        var binaryPath = Path.Combine(repositoryRoot, "tests", "nextorm.aot.runner", "bin", "linux", "Release", "net11.0", "linux-x64", "publish", "nextorm.aot.runner");
         // The NativeAOT runner is a published evidence artifact, not part of the ordinary build:
         // `dotnet build` never produces it. The CI job `aot` publishes it and runs this harness with
         // NEXTORM_AOT_EVIDENCE=1; a local run without that variable skips when the binary is absent,

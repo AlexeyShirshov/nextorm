@@ -37,7 +37,7 @@ public class ImplicitNavigationD7Tests
     private static (SqliteDataContext Ctx, string Path) CreateDb()
     {
         var path = Path.Combine(Path.GetTempPath(), $"nextorm-d7-nav-{Guid.NewGuid():N}.db");
-        using (var conn = new SqliteConnection($"Data Source={path}"))
+        using (var conn = new SqliteConnection($"Data Source={path};Pooling=False"))
         {
             conn.Open();
             using var cmd = conn.CreateCommand();
@@ -45,7 +45,7 @@ public class ImplicitNavigationD7Tests
             cmd.ExecuteNonQuery();
         }
 
-        var ctx = new SqliteDataContext($"Data Source={path}", new DataContextBuilder());
+        var ctx = new SqliteDataContext($"Data Source={path};Pooling=False", new DataContextBuilder());
         ctx.EnsureConnectionOpen();
         ctx.From<D7Parent>(b => b.HasMany(p => p.Children, c => c.ParentId));
         ctx.From<D7Child>(b => b.HasOne(c => c.Parent, c => c.ParentId));

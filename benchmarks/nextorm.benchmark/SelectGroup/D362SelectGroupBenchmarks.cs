@@ -94,14 +94,14 @@ public class D362SelectGroupBenchmarks
     public int Execute_CapturedCondition()
     {
         int t = 5;
-        return _ctx.From<D362BenchRow>().SelectGroupHaving(x => new { x.Category, Total = x.Score }, x => x.Score > t).ToList().Count;
+        return _ctx.From<D362BenchRow>().SelectGroupHaving(x => new { x.Category, Total = x.Score }, r => r.Total > t).ToList().Count;
     }
 
     [Benchmark]
     public int Execute_PositionalRebind()
     {
         int t = 7;
-        return _ctx.From<D362BenchRow>().SelectGroupHaving(x => new { x.Category, Total = x.Score }, x => x.Score > t).ToList().Count;
+        return _ctx.From<D362BenchRow>().SelectGroupHaving(x => new { x.Category, Total = x.Score }, r => r.Total > t).ToList().Count;
     }
 }
 

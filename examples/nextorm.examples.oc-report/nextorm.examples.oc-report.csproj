@@ -6,9 +6,9 @@
     <RootNamespace>NextORM.Examples.OcReport</RootNamespace>
     <!--
       NativeAOT is the only AOT-specific input in this project; the code and the query pipeline are
-      the ordinary ones. The property lives here rather than on the command line because a global
-      `-p:PublishAot=true` would also be forced onto the analyzer ProjectReference
-      (nextorm.core.sourcegenerator, netstandard2.0), which NativeAOT cannot compile.
+      the ordinary ones. The property lives here rather than on the command line so the project also
+      publishes natively from a plain `dotnet publish` (matching what a consumer writes in their own
+      csproj).
     -->
     <PublishAot>true</PublishAot>
     <!--
@@ -22,29 +22,30 @@
 
   <ItemGroup>
     <!--
-      The SDK's default ILCompiler 10.0.12 carries a NuGet audit advisory (NU1903), which this
-      repository's warnings-as-errors gate turns into an error. Pin the fixed patch, exactly as
-      tests/nextorm.aot.runner does.
+      The SDK's implicit ILCompiler item is pinned to the same version the repository's AOT runner
+      uses, exactly as tests/nextorm.aot.runner does. The override exists because the historical SDK
+      default carried a NuGet audit advisory (NU1903) that this repository's warnings-as-errors gate
+      turned into an error; keeping the two projects on one version keeps their AOT diagnostics
+      comparable.
     -->
-    <PackageReference Update="Microsoft.DotNet.ILCompiler" Version="10.0.14" />
+    <PackageReference Update="Microsoft.DotNet.ILCompiler" Version="11.0.0" />
   </ItemGroup>
 
   <ItemGroup>
     <KnownILCompilerPack Update="Microsoft.DotNet.ILCompiler">
-      <ILCompilerPackVersion>10.0.14</ILCompilerPackVersion>
+      <ILCompilerPackVersion>11.0.0</ILCompilerPackVersion>
     </KnownILCompilerPack>
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" />
     <!--
-      Dev-time ProjectReference, like nextorm.examples.mssql.adventureworks (#232): the NativeAOT fix
-      this example demonstrates is in the current checkout and is not in a published package yet.
-      Move it to the `nextorm` / `nextorm.sqlite` PackageReference once the release that carries the
-      fix is on nuget.org.
+      Consumes the published packages, like the postgres and clickhouse examples: 1.0.9-rc5 is the
+      first release that carries the NativeAOT fix this example demonstrates, so no dev-time
+      ProjectReference is needed any more.
     -->
-    <ProjectReference Include="../../src/nextorm.core/nextorm.core.csproj" />
-    <ProjectReference Include="../../src/nextorm.sqlite/nextorm.sqlite.csproj" />
+    <PackageReference Include="nextorm" />
+    <PackageReference Include="nextorm.sqlite" />
   </ItemGroup>
 
 </Project>

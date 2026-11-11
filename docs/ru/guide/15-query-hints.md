@@ -370,9 +370,9 @@ limit 1
 
 ---
 
-Source: `src/nextorm.core/Query/QueryCommand.TResult.cs` ([`Hint`](xref:NextORM.Core.QueryCommand`1.Hint(System.String[]))),
-`src/nextorm.core/DataContext/FromOptions.cs` (`WithTableHint`/`WithIndex`/`WithoutIndex`),
-`src/nextorm.core/Builders/JoinOptions.cs` (`WithJoinTableHint`/`WithJoinHint`), `src/nextorm.core/DataContext/FromOptions.cs` (`WithSubQueryHint`), `src/nextorm.core/Builders/EntityBuilder.cs` (`WithTablesInScopeHint`),
+Source: `src/nextorm.core/Query/Commands/QueryCommand.TResult.cs` ([`Hint`](xref:NextORM.Core.QueryCommand`1.Hint(System.String[]))),
+`src/nextorm.core/DataContext/Sql/FromOptions.cs` (`WithTableHint`/`WithIndex`/`WithoutIndex`),
+`src/nextorm.core/Builders/JoinOptions.cs` (`WithJoinTableHint`/`WithJoinHint`), `src/nextorm.core/DataContext/Sql/FromOptions.cs` (`WithSubQueryHint`), `src/nextorm.core/Builders/Entity/EntityBuilder.cs` (`WithTablesInScopeHint`),
 `src/nextorm.core/DataContext/Dialect/ISqlDialect.cs` ([`SupportsQueryHints`](xref:NextORM.Core.ISqlDialect.SupportsQueryHints) / [`RenderQueryHints`](xref:NextORM.Core.ISqlDialect.RenderQueryHints(System.String,System.Collections.Generic.IReadOnlyList{System.String},System.String,NextORM.Core.KeywordCase))),
 `src/nextorm.sqlserver/SqlServerDialect.cs`, `src/nextorm.postgres/PostgresDialect.cs`,
 `src/nextorm.mysql/MySqlDialect.cs` (MariaDB наследует).

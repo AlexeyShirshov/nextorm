@@ -219,6 +219,6 @@ while (reader.Read())
 
 ---
 
-Источник: `src/nextorm.core/Query/QueryCommandExtensions.cs`, `src/nextorm.core/DataContext/CommandReaderOwner.cs`,
-`src/nextorm.core/DataContext/LobDataReader.cs`,
+Источник: `src/nextorm.core/Query/Commands/QueryCommandExtensions.cs`, `src/nextorm.core/DataContext/Results/CommandReaderOwner.cs`,
+`src/nextorm.core/DataContext/Lob/LobDataReader.cs`,
 `tests/nextorm.integration.tests/CommonTestSuite/Lob/CommonTestSuite.Lob.cs` и тесты SQL-генерации/диалектов для `SupportsSequentialAccess`.

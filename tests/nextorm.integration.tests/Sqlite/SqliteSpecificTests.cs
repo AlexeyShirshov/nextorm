@@ -1356,7 +1356,7 @@ public sealed class SqliteSpecificTests : ProviderTestSuite
         var path = Path.Combine(Path.GetTempPath(), $"nextorm.fts.norank.{Guid.NewGuid():N}.db");
         try
         {
-            using var ctx = new SqliteDataContext($"Data Source='{path}'", new DataContextBuilder());
+            using var ctx = new SqliteDataContext($"Data Source='{path}';Pooling=False", new DataContextBuilder());
             Execute(ctx, "create virtual table fts4_docs using fts4(title, body)");
             Execute(ctx, "insert into fts4_docs(title, body) values ('hello world', 'x')");
 
@@ -1476,7 +1476,7 @@ public sealed class SqliteSpecificTests : ProviderTestSuite
         var path = Path.Combine(Path.GetTempPath(), $"nextorm.fts3.norank.{Guid.NewGuid():N}.db");
         try
         {
-            using var ctx = new SqliteDataContext($"Data Source='{path}'", new DataContextBuilder());
+            using var ctx = new SqliteDataContext($"Data Source='{path}';Pooling=False", new DataContextBuilder());
             Execute(ctx, "create virtual table fts3_docs using fts3(title, body)");
             Execute(ctx, "insert into fts3_docs(title, body) values ('hello world', 'x')");
 

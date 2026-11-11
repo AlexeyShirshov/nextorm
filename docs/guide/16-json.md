@@ -254,7 +254,7 @@ select id
  from complex_entity where ((@norm_p0 ->> 'name') = 'Alice')
 ```
 
-Provider parameter binding is unchanged: a plain JSON string parameter is still bound as `text`. The six
+Provider parameter binding: a plain JSON string parameter is bound as `text`. The six
 accessors `json_get`, `json_get_text`, `json_get_path` and `json_get_path_text` (both the string-key and
 the integer-index overloads) are the exception — they apply **contextual SQL typing**: a raw client
 document value (a literal, a captured value or an explicit parameter) is parsed as `jsonb` in the generated
@@ -308,9 +308,9 @@ Bare CLR JSON values are handled at the boundary, differently from a mapped colu
   scalar (`Select(x => x.Data)`) and composite projections. A SQL `NULL` and a JSON literal `null` both become
   CLR `null`. Declared `JsonObject`/`JsonArray` properties, and a bare `JsonDocument`/`JsonElement` *scalar*
   projection, are outside this support — map those with `[JsonColumn]` or project them in a named shape. A
-  `JsonNode` parameter still binds as `jsonb`.
+  `JsonNode` parameter binds as `jsonb`.
 * A plain `string` maps to `text`. The six accessors above (`json_get`, `json_get_text`, `json_get_path`,
-  `json_get_path_text`, string-key and integer-index overloads) still accept a raw client document string —
+  `json_get_path_text`, string-key and integer-index overloads) accept a raw client document string —
   a literal, a captured value or an explicit parameter — because they apply contextual SQL typing and
   parse it as `jsonb` in the generated SQL, typing the key/index/path as `text`/`integer`/`text[]`. A native
   `json`/`jsonb` column or a server-side JSON expression is left uncast, so its operand and result types do
@@ -416,8 +416,8 @@ captured value or an explicit parameter) is parsed as `jsonb`, so `json_get("{\"
 `cast('{"a":1}' as jsonb) -> cast('a' as text)`, while a native `json`/`jsonb` column or a server-side JSON
 expression is emitted unchanged (`doc -> cast('a' as text)`), preserving its operand and result types. The
 key/index/path is always typed for its overload: `cast(<key> as text)`, `cast(<index> as integer)`,
-`cast(<path> as text[])` — a literal key is inlined as `cast('a' as text)`. Parameter binding itself is
-unchanged; an ordinary `string` parameter is still bound as `text`.
+`cast(<path> as text[])` — a literal key is inlined as `cast('a' as text)`. An ordinary `string` parameter
+is bound as `text`.
 
 A `path`/`keys` operand is a `string[]` bound as a single array parameter, so
 `json_get_path(json, new[] { "a", "b" })` renders `json #> cast(@p0 as text[])`. JSONPath functions take
@@ -546,8 +546,8 @@ The construction and aggregation functions return `string?`; deserialize with
 
 ---
 
-Source: `src/nextorm.core/Visitors/JsonSqlTranslator.cs`, `src/nextorm.core/Query/SqlFunctions.Postgres.cs`,
-`src/nextorm.core/Query/SqlFunctions.SqlServer.cs`, `src/nextorm.core/Expressions/ForJson.cs`,
+Source: `src/nextorm.core/Visitors/Structured/JsonSqlTranslator.cs`, `src/nextorm.core/Query/SqlFunctions/SqlFunctions.Postgres.cs`,
+`src/nextorm.core/Query/SqlFunctions/SqlFunctions.SqlServer.cs`, `src/nextorm.core/Expressions/Formats/ForJson.cs`,
 `src/nextorm.core/DataContext/Dialect/ISqlDialect.cs`, `src/nextorm.sqlserver/SqlServerDialect.cs`,
 `src/nextorm.postgres/PostgresDialect.cs`; tests `tests/nextorm.sqlserver.tests/SqlGeneration/SqlGenerationTests.cs:443,695,1313,1390`,
 `tests/nextorm.postgres.tests/SqlGeneration/SqlGenerationTests.cs:848,868,887,930,950,1831,1861`,

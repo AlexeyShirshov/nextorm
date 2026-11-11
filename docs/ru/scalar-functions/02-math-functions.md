@@ -23,7 +23,7 @@ select abs((id - 5))
  from complex_entity
 ```
 
-Таблицы `Вывод:` ниже показывают строки, которые возвращает каждый пример на сид-данных интеграционных тестов (`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).
+Таблицы `Вывод:` ниже показывают строки, которые возвращает каждый пример на сид-данных интеграционных тестов (`tests/nextorm.integration.tests/Providers/TestProviders/SqliteTestProvider.cs`).
 
 Вывод:
 
@@ -185,8 +185,8 @@ var rows = dataContext.From<IComplexEntity>()
 
 Остальные математические функции входят в расширенную библиотеку скалярных функций
 ([`SupportsExtendedScalarFunctions`](xref:NextORM.Core.ISqlDialect.SupportsExtendedScalarFunctions), только PostgreSQL).
-Функции `degrees`/`radians`/`pi` больше не специфичны для PostgreSQL — используйте переносимые
-написания [`SqlFunctions.Sql`](xref:NextORM.Core.SqlFunctions.Sql) выше:
+Функции `degrees`/`radians`/`pi` входят в переносимую поверхность
+[`SqlFunctions.Sql`](xref:NextORM.Core.SqlFunctions.Sql) выше:
 
 | C# | SQL |
 |---|---|

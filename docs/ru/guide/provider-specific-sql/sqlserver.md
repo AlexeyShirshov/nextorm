@@ -606,5 +606,5 @@ null-операнду нужен SQL-тип, выведенный из мета�
 
 ---
 
-Source: `src/nextorm.sqlserver/SqlServerDialect.cs`, `src/nextorm.core/Query/SqlFunctions.SqlServer.cs`,
+Source: `src/nextorm.sqlserver/SqlServerDialect.cs`, `src/nextorm.core/Query/SqlFunctions/SqlFunctions.SqlServer.cs`,
 `tests/nextorm.sqlserver.tests/SqlGeneration/SqlGenerationTests.cs`.

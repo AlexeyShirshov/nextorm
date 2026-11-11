@@ -115,15 +115,15 @@ public sealed class SqliteStep4EfQueryFilterTests
     private static DbContextOptions<TContext> Options<TContext>(string? path = null)
         where TContext : DbContext
         => new DbContextOptionsBuilder<TContext>()
-            .UseSqlite($"Data Source='{path ?? NewPath()}'")
+            .UseSqlite($"Data Source='{path ?? NewPath()}';Pooling=False")
             .Options;
 
     private static SqliteDataContext NextContext(string path)
-        => new($"Data Source='{path}'", new DataContextBuilder());
+        => new($"Data Source='{path}';Pooling=False", new DataContextBuilder());
 
     private static void CreateDatabase(string path, params string[] statements)
     {
-        using var connection = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source='{path}'");
+        using var connection = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source='{path}';Pooling=False");
         connection.Open();
         foreach (var sql in statements)
         {

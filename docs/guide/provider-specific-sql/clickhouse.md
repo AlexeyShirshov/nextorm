@@ -205,9 +205,8 @@ three `range` overloads (`long[]` → `Array(Int64)`). The declared element type
 `Nullable(...)` unconditionally — a CLR nullable annotation on an element is erased at runtime, so it is
 never consulted: `string[]` and `string?[]` both render `Array(Nullable(String))`, and a jagged
 `string[][]` renders `Array(Array(Nullable(String)))` (the array arm is applied first, never
-`Nullable(Array(...))`). For existing reference-element arrays this intentionally changes the emitted SQL
-text (a `string[]` result previously rendered `Array(String)`), while the data, the materialised CLR
-result type (still `string[]`) and the public API do not change, and value-type elements (`int[]`,
+`Nullable(Array(...))`). A `string[]` result renders `Array(Nullable(String))`; the data, the materialised CLR
+result type (`string[]`) and the public API are the same, and value-type elements (`int[]`,
 `int?[]`, `byte[]`) are unaffected. Otherwise it is a type correction of the rendered call only: it
 changes neither the lambda translation nor the operand rendering, so the higher-order lambda limitations
 described below still apply. Binding is symmetric for input: a **bound** rank-1 array whose declared
@@ -386,14 +385,13 @@ cast(arrayMap((k, v) -> k,
     as Array(Nullable(String)))
 ```
 
-**Breaking change in 1.0.9-rc4.** `map_filter` used to declare `IDictionary<TKey, TValue>`; it now
-returns `Tuple<TKey, TValue>[]`, because a map cannot be materialised from a projected expression.
-`map_sort` (already a tuple array) and `map_apply` (already `TResult[]`) keep their shapes.
+`map_filter` returns `Tuple<TKey, TValue>[]`, because a map cannot be materialised from a projected
+expression. `map_sort` returns a tuple array and `map_apply` returns `TResult[]`.
 
 No public path turns a filtered map back into a server-side `Map`: `mapFilter` is only reached through
 the `map_*` lowering, `map_keys`/`map_values` require an `IDictionary` and therefore reject the tuple
 array at compile time, and the higher-order array lambdas refuse member access on their parameter, so
-`arrayMap(t => t.Item2, ...)` cannot be expressed. Migrate by reading the returned tuples — plain LINQ
+`arrayMap(t => t.Item2, ...)` cannot be expressed. Read the returned tuples directly — plain LINQ
 over the array once it is materialised: `filtered.Select(t => t.Item2)` for the values, or
 `filtered.ToDictionary(t => t.Item1, t => t.Item2)` for a dictionary on the client.
 
@@ -515,5 +513,5 @@ Exercising the server/cluster table functions (`url`, `s3`, `file`, `remote`, `r
 
 ---
 
-Source: `src/nextorm.clickhouse/ClickHouseDialect.cs`, `src/nextorm.core/Query/SqlFunctions.ClickHouse.cs`,
+Source: `src/nextorm.clickhouse/ClickHouseDialect.cs`, `src/nextorm.core/Query/SqlFunctions/SqlFunctions.ClickHouse.cs`,
 `tests/nextorm.clickhouse.tests/SqlGeneration/SqlGenerationTests.cs`.

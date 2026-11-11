@@ -132,7 +132,7 @@ select id, (select id
  from complex_entity
 ```
 
-Таблицы `Вывод:` ниже показывают строки, которые возвращает каждый пример на сид-данных интеграционных тестов (`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).
+Таблицы `Вывод:` ниже показывают строки, которые возвращает каждый пример на сид-данных интеграционных тестов (`tests/nextorm.integration.tests/Providers/TestProviders/SqliteTestProvider.cs`).
 
 Вывод:
 
@@ -475,8 +475,8 @@ SQLite не реализует `ANY` или `ALL`; тот же запрос пр
 
 ---
 
-Source: `tests/nextorm.integration.tests/CommonTestSuite/Queries/CommonTestSuite.CorrelatedQuery.cs`,
-`tests/nextorm.sqlite.tests/SqlGeneration/CorrelatedQueryTests.cs`,
+Source: `tests/nextorm.integration.tests/CommonTestSuite/Queries/Structure/CommonTestSuite.CorrelatedQuery.cs`,
+`tests/nextorm.sqlite.tests/SqlGeneration/Plan/CorrelatedQueryTests.cs`,
 `tests/nextorm.integration.tests/CommonTestSuite/Raw/CommonTestSuite.SqlCommand.cs:612,623,633,643,653,663`,
 `tests/nextorm.integration.tests/Sqlite/SqliteSpecificTests.cs:16,30`,
 `tests/nextorm.sqlite.tests/SqlGeneration/SqlGenerationTests.cs:255`,

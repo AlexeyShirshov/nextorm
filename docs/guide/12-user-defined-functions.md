@@ -71,7 +71,7 @@ select upper(somestring) as "V"
  from complex_entity
 ```
 
-The `Output:` tables below show the rows returned by each example against the integration-test seed data (`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).
+The `Output:` tables below show the rows returned by each example against the integration-test seed data (`tests/nextorm.integration.tests/Providers/TestProviders/SqliteTestProvider.cs`).
 
 Output:
 
@@ -128,14 +128,32 @@ select Lower(somestring) as 'V'
 scalar. It defaults to `false`:
 
 ```csharp
-[SqlFunction("my_sum", IsAggregate = true)]
-public static decimal MySum(decimal value) => throw new NotSupportedException();
+private static class Udf
+{
+    [SqlFunction("my_sum", IsAggregate = true)]
+    public static long MySum(long value) => throw new NotSupportedException();
+}
+
+var rows = dataContext.From<IComplexEntity>()
+    .SelectGroup(e => new { e.Int, Total = Udf.MySum(e.Id) })
+    .ToList();
+```
+
+```sql
+-- SQLite
+select nullableint as 'Int', my_sum(id) as 'Total'
+ from complex_entity
+ group by nullableint
 ```
 
 `IsAggregate = true` makes the call an opaque aggregate boundary for `SelectGroup` (in `NextORM.Extensions`): its arguments,
 its `DISTINCT` input and its `FILTER` predicate never become grouping keys, and a projection without
 any row-dependent member becomes a global aggregate. A scalar function - no attribute, or
 `IsAggregate = false` - may instead be inferred as a whole grouping key.
+
+Only `nullableint` became a key: `my_sum(id)` is an opaque aggregate boundary, so its argument never
+reached `GROUP BY`. Without `IsAggregate = true` the same call would be scalar and become a key itself -
+`group by nullableint, my_sum(id)`.
 
 The effective annotation is **either** the method's own attribute **or**, when the method carries
 none, the declaring type's attribute - never a merge of the two. A method attribute therefore
@@ -217,7 +235,7 @@ database. Only the surrounding identifier (column alias) quoting differs:
 
 ---
 
-Source: `src/nextorm.core/SqlFunctionAttribute.cs:14`, `src/nextorm.core/Visitors/BaseExpressionVisitor.cs:563`;
+Source: `src/nextorm.core/Attributes/SqlFunctionAttribute.cs:14`, `src/nextorm.core/Visitors/Core/BaseExpressionVisitor.cs:563`;
 `tests/nextorm.integration.tests/CommonTestSuite/Functions/CommonTestSuite.Udf.cs:14`, `:24`, `:36`;
 generated SQL: `tests/nextorm.sqlite.tests/SqlGeneration/SqlGenerationTests.cs:713`, `:722`, `:737`, `:746`;
 `tests/nextorm.sqlserver.tests/SqlGeneration/SqlGenerationTests.cs:466`, `:476`, `:490`;

@@ -537,7 +537,7 @@ public class ClickHouseDialectTests
         Dialect.AggregateFilterStyle.Should().Be(AggregateFilterStyle.IfCombinator);
         Dialect.UniqAggregates.Should().NotBeNull();
         Dialect.QuantileAggregates.Should().NotBeNull();
-        Dialect.SupportsAnyAggregates.Should().BeTrue();
+        Dialect.SupportsAnyLastAggregate.Should().BeTrue();
         Dialect.SupportsAnyValueAggregate.Should().BeTrue();
         Dialect.SupportsPercentileWindow.Should().BeFalse();
         Dialect.SupportsPercentRankCumeDist.Should().BeTrue();

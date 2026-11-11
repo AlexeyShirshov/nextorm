@@ -9,7 +9,7 @@ namespace NextORM.Integration.Tests;
 /// Those facts prepare the same statement twice with <c>storeInCache: true</c> and assert
 /// <c>ReferenceEquals(first, second)</c> — the cached path is the subject of the test. The plan store
 /// behind that identity is process-wide: <c>QueryPlanStore</c> keeps a <c>private static long
-/// _generation</c> (<c>src/nextorm.core/DataContext/Cache/QueryPlanStore.cs:29</c>) and
+/// _generation</c> (<c>src/nextorm.core/DataContext/Cache/Plans/QueryPlanStore.cs:29</c>) and
 /// <c>Clear() =&gt; Interlocked.Increment(ref _generation)</c> (<c>:181</c>); every thread drops its own
 /// plan dictionary the next time it looks, so a hit before a purge and a miss after it are both correct.
 /// <c>DataContext.PurgeQueryCache()</c> (<c>DataContext.cs:1996</c> → <c>QueryCache.PurgeQueryCache()</c>

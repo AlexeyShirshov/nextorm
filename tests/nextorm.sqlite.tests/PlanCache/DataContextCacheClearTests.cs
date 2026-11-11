@@ -23,7 +23,7 @@ public class DataContextCacheClearTests
     public void Clear_Should_Invalidate_Implicit_Plan_Cache()
     {
         var path = Path.Combine(Path.GetTempPath(), $"nextorm-clear-{Guid.NewGuid():N}.db");
-        using (var conn = new SqliteConnection($"Data Source={path}"))
+        using (var conn = new SqliteConnection($"Data Source={path};Pooling=False"))
         {
             conn.Open();
             using var cmd = conn.CreateCommand();
@@ -34,7 +34,7 @@ public class DataContextCacheClearTests
 
         try
         {
-            using var ctx = new SqliteDataContext($"Data Source={path}", new DataContextBuilder());
+            using var ctx = new SqliteDataContext($"Data Source={path};Pooling=False", new DataContextBuilder());
             ctx.PurgeQueryCache();
 
             var command = ctx.From<ISimpleEntity>().Select(x => x.Id);
@@ -62,7 +62,7 @@ public class DataContextCacheClearTests
     public void Clear_Should_Rebuild_And_Rebind_The_Captured_Value()
     {
         var path = Path.Combine(Path.GetTempPath(), $"nextorm-clear-rebind-{Guid.NewGuid():N}.db");
-        using (var conn = new SqliteConnection($"Data Source={path}"))
+        using (var conn = new SqliteConnection($"Data Source={path};Pooling=False"))
         {
             conn.Open();
             using var cmd = conn.CreateCommand();
@@ -73,7 +73,7 @@ public class DataContextCacheClearTests
 
         try
         {
-            using var ctx = new SqliteDataContext($"Data Source={path}", new DataContextBuilder());
+            using var ctx = new SqliteDataContext($"Data Source={path};Pooling=False", new DataContextBuilder());
             ctx.PurgeQueryCache();
 
             var threshold = 0;

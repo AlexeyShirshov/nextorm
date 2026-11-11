@@ -130,7 +130,7 @@ public class ToDataReaderSqliteTests
     private static SqliteDataContext CreateDb(out string path, SqlRecordingInterceptor? interceptor = null)
     {
         path = Path.Combine(Path.GetTempPath(), $"nextorm-todatareader-{Guid.NewGuid():N}.db");
-        using (var connection = new SqliteConnection($"Data Source={path}"))
+        using (var connection = new SqliteConnection($"Data Source={path};Pooling=False"))
         {
             connection.Open();
             using var command = connection.CreateCommand();
@@ -144,7 +144,7 @@ public class ToDataReaderSqliteTests
         if (interceptor is not null)
             builder = builder.AddInterceptor(interceptor);
 
-        return new SqliteDataContext($"Data Source={path}", builder);
+        return new SqliteDataContext($"Data Source={path};Pooling=False", builder);
     }
 
     [Fact]
@@ -726,7 +726,7 @@ public class ToDataReaderSqliteTests
     private static TrackingSqliteConnection CreateTrackingFileDb(out string path)
     {
         path = Path.Combine(Path.GetTempPath(), $"nextorm-todatareader-openfail-{Guid.NewGuid():N}.db");
-        var connection = new TrackingSqliteConnection($"Data Source={path}");
+        var connection = new TrackingSqliteConnection($"Data Source={path};Pooling=False");
         connection.Open();
         using (var command = connection.CreateCommand())
         {

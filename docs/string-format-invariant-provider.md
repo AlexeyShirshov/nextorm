@@ -16,7 +16,7 @@ The provider argument may be written in the natural C# way, `CultureInfo.Invaria
 var rows = ctx.From<Order>()
     .Select(o => new
     {
-        // No provider: unchanged, always accepted.
+        // No provider: always accepted.
         Plain = string.Format("{0}-{1}", o.Code, o.Region),
         // The static property expression: accepted structurally.
         Formatted = string.Format(CultureInfo.InvariantCulture, "{0:D4}", o.Id),
@@ -42,7 +42,7 @@ Recognition is purely structural: the expression tree node is inspected for its 
 
 ## Supported formats
 
-Accepting the provider does not widen the format surface. Only the formats the translator already supports are emitted:
+Accepting the provider does not widen the format surface. Only the formats the translator supports are emitted:
 
 | Value | Supported specifiers |
 |---|---|

@@ -4,9 +4,16 @@ using NextORM.Core;
 namespace NextORM.Extensions;
 
 /// <summary>
-/// The packaged grouping operator component: implements <c>SelectGroup</c> and
-/// <c>SelectGroupHaving</c> entirely on the public Core preparation-contribution mechanism.
+/// The packaged grouping operator: implements <c>SelectGroup</c> and <c>SelectGroupHaving</c> entirely
+/// on the public Core preparation-contribution mechanism.
 /// </summary>
+/// <remarks>
+/// The component claims the exclusive grouping slot, so a command carries at most one grouping owner.
+/// <see cref="Prepare"/> infers the grouping keys from the projection, classifies the command into a
+/// <see cref="SelectGroupMode"/> and returns an immutable descriptor whose structural hash and equality
+/// take part in the plan key. The statement itself is rendered by the engine from the effective prepared
+/// state, so <see cref="BuildQuery"/> has nothing to build.
+/// </remarks>
 public sealed class SelectGroupComponent<TEntity> : IQueryComponent, IQueryComponentShape
 {
     private readonly LambdaExpression _projection;
@@ -15,7 +22,13 @@ public sealed class SelectGroupComponent<TEntity> : IQueryComponent, IQueryCompo
     private static readonly object HasConditionState = new();
     private readonly object _shapeState;
 
-    /// <summary>x.</summary>
+    /// <summary>Creates the component for <paramref name="projection"/>, optionally with a <c>HAVING</c> condition.</summary>
+    /// <param name="projection">The projection whose aggregate-free, row-dependent subexpressions become the grouping keys.</param>
+    /// <param name="condition">
+    /// An additional <c>HAVING</c> predicate typed on the projection result, AND-ed with any existing source
+    /// <c>Having</c>; <see langword="null"/> for <c>SelectGroup</c>. Each member of the result is rebound to
+    /// the projection expression that produces it during <see cref="Prepare"/>.
+    /// </param>
     public SelectGroupComponent(LambdaExpression projection, LambdaExpression? condition = null)
     {
         ArgumentNullException.ThrowIfNull(projection);
@@ -24,23 +37,29 @@ public sealed class SelectGroupComponent<TEntity> : IQueryComponent, IQueryCompo
         _shapeState = _condition is not null ? HasConditionState : NoConditionState;
     }
 
-    /// <summary>x.</summary>
+    /// <summary>
+    /// The slot identity of the operator: <c>SelectGroup</c> and <c>SelectGroupHaving</c> share it, so a
+    /// second call replaces the component in place instead of nesting.
+    /// </summary>
     public Type Slot => typeof(SelectGroupComponent<TEntity>);
 
-    /// <summary>x.</summary>
+    /// <summary>The contribution mode: <see cref="QueryComponentContribution.ExclusiveGrouping"/> — the component owns the grouping of the command.</summary>
     public QueryComponentContribution Contribution => QueryComponentContribution.ExclusiveGrouping;
 
-    /// <summary>x.</summary>
+    /// <summary>
+    /// The scalar part of the raw-shape identity: whether the component carries a <c>HAVING</c> condition.
+    /// The projection itself is already part of the command's raw shape.
+    /// </summary>
     public object? ShapeState => _shapeState;
 
-    /// <summary>x.</summary>
+    /// <summary>One selector — the condition — when the component carries a <c>HAVING</c> condition; zero otherwise.</summary>
     // The projection is already carried by the raw command shape (Exp), so only the condition
     // (applied during Prepare, not yet in cmd.Having at raw-shape time) participates here.
     public int ShapeSelectorCount => _condition is null ? 0 : 1;
 
-    /// <summary>Cached shape selectors.</summary>
+    /// <summary>Cached shape selectors: the condition lambda, or an empty array when there is no condition.</summary>
     private LambdaExpression[]? _shapeSelectors;
-    /// <summary>Cached shape selectors.</summary>
+    /// <summary>Cached shape selectors, materialized once per component instance.</summary>
     public LambdaExpression[] ShapeSelectors
     {
         get
@@ -62,12 +81,19 @@ public sealed class SelectGroupComponent<TEntity> : IQueryComponent, IQueryCompo
         }
     }
 
-    /// <summary>x.</summary>
+    /// <summary>Returns the condition selector; only index 0 is valid, and only when a condition is present.</summary>
     public LambdaExpression GetShapeSelector(int index) => index == 0 && _condition is not null
         ? _condition
         : throw new ArgumentOutOfRangeException(nameof(index));
 
-    /// <summary>x.</summary>
+    /// <summary>
+    /// Infers the grouping keys from the projection, validates it together with the effective <c>HAVING</c>
+    /// and the expression ordering, and returns the immutable preparation contribution for the engine.
+    /// </summary>
+    /// <param name="context">The preparation context over the command being prepared.</param>
+    /// <returns>An immutable descriptor carrying the grouping contribution.</returns>
+    /// <exception cref="NotSupportedException">The command targets the in-memory provider.</exception>
+    /// <exception cref="QueryPreparationException">The command shape cannot be grouped by inference.</exception>
     public IQueryComponentDescriptor Prepare(IQueryComponentPrepareContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -81,13 +107,18 @@ public sealed class SelectGroupComponent<TEntity> : IQueryComponent, IQueryCompo
             || snapshot.GroupingType != NextORM.Core.GroupingType.None || snapshot.GroupingSets is { Count: > 0 })
             throw new QueryPreparationException("SelectGroup cannot be combined with explicit grouping.");
         var projection = snapshot.Projection ?? _projection;
+        // The condition is typed on the projection result: rebind it onto the source entity before it
+        // joins the effective HAVING, so validation and rendering see an ordinary entity predicate.
+        var condition = _condition is null
+            ? null
+            : SelectGroupConditionBinder.Bind(projection, _condition);
         // Combine existing source Having with the contributed condition before validation.
         LambdaExpression? combinedHaving = cmd.Having;
-        if (_condition is not null)
+        if (condition is not null)
         {
             combinedHaving = combinedHaving is null
-                ? _condition
-                : CombinePredicates(combinedHaving, _condition);
+                ? condition
+                : CombinePredicates(combinedHaving, condition);
         }
 
         var (keys, outputs, mode) = SelectGroupExpressionAnalyzer.Analyze(
@@ -104,7 +135,7 @@ public sealed class SelectGroupComponent<TEntity> : IQueryComponent, IQueryCompo
                     // Replace carries only the ADDED condition: the engine ANDs the raw source Having
                     // exactly once (QueryPreparer's effective-state application). The full combined
                     // predicate is used above only for coverage validation and the mode decision.
-                    _condition,
+                    condition,
                     sourcePredicate: null,
                     requireDistinct: false);
                 break;
@@ -112,7 +143,7 @@ public sealed class SelectGroupComponent<TEntity> : IQueryComponent, IQueryCompo
                 contribution = new QueryPreparationContribution(
                     Array.Empty<LambdaExpression>(),
                     QueryPreparationHavingMode.Replace,
-                    _condition,
+                    condition,
                     sourcePredicate: null,
                     requireDistinct: false);
                 break;
@@ -138,7 +169,7 @@ public sealed class SelectGroupComponent<TEntity> : IQueryComponent, IQueryCompo
         return new Descriptor(this, contribution, hash.ToHashCode());
     }
 
-    /// <summary>x.</summary>
+    /// <summary>Does nothing: the engine renders the statement from the effective prepared state.</summary>
     public void BuildQuery(IQueryComponentBuildContext context)
     {
         // Engine renders from effective prepared state; nothing to do here.
@@ -160,7 +191,6 @@ public sealed class SelectGroupComponent<TEntity> : IQueryComponent, IQueryCompo
     {
         private readonly ParameterExpression _old;
         private readonly ParameterExpression _new;
-        /// <summary>x.</summary>
         public ParameterReplacer(ParameterExpression old, ParameterExpression @new) { _old = old; _new = @new; }
         protected override Expression VisitParameter(ParameterExpression node) => node == _old ? _new : base.VisitParameter(node);
     }
@@ -168,35 +198,46 @@ public sealed class SelectGroupComponent<TEntity> : IQueryComponent, IQueryCompo
     private sealed class Descriptor : IQueryPreparationDescriptor
     {
         private readonly SelectGroupComponent<TEntity> _component;
-        /// <summary>x.</summary>
         public Descriptor(SelectGroupComponent<TEntity> component, QueryPreparationContribution prep, int hash)
         {
             _component = component;
             Preparation = prep;
             StructuralHash = hash;
         }
-        /// <summary>x.</summary>
         public Type Slot => _component.Slot;
-        /// <summary>x.</summary>
         public Type ComponentType => _component.GetType();
-        /// <summary>x.</summary>
         public QueryComponentContribution Contribution => _component.Contribution;
-        /// <summary>x.</summary>
         public string Discriminator => "SelectGroup";
-        /// <summary>x.</summary>
         public int StructuralHash { get; }
-        /// <summary>x.</summary>
         public QueryPreparationContribution Preparation { get; }
-        /// <summary>x.</summary>
         public bool StructurallyEquals(IQueryComponentDescriptor? other)
             => other is Descriptor rhs && Slot == rhs.Slot && StructuralHash == rhs.StructuralHash;
     }
 }
 
-/// <summary>x.</summary>
+/// <summary>
+/// The grouping operators of the <c>nextorm.extensions</c> package: <c>SelectGroup</c> and
+/// <c>SelectGroupHaving</c>, both built on the public query-component contract.
+/// </summary>
 public static class SelectGroupExtensions
 {
-    /// <summary>x.</summary>
+    /// <summary>
+    /// Projects each group of <paramref name="source"/>, inferring the <c>GROUP BY</c> keys from
+    /// <paramref name="projection"/>: every aggregate-free, row-dependent subexpression becomes a key and
+    /// the aggregate calls fold each group. The projection keeps its exact shape — no client-side grouping
+    /// and no rewriting of its members.
+    /// </summary>
+    /// <typeparam name="TEntity">The mapped source entity.</typeparam>
+    /// <typeparam name="TResult">The shape of the projection.</typeparam>
+    /// <param name="source">The entity builder to group.</param>
+    /// <param name="projection">The same projection lambda <c>Select</c> takes.</param>
+    /// <returns>A typed command for the grouped projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="projection"/> is <see langword="null"/>.</exception>
+    /// <exception cref="QueryPreparationException">
+    /// The command already carries explicit grouping, the projection contains a window function or a
+    /// subquery, or a <c>Having</c>/expression <c>OrderBy</c> member is not covered by an inferred key.
+    /// </exception>
+    /// <exception cref="NotSupportedException">The command targets the in-memory provider.</exception>
     public static QueryCommand<TResult> SelectGroup<TEntity, TResult>(
         this EntityBuilder<TEntity> source,
         Expression<Func<TEntity, TResult>> projection)
@@ -206,11 +247,32 @@ public static class SelectGroupExtensions
             .Select(projection);
     }
 
-    /// <summary>x.</summary>
+    /// <summary>
+    /// Same inference as <see cref="SelectGroup{TEntity, TResult}"/>, with <paramref name="condition"/>
+    /// AND-ed into the effective <c>HAVING</c>. The condition is typed on the projection result
+    /// (<typeparamref name="TResult"/>), never on the source entity: a member of the result stands for the
+    /// projection expression that produces it, so <c>f => f.Total > 5</c> becomes the same <c>HAVING</c> as
+    /// the underlying <c>sum(...) &gt; 5</c>. Keys are inferred only from <paramref name="projection"/>;
+    /// the condition never adds a key.
+    /// </summary>
+    /// <typeparam name="TEntity">The mapped source entity.</typeparam>
+    /// <typeparam name="TResult">The shape of the projection.</typeparam>
+    /// <param name="source">The entity builder to group.</param>
+    /// <param name="projection">The same projection lambda <c>Select</c> takes.</param>
+    /// <param name="condition">A <c>HAVING</c> predicate over the projection result, AND-ed with any existing source <c>Having</c>.</param>
+    /// <returns>A typed command for the grouped projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="projection"/> or <paramref name="condition"/> is <see langword="null"/>.</exception>
+    /// <exception cref="QueryPreparationException">
+    /// The command already carries explicit grouping, the projection contains a window function or a
+    /// subquery, the condition references a member the projection does not bind (or the result as a
+    /// whole), or a row member of the projection or of the effective <c>HAVING</c> is not covered by an
+    /// inferred key.
+    /// </exception>
+    /// <exception cref="NotSupportedException">The command targets the in-memory provider.</exception>
     public static QueryCommand<TResult> SelectGroupHaving<TEntity, TResult>(
         this EntityBuilder<TEntity> source,
         Expression<Func<TEntity, TResult>> projection,
-        Expression<Func<TEntity, bool>> condition)
+        Expression<Func<TResult, bool>> condition)
     {
         ArgumentNullException.ThrowIfNull(projection);
         ArgumentNullException.ThrowIfNull(condition);

@@ -66,8 +66,8 @@ var rows = dataContext.From<IComplexEntity>()
 | SQLite, PostgreSQL, MySQL, MariaDB, ClickHouse | `avg(id)` |
 | SQL Server | `avg(cast(id as float))` |
 
-Nullable-результат и расширение аргумента — намеренное ломающее изменение исходного кода, а не
-бинарно-совместимое:
+Результат nullable: `Avg` возвращает `double?` (или `float?`/`decimal?` для соответствующих входов).
+Сохраняйте nullable-результат или разворачивайте его явно; целочисленная цель не компилируется:
 
 ```csharp
 int average = dataContext.From<ISimpleEntity>().Avg(e => e.Id);        // не компилируется
@@ -75,10 +75,7 @@ var average = dataContext.From<ISimpleEntity>().Avg(e => e.Id);        // double
 var direct  = dataContext.From<ISimpleEntity>().Select(e => SqlFunctions.Sql.avg(e.Id)).First(); // double?
 ```
 
-Явные generic-аргументы, называвшие старую усекающую форму (`Avg<TEntity, TResult>` с целочисленным
-`TResult`, `avg<T>(...)`), тоже больше не компилируются; позвольте перегрузке выбрать объявление по
-типу селектора и читайте значение через `double?` (или `float?`/`decimal?` для соответствующих
-входов).
+Позвольте перегрузке выбрать объявление по типу селектора, а не указывайте generic-аргументы явно.
 
 ## GroupBy
 
@@ -105,7 +102,7 @@ var rows = dataContext.From<IComplexEntity>()
     .ToList();
 ```
 
-Таблицы `Вывод:` ниже показывают строки, которые возвращает каждый пример на сид-данных интеграционных тестов (`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).
+Таблицы `Вывод:` ниже показывают строки, которые возвращает каждый пример на сид-данных интеграционных тестов (`tests/nextorm.integration.tests/Providers/TestProviders/SqliteTestProvider.cs`).
 
 Вывод:
 
@@ -205,7 +202,8 @@ var top = dataContext.From<IComplexEntity>()
 ключи группировки из самой проекции. Каждое зависящее от строки выражение без агрегата становится
 ключом, а агрегатные вызовы сворачивают каждую группу. Проекция сохраняет ровно свою форму — нет ни
 клиентской группировки, ни динамического типа, ни reflection-emit слияния плоского типа результата.
-Это квартальный пример из issue:
+Проекция типизирована по исходной сущности: указывайте оба generic-аргумента
+(`.SelectGroup<TEntity, TResult>(...)`) или опускайте их. Квартальный пример:
 
 ```csharp
 ctx.From<Product>()
@@ -221,7 +219,21 @@ ctx.From<Product>()
 
 `ProductID`, `ProductName` и весь вызов `date_trunc('quarter', OrderDate)` становятся ключами
 `GROUP BY`, а два вызова `sum` остаются агрегатами. Результаты и SQL эквивалентны явной форме
-`GroupBy(...).Select(...)` с теми же ключами.
+`GroupBy(...).Select(...)` с теми же ключами. Компактный пример и его SQL:
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .SelectGroup(e => new { e.Int, Total = SqlFunctions.Sql.sum(e.Id) })
+    .ToList();
+```
+
+```sql
+select nullableint as 'Int', sum(id) as 'Total'
+ from complex_entity
+ group by nullableint
+```
+
+Единственным ключом стал `nullableint`, а `sum(id)` остался агрегатом — явный `GroupBy` не нужен.
 
 Правила вывода:
 
@@ -269,29 +281,42 @@ pre-group-фильтром и не участвует в выводе.
   агрегатов и внутри `FILTER`-предиката. Это отклонение безусловно и не зависит от вывода ключей;
   подзапрос в `Where` по-прежнему поддерживается.
 
-Провайдер in-memory выполняет выведенную группировку в пределах существующей поверхности агрегатов:
-поддерживаемые агрегаты ведут себя так же, как при явном `GroupBy`, а скалярные функции поверхности
-провайдера и пользовательские функции отклоняются явно, а не вычисляются в процессе.
-
-### Ломающее изменение
-
-`SelectGroup` переехал из `nextorm.core` в `nextorm.extensions`. Для выводимых вызовов место вызова
-не меняется (добавьте `using NextORM.Extensions;`). Явная одиночная форма `.SelectGroup<TResult>(...)`
-больше не поддерживается: указывайте оба generic-аргумента (`.SelectGroup<TEntity, TResult>(...)`) или
-опускайте их. Совместимой обёртки `*Old`/`Ex` не предоставляется.
+Провайдер in-memory не поддерживается: оба оператора бросают `NotSupportedException` ещё до построения
+плана, поэтому выведенная группировка всегда выполняется на реальной базе данных.
 
 ### SelectGroupHaving
 
 `SelectGroupHaving(projection, condition)` использует тот же вывод ключей, что и `SelectGroup`, и
-добавляет `condition` в эффективный `HAVING` через `AND`. `condition` типизирован по исходной сущности
-(`TEntity`), а не по типу проекции. Ключи выводятся **только** из `projection`; `condition` никогда не
-добавляет ключей. Существующий `Having` источника объединяется с `condition` через `AND` до валидации.
-Непокрытое ссылкой на строку выражение в `projection` или в эффективном `HAVING` завершается
-`QueryPreparationException` до обращения к БД. Три исхода (ключевая группировка, глобальная агрегация,
-проекция-константа) те же, что и у `SelectGroup`.
+добавляет `condition` в эффективный `HAVING` через `AND`. `condition` типизирован по результату
+проекции (`TResult`), а не по исходной сущности: каждый член результата перед валидацией заменяется
+выражением проекции, которое его производит, поэтому `r => r.Rows > 1` — это тот же `HAVING`, что и
+нижележащее `count(...) > 1`, а при скалярной проекции параметр условия — само спроецированное значение
+(`f => f > 5`). Ключи выводятся **только** из `projection`; `condition` никогда не добавляет ключей.
+Существующий `Having` источника объединяется с `condition` через `AND` до валидации. Член условия,
+который проекция не связывает (или результат целиком), а также непокрытое ссылкой на строку выражение в
+`projection` или в эффективном `HAVING` завершаются `QueryPreparationException` до обращения к БД. Три
+исхода (ключевая группировка, глобальная агрегация, проекция-константа) те же, что и у `SelectGroup`.
+
+Пример: `r => r.Count > 1` становится `HAVING` по нижележащему `count(*)`, а ключ по-прежнему
+выводится только из проекции:
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .SelectGroupHaving(
+        e => new { e.Int, Count = SqlFunctions.Sql.count() },
+        r => r.Count > 1)
+    .ToList();
+```
+
+```sql
+select nullableint as 'Int', count(*) as 'Count'
+ from complex_entity
+ group by nullableint
+ having (count(*) > 1)
+```
 
 Оба оператора бросают `NotSupportedException` (сообщение содержит `in-memory`) при выполнении на
-`InMemoryDataContext`; поддержка in-memory была явно отброшена и не является регрессией.
+`InMemoryDataContext`.
 
 Упакованные операторы сами являются обычными компонентами запроса на публичном контракте
 [`IQueryComponent`](xref:NextORM.Core.IQueryComponent): сторонний пакет может добавить свой структурный
@@ -376,6 +401,155 @@ select distinct on (somestring) id, somestring
 `ORDER BY` должны ему соответствовать. [`DistinctOn`](xref:NextORM.Postgres.PostgresEntityBuilderExtensions.DistinctOn``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}})) нельзя комбинировать с [`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct), и реализует его
 только PostgreSQL — остальные провайдеры отклоняют его на этапе построения SQL. Полная поверхность —
 в разделе [SELECT DISTINCT](09-distinct.md#distinct-on-postgresql).
+
+## Выбор экстремальной строки (`SelectWhereMax` / `SelectWhereMin`)
+
+> **Имена операторов.** Встроенные операторы — `SelectWhereMinOld` / `SelectWhereMaxOld`; они покрывают
+> путь совместимости, включая провайдер in-memory. `SelectWhereMin` / `SelectWhereMax` из
+> [пакета расширений](../advanced/extensions-package.md) построены на публичном слое компонентов запроса.
+
+[`SelectWhereMax`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMaxOld``1(System.Linq.Expressions.Expression{System.Func{`0,``0}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) и
+[`SelectWhereMin`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMinOld``1(System.Linq.Expressions.Expression{System.Func{`0,``0}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) оставляют строку (или строки),
+значение которой по селектору максимально или минимально в источнике. Это фильтр строк, а не
+агрегат: выжившая строка сохраняет все колонки.
+
+**Глобально и по группам.** Без ключа группировки экстремум берётся по всему источнику; с ключом
+группировки экстремальные строки выбираются внутри каждой отдельной группы. Ключ `null` — это
+отдельная группа.
+
+```csharp
+// Глобально: единственная строка с максимальным score.
+var top = dataContext.From<ExtremaEntity>()
+    .SelectWhereMax(e => e.Score)
+    .ToList();
+
+// По группам: одна экстремальная строка на категорию.
+var perGroup = dataContext.From<ExtremaEntity>()
+    .SelectWhereMax(e => e.Score, ExtremeRowTies.One, e => e.Category)
+    .ToList();
+```
+
+```sql
+-- PostgreSQL
+-- глобально: целочисленный ключ проходит нативно — ORDER BY ... LIMIT 1
+select t1.id, t1.score, t1.category, t1.label
+ from (select *
+ from extrema_entity
+ where score is not null order by "score" desc limit 1) as "t1"
+
+-- по группам: строковый ключ группировки не проходит нативно, остаётся переносимое оконное понижение
+select t1.id, t1.score, t1.category, t1.label
+ from (select *, row_number() over (partition by category order by score desc) as "__nextorm_rn"
+ from extrema_entity
+ where score is not null) as "t1"
+ where t1."__nextorm_rn" = 1
+```
+
+[`ExtremeRowTies`](xref:NextORM.Core.ExtremeRowTies) управляет обработкой совпадающих значений. [`One`](xref:NextORM.Core.ExtremeRowTies.One) (по умолчанию)
+оставляет одну строку — при равенстве значений провайдер выбирает одну из них, — а [`All`](xref:NextORM.Core.ExtremeRowTies.All)
+оставляет все строки, совпадающие по экстремальному значению. Совпадение определяется только
+селектором, поэтому результат `All` содержит все такие строки, а `One` — ровно одну произвольную.
+
+**Форма с проекцией.** Перегрузки
+[`SelectWhereMax`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMaxOld``2(System.Linq.Expressions.Expression{System.Func{`0,``0}},System.Linq.Expressions.Expression{System.Func{`0,``1}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) /
+[`SelectWhereMin`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMinOld``2(System.Linq.Expressions.Expression{System.Func{`0,``0}},System.Linq.Expressions.Expression{System.Func{`0,``1}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) принимают проекцию и применяют
+её к каждой выжившей строке, возвращая типизированную команду запроса:
+
+```csharp
+var projected = dataContext.From<ExtremaEntity>()
+    .SelectWhereMax(e => e.Score, e => new { e.Id, e.Label })
+    .ToList();
+```
+
+```sql
+-- PostgreSQL
+select t1.id, t1.label
+ from (select *
+ from extrema_entity
+ where score is not null order by "score" desc limit 1) as "t1"
+```
+
+**Источник с маппингом.** Перегрузки без проекции возвращают строки сущности целиком, поэтому источник
+должен быть типом с маппингом (`From<TEntity>()` или другой источник, несущий метаданные сущности).
+У именованного «сырого» источника вроде `From("orders")` нет маппированных колонок для материализации,
+поэтому подготовка отклоняет его через `BuildSqlCommandException`
+("SelectWhereMax/SelectWhereMin requires a mapped entity source.") вместо вводящей в заблуждение ошибки
+проекции. Для «сырого» именованного источника используйте перегрузки с проекцией выше — форму
+результата задаёт проекция, — если диалект поддерживает операцию.
+
+**Семантика NULL.** Сравниваемые значения `null` игнорируются, поэтому они никогда не выигрывают
+экстремум и не попадают в результат. Группа, у которой сравниваемое значение всегда `null`, не даёт
+ни одной строки, а глобальная форма возвращает пустой результат, когда все значения `null`.
+
+**Как понижается запрос.** `SelectWhereMax`/`SelectWhereMin` — это синтаксический сахар на стороне
+SQL: логический запрос понижается внутри общего конвейера, и форма зависит только от политики
+совпадений.
+
+[`One`](xref:NextORM.Core.ExtremeRowTies.One) понижается до производной таблицы с оконной функцией —
+`row_number()` над `(partition by <группа> order by <значение> [desc])` — с фильтром по `1`, а условие
+источника объединяется через `AND` с фильтром `is not null` по значению. На PostgreSQL и ClickHouse
+нативно подходящий запрос с `One` вместо этого рендерится нативно, автоматически, по провайдеру и
+форме запроса — см.
+[Нативные стратегии выбора экстремальной строки](../advanced/select-where-extrema-native.md), — а любой
+другой провайдер или форма сохраняет переносимое окно.
+
+[`All`](xref:NextORM.Core.ExtremeRowTies.All) понижается до **агрегатной** формы. Ранжирующее окно не
+используется никогда: в запросе с `All` нет ни `rank()`, ни `row_number()`, ни оконного
+`over (...)`, — за одним исключением: ключ экстремума с плавающей точкой на ClickHouse сохраняет
+ранжирующее окно, потому что `max()`/`min()` этого сервера считают `NaN` экстремальным значением,
+а `ORDER BY` ставит `NaN` последним, и эталоном контракта служит именно окно. По группам это
+`GROUP BY <группа>` с выбором экстремального значения (и null-safe ключа
+группы) и соединением обратно с источником; глобально — одна скалярная агрегатная подзапрос-выборка,
+соединённая обратно; составной ключ разрешается покомпонентно, лексикографически — экстремум каждого
+следующего компонента берётся по строкам, уже совпавшим с выбранным префиксом, — поэтому `(9, 2)`
+побеждает `(8, 100)`.
+
+```sql
+-- All, глобально: один скалярный агрегат, соединённый обратно с источником
+select t1.id, t1.score, t1.category, t1.label
+ from extrema_entity as "t1"
+ join (select max(score) as "__nextorm_ext_1_0"
+ from extrema_entity) as "t2" on t1.score = t2."__nextorm_ext_1_0"
+
+-- All, по группам: null-safe ключ группы и экстремальное значение, сгруппированные и соединённые обратно
+select t1.id, t1.score, t1.category, t1.label
+ from extrema_entity as "t1"
+ join (select category as "__nextorm_ext_1_1", max(score) as "__nextorm_ext_1_0"
+ from extrema_entity
+ group by category) as "t2" on ((t1.category = t2."__nextorm_ext_1_1" or (t1.category is null and t2."__nextorm_ext_1_1" is null)) and t1.score = t2."__nextorm_ext_1_0")
+
+-- One, по группам (переносимая форма): ранжируем строки источника, затем оставляем ранг 1
+select t1.id, t1.score, t1.category, t1.label
+ from (select *, row_number() over (partition by category order by score desc) as "__nextorm_rn"
+ from extrema_entity
+ where score is not null) as "t1"
+ where t1."__nextorm_rn" = 1
+```
+
+Обе формы сохраняют условие источника от вызывающего кода и семантику `null`: сравнимое значение
+`null` никогда не выигрывает экстремум. Оконная форма фильтрует `is not null` перед ранжированием;
+агрегатная форма полагается на то, что агрегат и сравнение ключа отбрасывают `null` сами, а при
+nullable-ключе рендерит тот же фильтр `is not null` внутри агрегата:
+
+```sql
+-- All, глобально, nullable-ключ: агрегат сам отфильтровывает null
+select t1.id, t1.score, t1.category
+ from extrema_nullable as "t1"
+ join (select max(score) as "__nextorm_ext_1_0"
+ from extrema_nullable
+ where score is not null) as "t2" on t1.score = t2."__nextorm_ext_1_0"
+```
+
+Обе формы порождаются одним и тем же шагом конвейера, поэтому контракт результата выше — целые
+строки сущности, перегрузки с проекцией, требование отображённого источника и семантика `null` —
+одинаков для любой политики совпадений и любого SQL-провайдера (SQLite, SQL Server, PostgreSQL, MySQL,
+MariaDB и ClickHouse). Провайдер in-memory вычисляет тот же контракт напрямую своим перечислителем и
+SQL не рендерит вовсе.
+
+Запрос отклоняется на этапе построения SQL при сочетании с другим модификатором формы строк, который
+не выражается через производную таблицу: [`DistinctOn`](xref:NextORM.Postgres.PostgresEntityBuilderExtensions.DistinctOn``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}})), [`GroupBy`](xref:NextORM.Core.EntityBuilder`1.GroupBy``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), соединение, `Having`,
+именованные окна, `LimitBy`, `ArrayJoin`, `PreWhere`, постраничный вывод, операция над множествами
+или нефизический источник.
 
 ## Агрегаты без группировки
 
@@ -614,11 +788,9 @@ var variance = dataContext.From<ISimpleEntity>().Select(x => SqlFunctions.Sql.va
 результат по одной строке — `0.0`. `null` возвращается только для неопределённого результата и
 никогда не подменяется придуманным нулём.
 
-Поскольку результат теперь настоящий `Nullable<T>`, а не аннотация поверх обычного `double`,
-изменение ломает исходный код тех вызывающих, кто присваивает терминал в non-nullable
-`int`/`double`. Сохраняйте nullable-результат (`double?`) либо разворачивайте его явно.
-`?? 0` уместен только там, где ноль действительно означает «нет разброса»: иначе возвращается
-придуманный ноль для неопределённого случая.
+Результат — настоящий `Nullable<T>`: сохраняйте его (`double?`) либо разворачивайте явно.
+Присваивание терминала в non-nullable `int`/`double` не компилируется. `?? 0` уместен только там,
+где ноль действительно означает «нет разброса»: иначе он подставляет ноль для неопределённого случая.
 
 ## Логические, битовые, статистические и упорядоченные агрегаты
 
@@ -642,7 +814,7 @@ var variance = dataContext.From<ISimpleEntity>().Select(x => SqlFunctions.Sql.va
 | Квантиль / медиана | `SqlFunctions.ClickHouse.quantile(0.5, x)`, `quantile_exact(0.9, x)`, `quantile_timing(0.5, x)`, `quantiles(new[] { 0.25, 0.5, 0.75 }, x)`, `median(x)` | `toFloat64(quantile(0.5)(x))`, `quantiles(0.25, 0.5, 0.75)(x)`, `toFloat64(median(x))`, ... | [`QuantileAggregates`](xref:NextORM.Core.ISqlDialect.QuantileAggregates) | ClickHouse |
 | Наиболее частые (top-K) | `SqlFunctions.ClickHouse.top_k(3, x)`, `top_k_weighted(2, x, w)` | `topK(3)(x)`, `topKWeighted(2)(x, w)` | [`TopKAggregates`](xref:NextORM.Core.ISqlDialect.TopKAggregates) | ClickHouse |
 | Произвольное значение | `SqlFunctions.Sql.any_agg(x)` | `ANY_VALUE(x)` / `any(x)` | [`SupportsAnyValueAggregate`](xref:NextORM.Core.ISqlDialect.SupportsAnyValueAggregate) | MySQL, ClickHouse |
-| Последняя строка | `SqlFunctions.ClickHouse.any_last(x)` | `anyLast(x)` | [`SupportsAnyAggregates`](xref:NextORM.Core.ISqlDialect.SupportsAnyAggregates) | ClickHouse |
+| Последняя строка | `SqlFunctions.ClickHouse.any_last(x)` | `anyLast(x)` | [`SupportsAnyLastAggregate`](xref:NextORM.Core.ISqlDialect.SupportsAnyLastAggregate) | ClickHouse |
 | С фильтром | `SqlFunctions.Sql.count(() => p)`, `sum(x, () => p)`, `avg(x, () => p)`, `min(x, () => p)`, `max(x, () => p)` | `count(*) filter (where p)`, ... / `countIf(p)`, `sumIf(x, p)`, ... | [`AggregateFilterStyle`](xref:NextORM.Core.ISqlDialect.AggregateFilterStyle) | PostgreSQL (9.4+), SQLite (ANSI `FILTER`), ClickHouse (`-If`) |
 | Последовательности / воронка | `SqlFunctions.ClickHouse.window_funnel(window, ts, c1, c2)`, `sequence_match(pattern, ts, c1, c2)`, `retention(c1, c2)` | `toInt32(windowFunnel(window)(ts, c1, c2))`, `toInt32(sequenceMatch(pattern)(ts, c1, c2))`, `retention(c1, c2)` | [`SequenceAggregates`](xref:NextORM.Core.ISqlDialect.SequenceAggregates) | ClickHouse |
 | Упорядоченные | `SqlFunctions.Postgres.percentile_cont(fraction, () => x)`, `percentile_disc(fraction, () => x)`, `median(() => x)`, `mode(() => x)` | `percentile_cont(f) within group (order by x)`, `percentile_cont(0.5) within group (order by x)`, ... | [`SupportsOrderedAggregates`](xref:NextORM.Core.ISqlDialect.SupportsOrderedAggregates) (`mode`), [`SupportsOrderedPercentiles`](xref:NextORM.Core.ISqlDialect.SupportsOrderedPercentiles) (квантили, `median`) | PostgreSQL |
@@ -816,8 +988,11 @@ MySQL/MariaDB и не в провайдере in-memory. `WITH TOTALS` — то�
 
 ---
 
-Source: `tests/nextorm.integration.tests/CommonTestSuite/Queries/CommonTestSuite.GroupBy.cs:9`,
+Source: `tests/nextorm.integration.tests/CommonTestSuite/Queries/Rows/CommonTestSuite.GroupBy.cs:9`,
 `tests/nextorm.integration.tests/CommonTestSuite/Functions/CommonTestSuite.Aggregates.cs:9`,
 `tests/nextorm.sqlite.tests/SqlGeneration/SqlGenerationTests.cs:185`,
 `tests/nextorm.sqlserver.tests/SqlGeneration/SqlGenerationTests.cs:240`,
-`tests/nextorm.postgres.tests/SqlGeneration/SqlGenerationTests.cs:181`.
+`tests/nextorm.postgres.tests/SqlGeneration/SqlGenerationTests.cs:181`,
+`tests/nextorm.integration.tests/CommonTestSuite/Queries/Rows/CommonTestSuite.SelectWhereExtrema.cs:41`,
+`tests/nextorm.sqlite.tests/SqlGeneration/Sources/T302ExtremeRowAllSqlGenerationTests.cs:27`,
+`tests/nextorm.integration.tests/ClickHouse/Integration/ClickHouseIntegrationTests.cs:1353`.

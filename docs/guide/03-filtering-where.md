@@ -168,7 +168,7 @@ mapped column (or its converter), not from the runtime null, so a SQL Server par
 ### Not covered
 
 The rewrite is deliberately limited to a DB column compared with a captured nullable/string variable.
-The following keep their previous behaviour and are **not** automatically null-safe:
+The following are **not** automatically null-safe:
 
 * a nullable column compared with another nullable column — in `WHERE`, a `SELECT` projection or
   `JOIN ON`;
@@ -215,7 +215,7 @@ select id
  from complex_entity where not (b)
 ```
 
-The `Output:` tables below show the rows returned by each example against the integration-test seed data (`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).
+The `Output:` tables below show the rows returned by each example against the integration-test seed data (`tests/nextorm.integration.tests/Providers/TestProviders/SqliteTestProvider.cs`).
 
 Output:
 
@@ -638,9 +638,9 @@ Source: `tests/nextorm.integration.tests/CommonTestSuite/Raw/CommonTestSuite.Sql
 `tests/nextorm.integration.tests/CommonTestSuite/Raw/CommonTestSuite.SqlCommand.cs:244`,
 `tests/nextorm.integration.tests/CommonTestSuite/Raw/CommonTestSuite.SqlCommand.cs:254`,
 `tests/nextorm.integration.tests/CommonTestSuite/Raw/CommonTestSuite.SqlCommand.cs:276`,
-`tests/nextorm.integration.tests/CommonTestSuite/Queries/CommonTestSuite.Conditional.cs:9`,
-`tests/nextorm.integration.tests/CommonTestSuite/Queries/CommonTestSuite.Unary.cs:8`,
-`tests/nextorm.integration.tests/CommonTestSuite/Queries/CommonTestSuite.In.cs:9`,
+`tests/nextorm.integration.tests/CommonTestSuite/Queries/Predicates/CommonTestSuite.Conditional.cs:9`,
+`tests/nextorm.integration.tests/CommonTestSuite/Queries/Predicates/CommonTestSuite.Unary.cs:8`,
+`tests/nextorm.integration.tests/CommonTestSuite/Queries/Predicates/CommonTestSuite.In.cs:9`,
 `tests/nextorm.sqlite.tests/SqlGeneration/SqlGenerationTests.cs:602`,
 `tests/nextorm.sqlite.tests/SqlGeneration/SqlGenerationTests.cs:664`,
 `tests/nextorm.sqlite.tests/SqlGeneration/SqlGenerationTests.cs:775`,
@@ -650,5 +650,5 @@ Source: `tests/nextorm.integration.tests/CommonTestSuite/Raw/CommonTestSuite.Sql
 `tests/nextorm.sqlite.tests/SqlGeneration/SqlGenerationTests.cs:1107`,
 `tests/nextorm.sqlserver.tests/SqlGeneration/SqlGenerationTests.cs:422`,
 `tests/nextorm.postgres.tests/SqlGeneration/SqlGenerationTests.cs:367`,
-`src/nextorm.core/Query/SqlFunctions.cs:185`;
-`src/nextorm.core/Visitors/BaseExpressionVisitor.cs:2032`.
+`src/nextorm.core/Query/SqlFunctions/SqlFunctions.cs:185`;
+`src/nextorm.core/Visitors/Core/BaseExpressionVisitor.cs:2032`.

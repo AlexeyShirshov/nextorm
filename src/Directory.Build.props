@@ -10,6 +10,21 @@
     <IsPackable>true</IsPackable>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <!--
+      Package validation is the packaged-output half of the API gate (issue #53): it compares the
+      package's own assets (net10.0 vs net11.0) and, once a stable baseline exists, the published
+      package it replaces. The source-tree half is PublicAPI.Shipped/Unshipped.txt next to each
+      library .csproj. Baseline validation is skipped for prerelease baselines, so
+      PackageValidationBaselineVersion is added when the first stable release (1.0.9) is on
+      nuget.org: the next release is then gated against it.
+    -->
+    <EnablePackageValidation>true</EnablePackageValidation>
+    <!--
+      Published packages ship one asset per supported consumer runtime. A net10.0 asset is also
+      loadable from a net11.0 application, but multi-targeting keeps the packages buildable against
+      future runtime-specific APIs and lets each consumer resolve its own nearest asset.
+    -->
+    <TargetFrameworks>$(NextormSupportedTargetFrameworks)</TargetFrameworks>
+    <!--
       Search keywords for nuget.org. Providers append their own below with
       <PackageTags>$(PackageTags);...</PackageTags>, so keep the shared set here.
     -->

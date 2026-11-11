@@ -41,7 +41,7 @@ The descriptor is context-independent: it carries no `DataContext`, composes wit
 a context only when it is consumed by `From`, a join or an APPLY. nextorm only emits the call — the
 function must already exist in the target database.
 
-The `Output:` tables below show the rows returned by each example against the integration-test seed data (`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).
+The `Output:` tables below show the rows returned by each example against the integration-test seed data (`tests/nextorm.integration.tests/Providers/TestProviders/SqliteTestProvider.cs`).
 
 Output:
 
@@ -50,31 +50,6 @@ Output:
 | 1     |
 | 2     |
 | 3     |
-
-### Breaking change in 1.0.9-rc4
-
-The previous static surface was removed **without a compatibility shim**:
-
-* the `[SqlTableFunction]` attribute and the `IQueryable<T>`-returning stub methods it annotated;
-* the table-function `From`/`CreateQueryBuilder…From` entry points that took
-  `Expression<Func<IQueryable<T>>>`.
-
-Every table-valued function is now a runtime factory as described below. Migrating an existing
-declaration replaces the attribute and the stub body with the descriptor, and the call site with a lambda
-source:
-
-```csharp
-// 1.0.9-rc4
-public static TvfEntityBuilder<ITvfRow> ById(long id) => new("rows_by_id");
-
-var rows = dataContext
-    .From(() => Tvf.ById(id))
-    .Select(r => new { r.Id })
-    .ToList();
-```
-
-The `[SqlTableFunction]` metadata (name, schema, `WithClause`, `CallClause`, verbatim indices, result
-schema) moves into the descriptor constructor unchanged; see [Declaring a runtime factory](#declaring-a-runtime-factory).
 
 ## Declaring a runtime factory
 
@@ -750,7 +725,7 @@ The result-schema forms each provider can render are listed in
 
 ---
 
-Source: `src/nextorm.core/Builders/TvfEntityBuilder.cs`, `src/nextorm.core/Builders/SourceExpressionLowerer.cs`, `src/nextorm.core/Builders/TvfJoinSourceExtensions.cs`, `src/nextorm.core/DataContext/SqlSourceRenderer.cs`;
-`tests/nextorm.core.tests/Builders/T320RuntimeTvfTests.cs`, `tests/nextorm.core.tests/Builders/T320RuntimeTvfIdentityTests.cs`;
+Source: `src/nextorm.core/Builders/Tvf/TvfEntityBuilder.cs`, `src/nextorm.core/Builders/Tvf/SourceExpressionLowerer.cs`, `src/nextorm.core/Builders/Tvf/TvfJoinSourceExtensions.cs`, `src/nextorm.core/DataContext/Sql/SqlSourceRenderer.cs`;
+`tests/nextorm.core.tests/Builders/Tvf/T320RuntimeTvfTests.cs`, `tests/nextorm.core.tests/Builders/Tvf/T320RuntimeTvfIdentityTests.cs`;
 `tests/nextorm.integration.tests/T320/T320MariaDbTvfTests.cs`;
 generated SQL: `tests/nextorm.sqlite.tests/T320/T320RuntimeTvfSqlTests.cs`, `tests/nextorm.sqlserver.tests/T320/T320RuntimeTvfSqlTests.cs`, `tests/nextorm.postgres.tests/T320/T320RuntimeTvfSqlTests.cs`, `tests/nextorm.mysql.tests/T320/T320RuntimeTvfSqlTests.cs`, `tests/nextorm.clickhouse.tests/T320/T320RuntimeTvfSqlTests.cs`.

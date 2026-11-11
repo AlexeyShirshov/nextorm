@@ -222,6 +222,6 @@ On the in-memory provider the value is materialised before the terminal wraps it
 
 ---
 
-Source: `src/nextorm.core/Query/QueryCommandExtensions.cs`, `src/nextorm.core/DataContext/CommandReaderOwner.cs`,
-`src/nextorm.core/DataContext/LobDataReader.cs`,
+Source: `src/nextorm.core/Query/Commands/QueryCommandExtensions.cs`, `src/nextorm.core/DataContext/Results/CommandReaderOwner.cs`,
+`src/nextorm.core/DataContext/Lob/LobDataReader.cs`,
 `tests/nextorm.integration.tests/CommonTestSuite/Lob/CommonTestSuite.Lob.cs` and the SQL-generation/dialect tests for `SupportsSequentialAccess`.

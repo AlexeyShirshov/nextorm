@@ -21,12 +21,27 @@
   </PropertyGroup>
 
   <!--
+    Target frameworks are declared per area, because the published libraries and the projects
+    that consume them differ:
+      * src/**            - the published packages multi-target every supported consumer runtime
+                            (NextormSupportedTargetFrameworks below), so a consumer on .NET 10 or
+                            .NET 11 gets a matching asset;
+      * tests/**, benchmarks/**, examples/** - non-shipped projects run on the newest supported
+                            runtime only (NextormHostTargetFramework). They compile against the
+                            matching library asset instead of doubling every suite.
+    A project outside those areas must declare its own TargetFramework.
+  -->
+  <PropertyGroup>
+    <NextormSupportedTargetFrameworks>net10.0;net11.0</NextormSupportedTargetFrameworks>
+    <NextormHostTargetFramework>net11.0</NextormHostTargetFramework>
+  </PropertyGroup>
+
+  <!--
     Properties shared by every project. Override locally only where a project genuinely differs
     (e.g. the source generator targets netstandard2.0). Packaging metadata for the published
     libraries lives in src/Directory.Build.props.
   -->
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
@@ -53,7 +68,7 @@
     The packaging CI job overrides it with -p:Version=<git tag> on the release tag.
   -->
   <PropertyGroup>
-    <Version>1.0.9-rc4</Version>
+    <Version>1.0.9-rc5</Version>
   </PropertyGroup>
 
 </Project>

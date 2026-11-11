@@ -19,7 +19,7 @@ public sealed class Cycle8GroupingCollectionDefinition;
 /// that a warmed plan re-binds a changed captured value.
 ///
 /// <para>
-/// Targeted arms of <c>src/nextorm.core/DataContext/SqlBuilder.cs</c>: the out-of-range grouping-set
+/// Targeted arms of <c>src/nextorm.core/DataContext/Sql/SqlBuilder.cs</c>: the out-of-range grouping-set
 /// index guard (:294-295, both operands of the range test) and the parameter pass of the portable
 /// extreme-row outer statement (:1351-1367 — the select-list walk and the sort walk, reached only when
 /// <c>SqlContext.ParamMode</c> is true), together with the parameter-mode rank-expression walk it

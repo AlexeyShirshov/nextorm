@@ -365,13 +365,14 @@ result column.
 > `array_map(v => v, new int?[] { 1, null, 3 })` yields `{ 1, null, 3 }`. Empty and all-`null` arrays carry
 > the same typed element, and the caller's array is not mutated. Non-nullable element arrays (`int[]`,
 > `double[]`, `DateTime[]`, `decimal[]`, `byte[]`) are unchanged; nested/jagged and multidimensional arrays
-> and a `null` array object are **not supported** and keep the previous (driver-inferred) behaviour.
+> and a `null` array object are **not supported**.
 > Array **results** follow the same element rule: a **reference-type** element result is declared
 > `Nullable(...)` unconditionally (a `string[]`/`string?[]` result renders `Array(Nullable(String))`, a
-> jagged one `Array(Array(Nullable(String)))`) and still materialises as a CLR `string[]` — only the
-> rendered SQL text changes, not the data, the CLR type or the public API, while value-type elements
+> jagged one `Array(Array(Nullable(String)))`) and materialises as a CLR `string[]`; the element
+> declaration affects only the rendered SQL text, not the data, the CLR type or the public API, while
+> value-type elements
 > (`int[]`, `int?[]`, `byte[]`) are unaffected. Decimal array **results** are materialised in both
-> shapes since [#337](https://github.com/AlexeyShirshov/nextorm/issues/337):
+> shapes:
 > `Array(Nullable(Decimal(38,10)))` → `decimal?[]` and `Array(Decimal(38,10))` → `decimal[]`, through
 > the direct, member-bound, multi-column and raw read routes, with every representable value preserved
 > exactly (no rounding, truncation or culture conversion). A `Decimal(38,10)` element whose scaled

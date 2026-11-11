@@ -17,6 +17,11 @@
   </ItemGroup>
 
   <PropertyGroup>
+    <!--
+      The analyzer is TFM-agnostic and lives at a single package path, so it is added from the first
+      supported TFM only; adding it from every TFM makes NuGet reject the duplicate (NU5118).
+    -->
+    <_NextormPackagingTargetFramework>$([System.String]::Copy('$(NextormSupportedTargetFrameworks)').Split(';')[0])</_NextormPackagingTargetFramework>
     <!-- Pack the join-alias Roslyn generator into analyzers/dotnet/cs of the `nextorm` package so
          consumers get it automatically. The referenced project is build-only: it is NOT added to
          core's own compilation as an Analyzer. -->
@@ -33,9 +38,10 @@
 
   <!-- Resolve the generator's built output through its own GetTargetPath so the per-host-OS
        bin/<os>/ redirect is honored (no hardcoded bin path), then place the DLL under
-       analyzers/dotnet/cs. TargetFramework is removed so the net10.0 core TFM does not override
-       the generator's own netstandard2.0. -->
-  <Target Name="_AddSourceGeneratorToPackage">
+       analyzers/dotnet/cs. TargetFramework is removed so the multi-targeted consumer TFMs do not
+       override the generator's own netstandard2.0. -->
+  <Target Name="_AddSourceGeneratorToPackage"
+          Condition="'$(TargetFramework)' == '$(_NextormPackagingTargetFramework)'">
     <MSBuild Projects="..\nextorm.core.sourcegenerator\nextorm.core.sourcegenerator.csproj"
              Targets="GetTargetPath"
              Properties="Configuration=$(Configuration)"
@@ -98,4 +104,16 @@
          test projects use; no product behaviour depends on it. -->
     <InternalsVisibleTo Include="nextorm.benchmark" />
   </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Public API tracking (issue #53, IF6). Every change to the public surface must be declared in
+      PublicAPI.Unshipped.txt: RS0016 (member missing from the file) and RS0017 (stale entry) are
+      build errors here, because the repository treats warnings as errors everywhere.
+    -->
+    <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
+    <AdditionalFiles Include="PublicAPI.Shipped.txt" />
+    <AdditionalFiles Include="PublicAPI.Unshipped.txt" />
+  </ItemGroup>
+
 </Project>

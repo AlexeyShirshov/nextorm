@@ -28,3 +28,10 @@ dotnet_diagnostic.S1104.severity = silent
 dotnet_diagnostic.S3604.severity = silent
 
 dotnet_diagnostic.S2292.severity = silent
+
+# Public API tracking (issue #53). Pinned as errors in their own right, so an undeclared addition
+# (RS0016) or a stale declaration (RS0017) fails the build even in a project that relaxes
+# TreatWarningsAsErrors. The baseline lives in PublicAPI.Shipped.txt / PublicAPI.Unshipped.txt
+# next to each library .csproj.
+dotnet_diagnostic.RS0016.severity = error
+dotnet_diagnostic.RS0017.severity = error

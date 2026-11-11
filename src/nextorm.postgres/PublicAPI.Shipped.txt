@@ -1,0 +1,157 @@
+#nullable enable
+NextORM.Postgres.PostgresDataContext
+NextORM.Postgres.PostgresDataContext.PostgresDataContext(string! connectionString, NextORM.Core.DataContextBuilder! optionsBuilder) -> void
+NextORM.Postgres.PostgresDataContext.PostgresDataContext(string! connectionString, NextORM.Core.DataContextBuilder! optionsBuilder, System.Version? serverVersion) -> void
+NextORM.Postgres.PostgresDataContext.PostgresDataContext(System.Data.Common.DbConnection! connection, NextORM.Core.DataContextBuilder! optionsBuilder) -> void
+NextORM.Postgres.PostgresDataContext.PostgresDataContext(System.Data.Common.DbConnection! connection, NextORM.Core.DataContextBuilder! optionsBuilder, System.Version? serverVersion) -> void
+NextORM.Postgres.PostgresDataContextOptionsBuilderExtensions
+NextORM.Postgres.PostgresDialect
+NextORM.Postgres.PostgresDialect.PostgresDialect() -> void
+NextORM.Postgres.PostgresDialect.PostgresDialect(System.Version? serverVersion) -> void
+NextORM.Postgres.PostgresEntityBuilderExtensions
+override NextORM.Postgres.PostgresDataContext.BulkInsertRows(string! tableName, System.Collections.Generic.IReadOnlyList<string!>! columnNames, System.Collections.Generic.IReadOnlyList<NextORM.Core.IPropertyMetadata!>! columns, System.Collections.Generic.IEnumerable<object?[]!>! rows, int? commandTimeoutSeconds, int? maxBatchSize, System.Action<int>? progress, int notifyEvery, NextORM.Core.BulkCopyFlags bulkCopy) -> int
+override NextORM.Postgres.PostgresDataContext.BulkInsertRowsAsync(string! tableName, System.Collections.Generic.IReadOnlyList<string!>! columnNames, System.Collections.Generic.IReadOnlyList<NextORM.Core.IPropertyMetadata!>! columns, System.Collections.Generic.IAsyncEnumerable<object?[]!>! rows, int? commandTimeoutSeconds, int? maxBatchSize, System.Action<int>? progress, int notifyEvery, NextORM.Core.BulkCopyFlags bulkCopy, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<int>!
+override NextORM.Postgres.PostgresDataContext.CreateDbConnection(string? connectionString) -> System.Data.Common.DbConnection!
+override NextORM.Postgres.PostgresDataContext.CreateParam(string! name, object? value) -> System.Data.Common.DbParameter!
+override NextORM.Postgres.PostgresDataContext.CreateProcedureParameter(NextORM.Core.ProcedureParameter parameter) -> System.Data.Common.DbParameter!
+override NextORM.Postgres.PostgresDataContext.Dialect.get -> NextORM.Core.ISqlDialect!
+override NextORM.Postgres.PostgresDataContext.IsGenuineCompositeColumn(System.Data.Common.DbDataReader! reader, int ordinal) -> bool
+override NextORM.Postgres.PostgresDataContext.MapColumnExpression(NextORM.Core.SelectExpression! column, System.Linq.Expressions.Expression! param) -> System.Linq.Expressions.Expression!
+override NextORM.Postgres.PostgresDataContext.SupportsRawRowColumns.get -> bool
+override NextORM.Postgres.PostgresDataContext.TimeOnlyProjectionRefusal.get -> string?
+override NextORM.Postgres.PostgresDialect.AggregateFilterStyle.get -> NextORM.Core.AggregateFilterStyle
+override NextORM.Postgres.PostgresDialect.ConcatStringOperator.get -> string!
+override NextORM.Postgres.PostgresDialect.DeleteJoinRequiresUsing.get -> bool
+override NextORM.Postgres.PostgresDialect.DistinctOn.get -> NextORM.Core.IDistinctOnRenderer!
+override NextORM.Postgres.PostgresDialect.Escape(string! keyword) -> string!
+override NextORM.Postgres.PostgresDialect.ExtremeRowRenderer.get -> NextORM.Core.IExtremeRowRenderer?
+override NextORM.Postgres.PostgresDialect.Iif.get -> NextORM.Core.IIifRenderer!
+override NextORM.Postgres.PostgresDialect.Lock.get -> NextORM.Core.ILockRenderer!
+override NextORM.Postgres.PostgresDialect.MakeAggregate(string! name) -> string!
+override NextORM.Postgres.PostgresDialect.MakeBase64Decode(string! value) -> string!
+override NextORM.Postgres.PostgresDialect.MakeBase64Encode(string! value) -> string!
+override NextORM.Postgres.PostgresDialect.MakeBool(bool v) -> string!
+override NextORM.Postgres.PostgresDialect.MakeCoalesce(string! v1, string! v2) -> string!
+override NextORM.Postgres.PostgresDialect.MakeCollate(string! value, string! collation, NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> string!
+override NextORM.Postgres.PostgresDialect.MakeColumnReference(string! name) -> string!
+override NextORM.Postgres.PostgresDialect.MakeCreateTableAsHead(NextORM.Core.CreateTableAsClause clause, NextORM.Core.KeywordCase keywordCase) -> string!
+override NextORM.Postgres.PostgresDialect.MakeCreateTableAsTail(NextORM.Core.CreateTableAsClause clause, NextORM.Core.KeywordCase keywordCase) -> string!
+override NextORM.Postgres.PostgresDialect.MakeCryptGenRandom(string! length) -> string!
+override NextORM.Postgres.PostgresDialect.MakeDateAdd(string! field, string! amount, string! value, bool isDateTimeOffset) -> string!
+override NextORM.Postgres.PostgresDialect.MakeDateDiffBig(string! field, string! start, string! end) -> string!
+override NextORM.Postgres.PostgresDialect.MakeDatePart(string! part, string! value) -> string!
+override NextORM.Postgres.PostgresDialect.MakeDatePart(string! part, string! value, bool isDateTimeOffset) -> string!
+override NextORM.Postgres.PostgresDialect.MakeDateTimeOffsetNow(bool utc) -> string!
+override NextORM.Postgres.PostgresDialect.MakeDeleteJoin(string! target, string! targetAlias, string! fromAndJoins, string! usingSources, string! joinConditions, string? whereSql, NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> string!
+override NextORM.Postgres.PostgresDialect.MakeDurationType(NextORM.Core.DurationUnit? unit, int precision = 0) -> string!
+override NextORM.Postgres.PostgresDialect.MakeFullText(string! functionName, string! column, string! search) -> string!
+override NextORM.Postgres.PostgresDialect.MakeIdentityFunction(NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> string!
+override NextORM.Postgres.PostgresDialect.MakeMathFunction(string! name, System.Collections.Generic.IReadOnlyList<string!>! args) -> string!
+override NextORM.Postgres.PostgresDialect.MakeMathFunction(string! name, System.Collections.Generic.IReadOnlyList<string!>! args, System.Collections.Generic.IReadOnlyList<System.Type!>! argTypes) -> string!
+override NextORM.Postgres.PostgresDialect.MakeMergeReturning(System.Collections.Generic.IReadOnlyList<string!>! columns, NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> string!
+override NextORM.Postgres.PostgresDialect.MakeOrdinal(string! value, bool ignoreCase) -> string!
+override NextORM.Postgres.PostgresDialect.MakeOverridingSystemValue(NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> string!
+override NextORM.Postgres.PostgresDialect.MakePage(NextORM.Core.Paging paging, System.Text.StringBuilder! sqlBuilder, NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> void
+override NextORM.Postgres.PostgresDialect.MakeParam(string! name) -> string!
+override NextORM.Postgres.PostgresDialect.MakeRegexMatch(string! value, string! pattern, bool ignoreCase) -> string!
+override NextORM.Postgres.PostgresDialect.MakeRegexReplace(string! value, string! pattern, string! replacement, bool ignoreCase) -> string!
+override NextORM.Postgres.PostgresDialect.MakeRepeat(string! value, string! count) -> string!
+override NextORM.Postgres.PostgresDialect.MakeStringPosition(string! value, string! substring) -> string!
+override NextORM.Postgres.PostgresDialect.MakeStringReverse(string! value) -> string!
+override NextORM.Postgres.PostgresDialect.MakeStuff(string! value, string! start, string? count, string! newValue) -> string!
+override NextORM.Postgres.PostgresDialect.MakeTableFunctionAlias(string! tableAlias, string? columnDefinitionList, NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> string!
+override NextORM.Postgres.PostgresDialect.MakeTypeName(System.Type! type) -> string!
+override NextORM.Postgres.PostgresDialect.NullSafeComparison.get -> NextORM.Core.INullSafeComparisonRenderer?
+override NextORM.Postgres.PostgresDialect.RenderOrderBy(string! expressionSql, NextORM.Core.OrderDirection direction, NextORM.Core.NullsPosition nullsPosition) -> string!
+override NextORM.Postgres.PostgresDialect.RenderQueryHints(string! sql, System.Collections.Generic.IReadOnlyList<string!>! hints, string? maxRecursionOption, NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> string!
+override NextORM.Postgres.PostgresDialect.RequireSubqueryAlias.get -> bool
+override NextORM.Postgres.PostgresDialect.ScalarFunctions.get -> NextORM.Core.IScalarFunctions!
+override NextORM.Postgres.PostgresDialect.SessionInfoFunctions.get -> NextORM.Core.ISessionInfoFunctions!
+override NextORM.Postgres.PostgresDialect.StringFormats.get -> NextORM.Core.IStringFormatFunctions?
+override NextORM.Postgres.PostgresDialect.SupportsApply.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsArrayFunction(string! name) -> bool
+override NextORM.Postgres.PostgresDialect.SupportsArrays.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsBase64Decode.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsBase64Encode.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsBatch.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsBitAggregates.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsBooleanAggregates.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsBulkCopy.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsCollation.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsColumnDefault.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsCreateTableAsSelect.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsCreateTableAsSelectColumnList.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsCreateTableAsSelectIfNotExists.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsCreateTableAsSelectOnCommit.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsCreateTableAsSelectWithNoData.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsCryptGenRandom.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsCryptoFunctions.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsCube.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsDataModifyingCtes.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsDateArithmetic.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsDatePart(string! part) -> bool
+override NextORM.Postgres.PostgresDialect.SupportsDateTimeOffsetTranslation.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsDateTrunc.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsDefaultValues.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsDeleteJoin.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsDeleteJoinReturning.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsExtendedScalarFunctions.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsFullText.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsGreatestLeast.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsGroupingSets.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsIdentityFunction.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsInlineHints.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsIntersectExceptAll.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsJson.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsMergeConditionalBranches.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsMergeDelete.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsMergeDoNothing.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsMergeStatement.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsMergeTargetQualification.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsNamedWindows.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsNativeDuration.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsNthValue.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsNullsOrdering.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsOnConflict.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsOnConflictDoNothing.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsOrderedAggregates.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsOrderedPercentiles.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsOrdinalComparison.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsPercentRankCumeDist.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsPostgresJsonSql.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsQueryHints.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsRandomSeed.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsRangeColumns.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsRanges.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsRawSqlSource.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsRegex.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsRegressionAggregates.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsResultSchema(NextORM.Core.TableFunctionSchema placement) -> bool
+override NextORM.Postgres.PostgresDialect.SupportsReturning.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsRollup.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsSavepoints.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsSelectWhereMinMax.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsSequentialAccess.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsStatisticalAggregates.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsStoredProcedures.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsStringArrayAggregates.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsSubQueryHints.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsTableFunction(string! name) -> bool
+override NextORM.Postgres.PostgresDialect.SupportsTableValuedParameters.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsTextSearchFunctions.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsTruncate.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsUpdateJoin.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsUpdateJoinReturning.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsWindowFrameExclusion.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsWindowFrameGroups.get -> bool
+override NextORM.Postgres.PostgresDialect.SupportsWithTies.get -> bool
+override NextORM.Postgres.PostgresDialect.TableSample.get -> NextORM.Core.ITableSampleMethods!
+override NextORM.Postgres.PostgresDialect.Tuple.get -> NextORM.Core.ITupleRenderer?
+override NextORM.Postgres.PostgresDialect.UpdateJoinRequiresFrom.get -> bool
+override NextORM.Postgres.PostgresDialect.UuidGenerators.get -> NextORM.Core.IUuidGenerators!
+override NextORM.Postgres.PostgresDialect.WrapTableFunction(string! name, string! call) -> string!
+override NextORM.Postgres.PostgresDialect.WrapTableFunction(string! name, string! call, System.Collections.Generic.IReadOnlyList<string!>! arguments) -> string!
+static NextORM.Postgres.PostgresDataContextOptionsBuilderExtensions.UsePostgres(this NextORM.Core.DataContextBuilder! builder, string! connectionString) -> NextORM.Core.DataContextBuilder!
+static NextORM.Postgres.PostgresDataContextOptionsBuilderExtensions.UsePostgres(this NextORM.Core.DataContextBuilder! builder, System.Data.Common.DbConnection! connection) -> NextORM.Core.DataContextBuilder!
+static NextORM.Postgres.PostgresEntityBuilderExtensions.DistinctOn<TEntity, TResult>(this NextORM.Core.EntityBuilder<TEntity>! builder, System.Linq.Expressions.Expression<System.Func<TEntity, TResult>!>! exp) -> NextORM.Core.EntityBuilder<TEntity>!
+static readonly NextORM.Postgres.PostgresDialect.Instance -> NextORM.Postgres.PostgresDialect!

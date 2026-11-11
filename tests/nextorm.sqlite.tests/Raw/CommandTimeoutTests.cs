@@ -132,7 +132,7 @@ public class CommandTimeoutTests
     {
         var interceptor = new CapturingInterceptor();
         var path = Path.Combine(Path.GetTempPath(), $"nextorm-timeout-{Guid.NewGuid():N}.db");
-        using (var connection = new SqliteConnection($"Data Source={path}"))
+        using (var connection = new SqliteConnection($"Data Source={path};Pooling=False"))
         {
             connection.Open();
             using var setup = connection.CreateCommand();
@@ -143,7 +143,7 @@ public class CommandTimeoutTests
         try
         {
             using var ctx = new SqliteDataContext(
-                $"Data Source={path}",
+                $"Data Source={path};Pooling=False",
                 new DataContextBuilder().UseCommandTimeout(13).AddInterceptor(interceptor));
 
             ctx.CreateDeleteBuilder<ISimpleEntity>().All().Delete();

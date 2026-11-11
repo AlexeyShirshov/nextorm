@@ -101,7 +101,7 @@ public class RawCommandTests
     private static (IDataContext Context, string Path) CreateDb(DataContextBuilder? builder = null)
     {
         var path = Path.Combine(Path.GetTempPath(), $"nextorm-raw-{Guid.NewGuid():N}.db");
-        using (var connection = new SqliteConnection($"Data Source={path}"))
+        using (var connection = new SqliteConnection($"Data Source={path};Pooling=False"))
         {
             connection.Open();
             using var command = connection.CreateCommand();
@@ -120,7 +120,7 @@ public class RawCommandTests
             command.ExecuteNonQuery();
         }
 
-        return (new SqliteDataContext($"Data Source={path}", builder ?? new DataContextBuilder()), path);
+        return (new SqliteDataContext($"Data Source={path};Pooling=False", builder ?? new DataContextBuilder()), path);
     }
 
     // Direct tokenless expanded-params calls live in plain helpers: xUnit1051 rejects them inside a

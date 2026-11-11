@@ -1,0 +1,1634 @@
+using Microsoft.Extensions.Logging;
+using System.Linq.Expressions;
+using System.Runtime.CompilerServices;
+
+namespace NextORM.Core;
+
+/// <summary>
+/// A strongly typed query command producing <typeparamref name="TResult"/> rows. It adds the
+/// terminal execution surface - materialization, scalar and aggregate terminals, and set operations -
+/// on top of the relational shape carried by <see cref="QueryCommand"/>.
+/// </summary>
+/// <typeparam name="TResult">The projected row, element or scalar type produced by the command.</typeparam>
+public sealed partial class QueryCommand<TResult> : QueryCommand
+{
+
+    /// <summary>
+    /// Initializes a command of type <typeparamref name="TResult"/> from a query shape.
+    /// </summary>
+    /// <param name="dataProvider">The context that executes the command, or <c>null</c> when the command is an unbound clone.</param>
+    /// <param name="definition">The shape (projection, filtering, joins, grouping, sorting and provider clauses) to copy from.</param>
+    public QueryCommand(IDataContext? dataProvider, QueryDefinition definition)
+        : base(dataProvider, definition)
+    {
+        ResultType = typeof(TResult);
+    }
+    /// <summary>
+    /// Initializes a command of type <typeparamref name="TResult"/>, optionally taking ownership of the
+    /// shape's joins; see <see cref="QueryCommand"/>'s ownership-aware constructor.
+    /// </summary>
+    internal QueryCommand(IDataContext? dataProvider, QueryDefinition definition, bool ownJoins)
+        : base(dataProvider, definition, ownJoins)
+    {
+        ResultType = typeof(TResult);
+    }
+    /// <summary>
+    /// Initializes a command of type <typeparamref name="TResult"/> by transferring the shape of an
+    /// existing command, without materialising a <see cref="QueryDefinition"/>; see
+    /// <see cref="QueryCommand"/>'s copy constructor.
+    /// </summary>
+    internal QueryCommand(IDataContext? dataProvider, QueryCommand source, bool forCache)
+        : base(dataProvider, source, forCache)
+    {
+        ResultType = typeof(TResult);
+    }
+    /// <summary>
+    /// Initializes a command of type <typeparamref name="TResult"/> from a stack-only
+    /// <see cref="QueryShape"/>; see <see cref="QueryCommand"/>'s shape constructor.
+    /// </summary>
+    internal QueryCommand(IDataContext? dataProvider, QueryShape shape, bool ownJoins)
+        : base(dataProvider, shape, ownJoins)
+    {
+        ResultType = typeof(TResult);
+    }
+    /// <summary>
+    /// Prepares the command and records <typeparamref name="TResult"/> in the result plan. The result
+    /// type hash is folded into the plan key only when <paramref name="dontCalculateHash"/> is <c>false</c>.
+    /// </summary>
+    /// <param name="dontCalculateHash">When <c>true</c>, skips recomputing the plan hashes; the caller promises the shape is unchanged.</param>
+    /// <param name="cancellationToken">A token to cancel preparation.</param>
+    public override void PrepareCommand(bool dontCalculateHash, CancellationToken cancellationToken)
+    {
+        base.PrepareCommand(dontCalculateHash, cancellationToken);
+        if (!dontCalculateHash)
+        {
+            ResultPlanHash = typeof(TResult).GetHashCode();
+        }
+        ResultType = typeof(TResult);
+    }
+    /// <summary>
+    /// Prepares the command so it can be executed repeatedly, typically with different parameter values.
+    /// </summary>
+    /// <param name="options">
+    /// How the prepared command reuses its underlying command and whether rows are streamed. The default
+    /// value prepares a buffered command whose underlying command is reused per connection.
+    /// </param>
+    /// <param name="cancellationToken">A token to cancel preparation.</param>
+    /// <returns>The prepared query command.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="options"/> carries a <see cref="PreparedCommandCache"/> value that is not defined.
+    /// </exception>
+    public IPreparedQueryCommand<TResult> Prepare(PrepareOptions options = default, CancellationToken cancellationToken = default)
+    {
+        if (!Enum.IsDefined(options.Cache))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(options),
+                options.Cache,
+                "The prepared-command cache policy is not a defined PreparedCommandCache value; use PreparedCommandCache.Connection or PreparedCommandCache.None.");
+        }
+
+        return _dataContext!.GetPreparedQueryCommand(this, options.Streaming, false, options.Cache, cancellationToken);
+    }
+    /// <summary>
+    /// Prepares the command and returns an async enumerator over its rows.
+    /// </summary>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>An async enumerator over the result rows.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public IAsyncEnumerator<TResult> CreateAsyncEnumerator(params object[]? @params) => CreateAsyncEnumerator(CancellationToken.None, @params);
+    /// <summary>
+    /// Prepares the command and returns an async enumerator over its rows.
+    /// </summary>
+    /// <param name="cancellationToken">A token observed while preparing and while enumerating rows.</param>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>An async enumerator over the result rows.</returns>
+    public IAsyncEnumerator<TResult> CreateAsyncEnumerator(CancellationToken cancellationToken, params object[]? @params)
+    {
+        var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, true, true, cancellationToken);
+
+        return _dataContext.CreateAsyncEnumerator<TResult>(preparedCommand, @params, cancellationToken);
+    }
+    /// <summary>
+    /// Prepares the command and returns a task producing a synchronous row enumerator.
+    /// </summary>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>A task producing an enumerator over the result rows.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Task<IEnumerator<TResult>> CreateEnumeratorAsync(params object[]? @params) => CreateEnumeratorAsync(CancellationToken.None, @params);
+    /// <summary>
+    /// Prepares the command and returns a task producing a synchronous row enumerator.
+    /// </summary>
+    /// <param name="cancellationToken">A token observed while preparing and opening the reader.</param>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>A task producing an enumerator over the result rows.</returns>
+    public Task<IEnumerator<TResult>> CreateEnumeratorAsync(CancellationToken cancellationToken, params object[]? @params)
+    {
+        var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, true, true, cancellationToken);
+
+        return _dataContext.CreateEnumeratorAsync<TResult>(preparedCommand, @params, cancellationToken);
+    }
+    /// <summary>Streams the result set asynchronously using the default cancellation token.</summary>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>An async stream of the result rows.</returns>
+    public IAsyncEnumerable<TResult> Pipeline(params object[] @params) => Pipeline(CancellationToken.None, @params);
+    /// <summary>
+    /// Streams the result set asynchronously. The previous implementation ran the synchronous
+    /// <see cref="ToEnumerable"/> on a thread-pool thread and pushed every row through an
+    /// unbounded <c>Channel</c>: it blocked a pool thread for the whole result set, buffered the
+    /// entire result in memory when the consumer was slower, and observed cancellation only
+    /// between rows. Driving the async enumerator directly keeps the same semantics without the
+    /// extra thread and without the unbounded buffer.
+    /// </summary>
+    public async IAsyncEnumerable<TResult> Pipeline(
+        [EnumeratorCancellation] CancellationToken cancellationToken,
+        params object[] @params)
+    {
+        var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, true, true, cancellationToken);
+
+        await using var enumerator = _dataContext.CreateAsyncEnumerator<TResult>(preparedCommand, @params, cancellationToken);
+        while (await enumerator.MoveNextAsync().ConfigureAwait(false))
+            yield return enumerator.Current;
+    }
+    /// <summary>Returns the result set as an async stream using the default cancellation token.</summary>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>An async stream of the result rows.</returns>
+    public IAsyncEnumerable<TResult> ToAsyncEnumerable(params object[] @params)
+        => ToAsyncEnumerableCore(CancellationToken.None, @params);
+    /// <summary>Returns the result set as an async stream, using the supplied cancellation token.</summary>
+    /// <param name="cancellationToken">A token observed while enumerating rows.</param>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>An async stream of the result rows.</returns>
+    public IAsyncEnumerable<TResult> ToAsyncEnumerable(CancellationToken cancellationToken, params object[] @params)
+        => ToAsyncEnumerableCore(cancellationToken, @params);
+
+    // The command is prepared lazily, on the first MoveNextAsync of the returned sequence, so an
+    // enumerable that is never enumerated never creates the transient streaming DbCommand. This
+    // iterator is also the only terminal that promotes a projection with a live Stream/TextReader
+    // member to sequential access (see DataContext.GetStreamingRowsQueryCommand).
+    private async IAsyncEnumerable<TResult> ToAsyncEnumerableCore([EnumeratorCancellation] CancellationToken cancellationToken, object[] @params)
+    {
+        var dataContext = _dataContext!;
+        var preparedCommand = dataContext is DataContext db
+            ? db.GetStreamingRowsQueryCommand(this, cancellationToken)
+            : dataContext.GetPreparedQueryCommand(this, true, true, cancellationToken);
+
+        await foreach (var row in dataContext.GetAsyncEnumerable<TResult>(preparedCommand, cancellationToken, @params).ConfigureAwait(false))
+            yield return row;
+    }
+
+    /// <summary>
+    /// Writes the query's projected rows directly to <paramref name="destination"/> as a JSON array,
+    /// without materializing a <typeparamref name="TResult"/> per row. The destination is owned by the
+    /// caller and is never closed. Supported on database providers only.
+    /// </summary>
+    /// <param name="destination">The caller-owned output stream; it is never closed. On a read, serialization or destination error, or on cancellation, the operation stops and the original exception propagates; already-written bytes are left in place (no rollback and no recovery tail), the destination stays open, and the writer never adds a <c>Stream.Flush</c> call.</param>
+    /// <exception cref="NotSupportedException">The command is executed by the in-memory provider.</exception>
+    public void WriteJson(Stream destination) => WriteJson(destination, new JsonStreamOptions());
+
+    /// <summary>
+    /// Writes the query's projected rows directly to <paramref name="destination"/> as JSON using
+    /// <paramref name="options"/>, without materializing a <typeparamref name="TResult"/> per row. The
+    /// destination is owned by the caller and is never closed. Supported on database providers only.
+    /// </summary>
+    /// <param name="destination">The caller-owned output stream; it is never closed. On a read, serialization or destination error, or on cancellation, the operation stops and the original exception propagates; already-written bytes are left in place (no rollback and no recovery tail), the destination stays open, and the writer never adds a <c>Stream.Flush</c> call.</param>
+    /// <param name="options">The JSON container and shaping options.</param>
+    /// <exception cref="NotSupportedException">The command is executed by the in-memory provider, the projection shape is not supported, or the option combination is invalid.</exception>
+    public void WriteJson(Stream destination, JsonStreamOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(destination);
+        ArgumentNullException.ThrowIfNull(options);
+
+        RequireJsonContext().WriteJson(this, destination, options, null, CancellationToken.None);
+    }
+
+    /// <summary>
+    /// Asynchronously writes the query's projected rows directly to <paramref name="destination"/> as a
+    /// JSON array, without materializing a <typeparamref name="TResult"/> per row. The destination is
+    /// owned by the caller and is never closed. Supported on database providers only.
+    /// </summary>
+    /// <param name="destination">The caller-owned output stream; it is never closed. On a read, serialization or destination error, or on cancellation, the operation stops and the original exception propagates; already-written bytes are left in place (no rollback and no recovery tail), the destination stays open, and the writer never adds a <c>Stream.Flush</c> call.</param>
+    /// <param name="cancellationToken">A token observed while reading rows and writing to the stream.</param>
+    /// <returns>A task that completes when the whole document has been written.</returns>
+    /// <exception cref="NotSupportedException">The command is executed by the in-memory provider.</exception>
+    public Task WriteJsonAsync(Stream destination, CancellationToken cancellationToken = default)
+        => WriteJsonAsync(destination, new JsonStreamOptions(), cancellationToken);
+
+    /// <summary>
+    /// Asynchronously writes the query's projected rows directly to <paramref name="destination"/> as
+    /// JSON using <paramref name="options"/>, without materializing a <typeparamref name="TResult"/> per
+    /// row. The destination is owned by the caller and is never closed. Supported on database providers only.
+    /// </summary>
+    /// <param name="destination">The caller-owned output stream; it is never closed. On a read, serialization or destination error, or on cancellation, the operation stops and the original exception propagates; already-written bytes are left in place (no rollback and no recovery tail), the destination stays open, and the writer never adds a <c>Stream.Flush</c> call.</param>
+    /// <param name="options">The JSON container and shaping options.</param>
+    /// <param name="cancellationToken">A token observed while reading rows and writing to the stream.</param>
+    /// <returns>A task that completes when the whole document has been written.</returns>
+    /// <exception cref="NotSupportedException">The command is executed by the in-memory provider, the projection shape is not supported, or the option combination is invalid.</exception>
+    public Task WriteJsonAsync(Stream destination, JsonStreamOptions options, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(destination);
+        ArgumentNullException.ThrowIfNull(options);
+
+        return RequireJsonContext().WriteJsonAsync(this, destination, options, null, cancellationToken);
+    }
+
+    /// <summary>
+    /// Writes the query's projected rows directly to <paramref name="stream"/> as JSON using
+    /// <paramref name="options"/> and binding the positional SQL parameter values in
+    /// <paramref name="params"/>, without materializing a <typeparamref name="TResult"/> per row. The
+    /// destination is owned by the caller and is never closed. Supported on database providers only.
+    /// </summary>
+    /// <param name="stream">The caller-owned output stream; it is never closed. On a read, serialization or destination error, or on cancellation, the operation stops and the original exception propagates; already-written bytes are left in place (no rollback and no recovery tail), the destination stays open, and the writer never adds a <c>Stream.Flush</c> call.</param>
+    /// <param name="options">The JSON container and shaping options.</param>
+    /// <param name="cancellationToken">A token observed while preparing, reading rows and writing to the stream.</param>
+    /// <param name="params">
+    /// The positional SQL parameter values, in the order their placeholders appear. An empty set binds
+    /// nothing; a <see langword="null"/> element binds <see cref="System.DBNull"/>.
+    /// </param>
+    /// <exception cref="NotSupportedException">The command is executed by the in-memory provider, the projection shape is not supported, or the option combination is invalid.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="stream"/> or <paramref name="options"/> is <see langword="null"/>.</exception>
+    public void WriteJson(Stream stream, JsonStreamOptions options, CancellationToken cancellationToken, params ReadOnlySpan<object?> @params)
+    {
+        ArgumentNullException.ThrowIfNull(stream);
+        ArgumentNullException.ThrowIfNull(options);
+
+        var values = new object[@params.Length];
+        for (var i = 0; i < @params.Length; i++)
+            values[i] = @params[i]!;
+
+        RequireJsonContext().WriteJson(this, stream, options, values, cancellationToken);
+    }
+
+    /// <summary>
+    /// Asynchronously writes the query's projected rows directly to <paramref name="stream"/> as JSON
+    /// using <paramref name="options"/> and binding the positional SQL parameter values in
+    /// <paramref name="params"/>, without materializing a <typeparamref name="TResult"/> per row. The
+    /// destination is owned by the caller and is never closed. Supported on database providers only.
+    /// </summary>
+    /// <param name="stream">The caller-owned output stream; it is never closed. On a read, serialization or destination error, or on cancellation, the operation stops and the original exception propagates; already-written bytes are left in place (no rollback and no recovery tail), the destination stays open, and the writer never adds a <c>Stream.Flush</c> call.</param>
+    /// <param name="options">The JSON container and shaping options.</param>
+    /// <param name="cancellationToken">A token observed while preparing, reading rows and writing to the stream.</param>
+    /// <param name="params">
+    /// The positional SQL parameter values, in the order their placeholders appear. An empty set binds
+    /// nothing; a <see langword="null"/> element binds <see cref="System.DBNull"/>.
+    /// </param>
+    /// <returns>A task that completes when the whole document has been written.</returns>
+    /// <exception cref="NotSupportedException">The command is executed by the in-memory provider, the projection shape is not supported, or the option combination is invalid.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="stream"/> or <paramref name="options"/> is <see langword="null"/>.</exception>
+    public Task WriteJsonAsync(Stream stream, JsonStreamOptions options, CancellationToken cancellationToken, params object?[] @params)
+    {
+        ArgumentNullException.ThrowIfNull(stream);
+        ArgumentNullException.ThrowIfNull(options);
+
+        var values = new object[@params.Length];
+        for (var i = 0; i < @params.Length; i++)
+            values[i] = @params[i]!;
+
+        return RequireJsonContext().WriteJsonAsync(this, stream, options, values, cancellationToken);
+    }
+
+    // JSON streaming has no in-memory fallback: the in-memory provider has no DbDataReader and no
+    // managed JsonSerializer path. Fail before the destination is touched, mirroring the LOB guard.
+    private DataContext RequireJsonContext()
+    {
+        var disposed = _dataContext switch
+        {
+            DataContext db => db.IsDisposed,
+            InMemoryDataContext memory => memory.IsDisposed,
+            _ => false,
+        };
+        ObjectDisposedException.ThrowIf(disposed, nameof(DataContext));
+
+        return _dataContext as DataContext
+            ?? throw new NotSupportedException(
+                "JSON streaming validation [in-memory]: WriteJson requires a database provider; the in-memory provider has no DbDataReader and does not support JSON streaming.");
+    }
+    /// <summary>Executes the command and returns the result set as a synchronous sequence.</summary>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>A sequence over the result rows.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public IEnumerable<TResult> ToEnumerable(params object[] @params) => _dataContext!.GetEnumerable(_dataContext.GetPreparedQueryCommand(this, true, true, CancellationToken.None), @params);
+    /// <summary>Executes the command and materializes every row into a list, binding no parameters.</summary>
+    /// <remarks>
+    /// The parameterless form is the expression-tree-usable terminal: the <c>params ReadOnlySpan&lt;object?&gt;</c>
+    /// overload is a ref struct and an expanded <c>params</c> collection, so a query expression tree that ends in
+    /// <c>ToList()</c> cannot reference it (<c>CS8640</c>/<c>CS9226</c>). Both overloads execute the identical
+    /// command; a zero-argument call simply takes this one.
+    /// </remarks>
+    /// <returns>A list containing all result rows.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public List<TResult> ToList() => ToList(ReadOnlySpan<object?>.Empty);
+    /// <summary>Executes the command and materializes every row into a list.</summary>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>A list containing all result rows.</returns>
+    public List<TResult> ToList(params ReadOnlySpan<object?> @params)
+    {
+        // #249 / T353: a collection-valued projection is materialized as an entity graph and projected in
+        // memory, so the projected command itself never prepares or executes SQL.
+        if (CollectionSlotCarrier is CollectionSlotCarrier<TResult> carrier)
+            return carrier.ToList(@params);
+
+        // I7/M3 native route: a value-agnostic shape derived from this command, the holder the miss
+        // published and the current closure values bound into it. Nothing is fingerprinted, staged,
+        // keyed or looked up on a hit; an ineligible command keeps the legacy path below.
+        NativeProjectionRoute.Run(this, @params, out var native);
+        if (native.Hit)
+            return native.Rows!;
+
+        var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, false, true, CancellationToken.None);
+        native.Publish(this, preparedCommand);
+
+        return _dataContext.ToList<TResult>(preparedCommand, @params);
+    }
+    /// <summary>Executes the command asynchronously and materializes every row into a list, using the default cancellation token.</summary>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>A task producing a list of all result rows.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Task<List<TResult>> ToListAsync(params object[] @params) => ToListAsyncCore(CancellationToken.None, @params);
+    /// <summary>Executes the command asynchronously and materializes every row into a list.</summary>
+    /// <param name="cancellationToken">A token to cancel the query.</param>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>A task producing a list of all result rows.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Task<List<TResult>> ToListAsync(CancellationToken cancellationToken, params object[] @params) => ToListAsyncCore(cancellationToken, @params);
+
+    private Task<List<TResult>> ToListAsyncCore(CancellationToken cancellationToken, object[] @params)
+    {
+        // I7/M3 native route; see ToList.
+        NativeProjectionRoute.RunAsync(this, @params, cancellationToken, out var native);
+        if (native.Hit)
+            return native.Pending!;
+
+        var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, false, true, cancellationToken);
+        native.Publish(this, preparedCommand);
+        return _dataContext.ToListAsync(preparedCommand, @params, cancellationToken);
+    }
+
+    /// <inheritdoc/>
+    internal override List<object?> ToObjectList(ReadOnlySpan<object?> @params)
+    {
+        var rows = ToList(@params);
+        var result = new List<object?>(rows.Count);
+        foreach (var row in rows)
+            result.Add(row);
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    internal override async Task<List<object?>> ToObjectListAsync(object[] @params, CancellationToken cancellationToken)
+    {
+        var rows = await ToListAsync(cancellationToken, @params).ConfigureAwait(false);
+        var result = new List<object?>(rows.Count);
+        foreach (var row in rows)
+            result.Add(row);
+
+        return result;
+    }
+    /// <summary>Executes the command and materializes every row into an array, binding no parameters.</summary>
+    /// <remarks>
+    /// The parameterless form is the expression-tree-usable terminal: the <c>params ReadOnlySpan&lt;object?&gt;</c>
+    /// overload is a ref struct and an expanded <c>params</c> collection, so a query expression tree that ends in
+    /// <c>ToArray()</c> cannot reference it (<c>CS8640</c>/<c>CS9226</c>). Both overloads execute the identical
+    /// command; a zero-argument call simply takes this one.
+    /// </remarks>
+    /// <returns>An array containing all result rows.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public TResult[] ToArray() => ToArray(ReadOnlySpan<object?>.Empty);
+    /// <summary>Executes the command and materializes every row into an array.</summary>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>An array containing all result rows.</returns>
+    public TResult[] ToArray(params ReadOnlySpan<object?> @params) => ToList(@params).ToArray();
+    /// <summary>Executes the command asynchronously and materializes every row into an array, using the default cancellation token.</summary>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>A task producing an array of all result rows.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Task<TResult[]> ToArrayAsync(params object[] @params) => ToArrayAsync(CancellationToken.None, @params);
+    /// <summary>Executes the command asynchronously and materializes every row into an array.</summary>
+    /// <param name="cancellationToken">A token to cancel the query.</param>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>A task producing an array of all result rows.</returns>
+    public async Task<TResult[]> ToArrayAsync(CancellationToken cancellationToken, params object[] @params)
+        => (await ToListAsync(cancellationToken, @params).ConfigureAwait(false)).ToArray();
+    /// <summary>Executes the command and materializes the rows into a hash set.</summary>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>A set containing all result rows.</returns>
+    public HashSet<TResult> ToHashSet(params ReadOnlySpan<object?> @params) => new(ToList(@params));
+    /// <summary>Executes the command and materializes the rows into a hash set that uses the supplied comparison.</summary>
+    /// <param name="comparer">The equality comparer used to compare rows, or <c>null</c> to use the default comparer.</param>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>A set containing all result rows.</returns>
+    public HashSet<TResult> ToHashSet(IEqualityComparer<TResult>? comparer, params ReadOnlySpan<object?> @params) => new(ToList(@params), comparer);
+    /// <summary>Executes the command asynchronously and materializes the rows into a hash set, using the default cancellation token.</summary>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>A task producing a set of all result rows.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Task<HashSet<TResult>> ToHashSetAsync(params object[] @params) => ToHashSetAsync(CancellationToken.None, @params);
+    /// <summary>Executes the command asynchronously and materializes the rows into a hash set.</summary>
+    /// <param name="cancellationToken">A token to cancel the query.</param>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>A task producing a set of all result rows.</returns>
+    public async Task<HashSet<TResult>> ToHashSetAsync(CancellationToken cancellationToken, params object[] @params)
+        => new(await ToListAsync(cancellationToken, @params).ConfigureAwait(false));
+    /// <summary>Executes the command asynchronously and materializes the rows into a hash set that uses the supplied comparison.</summary>
+    /// <param name="comparer">The equality comparer used to compare rows, or <c>null</c> to use the default comparer.</param>
+    /// <param name="cancellationToken">A token to cancel the query.</param>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>A task producing a set of all result rows.</returns>
+    public async Task<HashSet<TResult>> ToHashSetAsync(IEqualityComparer<TResult>? comparer, CancellationToken cancellationToken, params object[] @params)
+        => new(await ToListAsync(cancellationToken, @params).ConfigureAwait(false), comparer);
+    /// <summary>Executes the command and materializes the rows into a dictionary keyed by <paramref name="keySelector"/>.</summary>
+    /// <typeparam name="TKey">The dictionary key type.</typeparam>
+    /// <param name="keySelector">Maps a row to its dictionary key; keys must be unique.</param>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>A dictionary containing all result rows.</returns>
+    public Dictionary<TKey, TResult> ToDictionary<TKey>(Func<TResult, TKey> keySelector, params ReadOnlySpan<object?> @params) where TKey : notnull
+        => ToDictionary(keySelector, null, @params);
+    /// <summary>Executes the command and materializes the rows into a dictionary keyed by <paramref name="keySelector"/>.</summary>
+    /// <typeparam name="TKey">The dictionary key type.</typeparam>
+    /// <param name="keySelector">Maps a row to its dictionary key; keys must be unique.</param>
+    /// <param name="comparer">The equality comparer used to compare keys, or <c>null</c> to use the default comparer.</param>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>A dictionary containing all result rows.</returns>
+    public Dictionary<TKey, TResult> ToDictionary<TKey>(Func<TResult, TKey> keySelector, IEqualityComparer<TKey>? comparer, params ReadOnlySpan<object?> @params) where TKey : notnull
+    {
+        var list = ToList(@params);
+        var dict = new Dictionary<TKey, TResult>(list.Count, comparer);
+        foreach (var item in list)
+            dict.Add(keySelector(item), item);
+        return dict;
+    }
+    /// <summary>Executes the command asynchronously and materializes the rows into a dictionary keyed by <paramref name="keySelector"/>, using the default cancellation token.</summary>
+    /// <typeparam name="TKey">The dictionary key type.</typeparam>
+    /// <param name="keySelector">Maps a row to its dictionary key; keys must be unique.</param>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>A task producing a dictionary of all result rows.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Task<Dictionary<TKey, TResult>> ToDictionaryAsync<TKey>(Func<TResult, TKey> keySelector, params object[] @params) where TKey : notnull
+        => ToDictionaryAsync(keySelector, CancellationToken.None, @params);
+    /// <summary>Executes the command asynchronously and materializes the rows into a dictionary keyed by <paramref name="keySelector"/>.</summary>
+    /// <typeparam name="TKey">The dictionary key type.</typeparam>
+    /// <param name="keySelector">Maps a row to its dictionary key; keys must be unique.</param>
+    /// <param name="cancellationToken">A token to cancel the query.</param>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>A task producing a dictionary of all result rows.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Task<Dictionary<TKey, TResult>> ToDictionaryAsync<TKey>(Func<TResult, TKey> keySelector, CancellationToken cancellationToken, params object[] @params) where TKey : notnull
+        => ToDictionaryAsync(keySelector, null, cancellationToken, @params);
+    /// <summary>Executes the command asynchronously and materializes the rows into a dictionary keyed by <paramref name="keySelector"/>.</summary>
+    /// <typeparam name="TKey">The dictionary key type.</typeparam>
+    /// <param name="keySelector">Maps a row to its dictionary key; keys must be unique.</param>
+    /// <param name="comparer">The equality comparer used to compare keys, or <c>null</c> to use the default comparer.</param>
+    /// <param name="cancellationToken">A token to cancel the query.</param>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>A task producing a dictionary of all result rows.</returns>
+    public async Task<Dictionary<TKey, TResult>> ToDictionaryAsync<TKey>(Func<TResult, TKey> keySelector, IEqualityComparer<TKey>? comparer, CancellationToken cancellationToken, params object[] @params) where TKey : notnull
+    {
+        var list = await ToListAsync(cancellationToken, @params).ConfigureAwait(false);
+        var dict = new Dictionary<TKey, TResult>(list.Count, comparer);
+        foreach (var item in list)
+            dict.Add(keySelector(item), item);
+        return dict;
+    }
+    /// <summary>Returns <c>true</c> when the query produces at least one row.</summary>
+    /// <returns><c>true</c> if at least one row exists; otherwise <c>false</c>.</returns>
+    public bool Any() => Any(ReadOnlySpan<object?>.Empty);
+    /// <summary>Returns <c>true</c> when the query produces at least one row, binding the supplied parameters.</summary>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns><c>true</c> if at least one row exists; otherwise <c>false</c>.</returns>
+    public bool Any(params ReadOnlySpan<object?> @params)
+    {
+        if (this is not QueryCommand<bool> queryCommand || !queryCommand.SingleRow)
+        {
+            // Keep IgnoreColumns set: restoring it would change ColumnsPlanHash and force a full
+            // re-prepare on every call, even though the cached plan is already built.
+            if (!_isPrepared || !IgnoreColumns)
+            {
+                IgnoreColumns = true;
+                PrepareCommand(false, CancellationToken.None);
+            }
+
+            queryCommand = EntityBuilderExtensions.GetAnyCommand(_dataContext!, this);
+        }
+
+        var preparedCommand = _dataContext!.GetPreparedQueryCommand(queryCommand, false, true, CancellationToken.None);
+        return _dataContext.ExecuteScalar<bool>(preparedCommand, @params, true);
+    }
+    /// <summary>Asynchronously returns <c>true</c> when the query produces at least one row, using the default cancellation token.</summary>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>A task producing <c>true</c> if at least one row exists; otherwise <c>false</c>.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Task<bool> AnyAsync(params object[] @params) => AnyAsync(CancellationToken.None, @params);
+    /// <summary>Asynchronously returns <c>true</c> when the query produces at least one row.</summary>
+    /// <param name="cancellationToken">A token to cancel the query.</param>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>A task producing <c>true</c> if at least one row exists; otherwise <c>false</c>.</returns>
+    public async Task<bool> AnyAsync(CancellationToken cancellationToken, params object[] @params)
+    {
+        if (this is not QueryCommand<bool> queryCommand || !queryCommand.SingleRow)
+        {
+            if (!_isPrepared || !IgnoreColumns)
+            {
+                IgnoreColumns = true;
+                PrepareCommand(false, cancellationToken);
+            }
+
+            queryCommand = EntityBuilderExtensions.GetAnyCommand(_dataContext!, this);
+        }
+
+        var preparedCommand = _dataContext!.GetPreparedQueryCommand(queryCommand, false, true, cancellationToken);
+        return await _dataContext.ExecuteScalar<bool>(preparedCommand, @params, true, cancellationToken).ConfigureAwait(false);
+    }
+    /// <summary>Executes the command and returns the first column of the first row as a scalar.</summary>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>The scalar value, or <c>null</c> when the query returns no rows.</returns>
+    public TResult? ExecuteScalar(params ReadOnlySpan<object?> @params)
+    {
+        var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, false, true, CancellationToken.None);
+        return _dataContext.ExecuteScalar<TResult>(preparedCommand, @params, false);
+    }
+    /// <summary>Asynchronously executes the command and returns the first column of the first row as a scalar.</summary>
+    /// <param name="cancellationToken">A token to cancel the query.</param>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>A task producing the scalar value, or <c>null</c> when the query returns no rows.</returns>
+    public Task<TResult?> ExecuteScalarAsync(CancellationToken cancellationToken, params object[] @params)
+    {
+        var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, false, true, cancellationToken);
+        return _dataContext.ExecuteScalar<TResult>(preparedCommand, @params, false, cancellationToken);
+    }
+
+    /// <summary>Returns the first row of the query and throws when it produces none.</summary>
+    /// <returns>The first result row.</returns>
+    public TResult First() => First(ReadOnlySpan<object?>.Empty);
+    /// <summary>Returns the first row of the query, binding the supplied parameters, and throws when it produces none.</summary>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>The first result row.</returns>
+    public TResult First(params ReadOnlySpan<object?> @params)
+    {
+        // Keep the single-row shape on the command. Restoring Paging.Limit would change the cached
+        // plan key (QueryPlanEqualityComparer includes Limit/SingleRow) and force a full re-prepare
+        // (SQL + hashes) on every call.
+        if (Paging.Limit != 1 || !_isPrepared)
+        {
+            SingleRow = true;
+            Paging.Limit = 1;
+            PrepareCommand(false, CancellationToken.None);
+        }
+        var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, false, true, CancellationToken.None);
+        return _dataContext.First<TResult>(preparedCommand, @params);
+    }
+    /// <summary>Asynchronously returns the first row of the query, using the default cancellation token, and throws when it produces none.</summary>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>A task producing the first result row.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Task<TResult> FirstAsync(params object[] @params) => FirstAsync(CancellationToken.None, @params);
+    /// <summary>Asynchronously returns the first row of the query and throws when it produces none.</summary>
+    /// <param name="cancellationToken">A token to cancel the query.</param>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>A task producing the first result row.</returns>
+    public Task<TResult> FirstAsync(CancellationToken cancellationToken, params object[] @params)
+    {
+        if (Paging.Limit != 1 || !_isPrepared)
+        {
+            SingleRow = true;
+            Paging.Limit = 1;
+            PrepareCommand(false, cancellationToken);
+        }
+        var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, false, true, cancellationToken);
+        return _dataContext.FirstAsync<TResult>(preparedCommand, @params, cancellationToken);
+    }
+    /// <summary>Returns the first row of the query, or the default value when it produces none.</summary>
+    /// <returns>The first result row, or the default value for the element type.</returns>
+    public TResult? FirstOrDefault() => FirstOrDefault(ReadOnlySpan<object?>.Empty);
+    /// <summary>Returns the first row of the query, binding the supplied parameters, or the default value when it produces none.</summary>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>The first result row, or the default value for the element type.</returns>
+    public TResult? FirstOrDefault(params ReadOnlySpan<object?> @params)
+    {
+        if (Paging.Limit != 1 || !_isPrepared)
+        {
+            SingleRow = true;
+            Paging.Limit = 1;
+            PrepareCommand(false, CancellationToken.None);
+        }
+        var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, false, true, CancellationToken.None);
+        return _dataContext.FirstOrDefault<TResult>(preparedCommand, @params);
+    }
+    /// <summary>Asynchronously returns the first row of the query using the default cancellation token, or the default value when it produces none.</summary>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>A task producing the first result row, or the default value for the element type.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Task<TResult?> FirstOrDefaultAsync(params object[] @params) => FirstOrDefaultAsync(CancellationToken.None, @params);
+    /// <summary>Asynchronously returns the first row of the query, or the default value when it produces none.</summary>
+    /// <param name="cancellationToken">A token to cancel the query.</param>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>A task producing the first result row, or the default value for the element type.</returns>
+    public Task<TResult?> FirstOrDefaultAsync(CancellationToken cancellationToken, params object[] @params)
+    {
+        if (Paging.Limit != 1 || !_isPrepared)
+        {
+            SingleRow = true;
+            Paging.Limit = 1;
+            PrepareCommand(false, cancellationToken);
+        }
+        var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, false, true, cancellationToken);
+        return _dataContext.FirstOrDefaultAsync<TResult>(preparedCommand, @params, cancellationToken);
+    }
+    /// <summary>Returns the only row of the query and throws when it produces zero or more than one row.</summary>
+    /// <returns>The single result row.</returns>
+    public TResult Single() => Single(ReadOnlySpan<object?>.Empty);
+    /// <summary>Returns the only row of the query, binding the supplied parameters, and throws when it produces zero or more than one row.</summary>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>The single result row.</returns>
+    public TResult Single(params ReadOnlySpan<object?> @params)
+    {
+        if (Paging.Limit != 2 || !_isPrepared)
+        {
+            Paging.Limit = 2;
+            PrepareCommand(false, CancellationToken.None);
+        }
+        var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, false, true, CancellationToken.None);
+        return _dataContext.Single<TResult>(preparedCommand, @params);
+    }
+    /// <summary>Asynchronously returns the only row of the query using the default cancellation token, and throws when it produces zero or more than one row.</summary>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>A task producing the single result row.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Task<TResult> SingleAsync(params object[] @params) => SingleAsync(CancellationToken.None, @params);
+    /// <summary>Asynchronously returns the only row of the query and throws when it produces zero or more than one row.</summary>
+    /// <param name="cancellationToken">A token to cancel the query.</param>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>A task producing the single result row.</returns>
+    public Task<TResult> SingleAsync(CancellationToken cancellationToken, params object[] @params)
+    {
+        if (Paging.Limit != 2 || !_isPrepared)
+        {
+            Paging.Limit = 2;
+            PrepareCommand(false, cancellationToken);
+        }
+        var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, false, true, cancellationToken);
+        return _dataContext.SingleAsync<TResult>(preparedCommand, @params, cancellationToken);
+    }
+    /// <summary>Returns the only row of the query, or the default value when it produces no rows; throws when it produces more than one.</summary>
+    /// <returns>The single result row, or the default value for the element type when there is none.</returns>
+    public TResult? SingleOrDefault() => SingleOrDefault(ReadOnlySpan<object?>.Empty);
+    /// <summary>Returns the only row of the query, binding the supplied parameters, or the default value when it produces no rows; throws when it produces more than one.</summary>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>The single result row, or the default value for the element type when there is none.</returns>
+    public TResult? SingleOrDefault(params ReadOnlySpan<object?> @params)
+    {
+        if (Paging.Limit != 2 || !_isPrepared)
+        {
+            Paging.Limit = 2;
+            PrepareCommand(false, CancellationToken.None);
+        }
+        var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, false, true, CancellationToken.None);
+        return _dataContext.SingleOrDefault<TResult>(preparedCommand, @params);
+    }
+    /// <summary>Asynchronously returns the only row of the query using the default cancellation token, or the default value when it produces no rows; throws when it produces more than one.</summary>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>A task producing the single result row, or the default value for the element type when there is none.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Task<TResult?> SingleOrDefaultAsync(params object[] @params) => SingleOrDefaultAsync(CancellationToken.None, @params);
+    /// <summary>Asynchronously returns the only row of the query, or the default value when it produces no rows; throws when it produces more than one.</summary>
+    /// <param name="cancellationToken">A token to cancel the query.</param>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>A task producing the single result row, or the default value for the element type when there is none.</returns>
+    public Task<TResult?> SingleOrDefaultAsync(CancellationToken cancellationToken, params object[] @params)
+    {
+        if (Paging.Limit != 2 || !_isPrepared)
+        {
+            Paging.Limit = 2;
+            PrepareCommand(false, cancellationToken);
+        }
+        var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, false, true, cancellationToken);
+        return _dataContext.SingleOrDefaultAsync<TResult>(preparedCommand, @params, cancellationToken);
+    }
+    /// <summary>Creates an empty command of the same concrete type, bound to this command's context.</summary>
+    /// <returns>A new command used as the clone destination.</returns>
+    protected override QueryCommand CreateSelf()
+    {
+        // Copy-constructor path: no QueryDefinition record per fluent step.
+        return new QueryCommand<TResult>(_dataContext, this, forCache: false);
+    }
+    /// <summary>Creates an empty command of the same concrete type with the cache-safe parts of the shape, used to build a cached clone.</summary>
+    /// <returns>A new command with projections, conditions and grouping stripped for the plan cache.</returns>
+    protected override QueryCommand CreateSelfForClone()
+    {
+        // Cache clone: deep-clones the joins and clears the raw shape, without a QueryDefinition record.
+        return new QueryCommand<TResult>(null, this, forCache: true);
+    }
+    /// <summary>
+    /// Builds the command that returns the last row of the ordered query by reversing every
+    /// <c>ORDER BY</c> direction and reusing the <c>First</c> path. A query without <c>ORDER BY</c>
+    /// has no defined last row, so it is rejected rather than returning an arbitrary one.
+    /// </summary>
+    private QueryCommand<TResult> ForLast()
+    {
+        if (_sorting is null || _sorting.Length == 0)
+            throw new InvalidOperationException("Last/LastOrDefault requires an ORDER BY; the source order is not defined without one.");
+
+        var reversed = new Sorting[_sorting.Length];
+        for (var i = 0; i < _sorting.Length; i++)
+        {
+            var sorting = _sorting[i];
+            var flipped = sorting.ColumnIndex is int columnIndex
+                ? new Sorting(columnIndex, sorting.NullsPosition)
+                : new Sorting(sorting.SortExpression!, sorting.NullsPosition);
+            flipped.Direction = sorting.Direction == OrderDirection.Asc ? OrderDirection.Desc : OrderDirection.Asc;
+            // The reversed order must stay logically equivalent: flipping the direction flips which end
+            // the NULL group occupies, so an explicit placement swaps too. Default stays Default (the
+            // provider default is direction-aware on its own).
+            flipped.NullsPosition = sorting.NullsPosition switch
+            {
+                NullsPosition.First => NullsPosition.Last,
+                NullsPosition.Last => NullsPosition.First,
+                _ => NullsPosition.Default,
+            };
+            flipped.PreparedExpression = sorting.PreparedExpression;
+            reversed[i] = flipped;
+        }
+
+        var cmd = new QueryCommand<TResult>(_dataContext, this, forCache: false);
+        cmd._sorting = reversed;
+        CopyTo(cmd, true);
+        cmd.ResetPreparationPreservingFrom();
+        return cmd;
+    }
+    /// <summary>Returns the last row of the ordered query and throws when it produces none. Requires an <c>ORDER BY</c>.</summary>
+    /// <returns>The last result row.</returns>
+    public TResult Last() => Last(ReadOnlySpan<object?>.Empty);
+    /// <summary>Returns the last row of the ordered query, binding the supplied parameters, and throws when it produces none. Requires an <c>ORDER BY</c>.</summary>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>The last result row.</returns>
+    public TResult Last(params ReadOnlySpan<object?> @params) => ForLast().First(@params);
+    /// <summary>Asynchronously returns the last row of the ordered query using the default cancellation token, and throws when it produces none. Requires an <c>ORDER BY</c>.</summary>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>A task producing the last result row.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Task<TResult> LastAsync(params object[] @params) => LastAsync(CancellationToken.None, @params);
+    /// <summary>Asynchronously returns the last row of the ordered query and throws when it produces none. Requires an <c>ORDER BY</c>.</summary>
+    /// <param name="cancellationToken">A token to cancel the query.</param>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>A task producing the last result row.</returns>
+    public Task<TResult> LastAsync(CancellationToken cancellationToken, params object[] @params) => ForLast().FirstAsync(cancellationToken, @params);
+    /// <summary>Returns the last row of the ordered query, or the default value when it produces none. Requires an <c>ORDER BY</c>.</summary>
+    /// <returns>The last result row, or the default value for the element type.</returns>
+    public TResult? LastOrDefault() => LastOrDefault(ReadOnlySpan<object?>.Empty);
+    /// <summary>Returns the last row of the ordered query, binding the supplied parameters, or the default value when it produces none. Requires an <c>ORDER BY</c>.</summary>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>The last result row, or the default value for the element type.</returns>
+    public TResult? LastOrDefault(params ReadOnlySpan<object?> @params) => ForLast().FirstOrDefault(@params);
+    /// <summary>Asynchronously returns the last row of the ordered query using the default cancellation token, or the default value when it produces none. Requires an <c>ORDER BY</c>.</summary>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>A task producing the last result row, or the default value for the element type.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Task<TResult?> LastOrDefaultAsync(params object[] @params) => LastOrDefaultAsync(CancellationToken.None, @params);
+    /// <summary>Asynchronously returns the last row of the ordered query, or the default value when it produces none. Requires an <c>ORDER BY</c>.</summary>
+    /// <param name="cancellationToken">A token to cancel the query.</param>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>A task producing the last result row, or the default value for the element type.</returns>
+    public Task<TResult?> LastOrDefaultAsync(CancellationToken cancellationToken, params object[] @params) => ForLast().FirstOrDefaultAsync(cancellationToken, @params);
+    /// <summary>Returns a clone of this command with a 1-based projected column added to its sort order.</summary>
+    /// <param name="columnIndex">The 1-based index of the projected column to sort by; must be greater than zero.</param>
+    /// <param name="direction">The sort direction.</param>
+    /// <returns>A new command carrying the added sort.</returns>
+    public QueryCommand<TResult> OrderBy(int columnIndex, OrderDirection direction)
+    {
+        if (columnIndex < 1) throw new ArgumentException("Column index must be greater than zero", nameof(columnIndex));
+
+        var cmd = new QueryCommand<TResult>(_dataContext, this, forCache: false);
+        cmd._sorting = _sorting is null
+            ? [new Sorting(columnIndex) { Direction = direction }]
+            : [.. _sorting, new Sorting(columnIndex) { Direction = direction }];
+        CopyTo(cmd, true);
+        cmd.ResetPreparationPreservingFrom();
+        return cmd;
+    }
+    /// <summary>Returns a clone of this command with the 1-based column added to its sort order in ascending direction.</summary>
+    /// <param name="columnIndex">The 1-based index of the projected column to sort by; must be greater than zero.</param>
+    /// <returns>A new command carrying the added sort.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public QueryCommand<TResult> OrderBy(int columnIndex) => OrderBy(columnIndex, OrderDirection.Asc);
+    /// <summary>Returns a clone of this command with the 1-based column added to its sort order in descending direction.</summary>
+    /// <param name="columnIndex">The 1-based index of the projected column to sort by; must be greater than zero.</param>
+    /// <returns>A new command carrying the added sort.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public QueryCommand<TResult> OrderByDescending(int columnIndex) => OrderBy(columnIndex, OrderDirection.Desc);
+    /// <summary>
+    /// Returns a clone of this command with <paramref name="orderExp"/> added to its sort order. The
+    /// expression is written over the projected result type (<typeparamref name="TResult"/>); each
+    /// member is resolved to the projection expression that produced the corresponding output column.
+    /// Repeated calls append keys, so the existing order is preserved.
+    /// </summary>
+    /// <param name="orderExp">The key selector over the projected result.</param>
+    /// <param name="direction">The sort direction.</param>
+    /// <returns>A new command carrying the added sort.</returns>
+    public QueryCommand<TResult> OrderBy(Expression<Func<TResult, object?>> orderExp, OrderDirection direction)
+    {
+        ArgumentNullException.ThrowIfNull(orderExp);
+
+        var sorting = new Sorting(orderExp) { Direction = direction };
+        var cmd = new QueryCommand<TResult>(_dataContext, this, forCache: false);
+        cmd._sorting = _sorting is null ? [sorting] : [.. _sorting, sorting];
+        CopyTo(cmd, true);
+        cmd.ResetPreparationPreservingFrom();
+        return cmd;
+    }
+    /// <summary>Returns a clone of this command with <paramref name="orderExp"/> added to its sort order in ascending direction.</summary>
+    /// <param name="orderExp">The key selector over the projected result.</param>
+    /// <returns>A new command carrying the added sort.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public QueryCommand<TResult> OrderBy(Expression<Func<TResult, object?>> orderExp) => OrderBy(orderExp, OrderDirection.Asc);
+    /// <summary>Returns a clone of this command with <paramref name="orderExp"/> added to its sort order in descending direction.</summary>
+    /// <param name="orderExp">The key selector over the projected result.</param>
+    /// <returns>A new command carrying the added sort.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public QueryCommand<TResult> OrderByDescending(Expression<Func<TResult, object?>> orderExp) => OrderBy(orderExp, OrderDirection.Desc);
+    /// <summary>
+    /// Returns a clone of this command with <paramref name="orderExp"/> appended to its sort order in the
+    /// ascending direction and the requested NULL placement. Appending never replaces the existing keys.
+    /// </summary>
+    /// <param name="orderExp">The key selector over the projected result.</param>
+    /// <param name="nullsPosition">Where SQL <c>NULL</c> values are placed for this key.</param>
+    /// <returns>A new command carrying the added sort.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="nullsPosition"/> is not a defined <see cref="NullsPosition"/> member.</exception>
+    public QueryCommand<TResult> OrderBy(Expression<Func<TResult, object?>> orderExp, NullsPosition nullsPosition)
+        => OrderBy(orderExp, OrderDirection.Asc, nullsPosition);
+    /// <summary>
+    /// Returns a clone of this command with <paramref name="orderExp"/> appended to its sort order in the
+    /// given direction and the requested NULL placement. Appending never replaces the existing keys.
+    /// </summary>
+    /// <param name="orderExp">The key selector over the projected result.</param>
+    /// <param name="direction">The sort direction.</param>
+    /// <param name="nullsPosition">Where SQL <c>NULL</c> values are placed for this key.</param>
+    /// <returns>A new command carrying the added sort.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="nullsPosition"/> is not a defined <see cref="NullsPosition"/> member.</exception>
+    public QueryCommand<TResult> OrderBy(Expression<Func<TResult, object?>> orderExp, OrderDirection direction, NullsPosition nullsPosition)
+        => AppendOrdering(orderExp ?? throw new ArgumentNullException(nameof(orderExp)), null, direction, nullsPosition);
+    /// <summary>
+    /// Returns a clone of this command with <paramref name="orderExp"/> appended to its sort order in the
+    /// descending direction and the requested NULL placement.
+    /// </summary>
+    /// <param name="orderExp">The key selector over the projected result.</param>
+    /// <param name="nullsPosition">Where SQL <c>NULL</c> values are placed for this key.</param>
+    /// <returns>A new command carrying the added sort.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="nullsPosition"/> is not a defined <see cref="NullsPosition"/> member.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public QueryCommand<TResult> OrderByDescending(Expression<Func<TResult, object?>> orderExp, NullsPosition nullsPosition)
+        => OrderBy(orderExp, OrderDirection.Desc, nullsPosition);
+    /// <summary>
+    /// Returns a clone of this command with the 1-based projected column appended to its sort order in the
+    /// ascending direction and the requested NULL placement.
+    /// </summary>
+    /// <param name="columnIndex">The 1-based index of the projected column to sort by; must be greater than zero.</param>
+    /// <param name="nullsPosition">Where SQL <c>NULL</c> values are placed for this key.</param>
+    /// <returns>A new command carrying the added sort.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="nullsPosition"/> is not a defined <see cref="NullsPosition"/> member.</exception>
+    public QueryCommand<TResult> OrderBy(int columnIndex, NullsPosition nullsPosition)
+        => OrderBy(columnIndex, OrderDirection.Asc, nullsPosition);
+    /// <summary>
+    /// Returns a clone of this command with the 1-based projected column appended to its sort order in the
+    /// given direction and the requested NULL placement.
+    /// </summary>
+    /// <param name="columnIndex">The 1-based index of the projected column to sort by; must be greater than zero.</param>
+    /// <param name="direction">The sort direction.</param>
+    /// <param name="nullsPosition">Where SQL <c>NULL</c> values are placed for this key.</param>
+    /// <returns>A new command carrying the added sort.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="nullsPosition"/> is not a defined <see cref="NullsPosition"/> member.</exception>
+    public QueryCommand<TResult> OrderBy(int columnIndex, OrderDirection direction, NullsPosition nullsPosition)
+    {
+        if (columnIndex < 1) throw new ArgumentException("Column index must be greater than zero", nameof(columnIndex));
+
+        return AppendOrdering(expression: null, columnIndex, direction, nullsPosition);
+    }
+    /// <summary>
+    /// Returns a clone of this command with the 1-based projected column appended to its sort order in the
+    /// descending direction and the requested NULL placement.
+    /// </summary>
+    /// <param name="columnIndex">The 1-based index of the projected column to sort by; must be greater than zero.</param>
+    /// <param name="nullsPosition">Where SQL <c>NULL</c> values are placed for this key.</param>
+    /// <returns>A new command carrying the added sort.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="nullsPosition"/> is not a defined <see cref="NullsPosition"/> member.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public QueryCommand<TResult> OrderByDescending(int columnIndex, NullsPosition nullsPosition)
+        => OrderBy(columnIndex, OrderDirection.Desc, nullsPosition);
+    /// <summary>
+    /// Returns a clone of this command with <paramref name="orderExp"/> appended to its sort order in the
+    /// ascending direction. Unlike a second <c>OrderBy</c>, this states explicitly that the key is a
+    /// secondary one; both append to the same key list, so the resulting order is identical.
+    /// </summary>
+    /// <param name="orderExp">The key selector over the projected result.</param>
+    /// <returns>A new command carrying the added sort.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public QueryCommand<TResult> ThenBy(Expression<Func<TResult, object?>> orderExp) => OrderBy(orderExp);
+    /// <summary>
+    /// Returns a clone of this command with <paramref name="orderExp"/> appended to its sort order in the
+    /// given direction. The key is appended after every existing key, never replaces one.
+    /// </summary>
+    /// <param name="orderExp">The key selector over the projected result.</param>
+    /// <param name="direction">The sort direction.</param>
+    /// <returns>A new command carrying the added sort.</returns>
+    public QueryCommand<TResult> ThenBy(Expression<Func<TResult, object?>> orderExp, OrderDirection direction)
+        => OrderBy(orderExp, direction);
+    /// <summary>
+    /// Returns a clone of this command with <paramref name="orderExp"/> appended to its sort order in the
+    /// ascending direction and the requested NULL placement.
+    /// </summary>
+    /// <param name="orderExp">The key selector over the projected result.</param>
+    /// <param name="nullsPosition">Where SQL <c>NULL</c> values are placed for this key.</param>
+    /// <returns>A new command carrying the added sort.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="nullsPosition"/> is not a defined <see cref="NullsPosition"/> member.</exception>
+    public QueryCommand<TResult> ThenBy(Expression<Func<TResult, object?>> orderExp, NullsPosition nullsPosition)
+        => OrderBy(orderExp, nullsPosition);
+    /// <summary>
+    /// Returns a clone of this command with <paramref name="orderExp"/> appended to its sort order in the
+    /// given direction and the requested NULL placement.
+    /// </summary>
+    /// <param name="orderExp">The key selector over the projected result.</param>
+    /// <param name="direction">The sort direction.</param>
+    /// <param name="nullsPosition">Where SQL <c>NULL</c> values are placed for this key.</param>
+    /// <returns>A new command carrying the added sort.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="nullsPosition"/> is not a defined <see cref="NullsPosition"/> member.</exception>
+    public QueryCommand<TResult> ThenBy(Expression<Func<TResult, object?>> orderExp, OrderDirection direction, NullsPosition nullsPosition)
+        => OrderBy(orderExp, direction, nullsPosition);
+    /// <summary>
+    /// Returns a clone of this command with <paramref name="orderExp"/> appended to its sort order in the
+    /// descending direction.
+    /// </summary>
+    /// <param name="orderExp">The key selector over the projected result.</param>
+    /// <returns>A new command carrying the added sort.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public QueryCommand<TResult> ThenByDescending(Expression<Func<TResult, object?>> orderExp) => OrderByDescending(orderExp);
+    /// <summary>
+    /// Returns a clone of this command with <paramref name="orderExp"/> appended to its sort order in the
+    /// descending direction and the requested NULL placement.
+    /// </summary>
+    /// <param name="orderExp">The key selector over the projected result.</param>
+    /// <param name="nullsPosition">Where SQL <c>NULL</c> values are placed for this key.</param>
+    /// <returns>A new command carrying the added sort.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="nullsPosition"/> is not a defined <see cref="NullsPosition"/> member.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public QueryCommand<TResult> ThenByDescending(Expression<Func<TResult, object?>> orderExp, NullsPosition nullsPosition)
+        => OrderByDescending(orderExp, nullsPosition);
+    /// <summary>
+    /// Returns a clone of this command with the 1-based projected column appended to its sort order in the
+    /// ascending direction. The key is appended after every existing key.
+    /// </summary>
+    /// <param name="columnIndex">The 1-based index of the projected column to sort by; must be greater than zero.</param>
+    /// <returns>A new command carrying the added sort.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public QueryCommand<TResult> ThenBy(int columnIndex) => OrderBy(columnIndex);
+    /// <summary>
+    /// Returns a clone of this command with the 1-based projected column appended to its sort order in the
+    /// given direction.
+    /// </summary>
+    /// <param name="columnIndex">The 1-based index of the projected column to sort by; must be greater than zero.</param>
+    /// <param name="direction">The sort direction.</param>
+    /// <returns>A new command carrying the added sort.</returns>
+    public QueryCommand<TResult> ThenBy(int columnIndex, OrderDirection direction) => OrderBy(columnIndex, direction);
+    /// <summary>
+    /// Returns a clone of this command with the 1-based projected column appended to its sort order in the
+    /// ascending direction and the requested NULL placement.
+    /// </summary>
+    /// <param name="columnIndex">The 1-based index of the projected column to sort by; must be greater than zero.</param>
+    /// <param name="nullsPosition">Where SQL <c>NULL</c> values are placed for this key.</param>
+    /// <returns>A new command carrying the added sort.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="nullsPosition"/> is not a defined <see cref="NullsPosition"/> member.</exception>
+    public QueryCommand<TResult> ThenBy(int columnIndex, NullsPosition nullsPosition) => OrderBy(columnIndex, nullsPosition);
+    /// <summary>
+    /// Returns a clone of this command with the 1-based projected column appended to its sort order in the
+    /// given direction and the requested NULL placement.
+    /// </summary>
+    /// <param name="columnIndex">The 1-based index of the projected column to sort by; must be greater than zero.</param>
+    /// <param name="direction">The sort direction.</param>
+    /// <param name="nullsPosition">Where SQL <c>NULL</c> values are placed for this key.</param>
+    /// <returns>A new command carrying the added sort.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="nullsPosition"/> is not a defined <see cref="NullsPosition"/> member.</exception>
+    public QueryCommand<TResult> ThenBy(int columnIndex, OrderDirection direction, NullsPosition nullsPosition)
+        => OrderBy(columnIndex, direction, nullsPosition);
+    /// <summary>
+    /// Returns a clone of this command with the 1-based projected column appended to its sort order in the
+    /// descending direction.
+    /// </summary>
+    /// <param name="columnIndex">The 1-based index of the projected column to sort by; must be greater than zero.</param>
+    /// <returns>A new command carrying the added sort.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public QueryCommand<TResult> ThenByDescending(int columnIndex) => OrderByDescending(columnIndex);
+    /// <summary>
+    /// Returns a clone of this command with the 1-based projected column appended to its sort order in the
+    /// descending direction and the requested NULL placement.
+    /// </summary>
+    /// <param name="columnIndex">The 1-based index of the projected column to sort by; must be greater than zero.</param>
+    /// <param name="nullsPosition">Where SQL <c>NULL</c> values are placed for this key.</param>
+    /// <returns>A new command carrying the added sort.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="nullsPosition"/> is not a defined <see cref="NullsPosition"/> member.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public QueryCommand<TResult> ThenByDescending(int columnIndex, NullsPosition nullsPosition)
+        => OrderByDescending(columnIndex, nullsPosition);
+    /// <summary>
+    /// Appends one sort key to this command's ordering and returns the prepared clone. Shared by the
+    /// additive placement overloads and the <c>ThenBy</c> family; the existing <c>OrderBy</c> overloads
+    /// keep their own bodies so their behavior is unchanged.
+    /// </summary>
+    private QueryCommand<TResult> AppendOrdering(Expression? expression, int? columnIndex, OrderDirection direction, NullsPosition nullsPosition)
+    {
+        var sorting = expression is not null
+            ? new Sorting(expression, nullsPosition) { Direction = direction }
+            : new Sorting(columnIndex!.Value, nullsPosition) { Direction = direction };
+        var cmd = new QueryCommand<TResult>(_dataContext, this, forCache: false);
+        cmd._sorting = _sorting is null ? [sorting] : [.. _sorting, sorting];
+        CopyTo(cmd, true);
+        cmd.ResetPreparationPreservingFrom();
+        return cmd;
+    }
+    /// <summary>
+    /// Returns a clone of this command with the maximum number of returned rows set. Unlike the
+    /// builder-level limit this applies after the projection, so a grouped/aggregated query does not
+    /// need the aggregate repeated in an outer query.
+    /// </summary>
+    /// <param name="limit">The maximum number of rows to return; zero means no limit.</param>
+    /// <returns>A new command carrying the limit.</returns>
+    public QueryCommand<TResult> Limit(int limit)
+    {
+        var paging = Paging;
+        paging.Limit = limit;
+        return WithPaging(paging);
+    }
+    /// <summary>Returns a clone of this command with the number of leading rows to skip set.</summary>
+    /// <param name="offset">The number of leading rows to skip; zero starts from the first row.</param>
+    /// <returns>A new command carrying the offset.</returns>
+    public QueryCommand<TResult> Offset(int offset)
+    {
+        var paging = Paging;
+        paging.Offset = offset;
+        return WithPaging(paging);
+    }
+    /// <summary>Returns a clone of this command with both the page size and the start position set.</summary>
+    /// <param name="limit">The maximum number of rows to return; zero means no limit.</param>
+    /// <param name="offset">The number of leading rows to skip; zero starts from the first row.</param>
+    /// <returns>A new command carrying the limit and offset.</returns>
+    public QueryCommand<TResult> Page(int limit, int offset)
+    {
+        var paging = Paging;
+        paging.Limit = limit;
+        paging.Offset = offset;
+        return WithPaging(paging);
+    }
+    private QueryCommand<TResult> WithPaging(Paging paging)
+    {
+        var cmd = new QueryCommand<TResult>(_dataContext, this, forCache: false);
+        CopyTo(cmd, true);
+        cmd.Paging = paging;
+        cmd.ResetPreparationPreservingFrom();
+        return cmd;
+    }
+    /// <summary>Returns a clone of this command that emits <c>DISTINCT</c>, removing duplicate rows from the result.</summary>
+    /// <returns>A new command marked distinct.</returns>
+    public QueryCommand<TResult> Distinct()
+    {
+        var cmd = (QueryCommand<TResult>)Clone();
+        cmd.ResetPreparationPreservingFrom();
+        cmd.IsDistinct = true;
+        return cmd;
+    }
+    /// <summary>
+    /// Returns a new command carrying statement-level query hints, for example SQL Server
+    /// <c>"recompile"</c> (rendered as <c>OPTION (recompile)</c>). Repeated calls accumulate hints.
+    /// A dialect that does not support query hints rejects a command that carries them when its SQL
+    /// is built.
+    /// </summary>
+    public QueryCommand<TResult> Hint(params string[] hints)
+    {
+        var cmd = (QueryCommand<TResult>)Clone();
+        var source = cmd._from;
+        cmd.ResetPreparation();
+        cmd._from = source;
+        cmd.AddHints(hints);
+        return cmd;
+    }
+    /// <summary>
+    /// Returns a new command carrying a query tag, rendered as a block comment (<c>/* tag */</c>)
+    /// immediately after the <c>SELECT</c> keyword so the statement is identifiable in logs, profilers
+    /// and server-side query stores. The tag is independent of <see cref="Hint(System.String[])"/>: it is
+    /// a plain comment, not an optimizer hint, and it is rendered on every SQL provider. Line breaks and
+    /// the comment delimiters <c>*/</c> and <c>/*</c> are neutralised, so the tag cannot break out of the
+    /// comment. The tag is part of the plan key; passing <c>null</c> or an empty string clears it.
+    /// </summary>
+    /// <param name="tag">The tag text to render, or <c>null</c> to clear the tag.</param>
+    /// <returns>A new command carrying the tag.</returns>
+    public QueryCommand<TResult> WithTag(string? tag)
+    {
+        var cmd = (QueryCommand<TResult>)Clone();
+        var source = cmd._from;
+        cmd.ResetPreparation();
+        cmd._from = source;
+        cmd.Tag = string.IsNullOrEmpty(tag) ? null : tag;
+        return cmd;
+    }
+    /// <summary>
+    /// Overrides identifier quoting for this command: when <paramref name="value"/> is <c>true</c>,
+    /// physical table and column names are quoted with the provider's delimiter (<c>"id"</c> on
+    /// PostgreSQL/SQLite, <c>[id]</c> on SQL Server, `` `id` `` on MySQL/MariaDB/ClickHouse); when
+    /// <c>false</c>, names are emitted verbatim. Without a call the command inherits the context
+    /// default set with <c>DataContextBuilder.UseQuotedIdentifiers</c>.
+    /// </summary>
+    public QueryCommand<TResult> WithQuotedIdentifiers(bool value = true)
+    {
+        var cmd = (QueryCommand<TResult>)Clone();
+        var source = cmd._from;
+        cmd.ResetPreparation();
+        cmd._from = source;
+        cmd.QuoteIdentifiers = value;
+        return cmd;
+    }
+    /// <summary>
+    /// Overrides the naming convention for this command: auto-derived table and column names are
+    /// translated through <paramref name="convention"/> (for example
+    /// <see cref="SnakeCaseNamingConvention.Instance"/>), while names declared with
+    /// <c>[SqlTable]</c>/<c>[Column]</c> or a fluent mapping stay verbatim. Without a call the command
+    /// inherits the context default set with <c>DataContextBuilder.UseNamingConvention</c>.
+    /// </summary>
+    public QueryCommand<TResult> WithNamingConvention(INamingConvention? convention)
+    {
+        var cmd = (QueryCommand<TResult>)Clone();
+        var source = cmd._from;
+        cmd.ResetPreparation();
+        cmd._from = source;
+        cmd.NamingConvention = convention;
+        return cmd;
+    }
+    /// <summary>
+    /// Overrides the letter case in which this command's SQL keywords are emitted: <c>Upper</c> renders
+    /// <c>SELECT ... FROM ...</c>, <c>Lower</c> renders <c>select ... from ...</c>. Without a call the
+    /// command inherits the context default set with <c>DataContextBuilder.UseKeywordCase</c>.
+    /// Identifiers, string literals, function names, type names and raw SQL are never affected.
+    /// </summary>
+    public QueryCommand<TResult> WithKeywordCase(KeywordCase keywordCase = global::NextORM.Core.KeywordCase.Upper)
+    {
+        var cmd = (QueryCommand<TResult>)Clone();
+        var source = cmd._from;
+        cmd.ResetPreparation();
+        cmd._from = source;
+        cmd.KeywordCase = keywordCase;
+        return cmd;
+    }
+    /// <summary>
+    /// Overrides the command timeout in seconds for this command: the value is applied to the
+    /// underlying database command and takes precedence over the context default set with
+    /// <c>DataContextBuilder.UseCommandTimeout</c>. A value of zero or less means the provider default.
+    /// The override participates in the plan-cache key, so two otherwise identical commands with
+    /// different timeouts do not share a cached command and the value never leaks to another command.
+    /// </summary>
+    /// <param name="seconds">The command timeout in seconds; zero or less uses the provider default.</param>
+    /// <returns>A new command carrying the timeout override.</returns>
+    public QueryCommand<TResult> WithCommandTimeout(int seconds)
+    {
+        var cmd = (QueryCommand<TResult>)Clone();
+        var source = cmd._from;
+        cmd.ResetPreparation();
+        cmd._from = source;
+        cmd.CommandTimeout = seconds > 0 ? seconds : null;
+        return cmd;
+    }
+    /// <summary>
+    /// Attaches a SQL Server <c>FOR JSON</c> clause so the whole result set is returned as one JSON
+    /// document (<c>FOR JSON PATH</c> by default), and returns the command for further composition or
+    /// SQL inspection. Prefer <see cref="ForJson(ForJsonMode, string, bool, object[])"/> to execute
+    /// the query and read the document. A dialect that does not support the clause rejects the command
+    /// when its SQL is built.
+    /// </summary>
+    /// <param name="mode">Whether the output is shaped by the projection aliases (<see cref="ForJsonMode.Path"/>) or the table structure (<see cref="ForJsonMode.Auto"/>).</param>
+    /// <param name="root">An optional <c>ROOT('name')</c> wrapper around the document, or <c>null</c> for none.</param>
+    /// <param name="includeNullValues">Whether null-valued properties are emitted (<c>INCLUDE_NULL_VALUES</c>).</param>
+    /// <returns>A new command carrying the <c>FOR JSON</c> clause.</returns>
+    public QueryCommand<TResult> WithForJson(ForJsonMode mode = ForJsonMode.Path, string? root = null, bool includeNullValues = false)
+    {
+        var cmd = (QueryCommand<TResult>)Clone();
+        cmd.ResetPreparationPreservingFrom();
+        cmd.ForJsonClause = new ForJsonClause(mode, root, includeNullValues);
+        return cmd;
+    }
+    /// <summary>
+    /// Attaches a SQL Server <c>FOR XML</c> clause so the whole result set is returned as one XML
+    /// document (<c>FOR XML PATH</c> by default), and returns the command for further composition or
+    /// SQL inspection. Prefer <see cref="ForXml(ForXmlMode, string, string, bool, object[])"/> to
+    /// execute the query and read the document. A dialect that does not support the clause rejects the
+    /// command when its SQL is built, and combining it with <see cref="WithForJson"/> throws.
+    /// </summary>
+    /// <param name="mode">The <c>FOR XML</c> shaping mode (<c>RAW</c>, <c>AUTO</c>, <c>EXPLICIT</c> or <c>PATH</c>).</param>
+    /// <param name="elementName">The row element name for <c>RAW</c>/<c>PATH</c>, or <c>null</c> for the default.</param>
+    /// <param name="root">An optional <c>ROOT('name')</c> wrapper around the document, or <c>null</c> for none.</param>
+    /// <param name="elements">Whether columns are emitted as child elements (<c>ELEMENTS</c>).</param>
+    /// <returns>A new command carrying the <c>FOR XML</c> clause.</returns>
+    public QueryCommand<TResult> WithForXml(ForXmlMode mode = ForXmlMode.Path, string? elementName = null, string? root = null, bool elements = false)
+    {
+        var cmd = (QueryCommand<TResult>)Clone();
+        cmd.ResetPreparationPreservingFrom();
+        cmd.ForXmlClause = new ForXmlClause(mode, elementName, root, elements);
+        return cmd;
+    }
+    /// <summary>
+    /// Executes the query and returns the whole result set as one JSON document (SQL Server
+    /// <c>FOR JSON</c>). The projection drives the document shape in <see cref="ForJsonMode.Path"/> and
+    /// the table structure drives it in <see cref="ForJsonMode.Auto"/>; the query's own element type is
+    /// irrelevant because the database returns a single document column. This is a terminal operator,
+    /// so it does not apply an implicit <c>TOP 1</c>: the document covers the entire result set.
+    /// </summary>
+    /// <param name="mode">Whether the output is shaped by the projection aliases (<see cref="ForJsonMode.Path"/>) or the table structure (<see cref="ForJsonMode.Auto"/>).</param>
+    /// <param name="root">An optional <c>ROOT('name')</c> wrapper around the document, or <c>null</c> for none.</param>
+    /// <param name="includeNullValues">Whether null-valued properties are emitted (<c>INCLUDE_NULL_VALUES</c>).</param>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>The JSON document, or <c>null</c> when the query produced no rows (SQL Server <c>FOR JSON</c> yields SQL NULL for an empty result set).</returns>
+    public string? ForJson(ForJsonMode mode = ForJsonMode.Path, string? root = null, bool includeNullValues = false, params object[]? @params)
+        => ExecuteDocument(WithForJson(mode, root, includeNullValues), @params);
+    /// <summary>Asynchronously executes the query and returns the whole result set as one JSON document (SQL Server <c>FOR JSON</c>).</summary>
+    /// <param name="mode">Whether the output is shaped by the projection aliases (<see cref="ForJsonMode.Path"/>) or the table structure (<see cref="ForJsonMode.Auto"/>).</param>
+    /// <param name="root">An optional <c>ROOT('name')</c> wrapper around the document, or <c>null</c> for none.</param>
+    /// <param name="includeNullValues">Whether null-valued properties are emitted (<c>INCLUDE_NULL_VALUES</c>).</param>
+    /// <param name="cancellationToken">A token to cancel the query.</param>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>A task producing the JSON document, or <c>null</c> when the query produced no rows.</returns>
+    public Task<string?> ForJsonAsync(ForJsonMode mode = ForJsonMode.Path, string? root = null, bool includeNullValues = false, CancellationToken cancellationToken = default, params object[]? @params)
+        => ExecuteDocumentAsync(WithForJson(mode, root, includeNullValues), @params, cancellationToken);
+    /// <summary>
+    /// Executes the query and returns the whole result set as one XML document (SQL Server
+    /// <c>FOR XML</c>). This is a terminal operator, so it does not apply an implicit <c>TOP 1</c>: the
+    /// document covers the entire result set.
+    /// </summary>
+    /// <param name="mode">The <c>FOR XML</c> shaping mode (<c>RAW</c>, <c>AUTO</c>, <c>EXPLICIT</c> or <c>PATH</c>).</param>
+    /// <param name="elementName">The row element name for <c>RAW</c>/<c>PATH</c>, or <c>null</c> for the default.</param>
+    /// <param name="root">An optional <c>ROOT('name')</c> wrapper around the document, or <c>null</c> for none.</param>
+    /// <param name="elements">Whether columns are emitted as child elements (<c>ELEMENTS</c>).</param>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>The XML document, or <c>null</c> when the query produced no rows.</returns>
+    public string? ForXml(ForXmlMode mode = ForXmlMode.Path, string? elementName = null, string? root = null, bool elements = false, params object[]? @params)
+        => ExecuteDocument(WithForXml(mode, elementName, root, elements), @params);
+    /// <summary>Asynchronously executes the query and returns the whole result set as one XML document (SQL Server <c>FOR XML</c>).</summary>
+    /// <param name="mode">The <c>FOR XML</c> shaping mode (<c>RAW</c>, <c>AUTO</c>, <c>EXPLICIT</c> or <c>PATH</c>).</param>
+    /// <param name="elementName">The row element name for <c>RAW</c>/<c>PATH</c>, or <c>null</c> for the default.</param>
+    /// <param name="root">An optional <c>ROOT('name')</c> wrapper around the document, or <c>null</c> for none.</param>
+    /// <param name="elements">Whether columns are emitted as child elements (<c>ELEMENTS</c>).</param>
+    /// <param name="cancellationToken">A token to cancel the query.</param>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>A task producing the XML document, or <c>null</c> when the query produced no rows.</returns>
+    public Task<string?> ForXmlAsync(ForXmlMode mode = ForXmlMode.Path, string? elementName = null, string? root = null, bool elements = false, CancellationToken cancellationToken = default, params object[]? @params)
+        => ExecuteDocumentAsync(WithForXml(mode, elementName, root, elements), @params, cancellationToken);
+
+    private string? ExecuteDocument(QueryCommand<TResult> documentCommand, object[]? @params)
+    {
+        object[] boundParams = @params ?? [];
+        return CreateDocumentCommand(documentCommand).ExecuteScalar(boundParams);
+    }
+
+    private async Task<string?> ExecuteDocumentAsync(QueryCommand<TResult> documentCommand, object[]? @params, CancellationToken cancellationToken)
+    {
+        object[] boundParams = @params ?? [];
+        return await CreateDocumentCommand(documentCommand).ExecuteScalarAsync(cancellationToken, boundParams).ConfigureAwait(false);
+    }
+
+    private QueryCommand<string> CreateDocumentCommand(QueryCommand<TResult> configured)
+    {
+        if (_dataContext is not NextORM.Core.DataContext)
+            throw new NotSupportedException("FOR JSON / FOR XML requires a relational database provider.");
+
+        var cmd = new QueryCommand<string>(_dataContext, configured, forCache: false);
+        configured.CopyTo(cmd, true);
+        cmd.ForJsonClause = configured.ForJsonClause;
+        cmd.ForXmlClause = configured.ForXmlClause;
+        cmd.DocumentMode = true;
+        cmd.ResetPreparationPreservingFrom();
+        return cmd;
+    }
+    /// <summary>Returns a clone of this command combined with <paramref name="queryCommand"/> through <c>UNION</c> (duplicates removed).</summary>
+    /// <typeparam name="T">The project type of the second operand.</typeparam>
+    /// <param name="queryCommand">The second operand of the set operation.</param>
+    /// <returns>A new command carrying the set operation.</returns>
+    public QueryCommand<TResult> Union<T>(QueryCommand<T> queryCommand)
+    {
+        var cmd = (QueryCommand<TResult>)Clone();
+        // ResetPreparation clears _from; a typed-CTE source stores its ColumnShape there, so preserve
+        // it (as Hint/WithTag do) or the set operation's first operand would lose its source and fail
+        // to prepare when that source is not a mapped entity.
+        var source = cmd._from;
+        cmd.ResetPreparation();
+        cmd._from = source;
+        cmd.SetOperation(queryCommand, UnionType.Distinct);
+        return cmd;
+    }
+    /// <summary>Returns a clone of this command combined with <paramref name="queryCommand"/> through <c>UNION ALL</c> (duplicates preserved).</summary>
+    /// <typeparam name="T">The project type of the second operand.</typeparam>
+    /// <param name="queryCommand">The second operand of the set operation.</param>
+    /// <returns>A new command carrying the set operation.</returns>
+    public QueryCommand<TResult> UnionAll<T>(QueryCommand<T> queryCommand)
+    {
+        var cmd = (QueryCommand<TResult>)Clone();
+        // ResetPreparation clears _from; a typed-CTE source stores its ColumnShape there, so preserve
+        // it (as Hint/WithTag do) or the set operation's first operand would lose its source and fail
+        // to prepare when that source is not a mapped entity.
+        var source = cmd._from;
+        cmd.ResetPreparation();
+        cmd._from = source;
+        cmd.SetOperation(queryCommand, UnionType.All);
+        return cmd;
+    }
+    /// <summary>Returns a clone of this command combined with <paramref name="queryCommand"/> through <c>INTERSECT</c> (distinct rows present in both operands).</summary>
+    /// <typeparam name="T">The project type of the second operand.</typeparam>
+    /// <param name="queryCommand">The second operand of the set operation.</param>
+    /// <returns>A new command carrying the set operation.</returns>
+    public QueryCommand<TResult> Intersect<T>(QueryCommand<T> queryCommand)
+    {
+        var cmd = (QueryCommand<TResult>)Clone();
+        // ResetPreparation clears _from; a typed-CTE source stores its ColumnShape there, so preserve
+        // it (as Hint/WithTag do) or the set operation's first operand would lose its source and fail
+        // to prepare when that source is not a mapped entity.
+        var source = cmd._from;
+        cmd.ResetPreparation();
+        cmd._from = source;
+        cmd.SetOperation(queryCommand, UnionType.Intersect);
+        return cmd;
+    }
+    /// <summary>Returns a clone of this command combined with <paramref name="queryCommand"/> through <c>INTERSECT ALL</c> (duplicates preserved).</summary>
+    /// <typeparam name="T">The project type of the second operand.</typeparam>
+    /// <param name="queryCommand">The second operand of the set operation.</param>
+    /// <returns>A new command carrying the set operation.</returns>
+    public QueryCommand<TResult> IntersectAll<T>(QueryCommand<T> queryCommand)
+    {
+        var cmd = (QueryCommand<TResult>)Clone();
+        // ResetPreparation clears _from; a typed-CTE source stores its ColumnShape there, so preserve
+        // it (as Hint/WithTag do) or the set operation's first operand would lose its source and fail
+        // to prepare when that source is not a mapped entity.
+        var source = cmd._from;
+        cmd.ResetPreparation();
+        cmd._from = source;
+        cmd.SetOperation(queryCommand, UnionType.IntersectAll);
+        return cmd;
+    }
+    /// <summary>Returns a clone of this command combined with <paramref name="queryCommand"/> through <c>EXCEPT</c> (distinct rows of this command not present in the other).</summary>
+    /// <typeparam name="T">The project type of the second operand.</typeparam>
+    /// <param name="queryCommand">The second operand of the set operation.</param>
+    /// <returns>A new command carrying the set operation.</returns>
+    public QueryCommand<TResult> Except<T>(QueryCommand<T> queryCommand)
+    {
+        var cmd = (QueryCommand<TResult>)Clone();
+        // ResetPreparation clears _from; a typed-CTE source stores its ColumnShape there, so preserve
+        // it (as Hint/WithTag do) or the set operation's first operand would lose its source and fail
+        // to prepare when that source is not a mapped entity.
+        var source = cmd._from;
+        cmd.ResetPreparation();
+        cmd._from = source;
+        cmd.SetOperation(queryCommand, UnionType.Except);
+        return cmd;
+    }
+    /// <summary>Returns a clone of this command combined with <paramref name="queryCommand"/> through <c>EXCEPT ALL</c> (duplicates preserved).</summary>
+    /// <typeparam name="T">The project type of the second operand.</typeparam>
+    /// <param name="queryCommand">The second operand of the set operation.</param>
+    /// <returns>A new command carrying the set operation.</returns>
+    public QueryCommand<TResult> ExceptAll<T>(QueryCommand<T> queryCommand)
+    {
+        var cmd = (QueryCommand<TResult>)Clone();
+        // ResetPreparation clears _from; a typed-CTE source stores its ColumnShape there, so preserve
+        // it (as Hint/WithTag do) or the set operation's first operand would lose its source and fail
+        // to prepare when that source is not a mapped entity.
+        var source = cmd._from;
+        cmd.ResetPreparation();
+        cmd._from = source;
+        cmd.SetOperation(queryCommand, UnionType.ExceptAll);
+        return cmd;
+    }
+
+    /// <summary>Returns a clone of this command combined with the rows projected from <typeparamref name="TEntity"/> by <paramref name="selector"/> through <c>UNION</c> (duplicates removed).</summary>
+    /// <typeparam name="TEntity">The entity type of the second operand's source.</typeparam>
+    /// <param name="selector">Projection from <typeparamref name="TEntity"/> to <typeparamref name="TResult"/>; must not be <see langword="null"/>.</param>
+    /// <returns>A new command carrying the set operation.</returns>
+    /// <remarks>
+    /// This overload is syntactic sugar for <c>Union(_dataContext.From&lt;TEntity&gt;().Select(selector))</c>:
+    /// it fixes the element type of the right operand to <typeparamref name="TResult"/> (the left side's type).
+    /// A bare <c>Union(null)</c> is ambiguous between
+    /// <see cref="Union{T}(QueryCommand{T})"/> and this overload's
+    /// <c>Expression&lt;Func&lt;TEntity, TResult&gt;&gt;</c> parameter; the caller resolves it with a typed
+    /// null — <c>(QueryCommand&lt;TResult&gt;)null!</c> selects the command overload, while
+    /// <c>(Expression&lt;Func&lt;TEntity, TResult&gt;&gt;)null!</c> selects this selector overload (which
+    /// then throws <see cref="ArgumentNullException"/>).
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="selector"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">This command is not bound to a data context.</exception>
+    public QueryCommand<TResult> Union<TEntity>(Expression<Func<TEntity, TResult>> selector)
+    {
+        ArgumentNullException.ThrowIfNull(selector);
+        if (_dataContext is null)
+            throw new InvalidOperationException("This query command is not bound to a data context.");
+        return Union(_dataContext.From<TEntity>().Select(selector));
+    }
+
+    /// <summary>Returns a clone of this command combined with the rows projected from <typeparamref name="TEntity"/> by <paramref name="selector"/> through <c>UNION ALL</c> (duplicates preserved).</summary>
+    /// <typeparam name="TEntity">The entity type of the second operand's source.</typeparam>
+    /// <param name="selector">Projection from <typeparamref name="TEntity"/> to <typeparamref name="TResult"/>; must not be <see langword="null"/>.</param>
+    /// <returns>A new command carrying the set operation.</returns>
+    /// <remarks>
+    /// This overload is syntactic sugar for <c>UnionAll(_dataContext.From&lt;TEntity&gt;().Select(selector))</c>:
+    /// it fixes the element type of the right operand to <typeparamref name="TResult"/> (the left side's type).
+    /// A bare <c>UnionAll(null)</c> is ambiguous between
+    /// <see cref="UnionAll{T}(QueryCommand{T})"/> and this overload's
+    /// <c>Expression&lt;Func&lt;TEntity, TResult&gt;&gt;</c> parameter; the caller resolves it with a typed
+    /// null — <c>(QueryCommand&lt;TResult&gt;)null!</c> selects the command overload, while
+    /// <c>(Expression&lt;Func&lt;TEntity, TResult&gt;&gt;)null!</c> selects this selector overload (which
+    /// then throws <see cref="ArgumentNullException"/>).
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="selector"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">This command is not bound to a data context.</exception>
+    public QueryCommand<TResult> UnionAll<TEntity>(Expression<Func<TEntity, TResult>> selector)
+    {
+        ArgumentNullException.ThrowIfNull(selector);
+        if (_dataContext is null)
+            throw new InvalidOperationException("This query command is not bound to a data context.");
+        return UnionAll(_dataContext.From<TEntity>().Select(selector));
+    }
+
+    /// <summary>Returns a clone of this command combined with the rows projected from <typeparamref name="TEntity"/> by <paramref name="selector"/> through <c>INTERSECT</c> (distinct rows present in both operands).</summary>
+    /// <typeparam name="TEntity">The entity type of the second operand's source.</typeparam>
+    /// <param name="selector">Projection from <typeparamref name="TEntity"/> to <typeparamref name="TResult"/>; must not be <see langword="null"/>.</param>
+    /// <returns>A new command carrying the set operation.</returns>
+    /// <remarks>
+    /// This overload is syntactic sugar for <c>Intersect(_dataContext.From&lt;TEntity&gt;().Select(selector))</c>:
+    /// it fixes the element type of the right operand to <typeparamref name="TResult"/> (the left side's type).
+    /// A bare <c>Intersect(null)</c> is ambiguous between
+    /// <see cref="Intersect{T}(QueryCommand{T})"/> and this overload's
+    /// <c>Expression&lt;Func&lt;TEntity, TResult&gt;&gt;</c> parameter; the caller resolves it with a typed
+    /// null — <c>(QueryCommand&lt;TResult&gt;)null!</c> selects the command overload, while
+    /// <c>(Expression&lt;Func&lt;TEntity, TResult&gt;&gt;)null!</c> selects this selector overload (which
+    /// then throws <see cref="ArgumentNullException"/>).
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="selector"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">This command is not bound to a data context.</exception>
+    public QueryCommand<TResult> Intersect<TEntity>(Expression<Func<TEntity, TResult>> selector)
+    {
+        ArgumentNullException.ThrowIfNull(selector);
+        if (_dataContext is null)
+            throw new InvalidOperationException("This query command is not bound to a data context.");
+        return Intersect(_dataContext.From<TEntity>().Select(selector));
+    }
+
+    /// <summary>Returns a clone of this command combined with the rows projected from <typeparamref name="TEntity"/> by <paramref name="selector"/> through <c>INTERSECT ALL</c> (duplicates preserved).</summary>
+    /// <typeparam name="TEntity">The entity type of the second operand's source.</typeparam>
+    /// <param name="selector">Projection from <typeparamref name="TEntity"/> to <typeparamref name="TResult"/>; must not be <see langword="null"/>.</param>
+    /// <returns>A new command carrying the set operation.</returns>
+    /// <remarks>
+    /// This overload is syntactic sugar for <c>IntersectAll(_dataContext.From&lt;TEntity&gt;().Select(selector))</c>:
+    /// it fixes the element type of the right operand to <typeparamref name="TResult"/> (the left side's type).
+    /// A bare <c>IntersectAll(null)</c> is ambiguous between
+    /// <see cref="IntersectAll{T}(QueryCommand{T})"/> and this overload's
+    /// <c>Expression&lt;Func&lt;TEntity, TResult&gt;&gt;</c> parameter; the caller resolves it with a typed
+    /// null — <c>(QueryCommand&lt;TResult&gt;)null!</c> selects the command overload, while
+    /// <c>(Expression&lt;Func&lt;TEntity, TResult&gt;&gt;)null!</c> selects this selector overload (which
+    /// then throws <see cref="ArgumentNullException"/>).
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="selector"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">This command is not bound to a data context.</exception>
+    public QueryCommand<TResult> IntersectAll<TEntity>(Expression<Func<TEntity, TResult>> selector)
+    {
+        ArgumentNullException.ThrowIfNull(selector);
+        if (_dataContext is null)
+            throw new InvalidOperationException("This query command is not bound to a data context.");
+        return IntersectAll(_dataContext.From<TEntity>().Select(selector));
+    }
+
+    /// <summary>Returns a clone of this command combined with the rows projected from <typeparamref name="TEntity"/> by <paramref name="selector"/> through <c>EXCEPT</c> (distinct rows of this command not present in the other).</summary>
+    /// <typeparam name="TEntity">The entity type of the second operand's source.</typeparam>
+    /// <param name="selector">Projection from <typeparamref name="TEntity"/> to <typeparamref name="TResult"/>; must not be <see langword="null"/>.</param>
+    /// <returns>A new command carrying the set operation.</returns>
+    /// <remarks>
+    /// This overload is syntactic sugar for <c>Except(_dataContext.From&lt;TEntity&gt;().Select(selector))</c>:
+    /// it fixes the element type of the right operand to <typeparamref name="TResult"/> (the left side's type).
+    /// A bare <c>Except(null)</c> is ambiguous between
+    /// <see cref="Except{T}(QueryCommand{T})"/> and this overload's
+    /// <c>Expression&lt;Func&lt;TEntity, TResult&gt;&gt;</c> parameter; the caller resolves it with a typed
+    /// null — <c>(QueryCommand&lt;TResult&gt;)null!</c> selects the command overload, while
+    /// <c>(Expression&lt;Func&lt;TEntity, TResult&gt;&gt;)null!</c> selects this selector overload (which
+    /// then throws <see cref="ArgumentNullException"/>).
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="selector"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">This command is not bound to a data context.</exception>
+    public QueryCommand<TResult> Except<TEntity>(Expression<Func<TEntity, TResult>> selector)
+    {
+        ArgumentNullException.ThrowIfNull(selector);
+        if (_dataContext is null)
+            throw new InvalidOperationException("This query command is not bound to a data context.");
+        return Except(_dataContext.From<TEntity>().Select(selector));
+    }
+
+    /// <summary>Returns a clone of this command combined with the rows projected from <typeparamref name="TEntity"/> by <paramref name="selector"/> through <c>EXCEPT ALL</c> (duplicates preserved).</summary>
+    /// <typeparam name="TEntity">The entity type of the second operand's source.</typeparam>
+    /// <param name="selector">Projection from <typeparamref name="TEntity"/> to <typeparamref name="TResult"/>; must not be <see langword="null"/>.</param>
+    /// <returns>A new command carrying the set operation.</returns>
+    /// <remarks>
+    /// This overload is syntactic sugar for <c>ExceptAll(_dataContext.From&lt;TEntity&gt;().Select(selector))</c>:
+    /// it fixes the element type of the right operand to <typeparamref name="TResult"/> (the left side's type).
+    /// A bare <c>ExceptAll(null)</c> is ambiguous between
+    /// <see cref="ExceptAll{T}(QueryCommand{T})"/> and this overload's
+    /// <c>Expression&lt;Func&lt;TEntity, TResult&gt;&gt;</c> parameter; the caller resolves it with a typed
+    /// null — <c>(QueryCommand&lt;TResult&gt;)null!</c> selects the command overload, while
+    /// <c>(Expression&lt;Func&lt;TEntity, TResult&gt;&gt;)null!</c> selects this selector overload (which
+    /// then throws <see cref="ArgumentNullException"/>).
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="selector"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">This command is not bound to a data context.</exception>
+    public QueryCommand<TResult> ExceptAll<TEntity>(Expression<Func<TEntity, TResult>> selector)
+    {
+        ArgumentNullException.ThrowIfNull(selector);
+        if (_dataContext is null)
+            throw new InvalidOperationException("This query command is not bound to a data context.");
+        return ExceptAll(_dataContext.From<TEntity>().Select(selector));
+    }
+
+    /// <summary>
+    /// Clone of this command with the set operation removed, so the first operand of a
+    /// <c>UNION</c>/<c>INTERSECT</c>/<c>EXCEPT</c> can be executed independently.
+    /// </summary>
+    internal QueryCommand<TResult> CloneWithoutUnion()
+    {
+        var cmd = (QueryCommand<TResult>)Clone();
+        cmd.ClearUnion();
+        cmd.ResetPreparationPreservingFrom();
+        return cmd;
+    }
+
+    /// <summary>
+    /// Wraps this command as an ordinary (non-recursive) common table expression declared under
+    /// <paramref name="name"/>. The returned descriptor is read with
+    /// <see cref="DataContextExtensions.From{T}(IDataContext, Cte{T})"/>; the CTE keeps this command as
+    /// its body and the projection shape <typeparamref name="TResult"/> as its readable columns, so
+    /// member access on the typed source resolves to this command's output columns. The descriptor is a
+    /// typed projection source, not a mapped entity. Recursion is not part of this API: use the legacy
+    /// <c>WithRecursive</c> string API for recursive CTEs.
+    /// </summary>
+    /// <param name="name">The name the CTE is declared under and referenced by in <c>from</c>.</param>
+    /// <returns>An immutable descriptor of the declared CTE.</returns>
+    /// <exception cref="ArgumentException"><paramref name="name"/> is <c>null</c> or empty.</exception>
+    public Cte<TResult> AsCte(string name)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(name);
+
+        return new Cte<TResult>(this, name);
+    }
+
+    /// <summary>
+    /// Wraps this command as the anchor of a recursive common table expression declared under
+    /// <paramref name="name"/>. <paramref name="step"/> is invoked <b>exactly once</b>, during this
+    /// call, with a typed self-reference bound to the anchor's shape; the returned step query is
+    /// combined with the anchor as <c>anchor UNION ALL step</c>. The descriptor is read with
+    /// <see cref="DataContextExtensions.From{T}(IDataContext, Cte{T})"/>. No recursion-depth hint is
+    /// emitted by this overload. Legacy <c>WithRecursive</c> behavior is unchanged.
+    /// </summary>
+    /// <param name="name">The name the CTE is declared under and referenced by in <c>from</c>.</param>
+    /// <param name="step">Builds the recursive step from the typed self-reference; invoked once.</param>
+    /// <returns>An immutable descriptor of the recursive CTE.</returns>
+    /// <exception cref="ArgumentException"><paramref name="name"/> is <c>null</c> or empty.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="step"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException"><paramref name="step"/> returned <see langword="null"/>.</exception>
+    public Cte<TResult> AsRecursiveCte(string name, Func<CteReference<TResult>, QueryCommand<TResult>> step)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(name);
+        ArgumentNullException.ThrowIfNull(step);
+
+        return Cte<TResult>.CreateRecursive(this, name, step, null);
+    }
+
+    /// <summary>
+    /// Wraps this command as the anchor of a recursive common table expression with an explicit
+    /// recursion-depth limit. See the two-argument <c>AsRecursiveCte</c> overload for the callback
+    /// contract. <paramref name="maxRecursion"/> is required (no default): it is
+    /// rendered only by dialects that expose a depth option (SQL Server
+    /// <c>option (maxrecursion n)</c>) and ignored by the others, matching legacy <c>WithRecursive</c>
+    /// semantics; omitting the hint is expressed by the two-argument overload.
+    /// </summary>
+    /// <param name="name">The name the CTE is declared under and referenced by in <c>from</c>.</param>
+    /// <param name="step">Builds the recursive step from the typed self-reference; invoked once.</param>
+    /// <param name="maxRecursion">The recursion-depth limit (SQL Server <c>maxrecursion n</c>); required.</param>
+    /// <returns>An immutable descriptor of the recursive CTE.</returns>
+    /// <exception cref="ArgumentException"><paramref name="name"/> is <c>null</c> or empty.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="step"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException"><paramref name="step"/> returned <see langword="null"/>.</exception>
+    public Cte<TResult> AsRecursiveCte(string name, Func<CteReference<TResult>, QueryCommand<TResult>> step, int maxRecursion)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(name);
+        ArgumentNullException.ThrowIfNull(step);
+
+        return Cte<TResult>.CreateRecursive(this, name, step, maxRecursion);
+    }
+
+    /// <summary>
+    /// Resets the prepared state while preserving the from-expression. <see cref="QueryCommand.ResetPreparation"/>
+    /// clears <c>_from</c>, but a typed-CTE (or equivalent projection-source) read stores its
+    /// <c>ColumnShape</c> marker there; an operator that resets after cloning must restore it, exactly
+    /// like the set-operation methods, or preparation re-derives a mapped source from entity metadata
+    /// and fails for a non-mapped projection type.
+    /// </summary>
+    private void ResetPreparationPreservingFrom()
+    {
+        var source = _from;
+        ResetPreparation();
+        _from = source;
+    }
+
+}

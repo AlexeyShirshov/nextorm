@@ -249,19 +249,26 @@ CI run [`42398374420`](https://github.com/AlexeyShirshov/nextorm/actions/runs/42
 
 ## 4. Публикация (шаги владельца)
 
-- [ ] Закоммитить подготовленный объём (§3) на ветке `1.0.9-rc5` и запушить её.
-- [ ] Влить `1.0.9-rc5` в `main` через PR. **Здесь и закрываются релизные гейты:** job `build`
+- [x] Закоммитить подготовленный объём (§3) на ветке `1.0.9-rc5` и запушить её. (`b44c6d0f`)
+- [x] Влить `1.0.9-rc5` в `main` через PR. **Здесь и закрываются релизные гейты:** job `build`
       прогоняет build, все 16 тестовых модулей и оба coverage-гейта с hard-fail на `main`;
-      workflow `Docs` деплоит документацию EN+RU.
-- [ ] Дождаться зелёного run `build` на `main` и успешного деплоя `Docs` (якорь `#109-rc5`).
-- [ ] Создать тег `v1.0.9-rc5` → CI job `publish` (OIDC) отправляет **8** пакетов на nuget.org,
+      workflow `Docs` деплоит документацию EN+RU. (PR #371, merge `8c484206`; конфликты с `main`
+      сняты merge-коммитом `dcc752db`, см. §3.6)
+- [x] Дождаться зелёного run `build` на `main` и успешного деплоя `Docs` (якорь `#109-rc5`
+      доступен на задеплоенной странице).
+- [x] Создать тег `v1.0.9-rc5` → CI job `publish` (OIDC) отправляет **8** пакетов на nuget.org,
       включая `nextorm.extensions`.
-- [ ] Проверить run `publish`: 8 пакетов, ошибок нет.
-- [ ] Создать GitHub Release (prerelease): ссылка на
+- [x] Проверить run `publish`: run `42452841750` — `build`, `aot`, `publish` green, «Your package was
+      pushed» × 8; все 8 версий `1.0.9-rc5` подтверждены через flat-container API nuget.org.
+- [x] Создать GitHub Release (prerelease): ссылка на
       <https://alexeyshirshov.github.io/nextorm/#109-rc5> + 8 пакетов + issues #245–#369.
 - [ ] Закрыть milestone 1.0.9-rc5 (его issues уже closed, open=0).
-- [ ] После публикации: бампнуть `examples/Directory.Packages.props` `NextOrmVersion` → `1.0.9-rc5`
+- [x] После публикации: бампнуть `examples/Directory.Packages.props` `NextOrmVersion` → `1.0.9-rc5`
       и обновить дату/строку прогона в `examples/VERIFICATION.md`.
+- [x] Бампнуть `Directory.Build.props` `<Version>` → `1.0.9-rc5` и перевести
+      `examples/nextorm.examples.oc-report` с `ProjectReference` на опубликованные пакеты.
+      Примеры перепрогнаны на rc5: postgres 10/10, mssql 11/11, clickhouse 9/9, oc-report JIT/AOT
+      идентичны (8,414,024 байта).
 
 ## 5. Definition of Done
 

@@ -703,4 +703,21 @@ public class PlanKeyUniquenessTests
         {
         }
     }
+
+    [Fact]
+    public void SetOperation_Selector_Form_ShouldSharePlanKeyWithExplicitForm()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var selector = e.Select(x => x.Id).Union<IComplexEntity>(it => (int)it.Id);
+        var explicitForm = e.Select(x => x.Id).Union(ctx.From<IComplexEntity>().Select(it => (int)it.Id));
+
+        selector.PrepareCommand(false, CancellationToken.None);
+        explicitForm.PrepareCommand(false, CancellationToken.None);
+
+        var comparer = selector.GetQueryPlanEqualityComparer();
+        comparer.Equals(selector, explicitForm).Should().BeTrue("selector and explicit forms must share a plan key");
+        comparer.GetHashCode(selector).Should().Be(comparer.GetHashCode(explicitForm));
+    }
 }

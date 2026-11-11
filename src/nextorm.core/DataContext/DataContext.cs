@@ -231,7 +231,13 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// <summary>Starts a query over the raw physical table named <paramref name="table"/>.</summary>
     /// <param name="table">The physical table name to select from.</param>
     /// <returns>A builder over the table.</returns>
-    public EntityBuilder From(string table) => new(this, table) { Logger = CommandLogger };
+    /// <exception cref="ArgumentNullException"><paramref name="table"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="table"/> is empty or consists only of white-space characters.</exception>
+    public EntityBuilder From(string table)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(table);
+        return new(this, table) { Logger = CommandLogger };
+    }
 
     /// <summary>Raised after the context has released its connection during disposal.</summary>
     public event EventHandler? Disposed;

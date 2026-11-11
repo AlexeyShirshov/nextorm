@@ -1,0 +1,37 @@
+#nullable enable
+NextORM.Extensions.ExtremeKind
+NextORM.Extensions.ExtremeKind.Max = 1 -> NextORM.Extensions.ExtremeKind
+NextORM.Extensions.ExtremeKind.Min = 0 -> NextORM.Extensions.ExtremeKind
+NextORM.Extensions.ExtremeRowComponent<TEntity>
+NextORM.Extensions.ExtremeRowComponent<TEntity>.BuildQuery(NextORM.Core.IQueryComponentBuildContext! context) -> void
+NextORM.Extensions.ExtremeRowComponent<TEntity>.Contribution.get -> NextORM.Core.QueryComponentContribution
+NextORM.Extensions.ExtremeRowComponent<TEntity>.ExtremeRowComponent(NextORM.Extensions.ExtremeKind kind, System.Linq.Expressions.LambdaExpression! valueSelector, NextORM.Core.ExtremeRowTies ties, System.Linq.Expressions.Expression<System.Func<TEntity, object?>!>? groupBy) -> void
+NextORM.Extensions.ExtremeRowComponent<TEntity>.GetShapeSelector(int index) -> System.Linq.Expressions.LambdaExpression!
+NextORM.Extensions.ExtremeRowComponent<TEntity>.Prepare(NextORM.Core.IQueryComponentPrepareContext! context) -> NextORM.Core.IQueryComponentDescriptor!
+NextORM.Extensions.ExtremeRowComponent<TEntity>.ShapeSelectorCount.get -> int
+NextORM.Extensions.ExtremeRowComponent<TEntity>.ShapeSelectors.get -> System.Linq.Expressions.LambdaExpression![]!
+NextORM.Extensions.ExtremeRowComponent<TEntity>.ShapeState.get -> object?
+NextORM.Extensions.ExtremeRowComponent<TEntity>.Slot.get -> System.Type!
+NextORM.Extensions.ExtremeRowExtensions
+NextORM.Extensions.SelectGroupComponent<TEntity>
+NextORM.Extensions.SelectGroupComponent<TEntity>.BuildQuery(NextORM.Core.IQueryComponentBuildContext! context) -> void
+NextORM.Extensions.SelectGroupComponent<TEntity>.Contribution.get -> NextORM.Core.QueryComponentContribution
+NextORM.Extensions.SelectGroupComponent<TEntity>.GetShapeSelector(int index) -> System.Linq.Expressions.LambdaExpression!
+NextORM.Extensions.SelectGroupComponent<TEntity>.Prepare(NextORM.Core.IQueryComponentPrepareContext! context) -> NextORM.Core.IQueryComponentDescriptor!
+NextORM.Extensions.SelectGroupComponent<TEntity>.SelectGroupComponent(System.Linq.Expressions.LambdaExpression! projection, System.Linq.Expressions.LambdaExpression? condition = null) -> void
+NextORM.Extensions.SelectGroupComponent<TEntity>.ShapeSelectorCount.get -> int
+NextORM.Extensions.SelectGroupComponent<TEntity>.ShapeSelectors.get -> System.Linq.Expressions.LambdaExpression![]!
+NextORM.Extensions.SelectGroupComponent<TEntity>.ShapeState.get -> object?
+NextORM.Extensions.SelectGroupComponent<TEntity>.Slot.get -> System.Type!
+NextORM.Extensions.SelectGroupExtensions
+NextORM.Extensions.SelectGroupMode
+NextORM.Extensions.SelectGroupMode.ConstantProjection = 3 -> NextORM.Extensions.SelectGroupMode
+NextORM.Extensions.SelectGroupMode.GlobalAggregate = 2 -> NextORM.Extensions.SelectGroupMode
+NextORM.Extensions.SelectGroupMode.Keyed = 1 -> NextORM.Extensions.SelectGroupMode
+NextORM.Extensions.SelectGroupMode.None = 0 -> NextORM.Extensions.SelectGroupMode
+static NextORM.Extensions.ExtremeRowExtensions.SelectWhereMax<TEntity, TValue, TResult>(this NextORM.Core.EntityBuilder<TEntity>! source, System.Linq.Expressions.Expression<System.Func<TEntity, TValue>!>! valueSelector, System.Linq.Expressions.Expression<System.Func<TEntity, TResult>!>! projection, NextORM.Core.ExtremeRowTies ties = NextORM.Core.ExtremeRowTies.One, System.Linq.Expressions.Expression<System.Func<TEntity, object?>!>? groupBy = null) -> NextORM.Core.QueryCommand<TResult>!
+static NextORM.Extensions.ExtremeRowExtensions.SelectWhereMax<TEntity, TValue>(this NextORM.Core.EntityBuilder<TEntity>! source, System.Linq.Expressions.Expression<System.Func<TEntity, TValue>!>! valueSelector, NextORM.Core.ExtremeRowTies ties = NextORM.Core.ExtremeRowTies.One, System.Linq.Expressions.Expression<System.Func<TEntity, object?>!>? groupBy = null) -> NextORM.Core.EntityBuilder<TEntity>!
+static NextORM.Extensions.ExtremeRowExtensions.SelectWhereMin<TEntity, TValue, TResult>(this NextORM.Core.EntityBuilder<TEntity>! source, System.Linq.Expressions.Expression<System.Func<TEntity, TValue>!>! valueSelector, System.Linq.Expressions.Expression<System.Func<TEntity, TResult>!>! projection, NextORM.Core.ExtremeRowTies ties = NextORM.Core.ExtremeRowTies.One, System.Linq.Expressions.Expression<System.Func<TEntity, object?>!>? groupBy = null) -> NextORM.Core.QueryCommand<TResult>!
+static NextORM.Extensions.ExtremeRowExtensions.SelectWhereMin<TEntity, TValue>(this NextORM.Core.EntityBuilder<TEntity>! source, System.Linq.Expressions.Expression<System.Func<TEntity, TValue>!>! valueSelector, NextORM.Core.ExtremeRowTies ties = NextORM.Core.ExtremeRowTies.One, System.Linq.Expressions.Expression<System.Func<TEntity, object?>!>? groupBy = null) -> NextORM.Core.EntityBuilder<TEntity>!
+static NextORM.Extensions.SelectGroupExtensions.SelectGroup<TEntity, TResult>(this NextORM.Core.EntityBuilder<TEntity>! source, System.Linq.Expressions.Expression<System.Func<TEntity, TResult>!>! projection) -> NextORM.Core.QueryCommand<TResult>!
+static NextORM.Extensions.SelectGroupExtensions.SelectGroupHaving<TEntity, TResult>(this NextORM.Core.EntityBuilder<TEntity>! source, System.Linq.Expressions.Expression<System.Func<TEntity, TResult>!>! projection, System.Linq.Expressions.Expression<System.Func<TResult, bool>!>! condition) -> NextORM.Core.QueryCommand<TResult>!

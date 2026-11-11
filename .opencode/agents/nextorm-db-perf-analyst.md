@@ -23,8 +23,8 @@ explain, and apply the minimal fix when the evidence supports it.
 - Plan cache / prepared: `DataContext/Cache/` — `QueryCache.cs`,
   `QueryPlanStore.cs`, `QueryPlan.cs`, `PreparedQueryCommand.cs`,
   `DbPreparedQueryCommand.cs`.
-- SQL generation: `DataContext/SqlBuilder.cs`, `Query/QueryCommand*.cs`,
-  `Visitors/BaseExpressionVisitor.cs`, `Dialect/ISqlDialect.cs` +
+- SQL generation: `DataContext/Sql/SqlBuilder.cs`, `Query/QueryCommand*.cs`,
+  `Visitors/Core/BaseExpressionVisitor.cs`, `Dialect/ISqlDialect.cs` +
   `SqlDialectBase.cs` (provider SQL behind `Make*`/`Render*`).
 - Parameter binding: `ParamList.cs`, `IParameterProvider.GetParamName` (cached `norm_pN`).
 

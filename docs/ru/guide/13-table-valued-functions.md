@@ -42,7 +42,7 @@ select value
 привязывается к контексту только тогда, когда его потребляет `From`, соединение или APPLY. nextorm
 только генерирует вызов — функция уже должна существовать в целевой базе данных.
 
-Таблицы `Вывод:` ниже показывают строки, которые возвращает каждый пример на сид-данных интеграционных тестов (`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).
+Таблицы `Вывод:` ниже показывают строки, которые возвращает каждый пример на сид-данных интеграционных тестов (`tests/nextorm.integration.tests/Providers/TestProviders/SqliteTestProvider.cs`).
 
 Вывод:
 
@@ -51,31 +51,6 @@ select value
 | 1     |
 | 2     |
 | 3     |
-
-### Ломающее изменение в 1.0.9-rc4
-
-Прежняя статическая поверхность удалена **без shim-совместимости**:
-
-* атрибут `[SqlTableFunction]` и методы-заглушки, возвращавшие `IQueryable<T>`, которые он помечал;
-* точки входа табличной функции `From`/`CreateQueryBuilder…From`, принимавшие
-  `Expression<Func<IQueryable<T>>>`.
-
-Каждая табличная функция теперь — runtime-фабрика, описанная ниже. Миграция существующего объявления
-заменяет атрибут и тело заглушки на дескриптор, а место вызова — на lambda-источник:
-
-```csharp
-// 1.0.9-rc4
-public static TvfEntityBuilder<ITvfRow> ById(long id) => new("rows_by_id");
-
-var rows = dataContext
-    .From(() => Tvf.ById(id))
-    .Select(r => new { r.Id })
-    .ToList();
-```
-
-Метаданные `[SqlTableFunction]` (имя, схема, `WithClause`, `CallClause`, индексы verbatim-аргументов,
-схема результата) переносятся в конструктор дескриптора без изменений; см.
-[Объявление runtime-фабрики](#объявление-runtime-фабрики).
 
 ## Объявление runtime-фабрики
 
@@ -755,7 +730,7 @@ SQLite включает `json_each`/`json_tree`/`fts5`, а любой друго
 
 ---
 
-Source: `src/nextorm.core/Builders/TvfEntityBuilder.cs`, `src/nextorm.core/Builders/SourceExpressionLowerer.cs`, `src/nextorm.core/Builders/TvfJoinSourceExtensions.cs`, `src/nextorm.core/DataContext/SqlSourceRenderer.cs`;
-`tests/nextorm.core.tests/Builders/T320RuntimeTvfTests.cs`, `tests/nextorm.core.tests/Builders/T320RuntimeTvfIdentityTests.cs`;
+Source: `src/nextorm.core/Builders/Tvf/TvfEntityBuilder.cs`, `src/nextorm.core/Builders/Tvf/SourceExpressionLowerer.cs`, `src/nextorm.core/Builders/Tvf/TvfJoinSourceExtensions.cs`, `src/nextorm.core/DataContext/Sql/SqlSourceRenderer.cs`;
+`tests/nextorm.core.tests/Builders/Tvf/T320RuntimeTvfTests.cs`, `tests/nextorm.core.tests/Builders/Tvf/T320RuntimeTvfIdentityTests.cs`;
 `tests/nextorm.integration.tests/T320/T320MariaDbTvfTests.cs`;
 сгенерированный SQL: `tests/nextorm.sqlite.tests/T320/T320RuntimeTvfSqlTests.cs`, `tests/nextorm.sqlserver.tests/T320/T320RuntimeTvfSqlTests.cs`, `tests/nextorm.postgres.tests/T320/T320RuntimeTvfSqlTests.cs`, `tests/nextorm.mysql.tests/T320/T320RuntimeTvfSqlTests.cs`, `tests/nextorm.clickhouse.tests/T320/T320RuntimeTvfSqlTests.cs`.

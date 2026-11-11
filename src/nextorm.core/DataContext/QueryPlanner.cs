@@ -68,6 +68,7 @@ internal sealed class QueryPlanner : IQueryPlanner
         Volatile.Write(ref _recipeReuses, 0);
         Volatile.Write(ref _recipeRejections, 0);
         Volatile.Write(ref _recipeApplyMismatches, 0);
+        QueryPlanStore.ResetNativeCounters();
     }
 
     internal QueryPlanner(
@@ -799,11 +800,12 @@ internal sealed class QueryPlanner : IQueryPlanner
 
         var ext = queryCommand.CustomData as RawSqlOverride;
 
-        // D201-3 pre-preparation reuse. The raw descriptor must be captured BEFORE ordinary
-        // preparation mutates the command. The candidate is only probed for a fresh, cacheable,
-        // non-shared, effect-free command whose raw graph is describable; anything unproved keeps its
-        // ordinary route. The shared terminal command is excluded by ACTUAL INSTANCE identity of the
-        // context's QueryCache.AnyCommand — never by IsPrepared, TResult or command shape.
+        // D201-3 pre-preparation reuse. The raw candidate is probed from the fresh command's structural
+        // fingerprint (no descriptor object is materialized on the hit path); the descriptor itself is
+        // captured only when the probe misses, because that is when it must be published. Anything whose
+        // raw graph cannot be proved keeps its ordinary route, and the shared terminal command is excluded
+        // by ACTUAL INSTANCE identity of the context's QueryCache.AnyCommand — never by IsPrepared,
+        // TResult or command shape.
         QueryCommand.RawShape? recipeShape = null;
         if (!queryCommand.IsPrepared
             && !queryCommand.HasEverPrepared
@@ -815,23 +817,19 @@ internal sealed class QueryPlanner : IQueryPlanner
             && !queryCommand.HasTemporaryTableSource()
             && !IsSharedAnyCommand(queryCommand))
         {
-            recipeShape = QueryCommand.CaptureRawShape(queryCommand);
-            if (recipeShape is null)
-                Interlocked.Increment(ref _recipeRejections);
             // A global/builder query filter is injected only during preparation and is absent from the
             // value-free raw shape, so a fresh command whose raw graph resolves ANY applicable filter for
             // the live context could otherwise adopt a predicate prepared under a different context (a
             // permissive-to-restrictive transfer leaks rows; the reverse drops the filter). Such a graph is
             // ineligible: skip the whole raw path and take the ordinary preparation route. Metadata-only —
             // no user filter function is invoked for the probe.
-            else if (QueryCommand.HasApplicableFiltersInRawGraph(recipeShape, queryCommand.DataContext))
+            var recipeFingerprint = QueryCommand.ComputeRawFingerprint(queryCommand);
+            if (recipeFingerprint is null
+                || QueryCommand.HasApplicableFiltersInCommandGraph(queryCommand, queryCommand.DataContext))
             {
-                recipeShape = null;
                 Interlocked.Increment(ref _recipeRejections);
             }
-
-            if (recipeShape is not null
-                && QueryPlanStore.TryGetRaw(_contextType, recipeShape, queryCommand, out var recipePlan))
+            else if (QueryPlanStore.TryGetRawFingerprint(_contextType, recipeFingerprint.GetValueOrDefault(), out var recipePlan))
             {
                 // Transactional apply: stage the owner's preparation data into this command, validate
                 // the staged normalized key through the existing normalized store, and on any key or
@@ -849,6 +847,14 @@ internal sealed class QueryPlanner : IQueryPlanner
                     Interlocked.Increment(ref _recipeApplyMismatches);
                     queryCommand.DiscardStagedPreparation(rawGraph);
                 }
+            }
+            else
+            {
+                // Miss: capture the descriptor for publication below, still before preparation mutates
+                // the raw graph. A graph the capture rejects is ineligible and stays on the ordinary path.
+                recipeShape = QueryCommand.CaptureRawShape(queryCommand);
+                if (recipeShape is null)
+                    Interlocked.Increment(ref _recipeRejections);
             }
         }
 

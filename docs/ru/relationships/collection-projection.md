@@ -439,8 +439,8 @@ a reference navigation requires at most one related row per parent.
 
 ---
 
-Источник: `tests/nextorm.core.tests/EagerLoading/CollectionProjectionSlotTests.cs`,
-`tests/nextorm.core.tests/EagerLoading/CollectionProjectionDepthTests.cs`,
-`tests/nextorm.core.tests/EagerLoading/CollectionProjectionCardinalityTests.cs`,
+Источник: `tests/nextorm.core.tests/EagerLoading/CollectionProjection/CollectionProjectionSlotTests.cs`,
+`tests/nextorm.core.tests/EagerLoading/CollectionProjection/CollectionProjectionDepthTests.cs`,
+`tests/nextorm.core.tests/EagerLoading/CollectionProjection/CollectionProjectionCardinalityTests.cs`,
 `tests/nextorm.<provider>.tests/EagerLoading/CollectionProjectionSqlGenerationTests.cs`,
 `tests/nextorm.integration.tests/CommonTestSuite/CollectionProjection/CommonTestSuite.CollectionProjectionLive.cs`.

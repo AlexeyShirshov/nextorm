@@ -1,8 +1,8 @@
 # Installation
 
-> Add the `nextorm` core package plus one database-provider package to a `net10.0` project, then use the [`NextORM.Core`](xref:NextORM.Core) types from code.
+> Add the `nextorm` core package plus one database-provider package to a `net10.0` or `net11.0` project, then use the [`NextORM.Core`](xref:NextORM.Core) types from code.
 
-**Prerequisites:** A project targeting `net10.0`.
+**Prerequisites:** A project targeting `net10.0` or `net11.0`.
 
 ## Overview
 
@@ -17,37 +17,54 @@ NextORM is split into a small, driver-free core package and one package per rela
   ([`SqliteDataContext`](xref:NextORM.Sqlite.SqliteDataContext), [`SqlServerDataContext`](xref:NextORM.SqlServer.SqlServerDataContext), [`PostgresDataContext`](xref:NextORM.Postgres.PostgresDataContext), [`MySqlDataContext`](xref:NextORM.MySql.MySqlDataContext), [`MariaDbDataContext`](xref:NextORM.MariaDb.MariaDbDataContext),
   [`ClickHouseDataContext`](xref:NextORM.ClickHouse.ClickHouseDataContext)) and a `Use…` registration extension.
   The provider packages depend on `nextorm` transitively.
+* `nextorm.extensions` is an optional product package that adds the query-component operators
+  `SelectWhereMin` / `SelectWhereMax` and `SelectGroup` / `SelectGroupHaving` on top of the public
+  query-component layer. It references `nextorm.core` only, needs no provider package of its own and
+  works with every provider; see [Extensions package](../advanced/extensions-package.md).
+* `nextorm.entityframeworkcore` is an optional bridge package that runs nextorm queries and commands
+  over an existing EF Core `DbContext` connection and transaction, reusing the EF model mapping
+  (`db.CreateNextOrmContext()`); see [EF Core integration](../advanced/integration-efcore.md).
 
-> **Note:** `nextorm` no longer references `OneOf`. The dependency was unused and has been
-> removed, so `OneOf` is no longer provided transitively. If your own code used `OneOf` types that
-> were previously available through `nextorm`, add a direct `OneOf` `PackageReference` to your
-> project.
-
-All current releases are prereleases, so every install command must opt in to
-prerelease versions.
+1.0.9 is the first stable release, so the install commands below no longer need `--prerelease`.
+Preview builds (`1.0.10-a.x` and later) still do.
 
 ## Install the core package
 
 ```bash
-dotnet add package nextorm --prerelease
+dotnet add package nextorm
 ```
 
 Then add exactly one provider package for the database you target:
 
 ```bash
-dotnet add package nextorm.sqlite --prerelease
-dotnet add package nextorm.sqlserver --prerelease
-dotnet add package nextorm.postgres --prerelease
-dotnet add package nextorm.mysql --prerelease
-dotnet add package nextorm.mariadb --prerelease
-dotnet add package nextorm.clickhouse --prerelease
+dotnet add package nextorm.sqlite
+dotnet add package nextorm.sqlserver
+dotnet add package nextorm.postgres
+dotnet add package nextorm.mysql
+dotnet add package nextorm.mariadb
+dotnet add package nextorm.clickhouse
+```
+
+The `nextorm.extensions` package is optional. Add it when you need the component-based
+`SelectWhereMin` / `SelectWhereMax` or the inferred-grouping `SelectGroup` / `SelectGroupHaving`; it
+works with any provider:
+
+```bash
+dotnet add package nextorm.extensions
+```
+
+The `nextorm.entityframeworkcore` package is optional as well — add it when an application already has
+an EF Core `DbContext` and you want nextorm queries over the same connection:
+
+```bash
+dotnet add package nextorm.entityframeworkcore
 ```
 
 The Package Manager Console equivalent:
 
 ```powershell
-Install-Package nextorm -Prerelease
-Install-Package nextorm.sqlite -Prerelease
+Install-Package nextorm
+Install-Package nextorm.sqlite
 ```
 
 ## Package reference
@@ -61,20 +78,25 @@ Install-Package nextorm.sqlite -Prerelease
 | MySQL | `nextorm.mysql` | [`MySqlDataContext`](xref:NextORM.MySql.MySqlDataContext), [`UseMySql`](xref:NextORM.MySql.MySqlDataContextOptionsBuilderExtensions.UseMySql(NextORM.Core.DataContextBuilder,System.Data.Common.DbConnection)) | `MySqlConnector` |
 | MariaDB | `nextorm.mariadb` | [`MariaDbDataContext`](xref:NextORM.MariaDb.MariaDbDataContext), [`UseMariaDb`](xref:NextORM.MariaDb.MariaDbDataContextOptionsBuilderExtensions.UseMariaDb(NextORM.Core.DataContextBuilder,System.Data.Common.DbConnection)) | `MySqlConnector` |
 | ClickHouse | `nextorm.clickhouse` | [`ClickHouseDataContext`](xref:NextORM.ClickHouse.ClickHouseDataContext), [`UseClickHouse`](xref:NextORM.ClickHouse.ClickHouseDataContextOptionsBuilderExtensions.UseClickHouse(NextORM.Core.DataContextBuilder,System.Data.Common.DbConnection)) | `ClickHouse.Driver` |
+| Extensions (optional) | `nextorm.extensions` | [`SelectWhereMin`](xref:NextORM.Extensions.ExtremeRowExtensions) / [`SelectWhereMax`](xref:NextORM.Extensions.ExtremeRowExtensions) and [`SelectGroup`](xref:NextORM.Extensions.SelectGroupExtensions) / [`SelectGroupHaving`](xref:NextORM.Extensions.SelectGroupExtensions), on top of `nextorm.core` | — |
+| EF Core (optional) | `nextorm.entityframeworkcore` | [`CreateNextOrmContext`](xref:NextORM.EntityFrameworkCore.EntityFrameworkCoreExtensions.CreateNextOrmContext(Microsoft.EntityFrameworkCore.DbContext,System.Action{NextORM.Core.DataContextBuilder})) — nextorm queries over an existing `DbContext` connection and transaction | `Microsoft.EntityFrameworkCore.Relational` |
 
 The in-memory provider lives in the core package, so it is available without installing a provider.
 
 ## Target framework
 
-The packages target `net10.0` and enable implicit usings and nullable reference types. A
-`PackageReference` looks like this (`*-*` floats to the latest prerelease):
+The packages multi-target `net10.0` and `net11.0`, so NuGet resolves the asset that matches the
+consuming project, and enable implicit usings and nullable reference types. A
+`PackageReference` looks like this:
 
 ```xml
 <ItemGroup>
-  <PackageReference Include="nextorm" Version="*-*" />
-  <PackageReference Include="nextorm.sqlite" Version="*-*" />
+  <PackageReference Include="nextorm" Version="1.0.9" />
+  <PackageReference Include="nextorm.sqlite" Version="1.0.9" />
 </ItemGroup>
 ```
+
+For a preview build, float to the newest prerelease with `Version="*-*"`.
 
 ## What to read next
 
@@ -83,6 +105,8 @@ The packages target `net10.0` and enable implicit usings and nullable reference 
   entity-free [`TableAlias`](xref:NextORM.Core.TableAlias) mode.
 * [Dependency injection](04-dependency-injection.md) - registering a context with [`AddNextOrmContext`](xref:NextORM.Core.ServiceCollectionExtensions.AddNextOrmContext(Microsoft.Extensions.DependencyInjection.IServiceCollection,System.Action{NextORM.Core.DataContextBuilder}))
   and the provider `Use…` methods.
+* [Extensions package](../advanced/extensions-package.md) - the optional
+  `nextorm.extensions` operators and when to use them instead of the built-in ones.
 
 ---
 

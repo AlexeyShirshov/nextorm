@@ -39,7 +39,7 @@
   carrying a non-zero month component (either sign) is rejected with `InvalidCastException` naming
   calendar months, zero-month days and microseconds convert exactly with checked arithmetic (an
   unrepresentable value fails with `OverflowException` instead of wrapping), `time`/`timetz`
-  columns keep the driver's `TimeSpan` accessor unchanged, and a mapped `TimeOnly` projection is
+  columns use the driver's `TimeSpan` accessor, and a mapped `TimeOnly` projection is
   supported for a `time` column (µs exact, with the day domain enforced);
 - the `string_agg`/`array_agg` aggregates are enabled ([`SupportsStringArrayAggregates`](xref:NextORM.Core.ISqlDialect.SupportsStringArrayAggregates) is `true`);
 - full-text search is enabled ([`SupportsFullText`](xref:NextORM.Core.ISqlDialect.SupportsFullText) is `true`): `SqlFunctions.Sql.contains` renders
@@ -91,9 +91,8 @@
 - paging is `limit n` / `limit n offset m`; an offset-only query emits `offset m` alone.
 
 The variability aggregates follow the shared cardinality contract: `Stdev`/`Var` are `null` for zero or
-one contributing value, `Stdevp`/`Varp` are `null` for zero and `0.0` for one. Because the result is now
-a real `Nullable<T>`, a sample over an empty or single-row set materializes as `null` instead of raising
-Npgsql's `InvalidCastException` (`Column V is null.`) on a non-nullable read.
+one contributing value, `Stdevp`/`Varp` are `null` for zero and `0.0` for one. The result is a real
+`Nullable<T>`, so a sample over an empty or single-row set materializes as `null`.
 
 ## Registering the provider
 
@@ -278,7 +277,7 @@ ctx.From<IComplexEntity>()
     .Select(e => SqlFunctions.Postgres.jsonb_agg(e.String));   // jsonb_agg(somestring)
 ```
 
-Provider parameter binding is unchanged: a plain JSON string parameter is still bound as `text`. The six
+Provider parameter binding: a plain JSON string parameter is bound as `text`. The six
 `json_get`/`json_get_text`/`json_get_path`/`json_get_path_text` accessors (string-key and integer-index
 overloads) are translator-local — they apply **contextual SQL typing** to a raw client document value
 (literal, captured value or explicit parameter) and parse it as `jsonb` in the generated SQL, and they type

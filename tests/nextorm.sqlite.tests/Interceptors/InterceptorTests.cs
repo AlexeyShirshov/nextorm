@@ -103,7 +103,7 @@ public class InterceptorTests
     private static (SqliteDataContext Ctx, string Path) CreateDb(DataContextBuilder? builder = null)
     {
         var path = Path.Combine(Path.GetTempPath(), $"nextorm-interceptors-{Guid.NewGuid():N}.db");
-        using (var conn = new SqliteConnection($"Data Source={path}"))
+        using (var conn = new SqliteConnection($"Data Source={path};Pooling=False"))
         {
             conn.Open();
             using var cmd = conn.CreateCommand();
@@ -113,7 +113,7 @@ public class InterceptorTests
             cmd.ExecuteNonQuery();
         }
 
-        return (new SqliteDataContext($"Data Source={path}", builder ?? new DataContextBuilder()), path);
+        return (new SqliteDataContext($"Data Source={path};Pooling=False", builder ?? new DataContextBuilder()), path);
     }
 
     [Fact]

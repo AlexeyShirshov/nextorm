@@ -33,54 +33,79 @@ internal static class CollectionSlotRecognizer
     /// <typeparam name="TEntity">The entity being projected.</typeparam>
     /// <typeparam name="TResult">The projected shape.</typeparam>
     /// <param name="projection">The projection expression.</param>
-    /// <param name="relationshipKind">
-    /// The declared relationship kind of a member navigation, or <see langword="null"/> when the member is not a
-    /// navigation (a scalar collection column is not, and neither is an undeclared property).
+    /// <param name="dataProvider">
+    /// The context that owns the query; the declared relationship kind of a member navigation is resolved
+    /// through its metadata. Everything an ordinary scalar projection needs is allocation-free: the ordinal
+    /// accumulation lists are created only when a slot is actually recognized.
     /// </param>
     /// <returns>The recognition, or <see langword="null"/> for an ordinary scalar projection.</returns>
     internal static CollectionSlotRecognition? Recognize<TEntity, TResult>(
         Expression<Func<TEntity, TResult>> projection,
-        Func<Type, PropertyInfo, RelationshipKind?> relationshipKind)
+        IDataContext dataProvider)
     {
         var root = projection.Parameters[0];
-        var slots = new List<CollectionSlotDescriptor>();
-        var nodes = new List<Expression>();
+        var state = default(RecognitionState);
 
-        VisitProjection(projection.Body, root, typeof(TEntity), relationshipKind, slots, nodes);
+        VisitProjection(projection.Body, root, typeof(TEntity), dataProvider, ref state);
+
+        var slots = state.Slots;
+        if (slots is null || !slots.Exists(static slot => !slot.IsReference))
+            return null;
 
         // A reference-only projection is an ordinary entity projection: the implicit-navigation path owns it and
         // must not change. The carrier and its cardinality guard are projection-scoped to projections that
         // actually ask for a per-parent collection.
-        return slots.Exists(static slot => !slot.IsReference) ? new CollectionSlotRecognition { Slots = slots, Nodes = nodes } : null;
+        return new CollectionSlotRecognition { Slots = slots, Nodes = state.Nodes! };
     }
+
+    /// <summary>
+    /// Accumulates recognized slots (and the node each one replaces) behind nullable lists, so a projection
+    /// that carries no slot — the common case — allocates nothing at all.
+    /// </summary>
+    private struct RecognitionState
+    {
+        internal List<CollectionSlotDescriptor>? Slots;
+        internal List<Expression>? Nodes;
+
+        internal readonly int Count => Slots?.Count ?? 0;
+
+        internal void Add(CollectionSlotDescriptor slot, Expression node)
+        {
+            (Slots ??= new List<CollectionSlotDescriptor>(2)).Add(slot);
+            (Nodes ??= new List<Expression>(2)).Add(node);
+        }
+    }
+
+    private static RelationshipKind? RelationshipKindOf(IDataContext dataProvider, Type parentType, PropertyInfo property)
+        => MetadataEagerLoadResolver.DeclaredRelationshipKind(dataProvider, parentType, property);
 
     private static void VisitProjection(
         Expression body,
         ParameterExpression root,
         Type parentType,
-        Func<Type, PropertyInfo, RelationshipKind?> relationshipKind,
-        List<CollectionSlotDescriptor> slots,
-        List<Expression> nodes)
+        IDataContext dataProvider,
+        ref RecognitionState state)
     {
         switch (body)
         {
             case MemberInitExpression init:
-                VisitProjection(init.NewExpression, root, parentType, relationshipKind, slots, nodes);
+                VisitProjection(init.NewExpression, root, parentType, dataProvider, ref state);
                 foreach (var binding in init.Bindings)
                 {
                     if (binding is not MemberAssignment assignment)
                         continue;
 
-                    AddCandidate(assignment.Expression, assignment.Member, -1, MemberType(assignment.Member), root, parentType, relationshipKind, slots, nodes);
+                    AddCandidate(assignment.Expression, assignment.Member, -1, MemberType(assignment.Member), root, parentType, dataProvider, ref state);
                 }
 
                 break;
 
             case NewExpression creation:
+                var parameters = creation.Constructor?.GetParameters();
                 for (var i = 0; i < creation.Arguments.Count; i++)
                 {
-                    var parameterType = creation.Constructor?.GetParameters()[i].ParameterType ?? creation.Arguments[i].Type;
-                    AddCandidate(creation.Arguments[i], null, i, parameterType, root, parentType, relationshipKind, slots, nodes);
+                    var parameterType = parameters?[i].ParameterType ?? creation.Arguments[i].Type;
+                    AddCandidate(creation.Arguments[i], null, i, parameterType, root, parentType, dataProvider, ref state);
                 }
 
                 break;
@@ -94,16 +119,14 @@ internal static class CollectionSlotRecognizer
         Type destinationType,
         ParameterExpression root,
         Type parentType,
-        Func<Type, PropertyInfo, RelationshipKind?> relationshipKind,
-        List<CollectionSlotDescriptor> slots,
-        List<Expression> nodes)
+        IDataContext dataProvider,
+        ref RecognitionState state)
     {
-        if (TryRecognize(expression, root, destinationType, parentType, relationshipKind, out var slot))
+        if (TryRecognize(expression, root, destinationType, parentType, dataProvider, out var slot))
         {
             slot.Member = member;
             slot.ArgumentIndex = argumentIndex;
-            slots.Add(slot);
-            nodes.Add(expression);
+            state.Add(slot, expression);
             return;
         }
 
@@ -111,7 +134,7 @@ internal static class CollectionSlotRecognizer
         {
             // Only an expression that carries a *declared navigation* can be a malformed slot; anything else
             // (a scalar array column, a collection-valued SQL function) is an ordinary projected value.
-            if (TryGetRootedNavigation(expression, root) is { } navigation && relationshipKind(parentType, navigation) is not null && TryGetCollectionElement(expression.Type, out _))
+            if (TryGetRootedNavigation(expression, root) is { } navigation && RelationshipKindOf(dataProvider, parentType, navigation) is not null && TryGetCollectionElement(expression.Type, out _))
             {
                 throw new NotSupportedException(
                     $"The collection projection slot '{Describe(member)}' is expressed as '{expression}', which is not a " +
@@ -125,9 +148,9 @@ internal static class CollectionSlotRecognizer
         // A child projection constructed inline (not through an adapter Select) that itself carries a slot: the
         // slot's navigation is still rooted at this level, but the destination DTO is built in memory, so the
         // outer projector cannot address it. Refuse by name instead of silently projecting the child shape.
-        var nestedSlots = new List<CollectionSlotDescriptor>();
-        VisitProjection(expression, root, parentType, relationshipKind, nestedSlots, []);
-        if (nestedSlots.Count > 0)
+        var nested = default(RecognitionState);
+        VisitProjection(expression, root, parentType, dataProvider, ref nested);
+        if (nested.Count > 0)
         {
             throw new NotSupportedException(
                 "The projection carries a collection slot inside an inline child projection: a nested slot must be " +
@@ -141,14 +164,14 @@ internal static class CollectionSlotRecognizer
         ParameterExpression root,
         Type destinationType,
         Type parentType,
-        Func<Type, PropertyInfo, RelationshipKind?> relationshipKind,
+        IDataContext dataProvider,
         out CollectionSlotDescriptor slot)
     {
         slot = null!;
 
-        return TryRecognizeAdapter(expression, root, destinationType, parentType, relationshipKind, out slot)
-            || TryRecognizeDirect(expression, root, destinationType, parentType, relationshipKind, out slot)
-            || TryRecognizeReference(expression, root, parentType, relationshipKind, out slot);
+        return TryRecognizeAdapter(expression, root, destinationType, parentType, dataProvider, out slot)
+            || TryRecognizeDirect(expression, root, destinationType, parentType, dataProvider, out slot)
+            || TryRecognizeReference(expression, root, parentType, dataProvider, out slot);
     }
 
     private static bool TryRecognizeDirect(
@@ -156,7 +179,7 @@ internal static class CollectionSlotRecognizer
         ParameterExpression root,
         Type destinationType,
         Type parentType,
-        Func<Type, PropertyInfo, RelationshipKind?> relationshipKind,
+        IDataContext dataProvider,
         out CollectionSlotDescriptor slot)
     {
         slot = null!;
@@ -164,7 +187,7 @@ internal static class CollectionSlotRecognizer
         if (expression is not MemberExpression member || !IsRootedAt(member, root))
             return false;
 
-        if (member.Member is not PropertyInfo property || relationshipKind(parentType, property) is not (RelationshipKind.OneToMany or RelationshipKind.ManyToMany))
+        if (member.Member is not PropertyInfo property || RelationshipKindOf(dataProvider, parentType, property) is not (RelationshipKind.OneToMany or RelationshipKind.ManyToMany))
             return false;
 
         if (!TryGetCollectionElement(member.Type, out var elementType))
@@ -197,7 +220,7 @@ internal static class CollectionSlotRecognizer
         Expression expression,
         ParameterExpression root,
         Type parentType,
-        Func<Type, PropertyInfo, RelationshipKind?> relationshipKind,
+        IDataContext dataProvider,
         out CollectionSlotDescriptor slot)
     {
         slot = null!;
@@ -205,7 +228,7 @@ internal static class CollectionSlotRecognizer
         if (expression is not MemberExpression member || member.Expression != root)
             return false;
 
-        if (member.Member is not PropertyInfo property || relationshipKind(parentType, property) is not (RelationshipKind.ManyToOne or RelationshipKind.OneToOne))
+        if (member.Member is not PropertyInfo property || RelationshipKindOf(dataProvider, parentType, property) is not (RelationshipKind.ManyToOne or RelationshipKind.OneToOne))
             return false;
 
         slot = new CollectionSlotDescriptor
@@ -227,7 +250,7 @@ internal static class CollectionSlotRecognizer
         ParameterExpression root,
         Type destinationType,
         Type parentType,
-        Func<Type, PropertyInfo, RelationshipKind?> relationshipKind,
+        IDataContext dataProvider,
         out CollectionSlotDescriptor slot)
     {
         slot = null!;
@@ -282,7 +305,7 @@ internal static class CollectionSlotRecognizer
 
         if (navigation is null
             || navigation.Member is not PropertyInfo navigationProperty
-            || relationshipKind(parentType, navigationProperty) is not (RelationshipKind.OneToMany or RelationshipKind.ManyToMany)
+            || RelationshipKindOf(dataProvider, parentType, navigationProperty) is not (RelationshipKind.OneToMany or RelationshipKind.ManyToMany)
             || !IsRootedAt(navigation, root)
             || !TryGetCollectionElement(navigation.Type, out var childType))
             return false;
@@ -297,10 +320,9 @@ internal static class CollectionSlotRecognizer
         // A slot declared inside the adapter's Select(...) belongs to the child level: its navigation is rooted at
         // that lambda's parameter, and the binder declares it on the child builder. The recursion is structural, so
         // any depth is handled by the same code path.
-        var nested = new List<CollectionSlotDescriptor>();
-        var nestedNodes = new List<Expression>();
+        var nested = default(RecognitionState);
         if (operations.OfType<CollectionSlotSelect>().LastOrDefault() is { } select)
-            VisitProjection(select.Projection.Body, select.Projection.Parameters[0], childType, relationshipKind, nested, nestedNodes);
+            VisitProjection(select.Projection.Body, select.Projection.Parameters[0], childType, dataProvider, ref nested);
 
         slot = new CollectionSlotDescriptor
         {
@@ -312,8 +334,8 @@ internal static class CollectionSlotRecognizer
             Root = root,
             Path = Describe(navigation.Member),
             Operations = operations,
-            Nested = nested,
-            NestedNodes = nestedNodes,
+            Nested = nested.Slots ?? new List<CollectionSlotDescriptor>(0),
+            NestedNodes = nested.Nodes ?? new List<Expression>(0),
         };
         return true;
     }
@@ -377,6 +399,29 @@ internal static class CollectionSlotRecognizer
 
     private static PropertyInfo? TryGetRootedNavigation(Expression expression, ParameterExpression root)
     {
+        // A plain member chain is the common shape and resolves without allocating a visitor. The fast
+        // path is used only when the whole chain is members ending at the root, which makes the visitor's
+        // depth-first answer exactly the first property reached from the outside.
+        if (expression is MemberExpression top)
+        {
+            Expression? tail = top;
+            while (tail is MemberExpression memberTail)
+                tail = memberTail.Expression;
+
+            if (tail == root)
+            {
+                Expression? current = top;
+                while (current is MemberExpression member)
+                {
+                    if (member.Member is PropertyInfo property)
+                        return property;
+                    current = member.Expression;
+                }
+
+                return null;
+            }
+        }
+
         var finder = new RootedNavigationFinder(root);
         finder.Visit(expression);
         return finder.Navigation;
@@ -432,13 +477,31 @@ internal static class CollectionSlotRecognizer
 
         var enumerable = type.IsGenericType && type.GetGenericTypeDefinition() == typeof(IEnumerable<>)
             ? type
-            : type.GetInterfaces().FirstOrDefault(static i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IEnumerable<>));
+            : FindEnumerableInterface(type);
 
         if (enumerable is null)
             return false;
 
         elementType = enumerable.GetGenericArguments()[0];
         return true;
+    }
+
+    /// <summary>
+    /// Returns the type's <see cref="IEnumerable{T}"/> interface, or <c>null</c>. A plain loop over
+    /// <see cref="Type.GetInterfaces"/> keeps the projection hot path free of the LINQ enumerator and
+    /// delegate allocations a <c>FirstOrDefault</c> would add for every projected member.
+    /// </summary>
+    private static Type? FindEnumerableInterface(Type type)
+    {
+        var interfaces = type.GetInterfaces();
+        for (var i = 0; i < interfaces.Length; i++)
+        {
+            var candidate = interfaces[i];
+            if (candidate.IsGenericType && candidate.GetGenericTypeDefinition() == typeof(IEnumerable<>))
+                return candidate;
+        }
+
+        return null;
     }
 
     internal static string Describe(MemberInfo? member)

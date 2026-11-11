@@ -6,7 +6,7 @@
 
 ## Overview
 
-nextorm resolves a graph from **declared** metadata, not from a mapper convention: an entity without declared relationships is mapped exactly as before, and a navigation property is excluded from the column mapping only when it participates in a declared relationship. This page covers the metadata model and [`JoinInto`](xref:NextORM.Core.EntityBuilder`1), the explicit single-query relationship loader. Implicit navigation queries are supported for **declared** relationships — a reference navigation as a scalar chain or a presence check, a reference hop used inside a correlated predicate or scalar subquery, and a collection navigation through exactly four direct terminals (see [Implicit navigation queries](implicit-navigation.md)) — not inferred by convention. The correlated-predicate form joins the hop on the outer command and reads the joined alias from the nested one (`LEFT JOIN` plus a correlated `EXISTS`/scalar subquery, no `APPLY`); it is a predicate/scalar surface, not correlated eager loading, which stays reserved and rejected (`EagerLoadMode.Correlated`). Navigation **after** a temp-table/TVP boundary is **not available (fail-closed)**, and a table-valued parameter is parameter-only (no query root).
+nextorm resolves a graph from **declared** metadata, not from a mapper convention: an entity without declared relationships is mapped by its columns as usual, and a navigation property is excluded from the column mapping only when it participates in a declared relationship. This page covers the metadata model and [`JoinInto`](xref:NextORM.Core.EntityBuilder`1), the explicit single-query relationship loader. Implicit navigation queries are supported for **declared** relationships — a reference navigation as a scalar chain or a presence check, a reference hop used inside a correlated predicate or scalar subquery, and a collection navigation through exactly four direct terminals (see [Implicit navigation queries](implicit-navigation.md)) — not inferred by convention. The correlated-predicate form joins the hop on the outer command and reads the joined alias from the nested one (`LEFT JOIN` plus a correlated `EXISTS`/scalar subquery, no `APPLY`); it is a predicate/scalar surface, not correlated eager loading, which stays reserved and rejected (`EagerLoadMode.Correlated`). Navigation **after** a temp-table/TVP boundary is **not available (fail-closed)**, and a table-valued parameter is parameter-only (no query root).
 
 `JoinInto` and [`LoadWith`](eager-loading.md) are two ways to fill a parent collection and share one assignment contract: `JoinInto` is one denormalized query over all parents, and `LoadWith` defaults to a split query with one extra child statement per key chunk (or one denormalized query when the builder passes `EagerLoadMode.SingleQuery` to `LoadWith`). `JoinInto` fills **one** declared navigation; a multi-level (level 2+) graph is expressed by nesting `LoadWith` child queries, where each level runs in one graph-wide mode (see [Nested graphs](eager-loading.md#nested-graphs-level-2-and-deeper)). A **third** form returns the per-parent collections inside a projected result instead of filling the entity — the direct `Select(p => new { p.Id, p.Comments })` member and the `AsEntityBuilder<T>() … ToList()` adapter — documented in [Collection-valued projection slots](collection-projection.md).
 
@@ -32,7 +32,7 @@ ctx.From<OrderItem>(b => b.HasOne(i => i.Order, i => i.OrderId));
 
 The principal key is taken from the existing key metadata of the principal type (`[Key]`, [`EntityPropertyBuilder<T>.Key()`](xref:NextORM.Core.EntityPropertyBuilder`1), or the `Id`/`<TypeName>Id` convention), so the two sides converge as a one-to-many/many-to-one pair. The default principal key is the **whole** key in entity-metadata order — every key component, never only the first one.
 
-`HasMany`, `HasOne`, `HasOneToOne` and `HasManyThrough` expose ten declaration overloads (A–J). All ten share one selector parser and build the same internal relationship descriptor; the six existing signatures are unchanged and keep working. The ten signatures are:
+`HasMany`, `HasOne`, `HasOneToOne` and `HasManyThrough` expose ten declaration overloads (A–J). All ten share one selector parser and build the same internal relationship descriptor. The ten signatures are:
 
 ```csharp
 // A — 1:N, navigation + explicit foreign key + explicit principal key
@@ -110,7 +110,7 @@ A `null` selector (or a selector without a body) throws `ArgumentNullException` 
 
 An overload without a `principalKey` parameter uses the **whole** primary key of the principal entity in entity-metadata order — the members flagged `IsKey` in the order `IEntityMetadata.Properties` lists them. There is **no first-key fallback** and **no name matching**: a foreign key that selects fewer components than the full principal key is an arity error when the metadata is resolved, not a silent use of the first key. An explicit principal key may select mapped **non-key** properties (an alternate logical key) and any component order; the two lists must still have the same length and a matching nullable-unwrapped type at every position. `HasManyThrough` applies the same rule to both legs: each entity key and the junction foreign key that references it must have the same component count and the same positional types.
 
-The first registration for a type wins, like a query filter: a later `From<T>(...)` configuration for the same type is ignored. A property that participates in a declared relationship is excluded from [`IEntityMetadata.Properties`](xref:NextORM.Core.IEntityMetadata) and is reachable only through [`IEntityMetadata.Relationships`](xref:NextORM.Core.IEntityMetadata); mapping it as a column throws `InvalidOperationException`. Members that are not part of a declared relationship (including a reference-typed member with no declaration) are still mapped as columns as before.
+The first registration for a type wins, like a query filter: a later `From<T>(...)` configuration for the same type is ignored. A property that participates in a declared relationship is excluded from [`IEntityMetadata.Properties`](xref:NextORM.Core.IEntityMetadata) and is reachable only through [`IEntityMetadata.Relationships`](xref:NextORM.Core.IEntityMetadata); mapping it as a column throws `InvalidOperationException`. Members that are not part of a declared relationship (including a reference-typed member with no declaration) are mapped as columns.
 
 ### Attribute ([`[Relationship]`](xref:NextORM.Core.RelationshipAttribute))
 
@@ -347,7 +347,7 @@ var orders = ctx.From<Order>()
 
 **The second argument is a filter, not a key restatement.** When supplied it becomes one more conjunct **inside the same `ON`** condition; it never replaces the declared-key equality and is never moved into a `WHERE`. Omitting it, or passing `null`, means no additional restriction. Because these are `LEFT` joins, a reference whose only candidate is filtered out stays `null`, a collection whose children are all filtered out stays empty, and the parent row is preserved either way. Key restatement is unnecessary, so an arbitrary child condition is the normal use: `(o, i) => i.Active` narrows the children while the declared keys still decide which parent they belong to.
 
-**Boundary with the ten predicate forms.** The five original `JoinInto` overloads and their five source-less counterparts are **unchanged**: they keep their signatures, their explicit join kinds and their predicate-as-`ON` semantics — the caller's `(parent, child) => …` remains the whole join condition and no declared key is synthesized into it. The metadata-driven semantics described here belong **only** to the two navigation-first overloads; no legacy form was retro-fitted. Choose the navigation-first forms when the relationship is declared and the keys should come from metadata; keep the predicate forms when the join condition is genuinely yours (a non-declared pair, an extra correlation, an explicit `Inner`/`Left` choice).
+**Boundary with the ten predicate forms.** The five `JoinInto` overloads without a navigation and their five source-less counterparts keep their signatures, their explicit join kinds and their predicate-as-`ON` semantics — the caller's `(parent, child) => …` remains the whole join condition and no declared key is synthesized into it. The metadata-driven semantics described here belong **only** to the two navigation-first overloads. Choose the navigation-first forms when the relationship is declared and the keys should come from metadata; keep the predicate forms when the join condition is genuinely yours (a non-declared pair, an extra correlation, an explicit `Inner`/`Left` choice).
 
 ### One-to-one reference
 
@@ -549,7 +549,7 @@ The metadata model is exposed through [`IEntityMetadata.Relationships`](xref:Nex
 
 ---
 
-Source: `tests/nextorm.sqlite.tests/Joins/JoinIntoSqlGenerationTests.cs:23`,
-`tests/nextorm.sqlite.tests/Joins/JoinIntoExecutionTests.cs:43`,
-`tests/nextorm.core.tests/JoinInto/JoinIntoInMemoryTests.cs:31`,
-`tests/nextorm.core.tests/Metadata/RelationshipMetadataTests.cs:173`.
+Source: `tests/nextorm.sqlite.tests/Joins/JoinInto/JoinIntoSqlGenerationTests.cs:23`,
+`tests/nextorm.sqlite.tests/Joins/JoinInto/JoinIntoExecutionTests.cs:43`,
+`tests/nextorm.core.tests/JoinInto/InMemory/JoinIntoInMemoryTests.cs:31`,
+`tests/nextorm.core.tests/Metadata/Relationships/RelationshipMetadataTests.cs:173`.

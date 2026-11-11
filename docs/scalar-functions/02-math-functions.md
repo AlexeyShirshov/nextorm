@@ -23,7 +23,7 @@ select abs((id - 5))
  from complex_entity
 ```
 
-The `Output:` tables below show the rows returned by each example against the integration-test seed data (`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).
+The `Output:` tables below show the rows returned by each example against the integration-test seed data (`tests/nextorm.integration.tests/Providers/TestProviders/SqliteTestProvider.cs`).
 
 Output:
 
@@ -185,8 +185,8 @@ constant and the CLR arithmetic operators, not ClickHouse-only members.
 
 The remaining math functions are part of the extended scalar library
 ([`SupportsExtendedScalarFunctions`](xref:NextORM.Core.ISqlDialect.SupportsExtendedScalarFunctions), PostgreSQL only).
-`degrees`/`radians`/`pi` are no longer provider-specific — use the portable
-[`SqlFunctions.Sql`](xref:NextORM.Core.SqlFunctions.Sql) spellings above:
+`degrees`/`radians`/`pi` are part of the portable
+[`SqlFunctions.Sql`](xref:NextORM.Core.SqlFunctions.Sql) surface above:
 
 | C# | SQL |
 |---|---|

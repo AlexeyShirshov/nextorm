@@ -121,7 +121,7 @@
   объявленным связям, с глобальными фильтрами на дочерних уровнях.
 - Пакет интеграции с EF Core (`nextorm.entityframeworkcore`), использующий соединение, маппинг модели и
   транзакцию EF.
-- **Zero-config миграция на NativeAOT.** Внутри проверенной поверхности (SQLite, .NET 10 / `linux-x64`)
+- **Zero-config миграция на NativeAOT.** Внутри проверенной поверхности (SQLite, .NET 11 / `linux-x64`)
   единственное изменение у потребителя — `PublishAot=true`: без compiled model, без шага
   precompilation, без opt-in анализатора/интерцепторов, без регистрации сущностей и запросов, без
   linker-дескрипторов и roots. EF Core требует compiled model и interceptor-based precompilation и

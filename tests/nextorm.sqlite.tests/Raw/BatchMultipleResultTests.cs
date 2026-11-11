@@ -28,7 +28,7 @@ public class BatchMultipleResultTests
     private static (IDataContext Context, string Path) CreateDb()
     {
         var path = Path.Combine(Path.GetTempPath(), $"nextorm-batch-{Guid.NewGuid():N}.db");
-        using (var connection = new SqliteConnection($"Data Source={path}"))
+        using (var connection = new SqliteConnection($"Data Source={path};Pooling=False"))
         {
             connection.Open();
             using var command = connection.CreateCommand();
@@ -42,7 +42,7 @@ public class BatchMultipleResultTests
             command.ExecuteNonQuery();
         }
 
-        return (new SqliteDataContext($"Data Source={path}", new DataContextBuilder()), path);
+        return (new SqliteDataContext($"Data Source={path};Pooling=False", new DataContextBuilder()), path);
     }
 
     [Fact]

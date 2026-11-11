@@ -70,7 +70,7 @@ select id, row_number() over (partition by nullableint order by id) as 'rn'
  from complex_entity
 ```
 
-The `Output:` tables below show the rows returned by each example against the integration-test seed data (`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).
+The `Output:` tables below show the rows returned by each example against the integration-test seed data (`tests/nextorm.integration.tests/Providers/TestProviders/SqliteTestProvider.cs`).
 
 Output:
 
@@ -393,8 +393,8 @@ member is refused by every provider — it never aliases the continuous form.
 
 ---
 
-Source: `src/nextorm.core/Query/WindowFunctions.cs` ([`WindowFunction<T>`](xref:NextORM.Core.WindowFunction`1), [`WindowOrder`](xref:NextORM.Core.WindowOrder), frame enums, [`WindowFrameBound`](xref:NextORM.Core.WindowFrameBound), [`WindowFrame`](xref:NextORM.Core.WindowFrame)); `src/nextorm.core/Query/WindowDefinition.cs` ([`WindowDefinition`](xref:NextORM.Core.WindowDefinition), [`NamedWindowOrderKey`](xref:NextORM.Core.NamedWindowOrderKey)); `src/nextorm.core/Query/SqlFunctions.cs` (`asc`/`desc`, functions);
-`src/nextorm.core/Visitors/WindowFunctionTranslator.cs`, `src/nextorm.core/Visitors/WindowSql.cs`;
-`tests/nextorm.integration.tests/CommonTestSuite/Queries/CommonTestSuite.Window.cs`, `tests/nextorm.integration.tests/Postgres/PostgresSpecificTests.cs` (named windows/`GROUPS`/`EXCLUDE`);
+Source: `src/nextorm.core/Query/Windows/WindowFunctions.cs` ([`WindowFunction<T>`](xref:NextORM.Core.WindowFunction`1), [`WindowOrder`](xref:NextORM.Core.WindowOrder), frame enums, [`WindowFrameBound`](xref:NextORM.Core.WindowFrameBound), [`WindowFrame`](xref:NextORM.Core.WindowFrame)); `src/nextorm.core/Query/Windows/WindowDefinition.cs` ([`WindowDefinition`](xref:NextORM.Core.WindowDefinition), [`NamedWindowOrderKey`](xref:NextORM.Core.NamedWindowOrderKey)); `src/nextorm.core/Query/SqlFunctions/SqlFunctions.cs` (`asc`/`desc`, functions);
+`src/nextorm.core/Visitors/Windows/WindowFunctionTranslator.cs`, `src/nextorm.core/Visitors/Windows/WindowSql.cs`;
+`tests/nextorm.integration.tests/CommonTestSuite/Queries/Rows/CommonTestSuite.Window.cs`, `tests/nextorm.integration.tests/Postgres/PostgresSpecificTests.cs` (named windows/`GROUPS`/`EXCLUDE`);
 `tests/nextorm.core.tests/SqlRendering/WindowFunctionMarkerTests.cs`;
 generated SQL: `tests/nextorm.postgres.tests/SqlGeneration/SqlGenerationTests.cs`, `tests/nextorm.sqlite.tests/SqlGeneration/SqlGenerationTests.cs`.

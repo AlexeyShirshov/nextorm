@@ -1,0 +1,225 @@
+#nullable enable
+NextORM.ClickHouse.ClickHouseDataContext
+NextORM.ClickHouse.ClickHouseDataContext.ClickHouseDataContext(ClickHouse.Driver.ADO.ClickHouseDataSource! dataSource, NextORM.Core.DataContextBuilder! optionsBuilder) -> void
+NextORM.ClickHouse.ClickHouseDataContext.ClickHouseDataContext(ClickHouse.Driver.ClickHouseClient! client, NextORM.Core.DataContextBuilder! optionsBuilder) -> void
+NextORM.ClickHouse.ClickHouseDataContext.ClickHouseDataContext(string! connectionString, NextORM.Core.DataContextBuilder! optionsBuilder) -> void
+NextORM.ClickHouse.ClickHouseDataContext.ClickHouseDataContext(System.Data.Common.DbConnection! connection, NextORM.Core.DataContextBuilder! optionsBuilder) -> void
+NextORM.ClickHouse.ClickHouseDataContext.ClickHouseDataContext(System.Version! serverVersion, string! connectionString, NextORM.Core.DataContextBuilder! optionsBuilder) -> void
+NextORM.ClickHouse.ClickHouseDataContext.ClickHouseDataContext(System.Version! serverVersion, System.Data.Common.DbConnection! connection, NextORM.Core.DataContextBuilder! optionsBuilder) -> void
+NextORM.ClickHouse.ClickHouseDataContextOptionsBuilderExtensions
+NextORM.ClickHouse.ClickHouseDialect
+NextORM.ClickHouse.ClickHouseDialect.ClickHouseDialect() -> void
+NextORM.ClickHouse.ClickHouseDialect.ClickHouseDialect(System.Version! serverVersion) -> void
+NextORM.ClickHouse.ClickHouseEntityBuilderExtensions
+NextORM.ClickHouse.ClickHouseJoinedEntityBuilderExtensions
+override NextORM.ClickHouse.ClickHouseDataContext.CreateDbConnection(string? connectionString) -> System.Data.Common.DbConnection!
+override NextORM.ClickHouse.ClickHouseDataContext.CreateParam(string! name, object? value) -> System.Data.Common.DbParameter!
+override NextORM.ClickHouse.ClickHouseDataContext.CreateProcedureParameter(NextORM.Core.ProcedureParameter parameter) -> System.Data.Common.DbParameter!
+override NextORM.ClickHouse.ClickHouseDataContext.Dialect.get -> NextORM.Core.ISqlDialect!
+override NextORM.ClickHouse.ClickHouseDataContext.Dispose(bool disposing) -> void
+override NextORM.ClickHouse.ClickHouseDataContext.MapColumnExpression(NextORM.Core.SelectExpression! column, System.Linq.Expressions.Expression! param) -> System.Linq.Expressions.Expression!
+override NextORM.ClickHouse.ClickHouseDataContext.TimeOnlyProjectionRefusal.get -> string?
+override NextORM.ClickHouse.ClickHouseDialect.AggregateFilterStyle.get -> NextORM.Core.AggregateFilterStyle
+override NextORM.ClickHouse.ClickHouseDialect.ArrayJoinClause.get -> NextORM.Core.IArrayJoinRenderer!
+override NextORM.ClickHouse.ClickHouseDialect.ClickHouseAggregates.get -> NextORM.Core.IClickHouseAggregateRenderer!
+override NextORM.ClickHouse.ClickHouseDialect.DateConversion.get -> NextORM.Core.IDateConversionRenderer!
+override NextORM.ClickHouse.ClickHouseDialect.DeleteRequiresWhere.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.Escape(string! keyword) -> string!
+override NextORM.ClickHouse.ClickHouseDialect.ExtremeRowRenderer.get -> NextORM.Core.IExtremeRowRenderer?
+override NextORM.ClickHouse.ClickHouseDialect.Iif.get -> NextORM.Core.IIifRenderer!
+override NextORM.ClickHouse.ClickHouseDialect.LimitBy.get -> NextORM.Core.ILimitByRenderer!
+override NextORM.ClickHouse.ClickHouseDialect.MakeAggregate(string! name) -> string!
+override NextORM.ClickHouse.ClickHouseDialect.MakeArrayFunction(string! name, string! call) -> string!
+override NextORM.ClickHouse.ClickHouseDialect.MakeArrayResult(string! name, string! call, System.Type! resultType) -> string!
+override NextORM.ClickHouse.ClickHouseDialect.MakeAverageResult(string! aggregate, string! argument, string? filterPredicate = null, string? windowClause = null) -> string!
+override NextORM.ClickHouse.ClickHouseDialect.MakeBool(bool v) -> string!
+override NextORM.ClickHouse.ClickHouseDialect.MakeCoalesce(string! v1, string! v2) -> string!
+override NextORM.ClickHouse.ClickHouseDialect.MakeColumnReference(string! name) -> string!
+override NextORM.ClickHouse.ClickHouseDialect.MakeConcat(System.Collections.Generic.IReadOnlyList<string!>! parts) -> string!
+override NextORM.ClickHouse.ClickHouseDialect.MakeCreateTableAsSelect(NextORM.Core.CreateTableAsClause clause, string! selectSql, NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> string!
+override NextORM.ClickHouse.ClickHouseDialect.MakeDateAdd(string! field, string! amount, string! value) -> string!
+override NextORM.ClickHouse.ClickHouseDialect.MakeDateAdd(string! field, string! amount, string! value, bool isDateTimeOffset) -> string!
+override NextORM.ClickHouse.ClickHouseDialect.MakeDateDiff(string! field, string! start, string! end) -> string!
+override NextORM.ClickHouse.ClickHouseDialect.MakeDateDiffBig(string! field, string! start, string! end) -> string!
+override NextORM.ClickHouse.ClickHouseDialect.MakeDateFromParts(string! year, string! month, string! day) -> string!
+override NextORM.ClickHouse.ClickHouseDialect.MakeDatePart(string! part, string! value) -> string!
+override NextORM.ClickHouse.ClickHouseDialect.MakeDatePart(string! part, string! value, bool isDateTimeOffset) -> string!
+override NextORM.ClickHouse.ClickHouseDialect.MakeDateTimeOffsetNow(bool utc) -> string!
+override NextORM.ClickHouse.ClickHouseDialect.MakeDateTrunc(string! field, string! value) -> string!
+override NextORM.ClickHouse.ClickHouseDialect.MakeDeleteHead(string! table, NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> string!
+override NextORM.ClickHouse.ClickHouseDialect.MakeDeleteSuffix(NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> string?
+override NextORM.ClickHouse.ClickHouseDialect.MakeDictionaryFunction(string! name, System.Collections.Generic.IReadOnlyList<string!>! args) -> string!
+override NextORM.ClickHouse.ClickHouseDialect.MakeDurationType(NextORM.Core.DurationUnit? unit, int precision = 0) -> string!
+override NextORM.ClickHouse.ClickHouseDialect.MakeEndOfMonth(string! value) -> string!
+override NextORM.ClickHouse.ClickHouseDialect.MakeFilteredStringAgg(string! value, string! delimiter, string! predicate) -> string!
+override NextORM.ClickHouse.ClickHouseDialect.MakeGroupByTotals(string! grouping, NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> string!
+override NextORM.ClickHouse.ClickHouseDialect.MakeGrouping(string! columns, NextORM.Core.GroupingType groupingType, NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> string!
+override NextORM.ClickHouse.ClickHouseDialect.MakeJoinKeyword(NextORM.Core.JoinType joinType, NextORM.Core.JoinStrictness strictness, bool isGlobal, NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> string!
+override NextORM.ClickHouse.ClickHouseDialect.MakeJsonExtract(string! name, System.Collections.Generic.IReadOnlyList<string!>! args) -> string!
+override NextORM.ClickHouse.ClickHouseDialect.MakeLikeEscape(string! escapeChar, NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> string!
+override NextORM.ClickHouse.ClickHouseDialect.MakeNow(bool utc) -> string!
+override NextORM.ClickHouse.ClickHouseDialect.MakeNullableDurationType(NextORM.Core.DurationUnit? unit, int precision = 0) -> string!
+override NextORM.ClickHouse.ClickHouseDialect.MakeOrdinal(string! value, bool ignoreCase) -> string!
+override NextORM.ClickHouse.ClickHouseDialect.MakePage(NextORM.Core.Paging paging, System.Text.StringBuilder! sqlBuilder, NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> void
+override NextORM.ClickHouse.ClickHouseDialect.MakeParam(string! name) -> string!
+override NextORM.ClickHouse.ClickHouseDialect.MakeQualifiedTableName(string? server, string? database, string? schema, string! table) -> string!
+override NextORM.ClickHouse.ClickHouseDialect.MakeRegexMatch(string! value, string! pattern, bool ignoreCase) -> string!
+override NextORM.ClickHouse.ClickHouseDialect.MakeRegexReplace(string! value, string! pattern, string! replacement, bool ignoreCase) -> string!
+override NextORM.ClickHouse.ClickHouseDialect.MakeRepeat(string! value, string! count) -> string!
+override NextORM.ClickHouse.ClickHouseDialect.MakeResultColumnType(System.Type! clrType, bool nullable) -> string!
+override NextORM.ClickHouse.ClickHouseDialect.MakeStringAgg(string! value, string! delimiter) -> string!
+override NextORM.ClickHouse.ClickHouseDialect.MakeStringLength(string! value) -> string!
+override NextORM.ClickHouse.ClickHouseDialect.MakeStringPosition(string! value, string! substring) -> string!
+override NextORM.ClickHouse.ClickHouseDialect.MakeStringPosition(string! value, string! substring, string! start) -> string!
+override NextORM.ClickHouse.ClickHouseDialect.MakeStringReverse(string! value) -> string!
+override NextORM.ClickHouse.ClickHouseDialect.MakeTrim(string! value, NextORM.Core.StringTrimKind kind) -> string!
+override NextORM.ClickHouse.ClickHouseDialect.MakeTypeName(System.Type! type) -> string!
+override NextORM.ClickHouse.ClickHouseDialect.MakeUpdateHead(string! table, NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> string!
+override NextORM.ClickHouse.ClickHouseDialect.MakeUpdateSuffix(NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> string?
+override NextORM.ClickHouse.ClickHouseDialect.MakeWith(bool recursive, NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> string!
+override NextORM.ClickHouse.ClickHouseDialect.MultiIf.get -> NextORM.Core.IMultiIfRenderer!
+override NextORM.ClickHouse.ClickHouseDialect.NativeJsonProviderType.get -> System.Type!
+override NextORM.ClickHouse.ClickHouseDialect.NullSafeComparison.get -> NextORM.Core.INullSafeComparisonRenderer?
+override NextORM.ClickHouse.ClickHouseDialect.OuterJoinNullSettings.get -> System.Collections.Generic.IReadOnlyList<System.Collections.Generic.KeyValuePair<string!, string!>>!
+override NextORM.ClickHouse.ClickHouseDialect.PromoteDateOperand(string! field, string! value) -> string!
+override NextORM.ClickHouse.ClickHouseDialect.QuantileAggregates.get -> NextORM.Core.IQuantileAggregateRenderer!
+override NextORM.ClickHouse.ClickHouseDialect.QuoteIdentifier(string! name) -> string!
+override NextORM.ClickHouse.ClickHouseDialect.RenderOrderBy(string! expressionSql, NextORM.Core.OrderDirection direction, NextORM.Core.NullsPosition nullsPosition) -> string!
+override NextORM.ClickHouse.ClickHouseDialect.RequireSubqueryAlias.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.ScalarFunctions.get -> NextORM.Core.IScalarFunctions!
+override NextORM.ClickHouse.ClickHouseDialect.SequenceAggregates.get -> NextORM.Core.ISequenceAggregateRenderer!
+override NextORM.ClickHouse.ClickHouseDialect.SessionInfoFunctions.get -> NextORM.Core.ISessionInfoFunctions!
+override NextORM.ClickHouse.ClickHouseDialect.StringFormats.get -> NextORM.Core.IStringFormatFunctions?
+override NextORM.ClickHouse.ClickHouseDialect.StringSplit.get -> NextORM.Core.IStringSplitRenderer!
+override NextORM.ClickHouse.ClickHouseDialect.SupportsAnyLastAggregate.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsAnyValueAggregate.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsArgMinMax.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsArrayFunctions.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsArrayJoin.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsBitAggregates.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsBulkCopy.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsCollation.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsCommandBehaviorSingleRow.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsCreateTableAsSelect.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsCreateTableAsSelectIfNotExists.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsCrossDatabase.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsCube.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsDateAddField(string! field) -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsDateArithmetic.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsDatePart(string! part) -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsDateTimeOffsetTranslation.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsDateTrunc.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsDateTruncField(string! field) -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsDictionaries.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsFinal.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsGlobalJoin.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsGlobalPredicates.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsGreatestLeast.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsGroupByWithTotals.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsGroupingSets.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsHigherOrderArrayFunctions.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsInFrameWindowFunctions.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsInsertIgnore.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsIntersectExceptAll.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsJoinStrictness.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsJson.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsJsonExtract.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsNamedWindows.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsNthValue.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsNullsOrdering.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsOrdinalComparison.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsPasteJoin.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsPercentRankCumeDist.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsPreWhere.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsRangeColumns.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsRawSqlSource.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsRecursiveCte.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsReferenceToCollectionNavigation.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsRegex.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsResultSchema(NextORM.Core.TableFunctionSchema placement) -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsRollup.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsSample.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsSelectWhereMinMax.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsSemiAntiJoin.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsSettings.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsStatisticalAggregates.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsStringAgg.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsTableFunction(string! name) -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsTableValuedParameters.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsTemporaryCreateTableAsSelect.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsTransactions.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsTruncate.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.SupportsWindowFrameGroups.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.TopKAggregates.get -> NextORM.Core.ITopKAggregateRenderer!
+override NextORM.ClickHouse.ClickHouseDialect.Tuple.get -> NextORM.Core.ITupleRenderer?
+override NextORM.ClickHouse.ClickHouseDialect.UniqAggregates.get -> NextORM.Core.IUniqAggregateRenderer!
+override NextORM.ClickHouse.ClickHouseDialect.UpdateRequiresWhere.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.UuidGenerators.get -> NextORM.Core.IUuidGenerators!
+override NextORM.ClickHouse.ClickHouseDialect.WrapCount(string! countExpression, bool big) -> string!
+override NextORM.ClickHouse.ClickHouseDialect.WrapIntegerWindowResult(string! windowExpression) -> string!
+override NextORM.ClickHouse.ClickHouseDialect.WrapsAverageResult.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.WrapsCountResult.get -> bool
+override NextORM.ClickHouse.ClickHouseDialect.WrapTableFunction(string! name, string! call) -> string!
+static NextORM.ClickHouse.ClickHouseDataContextOptionsBuilderExtensions.UseClickHouse(this NextORM.Core.DataContextBuilder! builder, ClickHouse.Driver.ADO.ClickHouseDataSource! dataSource) -> NextORM.Core.DataContextBuilder!
+static NextORM.ClickHouse.ClickHouseDataContextOptionsBuilderExtensions.UseClickHouse(this NextORM.Core.DataContextBuilder! builder, ClickHouse.Driver.ClickHouseClient! client) -> NextORM.Core.DataContextBuilder!
+static NextORM.ClickHouse.ClickHouseDataContextOptionsBuilderExtensions.UseClickHouse(this NextORM.Core.DataContextBuilder! builder, string! connectionString) -> NextORM.Core.DataContextBuilder!
+static NextORM.ClickHouse.ClickHouseDataContextOptionsBuilderExtensions.UseClickHouse(this NextORM.Core.DataContextBuilder! builder, System.Data.Common.DbConnection! connection) -> NextORM.Core.DataContextBuilder!
+static NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.AntiJoin(this NextORM.Core.EntityBuilder! builder, NextORM.Core.EntityBuilder! from, System.Linq.Expressions.Expression<System.Func<NextORM.Core.TableAlias!, NextORM.Core.TableAlias!, bool>!>! joinCondition, System.Action<NextORM.Core.JoinOptions!>? options = null) -> NextORM.Core.EntityBuilder!
+static NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.AntiJoin<TEntity, TJoinEntity>(this NextORM.Core.EntityBuilder<TEntity>! builder, NextORM.Core.EntityBuilder<TJoinEntity>! join, System.Linq.Expressions.Expression<System.Func<TEntity, TJoinEntity, bool>!>! joinCondition, System.Action<NextORM.Core.JoinOptions!>? options = null) -> NextORM.Core.EntityBuilder<TEntity>!
+static NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.AntiJoin<TEntity, TJoinEntity>(this NextORM.Core.EntityBuilder<TEntity>! builder, NextORM.Core.QueryCommand<TJoinEntity>! query, System.Linq.Expressions.Expression<System.Func<TEntity, TJoinEntity, bool>!>! joinCondition, System.Action<NextORM.Core.JoinOptions!>? options = null) -> NextORM.Core.EntityBuilder<TEntity>!
+static NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.AntiJoin<TJoinEntity>(this NextORM.Core.EntityBuilder! builder, NextORM.Core.EntityBuilder<TJoinEntity>! join, System.Linq.Expressions.Expression<System.Func<NextORM.Core.TableAlias!, TJoinEntity, bool>!>! joinCondition, System.Action<NextORM.Core.JoinOptions!>? options = null) -> NextORM.Core.EntityBuilder!
+static NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.ArrayJoin<TEntity, TArray>(this NextORM.Core.EntityBuilder<TEntity>! builder, System.Linq.Expressions.Expression<System.Func<TEntity, TArray>!>! array) -> NextORM.Core.EntityBuilder<TEntity>!
+static NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.ArrayJoinElement<TEntity, TElement>(this NextORM.Core.EntityBuilder<TEntity>! builder, System.Linq.Expressions.Expression<System.Func<TEntity, System.Collections.Generic.IEnumerable<TElement>!>!>! array) -> NextORM.Core.EntityBuilder<NextORM.Core.ArrayJoinProjection<TEntity, TElement>!>!
+static NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.Final<TEntity>(this NextORM.Core.EntityBuilder<TEntity>! builder) -> NextORM.Core.EntityBuilder<TEntity>!
+static NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.Global(this NextORM.Core.JoinOptions! options) -> NextORM.Core.JoinOptions!
+static NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.LeftArrayJoin<TEntity, TArray>(this NextORM.Core.EntityBuilder<TEntity>! builder, System.Linq.Expressions.Expression<System.Func<TEntity, TArray>!>! array) -> NextORM.Core.EntityBuilder<TEntity>!
+static NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.LeftArrayJoinElement<TEntity, TElement>(this NextORM.Core.EntityBuilder<TEntity>! builder, System.Linq.Expressions.Expression<System.Func<TEntity, System.Collections.Generic.IEnumerable<TElement>!>!>! array) -> NextORM.Core.EntityBuilder<NextORM.Core.ArrayJoinProjection<TEntity, TElement>!>!
+static NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.LimitBy<TEntity, TResult>(this NextORM.Core.EntityBuilder<TEntity>! builder, int limit, int offset, System.Linq.Expressions.Expression<System.Func<TEntity, TResult>!>! exp) -> NextORM.Core.EntityBuilder<TEntity>!
+static NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.LimitBy<TEntity, TResult>(this NextORM.Core.EntityBuilder<TEntity>! builder, int limit, System.Linq.Expressions.Expression<System.Func<TEntity, TResult>!>! exp) -> NextORM.Core.EntityBuilder<TEntity>!
+static NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.PasteJoin(this NextORM.Core.EntityBuilder! builder, NextORM.Core.EntityBuilder! from, System.Action<NextORM.Core.JoinOptions!>? options = null) -> NextORM.Core.JoinedEntityBuilder<NextORM.Core.TableAlias!, NextORM.Core.TableAlias!>!
+static NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.PasteJoin<TEntity, TJoinEntity>(this NextORM.Core.EntityBuilder<TEntity>! builder, NextORM.Core.EntityBuilder<TJoinEntity>! join, System.Action<NextORM.Core.JoinOptions!>? options = null) -> NextORM.Core.JoinedEntityBuilder<TEntity, TJoinEntity>!
+static NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.PasteJoin<TEntity, TJoinEntity>(this NextORM.Core.EntityBuilder<TEntity>! builder, NextORM.Core.QueryCommand<TJoinEntity>! query, System.Action<NextORM.Core.JoinOptions!>? options = null) -> NextORM.Core.JoinedEntityBuilder<TEntity, TJoinEntity>!
+static NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.PasteJoin<TJoinEntity>(this NextORM.Core.EntityBuilder! builder, NextORM.Core.EntityBuilder<TJoinEntity>! join, System.Action<NextORM.Core.JoinOptions!>? options = null) -> NextORM.Core.JoinedEntityBuilder<NextORM.Core.TableAlias!, TJoinEntity>!
+static NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.PreWhere<TEntity>(this NextORM.Core.EntityBuilder<TEntity>! builder, System.Linq.Expressions.Expression<System.Func<TEntity, bool>!>! condition) -> NextORM.Core.EntityBuilder<TEntity>!
+static NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.Sample(this NextORM.Core.FromOptions! options, double ratio) -> NextORM.Core.FromOptions!
+static NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.Sample(this NextORM.Core.FromOptions! options, double ratio, double offset) -> NextORM.Core.FromOptions!
+static NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.SemiJoin(this NextORM.Core.EntityBuilder! builder, NextORM.Core.EntityBuilder! from, System.Linq.Expressions.Expression<System.Func<NextORM.Core.TableAlias!, NextORM.Core.TableAlias!, bool>!>! joinCondition, System.Action<NextORM.Core.JoinOptions!>? options = null) -> NextORM.Core.EntityBuilder!
+static NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.SemiJoin<TEntity, TJoinEntity>(this NextORM.Core.EntityBuilder<TEntity>! builder, NextORM.Core.EntityBuilder<TJoinEntity>! join, System.Linq.Expressions.Expression<System.Func<TEntity, TJoinEntity, bool>!>! joinCondition, System.Action<NextORM.Core.JoinOptions!>? options = null) -> NextORM.Core.EntityBuilder<TEntity>!
+static NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.SemiJoin<TEntity, TJoinEntity>(this NextORM.Core.EntityBuilder<TEntity>! builder, NextORM.Core.QueryCommand<TJoinEntity>! query, System.Linq.Expressions.Expression<System.Func<TEntity, TJoinEntity, bool>!>! joinCondition, System.Action<NextORM.Core.JoinOptions!>? options = null) -> NextORM.Core.EntityBuilder<TEntity>!
+static NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.SemiJoin<TJoinEntity>(this NextORM.Core.EntityBuilder! builder, NextORM.Core.EntityBuilder<TJoinEntity>! join, System.Linq.Expressions.Expression<System.Func<NextORM.Core.TableAlias!, TJoinEntity, bool>!>! joinCondition, System.Action<NextORM.Core.JoinOptions!>? options = null) -> NextORM.Core.EntityBuilder!
+static NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.Settings<TEntity>(this NextORM.Core.EntityBuilder<TEntity>! builder, params (string! Key, string! Value)[]! settings) -> NextORM.Core.EntityBuilder<TEntity>!
+static NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.WithStrictness(this NextORM.Core.JoinOptions! options, NextORM.Core.JoinStrictness strictness) -> NextORM.Core.JoinOptions!
+static NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.WithTotals<TEntity>(this NextORM.Core.EntityBuilder<TEntity>! builder) -> NextORM.Core.EntityBuilder<TEntity>!
+static NextORM.ClickHouse.ClickHouseJoinedEntityBuilderExtensions.AntiJoin<T1, T2, T3, T4, T5, T6, T7, T8>(this NextORM.Core.JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7>! builder, NextORM.Core.EntityBuilder<T8>! join, System.Linq.Expressions.Expression<System.Func<NextORM.Core.Projection<T1, T2, T3, T4, T5, T6, T7>!, T8, bool>!>! joinCondition, System.Action<NextORM.Core.JoinOptions!>? options = null) -> NextORM.Core.JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7>!
+static NextORM.ClickHouse.ClickHouseJoinedEntityBuilderExtensions.AntiJoin<T1, T2, T3, T4, T5, T6, T7>(this NextORM.Core.JoinedEntityBuilder<T1, T2, T3, T4, T5, T6>! builder, NextORM.Core.EntityBuilder<T7>! join, System.Linq.Expressions.Expression<System.Func<NextORM.Core.Projection<T1, T2, T3, T4, T5, T6>!, T7, bool>!>! joinCondition, System.Action<NextORM.Core.JoinOptions!>? options = null) -> NextORM.Core.JoinedEntityBuilder<T1, T2, T3, T4, T5, T6>!
+static NextORM.ClickHouse.ClickHouseJoinedEntityBuilderExtensions.AntiJoin<T1, T2, T3, T4, T5, T6>(this NextORM.Core.JoinedEntityBuilder<T1, T2, T3, T4, T5>! builder, NextORM.Core.EntityBuilder<T6>! join, System.Linq.Expressions.Expression<System.Func<NextORM.Core.Projection<T1, T2, T3, T4, T5>!, T6, bool>!>! joinCondition, System.Action<NextORM.Core.JoinOptions!>? options = null) -> NextORM.Core.JoinedEntityBuilder<T1, T2, T3, T4, T5>!
+static NextORM.ClickHouse.ClickHouseJoinedEntityBuilderExtensions.AntiJoin<T1, T2, T3, T4, T5>(this NextORM.Core.JoinedEntityBuilder<T1, T2, T3, T4>! builder, NextORM.Core.EntityBuilder<T5>! join, System.Linq.Expressions.Expression<System.Func<NextORM.Core.Projection<T1, T2, T3, T4>!, T5, bool>!>! joinCondition, System.Action<NextORM.Core.JoinOptions!>? options = null) -> NextORM.Core.JoinedEntityBuilder<T1, T2, T3, T4>!
+static NextORM.ClickHouse.ClickHouseJoinedEntityBuilderExtensions.AntiJoin<T1, T2, T3, T4>(this NextORM.Core.JoinedEntityBuilder<T1, T2, T3>! builder, NextORM.Core.EntityBuilder<T4>! join, System.Linq.Expressions.Expression<System.Func<NextORM.Core.Projection<T1, T2, T3>!, T4, bool>!>! joinCondition, System.Action<NextORM.Core.JoinOptions!>? options = null) -> NextORM.Core.JoinedEntityBuilder<T1, T2, T3>!
+static NextORM.ClickHouse.ClickHouseJoinedEntityBuilderExtensions.AntiJoin<T1, T2, T3>(this NextORM.Core.JoinedEntityBuilder<T1, T2>! builder, NextORM.Core.EntityBuilder<T3>! join, System.Linq.Expressions.Expression<System.Func<NextORM.Core.Projection<T1, T2>!, T3, bool>!>! joinCondition, System.Action<NextORM.Core.JoinOptions!>? options = null) -> NextORM.Core.JoinedEntityBuilder<T1, T2>!
+static NextORM.ClickHouse.ClickHouseJoinedEntityBuilderExtensions.ArrayJoin<T1, T2, T3, T4, T5, T6, T7, T8, TArray>(this NextORM.Core.JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8>! builder, System.Linq.Expressions.Expression<System.Func<NextORM.Core.Projection<T1, T2, T3, T4, T5, T6, T7, T8>!, TArray>!>! array) -> NextORM.Core.JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8>!
+static NextORM.ClickHouse.ClickHouseJoinedEntityBuilderExtensions.ArrayJoin<T1, T2, T3, T4, T5, T6, T7, TArray>(this NextORM.Core.JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7>! builder, System.Linq.Expressions.Expression<System.Func<NextORM.Core.Projection<T1, T2, T3, T4, T5, T6, T7>!, TArray>!>! array) -> NextORM.Core.JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7>!
+static NextORM.ClickHouse.ClickHouseJoinedEntityBuilderExtensions.ArrayJoin<T1, T2, T3, T4, T5, T6, TArray>(this NextORM.Core.JoinedEntityBuilder<T1, T2, T3, T4, T5, T6>! builder, System.Linq.Expressions.Expression<System.Func<NextORM.Core.Projection<T1, T2, T3, T4, T5, T6>!, TArray>!>! array) -> NextORM.Core.JoinedEntityBuilder<T1, T2, T3, T4, T5, T6>!
+static NextORM.ClickHouse.ClickHouseJoinedEntityBuilderExtensions.ArrayJoin<T1, T2, T3, T4, T5, TArray>(this NextORM.Core.JoinedEntityBuilder<T1, T2, T3, T4, T5>! builder, System.Linq.Expressions.Expression<System.Func<NextORM.Core.Projection<T1, T2, T3, T4, T5>!, TArray>!>! array) -> NextORM.Core.JoinedEntityBuilder<T1, T2, T3, T4, T5>!
+static NextORM.ClickHouse.ClickHouseJoinedEntityBuilderExtensions.ArrayJoin<T1, T2, T3, T4, TArray>(this NextORM.Core.JoinedEntityBuilder<T1, T2, T3, T4>! builder, System.Linq.Expressions.Expression<System.Func<NextORM.Core.Projection<T1, T2, T3, T4>!, TArray>!>! array) -> NextORM.Core.JoinedEntityBuilder<T1, T2, T3, T4>!
+static NextORM.ClickHouse.ClickHouseJoinedEntityBuilderExtensions.ArrayJoin<T1, T2, T3, TArray>(this NextORM.Core.JoinedEntityBuilder<T1, T2, T3>! builder, System.Linq.Expressions.Expression<System.Func<NextORM.Core.Projection<T1, T2, T3>!, TArray>!>! array) -> NextORM.Core.JoinedEntityBuilder<T1, T2, T3>!
+static NextORM.ClickHouse.ClickHouseJoinedEntityBuilderExtensions.ArrayJoin<T1, T2, TArray>(this NextORM.Core.JoinedEntityBuilder<T1, T2>! builder, System.Linq.Expressions.Expression<System.Func<NextORM.Core.Projection<T1, T2>!, TArray>!>! array) -> NextORM.Core.JoinedEntityBuilder<T1, T2>!
+static NextORM.ClickHouse.ClickHouseJoinedEntityBuilderExtensions.LeftArrayJoin<T1, T2, T3, T4, T5, T6, T7, T8, TArray>(this NextORM.Core.JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8>! builder, System.Linq.Expressions.Expression<System.Func<NextORM.Core.Projection<T1, T2, T3, T4, T5, T6, T7, T8>!, TArray>!>! array) -> NextORM.Core.JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8>!
+static NextORM.ClickHouse.ClickHouseJoinedEntityBuilderExtensions.LeftArrayJoin<T1, T2, T3, T4, T5, T6, T7, TArray>(this NextORM.Core.JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7>! builder, System.Linq.Expressions.Expression<System.Func<NextORM.Core.Projection<T1, T2, T3, T4, T5, T6, T7>!, TArray>!>! array) -> NextORM.Core.JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7>!
+static NextORM.ClickHouse.ClickHouseJoinedEntityBuilderExtensions.LeftArrayJoin<T1, T2, T3, T4, T5, T6, TArray>(this NextORM.Core.JoinedEntityBuilder<T1, T2, T3, T4, T5, T6>! builder, System.Linq.Expressions.Expression<System.Func<NextORM.Core.Projection<T1, T2, T3, T4, T5, T6>!, TArray>!>! array) -> NextORM.Core.JoinedEntityBuilder<T1, T2, T3, T4, T5, T6>!
+static NextORM.ClickHouse.ClickHouseJoinedEntityBuilderExtensions.LeftArrayJoin<T1, T2, T3, T4, T5, TArray>(this NextORM.Core.JoinedEntityBuilder<T1, T2, T3, T4, T5>! builder, System.Linq.Expressions.Expression<System.Func<NextORM.Core.Projection<T1, T2, T3, T4, T5>!, TArray>!>! array) -> NextORM.Core.JoinedEntityBuilder<T1, T2, T3, T4, T5>!
+static NextORM.ClickHouse.ClickHouseJoinedEntityBuilderExtensions.LeftArrayJoin<T1, T2, T3, T4, TArray>(this NextORM.Core.JoinedEntityBuilder<T1, T2, T3, T4>! builder, System.Linq.Expressions.Expression<System.Func<NextORM.Core.Projection<T1, T2, T3, T4>!, TArray>!>! array) -> NextORM.Core.JoinedEntityBuilder<T1, T2, T3, T4>!
+static NextORM.ClickHouse.ClickHouseJoinedEntityBuilderExtensions.LeftArrayJoin<T1, T2, T3, TArray>(this NextORM.Core.JoinedEntityBuilder<T1, T2, T3>! builder, System.Linq.Expressions.Expression<System.Func<NextORM.Core.Projection<T1, T2, T3>!, TArray>!>! array) -> NextORM.Core.JoinedEntityBuilder<T1, T2, T3>!
+static NextORM.ClickHouse.ClickHouseJoinedEntityBuilderExtensions.LeftArrayJoin<T1, T2, TArray>(this NextORM.Core.JoinedEntityBuilder<T1, T2>! builder, System.Linq.Expressions.Expression<System.Func<NextORM.Core.Projection<T1, T2>!, TArray>!>! array) -> NextORM.Core.JoinedEntityBuilder<T1, T2>!
+static NextORM.ClickHouse.ClickHouseJoinedEntityBuilderExtensions.PasteJoin<T1, T2, T3, T4, T5, T6, T7, T8>(this NextORM.Core.JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7>! builder, NextORM.Core.EntityBuilder<T8>! join, System.Action<NextORM.Core.JoinOptions!>? options = null) -> NextORM.Core.JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8>!
+static NextORM.ClickHouse.ClickHouseJoinedEntityBuilderExtensions.PasteJoin<T1, T2, T3, T4, T5, T6, T7>(this NextORM.Core.JoinedEntityBuilder<T1, T2, T3, T4, T5, T6>! builder, NextORM.Core.EntityBuilder<T7>! join, System.Action<NextORM.Core.JoinOptions!>? options = null) -> NextORM.Core.JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7>!
+static NextORM.ClickHouse.ClickHouseJoinedEntityBuilderExtensions.PasteJoin<T1, T2, T3, T4, T5, T6>(this NextORM.Core.JoinedEntityBuilder<T1, T2, T3, T4, T5>! builder, NextORM.Core.EntityBuilder<T6>! join, System.Action<NextORM.Core.JoinOptions!>? options = null) -> NextORM.Core.JoinedEntityBuilder<T1, T2, T3, T4, T5, T6>!
+static NextORM.ClickHouse.ClickHouseJoinedEntityBuilderExtensions.PasteJoin<T1, T2, T3, T4, T5>(this NextORM.Core.JoinedEntityBuilder<T1, T2, T3, T4>! builder, NextORM.Core.EntityBuilder<T5>! join, System.Action<NextORM.Core.JoinOptions!>? options = null) -> NextORM.Core.JoinedEntityBuilder<T1, T2, T3, T4, T5>!
+static NextORM.ClickHouse.ClickHouseJoinedEntityBuilderExtensions.PasteJoin<T1, T2, T3, T4>(this NextORM.Core.JoinedEntityBuilder<T1, T2, T3>! builder, NextORM.Core.EntityBuilder<T4>! join, System.Action<NextORM.Core.JoinOptions!>? options = null) -> NextORM.Core.JoinedEntityBuilder<T1, T2, T3, T4>!
+static NextORM.ClickHouse.ClickHouseJoinedEntityBuilderExtensions.PasteJoin<T1, T2, T3>(this NextORM.Core.JoinedEntityBuilder<T1, T2>! builder, NextORM.Core.EntityBuilder<T3>! join, System.Action<NextORM.Core.JoinOptions!>? options = null) -> NextORM.Core.JoinedEntityBuilder<T1, T2, T3>!
+static NextORM.ClickHouse.ClickHouseJoinedEntityBuilderExtensions.SemiJoin<T1, T2, T3, T4, T5, T6, T7, T8>(this NextORM.Core.JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7>! builder, NextORM.Core.EntityBuilder<T8>! join, System.Linq.Expressions.Expression<System.Func<NextORM.Core.Projection<T1, T2, T3, T4, T5, T6, T7>!, T8, bool>!>! joinCondition, System.Action<NextORM.Core.JoinOptions!>? options = null) -> NextORM.Core.JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7>!
+static NextORM.ClickHouse.ClickHouseJoinedEntityBuilderExtensions.SemiJoin<T1, T2, T3, T4, T5, T6, T7>(this NextORM.Core.JoinedEntityBuilder<T1, T2, T3, T4, T5, T6>! builder, NextORM.Core.EntityBuilder<T7>! join, System.Linq.Expressions.Expression<System.Func<NextORM.Core.Projection<T1, T2, T3, T4, T5, T6>!, T7, bool>!>! joinCondition, System.Action<NextORM.Core.JoinOptions!>? options = null) -> NextORM.Core.JoinedEntityBuilder<T1, T2, T3, T4, T5, T6>!
+static NextORM.ClickHouse.ClickHouseJoinedEntityBuilderExtensions.SemiJoin<T1, T2, T3, T4, T5, T6>(this NextORM.Core.JoinedEntityBuilder<T1, T2, T3, T4, T5>! builder, NextORM.Core.EntityBuilder<T6>! join, System.Linq.Expressions.Expression<System.Func<NextORM.Core.Projection<T1, T2, T3, T4, T5>!, T6, bool>!>! joinCondition, System.Action<NextORM.Core.JoinOptions!>? options = null) -> NextORM.Core.JoinedEntityBuilder<T1, T2, T3, T4, T5>!
+static NextORM.ClickHouse.ClickHouseJoinedEntityBuilderExtensions.SemiJoin<T1, T2, T3, T4, T5>(this NextORM.Core.JoinedEntityBuilder<T1, T2, T3, T4>! builder, NextORM.Core.EntityBuilder<T5>! join, System.Linq.Expressions.Expression<System.Func<NextORM.Core.Projection<T1, T2, T3, T4>!, T5, bool>!>! joinCondition, System.Action<NextORM.Core.JoinOptions!>? options = null) -> NextORM.Core.JoinedEntityBuilder<T1, T2, T3, T4>!
+static NextORM.ClickHouse.ClickHouseJoinedEntityBuilderExtensions.SemiJoin<T1, T2, T3, T4>(this NextORM.Core.JoinedEntityBuilder<T1, T2, T3>! builder, NextORM.Core.EntityBuilder<T4>! join, System.Linq.Expressions.Expression<System.Func<NextORM.Core.Projection<T1, T2, T3>!, T4, bool>!>! joinCondition, System.Action<NextORM.Core.JoinOptions!>? options = null) -> NextORM.Core.JoinedEntityBuilder<T1, T2, T3>!
+static NextORM.ClickHouse.ClickHouseJoinedEntityBuilderExtensions.SemiJoin<T1, T2, T3>(this NextORM.Core.JoinedEntityBuilder<T1, T2>! builder, NextORM.Core.EntityBuilder<T3>! join, System.Linq.Expressions.Expression<System.Func<NextORM.Core.Projection<T1, T2>!, T3, bool>!>! joinCondition, System.Action<NextORM.Core.JoinOptions!>? options = null) -> NextORM.Core.JoinedEntityBuilder<T1, T2>!
+static readonly NextORM.ClickHouse.ClickHouseDialect.Instance -> NextORM.ClickHouse.ClickHouseDialect!
