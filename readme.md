@@ -196,6 +196,13 @@ is a deliberate, reviewed diff rather than an accident. See the
 [roadmap](https://github.com/AlexeyShirshov/nextorm/milestones) and the
 [documentation](https://alexeyshirshov.github.io/nextorm/) for details.
 
+## Contributing
+
+Contributions are welcome! [`nextorm.extensions`](src/nextorm.extensions) is designed for
+third-party developers to add reusable query operators through Nextorm's public extension APIs.
+You can contribute to this package or publish an independent extension package.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
 ## License
 
 [MIT](https://github.com/AlexeyShirshov/nextorm/blob/main/LICENSE)
