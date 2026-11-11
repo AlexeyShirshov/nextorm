@@ -474,6 +474,7 @@ This round (evidence round) test additions/updates:
 status path: `.pdca/status/D386-table-name-validation-1.md` — modified this cycle · untracked (durable on disk, not committed); no commit made in this cycle. Baseline HEAD `c835ff85`.
 Touched-file ledger (Task-1): 10 modified/added paths (docs 2, src 6, tests 2; see Changed files); `timefinal.txt` remains untracked and unstaged; no other `.pdca/**` path touched by product work (evidence under `.pdca/D386/rv1/` is local/ignored). Evidence root `.pdca/D386/rv1/`.
 Git state (this round): status file untracked, evidence root ignored, no commit.
+Post-commit: commit sha 196f4b56 (full 196f4b56825bc0f1164bfc8a9847bdddc60acdb6), branch 1.0.9, 13 files committed; this single progress-log append is the only post-commit delta (uncommitted).
 ## Progress log
 
 append-only, one row per event, never edited retroactively:
@@ -508,3 +509,5 @@ append-only, one row per event, never edited retroactively:
 2026-11-11T12:18:00Z | DO | revision r1 | attempt n2/3 | guard-removal RED/GREEN not redone: no product source changed this attempt; earlier pair retained as history (guard-src.patch sha256 afc25b9f...) | .pdca/D386/rv1/
 2026-11-11T12:20:00Z | DO | revision r1 | attempt n2/3 | staged refreshed; manifest rows → attempts/n2 logs; F-02 VM-6 description corrected; validators rc 0 | .pdca/D386/rv1/attempts/n2/validators.log
 2026-11-11T11:34:20Z | DO | revision r1 | attempt n2/3 | evidence packaging: spec staged (sha256 e82d65a3...), manifest VM-1/VM-5 repointed, validators rc 0; CHECK (3) not accepted (packaging only) | .pdca/D386/rv1/staged/
+2026-11-11T11:40:21Z | ACT | revision r1 | attempt n2/3 | commit 196f4b56 (full 196f4b56825bc0f1164bfc8a9847bdddc60acdb6) — 13 files, branch 1.0.9; issue #386 close attempted | .pdca/D386/rv1/commit.txt
+2026-11-11T11:42:00Z | ACT | revision r1 | attempt n2/3 | ACT closed: outcome accepted (CHECK → ACT); issue #386 closed via gh; commit 196f4b56 | .pdca/D386/rv1/commit.txt
