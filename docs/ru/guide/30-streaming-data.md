@@ -100,6 +100,35 @@ await ctx.From<Order>()
 [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1)) и обе перегрузки — sync и async —
 принимают тот же список.
 
+Список **необязателен**, и типовому сценарию Minimal API он не нужен: значения, пришедшие с запросом, —
+обычные захваченные локальные переменные, каждая уже привязана по имени (`@from`, `@minTotal`), поэтому
+терминал вызывается через перегрузку только с опциями и принимает один токен:
+
+```csharp
+app.MapGet("/orders", async (HttpContext http, DateTime from, decimal minTotal, CancellationToken ct) =>
+{
+    using var ctx = new DataContextBuilder()
+        .UsePostgres(connectionString)
+        .CreateDataContext();
+
+    http.Response.ContentType = "application/x-ndjson; charset=utf-8";
+
+    await ctx.From<Order>()
+        .Where(o => o.CreatedAt >= from && o.Total > minTotal)   // захвачено -> @from, @minTotal
+        .Select(o => new { o.Id, o.CreatedAt, o.Total })
+        .WriteJsonAsync(http.Response.Body, new JsonStreamOptions
+        {
+            Mode = JsonStreamMode.NdJson,
+            IgnoreNull = true,
+        }, ct);                                                  // позиционного списка нет
+});
+```
+
+Телом `Response.Body` владеет ASP.NET Core и освобождает его после возврата обработчика — терминал его
+никогда не закрывает, — а параметр-`CancellationToken` привязывается к `RequestAborted`, так что ушедший
+клиент останавливает и чтение строк, и запись в приёмник. К позиционной форме прибегай только тогда,
+когда сам запрос объявляет слоты `SqlFunctions.Parameter<T>(i)`, которые надо заполнить со стороны вызова.
+
 ### Исключения валидации и ошибки времени выполнения
 
 Предварительная валидация — опции, форма проекции, имена членов, неподдерживаемые колонки, привязка
