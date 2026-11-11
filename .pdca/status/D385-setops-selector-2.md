@@ -653,7 +653,7 @@ Note: `src/nextorm.core/Query/Commands/QueryCommand.TResult.cs` also carries two
 
 ## Git state
 
-`status path: .pdca/status/D385-setops-selector-2.md — modified this cycle · untracked (durable on disk, not staged, not committed)`; branch `1.0.9`, HEAD `fce8e35f8c993e6bfbb93e6abee8b989263d7757` (unchanged during n=3); `git diff --cached --name-only` empty — nothing staged, committed, pushed or merged. Task-owned delta: 15 cycle files + 1 test edit (CommonTestSuite.SetOperations.cs) + process spec edit, all uncommitted/unstaged. `QueryCommand.TResult.cs` also carries 2 foreign issue-319 hunks that ACT must not stage. Porcelain: 16 entries; nothing staged. `.pdca/D385-setops-selector/rv3/**` is gitignored.
+`status path: .pdca/status/D385-setops-selector-2.md — modified this cycle · committed (tracked) in this cycle` (created in cycle N=2, committed in ACT). Branch `1.0.9`, HEAD `e8dc37d2c901fb13f8ee2da29aa8cf95ff91945d` (commit created and pushed: `fce8e35f8..e8dc37d2c 1.0.9 -> 1.0.9`). `git diff --cached --name-only` empty after commit — nothing staged. Task-owned delta committed: 15 cycle files (incl. `.pdca/status/D385-setops-selector-1.md` and this file). `QueryCommand.TResult.cs` staged in full (single cycle hunk `@@ -1397,6 +1397,150 @@`; no foreign issue-319 hunks present after HEAD). Push: `GIT_ALLOW_PUSH=1 git push origin 1.0.9` succeeded. `.pdca/D385-setops-selector/rv3/**` is gitignored (durable, not tracked). This durable on-disk edit records the commit hash post-commit and is intentionally left uncommitted (status file is durable on disk, not re-staged).
 
 ## Progress log
 
