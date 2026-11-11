@@ -24,6 +24,9 @@ public class SqlGenerationTests
     }
 
     private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd) => Normalize(Prepare(ctx, cmd).DbCommand.CommandText);
+    // Original, un-normalised CommandText: the selector-vs-explicit parity assertions compare the raw
+    // generated SQL byte for byte (AC2-5). Normalize/SqlOf stay for expectations that embed multi-line SQL.
+    private static string RawSqlOf<T>(IDataContext ctx, QueryCommand<T> cmd) => Prepare(ctx, cmd).DbCommand.CommandText;
 
     [Fact]
     public void QueryTag_ShouldRenderBlockCommentAfterSelect()
@@ -3626,5 +3629,171 @@ public class SqlGenerationTests
             .Should().Contain("varp(");
         SqlOf(ctx, e.Select(x => SqlFunctions.Sql.varp_distinct((double)x.Id)))
             .Should().Contain("varp(distinct ");
+    }
+    [Fact]
+    public void Union_Selector_ShouldMatchExplicitForm()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var selectorSql = RawSqlOf(ctx, e.Select(x => x.Id).Union<IComplexEntity>(it => (int)it.Id));
+        var explicitSql = RawSqlOf(ctx, e.Select(x => x.Id).Union(ctx.From<IComplexEntity>().Select(it => (int)it.Id)));
+        selectorSql.Should().Be(explicitSql);
+    }
+
+    [Fact]
+    public void UnionAll_Selector_ShouldMatchExplicitForm()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var selectorSql = RawSqlOf(ctx, e.Select(x => x.Id).UnionAll<IComplexEntity>(it => (int)it.Id));
+        var explicitSql = RawSqlOf(ctx, e.Select(x => x.Id).UnionAll(ctx.From<IComplexEntity>().Select(it => (int)it.Id)));
+        selectorSql.Should().Be(explicitSql);
+    }
+
+    [Fact]
+    public void Intersect_Selector_ShouldMatchExplicitForm()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var selectorSql = RawSqlOf(ctx, e.Select(x => x.Id).Intersect<IComplexEntity>(it => (int)it.Id));
+        var explicitSql = RawSqlOf(ctx, e.Select(x => x.Id).Intersect(ctx.From<IComplexEntity>().Select(it => (int)it.Id)));
+        selectorSql.Should().Be(explicitSql);
+    }
+
+    [Fact]
+    public void Except_Selector_ShouldMatchExplicitForm()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var selectorSql = RawSqlOf(ctx, e.Select(x => x.Id).Except<IComplexEntity>(it => (int)it.Id));
+        var explicitSql = RawSqlOf(ctx, e.Select(x => x.Id).Except(ctx.From<IComplexEntity>().Select(it => (int)it.Id)));
+        selectorSql.Should().Be(explicitSql);
+    }
+
+    [Fact]
+    public void IntersectAll_Selector_ShouldThrowLikeExplicitForm()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var selectorAct = () => SqlOf(ctx, e.Select(x => x.Id).IntersectAll<IComplexEntity>(it => (int)it.Id));
+        var explicitAct = () => SqlOf(ctx, e.Select(x => x.Id).IntersectAll(ctx.From<IComplexEntity>().Select(it => (int)it.Id)));
+
+        selectorAct.Should().Throw<NotSupportedException>().WithMessage("*IntersectAll*");
+        explicitAct.Should().Throw<NotSupportedException>().WithMessage("*IntersectAll*");
+    }
+
+    [Fact]
+    public void ExceptAll_Selector_ShouldThrowLikeExplicitForm()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var selectorAct = () => SqlOf(ctx, e.Select(x => x.Id).ExceptAll<IComplexEntity>(it => (int)it.Id));
+        var explicitAct = () => SqlOf(ctx, e.Select(x => x.Id).ExceptAll(ctx.From<IComplexEntity>().Select(it => (int)it.Id)));
+
+        selectorAct.Should().Throw<NotSupportedException>().WithMessage("*ExceptAll*");
+        explicitAct.Should().Throw<NotSupportedException>().WithMessage("*ExceptAll*");
+    }
+
+    [Fact]
+    public void SetOperations_Selector_Chain_ShouldMatchExplicitForm()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var selectorSql = RawSqlOf(ctx, e.Select(x => x.Id)
+            .Except<IComplexEntity>(it => (int)it.Id)
+            .Union<IComplexEntity>(it => (int)it.Id));
+        var explicitSql = RawSqlOf(ctx, e.Select(x => x.Id)
+            .Except(ctx.From<IComplexEntity>().Select(it => (int)it.Id))
+            .Union(ctx.From<IComplexEntity>().Select(it => (int)it.Id)));
+        selectorSql.Should().Be(explicitSql);
+    }
+
+
+    [Fact]
+    public void SetOperations_Selector_NullSelector_ShouldThrowArgumentNullExceptionForAllSix()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+        var left = e.Select(x => x.Id);
+
+        FluentActions.Invoking(() => left.Union<IComplexEntity>((Expression<Func<IComplexEntity, int>>)null!))
+            .Should().Throw<ArgumentNullException>().Which.ParamName.Should().Be("selector");
+        FluentActions.Invoking(() => left.UnionAll<IComplexEntity>((Expression<Func<IComplexEntity, int>>)null!))
+            .Should().Throw<ArgumentNullException>().Which.ParamName.Should().Be("selector");
+        FluentActions.Invoking(() => left.Intersect<IComplexEntity>((Expression<Func<IComplexEntity, int>>)null!))
+            .Should().Throw<ArgumentNullException>().Which.ParamName.Should().Be("selector");
+        FluentActions.Invoking(() => left.IntersectAll<IComplexEntity>((Expression<Func<IComplexEntity, int>>)null!))
+            .Should().Throw<ArgumentNullException>().Which.ParamName.Should().Be("selector");
+        FluentActions.Invoking(() => left.Except<IComplexEntity>((Expression<Func<IComplexEntity, int>>)null!))
+            .Should().Throw<ArgumentNullException>().Which.ParamName.Should().Be("selector");
+        FluentActions.Invoking(() => left.ExceptAll<IComplexEntity>((Expression<Func<IComplexEntity, int>>)null!))
+            .Should().Throw<ArgumentNullException>().Which.ParamName.Should().Be("selector");
+    }
+
+    [Fact]
+    public void SetOperations_Selector_NullContext_ShouldThrowInvalidOperationException()
+    {
+        var unbound = new QueryCommand<int>(null, new QueryDefinition());
+
+        FluentActions.Invoking(() => unbound.Union<IComplexEntity>(it => (int)it.Id))
+            .Should().Throw<InvalidOperationException>().WithMessage("*data context*");
+        FluentActions.Invoking(() => unbound.UnionAll<IComplexEntity>(it => (int)it.Id))
+            .Should().Throw<InvalidOperationException>().WithMessage("*data context*");
+        FluentActions.Invoking(() => unbound.Intersect<IComplexEntity>(it => (int)it.Id))
+            .Should().Throw<InvalidOperationException>().WithMessage("*data context*");
+        FluentActions.Invoking(() => unbound.IntersectAll<IComplexEntity>(it => (int)it.Id))
+            .Should().Throw<InvalidOperationException>().WithMessage("*data context*");
+        FluentActions.Invoking(() => unbound.Except<IComplexEntity>(it => (int)it.Id))
+            .Should().Throw<InvalidOperationException>().WithMessage("*data context*");
+        FluentActions.Invoking(() => unbound.ExceptAll<IComplexEntity>(it => (int)it.Id))
+            .Should().Throw<InvalidOperationException>().WithMessage("*data context*");
+    }
+
+    [Fact]
+    public void SetOperations_Selector_ShapeMismatch_PreparesIdentically()
+    {
+        // O-AC6 Branch A: a partial MemberInit projects fewer SQL columns than a fuller one for the
+        // same TResult, so a real column-count mismatch between the set-operation operands is
+        // constructible through Select(selector) - the translator does NOT align the projection to
+        // TResult and QueryPreparer does NOT validate column counts. Both forms therefore prepare
+        // identically (same SQL, mismatched column counts, no preparation failure); the failure only
+        // happens at execution, where the database rejects the mismatched UNION.
+        using var ctx = SqliteTestContext.Create();
+        var left = ctx.From<IComplexEntity>().Select(x => new T307Dto { Id = (int)x.Id });
+
+        var selectorSql = SqlOf(ctx, left.Union<IComplexEntity>(it => new T307Dto { Id = (int)it.Id, Name = it.String }));
+        var explicitSql = SqlOf(ctx, left.Union(ctx.From<IComplexEntity>().Select(it => new T307Dto { Id = (int)it.Id, Name = it.String })));
+
+        selectorSql.Should().Be(explicitSql);
+        selectorSql.Should().Contain("union");
+        // The left operand projects one column, the right operand projects two: the mismatch is
+        // present in the generated SQL and survived preparation.
+        selectorSql.Should().Contain(" as 'Id'");
+        selectorSql.Should().Contain(" as 'Name'");
+    }
+
+    [Fact]
+    public void SetOperations_Selector_CompatibleProjection_PreparesIdentically()
+    {
+        // Positive control only: both operands project the same one-column int shape. This is NOT a
+        // negative shape-mismatch test; the real mismatch is covered by
+        // SetOperations_Selector_ShapeMismatch_PreparesIdentically (O-AC6 Branch A).
+        using var ctx = SqliteTestContext.Create();
+        var left = ctx.From<ISimpleEntity>().Select(x => x.Id);
+
+        var selectorCmd = left.Union<IComplexEntity>(it => (int)it.Id);
+        var explicitCmd = left.Union(ctx.From<IComplexEntity>().Select(it => (int)it.Id));
+        selectorCmd.PrepareCommand(false, CancellationToken.None);
+        explicitCmd.PrepareCommand(false, CancellationToken.None);
+        var comparer = selectorCmd.GetQueryPlanEqualityComparer();
+        comparer.Equals(selectorCmd, explicitCmd).Should().BeTrue();
+        comparer.GetHashCode(selectorCmd).Should().Be(comparer.GetHashCode(explicitCmd));
     }
 }

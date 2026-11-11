@@ -1397,6 +1397,150 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
         return cmd;
     }
 
+    /// <summary>Returns a clone of this command combined with the rows projected from <typeparamref name="TEntity"/> by <paramref name="selector"/> through <c>UNION</c> (duplicates removed).</summary>
+    /// <typeparam name="TEntity">The entity type of the second operand's source.</typeparam>
+    /// <param name="selector">Projection from <typeparamref name="TEntity"/> to <typeparamref name="TResult"/>; must not be <see langword="null"/>.</param>
+    /// <returns>A new command carrying the set operation.</returns>
+    /// <remarks>
+    /// This overload is syntactic sugar for <c>Union(_dataContext.From&lt;TEntity&gt;().Select(selector))</c>:
+    /// it fixes the element type of the right operand to <typeparamref name="TResult"/> (the left side's type).
+    /// A bare <c>Union(null)</c> is ambiguous between
+    /// <see cref="Union{T}(QueryCommand{T})"/> and this overload's
+    /// <c>Expression&lt;Func&lt;TEntity, TResult&gt;&gt;</c> parameter; the caller resolves it with a typed
+    /// null — <c>(QueryCommand&lt;TResult&gt;)null!</c> selects the command overload, while
+    /// <c>(Expression&lt;Func&lt;TEntity, TResult&gt;&gt;)null!</c> selects this selector overload (which
+    /// then throws <see cref="ArgumentNullException"/>).
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="selector"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">This command is not bound to a data context.</exception>
+    public QueryCommand<TResult> Union<TEntity>(Expression<Func<TEntity, TResult>> selector)
+    {
+        ArgumentNullException.ThrowIfNull(selector);
+        if (_dataContext is null)
+            throw new InvalidOperationException("This query command is not bound to a data context.");
+        return Union(_dataContext.From<TEntity>().Select(selector));
+    }
+
+    /// <summary>Returns a clone of this command combined with the rows projected from <typeparamref name="TEntity"/> by <paramref name="selector"/> through <c>UNION ALL</c> (duplicates preserved).</summary>
+    /// <typeparam name="TEntity">The entity type of the second operand's source.</typeparam>
+    /// <param name="selector">Projection from <typeparamref name="TEntity"/> to <typeparamref name="TResult"/>; must not be <see langword="null"/>.</param>
+    /// <returns>A new command carrying the set operation.</returns>
+    /// <remarks>
+    /// This overload is syntactic sugar for <c>UnionAll(_dataContext.From&lt;TEntity&gt;().Select(selector))</c>:
+    /// it fixes the element type of the right operand to <typeparamref name="TResult"/> (the left side's type).
+    /// A bare <c>UnionAll(null)</c> is ambiguous between
+    /// <see cref="UnionAll{T}(QueryCommand{T})"/> and this overload's
+    /// <c>Expression&lt;Func&lt;TEntity, TResult&gt;&gt;</c> parameter; the caller resolves it with a typed
+    /// null — <c>(QueryCommand&lt;TResult&gt;)null!</c> selects the command overload, while
+    /// <c>(Expression&lt;Func&lt;TEntity, TResult&gt;&gt;)null!</c> selects this selector overload (which
+    /// then throws <see cref="ArgumentNullException"/>).
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="selector"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">This command is not bound to a data context.</exception>
+    public QueryCommand<TResult> UnionAll<TEntity>(Expression<Func<TEntity, TResult>> selector)
+    {
+        ArgumentNullException.ThrowIfNull(selector);
+        if (_dataContext is null)
+            throw new InvalidOperationException("This query command is not bound to a data context.");
+        return UnionAll(_dataContext.From<TEntity>().Select(selector));
+    }
+
+    /// <summary>Returns a clone of this command combined with the rows projected from <typeparamref name="TEntity"/> by <paramref name="selector"/> through <c>INTERSECT</c> (distinct rows present in both operands).</summary>
+    /// <typeparam name="TEntity">The entity type of the second operand's source.</typeparam>
+    /// <param name="selector">Projection from <typeparamref name="TEntity"/> to <typeparamref name="TResult"/>; must not be <see langword="null"/>.</param>
+    /// <returns>A new command carrying the set operation.</returns>
+    /// <remarks>
+    /// This overload is syntactic sugar for <c>Intersect(_dataContext.From&lt;TEntity&gt;().Select(selector))</c>:
+    /// it fixes the element type of the right operand to <typeparamref name="TResult"/> (the left side's type).
+    /// A bare <c>Intersect(null)</c> is ambiguous between
+    /// <see cref="Intersect{T}(QueryCommand{T})"/> and this overload's
+    /// <c>Expression&lt;Func&lt;TEntity, TResult&gt;&gt;</c> parameter; the caller resolves it with a typed
+    /// null — <c>(QueryCommand&lt;TResult&gt;)null!</c> selects the command overload, while
+    /// <c>(Expression&lt;Func&lt;TEntity, TResult&gt;&gt;)null!</c> selects this selector overload (which
+    /// then throws <see cref="ArgumentNullException"/>).
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="selector"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">This command is not bound to a data context.</exception>
+    public QueryCommand<TResult> Intersect<TEntity>(Expression<Func<TEntity, TResult>> selector)
+    {
+        ArgumentNullException.ThrowIfNull(selector);
+        if (_dataContext is null)
+            throw new InvalidOperationException("This query command is not bound to a data context.");
+        return Intersect(_dataContext.From<TEntity>().Select(selector));
+    }
+
+    /// <summary>Returns a clone of this command combined with the rows projected from <typeparamref name="TEntity"/> by <paramref name="selector"/> through <c>INTERSECT ALL</c> (duplicates preserved).</summary>
+    /// <typeparam name="TEntity">The entity type of the second operand's source.</typeparam>
+    /// <param name="selector">Projection from <typeparamref name="TEntity"/> to <typeparamref name="TResult"/>; must not be <see langword="null"/>.</param>
+    /// <returns>A new command carrying the set operation.</returns>
+    /// <remarks>
+    /// This overload is syntactic sugar for <c>IntersectAll(_dataContext.From&lt;TEntity&gt;().Select(selector))</c>:
+    /// it fixes the element type of the right operand to <typeparamref name="TResult"/> (the left side's type).
+    /// A bare <c>IntersectAll(null)</c> is ambiguous between
+    /// <see cref="IntersectAll{T}(QueryCommand{T})"/> and this overload's
+    /// <c>Expression&lt;Func&lt;TEntity, TResult&gt;&gt;</c> parameter; the caller resolves it with a typed
+    /// null — <c>(QueryCommand&lt;TResult&gt;)null!</c> selects the command overload, while
+    /// <c>(Expression&lt;Func&lt;TEntity, TResult&gt;&gt;)null!</c> selects this selector overload (which
+    /// then throws <see cref="ArgumentNullException"/>).
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="selector"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">This command is not bound to a data context.</exception>
+    public QueryCommand<TResult> IntersectAll<TEntity>(Expression<Func<TEntity, TResult>> selector)
+    {
+        ArgumentNullException.ThrowIfNull(selector);
+        if (_dataContext is null)
+            throw new InvalidOperationException("This query command is not bound to a data context.");
+        return IntersectAll(_dataContext.From<TEntity>().Select(selector));
+    }
+
+    /// <summary>Returns a clone of this command combined with the rows projected from <typeparamref name="TEntity"/> by <paramref name="selector"/> through <c>EXCEPT</c> (distinct rows of this command not present in the other).</summary>
+    /// <typeparam name="TEntity">The entity type of the second operand's source.</typeparam>
+    /// <param name="selector">Projection from <typeparamref name="TEntity"/> to <typeparamref name="TResult"/>; must not be <see langword="null"/>.</param>
+    /// <returns>A new command carrying the set operation.</returns>
+    /// <remarks>
+    /// This overload is syntactic sugar for <c>Except(_dataContext.From&lt;TEntity&gt;().Select(selector))</c>:
+    /// it fixes the element type of the right operand to <typeparamref name="TResult"/> (the left side's type).
+    /// A bare <c>Except(null)</c> is ambiguous between
+    /// <see cref="Except{T}(QueryCommand{T})"/> and this overload's
+    /// <c>Expression&lt;Func&lt;TEntity, TResult&gt;&gt;</c> parameter; the caller resolves it with a typed
+    /// null — <c>(QueryCommand&lt;TResult&gt;)null!</c> selects the command overload, while
+    /// <c>(Expression&lt;Func&lt;TEntity, TResult&gt;&gt;)null!</c> selects this selector overload (which
+    /// then throws <see cref="ArgumentNullException"/>).
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="selector"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">This command is not bound to a data context.</exception>
+    public QueryCommand<TResult> Except<TEntity>(Expression<Func<TEntity, TResult>> selector)
+    {
+        ArgumentNullException.ThrowIfNull(selector);
+        if (_dataContext is null)
+            throw new InvalidOperationException("This query command is not bound to a data context.");
+        return Except(_dataContext.From<TEntity>().Select(selector));
+    }
+
+    /// <summary>Returns a clone of this command combined with the rows projected from <typeparamref name="TEntity"/> by <paramref name="selector"/> through <c>EXCEPT ALL</c> (duplicates preserved).</summary>
+    /// <typeparam name="TEntity">The entity type of the second operand's source.</typeparam>
+    /// <param name="selector">Projection from <typeparamref name="TEntity"/> to <typeparamref name="TResult"/>; must not be <see langword="null"/>.</param>
+    /// <returns>A new command carrying the set operation.</returns>
+    /// <remarks>
+    /// This overload is syntactic sugar for <c>ExceptAll(_dataContext.From&lt;TEntity&gt;().Select(selector))</c>:
+    /// it fixes the element type of the right operand to <typeparamref name="TResult"/> (the left side's type).
+    /// A bare <c>ExceptAll(null)</c> is ambiguous between
+    /// <see cref="ExceptAll{T}(QueryCommand{T})"/> and this overload's
+    /// <c>Expression&lt;Func&lt;TEntity, TResult&gt;&gt;</c> parameter; the caller resolves it with a typed
+    /// null — <c>(QueryCommand&lt;TResult&gt;)null!</c> selects the command overload, while
+    /// <c>(Expression&lt;Func&lt;TEntity, TResult&gt;&gt;)null!</c> selects this selector overload (which
+    /// then throws <see cref="ArgumentNullException"/>).
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="selector"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">This command is not bound to a data context.</exception>
+    public QueryCommand<TResult> ExceptAll<TEntity>(Expression<Func<TEntity, TResult>> selector)
+    {
+        ArgumentNullException.ThrowIfNull(selector);
+        if (_dataContext is null)
+            throw new InvalidOperationException("This query command is not bound to a data context.");
+        return ExceptAll(_dataContext.From<TEntity>().Select(selector));
+    }
+
     /// <summary>
     /// Clone of this command with the set operation removed, so the first operand of a
     /// <c>UNION</c>/<c>INTERSECT</c>/<c>EXCEPT</c> can be executed independently.

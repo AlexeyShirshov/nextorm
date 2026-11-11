@@ -19,6 +19,9 @@ public class SqlGenerationTests
     }
 
     private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd) => Normalize(Prepare(ctx, cmd).DbCommand.CommandText);
+    // Original, un-normalised CommandText: the selector-vs-explicit parity assertions compare the raw
+    // generated SQL byte for byte (AC2-5). Normalize/SqlOf stay for expectations that embed multi-line SQL.
+    private static string RawSqlOf<T>(IDataContext ctx, QueryCommand<T> cmd) => Prepare(ctx, cmd).DbCommand.CommandText;
 
     [Fact]
     public void QueryTag_ShouldRenderBlockCommentAfterSelect()
@@ -1030,4 +1033,91 @@ public class SqlGenerationTests
         SqlOf(ctx, e.Select(x => SqlFunctions.Sql.varp_distinct((double)x.Id)))
             .Should().Contain("var_pop(distinct ");
     }
+    [Fact]
+    public void Union_Selector_ShouldMatchExplicitForm()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var selectorSql = RawSqlOf(ctx, e.Select(x => x.Id).Union<IComplexEntity>(it => (int)it.Id));
+        var explicitSql = RawSqlOf(ctx, e.Select(x => x.Id).Union(ctx.From<IComplexEntity>().Select(it => (int)it.Id)));
+        selectorSql.Should().Be(explicitSql);
+    }
+
+    [Fact]
+    public void UnionAll_Selector_ShouldMatchExplicitForm()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var selectorSql = RawSqlOf(ctx, e.Select(x => x.Id).UnionAll<IComplexEntity>(it => (int)it.Id));
+        var explicitSql = RawSqlOf(ctx, e.Select(x => x.Id).UnionAll(ctx.From<IComplexEntity>().Select(it => (int)it.Id)));
+        selectorSql.Should().Be(explicitSql);
+    }
+
+    [Fact]
+    public void Intersect_Selector_ShouldMatchExplicitForm()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var selectorSql = RawSqlOf(ctx, e.Select(x => x.Id).Intersect<IComplexEntity>(it => (int)it.Id));
+        var explicitSql = RawSqlOf(ctx, e.Select(x => x.Id).Intersect(ctx.From<IComplexEntity>().Select(it => (int)it.Id)));
+        selectorSql.Should().Be(explicitSql);
+    }
+
+    [Fact]
+    public void Except_Selector_ShouldMatchExplicitForm()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var selectorSql = RawSqlOf(ctx, e.Select(x => x.Id).Except<IComplexEntity>(it => (int)it.Id));
+        var explicitSql = RawSqlOf(ctx, e.Select(x => x.Id).Except(ctx.From<IComplexEntity>().Select(it => (int)it.Id)));
+        selectorSql.Should().Be(explicitSql);
+    }
+
+    [Fact]
+    public void IntersectAll_Selector_ShouldMatchExplicitForm()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var selectorSql = RawSqlOf(ctx, e.Select(x => x.Id).IntersectAll<IComplexEntity>(it => (int)it.Id));
+        var explicitSql = RawSqlOf(ctx, e.Select(x => x.Id).IntersectAll(ctx.From<IComplexEntity>().Select(it => (int)it.Id)));
+        selectorSql.Should().Be(explicitSql);
+        // Pinned portability matrix (O-AC3): MariaDB emits INTERSECT ALL on both forms.
+        selectorSql.Should().Contain("intersect all");
+        explicitSql.Should().Contain("intersect all");
+    }
+
+    [Fact]
+    public void ExceptAll_Selector_ShouldMatchExplicitForm()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var selectorSql = RawSqlOf(ctx, e.Select(x => x.Id).ExceptAll<IComplexEntity>(it => (int)it.Id));
+        var explicitSql = RawSqlOf(ctx, e.Select(x => x.Id).ExceptAll(ctx.From<IComplexEntity>().Select(it => (int)it.Id)));
+        selectorSql.Should().Be(explicitSql);
+        // Pinned portability matrix (O-AC3): MariaDB emits EXCEPT ALL on both forms.
+        selectorSql.Should().Contain("except all");
+        explicitSql.Should().Contain("except all");
+    }
+
+    [Fact]
+    public void SetOperations_Selector_Chain_ShouldMatchExplicitForm()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var selectorSql = RawSqlOf(ctx, e.Select(x => x.Id)
+            .Except<IComplexEntity>(it => (int)it.Id)
+            .Union<IComplexEntity>(it => (int)it.Id));
+        var explicitSql = RawSqlOf(ctx, e.Select(x => x.Id)
+            .Except(ctx.From<IComplexEntity>().Select(it => (int)it.Id))
+            .Union(ctx.From<IComplexEntity>().Select(it => (int)it.Id)));
+        selectorSql.Should().Be(explicitSql);
+    }
+
 }
