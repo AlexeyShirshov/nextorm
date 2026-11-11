@@ -384,7 +384,7 @@ def build_feature_rows(results_dir: Path, lang: str) -> list:
                 )
             )
         lines.append(
-            f"| [{label_en if lang == 'en' else label_ru}]({url}) | " + " | ".join(cells) + " |"
+            f"| [{(label_en if lang == 'en' else label_ru).strip('`')}]({url}) | " + " | ".join(cells) + " |"
         )
     return lines
 
