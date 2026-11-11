@@ -69,9 +69,14 @@ await ctx.From<Order>()
 ### Позиционные SQL-параметры
 
 У каждого JSON-терминала есть перегрузка с завершающим списком `params` из **позиционных SQL-значений**.
-Элемент `i` привязывается к плейсхолдеру запроса `i` (`NormParam.GetName(i)`) точно так же, как это
+Элемент `i` привязывается к плейсхолдеру запроса `i` (`NormParam.GetName(i)`), то есть к runtime-плейсхолдеру
+[`SqlFunctions.Parameter<T>(i)`](03-filtering-where.md#захваченные-параметры-и-parameter), точно так же, как это
 делает список `params` обычных буферизованных терминалов; это не список селекторов колонок. Пустой
 список ничего не привязывает (проверки арности нет), а `null`-элемент привязывает `DBNull`.
+
+Захваченная локальная переменная уже привязана как собственный именованный параметр (`@from`), поэтому
+**не** нужно повторять её в этом списке: чтобы завершающие значения что-то привязали, запрос должен
+ссылаться на плейсхолдеры `SqlFunctions.Parameter<T>(i)`.
 
 `JsonStreamOptions options` и `CancellationToken cancellationToken` на этой перегрузке **обязательны**
 (без значений по умолчанию), поэтому `WriteJson(stream, null)` не может быть неоднозначен с вызовом
@@ -81,13 +86,14 @@ await ctx.From<Order>()
 await using var file = File.Create("orders.ndjson");
 
 await ctx.From<Order>()
-    .Where(o => o.CreatedAt >= from && o.Total > minTotal)
+    .Where(o => o.CreatedAt >= SqlFunctions.Parameter<DateTime>(0)
+             && o.Total > SqlFunctions.Parameter<decimal>(1))
     .Select(o => new { o.Id, o.CreatedAt, o.Total })
     .WriteJsonAsync(file, new JsonStreamOptions
     {
         Mode = JsonStreamMode.NdJson,
         IgnoreNull = true,
-    }, cancellationToken, from, minTotal);
+    }, cancellationToken, from, minTotal); // привязывает norm_p0 = from, norm_p1 = minTotal
 ```
 
 Обе поверхности ([`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) и

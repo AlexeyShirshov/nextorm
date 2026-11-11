@@ -69,9 +69,15 @@ values throw the same way from the terminal's options overloads.
 ### Positional SQL parameters
 
 Each JSON terminal has an overload that takes a trailing `params` list of **positional SQL parameter
-values**. Element `i` is bound to the query's placeholder `i` (`NormParam.GetName(i)`), exactly as the
-ordinary buffered terminals bind their `params` list; it is not a list of column selectors. An empty
-list binds nothing (there is no arity guard), and a `null` element binds `DBNull`.
+values**. Element `i` is bound to the query's placeholder `i` (`NormParam.GetName(i)`), i.e. to a
+[`SqlFunctions.Parameter<T>(i)`](03-filtering-where.md#captured-parameters-and-parameter) runtime
+placeholder, exactly as the ordinary buffered terminals bind their `params` list; it is not a list of
+column selectors. An empty list binds nothing (there is no arity guard), and a `null` element binds
+`DBNull`.
+
+A captured local is already bound as its own named parameter (`@from`), so it must **not** be repeated
+in this list as well: the query must reference `SqlFunctions.Parameter<T>(i)` placeholders for the
+trailing values to have anything to bind.
 
 `JsonStreamOptions options` and `CancellationToken cancellationToken` are **required** on this overload
 (no defaults), so `WriteJson(stream, null)` cannot be ambiguous with an options-only call; the
@@ -81,13 +87,14 @@ option-only overloads above keep the token optional.
 await using var file = File.Create("orders.ndjson");
 
 await ctx.From<Order>()
-    .Where(o => o.CreatedAt >= from && o.Total > minTotal)
+    .Where(o => o.CreatedAt >= SqlFunctions.Parameter<DateTime>(0)
+             && o.Total > SqlFunctions.Parameter<decimal>(1))
     .Select(o => new { o.Id, o.CreatedAt, o.Total })
     .WriteJsonAsync(file, new JsonStreamOptions
     {
         Mode = JsonStreamMode.NdJson,
         IgnoreNull = true,
-    }, cancellationToken, from, minTotal);
+    }, cancellationToken, from, minTotal); // binds norm_p0 = from, norm_p1 = minTotal
 ```
 
 Both surfaces ([`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) and
