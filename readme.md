@@ -35,12 +35,12 @@ with no change tracking and no mandatory entity class.
 ## Installation
 
 ```bash
-dotnet add package nextorm --prerelease
-dotnet add package nextorm.sqlite --prerelease   # pick one provider
+dotnet add package nextorm
+dotnet add package nextorm.sqlite   # pick one provider
 ```
 
-All current releases are prereleases, so `--prerelease` is required. Package Manager Console equivalent:
-`Install-Package nextorm -Prerelease`.
+1.0.9 is the first stable release, so `--prerelease` is not needed; previews (`1.0.10-a.x` and later)
+still require it. Package Manager Console equivalent: `Install-Package nextorm`.
 
 | Package | Provider | Driver |
 |---|---|---|
@@ -52,6 +52,7 @@ All current releases are prereleases, so `--prerelease` is required. Package Man
 | `nextorm.mariadb` | MariaDB | `MySqlConnector` |
 | `nextorm.clickhouse` | ClickHouse | `ClickHouse.Driver` |
 | `nextorm.extensions` | Query components: `SelectWhereMin`/`SelectWhereMax`, `SelectGroup`/`SelectGroupHaving` | — |
+| `nextorm.entityframeworkcore` | EF Core integration: `db.CreateNextOrmContext()` over an existing `DbContext` | `Microsoft.EntityFrameworkCore.Relational` |
 
 ## Quick start
 
@@ -189,8 +190,10 @@ The full comparison — capabilities and benchmarks, with methodology — is in 
 
 ## Status
 
-Beta — the public API is still changing and backward compatibility is not preserved between
-prereleases. See the [roadmap](https://github.com/AlexeyShirshov/nextorm/milestones) and the
+Stable — 1.0.9 is the first stable release. The public API surface is frozen and tracked from this
+version (`PublicAPI.Shipped.txt` per package, enforced by `PublicApiAnalyzers`), so a breaking change
+is a deliberate, reviewed diff rather than an accident. See the
+[roadmap](https://github.com/AlexeyShirshov/nextorm/milestones) and the
 [documentation](https://alexeyshirshov.github.io/nextorm/) for details.
 
 ## License

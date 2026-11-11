@@ -119,14 +119,16 @@ Nextorm uses protocol-level libraries (for example, SqlClient for Microsoft SQL 
 
 ## Status
 
-The current status (1.0.9-rc5) is a prof of concept.
+The current status (1.0.9) is the first stable release: the public API surface is frozen and tracked
+from this version, and the packages target .NET 10 and .NET 11.
 
 ## Installation
 
 - from cli `dotnet add package nextorm`
 - from package manager `Install-Package nextorm`
 
-Don't forget to add `--prerelease` flag since all current versions is not stable.
+The 1.0.9 release is stable, so the `--prerelease` flag is no longer needed; previews
+(`1.0.10-a.x` and later) still require it.
 To add specific database provider use the following:
 
 - `dotnet add package nextorm.sqlserver`
@@ -135,6 +137,9 @@ To add specific database provider use the following:
 - `dotnet add package nextorm.mysql`
 - `dotnet add package nextorm.mariadb`
 - `dotnet add package nextorm.clickhouse`
+
+Optional packages: `nextorm.extensions` (query components: `SelectGroup`/`SelectGroupHaving`) and
+`nextorm.entityframeworkcore` (run nextorm queries over an existing EF Core `DbContext`).
 
 In-memory provider is built-in in core library.
 
@@ -148,6 +153,22 @@ They differ in cost, lifetime and thread-safety rules. Which one to use, what ea
 its limitations are covered in the [plan cache and reuse guide](engine/03-plan-cache-and-reuse.md).
 
 ## Releases
+
+### 1.0.9
+
+First stable release: the public API surface is frozen and tracked, the packages multi-target .NET 10
+and .NET 11, and the EF Core bridge reaches nuget.org.
+
+- [.NET 11: the packages multi-target `net10.0;net11.0`, tests/benchmarks/examples run on `net11.0`, the toolchain moves to the .NET 11 SDK](https://github.com/AlexeyShirshov/nextorm/issues/387)
+- [Public API is frozen and tracked: `PublicApiAnalyzers` + `PublicAPI.Shipped.txt` in every package, RS0016/RS0017 fail the build](https://github.com/AlexeyShirshov/nextorm/issues/53)
+- [Joins without `From(...)`: by entity type and by table name across all seven operators](https://github.com/AlexeyShirshov/nextorm/issues/384)
+- [Set operations: the right operand can come from an entity selector instead of a prebuilt query](https://github.com/AlexeyShirshov/nextorm/issues/385)
+- [Core: `From(string)` and the string-table join overloads reject null/empty/whitespace table names instead of failing later](https://github.com/AlexeyShirshov/nextorm/issues/386)
+- [JSON streaming: a `decimal` projection over a float/REAL column no longer serializes the binary expansion (`12.3399…` vs `12.34`)](https://github.com/AlexeyShirshov/nextorm/issues/388)
+- [`SelectGroupHaving`: the condition is typed by the projection result, not by the source entity](https://github.com/AlexeyShirshov/nextorm/issues/380)
+- [Build-once query construction: a cached query binds closure values into the published plan instead of rebuilding the statement (M1–M3, measured on `Any` and paged projections)](https://github.com/AlexeyShirshov/nextorm/issues/319)
+- `nextorm.entityframeworkcore` is published for the first time — the EF Core bridge was buildable but absent from the release job until now.
+- Breaking: `ISqlDialect.SupportsAnyAggregates` is renamed to `SupportsAnyLastAggregate` (the flag gates only `any_last`), and the `SelectGroupHaving` condition is now typed by the projection result (#53, #380).
 
 ### 1.0.9-rc5
 
