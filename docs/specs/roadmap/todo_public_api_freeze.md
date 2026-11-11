@@ -7,6 +7,9 @@
 > «capability-объекты диалекта» (Фазы 1–3)**.
 >
 > **Статус: закрыто 2026-11-11.** Файл сохранён как запись о выполнении — на него ссылается реестр.
+> **Дополнение (issue [#389](https://github.com/AlexeyShirshov/nextorm/issues/389), milestone `1.0.10-a`):**
+> после публикации 1.0.9 включён `PackageValidationBaselineVersion=1.0.9` — вторая половина
+> пакетного гейта (ApiCompat против опубликованного пакета) заработала; см. пункт 5.
 
 ## Пункт и цель
 
@@ -35,12 +38,15 @@
 4. **Гейт.** RS0016/RS0017 закреплены `error` в `.editorconfig` — падают независимо от
    `TreatWarningsAsErrors` в конкретном проекте. Пробы: публичный тип без объявления → RS0016;
    объявление без типа → RS0017; после правки файла — зелёно. Build Debug и Release — 0/0.
-5. **Пакетная проверка.** `EnablePackageValidation=true` в `src/Directory.Build.props`;
-   `dotnet pack -c Release` публикуемых проектов проходит с включённой валидацией. Baseline-сравнение
-   с предыдущим релизом включается свойством `PackageValidationBaselineVersion=1.0.9` сразу после
-   публикации 1.0.9 (против prerelease-baseline SDK сравнение пропускает: проверено на 1.0.8-b и
-   1.0.9-rc5 — ни одного CP-диагностика на заведомо ломающем переименовании). Отслеживается
-   отдельным тикетом [#389](https://github.com/AlexeyShirshov/nextorm/issues/389) (milestone `1.0.10-a.1`).
+5. **Пакетная проверка.** `EnablePackageValidation=true` и `PackageValidationBaselineVersion=1.0.9`
+   в `src/Directory.Build.props`: `dotnet pack -c Release` всех 9 публикуемых пакетов зелёный,
+   ApiCompat сравнивает их с опубликованными пакетами 1.0.9. Проверено негативной пробой
+   (переименование `nextorm.extensions.SelectGroupExtensions.SelectGroupHaving`) — pack валится с
+   `CP0002` на net10.0 и net11.0, то есть baseline-сравнение работает, а не пропускается; против
+   prerelease-baseline (1.0.8-b, 1.0.9-rc5) оно молча пропускалось. Осознанное ломающее изменение
+   подавляется явно через `CompatibilitySuppressions.xml`
+   (`dotnet pack -p:ApiCompatGenerateSuppressionFile=true`), baseline при этом не снимается.
+   Выполнено по тикету [#389](https://github.com/AlexeyShirshov/nextorm/issues/389) (milestone `1.0.10-a`).
 6. **Отложенные переименования.** XP3 выполнено (`ISqlDialect.SupportsAnyAggregates` →
    `SupportsAnyLastAggregate` с обновлением диалектов, транслятора, тестов, XML-доков и
    `docs/**` + `docs/ru/**`); XP6 дописан (два оставшихся вызова `SqlFunctions.ClickHouse.any_agg`
