@@ -179,7 +179,7 @@ class FeatureRowTests(unittest.TestCase):
         self.assertEqual(
             rows,
             [
-                "| [`CASE WHEN`](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/"
+                "| [CASE WHEN](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/"
                 "BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkFeaturesFair-report-github.md)"
                 " | **10.00 μs** | 14.00 μs | 15.00 μs | 35.00 μs |",
                 "| [CTE](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/"
