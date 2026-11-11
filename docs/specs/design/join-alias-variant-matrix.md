@@ -24,6 +24,7 @@ Legend: **T** = test, **G** = runtime guard (fail-closed `throw`). Gaps are list
 | Correlated `CrossApply`/`OuterApply` alias (`AliasJoinApply`) | T (in-memory refusal only) | `AliasInMemoryRefusalTests.cs:26-27` | **partial** |
 | All 7 operators emitted by the generator | T | `AliasGeneratedSurfaceTests.cs:78` (`JoinOperators`, `:20-21`) | covered |
 | Generator operator set = the 7 only | source | `src/nextorm.core.sourcegenerator/JoinAliasGenerator.cs:46` (`JoinOperators`) | covered |
+| Source-less (non-alias) type-only + string-table forms for all 7 operators (#384) | T | `src/nextorm.core/Builders/Entity/EntityBuilder.cs`, `src/nextorm.core/Builders/Joins/JoinedEntityBuilder.cs` (80 overloads: 10 `EntityBuilder<TEntity>` + 10 non-generic `EntityBuilder` (7 string-table + 3 type-only `CrossJoin/CrossApply/OuterApply<TJoinEntity>` added directly in n=2, since `EntityBuilder : ICloneable` does not inherit `EntityBuilder<TableAlias>`) + 60 `JoinedEntityBuilder` arities 2..7); tests `SourceLessJoinNegativePathsTests.cs`, `SourceLessJoinPlanCacheTests.cs`, `JoinSourceLessInMemoryTests.cs` | implemented (additive; no existing signature changed) |
 
 ## 2. Chain shape & slot resolution
 
@@ -165,8 +166,21 @@ source-less overload is the only alias surface that accepts `Action<JoinOptions>
 | **Refusal predicate**: in-memory refuses every source-less alias, no positional fallback | T | `tests/nextorm.alias.tests/AliasInMemoryRefusalTests.cs:75` | covered |
 | Live row parity over O × R × V (4 operators × slots 2–8 × omitted/null/callback), 4 shared providers | T | `tests/nextorm.integration.tests/CommonTestSuite/Joins/CommonTestSuite.JoinAlias.cs:267` | covered |
 | Live row parity re-pinned on MariaDB and ClickHouse | T | `MariaDb/MariaDbJoinAliasIntegrationTests.cs:36`; `ClickHouse/ClickHouseJoinAliasIntegrationTests.cs:36` | covered |
-| Source-less form has no `CrossJoin`/`CrossApply`/`OuterApply` variant | guard | conditionless operators take no condition; surface `AliasGeneratedSurfaceTests.cs:178` asserts the marker-with-options shape only for the four conditional operators | by design |
-| Raw-table (`From("table")`) source is not resolvable by type | guard | `docs/guide/04-joins.md` scope of the source-less form; `From<TJoin>` resolution path `EntityBuilder.cs:2948` | by design |
+| Source-less **alias** form has no `CrossJoin`/`CrossApply`/`OuterApply` variant | guard | conditionless operators take no condition; surface `AliasGeneratedSurfaceTests.cs:178` asserts the marker-with-options shape only for the four conditional operators. Note: the non-alias source-less form (issue #384) now provides type-only and string-table `CrossJoin`/`CrossApply`/`OuterApply` on both builder levels (80 overloads) | by design (alias form only) |
+| Raw-table (`From("table")`) source is not resolvable by type in the **alias** source-less form | guard | `docs/guide/04-joins.md` scope of the alias source-less form; `From<TJoin>` resolution path `DataContextExtensions.cs:1038` (`From<T>`) consumed by the type-only overloads at `EntityBuilder.cs:3566` (`Join<TJoinEntity>` → `RequireContext.From<TJoinEntity>()`) and `:3698` (`CrossJoin<TJoinEntity>`); `EntityBuilder.cs:2948` was a stale citation (that line is `SelectWhereMinOld`). Note: the non-alias string-table source-less form (issue #384) supports raw tables by name (`Join/... (string table, ...)`) | by design (alias form only) |
+
+### Non-alias source-less form (issue #384) — implemented surface
+
+The alias feature in §10 above is unaffected. Issue #384 adds a separate, non-alias source-less surface
+(type-only + string-table) that does not take an `Alias.<Name>` marker and is available on both builder levels.
+Operator × builder-level mapping (all accept `Action<JoinOptions>? options = null`):
+
+| Operator | `EntityBuilder<TEntity>` (incl. non-generic `EntityBuilder`) | `JoinedEntityBuilder<T1..Tn>` (arity 2..7) | Resulting right side |
+|---|---|---|---|
+| `Join` / `LeftJoin` / `RightJoin` / `FullJoin` | `string table` + predicate (4) | `string table` + predicate (4, `new`) | `TableAlias` |
+| `CrossJoin` / `CrossApply` / `OuterApply` | type-only `<TJoinEntity>` (3) + `string table` (3) | type-only `<TJoinEntity>` (3, `new`) + `string table` (3, `new`) | `TJoinEntity` / `TableAlias` |
+
+Total 80 new public methods (10 + 10 + 60). The non-generic `EntityBuilder` now also carries the three type-only unconditional forms (`CrossJoin/CrossApply/OuterApply<TJoinEntity>(Action<JoinOptions>?)`), added directly because `EntityBuilder : ICloneable` does not inherit `EntityBuilder<TableAlias>`. Negative paths (unregistered type, empty/null table name, null predicate) match the explicit form by exception type and stage; plan-cache keys match; in-memory behaviour matches except the pre-existing APPLY/TableAlias limitations, which are engine limits, not #384 defects.
 
 ## Gaps (tracked)
 
