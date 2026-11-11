@@ -174,12 +174,15 @@ These are fully implemented and covered by SQL-generation or integration tests:
 ---
 
 ## 4. Remaining gaps, in order of significance
-> Unresolved gaps only, ordered by impact on real query authoring; every item links its tracking issue
-> and/or `todo_*.md`. Shipped, closed-by-decision and out-of-scope gaps are in
+> Unresolved gaps only, ordered by impact on real query authoring; every item links its tracking issue,
+> and an item with a written plan also links its `todo_*.md`. Shipped, closed-by-decision and
+> out-of-scope gaps are in
 > [Resolved and out-of-scope gaps](#5-resolved-and-out-of-scope-gaps-ledger). Item numbers are stable
 > IDs carried over from the original ledger, so they are not contiguous here.
 
-Per-feature details and owners live in the per-feature `docs/specs/roadmap/todo_*.md`; the full matrix
+A written plan for an open item lives in `docs/specs/roadmap/todo_*.md`; a shipped or closed item's
+record is its tracking issue, the notes in public docs and this ledger (the working plan is deleted
+once the item closes). The full matrix
 is in [`comparison/capability-matrix.md`](../comparison/capability-matrix.md). Shipped items were moved
 to the ledger on 2026-09-29; item 49 (eager loading) moved on 2026-10-17; item 58 (savepoints) moved on
 2026-10-25.
@@ -196,7 +199,7 @@ to the ledger on 2026-09-29; item 49 (eager loading) moved on 2026-10-17; item 5
     `HasManyThrough`/`[Relationship]`) still declare a single key column. Public declaration, the SQL
     navigations over such a relationship and metadata-driven `LoadWith` remain open in #251.
 6. **ClickHouse `-State`/`-Merge` combinators and `runningAccumulate` need an `AggregateFunction(...)` state type — blocked by the driver.**
-    `ClickHouse.Driver` 1.4.0 throws `AggregateFunctionException` from `FrameworkType`/`Read`/`Write`,
+    `ClickHouse.Driver` 1.4.0–1.5.0 throws `AggregateFunctionException` from `FrameworkType`/`Read`/`Write`,
     so the state cannot be materialised or passed as a CLR value; `uniqMerge(uniqState(x))` is illegal
     (`ILLEGAL_AGGREGATION`) and `runningAccumulate` is deprecated in 25.8. Documented in
     [Limitations](../../advanced/limitations.md).
@@ -212,7 +215,7 @@ to the ledger on 2026-09-29; item 49 (eager loading) moved on 2026-10-17; item 5
     table functions and PostgreSQL `json_populate_record(set)`, both recorded in
     [Limitations](../../advanced/limitations.md).
     Shipped: [Dynamic result schema](../../guide/13-table-valued-functions.md#dynamic-result-schema).
-59. **SQL Server composable DML `OUTPUT` (issue [#266](https://github.com/AlexeyShirshov/nextorm/issues/266)) — batch capture shipped, other forms open.**
+59. **SQL Server composable DML `OUTPUT` (issue [#266](https://github.com/AlexeyShirshov/nextorm/issues/266)) — batch capture shipped, other forms assessed exclusions.**
     PostgreSQL can read a mutation's returned rows as an ordinary queryable source
     (`With("ins", insert.Returning(...)).From("ins")`, a data-modifying CTE). T-SQL cannot put `OUTPUT`
     inside a CTE, so on SQL Server the rows are consumed by the mutation itself (`Returning`,
@@ -223,9 +226,16 @@ to the ledger on 2026-09-29; item 49 (eager loading) moved on 2026-10-17; item 5
     refusals outside the owning batch (see
     [Writing into a table variable](../../guide/17-insert-statement.md#batch-scoped-capture-batchbuilderoutputintotablevariable)
     and [Capturing the merged rows](../../guide/21-merge-statement.md#capturing-the-merged-rows-batch-only)).
-    **Still absent:** a fluent MERGE `OutputInto`/`OutputIntoThenOutput`, real-table capture-source
-    helpers, join-mutation capture, and any capture outside SQL Server —
-    todo: [`todo_output_into.md`](todo_output_into.md).
+    **Still absent — assessed exclusions, each with its trigger to reconsider:**
+    a fluent MERGE `OutputInto`/`OutputIntoThenOutput` (the MERGE output always leads with `$action`,
+    which the existing `OutputIntoBuilder` cannot express; trigger — a request for a client-side MERGE
+    capture terminal); real-table capture-source helpers (a capture is deliberately batch-owned, and a
+    real table already reads through `From(tableName)`/`TableAlias`; trigger — a composable read over a
+    table written by `OutputInto(target)` in the same round trip); join-mutation capture (multi-table
+    `UPDATE`/`DELETE` are not batch steps; trigger — a request to capture their rows); and capture
+    outside SQL Server (only T-SQL has `OUTPUT ... INTO`; PostgreSQL uses a data-modifying CTE, the
+    others return rows only where a `RETURNING` form exists; trigger — a provider gaining a scriptable
+    capture form, not planned).
 56. **`ORDER BY ... NULLS FIRST/LAST` (issue [#287](https://github.com/AlexeyShirshov/nextorm/issues/287)).**
     There is no null-placement overload, so NULLs sort the way the provider sorts them — and the default
     differs: PostgreSQL is `NULLS LAST` ascending / `FIRST` descending, SQL Server/MySQL/MariaDB/SQLite
@@ -438,17 +448,18 @@ to the ledger on 2026-09-29; item 49 (eager loading) moved on 2026-10-17; item 5
     is query-only (only the key upsert), and change tracking/`SaveChanges` and navigation properties stay out
     of scope by design.
     Shipped: [Data modification (INSERT)](../../guide/17-insert-statement.md), [Upsert (key merge)](../../guide/21-merge-statement.md#upsert-key-merge), [Full MERGE](../../guide/21-merge-statement.md#full-merge), [Delete](../../guide/18-delete-statement.md), [Update](../../guide/19-update-statement.md).
-    Phases 1 and 3 of `todo_output_into.md` also shipped: SQL Server
-    `OUTPUT ... INTO` (`Returning(...).OutputInto(target)` writes the modified rows into an existing table;
-    `OutputIntoThenOutput(target)` also returns them) and key-upsert `Returning()`
+    The SQL Server `OUTPUT ... INTO` forms also shipped:
+    `Returning(...).OutputInto(target)` writes the modified rows into an existing table;
+    `OutputIntoThenOutput(target)` also returns them; and key-upsert `Returning()`
     (`ON CONFLICT ... RETURNING` on PostgreSQL/SQLite, `MERGE ... OUTPUT` on SQL Server; MySQL/MariaDB
     reject it). #266 adds the **batch-scoped capture**: `BatchBuilder.OutputIntoTableVariable(...)` for
     `INSERT`/`UPDATE`/`DELETE`/`MERGE` plus `FromOutput<TResult>`/`FromOutputTable` read-back in the same
     batch (one round trip; MERGE leads with `$action`; see
     [Writing into a table variable](../../guide/17-insert-statement.md#batch-scoped-capture-batchbuilderoutputintotablevariable)).
     The remaining `OUTPUT` forms — fluent MERGE `OutputInto`, real-table capture sources and
-    join-mutation capture — are listed in [`todo_output_into.md`](todo_output_into.md). Phase 2 (several result sets from one command) is now **implemented** (2026-09-26) by phase 4
-    of `todo_stored_procedures.md` (#70, including #25): the batch surface
+    join-mutation capture — are assessed exclusions with their triggers, recorded in item 59 above.
+    Phase 2 (several result sets from one command) is now **implemented** (2026-09-26) by the phase 4
+    of the stored-procedures plan (#70, including #25): the batch surface
     exposes `BatchBuilder.AddQuery<TResult>` + `Execute`/`ExecuteAsync` → `BatchResult.Read<TResult>()`,
     carrying several result sets in a single round trip (gated by `ISqlDialect.SupportsBatch`).
     The same phase 0 also unblocked **table-valued parameters** (`ProcedureParameter.Table<T>`, issue

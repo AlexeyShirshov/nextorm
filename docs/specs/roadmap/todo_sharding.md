@@ -1,9 +1,14 @@
 # TODO: Шардирование (consistent hashing) поверх mapping scope
-> Tracking issue: [#69](https://github.com/AlexeyShirshov/nextorm/issues/69).
+> Tracking issue: [#69](https://github.com/AlexeyShirshov/nextorm/issues/69) — **открыт**,
+> milestone `1.0.10-a.1` (актуализирован 2026-11-11).
 
 > Рабочий план (design RFC). Продвинутый слой: опирается на базовый
 > [`todo_mapping_scope.md`](todo_mapping_scope.md) и не дублирует его механику кэшей/подмены имён.
 > Источник: обсуждение шардирования по значениям свойств сущности.
+>
+> **Актуализация 2026-11-11.** В `src/` нет ни одного типа `Shard*`/`ConsistentHash*`, и базовый
+> слой (`MappingScope`, `IEntityScopeResolver`, `PrefixedParameterProvider` — §3 `todo_mapping_scope.md`)
+> тоже не начат. Фича не реализована; ниже — план, зависимость и актуальные точки встраивания.
 
 ## 1. Пункт и цель
 
@@ -152,14 +157,14 @@ public EntityBuilder<T> AcrossShards(ShardSelection sel);
 
 | Что | Точка | Файл:строка |
 |---|---|---|
-| Резолв scope для чтения | `From<T>`/`ResolveMetadata` через базовый `IEntityScopeResolver` | `DataContextExtensions.cs:114`, `:665` |
-| Вставка | значения инстанса → scope | `Builders/InsertBuilder.Values.cs:94` |
-| Update/Delete по сущности | инстанс → scope | `DataContextExtensions.cs:87` (`Update`), `:153` (`Delete`) |
-| Предикат | extractor обходит `Where`-лямбду | `Builders/EntityBuilder.cs:295` (`Where`), предикат в `Query/QueryCommand.QueryPreparer.cs` |
-| FROM | scope → `ShardPlacement` → table/schema | `DataContext/QueryPlanner.cs:479-481` |
-| DML | scope → table/schema | `InsertBuilder.cs:421`, `UpdateBuilder.cs:211`, `DeleteBuilder.cs:151`, `MergeBuilder.cs:375`, `TruncateBuilder.cs:62` |
-| Имена параметров при сборе | базовый префикс | `Query/PrefixedParameterProvider.cs`, `DataContext/NormParam.cs:12` |
-| Регистрация | `UseScopeResolver`/`UseEntityMetadataProvider`/`UseShardTopology` | `DI/DataContextBuilder.cs:146` |
+| Резолв scope для чтения | `From<T>`/`ResolveMetadata` через базовый `IEntityScopeResolver` | `DataContext/DataContextExtensions.cs:239`, `:334` |
+| Вставка | значения инстанса → scope | `Builders/Dml/Insert/InsertBuilder.Values.cs:104` |
+| Update/Delete по сущности | инстанс → scope | `DataContext/DataContextExtensions.cs:212` (`Update`), `:397` (`Delete`) |
+| Предикат | extractor обходит `Where`-лямбду | `Builders/Entity/EntityBuilder.cs:858` (`Where`), предикат в `Query/Commands/QueryCommand.QueryPreparer.cs` |
+| FROM | scope → `ShardPlacement` → table/schema | `DataContext/QueryPlanner.cs:1153` |
+| DML | scope → table/schema | `Builders/Dml/Insert/InsertBuilder.cs:637`, `Builders/Dml/Update/UpdateBuilder.cs:287`, `Builders/Dml/Delete/DeleteBuilder.cs:217`, `Builders/Merge/MergeBuilder.cs:747`, `Builders/Ddl/TruncateBuilder.cs:69` |
+| Имена параметров при сборе | базовый префикс | `Query/Providers/PrefixedParameterProvider.cs` (создаётся в базовом слое), `DataContext/Parameters/NormParam.cs:14` |
+| Регистрация | `UseScopeResolver`/`UseEntityMetadataProvider`/`UseShardTopology` | `DI/DataContextBuilder.cs` (новые методы; сейчас их нет) |
 
 ## 6. Этапы внедрения
 
@@ -169,7 +174,7 @@ public EntityBuilder<T> AcrossShards(ShardSelection sel);
   `IShardRouter`; маршрутизация INSERT/UPDATE/DELETE по инстансу и point-read по константе/замыканию;
   fail-fast при непокрытом shard key.
 - **Фаза 2 (execution-time):** двухфазная подготовка per-shard команд / parameterized shard key из
-  `params`; scoping prepared-команд (`Cache/DbPreparedQueryCommand.cs`).
+  `params`; scoping prepared-команд (`DataContext/Cache/Commands/DbPreparedQueryCommand.cs`).
 - **Фаза 3 (сбор):** `AcrossShards()` (`UNION ALL`), `ShardFanOut` (N команд + merge), глобальные
   `OrderBy`/`Limit`/агрегаты на клиенте.
 - **Вне области:** connection-per-shard, распределённые транзакции (2PC), rebalancing с переносом
@@ -178,8 +183,8 @@ public EntityBuilder<T> AcrossShards(ShardSelection sel);
 ## 7. Ограничения и цена
 
 - **Кэши:** ключ — id шарда (стабилен при ребалансе), `Version` топологии — только для placement.
-  Prepared-команды per-shard. План-кэш `[ThreadStatic]` (`Cache/QueryPlanStore.cs:18`) — scope
-  захватывается на build-time.
+  Prepared-команды per-shard. План-кэш `[ThreadStatic]`
+  (`DataContext/Cache/Plans/QueryPlanStore.cs:31`) — scope захватывается на build-time.
 - **Инъекция:** имена шардовых схем/таблиц — из `IShardTopology` (доверенный), не из пользовательских
   значений shard key. Значения shard key идут только в параметры предиката, не в идентификаторы.
 - **Хэш значений:** стабильная сериализация ключа (тип + разделитель) обязана быть детерминированной
@@ -221,12 +226,14 @@ public EntityBuilder<T> AcrossShards(ShardSelection sel);
 - Новое: `src/nextorm.core/Query/Sharding/ShardKeyAttribute.cs`, `Sharding/ShardKey.cs`,
   `Sharding/ConsistentHashRing.cs`, `Sharding/ShardTopology.cs`, `Sharding/ShardRouter.cs`,
   `Sharding/ShardKeyPredicateExtractor.cs`, `Sharding/ShardPlacement.cs`.
-- Правки: базовые `DataContext/Meta/*` (ShardKey в метаданных), `DataContext/QueryPlanner.cs`,
-  `Builders/EntityBuilder.cs` (+`AcrossShards`), `Builders/InsertBuilder*.cs`,
-  `Builders/UpdateBuilder.cs`, `Builders/DeleteBuilder.cs`, `DataContextExtensions.cs`,
-  `DI/DataContextBuilder.cs`, `Query/QueryCommand.QueryPreparer.cs`, `Cache/DbPreparedQueryCommand.cs`.
+- Правки: базовые `DataContext/Meta/Entities/*` (ShardKey в метаданных),
+  `DataContext/QueryPlanner.cs`, `Builders/Entity/EntityBuilder.cs` (+`AcrossShards`),
+  `Builders/Dml/Insert/InsertBuilder*.cs`, `Builders/Dml/Update/UpdateBuilder.cs`,
+  `Builders/Dml/Delete/DeleteBuilder.cs`, `DataContext/DataContextExtensions.cs`,
+  `DI/DataContextBuilder.cs`, `Query/Commands/QueryCommand.QueryPreparer.cs`,
+  `DataContext/Cache/Commands/DbPreparedQueryCommand.cs`.
 - Тесты: `tests/nextorm.core.tests/ShardingTests.cs` (+ ring/extractor), SQL-gen провайдеров,
-  `tests/nextorm.integration.tests/CommonTestSuite.Sharding.cs`.
+  `tests/nextorm.integration.tests/CommonTestSuite/Sharding/CommonTestSuite.Sharding.cs`.
 - Документация: новый гайд по шардированию (+RU), `docs/connecting-providers/overview.md` (+RU),
   `docs/advanced/limitations.md` (+RU), `docs/specs/design/API-NAMING-REVIEW.md`,
   `docs/specs/design/code-smells-review.md`.
@@ -235,6 +242,10 @@ public EntityBuilder<T> AcrossShards(ShardSelection sel);
 
 > Прогон сабагента `nextorm-design-engineer` по плану (read-only). `file:line` — по дереву на момент ревью.
 > Вердикт: **нужен пересмотр — 1 блокер** (форма `AcrossShards` нереализуема как единый `EntityBuilder` без scope-aware fan-out).
+>
+> **Актуализация 2026-11-11:** решения ревью в силе (реализация не начиналась), блокер не снят —
+> `FromExpression` по-прежнему несёт один `Table`/источник. Актуальные якоря — §5 выше; пункт
+> «Устаревшие якоря» ниже оставлен как запись ревью.
 
 - **[OCP]/[SRP] 🔴** `AcrossShards()` возвращает `EntityBuilder<T>` (`:141-143`), но scope фиксируется в команду на build-time, `QueryCommand` несёт один `FROM`/один scope; `FromExpression` хранит один `Table`/`SourceType` (`Expressions/FromExpression.cs:16-21,67`), FROM рендерится одной веткой (`DataContext/QueryPlanner.cs:518`). Fix: зафиксировать fan-out-абстракцию (N `QueryCommand` + merge в исполнителе, `ShardFanOut`) либо scope-aware UNION-рендер — до фазы 3.
 - **[SRP/DRY] 🟡** `IShardRouter.ResolveShardScope(Type, IReadOnlyList<object?>)` (`:106`) дублирует унаследованный `IEntityScopeResolver.Resolve(Type, IReadOnlyList<object?>)` (mapping_scope §4.2). Fix: убрать, переопределить базовый `Resolve`, оставить `IsSharded` (инвариант 1).
@@ -243,6 +254,6 @@ public EntityBuilder<T> AcrossShards(ShardSelection sel);
 - **[PERF] 🟡** Компилируемый экстрактор `Func<T, object?[]>` (`:50`) аллоцирует `object?[]` + боксы ключей на каждый вызов; на INSERT пачки из N сущностей — N массивов. Fix: инкрементальный хэш (`XxHash64`/`HashCode`) без промежуточного массива либо буфер в пуле (INSERT — заявленный hot-path критерия).
 - **[TYPE/PERF] 🟡** `ShardKeyPredicateExtractor.TryGetValues(…, out object?[] values)` (`:128-130`) аллоцирует массив без переиспользования буфера; `ShardAddress` несёт `Version` (`:80`) при авторитете `IShardTopology.Version` (`:86-93`). Fix: `TryGetValues(…, Span<object?> dest)`; убрать `Version` из `ShardAddress`.
 - **[TYPE] ℹ️** `IConsistentHashRing.GetShard(int bucket)` возвращает `string` shard-id на lookup-пути (`:68`). Deferred: вернуть `int` индекс, строковый id резолвить в `ShardPlacement`.
-- **[DRY] 🟡** Устаревшие якоря: `DataContextExtensions.cs:114/665` → `:729`; `:87` (`Update`) → `:151`; `:153` (`Delete`) → `:217`; `QueryPlanner.cs:479-481` → `:518`; `DI/DataContextBuilder.cs:146` → `:166` (методов `UseScopeResolver`/`UseEntityMetadataProvider`/`UseShardTopology` нет); `Cache/QueryPlanStore.cs:18` → `DataContext/Cache/QueryPlanStore.cs`. Fix.
+- **[DRY] 🟡** Устаревшие якоря: `DataContextExtensions.cs:114/665` → `:729`; `:87` (`Update`) → `:151`; `:153` (`Delete`) → `:217`; `QueryPlanner.cs:479-481` → `:518`; `DI/DataContextBuilder.cs:146` → `:166` (методов `UseScopeResolver`/`UseEntityMetadataProvider`/`UseShardTopology` нет); `Cache/QueryPlanStore.cs:18` → `DataContext/Cache/QueryPlanStore.cs`. Fix. *(На 2026-11-11 актуальные якоря — §5 выше; эта строка — запись ревью.)*
 - **[DRY/TYPE] ℹ️** `ShardSelection` (`:142`) не определён ни здесь, ни в базовом плане. Fix: определить форму или убрать перегрузку из v1.
 - **[DIP] ℹ️** `Query/PrefixedParameterProvider.cs` (`:34,161`) ещё не существует — зависимость `todo_mapping_scope.md` Фазы 2. Deferred с триггером: зафиксировать, что маршрутизация Фазы 1 от префикса не зависит.

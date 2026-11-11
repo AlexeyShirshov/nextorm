@@ -1,17 +1,22 @@
 # TODO: ClickHouse `AggregateFunction(...)` state type (`-State`/`-Merge`, `runningAccumulate`)
-> Tracking issue: [#62](https://github.com/AlexeyShirshov/nextorm/issues/62).
+> Tracking issue: [#62](https://github.com/AlexeyShirshov/nextorm/issues/62) — открыт,
+> milestone не назначен (backlog).
 
 > Рабочий план (design RFC). Источник: `docs/specs/roadmap/sql-capabilities-gap-analysis.md` §4 п.6.
-> **Статус: заблокировано драйвером `ClickHouse.Driver` 1.4.0** (проверено 22.09.2026).
+> **Статус: заблокировано драйвером `ClickHouse.Driver` 1.5.0** (перепроверено 2026-11-11;
+> исходная проверка 22.09.2026 — на 1.4.0). Апгрейд 1.4.0 → 1.5.0 поведения не изменил:
+> `AggregateFunctionException` и сообщение «Unable to directly query column with type
+> AggregateFunction(…) … use <function>Merge()» присутствуют в обеих сборках, release notes
+> 1.5.0 поддержки состояний не объявляют.
 
-## Блокер (проверено 22.09.2026)
+## Блокер (перепроверено 2026-11-11 на 1.5.0)
 
 - **Драйвер не может читать/писать `AggregateFunction(...)`.** `ClickHouse.Driver`
-  1.4.0 (`Types/AggregateFunctionType.cs`) бросает `AggregateFunctionException` из `FrameworkType`,
-  `Read`, `Write` и `ToString`: «Unable to directly query column with type
+  1.4.0 и 1.5.0 (`Types/AggregateFunctionType.cs`) бросают `AggregateFunctionException` из
+  `FrameworkType`, `Read`, `Write` и `ToString`: «Unable to directly query column with type
   AggregateFunction(&lt;function&gt;). Use &lt;function&gt;Merge() function to query this value».
   Значит, материализация состояния в CLR (`byte[]` или отдельный тип) и передача состояния из CLR
-  невозможны на этой версии драйвера — а это и есть цель пункта («чтение/передача»).
+  невозможны на этих версиях — а это и есть цель пункта («чтение/передача»).
 - **`uniqMerge(uniqState(x))` невыразим в одном запросе** — ClickHouse отклоняет вложенный агрегат
   (`ILLEGAL_AGGREGATION`). Состояние обязано пройти через серверный подзапрос/таблицу-состояние, т.е.
   пересечь CLR-границу, что упирается в первый блокер.
@@ -34,13 +39,14 @@
 - Критерий приёмки: SQL-gen + интеграционный round-trip `uniqState(col)` →
   таблица-состояние → `uniqMerge(state)`; прочие провайдеры — `NotSupportedException`.
 
-## Текущее состояние
+## Текущее состояние (2026-11-11)
 
-- `uniqExact`/`count_distinct` есть; `uniqState`/`uniqMerge` не выражаются.
-- Пример `examples/nextorm.examples.clickhouse.analytics` (`Incremental`) попадает сюда явно: запрос
-  выражается естественно и бросает `NotSupportedException` (сырым SQL не заменяется). Остальные
-  array/tuple-запросы примера (`ArrayAnalytics`, `Retention`) после перехода на пакеты `1.0.4-alpha`
-  теперь выражаются через `array_map`/`array_filter`/`group_array`.
+- `uniq`/`uniqExact`/`uniqCombined`/`uniqHLL12` и `count_distinct` есть; `uniqState`/`uniqMerge`
+  не выражаются (`src/nextorm.core/Query/SqlFunctions/SqlFunctions.ClickHouse.cs:84-96`).
+- Пример `examples/nextorm.examples.clickhouse.analytics`: запрос `Incremental` (состояние
+  `uniqState` + `uniqMerge`) **удалён из примера 2026-11-01** вместе с чисткой whole-query
+  `FromSql`; его отсутствие записано в `examples/VERIFICATION.md`. Остальные array/tuple-запросы
+  примера (`ArrayAnalytics`, `Retention`) выражаются через `array_map`/`array_filter`/`group_array`.
 
 ## Дизайн (черновик)
 
@@ -56,8 +62,9 @@
 
 ## Файлы к изменению
 
-- `src/nextorm.clickhouse/*`, `src/nextorm.core/DataContext/{Dialect,RowMapper*}`,
-  `src/nextorm.core/Query/SqlFunctions.ClickHouse.cs`.
+- `src/nextorm.clickhouse/*`,
+  `src/nextorm.core/DataContext/Mapping/RowMapperFactory.cs`,
+  `src/nextorm.core/Query/SqlFunctions/SqlFunctions.ClickHouse.cs`.
 - Тесты: `tests/nextorm.clickhouse.tests`, `tests/nextorm.integration.tests`.
 - Доки EN+RU, gap-analysis.
 
@@ -70,4 +77,6 @@
 - **[TYPE] 🟡** `byte[]` vs именованный `AggregateFunctionState` не решён (`:47,53`) — влияет на всю публичную поверхность. Deferred (driver-blocked); при именованном типе он должен быть `sealed`/`readonly`.
 - **[LSP]/[TYPE] ℹ️** `SimpleAggregateFunction` частично работает, но `sumMerge(...)` по нему нет (`:20-22`). Fix: заложить явный guard/`Supports` до реализации.
 - **[OCP] ℹ️** `runningAccumulate` устарел (CH 25.8, `:18-19`) — не заводить публичный член, оставить оконную форму (`sum_over`).
-- **ℹ️** Блокер актуален: `Directory.Packages.props:19` — `ClickHouse.Driver 1.4.0` (ровно версия из плана). Разблокировка — только апгрейд драйвера.
+- **ℹ️** Блокер был актуален на момент ревью: `Directory.Packages.props:19` — `ClickHouse.Driver 1.4.0`
+  (ровно версия из плана). На 2026-11-11 закреплён `1.5.0` (`Directory.Packages.props:9`), поведение
+  то же — см. §«Блокер». Разблокировка — только новая версия драйвера.

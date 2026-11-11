@@ -1,15 +1,21 @@
 # TODO: Mapping scope — scope-зависимый маппинг сущности (базовый слой)
-> Tracking issue: [#65](https://github.com/AlexeyShirshov/nextorm/issues/65).
+> Tracking issue: [#65](https://github.com/AlexeyShirshov/nextorm/issues/65) — **открыт**,
+> milestone `1.0.10-a.1` (актуализирован 2026-11-11; в файле milestone ранее не был указан).
 
 > Рабочий план (design RFC). Базовый слой без знания о шардировании. Продвинутый слой —
 > [`todo_sharding.md`](todo_sharding.md) — реализует этот seam.
 > Источник: обсуждение multi-tenancy / шардирования (design-спека, регистра нет).
+>
+> **Актуализация 2026-11-11.** В `src/` нет ни `MappingScope`, ни `IEntityScopeResolver`/
+> `IEntityMetadataProvider`/`PrefixedParameterProvider`; `IEntityMetadata` не имеет `Schema`
+> (`src/nextorm.core/DataContext/Meta/Entities/IEntityMetadata.cs:11-56`). Фича не начата:
+> ниже — план и проверенные точки встраивания.
 
 ## 1. Пункт и цель
 
 - **Проблема:** метаданные сущности жёстко привязаны к CLR-типу: один `IEntityMetadata` на тип за
-  процесс (`DataContextCache.cs:22`). Нельзя отдать для одного `TEntity` разные таблицу/схему/колонки
-  одной командой в зависимости от **scope**, вычисленного из самой сущности.
+  процесс (`DataContext/Caches/DataContextCache.cs:23`). Нельзя отдать для одного `TEntity` разные
+  таблицу/схему/колонки одной командой в зависимости от **scope**, вычисленного из самой сущности.
 - **Цель (база, ничего не знает про шардирование):**
   1. **scope, зависящий от сущности** — резолвер получает тип и (опционально) инстанс/значения свойств
      и возвращает `MappingScope`;
@@ -24,35 +30,37 @@
 
 1. Multi-tenancy «schema-per-tenant» / «table-per-tenant» без дублирования CLR-типов.
 2. Точка расширения, на которую опирается шардинг (см. `todo_sharding.md`) и будущие query filters
-   (`todo_query_filters.md`), EF Core integration (shipped — `nextorm.entityframeworkcore`).
+   (сама фича query filters уже отгружена — `DataContext/Meta/QueryFilters/`), EF Core integration
+   (shipped — `nextorm.entityframeworkcore`).
 3. Изоляция имени параметра нужна для много-вариантных команд (scatter-gather в шардинге).
 
 ## 3. Текущее состояние (проверено по коду)
 
 | Механизм | Ключ / область | Где |
 |---|---|---|
-| Кэш метаданных | `ConcurrentDictionary<Type, IEntityMetadata>` — только тип, процесс | `DataContextCache.cs:22`, `:30` |
-| Кэш select-list | `ConcurrentDictionary<Type, SelectExpression[]>` — только тип | `DataContextCache.cs:23`, `:35` |
-| Кэш имён колонок | `(PropertyInfo, INamingConvention?)` — процесс | `MemberInfoExtensions.cs:15`, `:22-43` |
-| Резолв метаданных | лениво, `configEntity` один раз за процесс | `DataContextExtensions.cs:114-125`, `:665-673` |
-| Построение FROM (SELECT) | `new FromExpression(entity.TableName, entity.IsTableNameAuto, t.IsInterface)` | `QueryPlanner.cs:479-481` |
-| Prepare / join-update | чтение метаданных по типу | `Query/QueryCommand.QueryPreparer.cs:367`, `Builders/UpdateJoinBuilder.cs:145` |
-| DML фиксирует таблицу | `_metadata.TableName!` | `InsertBuilder.cs:421`, `UpdateBuilder.cs:211`, `DeleteBuilder.cs:151`, `MergeBuilder.cs:375`, `TruncateBuilder.cs:62` |
-| In-memory отдаёт общий кэш | `Metadata => DataContextCache.Metadata` | `InMemoryDataContext.cs:88` |
-| Source | `FromExpression.Table` (только `string`) | `Expressions/FromExpression.cs:67` |
-| Рендер | convention для auto; кавычит `schema.table` по точкам | `SqlSourceRenderer.cs:380`, `:845` |
-| Имена параметров | `IParameterProvider.GetParamName()` → `pN` | `Query/IParameterProvider.cs:10`, `Query/DefaultParameterProvider.cs:11`, `DataContext/ParamNameCache.cs:12` |
-| Runtime-параметры | `NormParam.Prefix = "norm_p"`, статический | `DataContext/NormParam.cs:14`, `:20` |
-| Точки создания параметров | visitor/mutation | `Visitors/BaseExpressionVisitor.cs:330`, `Visitors/InValuesTranslator.cs:72/95`, `Visitors/SqlOperandTranslator.cs:71`, `DataContext/QueryPlanner.cs:246`, `DataContext/SqlMutationBuilder.cs:252/336/800`, `Visitors/NormSqlTranslator.cs:75` |
-| Provider-параметры в контексте | создаётся по месту | `DataContext.cs:367`, `:410`, `QueryPlanner.cs:85/141/282/310/330`, `SqlMutationBuilder.cs:126/177/242` |
+| Кэш метаданных | `ConcurrentDictionary<Type, IEntityMetadata>`-совместимый `TimedDictionary` — только тип, процесс | `DataContext/Caches/DataContextCache.cs:23`, `:52` |
+| Кэш select-list | `TimedDictionary<Type, SelectExpression[]>` — только тип | `DataContext/Caches/DataContextCache.cs:26`, `:75` |
+| Кэш имён колонок | `(PropertyInfo, INamingConvention?, Type?)` — процесс | `Utilities/MemberInfoExtensions.cs:16`, `:71-105` |
+| Резолв метаданных | лениво, `configEntity` один раз за процесс | `DataContext/DataContextExtensions.cs:239`, `:334` |
+| Построение FROM (SELECT) | `new FromExpression(entity.TableName, entity.IsTableNameAuto, t.IsInterface)` | `DataContext/QueryPlanner.cs:1153` |
+| Prepare / join-update | чтение метаданных по типу | `Query/Commands/QueryCommand.QueryPreparer.cs:670`, `Builders/Dml/Update/UpdateJoinBuilder.cs:244` |
+| DML фиксирует таблицу | `_metadata.TableName!` | `Builders/Dml/Insert/InsertBuilder.cs:637`, `Builders/Dml/Update/UpdateBuilder.cs:287`, `Builders/Dml/Delete/DeleteBuilder.cs:217`, `Builders/Merge/MergeBuilder.cs:747`, `Builders/Ddl/TruncateBuilder.cs:69` |
+| In-memory отдаёт общий кэш | `Metadata => DataContextCache.Metadata` | `DataContext/InMemory/InMemoryDataContext.cs:88` |
+| Source | `FromExpression.Table` (только `string`) | `Expressions/FromExpression.cs:101` |
+| Рендер | convention для auto; кавычит `schema.table` по точкам | `DataContext/Sql/SqlSourceRenderer.cs:821`, `:1623` |
+| Имена параметров | `IParameterProvider.GetParamName()` → `pN` | `Query/Providers/IParameterProvider.cs:16`, `Query/Providers/DefaultParameterProvider.cs:16`, `DataContext/Parameters/ParamNameCache.cs:12` |
+| Runtime-параметры | `NormParam.Prefix = "norm_p"`, статический | `DataContext/Parameters/NormParam.cs:14`, `:18-22` |
+| Точки создания параметров | visitor/mutation | `Visitors/Core/BaseExpressionVisitor.cs:758/774/999`, `Visitors/Parameters/InValuesTranslator.cs:80/103`, `Visitors/Sql/SqlOperandTranslator.cs:83`, `DataContext/QueryPlanner.cs:512`, `DataContext/Sql/SqlMutationBuilder.cs:317`, `Visitors/Sql/NormSqlTranslator.cs:154` |
+| Provider-параметры в контексте | создаётся по месту | `DataContext/DataContext.cs:1305/1321/1439`, `DataContext/QueryPlanner.cs:161/227/691`, `DataContext/Sql/SqlMutationBuilder.cs:163/241` |
 
 Факты для дизайна:
-- `IEntityMetadata` **не имеет** `Schema`; прецедент — `TableFunctionExpression.Schema`
-  (`Expressions/TableFunctionExpression.cs:14`, `:40`).
-- Ambient-состояние есть: `IContextEnvironment.Properties` (`IContextEnvironment.cs:26`,
-  `ContextEnvironment.cs:52`).
-- `QueryPlan` хэширует SQL (`QueryPlan.cs:38-51`); plan cache — `[ThreadStatic]`
-  (`Cache/QueryPlanStore.cs:18`).
+- `IEntityMetadata` **не имеет** `Schema` (`DataContext/Meta/Entities/IEntityMetadata.cs:11-56`);
+  прецедент — `TableFunctionExpression.Schema` (`Expressions/Sources/TableFunctionExpression.cs:13`,
+  `:46`).
+- Ambient-состояние есть: `IContextEnvironment.Properties`
+  (`DataContext/Roles/IContextEnvironment.cs:32`, `DataContext/Infrastructure/ContextEnvironment.cs:62`).
+- `QueryPlan` хэширует SQL (`DataContext/Cache/Plans/QueryPlan.cs:51`); plan cache — `[ThreadStatic]`
+  (`DataContext/Cache/Plans/QueryPlanStore.cs:31`).
 
 ## 4. Дизайн и публичный API
 
@@ -122,7 +130,8 @@ public interface IEntityMetadata
 }
 ```
 
-- Дефолтный член `=> null` — source/binary-compatible (как `IsTableNameAuto`, `IEntityMetadata.cs:27`).
+- Дефолтный член `=> null` — source/binary-compatible (как `IsTableNameAuto`,
+  `DataContext/Meta/Entities/IEntityMetadata.cs:27`).
 - Fluent: `EntityMetadataBuilder<T>.Schema(string)`.
 
 ### 4.5. `FromExpression` со схемой
@@ -144,15 +153,17 @@ public sealed class PrefixedParameterProvider(IParameterProvider inner, string p
 }
 ```
 
-- `NormParam` (`DataContext/NormParam.cs:12`) становится scope-aware:
+- `NormParam` (`DataContext/Parameters/NormParam.cs:14`) становится scope-aware:
   `GetName(MappingScope scope, int index)` / `IsName(scope, name)`; кэш `ParamNameCache` — на префикс,
   `"norm_p"` для default (без аллокаций и без смены имён в default-режиме).
-- Точки, которые обязаны прокидывать scope в имена: `QueryPlanner.cs:59,108`,
-  `Visitors/NormSqlTranslator.cs:75`, `Cache/DbPreparedQueryCommand.cs:119`,
-  `Visitors/InValuesTranslator.cs:72/95`, `SqlOperandTranslator.cs:71`,
-  `BaseExpressionVisitor.cs:330`, `QueryPlanner.cs:246`, `SqlMutationBuilder.cs:252/336/800`.
-- Провайдер параметров создаётся в `DataContext.cs:367/410` и `QueryPlanner`/`SqlMutationBuilder` по
-  месту — инстанцирование должно проходить через один хелпер, применяющий scope-префикс.
+- Точки, которые обязаны прокидывать scope в имена:
+  `Visitors/Sql/NormSqlTranslator.cs:154`, `DataContext/Cache/Commands/DbPreparedQueryCommand.cs:442/640`,
+  `Visitors/Parameters/InValuesTranslator.cs:80/103`, `Visitors/Sql/SqlOperandTranslator.cs:83`,
+  `Visitors/Core/BaseExpressionVisitor.cs:758/774/999`, `DataContext/QueryPlanner.cs:512`,
+  `DataContext/Sql/SqlMutationBuilder.cs:317`.
+- Провайдер параметров инстанцируется по месту: `DataContext/DataContext.cs:1305/1321/1439`,
+  `DataContext/QueryPlanner.cs:161/227/691`, `DataContext/Sql/SqlMutationBuilder.cs:163/241` —
+  инстанцирование должно проходить через единый хелпер, применяющий scope-префикс.
 
 ### 4.7. Регистрация и per-query override
 
@@ -170,18 +181,18 @@ public TBuilder WithScope(MappingScope scope);
 
 | Что | Точка | Файл:строка |
 |---|---|---|
-| Резолв метаданных по scope | `ResolveMetadata` / `From<T>` | `DataContextExtensions.cs:114`, `:665` |
-| Ключ кэша метаданных | `DataContextCache.Metadata` → `(Type, scope)` | `DataContextCache.cs:22`, `:30` |
-| Select-list | `SelectListCache` → `(Type, scope)` | `DataContextCache.cs:23`, `:35` |
-| Имена колонок | `_columnNames` → `(pi, convention, scope)` | `MemberInfoExtensions.cs:15`, `:22` |
-| FROM | передать `entity.Schema` | `QueryPlanner.cs:479-481` |
-| Prepare | scoped-резолв по `srcType` | `Query/QueryCommand.QueryPreparer.cs:367` |
-| Join-update | scoped-резолв по `_targetType` | `Builders/UpdateJoinBuilder.cs:145` |
-| DML | scoped-резолв и table/schema | `InsertBuilder.cs:421`, `UpdateBuilder.cs:211`, `DeleteBuilder.cs:151`, `MergeBuilder.cs:375`, `TruncateBuilder.cs:62` |
-| In-memory | scoped-lookup | `InMemoryDataContext.cs:88` |
-| Провайдеры параметров | единая фабрика + префикс | `DataContext.cs:367/410`, `QueryPlanner.cs:85/141/282/310/330`, `SqlMutationBuilder.cs:126/177/242` |
-| Runtime-имена | scope-aware `NormParam` | `DataContext/NormParam.cs:12`, `:20`; `Cache/DbPreparedQueryCommand.cs:119` |
-| Регистрация | `DataContextBuilder` + `DataContextDependencies` | `DI/DataContextBuilder.cs:146`, `DataContextDependencies.cs:21` |
+| Резолв метаданных по scope | `ResolveMetadata` / `From<T>` | `DataContext/DataContextExtensions.cs:239`, `:334` |
+| Ключ кэша метаданных | `DataContextCache.Metadata` → `(Type, scope)` | `DataContext/Caches/DataContextCache.cs:23`, `:52` |
+| Select-list | `SelectListCache` → `(Type, scope)` | `DataContext/Caches/DataContextCache.cs:26`, `:75` |
+| Имена колонок | `_columnNames` → `(pi, convention, scope)` | `Utilities/MemberInfoExtensions.cs:16`, `:71` |
+| FROM | передать `entity.Schema` | `DataContext/QueryPlanner.cs:1153` |
+| Prepare | scoped-резолв по `srcType` | `Query/Commands/QueryCommand.QueryPreparer.cs:670` |
+| Join-update | scoped-резолв по `_targetType` | `Builders/Dml/Update/UpdateJoinBuilder.cs:244` |
+| DML | scoped-резолв и table/schema | `Builders/Dml/Insert/InsertBuilder.cs:637`, `Builders/Dml/Update/UpdateBuilder.cs:287`, `Builders/Dml/Delete/DeleteBuilder.cs:217`, `Builders/Merge/MergeBuilder.cs:747`, `Builders/Ddl/TruncateBuilder.cs:69` |
+| In-memory | scoped-lookup | `DataContext/InMemory/InMemoryDataContext.cs:88` |
+| Провайдеры параметров | единая фабрика + префикс | `DataContext/DataContext.cs:1305/1321/1439`, `DataContext/QueryPlanner.cs:161/227/691`, `DataContext/Sql/SqlMutationBuilder.cs:163/241` |
+| Runtime-имена | scope-aware `NormParam` | `DataContext/Parameters/NormParam.cs:14`, `:18-22`; `DataContext/Cache/Commands/DbPreparedQueryCommand.cs:442/640` |
+| Регистрация | `DataContextBuilder` + `DataContextDependencies` (хуки планировщика) | `DI/DataContextBuilder.cs`, `DataContext/DataContextDependencies.cs:28` |
 
 ## 6. Этапы внедрения
 
@@ -207,7 +218,7 @@ public TBuilder WithScope(MappingScope scope);
   иначе просядут бенчмарки.
 - **Префикс параметров и `norm_p`:** статический `NormParam` — единственное место, где имена не идут
   через `IParameterProvider`. Смена формата имени ломает контракт `SqlFunctions.Parameter`
-  (`NormParam.cs:5-10`) — префикс обязан быть обратно совместим для default.
+  (`DataContext/Parameters/NormParam.cs:4-12`) — префикс обязан быть обратно совместим для default.
 - **Потокобезопасность:** scope неизменяем; смена scope на общем контексте — только через
   `Properties`/`AsyncLocal`.
 
@@ -219,7 +230,7 @@ public TBuilder WithScope(MappingScope scope);
   - разные `ColumnName` per scope → нет протухания `_columnNames`/`SelectListCache`;
   - префикс параметров: `p0` → `<scope>_p0`, `norm_p0` → `<scope>_norm_p0`;
   - кастомные `IEntityScopeResolver`/`IEntityMetadataProvider`.
-- **In-memory (`tests/nextorm.core.tests/InMemoryTests.cs`):** scoped-метаданные.
+- **In-memory (`tests/nextorm.core.tests/InMemory/Queries/InMemoryTests.cs`):** scoped-метаданные.
 - **SQL-gen (`tests/nextorm.<provider>.tests`):** `FROM "scope_a"."orders"`, quoting по частям.
 - **Интеграция (`tests/nextorm.integration.tests/CommonTestSuite.*.cs`):** PostgreSQL + SQL Server —
   две схемы, подмена scope на лету, read/insert/update/delete. Нужен `DOCKER_HOST`
@@ -234,7 +245,7 @@ public TBuilder WithScope(MappingScope scope);
 2. **Тип ключа scope:** `record struct MappingScope(string?)` vs объект-дескриптор.
 3. **Convention × scope:** применять ли `INamingConvention` к auto-именам внутри провайдера.
 4. **Схема:** отдельное `Schema` vs `TableName = "schema.table"` (первое чище; второе уже рендерится
-   через `QuoteQualifiedIdentifier`, `SqlSourceRenderer.cs:845`).
+   через `QuoteQualifiedIdentifier`, `DataContext/Sql/SqlSourceRenderer.cs:1623`).
 5. **Формат префикса параметров:** `<key>_pN` vs `<key>.pN` vs хэш ключа (длина/допустимость в
    провайдерах).
 6. **Колонки per scope** — отдельная фаза или сразу (инвазивно для кэша колонок)?
@@ -244,16 +255,21 @@ public TBuilder WithScope(MappingScope scope);
 - Новое: `src/nextorm.core/DataContext/Meta/MappingScope.cs`,
   `DataContext/Meta/IEntityScopeResolver.cs`, `DataContext/Meta/DefaultEntityScopeResolver.cs`,
   `DataContext/Meta/IEntityMetadataProvider.cs`, `DataContext/Meta/DefaultEntityMetadataProvider.cs`,
-  `Query/PrefixedParameterProvider.cs`.
-- Правки: `DataContext/Meta/IEntityMetadata.cs` (`Schema`), `Meta/Implementation/EntityMetadata.cs`,
-  `Meta/EntityMetadataBuilder.cs`, `DataContextCache.cs`, `MemberInfoExtensions.cs`,
-  `DataContextExtensions.cs`, `DataContext/QueryPlanner.cs`, `DataContext/InMemoryDataContext.cs`,
-  `DataContext/Roles/IContextEnvironment.cs` (+`ContextEnvironment.cs`), `DI/DataContextBuilder.cs`,
-  `DataContextDependencies.cs`, `Expressions/FromExpression.cs`, `DataContext/SqlSourceRenderer.cs`,
-  `DataContext/SqlMutationBuilder.cs`, `DataContext/NormParam.cs`, `DataContext/ParamNameCache.cs`,
-  `Query/IParameterProvider.cs`, все `Builders/*Builder.cs`, `Query/QueryCommand.QueryPreparer.cs`.
-- Тесты: `tests/nextorm.core.tests/MappingScopeTests.cs`, правки `InMemoryTests.cs`, SQL-gen
-  провайдеров, `tests/nextorm.integration.tests/CommonTestSuite.*.cs`.
+  `Query/Providers/PrefixedParameterProvider.cs`.
+- Правки: `DataContext/Meta/Entities/IEntityMetadata.cs` (`Schema`),
+  `Meta/Implementation/EntityMetadata.cs`, `Meta/Entities/EntityMetadataBuilder.cs`,
+  `DataContext/Caches/DataContextCache.cs`, `Utilities/MemberInfoExtensions.cs`,
+  `DataContext/DataContextExtensions.cs`, `DataContext/QueryPlanner.cs`,
+  `DataContext/InMemory/InMemoryDataContext.cs`,
+  `DataContext/Roles/IContextEnvironment.cs` (+`DataContext/Infrastructure/ContextEnvironment.cs`),
+  `DI/DataContextBuilder.cs`, `DataContext/DataContextDependencies.cs`,
+  `Expressions/FromExpression.cs`, `DataContext/Sql/SqlSourceRenderer.cs`,
+  `DataContext/Sql/SqlMutationBuilder.cs`, `DataContext/Parameters/NormParam.cs`,
+  `DataContext/Parameters/ParamNameCache.cs`, `Query/Providers/IParameterProvider.cs`,
+  все `Builders/**/*Builder.cs`, `Query/Commands/QueryCommand.QueryPreparer.cs`.
+- Тесты: `tests/nextorm.core.tests/MappingScopeTests.cs`, правки
+  `tests/nextorm.core.tests/InMemory/Queries/InMemoryTests.cs`, SQL-gen
+  провайдеров, `tests/nextorm.integration.tests/CommonTestSuite/*.cs`.
 - Документация: `docs/getting-started/03-entities-and-metadata.md` (+RU), раздел по multi-tenancy,
   `docs/specs/design/API-NAMING-REVIEW.md`, `docs/specs/design/code-smells-review.md`.
 
@@ -261,6 +277,9 @@ public TBuilder WithScope(MappingScope scope);
 
 > Прогон сабагента `nextorm-design-engineer` по плану (read-only). `file:line` — по дереву на момент ревью.
 > Вердикт: **нужен пересмотр до старта фазы 1 — 1 блокер + 8 🟡**.
+>
+> **Актуализация 2026-11-11:** решения ревью в силе (реализация не начиналась). Актуальные якоря —
+> таблицы §3/§5 выше; `_fromCache` сейчас `DataContext/QueryPlanner.cs:1142-1154`.
 
 - **[TYPE] 🔴** `QueryPlanner._fromCache` не scope-aware: `QueryPlanner.cs:509-519` — process-wide `ConcurrentDictionary<Type, FromExpression>` по типу; при двух scope второй получит `FromExpression` default-scope (table/schema). В «Точках встраивания» (`:169-184`) и «Файлах» (`:242-254`) `_fromCache` отсутствует. Fix: ключ `(Type, MappingScope)` или перенос кэша в scoped-провайдер.
 - **[TYPE]/[DIP] 🟡** Scope не протянут через `SqlBuildContext`/`VisitorOptions`: `MemberInfoExtensions.cs:22-43` резолвит имя колонки из process-wide `DataContextCache.Metadata` без scope/provider; рендер получает параметры через `SqlBuildContext` (`SqlBuildContext.cs:44`) и `VisitorOptions` (`VisitorOptions.cs:67`), где scope нет. Fix: добавить `MappingScope`/scoped-resolver в эти два типа.

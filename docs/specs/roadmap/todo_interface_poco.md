@@ -1,10 +1,15 @@
 # TODO: Интерфейсные сущности без классов реализации (runtime proxy, POCO)
 
 > Рабочий план (design RFC). Источник: GitHub issue
-> [#34 «POCO»](https://github.com/AlexeyShirshov/nextorm/issues/34), milestone `1.4-a.1`.
+> [#34 «POCO»](https://github.com/AlexeyShirshov/nextorm/issues/34) — **открыт**,
+> milestone `1.0.10-a.1` (актуализирован 2026-10-04; в плане ранее стоял `1.4-a.1`).
 > «Emit class with interface implementation, create and return instance of it». Цель — позволить
 > описывать сущность **только** интерфейсом и оперировать им: `ctx.From<IEntity>().ToList()` должен
 > вернуть `IEntity[]`, где реализация сгенерирована на лету и закэширована в метаданных.
+>
+> **Актуализация 2026-11-11:** реализации в `src/` нет (runtime-прокси/`MaterializationType`/
+> кэша прокси-типов не существует); поведение не изменилось — интерфейсная сущность без `Select`
+> по-прежнему не материализуется (`Select`/DTO/scalar — работают).
 
 ## Пункт и цель
 
@@ -14,31 +19,35 @@
   через `ToList`/`First*`/`ToAsyncEnumerable`; атрибуты на интерфейсе (`[SqlTable]`/`[Key]`/
   `[Column]`/`[DatabaseGenerated]`), включая **унаследованные** интерфейсы, учитываются; прокси-тип
   создаётся один раз на интерфейс; in-memory и DB-провайдеры дают одинаковый результат.
-- **Не путать** с потоковой выдачей JSON (`todo_json_streaming.md`): там прокси не нужен, JSON
+- **Не путать** с потоковой выдачей JSON (уже отгружена —
+  [`docs/guide/30-streaming-data.md`](../../guide/30-streaming-data.md)): там прокси не нужен, JSON
   пишется прямо из ридера.
 
 ## Почему это нужно (мотивация)
 
 1. **Меньше boilerplate.** Сейчас на каждую сущность нужен класс-реализация (`SimpleEntity :
-   ISimpleEntity`, `Entities.cs:15`); интерфейс уже несёт разметку, класс — чистый дубль ради ctor.
+   ISimpleEntity`, `tests/nextorm.integration.tests/Support/Entities/Entities.cs:15`); интерфейс уже
+   несёт разметку, класс — чистый дубль ради ctor.
 2. **Интерфейс как контракт.** DDD-подход: наружу отдаётся `IOrder`, реализация — деталь хранения.
-3. **Уже почти готово.** Атрибуты с интерфейса читаются (`EntityMetadataBuilder.FindInterfaceProperty:84`),
-   `IsInterface` учитывается в SQL-планировании (`QueryPlanner.cs:432`, `SqlMutationBuilder.cs:775`).
+3. **Уже почти готово.** Атрибуты с интерфейса читаются
+   (`EntityMetadataBuilder.FindInterfaceProperty`, `DataContext/Meta/Entities/EntityMetadataBuilder.cs:391`),
+   `IsInterface` учитывается в SQL-планировании (`DataContext/QueryPlanner.cs:1153`,
+   `DataContext/Sql/SqlMutationBuilder.cs:1499`).
    Не хватает ровно одного шага — материализации.
 
 ## Текущее состояние и разрыв
 
 | Слой | Где | Чего не хватает |
 |---|---|---|
-| Метаданные | `Meta/EntityMetadataBuilder.cs:46-82` | свойства собираются, но `FlattenHierarchy` не разворачивает интерфейсную иерархию; фильтр `CanWrite` отсекает get-only |
-| Атрибуты | `EntityMetadataBuilder.cs:61-64,84,155-174` | `[Column]`/`[Key]`/`[DatabaseGenerated]`/`[SqlTable]`/`[Table]` с интерфейса уже читаются |
-| Источник | `QueryPlanner.cs:432` | `From<T>()` уже помечает `FromExpression.SourceIsInterface` (`FromExpression.cs:74`) для naming convention |
-| Материализация | `RowMaterializerBuilder.cs:21-54` | `resultType.GetConstructors()` (`:28`) у интерфейса пуст → `QueryPreparationException`; `Expression.New(interface)` невозможен |
-| Returning | `DataContext.cs:463-470` | `EnsureReturningMaterializable` явно запрещает interface/abstract |
-| Кэш | `DataContextCache.cs:22`, `MapperCache.cs:26` | кэша прокси-типов нет |
-| Публичный вход | `DataContextExtensions.cs:665`, `:114` | `From<T>`/`ResolveMetadata` кладут только `IEntityMetadata` |
-| Прочие пути | `InMemoryRowMaterializer.cs:51,73`, `RowMapperFactory.cs:120-159` | оба идут через `RowMaterializerBuilder` — одна точка правки |
-| Source-gen | `src/nextorm.core.sourcegenerator` | пустой `IIncrementalGenerator`, не подключён ни к одному проекту |
+| Метаданные | `DataContext/Meta/Entities/EntityMetadataBuilder.cs:293-330` (`AutoBuildProperties`; `GetProperties(FlattenHierarchy)` — `:300`, `CanWrite` — `:326`) | свойства собираются, но `FlattenHierarchy` не разворачивает интерфейсную иерархию; фильтр `CanWrite` отсекает get-only; `FindInterfaceProperty` — `:391` |
+| Атрибуты | `DataContext/Meta/Entities/EntityMetadataBuilder.cs:315,391` | `[Column]`/`[Key]`/`[DatabaseGenerated]`/`[SqlTable]`/`[Table]` с интерфейса уже читаются |
+| Источник | `DataContext/QueryPlanner.cs:1153` | `From<T>()` уже помечает `FromExpression.SourceIsInterface` (`Expressions/FromExpression.cs:108`) для naming convention |
+| Материализация | `DataContext/Mapping/RowMaterializerBuilder.cs:191,317` | `resultType.GetConstructors()` у интерфейса пуст → `QueryPreparationException`; `Expression.New(interface)` невозможен |
+| Returning | `DataContext/DataContext.cs:1805-1814` | `EnsureReturningMaterializable` явно запрещает interface/abstract |
+| Кэш | `DataContext/Caches/DataContextCache.cs:23,52`; `DataContext/Mapping/MapperCache.cs` | кэша прокси-типов нет |
+| Публичный вход | `DataContext/DataContextExtensions.cs:239,334` | `From<T>`/`ResolveMetadata` кладут только `IEntityMetadata` |
+| Прочие пути | `DataContext/InMemory/InMemoryRowMaterializer.cs:65,87`, `DataContext/Mapping/RowMapperFactory.cs:411,468` | оба идут через `RowMaterializerBuilder` — одна точка правки |
+| Source-gen | `src/nextorm.core.sourcegenerator` | проект уже подключён как анализатор: `JoinAliasGenerator` (публичный alias-API, #113/#160) отгружается в пакет; `AnonymousClassGenerator` — пустой стаб, и именно он годится под генерацию реализации интерфейса (AOT) |
 
 ## Проверенные факты (прототип Reflection.Emit + Expression)
 
@@ -77,27 +86,29 @@
 - backing field + свойство (getter/setter всегда) для каждого свойства замыкания; публичный
   `sealed` класс, дефолтный ctor;
 - кэш `ConcurrentDictionary<Type, Type>` со значениями `Lazy<Type>` (эмит ровно один раз,
-  process-wide); кладётся рядом с `DataContextCache.Metadata` (`DataContextCache.cs:22`);
+  process-wide); кладётся рядом с `DataContextCache.Metadata` (`DataContext/Caches/DataContextCache.cs:23,52`);
 - защита: если интерфейс не public — понятное исключение с указанием на ограничение (фаза 3 —
   `IgnoresAccessChecksTo`/source-gen).
 
 ### 3. Подключение к материализации
 
-- `RowMaterializerBuilder.Build` (`:21`) получает **`materializationType`** отдельно от `resultType`
+- `RowMaterializerBuilder.Build` (`DataContext/Mapping/RowMaterializerBuilder.cs:41`, `GetConstructors` —
+  `:191,317`) получает **`materializationType`** отдельно от `resultType`
   (тип лямбды остаётся интерфейсом):
-  - `GetConstructors()`/`Expression.New` — по прокси (parameterless → member-init путь, `:45-53`);
+  - `GetConstructors()`/`Expression.New` — по прокси (parameterless → member-init путь);
   - bind-члены резолвить **на прокси** (`proxyType.GetProperty(name)`), а не на интерфейсе — снимает
     разом get-only и унаследованные свойства;
-- `RowMapperFactory.Build:146` и `InMemoryRowMaterializer.cs:51,73` — прокинуть прокси (в in-memory
+- `DataContext/Mapping/RowMapperFactory.cs:411,468` и
+  `DataContext/InMemory/InMemoryRowMaterializer.cs:65,87` — прокинуть прокси (в in-memory
   тот же builder, правка одна);
-- `DataContext.EnsureReturningMaterializable:463` — разрешить интерфейсы, оставить запрет только для
-  **abstract-классов** (их проксировать нельзя).
+- `DataContext/DataContext.cs:1805` (`EnsureReturningMaterializable`) — разрешить интерфейсы, оставить
+  запрет только для **abstract-классов** (их проксировать нельзя).
 
 ### 4. Метаданные и API
 
 - `IEntityMetadata` — `Type? MaterializationType { get; }` с default-реализацией (как
-  `IsTableNameAuto:27`), чтобы не ломать внешних имплементаторов; заполняется для интерфейсов
-  прокси-типом (issue просит «закешировать в метаданные»);
+  `IsTableNameAuto` — `DataContext/Meta/Entities/IEntityMetadata.cs:27`), чтобы не ломать внешних
+  имплементаторов; заполняется для интерфейсов прокси-типом (issue просит «закешировать в метаданные»);
 - `IPropertyMetadata.PropertyInfo` остаётся интерфейсным — чтение/запись значений у прокси идут через
   интерфейсную диспетчеризацию;
 - опционально `ctx.New<IEntity>()`/`ctx.Create<IEntity>()` — пустой экземпляр прокси.
@@ -119,7 +130,7 @@
 | `From<IEntity>().ToList()` | `QueryPreparationException` | `IEntity[]` через прокси |
 | `From<IEntity>().Where(…).First()` | ошибка | прокси |
 | `From<IEntity>()` (in-memory) | ошибка | прокси (тот же `RowMaterializerBuilder`) |
-| `Returning<IEntity>()` | `NotSupportedException` (`DataContext.cs:469`) | фаза 2 |
+| `Returning<IEntity>()` | `NotSupportedException` (`DataContext/DataContext.cs:1805`) | фаза 2 |
 | `Projection<T1,T2>` с интерфейсом | ошибка | фаза 2 |
 | abstract-класс как `TResult` | ошибка | остаётся ошибкой |
 
@@ -174,15 +185,18 @@
 
 ## Файлы к изменению
 
-- Новое: `src/nextorm.core/DataContext/Meta/InterfaceProxyFactory.cs`,
+- Новое: `src/nextorm.core/DataContext/Meta/Entities/InterfaceProxyFactory.cs`,
   тесты `tests/nextorm.core.tests/InterfaceMaterializationTests.cs`,
-  `tests/nextorm.integration.tests/CommonTestSuite.InterfaceEntities.cs`.
-- Правки: `src/nextorm.core/DataContext/Meta/EntityMetadataBuilder.cs` (обход интерфейсов),
-  `DataContext/Meta/IEntityMetadata.cs` + `Meta/Implementation/EntityMetadata.cs`
-  (`MaterializationType`), `DataContext/RowMaterializerBuilder.cs`,
-  `DataContext/RowMapperFactory.cs`, `DataContext/InMemoryRowMaterializer.cs`,
-  `DataContext/DataContext.cs` (`EnsureReturningMaterializable`), `DataContext/DataContextCache.cs`,
+  `tests/nextorm.integration.tests/CommonTestSuite/Interface/InterfaceEntities.cs`.
+- Правки: `src/nextorm.core/DataContext/Meta/Entities/EntityMetadataBuilder.cs` (обход интерфейсов),
+  `DataContext/Meta/Entities/IEntityMetadata.cs` + `Meta/Implementation/EntityMetadata.cs`
+  (`MaterializationType`), `DataContext/Mapping/RowMaterializerBuilder.cs`,
+  `DataContext/Mapping/RowMapperFactory.cs`, `DataContext/InMemory/InMemoryRowMaterializer.cs`,
+  `DataContext/DataContext.cs` (`EnsureReturningMaterializable`),
+  `DataContext/Caches/DataContextCache.cs`,
   опционально `DataContext/DataContextExtensions.cs` (`New<T>`).
+- Source-gen (фаза 3): `src/nextorm.core.sourcegenerator/AnonymousClassGenerator.cs` (сейчас пустой
+  стаб) рядом с отгруженным `JoinAliasGenerator.cs`.
 - Документация: `docs/guide/` (раздел об интерфейсных сущностях, +RU),
   `docs/advanced/api-reference.md` (+RU), `docs/advanced/limitations.md` (снять «project the
   columns», +RU), `docs/specs/design/API-NAMING-REVIEW.md`.
@@ -192,7 +206,7 @@
 > Прогон сабагента `nextorm-design-engineer` по плану (read-only). `file:line` — по дереву на момент ревью.
 > Вердикт: **дизайн-здоров, блокеров нет**; 3 🟡 закрыть в тексте плана до реализации.
 
-- **[TYPE]/[LSP] 🟡** Публичный `IEntityMetadata.MaterializationType` (`:96-103,165-166`) протекает динамическим прокси-типом: в фазе 3 (source-gen) он сменится, а пользователь может начать на него опираться — leaky contract и помеха заморозке (`todo_public_api_freeze.md`). Fix: держать прокси в `DataContextCache`, публично не раскрывать тип (или `internal` + документированная нестабильность).
+- **[TYPE]/[LSP] 🟡** Публичный `IEntityMetadata.MaterializationType` (`:96-103,165-166`) протекает динамическим прокси-типом: в фазе 3 (source-gen) он сменится, а пользователь может начать на него опираться — leaky contract и помеха заморозке (`todo_public_api_freeze.md`; заморозка выполнена 2026-11-11 — публичный член потребует строку в `PublicAPI.Shipped.txt`). Fix: держать прокси в `DataContextCache`, публично не раскрывать тип (или `internal` + документированная нестабильность).
 - **[DRY] 🟡** Объявление кэша самопротиворечиво (`:78-80`: `ConcurrentDictionary<Type, Type>` со `Lazy<Type>`, «рядом с `DataContextCache.Metadata`» без нового поля — `DataContextCache.cs:22,30` это `IDictionary<Type, IEntityMetadata>`). Fix: отдельный `static ConcurrentDictionary<Type, Lazy<Type>>` с явным именем владельца.
 - **[OCP]/[TYPE] 🟡** Bind-члены «по имени на прокси» (`:89` `proxyType.GetProperty(name)`) повторяет reflection-by-name (`RowMaterializerBuilder.cs:49`); при замыкании интерфейсов/explicit-implementation возможен неверный член. Fix: один раз построить `name → PropertyInfo` карту по прокси-типу (или interface map), не звать `GetProperty` в цикле материализации.
 - **[OCP] ℹ️** Две стратегии сбора свойств в одном методе (`:65-71` добавляет обход замыкания интерфейсов рядом с классовым `Where(CanWrite)` `EntityMetadataBuilder.cs:52`). Deferred с триггером (третье правило формы); до этого вынести интерфейсный обход в приватный хелпер.
