@@ -363,8 +363,11 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// <summary>Initializes a builder over the raw table named <paramref name="table"/>.</summary>
     /// <param name="dataProvider">The data context that creates the query command.</param>
     /// <param name="table">The physical table name to select from.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="table"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="table"/> is empty or consists only of white-space characters.</exception>
     public EntityBuilder(IDataContext dataProvider, string table)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(table);
         _dataProvider = dataProvider;
         _table = table;
     }
@@ -3880,7 +3883,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// <param name="options">Optional per-join configuration; forwarded unchanged.</param>
     /// <returns>A builder over the projection extended with <see cref="TableAlias"/>.</returns>
     /// <remarks>A <see langword="null"/> <paramref name="joinCondition"/> is accepted and renders no <c>ON</c> clause, matching the explicit form over <c>ctx.From(table)</c>.</remarks>
-    /// <remarks>For the string-typed null binding behaviour (overload selection and the runtime outcome), see the remarks on <see cref="EntityBuilder"/> and the retained tests in <c>SourceLessJoinNegativePathsTests</c>.</remarks>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
     public JoinedEntityBuilder<TEntity, TableAlias> Join(string table, Expression<Func<TEntity, TableAlias, bool>> joinCondition, Action<JoinOptions>? options = null)
     {
         return JoinCore<TableAlias>(new EntityBuilder<TableAlias>(RequireContext, table), JoinType.Inner, joinCondition, options);
@@ -3891,7 +3894,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// <param name="options">Optional per-join configuration; forwarded unchanged.</param>
     /// <returns>A builder over the projection extended with <see cref="TableAlias"/>.</returns>
     /// <remarks>A <see langword="null"/> <paramref name="joinCondition"/> is accepted and renders no <c>ON</c> clause, matching the explicit form over <c>ctx.From(table)</c>.</remarks>
-    /// <remarks>For the string-typed null binding behaviour (overload selection and the runtime outcome), see the remarks on <see cref="EntityBuilder"/> and the retained tests in <c>SourceLessJoinNegativePathsTests</c>.</remarks>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
     public JoinedEntityBuilder<TEntity, TableAlias> LeftJoin(string table, Expression<Func<TEntity, TableAlias, bool>> joinCondition, Action<JoinOptions>? options = null)
     {
         return JoinCore<TableAlias>(new EntityBuilder<TableAlias>(RequireContext, table), JoinType.Left, joinCondition, options);
@@ -3902,7 +3905,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// <param name="options">Optional per-join configuration; forwarded unchanged.</param>
     /// <returns>A builder over the projection extended with <see cref="TableAlias"/>.</returns>
     /// <remarks>A <see langword="null"/> <paramref name="joinCondition"/> is accepted and renders no <c>ON</c> clause, matching the explicit form over <c>ctx.From(table)</c>.</remarks>
-    /// <remarks>For the string-typed null binding behaviour (overload selection and the runtime outcome), see the remarks on <see cref="EntityBuilder"/> and the retained tests in <c>SourceLessJoinNegativePathsTests</c>.</remarks>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
     public JoinedEntityBuilder<TEntity, TableAlias> RightJoin(string table, Expression<Func<TEntity, TableAlias, bool>> joinCondition, Action<JoinOptions>? options = null)
     {
         return JoinCore<TableAlias>(new EntityBuilder<TableAlias>(RequireContext, table), JoinType.Right, joinCondition, options);
@@ -3913,7 +3916,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// <param name="options">Optional per-join configuration; forwarded unchanged.</param>
     /// <returns>A builder over the projection extended with <see cref="TableAlias"/>.</returns>
     /// <remarks>A <see langword="null"/> <paramref name="joinCondition"/> is accepted and renders no <c>ON</c> clause, matching the explicit form over <c>ctx.From(table)</c>.</remarks>
-    /// <remarks>For the string-typed null binding behaviour (overload selection and the runtime outcome), see the remarks on <see cref="EntityBuilder"/> and the retained tests in <c>SourceLessJoinNegativePathsTests</c>.</remarks>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
     public JoinedEntityBuilder<TEntity, TableAlias> FullJoin(string table, Expression<Func<TEntity, TableAlias, bool>> joinCondition, Action<JoinOptions>? options = null)
     {
         return JoinCore<TableAlias>(new EntityBuilder<TableAlias>(RequireContext, table), JoinType.Full, joinCondition, options);
@@ -3922,21 +3925,21 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// <param name="table">The physical table name of the joined source.</param>
     /// <param name="options">Optional per-join configuration; forwarded unchanged.</param>
     /// <returns>A builder over the projection extended with <see cref="TableAlias"/>.</returns>
-    /// <remarks>For the string-typed null binding behaviour (overload selection and the runtime outcome), see the remarks on <see cref="EntityBuilder"/> and the retained tests in <c>SourceLessJoinNegativePathsTests</c>.</remarks>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
     public JoinedEntityBuilder<TEntity, TableAlias> CrossJoin(string table, Action<JoinOptions>? options = null)
         => JoinCore<TableAlias>(new EntityBuilder<TableAlias>(RequireContext, table), JoinType.Cross, null, options);
     /// <summary>Adds a <c>CROSS APPLY</c> over the table named <paramref name="table"/> without an explicit source.</summary>
     /// <param name="table">The physical table name of the joined source.</param>
     /// <param name="options">Optional per-join configuration; forwarded unchanged.</param>
     /// <returns>A builder over the projection extended with <see cref="TableAlias"/>.</returns>
-    /// <remarks>For the string-typed null binding behaviour (overload selection and the runtime outcome), see the remarks on <see cref="EntityBuilder"/> and the retained tests in <c>SourceLessJoinNegativePathsTests</c>.</remarks>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
     public JoinedEntityBuilder<TEntity, TableAlias> CrossApply(string table, Action<JoinOptions>? options = null)
         => JoinCore<TableAlias>(new EntityBuilder<TableAlias>(RequireContext, table), JoinType.CrossApply, null, options);
     /// <summary>Adds an <c>OUTER APPLY</c> over the table named <paramref name="table"/> without an explicit source.</summary>
     /// <param name="table">The physical table name of the joined source.</param>
     /// <param name="options">Optional per-join configuration; forwarded unchanged.</param>
     /// <returns>A builder over the projection extended with <see cref="TableAlias"/>.</returns>
-    /// <remarks>For the string-typed null binding behaviour (overload selection and the runtime outcome), see the remarks on <see cref="EntityBuilder"/> and the retained tests in <c>SourceLessJoinNegativePathsTests</c>.</remarks>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
     public JoinedEntityBuilder<TEntity, TableAlias> OuterApply(string table, Action<JoinOptions>? options = null)
         => JoinCore<TableAlias>(new EntityBuilder<TableAlias>(RequireContext, table), JoinType.OuterApply, null, options);
     /// <summary>
@@ -6346,42 +6349,42 @@ public class EntityBuilder : ICloneable
         => JoinCore(from, JoinType.OuterApply, null);
     /// <summary>Adds an <c>INNER JOIN</c> over the table named <paramref name="table"/> on this named-table source.</summary>
     /// <remarks>A <see langword="null"/> <paramref name="joinCondition"/> is accepted and renders no <c>ON</c> clause, matching the explicit form over <c>ctx.From(table)</c>.</remarks>
-    /// <remarks>A <see langword="null"/> table name passed through a <see cref="string"/>-typed value — a <c>string?</c> variable holding <see langword="null"/>, or an explicit <c>(string)null</c> cast — selects this string-table overload; the builder call succeeds and SQL compilation then throws <see cref="NullReferenceException"/>, because the table name resolves to no source (the same outcome as the explicit <c>ctx.From((string)null)</c> form). To make the intended overload explicit, pass a cast or a typed variable.</remarks>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
     public JoinedEntityBuilder<TableAlias, TableAlias> Join(string table, Expression<Func<TableAlias, TableAlias, bool>> joinCondition, Action<JoinOptions>? options = null)
     {
         return Join(_dataProvider.From(table), joinCondition, options);
     }
     /// <summary>Adds a <c>LEFT JOIN</c> over the table named <paramref name="table"/> on this named-table source.</summary>
     /// <remarks>A <see langword="null"/> <paramref name="joinCondition"/> is accepted and renders no <c>ON</c> clause, matching the explicit form over <c>ctx.From(table)</c>.</remarks>
-    /// <remarks>A <see langword="null"/> table name passed through a <see cref="string"/>-typed value — a <c>string?</c> variable holding <see langword="null"/>, or an explicit <c>(string)null</c> cast — selects this string-table overload; the builder call succeeds and SQL compilation then throws <see cref="NullReferenceException"/>, because the table name resolves to no source (the same outcome as the explicit <c>ctx.From((string)null)</c> form). To make the intended overload explicit, pass a cast or a typed variable.</remarks>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
     public JoinedEntityBuilder<TableAlias, TableAlias> LeftJoin(string table, Expression<Func<TableAlias, TableAlias, bool>> joinCondition, Action<JoinOptions>? options = null)
     {
         return LeftJoin(_dataProvider.From(table), joinCondition, options);
     }
     /// <summary>Adds a <c>RIGHT JOIN</c> over the table named <paramref name="table"/> on this named-table source.</summary>
     /// <remarks>A <see langword="null"/> <paramref name="joinCondition"/> is accepted and renders no <c>ON</c> clause, matching the explicit form over <c>ctx.From(table)</c>.</remarks>
-    /// <remarks>A <see langword="null"/> table name passed through a <see cref="string"/>-typed value — a <c>string?</c> variable holding <see langword="null"/>, or an explicit <c>(string)null</c> cast — selects this string-table overload; the builder call succeeds and SQL compilation then throws <see cref="NullReferenceException"/>, because the table name resolves to no source (the same outcome as the explicit <c>ctx.From((string)null)</c> form). To make the intended overload explicit, pass a cast or a typed variable.</remarks>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
     public JoinedEntityBuilder<TableAlias, TableAlias> RightJoin(string table, Expression<Func<TableAlias, TableAlias, bool>> joinCondition, Action<JoinOptions>? options = null)
     {
         return RightJoin(_dataProvider.From(table), joinCondition, options);
     }
     /// <summary>Adds a <c>FULL JOIN</c> over the table named <paramref name="table"/> on this named-table source.</summary>
     /// <remarks>A <see langword="null"/> <paramref name="joinCondition"/> is accepted and renders no <c>ON</c> clause, matching the explicit form over <c>ctx.From(table)</c>.</remarks>
-    /// <remarks>A <see langword="null"/> table name passed through a <see cref="string"/>-typed value — a <c>string?</c> variable holding <see langword="null"/>, or an explicit <c>(string)null</c> cast — selects this string-table overload; the builder call succeeds and SQL compilation then throws <see cref="NullReferenceException"/>, because the table name resolves to no source (the same outcome as the explicit <c>ctx.From((string)null)</c> form). To make the intended overload explicit, pass a cast or a typed variable.</remarks>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
     public JoinedEntityBuilder<TableAlias, TableAlias> FullJoin(string table, Expression<Func<TableAlias, TableAlias, bool>> joinCondition, Action<JoinOptions>? options = null)
     {
         return FullJoin(_dataProvider.From(table), joinCondition, options);
     }
     /// <summary>Adds a <c>CROSS JOIN</c> over the table named <paramref name="table"/> on this named-table source.</summary>
-    /// <remarks>A <see langword="null"/> table name passed through a <see cref="string"/>-typed value — a <c>string?</c> variable holding <see langword="null"/>, or an explicit <c>(string)null</c> cast — selects this string-table overload; the builder call succeeds and SQL compilation then throws <see cref="NullReferenceException"/>, because the table name resolves to no source (the same outcome as the explicit <c>ctx.From((string)null)</c> form). To make the intended overload explicit, pass a cast or a typed variable.</remarks>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
     public JoinedEntityBuilder<TableAlias, TableAlias> CrossJoin(string table, Action<JoinOptions>? options = null)
         => JoinCore(_dataProvider.From(table), JoinType.Cross, null, options);
     /// <summary>Adds a <c>CROSS APPLY</c> over the table named <paramref name="table"/> on this named-table source.</summary>
-    /// <remarks>A <see langword="null"/> table name passed through a <see cref="string"/>-typed value — a <c>string?</c> variable holding <see langword="null"/>, or an explicit <c>(string)null</c> cast — selects this string-table overload; the builder call succeeds and SQL compilation then throws <see cref="NullReferenceException"/>, because the table name resolves to no source (the same outcome as the explicit <c>ctx.From((string)null)</c> form). To make the intended overload explicit, pass a cast or a typed variable.</remarks>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
     public JoinedEntityBuilder<TableAlias, TableAlias> CrossApply(string table, Action<JoinOptions>? options = null)
         => JoinCore(_dataProvider.From(table), JoinType.CrossApply, null, options);
     /// <summary>Adds an <c>OUTER APPLY</c> over the table named <paramref name="table"/> on this named-table source.</summary>
-    /// <remarks>A <see langword="null"/> table name passed through a <see cref="string"/>-typed value — a <c>string?</c> variable holding <see langword="null"/>, or an explicit <c>(string)null</c> cast — selects this string-table overload; the builder call succeeds and SQL compilation then throws <see cref="NullReferenceException"/>, because the table name resolves to no source (the same outcome as the explicit <c>ctx.From((string)null)</c> form). To make the intended overload explicit, pass a cast or a typed variable.</remarks>
+    /// <remarks>A <see langword="null"/>, empty, or whitespace-only <paramref name="table"/> is rejected at the call site with <see cref="ArgumentNullException"/> / <see cref="ArgumentException"/> (<c>ParamName == "table"</c>), matching the explicit <c>ctx.From(table)</c> form.</remarks>
     public JoinedEntityBuilder<TableAlias, TableAlias> OuterApply(string table, Action<JoinOptions>? options = null)
         => JoinCore(_dataProvider.From(table), JoinType.OuterApply, null, options);
     internal JoinedEntityBuilder<TableAlias, TableAlias> JoinCore(EntityBuilder from, JoinType joinType, LambdaExpression? joinCondition, Action<JoinOptions>? options = null)

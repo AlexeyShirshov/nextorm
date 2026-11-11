@@ -1209,9 +1209,14 @@ public static class DataContextExtensions
     /// <c>Limit</c>/<c>Select</c>) is available, unlike the previous non-generic shape.
     /// </para>
     /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="table"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="table"/> is empty or consists only of white-space characters.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static EntityBuilder<TableAlias> From(this IDataContext dataContext, string table)
-        => new(dataContext, table) { Logger = dataContext.CommandLogger };
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(table);
+        return new(dataContext, table) { Logger = dataContext.CommandLogger };
+    }
 
     /// <summary>
     /// Starts a query against a raw table (or CTE) name with per-query source options (a
@@ -1222,10 +1227,12 @@ public static class DataContextExtensions
     /// <param name="table">The table or CTE name.</param>
     /// <param name="options">Configures the primary source, for example <c>o =&gt; o.TableSample(10)</c> or <c>o =&gt; o.WithTableHint("nolock")</c>.</param>
     /// <returns>A builder for composing the query.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="table"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="table"/> is empty or consists only of white-space characters.</exception>
     public static EntityBuilder<TableAlias> From(this IDataContext dataContext, string table, Action<FromOptions> options)
     {
         ArgumentNullException.ThrowIfNull(dataContext);
-        ArgumentNullException.ThrowIfNull(table);
+        ArgumentException.ThrowIfNullOrWhiteSpace(table);
         ArgumentNullException.ThrowIfNull(options);
 
         var fromOptions = new FromOptions();

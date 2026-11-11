@@ -481,11 +481,10 @@ var sql = dataContext.From<ISimpleEntity>()
   explicit-source form (`Join(dataContext.From("table"), null)`) and to the string-table source-less
   forms (`Join/LeftJoin/RightJoin/FullJoin(string table, predicate, options)`), where a `null`
   predicate renders no `ON` clause.
-* **`null` table name.** A `null` table name passed through a `string`-typed value — a `string?`
-  variable holding `null`, or an explicit `(string)null` cast — selects the string-table overload:
-  the builder call succeeds and SQL compilation then throws `NullReferenceException`, because the
-  table name resolves to no source (the same outcome as the explicit `ctx.From((string)null)`
-  form). To make the intended overload explicit, pass a cast or a typed variable.
+* **`null` / empty / whitespace table name.** A `null`, empty, or whitespace-only table name passed
+  through a `string`-typed value is rejected at the call site with `ArgumentNullException` (`null`)
+  or `ArgumentException` (`""` / whitespace-only), `ParamName == "table"`, identical to the explicit
+  `ctx.From(table)` form. To make the intended overload explicit, pass a cast or a typed variable.
 * **Invalid all-null pair.** The untyped all-`null` pair `joined.Join<T>(null, null)` compiles: overload
   resolution binds it to the pre-existing two-argument
   `Join<TJoinEntity>(Cte<TJoinEntity>, Expression<…>)` overload, which then rejects the null CTE with
@@ -973,8 +972,9 @@ var chained = dataContext.From("simple_entity")
 
 `Join`, `LeftJoin`, `RightJoin`, `FullJoin` take the predicate; `CrossJoin`, `CrossApply`, `OuterApply`
 take only the table name and an optional `Action<JoinOptions>`. A `null` predicate is accepted and renders
-no `ON` clause, identical to the explicit `From("table")` form. A `null` table name (a `string?` variable
-holding `null`) or an empty table name throws the same exception at the same stage as the explicit form.
+no `ON` clause, identical to the explicit `From("table")` form. A `null`, empty, or whitespace-only table
+name throws `ArgumentNullException` / `ArgumentException` (`ParamName == "table"`) at the call site, the
+same as the explicit `From("table")` form.
 
 ## Chained joins and arity 2..8
 

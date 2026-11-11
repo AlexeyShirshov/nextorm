@@ -66,6 +66,7 @@ public sealed class MutationCteQuery<TResult>
     /// <returns>A builder whose columns are read through <see cref="TableAlias"/> accessors.</returns>
     public EntityBuilder<TableAlias> FromTable(string cteName)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(cteName);
         FindCte(cteName);
         return new EntityBuilder<TableAlias>(_dataContext, cteName) { Logger = _dataContext.CommandLogger, Ctes = _ctes };
     }

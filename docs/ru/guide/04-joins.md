@@ -494,12 +494,11 @@ var sql = dataContext.From<ISimpleEntity>()
   источником (`Join(dataContext.From("table"), null)`) и к строковым формам без источника
   (`Join/LeftJoin/RightJoin/FullJoin(string table, predicate, options)`), где `null`-predicate не
   генерирует `ON`.
-* **`null`-имя таблицы.** Имя таблицы `null`, переданное через значение типа `string` (переменная
-  `string?` со значением `null` или явный каст `(string)null`), выбирает строковую перегрузку:
-  вызов построителя проходит, а компиляция SQL затем бросает `NullReferenceException`, потому что
-  имя таблицы не разрешается ни в какой источник (тот же исход, что у явной формы
-  `ctx.From((string)null)`). Чтобы явно выразить нужную перегрузку, передавайте каст или
-  типизированную переменную.
+* **`null` / пустое / пробельное имя таблицы.** Имя таблицы `null`, пустое или состоящее только из
+  пробелов, переданное через значение типа `string`, отклоняется на месте вызова с
+  `ArgumentNullException` (`null`) или `ArgumentException` (пустое / пробельное), `ParamName == "table"`,
+  идентично явной форме `ctx.From(table)`. Чтобы явно выразить нужную перегрузку, передавайте каст
+  или типизированную переменную.
 * **Недопустимая пара «всё null».** Нетипизированная пара `joined.Join<T>(null, null)` компилируется:
   разрешение перегрузки связывает её с существующей двухаргументной перегрузкой
   `Join<TJoinEntity>(Cte<TJoinEntity>, Expression<…>)`, которая затем отклоняет null-CTE с
@@ -992,8 +991,9 @@ var chained = dataContext.From("simple_entity")
 
 `Join`, `LeftJoin`, `RightJoin`, `FullJoin` принимают predicate; `CrossJoin`, `CrossApply`, `OuterApply` —
 только имя таблицы и необязательный `Action<JoinOptions>`. `null`-predicate принимается и не генерирует
-`ON`, идентично явной форме `From("table")`. Имя таблицы `null` (переменная `string?` со значением `null`)
-или пустое имя таблицы бросает то же исключение на той же стадии, что и явная форма.
+`ON`, идентично явной форме `From("table")`. Имя таблицы `null`, пустое или состоящее только из пробелов
+бросает `ArgumentNullException` / `ArgumentException` (`ParamName == "table"`) на месте вызова — так же, как
+явная форма `From("table")`.
 
 ## Цепочки соединений и арность 2..8
 

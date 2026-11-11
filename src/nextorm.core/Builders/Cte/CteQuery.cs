@@ -152,7 +152,11 @@ public sealed class CteQuery
         => MutationCteQuery<TResult>.Create(_dataContext, name, insert, _ctes);
 
     /// <summary>Starts a query whose source is the CTE declared as <paramref name="cteName"/>.</summary>
-    public EntityBuilder<TableAlias> From(string cteName) => new(_dataContext, cteName) { Ctes = _ctes, Logger = _dataContext.CommandLogger };
+    public EntityBuilder<TableAlias> From(string cteName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(cteName);
+        return new(_dataContext, cteName) { Ctes = _ctes, Logger = _dataContext.CommandLogger };
+    }
 
     /// <summary>Starts a query whose source is <paramref name="cte"/>.</summary>
     public EntityBuilder<TableAlias> From(CteDefinition cte) => From(cte.Name);
