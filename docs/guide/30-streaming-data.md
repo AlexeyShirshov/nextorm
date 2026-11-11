@@ -101,6 +101,35 @@ Both surfaces ([`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) and
 [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1)) and both the sync and async overloads
 take the same list.
 
+The list is **optional**, and the usual Minimal API case does not need it: values that arrive with the
+request are ordinary captured locals, each already bound by name (`@from`, `@minTotal`), so the terminal
+is called through the option-only overload and takes just the token:
+
+```csharp
+app.MapGet("/orders", async (HttpContext http, DateTime from, decimal minTotal, CancellationToken ct) =>
+{
+    using var ctx = new DataContextBuilder()
+        .UsePostgres(connectionString)
+        .CreateDataContext();
+
+    http.Response.ContentType = "application/x-ndjson; charset=utf-8";
+
+    await ctx.From<Order>()
+        .Where(o => o.CreatedAt >= from && o.Total > minTotal)   // captured -> @from, @minTotal
+        .Select(o => new { o.Id, o.CreatedAt, o.Total })
+        .WriteJsonAsync(http.Response.Body, new JsonStreamOptions
+        {
+            Mode = JsonStreamMode.NdJson,
+            IgnoreNull = true,
+        }, ct);                                                  // no positional list
+});
+```
+
+ASP.NET Core owns `Response.Body` and disposes it after the handler returns — the terminal never closes
+it — and a `CancellationToken` handler parameter is bound to `RequestAborted`, so a client that goes
+away stops the row reads and the destination writes. Reach for the positional form only when the query
+itself declares `SqlFunctions.Parameter<T>(i)` slots to feed from the call site.
+
 ### Validation exceptions and runtime errors
 
 Preflight validation — options, projection shape, member names, unsupported columns, reader binding,
