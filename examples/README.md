@@ -145,7 +145,7 @@ datasets. The examples deliberately express the original SQL without workarounds
 means one arm hit a documented gap; `DIFF` means the two arms returned different row counts; any other
 error still aborts.
 
-Last run against Testcontainers (Podman), 2026-10-30 (`NextOrmVersion = 1.0.9-rc4`):
+Last run against Testcontainers (Podman), 2026-11-11 (`NextOrmVersion = 1.0.9`):
 
 | Project | Matched in both arms | Remaining `FAIL`s (documented gaps) |
 |---|---|---|

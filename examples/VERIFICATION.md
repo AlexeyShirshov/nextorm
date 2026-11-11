@@ -1,6 +1,6 @@
 # Examples verification report
 
-> **Last verified: 2026-11-08** (the examples are now **comparison projects**: native comparison queries have
+> **Last verified: 2026-11-11** (the examples are now **comparison projects**: native comparison queries have
 > nextorm and linq2db arms, and both are executed against the same dataset; BenchmarkDotNet runs
 > through `--benchmark`). Re-run the examples whenever the engine gains features and update the tables
 > below. This file is the source of truth for "what works / what does not and why"; the topics are owned
@@ -8,9 +8,9 @@
 > [`docs/specs/`](../docs/specs). Run mechanics live in
 > [`.opencode/skills/running-examples/SKILL.md`](../.opencode/skills/running-examples/SKILL.md).
 >
-> **The numbers below are from 2026-11-08**, the run that bumped `NextOrmVersion` to `1.0.9-rc5`.
-> All four examples (postgres, mssql, clickhouse, oc-report) now consume the **published `1.0.9-rc5`
-> packages**; the mssql `ProjectReference` for the typed `Pivot` surface (#232) is still in place.
+> **The numbers below are from 2026-11-11**, the run that bumped `NextOrmVersion` to the stable `1.0.9`.
+> postgres and oc-report consume the **published `1.0.9` packages**; mssql and clickhouse keep their
+> `src/` `ProjectReference` (typed `Pivot` surface, #232), so they always exercise the current checkout.
 
 ## Environment
 
@@ -37,14 +37,16 @@ as `FAIL`; any other exception aborts the run. Comparison arms must be native on
 | `nextorm.examples.clickhouse.analytics` | **9/9** | — |
 
 `nextorm.examples.oc-report` is not a two-arm comparison: it is the NativeAOT reference app, and since
-`1.0.9-rc5` it builds against the published `nextorm` / `nextorm.sqlite` packages instead of `src/`.
-Re-verified 2026-11-08 on that switch: `dotnet publish -c Release -r linux-x64` → native binary
-8,414,024 bytes, JIT and NativeAOT output byte-identical on the synthetic database. The
+`1.0.9-rc5` it builds against the published `nextorm` / `nextorm.sqlite` packages instead of `src/`
+(now `1.0.9`). Re-verified 2026-11-11 against `1.0.9`: Release build 0W/0E and the 3-day report over the
+synthetic database exits 0. The earlier publish check on the synthetic database produced a
+8,414,024-byte native binary with JIT and NativeAOT output byte-identical. The
 real-world numbers (13 GB `opencode.db`, 3-day window, warm page cache, median of three runs) remain
 JIT 0.42 s → NativeAOT 0.12 s, 30 MB RSS, byte-identical against the app's Python twin and against the
 EF Core / Dapper.AOT arms. See its [README](nextorm.examples.oc-report/README.md).
 
-Query-by-query counts on 2026-11-08 (warm volumes, Podman, published `1.0.9-rc5`):
+Query-by-query counts on 2026-11-11 (warm volumes, Podman; published `1.0.9` for postgres, `src/` build
+for mssql and clickhouse):
 
 * postgres: aircraft delay chains 30, occupancy matrix 8, no-show 0, rolling revenue 91, ABC/XYZ 614,
   top routes 186, airport OTP 63, frequent flyers 10, passenger growth 2, cancellations 15.
@@ -68,6 +70,13 @@ MSSQL `QuarterlyPivot` is no longer a failure: the native `PIVOT` now accepts a 
 reference `WITH OrderMargins AS (<5-table join>) ... PIVOT (...)` is expressed directly.
 
 ## Actuality changes made on this verification
+
+* **Re-verified 2026-11-11 on the stable `1.0.9` packages.** `NextOrmVersion` bumped `1.0.9-rc5 → 1.0.9`
+  (postgres, oc-report); mssql and clickhouse rebuild against the current `src/` checkout as before.
+  Warm volumes, Podman: postgres **10/10**, mssql **11/11**, clickhouse **9/9**; no `[DIFF]`, no
+  `[FAIL]`, and every per-query row count is identical to the 2026-11-08 `1.0.9-rc5` run.
+  `nextorm.examples.oc-report` rebuilt Release (0W/0E) on `1.0.9` and ran the 3-day report over the
+  synthetic `seed.sql` database — exit 0.
 
 * **Re-verified after collapsing chained ordering calls into composite selectors (2026-11-08).** The
   same-direction ordering pairs in `SupplyChain`, `ProductAbcXyz`, `TerritoryYearOverYear`,

@@ -57,9 +57,8 @@ here) and pins `Microsoft.DotNet.ILCompiler` 11.0.0, matching the repository's N
 pin exists because a historical SDK default carried a NuGet audit advisory (NU1903) that the
 warnings-as-errors gate turned into an error; nextorm itself needs none of that.
 
-The project consumes the published `nextorm` / `nextorm.sqlite` `1.0.9-rc5` packages (version pinned by
-`NextOrmVersion` in [`Directory.Packages.props`](../Directory.Packages.props)), like the postgres and
-clickhouse examples.
+The project consumes the published `nextorm` / `nextorm.sqlite` `1.0.9` packages (version pinned by
+`NextOrmVersion` in [`Directory.Packages.props`](../Directory.Packages.props)), like the postgres example.
 
 ## Reference numbers
 
