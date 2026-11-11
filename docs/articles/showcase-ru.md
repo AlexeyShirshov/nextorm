@@ -22,15 +22,7 @@ var row = dataContext.From<SimpleEntity>()
 
 [https://alexeyshirshov.github.io/nextorm/comparisons/benchmarks.html](https://alexeyshirshov.github.io/nextorm/comparisons/benchmarks.html)
 
-### Бенчмарки: SQLite, асинхронные запросы
-
-Benchmark conditions: provider SQLite (`Microsoft.Data.Sqlite`); async queries; each cell is the fastest
-method for that ORM in the linked report. Machine: AMD EPYC 7763 (4 logical / 2 physical cores), .NET 11.0.0,
-BenchmarkDotNet 0.15.8 (`ShortRun` + `InProcessEmitToolchain`). As of **2026-11-11**. The last twelve rows are
-the basic-feature scenarios (Category A in the [comparison
-article](https://alexeyshirshov.github.io/nextorm/comparisons/benchmarks.html)): Nextorm through `Prepare()`
-against the compiled form of EF Core and linq2db and raw Dapper, ten queries per iteration, so each cell there
-is the per-query mean. Those rows come from the Category A suite run on **2026-11-11**.
+Ниже приведена таблица по замерам производительности для скомпилированных/подготовленных запросов для четырех провайдеров.
 
 | Method | Nextorm | Dapper | linq2db | EF Core |
 |---|:---:|:---:|:---:|:---:|
