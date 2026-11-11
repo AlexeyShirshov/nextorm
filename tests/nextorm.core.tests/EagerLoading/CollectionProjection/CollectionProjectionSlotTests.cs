@@ -162,7 +162,7 @@ public sealed class CollectionProjectionSlotTests
         EagerLoadMode mode = EagerLoadMode.SplitQuery)
     {
         var path = Path.Combine(Path.GetTempPath(), $"nextorm-t353-slot-{Guid.NewGuid():N}.db");
-        using (var conn = new SqliteConnection($"Data Source={path}"))
+        using (var conn = new SqliteConnection($"Data Source={path};Pooling=False"))
         {
             conn.Open();
             using var cmd = conn.CreateCommand();
@@ -182,7 +182,7 @@ public sealed class CollectionProjectionSlotTests
         }
 
         var context = new SqliteDataContext(
-            $"Data Source={path}",
+            $"Data Source={path};Pooling=False",
             new DataContextBuilder().UseEagerLoadMode(mode));
         var recorder = new SqlRecordingInterceptor();
         context.AddInterceptor(recorder);

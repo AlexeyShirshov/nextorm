@@ -32,7 +32,7 @@ internal static class PreparedCommandHarness
     internal static string CreateSeededFile()
     {
         var path = Path.Combine(Path.GetTempPath(), $"nextorm-t333-{Guid.NewGuid():N}.db");
-        using var seed = new SqliteConnection($"Data Source={path}");
+        using var seed = new SqliteConnection($"Data Source={path};Pooling=False");
         seed.Open();
         using var command = seed.CreateCommand();
         command.CommandText =
@@ -45,7 +45,7 @@ internal static class PreparedCommandHarness
     /// <summary>Opens an instrumented connection over an already seeded database file.</summary>
     internal static ProbeSqliteConnection OpenProbe(string path)
     {
-        var connection = new ProbeSqliteConnection($"Data Source={path}");
+        var connection = new ProbeSqliteConnection($"Data Source={path};Pooling=False");
         connection.Open();
         return connection;
     }

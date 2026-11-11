@@ -39,7 +39,7 @@ public class EagerTerminalGuardTests
     private static (SqliteDataContext Ctx, string Path) CreateDb(EagerLoadMode? contextMode = null)
     {
         var path = Path.Combine(Path.GetTempPath(), $"nextorm-terminal-guard-{Guid.NewGuid():N}.db");
-        using (var conn = new SqliteConnection($"Data Source={path}"))
+        using (var conn = new SqliteConnection($"Data Source={path};Pooling=False"))
         {
             conn.Open();
             using var cmd = conn.CreateCommand();
@@ -56,7 +56,7 @@ public class EagerTerminalGuardTests
         var builder = new DataContextBuilder();
         if (contextMode is { } mode)
             builder.UseEagerLoadMode(mode);
-        var ctx = new SqliteDataContext($"Data Source={path}", builder);
+        var ctx = new SqliteDataContext($"Data Source={path};Pooling=False", builder);
         // Declare the relationships so JoinInto can resolve the collection navigation.
         ctx.From<TerminalGuardParent>(b => b
             .HasMany(p => p.Children, c => c.ParentId)

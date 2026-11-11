@@ -117,7 +117,7 @@ public sealed class CollectionProjectionCardinalityTests
         Witness witness = Witness.Valid)
     {
         var path = Path.Combine(Path.GetTempPath(), $"nextorm-t353-guard-{Guid.NewGuid():N}.db");
-        using (var conn = new SqliteConnection($"Data Source={path}"))
+        using (var conn = new SqliteConnection($"Data Source={path};Pooling=False"))
         {
             conn.Open();
             using var cmd = conn.CreateCommand();
@@ -152,7 +152,7 @@ public sealed class CollectionProjectionCardinalityTests
             cmd.ExecuteNonQuery();
         }
 
-        var context = new SqliteDataContext($"Data Source={path}", new DataContextBuilder().UseEagerLoadMode(mode));
+        var context = new SqliteDataContext($"Data Source={path};Pooling=False", new DataContextBuilder().UseEagerLoadMode(mode));
         _ = context.From<Parent>(cfg => cfg
             .HasMany(p => p.Items, i => i.ParentId)
             .HasOneToOne(p => p.Contact, p => p.Id, c => c.ParentId));

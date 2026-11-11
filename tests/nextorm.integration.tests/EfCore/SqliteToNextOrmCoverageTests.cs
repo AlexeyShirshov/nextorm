@@ -403,7 +403,7 @@ public sealed class SqliteToNextOrmCoverageTests
 
         public SqliteFixture()
         {
-            Options = new DbContextOptionsBuilder<TocContext>().UseSqlite($"Data Source={_path}").Options;
+            Options = new DbContextOptionsBuilder<TocContext>().UseSqlite($"Data Source={_path};Pooling=False").Options;
             Db = new TocContext(Options);
             Db.Database.EnsureCreated();
 

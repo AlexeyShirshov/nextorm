@@ -436,7 +436,7 @@ public class RawSourceBindingColdRegistrationTests
         var path = Path.Combine(Path.GetTempPath(), $"nextorm-rsb-cold-class-{Guid.NewGuid():N}.db");
         try
         {
-            using (var conn = new SqliteConnection($"Data Source={path}"))
+            using (var conn = new SqliteConnection($"Data Source={path};Pooling=False"))
             {
                 conn.Open();
                 using var cmd = conn.CreateCommand();
@@ -447,7 +447,7 @@ public class RawSourceBindingColdRegistrationTests
                 cmd.ExecuteNonQuery();
             }
 
-            using var ctx = new SqliteDataContext($"Data Source={path}", new DataContextBuilder());
+            using var ctx = new SqliteDataContext($"Data Source={path};Pooling=False", new DataContextBuilder());
 
             DataContextCache.Metadata.ContainsKey(typeof(ColdClassEntity)).Should().BeFalse(
                 "the configured metadata cache is genuinely cold before the bind");

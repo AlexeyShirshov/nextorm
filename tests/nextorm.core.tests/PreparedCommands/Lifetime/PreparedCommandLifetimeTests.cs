@@ -185,7 +185,7 @@ public class PreparedCommandLifetimeTests
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static WeakReference ExecuteOnAbandonedConnection(DbPreparedQueryCommand<int> prepared, string path)
     {
-        var connection = new ProbeSqliteConnection($"Data Source={path}");
+        var connection = new ProbeSqliteConnection($"Data Source={path};Pooling=False");
         connection.Open();
         var executor = PreparedCommandHarness.CreateExecutor(new ProbeHarnessContext(), new ProbeConnectionManager(connection));
         using (var owner = executor.OpenResultReader(prepared, ReadOnlySpan<object?>.Empty))

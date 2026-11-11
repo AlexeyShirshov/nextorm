@@ -27,7 +27,7 @@ public class EagerLoadingSqlGenerationTests
     private static (SqliteDataContext Ctx, string Path) CreateDb()
     {
         var path = Path.Combine(Path.GetTempPath(), $"nextorm-eager-{Guid.NewGuid():N}.db");
-        using (var conn = new SqliteConnection($"Data Source={path}"))
+        using (var conn = new SqliteConnection($"Data Source={path};Pooling=False"))
         {
             conn.Open();
             using var cmd = conn.CreateCommand();
@@ -39,7 +39,7 @@ public class EagerLoadingSqlGenerationTests
             cmd.ExecuteNonQuery();
         }
 
-        return (new SqliteDataContext($"Data Source={path}", new DataContextBuilder()), path);
+        return (new SqliteDataContext($"Data Source={path};Pooling=False", new DataContextBuilder()), path);
     }
 
     [Fact]
@@ -129,7 +129,7 @@ public class EagerLoadingSqlGenerationTests
     private static (SqliteDataContext Ctx, string Path) CreateBulkDb(int count)
     {
         var path = Path.Combine(Path.GetTempPath(), $"nextorm-eager-bulk-{Guid.NewGuid():N}.db");
-        using (var conn = new SqliteConnection($"Data Source={path}"))
+        using (var conn = new SqliteConnection($"Data Source={path};Pooling=False"))
         {
             conn.Open();
             using var cmd = conn.CreateCommand();
@@ -139,7 +139,7 @@ public class EagerLoadingSqlGenerationTests
             cmd.ExecuteNonQuery();
         }
 
-        var ctx = new SqliteDataContext($"Data Source={path}", new DataContextBuilder());
+        var ctx = new SqliteDataContext($"Data Source={path};Pooling=False", new DataContextBuilder());
         const int batchSize = 250;
         for (var offset = 1; offset <= count; offset += batchSize)
         {
@@ -226,7 +226,7 @@ public class EagerLoadingSqlGenerationTests
     {
         var interceptor = new SqlRecordingInterceptor();
         var path = Path.Combine(Path.GetTempPath(), $"nextorm-eager-two-{Guid.NewGuid():N}.db");
-        using (var conn = new SqliteConnection($"Data Source={path}"))
+        using (var conn = new SqliteConnection($"Data Source={path};Pooling=False"))
         {
             conn.Open();
             using var seed = conn.CreateCommand();
@@ -240,7 +240,7 @@ public class EagerLoadingSqlGenerationTests
             seed.ExecuteNonQuery();
         }
 
-        var ctx = new SqliteDataContext($"Data Source={path}", new DataContextBuilder());
+        var ctx = new SqliteDataContext($"Data Source={path};Pooling=False", new DataContextBuilder());
         ctx.AddInterceptor(interceptor);
         try
         {
@@ -275,7 +275,7 @@ public class EagerLoadingSqlGenerationTests
     private static (SqliteDataContext Ctx, string Path) CreateDbWithEagerMode(EagerLoadMode contextMode)
     {
         var path = Path.Combine(Path.GetTempPath(), $"nextorm-eager-mode-{Guid.NewGuid():N}.db");
-        using (var conn = new SqliteConnection($"Data Source={path}"))
+        using (var conn = new SqliteConnection($"Data Source={path};Pooling=False"))
         {
             conn.Open();
             using var cmd = conn.CreateCommand();
@@ -287,7 +287,7 @@ public class EagerLoadingSqlGenerationTests
             cmd.ExecuteNonQuery();
         }
 
-        return (new SqliteDataContext($"Data Source={path}", new DataContextBuilder().UseEagerLoadMode(contextMode)), path);
+        return (new SqliteDataContext($"Data Source={path};Pooling=False", new DataContextBuilder().UseEagerLoadMode(contextMode)), path);
     }
 
     [Fact]
@@ -836,7 +836,7 @@ public class EagerLoadingSqlGenerationTests
     {
         var interceptor = new SqlRecordingInterceptor();
         var path = Path.Combine(Path.GetTempPath(), $"nextorm-joininto-mode-{Guid.NewGuid():N}.db");
-        using (var conn = new SqliteConnection($"Data Source={path}"))
+        using (var conn = new SqliteConnection($"Data Source={path};Pooling=False"))
         {
             conn.Open();
             using var seed = conn.CreateCommand();
@@ -848,7 +848,7 @@ public class EagerLoadingSqlGenerationTests
             seed.ExecuteNonQuery();
         }
 
-        var ctx = new SqliteDataContext($"Data Source={path}", new DataContextBuilder().UseEagerLoadMode(contextMode));
+        var ctx = new SqliteDataContext($"Data Source={path};Pooling=False", new DataContextBuilder().UseEagerLoadMode(contextMode));
         ctx.AddInterceptor(interceptor);
         try
         {
@@ -878,7 +878,7 @@ public class EagerLoadingSqlGenerationTests
     private static (SqliteDataContext Ctx, string Path) CreateMixedDb(EagerLoadMode contextMode)
     {
         var path = Path.Combine(Path.GetTempPath(), $"nextorm-mixed-{Guid.NewGuid():N}.db");
-        using (var conn = new SqliteConnection($"Data Source={path}"))
+        using (var conn = new SqliteConnection($"Data Source={path};Pooling=False"))
         {
             conn.Open();
             using var seed = conn.CreateCommand();
@@ -892,7 +892,7 @@ public class EagerLoadingSqlGenerationTests
             seed.ExecuteNonQuery();
         }
 
-        return (new SqliteDataContext($"Data Source={path}", new DataContextBuilder().UseEagerLoadMode(contextMode)), path);
+        return (new SqliteDataContext($"Data Source={path};Pooling=False", new DataContextBuilder().UseEagerLoadMode(contextMode)), path);
     }
 
     [Theory]
@@ -1275,7 +1275,7 @@ public class EagerLoadingSqlGenerationTests
     private static (SqliteDataContext Ctx, string Path) CreateNestedDb()
     {
         var path = Path.Combine(Path.GetTempPath(), $"nextorm-eager-nested-{Guid.NewGuid():N}.db");
-        using (var conn = new SqliteConnection($"Data Source={path}"))
+        using (var conn = new SqliteConnection($"Data Source={path};Pooling=False"))
         {
             conn.Open();
             using var cmd = conn.CreateCommand();
@@ -1289,7 +1289,7 @@ public class EagerLoadingSqlGenerationTests
             cmd.ExecuteNonQuery();
         }
 
-        return (new SqliteDataContext($"Data Source={path}", new DataContextBuilder()), path);
+        return (new SqliteDataContext($"Data Source={path};Pooling=False", new DataContextBuilder()), path);
     }
 
     [Fact]
@@ -1369,7 +1369,7 @@ public class EagerLoadingSqlGenerationTests
     private static (SqliteDataContext Ctx, string Path) CreateRepeatedRootDb()
     {
         var path = Path.Combine(Path.GetTempPath(), $"nextorm-eager-repeat-root-{Guid.NewGuid():N}.db");
-        using (var conn = new SqliteConnection($"Data Source={path}"))
+        using (var conn = new SqliteConnection($"Data Source={path};Pooling=False"))
         {
             conn.Open();
             using var cmd = conn.CreateCommand();
@@ -1381,7 +1381,7 @@ public class EagerLoadingSqlGenerationTests
             cmd.ExecuteNonQuery();
         }
 
-        return (new SqliteDataContext($"Data Source={path}", new DataContextBuilder()), path);
+        return (new SqliteDataContext($"Data Source={path};Pooling=False", new DataContextBuilder()), path);
     }
 
     [Fact]

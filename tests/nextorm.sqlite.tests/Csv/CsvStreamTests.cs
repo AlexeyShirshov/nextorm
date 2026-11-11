@@ -90,7 +90,7 @@ public class CsvStreamTests
     private static SqliteDataContext CreateDb(out string path)
     {
         path = Path.Combine(Path.GetTempPath(), $"nextorm-csv-{Guid.NewGuid():N}.db");
-        using (var connection = new SqliteConnection($"Data Source={path}"))
+        using (var connection = new SqliteConnection($"Data Source={path};Pooling=False"))
         {
             connection.Open();
             using (var create = connection.CreateCommand())
@@ -117,7 +117,7 @@ public class CsvStreamTests
             insert.ExecuteNonQuery();
         }
 
-        return new SqliteDataContext($"Data Source={path}", new DataContextBuilder());
+        return new SqliteDataContext($"Data Source={path};Pooling=False", new DataContextBuilder());
     }
 
     private static string Utf8(MemoryStream stream) => Encoding.UTF8.GetString(stream.ToArray());
@@ -621,7 +621,7 @@ public class CsvStreamTests
     private static SqliteDataContext CreateBlobDb(out string path, byte[] payload)
     {
         path = Path.Combine(Path.GetTempPath(), $"nextorm-csvblob-{Guid.NewGuid():N}.db");
-        using (var connection = new SqliteConnection($"Data Source={path}"))
+        using (var connection = new SqliteConnection($"Data Source={path};Pooling=False"))
         {
             connection.Open();
             using (var create = connection.CreateCommand())
@@ -637,7 +637,7 @@ public class CsvStreamTests
             insert.ExecuteNonQuery();
         }
 
-        return new SqliteDataContext($"Data Source={path}", new DataContextBuilder());
+        return new SqliteDataContext($"Data Source={path};Pooling=False", new DataContextBuilder());
     }
 
     /// <summary>

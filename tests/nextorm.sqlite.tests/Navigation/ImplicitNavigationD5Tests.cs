@@ -25,7 +25,7 @@ public class ImplicitNavigationD5Tests
     private static (SqliteDataContext Ctx, string Path) CreateDb()
     {
         var path = Path.Combine(Path.GetTempPath(), $"nextorm-d5-nav-{Guid.NewGuid():N}.db");
-        using (var conn = new SqliteConnection($"Data Source={path}"))
+        using (var conn = new SqliteConnection($"Data Source={path};Pooling=False"))
         {
             conn.Open();
             using var cmd = conn.CreateCommand();
@@ -33,7 +33,7 @@ public class ImplicitNavigationD5Tests
             cmd.ExecuteNonQuery();
         }
 
-        var ctx = new SqliteDataContext($"Data Source={path}", new DataContextBuilder());
+        var ctx = new SqliteDataContext($"Data Source={path};Pooling=False", new DataContextBuilder());
         ctx.EnsureConnectionOpen();
         ctx.From<D5Parent>();
         ctx.From<D5Child>(b => b.HasOne(c => c.Parent, c => c.ParentId));

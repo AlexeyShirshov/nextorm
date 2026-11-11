@@ -297,16 +297,12 @@ public sealed class EfCoreQueryFilterBridgeTests
 
         public SqliteFixture()
             => Options = new DbContextOptionsBuilder<EfQueryFilterContext>()
-                .UseSqlite($"Data Source={_path}")
+                .UseSqlite($"Data Source={_path};Pooling=False")
                 .Options;
 
         public DbContextOptions<EfQueryFilterContext> Options { get; }
 
-        public void Dispose()
-        {
-            if (File.Exists(_path))
-                File.Delete(_path);
-        }
+        public void Dispose() => SqliteTempFile.Delete(_path);
     }
 
     private sealed class NamedRow

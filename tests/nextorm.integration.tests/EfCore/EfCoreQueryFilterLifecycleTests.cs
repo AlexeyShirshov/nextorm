@@ -285,7 +285,7 @@ public sealed class EfCoreQueryFilterLifecycleTests
 
         public SqliteFixture()
             => Options = new DbContextOptionsBuilder<LifecycleContext>()
-                .UseSqlite($"Data Source={_path}")
+                .UseSqlite($"Data Source={_path};Pooling=False")
                 .Options;
 
         public DbContextOptions<LifecycleContext> Options { get; }

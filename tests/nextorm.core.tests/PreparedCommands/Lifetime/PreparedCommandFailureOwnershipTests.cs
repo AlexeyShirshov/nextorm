@@ -191,7 +191,7 @@ public class PreparedCommandFailureOwnershipTests
         var path = PreparedCommandHarness.CreateSeededFile();
         try
         {
-            using var connection = new ProbeSqliteConnection($"Data Source={path}");
+            using var connection = new ProbeSqliteConnection($"Data Source={path};Pooling=False");
             var prepared = PreparedCommandHarness.IntPrepared("select id from pdca_t333_rows order by id", PreparedCommandCache.Connection);
             var executor = PreparedCommandHarness.CreateExecutor(new ProbeHarnessContext(), new ProbeConnectionManager(connection));
 
@@ -220,7 +220,7 @@ public class PreparedCommandFailureOwnershipTests
         var path = PreparedCommandHarness.CreateSeededFile();
         try
         {
-            using var connection = new ProbeSqliteConnection($"Data Source={path}");
+            using var connection = new ProbeSqliteConnection($"Data Source={path};Pooling=False");
             var prepared = PreparedCommandHarness.IntPrepared("select id from pdca_t333_rows order by id", PreparedCommandCache.Connection);
             var executor = PreparedCommandHarness.CreateExecutor(new ProbeHarnessContext(), new ProbeConnectionManager(connection));
             using var source = new CancellationTokenSource();

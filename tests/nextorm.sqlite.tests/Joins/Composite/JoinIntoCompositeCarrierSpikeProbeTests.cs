@@ -114,7 +114,7 @@ public class JoinIntoCompositeCarrierSpikeProbeTests
     private static (SqliteDataContext Ctx, string Path) CreateDb()
     {
         var path = Path.Combine(Path.GetTempPath(), $"nextorm-composite-carrier-{Guid.NewGuid():N}.db");
-        using (var conn = new SqliteConnection($"Data Source={path}"))
+        using (var conn = new SqliteConnection($"Data Source={path};Pooling=False"))
         {
             conn.Open();
             using var cmd = conn.CreateCommand();
@@ -130,7 +130,7 @@ public class JoinIntoCompositeCarrierSpikeProbeTests
             cmd.ExecuteNonQuery();
         }
 
-        var ctx = new SqliteDataContext($"Data Source={path}", new DataContextBuilder());
+        var ctx = new SqliteDataContext($"Data Source={path};Pooling=False", new DataContextBuilder());
         ctx.EnsureConnectionOpen();
         return (ctx, path);
     }
@@ -167,7 +167,7 @@ public class JoinIntoCompositeCarrierSpikeProbeTests
         RegisterThreeComponentJunction();
 
         var path = Path.Combine(Path.GetTempPath(), $"nextorm-composite-carrier3-{Guid.NewGuid():N}.db");
-        using (var conn = new SqliteConnection($"Data Source={path}"))
+        using (var conn = new SqliteConnection($"Data Source={path};Pooling=False"))
         {
             conn.Open();
             using var cmd = conn.CreateCommand();
@@ -181,7 +181,7 @@ public class JoinIntoCompositeCarrierSpikeProbeTests
             cmd.ExecuteNonQuery();
         }
 
-        using var ctx = new SqliteDataContext($"Data Source={path}", new DataContextBuilder());
+        using var ctx = new SqliteDataContext($"Data Source={path};Pooling=False", new DataContextBuilder());
         try
         {
             ctx.EnsureConnectionOpen();
@@ -253,7 +253,7 @@ public class JoinIntoCompositeCarrierSpikeProbeTests
     private static (SqliteDataContext Ctx, string Path) CreateJunctionDb(string ddl)
     {
         var path = Path.Combine(Path.GetTempPath(), $"nextorm-composite-matrix-{Guid.NewGuid():N}.db");
-        using (var conn = new SqliteConnection($"Data Source={path}"))
+        using (var conn = new SqliteConnection($"Data Source={path};Pooling=False"))
         {
             conn.Open();
             using var cmd = conn.CreateCommand();
@@ -261,7 +261,7 @@ public class JoinIntoCompositeCarrierSpikeProbeTests
             cmd.ExecuteNonQuery();
         }
 
-        var ctx = new SqliteDataContext($"Data Source={path}", new DataContextBuilder());
+        var ctx = new SqliteDataContext($"Data Source={path};Pooling=False", new DataContextBuilder());
         ctx.EnsureConnectionOpen();
         return (ctx, path);
     }

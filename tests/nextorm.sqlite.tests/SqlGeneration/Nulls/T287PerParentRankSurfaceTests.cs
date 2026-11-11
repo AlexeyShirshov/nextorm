@@ -61,7 +61,7 @@ public sealed class T287PerParentRankSurfaceTests
     private static (SqliteDataContext Ctx, string Path) CreateDb()
     {
         var path = Path.Combine(Path.GetTempPath(), $"nextorm-t287-rank-{Guid.NewGuid():N}.db");
-        using (var conn = new SqliteConnection($"Data Source={path}"))
+        using (var conn = new SqliteConnection($"Data Source={path};Pooling=False"))
         {
             conn.Open();
             using var cmd = conn.CreateCommand();
@@ -75,7 +75,7 @@ public sealed class T287PerParentRankSurfaceTests
             cmd.ExecuteNonQuery();
         }
 
-        return (new SqliteDataContext($"Data Source={path}", new DataContextBuilder()), path);
+        return (new SqliteDataContext($"Data Source={path};Pooling=False", new DataContextBuilder()), path);
     }
 
     private static readonly
