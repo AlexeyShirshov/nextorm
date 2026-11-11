@@ -55,6 +55,18 @@ internal static class QueryPlanStore
     [ThreadStatic]
     private static Dictionary<int, List<RawCandidate>>? _rawIndex;
 
+    /// <summary>
+    /// Native candidate index (I7/M2): the value-agnostic shape of a raw query mapped to the plan that
+    /// was compiled for it. It shares the store's generation transition, so <see cref="Clear"/> leaves
+    /// no usable alias, and it is thread-local for the same reason the normalized dictionary is.
+    /// </summary>
+    [ThreadStatic]
+    private static Dictionary<int, List<NativeCandidate>>? _nativeIndex;
+
+    private static int _nativeHits;
+    private static int _nativePublishes;
+    private static int _nativeMisses;
+
     private static Dictionary<Key, Entry> Cache
     {
         get
@@ -87,6 +99,150 @@ internal static class QueryPlanStore
         }
     }
 
+    private static Dictionary<int, List<NativeCandidate>> NativeIndex
+    {
+        get
+        {
+            var generation = Volatile.Read(ref _generation);
+            if (_nativeIndex is null || _cacheGeneration != generation)
+                _nativeIndex = [];
+
+            return _nativeIndex;
+        }
+    }
+
+    /// <summary>Number of native shapes served from the index. Diagnostic only.</summary>
+    internal static int NativeHits => Volatile.Read(ref _nativeHits);
+
+    /// <summary>Number of native shapes published after a miss. Diagnostic only.</summary>
+    internal static int NativePublishes => Volatile.Read(ref _nativePublishes);
+
+    /// <summary>Number of native probes that found no candidate. Diagnostic only.</summary>
+    internal static int NativeMisses => Volatile.Read(ref _nativeMisses);
+
+    /// <summary>Resets the native-route diagnostic counters. Test seam.</summary>
+    internal static void ResetNativeCounters()
+    {
+        Volatile.Write(ref _nativeHits, 0);
+        Volatile.Write(ref _nativePublishes, 0);
+        Volatile.Write(ref _nativeMisses, 0);
+    }
+
+    /// <summary>
+    /// Probes the native index for a plan compiled for the given value-agnostic shape. The hash is only
+    /// an index; every candidate in the bucket is verified with a structural comparison, so a collision
+    /// cannot select a wrong plan.
+    /// </summary>
+    /// <param name="header">The non-expression dimensions of the request.</param>
+    /// <param name="root">The fresh expression graph.</param>
+    /// <param name="candidate">The matching candidate, when one was verified.</param>
+    /// <returns><see langword="true"/> when an exact structural match was found.</returns>
+    internal static bool TryGetNative(in ShapeHeader header, System.Linq.Expressions.LambdaExpression? root, out NativeCandidate? candidate)
+    {
+        candidate = null;
+        var index = NativeIndex;
+        if (index.Count == 0)
+            return false;
+
+        if (!ShapeIdentity.TryHash(header, root, out var hash))
+            return false;
+
+        if (!index.TryGetValue(hash, out var bucket) || bucket.Count == 0)
+        {
+            Interlocked.Increment(ref _nativeMisses);
+            return false;
+        }
+
+        for (var i = 0; i < bucket.Count; i++)
+        {
+            var entry = bucket[i];
+            if (!ShapeIdentity.Matches(entry.Shape, header, root))
+                continue;
+
+            Interlocked.Increment(ref _nativeHits);
+            candidate = entry;
+            return true;
+        }
+
+        Interlocked.Increment(ref _nativeMisses);
+        return false;
+    }
+
+    /// <summary>
+    /// Probes the native index for a plan compiled for a three-graph value-agnostic shape (filter,
+    /// grouping key, projection). Same contract as the single-graph overload: the hash indexes, the
+    /// structural comparison proves, and a collision cannot select a wrong plan.
+    /// </summary>
+    /// <param name="header">The non-expression dimensions of the request.</param>
+    /// <param name="root0">The fresh filter graph, or <see langword="null"/>.</param>
+    /// <param name="root1">The fresh grouping graph, or <see langword="null"/>.</param>
+    /// <param name="root2">The fresh projection graph, or <see langword="null"/>.</param>
+    /// <param name="candidate">The matching candidate, when one was verified.</param>
+    /// <returns><see langword="true"/> when an exact structural match was found.</returns>
+    internal static bool TryGetNative(
+        in ShapeHeader header,
+        System.Linq.Expressions.LambdaExpression? root0,
+        System.Linq.Expressions.LambdaExpression? root1,
+        System.Linq.Expressions.LambdaExpression? root2,
+        out NativeCandidate? candidate)
+    {
+        candidate = null;
+        var index = NativeIndex;
+        if (index.Count == 0)
+            return false;
+
+        if (!ShapeIdentity.TryHash(header, root0, root1, root2, out var hash))
+            return false;
+
+        if (!index.TryGetValue(hash, out var bucket) || bucket.Count == 0)
+        {
+            Interlocked.Increment(ref _nativeMisses);
+            return false;
+        }
+
+        for (var i = 0; i < bucket.Count; i++)
+        {
+            var entry = bucket[i];
+            if (!ShapeIdentity.Matches(entry.Shape, header, root0, root1, root2))
+                continue;
+
+            Interlocked.Increment(ref _nativeHits);
+            candidate = entry;
+            return true;
+        }
+
+        Interlocked.Increment(ref _nativeMisses);
+        return false;
+    }
+
+    /// <summary>Publishes a compiled holder under its value-agnostic shape (a no-op replace on a collision).</summary>
+    /// <param name="shape">The shape the holder was compiled for.</param>
+    /// <param name="holder">The compiled holder.</param>
+    /// <param name="binder">The value binder for the holder's parameters.</param>
+    internal static void SetNative(ShapeKey shape, IDbCommandHolder holder, NativeBinder binder)
+    {
+        var index = NativeIndex;
+        if (!index.TryGetValue(shape.Hash, out var bucket))
+        {
+            bucket = new List<NativeCandidate>(2);
+            index[shape.Hash] = bucket;
+        }
+
+        var candidate = new NativeCandidate(shape, holder, binder);
+        for (var i = 0; i < bucket.Count; i++)
+        {
+            if (ReferenceEquals(bucket[i].Shape, shape))
+            {
+                bucket[i] = candidate;
+                Interlocked.Increment(ref _nativePublishes);
+                return;
+            }
+        }
+
+        bucket.Add(candidate);
+        Interlocked.Increment(ref _nativePublishes);
+    }
+
     internal static bool TryGet(Type contextType, QueryPlan plan, out IDbCommandHolder? holder, out QueryPlan? storedPlan)
     {
         if (Cache.TryGetValue(new Key(contextType, plan), out var entry))
@@ -105,6 +261,52 @@ internal static class QueryPlanStore
     {
         var key = new Key(contextType, plan);
         Cache[key] = new Entry(key, holder);
+    }
+
+    /// <summary>
+    /// Looks up a published raw candidate by its descriptor-free fingerprint. The warm probe reads the
+    /// live command (no descriptor is materialized), so the candidate is selected by structural
+    /// fingerprint alone; the caller's staged normalized-key check remains the correctness gate against
+    /// a collision.
+    /// </summary>
+    /// <param name="contextType">The provider context type the plan belongs to.</param>
+    /// <param name="fingerprint">The structural fingerprint of the fresh command graph.</param>
+    /// <param name="plan">The stored normalized key of the matched candidate.</param>
+    /// <returns><see langword="true"/> when a published candidate with a live owner was found.</returns>
+    internal static bool TryGetRawFingerprint(Type contextType, int fingerprint, out QueryPlan? plan)
+    {
+        plan = null;
+
+        var generation = Volatile.Read(ref _generation);
+        var cache = Cache; // performs the shared generation transition for both indexes
+        if (cache.Count == 0)
+            return false;
+
+        if (!RawIndex.TryGetValue(fingerprint, out var bucket) || bucket.Count == 0)
+            return false;
+
+        for (var i = 0; i < bucket.Count; i++)
+        {
+            var candidate = bucket[i];
+            if (candidate.Shape.Fingerprint != fingerprint)
+                continue;
+
+            // The owner must still be live under the historical normalized key and hold the published holder.
+            if (!cache.TryGetValue(new Key(contextType, candidate.Plan), out var entry))
+                continue;
+
+            if (!ReferenceEquals(entry.Holder, candidate.Holder))
+                continue;
+
+            // Generation recheck before the fast path commits: a Clear observed here rejects the candidate.
+            if (Volatile.Read(ref _generation) != generation)
+                return false;
+
+            plan = candidate.Plan;
+            return true;
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -176,6 +378,22 @@ internal static class QueryPlanStore
         }
 
         bucket.Add(new RawCandidate(plan, holder, shape));
+    }
+
+    /// <summary>
+    /// One published native candidate: the shape it belongs to, the compiled holder that executes it and
+    /// the binder that refreshes the holder's parameters from the current closures.
+    /// </summary>
+    internal sealed class NativeCandidate(ShapeKey shape, IDbCommandHolder holder, NativeBinder binder)
+    {
+        /// <summary>The published value-agnostic shape.</summary>
+        internal ShapeKey Shape { get; } = shape;
+
+        /// <summary>The compiled holder the native route executes.</summary>
+        internal IDbCommandHolder Holder { get; } = holder;
+
+        /// <summary>The binder for the holder's parameters.</summary>
+        internal NativeBinder Binder { get; } = binder;
     }
 
     internal static void Clear() => Interlocked.Increment(ref _generation);

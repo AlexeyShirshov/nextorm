@@ -425,6 +425,40 @@ public sealed class CachedPreparationRecipeTests
     private static QueryCommand<int> DistinctShape(IDataContext ctx)
         => ctx.From<SimpleEntity>().Where(x => x.Id > 0).Select(x => x.Id).Distinct();
 
+    /// <summary>
+    /// The fingerprint must hash the RAW sort key. A fresh command's <c>Sorting.PreparedExpression</c>
+    /// is still null, so hashing the prepared form would put two different <c>ORDER BY</c> members into
+    /// one bucket and let an invalid member match a valid plan.
+    /// </summary>
+    [Fact]
+    public void Fingerprint_DistinguishesDifferentOrderByMembers()
+    {
+        using var ctx = CreateSqlServerContext();
+        _ = ctx.From<SortProbeEntity>();
+
+        var byId = QueryCommand.ComputeRawFingerprint(ctx.From<SortProbeEntity>().Select(x => new { x.Id }).OrderBy(x => x.Id));
+        var byName = QueryCommand.ComputeRawFingerprint(ctx.From<SortProbeEntity>().Select(x => new { Name = x.Name }).OrderBy(x => x.Name));
+
+        byId.Should().NotBeNull();
+        byName.Should().NotBeNull();
+        byId.Should().NotBe(byName, "two different ORDER BY members are two different raw graphs");
+    }
+
+    /// <summary>Probe entity with two sortable columns (the shared test entity has only <c>Id</c>).</summary>
+    private sealed class SortProbeEntity
+    {
+        public int Id { get; set; }
+        public string? Name { get; set; }
+    }
+
+    /// <summary>The T7 paging arm shape: projection + ORDER BY + OFFSET/LIMIT.</summary>
+    private static QueryCommand<int> SortedPageShape(IDataContext ctx)
+        => ctx.From<SimpleEntity>()
+            .Select(x => x.Id)
+            .OrderBy(x => x)
+            .Offset(10)
+            .Limit(5);
+
     // --- 1. RawDescriptorDifferential ----------------------------------------------------------------
 
     [Fact]
@@ -518,6 +552,30 @@ public sealed class CachedPreparationRecipeTests
         QueryPlanner.RecipeApplyMismatches.Should().Be(0);
         QueryPlanner.RecipeReuses.Should().Be(1);
         second.Should().Be(first);
+    }
+
+    /// <summary>
+    /// A sorted query must reuse its raw recipe like an unsorted one. Preparation fills
+    /// <c>Sorting.PreparedExpression</c> in place, and that field is part of the normalized plan key, so
+    /// a staged apply that left the fresh command's raw sort keys in place would produce a key that
+    /// differs from the stored one and reject the candidate on every call.
+    /// </summary>
+    [Fact]
+    public void Recipe_SortedPageShape_ReusesInsteadOfRejectingTheStagedKey()
+    {
+        ResetRecipeCache();
+        using var ctx = CreateSqlServerContext();
+
+        var first = PrepareSql(ctx, SortedPageShape(ctx));
+        QueryPlanner.RecipePublishes.Should().Be(1);
+
+        var second = PrepareSql(ctx, SortedPageShape(ctx));
+
+        QueryPlanner.RecipeReuses.Should().Be(1);
+        QueryPlanner.RecipeApplyMismatches.Should().Be(0,
+            "the staged apply must adopt the prepared sort keys, or the reconciled key can never match");
+        second.Should().Be(first);
+        second.Should().ContainEquivalentOf("order by").And.ContainEquivalentOf("offset 10");
     }
 
     /// <summary>

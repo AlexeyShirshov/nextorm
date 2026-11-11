@@ -39,8 +39,15 @@ Usage
     python3 tools/integration/run-integration-capped.py --class \\
         nextorm.integration.tests.PostgresIntegrationTests
 
+    # the canonical full-suite evidence run (+ skip-budget gate)
+    python3 tools/integration/run-integration-capped.py --full
+
     # see the exact commands, run nothing
     python3 tools/integration/run-integration-capped.py --dry-run
+
+A *bare* full-suite run (``dotnet run`` without the wrapper) is not allowed on a memory-tight host:
+it holds the Podman WSL2 VM next to the Ubuntu distro and takes the OpenCode server down with it.
+``--full`` is the blessed way to produce the skip-budget evidence.
 
 Exit code: 0 when every requested class passed, 1 otherwise.
 
@@ -150,6 +157,17 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--gap", type=int, default=10, help="seconds between classes (default: %(default)s)")
     parser.add_argument("--log-dir", type=pathlib.Path, default=DEFAULT_LOG_DIR, help="default: %(default)s")
     parser.add_argument("--dry-run", action="store_true", help="print the commands and exit")
+    parser.add_argument(
+        "--full",
+        action="store_true",
+        help=(
+            "run the CANONICAL full suite once (no -class, -notrait Category=Diagnostic) under the same "
+            "caps, then check tests/nextorm.integration.tests/skip-budget.json against its log. This is "
+            "the only supported way to produce skip-budget evidence on a memory-tight host: a plain "
+            "full-suite run holds the Podman WSL2 VM next to the Ubuntu one and takes the OpenCode "
+            "server down with it."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -231,29 +249,13 @@ def cgroup_shim(args: argparse.Namespace) -> list[str]:
     return ["sh", "-c", script, "sh"]
 
 
-def build_command(args: argparse.Namespace, fqcn: str, caps: bool) -> list[str]:
-    inner: list[str] = []
+def wrap_guarded(args: argparse.Namespace, inner: list[str], caps: bool) -> list[str]:
     if args.timeout > 0:
-        inner += ["timeout", str(args.timeout)]
+        inner = ["timeout", str(args.timeout)] + inner
     if args.io_priority >= 0 and shutil.which("ionice"):
-        inner += ["ionice", "-c", "2", "-n", str(args.io_priority)]
-    inner += cgroup_shim(args) if caps else []
-    inner += [
-        "dotnet",
-        "run",
-        "--project",
-        PROJECT,
-        "-c",
-        args.configuration,
-        "--no-build",
-        "--",
-        "-noColor",
-        "-notrait",
-        "Category=Diagnostic",
-        "-class",
-        fqcn,
-    ]
-
+        inner = ["ionice", "-c", "2", "-n", str(args.io_priority)] + inner
+    if caps:
+        inner = cgroup_shim(args) + inner
     if not args.no_detach and shutil.which("setsid"):
         inner = ["setsid", "--wait"] + inner
     if caps:
@@ -272,6 +274,34 @@ def build_command(args: argparse.Namespace, fqcn: str, caps: bool) -> list[str]:
             "--",
         ] + inner
     return inner
+
+
+def suite_arguments(args: argparse.Namespace, fqcn: str | None) -> list[str]:
+    arguments = [
+        "dotnet",
+        "run",
+        "--project",
+        PROJECT,
+        "-c",
+        args.configuration,
+        "--no-build",
+        "--",
+        "-noColor",
+        "-notrait",
+        "Category=Diagnostic",
+    ]
+    if fqcn is not None:
+        arguments += ["-class", fqcn]
+    return arguments
+
+
+def build_command(args: argparse.Namespace, fqcn: str, caps: bool) -> list[str]:
+    return wrap_guarded(args, suite_arguments(args, fqcn), caps)
+
+
+def build_full_command(args: argparse.Namespace, caps: bool) -> list[str]:
+    """The canonical full-suite command (the one the skip budget is pinned against)."""
+    return wrap_guarded(args, suite_arguments(args, None), caps)
 
 
 def preflight() -> None:
@@ -376,9 +406,21 @@ def run_class(
     }
 
 
+def run_skip_budget_check(log_path: pathlib.Path, env: dict[str, str]) -> int:
+    """Compare the canonical log's skip set with the pinned budget (the merge evidence gate)."""
+    checker = pathlib.Path("tools/integration/check-integration-skip-budget.py")
+    if not checker.exists():
+        print(f"skip-budget checker not found: {checker}", file=sys.stderr, flush=True)
+        return 2
+    print(f"\n$ python3 {checker} --log {log_path}", flush=True)
+    return subprocess.run([sys.executable, str(checker), "--log", str(log_path)], env=env, check=False).returncode
+
+
 def main(argv: list[str]) -> int:
     args = parse_args(argv)
-    classes = resolve_classes(args)
+    if args.full and args.classes:
+        raise SystemExit("--full runs the whole suite; it cannot be combined with --class")
+    classes = [] if args.full else resolve_classes(args)
     env = base_env(args)
 
     caps = not args.no_caps and probe_systemd()
@@ -398,7 +440,10 @@ def main(argv: list[str]) -> int:
             flush=True,
         )
 
-    commands = [(provider, fqcn, build_command(args, fqcn, caps)) for provider, fqcn in classes]
+    if args.full:
+        commands = [("canonical", "canonical-full-suite", build_full_command(args, caps))]
+    else:
+        commands = [(provider, fqcn, build_command(args, fqcn, caps)) for provider, fqcn in classes]
     if args.dry_run:
         for provider, fqcn, command in commands:
             print(f"# {provider}: {fqcn}")
@@ -493,6 +538,12 @@ def main(argv: list[str]) -> int:
         for result in failed:
             print(f"  {result['log']}")
         return 1
+
+    if args.full and results:
+        budget_rc = run_skip_budget_check(results[0]["log"], env)
+        if budget_rc != 0:
+            print("skip budget gate failed for the canonical run", file=sys.stderr, flush=True)
+            return budget_rc
     return 0
 
 

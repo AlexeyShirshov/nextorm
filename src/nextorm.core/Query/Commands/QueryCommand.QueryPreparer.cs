@@ -279,12 +279,13 @@ public partial class QueryCommand
             cmd._isPrepared = true;
             cmd.HasEverPrepared = true;
             cmd._selectList = selectList ?? [];
-            cmd._groupingList = groupingList ?? [];
-            cmd._limitByColumns = limitByColumns ?? [];
-            cmd._distinctOnColumns = distinctOnColumns ?? [];
-            cmd._extremeRowColumns = extremeRowColumns ?? [];
-            cmd._extremeRowGroupByColumns = extremeRowGroupByColumns ?? [];
-            cmd._perParentPartitionColumns = perParentPartitionColumns ?? [];
+            var preparedColumns = cmd.Prepared;
+            preparedColumns.GroupingList = groupingList ?? [];
+            preparedColumns.LimitByColumns = limitByColumns ?? [];
+            preparedColumns.DistinctOnColumns = distinctOnColumns ?? [];
+            preparedColumns.ExtremeRowColumns = extremeRowColumns ?? [];
+            preparedColumns.ExtremeRowGroupByColumns = extremeRowGroupByColumns ?? [];
+            preparedColumns.PerParentPartitionColumns = perParentPartitionColumns ?? [];
             cmd._srcType = srcType;
             cmd._from = from;
 
@@ -366,7 +367,7 @@ public partial class QueryCommand
                     initial = wherePartitions;
                     unchecked
                     {
-                        cmd.WherePlanHash = cmd._whereBasePlanHash * 13 + cmd.InValuesShapeHash;
+                        cmd.WherePlanHash = (cmd.Prep?.WhereBasePlanHash ?? 0) * 13 + cmd.InValuesShapeHash;
                     }
                 }
 
@@ -406,7 +407,7 @@ public partial class QueryCommand
                 merged = wherePartitions;
                 unchecked
                 {
-                    cmd.WherePlanHash = cmd._whereBasePlanHash * 13 + cmd.InValuesShapeHash;
+                    cmd.WherePlanHash = (cmd.Prep?.WhereBasePlanHash ?? 0) * 13 + cmd.InValuesShapeHash;
                 }
             }
 
@@ -3317,7 +3318,7 @@ public partial class QueryCommand
             }
 
             // ClickHouse ARRAY JOIN expressions; the prepared array is what the renderer consumes.
-            if (cmd._preparedArrayJoin is { } preparedArrayJoin)
+            if (cmd.Prep?.PreparedArrayJoin is { } preparedArrayJoin)
             {
                 for (var i = 0; i < preparedArrayJoin.Length; i++)
                 {
@@ -3568,7 +3569,7 @@ public partial class QueryCommand
             }
 
             // ClickHouse ARRAY JOIN expressions; the prepared array is what the renderer consumes.
-            if (cmd._preparedArrayJoin is { } preparedArrayJoin)
+            if (cmd.Prep?.PreparedArrayJoin is { } preparedArrayJoin)
             {
                 for (var i = 0; i < preparedArrayJoin.Length; i++)
                 {
@@ -3760,7 +3761,7 @@ public partial class QueryCommand
                     {
 
                         wherePlanHash = wherePlanHash * 13 + cmd.GetExpressionPlanEqualityComparer().GetHashCode(cmd.PreparedCondition);
-                        cmd._whereBasePlanHash = wherePlanHash;
+                        cmd.Prepared.WhereBasePlanHash = wherePlanHash;
 
                         // A captured collection contributes no shape to the expression hash, so fold the
                         // evaluated value-list and lookup shape in as well; otherwise a plan built for one
@@ -3817,12 +3818,12 @@ public partial class QueryCommand
             for (var (i, cnt) = (0, arrayJoins.Length); i < cnt; i++)
                 prepared[i] = innerQueryVisitor.Visit(arrayJoins[i]);
 
-            cmd._preparedArrayJoin = prepared;
+            cmd.Prepared.PreparedArrayJoin = prepared;
         }
 
         private static SelectExpression[]? PrepareLimitBy(QueryCommand cmd, CancellationToken cancellationToken)
         {
-            var columns = cmd._limitByColumns;
+            var columns = cmd.Prep?.LimitByColumns;
 
             if (cmd.LimitBy is { } limitBy && columns is null)
             {
@@ -3840,7 +3841,7 @@ public partial class QueryCommand
 
         private static SelectExpression[]? PrepareDistinctOn(QueryCommand cmd, CancellationToken cancellationToken)
         {
-            var columns = cmd._distinctOnColumns;
+            var columns = cmd.Prep?.DistinctOnColumns;
 
             if (cmd.DistinctOn is { } distinctOn && columns is null)
                 columns = BuildKeyColumns(distinctOn.Expression, "DISTINCT ON", cancellationToken);
@@ -3855,8 +3856,8 @@ public partial class QueryCommand
         /// </summary>
         private static (SelectExpression[]? ValueColumns, SelectExpression[]? GroupByColumns) PrepareExtremeRow(QueryCommand cmd, CancellationToken cancellationToken)
         {
-            var valueColumns = cmd._extremeRowColumns;
-            var groupByColumns = cmd._extremeRowGroupByColumns;
+            var valueColumns = cmd.Prep?.ExtremeRowColumns;
+            var groupByColumns = cmd.Prep?.ExtremeRowGroupByColumns;
 
             if (cmd.ExtremeRow is { } extremeRow)
             {
@@ -3877,7 +3878,7 @@ public partial class QueryCommand
         /// </summary>
         private static SelectExpression[]? PreparePerParentPartition(QueryCommand cmd, CancellationToken cancellationToken)
         {
-            var columns = cmd._perParentPartitionColumns;
+            var columns = cmd.Prep?.PerParentPartitionColumns;
 
             if (cmd.PerParentPaging && cmd.PerParentPartition is { } partition && columns is null)
                 columns = BuildKeyColumns(partition, "per-parent eager top-N partition", cancellationToken);
@@ -3979,7 +3980,7 @@ public partial class QueryCommand
 
         private static (SelectExpression[]?, int) PrepareGrouping(QueryCommand cmd, bool noHash, CancellationToken cancellationToken)
         {
-            var groupingList = cmd._groupingList;
+            var groupingList = cmd.Prep?.GroupingList;
             int groupingPlanHash = 7;
             if (cmd._groupExp is not null && groupingList is null)
             {
@@ -4573,10 +4574,13 @@ public partial class QueryCommand
         // changed value into the same recipe while a different instance must build its own shape. A
         // captured QueryCommand can change the rendered statement without changing this shape, so it
         // stays ineligible exactly as before.
-        if (!TryCollectClosureKey(shape, out var closures)) return null;
+        if (!TryCollectClosureKey(cmd, out var closures)) return null;
         shape.Closures = closures;
 
-        shape.Fingerprint = Fingerprint(shape, cmd);
+        // The fingerprint is the same structural identity the warm hit derives from a fresh command, so
+        // the published shape and a later probe can never disagree about which bucket they belong to.
+        if (ComputeRawFingerprint(cmd) is not int fingerprint) return null;
+        shape.Fingerprint = fingerprint;
         return shape;
     }
 
@@ -4613,6 +4617,75 @@ public partial class QueryCommand
             || (from.SubQuery is null && from.ColumnShape is null && from.Pivot is null
                 && from.XmlNodes is null && from.RawSqlSource is null && from.TempTable is null
                 && from.TableFunction is null && from.TableExpressionOverride is null);
+
+    /// <summary>
+    /// Whether any source of a fresh command graph resolves at least one active global/builder query
+    /// filter for the live context. The warm raw-candidate probe reads the live command (a descriptor is
+    /// not materialized on that path), so this is the command-based twin of
+    /// <see cref="HasApplicableFiltersInRawGraph(RawShape, IDataContext?)"/> and must keep the same
+    /// fail-closed traversal.
+    /// </summary>
+    /// <param name="cmd">The fresh command to probe.</param>
+    /// <param name="dataContext">The live context whose filters would be injected.</param>
+    /// <returns><see langword="true"/> when the graph must not reuse a prepared plan.</returns>
+    internal static bool HasApplicableFiltersInCommandGraph(QueryCommand cmd, IDataContext? dataContext)
+    {
+        var commandScope = cmd._filterScope;
+
+        // Main source: mirrors InjectMainSourceFilters.
+        if (cmd._from?.SourceBinding is { } mainBinding)
+        {
+            if (HasApplicableFilters(mainBinding.EntityType, commandScope, dataContext))
+                return true;
+        }
+        else if (cmd._from?.ColumnShape is null)
+        {
+            var mainType = cmd._srcType
+                ?? (cmd._exp?.Parameters is { Count: > 0 } parameters ? parameters[0].Type : null);
+            if (HasApplicableFilters(MainFilterEntityType(mainType), commandScope, dataContext))
+                return true;
+        }
+
+        // Joins: mirrors InjectJoinFilters.
+        if (cmd._joins is { Length: > 0 } joins)
+        {
+            for (var i = 0; i < joins.Length; i++)
+            {
+                var join = joins[i];
+                var joinFrom = join.From;
+
+                if (joinFrom is null) return true;
+                if (joinFrom.SubQuery is not null) continue;
+                if (joinFrom.ColumnShape is not null && joinFrom.SourceBinding is null) continue;
+
+                var joinScope = join.FilterScope is { } childScope ? childScope.Union(commandScope) : commandScope;
+
+                if (joinFrom.SourceBinding is { } binding)
+                {
+                    if (HasApplicableFilters(binding.EntityType, joinScope, dataContext)) return true;
+                    continue;
+                }
+
+                if (join.OriginalJoinCondition is not { Parameters: { Count: >= 2 } } joinCondition)
+                    continue;
+
+                var rightType = join.EntityType ?? joinFrom.SourceType ?? joinCondition.Parameters[1].Type;
+                if (HasApplicableFilters(rightType, joinScope, dataContext)) return true;
+            }
+        }
+
+        // Nested commands: a whole-graph reuse also adopts the nested union/CTE prepared state.
+        if (cmd._union is { } union && HasApplicableFiltersInCommandGraph(union, dataContext)) return true;
+        if (cmd._ctes is { Count: > 0 } ctes)
+        {
+            for (var i = 0; i < ctes.Count; i++)
+            {
+                if (HasApplicableFiltersInCommandGraph(ctes[i].Query, dataContext)) return true;
+            }
+        }
+
+        return false;
+    }
 
     /// <summary>
     /// Whether any source of a captured raw (pre-preparation) graph resolves at least one active
@@ -4736,59 +4809,11 @@ public partial class QueryCommand
     [ThreadStatic]
     private static ClosureKeyScan? _tlsClosureScan;
 
-    private static bool TryCollectClosureKey(RawShape shape, out object[]? closures)
+    private static bool TryCollectClosureKey(QueryCommand cmd, out object[]? closures)
     {
         var scan = _tlsClosureScan ??= new ClosureKeyScan();
         scan.Reset();
-        scan.Scan(shape.Exp);
-        scan.Scan(shape.Condition);
-        scan.Scan(shape.Group);
-        scan.Scan(shape.Having);
-        scan.Scan(shape.PreWhere);
-        scan.Scan(shape.PerParentPartition);
-        if (shape.ArrayJoins is { Length: > 0 } arrayJoins)
-        {
-            for (var i = 0; i < arrayJoins.Length; i++)
-                scan.Scan(arrayJoins[i]);
-        }
-
-        if (shape.Sorting is { Length: > 0 } sorting)
-        {
-            for (var i = 0; i < sorting.Length; i++)
-                scan.Scan(sorting[i].SortExpression);
-        }
-
-        if (shape.Joins is { Length: > 0 } joins)
-        {
-            for (var i = 0; i < joins.Length; i++)
-                scan.Scan(joins[i].JoinCondition);
-        }
-
-        if (shape.Windows is { Count: > 0 } windows)
-        {
-            for (var i = 0; i < windows.Count; i++)
-            {
-                var window = windows[i];
-                for (var p = 0; p < window.PartitionBy.Count; p++)
-                    scan.Scan(window.PartitionBy[p]);
-                for (var o = 0; o < window.OrderBy.Count; o++)
-                    scan.Scan(window.OrderBy[o].Expression);
-            }
-        }
-
-        // A component selector carries the operator's own raw lambdas (e.g. a grouping condition), so it
-        // is part of the same identity.
-        if (!shape.Components.IsEmpty)
-        {
-            for (var i = 0; i < shape.Components.Count; i++)
-            {
-                if (shape.Components[i] is not IQueryComponentShape described) continue;
-                var selectors = described.ShapeSelectors;
-                for (var j = 0; j < selectors.Length; j++)
-                    scan.Scan(selectors[j]);
-            }
-        }
-
+        scan.ScanCommand(cmd);
         closures = scan.Snapshot();
         return !scan.HasCapturedCommand;
     }
@@ -4803,9 +4828,16 @@ public partial class QueryCommand
         private readonly List<object> _closures = new();
         internal bool HasCapturedCommand { get; private set; }
 
+        /// <summary>
+        /// Order-independent-with-the-list hash of the closure identities added so far, so a caller
+        /// that only needs the identity (the raw fingerprint) does not have to materialize the array.
+        /// </summary>
+        internal int IdentitiesHash { get; private set; }
+
         internal void Reset()
         {
             _closures.Clear();
+            IdentitiesHash = 0;
             HasCapturedCommand = false;
         }
 
@@ -4815,6 +4847,60 @@ public partial class QueryCommand
         {
             if (HasCapturedCommand || expression is null) return;
             Visit(expression);
+        }
+
+        /// <summary>
+        /// Scans every raw expression-bearing member of <paramref name="cmd"/>, in the order the raw
+        /// descriptor captures them. Used by the descriptor capture and by the fingerprint, so both see
+        /// the same closure identities.
+        /// </summary>
+        internal void ScanCommand(QueryCommand cmd)
+        {
+            Scan(cmd._exp);
+            Scan(cmd._condition);
+            Scan(cmd._groupExp);
+            Scan(cmd._having);
+            Scan(cmd._preWhere);
+            Scan(cmd.PerParentPartition);
+
+            if (cmd._arrayJoins is { Length: > 0 } arrayJoins)
+            {
+                for (var i = 0; i < arrayJoins.Length; i++)
+                    Scan(arrayJoins[i]);
+            }
+
+            if (cmd._sorting is { Length: > 0 } sorting)
+            {
+                for (var i = 0; i < sorting.Length; i++)
+                    Scan(sorting[i].SortExpression);
+            }
+
+            if (cmd._joins is { Length: > 0 } joins)
+            {
+                for (var i = 0; i < joins.Length; i++)
+                    Scan(joins[i].JoinCondition);
+            }
+
+            if (cmd._windows is { Count: > 0 } windows)
+            {
+                for (var i = 0; i < windows.Count; i++)
+                {
+                    var window = windows[i];
+                    for (var p = 0; p < window.PartitionBy.Count; p++)
+                        Scan(window.PartitionBy[p]);
+                    for (var o = 0; o < window.OrderBy.Count; o++)
+                        Scan(window.OrderBy[o].Expression);
+                }
+            }
+
+            var components = cmd.ComponentsState;
+            for (var i = 0; i < components.Count; i++)
+            {
+                if (components[i] is not IQueryComponentShape described) continue;
+                var selectors = described.ShapeSelectors;
+                for (var j = 0; j < selectors.Length; j++)
+                    Scan(selectors[j]);
+            }
         }
 
         protected override Expression VisitMember(MemberExpression node)
@@ -4856,89 +4942,299 @@ public partial class QueryCommand
             }
 
             _closures.Add(value);
+            IdentitiesHash = HashCode.Combine(IdentitiesHash, RuntimeHelpers.GetHashCode(value));
         }
     }
 
-    private static int Fingerprint(RawShape shape, QueryCommand src)
+    /// <summary>
+    /// Computes the raw-candidate fingerprint of a fresh command graph without materializing the
+    /// descriptor: every dimension the descriptor compares is folded into one structural hash —
+    /// including the nested union/CTE bodies and the captured closure identities — so a warm hit can
+    /// probe the raw index directly instead of building (and throwing away) a descriptor object graph.
+    /// </summary>
+    /// <param name="cmd">The fresh command to describe.</param>
+    /// <returns>The fingerprint, or <see langword="null"/> when the graph is not describable.</returns>
+    /// <remarks>
+    /// The eligibility rules are exactly those of <see cref="CaptureRawShape(QueryCommand)"/>; a graph
+    /// that capture would reject must never probe a candidate, because the dimensions that make it
+    /// ineligible (a captured command, a derived source, an injected filter) are not all part of the
+    /// normalized plan key, so the post-apply key check alone cannot reject them.
+    /// <para>
+    /// The hash must cover every member the descriptor comparison reads. Missing a dimension only costs
+    /// a rejected apply (the staged normalized key still guards correctness), but it wastes a full
+    /// preparation attempt, so new descriptor members belong here as well.
+    /// </para>
+    /// </remarks>
+    internal static int? ComputeRawFingerprint(QueryCommand cmd)
     {
-        var exp = src.GetExpressionPlanEqualityComparer();
+        // The comparers are created once for the whole graph: each comparer owns a thread-static hashing
+        // visitor, so resolving them per nested node would allocate a fresh comparer/visitor pair for
+        // every CTE/union body. They resolve referenced queries through the graph they were built for,
+        // and an eligible raw graph carries none (the eligibility check rejects such a command at every
+        // depth), so the root instance describes the whole graph.
+        var comparers = new RawFingerprintComparers(cmd);
+        return ComputeRawFingerprint(cmd, 0, ref comparers);
+    }
+
+    /// <summary>
+    /// The plan comparers one raw fingerprint needs, resolved once for the whole graph. Passed by
+    /// <c>ref</c> so the nested recursion reuses the same instances (and their thread-static visitors).
+    /// </summary>
+    private readonly ref struct RawFingerprintComparers
+    {
+        internal readonly ExpressionPlanEqualityComparer Expression;
+        internal readonly JoinExpressionPlanEqualityComparer Join;
+        internal readonly FromExpressionPlanEqualityComparer From;
+
+        internal RawFingerprintComparers(QueryCommand cmd)
+        {
+            Expression = cmd.GetExpressionPlanEqualityComparer();
+            Join = cmd.GetJoinExpressionPlanEqualityComparer();
+            From = cmd.GetFromExpressionPlanEqualityComparer();
+        }
+    }
+
+    private static int? ComputeRawFingerprint(QueryCommand cmd, int depth, ref RawFingerprintComparers comparers)
+    {
+        // Deep/cyclic graphs and any already-mutated command are ineligible.
+        if (depth > 8 || cmd._isPrepared) return null;
+        if (cmd._customData is not null) return null;
+        if (depth == 0 && IsTrivialEntitySelect(cmd)) return null;
+        if (cmd._referencedQueries is { Count: > 0 } || cmd._outerRefs is { Count: > 0 }) return null;
+        if (cmd.HasDataModifyingCte || cmd.HasTemporaryTableSource()) return null;
+        if (!IsPlainTableSource(cmd._from)) return null;
+
+        var components = cmd.ComponentsState;
+        for (var i = 0; i < components.Count; i++)
+        {
+            if (components[i] is not IQueryComponentShape) return null;
+        }
+
+        if (cmd._joins is { Length: > 0 } joins)
+        {
+            for (var i = 0; i < joins.Length; i++)
+            {
+                if (!IsPlainTableSource(joins[i].From)) return null;
+            }
+        }
+
+        // The nested bodies are hashed on the fly (no intermediate descriptor), so an ineligible body
+        // rejects the whole graph before any candidate is probed or published.
+        var cteFingerprints = cmd._ctes is { Count: > 0 } ? new int[cmd._ctes.Count] : null;
+        if (cmd._ctes is { Count: > 0 } declarations)
+        {
+            for (var i = 0; i < declarations.Count; i++)
+            {
+                var cte = declarations[i];
+                if (cte.Mutation is not null || cte.Query._ctes is { Count: > 0 }) return null;
+
+                var body = ComputeRawFingerprint(cte.Query, depth + 1, ref comparers);
+                if (body is null) return null;
+                cteFingerprints![i] = body.GetValueOrDefault();
+            }
+        }
+
+        int? unionFingerprint = null;
+        if (cmd._union is not null)
+        {
+            unionFingerprint = ComputeRawFingerprint(cmd._union, depth + 1, ref comparers);
+            if (unionFingerprint is null) return null;
+        }
+
+        // Closure identities partition the bucket the same way the descriptor does, and a captured
+        // command makes the graph ineligible. The scan is allocation-free (thread-static scanner).
+        var scan = _tlsClosureScan ??= new ClosureKeyScan();
+        scan.Reset();
+        scan.ScanCommand(cmd);
+        if (scan.HasCapturedCommand) return null;
+
+        var exp = comparers.Expression;
         XxHash32 hash = new();
         unchecked
         {
-            hash.Add(shape.EntityType);
-            hash.Add(shape.ResultType);
-            hash.Add(shape.ProjectionType);
-            hash.Add(shape.IdentitySlotAliases);
-            hash.Add(shape.SingleRow);
-            hash.Add(shape.IsDistinct);
-            hash.Add(shape.GroupByWithTotals);
-            hash.Add(shape.Final);
-            hash.Add(shape.DocumentMode);
-            hash.Add(shape.IgnoreColumns);
-            hash.Add(shape.PerParentPaging);
-            hash.Add(shape.PerParentPagingEmbedded);
-            hash.Add(shape.DefaultOnEmpty);
-            hash.Add(shape.SingleScalar);
-            hash.Add(shape.HasPerParentEagerTopN);
-            hash.Add(shape.BindArrayJoinElement);
-            hash.Add((int)shape.GroupingType);
-            hash.Add((int)shape.ArrayJoinKind);
-            hash.Add(shape.QuoteIdentifiers);
-            hash.Add(shape.KeywordCase);
-            hash.Add(shape.CommandTimeout);
-            hash.Add(shape.EffectiveQuoteIdentifiers);
-            hash.Add(shape.EffectiveKeywordCase);
-            hash.Add(shape.EffectiveCommandTimeout);
-            hash.Add(shape.ContextEagerLoadMode);
-            shape.CollectionSlotShape.AddTo(ref hash);
-            hash.Add(shape.Tag);
-            foreach (var hint in shape.Hints ?? []) hash.Add(hint);
-            foreach (var hint in shape.TableHints ?? []) hash.Add(hint);
-            foreach (var hint in shape.IndexHints ?? []) hash.Add(hint);
-            foreach (var hint in shape.TablesInScopeHints ?? []) hash.Add(hint);
-            AddLambda(ref hash, shape.Exp, exp);
-            AddLambda(ref hash, shape.Condition, exp);
-            AddLambda(ref hash, shape.Group, exp);
-            AddLambda(ref hash, shape.Having, exp);
-            AddLambda(ref hash, shape.PreWhere, exp);
-            AddLambda(ref hash, shape.PerParentPartition, exp);
-            if (shape.ArrayJoins is { Length: > 0 } arrayJoins)
+            hash.Add(cmd._srcType);
+            hash.Add(cmd.ResultType);
+            hash.Add(cmd.ProjectionType);
+            hash.Add(cmd.IdentitySlotAliases);
+            hash.Add(cmd.SingleRow);
+            hash.Add(cmd.IsDistinct);
+            hash.Add(cmd.GroupByWithTotals);
+            hash.Add(cmd.Final);
+            hash.Add(cmd.DocumentMode);
+            hash.Add(cmd.IgnoreColumns);
+            hash.Add(cmd.PerParentPaging);
+            hash.Add(cmd.PerParentPagingEmbedded);
+            hash.Add(cmd.DefaultOnEmpty);
+            hash.Add(cmd.SingleScalar);
+            hash.Add(cmd.HasPerParentEagerTopN);
+            hash.Add(cmd.BindArrayJoinElement);
+            hash.Add((int)cmd.GroupingType);
+            hash.Add((int)cmd.ArrayJoinKind);
+            hash.Add(cmd.QuoteIdentifiers.HasValue);
+            hash.Add(cmd.QuoteIdentifiers.GetValueOrDefault());
+            hash.Add(cmd.KeywordCase.HasValue);
+            hash.Add((int)cmd.KeywordCase.GetValueOrDefault());
+            hash.Add(cmd.CommandTimeout ?? int.MinValue);
+            hash.Add(cmd.EagerLoadMode.HasValue);
+            hash.Add((int)cmd.EagerLoadMode.GetValueOrDefault());
+            // Effective (override ?? context) forms of the settings preparation resolves: an apply
+            // overwrites the resolved values, so two contexts with different defaults must not share.
+            hash.Add(cmd.QuoteIdentifiers ?? cmd._dataContext?.QuoteIdentifiers ?? false);
+            hash.Add((cmd.NamingConvention ?? cmd._dataContext?.NamingConvention)?.GetHashCode() ?? 0);
+            hash.Add((int)(cmd.KeywordCase ?? cmd._dataContext?.KeywordCase ?? default));
+            hash.Add(cmd.CommandTimeout is int effectiveTimeout && effectiveTimeout > 0
+                ? effectiveTimeout
+                : cmd._dataContext?.CommandTimeout is int contextTimeout && contextTimeout > 0 ? contextTimeout : int.MinValue);
+            hash.Add(cmd._dataContext is null);
+            hash.Add((int)(cmd._dataContext?.EagerLoadMode ?? default));
+            hash.Add(cmd.NamingConvention is null ? 0 : RuntimeHelpers.GetHashCode(cmd.NamingConvention));
+            cmd.EagerLoadShape.AddTo(ref hash);
+            cmd.CollectionSlotShape.AddTo(ref hash);
+            hash.Add(cmd.Tag);
+            foreach (var hint in cmd._hints ?? []) hash.Add(hint);
+            foreach (var hint in cmd.TableHints ?? []) hash.Add(hint);
+            foreach (var hint in cmd.IndexHints ?? []) hash.Add(hint);
+            foreach (var hint in cmd.TablesInScopeHints ?? []) hash.Add(hint);
+            hash.Add((int)cmd.IndexHintKind);
+
+            hash.Add(cmd._filterScope);
+            hash.Add(cmd.Paging.Limit);
+            hash.Add(cmd.Paging.Offset);
+            hash.Add(cmd.Paging.HasWithTies);
+            if (cmd.GroupingSets is { Count: > 0 } groupingSets)
             {
+                hash.Add(groupingSets.Count);
+                for (var i = 0; i < groupingSets.Count; i++)
+                {
+                    var set = groupingSets[i];
+                    hash.Add(set.Length);
+                    for (var j = 0; j < set.Length; j++) hash.Add(set[j]);
+                }
+            }
+
+            if (cmd.Settings is { Count: > 0 } settings)
+            {
+                hash.Add(settings.Count);
+                for (var i = 0; i < settings.Count; i++)
+                {
+                    hash.Add(settings[i].Key);
+                    hash.Add(settings[i].Value);
+                }
+            }
+
+            hash.Add(cmd.SampleRatio.HasValue);
+            hash.Add(cmd.SampleRatio.GetValueOrDefault());
+            hash.Add(cmd.SampleOffset);
+            hash.Add(cmd.ForJsonClause?.GetHashCode() ?? 0);
+            hash.Add(cmd.ForXmlClause?.GetHashCode() ?? 0);
+            hash.Add(cmd.TableSample?.GetHashCode() ?? 0);
+            hash.Add(cmd.Temporal?.GetHashCode() ?? 0);
+            hash.Add(cmd.RowLock?.GetHashCode() ?? 0);
+            hash.Add(cmd.SourceLockClause?.GetHashCode() ?? 0);
+            hash.Add(cmd.LimitBy?.GetHashCode() ?? 0);
+            hash.Add(cmd.DistinctOn?.GetHashCode() ?? 0);
+            hash.Add(cmd.ExtremeRow?.GetHashCode() ?? 0);
+
+            AddLambda(ref hash, cmd._exp, exp);
+            AddLambda(ref hash, cmd._condition, exp);
+            AddLambda(ref hash, cmd._groupExp, exp);
+            AddLambda(ref hash, cmd._having, exp);
+            AddLambda(ref hash, cmd._preWhere, exp);
+            AddLambda(ref hash, cmd.PerParentPartition, exp);
+            if (cmd._arrayJoins is { Length: > 0 } arrayJoins)
+            {
+                hash.Add(arrayJoins.Length);
                 for (var i = 0; i < arrayJoins.Length; i++)
                     AddLambda(ref hash, arrayJoins[i], exp);
             }
 
-            if (shape.Sorting is { Length: > 0 } sorting)
+            if (cmd._sorting is { Length: > 0 } sorting)
             {
-                var sortComparer = src.GetSortingExpressionPlanEqualityComparer();
+                // The RAW sort key is hashed, not Sorting.PreparedExpression: a fresh command's keys are
+                // unprepared, so the comparer would see a null prepared expression for every key and two
+                // different ORDER BY members would share a fingerprint bucket.
+                hash.Add(sorting.Length);
                 for (var i = 0; i < sorting.Length; i++)
-                    hash.Add(sortComparer.GetHashCode(sorting[i]));
-            }
-
-            hash.Add((int)shape.UnionType);
-            if (shape.Ctes is { Length: > 0 } ctes)
-            {
-                for (var i = 0; i < ctes.Length; i++)
                 {
-                    hash.Add(ctes[i].Name);
-                    hash.Add(ctes[i].Recursive);
-                    hash.Add(ctes[i].MaxRecursion);
-                    hash.Add(ctes[i].TypedProjection);
-                    hash.Add(ctes[i].Body.Fingerprint);
+                    var sortKey = sorting[i];
+                    hash.Add((int)sortKey.Direction);
+                    hash.Add((int)sortKey.NullsPosition);
+                    hash.Add(sortKey.ColumnIndex ?? int.MinValue);
+                    AddLambda(ref hash, sortKey.SortExpression, exp);
                 }
             }
 
-            if (shape.Union is not null)
-                hash.Add(shape.Union.Fingerprint);
-
-            if (!shape.Components.IsEmpty)
+            if (cmd._joins is { Length: > 0 } joinList)
             {
-                for (var i = 0; i < shape.Components.Count; i++)
+                var joinComparer = comparers.Join;
+                hash.Add(joinList.Length);
+                for (var i = 0; i < joinList.Length; i++)
+                    hash.Add(joinComparer.GetHashCode(joinList[i]));
+            }
+
+            hash.Add(comparers.From.GetHashCode(cmd._from));
+            hash.Add(cmd._from?.Table);
+            hash.Add(cmd._from?.SourceBinding is null ? 0 : RuntimeHelpers.GetHashCode(cmd._from.SourceBinding));
+
+            if (cmd._windows is { Count: > 0 } windows)
+            {
+                hash.Add(windows.Count);
+                for (var i = 0; i < windows.Count; i++)
                 {
-                    var c = shape.Components[i];
-                    hash.Add(c.Slot);
-                    hash.Add((int)c.Contribution);
-                    if (c is IQueryComponentShape described)
+                    var window = windows[i];
+                    hash.Add(window.Name);
+                    hash.Add(window.PartitionBy.Count);
+                    for (var p = 0; p < window.PartitionBy.Count; p++)
+                        AddLambda(ref hash, window.PartitionBy[p], exp);
+                    hash.Add(window.OrderBy.Count);
+                    for (var o = 0; o < window.OrderBy.Count; o++)
+                    {
+                        hash.Add((int)window.OrderBy[o].Direction);
+                        AddLambda(ref hash, window.OrderBy[o].Expression, exp);
+                    }
+
+                    var frame = window.Frame;
+                    hash.Add(frame is null);
+                    if (frame is not null)
+                    {
+                        hash.Add((int)frame.Type);
+                        hash.Add((int)frame.Start.Kind);
+                        hash.Add(frame.Start.Offset);
+                        hash.Add((int)frame.End.Kind);
+                        hash.Add(frame.End.Offset);
+                        hash.Add(frame.Exclusion.HasValue);
+                        hash.Add((int)frame.Exclusion.GetValueOrDefault());
+                    }
+                }
+            }
+
+            hash.Add((int)cmd._unionType);
+            if (cmd._ctes is { Count: > 0 } cteDeclarations)
+            {
+                hash.Add(cteDeclarations.Count);
+                for (var i = 0; i < cteDeclarations.Count; i++)
+                {
+                    var declaration = cteDeclarations[i];
+                    hash.Add(declaration.Name);
+                    hash.Add(declaration.Recursive);
+                    hash.Add(declaration.MaxRecursion ?? int.MinValue);
+                    hash.Add(declaration.TypedProjection);
+                    hash.Add(cteFingerprints![i]);
+                }
+            }
+
+            if (unionFingerprint is int unionFingerprintValue)
+                hash.Add(unionFingerprintValue);
+
+            if (!components.IsEmpty)
+            {
+                hash.Add(components.Count);
+                for (var i = 0; i < components.Count; i++)
+                {
+                    var component = components[i];
+                    hash.Add(component.Slot);
+                    hash.Add((int)component.Contribution);
+                    if (component is IQueryComponentShape described)
                     {
                         hash.Add(described.ShapeState?.GetHashCode() ?? 0);
                         var selectors = described.ShapeSelectors;
@@ -4948,13 +5244,9 @@ public partial class QueryCommand
                 }
             }
 
-            // Closure identity partitions the bucket, so a shape captured from one closure instance is
-            // never compared against (or published over) another instance's recipe.
-            if (shape.Closures is { Length: > 0 } closures)
-            {
-                for (var i = 0; i < closures.Length; i++)
-                    hash.Add(RuntimeHelpers.GetHashCode(closures[i]));
-            }
+            // Closure identity partitions the bucket, so a graph captured from one closure instance is
+            // never matched against (or published over) another instance's recipe.
+            hash.Add(scan.IdentitiesHash);
 
             return hash.ToHashCode();
         }
@@ -4970,7 +5262,8 @@ public partial class QueryCommand
     /// Applies the prepared state of the stored cache-side <paramref name="clone"/> into this fresh
     /// command. Only derived/prepared members are written; the fresh command's own raw graph is left
     /// intact except for the transformed edges the preparation pipeline rewrites (<c>from</c>,
-    /// <c>joins</c>, <c>ctes</c>, <c>union</c>), which the caller restores on discard.
+    /// <c>joins</c>, <c>ctes</c>, <c>union</c>) and the sort keys, whose prepared form preparation fills
+    /// in place; the caller restores all of them on discard.
     /// </summary>
     internal void ApplyPreparationFrom(QueryCommand clone)
     {
@@ -4982,16 +5275,24 @@ public partial class QueryCommand
         // Members CopyTo never carries: the clone's joins come from its Definition, so they must be
         // adopted explicitly, together with the value-list base hash and the prepared ARRAY JOIN list.
         _joins = clone._joins;
-        _whereBasePlanHash = clone._whereBasePlanHash;
-        _preparedArrayJoin = clone._preparedArrayJoin;
+        // Preparation fills Sorting.PreparedExpression in place, and that field is what the plan key
+        // compares (SortingExpressionPlanEqualityComparer). A fresh command's sort keys are still raw
+        // (null PreparedExpression), so leaving them in place would make every staged key of a sorted
+        // query differ from the stored one and reject the candidate on every call. The stored array is
+        // the same shape the raw description already proved, so adopting it is what makes the staged
+        // command comparable; the caller's own raw array is restored by DiscardStagedPreparation.
+        _sorting = clone._sorting;
+        var applied = Prepared;
+        applied.WhereBasePlanHash = clone.Prep?.WhereBasePlanHash ?? 0;
+        applied.PreparedArrayJoin = clone.Prep?.PreparedArrayJoin;
         // Preparation-derived terminal shape read on the later uncached/render path.
         OneColumn = clone.OneColumn;
     }
 
     /// <summary>The transformed raw edges an apply overwrites, so a rejected fast path can be undone.</summary>
-    internal readonly record struct RawGraphSnapshot(FromExpression? From, JoinExpression[]? Joins, IReadOnlyList<CteDefinition>? Ctes, QueryCommand? Union);
+    internal readonly record struct RawGraphSnapshot(FromExpression? From, JoinExpression[]? Joins, IReadOnlyList<CteDefinition>? Ctes, QueryCommand? Union, Sorting[]? Sorting);
 
-    internal RawGraphSnapshot CaptureRawGraph() => new(_from, _joins, _ctes, _union);
+    internal RawGraphSnapshot CaptureRawGraph() => new(_from, _joins, _ctes, _union, _sorting);
 
     /// <summary>
     /// Discards a staged apply: every prepared member is cleared and the fresh command's own raw
@@ -5004,5 +5305,6 @@ public partial class QueryCommand
         _joins = raw.Joins;
         _ctes = raw.Ctes;
         _union = raw.Union;
+        _sorting = raw.Sorting;
     }
 }

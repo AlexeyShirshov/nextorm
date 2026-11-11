@@ -254,6 +254,49 @@ stop and raise the narrow owner decision required by design §12 instead of rela
 Remove the obsolete raw-recipe machinery once unreachable (design §14 Q8), update EN/RU docs and
 samples for the public renames, sweep the full matrix, both live suites, and both coverage gates.
 
+**I7 — raw-handle migration (authorized 2026-11-10).** The owner authorized the raw-handle core
+migration for the three targets I6 left open (T1 Any, T2 Where, T4 GroupByCount). It is staged by
+route, never big-bang, and every stage keeps the legacy route as the fail-closed fallback (design
+§14 Q1/Q8). Ordered by margin: T1 (largest headroom) -> T4 -> T2 (needs the `Select` return-type
+break).
+
+*Measured precondition.* The blocker is **not** the transport record: it is the identity of a
+captured value in the key. `RawQueryStateEquality` compares projection/conditions through
+`ExpressionPlanEqualityComparer`, whose `VisitConstant` hashes `ConstantExpression.Value` — i.e. the
+closure **instance**. Every benchmark operation hoists a fresh display class, so a key built this
+way can never hit across operations, exactly as the D201 raw recipe cannot. Design §14 Q6 forbids
+keying closure identities as a substitute for binding, so the first stage is a value-agnostic shape
+identity plus a value binder; only then can any route be switched.
+
+- **M1 — shape identity (foundation, no route change).** A canonical, allocation-free identity of a
+  raw expression graph that keeps every SQL-affecting dimension (node kinds, types, methods,
+  literal constant values, member paths) and replaces a captured closure member with a typed
+  *capture slot*; captures are numbered in canonical first-appearance order. Two independent
+  outputs: a structural hash and a structural comparison (hash is an index, never the proof).
+  Fail closed (no identity -> legacy route) for captured collections/arrays and anything whose slot
+  count cannot be proven. Acceptance: a fresh-closure query has the *same* identity across
+  operations, a different condition/sort/join/projection has a *different* one, and the
+  binding of slot values reproduces the parameter list the miss-time render produced.
+- **M2 — native terminal route for `Any`/`AnyAsync` (T1).** The terminal derives the identity from
+  the builder (no command), looks the compiled plan up in a thread-local native index with the same
+  `Clear()` generation as the normalized store, binds the current closure values and executes. On a
+  miss it materializes the legacy `QueryCommand` graph once, compiles it through the existing
+  planner and publishes the plan under the native identity. Acceptance: T1 `<= 1.20x`, byte-identical
+  SQL/parameters, the shared-command sticky-cache trap untouched, filters still fail closed.
+- **M3 — `GroupBy`/`Select` route (T4).** Projection and grouping become part of the native
+  description; the terminal executes the stored plan without staging prepared state into a fresh
+  command. Acceptance: T4 `<= 1.20x`, identical SQL.
+- **M4 — `Select`/`ToCommand` return a compact handle (T2).** The public result of the projection
+  step stops being a `QueryCommand<T>` (design explicitly waives API compatibility); terminals
+  consume the handle. This is the only stage that can close T2, because the command object itself
+  is ~650-1,000 B of a 3,042 B budget. Acceptance: T2 `<= 1.20x`; EN/RU docs and samples updated for
+  the rename in the same change (design Q7).
+
+*Per-stage gate.* Each stage is accepted on its own: `<= 1.20x` for its target, no control above
+1.20x, no confirmed positive paired time regression (Q4), byte-identical SQL/parameters/column order
+(Q9), phase guards green, and the full unit + provider + both live suites green. A stage that cannot
+meet its gate stops and reports instead of relaxing the floor (design §12).
+
 ## 9. Risks
 
 - **R1 Recursive CTE depth.** Largest required reduction (36,259 B/op) over the most nested shape;
@@ -288,6 +331,20 @@ samples for the public renames, sweep the full matrix, both live suites, and bot
   both coverage gates unchanged (85/75 and 65/75).
 - EN and RU documentation and samples updated for every public rename in the same change.
 - No commit, push or merge by the agent.
+
+**Status after I7 (2026-11-10, owner decision: stop and record).**
+- `<= 1.20x` allocation: **6 of 8** frozen targets met — T1 Any **0.840x**, T7 Page **1.088x**, plus the
+  four closed in the earlier increments. **T4 GroupByCount 1.218x** and **T2 Where 1.471x** are recorded
+  residuals of the current architecture with the measured attribution in the progress log; closing
+  either requires `Select` to stop constructing a `QueryCommand<TResult>` (plan stage M4), which closes
+  T4 but not T2, so the owner chose to stop instead of taking the public return-type break.
+- Every control that was `<= 1.20x` still is.
+- Time: no confirmed positive paired regression (Where's reading is UNVERIFIED under the noise contract).
+- SQL/parameter/column order byte-identical: the native routes only reuse a holder the ordinary route
+  compiled for the same shape, and every ineligible shape keeps the legacy path.
+- Unit + provider suites green (core 3942, sqlite 2335). Live suites: extensions **130/130**; the
+  canonical capped builtin run is **8475 passed / 3 failed / 197 skipped**, and the only three failures
+  belong to the uncommitted `Union`/`UnionAll` selector work in the tree, not to this change.
 
 ## 11. Progress log
 
@@ -421,6 +478,130 @@ samples for the public renames, sweep the full matrix, both live suites, and bot
   New harness: `benchmarks/nextorm.benchmark/Issue319/Issue319PreparationProbe.cs`
   (`--issue319-prep-probe <outDir>`), which attributes construction, fingerprint, raw lookup,
   prepared-state apply and plan-key build.
+- **2026-11-10 — I7/M1 delivered: value-agnostic shape identity.** `src/nextorm.core/Query/Raw/ShapeIdentity.cs`:
+  a canonical token stream over the raw expression graph that keeps every SQL-affecting dimension
+  (node kinds, CLR types, members, methods, literal values, canonical capture order) and replaces a
+  captured member with a typed slot, so a fresh display class per call cannot change the identity
+  (design Q6: values are bound, never keyed). The hash is an index only; equality walks the fresh
+  graph against the published token stream, which retains types/members/literals but no closure
+  instance. Both directions are allocation-free — measured in `Matches_ShouldBeAllocationFree`
+  (0 B/op after warmup). Fail-closed cases: captured array/collection, captured `QueryCommand`/
+  `IQueryable`, unsupported value-type constants. Tests: `tests/nextorm.core.tests/Raw/ShapeIdentityTests.cs`
+  (10 oracles: fresh-closure stability, operator/literal/projection differentiation, capture slot
+  order and paths, the fail-closed set, allocation). Core suite 3938 green. No route is switched yet,
+  so no arm moves.
+  *Next: M2 — native `Any`/`AnyAsync` route (thread-local native index beside `QueryPlanStore`,
+  builder-derived shape, value binding through a root-expression binder, miss adapter publishing the
+  compiled holder), then M3 (`GroupBy`/`Select`) and M4 (`Select`/`ToCommand` handle).*
+- **2026-11-10 — I7/M3 defects found by the live suite (fixed).** The first canonical run after M3
+  (`Total: 8675, skipped 197`) reported 3038 failures: 2947 were container-connection failures from a
+  concurrent suite sharing the containers, and **91 were real**, exposing three gaps in the shape
+  identity and one in the route gate. The shape kept node kinds, CLR types, literal values and the
+  closure type, but not the **symbols** an expression carries, so statements that differed only in a
+  function, a column or a captured path were indistinguishable and one compiled holder answered
+  another query:
+  1. **Method identity.** `sha1(x)` and `md5(x)` (also `upper`/`lower`, `to_int16`/`reinterpret_as_uint16`,
+     `lpad`/`right`, …) shared a shape. The MySQL/MariaDB/SQL Server/ClickHouse native-function live
+     matrices returned another function's value; `PlanEqualityBranchCoverage2Tests
+     .ExpressionComparer_MethodCallShapes_ShouldCompareBothWays` failed for the same reason.
+  2. **Member identity.** A non-captured member access (`x.Id` vs `x.Value`) was visited only through its
+     instance, so the column never entered the token stream; `RangeColumns_ShouldRoundTripAndFilter`
+     returned another column's value.
+  3. **Capture path.** A capture recorded its leaf member only, so `holder.First.Value` and
+     `holder.Second.Value` (same leaf name and type) were one shape.
+  4. **Statement-level `Hints`.** The route gate covered `TableHints`/`IndexHints`/`TablesInScopeHints`
+     but not the separate `Hints` list, so a hinted command took the native path and skipped the
+     dialect's `NotSupportedException` (`BuilderValidationSweepTests.QueryHint_ShouldBeRejectedBySqlite`).
+  5. **Source identity.** The physical table of a `From("name")` source lives in `FromExpression`, not
+     in the filter/grouping/projection graphs, so every named-source read shared one shape: reading
+     `pg3_ctas_delete_rows` executed the statement compiled for `pg3_ctas_preserve_rows`
+     (`CreateTableAs_WithCteBody_*`, `CreateTemporaryTableAsSelect_*`, `T305…LocalTemporary_*` — all
+     "relation does not exist"). The header now carries `NativeSourceStamp` (table, table-name/schema/
+     database/server/table-expression overrides, auto-mapped flag, bound entity type), read from the
+     already-resolved source with no metadata lookup. Measured on a quiet machine before this fix the
+     canonical run was 8471/7 faulty; the 7 were exactly this defect (4) plus the uncommitted `Union`
+     selector work (3).
+  The shape now emits a `Symbol` token for every method call (and its overload), `new` constructor,
+  member access, `MemberInit` binding, indexer, operator overload and list-initializer `Add`, plus one
+  `Symbol` per member of a captured path (reused list, so the hit path stays allocation-free); the gate
+  gained `Hints`, `IdentitySlotAliases`, `EagerLoadMode` and `PerParentPartition`. The shared
+  `Any`/`Count`/`All` command is also preserved: a native hit never builds the wrapper, so the first
+  `Any` on a context must take the legacy route (`DataContext.AnyCommand` is observable state and the
+  other terminals reuse it) — `T304`/`T320` caught that.
+  Regression oracles: `ShapeIdentityTests` +4 (method, member-init binding, entity column, capture path;
+  14/14), `Issue319NativeProjectionTests` (9 live oracles: hit + rebinding, sync terminal, grouped shape,
+  different predicate, a modifier, a filter, and three same-shape/different-statement aliasing oracles for
+  the column, the function and the named source), `Issue319NativeAnyTests` (5 live oracles, including the
+  shared-command one).
+  Live confirmation, canonical capped run on a quiet machine (no concurrent suite, containers recreated):
+  **`Total: 8675, passed 8475, failed 3, skipped 197`** — the 197 skips equal the pinned budget, and the
+  three failures are `SetOperations_SelectorChain_ShouldApplyLeftToRight` on MySQL/SQL Server/PostgreSQL,
+  i.e. the uncommitted `Union`/`UnionAll` selector feature added to `CommonTestSuite.SetOperations.cs`
+  outside this change. The extensions live suite is **130/130**. Targeted confirmation of the
+  function-aliasing fix: `MySqlNativeFunctionLiveTests` + `SqlServerStep2UnitC2Tests` (the two classes
+  that carried those failures) run 299/299 green.
+- **2026-11-10 — I7/M3 delivered: native projection route.** `QueryCommand<TResult>.ToList`/`ToListAsync`
+  probe a native index before the ordinary route: `src/nextorm.core/Query/Raw/Native/NativeProjectionRoute.cs`
+  derives a value-agnostic shape from the *command's own* graphs (filter, grouping key, projection) plus a
+  header (entity type, result type, context type, terminal, render stamp), finds the compiled holder the
+  miss published, binds the current closure values and executes it — no raw fingerprint, no staged
+  preparation, no normalized plan key, no store lookup. `ShapeIdentity` gained three-root
+  create/hash/match/bind overloads (no `params` array, so the hit allocates nothing) and
+  `ShapeHeader.RenderStamp` with `NativeContextStamp`: two contexts of the same type that render
+  different identifiers (quoting, naming convention, keyword case) can never share a native plan.
+  Eligibility is fail-closed on everything the raw descriptor models (joins, CTEs, set operations,
+  sorting, paging, HAVING, DISTINCT, FINAL, samples, locks, hints, tag, windows, array joins, query
+  components, eager/collection-slot state, naming/quoting/keyword/timeout overrides, navigation paths,
+  per-parent state, a non-plain source) plus an applicable global/builder filter and positional
+  `params`. `QueryCommand` gained the internal raw `ArrayJoins` accessor the gate reads. Tests:
+  `tests/nextorm.sqlite.tests/PlanCache/Issue319NativeProjectionTests.cs` (6 live-SQLite oracles:
+  fresh-closure hit + current-value rebinding, synchronous terminal, grouped shape with every group,
+  different predicate, a paged/ordered command keeps the legacy route and publishes nothing, a filtered
+  entity keeps it too).
+  Measured (BDN, paired): **T1 Any 196.13 KB vs 233.59 KB = 0.840x**, **T7 Page 19.16 vs 17.61 = 1.088x**
+  (both closed), **T4 GroupByCount 8.34 vs 6.85 = 1.218x** (was 1.308), **T2 Where 372.92 vs 253.53 =
+  1.471x** (was 2.371). Re-measured after the shape gained the symbol/source tokens: Any unchanged at
+  **196.13 vs 233.62 = 0.840x**, GroupBy **8.42 vs 6.85 = 1.229x** (the larger token stream costs ~80 B on
+  the miss-side capture only; still the same residual). Time: Any 1.547 vs 1.737 ms, GroupBy 1.637 vs 1.632 ms, Page 113.8 vs 141.8 us;
+  Where 1.876 vs 1.793 ms is UNVERIFIED (the previous round read 3.875 ms for the same arm, so the
+  machine spread dominates this reading).
+  Attribution in the arm's own shape (op-shaped probe stages, B/op):
+  - **GroupByCount** 8,344 = caller expression trees **2,656** + `GroupBy` clone 275 + `Select` command
+    **678** + execution 4,701 + native probe 35. The gate/probe/bind is free on a parameter-free shape,
+    so the whole remaining overage is construction + the result set (100 rows).
+  - **Where** 3,729 = caller trees **1,640** (656 filter + 984 projection) + `Where` clone 264 +
+    `Select` command **603** + execution 720 + native probe 168 + 334 not yet attributed.
+  **Stop point (design §12).** Both remaining targets need the same thing: `Select` must stop
+  constructing a `QueryCommand<TResult>`. For T4 that is the whole gap (8,344 - 678 + handle ≈ 7,750 →
+  ≈1.13x), i.e. M4 would close it. For T2 it is not: 3,729 - 603 + handle ≈ 3,200 → ≈1.26x, so even a
+  free command leaves T2 above the floor, and the arm's irreducible caller-side expression trees (1,640)
+  plus execution (720) already consume 2,360 of the 3,042 budget. M4 would therefore be a public
+  return-type break (`Select`/`ToCommand`) with a large docs/sample/test blast radius that closes T4 and
+  still misses T2. **Owner decision (2026-11-10): stop and record.** No stage is started; T4 and T2 stay
+  as documented residuals with the attribution above, and the tree keeps M1+M2+M3 only.
+- **2026-11-10 — I7/M2 delivered: native `Any`/`AnyAsync` route; T1 closed.** The terminal derives
+  the value-agnostic shape from the builder (no `QueryCommand`), probes a thread-local native index in
+  `QueryPlanStore` (same `Clear()` generation transition, so metadata/config changes invalidate it),
+  binds the current closure values into the published holder's parameters and executes it. Nothing is
+  built, prepared or re-rendered on a hit. On a miss the legacy path compiles once and publishes the
+  holder under the shape. `src/nextorm.core/DataContext/Cache/Plans/QueryPlanStore.cs` gains
+  `NativeCandidate`/`TryGetNative`/`SetNative` (+ hit/publish/miss counters, reset by
+  `QueryPlanner.ResetCounters`); `src/nextorm.core/Builders/Entity/NativeAnyRoute.cs` owns the
+  eligibility gate (plain entity source, no join/CTE/group/having/distinct/sort/paging/sample/lock/
+  hint/tag/naming/load/join-into modifier, no applicable global or builder filter, no positional
+  `params`), the fail-closed bind and the publish. `ShapeIdentity` gained a single-graph overload pair
+  (no `params` array, 0 B/op hit) and `TryHash` (hash-only walk for the index probe); the comparison
+  walks the fresh graph against the stored tokens, so a hash collision cannot select a wrong plan.
+  The closure **type** is part of the shape (the binder casts to it), so another call site's display
+  class never shares a plan.
+  Measured (paired, same round): **T1 Any 196.13 KB vs linq2db 233.62 KB = 0.840x** (was 1.585);
+  time 1.833 ms vs 2.322 ms, no regression. Controls unchanged: T7 Page 19.16 vs 17.61 KB = 1.088x,
+  T4 GroupBy 8.97 vs 6.85 KB = 1.309x, T2 Where 597.96 vs 253.53 KB = 2.358x (both still pending
+  M3/M4, as planned). Probe: `O_any_full` 379,224 -> 200,824 B/op; per-call `Any` 3,944 -> 2,168 B.
+  Tests: `tests/nextorm.sqlite.tests/PlanCache/Issue319NativeAnyTests.cs` (4 live-SQLite oracles:
+  fresh-closure hit + current-value rebinding, synchronous terminal, different predicates,
+  a modifier keeps the legacy route and publishes nothing), `ShapeIdentityTests` 10/10.
+  *Next: M3 — `GroupBy`/`Select` route (T4), then M4 — `Select`/`ToCommand` compact handle (T2).*
 - **2026-11-09 — I6 attribution delivered; T7 closed; T1 improved; T2/T4 blocked on the core.**
   New harness `benchmarks/nextorm.benchmark/Issue319/Issue319TargetsProbe.cs`
   (`--issue319-targets <outDir>`) decomposes the four remaining frozen targets into

@@ -328,7 +328,15 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
         if (CollectionSlotCarrier is CollectionSlotCarrier<TResult> carrier)
             return carrier.ToList(@params);
 
+        // I7/M3 native route: a value-agnostic shape derived from this command, the holder the miss
+        // published and the current closure values bound into it. Nothing is fingerprinted, staged,
+        // keyed or looked up on a hit; an ineligible command keeps the legacy path below.
+        NativeProjectionRoute.Run(this, @params, out var native);
+        if (native.Hit)
+            return native.Rows!;
+
         var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, false, true, CancellationToken.None);
+        native.Publish(this, preparedCommand);
 
         return _dataContext.ToList<TResult>(preparedCommand, @params);
     }
@@ -336,13 +344,25 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
     /// <returns>A task producing a list of all result rows.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public Task<List<TResult>> ToListAsync(params object[] @params) => _dataContext!.ToListAsync(_dataContext.GetPreparedQueryCommand(this, false, true, CancellationToken.None), @params, CancellationToken.None);
+    public Task<List<TResult>> ToListAsync(params object[] @params) => ToListAsyncCore(CancellationToken.None, @params);
     /// <summary>Executes the command asynchronously and materializes every row into a list.</summary>
     /// <param name="cancellationToken">A token to cancel the query.</param>
     /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
     /// <returns>A task producing a list of all result rows.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public Task<List<TResult>> ToListAsync(CancellationToken cancellationToken, params object[] @params) => _dataContext!.ToListAsync(_dataContext.GetPreparedQueryCommand(this, false, true, cancellationToken), @params, cancellationToken);
+    public Task<List<TResult>> ToListAsync(CancellationToken cancellationToken, params object[] @params) => ToListAsyncCore(cancellationToken, @params);
+
+    private Task<List<TResult>> ToListAsyncCore(CancellationToken cancellationToken, object[] @params)
+    {
+        // I7/M3 native route; see ToList.
+        NativeProjectionRoute.RunAsync(this, @params, cancellationToken, out var native);
+        if (native.Hit)
+            return native.Pending!;
+
+        var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, false, true, cancellationToken);
+        native.Publish(this, preparedCommand);
+        return _dataContext.ToListAsync(preparedCommand, @params, cancellationToken);
+    }
 
     /// <inheritdoc/>
     internal override List<object?> ToObjectList(ReadOnlySpan<object?> @params)

@@ -29,46 +29,320 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// Context-dependent operations must go through <see cref="RequireContext"/>, never this field.
     /// </summary>
     protected readonly IDataContext? _dataProvider;
+    private EntityBuilderExtras<TEntity>? _extras;
     private QueryCommand? _query;
     private Expression<Func<TEntity, bool>>? _condition;
     private QueryFilterScope _filterScope = QueryFilterScope.None;
     private LambdaExpression? _group;
-    private LimitByClause? _limitBy;
-    private DistinctOnClause? _distinctOn;
-    private ExtremeRowClause? _extremeRow;
+    private LimitByClause? _limitBy
+    {
+        get => _extras?.LimitBy;
+        set
+        {
+            if (value is null)
+            {
+                if (_extras is not null) _extras.LimitBy = null;
+                return;
+            }
+
+            (_extras ??= new()).LimitBy = value;
+        }
+    }
+    private DistinctOnClause? _distinctOn
+    {
+        get => _extras?.DistinctOn;
+        set
+        {
+            if (value is null)
+            {
+                if (_extras is not null) _extras.DistinctOn = null;
+                return;
+            }
+
+            (_extras ??= new()).DistinctOn = value;
+        }
+    }
+    private ExtremeRowClause? _extremeRow
+    {
+        get => _extras?.ExtremeRow;
+        set
+        {
+            if (value is null)
+            {
+                if (_extras is not null) _extras.ExtremeRow = null;
+                return;
+            }
+
+            (_extras ??= new()).ExtremeRow = value;
+        }
+    }
     // #362 AC7: the attached components live in one reference field, never two: null means none, a
     // single `IQueryComponent` means exactly one (the common case, no list), and a
     // `List<IQueryComponent>` means two or more. Keeping the no-component builder at one added
     // reference instead of two is what keeps the untouched construction path as close to the
     // pre-cycle allocation as the class layout allows.
-    private object? _componentState;
-    private TableSampleClause? _tablesample;
-    private TemporalClause? _temporal;
-    private LockClause? _rowLock;
-    private LockClause? _sourceLock;
-    private LambdaExpression? _preWhere;
-    private List<LambdaExpression>? _arrayJoins;
-    private ArrayJoinKind _arrayJoinKind;
-    private List<WindowDefinition>? _windows;
+    private object? _componentState
+    {
+        get => _extras?.ComponentState;
+        set
+        {
+            if (value is null)
+            {
+                if (_extras is not null) _extras.ComponentState = null;
+                return;
+            }
+
+            (_extras ??= new()).ComponentState = value;
+        }
+    }
+    private TableSampleClause? _tablesample
+    {
+        get => _extras?.Tablesample;
+        set
+        {
+            if (value is null)
+            {
+                if (_extras is not null) _extras.Tablesample = null;
+                return;
+            }
+
+            (_extras ??= new()).Tablesample = value;
+        }
+    }
+    private TemporalClause? _temporal
+    {
+        get => _extras?.Temporal;
+        set
+        {
+            if (value is null)
+            {
+                if (_extras is not null) _extras.Temporal = null;
+                return;
+            }
+
+            (_extras ??= new()).Temporal = value;
+        }
+    }
+    private LockClause? _rowLock
+    {
+        get => _extras?.RowLock;
+        set
+        {
+            if (value is null)
+            {
+                if (_extras is not null) _extras.RowLock = null;
+                return;
+            }
+
+            (_extras ??= new()).RowLock = value;
+        }
+    }
+    private LockClause? _sourceLock
+    {
+        get => _extras?.SourceLock;
+        set
+        {
+            if (value is null)
+            {
+                if (_extras is not null) _extras.SourceLock = null;
+                return;
+            }
+
+            (_extras ??= new()).SourceLock = value;
+        }
+    }
+    private LambdaExpression? _preWhere
+    {
+        get => _extras?.PreWhere;
+        set
+        {
+            if (value is null)
+            {
+                if (_extras is not null) _extras.PreWhere = null;
+                return;
+            }
+
+            (_extras ??= new()).PreWhere = value;
+        }
+    }
+    private List<LambdaExpression>? _arrayJoins
+    {
+        get => _extras?.ArrayJoins;
+        set
+        {
+            if (value is null)
+            {
+                if (_extras is not null) _extras.ArrayJoins = null;
+                return;
+            }
+
+            (_extras ??= new()).ArrayJoins = value;
+        }
+    }
+    private ArrayJoinKind _arrayJoinKind
+    {
+        get => _extras?.ArrayJoinKind ?? default;
+        set
+        {
+            if (value == default)
+            {
+                if (_extras is not null) _extras.ArrayJoinKind = value;
+                return;
+            }
+
+            (_extras ??= new()).ArrayJoinKind = value;
+        }
+    }
+    private List<WindowDefinition>? _windows
+    {
+        get => _extras?.Windows;
+        set
+        {
+            if (value is null)
+            {
+                if (_extras is not null) _extras.Windows = null;
+                return;
+            }
+
+            (_extras ??= new()).Windows = value;
+        }
+    }
     private Type? _sourceEntityType;
     private bool _bindArrayJoinElement;
-    private List<KeyValuePair<string, string>>? _settings;
+    private List<KeyValuePair<string, string>>? _settings
+    {
+        get => _extras?.Settings;
+        set
+        {
+            if (value is null)
+            {
+                if (_extras is not null) _extras.Settings = null;
+                return;
+            }
+
+            (_extras ??= new()).Settings = value;
+        }
+    }
     private Expression<Func<TEntity, bool>>? _having;
     private List<Sorting>? _sorting;
-    private List<IEagerLoadSpec<TEntity>>? _loadSpecs;
-    private List<IJoinIntoSpec<TEntity>>? _joinIntos;
+    private List<IEagerLoadSpec<TEntity>>? _loadSpecs
+    {
+        get => _extras?.LoadSpecs;
+        set
+        {
+            if (value is null)
+            {
+                if (_extras is not null) _extras.LoadSpecs = null;
+                return;
+            }
+
+            (_extras ??= new()).LoadSpecs = value;
+        }
+    }
+    private List<IJoinIntoSpec<TEntity>>? _joinIntos
+    {
+        get => _extras?.JoinIntos;
+        set
+        {
+            if (value is null)
+            {
+                if (_extras is not null) _extras.JoinIntos = null;
+                return;
+            }
+
+            (_extras ??= new()).JoinIntos = value;
+        }
+    }
     private EagerLoadMode _eagerLoadMode;
     private CollectionSlotShape _collectionSlotShape;
     /// <summary>The join clauses collected so far, or <c>null</c> when the query has no joins.</summary>
     protected List<JoinExpression>? _joins;
     private string? _table;
     private FromExpression? _from;
-    private string? _subQueryHint;
-    private string? _tableNameOverride;
-    private string? _schemaOverride;
-    private string? _databaseOverride;
-    private string? _serverOverride;
-    private string? _tableExpression;
+    private string? _subQueryHint
+    {
+        get => _extras?.SubQueryHint;
+        set
+        {
+            if (value is null)
+            {
+                if (_extras is not null) _extras.SubQueryHint = null;
+                return;
+            }
+
+            (_extras ??= new()).SubQueryHint = value;
+        }
+    }
+    private string? _tableNameOverride
+    {
+        get => _extras?.TableNameOverride;
+        set
+        {
+            if (value is null)
+            {
+                if (_extras is not null) _extras.TableNameOverride = null;
+                return;
+            }
+
+            (_extras ??= new()).TableNameOverride = value;
+        }
+    }
+    private string? _schemaOverride
+    {
+        get => _extras?.SchemaOverride;
+        set
+        {
+            if (value is null)
+            {
+                if (_extras is not null) _extras.SchemaOverride = null;
+                return;
+            }
+
+            (_extras ??= new()).SchemaOverride = value;
+        }
+    }
+    private string? _databaseOverride
+    {
+        get => _extras?.DatabaseOverride;
+        set
+        {
+            if (value is null)
+            {
+                if (_extras is not null) _extras.DatabaseOverride = null;
+                return;
+            }
+
+            (_extras ??= new()).DatabaseOverride = value;
+        }
+    }
+    private string? _serverOverride
+    {
+        get => _extras?.ServerOverride;
+        set
+        {
+            if (value is null)
+            {
+                if (_extras is not null) _extras.ServerOverride = null;
+                return;
+            }
+
+            (_extras ??= new()).ServerOverride = value;
+        }
+    }
+    private string? _tableExpression
+    {
+        get => _extras?.TableExpression;
+        set
+        {
+            if (value is null)
+            {
+                if (_extras is not null) _extras.TableExpression = null;
+                return;
+            }
+
+            (_extras ??= new()).TableExpression = value;
+        }
+    }
     #endregion
     /// <summary>
     /// Initializes a builder over the mapped entity type; the source is resolved from entity metadata.
@@ -380,7 +654,9 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// <returns>The command that produces projected rows.</returns>
     private QueryCommand<TResult> SelectCore<TResult>(Expression<Func<TEntity, TResult>> exp)
     {
-        var cmd = RequireContext.CreateCommand<TResult>(new QueryDefinition
+        // Stack-only transfer record: the fluent hot path must not materialise a QueryDefinition just for
+        // the constructor to copy its fields out again (#319).
+        var cmd = RequireContext.CreateCommand<TResult>(new QueryShape
         {
             Exp = exp,
             SrcType = _sourceEntityType,
@@ -529,7 +805,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// <returns>The command that produces <typeparamref name="TEntity"/> rows.</returns>
     public QueryCommand<TEntity> ToCommand()
     {
-        var cmd = RequireContext.CreateCommand<TEntity>(new QueryDefinition
+        var cmd = RequireContext.CreateCommand<TEntity>(new QueryShape
         {
             SrcType = _sourceEntityType ?? typeof(TEntity),
             Condition = _condition,
@@ -5756,7 +6032,8 @@ public class EntityBuilder : ICloneable
     public QueryCommand<TResult> Select<TResult>(Expression<Func<TableAlias, TResult>> exp)
     {
         //if (string.IsNullOrEmpty(_table)) throw new InvalidOperationException("Table must be specified");
-        var cmd = new QueryCommand<TResult>(_dataProvider, new QueryDefinition
+        // Stack-only transfer record, exactly like SelectCore: no QueryDefinition is materialised (#319).
+        var cmd = new QueryCommand<TResult>(_dataProvider, new QueryShape
         {
             Exp = exp,
             Condition = _condition,

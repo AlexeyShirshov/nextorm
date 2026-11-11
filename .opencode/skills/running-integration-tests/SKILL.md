@@ -25,6 +25,17 @@ description: Run nextorm's xunit v3 integration tests (tests/nextorm.integration
 
 Always run from the repo root and set `DOCKER_HOST` first.
 
+> **On a memory-tight host the canonical run MUST go through the capped wrapper.** A bare full-suite
+> run holds the Podman WSL2 VM next to the Ubuntu distro, the OpenCode server is killed together with
+> the VM, and the run dies mid-way or turns red on connection errors:
+>
+> ```bash
+> python3 tools/integration/run-integration-capped.py --full
+> ```
+>
+> It runs exactly the command below under the cgroup cap and `setsid`, then checks the skip budget
+> against the produced log. Use the bare command only when `--full` is unavailable.
+
 Whole suite (starts PostgreSQL, SQL Server, MySQL and ClickHouse containers lazily). The canonical
 run excludes the opt-in diagnostic harnesses (`Category=Diagnostic`), so the skip set matches the
 pinned budget:

@@ -82,6 +82,19 @@ if (args.Length > 0 && args[0] == "--t245-prep-remainder")
     return await T245PreparationRemainderProbe.RunAsync(
         args.Length > 1 ? args[1] : throw new ArgumentException("--t245-prep-remainder needs an output directory"));
 
+// Issue #319: measurement-only decomposition of the warm plan-cache hit of a fresh command
+// (construction, raw-descriptor capture, raw lookup, prepared-state apply, plan-key build).
+// Benchmark-project-only; with the flag absent this file behaves exactly as before.
+if (args.Length > 0 && args[0] == "--issue319-prep-probe")
+    return await Issue319PreparationProbe.RunAsync(
+        args.Length > 1 ? args[1] : throw new ArgumentException("--issue319-prep-probe needs an output directory"));
+
+// Issue #319/I6: measurement-only decomposition of the four remaining frozen targets (Any, Where,
+// GroupByCount, PageAsync) into collection, preparation, plan-key lookup and execution.
+if (args.Length > 0 && args[0] == "--issue319-targets")
+    return await Issue319TargetsProbe.RunAsync(
+        args.Length > 1 ? args[1] : throw new ArgumentException("--issue319-targets needs an output directory"));
+
 // T297-G8 (#297): BenchmarkDotNet launches one process per benchmark, so the class-level static
 // collector never sees more than the last probe of a BDN run. This env-gated entry point runs all
 // 32 probe bodies in a single process and writes the evidence; benchmark-project-only, and with

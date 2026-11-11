@@ -21,7 +21,9 @@ namespace NextORM.Core;
 /// captured member access whose root is a constant (typically a compiler-generated) closure, the member
 /// name must be the parameter name, no value converter/duration/stability/runtime parameter may be
 /// involved, and the command must have no joins, grouping, HAVING, PREWHERE, sorting, windows, array
-/// joins, CTEs, unions, referenced queries or outer references. Anything else leaves the cached command
+/// joins, CTEs, unions or outer references. A referenced subquery is supported only for the shared
+/// terminal wrapper (Any/Count/All), whose captured predicate is rendered inside that subquery; the
+/// recipe then navigates the subquery's own roots on every bind. Anything else leaves the cached command
 /// without a recipe, and the original <c>ExtractParams</c> path runs unchanged.
 /// </para>
 /// <para>
@@ -33,10 +35,13 @@ namespace NextORM.Core;
 internal sealed class ParamRefreshRecipe
 {
     private readonly string[] _names;
-    // Per-path provenance: true when the navigation path was built from the projection root and must be
-    // walked from ProjectionExpression, false when it was built from (and must be walked from)
-    // PreparedCondition. Binding from the wrong root would either resolve a foreign constant or throw.
-    private readonly bool[] _projectionRoots;
+    // Per-path provenance: which expression of the fresh command the navigation path must be walked
+    // from. A capture may live in the command's own condition or projection, or — for the shared
+    // terminal wrapper (Any/Count/All) — inside a referenced query's condition or projection. Binding
+    // from the wrong root would either resolve a foreign constant or throw.
+    private readonly RootKind[] _rootKinds;
+    // The referenced-query index when the kind addresses one; 0 otherwise.
+    private readonly int[] _rootIndices;
     // The miss-time constant (display-class) type of each path, validated before any value is written.
     private readonly Type[] _closureTypes;
     private readonly Func<Expression, Expression>[][] _paths;
@@ -63,16 +68,31 @@ internal sealed class ParamRefreshRecipe
 
     private ParamRefreshRecipe(
         string[] names,
-        bool[] projectionRoots,
+        RootKind[] rootKinds,
+        int[] rootIndices,
         Type[] closureTypes,
         Func<Expression, Expression>[][] paths,
         Action<object?, DbParameter>[] writers)
     {
         _names = names;
-        _projectionRoots = projectionRoots;
+        _rootKinds = rootKinds;
+        _rootIndices = rootIndices;
         _closureTypes = closureTypes;
         _paths = paths;
         _writers = writers;
+    }
+
+    /// <summary>The expression of the fresh command a captured path is walked from.</summary>
+    private enum RootKind
+    {
+        /// <summary>The command's own prepared condition.</summary>
+        Condition,
+        /// <summary>The command's own prepared projection.</summary>
+        Projection,
+        /// <summary>The prepared condition of the referenced query at <c>_rootIndices[i]</c>.</summary>
+        ReferencedCondition,
+        /// <summary>The prepared projection of the referenced query at <c>_rootIndices[i]</c>.</summary>
+        ReferencedProjection,
     }
 
     /// <summary>The number of parameters the recipe refreshes.</summary>
@@ -108,11 +128,32 @@ internal sealed class ParamRefreshRecipe
         }
 
         var captures = new Dictionary<string, Capture>(StringComparer.Ordinal);
-        if (!TryCollect(queryCommand.PreparedCondition!, captures))
+        if (queryCommand.PreparedCondition is { } ownCondition
+            && !TryCollect(ownCondition, RootKind.Condition, -1, captures))
             return null;
 
-        if (queryCommand.ProjectionExpression is { } projection && !TryCollect(projection, captures))
+        if (queryCommand.ProjectionExpression is { } projection
+            && !TryCollect(projection, RootKind.Projection, -1, captures))
             return null;
+
+        // The shared terminal wrapper (Any/Count/All) renders its captured predicate inside the
+        // referenced subquery, not on its own condition, so the captures are collected from there as
+        // well. The referenced query is swapped in place between executions (ReplaceCommand), so the
+        // recipe navigates the CURRENT instance's prepared roots on every bind.
+        if (queryCommand.ReferencedQueries is { Count: > 0 } referenced)
+        {
+            for (var r = 0; r < referenced.Count; r++)
+            {
+                var body = referenced[r];
+                if (body.PreparedCondition is { } referencedCondition
+                    && !TryCollect(referencedCondition, RootKind.ReferencedCondition, r, captures))
+                    return null;
+
+                if (body.ProjectionExpression is { } referencedProjection
+                    && !TryCollect(referencedProjection, RootKind.ReferencedProjection, r, captures))
+                    return null;
+            }
+        }
 
         // Every parameter must resolve to exactly one unambiguous captured member, and no captured
         // member may be left over that the parameter list does not use (otherwise a capture came from a
@@ -121,11 +162,11 @@ internal sealed class ParamRefreshRecipe
             return null;
 
         var names = new string[parameters.Count];
-        var projectionRoots = new bool[parameters.Count];
+        var rootKinds = new RootKind[parameters.Count];
+        var rootIndices = new int[parameters.Count];
         var closureTypes = new Type[parameters.Count];
         var paths = new Func<Expression, Expression>[parameters.Count][];
         var writers = new Action<object?, DbParameter>[parameters.Count];
-        var conditionRoot = queryCommand.PreparedCondition;
         for (var i = 0; i < parameters.Count; i++)
         {
             var name = parameters[i].Name;
@@ -138,15 +179,16 @@ internal sealed class ParamRefreshRecipe
 
             names[i] = name;
             paths[i] = path;
-            // A capture collected from the projection root must be navigated from ProjectionExpression on
-            // a hit; navigating it from PreparedCondition would misbind or throw. The root is known at
-            // collection time, so this is proven provenance, not a guess.
-            projectionRoots[i] = !ReferenceEquals(capture.SourceRoot, conditionRoot);
+            // Proven provenance collected at miss time: the same path is walked from the same kind of
+            // root on a hit, so a capture collected from a referenced subquery is never navigated from
+            // the wrapper's condition (which would misbind or throw).
+            rootKinds[i] = capture.RootKind;
+            rootIndices[i] = capture.RootIndex;
             closureTypes[i] = capture.ClosureType;
             writers[i] = CompileWriter(capture.Node, capture.ClosureType);
         }
 
-        return new ParamRefreshRecipe(names, projectionRoots, closureTypes, paths, writers);
+        return new ParamRefreshRecipe(names, rootKinds, rootIndices, closureTypes, paths, writers);
     }
 
     /// <summary>
@@ -181,17 +223,11 @@ internal sealed class ParamRefreshRecipe
                 return false;
         }
 
-        if (queryCommand.PreparedCondition is null)
-            return false;
-
-        var conditionRoot = queryCommand.PreparedCondition;
-        var projectionRoot = queryCommand.ProjectionExpression;
-
         // Pass 1: navigate every path and validate it reaches the expected constant. This reads no
         // captured member, so a malformed recipe cannot leave a partial bind behind.
         for (var i = 0; i < _names.Length; i++)
         {
-            if (!TryRoot(conditionRoot, projectionRoot, i, out var root)
+            if (!TryRoot(queryCommand, i, out var root)
                 || !TryResolveClosure(root, _paths[i], _closureTypes[i], out _))
             {
                 return false;
@@ -201,7 +237,7 @@ internal sealed class ParamRefreshRecipe
         // Pass 2: read each captured member exactly once and assign it to the cached parameter.
         for (var i = 0; i < _names.Length; i++)
         {
-            _ = TryRoot(conditionRoot, projectionRoot, i, out var root);
+            _ = TryRoot(queryCommand, i, out var root);
             _ = TryResolveClosure(root, _paths[i], _closureTypes[i], out var closure);
             _writers[i](closure, dbCommandParams[i]);
         }
@@ -209,24 +245,59 @@ internal sealed class ParamRefreshRecipe
         return true;
     }
 
-    // Selects the fresh root a path was built against: the projection lambda for a capture collected
-    // from the projection, the prepared condition otherwise. Null means the plan cannot supply that root.
-    private bool TryRoot(Expression conditionRoot, LambdaExpression? projectionRoot, int index, out Expression root)
+    // Selects the fresh root a path was built against: the command's own condition/projection, or the
+    // condition/projection of the referenced subquery the capture came from. Null means the fresh
+    // command cannot supply that root, so the recipe rejects instead of binding a foreign value.
+    private bool TryRoot(QueryCommand queryCommand, int index, out Expression root)
     {
-        if (_projectionRoots[index])
+        switch (_rootKinds[index])
         {
-            if (projectionRoot is null)
-            {
+            case RootKind.Condition:
+                if (queryCommand.PreparedCondition is null)
+                {
+                    root = null!;
+                    return false;
+                }
+
+                root = queryCommand.PreparedCondition;
+                return true;
+
+            case RootKind.Projection:
+                if (queryCommand.ProjectionExpression is null)
+                {
+                    root = null!;
+                    return false;
+                }
+
+                root = queryCommand.ProjectionExpression;
+                return true;
+
+            case RootKind.ReferencedCondition:
+            case RootKind.ReferencedProjection:
+                if (queryCommand.ReferencedQueries is not { } referenced
+                    || _rootIndices[index] >= referenced.Count)
+                {
+                    root = null!;
+                    return false;
+                }
+
+                var body = referenced[_rootIndices[index]];
+                var expression = _rootKinds[index] == RootKind.ReferencedCondition
+                    ? body.PreparedCondition
+                    : body.ProjectionExpression;
+                if (expression is null)
+                {
+                    root = null!;
+                    return false;
+                }
+
+                root = expression;
+                return true;
+
+            default:
                 root = null!;
                 return false;
-            }
-
-            root = projectionRoot;
-            return true;
         }
-
-        root = conditionRoot;
-        return true;
     }
 
     private static bool TryResolveClosure(Expression root, Func<Expression, Expression>[] path, Type closureType, out object? closure)
@@ -255,11 +326,29 @@ internal sealed class ParamRefreshRecipe
 
     private static bool HasSupportedShape(QueryCommand queryCommand)
     {
-        // Captures may only come from a scalar WHERE and (optionally) the projection. Every other
-        // parameter-bearing clause is out of the supported subset.
-        if (queryCommand.PreparedCondition is null)
+        // Captures may only come from a scalar WHERE and (optionally) the projection — of the command
+        // itself or of a referenced subquery (the shared Any/Count/All wrapper renders the captured
+        // predicate there). Every other parameter-bearing clause is out of the supported subset, and a
+        // referenced subquery must be a plain scalar body in its own right.
+        if (!IsSupportedBody(queryCommand, allowReferenced: true))
             return false;
 
+        if (queryCommand.ReferencedQueries is { Count: > 0 } referenced)
+        {
+            for (var i = 0; i < referenced.Count; i++)
+            {
+                if (referenced[i] is null || !IsSupportedBody(referenced[i], allowReferenced: false))
+                    return false;
+            }
+        }
+
+        return true;
+    }
+
+    // The body restrictions of the supported scalar subset. A referenced subquery may not itself
+    // reference further subqueries: a nested wrapper has no proven single root to bind from.
+    private static bool IsSupportedBody(QueryCommand queryCommand, bool allowReferenced)
+    {
         if (queryCommand.Joins is { Length: > 0 })
             return false;
 
@@ -287,7 +376,7 @@ internal sealed class ParamRefreshRecipe
         if (queryCommand.UnionQuery is not null)
             return false;
 
-        if (queryCommand.ReferencedQueries is { Count: > 0 })
+        if (!allowReferenced && queryCommand.ReferencedQueries is { Count: > 0 })
             return false;
 
         if (queryCommand.OuterReferences is { Count: > 0 })
@@ -296,9 +385,9 @@ internal sealed class ParamRefreshRecipe
         return true;
     }
 
-    private static bool TryCollect(Expression expression, Dictionary<string, Capture> captures)
+    private static bool TryCollect(Expression expression, RootKind rootKind, int rootIndex, Dictionary<string, Capture> captures)
     {
-        var collector = new Collector(expression, captures);
+        var collector = new Collector(expression, rootKind, rootIndex, captures);
         collector.Visit(expression);
         return !collector.Failed;
     }
@@ -434,11 +523,15 @@ internal sealed class ParamRefreshRecipe
     private sealed class Collector : ExpressionVisitor
     {
         private readonly Expression _sourceRoot;
+        private readonly RootKind _rootKind;
+        private readonly int _rootIndex;
         private readonly Dictionary<string, Capture> _captures;
 
-        internal Collector(Expression sourceRoot, Dictionary<string, Capture> captures)
+        internal Collector(Expression sourceRoot, RootKind rootKind, int rootIndex, Dictionary<string, Capture> captures)
         {
             _sourceRoot = sourceRoot;
+            _rootKind = rootKind;
+            _rootIndex = rootIndex;
             _captures = captures;
         }
 
@@ -446,6 +539,12 @@ internal sealed class ParamRefreshRecipe
 
         protected override Expression VisitMember(MemberExpression node)
         {
+            // A captured query object is a nested command reference, not a scalar value: it is rendered
+            // by the registry (the referenced query), never bound as a parameter, so it must not count
+            // as a capture that the parameter list has to explain.
+            if (typeof(QueryCommand).IsAssignableFrom(node.Type))
+                return node;
+
             if (node.Expression is not null && TryFindRootConstant(node, out var root))
             {
                 var name = node.Member.Name;
@@ -455,6 +554,8 @@ internal sealed class ParamRefreshRecipe
                     // from the same closure instance.
                     if (existing.Member != node.Member
                         || existing.ClosureType != root.Type
+                        || existing.RootKind != _rootKind
+                        || existing.RootIndex != _rootIndex
                         || !ReferenceEquals(existing.Constant.Value, root.Value))
                     {
                         Failed = true;
@@ -462,7 +563,7 @@ internal sealed class ParamRefreshRecipe
                 }
                 else
                 {
-                    _captures[name] = new Capture(root.Type, node.Member, root, node, _sourceRoot);
+                    _captures[name] = new Capture(root.Type, node.Member, root, node, _sourceRoot, _rootKind, _rootIndex);
                 }
 
                 // The whole member subtree is one captured value; do not descend and record inner
@@ -492,13 +593,15 @@ internal sealed class ParamRefreshRecipe
 
     private sealed class Capture
     {
-        internal Capture(Type closureType, MemberInfo member, ConstantExpression constant, MemberExpression node, Expression sourceRoot)
+        internal Capture(Type closureType, MemberInfo member, ConstantExpression constant, MemberExpression node, Expression sourceRoot, RootKind rootKind, int rootIndex)
         {
             ClosureType = closureType;
             Member = member;
             Constant = constant;
             Node = node;
             SourceRoot = sourceRoot;
+            RootKind = rootKind;
+            RootIndex = rootIndex;
         }
 
         internal Type ClosureType { get; }
@@ -506,5 +609,7 @@ internal sealed class ParamRefreshRecipe
         internal ConstantExpression Constant { get; }
         internal MemberExpression Node { get; }
         internal Expression SourceRoot { get; }
+        internal RootKind RootKind { get; }
+        internal int RootIndex { get; }
     }
 }

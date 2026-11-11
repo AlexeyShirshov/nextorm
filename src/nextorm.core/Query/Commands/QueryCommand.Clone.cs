@@ -36,7 +36,39 @@ public partial class QueryCommand
     protected virtual void CopyTo(QueryCommand dst, bool copyAll)
     {
         dst._selectList = _selectList;
-        dst._groupingList = _groupingList;
+        // Prepared-only columns travel as one payload block: an unprepared source must not make the
+        // clone allocate a payload for state it does not have (issue #319).
+        if (_preparedState is { } prepared)
+        {
+            var preparedTarget = dst.Prepared;
+            preparedTarget.GroupingList = prepared.GroupingList;
+            preparedTarget.LimitByColumns = prepared.LimitByColumns;
+            preparedTarget.DistinctOnColumns = prepared.DistinctOnColumns;
+            preparedTarget.ExtremeRowColumns = prepared.ExtremeRowColumns;
+            preparedTarget.ExtremeRowGroupByColumns = prepared.ExtremeRowGroupByColumns;
+            preparedTarget.PerParentPartitionColumns = prepared.PerParentPartitionColumns;
+            preparedTarget.PreparedArrayJoin = prepared.PreparedArrayJoin;
+            preparedTarget.PreparedCondition = prepared.PreparedCondition;
+            preparedTarget.PreparedHaving = prepared.PreparedHaving;
+            preparedTarget.PreparedPreWhere = prepared.PreparedPreWhere;
+            preparedTarget.PreWhereShapeHash = prepared.PreWhereShapeHash;
+            preparedTarget.HasPreWhereInValues = prepared.HasPreWhereInValues;
+            preparedTarget.LookupPartitions = prepared.LookupPartitions;
+            preparedTarget.ShapeScanned = prepared.ShapeScanned;
+            preparedTarget.HasUnkeyedTupleInValues = prepared.HasUnkeyedTupleInValues;
+            preparedTarget.HasUnkeyedScalarInValues = prepared.HasUnkeyedScalarInValues;
+            preparedTarget.OuterRefs = prepared.OuterRefs;
+            preparedTarget.OuterRefBindings = prepared.OuterRefBindings;
+            preparedTarget.BoxedResultType = prepared.BoxedResultType;
+            preparedTarget.EffectiveGroupingKeys = prepared.EffectiveGroupingKeys;
+            preparedTarget.EffectiveHavingMode = prepared.EffectiveHavingMode;
+            preparedTarget.EffectiveHaving = prepared.EffectiveHaving;
+            preparedTarget.EffectiveSourcePredicate = prepared.EffectiveSourcePredicate;
+            preparedTarget.EffectiveRequireDistinct = prepared.EffectiveRequireDistinct;
+            preparedTarget.PreparedComponents = prepared.PreparedComponents;
+            preparedTarget.PreparedComponentsView = prepared.PreparedComponentsView;
+            preparedTarget.ComponentRenderShape = null;
+        }
         dst._isPrepared = _isPrepared;
         dst._srcType = _srcType;
         dst._dontCache = _dontCache;
@@ -45,17 +77,10 @@ public partial class QueryCommand
         dst.JoinPlanHash = JoinPlanHash;
         dst.WherePlanHash = WherePlanHash;
         dst.SortingPlanHash = SortingPlanHash;
-        dst.PreparedCondition = PreparedCondition;
-        dst.PreparedHaving = PreparedHaving;
         dst.InValuesShapeHash = InValuesShapeHash;
-        dst.LookupPartitions = LookupPartitions;
-        dst.ShapeScanned = ShapeScanned;
         // ShapeValuesStable is deliberately not copied: a clone's evaluated InValuesPartitions are not
         // transferred either, so a clone must keep the pre-existing refresh path instead of skipping it.
-        dst.HasUnkeyedTupleInValues = HasUnkeyedTupleInValues;
-        dst.HasUnkeyedScalarInValues = HasUnkeyedScalarInValues;
         dst.ResultPlanHash = ResultPlanHash;
-        dst.BoxedResultType = BoxedResultType;
         dst.GroupingPlanHash = GroupingPlanHash;
         // From/Union/ReferencedQueries hashes must travel with the clone too: QueryPlanEqualityComparer
         // .GetHashCode() reads them, and QueryPlan.Equals() considers the cloned members equal, so the
@@ -90,11 +115,9 @@ public partial class QueryCommand
         // Outer references participate in the plan key (QueryPlanEqualityComparer), so the cached
         // clone must carry them; otherwise the hash captured at construction would not match the
         // recomputed hash in QueryPlan.GetCacheVersion and the Debug.Assert would fail.
-        dst._outerRefs = _outerRefs;
         // The occurrence bindings travel with the outer references so a cached clone keeps the metadata
         // needed to render its markers. They are runtime metadata only: neither is part of the plan key
         // (QueryPlanEqualityComparer reads OuterReferences, never the binding side table).
-        dst._outerRefBindings = _outerRefBindings;
         dst.OuterRegistry = OuterRegistry;
 
         dst.ResultType = ResultType;
@@ -112,32 +135,19 @@ public partial class QueryCommand
         dst.GroupByWithTotals = GroupByWithTotals;
         // The inferred SelectGroup state is derived at preparation, but `_isPrepared` travels with the
         dst.LimitBy = LimitBy;
-        dst._limitByColumns = _limitByColumns;
         dst.DistinctOn = DistinctOn;
-        dst._distinctOnColumns = _distinctOnColumns;
         dst.ExtremeRow = ExtremeRow;
         // #368: component state is stored flat; share the immutable component/prepared lists and views,
         // and drop the render-scoped shape on the clone (it belongs to the source instance).
         dst._components = _components;
         dst._componentsView = _componentsView;
-        dst._preparedComponents = _preparedComponents;
-        dst._preparedComponentsView = _preparedComponentsView;
-        dst._componentRenderShape = null;
         // The effective state the component contributions produced during preparation. The clone
         // constructor already copies it; a staged raw apply (ApplyPreparationFrom) targets a fresh
         // command, so it must arrive through here or the hit cannot re-extract captured parameters from
         // the component's replacement HAVING/grouping.
-        dst.EffectiveGroupingKeys = EffectiveGroupingKeys;
-        dst.EffectiveHavingMode = EffectiveHavingMode;
-        dst.EffectiveHaving = EffectiveHaving;
-        dst.EffectiveSourcePredicate = EffectiveSourcePredicate;
-        dst.EffectiveRequireDistinct = EffectiveRequireDistinct;
-        dst._extremeRowColumns = _extremeRowColumns;
-        dst._extremeRowGroupByColumns = _extremeRowGroupByColumns;
         dst.PerParentPaging = PerParentPaging;
         dst.PerParentPagingEmbedded = PerParentPagingEmbedded;
         dst.PerParentPartition = PerParentPartition;
-        dst._perParentPartitionColumns = _perParentPartitionColumns;
         dst.TableSample = TableSample;
         dst.Temporal = Temporal;
         dst.RowLock = RowLock;
@@ -155,10 +165,6 @@ public partial class QueryCommand
         dst._windows = _windows;
         dst.ArrayJoinKind = ArrayJoinKind;
         dst.BindArrayJoinElement = BindArrayJoinElement;
-        dst._preparedArrayJoin = _preparedArrayJoin;
-        dst.PreparedPreWhere = PreparedPreWhere;
-        dst.PreWhereShapeHash = PreWhereShapeHash;
-        dst.HasPreWhereInValues = HasPreWhereInValues;
         dst.TableHints = TableHints;
         dst.IndexHints = IndexHints;
         dst.IndexHintKind = IndexHintKind;
@@ -173,10 +179,12 @@ public partial class QueryCommand
         // creates its own from the lazy getters.
         dst._unionType = _unionType;
 
+        if (_preparedState is { } preparedReferences && preparedReferences.ReferencedQueries is not null)
+            dst.Prepared.ReferencedQueries = preparedReferences.ReferencedQueries;
+
         if (copyAll)
         {
             dst._customData = _customData;
-            dst._referencedQueries = _referencedQueries;
             dst._union = _union;
             dst._from = _from;
             dst._ctes = _ctes;
@@ -203,9 +211,9 @@ public partial class QueryCommand
                     }).ToList();
             }
 
-            if (_referencedQueries?.Count > 0)
+            if (Prep?.ReferencedQueries is { Count: > 0 } referencedQueries)
             {
-                dst._referencedQueries = _referencedQueries.Select(it => it.CloneForCache()).ToList();
+                dst.Prepared.ReferencedQueries = referencedQueries.Select(it => it.CloneForCache()).ToList();
             }
         }
     }

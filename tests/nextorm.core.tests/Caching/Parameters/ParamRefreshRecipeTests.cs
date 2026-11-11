@@ -70,6 +70,16 @@ public class ParamRefreshRecipeTests
     private static DbPreparedQueryCommand<T> Prepare<T>(IDataContext ctx, QueryCommand<T> cmd, bool cache = true)
         => (DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(cmd, false, cache, CancellationToken.None);
 
+    // The exact production route of the shared Any terminal: the parent command is prepared, the
+    // context-owned EXISTS wrapper takes it as a referenced query, and the wrapper's plan is prepared.
+    private static DbPreparedQueryCommand<bool> PrepareAny(RecipeTestContext ctx, EntityBuilder<RecipeEntity> e, int value)
+    {
+        var parent = e.Where(x => x.Id > value).ToParentCommand();
+        parent.IgnoreColumns = true;
+        var wrapper = EntityBuilderExtensions.GetAnyCommand(ctx, parent);
+        return (DbPreparedQueryCommand<bool>)ctx.GetPreparedQueryCommand(wrapper, false, true, CancellationToken.None);
+    }
+
     // Same source site, so the captured value (not its shape) changes between calls and the second
     // Prepare is a cache hit with a fresh closure.
     private static QueryCommand<int> WhereCaptured(EntityBuilder<RecipeEntity> e, int value)
@@ -153,6 +163,36 @@ public class ParamRefreshRecipeTests
         b.Reads.Should().Be(1, "the fresh projection closure is read exactly once");
         a.Reads.Should().Be(0, "the stale closure is never read");
         QueryPlanner.FallbackRefreshes.Should().Be(0, "a resolved projection path takes the fast path");
+    }
+
+    /// <summary>
+    /// The shared terminal wrapper (<c>Any</c>/<c>Count</c>/<c>All</c>) renders the captured predicate
+    /// inside a referenced subquery, not on the wrapper's own condition. The recipe must collect the
+    /// capture there and navigate the CURRENT subquery on every bind; otherwise each execution falls
+    /// back to re-rendering the whole statement just to extract one parameter value.
+    /// </summary>
+    [Fact]
+    public void ReferencedQueryCapture_OnCacheHit_ShouldBindFreshValueWithoutReRendering()
+    {
+        using var ctx = new RecipeTestContext();
+        ctx.PurgeQueryCache();
+        var e = ctx.From<RecipeEntity>();
+
+        var first = PrepareAny(ctx, e, 1);
+        first.ParamRecipe.Should().NotBeNull(
+            "a capture rendered inside the referenced subquery is part of the supported recipe subset");
+        first.DbCommandParams.Cast<DbParameter>().Should().ContainSingle();
+        first.DbCommandParams[0].Value.Should().Be(1);
+
+        ExpressionPlanEqualityComparer.ResetCounters();
+
+        var second = PrepareAny(ctx, e, 2);
+
+        ParamRefreshRecipe.FastBindHits.Should().Be(1);
+        ParamRefreshRecipe.BindRejected.Should().Be(0);
+        QueryPlanner.FallbackRefreshes.Should().Be(0,
+            "a resolved referenced-query path must not fall back to the full ExtractParams re-render");
+        second.DbCommandParams[0].Value.Should().Be(2, "the recipe binds the fresh subquery closure value");
     }
 
     [Fact]
@@ -525,7 +565,7 @@ public class ParamRefreshRecipeTests
         ctx.PurgeQueryCache();
 
         var command = CreateCapturedCommand(ctx, 1);
-        command._preparedArrayJoin = [Expression.Constant(Array.Empty<int>())];
+        command.Prepared.PreparedArrayJoin = [Expression.Constant(Array.Empty<int>())];
 
         AssertRecipeNull(command);
     }

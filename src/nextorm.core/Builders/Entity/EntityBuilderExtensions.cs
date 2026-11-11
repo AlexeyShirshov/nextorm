@@ -292,10 +292,17 @@ public static class EntityBuilderExtensions
     public static bool Any<TEntity>(this EntityBuilder<TEntity> builder, params ReadOnlySpan<object?> @params) => AnyCore(builder, @params);
     private static bool AnyCore<TEntity>(EntityBuilder<TEntity> builder, ReadOnlySpan<object?> @params)
     {
+        // I7/M2 native route: a value-agnostic shape derived from the builder, the compiled holder the
+        // miss published and the current closure values bound into it. Nothing is built, prepared or
+        // re-rendered on a hit; an ineligible builder keeps the legacy path below.
+        if (NativeAnyRoute.TryExecute(builder, @params, out var native))
+            return native;
+
         var cmd = builder.ToParentCommand();
         cmd.IgnoreColumns = true;
         var queryCommand = GetAnyCommand(builder.DataProvider, cmd);
         var preparedCommand = builder.DataProvider.GetPreparedQueryCommand(queryCommand, false, true, CancellationToken.None);
+        NativeAnyRoute.Publish(builder, preparedCommand);
         return builder.DataProvider.ExecuteScalar<bool>(preparedCommand, @params, true);
     }
     /// <summary>
@@ -317,10 +324,15 @@ public static class EntityBuilderExtensions
     /// <returns>A task whose result is true if the query matches at least one row; otherwise, false.</returns>
     public static async Task<bool> AnyAsync<TEntity>(this EntityBuilder<TEntity> builder, CancellationToken cancellationToken, params object[] @params)
     {
+        // I7/M2 native route; see AnyCore.
+        if (NativeAnyRoute.TryExecuteAsync(builder, cancellationToken, @params, out var native))
+            return await native.ConfigureAwait(false);
+
         var cmd = builder.ToParentCommand();
         cmd.IgnoreColumns = true;
         var queryCommand = GetAnyCommand(builder.DataProvider, cmd);
         var preparedCommand = builder.DataProvider.GetPreparedQueryCommand(queryCommand, false, true, cancellationToken);
+        NativeAnyRoute.Publish(builder, preparedCommand);
         return await builder.DataProvider.ExecuteScalar<bool>(preparedCommand, @params, true, cancellationToken).ConfigureAwait(false);
     }
 
