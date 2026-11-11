@@ -4,8 +4,8 @@
     Compiler fixture for #301 (T301). Deliberately NOT part of nextorm.slnx: the
     RemovedUpdateSelector case must fail to compile by design, so it can never be a
     solution build member. Each case is selected with -p:ApiCase=<name>; the shared
-    properties (net10.0, implicit usings, nullable, warnings-as-errors) come from the
-    repository Directory.Build.props, and no package is referenced (no CPM edit).
+    properties (net11.0, implicit usings, nullable, warnings-as-errors) come from the
+    repository tests/Directory.Build.props, and no package is referenced (no CPM edit).
   -->
   <PropertyGroup>
     <OutputType>Library</OutputType>

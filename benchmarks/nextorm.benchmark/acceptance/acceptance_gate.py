@@ -41,7 +41,7 @@ CANDIDATE = REPO
 PROJECT = os.path.join("benchmarks", "nextorm.benchmark", "nextorm.benchmark.csproj")
 BENCH_FILTER = "*SqlServerBufferedNumericAcceptanceBenchmark*"
 CATEGORY = "acceptance"
-DLL_GLOB = os.path.join("benchmarks", "nextorm.benchmark", "bin", "*", "Release", "net10.0", "nextorm.benchmark.dll")
+DLL_GLOB = os.path.join("benchmarks", "nextorm.benchmark", "bin", "*", "Release", "net11.0", "nextorm.benchmark.dll")
 
 ROUNDS = int(os.environ.get("D168_GATE_ROUNDS", "3"))
 ITERATIONS = int(os.environ.get("D168_GATE_ITERATIONS", "20"))

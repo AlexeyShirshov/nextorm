@@ -118,7 +118,7 @@ Against the shared surface Nextorm matches or exceeds linq2db; on top of that it
   navigation, with global query filters applied to children at every level.
 - An EF Core integration package (`nextorm.entityframeworkcore`) sharing the EF connection, model mapping and
   transaction.
-- **Zero-config NativeAOT migration.** Inside the verified surface (SQLite, .NET 10 / `linux-x64`) the
+- **Zero-config NativeAOT migration.** Inside the verified surface (SQLite, .NET 11 / `linux-x64`) the
   only consumer change is `PublishAot=true`: no compiled model, no precompilation step, no
   analyzer/interceptor opt-in, no entity or query registration, no linker descriptors or roots. EF Core
   requires a compiled model plus interceptor-based query precompilation and rejects dynamically

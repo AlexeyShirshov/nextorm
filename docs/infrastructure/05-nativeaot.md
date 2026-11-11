@@ -1,6 +1,6 @@
 # NativeAOT (partial support)
 
-> Publish applications with `PublishAot=true` on .NET 10 for `linux-x64` and the SQLite provider.
+> Publish applications with `PublishAot=true` on .NET 11 for `linux-x64` and the SQLite provider.
 > Support is **partial and experimental**: a measured subset of the engine runs natively, and the
 > rest is tracked in [#370](https://github.com/AlexeyShirshov/nextorm/issues/370).
 
@@ -14,7 +14,7 @@ and executes it on every push, and the `publish` job requires that gate.
 
 | Area | Status |
 |---|---|
-| Target | `net10.0`, `linux-x64` |
+| Target | `net11.0`, `linux-x64` |
 | Providers | SQLite |
 | Query surface | interface entities, captured predicates, anonymous projections, nullable scalar materialization, SQLite JSON functions (`json_extract`/`json_get_text`), `GROUP BY` with aggregates and `HAVING` |
 | `nextorm.extensions` | `SelectWhereMin`/`SelectWhereMax` and `SelectGroup`/`SelectGroupHaving` component slices |

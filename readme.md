@@ -29,7 +29,7 @@ with no change tracking and no mandatory entity class.
   No `InternalsVisibleTo`, no translator registry and no global mutable state.
 * **Zero-config NativeAOT** — `PublishAot=true` is the only change: no compiled model, no precompilation
   step, no interceptor opt-in and no manual entity/query registration. Partial coverage today (SQLite,
-  .NET 10 / `linux-x64`); see the
+  .NET 11 / `linux-x64`); see the
   [NativeAOT guide](https://alexeyshirshov.github.io/nextorm/infrastructure/05-nativeaot.html).
 
 ## Installation
@@ -131,7 +131,7 @@ is [Extensibility](https://alexeyshirshov.github.io/nextorm/advanced/extensibili
 
 ## NativeAOT
 
-Partial and experimental: published native binaries run with the SQLite provider on `net10.0`
+Partial and experimental: published native binaries run with the SQLite provider on `net11.0`
 (`linux-x64`), with JIT-parity checks for interface entities, captured predicates, anonymous
 projections, nullable scalars, SQLite JSON functions and grouped aggregates. Every push publishes
 the native runner and executes it in CI. The remaining providers, the EF Core bridge and the

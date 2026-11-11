@@ -1,6 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <!-- The generator is a Roslyn analyzer: it always compiles to netstandard2.0, so the
+         multi-targeted consumer frameworks inherited from src/Directory.Build.props are cleared. -->
+    <TargetFrameworks></TargetFrameworks>
     <TargetFramework>netstandard2.0</TargetFramework>
     <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
     <IsPackable>false</IsPackable>

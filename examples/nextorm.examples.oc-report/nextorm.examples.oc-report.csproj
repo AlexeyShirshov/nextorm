@@ -22,16 +22,18 @@
 
   <ItemGroup>
     <!--
-      The SDK's default ILCompiler 10.0.12 carries a NuGet audit advisory (NU1903), which this
-      repository's warnings-as-errors gate turns into an error. Pin the fixed patch, exactly as
-      tests/nextorm.aot.runner does.
+      The SDK's implicit ILCompiler item is pinned to the same version the repository's AOT runner
+      uses, exactly as tests/nextorm.aot.runner does. The override exists because the historical SDK
+      default carried a NuGet audit advisory (NU1903) that this repository's warnings-as-errors gate
+      turned into an error; keeping the two projects on one version keeps their AOT diagnostics
+      comparable.
     -->
-    <PackageReference Update="Microsoft.DotNet.ILCompiler" Version="10.0.14" />
+    <PackageReference Update="Microsoft.DotNet.ILCompiler" Version="11.0.0" />
   </ItemGroup>
 
   <ItemGroup>
     <KnownILCompilerPack Update="Microsoft.DotNet.ILCompiler">
-      <ILCompilerPackVersion>10.0.14</ILCompilerPackVersion>
+      <ILCompilerPackVersion>11.0.0</ILCompilerPackVersion>
     </KnownILCompilerPack>
   </ItemGroup>
 
