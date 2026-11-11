@@ -2388,10 +2388,16 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
         // the server reports none, and otherwise the member must mirror the raw function exactly.
         var summaryFileCount = Scalar((DataContext)_sut.DataProvider, "select count(*) from pg_available_wal_summaries()");
         if (summaryFileCount == "0")
+        {
             summaries.Should().BeEmpty("summarize_wal is off on the fixture, so the server has no summary files");
+        }
         else
+        {
+            // OnlyContain fails on an empty collection, and this test also runs on a fresh container where
+            // the summary producer of this class has not run yet, so the mirror assertion is non-empty-only.
             summaries.Should().HaveCount(int.Parse(summaryFileCount, System.Globalization.CultureInfo.InvariantCulture));
-        summaries.Should().OnlyContain(r => r.StartLsn != null && r.EndLsn != null && r.TimelineId != null);
+            summaries.Should().OnlyContain(r => r.StartLsn != null && r.EndLsn != null && r.TimelineId != null);
+        }
 
         Execute(_sut.DataProvider, "drop table if exists t347_multixact_probe");
         Execute(_sut.DataProvider, "create table t347_multixact_probe (id integer primary key, value integer)");
