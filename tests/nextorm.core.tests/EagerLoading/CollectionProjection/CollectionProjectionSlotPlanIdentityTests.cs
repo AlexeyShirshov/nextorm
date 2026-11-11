@@ -88,7 +88,7 @@ public sealed class CollectionProjectionSlotPlanIdentityTests
     private static (SqliteDataContext Context, string Path) CreateDb(EagerLoadMode mode = EagerLoadMode.SplitQuery)
     {
         var path = Path.Combine(Path.GetTempPath(), $"nextorm-t353-key-{Guid.NewGuid():N}.db");
-        using (var connection = new SqliteConnection($"Data Source={path}"))
+        using (var connection = new SqliteConnection($"Data Source={path};Pooling=False"))
         {
             connection.Open();
             using var command = connection.CreateCommand();
@@ -101,7 +101,7 @@ public sealed class CollectionProjectionSlotPlanIdentityTests
             command.ExecuteNonQuery();
         }
 
-        var context = new SqliteDataContext($"Data Source={path}", new DataContextBuilder().UseEagerLoadMode(mode));
+        var context = new SqliteDataContext($"Data Source={path};Pooling=False", new DataContextBuilder().UseEagerLoadMode(mode));
         return (context, path);
     }
 

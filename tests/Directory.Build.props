@@ -1,0 +1,15 @@
+<Project>
+
+  <!--
+    A nested Directory.Build.props stops MSBuild's automatic upward search, so the repository-wide
+    file must be imported explicitly. Test and test-support projects are never published and all run
+    on the newest supported runtime: one host runtime keeps every suite (including the container
+    suites) at a single pass instead of doubling them per supported TFM.
+  -->
+  <Import Project="$(MSBuildThisFileDirectory)../Directory.Build.props" />
+
+  <PropertyGroup>
+    <TargetFramework>$(NextormHostTargetFramework)</TargetFramework>
+  </PropertyGroup>
+
+</Project>

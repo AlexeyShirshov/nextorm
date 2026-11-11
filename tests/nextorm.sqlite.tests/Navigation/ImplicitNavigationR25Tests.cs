@@ -25,7 +25,7 @@ public class ImplicitNavigationR25Tests
     private static (SqliteDataContext Ctx, string Path) CreateDb(string schema)
     {
         var path = Path.Combine(Path.GetTempPath(), $"nextorm-r25-nav-{Guid.NewGuid():N}.db");
-        using (var conn = new SqliteConnection($"Data Source={path}"))
+        using (var conn = new SqliteConnection($"Data Source={path};Pooling=False"))
         {
             conn.Open();
             using var cmd = conn.CreateCommand();
@@ -33,7 +33,7 @@ public class ImplicitNavigationR25Tests
             cmd.ExecuteNonQuery();
         }
 
-        var ctx = new SqliteDataContext($"Data Source={path}", new DataContextBuilder());
+        var ctx = new SqliteDataContext($"Data Source={path};Pooling=False", new DataContextBuilder());
         ctx.EnsureConnectionOpen();
         return (ctx, path);
     }

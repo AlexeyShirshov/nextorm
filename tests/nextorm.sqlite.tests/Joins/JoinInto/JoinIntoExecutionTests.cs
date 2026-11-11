@@ -16,7 +16,7 @@ public class JoinIntoExecutionTests
     private static (SqliteDataContext Ctx, string Path) CreateDb()
     {
         var path = Path.Combine(Path.GetTempPath(), $"nextorm-joininto-{Guid.NewGuid():N}.db");
-        using (var conn = new SqliteConnection($"Data Source={path}"))
+        using (var conn = new SqliteConnection($"Data Source={path};Pooling=False"))
         {
             conn.Open();
             using var cmd = conn.CreateCommand();
@@ -30,7 +30,7 @@ public class JoinIntoExecutionTests
             cmd.ExecuteNonQuery();
         }
 
-        var ctx = new SqliteDataContext($"Data Source={path}", new DataContextBuilder().AddInterceptor(new CountingInterceptor()));
+        var ctx = new SqliteDataContext($"Data Source={path};Pooling=False", new DataContextBuilder().AddInterceptor(new CountingInterceptor()));
         ctx.EnsureConnectionOpen();
         return (ctx, path);
     }

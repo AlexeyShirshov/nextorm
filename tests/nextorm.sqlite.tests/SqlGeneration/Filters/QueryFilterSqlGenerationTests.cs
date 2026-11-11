@@ -768,7 +768,7 @@ public class QueryFilterSqlGenerationTests
     public void InsertSelect_SourceViolatesTargetFilter_ShouldThrowBeforeInsert()
     {
         var path = Path.Combine(Path.GetTempPath(), $"nextorm-queryfilter-insertselect-{Guid.NewGuid():N}.db");
-        using (var conn = new SqliteConnection($"Data Source={path}"))
+        using (var conn = new SqliteConnection($"Data Source={path};Pooling=False"))
         {
             conn.Open();
             using var cmd = conn.CreateCommand();
@@ -781,7 +781,7 @@ public class QueryFilterSqlGenerationTests
 
         try
         {
-            using var ctx = new SqliteDataContext($"Data Source={path}", new DataContextBuilder());
+            using var ctx = new SqliteDataContext($"Data Source={path};Pooling=False", new DataContextBuilder());
             ctx.EnsureConnectionOpen();
             ConfigureDmlTarget(ctx);
 

@@ -2,6 +2,7 @@ using FluentAssertions;
 using NextORM.Core;
 using NextORM.SqlServer;
 using System;
+using System.Globalization;
 using System.Threading;
 
 namespace NextORM.Core.Tests;
@@ -627,7 +628,9 @@ public class CompositeOrderByTests
         b7.Sorting.Should().HaveCount(1);
         var c7 = b7.ToCommand();
         ctx.GetPreparedQueryCommand(c7, false, false, CancellationToken.None);
-        c7.Sorting![0].PreparedExpression!.ToString().Should().Be("x => Convert(new Decimal(1.5), Object)");
+        // Expression.ToString() renders a decimal constant with the ambient culture, so the expected
+        // text is built the same way instead of hardcoding the en-US decimal separator.
+        c7.Sorting![0].PreparedExpression!.ToString().Should().Be($"x => Convert(new Decimal({1.5m.ToString(CultureInfo.CurrentCulture)}), Object)");
     }
 
     // ---- ordinal / repeated OrderBy preservation ------------------------------------------

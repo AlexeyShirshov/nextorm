@@ -84,7 +84,7 @@ public class InterceptorDiRegistrationTests
     private static string CreateDb()
     {
         var path = Path.Combine(Path.GetTempPath(), $"nextorm-t221-{Guid.NewGuid():N}.db");
-        using (var conn = new SqliteConnection($"Data Source={path}"))
+        using (var conn = new SqliteConnection($"Data Source={path};Pooling=False"))
         {
             conn.Open();
             using var cmd = conn.CreateCommand();
@@ -95,6 +95,18 @@ public class InterceptorDiRegistrationTests
         }
 
         return path;
+    }
+
+    /// <summary>
+    /// Deletes a temp database whose context was created through <c>UseSqlite(path)</c>. That overload
+    /// owns the connection string (it builds <c>Data Source='{path}'</c>), so pooling cannot be
+    /// disabled per call; clearing the pool releases the native handle, which Windows keeps locked
+    /// until then.
+    /// </summary>
+    private static void DeleteDatabase(string path)
+    {
+        SqliteConnection.ClearAllPools();
+        File.Delete(path);
     }
 
     private static ServiceProvider CreateProvider(
@@ -131,7 +143,7 @@ public class InterceptorDiRegistrationTests
         }
         finally
         {
-            File.Delete(path);
+            DeleteDatabase(path);
         }
     }
 
@@ -155,7 +167,7 @@ public class InterceptorDiRegistrationTests
         }
         finally
         {
-            File.Delete(path);
+            DeleteDatabase(path);
         }
     }
 
@@ -186,7 +198,7 @@ public class InterceptorDiRegistrationTests
         }
         finally
         {
-            File.Delete(path);
+            DeleteDatabase(path);
         }
     }
 
@@ -215,7 +227,7 @@ public class InterceptorDiRegistrationTests
         }
         finally
         {
-            File.Delete(path);
+            DeleteDatabase(path);
         }
     }
 
@@ -243,7 +255,7 @@ public class InterceptorDiRegistrationTests
         }
         finally
         {
-            File.Delete(path);
+            DeleteDatabase(path);
         }
     }
 
@@ -271,7 +283,7 @@ public class InterceptorDiRegistrationTests
         }
         finally
         {
-            File.Delete(path);
+            DeleteDatabase(path);
         }
     }
 
@@ -297,7 +309,7 @@ public class InterceptorDiRegistrationTests
         }
         finally
         {
-            File.Delete(path);
+            DeleteDatabase(path);
         }
     }
 
@@ -323,7 +335,7 @@ public class InterceptorDiRegistrationTests
         }
         finally
         {
-            File.Delete(path);
+            DeleteDatabase(path);
         }
     }
 
@@ -345,7 +357,7 @@ public class InterceptorDiRegistrationTests
         }
         finally
         {
-            File.Delete(path);
+            DeleteDatabase(path);
         }
     }
 }

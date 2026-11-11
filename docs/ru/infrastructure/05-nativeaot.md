@@ -1,6 +1,6 @@
 # NativeAOT (частичная поддержка)
 
-> Публикуйте приложения с `PublishAot=true` на .NET 10 для `linux-x64` и провайдера SQLite.
+> Публикуйте приложения с `PublishAot=true` на .NET 11 для `linux-x64` и провайдера SQLite.
 > Поддержка **частичная и экспериментальная**: нативно исполняется измеренное подмножество
 > движка, остаток отслеживается в [#370](https://github.com/AlexeyShirshov/nextorm/issues/370).
 
@@ -14,7 +14,7 @@ CI-job `aot` публикует и запускает его на каждый p
 
 | Область | Статус |
 |---|---|
-| Цель | `net10.0`, `linux-x64` |
+| Цель | `net11.0`, `linux-x64` |
 | Провайдеры | SQLite |
 | Поверхность запросов | сущности-интерфейсы, захваченные предикаты, анонимные проекции, материализация nullable-скаляров, JSON-функции SQLite (`json_extract`/`json_get_text`), `GROUP BY` с агрегатами и `HAVING` |
 | `nextorm.extensions` | компонентные срезы `SelectWhereMin`/`SelectWhereMax` и `SelectGroup`/`SelectGroupHaving` |

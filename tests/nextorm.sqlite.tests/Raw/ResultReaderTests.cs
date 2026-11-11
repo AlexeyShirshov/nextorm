@@ -29,7 +29,7 @@ public class ResultReaderTests
     private static SqliteDataContext CreateDb(out string path)
     {
         path = Path.Combine(Path.GetTempPath(), $"nextorm-resultreader-{Guid.NewGuid():N}.db");
-        using (var connection = new SqliteConnection($"Data Source={path}"))
+        using (var connection = new SqliteConnection($"Data Source={path};Pooling=False"))
         {
             connection.Open();
             using var command = connection.CreateCommand();
@@ -39,7 +39,7 @@ public class ResultReaderTests
             command.ExecuteNonQuery();
         }
 
-        return new SqliteDataContext($"Data Source={path}", new DataContextBuilder());
+        return new SqliteDataContext($"Data Source={path};Pooling=False", new DataContextBuilder());
     }
 
     [Fact]

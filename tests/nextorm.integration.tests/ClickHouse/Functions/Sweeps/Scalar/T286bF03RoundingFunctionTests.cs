@@ -163,7 +163,10 @@ public sealed class T286bF03RoundingFunctionTests : ProviderTestSuite
         Scalar<string>("toString(round(toDecimal64('2.5', 1)))").Should().Be("3", "round(Decimal) rounds away from zero");
         Scalar<string>("toString(roundBankers(toDecimal64('2.5', 1)))").Should().Be("2", "roundBankers(Decimal) is half-even");
         Math.Round(2.5).Should().Be(2d, "the one-argument CLR rule agrees with the server for Float64");
-        Math.Round(2.675, 2).Should().Be(2.68, "the CLR also rounds the decimal representation here");
+        // .NET 11 rounds the stored binary value (2.67499999999999982...), so the CLR lands on 2.67 while the
+        // server rounds the decimal representation and returns 2.68 below: that divergence is one more reason
+        // roundBankers is not rendered as Math.Round.
+        Math.Round(2.675, 2).Should().Be(2.67, "the CLR rounds the binary value, the server the decimal one");
         Scalar<double>("roundBankers(2.675, 2)").Should().Be(2.68);
 
         Seed();

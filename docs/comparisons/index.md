@@ -64,7 +64,7 @@ Across the shared surface Nextorm matches or exceeds the three libraries, and on
   parameter binding and provider independence of an ordinary query — no friend access, no global
   registry, no raw SQL. linq2db and EF Core expose interceptors and function mappings, but no
   structural component contract with plan-cache integration.
-- **Zero-config NativeAOT migration.** Inside the verified surface (SQLite, .NET 10 / `linux-x64`) the
+- **Zero-config NativeAOT migration.** Inside the verified surface (SQLite, .NET 11 / `linux-x64`) the
   only consumer change is `PublishAot=true`: no compiled model, no precompilation step, no
   analyzer/interceptor opt-in, no entity or query registration, no linker descriptors or roots. The
   competitors' contracts are heavier: EF Core requires a compiled model plus interceptor-based query

@@ -681,7 +681,24 @@ internal static class JsonRowWriterFactory
         for (var i = NumericFieldTypes.Length - 1; i >= 0; i--)
         {
             var fieldTypeConstant = NumericFieldTypes[i];
-            var (read, convertSource) = ReadNumericField(record, column.Ordinal, fieldTypeConstant);
+            Expression read;
+            Type convertSource;
+            if (column.ValueType == typeof(decimal)
+                && (fieldTypeConstant == typeof(float) || fieldTypeConstant == typeof(double)))
+            {
+                // REAL/float columns surface as float/double. Convert.ToDecimal(double) keeps the
+                // binary expansion (12.34d becomes 12.339999999999999857891452848), while the row
+                // materializer reads the same column with IDataRecord.GetDecimal and gets the
+                // provider-rounded value (12.34). Read the decimal the same way here so the streamed
+                // JSON matches what ToList() serializes.
+                read = Expression.Call(record, GetDecimalMI, Expression.Constant(column.Ordinal));
+                convertSource = typeof(decimal);
+            }
+            else
+            {
+                (read, convertSource) = ReadNumericField(record, column.Ordinal, fieldTypeConstant);
+            }
+
             if (convertSource != column.ValueType)
                 read = Expression.Call(ConvertMethod(column.ValueType, convertSource), read);
 

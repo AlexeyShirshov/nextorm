@@ -19,7 +19,7 @@ public class AliasSameAliasRuntimeTests
     public void Same_alias_different_joined_types_across_two_queries()
     {
         var path = Path.Combine(Path.GetTempPath(), $"nextorm-alias-samealias-{Guid.NewGuid():N}.db");
-        using (var connection = new SqliteConnection($"Data Source={path}"))
+        using (var connection = new SqliteConnection($"Data Source={path};Pooling=False"))
         {
             connection.Open();
             using var cmd = connection.CreateCommand();
@@ -34,7 +34,7 @@ public class AliasSameAliasRuntimeTests
         }
 
         var sql = new SqlRecordingInterceptor();
-        var ctx = new SqliteDataContext($"Data Source={path}", new DataContextBuilder().AddInterceptor(sql));
+        var ctx = new SqliteDataContext($"Data Source={path};Pooling=False", new DataContextBuilder().AddInterceptor(sql));
         try
         {
             var orders = ctx.From<Order>(b => b.Table("orders"));

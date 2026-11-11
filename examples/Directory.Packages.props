@@ -14,7 +14,7 @@
     -->
     <NextOrmVersion>1.0.9-rc5</NextOrmVersion>
     <!-- Mirrors the `linq2db` version pinned in the repository-wide Directory.Packages.props. -->
-    <Linq2DbVersion>6.5.0</Linq2DbVersion>
+    <Linq2DbVersion>6.5.1</Linq2DbVersion>
   </PropertyGroup>
 
   <ItemGroup>

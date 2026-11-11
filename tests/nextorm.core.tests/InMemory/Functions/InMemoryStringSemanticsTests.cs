@@ -22,8 +22,10 @@ public class InMemoryStringSemanticsTests
     {
         var r = _sut.SimpleEntity.Select(it => new { F = it.Id.ToString("F2") }).ToList();
 
-        r.Should().Contain(x => x.F == "1.00");
-        r.Should().Contain(x => x.F == "2.00");
+        // The expression itself formats with the ambient culture (it runs as native CLR code), so the
+        // expected values are produced the same way instead of hardcoding the en-US separators.
+        r.Should().Contain(x => x.F == 1.ToString("F2"));
+        r.Should().Contain(x => x.F == 2.ToString("F2"));
     }
 
     [Fact]

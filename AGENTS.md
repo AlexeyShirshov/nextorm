@@ -1,7 +1,7 @@
 # AGENTS
 
 ## Build & toolchain
-- .NET 10 SDK; production and test projects target `net10.0` (the source generator targets `netstandard2.0`). `global.json` pins only the test runner (`Microsoft.Testing.Platform`), not an SDK version.
+- .NET 11 SDK (pinned in `global.json`, `rollForward: latestFeature`); production and test projects target `net11.0` (the source generator targets `netstandard2.0`). Published packages multi-target `net10.0;net11.0` — `NextormSupportedTargetFrameworks` in the root `Directory.Build.props` — while `tests/`, `benchmarks/` and `examples/` use the single host TFM `NextormHostTargetFramework`.
 - Central Package Management: reference packages as `<PackageReference Include="X" />` (no `Version`); add/update the version in `Directory.Packages.props`.
 - `TreatWarningsAsErrors=true` for every project and configuration — nullable and analyzer warnings fail the build. Fix them or suppress explicitly via `NoWarn`.
 - `Directory.Build.props` redirects build output into per-host-OS dirs: `bin/<linux|windows>/`, `obj/<linux|windows>/`, so WSL and Windows builds coexist. Look there for artifacts; there is no shared `obj/`.

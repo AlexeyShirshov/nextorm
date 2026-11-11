@@ -151,7 +151,7 @@ its limitations are covered in the [plan cache and reuse guide](engine/03-plan-c
 
 ### 1.0.9-rc5
 
-- [NativeAOT: объявлена частичная поддержка (SQLite, .NET 10 / `linux-x64`); нативный раннер публикуется и исполняется в CI, остаток — #370](https://github.com/AlexeyShirshov/nextorm/issues/370)
+- [NativeAOT: объявлена частичная поддержка (SQLite, .NET 11 / `linux-x64`); нативный раннер публикуется и исполняется в CI, остаток — #370](https://github.com/AlexeyShirshov/nextorm/issues/370)
 - [Warm `EXCEPT`/`INTERSECT`: аллокации приближены к linq2db (принятый остаток)](https://github.com/AlexeyShirshov/nextorm/issues/245)
 - [JSON streaming: пропускная способность на 10k строк доведена до паритета с linq2db](https://github.com/AlexeyShirshov/nextorm/issues/247)
 - [CSV-терминал больше не пересобирает план колонок на каждый экспорт](https://github.com/AlexeyShirshov/nextorm/issues/250)

@@ -174,7 +174,7 @@ public sealed class CollectionProjectionDepthTests
         int roots = 2)
     {
         var path = Path.Combine(Path.GetTempPath(), $"nextorm-t353-depth-{Guid.NewGuid():N}.db");
-        using (var conn = new SqliteConnection($"Data Source={path}"))
+        using (var conn = new SqliteConnection($"Data Source={path};Pooling=False"))
         {
             conn.Open();
             using var cmd = conn.CreateCommand();
@@ -209,7 +209,7 @@ public sealed class CollectionProjectionDepthTests
             cmd.ExecuteNonQuery();
         }
 
-        var context = new SqliteDataContext($"Data Source={path}", new DataContextBuilder().UseEagerLoadMode(mode));
+        var context = new SqliteDataContext($"Data Source={path};Pooling=False", new DataContextBuilder().UseEagerLoadMode(mode));
         _ = context.From<Parent>(cfg => cfg
             .HasMany(p => p.Items, i => i.ParentId)
             .HasManyThrough<Tag, ParentTag, int, int>(p => p.Tags, p => p.Id, l => l.ParentId, t => t.Id, l => l.TagId)

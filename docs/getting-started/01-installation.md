@@ -1,8 +1,8 @@
 # Installation
 
-> Add the `nextorm` core package plus one database-provider package to a `net10.0` project, then use the [`NextORM.Core`](xref:NextORM.Core) types from code.
+> Add the `nextorm` core package plus one database-provider package to a `net10.0` or `net11.0` project, then use the [`NextORM.Core`](xref:NextORM.Core) types from code.
 
-**Prerequisites:** A project targeting `net10.0`.
+**Prerequisites:** A project targeting `net10.0` or `net11.0`.
 
 ## Overview
 
@@ -74,7 +74,8 @@ The in-memory provider lives in the core package, so it is available without ins
 
 ## Target framework
 
-The packages target `net10.0` and enable implicit usings and nullable reference types. A
+The packages multi-target `net10.0` and `net11.0`, so NuGet resolves the asset that matches the
+consuming project, and enable implicit usings and nullable reference types. A
 `PackageReference` looks like this (`*-*` floats to the latest prerelease):
 
 ```xml

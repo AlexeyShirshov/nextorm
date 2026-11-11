@@ -116,7 +116,7 @@ public sealed class NestedManyToManySingleQueryTests
     private static (SqliteDataContext Ctx, string Path, SqlRecordingInterceptor Recorder) CreateDb()
     {
         var path = Path.Combine(Path.GetTempPath(), $"nextorm-t353-mn-{Guid.NewGuid():N}.db");
-        using (var conn = new SqliteConnection($"Data Source={path}"))
+        using (var conn = new SqliteConnection($"Data Source={path};Pooling=False"))
         {
             conn.Open();
             using var cmd = conn.CreateCommand();
@@ -136,7 +136,7 @@ public sealed class NestedManyToManySingleQueryTests
             cmd.ExecuteNonQuery();
         }
 
-        var context = new SqliteDataContext($"Data Source={path}", new DataContextBuilder());
+        var context = new SqliteDataContext($"Data Source={path};Pooling=False", new DataContextBuilder());
         var recorder = new SqlRecordingInterceptor();
         context.AddInterceptor(recorder);
         return (context, path, recorder);

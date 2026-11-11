@@ -48,7 +48,7 @@ public sealed class EagerLoadPerParentPagingEdgeTests
     private static (SqliteDataContext Ctx, string Path) CreateDb()
     {
         var path = Path.Combine(Path.GetTempPath(), $"nextorm-perparent-edge-{Guid.NewGuid():N}.db");
-        using (var conn = new SqliteConnection($"Data Source={path}"))
+        using (var conn = new SqliteConnection($"Data Source={path};Pooling=False"))
         {
             conn.Open();
             using var cmd = conn.CreateCommand();
@@ -70,7 +70,7 @@ public sealed class EagerLoadPerParentPagingEdgeTests
             cmd.ExecuteNonQuery();
         }
 
-        return (new SqliteDataContext($"Data Source={path}", new DataContextBuilder()), path);
+        return (new SqliteDataContext($"Data Source={path};Pooling=False", new DataContextBuilder()), path);
     }
 
     // --- variant row :232 — zero/default bounds / negatives / extreme bounds -------------------------
@@ -357,7 +357,7 @@ public sealed class EagerLoadPerParentPagingEdgeTests
         {
             ctx.PurgeQueryCache();
 
-            using (var conn = new SqliteConnection($"Data Source={path}"))
+            using (var conn = new SqliteConnection($"Data Source={path};Pooling=False"))
             {
                 conn.Open();
                 using var cmd = conn.CreateCommand();

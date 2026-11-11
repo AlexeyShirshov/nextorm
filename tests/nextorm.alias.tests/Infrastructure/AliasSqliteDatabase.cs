@@ -17,7 +17,7 @@ internal static class AliasSqliteDatabase
     public static (string Path, SqliteDataContext Context, SqlRecordingInterceptor Sql) CreateContext()
     {
         var path = Path.Combine(Path.GetTempPath(), $"nextorm-alias-tests-{Guid.NewGuid():N}.db");
-        using (var connection = new SqliteConnection($"Data Source={path}"))
+        using (var connection = new SqliteConnection($"Data Source={path};Pooling=False"))
         {
             connection.Open();
             using var cmd = connection.CreateCommand();
@@ -30,7 +30,7 @@ internal static class AliasSqliteDatabase
         }
 
         var sql = new SqlRecordingInterceptor();
-        var context = new SqliteDataContext($"Data Source={path}", new DataContextBuilder().AddInterceptor(sql));
+        var context = new SqliteDataContext($"Data Source={path};Pooling=False", new DataContextBuilder().AddInterceptor(sql));
         return (path, context, sql);
     }
 }

@@ -28,7 +28,7 @@ public sealed class TimeOnlySqliteLiveTests : IDisposable
     {
         _output = output;
         _path = Path.Combine(Path.GetTempPath(), $"nextorm.t340.{Environment.ProcessId}.{Guid.NewGuid():N}.db");
-        _ctx = new SqliteDataContext($"Data Source='{_path}'", new DataContextBuilder());
+        _ctx = new SqliteDataContext($"Data Source='{_path}';Pooling=False", new DataContextBuilder());
     }
 
     public void Dispose()

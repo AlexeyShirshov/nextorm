@@ -35,7 +35,7 @@ public sealed class EfQueryFilterBoundedConcurrencyTests : EfCoreMetadataCleanup
 
         try
         {
-            using (var seed = new BoundedContext($"Data Source={path}", tenantId: 1))
+            using (var seed = new BoundedContext($"Data Source={path};Pooling=False", tenantId: 1))
             {
                 seed.Database.EnsureCreated();
                 seed.Rows.AddRange(
@@ -49,7 +49,7 @@ public sealed class EfQueryFilterBoundedConcurrencyTests : EfCoreMetadataCleanup
 
             // Import the bridge metadata once, sequentially, before any reader starts.
             for (var slot = 0; slot < tenants.Length; slot++)
-                owners[slot] = new BoundedContext($"Data Source={path}", tenants[slot]);
+                owners[slot] = new BoundedContext($"Data Source={path};Pooling=False", tenants[slot]);
 
             using (var warm = owners[0].CreateNextOrmContext())
                 warm.From<BoundedRow>().OrderBy(row => row.Id).Select(row => row.Id).ToList().Should().Equal(1, 3, 5);

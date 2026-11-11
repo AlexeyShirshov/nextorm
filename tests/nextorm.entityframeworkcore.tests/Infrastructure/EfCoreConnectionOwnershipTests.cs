@@ -57,7 +57,7 @@ public sealed class EfCoreConnectionOwnershipTests : EfCoreMetadataCleanup
     {
         var path = Path.Combine(Path.GetTempPath(), $"nextorm-ef-{Guid.NewGuid():N}.db");
         var options = new DbContextOptionsBuilder<OwnershipContext>()
-            .UseSqlite($"Data Source={path}")
+            .UseSqlite($"Data Source={path};Pooling=False")
             .Options;
 
         try

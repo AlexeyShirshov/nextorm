@@ -25,7 +25,7 @@ public class ImplicitNavigationR3SqlGapTests
     private static (SqliteDataContext Ctx, string Path) CreateDb()
     {
         var path = Path.Combine(Path.GetTempPath(), $"nextorm-r3sqlg-nav-{Guid.NewGuid():N}.db");
-        using (var conn = new SqliteConnection($"Data Source={path}"))
+        using (var conn = new SqliteConnection($"Data Source={path};Pooling=False"))
         {
             conn.Open();
             using var cmd = conn.CreateCommand();
@@ -33,7 +33,7 @@ public class ImplicitNavigationR3SqlGapTests
             cmd.ExecuteNonQuery();
         }
 
-        var ctx = new SqliteDataContext($"Data Source={path}", new DataContextBuilder());
+        var ctx = new SqliteDataContext($"Data Source={path};Pooling=False", new DataContextBuilder());
         ctx.EnsureConnectionOpen();
         ctx.From<R3SqRoot>(b => b.HasMany(r => r.Mids, m => m.RootId));
         ctx.From<R3SqMid>(b =>
