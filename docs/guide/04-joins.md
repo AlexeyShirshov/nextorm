@@ -433,9 +433,15 @@ var full = dataContext.From<ISimpleEntity>()
 
 ## Source-less (type-only) joins
 
-The four conditional operators also have a source-less form that resolves the joined entity through the
-same data context. Instead of passing `dataContext.From<TJoinEntity>()`, name the joined type as the
-generic argument and pass only the condition:
+The four conditional operators have a source-less form that resolves the joined entity through the same
+data context. Instead of passing `dataContext.From<TJoinEntity>()`, name the joined type as the generic
+argument and pass only the condition. These type-only conditional joins keep the
+`ArgumentNullException.ThrowIfNull` guard, so a `null` predicate is rejected with `ArgumentNullException`
+as soon as the builder call is made. The source-explicit overloads
+(`Join/LeftJoin/RightJoin/FullJoin(EntityBuilder<TJoinEntity>, predicate, options)`) carry no such guard —
+they pass the predicate through to the join core — and the string-table source-less forms (see
+"Source-less raw-table joins" below) behave the same way: a `null` predicate is **accepted** and renders
+no `ON` clause. A type-only join is written without a source argument:
 
 ```csharp
 var rows = dataContext.From<ISimpleEntity>()
@@ -470,31 +476,41 @@ var sql = dataContext.From<ISimpleEntity>()
 * **Untyped lambda without an inferable type is a compile error.** `Join((a, b) => …)` cannot infer
   `TJoinEntity` from its parameters and does not fall through to another overload; pass the type argument
   or type the lambda.
-* **`null` condition.** A `null` predicate passed to a source-less overload is rejected with
-  `ArgumentNullException` before any source resolution, on every receiver and operator. This is a
-  deliberate difference from the source-explicit form, **not** parity:
-  `Join(dataContext.From<TJoinEntity>(), null)` is accepted (`JoinCore` takes a nullable `LambdaExpression`),
-  so a null-condition join is expressible only through the explicit-source form. The equivalence statement
-  above therefore covers non-null predicates only.
+* **`null` condition.** The type-only conditional joins keep their `ThrowIfNull` guard, so a `null`
+  predicate throws `ArgumentNullException` (see above). `null`-predicate acceptance applies to the
+  explicit-source form (`Join(dataContext.From("table"), null)`) and to the string-table source-less
+  forms (`Join/LeftJoin/RightJoin/FullJoin(string table, predicate, options)`), where a `null`
+  predicate renders no `ON` clause.
+* **`null` table name.** A `null` table name passed through a `string`-typed value — a `string?`
+  variable holding `null`, or an explicit `(string)null` cast — selects the string-table overload:
+  the builder call succeeds and SQL compilation then throws `NullReferenceException`, because the
+  table name resolves to no source (the same outcome as the explicit `ctx.From((string)null)`
+  form). To make the intended overload explicit, pass a cast or a typed variable.
 * **Invalid all-null pair.** The untyped all-`null` pair `joined.Join<T>(null, null)` compiles: overload
   resolution binds it to the pre-existing two-argument
   `Join<TJoinEntity>(Cte<TJoinEntity>, Expression<…>)` overload, which then rejects the null CTE with
-  `ArgumentNullException` (`Parameter 'cte'`). This is not a new ambiguity introduced by the source-less
-  overloads; use a typed argument to state the intent.
+  `ArgumentNullException` (`Parameter 'cte'`). That binding is pre-existing and is not introduced by the
+  source-less overloads; use a typed argument to state the intent.
 
 ### Scope
 
-The source-less form is limited to the four predicate-based operators. `CrossJoin`, `CrossApply` and
-`OuterApply` have no predicate and are **not** provided source-less; a source-less `EntityBuilder` over a
-raw table (`From("table")`) is likewise **not** provided. The form is available on the `EntityBuilder<T>`
-receiver (arity 2) and on `JoinedEntityBuilder<T1..Tn>` receivers with arity 2–7 (resulting arity 3–8).
-**No new** source-less overload is *declared* on the terminal `JoinedEntityBuilder<T1..T8>` — that is the
-flat arity-chain scope bound, which stops at arity 8. It is **not** a compile-time rejection: the terminal
-builder still inherits the generic-base `EntityBuilder<Projection<T1..T8>>` members, so a further
-source-less join (like a further source-explicit join) *does* compile, treating the accumulated eight-table
-projection as `Item1`. Use `As`/`From(query)` to name the projection when the flat chain is no longer the
-right shape. The same four operators also accept an `Alias.<Name>` marker — with the optional join
-options after it — on every one of those receivers; see [Source-less aliases](#source-less-aliases).
+The type-only source-less form above covers the four predicate-based operators. In addition, `CrossJoin`,
+`CrossApply` and `OuterApply` now also have a source-less form — both **type-only** (`CrossJoin<TJoinEntity>()`,
+`CrossApply<TJoinEntity>()`, `OuterApply<TJoinEntity>(Action<JoinOptions>? options = null)`) and **string-table**
+(`CrossJoin/CrossApply/OuterApply(string table, Action<JoinOptions>? options = null)`), with the right-hand side
+becoming `TJoinEntity` or `TableAlias` respectively. The same string-table overloads exist for the four
+predicate-based operators (`Join/LeftJoin/RightJoin/FullJoin(string table, predicate, options)`), so a raw
+table can be joined without an explicit `From("table")` source on both builder levels. All of these are
+available on the `EntityBuilder<T>` receiver (arity 2) and on `JoinedEntityBuilder<T1..Tn>` receivers with
+arity 2–7 (resulting arity 3–8); the terminal `JoinedEntityBuilder<T1..T8>` keeps the inherited generic-base
+members only (the flat arity-chain scope bound stops at arity 8, and is **not** a compile-time rejection — a
+further source-less join still compiles, treating the accumulated eight-table projection as `Item1`).
+The string-table forms `Join/LeftJoin/RightJoin/FullJoin(string table, predicate, options)` also accept a
+`null` predicate, behaving identically to the explicit-source form (no `ON` clause); the type-only
+conditional forms keep their `ThrowIfNull` guard and do **not**. The four predicate-based operators
+additionally accept an `Alias.<Name>` marker — with
+the optional join options after it — on every one of those receivers; see
+[Source-less aliases](#source-less-aliases).
 
 ## Cross join
 
@@ -515,6 +531,25 @@ Output:
 | Count |
 |-------|
 | 30 |
+
+### Source-less cross joins
+
+`CrossJoin` is also available without an explicit source, both by type and by table name, on both builder
+levels:
+
+```csharp
+var byType = dataContext.From<ISimpleEntity>()
+    .CrossJoin<IComplexEntity>()
+    .Count();
+
+var byTable = dataContext.From<ISimpleEntity>()
+    .CrossJoin("complex_entity")
+    .Count();
+```
+
+Both forms accept an optional `Action<JoinOptions>` and produce the same SQL as the explicit
+`dataContext.From<IComplexEntity>()` / `dataContext.From("complex_entity")` form. `CrossApply` and
+`OuterApply` follow the same pattern (see [APPLY and LATERAL](#apply-and-lateral)).
 
 ## APPLY and LATERAL
 
@@ -552,6 +587,28 @@ select t1.id, t2.somestring
  from simple_entity as t1
  cross join complex_entity as t2
 ```
+
+### Source-less APPLY
+
+`CrossApply` and `OuterApply` are also available without an explicit source, both by type and by table
+name, on both builder levels (the right side becomes `TJoinEntity` or `TableAlias`):
+
+```csharp
+var byType = dataContext.From<ISimpleEntity>()
+    .CrossApply<IComplexEntity>()
+    .Select(p => new { p.Item1.Id, p.Item2.RequiredString })
+    .ToList();
+
+var byTable = dataContext.From<ISimpleEntity>()
+    .OuterApply("complex_entity")
+    .Select(p => new { p.Item1.Id, p.Item2.RequiredString })
+    .ToList();
+```
+
+Both forms accept an optional `Action<JoinOptions>`. The provider boundaries are unchanged: dialects with
+`SupportsApply == false` (SQLite, ClickHouse, MariaDB 11.4) and the in-memory provider still reject every
+`CrossApply`/`OuterApply` with `NotSupportedException`, exactly as in the explicit-source form. APPLY over
+a raw `TableAlias` source keeps the same column-read semantics as the explicit form.
 
 An `OUTER APPLY` over a derived table:
 
@@ -895,6 +952,29 @@ derived query (`From(query)`), a table-valued function (`From(() => ...)`), or a
 (`Cte<T>`), that source is used as the join's `FROM` instead of the entity metadata. A plain mapped
 entity with no explicit source keeps the metadata fallback. `SemiJoin`/`AntiJoin` are unaffected: the
 joined type still resolves through its entity metadata.
+
+### Source-less raw-table joins
+
+The string-table overloads let a raw table be joined without an explicit `From("table")` source. The right
+side becomes a `TableAlias`, read through the indexer exactly as in the explicit form, on both builder
+levels (arity 1 and chained):
+
+```csharp
+var rows = dataContext.From<ISimpleEntity>()
+    .Join("complex_entity", (s, c) => s.Id == c["id"].AsInt)
+    .Select(p => new { p.Item1.Id, Str = p.Item2["someString"].AsString })
+    .ToList();
+
+var chained = dataContext.From("simple_entity")
+    .Join("complex_entity", (s, c) => s["id"] == c["id"])
+    .CrossJoin("other_table")
+    .Select(p => new { Id = p.Item1["id"].AsInt, Str = p.Item2["someString"].AsString });
+```
+
+`Join`, `LeftJoin`, `RightJoin`, `FullJoin` take the predicate; `CrossJoin`, `CrossApply`, `OuterApply`
+take only the table name and an optional `Action<JoinOptions>`. A `null` predicate is accepted and renders
+no `ON` clause, identical to the explicit `From("table")` form. A `null` table name (a `string?` variable
+holding `null`) or an empty table name throws the same exception at the same stage as the explicit form.
 
 ## Chained joins and arity 2..8
 
