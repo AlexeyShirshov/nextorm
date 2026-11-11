@@ -1,9 +1,9 @@
 ```
 
-BenchmarkDotNet v0.15.8, Linux Ubuntu 22.04.5 LTS (Jammy Jellyfish)
-AMD Ryzen 7 5800HS with Radeon Graphics 3.19GHz, 1 CPU, 8 logical and 4 physical cores
-.NET SDK 10.0.401
-  [Host] : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+BenchmarkDotNet v0.15.8, Linux Ubuntu 26.04.1 LTS (Resolute Raccoon)
+AMD EPYC 7763 3.02GHz, 1 CPU, 4 logical and 2 physical cores
+.NET SDK 11.0.100
+  [Host] : .NET 11.0.0 (11.0.0, 11.0.26.53018), X64 RyuJIT x86-64-v3
 
 Job=ShortRun  Toolchain=InProcessEmitToolchain  IterationCount=3  
 LaunchCount=1  WarmupCount=3  
@@ -11,14 +11,14 @@ LaunchCount=1  WarmupCount=3
 ```
 | Method                                | Mean     | Error    | StdDev   | Gen0   | Gen1   | Allocated |
 |-------------------------------------- |---------:|---------:|---------:|-------:|-------:|----------:|
-| Nextorm_Prepared_AsyncStream          | 10.29 μs | 0.721 μs | 0.040 μs | 0.0916 |      - |     792 B |
-| Nextorm_Prepared_ToListAsync          | 10.36 μs | 0.443 μs | 0.024 μs | 0.1221 |      - |    1048 B |
-| Nextorm_PreparedManualSql_ToListAsync | 10.42 μs | 1.585 μs | 0.087 μs | 0.1221 |      - |    1048 B |
-| Nextorm_Cached_ToListAsync            | 11.52 μs | 1.287 μs | 0.071 μs | 0.2747 |      - |    2360 B |
-| Nextorm_CachedManualSql_ToListAsync   | 11.57 μs | 1.068 μs | 0.059 μs | 0.2747 |      - |    2384 B |
-| DapperAsync                           | 14.89 μs | 0.674 μs | 0.037 μs | 0.2136 |      - |    1904 B |
-| Dapper_AsyncStream                    | 15.15 μs | 3.006 μs | 0.165 μs | 0.2136 |      - |    1856 B |
-| Linq2Db_Compiled_ToList               | 15.76 μs | 3.107 μs | 0.170 μs | 0.2441 |      - |    2088 B |
-| Linq2Db_AsyncStream                   | 15.91 μs | 2.317 μs | 0.127 μs | 0.2747 |      - |    2472 B |
-| Linq2Db_ToListAsync                   | 16.24 μs | 1.788 μs | 0.098 μs | 0.3052 |      - |    2792 B |
-| EFCore_Compiled_ToListAsync           | 36.64 μs | 3.484 μs | 0.191 μs | 1.2207 | 0.6104 |   10224 B |
+| Nextorm_PreparedManualSql_ToListAsync | 10.75 μs | 0.597 μs | 0.033 μs | 0.0458 |      - |     968 B |
+| Nextorm_Prepared_ToListAsync          | 10.83 μs | 3.559 μs | 0.195 μs | 0.0458 |      - |     968 B |
+| Nextorm_Prepared_AsyncStream          | 10.95 μs | 6.472 μs | 0.355 μs | 0.0610 |      - |    1048 B |
+| Nextorm_Cached_ToListAsync            | 12.16 μs | 1.070 μs | 0.059 μs | 0.1221 |      - |    2224 B |
+| Nextorm_CachedManualSql_ToListAsync   | 12.19 μs | 0.406 μs | 0.022 μs | 0.1221 |      - |    2264 B |
+| Dapper_AsyncStream                    | 15.80 μs | 1.695 μs | 0.093 μs | 0.0916 |      - |    1848 B |
+| DapperAsync                           | 15.81 μs | 2.288 μs | 0.125 μs | 0.0916 |      - |    1896 B |
+| Linq2Db_Compiled_ToList               | 16.50 μs | 3.612 μs | 0.198 μs | 0.1221 |      - |    2080 B |
+| Linq2Db_AsyncStream                   | 16.66 μs | 1.711 μs | 0.094 μs | 0.1221 |      - |    2456 B |
+| Linq2Db_ToListAsync                   | 16.89 μs | 0.464 μs | 0.025 μs | 0.1526 |      - |    2768 B |
+| EFCore_Compiled_ToListAsync           | 38.46 μs | 0.301 μs | 0.016 μs | 0.5493 | 0.2441 |    9776 B |

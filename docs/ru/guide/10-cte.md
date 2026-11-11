@@ -54,7 +54,7 @@ with recent as (select id
  from recent
 ```
 
-Таблицы `Вывод:` ниже показывают строки, которые возвращает каждый пример на сид-данных интеграционных тестов (`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).
+Таблицы `Вывод:` ниже показывают строки, которые возвращает каждый пример на сид-данных интеграционных тестов (`tests/nextorm.integration.tests/Providers/TestProviders/SqliteTestProvider.cs`).
 
 Вывод:
 
@@ -97,8 +97,8 @@ with recent as (select id
 whole-entity `TResult` не делает внешний источник таблицей, а члены разрешаются в выходные алиасы
 определяющей проекции, перенося её алиасы и сконфигурированные конвертеры/provider-типы — без DTO-remapping.
 
-Строковый API не меняется: `With`/`WithRecursive`/`From(string)`/`From(CteDefinition)` по-прежнему
-объявляют и читают CTE по имени и остаются доступными. Рекурсивный CTE можно также объявить через
+Строковый API объявляет и читает CTE по имени: `With`/`WithRecursive`/`From(string)`/`From(CteDefinition)`
+доступны наряду с типизированной поверхностью. Рекурсивный CTE можно также объявить через
 типизированную поверхность `AsRecursiveCte`, описанную ниже.
 
 Типизированное объявление переиспользует тот же механизм, поэтому разнородные дескрипторы и self-join
@@ -337,14 +337,14 @@ with nums as (select id as [Id]
 | ClickHouse | **Исключён**: типизированный рекурсивный CTE бросает `NotSupportedException` до вывода любого SQL. Обычный (нерекурсивный) типизированный CTE на ClickHouse по-прежнему работает. |
 | In-memory | Не применимо: рекурсию рендерят SQL-диалекты. |
 
-Устаревший строковый `WithRecursive` **не** гейтится этой проверкой возможности и сохраняет прежнее
-поведение на каждом провайдере — кроме одного ограничения SQL Server, описанного ниже.
+Строковый `WithRecursive` **не** гейтится этой проверкой возможности и работает на каждом провайдере —
+кроме одного ограничения SQL Server, описанного ниже.
 
-### SQL Server: устаревший рекурсивный CTE требует `UNION ALL`
+### SQL Server: рекурсивный CTE требует `UNION ALL`
 
-Устаревшее объявление `WithRecursive`, тело которого — distinct `UNION` (`anchor.Union(step)`), не является
+Объявление `WithRecursive`, тело которого — distinct `UNION` (`anchor.Union(step)`), не является
 корректным рекурсивным CTE для SQL Server: сервер отвечает *«does not contain a top-level UNION ALL
-operator»*. nextorm теперь отвергает его локально во время подготовки запроса — **до** исполнения и до
+operator»*. nextorm отвергает его локально во время подготовки запроса — **до** исполнения и до
 попадания в кэш планов — с `NotSupportedException`, который называет SQL Server и обе поддерживаемые
 формы:
 
@@ -357,8 +357,8 @@ var body = anchor.UnionAll(step);                        // строковый A
 var nums = anchor.AsRecursiveCte("nums", self => ...);   // типизированный API, всегда UNION ALL
 ```
 
-PostgreSQL, SQLite, MySQL и MariaDB по-прежнему принимают distinct `UNION` в рекурсивном CTE и выводят
-его байт-в-байт как раньше.
+PostgreSQL, SQLite, MySQL и MariaDB принимают distinct `UNION` в рекурсивном CTE и выводят
+его байт-в-байт.
 
 Каждый пример выше ограничен завершающим предикатом в шаге; никогда не стройте неограниченный
 рекурсивный CTE.
@@ -789,11 +789,11 @@ Write-CTE документируется вместе с поверхность�
 
 ---
 
-Source: `src/nextorm.core/Builders/CteQuery.cs:7`, `src/nextorm.core/DataContext/DataContextExtensions.cs:9`;
+Source: `src/nextorm.core/Builders/Cte/CteQuery.cs:7`, `src/nextorm.core/DataContext/DataContextExtensions.cs:9`;
 `tests/nextorm.integration.tests/CommonTestSuite/Cte/CommonTestSuite.Cte.cs:14`, `tests/nextorm.integration.tests/CommonTestSuite/Cte/CommonTestSuite.Cte.cs:33`;
 `tests/nextorm.core.tests/Cte/CteQueryTests.cs:8`;
-типизированный рекурсивный CTE: `src/nextorm.core/Cte.cs:15`, `src/nextorm.core/Query/QueryCommand.TResult.cs:1100`,
-`src/nextorm.core/DataContext/SqlSourceRenderer.cs:35`, `src/nextorm.core/Query/QueryCommand.QueryPreparer.cs:981`;
+типизированный рекурсивный CTE: `src/nextorm.core/Cte.cs:15`, `src/nextorm.core/Query/Commands/QueryCommand.TResult.cs:1100`,
+`src/nextorm.core/DataContext/Sql/SqlSourceRenderer.cs:35`, `src/nextorm.core/Query/Commands/QueryCommand.QueryPreparer.cs:981`;
 `tests/nextorm.core.tests/Cte/TypedCteTests.cs:1057`, `tests/nextorm.sqlite.tests/Cte/TypedCteTests.cs:718`;
 `tests/nextorm.sqlite.tests/PlanCache/PlanCacheTests.cs:190`, `tests/nextorm.sqlite.tests/PlanCache/PlanCacheTests.cs:343`;
 generated SQL: `tests/nextorm.sqlite.tests/SqlGeneration/SqlGenerationTests.cs:1188`, `:1202`, `:1216`, `:1231`, `:1248`;

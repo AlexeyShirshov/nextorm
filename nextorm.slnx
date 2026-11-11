@@ -7,14 +7,17 @@
   <Folder Name="/examples/">
     <Project Path="examples/nextorm.examples.clickhouse.analytics/nextorm.examples.clickhouse.analytics.csproj" />
     <Project Path="examples/nextorm.examples.mssql.adventureworks/nextorm.examples.mssql.adventureworks.csproj" />
+    <Project Path="examples/nextorm.examples.oc-report/nextorm.examples.oc-report.csproj" />
     <Project Path="examples/nextorm.examples.postgres.aviasales/nextorm.examples.postgres.aviasales.csproj" />
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/nextorm.clickhouse/nextorm.clickhouse.csproj" />
+    <Project Path="src/nextorm.extensions/nextorm.extensions.csproj" />
     <Project Path="src/nextorm.mariadb/nextorm.mariadb.csproj" />
     <Project Path="src/nextorm.mysql/nextorm.mysql.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/nextorm.aot.runner/nextorm.aot.runner.csproj" />
     <Project Path="tests/nextorm.clickhouse.extensions.tests/nextorm.clickhouse.extensions.tests.csproj" />
     <Project Path="tests/nextorm.clickhouse.tests/nextorm.clickhouse.tests.csproj" />
     <Project Path="tests/nextorm.mariadb.tests/nextorm.mariadb.tests.csproj" />
@@ -30,9 +33,13 @@
   <Project Path="src/nextorm.sqlserver/nextorm.sqlserver.csproj" />
   <Project Path="tests/nextorm.alias.tests/nextorm.alias.tests.csproj" />
   <Project Path="tests/nextorm.core.tests/nextorm.core.tests.csproj" />
+  <Project Path="tests/nextorm.extensions.tests/nextorm.extensions.tests.csproj" />
+  <Project Path="tests/nextorm.extensions.integration.tests/nextorm.extensions.integration.tests.csproj" />
   <Project Path="tests/nextorm.entityframeworkcore.tests/nextorm.entityframeworkcore.tests.csproj" />
   <Project Path="tests/nextorm.integration.tests/nextorm.integration.tests.csproj" />
   <Project Path="tests/nextorm.postgres.tests/nextorm.postgres.tests.csproj" />
   <Project Path="tests/nextorm.publicextensibility.tests/nextorm.publicextensibility.tests.csproj" />
+  <Project Path="tests/nextorm.querycomponents/nextorm.querycomponents.csproj" />
+  <Project Path="tests/nextorm.querycomponents.tests/nextorm.querycomponents.tests.csproj" />
   <Project Path="tests/nextorm.sqlite.tests/nextorm.sqlite.tests.csproj" />
 </Solution>

@@ -218,7 +218,8 @@ internal sealed class InsertCommand : MutationCommand
     /// <param name="tableSchema">The schema (or database) that qualifies <paramref name="tableName"/>, or <see langword="null"/>.</param>
     /// <param name="outputInto">The <c>OUTPUT ... INTO</c> target, or <see langword="null"/>.</param>
     /// <param name="dynamicColumns">The entity store's dynamic columns written after the mapped ones, or <see langword="null"/>.</param>
-    public InsertCommand(Type entityType, string tableName, bool isTableNameAuto, IReadOnlyList<InsertColumn> columns, int rowCount, IPropertyMetadata? identityColumn, IReadOnlyList<IPropertyMetadata>? returningColumns = null, QueryCommand? source = null, IReadOnlyList<IPropertyMetadata>? sourceColumns = null, bool ignoreConflicts = false, bool keepIdentity = false, string? tableSchema = null, OutputIntoClause? outputInto = null, DynamicColumnSet? dynamicColumns = null)
+    /// <param name="isBulkReturning">Whether the command was built by the portable bulk path for a <c>Returning*</c> terminal, so its <c>RETURNING</c> support is the bulk-only capability rather than the dialect-wide one.</param>
+    public InsertCommand(Type entityType, string tableName, bool isTableNameAuto, IReadOnlyList<InsertColumn> columns, int rowCount, IPropertyMetadata? identityColumn, IReadOnlyList<IPropertyMetadata>? returningColumns = null, QueryCommand? source = null, IReadOnlyList<IPropertyMetadata>? sourceColumns = null, bool ignoreConflicts = false, bool keepIdentity = false, string? tableSchema = null, OutputIntoClause? outputInto = null, DynamicColumnSet? dynamicColumns = null, bool isBulkReturning = false)
         : base(SqlStatementType.Insert, entityType)
     {
         TableName = tableName;
@@ -234,6 +235,7 @@ internal sealed class InsertCommand : MutationCommand
         TableSchema = tableSchema;
         OutputInto = outputInto;
         DynamicColumns = dynamicColumns;
+        IsBulkReturning = isBulkReturning;
     }
 
     /// <summary>The mapped table name, before the naming convention and identifier quoting are applied.</summary>
@@ -293,4 +295,13 @@ internal sealed class InsertCommand : MutationCommand
     /// name quoted through <see cref="ISqlDialect.QuoteIdentifier"/>; the store-less path is unchanged.
     /// </summary>
     public DynamicColumnSet? DynamicColumns { get; }
+
+    /// <summary>
+    /// Whether this insert was built by the portable bulk path for a <c>Returning*</c> terminal. Such a
+    /// command is gated by the bulk-only <see cref="SqlDialectBase.SupportsBulkInsertReturning"/>
+    /// capability instead of the dialect-wide <see cref="ISqlDialect.SupportsReturning"/>, so a provider can
+    /// enable the bulk arm without enabling single-row insert <c>RETURNING</c>. A plain insert, including a
+    /// single-row <c>InsertBuilder.Returning()</c>, leaves it <see langword="false"/>.
+    /// </summary>
+    public bool IsBulkReturning { get; }
 }

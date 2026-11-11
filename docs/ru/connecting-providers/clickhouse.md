@@ -34,8 +34,12 @@ ADO.NET-провайдер `ClickHouse.Driver`. Он создаёт `ClickHouseC
 - `stdev`/`stdevp`/`var`/`varp` как `stddevSamp`/`stddevPop`/`varSamp`/`varPop`;
 - `date_trunc(field, x)` как `dateTrunc('field', x)` (множественные ANSI-части субсекунд сворачиваются
   в единственные; `decade`/`century`/`millennium` бросают исключение), а `date_add`/`DateTime.Add*` —
-  как выделенные функции `addYears`/`addQuarters`/…/`addSeconds` (`decade`/`century`/`millennium`
-  сворачиваются в масштабированный `addYears`), `end_of_month` — как `toLastDayOfMonth(x)`;
+  как выделенные функции `addYears`/`addQuarters`/…/`addSeconds` (`year`/`decade`/`century` продвигают
+  операнд к `DateTime64(6)` и масштабируют `addYears`, поэтому тип SQL-результата этих единиц —
+  `DateTime64(6)`, а CLR-API не меняется; `millennium` бросает исключение до выполнения — на
+  закреплённом ClickHouse 25.8 поддерживаемые результаты годового семейства остаются в диапазоне
+  1900–2299, арифметика за его пределами не поддерживается, входные значения нормализуются до
+  микросекунд с отбрасыванием более тонкой точности), `end_of_month` — как `toLastDayOfMonth(x)`;
 - поверхность приведения/частей даты `SqlFunctions.ClickHouse.to_*` (гейт
   [`DateConversion`](xref:NextORM.Core.ISqlDialect.DateConversion)):
   `to_date`/`to_date_time`/`to_date32` — как `toDate`/`toDateTime`/`toDate32`; аксессоры `to_year`/
@@ -58,12 +62,16 @@ ADO.NET-провайдер `ClickHouse.Driver`. Он создаёт `ClickHouseC
   `count_big`/`count_big_distinct`) приводятся так же — в `toInt32(...)` для возвращающих `int`
   вариантов и `toInt64(...)` для 64-битных; параметрические агрегаты квантилей `quantile(level)(value)`/`quantileExact`/
   `quantileTiming` и `median`, обёрнутые в `toFloat64(...)` (чтобы любой вариант материализовался как
-  `double`); агрегат произвольного значения `any_agg` — как `any` (кросс-провайдерно: `ANY_VALUE(x)` в
+  `double`); `median` — обычный агрегат (одна строка на группу), а у общего
+  `SqlFunctions.ClickHouse.percentile` нет нативного написания: вызов бросает `NotSupportedException`,
+  а не становится псевдонимом `quantile`/`median`; агрегат произвольного значения `any_agg` — как `any` (кросс-провайдерно: `ANY_VALUE(x)` в
   MySQL), а агрегат последней строки `any_last` — как `anyLast`; возвращающие массивы агрегаты
   `group_array`/`group_uniq_array` — как `groupArray`/`groupUniqArray` (материализуются как CLR `T[]`);
   агрегаты последовательностей/воронки
   `window_funnel`/`sequence_match`/`retention` — как `windowFunnel`/`sequenceMatch`/`retention`
-  (`windowFunnel`/`sequenceMatch` обёрнуты в `toInt32(...)`; `retention` возвращает `Array(UInt8)` как `byte[]`); извлекающие функции
+  (`windowFunnel`/`sequenceMatch` обёрнуты в `toInt32(...)`; `retention` нормализуется на сервере к
+  объявленному `int[]`, а `top_k`, `top_k_weighted`, `group_array`, `group_uniq_array`, `array_map` и все
+  три перегрузки `range` так же возвращают объявленный CLR-тип массива); извлекающие функции
   строкового JSON `json_extract_string`/`json_extract_int`/`json_extract_float`/`json_extract_bool`/
   `json_extract_raw`/`json_has`/`json_type` — как `JSONExtractString`/`JSONExtractInt`/`JSONExtractFloat`/
   `JSONExtractBool`/`JSONExtractRaw`/`JSONHas`/`JSONType`, `json_length` — как
@@ -128,6 +136,21 @@ ADO.NET-провайдер `ClickHouse.Driver`. Он создаёт `ClickHouseC
   комбинируется со strictness (`global left any join`,
   [`SupportsGlobalJoin`](xref:NextORM.Core.ISqlDialect.SupportsGlobalJoin)).
 
+Объявленный контракт для агрегатов вариативности — общий: `Stdev`/`Var` дают `null` при нуле или одном
+вносящем вклад значении, `Stdevp`/`Varp` — `null` при нуле и `0.0` при одном. Для этого изменения ветка
+ClickHouse проверена только на генерации SQL (`stddevSamp`/`stddevPop`/`varSamp`/`varPop` выше), а не на
+живом сервере: живой результат не заявлен, и нормализация NaN/Inf не подразумевается. Живыми ветками
+этого изменения были SQLite и PostgreSQL.
+
+Результат `avg` на ClickHouse следует контракту SQL: на пустом входе или входе, где все значения `NULL`,
+он равен SQL `NULL`, а не нативному `nan`. Диалект восстанавливает это проверкой допустимости строк
+вокруг агрегата — `if(count(x)=0, cast(null as Nullable(Float64)), avg(x))`, для фильтрованного AVG —
+`if(countIf(isNotNull(x) AND p)=0, ..., avgIf(x, p))`, для оконного — та же проверка `count(x) over (...)`
+с идентичными partition/order/frame. Проверка `nan`/`isFinite` не используется: считается число
+допустимых строк, а не значение результата, поэтому настоящие `NaN` и ±бесконечность, полученные из
+непустых данных, возвращаются без изменений. Это относится к обычному, `DISTINCT`, фильтрованному и
+оконному AVG.
+
 ClickHouse не поддерживает рекурсивные CTE, поэтому диалект объявляет каждый CTE просто через `with`.
 
 ## Регистрация провайдера
@@ -154,6 +177,50 @@ using NextORM.ClickHouse;
 using IDataContext ctx = new ClickHouseDataContext(
     "Host=localhost;Username=default;Database=app", new DataContextBuilder());
 ```
+
+### Объявление версии сервера
+
+Версия сервера — это объявление вызывающего кода, а не результат опроса: без него провайдер
+сохраняет закреплённую базовую версию 25.8 и отклоняет все функции, появившиеся позже. Если
+развёртывание гарантированно работает на более новом сервере, объявите версию через
+версионированный конструктор (перегрузки с строкой подключения и с внешним соединением):
+
+```csharp
+using var ctx = new ClickHouseDataContext(
+    new Version(25, 9),
+    "Host=localhost;Username=default;Database=app",
+    new DataContextBuilder());
+```
+
+Объявленная версия 25.9 или новее включает нативную `arrayExcept` за
+`SqlFunctions.ClickHouse.array_except`; вызов с двумя массивами рендерится как `arrayExcept(...)`
+(нативная функция принимает ровно два массива, поэтому любая другая арность отклоняется до генерации
+SQL). Необъявленный
+контекст сохраняет исторический отказ — общий `ClickHouseDialect.Instance` никогда не включает
+функцию 25.9, — а контекст с объявленной более старой версией (например, `25.8`) по-прежнему
+отклоняет вызов, но `NotSupportedException` называет и требуемую `25.9`, и объявленную версию и
+бросается до генерации любого SQL.
+
+Конкретный тип контекста несёт одно неизменяемое объявление, потому что кэш планов ключуется типом
+контекста. Объявляйте каждую версию своим подклассом:
+
+```csharp
+// Один тип контекста = одно неизменяемое объявление.
+public sealed class Declared25Context : ClickHouseDataContext
+{
+    public Declared25Context(string connectionString, DataContextBuilder optionsBuilder)
+        : base(new Version(25, 9), connectionString, optionsBuilder)
+    {
+    }
+}
+
+var builder = new DataContextBuilder();
+builder.Factory = b => new Declared25Context(connectionString, b);   // путь через DI
+```
+
+Второе, отличающееся объявление для того же типа бросает `InvalidOperationException` до подготовки
+любого запроса. Конструкторы с клиентом и источником данных неверсионированные: они всегда создают
+диалект закреплённой базовой версии.
 
 ## Конкатенация строк
 
@@ -199,6 +266,31 @@ public sealed class TvpRow
 
 Формы `format(JSONEachRow, ...)`, `values()` и `input()` для связанного параметра **не** используются — `format`/`values` требуют литеральной структуры, а `input` допустим только в `INSERT ... SELECT`, поэтому поддерживаемая эмуляция — именно массив. В ClickHouse **нет хранимых процедур** ([`SupportsStoredProcedures`](xref:NextORM.Core.ISqlDialect.SupportsStoredProcedures) равно `false`, а `ExecuteProcedure` бросает `NotSupportedException`), поэтому параметр потребляется SQL из `ExecuteRaw`/`ExecuteRawAsync`, вызывающим `arrayJoin` самостоятельно. `TypeName` — только для SQL Server и отклоняется через `ArgumentException`. Пустой набор связывается пустым массивом, а null-элементы, nullable-колонки и пустые наборы покрыты тестами провайдера. Поддерживаются только CLR-типы с маппингом на ClickHouse — набор скалярных колонок (целочисленные типы, `float`/`double`, `decimal` как объявленный `Decimal(p, s)` или `Decimal(38, 10)`, `bool`, `string`/`char`, `Guid`, `DateTime`/`DateTimeOffset`/`DateOnly`, перечисление как его базовое число; `TimeOnly` как `String` в инвариантном формате `HH:mm:ss.fffffff`, `TimeSpan` как `Int64` в объявленной единице длительности (по умолчанию тики), `byte[]` как `String`); любой другой тип колонки бросает `NotSupportedException`. Колонка `byte[]` связывается как `String`, поэтому читатель строк возвращает `string`, а не `byte[]` — не полагайтесь на круговой путь `byte[]`. Набор отправляется одним параметром-массивом, без стриминга и копирования, поэтому для очень больших наборов используйте API бинарной вставки драйвера. См. [Сырой SQL: табличные параметры](../guide/14-raw-sql.md#табличные-параметры).
 
+## Массовая вставка
+
+Нативный путь — `ClickHouseClient.InsertBinaryAsync` через собственный клиент контекста, поэтому нужен клиент
+`ClickHouse.Driver` (`ClickHouseClient`/`ClickHouseDataSource` — перегрузки `UseClickHouse`). Настройки клиента
+копируются для вставки; объект настроек вызывающего и настройки соединения никогда не мутируются.
+
+- `ClickHouse(new ClickHouseBulkInsertOptions { ... })` несёт `MaxDegreeOfParallelism` и `UseSession`: `null`
+  сохраняет настроенное значение/сессию, `true` требует фактический session id, а `false` явно запрашивает
+  безсессионную нетемпоральную вставку. Параллелизм больше единицы нельзя сочетать с сессией (ClickHouse
+  допускает одну конкурентную команду на сессию) — запрос отклоняется по имени; неположительный параллелизм —
+  ошибка аргумента.
+- Адаптер читает источник ограниченными чанками (`MaxBatchSize`, по умолчанию 10 000 строк), дожидается
+  каждого вызова драйвера до чтения следующего чанка и сообщает прогресс только после завершения чанка.
+- Записываемы только обычные колонки и колонки `DEFAULT`: замапленная колонка ALIAS или MATERIALIZED
+  отклоняется по имени (каталог читается один раз на цель). `KeepIdentity` пишет явное значение.
+- `IgnoreDuplicates`, `Returning*`, `TableLock`, `FireTriggers` и `CheckConstraints=false` отклоняются;
+  `KeepNulls=false` требует default-equivalent формы.
+- `DatabaseName` рендерит `db.table`; `ServerName` отклоняется (перенаправления нет). `Timeout` — один бюджет
+  на весь вызов со связанной отменой; истёкший бюджет даёт `TimeoutException`, а отмена побеждает.
+
+Класс `ClickHouseBulkCopy` из `ClickHouse.Driver` 1.4.0 **не** устарел — устарел только его метод
+`InitAsync`, — поэтому причиной использования `InsertBinaryAsync` является не класс: бинарный API вставки
+несёт копию настроек на конкретную вставку и контракт session/parallelism. См.
+[Массовая вставка](../guide/22-bulk-insert.md).
+
 ## Различия провайдера
 
 | Аспект | ClickHouse |
@@ -222,7 +314,7 @@ public sealed class TvpRow
 | Логические агрегаты | не поддерживаются (`bool_and`/`bool_or`/`every` — только PostgreSQL) |
 | Фильтрованный агрегат | комбинатор `-If` `countIf`/`sumIf`/`avgIf`/`minIf`/`maxIf`, генерируемый из общего API фильтрации (без ANSI `filter (where ...)`) |
 | ArgMin / ArgMax | `argMin`/`argMax` |
-| quantile / median | `quantile(0.5)(x)`, `quantileExact(0.9)(x)`, `quantileTiming(0.5)(x)`, `median(x)` (как `toFloat64(...)`) |
+| quantile / median | `quantile(0.5)(x)`, `quantileExact(0.9)(x)`, `quantileTiming(0.5)(x)`, `median(x)` (как `toFloat64(...)`, агрегат: одна строка на группу); общий `percentile` и оконные `percentile_cont`/`percentile_disc` бросают `NotSupportedException` |
 | any_agg (произвольное значение) | `any(x)` (кросс-провайдерно; `ANY_VALUE(x)` в MySQL) |
 | any_last (последняя строка) | `anyLast(x)` |
 | Условная функция | `iif(cond, a, b)` → `if(cond, a, b)`; `multi_if(when(c1, v1), ..., otherwise(v))` → `multiIf(c1, v1, ..., v)` |
@@ -240,14 +332,35 @@ public sealed class TvpRow
 | Нативный тип колонки JSON | нативный тип `JSON` с корнем-объектом: свойство `[JsonColumn]` (`Auto`/`Native`: POCO/`JsonObject`/`JsonDocument`/`JsonElement` с корнем-объектом) и «голые» `JsonObject`/`JsonDocument`/`JsonElement` (чтение и параметр) отображаются на него; массивы/скалярные корни отклоняются fail-closed. «Голый» скаляр верхнего уровня `Select(x => x.Doc)` не обрабатывается ядровым классификатором проекции — используйте анонимный тип или DTO. `Text` сохраняет колонку `String`; «голая» `string` и легаси-алиас `Object('json')` не поддерживаются. См. [Поддержка JSON](../guide/16-json.md#отобразить-clr-объект-на-нативную-json-колонку) |
 | Потоковое чтение LOB (`ToStream`/`ToTextReader`) | `NotSupportedException` (у драйвера нет потоковых геттеров) |
 
+### Строковые литералы и экранирование в LIKE
+
+Встроенный строковый литерал заключается в одинарные кавычки, апострофы и обратные слэши
+удваиваются, а остальные символы C0 записываются как `\xNN`. Клауза `ESCAPE` **никогда** не
+выдаётся: движок отвергает любое её написание, а литерал шаблона `LIKE` уже несёт `\%`/`\_`.
+Поэтому пользовательский символ экранирования `LIKE` (третий аргумент `SqlFunctions.Sql.like`)
+падает fail-closed с `NotSupportedException`, называющим ClickHouse.
+
+```sql
+select `Id` as `Id`
+ from simple_entity
+ where `Name` like 'a\%b'
+```
+
 ## Замечания и ограничения
 
+- Нативная `arrayExcept` существует только с ClickHouse 25.9. `SqlFunctions.ClickHouse.array_except`
+  остаётся в публичном API: необъявленный контекст сохраняет отказ закреплённой 25.8
+  (`NotSupportedException` на этапе трансляции, SQL не генерируется), контекст с объявленной 25.9
+  или новее рендерит `arrayExcept(...)`, а контекст с объявленной более старой версией отклоняет
+  вызов сообщением с требуемой `25.9` и объявленной версией. См.
+  [Объявление версии сервера](#объявление-версии-сервера).
 - `GROUP BY ... WITH TOTALS` рендерится корректно, но официальный `ClickHouse.Driver` возвращает строку
   итогов отдельным блоком ответа, который не отдаётся через `IDataReader`, поэтому материализуются
   только строки групп. Используйте, если ваш драйвер отдаёт итоги; сам nextorm только эмитит модификатор.
 - Параметры ClickHouse передаются как параметры HTTP-запроса. Для массовой вставки следует
-  использовать API бинарной вставки драйвера, а не параметризованные `INSERT`, что выходит за
-  пределы построителя запросов.
+  использовать нативный бинарный путь провайдера (см. [Массовая вставка](#массовая-вставка)), который
+  построитель запросов предоставляет через `CreateBulkInsertBuilder`; утверждение
+  `INSERT ... VALUES` остаётся портируемым запасным вариантом (`Mode.Portable`).
 - Для `null`-значений параметров тип ClickHouse невозможно вывести только из значения CLR. Когда
   запрос связывает параметр `null`, задайте явный тип параметра на уровне драйвера (например,
   пользовательским резолвером) или приведите плейсхолдер в SQL.

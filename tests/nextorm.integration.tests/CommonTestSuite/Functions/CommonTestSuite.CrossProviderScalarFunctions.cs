@@ -73,12 +73,267 @@ public abstract partial class CommonTestSuite
             })
             .First();
 
-        r.Bl.Should().Be(24);
-        r.Ol.Should().Be(3);
+        // SQL Server renders the inline literal as N'abc' (SqlStringLiteralPolicy.cs:219-267), so
+        // datalength(N'abc') counts six UTF-16 bytes: bit_length doubles that to 48 and octet_length
+        // keeps 6 (SqlServerDialect.cs:1011-1012). Every other provider measures the three ASCII bytes.
+        if (Provider.Name == "sqlserver")
+        {
+            r.Bl.Should().Be(48);
+            r.Ol.Should().Be(6);
+        }
+        else
+        {
+            r.Bl.Should().Be(24);
+            r.Ol.Should().Be(3);
+        }
         ((double?)r.Deg).GetValueOrDefault().Should().BeApproximately(180.0, 1e-6);
         ((double?)r.Rad).GetValueOrDefault().Should().BeApproximately(Math.PI, 1e-6);
         ((double?)r.Pi).GetValueOrDefault().Should().BeApproximately(Math.PI, 1e-6);
         ((double?)r.Acos).GetValueOrDefault().Should().BeApproximately(0.0, 1e-6);
         ((double?)r.Atan2).GetValueOrDefault().Should().BeApproximately(Math.PI / 4, 1e-6);
     }
+
+    [Fact]
+    [Trait("Issue", "281")]
+    public void CrossProviderScalarFunctions_NumericScale_ShouldMatchProviderSupport()
+    {
+        var scale = () => _sut.ComplexEntity
+            .Where(e => e.Id == 1)
+            .Select(e => new { V = SqlFunctions.Postgres.scale(12.3400m) })
+            .First();
+        var minScale = () => _sut.ComplexEntity
+            .Where(e => e.Id == 1)
+            .Select(e => new { V = SqlFunctions.Postgres.min_scale(12.3400m) })
+            .First();
+        var trimScale = () => _sut.ComplexEntity
+            .Where(e => e.Id == 1)
+            .Select(e => new { V = SqlFunctions.Postgres.trim_scale(12.3400m) })
+            .First();
+
+        if (Provider.Name == "postgres")
+        {
+            scale().V.Should().Be(4);
+            minScale().V.Should().Be(2);
+            trimScale().V.Should().Be(12.34m);
+            return;
+        }
+
+        scale.Should().Throw<NotSupportedException>().WithMessage("*scale*not supported*");
+        minScale.Should().Throw<NotSupportedException>().WithMessage("*min_scale*not supported*");
+        trimScale.Should().Throw<NotSupportedException>().WithMessage("*trim_scale*not supported*");
+    }
+
+    /// <summary>
+    /// The residual string and numeric names of #281 are enrolled in the shared scalar path, so each one
+    /// runs on every provider: PostgreSQL executes and maps it, every other provider refuses it during
+    /// preparation with a message naming the function. The refused members (<c>casefold</c>,
+    /// <c>gamma</c>/<c>tgamma</c>/<c>lgamma</c>, one-argument <c>to_ascii</c>) carry their technical
+    /// reason on every provider, because the reason is a property of the target server, not of a
+    /// provider.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void CrossProviderScalarFunctions_PostgresResidualFamilies_ShouldMatchProviderSupport()
+    {
+        var delivered = new (string Name, Func<object?> Run, Type Expected)[]
+        {
+            ("btrim", () => Row(e => new { V = SqlFunctions.Postgres.btrim("  ab  ") }).V, typeof(string)),
+            ("ltrim", () => Row(e => new { V = SqlFunctions.Postgres.ltrim("xxab", "x") }).V, typeof(string)),
+            ("rtrim", () => Row(e => new { V = SqlFunctions.Postgres.rtrim("abxx", "x") }).V, typeof(string)),
+            ("starts_with", () => Row(e => new { V = SqlFunctions.Postgres.starts_with("dadfasd", "dad") }).V, typeof(bool)),
+            ("parse_ident", () => Row(e => new { V = SqlFunctions.Postgres.parse_ident("a.b", false) }).V, typeof(string[])),
+            ("quote_ident", () => Row(e => new { V = SqlFunctions.Postgres.quote_ident("a b") }).V, typeof(string)),
+            ("quote_literal", () => Row(e => new { V = SqlFunctions.Postgres.quote_literal("a") }).V, typeof(string)),
+            ("quote_nullable", () => Row(e => new { V = SqlFunctions.Postgres.quote_nullable("a") }).V, typeof(string)),
+            ("to_ascii", () => Row(e => new { V = SqlFunctions.Postgres.to_ascii("abc", "LATIN1") }).V, typeof(string)),
+            ("to_hex", () => Row(e => new { V = SqlFunctions.Postgres.to_hex(-1) }).V, typeof(string)),
+            ("to_oct", () => Row(e => new { V = SqlFunctions.Postgres.to_oct(8) }).V, typeof(string)),
+            ("to_bin", () => Row(e => new { V = SqlFunctions.Postgres.to_bin(5) }).V, typeof(string)),
+            ("convert_from", () => Row(e => new
+            {
+                V = SqlFunctions.Postgres.convert_from(SqlFunctions.Postgres.convert_to("abc", "UTF8"), "UTF8")
+            }).V, typeof(string)),
+            ("convert_to", () => Row(e => new { V = SqlFunctions.Postgres.convert_to("abc", "UTF8") }).V, typeof(byte[])),
+            ("encode", () => Row(e => new
+            {
+                V = SqlFunctions.Postgres.encode(SqlFunctions.Postgres.convert_to("abc", "UTF8"), "hex")
+            }).V, typeof(string)),
+            ("decode", () => Row(e => new { V = SqlFunctions.Postgres.decode("616263", "hex") }).V, typeof(byte[])),
+            ("normalize", () => Row(e => new { V = SqlFunctions.Postgres.normalize("abc", "NFC") }).V, typeof(string)),
+            ("unistr", () => Row(e => new { V = SqlFunctions.Postgres.unistr("a\\0441") }).V, typeof(string)),
+            ("regexp_match", () => Row(e => new { V = SqlFunctions.Postgres.regexp_match("dadfasd", "(d)(a)") }).V, typeof(string[])),
+            ("div", () => Row(e => new { V = SqlFunctions.Postgres.div(7m, 2m) }).V, typeof(decimal)),
+            ("erf", () => Row(e => new { V = SqlFunctions.Postgres.erf(0.0) }).V, typeof(double)),
+            ("erfc", () => Row(e => new { V = SqlFunctions.Postgres.erfc(0.0) }).V, typeof(double)),
+            ("random_normal", () => Row(e => new { V = SqlFunctions.Postgres.random_normal(0.0, 0.0) }).V, typeof(double)),
+            ("acosd", () => Row(e => new { V = SqlFunctions.Postgres.acosd(1.0) }).V, typeof(double)),
+            ("asind", () => Row(e => new { V = SqlFunctions.Postgres.asind(1.0) }).V, typeof(double)),
+            ("atand", () => Row(e => new { V = SqlFunctions.Postgres.atand(1.0) }).V, typeof(double)),
+            ("atan2d", () => Row(e => new { V = SqlFunctions.Postgres.atan2d(1.0, 1.0) }).V, typeof(double)),
+            ("cosd", () => Row(e => new { V = SqlFunctions.Postgres.cosd(60.0) }).V, typeof(double)),
+            ("cotd", () => Row(e => new { V = SqlFunctions.Postgres.cotd(45.0) }).V, typeof(double)),
+            ("sind", () => Row(e => new { V = SqlFunctions.Postgres.sind(30.0) }).V, typeof(double)),
+            ("tand", () => Row(e => new { V = SqlFunctions.Postgres.tand(45.0) }).V, typeof(double))
+        };
+
+        var refused = new (string Name, Func<object?> Run)[]
+        {
+            ("casefold", () => Row(e => new { V = SqlFunctions.Postgres.casefold("A") }).V),
+            ("gamma", () => Row(e => new { V = SqlFunctions.Postgres.gamma(1.5) }).V),
+            ("tgamma", () => Row(e => new { V = SqlFunctions.Postgres.tgamma(1.5) }).V),
+            ("lgamma", () => Row(e => new { V = SqlFunctions.Postgres.lgamma(1.5) }).V),
+            ("to_ascii", () => Row(e => new { V = SqlFunctions.Postgres.to_ascii("abc") }))
+        };
+
+        if (Provider.Name == "postgres")
+        {
+            foreach (var (name, run, expected) in delivered)
+            {
+                var value = run();
+                value.Should().NotBeNull($"'{name}' is delivered on PostgreSQL");
+                value.Should().BeOfType(expected, $"'{name}' maps to {expected.Name}");
+            }
+
+            foreach (var (name, run) in refused)
+            {
+                var act = () => { _ = run(); };
+                act.Should().Throw<NotSupportedException>($"'{name}' is a refused member");
+            }
+
+            return;
+        }
+
+        foreach (var (name, run, _) in delivered)
+        {
+            var act = () => { _ = run(); };
+            act.Should().Throw<NotSupportedException>().WithMessage($"*{name}*not supported*");
+        }
+
+        foreach (var (name, run) in refused)
+        {
+            var act = () => { _ = run(); };
+            act.Should().Throw<NotSupportedException>().WithMessage("*refused*", $"'{name}' carries its reason on every provider");
+        }
+    }
+
+    /// <summary>
+    /// The residual PostgreSQL date/time, UUID and binary-string names of #281 follow the same
+    /// enrolment: PostgreSQL executes and maps each one, every other provider refuses it during
+    /// preparation with a message naming the function. The PostgreSQL 18 <c>crc32</c>/<c>crc32c</c>
+    /// refusals keep their technical reason on every provider.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void CrossProviderScalarFunctions_PostgresDateTimeUuidAndBinaryFamilies_ShouldMatchProviderSupport()
+    {
+        var date = new DateOnly(2024, 1, 1);
+        var day = TimeSpan.FromDays(1);
+        var v1 = Guid.Parse("a0eebc99-9c0b-11d1-9c9b-00c04fd430c8");
+
+        var delivered = new (string Name, Func<object?> Run, Type Expected)[]
+        {
+            ("date_subtract", () => Row(e => new { V = SqlFunctions.Postgres.date_subtract(e.Datetime, day) }).V, typeof(DateTime)),
+            ("date_subtract", () => Row(e => new { V = SqlFunctions.Postgres.date_subtract(e.Datetime, day, "UTC") }).V, typeof(DateTime)),
+            ("justify_interval", () => Row(e => new { V = SqlFunctions.Postgres.justify_interval(TimeSpan.FromHours(25)) }).V, typeof(TimeSpan)),
+            ("make_timestamptz", () => Row(e => new { V = SqlFunctions.Postgres.make_timestamptz(2024, 1, 2, 3, 4, 5.5) }).V, typeof(DateTime)),
+            ("make_timestamptz", () => Row(e => new { V = SqlFunctions.Postgres.make_timestamptz(2024, 1, 2, 3, 4, 5.5, "UTC") }).V, typeof(DateTime)),
+            ("clock_timestamp", () => Row(e => new { V = SqlFunctions.Postgres.clock_timestamp() }).V, typeof(DateTime)),
+            ("statement_timestamp", () => Row(e => new { V = SqlFunctions.Postgres.statement_timestamp() }).V, typeof(DateTime)),
+            ("transaction_timestamp", () => Row(e => new { V = SqlFunctions.Postgres.transaction_timestamp() }).V, typeof(DateTime)),
+            ("timeofday", () => Row(e => new { V = SqlFunctions.Postgres.timeofday() }).V, typeof(string)),
+            ("isfinite", () => Row(e => new { V = SqlFunctions.Postgres.isfinite(date) }).V, typeof(bool)),
+            ("isfinite", () => Row(e => new { V = SqlFunctions.Postgres.isfinite(e.Datetime) }).V, typeof(bool)),
+            ("isfinite", () => Row(e => new { V = SqlFunctions.Postgres.isfinite(day) }).V, typeof(bool)),
+            ("uuid_extract_timestamp", () => Row(e => new { V = SqlFunctions.Postgres.uuid_extract_timestamp(v1) }).V, typeof(DateTime)),
+            ("uuid_extract_version", () => Row(e => new { V = SqlFunctions.Postgres.uuid_extract_version(v1) }).V, typeof(short)),
+            ("get_bit", () => Row(e => new
+            {
+                V = SqlFunctions.Postgres.get_bit(SqlFunctions.Postgres.decode("a1", "hex"), 0L)
+            }).V, typeof(int)),
+            ("set_bit", () => Row(e => new
+            {
+                V = SqlFunctions.Postgres.set_bit(SqlFunctions.Postgres.decode("a1", "hex"), 0L, 0)
+            }).V, typeof(byte[])),
+            ("get_byte", () => Row(e => new
+            {
+                V = SqlFunctions.Postgres.get_byte(SqlFunctions.Postgres.decode("a1", "hex"), 0)
+            }).V, typeof(int)),
+            ("set_byte", () => Row(e => new
+            {
+                V = SqlFunctions.Postgres.set_byte(SqlFunctions.Postgres.decode("a1", "hex"), 0, 255)
+            }).V, typeof(byte[])),
+            ("bit_count", () => Row(e => new
+            {
+                V = SqlFunctions.Postgres.bit_count(SqlFunctions.Postgres.decode("a1", "hex"))
+            }).V, typeof(long))
+        };
+
+        var refused = new (string Name, Func<object?> Run)[]
+        {
+            ("crc32", () => Row(e => new
+            {
+                V = SqlFunctions.Postgres.crc32(SqlFunctions.Postgres.decode("a1", "hex"))
+            }).V),
+            ("crc32c", () => Row(e => new
+            {
+                V = SqlFunctions.Postgres.crc32c(SqlFunctions.Postgres.decode("a1", "hex"))
+            }).V)
+        };
+
+        if (Provider.Name == "postgres")
+        {
+            foreach (var (name, run, expected) in delivered)
+            {
+                var value = run();
+                value.Should().NotBeNull($"'{name}' is delivered on PostgreSQL");
+                value.Should().BeOfType(expected, $"'{name}' maps to {expected.Name}");
+            }
+
+            foreach (var (name, run) in refused)
+            {
+                var act = () => { _ = run(); };
+                act.Should().Throw<NotSupportedException>($"'{name}' is a refused member");
+            }
+
+            return;
+        }
+
+        foreach (var (name, run, _) in delivered)
+        {
+            var act = () => { _ = run(); };
+            act.Should().Throw<NotSupportedException>().WithMessage($"*{name}*not supported*");
+        }
+
+        foreach (var (name, run) in refused)
+        {
+            var act = () => { _ = run(); };
+            act.Should().Throw<NotSupportedException>().WithMessage("*refused*", $"'{name}' carries its reason on every provider");
+        }
+    }
+
+    /// <summary>
+    /// <c>string_to_table</c> is the one set-returning name of the D2a family: PostgreSQL returns one row
+    /// per fragment, every other provider refuses the table function by name.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "281")]
+    public void CrossProviderScalarFunctions_StringToTable_ShouldMatchProviderSupport()
+    {
+        var run = () => _sut.DataProvider
+            .From(() => SqlFunctions.Postgres.string_to_table("a,b,c", ","))
+            .Select(row => row.Value)
+            .ToList();
+
+        if (Provider.Name == "postgres")
+        {
+            run().Should().Equal("a", "b", "c");
+            return;
+        }
+
+        var act = () => { _ = run(); };
+        act.Should().Throw<NotSupportedException>().WithMessage("*string_to_table*not supported*");
+    }
+
+    private T Row<T>(System.Linq.Expressions.Expression<Func<IComplexEntity, T>> projection)
+        => _sut.ComplexEntity.Where(e => e.Id == 1).Select(projection).First();
 }

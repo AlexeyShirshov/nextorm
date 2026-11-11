@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1800 860" role="img" aria-labelledby="t d">
+<title id="t">Жизненный цикл компонента запроса: от вызова построителя до выполненного SQL</title>
+<desc id="d">Ваш код вызывает метод-расширение, который присоединяет компонент к неизменяемому построителю. Ядро подготавливает его один раз на построение плана, получает неизменяемый дескриптор, строит утверждение на промахе кэша и переиспользует кэшированный план на попадании; далее исполнитель идёт тем же путём, что и у обычного запроса.</desc>
+<defs>
+  <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#64748b"/></marker>
+  <style>
+    text { font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #f1f5f9; }
+    .chip { font-size: 11px; font-weight: 700; letter-spacing: 1.1px; fill: #8b9bb4; }
+    .card { fill: #121e32; stroke: #2b3a55; stroke-width: 1.4; }
+    .mono { font-family: Consolas, "Liberation Mono", monospace; }
+    .note { font-size: 12.5px; fill: #94a3b8; }
+    .step { font-size: 15px; font-weight: 700; }
+    .code { font-size: 15px; fill: #e2e8f0; }
+    .green { fill: #7ee0b4; } .purple { fill: #c084fc; } .cyan { fill: #55d6e8; }
+    .link { fill: none; stroke: #475569; stroke-width: 2; }
+  </style>
+</defs>
+
+<rect x="0" y="0" width="1800" height="860" rx="16" fill="#0b1220" stroke="#1e293b"/>
+<text x="44" y="48" font-size="21" font-weight="700">Жизненный цикл компонента запроса: от вызова построителя до SQL</text>
+<text x="44" y="74" font-size="12.5" class="note">Один публичный контракт и две дороги через ядро: промах кэша строит план, попадание только привязывает значения.</text>
+
+<!-- Row A -->
+<rect class="card" x="40" y="140" width="300" height="88" rx="12"/>
+<text class="chip green" x="60" y="164">ВАШ КОД</text>
+<text class="mono code" x="60" y="189">ctx.From&lt;Player&gt;()</text>
+<text class="note" x="60" y="211">fluent-вызов, SQL ещё нет</text>
+
+<rect class="card" x="392" y="140" width="352" height="88" rx="12"/>
+<text class="chip green" x="412" y="164">ВАШ ПАКЕТ</text>
+<text class="mono code" x="412" y="189">SelectWhereMinEx(...)</text>
+<text class="note" x="412" y="211">возвращает новый EntityBuilder</text>
+
+<rect class="card" x="796" y="140" width="310" height="88" rx="12"/>
+<text class="chip green" x="816" y="164">ВАШ ПАКЕТ</text>
+<text class="mono code" x="816" y="189">IQueryComponent</text>
+<text class="note" x="816" y="211">слот · вид вклада · Prepare · BuildQuery</text>
+
+<rect class="card" x="1158" y="140" width="340" height="88" rx="12"/>
+<text class="chip cyan" x="1178" y="164">API ЯДРА</text>
+<text class="mono code" x="1178" y="189">WithComponent(...)</text>
+<text class="note" x="1178" y="211">неизменяемо: тот же слот заменяется на месте</text>
+
+<rect class="card" x="1550" y="140" width="210" height="88" rx="12"/>
+<text class="chip cyan" x="1570" y="164">API ЯДРА</text>
+<text class="mono code" x="1570" y="189" font-size="13">Command.Components</text>
+<text class="note" x="1570" y="211">управляется ядром</text>
+
+<path class="link" marker-end="url(#a)" d="M340 184 H392"/>
+<path class="link" marker-end="url(#a)" d="M744 184 H796"/>
+<path class="link" marker-end="url(#a)" d="M1106 184 H1158"/>
+<path class="link" marker-end="url(#a)" d="M1498 184 H1550"/>
+
+<!-- lookup -->
+<path class="link" marker-end="url(#a)" d="M1655 228 V270 H900 V300"/>
+
+<rect class="card" x="640" y="300" width="520" height="86" rx="12" stroke="#38bdf8"/>
+<text class="chip cyan" x="664" y="326">API ЯДРА</text>
+<text class="step" x="664" y="352">Поиск в кэше планов</text>
+<text class="note" x="664" y="374">ключ = слот · тип компонента · вид вклада · признак · хэш</text>
+
+<!-- branches -->
+<path class="link" marker-end="url(#a)" d="M790 386 V430"/>
+<path class="link" marker-end="url(#a)" d="M1050 386 V430"/>
+
+<rect class="card" x="140" y="430" width="660" height="96" rx="12" stroke="#c084fc"/>
+<text class="chip purple" x="164" y="452">ВАШ КОД · ОДИН РАЗ НА ПЛАН</text>
+<text class="step" x="164" y="476">Prepare → неизменяемый дескриптор</text>
+<text class="note" x="164" y="497">валидирует комбинацию: неподдерживаемая бросает исключение</text>
+<text class="note" x="164" y="515">возвращает слот, структурный хэш и структурное равенство</text>
+
+<rect class="card" x="140" y="556" width="660" height="96" rx="12" stroke="#55d6e8"/>
+<text class="chip cyan" x="164" y="578">ВАШ КОД · ТОЛЬКО ПРОМАХ КЭША</text>
+<text class="step" x="164" y="602">BuildQuery → утверждение</text>
+<text class="note" x="164" y="623">производный источник · payload + одна скрытая колонка</text>
+<text class="note" x="164" y="643">внешний фильтр по ней · без текста SQL, без кода диалекта</text>
+
+<path class="link" marker-end="url(#a)" d="M470 526 V556"/>
+
+<rect class="card" x="1010" y="430" width="650" height="96" rx="12" stroke="#7ee0b4"/>
+<text class="chip green" x="1034" y="452">ЯДРО · ТЁПЛОЕ ПОПАДАНИЕ</text>
+<text class="step" x="1034" y="476">Кэшированный план переиспользуется</text>
+<text class="note" x="1034" y="497">BuildQuery не вызывается — ни перестроения, ни ревалидации</text>
+<text class="note" x="1034" y="515">захваченные и позиционные значения перепривязываются</text>
+
+<rect class="card" x="1010" y="556" width="650" height="96" rx="12"/>
+<text class="chip" x="1034" y="578">ЯДРО · КЛЮЧ ПЛАНА</text>
+<text class="step" x="1034" y="602">Равный ключ ⇒ один план</text>
+<text class="note" x="1034" y="623">равные компоненты делят один подготовленный план</text>
+<text class="note" x="1034" y="643">другой слот или состояние строит отдельный план</text>
+
+<!-- merge -->
+<path class="link" d="M470 652 V676 H900"/>
+<path class="link" d="M1335 652 V676 H900"/>
+<circle cx="900" cy="676" r="4" fill="#64748b"/>
+<path class="link" marker-end="url(#a)" d="M900 676 V700"/>
+
+<rect class="card" x="640" y="700" width="520" height="86" rx="12"/>
+<text class="chip cyan" x="664" y="726">ЯДРО</text>
+<text class="step" x="664" y="752">Исполнитель запроса → строки</text>
+<text class="note" x="664" y="774">тот же путь исполнения, что у обычного запроса</text>
+
+<text x="900" y="820" text-anchor="middle" font-size="13" class="note">строки возвращаются в ваш ToList()</text>
+</svg>

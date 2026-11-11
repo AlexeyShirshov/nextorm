@@ -213,6 +213,13 @@ internal sealed class JoinIntoSpec<TEntity, TChild> : IJoinIntoSpec<TEntity>
         Relationship = relationship;
         JoinType = joinType;
 
+        // Structural validation of the declared relationship happens here, on the demand path that will
+        // render SQL, for every producer (fluent/attribute) and for a hand-written IRelationshipMetadata
+        // alike: the concrete RelationshipMetadata validates its lazy keys on first read, but a custom
+        // instance has no such guard. Nothing is cached before this call returns, so a rejected mapping
+        // can never reach SQL or a successful plan-cache insert, and repeating the attempt rethrows.
+        RelationshipResolver.ValidateRelationship(relationship);
+
         var principalKey = relationship.PrincipalKey.Select(static p => p.PropertyInfo).ToArray();
         var foreignKey = relationship.ForeignKey.Select(static p => p.PropertyInfo).ToArray();
 
@@ -462,6 +469,11 @@ internal sealed class JoinIntoReferenceSpec<TEntity, TChild> : IJoinIntoSpec<TEn
         Relationship = relationship;
         JoinType = joinType;
 
+        // Same demand-time structural validation as the collection spec: a hand-written
+        // IRelationshipMetadata is checked before either key list is read, hence before SQL and before a
+        // plan-cache insert.
+        RelationshipResolver.ValidateRelationship(relationship);
+
         var principalKey = relationship.PrincipalKey.Select(static p => p.PropertyInfo).ToArray();
 
         _parentKey = JoinIntoSpecHelpers.BuildKeySelector<TEntity>(principalKey).Compile();
@@ -583,6 +595,22 @@ internal static class JoinIntoSpecHelpers
     /// <exception cref="NotSupportedException">The key type does not support value equality.</exception>
     internal static Expression BuildKeyEquality(Expression parentKey, Expression childKey, Type keyType, string modeName)
     {
+        // A nullable foreign-key component compared with its non-nullable principal (or the reverse)
+        // has no common equality operator: Expression.Equal(int?, int) throws. Lift the narrower side
+        // to Nullable<T> so the lifted operator applies. This is still a plain equality — a NULL
+        // component yields NULL and therefore no match, never a null-safe "null == null" — and the
+        // conversion is transparent to SQL rendering (no cast is emitted for a same-underlying-type
+        // nullable lift).
+        var nullableType = NullableLiftTarget(parentKey.Type, childKey.Type);
+        if (nullableType is not null)
+        {
+            if (parentKey.Type != nullableType)
+                parentKey = Expression.Convert(parentKey, nullableType);
+
+            if (childKey.Type != nullableType)
+                childKey = Expression.Convert(childKey, nullableType);
+        }
+
         Expression equality;
         try
         {
@@ -606,6 +634,28 @@ internal static class JoinIntoSpecHelpers
                 $"loading (omit {modeName}), which compares keys with the default equality comparer.");
 
         return equality;
+    }
+
+    /// <summary>
+    /// Resolves the <see cref="Nullable{T}"/> type both sides must be lifted to when one side is
+    /// nullable and the other is its non-nullable underlying type, or <see langword="null"/> when the
+    /// two types already match (or cannot be reconciled by a nullable lift).
+    /// </summary>
+    private static Type? NullableLiftTarget(Type left, Type right)
+    {
+        if (left == right)
+            return null;
+
+        var leftUnderlying = Nullable.GetUnderlyingType(left);
+        var rightUnderlying = Nullable.GetUnderlyingType(right);
+
+        if (leftUnderlying is not null && leftUnderlying == right)
+            return left;
+
+        if (rightUnderlying is not null && rightUnderlying == left)
+            return right;
+
+        return null;
     }
 
     /// <summary>

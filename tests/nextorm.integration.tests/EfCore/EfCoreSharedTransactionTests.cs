@@ -20,7 +20,7 @@ public sealed class EfCoreSharedTransactionTests
     {
         var path = Path.Combine(Path.GetTempPath(), $"nextorm.efcore.{Guid.NewGuid():N}.db");
         var options = new DbContextOptionsBuilder<EfInsertContext>()
-            .UseSqlite($"Data Source={path}")
+            .UseSqlite($"Data Source={path};Pooling=False")
             .Options;
 
         try
@@ -46,8 +46,7 @@ public sealed class EfCoreSharedTransactionTests
         }
         finally
         {
-            if (File.Exists(path))
-                File.Delete(path);
+            SqliteTempFile.Delete(path);
         }
     }
 

@@ -201,7 +201,7 @@ ctx.CreateInsertBuilder<IOrder>()
 В PostgreSQL источником может быть даже модифицирующий CTE (`ctx.With(имя, insert.Returning(...))`); см.
 [Модифицирующий CTE (PostgreSQL)](#модифицирующий-cte-postgresql).
 
-**Табличная функция** тоже годится как источник: `FromTableFunction` даёт `EntityBuilder<TSource>`,
+**Табличная функция** тоже годится как источник: источник-runtime-фабрика даёт `EntityBuilder<TSource>`,
 поэтому `unnest`/`generate_series` могут питать вставку. Массив — настоящий параметр, поэтому
 передавайте его захваченной переменной: рантайм-плейсхолдер `SqlFunctions.Parameter` отклоняется (см.
 выше):
@@ -210,7 +210,7 @@ ctx.CreateInsertBuilder<IOrder>()
 var ids = new long[] { 1, 2, 3 };
 
 ctx.CreateInsertBuilder<IdRow>()
-    .Values(ctx.FromTableFunction(() => SqlFunctions.Postgres.unnest(ids)), r => new { r.Value })
+    .Values(ctx.From(() => SqlFunctions.Postgres.unnest(ids)), r => new { r.Value })
     .Insert();
 // insert into id_row (value) select unnest as "Value"
 // from (select unnest
@@ -600,6 +600,86 @@ declare @t table (id bigint, name nvarchar(100)); insert into simple_entity (nam
 Поддержка `OUTPUT`/`OUTPUT INTO` на SQL Server отслеживалась в задаче
 [#15](https://github.com/AlexeyShirshov/nextorm/issues/15) (закрыта).
 
+### Захват в рамках батча (`BatchBuilder.OutputIntoTableVariable`)
+
+Fluent-форма выше принадлежит самой мутации: она объявляет переменную, пишет в неё изменённые строки
+и добавляет автоматическое чтение `SELECT`, которое её терминалы затем отбрасывают. Когда захваченные
+строки нужны **следующей инструкции того же батча** — чтобы отфильтровать, соединить, агрегировать или
+вернуть их — зарегистрируйте захват на батче и постройте поверх него обычный запрос:
+
+```csharp
+public sealed class CapturedRow
+{
+    public long Id { get; set; }
+    public string? Name { get; set; }
+}
+
+var batch = ctx.CreateBatchBuilder();
+
+batch.OutputIntoTableVariable(
+    ctx.CreateInsertBuilder<ISimpleEntity>()
+        .Value(x => x.Name, name)
+        .Returning(x => new CapturedRow { Id = x.Id, Name = x.Name }),
+    "@t",
+    "id bigint, name nvarchar(100)");
+
+var rows = batch
+    .Query(batch.FromOutput<CapturedRow>("@t")
+        .Where(r => r.Id > minId)
+        .OrderBy(r => r.Name)
+        .Select(r => new CapturedRow { Id = r.Id, Name = r.Name }))
+    .ToList();
+```
+
+```sql
+-- SQL Server (один батч, один round trip)
+declare @t table (id bigint, name nvarchar(100)); insert into simple_entity (name) output inserted.id, inserted.name into @t (id, name) values (@p0); select id, name
+ from @t as [t1]
+ where (t1.id > @b1_minId)
+ order by t1.name
+```
+
+* **Одна перегрузка захвата на вид мутации.** `BatchBuilder.OutputIntoTableVariable(...)` принимает
+  `InsertReturningBuilder<TEntity, TResult>`, `UpdateReturningBuilder<TEntity, TResult>`,
+  `DeleteReturningBuilder<TEntity, TResult>` или `MergeReturningBuilder<TEntity, TResult>`; форма
+  захваченной строки — это проекция `Returning(...)` мутации (`Returning()` захватывает всю
+  mapped-сущность). `DELETE` читает удалённые строки через алиас `deleted`.
+* **Видимость только внутри батча.** Табличная переменная существует только внутри объявившего её
+  батча. `FromOutput<TResult>(name)` и `FromOutputTable(name)` принимаются только
+  `Query`/`AddQuery` этого батча и только для захвата, зарегистрированного **раньше** на том же
+  билдере. Чтение источника вне его батча отклоняется с `NotSupportedException`
+  (`batch output source`) ещё до выделения команды; имя, не захваченное в этом батче, повторное имя
+  захвата или мутация, привязанная к другому контексту, отклоняются с
+  `InvalidOperationException`/`ArgumentException` при сборке батча.
+* **Две формы источника.** `FromOutput<TResult>("@t")` — типизированный источник: `TResult` должен
+  быть ровно типом проекции захвата (используйте именованный класс или record, а не анонимный тип), и
+  работают обычные операторы — `Where`, `OrderBy`, `Join`, `GroupBy`, `Limit`. `FromOutputTable("@t")` —
+  источник на [`TableAlias`](xref:NextORM.Core.TableAlias) (`t["id"].AsInt`), практичный выбор для
+  анонимной проекции, соединения или агрегата.
+* **Нет автоматического чтения и лишнего набора результатов.** Шаг захвата рендерит только
+  `DECLARE @t TABLE (...); <мутация> OUTPUT ... INTO @t (...)`; чтением **является** сам составной
+  запрос. Весь батч — захват плюс все составные запросы — один round trip к серверу (наивная форма,
+  захват в реальную таблицу и затем `SELECT` из неё, требует двух).
+* **Изоляция параметров по шагам.** Захваченные переменные каждого шага несут префикс `b{i}_`
+  (`@b0_min`, `@b1_min`, …), поэтому одно и то же имя замкнутой переменной в двух шагах никогда не
+  сливается в один placeholder; собственные связанные значения мутации продолжают единую
+  последовательность `@p0…` на весь батч.
+* **Порядок задаётся явно.** У табличной переменной нет собственного порядка: составной запрос
+  возвращает строки в том порядке, в каком их выдаёт движок, если не добавить `OrderBy(...)`.
+* **Определения колонок — доверенный SQL.** `columnDefinitions` подставляется в текст
+  `DECLARE @t TABLE (...)` дословно и никогда не параметризуется и не проверяется; имена из объявления
+  вызывающего переиспользуются как список колонок `INTO`, позиционно по порядку проекции мутации.
+  Поэтому объявление должно совпадать с returning-проекцией **по позиции и количеству** (имя и
+  совместимый тип на каждую колонку) — несовпадение это ошибка базы, а не клиентская диагностика.
+  Никогда не передавайте туда пользовательский ввод.
+* **Ограничения провайдеров и форм.** Только SQL Server реализует `ISqlDialect.SupportsOutputInto`;
+  остальные провайдеры отклоняют захват с `NotSupportedException`, и мутация, проекция которой не даёт
+  ни одной выходной колонки (беспараметрическая `ReturningIdentity<TKey>()`), отклоняется так же.
+  PostgreSQL сохраняет свой маршрут
+  [модифицирующий CTE](#модифицирующий-cte-postgresql) для чтения изменённых строк, и этот API его
+  отклоняет. Fluent `OutputInto` для `MERGE` нет — единственная форма захвата для него это батчевый
+  захват (см. [Захват слитых строк](21-merge-statement.md#захват-слитых-строк-только-в-батче)).
+
 ## Массовая вставка (bulk)
 
 Запись целого набора — нативные bulk-пути, чанкинг, `Returning`, `IgnoreDuplicates` и `KeepIdentity` —
@@ -638,8 +718,10 @@ var sql = ctx.CreateInsertBuilder<ISimpleEntity>().Value(x => x.Name, "a").ToSql
 Сам `INSERT ... VALUES` кросс-провайдерный и не гейтится: одно и то же API `CreateInsertBuilder<T>()` работает
 на всех SQL-провайдерах. Отличается лишь форма возврата ключа, и провайдер, который её не выражает,
 отклоняет `ReturningIdentity`/`ReturningKey` через `NotSupportedException`, а не генерирует некорректный SQL.
-SQL Server дополнительно записывает изменённые строки в существующую таблицу через `OUTPUT INTO`; см.
-[Запись изменённых строк в таблицу](#запись-изменённых-строк-в-таблицу-output-into).
+SQL Server дополнительно записывает изменённые строки в существующую таблицу через `OUTPUT INTO`, а
+также в табличную переменную того же батча для следующей инструкции этого батча; см.
+[Запись изменённых строк в таблицу](#запись-изменённых-строк-в-таблицу-output-into) и
+[Захват в рамках батча](#захват-в-рамках-батча-batchbuilderoutputintotablevariable).
 
 ## Примечания и ограничения
 

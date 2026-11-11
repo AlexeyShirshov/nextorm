@@ -18,6 +18,7 @@ public sealed class SqlFunctionAttribute : Attribute
     public SqlFunctionAttribute(string name);
     public string? Name { get; set; }     // defaults to the CLR method name
     public string? Schema { get; set; }   // optional schema/owner prefix
+    public bool IsAggregate { get; set; } // defaults to false: a scalar function
 }
 ```
 
@@ -71,7 +72,7 @@ select upper(somestring) as "V"
  from complex_entity
 ```
 
-Таблицы `Вывод:` ниже показывают строки, которые возвращает каждый пример на сид-данных интеграционных тестов (`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).
+Таблицы `Вывод:` ниже показывают строки, которые возвращает каждый пример на сид-данных интеграционных тестов (`tests/nextorm.integration.tests/Providers/TestProviders/SqliteTestProvider.cs`).
 
 Вывод:
 
@@ -121,6 +122,52 @@ var value = dataContext.From<IComplexEntity>()
 select Lower(somestring) as 'V'
  from complex_entity
 ```
+
+## Пометка сопоставленной функции как агрегата
+
+`IsAggregate` объявляет, что сопоставленная функция сворачивает строки группы, а не возвращает
+скалярное значение. По умолчанию свойство равно `false`:
+
+```csharp
+private static class Udf
+{
+    [SqlFunction("my_sum", IsAggregate = true)]
+    public static long MySum(long value) => throw new NotSupportedException();
+}
+
+var rows = dataContext.From<IComplexEntity>()
+    .SelectGroup(e => new { e.Int, Total = Udf.MySum(e.Id) })
+    .ToList();
+```
+
+```sql
+-- SQLite
+select nullableint as 'Int', my_sum(id) as 'Total'
+ from complex_entity
+ group by nullableint
+```
+
+`IsAggregate = true` делает вызов непрозрачной агрегатной границей для `SelectGroup` (в `NextORM.Extensions`): его
+аргументы, его `DISTINCT`-вход и его `FILTER`-предикат никогда не становятся ключами группировки, а
+проекция без зависящих от строки членов становится глобальной агрегацией. Скалярная функция — без
+атрибута или с `IsAggregate = false` — может, наоборот, быть выведена как целый ключ группировки.
+
+Ключом стал только `nullableint`: вызов `my_sum(id)` — непрозрачная агрегатная граница, поэтому его
+аргумент не попал в `GROUP BY`. Без `IsAggregate = true` тот же вызов был бы скалярным и сам стал бы
+ключом — `group by nullableint, my_sum(id)`.
+
+Эффективная аннотация — это **либо** собственный атрибут метода, **либо**, когда у метода его нет,
+атрибут объявляющего типа, и никогда их слияние. Поэтому атрибут метода заменяет атрибут типа
+целиком: `[SqlFunction("f")]` на методе типа, помеченного `[SqlFunction(IsAggregate = true)]`,
+делает этот метод скалярным, и ни `Name`, ни `Schema` из типа не наследуются.
+
+Распознавание идёт по методу и объявляющему типу, а не по имени CLR: пользовательская функция с
+именем `sum` рендерится под своим объявленным SQL-именем и никогда не считается встроенным
+агрегатом, а тот же метод с `IsAggregate = true` является границей пользовательского агрегата.
+
+Аннотация только классифицирует вызов. Она не обещает, что функция существует в целевой базе
+данных, что диалект поддерживает `FILTER` или что провайдер in-memory умеет её вычислять:
+неподдерживаемые функции отклоняются там явно, а не выполняются из-за совпадения имени со встроенной.
 
 ## Захваченный аргумент становится параметром
 
@@ -188,7 +235,7 @@ public sealed class Formatter
 
 ---
 
-Source: `src/nextorm.core/SqlFunctionAttribute.cs:14`, `src/nextorm.core/Visitors/BaseExpressionVisitor.cs:563`;
+Source: `src/nextorm.core/Attributes/SqlFunctionAttribute.cs:14`, `src/nextorm.core/Visitors/Core/BaseExpressionVisitor.cs:563`;
 `tests/nextorm.integration.tests/CommonTestSuite/Functions/CommonTestSuite.Udf.cs:14`, `:24`, `:36`;
 generated SQL: `tests/nextorm.sqlite.tests/SqlGeneration/SqlGenerationTests.cs:713`, `:722`, `:737`, `:746`;
 `tests/nextorm.sqlserver.tests/SqlGeneration/SqlGenerationTests.cs:466`, `:476`, `:490`;

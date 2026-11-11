@@ -1,0 +1,738 @@
+using System.Linq.Expressions;
+using System.Reflection;
+using System.Text;
+using Microsoft.Extensions.Logging;
+
+namespace NextORM.Core;
+
+/// <summary>
+/// Translates the <see cref="SqlFunctions"/> helpers (<c>SqlFunctions.Parameter</c>,
+/// <c>SqlFunctions.Column&lt;T&gt;</c>), the translation-only PIVOT/UNPIVOT markers
+/// (<see cref="PivotValues.Value{T}"/>, <see cref="UnpivotValues.Value{T}"/>,
+/// <see cref="UnpivotValues.Name{T}"/>) and the <see cref="CommonFunctions"/>
+/// built-ins (aggregates, <c>EXISTS</c>/<c>ANY</c>/<c>ALL</c> and <c>IN</c> subqueries, value-list
+/// <c>IN</c>) into SQL. Extracted from <see cref="BaseExpressionVisitor.VisitMethodCall"/>; the
+/// branch order, the visitor walk and therefore the parameter numbering are unchanged.
+/// </summary>
+internal static class NormSqlTranslator
+{
+    /// <summary>
+    /// Returns <c>false</c> for a call whose declaring type is neither <see cref="SqlFunctions"/> nor
+    /// <see cref="CommonFunctions"/>; otherwise translates it (or throws, like the original branches)
+    /// and returns <c>true</c>.
+    /// </summary>
+    internal static bool TryTranslate(BaseExpressionVisitor visitor, MethodCallExpression node)
+    {
+        if (node.Method.DeclaringType == typeof(SqlFunctions))
+        {
+            TranslateNormParam(visitor, node);
+            return true;
+        }
+
+        // PG_SQL derives from CommonFunctions, so IsAssignableFrom covers both surfaces.
+        if (typeof(CommonFunctions).IsAssignableFrom(node.Method.DeclaringType))
+        {
+            TranslateNormSql(visitor, node);
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Handles <c>SqlFunctions.Column&lt;T&gt;(entity, "name")</c> and the translation-only
+    /// PIVOT/UNPIVOT marker accessors before the generic function translators: each call is a marker,
+    /// so running the scalar/window/in-values probes first only adds work on the SQL-build path.
+    /// </summary>
+    internal static bool TryTranslateColumnReference(BaseExpressionVisitor visitor, MethodCallExpression node)
+    {
+        if (TryTranslateMarker(visitor, node))
+            return true;
+
+        if (node.Method.DeclaringType != typeof(SqlFunctions)
+            || node.Method.Name != nameof(SqlFunctions.Column))
+            return false;
+
+        TranslateColumn(visitor, node);
+        return true;
+    }
+
+    /// <summary>
+    /// Recognises the translation-only PIVOT/UNPIVOT marker accessors by their exact generic method
+    /// definition and emits the referenced result column, bound to the single <see cref="TableAlias"/>
+    /// PIVOT/UNPIVOT source in scope — the same source-qualified identifier plus
+    /// <see cref="BaseExpressionVisitor.ColumnName"/> route
+    /// (<see cref="BaseExpressionVisitor.AppendColumnReference"/>) that <c>SqlFunctions.Column&lt;T&gt;</c>
+    /// uses. The marker carries no source argument, so an unbound (or otherwise ambiguous) marker
+    /// source fails closed instead of emitting an unqualified or wrong identifier.
+    /// </summary>
+    private static bool TryTranslateMarker(BaseExpressionVisitor visitor, MethodCallExpression node)
+    {
+        var marker = MarkerOf(node.Method);
+        if (marker is null)
+            return false;
+
+        if (node.Arguments is not [ConstantExpression { Value: string columnName }] || string.IsNullOrEmpty(columnName))
+            throw new BuildSqlCommandException(
+                $"The {marker} marker requires a compile-time constant column name.");
+
+        if (visitor.IsParamMode)
+            return true;
+
+        var index = visitor.ColumnsProvider.FindAlias(typeof(TableAlias), null, false)
+            ?? throw new BuildSqlCommandException(
+                $"The {marker} marker requires a bound PIVOT/UNPIVOT result source; no TableAlias source is in scope, " +
+                $"so the column '{columnName}' cannot be resolved.");
+
+        // The marker carries no source argument, so it cannot choose between two distinguishable
+        // TableAlias-bound sources in scope (for example a PIVOT result joined with a raw TableAlias
+        // source): the lookup below would silently bind the first one and emit a wrong identifier.
+        // Fail closed instead; the source-naming SqlFunctions.Column<T>(source, "name") route stays
+        // available for a query that really has more than one such source.
+        if (HasAmbiguousTableAliasSource(visitor))
+            throw new BuildSqlCommandException(
+                $"The {marker} marker matches more than one TableAlias source in scope, so the column '{columnName}' " +
+                $"is ambiguous: the marker does not name its PIVOT/UNPIVOT result source. Reference the intended " +
+                $"source explicitly with SqlFunctions.Column<T>(source, \"{columnName}\").");
+
+        if (!visitor.DontNeedAlias && visitor.ColumnsProvider.HasAliases && visitor.AliasProvider is { } aliases)
+            visitor.Builder!.Append(aliases.FindAlias(index)).Append('.');
+
+        visitor.AppendAlwaysQuotedIdentifier(columnName);
+        visitor.ColumnName = columnName;
+        return true;
+    }
+
+    /// <summary>
+    /// Whether the marker's alias lookup is ambiguous: a second same-typed (<see cref="TableAlias"/>)
+    /// source is visible in the very scope <see cref="TryTranslateMarker"/> searched. The probe asks
+    /// the public lookup for the (zero-based) second matching source, so a non-null answer proves the
+    /// marker cannot select its PIVOT/UNPIVOT result source by itself.
+    /// </summary>
+    private static bool HasAmbiguousTableAliasSource(BaseExpressionVisitor visitor)
+        => visitor.ColumnsProvider.FindAlias(typeof(TableAlias), 1, false) is not null;
+
+    /// <summary>The marker type name for an exactly recognised accessor, or <c>null</c>.</summary>
+    private static string? MarkerOf(MethodInfo method)
+    {
+        if (!method.IsGenericMethod || method.DeclaringType is not { } declaringType)
+            return null;
+
+        var definition = method.GetGenericMethodDefinition();
+        if (declaringType == typeof(PivotValues) && definition.Name == nameof(PivotValues.Value))
+            return nameof(PivotValues);
+
+        if (declaringType == typeof(UnpivotValues)
+            && definition.Name is nameof(UnpivotValues.Value) or nameof(UnpivotValues.Name))
+            return nameof(UnpivotValues);
+
+        return null;
+    }
+
+    /// <summary>Emits <c>SqlFunctions.Parameter</c>/<c>SqlFunctions.Column&lt;T&gt;</c>; any other <see cref="SqlFunctions"/> method throws.</summary>
+    private static void TranslateNormParam(BaseExpressionVisitor visitor, MethodCallExpression node)
+    {
+        if (node.Method.Name == nameof(SqlFunctions.Column))
+        {
+            TranslateColumn(visitor, node);
+            return;
+        }
+
+        var paramIdx = node switch
+        {
+            {
+                Method.Name: nameof(SqlFunctions.Parameter),
+                Arguments: [ConstantExpression constExp]
+            } => constExp.Value is int i ? i : -1,
+            _ => -1
+        };
+
+        if (paramIdx >= 0)
+        {
+            // Reuse the cached norm_pN table instead of string.Format (same names, no boxing
+            // and no composite-formatting pass on the SQL-build path).
+            var paramName = NormParam.GetName(paramIdx);
+            var parameter = new Parameter(paramName, null);
+            visitor.Params.Add(parameter);
+            if (!visitor.IsParamMode)
+            {
+                // The single emission funnel: identical placeholder text and position, plus the
+                // recorded occurrence. The alias flag stays a render-mode concern.
+                visitor.EmitParameter(parameter);
+                // A projected parameter is addressed by its projected member name (an outer query
+                // re-resolves it, and the native FOR JSON fast-path takes the JSON property name from
+                // the SQL alias), so the select item must carry its exact alias like the scalar and
+                // aggregate translators do. The flag is per-visitor (one fresh visitor per projected
+                // column), so it cannot leak into a WHERE expression or a later column.
+                visitor.NeedAliasForColumn = true;
+            }
+
+            return;
+        }
+        else
+            throw new NotSupportedException(node.Method.Name);
+    }
+
+    /// <summary>
+    /// Emits <c>SqlFunctions.Column&lt;T&gt;(entity, "name")</c> as the entity's column identifier
+    /// (table-qualified when the query has aliased sources). The column name is a compile-time
+    /// constant, so it participates in the plan key through the expression tree.
+    /// </summary>
+    private static void TranslateColumn(BaseExpressionVisitor visitor, MethodCallExpression node)
+    {
+        if (node.Arguments is not [Expression entity, ConstantExpression { Value: string columnName }])
+            throw new NotSupportedException(nameof(SqlFunctions.Column));
+
+        if (!visitor.IsParamMode)
+        {
+            visitor.AppendColumnReference(entity, columnName);
+            visitor.ColumnName = columnName;
+        }
+    }
+
+    /// <summary>Emits the <see cref="CommonFunctions"/> built-ins; an unrecognised method throws.</summary>
+    private static void TranslateNormSql(BaseExpressionVisitor visitor, MethodCallExpression node)
+    {
+        // A window function is only valid once it has been given a specification; emitting the bare
+        // call would produce invalid SQL, so fail with an actionable message instead. The declaring-type
+        // guard keeps the PostgreSQL ordered-set aggregate percentile_cont (declared on
+        // PostgresFunctions) distinct from the CommonFunctions window percentile (same method name).
+        if ((node.Method.DeclaringType == typeof(CommonFunctions)
+                || node.Method.DeclaringType == typeof(ClickHouseFunctions))
+            && WindowSql.MapWindowFunctionName(node.Method.Name) is { } windowFunction
+            && !AdvancedAggregateTranslator.IsAggregateOverWindowName(node))
+            throw new NotSupportedException($"The window function {windowFunction} must be completed with Over(...).");
+
+        // The residual percentile members live on a provider surface; only the median is native (the
+        // percentile member is refused by the aggregate translator, which keeps the provider-named
+        // refusal in one place). The median has no window spelling of its own, so the message names the
+        // native composition it becomes. The generic percentile is refused outright with the actual
+        // provider's name, before the missing-Over shape check.
+        if (node.Method.DeclaringType == typeof(MySqlFunctions)
+            && node.Method.Name == nameof(MySqlFunctions.percentile))
+            throw new NotSupportedException(
+                $"The percentile function is not supported by {AdvancedAggregateTranslator.ProviderLabel(visitor.Dialect)}.");
+
+        // ClickHouse spellings that the dialect does not expose as a native name are refused with the
+        // provider's name rather than falling through to a name-table lookup.
+        if (node.Method.DeclaringType == typeof(ClickHouseFunctions)
+            && node.Method.Name == nameof(ClickHouseFunctions.percentile))
+            throw new NotSupportedException("The percentile function is not supported by ClickHouse.");
+
+        if ((node.Method.DeclaringType == typeof(SqlServerFunctions)
+                || node.Method.DeclaringType == typeof(MySqlFunctions))
+            && node.Method.Name == nameof(SqlServerFunctions.median))
+        {
+            if (!visitor.Dialect.SupportsPercentileWindow)
+                throw new NotSupportedException(
+                    $"The median function is not supported by {AdvancedAggregateTranslator.ProviderLabel(visitor.Dialect)}.");
+
+            throw new NotSupportedException(
+                "The window function percentile_cont must be completed with Over(...).");
+        }
+
+        // The ClickHouse-native functions are probed first: their names can collide with a
+        // cross-provider built-in (for example extract, md5) that is matched by name only.
+        if (ClickHouseNativeFunctionTranslator.TryTranslate(visitor, node))
+            return;
+
+        // The array overloads of any/all (column = any(@array)); the subquery overload is handled below.
+        if (ArraySqlTranslator.TryTranslateAnyAll(visitor, node))
+            return;
+
+        if ((node.Method.Name == nameof(CommonFunctions.exists)
+            || node.Method.Name == nameof(CommonFunctions.all)
+            || node.Method.Name == nameof(CommonFunctions.any)
+            )
+            && node.Arguments is [Expression exp] && exp.Type.IsAssignableTo(typeof(QueryCommand)))
+        {
+            QueryCommand innerQuery;
+            var expVisitor = new TypeExpressionVisitor<ParameterExpression, ConstantExpression>();
+            expVisitor.Visit(exp);
+
+            var predicateKeyword = node.Method.Name switch
+            {
+                nameof(CommonFunctions.exists) => visitor.Kw("exists"),
+                nameof(CommonFunctions.all) => visitor.Kw("all"),
+                nameof(CommonFunctions.any) => visitor.Kw("any"),
+                _ => throw new NotImplementedException()
+            };
+
+            var keyCmd = new ExpressionKey(exp, visitor.QueryProvider);
+            if (!DataContextCache.ExpressionsCache.TryGetValue(keyCmd, out var dCmd))
+            {
+                object? paramValue;
+                Expression body;
+                ParameterExpression pExp;
+                if (expVisitor.Has1)
+                {
+                    pExp = Expression.Parameter(typeof(object));
+                    var replParam = new ReplaceParameterExpressionVisitor(Expression.Convert(pExp, typeof(IQueryRegistry)));
+                    body = replParam.Visit(exp);
+                    paramValue = visitor.QueryProvider;
+                }
+                else if (expVisitor.Has2)
+                {
+                    pExp = Expression.Parameter(typeof(object));
+                    var ce = expVisitor.Target2;
+                    var replace = new ReplaceConstantExpressionVisitor(Expression.Convert(pExp, ce!.Type));
+                    paramValue = ce.Value;
+                    body = replace.Visit(exp);
+                }
+                else
+                    throw new InvalidOperationException();
+
+                var d = Expression.Lambda<Func<object?, object>>(body, pExp).Compile();
+                DataContextCache.ExpressionsCache[keyCmd] = d;
+                innerQuery = (QueryCommand)d(paramValue);
+
+                if (visitor.Logger?.IsEnabled(LogLevel.Trace) ?? false)
+                {
+                    visitor.Logger.LogTrace("Expression cache miss on visit exists. hashcode: {hash}, value: {value}", keyCmd.GetHashCode(), d(paramValue));
+                }
+                else if (visitor.Logger?.IsEnabled(LogLevel.Debug) ?? false) visitor.Logger.LogDebug("Expression cache miss on visit exists");
+            }
+            else
+            {
+                object? paramValue;
+
+                if (expVisitor.Has1)
+                {
+                    paramValue = visitor.QueryProvider;
+                }
+                else if (expVisitor.Has2)
+                {
+                    var ce = expVisitor.Target2;
+                    paramValue = ce!.Value;
+                }
+                else
+                    throw new InvalidOperationException();
+
+                innerQuery = (QueryCommand)((Func<object?, object>)dCmd)(paramValue);
+            }
+
+            var sqlBuilder = new SqlBuilder(visitor.Options);
+            var sql = sqlBuilder.MakeSelect(innerQuery);
+
+            if (!visitor.IsParamMode)
+            {
+                // The dialect wraps the subquery unchanged, so its occurrences keep their offsets inside
+                // the wrapper; they are tracked as a transformed fragment of this visitor.
+                visitor.AppendTransformed(
+                    visitor.Dialect.MakeSubqueryPredicate(predicateKeyword, sql!, visitor.IsPredicateContext),
+                    sql!);
+            }
+
+            return;
+        }
+        else if ((node.Method.Name == nameof(CommonFunctions.@in)
+            || node.Method.Name == nameof(CommonFunctions.inUntyped)
+            || node.Method.Name == nameof(ClickHouseFunctions.global_in))
+            && node.Arguments is [Expression parExp, Expression cmdExp] && cmdExp.Type.IsAssignableTo(typeof(QueryCommand)))
+        {
+            var globalIn = node.Method.Name == nameof(ClickHouseFunctions.global_in);
+            if (globalIn && !visitor.Dialect.SupportsGlobalPredicates)
+                throw new NotSupportedException("The GLOBAL IN predicate is not supported by this provider.");
+
+            if (!visitor.IsParamMode)
+                visitor.Visit(parExp);
+
+            if (!visitor.IsParamMode) visitor.Builder!.Append(globalIn ? " global in (" : " in (");
+
+            var constRepl = new ReplaceConstantsExpressionVisitor(visitor.QueryProvider);
+            var body = constRepl.Visit(cmdExp);
+
+            QueryCommand innerQuery;
+
+            if (constRepl.Params.Count > 0)
+            {
+                var keyCmd = new ExpressionKey(cmdExp, visitor.QueryProvider);
+                if (!DataContextCache.ExpressionsCache.TryGetValue(keyCmd, out var dCmd))
+                {
+                    var d = Expression.Lambda(body, constRepl.Params.Select(it => it.Item1)).Compile();
+
+                    DataContextCache.ExpressionsCache[keyCmd] = d;
+                    innerQuery = (QueryCommand)d.DynamicInvoke(constRepl.Params.Select(it => it.Item2).ToArray())!;
+
+                    if (visitor.Logger?.IsEnabled(LogLevel.Trace) ?? false)
+                    {
+                        visitor.Logger.LogTrace("Subquery expression miss: {exp}", cmdExp);
+                    }
+                    else if (visitor.Logger?.IsEnabled(LogLevel.Debug) ?? false) visitor.Logger.LogDebug("Subquery expression miss");
+                }
+                else
+                    innerQuery = (QueryCommand)dCmd.DynamicInvoke(constRepl.Params.Select(it => it.Item2).ToArray())!;
+
+            }
+            else
+                throw new InvalidOperationException();
+
+            var sqlBuilder = new SqlBuilder(visitor.Options);
+            var sql = sqlBuilder.MakeSelect(innerQuery);
+
+            if (!visitor.IsParamMode)
+            {
+                visitor.Builder!.Append(sql).Append(')');
+            }
+
+            return;
+        }
+        else if ((node.Method.Name == nameof(CommonFunctions.@in)
+            || node.Method.Name == nameof(ClickHouseFunctions.global_in))
+            && node.Arguments is [Expression inColumnExp, Expression inValuesExp]
+            && !inValuesExp.Type.IsAssignableTo(typeof(QueryCommand)))
+        {
+            var globalIn = node.Method.Name == nameof(ClickHouseFunctions.global_in);
+            if (globalIn && !visitor.Dialect.SupportsGlobalPredicates)
+                throw new NotSupportedException("The GLOBAL IN predicate is not supported by this provider.");
+
+            InValuesTranslator.TranslateInValues(visitor, inColumnExp, inValuesExp, node.Method.GetGenericArguments()[0], globalIn);
+            return;
+        }
+        else if (node.Method.Name == nameof(CommonFunctions.count)
+            || node.Method.Name == nameof(CommonFunctions.count_distinct)
+            || node.Method.Name == nameof(CommonFunctions.count_big)
+            || node.Method.Name == nameof(CommonFunctions.count_big_distinct))
+        {
+            // count(filter) is the filtered count(*); the plain count takes a params array instead.
+            var countFilter = node.Arguments is [Expression filterCandidate] && AggregateFilter.IsFilterExpression(filterCandidate)
+                ? filterCandidate
+                : null;
+            AggregateFilter.RequireSupport(visitor, countFilter);
+
+            // A count projected into a select list is referenced from outer queries by its property
+            // name, so it must carry an alias (the scalar aggregate translators set this too).
+            if (!visitor.IsParamMode) visitor.NeedAliasForColumn = true;
+
+            var countBig = node.Method.Name.Contains("big", StringComparison.Ordinal);
+
+            // ClickHouse renders the filtered count as countIf(predicate); the generic count filter
+            // always counts rows, so there is no value argument.
+            if (countFilter is not null
+                && visitor.Dialect.AggregateFilterStyle == AggregateFilterStyle.IfCombinator)
+            {
+                var combinatorBuilder = visitor.IsParamMode ? null : visitor.Builder!;
+                var combinatorStart = combinatorBuilder?.Length ?? 0;
+                var combinatorMark = visitor.IsParamMode
+                    ? (SqlParameterMark?)null
+                    : visitor.Recorder?.MarkAt(combinatorStart);
+                AggregateFilter.AppendCombinator(visitor, AggregateFilter.CombinatorName(visitor.Dialect, "count"), value: null, countFilter);
+
+                if (combinatorBuilder is not null && visitor.Dialect.WrapsCountResult)
+                    AppendCountWrap(visitor, combinatorBuilder, combinatorStart, combinatorMark, countBig);
+
+                return;
+            }
+
+            var countBuilder = visitor.IsParamMode ? null : visitor.Builder!;
+            var countStart = countBuilder?.Length ?? 0;
+            var countMark = visitor.IsParamMode
+                ? (SqlParameterMark?)null
+                : visitor.Recorder?.MarkAt(countStart);
+
+            if (!visitor.IsParamMode) visitor.Builder!.Append(visitor.Dialect.MakeCount(node.Method.Name.EndsWith("distinct", StringComparison.Ordinal), countBig));
+
+            if (countFilter is not null)
+            {
+                if (!visitor.IsParamMode) visitor.Builder!.Append('*');
+            }
+            else if (node.Arguments is [NewArrayExpression newArray])//ReadOnlyCollection<Expression> args
+            {
+                var items = newArray.Expressions;
+                // count() is only valid in SQLite; every other provider (and the SQL standard)
+                // requires count(*).
+                if (items.Count == 0)
+                {
+                    if (!visitor.IsParamMode) visitor.Builder!.Append('*');
+                }
+                else
+                {
+                    for (var (i, cnt) = (0, items.Count); i < cnt; i++)
+                    {
+                        var argExp = items[i];
+                        using var subVisitor = new BaseExpressionVisitor(visitor.Options with { Dim = 0 });
+                        subVisitor.Visit(argExp);
+                        if (!visitor.IsParamMode) visitor.Builder!.Append(subVisitor.ToString()).Append(", ");
+                    }
+
+                    if (countBuilder is not null) TrimTrailingSeparator(visitor, countBuilder);
+                }
+            }
+
+            if (!visitor.IsParamMode) visitor.Builder!.Append(')');
+
+            if (countFilter is not null) AggregateFilter.Append(visitor, countFilter);
+
+            if (countBuilder is not null && visitor.Dialect.WrapsCountResult)
+                AppendCountWrap(visitor, countBuilder, countStart, countMark, countBig);
+
+            return;
+        }
+        else if (node.Method.Name == nameof(CommonFunctions.min)
+            || node.Method.Name == nameof(CommonFunctions.max))
+        {
+            var args = node.Arguments;
+            var minMaxFilter = GetTrailingFilter(args, 2);
+            AggregateFilter.RequireSupport(visitor, minMaxFilter);
+
+            if (!visitor.IsParamMode) visitor.NeedAliasForColumn = true;
+
+            // ClickHouse renders the filtered min/max as minIf(value, predicate)/maxIf(value, predicate).
+            if (minMaxFilter is not null
+                && visitor.Dialect.AggregateFilterStyle == AggregateFilterStyle.IfCombinator)
+            {
+                AggregateFilter.AppendCombinator(visitor, AggregateFilter.CombinatorName(visitor.Dialect, node.Method.Name), args[0], minMaxFilter);
+                return;
+            }
+
+            if (!visitor.IsParamMode) visitor.Builder!.Append(node.Method.Name).Append('(');
+
+            var last = minMaxFilter is null ? args.Count : args.Count - 1;
+            for (var (i, cnt) = (0, last); i < cnt; i++)
+            {
+                var argExp = args[i];
+                using var subVisitor = new BaseExpressionVisitor(visitor.Options with { Dim = 0 });
+                subVisitor.Visit(argExp);
+                if (!visitor.IsParamMode) visitor.Builder!.Append(subVisitor.ToString()).Append(", ");
+            }
+
+            if (!visitor.IsParamMode)
+            {
+                if (last > 0) TrimTrailingSeparator(visitor, visitor.Builder!);
+                visitor.Builder!.Append(')');
+            }
+
+            if (minMaxFilter is not null) AggregateFilter.Append(visitor, minMaxFilter);
+
+            return;
+        }
+        else if (node.Method.Name == nameof(CommonFunctions.avg)
+            || node.Method.Name == nameof(CommonFunctions.sum)
+            || node.Method.Name == nameof(CommonFunctions.stdev)
+            || node.Method.Name == nameof(CommonFunctions.stdevp)
+            || node.Method.Name == nameof(CommonFunctions.var)
+            || node.Method.Name == nameof(CommonFunctions.varp)
+            || node.Method.Name == nameof(CommonFunctions.avg_distinct)
+            || node.Method.Name == nameof(CommonFunctions.sum_distinct)
+            || node.Method.Name == nameof(CommonFunctions.stdev_distinct)
+            || node.Method.Name == nameof(CommonFunctions.stdevp_distinct)
+            || node.Method.Name == nameof(CommonFunctions.var_distinct)
+            || node.Method.Name == nameof(CommonFunctions.varp_distinct)
+            )
+        {
+            var args = node.Arguments;
+            var aggregateFilter = GetTrailingFilter(args, 2);
+            AggregateFilter.RequireSupport(visitor, aggregateFilter);
+
+            // ClickHouse renders the filtered avg/sum as avgIf(value, predicate)/sumIf(value, predicate).
+            if (aggregateFilter is not null
+                && visitor.Dialect.AggregateFilterStyle == AggregateFilterStyle.IfCombinator)
+            {
+                if (!visitor.IsParamMode) visitor.NeedAliasForColumn = true;
+                var combinatorName = node.Method.Name.Replace("_distinct", string.Empty);
+                var average = IsAverage(node.Method.Name);
+
+                var combinatorBuilder = visitor.IsParamMode ? null : visitor.Builder!;
+                var combinatorStart = combinatorBuilder?.Length ?? 0;
+                var combinatorMark = visitor.IsParamMode ? null : visitor.Recorder?.MarkAt(combinatorStart);
+                string? averageArgument = null;
+                string? averagePredicate = null;
+
+                AggregateFilter.AppendCombinator(visitor, AggregateFilter.CombinatorName(visitor.Dialect, combinatorName), args[0], aggregateFilter,
+                    average ? rendered => visitor.Dialect.MakeAverageArgument(rendered, args[0].Type) : null,
+                    average ? (argument, predicate) =>
+                    {
+                        averageArgument = argument;
+                        averagePredicate = predicate;
+                    } : null);
+
+                if (combinatorBuilder is not null && averageArgument is not null && visitor.Dialect.WrapsAverageResult)
+                    AppendAverageWrap(visitor, combinatorBuilder, combinatorStart, combinatorMark, averageArgument, averagePredicate);
+
+                return;
+            }
+
+            var averageBuilder = visitor.IsParamMode ? null : visitor.Builder!;
+            var averageStart = averageBuilder?.Length ?? 0;
+            var averageMark = visitor.IsParamMode ? null : visitor.Recorder?.MarkAt(averageStart);
+            string? renderedAverageArgument = null;
+
+            if (!visitor.IsParamMode)
+            {
+                visitor.NeedAliasForColumn = true;
+                visitor.Builder!.Append(visitor.Dialect.MakeAggregate(node.Method.Name.Replace("_distinct", string.Empty))).Append('(');
+                if (node.Method.Name.EndsWith("distinct", StringComparison.Ordinal))
+                    visitor.Builder!.Append(visitor.Kw("distinct "));
+            }
+
+            var last = aggregateFilter is null ? args.Count : args.Count - 1;
+            for (var (i, cnt) = (0, last); i < cnt; i++)
+            {
+                var argExp = args[i];
+                using var subVisitor = new BaseExpressionVisitor(visitor.Options with { Dim = 0 });
+                subVisitor.Visit(argExp);
+                if (!visitor.IsParamMode)
+                {
+                    // The AVG argument policy runs on the rendered argument, so a dialect that has to
+                    // widen an integral argument does it inside the parentheses (after `distinct`)
+                    // rather than around the aggregate result.
+                    var rendered = subVisitor.ToString();
+                    if (IsAverage(node.Method.Name))
+                        renderedAverageArgument = rendered = visitor.Dialect.MakeAverageArgument(rendered, argExp.Type);
+                    visitor.Builder!.Append(rendered).Append(", ");
+                }
+            }
+
+            if (!visitor.IsParamMode)
+            {
+                if (last > 0) TrimTrailingSeparator(visitor, visitor.Builder!);
+                visitor.Builder!.Append(')');
+            }
+
+            if (aggregateFilter is not null) AggregateFilter.Append(visitor, aggregateFilter);
+
+            if (averageBuilder is not null && renderedAverageArgument is not null && visitor.Dialect.WrapsAverageResult)
+                AppendAverageWrap(visitor, averageBuilder, averageStart, averageMark, renderedAverageArgument);
+
+            return;
+        }
+
+        if (BuiltinFunctionTranslator.TryTranslate(visitor, node))
+            return;
+
+        if (PortableBinaryFunctionTranslator.TryTranslate(visitor, node))
+            return;
+
+        if (SqlServerScalarFunctionTranslator.TryTranslate(visitor, node))
+            return;
+
+        if (SessionInfoFunctionTranslator.TryTranslate(visitor, node))
+            return;
+
+        if (MySqlFunctionTranslator.TryTranslate(visitor, node))
+            return;
+
+        if (UuidFunctionTranslator.TryTranslate(visitor, node))
+            return;
+
+        if (AdvancedAggregateTranslator.TryTranslate(visitor, node))
+            return;
+
+        if (DateConversionSqlTranslator.TryTranslate(visitor, node))
+            return;
+
+        if (SqliteFunctionTranslator.TryTranslate(visitor, node))
+            return;
+
+        if (ExtendedScalarFunctionTranslator.TryTranslate(visitor, node))
+            return;
+
+        if (ArraySqlTranslator.TryTranslateFunction(visitor, node))
+            return;
+
+        if (RangeColumnsSqlTranslator.TryTranslate(visitor, node))
+            return;
+
+        if (PostgresRangeSqlTranslator.TryTranslate(visitor, node))
+            return;
+
+        if (JsonSqlTranslator.TryTranslate(visitor, node))
+            return;
+
+        if (TextJsonSqlTranslator.TryTranslate(visitor, node))
+            return;
+
+        if (XmlSqlTranslator.TryTranslate(visitor, node))
+            return;
+
+        if (JsonExtractSqlTranslator.TryTranslate(visitor, node))
+            return;
+
+        if (DictionarySqlTranslator.TryTranslate(visitor, node))
+            return;
+
+        if (NullSafeComparisonTranslator.TryTranslate(visitor, node))
+            return;
+
+        throw new NotImplementedException();
+    }
+
+    /// <summary>
+    /// Wraps the count expression that was just rendered after <paramref name="start"/> with the dialect's
+    /// result cast. The wrapper embeds the rendered text unchanged, so the parameter recorder is rewound
+    /// to the checkpoint and the detached occurrences are relocated behind the wrapper prefix
+    /// (<c>toInt32(</c>/<c>toInt64(</c>), never left at their truncated positions.
+    /// </summary>
+    private static void AppendCountWrap(
+        BaseExpressionVisitor visitor,
+        StringBuilder builder,
+        int start,
+        SqlParameterMark? mark,
+        bool countBig)
+    {
+        var rendered = builder.ToString(start, builder.Length - start);
+        builder.Length = start;
+        var fragment = mark is { } checkpoint ? visitor.Recorder!.RewindTo(checkpoint) : null;
+        var fragments = fragment is { OccurrenceCount: > 0 }
+            ? new[] { new SqlParameterTrackedFragment(rendered, null, fragment) }
+            : Array.Empty<SqlParameterTrackedFragment>();
+        SqlParameterFragmentRelocation.AppendComposed(
+            builder,
+            visitor.Recorder,
+            visitor.Dialect.WrapCount(rendered, countBig),
+            fragments);
+    }
+
+    /// <summary>
+    /// Wraps the AVG expression rendered after <paramref name="start"/> with the dialect's eligibility
+    /// guard (ClickHouse turns an empty/all-NULL input into SQL NULL with an <c>if(count(...)=0, ...)</c>
+    /// wrapper). The wrapper embeds the rendered text unchanged, so the parameter recorder is rewound to
+    /// the checkpoint and the detached occurrences are relocated behind the wrapper prefix.
+    /// </summary>
+    private static void AppendAverageWrap(
+        BaseExpressionVisitor visitor,
+        StringBuilder builder,
+        int start,
+        SqlParameterMark? mark,
+        string argument,
+        string? filterPredicate = null)
+    {
+        var rendered = builder.ToString(start, builder.Length - start);
+        builder.Length = start;
+        var fragment = mark is { } checkpoint ? visitor.Recorder!.RewindTo(checkpoint) : null;
+        var fragments = fragment is { OccurrenceCount: > 0 }
+            ? new[] { new SqlParameterTrackedFragment(rendered, null, fragment) }
+            : Array.Empty<SqlParameterTrackedFragment>();
+        SqlParameterFragmentRelocation.AppendComposed(
+            builder,
+            visitor.Recorder,
+            visitor.Dialect.MakeAverageResult(rendered, argument, filterPredicate),
+            fragments);
+    }
+
+    /// <summary>
+    /// Trims the trailing <c>", "</c> separator of an argument list. The recorder is first advanced over
+    /// the text it has not accounted for yet, then rewound over the separator, which carries no
+    /// occurrence; a trim that would cut through a placeholder throws instead of misplacing it.
+    /// </summary>
+    private static void TrimTrailingSeparator(BaseExpressionVisitor visitor, StringBuilder builder)
+    {
+        var recorder = visitor.Recorder;
+        recorder?.AdvanceTo(builder.Length);
+        builder.Length -= 2;
+        recorder?.TrimTo(builder.Length);
+    }
+
+    /// <summary>
+    /// Returns the trailing filter argument of an aggregate call (<c>agg(x, filter)</c>) when the
+    /// argument count matches and the last argument is a filter lambda; otherwise <c>null</c>.
+    /// </summary>
+    private static Expression? GetTrailingFilter(IReadOnlyList<Expression> args, int withFilterCount)
+        => args.Count == withFilterCount && AggregateFilter.IsFilterExpression(args[args.Count - 1])
+            ? args[args.Count - 1]
+            : null;
+
+    /// <summary>True for the two AVG spellings that share the argument-rendering policy.</summary>
+    private static bool IsAverage(string methodName)
+        => methodName is nameof(CommonFunctions.avg) or nameof(CommonFunctions.avg_distinct);
+}

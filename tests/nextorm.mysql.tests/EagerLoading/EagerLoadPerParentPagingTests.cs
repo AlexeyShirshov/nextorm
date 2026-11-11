@@ -47,7 +47,7 @@ public sealed class EagerLoadPerParentPagingTests
     private static IDataContext CreateCtx() => MySqlTestContext.Create();
 
     private static string SqlOf(IDataContext ctx, QueryCommand cmd)
-        => ((dynamic)ctx.GetPreparedQueryCommand((dynamic)cmd, false, false, CancellationToken.None)).DbCommand.CommandText;
+        => ((DbPreparedQueryCommand<object?>)((DataContext)ctx).GetPreparedQueryCommand(cmd, false, false, CancellationToken.None)).DbCommand.CommandText;
 
     /// <summary>
     /// Renders the split child statement the loader builds for <paramref name="builder"/>: the embedded

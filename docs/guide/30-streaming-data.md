@@ -75,7 +75,7 @@ list binds nothing (there is no arity guard), and a `null` element binds `DBNull
 
 `JsonStreamOptions options` and `CancellationToken cancellationToken` are **required** on this overload
 (no defaults), so `WriteJson(stream, null)` cannot be ambiguous with an options-only call; the
-option-only overloads above are unchanged and keep the token optional.
+option-only overloads above keep the token optional.
 
 ```csharp
 await using var file = File.Create("orders.ndjson");
@@ -215,14 +215,14 @@ is not replayed through the managed path.
 The native document is **logically equivalent** to the managed output, not necessarily byte-for-byte
 identical: it is valid UTF-8 and parses to the same JSON values, but SQL Server's escaping differs from
 `System.Text.Json` — for example it leaves `<`, `>`, `&` and non-ASCII characters unescaped. A large
-document is split by the database across several reader rows and concatenated transparently. There is
-no public API or signature change. An empty result still writes `[]` in `Array` mode, and destination
-ownership is unchanged: the library never calls `Stream.Flush` and never disposes your `Stream`; on
+document is split by the database across several reader rows and concatenated transparently. The public
+API and signatures are identical for both writers. An empty result writes `[]` in `Array` mode, and the
+destination belongs to the caller: the library never calls `Stream.Flush` and never disposes your `Stream`; on
 cancellation or error the operation stops and rethrows, leaving any already-written bytes in place (see
 [Ownership, flushing and errors](#ownership-flushing-and-errors)).
 
 The scalar [`ForJson`](16-json.md#return-the-whole-result-set-as-one-json-document) / `ForJsonAsync`
-terminals are a separate, unchanged surface: they still return one materialized `string`, and `null` for
+terminals are a separate surface: they return one materialized `string`, and `null` for
 an empty result.
 
 ### Names, null semantics and arrays
@@ -288,7 +288,7 @@ Both are terminals on the same query, so pick one — do not chain them.
 
 ## CSV
 
-`WriteCsv`/`WriteCsvAsync` turn a query into CSV and write it straight to a `Stream` you supply. Rows are pulled from the database reader and formatted one at a time: the result set is **not** materialised into a list, no `TResult` instance is constructed for a row, and the per-row path reads every supported column without boxing. That includes SQL Server numeric columns: the CSV terminal reads them through the provider's storage-typed getter (the `MapTypedColumnExpression` hook, which receives the reader's actual field type) and converts them with a typed `Convert.To<T>` — no `GetValue` and no `Convert.ChangeType(object)`. Since [#168](https://github.com/AlexeyShirshov/nextorm/issues/168) the same storage-typed dispatch also backs the shared buffered materialization path (`MapColumnExpression` resolves the reader's field type at runtime), so a normal buffered `ToList` no longer boxes SQL Server numerics either. A column whose storage type is unknown or cannot be converted is rejected with `NotSupportedException` before any output. Memory use is O(row), so a query over millions of rows can be served to a file or an HTTP response without buffering it. A **direct stored `byte[]` column** on a provider with confirmed sequential access (PostgreSQL, SQL Server, SQLite) is streamed through the reader's `GetBytes` accessor in fixed 12 KiB input buffers and Base64-encoded chunk by chunk, so its peak memory is O(buffer) independent of the field size. Every other binary case stays on the buffered path — the field is read whole and Base64-encoded per row, bounding memory by the largest field/row: MySQL/MariaDB/ClickHouse (no confirmed sequential access), a bound parameter, function or expression projection, a computed member, a value converter or typed provider mapping, a `ValueTransform`, or a dialect whose delimiter or NULL marker collides with the Base64 framing (see [Limitations](#limitations)).
+`WriteCsv`/`WriteCsvAsync` turn a query into CSV and write it straight to a `Stream` you supply. Rows are pulled from the database reader and formatted one at a time: the result set is **not** materialised into a list, no `TResult` instance is constructed for a row, and the per-row path reads every supported column without boxing. That includes SQL Server numeric columns: the CSV terminal reads them through the provider's storage-typed getter (the `MapTypedColumnExpression` hook, which receives the reader's actual field type) and converts them with a typed `Convert.To<T>` — no `GetValue` and no `Convert.ChangeType(object)`. The same storage-typed dispatch backs the shared buffered materialization path (`MapColumnExpression` resolves the reader's field type at runtime), so a normal buffered `ToList` does not box SQL Server numerics. A column whose storage type is unknown or cannot be converted is rejected with `NotSupportedException` before any output. Memory use is O(row), so a query over millions of rows can be served to a file or an HTTP response without buffering it. A **direct stored `byte[]` column** on a provider with confirmed sequential access (PostgreSQL, SQL Server, SQLite) is streamed through the reader's `GetBytes` accessor in fixed 12 KiB input buffers and Base64-encoded chunk by chunk, so its peak memory is O(buffer) independent of the field size. Every other binary case stays on the buffered path — the field is read whole and Base64-encoded per row, bounding memory by the largest field/row: MySQL/MariaDB/ClickHouse (no confirmed sequential access), a bound parameter, function or expression projection, a computed member, a value converter or typed provider mapping, a `ValueTransform`, or a dialect whose delimiter or NULL marker collides with the Base64 framing (see [Limitations](#limitations)).
 
 This is the streaming terminal for **tabular** output. The single-`byte[]`/`string` [LOB terminals](28-large-objects.md) stream one large value; the CSV terminals stream every column and row of the projection.
 
@@ -470,4 +470,4 @@ await ctx.From<Order>().WriteCsvAsync(file);
 
 ---
 
-Source: `src/nextorm.core/Query/QueryCommand.TResult.cs`, `src/nextorm.core/Query/QueryCommandExtensions.cs`, `src/nextorm.core/Builders/EntityBuilderExtensions.cs`, `src/nextorm.core/Query/Json/JsonStreamOptions.cs`, `src/nextorm.core/Query/CsvStreamOptions.cs`.
+Source: `src/nextorm.core/Query/Commands/QueryCommand.TResult.cs`, `src/nextorm.core/Query/Commands/QueryCommandExtensions.cs`, `src/nextorm.core/Builders/Entity/EntityBuilderExtensions.cs`, `src/nextorm.core/Query/Json/JsonStreamOptions.cs`, `src/nextorm.core/Query/CsvStreamOptions.cs`.

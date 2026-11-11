@@ -21,15 +21,33 @@ public class DirectCteJoinTests
         return (Normalize(prepared.DbCommand.CommandText), parameters);
     }
 
+    // Runs the whole prepare pipeline (build + SQL compilation) so the declared outcome covers the
+    // stage the exception is promised at, instead of reading the expectation from the reference call.
+    private static (string? Sql, object?[]? Parameters, Exception? Error) TryPrepare<T>(IDataContext ctx, Func<QueryCommand<T>> build)
+    {
+        try
+        {
+            var (sql, parameters) = Prepare(ctx, build());
+            return (sql, parameters, null);
+        }
+        catch (Exception ex)
+        {
+            return (null, null, ex);
+        }
+    }
+
+    // PostgreSQL supports every join operator, so every case is a declared accept: both forms must
+    // prepare and render the same SQL. The declaration comes from the dialect contract, never from
+    // the converted call.
     [Theory]
-    [InlineData("Join")]
-    [InlineData("LeftJoin")]
-    [InlineData("RightJoin")]
-    [InlineData("FullJoin")]
-    [InlineData("CrossJoin")]
-    [InlineData("CrossApply")]
-    [InlineData("OuterApply")]
-    public void Direct_typed_cte_join_matches_the_converted_form(string operation)
+    [InlineData("Join", null)]
+    [InlineData("LeftJoin", null)]
+    [InlineData("RightJoin", null)]
+    [InlineData("FullJoin", null)]
+    [InlineData("CrossJoin", null)]
+    [InlineData("CrossApply", null)]
+    [InlineData("OuterApply", null)]
+    public void Direct_typed_cte_join_matches_the_converted_form(string operation, string? expectedRefusal)
     {
         using var ctx = PostgresTestContext.Create();
 
@@ -60,21 +78,22 @@ public class DirectCteJoinTests
             _ => throw new NotSupportedException(),
         };
 
-        var convertedEx = Record.Exception(() => Normalize(((DbPreparedQueryCommand<long>)ctx.GetPreparedQueryCommand(Converted(), false, false, CancellationToken.None)).DbCommand.CommandText));
-        if (convertedEx is null)
-        {
-            var direct = Prepare(ctx, Direct());
-            var converted = Prepare(ctx, Converted());
+        var direct = TryPrepare(ctx, Direct);
+        var converted = TryPrepare(ctx, Converted);
 
-            direct.Sql.Should().Be(converted.Sql);
-            direct.Parameters.Should().Equal(converted.Parameters);
-            direct.Sql.Should().Contain("with l as (").And.Contain("r as (");
-        }
-        else
+        if (expectedRefusal is null)
         {
-            var directEx = Record.Exception(() => Prepare(ctx, Direct()));
-            directEx.Should().BeOfType(convertedEx.GetType());
-            directEx!.Message.Should().Be(convertedEx.Message);
+            direct.Error.Should().BeNull("PostgreSQL declares {0} supported, so the direct form must prepare", operation);
+            converted.Error.Should().BeNull("PostgreSQL declares {0} supported, so the converted form must prepare", operation);
+            direct.Sql.Should().Be(converted.Sql, "the direct CTE form must render the declared SQL of the converted form");
+            direct.Parameters.Should().Equal(converted.Parameters, "both forms must bind the same parameters");
+            direct.Sql.Should().Contain("with l as (").And.Contain("r as (", "the rendered SQL must keep both declared CTEs");
+            return;
         }
+
+        direct.Error.Should().BeOfType<NotSupportedException>("PostgreSQL declares {0} a capability refusal", operation);
+        converted.Error.Should().BeOfType<NotSupportedException>("the converted form must hit the same declared refusal");
+        direct.Error!.Message.Should().Contain(expectedRefusal, "the direct form must carry the declared capability marker");
+        converted.Error!.Message.Should().Contain(expectedRefusal, "the converted form must carry the declared capability marker");
     }
 }

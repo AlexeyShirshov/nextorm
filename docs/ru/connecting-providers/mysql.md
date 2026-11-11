@@ -23,8 +23,9 @@
   `double`, `decimal`, `char`, `datetime`), а не через ANSI `bigint`/`integer`;
 - унарное дополнение отрисовывается как `(-(x) - 1)`, потому что `~` в MySQL даёт беззнаковое
   64-битное значение, которое переполняет знаковый CLR-целый тип;
-- символ `ESCAPE` в предикате `LIKE` записывается как `'\\'`, так как MySQL также трактует
-  обратный слэш как escape-символ строкового литерала;
+- символ `ESCAPE` в предикате `LIKE` отрисовывается как независимый от режимов токен `_utf8mb4 X'5c'`,
+  поэтому `NO_BACKSLASH_ESCAPES`, `ANSI_QUOTES` и настройка драйвера `NoBackslashEscapes` не могут
+  изменить его смысл;
 - разбиение на страницы — `limit n` / `limit n offset m`; offset без limit превращается в
   `limit 18446744073709551615 offset m`, потому что MySQL принимает `offset` только вместе с `limit`;
 - семейство session/info ([`SessionInfoFunctions`](xref:NextORM.Core.ISqlDialect.SessionInfoFunctions)) отрисовывает
@@ -34,6 +35,13 @@
   `ANY_VALUE(x)` ([`SupportsAnyValueAggregate`](xref:NextORM.Core.ISqlDialect.SupportsAnyValueAggregate), MySQL 5.7+);
 - переносимый условный [`SqlFunctions.Sql.iif`](xref:NextORM.Core.CommonFunctions.iif``1(System.Boolean,``0,``0)) отрисовывается как
   `if(condition, a, b)` ([`Iif`](xref:NextORM.Core.ISqlDialect.Iif), [`IIifRenderer.Render`](xref:NextORM.Core.IIifRenderer.Render(System.String,System.String,System.String))).
+
+Агрегаты вариативности следуют общему контракту кардинальности: `Stdev`/`Var` дают `null` при нуле или
+одном вносящем вклад значении, `Stdevp`/`Varp` — `null` при нуле и `0.0` при одном. Одно ограничение
+провайдера не связано с nullable-результатом: MySQL 8.4 отклоняет `DISTINCT` внутри
+`STDDEV_SAMP`/`STDDEV_POP`/`VAR_SAMP`/`VAR_POP` (`stddev_samp(distinct x)` завершается синтаксической
+ошибкой). Рендерер продолжает выдавать это написание для форм `*_distinct`, поэтому гарантирован только
+SQL-текст, а живой запрос distinct-дисперсии на MySQL 8.4 не заявлен как поддерживаемый.
 
 ## Регистрация провайдера
 
@@ -83,6 +91,70 @@ ctx.From<ISimpleEntity>().Page(5, 10).Select(x => x.Id);   // limit 5 offset 10
 ctx.From<ISimpleEntity>().Offset(10).Select(x => x.Id);    // limit 18446744073709551615 offset 10
 ```
 
+## Строковые литералы и параметры
+
+Каждое встроенное текстовое значение — включая операнд в позиции, где грамматика принимает только
+литерал — рендерится в независимой от режимов форме `_utf8mb4 X'…'` (шестнадцатеричная строка UTF-8
+в верхнем регистре), поэтому ни `sql_mode`, ни `ANSI_QUOTES`, `NO_BACKSLASH_ESCAPES` или настройка
+драйвера `NoBackslashEscapes` не могут изменить её смысл. **Слот параметра** текста, принадлежащий
+ORM, в read-запросе сохраняет плейсхолдер `@name` в кэшированной команде и понижается до того же
+литерала `_utf8mb4 X'…'` во время выполнения: параметр драйвера для этого выполнения опускается, а
+команда восстанавливается к каноническому тексту и привязкам перед следующим. Мутации
+(`INSERT`/`UPDATE`/`DELETE`) никогда не готовятся, поэтому их текстовые значения понижаются во время
+рендеринга, и шаблон не сохраняется.
+
+`GROUP_CONCAT ... SEPARATOR` — позиция грамматического токена, где движок принимает только текстовый
+литерал. **Константный** разделитель рендерится как «голый» литерал с удвоенными апострофами из
+допустимого набора `U+0020`–`U+007E` без обратного слэша; неконстантный, `null`, содержащий обратный
+слэш, содержащий NUL или иной непечатаемый ASCII разделитель падает fail-closed с
+`NotSupportedException`, называющим MySQL/MariaDB — без плейсхолдера, без невалидного SQL, и значение
+никогда не выводится.
+
+```csharp
+var query = ctx.From<IComplexEntity>().Where(e => e.String == "O'Brien").Select(e => e.Id);
+```
+
+```sql
+-- слот текстового параметра понижается до литерала для этого выполнения
+select `Id` as `Id`
+ from complex_entity
+ where `String` = _utf8mb4 X'4F27427269656E'
+```
+
+Константный `SEPARATOR` сохраняет литеральную форму:
+
+```csharp
+var names = ctx.From<IComplexEntity>().Select(e => SqlFunctions.Sql.string_agg(e.String, ","));
+```
+
+```sql
+select group_concat(`String` separator ',')
+ from complex_entity
+```
+
+## Массовая вставка
+
+Нативный путь — `MySqlBulkCopy`, загрузка через `LOAD DATA LOCAL INFILE`, и ему нужны **оба** условия:
+`AllowLoadLocalInfile=true` в строке подключения (клиент) и `local_infile=1` как серверная переменная
+`@@GLOBAL.local_infile`. Серверное значение читается read-only preflight-запросом
+(`select @@global.local_infile`), и nextorm не включает ни одно из них. Без них `Auto` откатывается, только
+если портируемый путь выполняет весь запрос, а `Native` отклоняет по имени; ошибка `LOAD` во время
+выполнения никогда не переигрывается через SQL-путь.
+
+- Источник читается ограниченными чанками (`MaxBatchSize`, по умолчанию 10 000 строк); каждый чанк — одна
+  загрузка.
+- `KeepIdentity` пишет явную identity-колонку под scoped-guard `NO_AUTO_VALUE_ON_ZERO`, поэтому явный `0` не
+  заменяется сгенерированным значением.
+- `IgnoreDuplicates` отображается в `ConflictOption.Ignore` на нативной загрузке и в `INSERT IGNORE` в
+  портируемом утверждении.
+- `KeepNulls=false` требует default-equivalent формы; `CheckConstraints=false`, `TableLock` и `FireTriggers`
+  отклоняются (MySQL всегда проверяет ограничения), а `Returning*` отклоняется — ключи читайте через
+  `CreateInsertBuilder`.
+- `DatabaseName` рендерит `db.table`; `ServerName` отклоняется (перенаправления нет). `Timeout` — один бюджет
+  на весь вызов; истёкший бюджет даёт `TimeoutException`, а отмена побеждает.
+
+См. [Массовая вставка](../guide/22-bulk-insert.md).
+
 ## Различия провайдера
 
 | Аспект | MySQL |
@@ -100,7 +172,9 @@ ctx.From<ISimpleEntity>().Offset(10).Select(x => x.Id);    // limit 184467440737
 | Session/info-функции | `current_user()`, `session_user()`, `schema()`, `database()`, `version()` |
 | Произвольное значение | `ANY_VALUE(x)` |
 | Условная функция | `iif(cond, a, b)` → `if(cond, a, b)` |
-| Оконные квантили | не поддерживаются (`PERCENTILE_CONT` только в MariaDB) |
+| Оконные квантили | не поддерживаются: `percentile_cont`/`percentile_disc` в оконной форме бросают `NotSupportedException` (в MySQL нет ни функций, ни `WITHIN GROUP`; `PERCENTILE_CONT` только в MariaDB) |
+| Медиана (аналитическая) | не поддерживается: `SqlFunctions.MySql.median(v).Over(...)` бросает `NotSupportedException("The median function is not supported by MySQL.")` |
+| Общий квантиль | не поддерживается: `SqlFunctions.MySql.percentile(fraction, v)` бросает `NotSupportedException("The percentile function is not supported by MySQL.")` |
 | Потоковое чтение LOB (`ToStream`/`ToTextReader`) | `NotSupportedException` |
 
 MySQL 8.0.31 и новее поддерживает `INTERSECT`/`EXCEPT`; диалект отклоняет варианты `*ALL` с

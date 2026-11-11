@@ -29,6 +29,20 @@ public class ClickHouseDialectTests
     }
 
     [Fact]
+    public void MakeLikeEscape_ShouldOmitTheClauseAndRejectCustomCharacters()
+    {
+        // ClickHouse rejects the ESCAPE clause in every spelling (measured live); the default LIKE
+        // backslash escaping already covers the escaped wildcards of the pattern literal.
+        Dialect.MakeLikeEscape("\\").Should().BeEmpty();
+
+        var act = () => Dialect.MakeLikeEscape("!");
+
+        act.Should().Throw<NotSupportedException>()
+            .WithMessage("*ClickHouse*")
+            .WithMessage("*ESCAPE*");
+    }
+
+    [Fact]
     public void IdentifierAndScalarFunctionHooks_ShouldUseClickHouseForms()
     {
         Dialect.Escape("t1").Should().Be("`t1`");
@@ -209,6 +223,49 @@ public class ClickHouseDialectTests
     }
 
     [Fact]
+    public void MakeArrayResult_ShouldCastOnlyTheTargetedFacades()
+    {
+        // The seven targeted facades normalise their result to the closed declared CLR array type.
+        Dialect.MakeArrayResult("top_k", "topK(3)(x)", typeof(int[]))
+            .Should().Be("cast(topK(3)(x) as Array(Int32))");
+        Dialect.MakeArrayResult("top_k_weighted", "topKWeighted(2)(x, w)", typeof(int[]))
+            .Should().Be("cast(topKWeighted(2)(x, w) as Array(Int32))");
+        Dialect.MakeArrayResult("group_array", "groupArray(nullableint)", typeof(int?[]))
+            .Should().Be("cast(groupArray(nullableint) as Array(Nullable(Int32)))");
+        Dialect.MakeArrayResult("group_uniq_array", "groupUniqArray(id)", typeof(long[]))
+            .Should().Be("cast(groupUniqArray(id) as Array(Int64))");
+        Dialect.MakeArrayResult("retention", "retention((id <= 2), (id <= 5))", typeof(int[]))
+            .Should().Be("cast(retention((id <= 2), (id <= 5)) as Array(Int32))");
+        Dialect.MakeArrayResult("array_map", "arrayMap(v -> (v * 2), nums)", typeof(int[]))
+            .Should().Be("cast(arrayMap(v -> (v * 2), nums) as Array(Int32))");
+        Dialect.MakeArrayResult("range", "range(3)", typeof(long[]))
+            .Should().Be("cast(range(3) as Array(Int64))");
+
+        // A reference element is declared Nullable(...) unconditionally and a nested one-dimensional
+        // array recurses. The CLR nullable annotation is erased at runtime, so string[] and string?[]
+        // emit identical text: no NRT distinction is ever consulted.
+        Dialect.MakeArrayResult("group_array", "groupArray(s)", typeof(string[]))
+            .Should().Be("cast(groupArray(s) as Array(Nullable(String)))");
+        Dialect.MakeArrayResult("group_array", "groupArray(s)", typeof(string?[]))
+            .Should().Be("cast(groupArray(s) as Array(Nullable(String)))");
+        Dialect.MakeArrayResult("group_array", "groupArray(tags)", typeof(string[][]))
+            .Should().Be("cast(groupArray(tags) as Array(Array(Nullable(String))))");
+
+        // Value-type elements keep their declaration unchanged: byte stays UInt8, decimal keeps its
+        // provider default precision/scale, and neither becomes Nullable(...).
+        Dialect.MakeArrayResult("group_array", "groupArray(bytes)", typeof(byte[]))
+            .Should().Be("cast(groupArray(bytes) as Array(UInt8))");
+        Dialect.MakeArrayResult("group_array", "groupArray(amount)", typeof(decimal[]))
+            .Should().Be("cast(groupArray(amount) as Array(Decimal(38, 10)))");
+
+        // Every other facade result is the identity, without inspecting the result type.
+        Dialect.MakeArrayResult("array_sort", "arraySort(nums)", typeof(long[]))
+            .Should().Be("arraySort(nums)");
+        Dialect.MakeArrayResult("array_filter", "arrayFilter(v -> (v > 1), nums)", typeof(long[]))
+            .Should().Be("arrayFilter(v -> (v > 1), nums)");
+    }
+
+    [Fact]
     public void MakeJsonExtract_ShouldMapNamesAndCastLength()
     {
         Dialect.MakeJsonExtract("json_extract_string", ["json", "'s'"]).Should().Be("JSONExtractString(json, 's')");
@@ -336,8 +393,8 @@ public class ClickHouseDialectTests
         Dialect.MakeDateTrunc("month", "dt").Should().Be("dateTrunc('month', dt)");
         Dialect.MakeDateTrunc("milliseconds", "dt").Should().Be("dateTrunc('millisecond', dt)");
         Dialect.MakeDateAdd("day", "2", "dt").Should().Be("addDays(dt, 2)");
-        Dialect.MakeDateAdd("decade", "2", "dt").Should().Be("addYears(dt, (2) * 10)");
-        Dialect.MakeDateDiff("milliseconds", "a", "b").Should().Be("dateDiff('millisecond', a, b)");
+        Dialect.MakeDateAdd("decade", "2", "dt").Should().Be("addYears(toDateTime64(dt, 6), (2) * 10)");
+        Dialect.MakeDateDiff("milliseconds", "a", "b").Should().Be("toInt32(dateDiff('millisecond', a, b))");
         Dialect.MakeDateDiffBig("milliseconds", "a", "b").Should().Be("dateDiff('millisecond', a, b)");
         Dialect.PromoteDateOperand("day", "dt").Should().Be("dt");
         Dialect.PromoteDateOperand("second", "dt").Should().Be("toDateTime(dt)");
@@ -353,6 +410,50 @@ public class ClickHouseDialectTests
         Dialect.MakeDatePart("doy", "dt").Should().Be("toInt32(toDayOfYear(dt))");
         Dialect.MakeStringAgg("somestring", "','").Should().Be("arrayStringConcat(groupArray(somestring), ',')");
         Dialect.MakeFilteredStringAgg("somestring", "','", "(id > 0)").Should().Be("arrayStringConcat(groupArrayIf(somestring, (id > 0)), ',')");
+    }
+
+    /// <summary>
+    /// The narrow <c>date_diff</c> renderer casts ClickHouse's native <c>Int64</c> down to the declared
+    /// <c>int?</c> result, while <c>date_diff_big</c> keeps the native width and must never inherit the
+    /// narrowing (issue #255).
+    /// </summary>
+    [Theory]
+    [InlineData("microseconds", "microsecond")]
+    [InlineData("milliseconds", "millisecond")]
+    [InlineData("second", "second")]
+    [InlineData("minute", "minute")]
+    [InlineData("hour", "hour")]
+    [InlineData("day", "day")]
+    [InlineData("week", "week")]
+    [InlineData("month", "month")]
+    [InlineData("quarter", "quarter")]
+    [InlineData("year", "year")]
+    public void MakeDateDiff_ShouldNarrowOnlyTheThirtyTwoBitForm(string field, string unit)
+    {
+        Dialect.MakeDateDiff(field, "a", "b").Should().Be($"toInt32(dateDiff('{unit}', a, b))");
+        Dialect.MakeDateDiffBig(field, "a", "b").Should().Be($"dateDiff('{unit}', a, b)");
+        Dialect.MakeDateDiffBig(field, "a", "b").Should().NotContain("toInt32");
+    }
+
+    [Fact]
+    public void MakeDateDiff_ShouldPreserveArgumentRendering()
+    {
+        // Zero span, a positive span and a negative span share the same renderer: both operands are
+        // spliced verbatim, so nulls, composed expressions and signed spans are untouched by the cast.
+        Dialect.MakeDateDiff("second", "dt", "dt").Should().Be("toInt32(dateDiff('second', dt, dt))");
+        Dialect.MakeDateDiff("second", "null", "dt").Should().Be("toInt32(dateDiff('second', null, dt))");
+        Dialect.MakeDateDiffBig("second", "null", "dt").Should().Be("dateDiff('second', null, dt)");
+        Dialect.MakeDateDiffBig("second", "dt", "null").Should().Be("dateDiff('second', dt, null)");
+    }
+
+    [Theory]
+    [InlineData("decade")]
+    [InlineData("century")]
+    [InlineData("millennium")]
+    public void DateDiff_WithUnsupportedField_ShouldBeRejectedByTheCapabilityGuard(string field)
+    {
+        Dialect.SupportsDateDiffField(field).Should().BeFalse();
+        Dialect.SupportsDateDiffField("day").Should().BeTrue();
     }
 
     [Fact]
@@ -420,6 +521,7 @@ public class ClickHouseDialectTests
         Dialect.SupportsRightFullJoin.Should().BeTrue();
         Dialect.SupportsIntersectExceptAll.Should().BeTrue();
         Dialect.SupportsSequentialAccess.Should().BeFalse();
+        Dialect.SupportsSavepoints.Should().BeFalse();
         Dialect.SupportsApply.Should().BeFalse();
         Dialect.SupportsQueryHints.Should().BeFalse();
         Dialect.SupportsDateTrunc.Should().BeTrue();
@@ -435,7 +537,7 @@ public class ClickHouseDialectTests
         Dialect.AggregateFilterStyle.Should().Be(AggregateFilterStyle.IfCombinator);
         Dialect.UniqAggregates.Should().NotBeNull();
         Dialect.QuantileAggregates.Should().NotBeNull();
-        Dialect.SupportsAnyAggregates.Should().BeTrue();
+        Dialect.SupportsAnyLastAggregate.Should().BeTrue();
         Dialect.SupportsAnyValueAggregate.Should().BeTrue();
         Dialect.SupportsPercentileWindow.Should().BeFalse();
         Dialect.SupportsPercentRankCumeDist.Should().BeTrue();
@@ -474,5 +576,146 @@ public class ClickHouseDialectTests
         Dialect.UuidGenerators!.Supports("uuidv7").Should().BeTrue();
         Dialect.UuidGenerators!.Render("gen_random_uuid").Should().Be("generateUUIDv4()");
         Dialect.UuidGenerators!.Render("uuidv7").Should().Be("generateUUIDv7()");
+    }
+
+    [Fact]
+    public void MakeArrayResult_TupleElement_ShouldRenderTupleWithoutNullableWrapperOrClrArity()
+    {
+        // reference tuple element
+        Dialect.MakeArrayResult("group_array", "groupArray(t)", typeof(Tuple<int, string>[]))
+            .Should().Be("cast(groupArray(t) as Array(Tuple(Int32, String)))");
+
+        // value tuple element
+        Dialect.MakeArrayResult("group_array", "groupArray(t)", typeof((int, string)[]))
+            .Should().Be("cast(groupArray(t) as Array(Tuple(Int32, String)))");
+
+        // nested tuple with a nullable value field
+        Dialect.MakeArrayResult("group_array", "groupArray(t)", typeof(Tuple<Tuple<int?, string>, (long, (byte, byte?))>[]))
+            .Should().Be("cast(groupArray(t) as Array(Tuple(Tuple(Nullable(Int32), String), Tuple(Int64, Tuple(UInt8, Nullable(UInt8))))))");
+
+        // non-tuple guard: string array rendering is unchanged
+        Dialect.MakeArrayResult("group_array", "groupArray(s)", typeof(string[]))
+            .Should().Be("cast(groupArray(s) as Array(Nullable(String)))");
+    }
+
+    [Fact]
+    public void MakeArrayResult_GroupArrayRetentionTuple_ShouldUseWellFormedClickHouseTupleType()
+    {
+        var sql = Dialect.MakeArrayResult(
+            "group_array",
+            "groupArray(tuple(week, retention))",
+            typeof(Tuple<byte, double>[]));
+
+        sql.Should().Be("cast(groupArray(tuple(week, retention)) as Array(Tuple(UInt8, Float64)))");
+        sql.Should().NotContain("`");
+        sql.Should().NotContain("Tuple`2");
+    }
+
+    [Fact]
+    public void MakeArrayResult_NullableTupleElement_ShouldRenderTupleWithoutNullableWrapper()
+    {
+        // (a) nullable value-tuple element: no Nullable(...) wrapper around the tuple
+        Dialect.MakeArrayResult("group_array", "groupArray(t)", typeof(Nullable<(int, string)>[]))
+            .Should().Be("cast(groupArray(t) as Array(Tuple(Int32, String)))");
+
+        // (b) nullable fields inside the tuple still render Nullable(T)
+        Dialect.MakeArrayResult("group_array", "groupArray(t)", typeof(Nullable<(int?, string)>[]))
+            .Should().Be("cast(groupArray(t) as Array(Tuple(Nullable(Int32), String)))");
+
+        // nested tuple whose nullable fields still render Nullable(T)
+        Dialect.MakeArrayResult("group_array", "groupArray(t)", typeof(Tuple<Tuple<int?, string>, (long, (byte, byte?))>[]))
+            .Should().Be("cast(groupArray(t) as Array(Tuple(Tuple(Nullable(Int32), String), Tuple(Int64, Tuple(UInt8, Nullable(UInt8))))))");
+    }
+
+    [Fact]
+    public void MakeArrayResult_HighArityTupleElement_ShouldRenderTupleWithoutClrArity()
+    {
+        // (c) arity-8 / nested rest: valid Tuple(...), no Tuple`8
+        Dialect.MakeArrayResult("group_array", "groupArray(t)", typeof((int, int, int, int, int, int, int, int)[]))
+            .Should().Be("cast(groupArray(t) as Array(Tuple(Int32, Int32, Int32, Int32, Int32, Int32, Int32, Tuple(Int32))))");
+    }
+
+    [Fact]
+    public void MakeArrayResult_NonGenericITupleElement_ShouldRenderTupleWithoutNullableWrapperOrClrArity()
+    {
+        // non-generic reference type implementing ITuple (subclass of Tuple<int,string>)
+        Dialect.MakeArrayResult("group_array", "groupArray(t)", typeof(NonGenericTuple[]))
+            .Should().Be("cast(groupArray(t) as Array(Tuple(Int32, String)))");
+    }
+
+    [Fact]
+    public void MakeArrayResult_TaggedTupleElement_ShouldResolveBaseTupleComponents()
+    {
+        // generic ITuple subclass whose own generic parameter list is NOT the component list:
+        // TaggedTuple<long> : Tuple<int, string> must render the base tuple's components.
+        Dialect.MakeArrayResult("group_array", "groupArray(t)", typeof(TaggedTuple<long>[]))
+            .Should().Be("cast(groupArray(t) as Array(Tuple(Int32, String)))");
+
+        // standalone (non-array) rendering via the shared tuple-aware renderer.
+        ClickHouseDialect.TypeName(ClickHouseDialect.Instance, typeof(TaggedTuple<long>))
+            .Should().Be("Tuple(Int32, String)");
+    }
+
+    [Fact]
+    public void TypeName_TaggedTuple_ShouldResolveBaseTupleComponents()
+    {
+        ClickHouseDialect.TypeName(ClickHouseDialect.Instance, typeof(TaggedTuple<int>))
+            .Should().Be("Tuple(Int32, String)");
+    }
+
+    [Fact]
+    public void MakeArrayResult_CustomItupleWithItems_ShouldResolveFromItemMembers()
+    {
+        // custom ITuple (not inheriting Tuple/ValueTuple) exposing Item1..ItemN.
+        Dialect.MakeArrayResult("group_array", "groupArray(t)", typeof(CustomItemTuple[]))
+            .Should().Be("cast(groupArray(t) as Array(Tuple(Int32, String)))");
+
+        ClickHouseDialect.TypeName(ClickHouseDialect.Instance, typeof(CustomItemTuple))
+            .Should().Be("Tuple(Int32, String)");
+    }
+
+    [Fact]
+    public void MakeArrayResult_BareItuple_ShouldThrowNotSupportedException()
+    {
+        var act = () => Dialect.MakeArrayResult("group_array", "groupArray(t)", typeof(System.Runtime.CompilerServices.ITuple[]));
+        act.Should().Throw<NotSupportedException>();
+
+        var act2 = () => ClickHouseDialect.TypeName(ClickHouseDialect.Instance, typeof(System.Runtime.CompilerServices.ITuple));
+        act2.Should().Throw<NotSupportedException>();
+    }
+
+    [Fact]
+    public void MakeArrayResult_EmptyItuple_ShouldThrowNotSupportedException()
+    {
+        var act = () => Dialect.MakeArrayResult("group_array", "groupArray(t)", typeof(EmptyItuple[]));
+        act.Should().Throw<NotSupportedException>();
+
+        var act2 = () => ClickHouseDialect.TypeName(ClickHouseDialect.Instance, typeof(EmptyItuple));
+        act2.Should().Throw<NotSupportedException>();
+    }
+
+    private sealed class NonGenericTuple : Tuple<int, string>
+    {
+        public NonGenericTuple(int item1, string item2) : base(item1, item2) { }
+    }
+
+    private sealed class TaggedTuple<T> : Tuple<int, string>
+    {
+        public T Tag { get; }
+        public TaggedTuple(int item1, string item2, T tag) : base(item1, item2) { Tag = tag; }
+    }
+
+    private sealed class CustomItemTuple : System.Runtime.CompilerServices.ITuple
+    {
+        public int Item1 { get; }
+        public string Item2 { get; } = string.Empty;
+        public int Length => 2;
+        public object? this[int index] => index == 0 ? Item1 : Item2;
+    }
+
+    private sealed class EmptyItuple : System.Runtime.CompilerServices.ITuple
+    {
+        public int Length => 0;
+        public object? this[int index] => throw new IndexOutOfRangeException();
     }
 }

@@ -49,7 +49,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<ExtremeNativeEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.K1).ToCommand()));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.K1).ToCommand()));
 
         norm.Should().Contain("argMax(tuple(");
         norm.Should().Contain("), k1)");
@@ -67,7 +67,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<ExtremeNativeEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMin(x => x.K1).ToCommand()));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMinOld(x => x.K1).ToCommand()));
 
         norm.Should().Contain("argMin(tuple(");
         norm.Should().Contain("), k1)");
@@ -83,7 +83,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<ExtremeNativeEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.K1, x => new { x.Id, x.Payload })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.K1, x => new { x.Id, x.Payload })));
 
         norm.Should().Contain("argMax(tuple(");
         norm.Should().Contain("), k1)");
@@ -98,7 +98,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<ExtremeNativeEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMin(x => x.K1, x => new { x.Id, x.Payload })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMinOld(x => x.K1, x => new { x.Id, x.Payload })));
 
         norm.Should().Contain("argMin(tuple(");
         norm.Should().NotContain("argMax");
@@ -115,7 +115,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<ExtremeNativeEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.K1, ExtremeRowTies.One, x => new { x.Id }).ToCommand()));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.K1, ExtremeRowTies.One, x => new { x.Id }).ToCommand()));
 
         norm.Should().Contain("argMax(tuple(");
         norm.Should().Contain("), k1)");
@@ -131,7 +131,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<ExtremeNativeEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMin(x => x.K1, ExtremeRowTies.One, x => new { x.Id }).ToCommand()));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMinOld(x => x.K1, ExtremeRowTies.One, x => new { x.Id }).ToCommand()));
 
         norm.Should().Contain("argMin(tuple(");
         norm.Should().Contain("group by id");
@@ -145,7 +145,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<ExtremeNativeEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.K1, x => new { x.Id, x.Payload }, ExtremeRowTies.One, x => new { x.Id })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.K1, x => new { x.Id, x.Payload }, ExtremeRowTies.One, x => new { x.Id })));
 
         norm.Should().Contain("argMax(tuple(");
         norm.Should().Contain("group by id");
@@ -159,7 +159,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<ExtremeNativeEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMin(x => x.K1, x => new { x.Id, x.Payload }, ExtremeRowTies.One, x => new { x.Id })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMinOld(x => x.K1, x => new { x.Id, x.Payload }, ExtremeRowTies.One, x => new { x.Id })));
 
         norm.Should().Contain("argMin(tuple(");
         norm.Should().Contain("group by id");
@@ -175,7 +175,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<ExtremeNativeEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => new { x.K1, x.K2 }, x => new { x.Id })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => new { x.K1, x.K2 }, x => new { x.Id })));
 
         norm.Should().Contain("argMax(tuple(");
         norm.Should().Contain(", (k1, k2))");
@@ -190,7 +190,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<ExtremeNativeEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMin(x => new { x.K1, x.K2 }, x => new { x.Id })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMinOld(x => new { x.K1, x.K2 }, x => new { x.Id })));
 
         norm.Should().Contain("argMin(tuple(");
         norm.Should().Contain(", (k1, k2))");
@@ -205,7 +205,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<ExtremeNativeEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.K1, x => new { x.G, x.Payload }, ExtremeRowTies.One, x => new { x.Id, x.K2 })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.K1, x => new { x.G, x.Payload }, ExtremeRowTies.One, x => new { x.Id, x.K2 })));
 
         norm.Should().Contain("argMax(tuple(");
         norm.Should().Contain("group by id, k2");
@@ -220,7 +220,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<ExtremeNativeEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => new { x.K1, x.K2 }, x => new { x.Id })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => new { x.K1, x.K2 }, x => new { x.Id })));
 
         norm.Should().Contain("k1 is not null and k2 is not null");
     }
@@ -231,7 +231,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<ExtremeNativeEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.K1).ToCommand()));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.K1).ToCommand()));
 
         // The global aggregate over an empty filtered input yields one default row; counting the
         // filtered input and requiring it positive suppresses that row.
@@ -246,7 +246,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = ClickHouseTestContext.CreateQuoted();
         var e = ctx.From<ExtremeNativeEntity>();
 
-        var sql = SqlOf(ctx, e.SelectWhereMax(x => x.K1, ExtremeRowTies.One, x => new { x.Id }).ToCommand());
+        var sql = SqlOf(ctx, e.SelectWhereMaxOld(x => x.K1, ExtremeRowTies.One, x => new { x.Id }).ToCommand());
 
         sql.Should().Contain("`k1`");
         sql.Should().Contain("`__nextorm_extreme_tuple`");
@@ -259,7 +259,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<IExtremeSpecialNativeEntity>();
 
-        var sql = SqlOf(ctx, e.SelectWhereMax(x => x.K, x => new { x.Payload }));
+        var sql = SqlOf(ctx, e.SelectWhereMaxOld(x => x.K, x => new { x.Payload }));
 
         sql.Should().Contain(@"`k\\ey`");
         sql.Should().Contain(@"`pay``load`");
@@ -272,37 +272,44 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = ClickHouseTestContext.CreateUppercase();
         var e = ctx.From<ExtremeNativeEntity>();
 
-        var sql = SqlOf(ctx, e.SelectWhereMax(x => x.K1).ToCommand());
+        var sql = SqlOf(ctx, e.SelectWhereMaxOld(x => x.K1).ToCommand());
 
         sql.Should().Contain("HAVING COUNT() > 0");
         sql.Should().Contain("argMax(");
     }
 
-    // --- fallback: All and ineligible shapes keep the portable window path --------------------
+    // --- fallback: grouped All and ineligible shapes keep the portable window path ------------
 
     [Fact]
-    public void SelectWhereMax_AllTies_ShouldKeepPortableWindowLowering()
+    public void SelectWhereMax_AllTiesGlobal_ShouldLowerToAggregateJoin()
     {
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<ExtremeNativeEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.K1, ExtremeRowTies.All).ToCommand()));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.K1, ExtremeRowTies.All).ToCommand()));
 
-        norm.Should().Contain("rank() over (order by k1 desc)");
-        norm.Should().Contain("= 1");
+        norm.Should().Contain("max(k1)");
+        norm.Should().Contain("join");
+        norm.Should().Contain("__nextorm_ext_1_0");
+        norm.Should().NotContain("rank()");
         norm.Should().NotContain("argMax");
         norm.Should().NotContain("having count()");
     }
 
     [Fact]
-    public void SelectWhereMax_AllTiesGrouped_ShouldKeepPortableWindowLowering()
+    public void SelectWhereMax_AllTiesGrouped_ShouldLowerToAggregateJoin()
     {
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<ExtremeNativeEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.K1, x => new { x.Id }, ExtremeRowTies.All, x => new { x.Id })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.K1, x => new { x.Id }, ExtremeRowTies.All, x => new { x.Id })));
 
-        norm.Should().Contain("rank() over (partition by id order by k1 desc)");
+        norm.Should().Contain("max(k1)");
+        norm.Should().Contain("group by id");
+        norm.Should().Contain("__nextorm_ext_1_0");
+        norm.Should().Contain("__nextorm_ext_1_1");
+        norm.Should().Contain("join");
+        norm.Should().NotContain("rank()");
         norm.Should().NotContain("argMax");
     }
 
@@ -314,7 +321,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<IFloatNativeEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.D, x => new { x.Id })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.D, x => new { x.Id })));
 
         norm.Should().Contain("argMax(tuple(");
         norm.Should().Contain(", (isNaN(d) = 0, d))");
@@ -330,7 +337,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<IFloatNativeEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMin(x => x.D, x => new { x.Id })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMinOld(x => x.D, x => new { x.Id })));
 
         norm.Should().Contain("argMin(tuple(");
         norm.Should().Contain(", (isNaN(d), d))");
@@ -344,7 +351,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<IFloatNativeEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Dn, x => new { x.Id })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.Dn, x => new { x.Id })));
 
         norm.Should().Contain("argMax(tuple(");
         norm.Should().Contain(", (isNaN(dn) = 0, dn))");
@@ -358,7 +365,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<IFloatNativeEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.F, x => new { x.Id })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.F, x => new { x.Id })));
 
         norm.Should().Contain("argMax(tuple(");
         norm.Should().Contain(", (isNaN(f) = 0, toFloat64(f)))");
@@ -371,7 +378,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<IFloatNativeEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMin(x => x.Fn, x => new { x.Id })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMinOld(x => x.Fn, x => new { x.Id })));
 
         norm.Should().Contain("argMin(tuple(");
         norm.Should().Contain(", (isNaN(fn), toFloat64(fn)))");
@@ -385,7 +392,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<IFloatNativeEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => new { x.K, x.D }, x => new { x.Id })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => new { x.K, x.D }, x => new { x.Id })));
 
         norm.Should().Contain("argMax(tuple(");
         norm.Should().Contain(", (k, isNaN(d) = 0, d))");
@@ -399,7 +406,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<IFloatNativeEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => new { x.D, x.K }, x => new { x.Id })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => new { x.D, x.K }, x => new { x.Id })));
 
         norm.Should().Contain("argMax(tuple(");
         norm.Should().Contain(", (isNaN(d) = 0, d, k))");
@@ -412,7 +419,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<IFloatNativeEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => new { x.K, x.Id, x.D }, x => new { x.Id })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => new { x.K, x.Id, x.D }, x => new { x.Id })));
 
         norm.Should().Contain("argMax(tuple(");
         norm.Should().Contain(", (k, id, isNaN(d) = 0, d))");
@@ -425,7 +432,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<IFloatNativeEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.D, x => new { x.Id }, ExtremeRowTies.One, x => new { x.K })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.D, x => new { x.Id }, ExtremeRowTies.One, x => new { x.K })));
 
         norm.Should().Contain("argMax(tuple(");
         norm.Should().Contain(", (isNaN(d) = 0, d))");
@@ -443,7 +450,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<IFloatingPayloadIntegralKeyNativeEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.K, x => new { x.Id })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.K, x => new { x.Id })));
 
         norm.Should().Contain("row_number() over (order by k desc)");
         norm.Should().NotContain("argMax");
@@ -459,7 +466,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<ExtremeNativeEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => new { x.Id, x.K1, x.K2, x.Flag }, x => new { x.Payload })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => new { x.Id, x.K1, x.K2, x.Flag }, x => new { x.Payload })));
 
         norm.Should().Contain("argMax(tuple(");
         norm.Should().Contain(", (id, k1, k2, flag))");
@@ -473,13 +480,13 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<IIntegralWidthKeyNativeEntity>();
 
-        Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.S, x => new { x.Id })))
+        Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.S, x => new { x.Id })))
             .Should().Contain("argMax(tuple(").And.Contain(", s)");
-        Dequoted(SqlOf(ctx, e.SelectWhereMin(x => x.L, x => new { x.Id })))
+        Dequoted(SqlOf(ctx, e.SelectWhereMinOld(x => x.L, x => new { x.Id })))
             .Should().Contain("argMin(tuple(").And.Contain(", l)").And.NotContain("argMax");
-        Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Sn, x => new { x.Id })))
+        Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.Sn, x => new { x.Id })))
             .Should().Contain("argMax(tuple(").And.Contain(", sn)");
-        Dequoted(SqlOf(ctx, e.SelectWhereMin(x => x.Ln, x => new { x.Id })))
+        Dequoted(SqlOf(ctx, e.SelectWhereMinOld(x => x.Ln, x => new { x.Id })))
             .Should().Contain("argMin(tuple(").And.Contain(", ln)");
     }
 
@@ -491,7 +498,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<IConverterKeyNativeEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.ConvertedKey, x => new { x.Id })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.ConvertedKey, x => new { x.Id })));
 
         norm.Should().Contain("row_number() over (order by");
         norm.Should().NotContain("argMax");
@@ -505,7 +512,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<IFloatNativeEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Id, x => new { x.Id }, ExtremeRowTies.One, x => new { x.D })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.Id, x => new { x.Id }, ExtremeRowTies.One, x => new { x.D })));
 
         norm.Should().Contain("row_number() over (partition by d order by id desc)");
         norm.Should().NotContain("argMax");
@@ -517,7 +524,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<IFloatNativeEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.D + 1, x => new { x.Id })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.D + 1, x => new { x.Id })));
 
         norm.Should().Contain("row_number() over (order by");
         norm.Should().NotContain("argMax");
@@ -532,7 +539,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<IFloatNativeEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => new { x.K, x.Id, x.D, x.Dn }, x => new { x.Id })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => new { x.K, x.Id, x.D, x.Dn }, x => new { x.Id })));
 
         norm.Should().Contain("row_number() over (order by");
         norm.Should().NotContain("argMax");
@@ -546,7 +553,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<IUnsupportedFloatingKeyNativeEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.H, x => new { x.Id })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.H, x => new { x.Id })));
 
         norm.Should().Contain("row_number() over (order by");
         norm.Should().NotContain("argMax");
@@ -560,7 +567,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<IUnsupportedFloatingKeyNativeEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMin(x => x.Dec, x => new { x.Id })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMinOld(x => x.Dec, x => new { x.Id })));
 
         norm.Should().Contain("row_number() over (order by");
         norm.Should().NotContain("argMin");
@@ -572,7 +579,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<IUnsupportedFloatingKeyNativeEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.DecN, x => new { x.Id })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.DecN, x => new { x.Id })));
 
         norm.Should().Contain("row_number() over (order by");
         norm.Should().NotContain("argMax");
@@ -584,7 +591,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<IStringKeyNativeEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Name, x => new { x.Id })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.Name, x => new { x.Id })));
 
         norm.Should().Contain("row_number() over (order by name desc)");
         norm.Should().NotContain("argMax");
@@ -596,7 +603,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Datetime, x => new { x.Id })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.Datetime, x => new { x.Id })));
 
         norm.Should().Contain("row_number() over (order by dt desc)");
         norm.Should().NotContain("argMax");
@@ -610,7 +617,7 @@ public class ExtremeRowNativeSqlGenerationTests
 
         // The key is an integral direct column, but the payload carries bool/DateTime, which the
         // tuple strategy does not support, so the portable window lowering is kept.
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Int, x => new { x.Id })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.Int, x => new { x.Id })));
 
         norm.Should().Contain("row_number() over (order by nullableint desc)");
         norm.Should().NotContain("argMax");
@@ -623,7 +630,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMin(x => x.Int, x => new { x.Id })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMinOld(x => x.Int, x => new { x.Id })));
 
         norm.Should().Contain("row_number() over (order by nullableint)");
         norm.Should().NotContain("argMin");
@@ -638,7 +645,7 @@ public class ExtremeRowNativeSqlGenerationTests
         // The extreme key is a supported direct mapped integral column, but a payload property carries
         // a value converter, so the whole row cannot be reconstructed as a raw tuple and the portable
         // window lowering is kept.
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.K, x => new { x.Id })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.K, x => new { x.Id })));
 
         norm.Should().Contain("row_number() over (order by k desc)");
         norm.Should().NotContain("argMax");
@@ -653,7 +660,7 @@ public class ExtremeRowNativeSqlGenerationTests
 
         // A computed payload column is not a plain mapped column (its IsDirectMappedColumn is false),
         // so even with an integral direct key it keeps the portable lowering.
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.K, x => new { x.Id })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.K, x => new { x.Id })));
 
         norm.Should().Contain("row_number() over (order by k desc)");
         norm.Should().NotContain("argMax");
@@ -668,7 +675,7 @@ public class ExtremeRowNativeSqlGenerationTests
 
         // A computed expression is not a direct mapped column, so it is not natively eligible even
         // though the result is integral and the payload is supported.
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.K1 + 1, x => new { x.Id })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.K1 + 1, x => new { x.Id })));
 
         norm.Should().Contain("row_number() over (order by");
         norm.Should().NotContain("argMax");
@@ -682,7 +689,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<ExtremeNativeEntity>();
 
-        var act = () => SqlOf(ctx, e.LimitBy(2, x => x.K1).SelectWhereMax(x => x.K1).Select(x => new { x.Id }));
+        var act = () => SqlOf(ctx, e.LimitBy(2, x => x.K1).SelectWhereMaxOld(x => x.K1).Select(x => new { x.Id }));
 
         act.Should().Throw<BuildSqlCommandException>()
             .WithMessage("*SelectWhereMax/SelectWhereMin cannot be combined with LIMIT BY*");
@@ -694,7 +701,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<ExtremeNativeEntity>();
 
-        var act = () => SqlOf(ctx, e.PreWhere(x => x.Id > 1).SelectWhereMax(x => x.K1).Select(x => new { x.Id }));
+        var act = () => SqlOf(ctx, e.PreWhere(x => x.Id > 1).SelectWhereMaxOld(x => x.K1).Select(x => new { x.Id }));
 
         act.Should().Throw<BuildSqlCommandException>()
             .WithMessage("*SelectWhereMax/SelectWhereMin cannot be combined with PREWHERE*");
@@ -706,7 +713,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var a = ctx.From<IArrayEntity>();
 
-        var act = () => SqlOf(ctx, a.ArrayJoin(x => x.Tags).SelectWhereMax(x => x.Id).Select(x => new { x.Id }));
+        var act = () => SqlOf(ctx, a.ArrayJoin(x => x.Tags).SelectWhereMaxOld(x => x.Id).Select(x => new { x.Id }));
 
         act.Should().Throw<BuildSqlCommandException>()
             .WithMessage("*SelectWhereMax/SelectWhereMin cannot be combined with ARRAY JOIN*");
@@ -723,7 +730,7 @@ public class ExtremeRowNativeSqlGenerationTests
         // metadata for the tuple renderer, so it must keep the portable window lowering instead of
         // failing the read with "requires a mapped entity source".
         var command = ctx.From("raw_source_144")
-            .SelectWhereMax(t => t.GetInt32("k"), t => new { Id = t.GetInt32("id") });
+            .SelectWhereMaxOld(t => t.GetInt32("k"), t => new { Id = t.GetInt32("id") });
 
         var norm = Dequoted(SqlOf(ctx, command));
 
@@ -740,7 +747,7 @@ public class ExtremeRowNativeSqlGenerationTests
         // The compatibility guard runs before the native/portable decision, so a forbidden modifier is
         // still rejected for a name-addressed source.
         var command = ctx.From("raw_source_144").Limit(1)
-            .SelectWhereMax(t => t.GetInt32("k"), t => new { Id = t.GetInt32("id") });
+            .SelectWhereMaxOld(t => t.GetInt32("k"), t => new { Id = t.GetInt32("id") });
 
         var act = () => SqlOf(ctx, command);
 
@@ -760,7 +767,7 @@ public class ExtremeRowNativeSqlGenerationTests
         // "__nextorm_extreme_tuple", the renderer's source-subquery and tuple alias bases. Reusing
         // either verbatim would make the aggregate or the tuple extraction reference an ambiguous name,
         // so both aliases must be extended until free.
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.K).ToCommand()));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.K).ToCommand()));
 
         norm.Should().Contain("as __nextorm_extreme_src_");
         norm.Should().Contain("as __nextorm_extreme_tuple_");
@@ -776,7 +783,7 @@ public class ExtremeRowNativeSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<ExtremeAliasNativeEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.K, x => new { x.Id }, ExtremeRowTies.One, x => new { x.TupleLike })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMaxOld(x => x.K, x => new { x.Id }, ExtremeRowTies.One, x => new { x.TupleLike })));
 
         norm.Should().Contain("group by __nextorm_extreme_tuple");
         norm.Should().Contain("as __nextorm_extreme_tuple_");
@@ -796,7 +803,7 @@ public class ExtremeRowNativeSqlGenerationTests
         // bound parameter: the native source rebuild must not inline it while re-rendering the WHERE.
         var command = Prepare(ctx, e
             .Where(x => x.K1 == SqlFunctions.Parameter<int>(0))
-            .SelectWhereMax(x => x.K1).ToCommand());
+            .SelectWhereMaxOld(x => x.K1).ToCommand());
 
         var sql = Dequoted(Normalize(command.DbCommand.CommandText));
 

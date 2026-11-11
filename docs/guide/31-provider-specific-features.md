@@ -129,10 +129,9 @@ newer `FOR SHARE OF` spelling. A whole-query and a source-level lock are mutuall
 them throws `InvalidOperationException` — and a source-level lock is only valid on a physical table
 source: `FromSql`, a query/builder subquery and a CTE source throw `NotSupportedException`.
 
-> **SQL Server behavior change.** A whole-query `ForUpdate()`/`ForShare()` now places the lock hint on
-> **every** `FROM`/`JOIN` physical source of the statement; previously only the primary source was
-> hinted. Multi-table queries therefore take the hint on more tables than before. A source-level lock
-> places the hint on the chosen source only.
+> **SQL Server.** A whole-query `ForUpdate()`/`ForShare()` places the lock hint on **every**
+> `FROM`/`JOIN` physical source of the statement. A source-level lock places the hint on the chosen
+> source only.
 
 > **MariaDB** has no `FOR UPDATE OF`/`FOR SHARE OF` grammar, so a source-level lock is **not supported**:
 > it is rejected deterministically with `NotSupportedException` (fail-closed) instead of emitting an

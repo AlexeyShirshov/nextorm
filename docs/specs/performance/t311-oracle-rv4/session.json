@@ -1,0 +1,139 @@
+{
+  "session_id": "t311-20261101T111315Z",
+  "baseline_generation": "bg-t311-20261101T111315Z",
+  "generated_utc": "2026-11-01T11:20:43Z",
+  "retained_commit": "2ea3ef452711ae452ceacbd1f6d462655bd8d577",
+  "retained_tree": "b30268568aaa997e8ba105c766fc4d46d9c25e97",
+  "host_branch": "1.0.9-rc5",
+  "host_head": "9e7fb4b36c4cf902eed3fa2c76333b5ab3359732",
+  "worktree": "/tmp/opencode/t311-retained-2ea3ef45",
+  "worktree_list_exit": 0,
+  "worktree_list_stdout": "/home/alex/sources/nextorm                    9e7fb4b3 [1.0.9-rc5]\n/home/alex/sources/nextorm-worktrees/rc4/g22  cf547300 [collection/rc4/task-22-301]\n/home/alex/sources/nextorm-worktrees/rc4/g34  f09797ee [collection/rc4/task-34-347]\n/home/alex/sources/nextorm-worktrees/rc4/g41  f4b583fe [collection/rc4/spike-249]\n/tmp/opencode/T323-base-25d262b2              25d262b2 (detached HEAD) prunable\n/tmp/opencode/bench-c                         7019acc4 [bench-c] prunable\n/tmp/opencode/nextorm-327                     307b8e97 [spike/327-sql-literals] prunable\n/tmp/opencode/t280-base                       e90e52bb (detached HEAD) prunable\n/tmp/opencode/t311-retained-2ea3ef45          2ea3ef45 (detached HEAD)",
+  "db_path": "/tmp/nextorm-bench/test.db",
+  "db_sha256_initial": "32bf10a08291f25afff934f42c378215b6e8f76b8568d6afd519a53a92d72295",
+  "db_sha256_final": "32bf10a08291f25afff934f42c378215b6e8f76b8568d6afd519a53a92d72295",
+  "spec_sha256": "4c9937da13b55a214f576c1fac655b3630126affd38e23856294c0ef556e9a18",
+  "collector_sha256": "9e98ad130ad6afeb1eec986414cbae14d9dc7d98439641a324ce3568716ea0a5",
+  "transcripts": {
+    "round-1": {
+      "pre": {
+        "phase": "pre",
+        "utc": "2026-11-01T11:13:18Z",
+        "checks": {
+          "wt_head": {
+            "ok": true,
+            "detail": "2ea3ef452711ae452ceacbd1f6d462655bd8d577"
+          },
+          "wt_tree": {
+            "ok": true,
+            "detail": "b30268568aaa997e8ba105c766fc4d46d9c25e97"
+          },
+          "wt_diff": {
+            "ok": true,
+            "detail": ""
+          },
+          "wt_status": {
+            "ok": true,
+            "detail": ""
+          },
+          "host_json_surface": {
+            "ok": true,
+            "detail": ""
+          }
+        },
+        "git_ok": true,
+        "db_sha256": "32bf10a08291f25afff934f42c378215b6e8f76b8568d6afd519a53a92d72295"
+      },
+      "post": {
+        "phase": "post",
+        "utc": "2026-11-01T11:17:03Z",
+        "checks": {
+          "wt_head": {
+            "ok": true,
+            "detail": "2ea3ef452711ae452ceacbd1f6d462655bd8d577"
+          },
+          "wt_tree": {
+            "ok": true,
+            "detail": "b30268568aaa997e8ba105c766fc4d46d9c25e97"
+          },
+          "wt_diff": {
+            "ok": true,
+            "detail": ""
+          },
+          "wt_status": {
+            "ok": true,
+            "detail": ""
+          },
+          "host_json_surface": {
+            "ok": true,
+            "detail": ""
+          }
+        },
+        "git_ok": true,
+        "db_sha256": "32bf10a08291f25afff934f42c378215b6e8f76b8568d6afd519a53a92d72295"
+      },
+      "db_sha_before": "32bf10a08291f25afff934f42c378215b6e8f76b8568d6afd519a53a92d72295",
+      "db_sha_after": "32bf10a08291f25afff934f42c378215b6e8f76b8568d6afd519a53a92d72295"
+    },
+    "round-2": {
+      "pre": {
+        "phase": "pre",
+        "utc": "2026-11-01T11:17:03Z",
+        "checks": {
+          "wt_head": {
+            "ok": true,
+            "detail": "2ea3ef452711ae452ceacbd1f6d462655bd8d577"
+          },
+          "wt_tree": {
+            "ok": true,
+            "detail": "b30268568aaa997e8ba105c766fc4d46d9c25e97"
+          },
+          "wt_diff": {
+            "ok": true,
+            "detail": ""
+          },
+          "wt_status": {
+            "ok": true,
+            "detail": ""
+          },
+          "host_json_surface": {
+            "ok": true,
+            "detail": ""
+          }
+        },
+        "git_ok": true,
+        "db_sha256": "32bf10a08291f25afff934f42c378215b6e8f76b8568d6afd519a53a92d72295"
+      },
+      "post": {
+        "phase": "post",
+        "utc": "2026-11-01T11:20:43Z",
+        "checks": {
+          "wt_head": {
+            "ok": true,
+            "detail": "2ea3ef452711ae452ceacbd1f6d462655bd8d577"
+          },
+          "wt_tree": {
+            "ok": true,
+            "detail": "b30268568aaa997e8ba105c766fc4d46d9c25e97"
+          },
+          "wt_diff": {
+            "ok": true,
+            "detail": ""
+          },
+          "wt_status": {
+            "ok": true,
+            "detail": ""
+          },
+          "host_json_surface": {
+            "ok": true,
+            "detail": ""
+          }
+        },
+        "git_ok": true,
+        "db_sha256": "32bf10a08291f25afff934f42c378215b6e8f76b8568d6afd519a53a92d72295"
+      },
+      "db_sha_before": "32bf10a08291f25afff934f42c378215b6e8f76b8568d6afd519a53a92d72295",
+      "db_sha_after": "32bf10a08291f25afff934f42c378215b6e8f76b8568d6afd519a53a92d72295"
+    }
+  }
+}

@@ -1,7 +1,7 @@
 # Специфичный для SQLite SQL
 
 > SQLite даёт функции ядра (`printf`/`format`, `hex`/`unhex`, `random`/`randomblob`, `quote`,
-> `typeof`, `glob`, `unicode`/`char`, `soundex`, `octet_length`, `if`/`ifnull`), функции/операторы/
+> `typeof`, `glob`, `unicode`/`char`, `octet_length`, `if`/`ifnull`), функции/операторы/
 > агрегаты JSON1 и табличные функции `json_each`/`json_tree`, функции дат (`timediff`, `unixepoch`,
 > `julianday`), функции математического расширения (`acos`/`asin`/`atan`/`atan2`, гиперболические,
 > `log2`/`log10`, `mod`) и поверхность полнотекстового поиска FTS3/FTS4/FTS5.
@@ -28,9 +28,18 @@
 | `unicode(value)` | `unicode(...)` | код первой кодовой точки |
 | `@char(c1, ...)` | `char(...)` | строка из кодовых точек Unicode |
 | `octet_length(value)` | `octet_length(...)` | длина значения в байтах |
-| `soundex(value)` | `soundex(...)` | требует опции сборки `SQLITE_SOUNDEX` |
+| `soundex(value)` | не генерируется — **не поддерживается** | в поставляемом движке нет `soundex` (нет `SQLITE_SOUNDEX`); подготовка бросает `NotSupportedException` |
 | `ifnull(value, other)` | `ifnull(...)` | двухаргументный `coalesce` |
 | `@if(condition, whenTrue, whenFalse)` | `if(...)` | псевдоним `if()` — 3.48+ |
+
+> **`soundex` не поддерживается и не генерируется.** `SqlFunctions.Sqlite.soundex` сохранён только для
+> совместимости исходников и бинарников: поставляемый движок SQLite собран без `SQLITE_SOUNDEX` и не
+> содержит такой функции, поэтому подготовка вызова бросает `NotSupportedException` —
+> `The SQLite function 'soundex' is not supported by this provider.` — до генерации и выполнения любого
+> SQL. Отказ безусловен и распространяется также на кастомную сборку SQLite с `SQLITE_SOUNDEX`; для
+> soundex-кода используйте провайдера с нативной поддержкой
+> ([`SqlFunctions.SqlServer.soundex`](xref:NextORM.Core.SqlServerFunctions.soundex(System.String)))
+> или сырой SQL-фрагмент.
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
@@ -49,6 +58,14 @@ select printf('%d-%s', id, somestring) as 'Label',
        unicode(somestring) as 'Ascii'
  from complex_entity
 ```
+
+## Null-safe-сравнение
+
+Оператор `IS` в SQLite — это нативное null-safe-равенство, поэтому
+`SqlFunctions.Sql.is_not_distinct_from(a, b)` рендерит `(a is b)`, а `is_distinct_from(a, b)` —
+`(a is not b)`. Оба двузначны (0/1) и не требуют скалярной легализации; обычные `==`/`!=` сохраняют
+семантику SQL NULL. См.
+[Null-safe-сравнение](../../scalar-functions/04-conditionals-and-conversion.md#null-safe-сравнение-is-not-distinct-from).
 
 ## JSON1
 
@@ -106,12 +123,13 @@ var rows = dataContext.From<IComplexEntity>()
 ## Табличные функции `json_each` / `json_tree`
 
 `json_each` обходит непосредственных детей JSON-значения, `json_tree` — рекурсивно. Используйте их
-через [`FromTableFunction`](../13-table-valued-functions.md) и проецируйте форму строки вызова;
-колонки — `key`, `value`, `type`, `fullkey` и `path` (плюс `id`/`parent` у `json_tree`).
+через источник-runtime-фабрику [`From(() => ...)`](../13-table-valued-functions.md) и проецируйте форму
+строки, возвращаемую вызовом; колонки — `key`, `value`, `type`, `fullkey` и `path` (плюс
+`id`/`parent` у `json_tree`).
 
 ```csharp
 var values = dataContext
-    .FromTableFunction(() => SqlFunctions.Sqlite.json_each("[\"a\",\"b\",\"c\"]"))
+    .From(() => SqlFunctions.Sqlite.json_each("[\"a\",\"b\",\"c\"]"))
     .Select(r => r.Value)
     .ToList();
 ```
@@ -119,6 +137,24 @@ var values = dataContext
 ```sql
 select value
  from json_each('["a","b","c"]')
+```
+
+## Агрегатные функции
+
+`total(value)` — агрегат SQLite, суммирующий в плавающей точке. Он возвращает `double` и никогда не
+возвращает null: пустая группа или группа из одних null даёт `0.0`, null внутри смешанной группы
+игнорируются, а большие целые суммируются в плавающей точке вместо переполнения, на которое способен
+`sum`.
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .Select(c => new { Total = SqlFunctions.Sqlite.total(c.NullableInt) })
+    .ToList();
+```
+
+```sql
+select total(nullableint)
+ from complex_entity
 ```
 
 ## Функции дат
@@ -233,7 +269,7 @@ var weighted = dataContext.From<Article>()
 
 ```csharp
 var rows = dataContext
-    .FromTableFunction(() => SqlFunctions.Sqlite.MatchTable<Article>("article_fts", query))
+    .From(() => SqlFunctions.Sqlite.MatchTable<Article>("article_fts", query))
     .Where(x => x.RowId > 0)
     .OrderBy(x => x.RowId)
     .Select(x => new { x.RowId, x.Title })

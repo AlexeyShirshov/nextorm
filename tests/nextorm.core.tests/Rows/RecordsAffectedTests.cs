@@ -183,7 +183,7 @@ public class RecordsAffectedTests
     private static (ProcedureResult Result, CommandReaderOwner Owner, FakeRecordsReader Reader) CreateResult(int preClose = -1, int postClose = -1)
     {
         var reader = new FakeRecordsReader { PreClose = preClose, PostClose = postClose };
-        var owner = new CommandReaderOwner(null!, reader);
+        var owner = new CommandReaderOwner(null!, reader, null);
         return (new ProcedureResult(new FakeContext(), owner), owner, reader);
     }
 
@@ -358,7 +358,7 @@ public class RecordsAffectedTests
     {
         var reader = new FakeRecordsReader { PreClose = 4, PostClose = 4 };
         var command = new FakeRecordsCommand();
-        var owner = new CommandReaderOwner(command, reader);
+        var owner = new CommandReaderOwner(command, reader, null);
         using var result = new ProcedureResult(new FakeContext(), owner);
 
         await owner.DisposeAsync();

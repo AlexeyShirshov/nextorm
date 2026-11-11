@@ -511,7 +511,7 @@ public sealed class T243WarmScalarArtifactTests
     private static (SqliteDataContext Db, string Path) CreateDb()
     {
         var path = Path.Combine(Path.GetTempPath(), $"nextorm-d243-scalar-{Guid.NewGuid():N}.db");
-        var db = new SqliteDataContext($"Data Source={path}", new DataContextBuilder());
+        var db = new SqliteDataContext($"Data Source={path};Pooling=False", new DataContextBuilder());
         db.EnsureConnectionOpen();
         Execute(db, Schema);
         return (db, path);

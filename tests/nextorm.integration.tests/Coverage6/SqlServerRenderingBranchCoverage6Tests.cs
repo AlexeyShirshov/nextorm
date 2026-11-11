@@ -94,7 +94,7 @@ public sealed class SqlServerRenderingBranchCoverage6Tests : ProviderTestSuite
         const string json = """[{"k":1},{"k":2}]""";
 
         var crossed = Context.From<Sr6SqlServerMarker>()
-            .CrossApply(Context.FromTableFunction(() => SqlFunctions.SqlServer.openjson(json)))
+            .CrossApply(Context.From(() => SqlFunctions.SqlServer.openjson(json)))
             .Select(p => new { Marker = p.Item1.Id, p.Item2.Key })
             .ToList();
 
@@ -103,7 +103,7 @@ public sealed class SqlServerRenderingBranchCoverage6Tests : ProviderTestSuite
         crossed.Select(r => r.Key).Should().Contain("0").And.Contain("1");
 
         var outerEmpty = Context.From<Sr6SqlServerMarker>()
-            .OuterApply(Context.FromTableFunction(() => SqlFunctions.SqlServer.openjson("[]")))
+            .OuterApply(Context.From(() => SqlFunctions.SqlServer.openjson("[]")))
             .OrderBy(p => p.Item1.Id)
             .Select(p => new { Marker = p.Item1.Id, Key = (string?)p.Item2.Key })
             .ToList();

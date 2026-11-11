@@ -38,6 +38,66 @@ public class TransactionTests
     }
 
     [Fact]
+    public void CreateSavepoint_ShouldThrow()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        var act = () => ((ITransactionManager)ctx).CreateSavepoint("sp_1");
+
+        act.Should().Throw<NotSupportedException>();
+    }
+
+    [Fact]
+    public async Task CreateSavepointAsync_ShouldThrow()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        var act = async () => await ((ITransactionManager)ctx).CreateSavepointAsync("sp_1", TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<NotSupportedException>();
+    }
+
+    [Fact]
+    public void RollbackToSavepoint_ShouldThrow()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        var act = () => ((ITransactionManager)ctx).RollbackToSavepoint("sp_1");
+
+        act.Should().Throw<NotSupportedException>();
+    }
+
+    [Fact]
+    public async Task RollbackToSavepointAsync_ShouldThrow()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        var act = async () => await ((ITransactionManager)ctx).RollbackToSavepointAsync("sp_1", TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<NotSupportedException>();
+    }
+
+    [Fact]
+    public void ReleaseSavepoint_ShouldThrow()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        var act = () => ((ITransactionManager)ctx).ReleaseSavepoint("sp_1");
+
+        act.Should().Throw<NotSupportedException>();
+    }
+
+    [Fact]
+    public async Task ReleaseSavepointAsync_ShouldThrow()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        var act = async () => await ((ITransactionManager)ctx).ReleaseSavepointAsync("sp_1", TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<NotSupportedException>();
+    }
+
+    [Fact]
     public void UseTransaction_WithNull_IsAllowed()
     {
         using var ctx = ClickHouseTestContext.Create();

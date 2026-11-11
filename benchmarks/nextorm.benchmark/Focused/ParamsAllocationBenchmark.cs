@@ -63,12 +63,12 @@ public class ParamsAllocationBenchmark
         _cmd1 = _repo.SimpleEntity
             .Where(e => e.Id == SqlFunctions.Parameter<int>(0))
             .AnyCommand()
-            .Prepare(true);
+            .Prepare();
 
         _cmd2 = _repo.SimpleEntity
             .Where(e => e.Id > SqlFunctions.Parameter<int>(0) && e.Id < SqlFunctions.Parameter<int>(1))
             .AnyCommand()
-            .Prepare(true);
+            .Prepare();
 
         ((IConnectionManager)_db).EnsureConnectionOpen();
         _conn = _dbCtx.GetConnection();

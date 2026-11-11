@@ -10,6 +10,8 @@ The prepared SQL text is bound to a provider `DbCommand` (created by `DataContex
 
 When the projection needs objects, a row mapper compiled by `RowMapperFactory` reads each row from the `DbDataReader` and builds the entity, DTO, record, tuple or anonymous type — the shapes are covered under [Projections](../guide/02-projections.md). The mapper is compiled once per plan shape and reused for every row.
 
+A nullable aggregate scalar is materialized as `null`. When the projection is a nullable value type — the four variability families (`Stdev`/`Stdevp`/`Var`/`Varp`) are the first aggregates that return `T?` — the mapper's nullable read path guards the value getter with `IsDBNull`, so a SQL `NULL` reaches the caller as `null` instead of throwing from an unguarded getter. The terminal's declared `T?` and the nullable projection are one decision: `AggregateTerminalRewriter` projects the aggregate as `Nullable<T>` whenever the aggregate's parameter is `T?`.
+
 ## Terminals and their output shapes
 
 | Terminal | Output |

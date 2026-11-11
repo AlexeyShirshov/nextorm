@@ -1,0 +1,51 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>nextorm.examples.oc-report</AssemblyName>
+    <RootNamespace>NextORM.Examples.OcReport</RootNamespace>
+    <!--
+      NativeAOT is the only AOT-specific input in this project; the code and the query pipeline are
+      the ordinary ones. The property lives here rather than on the command line so the project also
+      publishes natively from a plain `dotnet publish` (matching what a consumer writes in their own
+      csproj).
+    -->
+    <PublishAot>true</PublishAot>
+    <!--
+      Repository policy, not nextorm configuration: this repository sets TreatWarningsAsErrors=true,
+      so ILC diagnostics are exempted from the build gate here. An application outside this
+      repository needs none of these properties.
+    -->
+    <IlcTreatWarningsAsErrors>false</IlcTreatWarningsAsErrors>
+    <WarningsNotAsErrors>IL2*;IL3*</WarningsNotAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      The SDK's implicit ILCompiler item is pinned to the same version the repository's AOT runner
+      uses, exactly as tests/nextorm.aot.runner does. The override exists because the historical SDK
+      default carried a NuGet audit advisory (NU1903) that this repository's warnings-as-errors gate
+      turned into an error; keeping the two projects on one version keeps their AOT diagnostics
+      comparable.
+    -->
+    <PackageReference Update="Microsoft.DotNet.ILCompiler" Version="11.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <KnownILCompilerPack Update="Microsoft.DotNet.ILCompiler">
+      <ILCompilerPackVersion>11.0.0</ILCompilerPackVersion>
+    </KnownILCompilerPack>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" />
+    <!--
+      Consumes the published packages, like the postgres and clickhouse examples: 1.0.9-rc5 is the
+      first release that carries the NativeAOT fix this example demonstrates, so no dev-time
+      ProjectReference is needed any more.
+    -->
+    <PackageReference Include="nextorm" />
+    <PackageReference Include="nextorm.sqlite" />
+  </ItemGroup>
+
+</Project>

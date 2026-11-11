@@ -531,7 +531,7 @@ public sealed class Cycle7ClickHouseDialectTests : ProviderTestSuite
     [Fact]
     public void ValuesTableFunction_ShouldRenderEveryClrTypeName()
     {
-        var rows = Context.FromTableFunction(() => SqlFunctions.ClickHouse.values<Ch7TypeRow>(TypeTuples))
+        var rows = Context.From(() => SqlFunctions.ClickHouse.values<Ch7TypeRow>(TypeTuples))
             .Select(r => new { r.B, r.I, r.Txt, r.N })
             .ToList();
 
@@ -546,7 +546,7 @@ public sealed class Cycle7ClickHouseDialectTests : ProviderTestSuite
     [Fact]
     public void NumbersMtTableFunction_ShouldReturnTheGeneratedRows()
     {
-        var values = Context.FromTableFunction(() => SqlFunctions.ClickHouse.numbers_mt(3))
+        var values = Context.From(() => SqlFunctions.ClickHouse.numbers_mt(3))
             .Select(r => r.Value)
             .ToList();
 
@@ -560,7 +560,7 @@ public sealed class Cycle7ClickHouseDialectTests : ProviderTestSuite
     [Fact]
     public void GenerateRandomSeededTableFunction_ShouldReturnTheFixedShape()
     {
-        var rows = Context.FromTableFunction(() => SqlFunctions.ClickHouse.generate_random(42L))
+        var rows = Context.From(() => SqlFunctions.ClickHouse.generate_random(42L))
             .Page(2, 0)
             .Select(r => new { r.Id, r.Value, r.Name })
             .ToList();

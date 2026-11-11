@@ -43,6 +43,27 @@ public interface ITupleEntity
     Tuple<int, string> Pair { get; set; }
 }
 
+/// <summary>An entity whose only written column is nullable, so <c>KeepNulls=false</c> is default-equivalent.</summary>
+[SqlTable("nullable_entity")]
+public interface INullableEntity
+{
+    [Key]
+    [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+    [Column("id")]
+    long Id { get; set; }
+
+    [Column("name")]
+    string? Name { get; set; }
+}
+
+/// <summary>The concrete entity for <see cref="INullableEntity"/>.</summary>
+public sealed class NullableEntity : INullableEntity
+{
+    public long Id { get; set; }
+
+    public string? Name { get; set; }
+}
+
 [SqlTable("dynamic_entity")]
 public class DynamicColumnsEntity
 {

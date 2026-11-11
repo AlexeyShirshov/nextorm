@@ -331,6 +331,25 @@ where (b = true)
 settings max_threads = 2
 ```
 
+`Settings` замыкает порядок предложений: он выводится после `LIMIT ... BY` и после
+`LIMIT`/`OFFSET`, а `LIMIT` после `SETTINGS` ClickHouse отклоняет (код сервера 62). Скалярный
+терминал добавляет постраничность — `First`/`FirstOrDefault` рендерят `limit 1`,
+`Single`/`SingleOrDefault` рендерят `limit 2` — поэтому предложение настроек идёт за ней:
+
+```csharp
+var count = dataContext.From<IComplexEntity>()
+    .Settings(("max_threads", "2"))
+    .Select(c => SqlFunctions.Sql.count())
+    .First();
+```
+
+```sql
+select toInt32(count(*))
+ from complex_entity
+limit 1
+ settings max_threads = 2
+```
+
 `Final()` принудительно выполняет merge ReplacingMergeTree/CollapsingMergeTree перед чтением; `Sample`
 читает долю строк `[0, 1]`; `PreWhere` фильтрует до обычного `WHERE`, позволяя пропустить чтение
 остальных колонок; `Settings` добавляет завершающее предложение, значения которого рендерятся как есть
@@ -351,9 +370,9 @@ settings max_threads = 2
 
 ---
 
-Source: `src/nextorm.core/Query/QueryCommand.TResult.cs` ([`Hint`](xref:NextORM.Core.QueryCommand`1.Hint(System.String[]))),
-`src/nextorm.core/DataContext/FromOptions.cs` (`WithTableHint`/`WithIndex`/`WithoutIndex`),
-`src/nextorm.core/Builders/JoinOptions.cs` (`WithJoinTableHint`/`WithJoinHint`), `src/nextorm.core/DataContext/FromOptions.cs` (`WithSubQueryHint`), `src/nextorm.core/Builders/EntityBuilder.cs` (`WithTablesInScopeHint`),
+Source: `src/nextorm.core/Query/Commands/QueryCommand.TResult.cs` ([`Hint`](xref:NextORM.Core.QueryCommand`1.Hint(System.String[]))),
+`src/nextorm.core/DataContext/Sql/FromOptions.cs` (`WithTableHint`/`WithIndex`/`WithoutIndex`),
+`src/nextorm.core/Builders/JoinOptions.cs` (`WithJoinTableHint`/`WithJoinHint`), `src/nextorm.core/DataContext/Sql/FromOptions.cs` (`WithSubQueryHint`), `src/nextorm.core/Builders/Entity/EntityBuilder.cs` (`WithTablesInScopeHint`),
 `src/nextorm.core/DataContext/Dialect/ISqlDialect.cs` ([`SupportsQueryHints`](xref:NextORM.Core.ISqlDialect.SupportsQueryHints) / [`RenderQueryHints`](xref:NextORM.Core.ISqlDialect.RenderQueryHints(System.String,System.Collections.Generic.IReadOnlyList{System.String},System.String,NextORM.Core.KeywordCase))),
 `src/nextorm.sqlserver/SqlServerDialect.cs`, `src/nextorm.postgres/PostgresDialect.cs`,
 `src/nextorm.mysql/MySqlDialect.cs` (MariaDB наследует).

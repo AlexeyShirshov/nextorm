@@ -19,9 +19,10 @@ internal class NextormConfig : ManualConfig
 
         // Quick by default: short run (warmup 3 / iterations 3) and in-process toolchain,
         // which avoids building a generated project and launching a process per benchmark case.
-        // Set NEXTORM_BENCH_FULL=1 to get the full out-of-process run.
+        // Set NEXTORM_BENCH_FULL=1 for the full job (default warmup/iteration counts) while
+        // staying on the in-process toolchain.
         AddJob(Environment.GetEnvironmentVariable("NEXTORM_BENCH_FULL") == "1"
-            ? Job.Default
+            ? Job.Default.WithToolchain(InProcessEmitToolchain.Instance)
             : Job.ShortRun.WithToolchain(InProcessEmitToolchain.Instance));
     }
 }

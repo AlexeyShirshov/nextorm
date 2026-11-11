@@ -66,6 +66,12 @@ using IDataContext ctx = new SqliteDataContext("Data Source=app.db", new DataCon
 (меньше 2 для выборочного варианта, меньше 1 для генерального). Поскольку функции
 уже названы `stdev`/`var`, SQLite не выполняет переименование агрегатов.
 
+Это обещание null сохраняется и на границе CLR: четыре терминала на сущности и формы фасада
+`Sql.stdev*`/`Sql.var*` возвращают `T?`, поэтому `null` из аккумулятора доходит до вызывающего как
+`null`, а не бросает исключение на non-nullable `double`. Генеральный результат по одной строке
+по-прежнему `0.0`, а дубликаты, свёрнутые `DISTINCT`, подчиняются тому же правилу кардинальности,
+что и обычные формы.
+
 ```csharp
 var stddev = ctx.From<IComplexEntity>()
     .Select(x => SqlFunctions.Sql.stdev((double)x.Id))
@@ -115,10 +121,10 @@ select id
 
 ## Функции, специфичные для SQLite
 
-`SqlFunctions.Sqlite` даёт поверхность, специфичную для SQLite: функции ядра, JSON1, функции дат,
-функции математического расширения и поверхность полнотекстового поиска FTS3/FTS4/FTS5.
-`json_each`/`json_tree` и табличный поиск FTS5 доступны как табличные функции. Прочие провайдеры
-отклоняют любой член поверхности с `NotSupportedException`.
+`SqlFunctions.Sqlite` даёт поверхность, специфичную для SQLite: функции ядра, JSON1, агрегатные
+функции, функции дат, функции математического расширения и поверхность полнотекстового поиска
+FTS3/FTS4/FTS5. `json_each`/`json_tree` и табличный поиск FTS5 доступны как табличные функции. Прочие
+провайдеры отклоняют любой член поверхности с `NotSupportedException`.
 
 ```csharp
 ctx.From<IComplexEntity>()
@@ -126,9 +132,13 @@ ctx.From<IComplexEntity>()
     {
         Json = SqlFunctions.Sqlite.json_extract<string>(x.String, "$.name"),
         Kind = SqlFunctions.Sqlite.@typeof(x.String),
+        Total = SqlFunctions.Sqlite.total(x.NullableInt),
         Pi = SqlFunctions.Sql.pi()
     });
 ```
+
+Поставляемый агрегат — `total(value)`: он возвращает `double` и никогда не возвращает null, поэтому
+пустая группа или группа из одних null даёт `0.0`.
 
 ### Полнотекстовый поиск (FTS3/FTS4/FTS5)
 
@@ -188,11 +198,11 @@ order by rowid
 ```
 
 У FTS5 есть также табличная форма `FROM` — `MatchTable`, которая композируется как любой другой
-источник (`FromTableFunction`):
+источник (`From(() => ...)`):
 
 ```csharp
 var rows = ctx
-    .FromTableFunction(() => SqlFunctions.Sqlite.MatchTable<Article>("article_fts", query))
+    .From(() => SqlFunctions.Sqlite.MatchTable<Article>("article_fts", query))
     .OrderBy(x => x.RowId)
     .Select(x => new { x.RowId, x.Title })
     .ToList();
@@ -294,6 +304,26 @@ await ctx.From<ISimpleEntity>()
 Многоколоночный терминал `ToDataReader`/`ToDataReaderAsync` в SQLite **поддерживается**. Он идёт через отдельный шов без локатора (per-call буферизованная подготовка `storeInCache: false`, а не LOB-путь с `SequentialAccess`): локатор `rowid` не добавляется, поэтому `FieldCount` равен числу колонок проекции, а ordinals соответствуют `Select`. Reader **буферизованный**, а не чанковый — колонка `byte[]`/`string` внутри многоколоночной проекции читается целиком в managed-память, — поэтому для одной большой LOB-колонки предпочитайте `ToStream`/`ToTextReader`. Возвращённый reader принадлежит вызывающему: освободите его, чтобы освободить provider-reader и per-call команду; контекст остаётся живым и пригодным.
 
 Собственная поверхность полнотекстового поиска SQLite (`FTS3/FTS4/FTS5`) доступна (см. [Полнотекстовый поиск](#полнотекстовый-поиск-fts3fts4fts5)), как и специфичный для SQLite command builder обслуживания FTS5 (`CreateSqliteFts5CommandBuilder`); за её пределами остаются только кросс-провайдерные предикаты `SqlFunctions.Sql.contains`/`freetext` (гейт [`SupportsFullText`](xref:NextORM.Core.ISqlDialect.SupportsFullText), на SQLite `false`). Поверхность обслуживания отклоняется на любом не-SQLite провайдере через `NotSupportedException`, а `Rebuild` недоступна для contentless-таблиц FTS5.
+
+## Массовая вставка
+
+В SQLite нет нативного bulk API, поэтому каждая массовая вставка идёт портируемым путём
+`INSERT ... VALUES`: `Mode.Native` отклоняется по имени до перечисления источника, `Auto` всегда
+разрешается в портируемый путь, а `Portable` — его явная форма. Сертифицированная конфигурация — **файловая
+база** (межпроцессного сервера нет).
+
+- Батч делится по `MaxBatchSize`/`MaxParameters`/`MaxSqlLength`; каждый чанк — одно утверждение.
+- `KeepIdentity` пишет явную identity-колонку; `IgnoreDuplicates` использует `INSERT OR IGNORE`, а
+  `Returning*` — `RETURNING` (SQLite 3.35+).
+- `CheckConstraints=false` выполняется scoped-прагмой `PRAGMA foreign_keys` вокруг записи и отклоняется внутри
+  активной транзакции (там прагма — no-op); `KeepNulls=false` требует default-equivalent формы, а
+  `TableLock`/`FireTriggers` отклоняются.
+- `DatabaseName` рендерит квалификатор attached/main/temp базы там, где диалект это умеет; `ServerName`
+  отклоняется (перенаправления нет).
+- `Timeout` — один бюджет на весь вызов вокруг записей; истёкший бюджет даёт `TimeoutException`, а отмена
+  вызывающего всегда побеждает.
+
+См. [Массовая вставка](../guide/22-bulk-insert.md).
 
 ## Различия провайдеров
 

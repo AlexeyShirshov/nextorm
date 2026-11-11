@@ -6,3 +6,5 @@
   href: eager-loading.md
 - name: Per-parent paging in eager loading
   href: eager-loading-per-parent-paging.md
+- name: Collection-valued projection slots
+  href: collection-projection.md

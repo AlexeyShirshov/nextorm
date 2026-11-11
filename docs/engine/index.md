@@ -36,7 +36,7 @@ Every statement starts at a factory on [`IDataContext`](xref:NextORM.Core.IDataC
 | `ctx.From<T>()`, `ctx.From<T>(o => ...)` | `EntityBuilder<T>` | `SELECT` over a mapped entity, with per-source [options](../guide/01-query-sources.md) |
 | `ctx.From("table")` | `EntityBuilder<TableAlias>` | `SELECT` over a raw table or CTE name |
 | `ctx.FromSql(sql, parameters)` | `EntityBuilder<TableAlias>` | `SELECT` over a derived-table SQL |
-| `ctx.FromTableFunction(() => Db.MyTvf(...))` | `EntityBuilder<T>` | `SELECT` over a table-valued function |
+| `ctx.From(() => Db.MyTvf(...))` | `EntityBuilder<T>` | `SELECT` over a table-valued function |
 | `ctx.From(query)` / `ctx.From(cte)` / `ctx.From(tempTable)` / `ctx.From(builder)` | `EntityBuilder<TResult>` (`EntityBuilder<TableAlias>` for a temporary table) | `SELECT` over a subquery, a CTE, a lazy temporary table, or another builder |
 | `ctx.CreateInsertBuilder<T>()`, `CreateBulkInsertBuilder<T>()`, `CreateUpdateBuilder<T>()`, `CreateDeleteBuilder<T>()`, `CreateMergeBuilder<T>()`, `CreateTruncateBuilder<T>()` | `InsertBuilder<T>`, `BulkInsertBuilder<T>`, `UpdateBuilder<T>`, `DeleteBuilder<T>`, `MergeBuilder<T>`, `TruncateBuilder<T>` | DML statements |
 | `ctx.CreateBatchBuilder()` | `BatchBuilder` | several statements in one round trip |

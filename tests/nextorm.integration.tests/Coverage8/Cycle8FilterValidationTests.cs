@@ -14,7 +14,7 @@ namespace NextORM.Integration.Tests;
 /// the unchanged database state measured by a raw <c>count(*)</c>.
 ///
 /// <para>
-/// Targeted arms of <c>src/nextorm.core/DataContext/Meta/QueryFilterValidator.cs</c>:
+/// Targeted arms of <c>src/nextorm.core/DataContext/Meta/QueryFilters/QueryFilterValidator.cs</c>:
 /// <c>CreateEntityCheck</c> (:42-56, async bulk stream), <c>ValidateSourceAsync</c> (:161-172),
 /// <c>BuildEntityPredicates</c> (:174-202), <c>BuildColumnPredicates</c> (:204-251, omitted and
 /// unsupported rewrites), <c>CanonicalPropertyKey</c>/<c>ResolveOnConcreteType</c> (:258-291),

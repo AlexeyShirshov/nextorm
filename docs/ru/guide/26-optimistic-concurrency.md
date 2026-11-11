@@ -179,10 +179,13 @@ ctx.CreateMergeBuilder<IOrder>()
     .Using(order)                                     // сущность, батч или серверный запрос
     .OnKeys()
     .WhenMatched((t, s) => t.Version == s.Version)
-    .ThenUpdate(o => new { o.Status })
+    .ThenUpdate((t, s) => new { Status = s.Status })
     .WhenNotMatched().ThenInsert()
     .Merge();
 ```
+
+Каждое присваивание при обновлении называет назначение и явную правую часть:
+`.ThenUpdate((t, s) => new { Status = s.Status })`.
 
 ```sql
 -- SQL Server
@@ -203,9 +206,16 @@ merge into orders as target using (values (@p0, @p1, @p2)) as source (id, status
 ## Свой трекер изменений
 
 Хука материализации строк нет, поэтому пользовательский трекер привязывает строки по мере загрузки и
-делает diff в момент `SaveChanges`. Для одного типа сущности это немного:
+делает diff в момент `SaveChanges`. Для одного типа сущности это немного — а записи уходят **одним
+батчем**, а не отдельным round trip на строку:
 
 ```csharp
+public sealed class OrderVersion
+{
+    public long Id { get; set; }
+    public long Version { get; set; }
+}
+
 public sealed class OrderTracker
 {
     private readonly IDataContext _ctx;
@@ -223,26 +233,51 @@ public sealed class OrderTracker
 
     public int SaveChanges()
     {
-        var affected = 0;
-        foreach (var (id, (entity, version, status)) in _original)
-        {
-            if (entity.Status == status)                          // обнаружение изменения
-                continue;
+        var changed = _original
+            .Where(x => x.Value.Entity.Status != x.Value.Status)  // обнаружение изменений
+            .ToArray();
+        if (changed.Length == 0)
+            return 0;
 
-            var n = _ctx.CreateUpdateBuilder<IOrder>()
+        var batch = _ctx.CreateBatchBuilder();
+        foreach (var (id, (entity, version, _)) in changed)
+            batch.Update(_ctx.CreateUpdateBuilder<IOrder>()
                 .Set(o => o.Status, entity.Status)
                 .Set(o => o.Version, o => o.Version + 1)
-                .Where(o => o.Id == id && o.Version == version)
-                .Update();
+                .Where(o => o.Id == id && o.Version == version));
 
-            if (n == 0)
-                throw new ConcurrencyException($"Order {id} was modified.");
-            affected += n;
+        var ids = changed.Select(x => x.Key).ToArray();
+        var result = batch
+            .AddQuery(_ctx.From<IOrder>()
+                .Where(o => ids.Contains(o.Id))
+                .Select(o => new OrderVersion { Id = o.Id, Version = o.Version }))
+            .Execute();
+
+        var updated = result.Read<OrderVersion>().ToDictionary(r => r.Id);
+        foreach (var (id, (entity, version, _)) in changed)
+        {
+            // строки нет → удалена; токен не изменился → UPDATE не нашёл совпадения
+            if (!updated.TryGetValue(id, out var row) || row.Version == version)
+                throw new ConcurrencyException($"Order {id} was modified or deleted.");
+            _original[id] = (entity, row.Version, entity.Status);   // новый снимок
         }
-        return affected;
+        return changed.Length;
     }
 }
 ```
+
+* По одному `UPDATE ... WHERE id = @p AND version = @v` на изменённую строку плюс читающий
+  `SELECT` уходят одним батчем — один round trip на одной сессии
+  ([Выполнение утверждений одним батчем](25-sql-batch.md)).
+* `BatchBuilder.Execute` требует хотя бы один результат-несущий запрос, поэтому чтение назад здесь
+  не опционально. Оно же делает проверку построчной: `RecordsAffected` — один суммарный счётчик
+  драйвера на весь батч, поэтому по нему видно лишь, что конфликт был, но не в какой строке.
+* Отсутствующая в результате строка была удалена, а строка, у которой токен всё ещё равен исходному,
+  не прошла свой `WHERE`. Новые токены записываются в снимок, чтобы следующий `SaveChanges` того же
+  трекера начинал с актуальных значений.
+* Батчевый путь требует `ISqlDialect.SupportsBatch` — PostgreSQL, SQL Server, SQLite, MySQL и MariaDB.
+  ClickHouse и in-memory-контекст отклоняют батчи, поэтому там оставляйте построчный цикл (один
+  `Update()` на изменённую строку).
 
 Оберните `SaveChanges` в транзакцию, чтобы конфликт откатывал всю единицу работы целиком:
 
@@ -286,6 +321,7 @@ ClickHouse — заметное исключение: `ALTER TABLE ... UPDATE` �
 - [Изменение данных (UPDATE)](19-update-statement.md)
 - [Изменение данных (MERGE)](21-merge-statement.md)
 - [Транзакции](23-transactions.md)
+- [Выполнение утверждений одним батчем](25-sql-batch.md)
 - [Изменение данных (INSERT)](17-insert-statement.md)
 - [Изменение данных (DELETE)](18-delete-statement.md)
 - [Ограничения и что вне области](../advanced/limitations.md)

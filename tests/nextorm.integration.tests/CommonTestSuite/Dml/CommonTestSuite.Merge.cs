@@ -218,8 +218,8 @@ public abstract partial class CommonTestSuite
             var unsupported = () => ctx.CreateMergeBuilder<IMergeEntity>()
                 .Using(new MergeEntity { Id = id, Name = "x", Age = 1 })
                 .On((t, s) => t.Id == s.Id)
-                .WhenMatched().ThenUpdate(d => new { d.Name, d.Age })
-                .WhenNotMatched().ThenInsert(d => new { d.Id, d.Name, d.Age })
+                .WhenMatched().ThenUpdate((t, s) => new { Name = s.Name, Age = s.Age })
+                .WhenNotMatched().ThenInsert(s => new { Id = s.Id, Name = s.Name, Age = s.Age })
                 .Merge();
             unsupported.Should().Throw<NotSupportedException>();
             return;
@@ -232,8 +232,8 @@ public abstract partial class CommonTestSuite
         ctx.CreateMergeBuilder<IMergeEntity>()
             .Using(new MergeEntity { Id = id, Name = marker, Age = 9 })
             .On((t, s) => t.Id == s.Id)
-            .WhenMatched().ThenUpdate(d => new { d.Name, d.Age })
-            .WhenNotMatched().ThenInsert(d => new { d.Id, d.Name, d.Age })
+            .WhenMatched().ThenUpdate((t, s) => new { Name = s.Name, Age = s.Age })
+            .WhenNotMatched().ThenInsert(s => new { Id = s.Id, Name = s.Name, Age = s.Age })
             .Merge();
 
         var row = ctx.From<IMergeEntity>().Where(x => x.Id == id).Select(x => new { x.Name, x.Age }).Single();

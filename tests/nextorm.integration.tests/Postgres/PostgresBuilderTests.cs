@@ -83,7 +83,7 @@ public sealed class PostgresBuilderTests : ProviderTestSuite
         simple.SingleOrSingleOrDefaultCommand().Should().NotBeNull();
         simple.Where(x => x.Id == 1).SingleOrSingleOrDefaultCommand(x => x.Id).Should().NotBeNull();
 
-        var prepared = simple.Where(x => x.Id > 0).Prepare(cancellationToken: TestContext.Current.CancellationToken);
+        var prepared = simple.Where(x => x.Id > 0).Prepare(default, TestContext.Current.CancellationToken);
         _sut.DataProvider.ToList(prepared).Should().HaveCount(10);
     }
 

@@ -9,6 +9,7 @@ namespace NextORM.Integration.Tests;
 /// <c>eager_parent</c>/<c>eager_child</c> Memory tables. A skip is never a pass: the base suite reports
 /// the unavailable-provider reason.
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class ClickHouseEagerPerParentPagingTests : ProviderTestSuite
 {
     private static int _seed = -660_000_000;

@@ -41,10 +41,10 @@ public class ExtremeRowPayloadLazinessTests
     public void GlobalNative_ShouldRenderIdenticalSqlWithoutMaterializingPayload()
     {
         using var real = PostgresTestContext.Create();
-        var realSql = SqlOf(real, real.From<ExtremeNativeEntity>().SelectWhereMax(x => x.Int).ToCommand());
+        var realSql = SqlOf(real, real.From<ExtremeNativeEntity>().SelectWhereMaxOld(x => x.Int).ToCommand());
 
         using var ctx = new CapturingPostgresDataContext(PlaceholderConnectionString);
-        var sql = SqlOf(ctx, ctx.From<ExtremeNativeEntity>().SelectWhereMax(x => x.Int).ToCommand());
+        var sql = SqlOf(ctx, ctx.From<ExtremeNativeEntity>().SelectWhereMaxOld(x => x.Int).ToCommand());
 
         sql.Should().Be(realSql, "the transparent wrapper must not change the native SQL");
         ctx.CapturingDialect.Renderer.CanRenderCalls.Should().Be(1);
@@ -60,13 +60,13 @@ public class ExtremeRowPayloadLazinessTests
         var realSql = SqlOf(
             real,
             real.From<ExtremeNativeEntity>()
-                .SelectWhereMax(x => x.Int, ExtremeRowTies.One, x => new { x.Id }).ToCommand());
+                .SelectWhereMaxOld(x => x.Int, ExtremeRowTies.One, x => new { x.Id }).ToCommand());
 
         using var ctx = new CapturingPostgresDataContext(PlaceholderConnectionString);
         var sql = SqlOf(
             ctx,
             ctx.From<ExtremeNativeEntity>()
-                .SelectWhereMax(x => x.Int, ExtremeRowTies.One, x => new { x.Id }).ToCommand());
+                .SelectWhereMaxOld(x => x.Int, ExtremeRowTies.One, x => new { x.Id }).ToCommand());
 
         sql.Should().Be(realSql);
         ctx.CapturingDialect.Renderer.CanRenderCalls.Should().Be(1);
@@ -81,7 +81,7 @@ public class ExtremeRowPayloadLazinessTests
         using var ctx = new CapturingPostgresDataContext(PlaceholderConnectionString);
         var sql = SqlOf(
             ctx,
-            ctx.From<IComplexEntity>().SelectWhereMax(x => x.String, x => new { x.Id }));
+            ctx.From<IComplexEntity>().SelectWhereMaxOld(x => x.String, x => new { x.Id }));
 
         ctx.CapturingDialect.Renderer.CanRenderCalls.Should().Be(1);
         IsPayloadMaterialized(ctx.CapturingDialect.Renderer.Description!).Should().BeFalse();
@@ -95,10 +95,10 @@ public class ExtremeRowPayloadLazinessTests
         // column still dispatches natively; PostgreSQL's CanRender reads only Keys/Groups, so the
         // factory-backed payload must stay unmaterialized through the SQL pass.
         using var real = PostgresTestContext.Create();
-        var realSql = SqlOf(real, real.From<ExtremeRefPayloadEntity>().SelectWhereMax(x => x.Id).ToCommand());
+        var realSql = SqlOf(real, real.From<ExtremeRefPayloadEntity>().SelectWhereMaxOld(x => x.Id).ToCommand());
 
         using var ctx = new CapturingPostgresDataContext(PlaceholderConnectionString);
-        var sql = SqlOf(ctx, ctx.From<ExtremeRefPayloadEntity>().SelectWhereMax(x => x.Id).ToCommand());
+        var sql = SqlOf(ctx, ctx.From<ExtremeRefPayloadEntity>().SelectWhereMaxOld(x => x.Id).ToCommand());
 
         sql.Should().Be(realSql, "the transparent wrapper must not change the native SQL");
         sql.Should().Contain("limit 1", "an integral key keeps the native strategy");

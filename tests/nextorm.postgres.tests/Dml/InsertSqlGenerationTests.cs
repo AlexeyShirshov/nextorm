@@ -569,7 +569,7 @@ public class InsertSqlGenerationTests
         var values = new long[] { 1, 2, 3 };
 
         Normalize(ctx.CreateInsertBuilder<IValueEntity>()
-            .Values(ctx.FromTableFunction(() => SqlFunctions.Postgres.unnest(values)), r => new { r.Value })
+            .Values(ctx.From(() => SqlFunctions.Postgres.unnest(values)), r => new { r.Value })
             .ToSql())
             .Should().Be("insert into value_entity (value) select unnest as \"Value\"\n from (select unnest\n from unnest(@values)) as \"t1\"");
     }

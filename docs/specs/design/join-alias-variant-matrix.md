@@ -24,6 +24,7 @@ Legend: **T** = test, **G** = runtime guard (fail-closed `throw`). Gaps are list
 | Correlated `CrossApply`/`OuterApply` alias (`AliasJoinApply`) | T (in-memory refusal only) | `AliasInMemoryRefusalTests.cs:26-27` | **partial** |
 | All 7 operators emitted by the generator | T | `AliasGeneratedSurfaceTests.cs:78` (`JoinOperators`, `:20-21`) | covered |
 | Generator operator set = the 7 only | source | `src/nextorm.core.sourcegenerator/JoinAliasGenerator.cs:46` (`JoinOperators`) | covered |
+| Source-less (non-alias) type-only + string-table forms for all 7 operators (#384) | T | `src/nextorm.core/Builders/Entity/EntityBuilder.cs`, `src/nextorm.core/Builders/Joins/JoinedEntityBuilder.cs` (80 overloads: 10 `EntityBuilder<TEntity>` + 10 non-generic `EntityBuilder` (7 string-table + 3 type-only `CrossJoin/CrossApply/OuterApply<TJoinEntity>` added directly in n=2, since `EntityBuilder : ICloneable` does not inherit `EntityBuilder<TableAlias>`) + 60 `JoinedEntityBuilder` arities 2..7); tests `SourceLessJoinNegativePathsTests.cs`, `SourceLessJoinPlanCacheTests.cs`, `JoinSourceLessInMemoryTests.cs` | implemented (additive; no existing signature changed) |
 
 ## 2. Chain shape & slot resolution
 
@@ -134,6 +135,52 @@ Common suite runs once per provider (`Postgres`/`SqlServer`/`MySql`/`MariaDb`/`S
 | Root-alias APPLY fails closed without a lateral source | T | `RootAliasTests.cs:653` | covered |
 | `Projection<T1>` is dim-1, a plain `IProjection`, not directly extendable | T | `RootAliasTests.cs:87` | covered |
 | Generated `WithAlias<T>` + `Alias.RootMarker` surface (null marker rejected) | T | `JoinAlias.g.cs` (generated); `RootAliasTests.cs:284` | covered |
+
+## 10. Source-less (type-only) alias form (#322)
+
+The alias marker on the source-less form: `.Join<TJoin>((left, right) => ..., Alias.X[, options])`.
+The joined source is created inside the core seam from the receiver's data context, so the call carries
+no `EntityBuilder<TJoin>` argument; the marker keeps its meaning (it names the new slot) and the
+source-less overload is the only alias surface that accepts `Action<JoinOptions>`.
+
+| Variant | Evidence | Location | Status |
+|---|---|---|---|
+| Exact `<TJoin>(condition, marker)` shape compiles and projects the named slot | T | `tests/nextorm.alias.tests/JoinAliasGeneratorDiagnosticTests.cs:943` (`TypeOnlyAliasExactCallShapeCompiles`) | covered |
+| Emitted source-less overload is `(condition, marker, Action<JoinOptions> options = null)` | T | `JoinAliasGeneratorDiagnosticTests.cs:1002`; emitter `src/nextorm.core.sourcegenerator/JoinAliasGenerator.cs:1461` (`step.SourceLess`) | covered |
+| All four conditional operators emitted source-less | T | `JoinAliasGeneratorDiagnosticTests.cs:1031` (`Source_less_alias_joins_emit_every_conditional_operator`) | covered |
+| Source-less surface closes every positional receiver arity (joined arity 2–7 → slots 2–8) | T | `JoinAliasGeneratorDiagnosticTests.cs:1060` | covered |
+| Generic `<TJoined>` type argument binds source-less | T | `JoinAliasGeneratorDiagnosticTests.cs:1099` | covered |
+| Seven-to-eight slot transition (arity-7 receiver → slot 8) | T | `JoinAliasGeneratorDiagnosticTests.cs:1123` | covered |
+| Malformed marker on the source-less form reports `NORMGEN005` | T | `JoinAliasGeneratorDiagnosticTests.cs:1151` | covered |
+| Ninth slot still reports `NORMGEN004` | T | `JoinAliasGeneratorDiagnosticTests.cs:1167` | covered |
+| Marker-last source-explicit overloads stay option-less; only the source-less form takes options | T | `tests/nextorm.alias.tests/AliasGeneratedSurfaceTests.cs:138`, `:178`; marker classification `JoinAliasGenerator.cs:567` (`TryLocateMarker`), joined-type discovery `:760` (`TryGetJoinedType`, argument zero never read as a source in the source-less branch) | covered |
+| Options callback runs exactly once and matches the explicit baseline | T | `tests/nextorm.core.tests/Query/TypeOnlyAliasSeamTests.cs:77` | covered |
+| Omitted and explicit-null options both preserve the join defaults | T | `TypeOnlyAliasSeamTests.cs:108` | covered |
+| `null` condition throws `ArgumentNullException` before the callback and without mutating state | T | `TypeOnlyAliasSeamTests.cs:132`; generated delegation `AliasInMemoryRefusalTests.cs:93` | covered |
+| JoinType is routed through the shared assembly path (no per-operator copy) | T | `TypeOnlyAliasSeamTests.cs:175` | covered |
+| Projection receiver keeps state and repeated preparation reuses the plan | T | `TypeOnlyAliasSeamTests.cs:196`; `AliasPlanCacheTests.cs:60` | covered |
+| Source-less alias SQL identity with the source-explicit form, 4 operators × arity 1–7 | T | `tests/nextorm.sqlite.tests/Joins/JoinAliasSqlGenerationTests.cs:223`; same theory in `nextorm.{postgres,sqlserver,mysql,mariadb,clickhouse}.tests/Joins/JoinAliasSqlGenerationTests.cs` | covered |
+| Source-less alias rows = source-explicit = positional (SQLite, unmatched rows included) | T | `tests/nextorm.alias.tests/AliasSqliteEndToEndTests.cs:173`, `:203` | covered |
+| **Refusal predicate**: MySQL/MariaDB `FullJoin` refuses in every form with the same `Full join` message, arity 1–7 | T | `tests/nextorm.mysql.tests/Joins/JoinAliasSqlGenerationTests.cs:302`; `tests/nextorm.mariadb.tests/Joins/JoinAliasSqlGenerationTests.cs:302`; dialect guard `src/nextorm.core/DataContext/SqlSourceRenderer.cs:188-190` (message `The Full join is not supported by this SQL dialect`), `src/nextorm.mysql/MySqlDialect.cs:166` (`SupportsFullJoin => false`, inherited by MariaDB) | covered |
+| **Refusal predicate**: live FULL refusal parity per cell (MySQL/MariaDB) | T | `tests/nextorm.integration.tests/CommonTestSuite/Joins/CommonTestSuite.JoinAlias.cs:278` (`TypeOnlyAliasRowsMatch`), re-pinned `MariaDb/MariaDbJoinAliasIntegrationTests.cs:36` | covered |
+| **Refusal predicate**: in-memory refuses every source-less alias, no positional fallback | T | `tests/nextorm.alias.tests/AliasInMemoryRefusalTests.cs:75` | covered |
+| Live row parity over O × R × V (4 operators × slots 2–8 × omitted/null/callback), 4 shared providers | T | `tests/nextorm.integration.tests/CommonTestSuite/Joins/CommonTestSuite.JoinAlias.cs:267` | covered |
+| Live row parity re-pinned on MariaDB and ClickHouse | T | `MariaDb/MariaDbJoinAliasIntegrationTests.cs:36`; `ClickHouse/ClickHouseJoinAliasIntegrationTests.cs:36` | covered |
+| Source-less **alias** form has no `CrossJoin`/`CrossApply`/`OuterApply` variant | guard | conditionless operators take no condition; surface `AliasGeneratedSurfaceTests.cs:178` asserts the marker-with-options shape only for the four conditional operators. Note: the non-alias source-less form (issue #384) now provides type-only and string-table `CrossJoin`/`CrossApply`/`OuterApply` on both builder levels (80 overloads) | by design (alias form only) |
+| Raw-table (`From("table")`) source is not resolvable by type in the **alias** source-less form | guard | `docs/guide/04-joins.md` scope of the alias source-less form; `From<TJoin>` resolution path `DataContextExtensions.cs:1038` (`From<T>`) consumed by the type-only overloads at `EntityBuilder.cs:3566` (`Join<TJoinEntity>` → `RequireContext.From<TJoinEntity>()`) and `:3698` (`CrossJoin<TJoinEntity>`); `EntityBuilder.cs:2948` was a stale citation (that line is `SelectWhereMinOld`). Note: the non-alias string-table source-less form (issue #384) supports raw tables by name (`Join/... (string table, ...)`) | by design (alias form only) |
+
+### Non-alias source-less form (issue #384) — implemented surface
+
+The alias feature in §10 above is unaffected. Issue #384 adds a separate, non-alias source-less surface
+(type-only + string-table) that does not take an `Alias.<Name>` marker and is available on both builder levels.
+Operator × builder-level mapping (all accept `Action<JoinOptions>? options = null`):
+
+| Operator | `EntityBuilder<TEntity>` (incl. non-generic `EntityBuilder`) | `JoinedEntityBuilder<T1..Tn>` (arity 2..7) | Resulting right side |
+|---|---|---|---|
+| `Join` / `LeftJoin` / `RightJoin` / `FullJoin` | `string table` + predicate (4) | `string table` + predicate (4, `new`) | `TableAlias` |
+| `CrossJoin` / `CrossApply` / `OuterApply` | type-only `<TJoinEntity>` (3) + `string table` (3) | type-only `<TJoinEntity>` (3, `new`) + `string table` (3, `new`) | `TJoinEntity` / `TableAlias` |
+
+Total 80 new public methods (10 + 10 + 60). The non-generic `EntityBuilder` now also carries the three type-only unconditional forms (`CrossJoin/CrossApply/OuterApply<TJoinEntity>(Action<JoinOptions>?)`), added directly because `EntityBuilder : ICloneable` does not inherit `EntityBuilder<TableAlias>`. Negative paths (unregistered type, empty/null table name, null predicate) match the explicit form by exception type and stage; plan-cache keys match; in-memory behaviour matches except the pre-existing APPLY/TableAlias limitations, which are engine limits, not #384 defects.
 
 ## Gaps (tracked)
 

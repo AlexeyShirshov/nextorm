@@ -1,9 +1,0 @@
-Running tests from /home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64)
-/home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64) passed (15s 431ms)
-
-Test run summary: Passed!
-  total: 2660
-  failed: 0
-  succeeded: 2660
-  skipped: 0
-  duration: 15s 661ms

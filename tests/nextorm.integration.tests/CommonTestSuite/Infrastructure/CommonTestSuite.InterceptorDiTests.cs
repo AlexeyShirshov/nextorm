@@ -82,6 +82,7 @@ public abstract partial class CommonTestSuite
 /// <summary>
 /// ClickHouse has no <see cref="CommonTestSuite"/> subclass, so this mirrors the DI wiring test for it.
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class ClickHouseInterceptorDiTests : ProviderTestSuite
 {
     protected override ITestProvider Provider => ClickHouseTestProvider.Instance;

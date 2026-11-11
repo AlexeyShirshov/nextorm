@@ -34,6 +34,7 @@ whose message mentions [`Over`](xref:NextORM.Core.WindowFunction`1.Over(NextORM.
 | Cumulative distribution | `cume_dist()` | `cume_dist()` |
 | Interpolated percentile | `percentile_cont(fraction, property)` | `percentile_cont(f) within group (order by expr) over (...)` |
 | Discrete percentile | `percentile_disc(fraction, property)` | `percentile_disc(f) within group (order by expr) over (...)` |
+| Median (analytic) | `SqlFunctions.SqlServer.median(property)` / `SqlFunctions.MySql.median(property)` | `percentile_cont(0.5) within group (order by expr) over (...)` |
 | Buckets | `ntile(buckets)` | `ntile(n)` |
 | Previous value | `lag(property[, offset[, defaultValue]])` | `lag(expr, offset[, default])` |
 | Next value | `lead(property[, offset[, defaultValue]])` | `lead(expr, offset[, default])` |
@@ -69,7 +70,7 @@ select id, row_number() over (partition by nullableint order by id) as 'rn'
  from complex_entity
 ```
 
-The `Output:` tables below show the rows returned by each example against the integration-test seed data (`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).
+The `Output:` tables below show the rows returned by each example against the integration-test seed data (`tests/nextorm.integration.tests/Providers/TestProviders/SqliteTestProvider.cs`).
 
 Output:
 
@@ -217,6 +218,37 @@ select id, sum(id) over (partition by nullableint) as 'total', count(*) over (pa
  from complex_entity
 ```
 
+`avg_over` inherits the grouped `avg` contract: an integral property yields `double?` and SQL Server
+widens the argument inside the aggregate (`avg(cast(id as float)) over (...)`), while the other
+dialects keep the native argument — exactly as described in
+[AVG result types and argument policy](05-grouping-and-aggregates.md#avg-result-types-and-argument-policy).
+A running average therefore never loses the fraction:
+
+```csharp
+var rows = dataContext.From<ISimpleEntity>()
+    .Select(e => new
+    {
+        e.Id,
+        runningAvg = SqlFunctions.Sql.avg_over(e.Id).Over(
+            SqlFunctions.Sql.asc(() => e.Id),
+            WindowFrame.RowsUnboundedPrecedingToCurrentRow)
+    })
+    .ToList();
+```
+
+```sql
+select id, avg(id) over (order by id rows between unbounded preceding and current row) as 'runningAvg'
+ from simple_entity
+```
+
+Output for the rows with `id` 1, 2, 3 (`[1, 2, 3]`):
+
+| Id | runningAvg |
+|----|----|
+| 1 | 1 |
+| 2 | 1.5 |
+| 3 | 2 |
+
 ## Frames
 
 A frame restricts the rows an aggregate sees. [`WindowFrame`](xref:NextORM.Core.WindowFrame) has factory methods for both SQL frame
@@ -331,6 +363,18 @@ percentiles as an ordered-set **aggregate** instead
 ([`SqlFunctions.Postgres.percentile_cont`](xref:NextORM.Core.PostgresFunctions.percentile_cont``1(System.Double,System.Linq.Expressions.Expression{System.Func{``0}}))), and
 MySQL, SQLite and ClickHouse reject the window form with `NotSupportedException`.
 
+The median has no spelling of its own on SQL Server or MariaDB: `SqlFunctions.SqlServer.median(value)` and
+`SqlFunctions.MySql.median(value)` are the same analytic composition with the fraction fixed at `0.5`
+(`percentile_cont(0.5) within group (order by value) over (...)`), so they must be completed with
+[`Over`](xref:NextORM.Core.WindowFunction`1.Over(NextORM.Core.WindowOrder,NextORM.Core.WindowFrame)) just like the window percentiles.
+These forms are **analytic**, not aggregates: they keep one row per input row, whereas an aggregate collapses
+each group to a single row. Only a partition-only window is supported (`.Over(partitionBy: ...)`, or the empty
+`over ()`); a window `ORDER BY` or a frame is refused, because the ordering comes from the value argument.
+The fraction of `percentile_cont`/`percentile_disc` is a `double` in `[0, 1]`, not a percentage, and must be
+finite and row-independent (a literal or a captured variable); a row-dependent fraction is refused at SQL
+generation. PostgreSQL's ordered-set aggregates never take `OVER`, and the generic `percentile(fraction, value)`
+member is refused by every provider — it never aliases the continuous form.
+
 | Provider | Behaviour |
 |---|---|
 | SQLite | Full `OVER` support, named windows, `GROUPS` and `EXCLUDE`; column aliases single-quoted (`as 'rn'`). |
@@ -349,8 +393,8 @@ MySQL, SQLite and ClickHouse reject the window form with `NotSupportedException`
 
 ---
 
-Source: `src/nextorm.core/Query/WindowFunctions.cs` ([`WindowFunction<T>`](xref:NextORM.Core.WindowFunction`1), [`WindowOrder`](xref:NextORM.Core.WindowOrder), frame enums, [`WindowFrameBound`](xref:NextORM.Core.WindowFrameBound), [`WindowFrame`](xref:NextORM.Core.WindowFrame)); `src/nextorm.core/Query/WindowDefinition.cs` ([`WindowDefinition`](xref:NextORM.Core.WindowDefinition), [`NamedWindowOrderKey`](xref:NextORM.Core.NamedWindowOrderKey)); `src/nextorm.core/Query/SqlFunctions.cs` (`asc`/`desc`, functions);
-`src/nextorm.core/Visitors/WindowFunctionTranslator.cs`, `src/nextorm.core/Visitors/WindowSql.cs`;
-`tests/nextorm.integration.tests/CommonTestSuite/Queries/CommonTestSuite.Window.cs`, `tests/nextorm.integration.tests/Postgres/PostgresSpecificTests.cs` (named windows/`GROUPS`/`EXCLUDE`);
+Source: `src/nextorm.core/Query/Windows/WindowFunctions.cs` ([`WindowFunction<T>`](xref:NextORM.Core.WindowFunction`1), [`WindowOrder`](xref:NextORM.Core.WindowOrder), frame enums, [`WindowFrameBound`](xref:NextORM.Core.WindowFrameBound), [`WindowFrame`](xref:NextORM.Core.WindowFrame)); `src/nextorm.core/Query/Windows/WindowDefinition.cs` ([`WindowDefinition`](xref:NextORM.Core.WindowDefinition), [`NamedWindowOrderKey`](xref:NextORM.Core.NamedWindowOrderKey)); `src/nextorm.core/Query/SqlFunctions/SqlFunctions.cs` (`asc`/`desc`, functions);
+`src/nextorm.core/Visitors/Windows/WindowFunctionTranslator.cs`, `src/nextorm.core/Visitors/Windows/WindowSql.cs`;
+`tests/nextorm.integration.tests/CommonTestSuite/Queries/Rows/CommonTestSuite.Window.cs`, `tests/nextorm.integration.tests/Postgres/PostgresSpecificTests.cs` (named windows/`GROUPS`/`EXCLUDE`);
 `tests/nextorm.core.tests/SqlRendering/WindowFunctionMarkerTests.cs`;
 generated SQL: `tests/nextorm.postgres.tests/SqlGeneration/SqlGenerationTests.cs`, `tests/nextorm.sqlite.tests/SqlGeneration/SqlGenerationTests.cs`.

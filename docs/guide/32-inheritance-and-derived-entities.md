@@ -12,7 +12,7 @@
 
 The mapping unit is a **CLR type**. When metadata is built for `T`, its public writable properties are
 mapped, including the ones inherited from a base class (`GetProperties(FlattenHierarchy | Public | Instance)`,
-see `src/nextorm.core/DataContext/Meta/EntityMetadataBuilder.cs`). That gives you ordinary C# inheritance
+see `src/nextorm.core/DataContext/Meta/Entities/EntityMetadataBuilder.cs`). That gives you ordinary C# inheritance
 for free: a base class can hold shared columns, and each concrete type maps to its own table.
 
 What the engine does **not** do is interpret the hierarchy:

@@ -177,10 +177,13 @@ ctx.CreateMergeBuilder<IOrder>()
     .Using(order)                                     // entity, batch or server-side query
     .OnKeys()
     .WhenMatched((t, s) => t.Version == s.Version)
-    .ThenUpdate(o => new { o.Status })
+    .ThenUpdate((t, s) => new { Status = s.Status })
     .WhenNotMatched().ThenInsert()
     .Merge();
 ```
+
+Each update assignment names its destination and an explicit right-hand side:
+`.ThenUpdate((t, s) => new { Status = s.Status })`.
 
 ```sql
 -- SQL Server
@@ -200,9 +203,16 @@ merge into orders as target using (values (@p0, @p1, @p2)) as source (id, status
 ## Rolling your own change tracking
 
 There is no row-materialization hook, so a user-land tracker attaches rows as it loads them and diffs
-them at `SaveChanges` time. For one entity type it is small:
+them at `SaveChanges` time. For one entity type it is small — and the writes go out as **one batch**
+instead of one round trip per row:
 
 ```csharp
+public sealed class OrderVersion
+{
+    public long Id { get; set; }
+    public long Version { get; set; }
+}
+
 public sealed class OrderTracker
 {
     private readonly IDataContext _ctx;
@@ -220,26 +230,50 @@ public sealed class OrderTracker
 
     public int SaveChanges()
     {
-        var affected = 0;
-        foreach (var (id, (entity, version, status)) in _original)
-        {
-            if (entity.Status == status)                          // detect change
-                continue;
+        var changed = _original
+            .Where(x => x.Value.Entity.Status != x.Value.Status)  // detect changes
+            .ToArray();
+        if (changed.Length == 0)
+            return 0;
 
-            var n = _ctx.CreateUpdateBuilder<IOrder>()
+        var batch = _ctx.CreateBatchBuilder();
+        foreach (var (id, (entity, version, _)) in changed)
+            batch.Update(_ctx.CreateUpdateBuilder<IOrder>()
                 .Set(o => o.Status, entity.Status)
                 .Set(o => o.Version, o => o.Version + 1)
-                .Where(o => o.Id == id && o.Version == version)
-                .Update();
+                .Where(o => o.Id == id && o.Version == version));
 
-            if (n == 0)
-                throw new ConcurrencyException($"Order {id} was modified.");
-            affected += n;
+        var ids = changed.Select(x => x.Key).ToArray();
+        var result = batch
+            .AddQuery(_ctx.From<IOrder>()
+                .Where(o => ids.Contains(o.Id))
+                .Select(o => new OrderVersion { Id = o.Id, Version = o.Version }))
+            .Execute();
+
+        var updated = result.Read<OrderVersion>().ToDictionary(r => r.Id);
+        foreach (var (id, (entity, version, _)) in changed)
+        {
+            // absent → deleted; unchanged token → the UPDATE matched nothing
+            if (!updated.TryGetValue(id, out var row) || row.Version == version)
+                throw new ConcurrencyException($"Order {id} was modified or deleted.");
+            _original[id] = (entity, row.Version, entity.Status);   // new snapshot
         }
-        return affected;
+        return changed.Length;
     }
 }
 ```
+
+* One `UPDATE ... WHERE id = @p AND version = @v` per changed row plus the read-back `SELECT` travel as
+  a single batch — one round trip on one session ([Executing statements in one batch](25-sql-batch.md)).
+* `BatchBuilder.Execute` requires at least one result-bearing query, so the read-back is not optional;
+  that query is also the per-row conflict oracle. `RecordsAffected` is one driver total across the whole
+  batch, so it can only say *that* some row conflicted, never *which* one.
+* A row missing from the result was deleted; a row whose token still equals the original one did not
+  match its `WHERE`. The new tokens are written back into the snapshot, so a second `SaveChanges` on
+  the same tracker starts from the current values.
+* The batch path needs `ISqlDialect.SupportsBatch` — PostgreSQL, SQL Server, SQLite, MySQL and MariaDB.
+  ClickHouse and the in-memory context reject batches, so keep the per-row loop (one `Update()` per
+  changed row) there.
 
 Wrap `SaveChanges` in a transaction so a conflict rolls the whole unit of work back:
 
@@ -283,6 +317,7 @@ expected value, or re-read the row, to detect contention.
 - [Data modification (UPDATE)](19-update-statement.md)
 - [Data modification (MERGE)](21-merge-statement.md)
 - [Transactions](23-transactions.md)
+- [Executing statements in one batch](25-sql-batch.md)
 - [Data modification (INSERT)](17-insert-statement.md)
 - [Data modification (DELETE)](18-delete-statement.md)
 - [Limitations and out-of-scope features](../advanced/limitations.md)

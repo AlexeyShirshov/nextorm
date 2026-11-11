@@ -41,6 +41,18 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
     /// <summary>Maximum projection arity supported by <c>Projection&lt;T1..T8&gt;</c>.</summary>
     private const int MaxSlots = 8;
 
+    /// <summary>
+    /// Placeholder for the joined type of a correlated APPLY lambda source (`CrossApply(p =&gt; …)` /
+    /// `OuterApply(p =&gt; …)`): its element type is bound only by the lambda body, which the generator
+    /// does not read, so the emitted signature carries it as the method type parameter <c>TJoin</c>
+    /// instead of a concrete type (#324). The value is a chain-identity token and never reaches
+    /// generated source.
+    /// </summary>
+    private const string InferredJoinTypeName = "$TJoin";
+
+    /// <summary>The correlated APPLY operators whose joined element type can only be inferred (#324).</summary>
+    private static readonly string[] CorrelatedApplyOperators = { "CrossApply", "OuterApply" };
+
     /// <summary>Root of the reserved generated namespace; the consumer assembly name is appended.</summary>
     private const string GeneratedNamespaceRoot = "NextORM.Generated";
 
@@ -70,18 +82,28 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
     };
 
     /// <summary>
+    /// The conditional join operators. Only these take a predicate, so only these can appear in the
+    /// source-less form (#322) as <c>.Join&lt;TJoin&gt;(condition, Alias.X[, options])</c>; the
+    /// source-less conditionless operators stay deferred.
+    /// </summary>
+    private static readonly HashSet<string> ConditionalJoinOperators = new(StringComparer.Ordinal)
+    {
+        "Join", "LeftJoin", "RightJoin", "FullJoin"
+    };
+
+    /// <summary>
     /// Query-root operators that start a fresh chain from a source argument or an explicit type
-    /// argument (<c>From</c>/<c>CreateQueryBuilder</c>/<c>FromSql</c>/<c>FromTableFunction</c>). Used by
+    /// argument (<c>From</c>/<c>CreateQueryBuilder</c>/<c>FromSql</c>). Used by
     /// the syntax recovery path (#230) when the source's semantic type is unavailable.
     /// </summary>
     private static readonly HashSet<string> QueryRootOperators = new(StringComparer.Ordinal)
     {
-        "From", "CreateQueryBuilder", "FromSql", "FromTableFunction"
+        "From", "CreateQueryBuilder", "FromSql"
     };
 
     /// <summary>
     /// Operators that preserve the current query element type; used to walk back to the operator that
-    /// establishes it (<c>Select</c> or the query root) when resolving an element type from syntax.
+    /// establishes it (a projection or the query root) when resolving an element type from syntax.
     /// </summary>
     private static readonly HashSet<string> ElementPreservingOperators = new(StringComparer.Ordinal)
     {
@@ -220,6 +242,15 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
 
         if (IsAliasRootedMemberAccess(arguments[arguments.Count - 1].Expression)) return true;
 
+        // #322: the source-less form takes its optional join options AFTER the alias marker, so the
+        // marker is no longer the last argument: `.Join<TJoin>(condition, Alias.X, options)`.
+        if (ConditionalJoinOperators.Contains(name.Identifier.ValueText)
+            && arguments.Count == 3
+            && IsAliasRootedMemberAccess(arguments[1].Expression))
+        {
+            return true;
+        }
+
         // A positional step can extend an alias chain held in a variable (for example
         // `var a = root.Join<X>(..., Alias.X); a.Join(y, ...)`). The receiver is then an identifier
         // rather than a syntactic invocation, so the call site cannot be recognised syntactically; the
@@ -269,28 +300,40 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
             return new Candidate(true, rootAlias, rootReceiver with { RootAlias = rootAlias }, location);
         }
 
-        if (IsAliasRootedMemberAccess(lastExpression))
+        if (TryLocateMarker(name, arguments, out var markerIndex, out var sourceLess))
         {
-            if (!TryReadAliasArgument(lastExpression, out var alias))
+            var markerExpression = arguments[markerIndex].Expression;
+            var markerLocation = ToAliasLocation(markerExpression.GetLocation());
+
+            if (!TryReadAliasArgument(markerExpression, out var alias))
             {
                 // 'Alias.<identifier>' is the approved form; anything else rooted at Alias (for example
                 // 'Alias.Buyer<int>' or 'Alias.Buyer.Approver') is a hard error.
-                return new Candidate(false, string.Empty, null, location);
+                return new Candidate(false, string.Empty, null, markerLocation);
             }
 
             if (!JoinOperators.Contains(operation)) return null;
 
             var conditionless = ConditionlessOperators.Contains(operation);
-            if (conditionless ? arguments.Count != 2 : arguments.Count != 3) return null;
+            if (sourceLess)
+            {
+                // #322 scopes source-less aliases to the conditional operators; a source-less
+                // Cross/Apply alias has no seam and stays deferred, so it is silently not handled.
+                if (conditionless) return null;
+            }
+            else if (conditionless ? arguments.Count != 2 : arguments.Count != 3)
+            {
+                return null;
+            }
 
-            if (!TryGetJoinedType(invocation, name, semanticModel, ct, out var joined, out var isCte)) return null;
+            if (!TryGetJoinedType(invocation, name, semanticModel, ct, sourceLess, out var joined, out var isCte, out var inferred)) return null;
 
             var receiver = ResolveChain(memberAccess.Expression, semanticModel, ct);
             if (receiver is null) return null;
 
             // Slot is assigned by Append (root is slot 1, this step is the next one).
-            var step = new ChainStep(StepKind.Alias, alias, Display(joined), operation, conditionless, isCte, 0, location);
-            return new Candidate(true, alias, Append(receiver, step), location);
+            var step = new ChainStep(StepKind.Alias, alias, inferred ? InferredJoinTypeName : Display(joined), operation, conditionless, isCte, sourceLess, 0, markerLocation);
+            return new Candidate(true, alias, Append(receiver, step), markerLocation);
         }
 
         // A positional step. It only matters when it extends a chain that already carries an alias; a
@@ -303,10 +346,10 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
         var receiverChain = ResolveChain(memberAccess.Expression, semanticModel, ct);
         if (receiverChain is null || !receiverChain.HasAlias) return null;
 
-        if (!TryGetJoinedType(invocation, name, semanticModel, ct, out var positionalJoined, out var positionalIsCte)) return null;
+        if (!TryGetJoinedType(invocation, name, semanticModel, ct, sourceLess: false, out var positionalJoined, out var positionalIsCte, out var positionalInferred)) return null;
 
         // Slot is assigned by Append (root is slot 1, this step is the next one).
-        var positionalStep = new ChainStep(StepKind.Positional, string.Empty, Display(positionalJoined), operation, positionalConditionless, positionalIsCte, 0, location);
+        var positionalStep = new ChainStep(StepKind.Positional, string.Empty, positionalInferred ? InferredJoinTypeName : Display(positionalJoined), operation, positionalConditionless, positionalIsCte, false, 0, location);
         return new Candidate(true, string.Empty, Append(receiverChain, positionalStep), location);
     }
 
@@ -369,7 +412,7 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
 
     /// <summary>
     /// Recovers a fresh chain root from a query-root invocation (<c>From</c>/<c>CreateQueryBuilder</c>/
-    /// <c>FromSql</c>/<c>FromTableFunction</c>) when its semantic type is unavailable because it depends on
+    /// <c>FromSql</c>) when its semantic type is unavailable because it depends on
     /// a generated builder type. The root's element type is read from the explicit type argument or the
     /// source argument, entirely from syntax; the new chain carries no join aliases.
     /// </summary>
@@ -387,9 +430,9 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
 
     /// <summary>
     /// Best-effort recovery of a query's element type from syntax, used only when the semantic type is
-    /// unavailable (error type). Walks back through element-preserving operators to the <c>Select</c> that
-    /// establishes the projection (its lambda body type), or to the query root's explicit type argument /
-    /// source element type. Returns <c>null</c> when the shape cannot be recovered.
+    /// unavailable (error type). Walks back through element-preserving operators to the projection that
+    /// establishes the element type (its lambda body type), or to the query root's explicit type argument
+    /// / source element type. Returns <c>null</c> when the shape cannot be recovered.
     /// </summary>
     private static ITypeSymbol? ResolveQueryElementType(ExpressionSyntax expression, SemanticModel semanticModel, CancellationToken ct)
     {
@@ -403,18 +446,6 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
             && memberAccess.Name is SimpleNameSyntax name)
         {
             var operation = name.Identifier.ValueText;
-
-            if (operation == "Select")
-            {
-                var arguments = invocation.ArgumentList.Arguments;
-                if (arguments.Count > 0 && GetLambdaBody(arguments[arguments.Count - 1].Expression) is { } body
-                    && semanticModel.GetTypeInfo(body, ct).Type is { } projected)
-                {
-                    return projected;
-                }
-
-                return UnwrapElement(semanticModel.GetTypeInfo(invocation, ct).Type);
-            }
 
             if (ElementPreservingOperators.Contains(operation))
                 return ResolveQueryElementType(memberAccess.Expression, semanticModel, ct);
@@ -434,11 +465,59 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
                 return null;
             }
 
-            return UnwrapElement(semanticModel.GetTypeInfo(invocation, ct).Type);
+            // No operator-name knowledge: an operator that establishes a new query element type reports
+            // it through its resolved return type (`QueryCommand<T>`, `EntityBuilder<T>`, `Cte<T>`, …),
+            // whatever it is called. On the generator's input pass that return type is often unavailable,
+            // because the receiver is a builder type this same generator emits (error type), and an
+            // unresolved extension call surfaces as a bare type parameter (`QueryCommand<TResult>`); in
+            // both cases the projection lambda in the arguments carries the element type.
+            var elementType = UnwrapElement(semanticModel.GetTypeInfo(invocation, ct).Type);
+
+            if (elementType is { TypeKind: not TypeKind.Error and not TypeKind.TypeParameter })
+                return elementType;
+
+            // A join's lambdas are sources and conditions, never projections: it extends the slot list
+            // instead of establishing a new element type, so it must not be read through the projection rule.
+            if (JoinOperators.Contains(operation))
+                return elementType;
+
+            // A bare type parameter stays when no projection lambda exists: it is the element type of a
+            // legitimately generic query helper rather than an unresolved operator.
+            return ResolveProjectionElementType(invocation, semanticModel, ct) ?? elementType;
         }
 
         return UnwrapElement(semanticModel.GetTypeInfo(expression, ct).Type);
     }
+
+    /// <summary>
+    /// Recovers the projection type of an operator from its own arguments, without knowing the operator's
+    /// name: the first single-parameter lambda whose body is a value. A predicate lambda returns
+    /// <c>bool</c>, and a join predicate takes two parameters, so neither is mistaken for a projection.
+    /// Used only when the invocation's resolved return type is unavailable or unbound.
+    /// </summary>
+    private static ITypeSymbol? ResolveProjectionElementType(InvocationExpressionSyntax invocation, SemanticModel semanticModel, CancellationToken ct)
+    {
+        foreach (var argument in invocation.ArgumentList.Arguments)
+        {
+            if (LambdaParameterCount(argument.Expression) != 1) continue;
+            if (GetLambdaBody(argument.Expression) is not { } body) continue;
+
+            if (semanticModel.GetTypeInfo(body, ct).Type is { TypeKind: not TypeKind.Error } projected
+                && projected.SpecialType is not SpecialType.System_Boolean and not SpecialType.System_Void)
+            {
+                return projected;
+            }
+        }
+
+        return null;
+    }
+
+    private static int LambdaParameterCount(ExpressionSyntax expression) => expression switch
+    {
+        SimpleLambdaExpressionSyntax => 1,
+        ParenthesizedLambdaExpressionSyntax parenthesized => parenthesized.ParameterList.Parameters.Count,
+        _ => 0
+    };
 
     /// <summary>Resolves a local variable initializer or a parameter's declared type to its element type.</summary>
     private static ITypeSymbol? ResolveIdentifierElementType(IdentifierNameSyntax identifier, SemanticModel semanticModel, CancellationToken ct)
@@ -491,7 +570,7 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
             {
                 // A positional prefix already wrote its slots into the builder type: the root argument
                 // is slot 1 and each later type argument consumes the next absolute slot.
-                steps[i - 1] = new ChainStep(StepKind.Positional, string.Empty, Display(builder.TypeArguments[i]), "Join", false, false, i + 1, default);
+                steps[i - 1] = new ChainStep(StepKind.Positional, string.Empty, Display(builder.TypeArguments[i]), "Join", false, false, false, i + 1, default);
             }
 
             return new ChainModel(Display(builder.TypeArguments[0]), null, new EquatableArray<ChainStep>(steps));
@@ -522,6 +601,49 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
         return true;
     }
 
+    /// <summary>
+    /// Locates the alias-marker argument of a join step and reports the call form. The marker is normally
+    /// the last argument (the source-explicit form). Since #322 the source-less conditional form takes
+    /// its optional <c>Action&lt;JoinOptions&gt;</c> AFTER the marker, so there the marker sits at index 1
+    /// with no source argument in front of it: <c>.Join&lt;TJoin&gt;(condition, Alias.X, options)</c>.
+    /// </summary>
+    /// <param name="name">The invoked member name (the operator).</param>
+    /// <param name="arguments">The invocation arguments.</param>
+    /// <param name="markerIndex">The zero-based index of the argument carrying the marker.</param>
+    /// <param name="sourceLess">True for the source-less form (no source argument precedes the condition).</param>
+    /// <returns>True when an alias-marker argument was located in an approved syntactic position.</returns>
+    private static bool TryLocateMarker(
+        SimpleNameSyntax name,
+        SeparatedSyntaxList<ArgumentSyntax> arguments,
+        out int markerIndex,
+        out bool sourceLess)
+    {
+        markerIndex = -1;
+        sourceLess = false;
+
+        var last = arguments.Count - 1;
+        if (last >= 0 && IsAliasRootedMemberAccess(arguments[last].Expression))
+        {
+            markerIndex = last;
+
+            // A source-explicit conditional step is exactly `source, condition, marker`; a conditional
+            // step with only `condition, marker` cannot be source-explicit, so it is the source-less form.
+            sourceLess = ConditionalJoinOperators.Contains(name.Identifier.ValueText) && arguments.Count == 2;
+            return true;
+        }
+
+        if (ConditionalJoinOperators.Contains(name.Identifier.ValueText)
+            && arguments.Count == 3
+            && IsAliasRootedMemberAccess(arguments[1].Expression))
+        {
+            markerIndex = 1;
+            sourceLess = true;
+            return true;
+        }
+
+        return false;
+    }
+
     /// <summary>Reads one slot step (alias or positional) from an invocation, returning its receiver.</summary>
     private static bool TryReadStep(
         InvocationExpressionSyntax invocation,
@@ -542,26 +664,36 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
 
         var conditionless = ConditionlessOperators.Contains(operation);
         var lastExpression = arguments[arguments.Count - 1].Expression;
-        var lastIsAlias = IsAliasRootedMemberAccess(lastExpression);
 
-        if (lastIsAlias)
+        if (TryLocateMarker(name, arguments, out var markerIndex, out var sourceLess))
         {
-            if (!TryReadAliasArgument(lastExpression, out var alias)) return false;
-            if (conditionless ? arguments.Count != 2 : arguments.Count != 3) return false;
-            if (!TryGetJoinedType(invocation, name, semanticModel, ct, out var joined, out var isCte)) return false;
+            var markerExpression = arguments[markerIndex].Expression;
+            if (!TryReadAliasArgument(markerExpression, out var alias)) return false;
+
+            if (sourceLess)
+            {
+                // The source-less alias form is conditional-only; source-less Cross/Apply is deferred.
+                if (conditionless) return false;
+            }
+            else if (conditionless ? arguments.Count != 2 : arguments.Count != 3)
+            {
+                return false;
+            }
+
+            if (!TryGetJoinedType(invocation, name, semanticModel, ct, sourceLess, out var joined, out var isCte, out var inferred)) return false;
 
             receiver = memberAccess.Expression;
             // Slot is assigned by Append (root is slot 1, this step is the next one).
-            step = new ChainStep(StepKind.Alias, alias, Display(joined), operation, conditionless, isCte, 0, ToAliasLocation(lastExpression.GetLocation()));
+            step = new ChainStep(StepKind.Alias, alias, inferred ? InferredJoinTypeName : Display(joined), operation, conditionless, isCte, sourceLess, 0, ToAliasLocation(markerExpression.GetLocation()));
             return true;
         }
 
         if (conditionless ? arguments.Count is < 1 or > 2 : arguments.Count is < 2 or > 3) return false;
-        if (!TryGetJoinedType(invocation, name, semanticModel, ct, out var positionalJoined, out var positionalIsCte)) return false;
+        if (!TryGetJoinedType(invocation, name, semanticModel, ct, sourceLess: false, out var positionalJoined, out var positionalIsCte, out var positionalInferred)) return false;
 
         receiver = memberAccess.Expression;
         // Slot is assigned by Append (root is slot 1, this step is the next one).
-        step = new ChainStep(StepKind.Positional, string.Empty, Display(positionalJoined), operation, conditionless, positionalIsCte, 0, ToAliasLocation(lastExpression.GetLocation()));
+        step = new ChainStep(StepKind.Positional, string.Empty, positionalInferred ? InferredJoinTypeName : Display(positionalJoined), operation, conditionless, positionalIsCte, false, 0, ToAliasLocation(lastExpression.GetLocation()));
         return true;
     }
 
@@ -606,7 +738,7 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
                 if (semanticModel.GetTypeInfo(typeArguments[i], ct).Type is not INamedTypeSymbol joined) return null;
                 // Defect A: carry the absolute slot parsed from the written type, so a chain recovered
                 // from a builder type is identical to one recovered from the fluent expression.
-                steps[i - 1] = new ChainStep(tokens[i].Kind, tokens[i].Name, Display(joined), "Join", false, false, tokens[i].Slot, default);
+                steps[i - 1] = new ChainStep(tokens[i].Kind, tokens[i].Name, Display(joined), "Join", false, false, false, tokens[i].Slot, default);
             }
 
             return new ChainModel(Display(baseType), rootAlias, new EquatableArray<ChainStep>(steps));
@@ -670,18 +802,22 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
     /// Resolves the joined entity type: from the explicit generic type argument when present, otherwise
     /// from an <c>EntityBuilder&lt;T&gt;</c> or typed CTE <c>Cte&lt;T&gt;</c> source argument (type-argument
     /// inference at the call site). <paramref name="isCte"/> reports whether the joined source is a typed
-    /// CTE descriptor.
+    /// CTE descriptor. <paramref name="sourceLess"/> marks the #322 form, which has no source argument at
+    /// all: argument zero is then the join condition and must never be read as a source.
     /// </summary>
     private static bool TryGetJoinedType(
         InvocationExpressionSyntax invocation,
         SimpleNameSyntax name,
         SemanticModel semanticModel,
         CancellationToken ct,
+        bool sourceLess,
         out ITypeSymbol joined,
-        out bool isCte)
+        out bool isCte,
+        out bool inferred)
     {
         joined = null!;
         isCte = false;
+        inferred = false;
 
         var arguments = invocation.ArgumentList.Arguments;
         if (arguments.Count == 0) return false;
@@ -692,7 +828,21 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
             var explicitType = semanticModel.GetTypeInfo(generic.TypeArgumentList.Arguments[0], ct).Type;
             if (explicitType is null) return false;
             joined = explicitType;
-            isCte = IsCteSource(arguments[0].Expression, semanticModel, ct);
+            // A source-less step has no source argument, so argument zero is the condition and cannot be
+            // a CTE descriptor; reading it would be a false positive.
+            isCte = !sourceLess && IsCteSource(arguments[0].Expression, semanticModel, ct);
+            return true;
+        }
+
+        // Source inference from argument zero only exists for the source-explicit form; the source-less
+        // form requires the explicit `<TJoin>` type argument.
+        if (sourceLess) return false;
+
+        // #324: a correlated APPLY takes a lambda (`p => …`) instead of a builder/CTE descriptor. Its
+        // element type lives in the lambda body, so it is carried as the method type parameter TJoin.
+        if (IsLambdaSource(arguments[0].Expression))
+        {
+            inferred = true;
             return true;
         }
 
@@ -703,6 +853,105 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
             joined = source.TypeArguments[0];
             isCte = IsCteSource(source, semanticModel);
             return true;
+        }
+
+        // A descriptor built from an aliased chain carries a generated alias-extension type that does not
+        // exist on the generator's input pass, so its semantic type is an error type — the same #230
+        // situation the root path recovers from syntax. Recovering here keeps `Alias.<Name>` emitted when
+        // an aliased chain is consumed as a joined source instead of being silently dropped.
+        if (semanticModel.GetTypeInfo(arguments[0].Expression, ct).Type is null or { TypeKind: TypeKind.Error })
+        {
+            if (ResolveQueryElementType(arguments[0].Expression, semanticModel, ct) is { TypeKind: not TypeKind.Error } recovered)
+            {
+                joined = recovered;
+                isCte = IsCteDescriptorSyntax(arguments[0].Expression);
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Syntax-only CTE test for the error-type fallback: the descriptor factory (<c>AsCte</c> /
+    /// <c>AsRecursiveCte</c>) is the outermost call of the variable's initializer, or of the argument the
+    /// query root wraps. A derived query or a builder source answers <see langword="false"/>.
+    /// </summary>
+    private static bool IsCteDescriptorSyntax(ExpressionSyntax expression)
+    {
+        while (true)
+        {
+            switch (expression)
+            {
+                case ParenthesizedExpressionSyntax parenthesized:
+                    expression = parenthesized.Expression;
+                    continue;
+
+                // ctx.From(cte) / ctx.From(derived): the descriptor is the argument.
+                case InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax { Name.Identifier.ValueText: "From" } } invocation:
+                    expression = invocation.ArgumentList.Arguments[0].Expression;
+                    continue;
+
+                case InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax call }:
+                    if (call.Name.Identifier.ValueText is "AsCte" or "AsRecursiveCte") return true;
+                    if (call.Name.Identifier.ValueText is "ToCommand" or "Prepare")
+                    {
+                        expression = call.Expression;
+                        continue;
+                    }
+
+                    return false;
+
+                case IdentifierNameSyntax identifier:
+                    return InitializerIsCte(identifier);
+
+                default:
+                    return false;
+            }
+        }
+    }
+
+    /// <summary>Finds the <c>var</c> declaration of <paramref name="identifier"/> and tests its initializer.</summary>
+    private static bool InitializerIsCte(IdentifierNameSyntax identifier)
+    {
+        var scope = identifier.Ancestors().FirstOrDefault(static a =>
+            a is MethodDeclarationSyntax or LocalFunctionStatementSyntax or AccessorDeclarationSyntax
+            or GlobalStatementSyntax);
+
+        if (scope is null) return false;
+
+        var name = identifier.Identifier.ValueText;
+        foreach (var declarator in scope.DescendantNodes().OfType<VariableDeclaratorSyntax>())
+        {
+            if (!string.Equals(declarator.Identifier.ValueText, name, StringComparison.Ordinal)) continue;
+            if (declarator.Initializer is null) continue;
+            return IsCteDescriptorSyntax(declarator.Initializer.Value);
+        }
+
+        return false;
+    }
+
+    /// <summary>True when the argument is a lambda (the correlated APPLY source form).</summary>
+    private static bool IsLambdaSource(ExpressionSyntax expression)
+        => expression is SimpleLambdaExpressionSyntax or ParenthesizedLambdaExpressionSyntax;
+
+    /// <summary>
+    /// True when the joined type of <paramref name="step"/> is the correlated-APPLY placeholder (#324):
+    /// the element type is the emitted method's own <c>TJoin</c> type parameter.
+    /// </summary>
+    private static bool IsInferredJoin(ChainStep step)
+        => string.Equals(step.JoinedType, InferredJoinTypeName, StringComparison.Ordinal);
+
+    /// <summary>
+    /// True when the chain up to and including <paramref name="count"/> contains a correlated-APPLY
+    /// placeholder, so the transition's concrete slot types are not all known to the generator and its
+    /// signature must be emitted generically.
+    /// </summary>
+    private static bool HasInferredJoin(ChainModel chain, int count)
+    {
+        for (var i = 0; i <= count && i < chain.Steps.Count; i++)
+        {
+            if (IsInferredJoin(chain.Steps[i])) return true;
         }
 
         return false;
@@ -863,16 +1112,24 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
                 var step = chain.Steps[count];
                 if (step.Kind == StepKind.Alias)
                 {
+                    // A correlated APPLY on a bare alias root (one slot, no join) stays out of scope
+                    // (#324 designs the after-join receivers only), so it is not emitted.
+                    if (IsInferredJoin(step) && schema.Arity < 2) continue;
+
                     // Alias extensions carry the concrete entity types in their receiver/return signature
                     // (only TJoin is a method type parameter), so distinct base-type instantiations of the
-                    // same base-agnostic schema are distinct methods.
+                    // same base-agnostic schema are distinct methods. A correlated APPLY's element type is
+                    // not known at the call site, so that transition is rendered generically instead
+                    // (see RenderAliasExtension).
                     var key = ChainKey(chain) + ">>" + count;
                     aliasTransitions[key] = new AliasTransition(schema, step, chain, count);
                 }
-                else if (schema.HasAlias)
+                else if (schema.HasAlias && !IsInferredJoin(step))
                 {
                     // Generated positional overloads live on the base-agnostic generic builder and use its
                     // own type parameters, so one method per (schema, operator, conditionlessness) suffices.
+                    // A correlated APPLY positional step is emitted for every after-join alias receiver by
+                    // AppendTypes (its element type is the method's TJoin), so it is not collected here.
                     var key = schema.Suffix + ">>P:" + step.Operator + ":" + (step.Conditionless ? "1" : "0");
                     positionalTransitions[key] = new PositionalTransition(schema, step);
                 }
@@ -895,7 +1152,7 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
             foreach (var operation in JoinOperatorOrder)
             {
                 var conditionless = ConditionlessOperators.Contains(operation);
-                var step = new ChainStep(StepKind.Positional, string.Empty, string.Empty, operation, conditionless, false, 2, default);
+                var step = new ChainStep(StepKind.Positional, string.Empty, string.Empty, operation, conditionless, false, false, 2, default);
                 var nextSchema = BuildSchema(Append(rootChain, step), 1);
                 schemas[nextSchema.Suffix] = nextSchema;
 
@@ -1175,6 +1432,22 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
                 }
             }
 
+            // #324: an after-join alias receiver also needs the correlated APPLY transitions of the core
+            // flat surface — the inherited single-entity member would nest the alias projection as the
+            // result's first item. They are instance `new` methods (an extension cannot shadow an
+            // applicable instance member), take the same alias-projection lambda, carry the optional
+            // options of the positional form and no marker. Emitted whenever the continuation schema
+            // exists, which any discovered call site creates, so the generated type set stays a function
+            // of the chains actually used.
+            if (schema.HasAlias && schema.Arity is >= 2 and < MaxSlots
+                && schemas.ContainsKey(schema.Suffix + "_P" + (schema.Arity + 1).ToString(CultureInfo.InvariantCulture)))
+            {
+                foreach (var operation in CorrelatedApplyOperators)
+                {
+                    RenderCorrelatedPositionalMethods(emitter, generatedNamespace, schema, operation);
+                }
+            }
+
             emitter.AppendLine("    }");
             emitter.AppendLine();
         }
@@ -1233,6 +1506,43 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
         emitter.AppendLine("                cte,");
         if (!conditionless) emitter.AppendLine("                condition,");
         emitter.AppendLine("                " + joinType + ", options);");
+    }
+
+    /// <summary>
+    /// Renders the generated <c>new</c> correlated APPLY transitions of one after-join alias receiver
+    /// (#324): both lambda forms (<c>EntityBuilder&lt;TJoin&gt;</c> / <c>QueryCommand&lt;TJoin&gt;</c>)
+    /// with the alias-projection lambda parameter, the positional form's optional options and no marker.
+    /// The receiver keeps its named slots (the added slot is an unnamed <c>P</c> slot) and the result is
+    /// the next flat generated schema, so the aliased row is never nested. The methods hide the inherited
+    /// single-entity members of the same signature, which would nest the alias projection.
+    /// </summary>
+    private static void RenderCorrelatedPositionalMethods(
+        StringBuilder emitter,
+        string generatedNamespace,
+        SchemaInfo schema,
+        string operation)
+    {
+        var receiverTypeParameters = TypeParameters(schema.Arity);
+        var receiverProjection = generatedNamespace + ".AliasProjection_" + schema.Suffix + "<" + receiverTypeParameters + ">";
+
+        var nextSuffix = schema.Suffix + "_P" + (schema.Arity + 1);
+        var returnTypeParameters = receiverTypeParameters + ", TJoin";
+        var returnType = generatedNamespace + ".AliasJoin_" + nextSuffix + "<" + returnTypeParameters + ">";
+        var projectionType = generatedNamespace + ".AliasProjection_" + nextSuffix + "<" + returnTypeParameters + ">";
+        var joinType = "global::NextORM.Core.JoinType." + JoinTypeName(operation);
+
+        // The applied source may be an entity builder or a derived query; both forms are emitted so the
+        // call site binds whichever lambda body the user wrote.
+        foreach (var sourceType in new[] { "global::NextORM.Core.EntityBuilder<TJoin>", "global::NextORM.Core.QueryCommand<TJoin>" })
+        {
+            emitter.AppendLine("        public new " + returnType + " " + operation + "<TJoin>(");
+            emitter.AppendLine("            global::System.Linq.Expressions.Expression<global::System.Func<" + receiverProjection + ", " + sourceType + ">> source,");
+            emitter.AppendLine("            global::System.Action<global::NextORM.Core.JoinOptions> options = null)");
+            emitter.AppendLine("            => JoinAlias<" + returnType + ", " + projectionType + ", TJoin>(");
+            emitter.AppendLine("                static dc => new " + returnType + "(dc),");
+            emitter.AppendLine("                source,");
+            emitter.AppendLine("                " + joinType + ", options);");
+        }
     }
 
     private static void AppendExtensions(
@@ -1329,6 +1639,13 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
         var count = transition.Count;
         var step = transition.Step;
 
+        // #324: a chain that extends a correlated APPLY has a slot whose element type is only the call
+        // site's lambda body, so its concrete slot types are not known here. Its extension is emitted
+        // generically over every slot type (the schematic signature of the approved design), which is
+        // still one method per schema and operator.
+        if (HasInferredJoin(chain, count))
+            return RenderAliasApplyExtension(emitter, generatedNamespace, transition);
+
         string receiverType;
         string conditionArgumentType;
         var concreteArguments = new List<string> { chain.BaseType };
@@ -1364,6 +1681,28 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
             : "global::NextORM.Core.EntityBuilder<TJoin>";
         var conditionParameterType = "global::System.Linq.Expressions.Expression<global::System.Func<"
             + conditionArgumentType + ", TJoin, bool>>";
+        var optionsParameterType = "global::System.Action<global::NextORM.Core.JoinOptions>";
+
+        if (step.SourceLess)
+        {
+            // #322: the source-less form. The implicit source is created inside the core JoinAlias seam,
+            // so the generated surface takes no source argument at all and the optional join options
+            // follow the marker (`marker, Action<JoinOptions> options = null`). The generated file is
+            // emitted under `#nullable disable`, so the optional default is written without a `?`
+            // annotation: the annotation is metadata-only and would raise CS8632 here.
+            emitter.AppendLine("        public static " + returnType + " " + step.Operator + "<TJoin>(");
+            emitter.AppendLine("            this " + receiverType + " self,");
+            emitter.AppendLine("            " + conditionParameterType + " condition,");
+            emitter.AppendLine("            " + markerType + " marker,");
+            emitter.AppendLine("            " + optionsParameterType + " options = null)");
+            emitter.AppendLine("            => self.JoinAlias<" + returnType + ", " + projectionType + ", TJoin>(");
+            emitter.AppendLine("                static dc => new " + returnType + "(dc),");
+            emitter.AppendLine("                condition,");
+            emitter.AppendLine("                " + joinType + ", options);");
+
+            return step.Operator + "<TJoin>(" + receiverType + ", " + conditionParameterType + ", "
+                + markerType + ", " + optionsParameterType + ") -> " + returnType;
+        }
 
         emitter.AppendLine("        public static " + returnType + " " + step.Operator + "<TJoin>(");
         emitter.AppendLine("            this " + receiverType + " self,");
@@ -1387,6 +1726,50 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
 
         return step.Operator + "<TJoin>(" + receiverType + ", " + sourceParameterType + ", "
             + (step.Conditionless ? string.Empty : conditionParameterType + ", ")
+            + markerType + ") -> " + returnType;
+    }
+
+    /// <summary>
+    /// Renders the correlated APPLY alias extensions of one after-join alias receiver (#324): both lambda
+    /// forms (<c>EntityBuilder&lt;TJoin&gt;</c> / <c>QueryCommand&lt;TJoin&gt;</c>) and both APPLY kinds,
+    /// routed through the existing <c>JoinAlias</c> seam. The marker is the last parameter and names the
+    /// added slot (so it is both a generated named member and <c>Item(n+1)</c>), the result is the next
+    /// flat generated schema, and — like every other source-explicit alias extension — the form carries
+    /// <em>no</em> <c>Action&lt;JoinOptions&gt;</c>. Every slot type is a method type parameter because the
+    /// applied element type lives in the call site's lambda body.
+    /// </summary>
+    private static string RenderAliasApplyExtension(StringBuilder emitter, string generatedNamespace, AliasTransition transition)
+    {
+        var schema = transition.Receiver;
+        var chain = transition.Chain;
+        var count = transition.Count;
+        var step = transition.Step;
+
+        var receiverTypeParameters = TypeParameters(schema.Arity);
+        var methodTypeParameters = receiverTypeParameters + ", TJoin";
+        var receiverType = generatedNamespace + ".AliasJoin_" + schema.Suffix + "<" + receiverTypeParameters + ">";
+        var receiverProjection = generatedNamespace + ".AliasProjection_" + schema.Suffix + "<" + receiverTypeParameters + ">";
+
+        var nextSchema = BuildSchema(chain, count + 1);
+        var returnType = generatedNamespace + ".AliasJoin_" + nextSchema.Suffix + "<" + methodTypeParameters + ">";
+        var returnProjection = generatedNamespace + ".AliasProjection_" + nextSchema.Suffix + "<" + methodTypeParameters + ">";
+        var markerType = generatedNamespace + ".Alias." + step.Alias + "Marker";
+        var joinType = "global::NextORM.Core.JoinType." + JoinTypeName(step.Operator);
+
+        foreach (var sourceType in new[] { "global::NextORM.Core.EntityBuilder<TJoin>", "global::NextORM.Core.QueryCommand<TJoin>" })
+        {
+            emitter.AppendLine("        public static " + returnType + " " + step.Operator + "<" + methodTypeParameters + ">(");
+            emitter.AppendLine("            this " + receiverType + " self,");
+            emitter.AppendLine("            global::System.Linq.Expressions.Expression<global::System.Func<" + receiverProjection + ", " + sourceType + ">> source,");
+            emitter.AppendLine("            " + markerType + " marker)");
+            emitter.AppendLine("            => self.JoinAlias<" + returnType + ", " + returnProjection + ", TJoin>(");
+            emitter.AppendLine("                static dc => new " + returnType + "(dc),");
+            emitter.AppendLine("                source,");
+            emitter.AppendLine("                " + joinType + ");");
+        }
+
+        return step.Operator + "<" + methodTypeParameters + ">(" + receiverType + ", "
+            + "Expression<Func<" + receiverProjection + ", EntityBuilder<TJoin>|QueryCommand<TJoin>>>" + ", "
             + markerType + ") -> " + returnType;
     }
 
@@ -1418,7 +1801,7 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
         for (var i = 0; i < chain.Steps.Count; i++)
         {
             var step = chain.Steps[i];
-            builder.Append('|').Append(step.Slot).Append(':').Append(step.Operator).Append(':').Append(step.Kind == StepKind.Alias ? "A" : "P").Append(':').Append(step.Alias).Append(':').Append(step.JoinedType).Append(':').Append(step.IsCte ? 'c' : 'e');
+            builder.Append('|').Append(step.Slot).Append(':').Append(step.Operator).Append(':').Append(step.Kind == StepKind.Alias ? "A" : "P").Append(':').Append(step.Alias).Append(':').Append(step.JoinedType).Append(':').Append(step.IsCte ? 'c' : 'e').Append(step.SourceLess ? 's' : 'x');
         }
 
         return builder.ToString();
@@ -1491,8 +1874,10 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
     /// One step of a slot chain. <see cref="Slot"/> is the absolute 1-based slot the step occupies
     /// (the root is slot 1, so a step recorded here is always slot 2 or higher); it is part of the
     /// chain identity so generator and runtime resolve ordinals against the same explicit model.
+    /// <see cref="SourceLess"/> marks the #322 form: the joined source is implicit, so the generated
+    /// extension takes the marker (and optional options) without a source argument.
     /// </summary>
-    private sealed record ChainStep(StepKind Kind, string Alias, string JoinedType, string Operator, bool Conditionless, bool IsCte, int Slot, AliasLocation Location);
+    private sealed record ChainStep(StepKind Kind, string Alias, string JoinedType, string Operator, bool Conditionless, bool IsCte, bool SourceLess, int Slot, AliasLocation Location);
 
     /// <summary>
     /// One ordered slot chain: slot 1 is the base entity (optionally named by <see cref="RootAlias"/>);

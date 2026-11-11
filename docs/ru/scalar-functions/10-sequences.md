@@ -57,6 +57,9 @@ var rows = dataContext.From<IOrderEntity>()
 отклоняют их с `NotSupportedException`. `lastval` читает последнее сгенерированное значение
 **соединения**.
 
+Функции последовательностей MariaDB и их доступность перечислены в
+[каталоге MariaDB](08-reference.md#mariadb-catalogue).
+
 ## SQL Server
 
 SQL Server читает последовательность через `NEXT VALUE FOR`, это открывают
@@ -94,11 +97,26 @@ var rows = dataContext.From<IOrderEntity>()
 
 | C# | PostgreSQL | SQL Server | MySQL | MariaDB | ClickHouse | SQLite |
 |---|---|---|---|---|---|---|
-| `gen_random_uuid()` | `gen_random_uuid()` (13+) | `newid()` | — | `UUID_v4()` | `generateUUIDv4()` | — |
-| `uuidv7()` | `uuidv7()` (18+) | — | — | `UUID_v7()` (11.7+) | `generateUUIDv7()` | — |
+| `gen_random_uuid()` | `gen_random_uuid()` (13+) | `newid()` | — | `uuid_v4()` (11.7+) | `generateUUIDv4()` | — |
+| `uuidv7()` | `uuidv7()` (18+, требуется явная версия) | — | — | `uuid_v7()` (11.7+) | `generateUUIDv7()` | — |
 
-У MySQL есть только `UUID()` (v1), у SQLite генератора UUID нет, поэтому оба отклоняют вызов. Это
+В PostgreSQL `uuidv7()` рендерится только когда контекст настроен на явную версию сервера 18+; версия
+ниже 18 или **незаданная** версия отклоняет вызов при подготовке обычным `NotSupportedException`:
+`The uuidv7 function is not supported by this provider.` Генератор v4 никогда не подставляется, а
+`NULL` никогда не возвращается; `gen_random_uuid()` (v4) сохраняет прежнее поведение на PostgreSQL 13+.
+
+У MySQL есть только `UUID()` (v1), у SQLite генератора UUID нет, поэтому оба отклоняют вызов. В MariaDB оба
+генератора требуют явно заданной версии сервера 11.7 или новее; **контекст без версии**
+(`MariaDbDataContext`) отклоняет их с `NotSupportedException`, а `UUID()` (v1) не подставляется. Это
 серверные генераторы, вычисляемые на каждую строку базой; `Guid.NewGuid()` — клиентское значение и
 заменой не является. SQL Server дополнительно открывает `newsequentialid()`
 (`SqlFunctions.SqlServer.newsequentialid()`), допустимый только как `DEFAULT` колонки, но не в
 обычном `SELECT`.
+
+PostgreSQL также читает данные из сохранённого UUID — на `SqlFunctions.Postgres`, с гейтом по имени
+через [`IScalarFunctions.Supports`](xref:NextORM.Core.IScalarFunctions.Supports(System.String)):
+
+| C# | SQL | Возвращает |
+|---|---|---|
+| `SqlFunctions.Postgres.uuid_extract_timestamp(value)` | `uuid_extract_timestamp(value)` | `timestamptz` (`DateTime?`) — NULL для UUID версии 4 или nil-UUID |
+| `SqlFunctions.Postgres.uuid_extract_version(value)` | `uuid_extract_version(value)` | `smallint` (`short?`) — встроенная версия, NULL для nil-UUID |

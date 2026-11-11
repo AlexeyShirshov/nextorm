@@ -119,4 +119,21 @@ public class DataModifyingCteRejectionTests
 
         act.Should().Throw<NotSupportedException>().WithMessage("*cannot return written rows*");
     }
+
+    [Fact]
+    public void T266_BatchCapture_IsRefused()
+    {
+        using var ctx = MariaDbTestContext.Create();
+
+        // A table-variable batch capture is the SQL Server OUTPUT ... INTO form. The capture builder
+        // refuses the provider itself, so no statement is rendered and no command is ever executed.
+        var act = () => ctx.CreateBatchBuilder().OutputIntoTableVariable(
+            ctx.CreateInsertBuilder<IComplexEntity>()
+                .Value(x => x.String, "a")
+                .Returning(x => new { x.Id }),
+            "@t",
+            "id bigint");
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*OUTPUT INTO*");
+    }
 }

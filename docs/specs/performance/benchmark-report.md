@@ -3260,3 +3260,381 @@ inside the ±20% ShortRun noise band, so no row is reported as a regression.
 `artifacts/pdca/CCORR-201/rv1/E/benchmarks/` (the tracked `benchmarks/BenchmarkDotNet.Artifacts`
 files were restored to HEAD after the run).
 
+## Results 2026-10-20 — published comparison tables and feature snapshot (1.0.9-rc3)
+
+Запись закрывает разрыв между журналом и публичными страницами: итерация 18 закончилась 2026-10-17, а
+числа в `readme.md` и `docs/comparisons/benchmarks.md` собраны из прогонов 2026-10-17 … 2026-10-28.
+Значения ниже — те же, что опубликованы.
+
+Условия (общие для всех строк, кроме Category A): AMD Ryzen 7 5800HS (8 logical / 4 physical), Ubuntu
+22.04.5 LTS, .NET 10.0.12, BenchmarkDotNet 0.15.8, `ShortRun` + `InProcessEmitToolchain`, SQLite через
+`Microsoft.Data.Sqlite`, БД на tmpfs. Различия ниже ~20 % — шум.
+
+### Сквозные сценарии — время, быстрейший метод каждой библиотеки
+
+| Сценарий | Nextorm | Dapper | linq2db | EF Core |
+|---|---:|---:|---:|---:|
+| Data fetch | **10.29 μs** | 14.89 μs | 15.76 μs | 36.64 μs |
+| Wide data fetch | **8.331 ms** | 8.680 ms | 9.366 ms | 9.771 ms |
+| Where | **886.7 μs** | 1,369.6 μs | 1,412.3 μs | 3,199.6 μs |
+| Simulate work | **7.594 ms** | 26.432 ms | 393.986 ms | 110.812 ms |
+| Any | **889.9 μs** | 1,399.7 μs | 1,498.9 μs | 3,620.0 μs |
+| FirstOrDefault | **91.35 μs** | 146.41 μs | 388.41 μs | 351.03 μs |
+| SingleOrDefault | **90.87 μs** | 140.79 μs | 394.50 μs | 345.20 μs |
+
+### Сквозные сценарии — аллокации
+
+| Сценарий | Nextorm | Dapper | linq2db | EF Core |
+|---|---:|---:|---:|---:|
+| Data fetch | **792 B** | 1,904 B | 2,088 B | 10,224 B |
+| Wide data fetch | **2.14 MB** | 2.59 MB | **2.14 MB** | 4.28 MB |
+| Where | **92.43 KB** | 180.72 KB | 253.53 KB | 789.17 KB |
+| Simulate work | **6.25 MB** | 8.90 MB | 121.57 MB | 13.68 MB |
+| Any | **85.16 KB** | 139.07 KB | 233.60 KB | 807.05 KB |
+| FirstOrDefault | **8.63 KB** | 16.48 KB | 187.58 KB | 80.40 KB |
+| SingleOrDefault | **8.36 KB** | 16.40 KB | 187.82 KB | 80.40 KB |
+
+### Feature-тиры (2026-10-17)
+
+22 like-for-like строки в `docs/comparisons/feature-benchmarks.md`: Tier-1 (проекция, `Count`/`Sum`/
+`GroupBy`, пагинация, буферизованный и небуферизованный стриминг, синхронный raw reader), Tier-2 (CTE,
+рекурсивный CTE, 4-табличный join, LEFT JOIN, DISTINCT, IN-list), Tier-3 (`EXCEPT`, `INTERSECT`),
+Tier-4 (`CASE WHEN`, `Contains`, `ToUpper`, UDF, `ROW_NUMBER`, `SUM OVER`), Tier-5 (JSON и CSV на 10 000
+строк). Nextorm — только implicit-cache плечи (`B_Nextorm_Cached_*`), без `Prepare()`.
+Итог: Nextorm первый по времени на 9 строках, Dapper — на 12, linq2db — на 1; по аллокациям 5 / 17 / 0.
+
+### Category A и Category B
+
+Две таблицы публичной страницы (по 13 категорий) — единственное место, где зафиксированы эти числа.
+Category B (`B_*_Cached_*`) собрана из того же снимка, что и строки выше. Category A
+(`A_Nextorm_Prepared_*` против compiled linq2db/EF Core) датирована **2026-10-28**, и отчёт этого
+прогона в репозиторий не попал: числа существуют только в опубликованной странице и из коммита не
+воспроизводятся.
+
+### Источник и воспроизведение
+
+- Отчёты: `benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.{Iteration,LargeIteration,
+  Where,SimulateWork,Any,First,Single,FeaturesFair,FeaturesFairCached,Projection,Aggregates,Paging,
+  Streaming,WriteJson,Csv}-report-{github.md,csv}`, снимок коммита `957fcfe7` (2026-10-17).
+- Таблицы: `python3 tools/benchmarks/update_benchmark_tables.py --date 2026-10-20`.
+- Оговорка: Category A (2026-10-28) в снимке отсутствует — см. раздел выше.
+
+
+
+# Итерация 19 — локальный сравнительный прогон и Tier-1 (2026-11-11)
+
+**Область и методика.** Снимок исходного дерева `368470fe`, ветка `1.0.9`;
+Release, AMD Ryzen 7 5800HS (8 logical / 4 physical), Ubuntu 22.04.5 LTS,
+SDK 11.0.100 / .NET 11.0.0, BenchmarkDotNet 0.15.8, `ShortRun`
+(3 warmup, 3 iteration, 1 launch), `InProcessEmitToolchain`. SQLite — отдельная
+копия `data/test.db` в `/tmp/opencode/bench/test.db`. **Она на ext4, не tmpfs**:
+это отличие от предыдущего снимка; данные прогреты, но утверждать одинаковые условия I/O нельзя.
+Прогоны последовательны. Full cycle ниже означает охват сценариев, а не `Job.Default`.
+
+- Основной набор CI: 7 end-to-end классов и `SqliteBenchmarkFeaturesFair` / `FeaturesFairCached`:
+  **182 случая**, девять свежих отчётов; отчёты CSV и Markdown —
+  `benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.*-report-{github.md,csv}`.
+- Дополнительно Tier-1: `Projection` 7, `Aggregates` 21, `Paging` 7, `Streaming` 22,
+  `WriteJson` 33, `Csv` 28 — **118 случаев**. Артефакты и логи только в
+  `/tmp/opencode/bench/followup/artifacts/` и `.../followup/*.log` (временные, не версионируются).
+  Перечисленные фильтры могут включать и другие категории, а не только строки Tier-1.
+- `--anyCategories=acceptance`: **12 случаев**, не 7: семь исторических плюс пять
+  `Nextorm_WriteCsv_3Col` с Rows=1/10/100/1000/10000. Таким образом старый контракт о
+  ровно семи выбранных случаях устарел; семь общих случаев приведены ниже. Лог и отчёты:
+  `/tmp/opencode/bench/followup/acceptance.log` и `.../followup/acceptance/results/`.
+- В логах отсутствуют `Benchmarks with issues` и сообщения о пустом результате; все 312
+  случаев представлены в суммах BDN (182 + 118 + 12; некоторые случаи повторяются).
+  `Failed to set up priority High` — отказ повышения приоритета. BDN также предупреждает
+  о короткой итерации `SimulateWork.Nextorm_Cached_AsyncStream` и девяти raw-reader
+  плечах Streaming; их времена требуют повторного измерения с достаточной длительностью.
+- Генератор `tools/benchmarks/update_benchmark_tables.py` и его `--check` выполнены;
+  обновлены публичные таблицы. Tier-1 публичной страницы в этот генератор не входит и
+  сохраняет прежнюю дату; дополнительные Tier-1 отчёты данного запуска — во временном каталоге.
+
+## Сравнение с предыдущей опубликованной таблицей (2026-11-07)
+
+Быстрейшее плечо Nextorm в каждой строке (плечо может измениться между прогонами),
+не парный A/B: предыдущий результат `.NET 10.0.12`, текущий `.NET 11.0.0`,
+другой режим хранения БД, один `ShortRun` на версию. Поэтому это **индикатор**,
+а не доказательство отсутствия регрессии конкретного метода или причины изменения.
+
+| Сценарий | 2026-11-07 | 2026-11-11 | Изменение времени |
+|---|---:|---:|---:|
+| Data fetch | 10.89 μs | 10.26 μs | −5.8% |
+| Wide data fetch | 9.188 ms | 7.682 ms | −16.4% |
+| Where | 951.1 μs | 927.9 μs | −2.4% |
+| Simulate work | 7.871 ms | 7.558 ms | −4.0% |
+| Any | 1.024 ms | 0.9455 ms | −7.7% |
+| FirstOrDefault | 103.8 μs | 96.31 μs | −7.2% |
+| SingleOrDefault | 102.7 μs | 99.09 μs | −3.5% |
+
+Среди семи опубликованных строк ухудшения времени не видно. Подготовленный Category A
+быстрее остальных библиотек по времени во всех 12 опубликованных сценариях;
+Category B смешанный (см. свежие таблицы). Сравнение одинаковых именованных Nextorm-методов
+в CSV предыдущего `HEAD` и новых девяти отчётов плюс шести Tier-1 отчётов не выявило
+увеличений Mean или Allocated более 20% среди совпавших строк; это скрининг,
+не полное доказательство: часть сценариев могла измениться, строки без пары исключены,
+условия прогона различаются. Исторический отчёт см. в Git `HEAD` до этой итерации;
+следует сохранять снимок при коммите новых отчётов.
+
+## Acceptance: семь общих с историческим набором
+
+| Кейс | Mean | Allocated |
+|---|---:|---:|
+| `Nextorm_Count` | 2.168 ms | 316.41 KB |
+| `Nextorm_GroupByCount` | 58.21 ms | 50.03 MB |
+| `SqliteBenchmarkAny.Nextorm_Cached` | 1.257 ms | 193.79 KB |
+| `Prepared_ToList` | 908.5 μs | 78.13 KB |
+| `Cached_ToList` | 1,415.0 μs | 375.02 KB |
+| `Cached_PlanOnly_Param` | 318.9 μs | 296.88 KB |
+| `Nextorm_Cached_ToListAsync` | 1.517 ms | 370.59 KB |
+
+Внутри одного запуска `Cached_ToList / Prepared_ToList` = **1.56** по времени и
+**4.80** по аллокациям; для последней записи acceptance 2026-10-15 — 1.71 и 5.98
+соответственно. Видимого ухудшения этих соотношений нет; из-за другой версии .NET и
+условий хранения это не равноценно парной проверке регрессии. Для уверенного вердикта
+нужны старый и новый код на одном runtime, с одной и той же копией БД и повторными
+чередующимися прогонами. Acceptance-документ с ожиданием ровно 7 кейсов требует
+отдельного согласования контракта; в этой записи он не изменён.
+
+
+## Полный снимок сравнительных таблиц итерации 19
+
+Ниже зафиксированы значения текущих таблиц от 2026-11-11, а не ссылки на меняющиеся отчёты. Единицы и выбор быстрейшего плеча каждой библиотеки — как в публичной таблице; время и аллокации в отдельных таблицах могут относиться к разным плечам.
+
+### Сквозные сценарии — время
+
+| Method | Nextorm | Dapper | linq2db | EF Core |
+|---|:---:|:---:|:---:|:---:|
+| Data fetch | **10.26 μs** | 14.59 μs | 15.54 μs | 34.36 μs |
+| Wide data fetch | **7.682 ms** | 8.635 ms | 8.765 ms | 8.981 ms |
+| Where | **927.9 μs** | 1,353.2 μs | 1,403.5 μs | 3,179.1 μs |
+| Simulate work | **7.558 ms** | 24.385 ms | 393.247 ms | 102.706 ms |
+| Any | **945.5 μs** | 1,443.5 μs | 1,526.2 μs | 3,401.7 μs |
+| FirstOrDefault | **96.31 μs** | 140.89 μs | 356.68 μs | 365.25 μs |
+| SingleOrDefault | **99.09 μs** | 140.28 μs | 361.22 μs | 350.29 μs |
+
+### Сквозные сценарии — аллокации
+
+| Method | Nextorm | Dapper | linq2db | EF Core |
+|---|:---:|:---:|:---:|:---:|
+| Data fetch | **968 B** | 1,896 B | 2,080 B | 9,776 B |
+| Wide data fetch | **2.14 MB** | 2.59 MB | **2.14 MB** | 4.28 MB |
+| Where | **102.58 KB** | 179.23 KB | 252.74 KB | 745.41 KB |
+| Simulate work | **6.21 MB** | 8.86 MB | 107.83 MB | 13.57 MB |
+| Any | **84.38 KB** | 138.29 KB | 232.82 KB | 763.30 KB |
+| FirstOrDefault | **8.56 KB** | 16.12 KB | 159.77 KB | 76.03 KB |
+| SingleOrDefault | **8.28 KB** | 16.04 KB | 159.77 KB | 76.03 KB |
+
+### Category A — prepared / compiled / raw
+
+As of **2026-11-11**.
+
+| Feature | Nextorm (prepared) | Dapper | linq2db (compiled) | EF Core (compiled) |
+|---|---|---|---|---|
+| `CASE WHEN` | **9.64 μs / 664 B** | 14.07 μs / 1.34 KB | 15.47 μs / 1.59 KB | 33.70 μs / 7.46 KB |
+| CTE | **10.13 μs / 712 B** | 21.60 μs / 1.56 KB | 22.04 μs / 1.77 KB | — |
+| `SELECT DISTINCT` | **11.54 μs / 665 B** | 17.84 μs / 1.44 KB | 18.16 μs / 1.59 KB | 38.90 μs / 7.23 KB |
+| `EXCEPT` | **11.16 μs / 680 B** | 17.32 μs / 1.43 KB | 21.20 μs / 1.67 KB | 42.61 μs / 8.38 KB |
+| IN-list | **12.90 μs / 1.55 KB** | 18.15 μs / 1.26 KB | 43.08 μs / 13.63 KB | 59.00 μs / 14.34 KB |
+| `INTERSECT` | **10.12 μs / 665 B** | 16.66 μs / 1.28 KB | 20.33 μs / 1.62 KB | 39.48 μs / 7.50 KB |
+| 4-table join | **12.98 μs / 1,000 B** | 25.84 μs / 2.02 KB | 24.19 μs / 2.06 KB | 45.38 μs / 8.05 KB |
+| `LEFT JOIN` | **12.68 μs / 1.12 KB** | 20.00 μs / 2.21 KB | 20.96 μs / 2.31 KB | 40.49 μs / 9.48 KB |
+| Recursive CTE | **12.49 μs / 672 B** | 24.18 μs / 1.52 KB | 27.07 μs / 1.77 KB | — |
+| String functions | **9.47 μs / 656 B** | 14.86 μs / 1.27 KB | 16.37 μs / 1.63 KB | 33.21 μs / 7.05 KB |
+| UDF | **9.54 μs / 688 B** | 14.12 μs / 1.27 KB | 15.13 μs / 1.63 KB | 34.16 μs / 7.05 KB |
+| Window functions | **14.45 μs / 793 B** | 29.70 μs / 1.53 KB | 31.98 μs / 1.74 KB | — |
+
+### Category B — warm cached / regular
+
+| Feature | Nextorm (cached) | Dapper | linq2db | EF Core |
+|---|---|---|---|---|
+| `CASE WHEN` | **12.25 μs / 2.04 KB** | 15.20 μs / 1.34 KB | 24.01 μs / 3.77 KB | 56.38 μs / 11.46 KB |
+| CTE | 30.59 μs / 9.25 KB | **20.66 μs / 1.56 KB** | 55.21 μs / 9.17 KB | — |
+| `SELECT DISTINCT` | **14.91 μs / 3.01 KB** | 17.67 μs / 1.44 KB | 30.26 μs / 3.88 KB | 61.04 μs / 11.70 KB |
+| `EXCEPT` | **16.33 μs / 4.16 KB** | 17.75 μs / 1.43 KB | 37.30 μs / 5.01 KB | 71.78 μs / 14.73 KB |
+| IN-list | 39.68 μs / 8.73 KB | **18.21 μs / 1.26 KB** | 68.44 μs / 17.43 KB | 104.90 μs / 22.05 KB |
+| `INTERSECT` | 17.26 μs / 4.15 KB | **16.91 μs / 1.28 KB** | 37.48 μs / 4.96 KB | 72.75 μs / 13.81 KB |
+| 4-table join | 32.65 μs / 9.97 KB | **26.16 μs / 2.02 KB** | 66.07 μs / 14.12 KB | 112.04 μs / 23.82 KB |
+| `LEFT JOIN` | 23.05 μs / 5.70 KB | **20.20 μs / 2.21 KB** | 68.21 μs / 8.94 KB | 95.81 μs / 19.66 KB |
+| Recursive CTE | 33.58 μs / 10.07 KB | **24.33 μs / 1.52 KB** | 58.97 μs / 8.31 KB | — |
+| String functions | **13.05 μs / 2.78 KB** | 14.26 μs / 1.27 KB | 31.87 μs / 4.89 KB | 65.28 μs / 12.74 KB |
+| UDF | **14.03 μs / 2.87 KB** | 14.30 μs / 1.27 KB | 47.48 μs / 6.82 KB | 64.60 μs / 12.74 KB |
+| Window functions | **27.66 μs / 4.16 KB** | 29.89 μs / 1.53 KB | 61.01 μs / 5.79 KB | — |
+
+## Дополнительные результаты Tier-1: исходные таблицы BDN
+
+Снимок отдельных прогонов 2026-11-11, тот же runtime и база, что выше. Значения приведены **на операцию BDN**, без пересчёта на запрос; имена, параметры и доступные поля сохранены из исходных отчётов. CSV-фильтр также выбрал класс CsvFixedCost. Предупреждения о коротких итерациях Streaming см. в методике выше.
+
+### SqliteBenchmarkProjection
+
+| Method                         | Categories                | Mean     | Gen0     | Gen1     | Gen2    | Allocated |
+|------------------------------- |-------------------------- |---------:|---------:|---------:|--------:|----------:|
+| A_Nextorm_Prepared_ToListAsync | A_Projection              | 3.768 ms | 160.1563 | 117.1875 |       - |    1.3 MB |
+| A_EFCore_Compiled_ToListAsync  | A_Projection              | 4.798 ms | 414.0625 |        - |       - |   3.36 MB |
+| A_Linq2Db_Compiled_ToList      | A_Projection              | 5.434 ms | 218.7500 | 210.9375 | 54.6875 |   1.47 MB |
+|                                |                           |          |          |          |         |           |
+| A_Dapper_ToListAsync           | A_Projection,B_Projection | 6.434 ms | 257.8125 | 250.0000 | 62.5000 |    1.7 MB |
+|                                |                           |          |          |          |         |           |
+| B_Nextorm_Cached_ToListAsync   | B_Projection              | 3.658 ms | 160.1563 | 113.2813 |       - |    1.3 MB |
+| B_Linq2Db_ToListAsync          | B_Projection              | 5.650 ms | 218.7500 | 210.9375 | 54.6875 |   1.48 MB |
+| B_EFCore_ToListAsync           | B_Projection              | 7.803 ms | 515.6250 | 312.5000 | 78.1250 |   3.62 MB |
+
+### SqliteBenchmarkAggregates
+
+| Method                          | Categories                | Mean        | Gen0   | Gen1   | Allocated |
+|-------------------------------- |-------------------------- |------------:|-------:|-------:|----------:|
+| A_Nextorm_Prepared_Count        | A_Aggregates              |    13.76 μs | 0.0458 |      - |     400 B |
+| A_Linq2Db_Compiled_Count        | A_Aggregates              |    17.96 μs | 0.1221 |      - |    1272 B |
+| A_EFCore_Compiled_Count         | A_Aggregates              |    34.09 μs | 0.8545 | 0.4272 |    7296 B |
+| A_Nextorm_Prepared_Sum          | A_Aggregates              |   276.44 μs |      - |      - |     402 B |
+| A_Linq2Db_Compiled_Sum          | A_Aggregates              |   290.42 μs |      - |      - |    1282 B |
+| A_EFCore_Compiled_Sum           | A_Aggregates              |   313.36 μs | 0.4883 |      - |    7322 B |
+| A_Nextorm_Prepared_GroupByCount | A_Aggregates              | 1,306.52 μs |      - |      - |    4658 B |
+| A_Linq2Db_Compiled_GroupByCount | A_Aggregates              | 1,364.63 μs |      - |      - |    7018 B |
+| A_EFCore_Compiled_GroupByCount  | A_Aggregates              | 1,372.36 μs | 1.9531 |      - |   32642 B |
+|                                 |                           |             |        |        |           |
+| Dapper_Count                    | A_Aggregates,B_Aggregates |    17.51 μs | 0.0916 |      - |     936 B |
+| Dapper_Sum                      | A_Aggregates,B_Aggregates |   293.01 μs |      - |      - |     946 B |
+| Dapper_GroupByCount             | A_Aggregates,B_Aggregates | 1,331.17 μs |      - |      - |   12322 B |
+|                                 |                           |             |        |        |           |
+| B_Nextorm_Cached_Count          | B_Aggregates              |    14.23 μs | 0.0458 |      - |     400 B |
+| B_Linq2Db_Count                 | B_Aggregates              |    24.10 μs | 0.3357 |      - |    2848 B |
+| B_EFCore_Count                  | B_Aggregates              |    46.75 μs | 1.0986 | 0.5493 |    9616 B |
+| B_Nextorm_Cached_Sum            | B_Aggregates              |   282.63 μs |      - |      - |     962 B |
+| B_Linq2Db_Sum                   | B_Aggregates              |   304.68 μs |      - |      - |    3474 B |
+| B_EFCore_Sum                    | B_Aggregates              |   330.24 μs | 0.9766 | 0.4883 |   10514 B |
+| B_Linq2Db_GroupByCount          | B_Aggregates              | 1,385.06 μs |      - |      - |   11514 B |
+| B_Nextorm_Cached_GroupByCount   | B_Aggregates              | 1,405.09 μs |      - |      - |    8722 B |
+| B_EFCore_GroupByCount           | B_Aggregates              | 1,471.29 μs | 3.9063 |      - |   42154 B |
+
+### SqliteBenchmarkPaging
+
+| Method                       | Categories        | Mean      | Gen0   | Gen1   | Allocated |
+|----------------------------- |------------------ |----------:|-------:|-------:|----------:|
+| A_Nextorm_Prepared_PageAsync | A_Paging          |  87.03 μs | 1.5869 |      - |  13.91 KB |
+| A_Linq2Db_Compiled_Page      | A_Paging          | 106.72 μs | 2.0752 |      - |   17.6 KB |
+| A_EFCore_Compiled_PageAsync  | A_Paging          | 134.83 μs | 5.3711 | 0.9766 |  44.37 KB |
+|                              |                   |           |        |        |           |
+| A_Dapper_PageAsync           | A_Paging,B_Paging |  99.42 μs | 2.1973 |      - |  18.14 KB |
+|                              |                   |           |        |        |           |
+| B_Nextorm_Cached_PageAsync   | B_Paging          |  95.87 μs | 2.3193 |      - |  19.14 KB |
+| B_Linq2Db_PageAsync          | B_Paging          | 142.04 μs | 2.6855 |      - |  22.59 KB |
+| B_EFCore_PageAsync           | B_Paging          | 189.47 μs | 6.8359 | 1.2207 |  56.28 KB |
+
+### SqliteBenchmarkStreaming
+
+| Method                             | InvocationCount | UnrollFactor | Categories                      | Mean        | Gen0     | Gen1     | Gen2    | Allocated |
+|----------------------------------- |---------------- |------------- |-------------------------------- |------------:|---------:|---------:|--------:|----------:|
+| A_Nextorm_Prepared_ToList_Dto      | Default         | 16           | A_BufferedDto                   | 3,618.85 μs | 160.1563 | 117.1875 |       - | 1360648 B |
+| Linq2Db_Compiled_ToList_Dto        | Default         | 16           | A_BufferedDto                   | 5,548.14 μs | 218.7500 | 210.9375 | 54.6875 | 1544510 B |
+| A_EFCore_Compiled_ToList_Dto       | Default         | 16           | A_BufferedDto                   | 7,831.21 μs | 515.6250 | 312.5000 | 78.1250 | 3789915 B |
+|                                    |                 |              |                                 |             |          |          |         |           |
+| Dapper_ToList_Dto                  | Default         | 16           | A_BufferedDto,B_BufferedDto     | 7,026.80 μs | 257.8125 | 250.0000 | 62.5000 | 1784151 B |
+|                                    |                 |              |                                 |             |          |          |         |           |
+| A_Nextorm_Prepared_AsyncStream_Dto | Default         | 16           | A_UnbufferedDto                 | 3,592.36 μs | 152.3438 |        - |       - | 1280817 B |
+| A_EFCore_Compiled_AsyncStream_Dto  | Default         | 16           | A_UnbufferedDto                 | 4,743.72 μs | 414.0625 |        - |       - | 3526999 B |
+|                                    |                 |              |                                 |             |          |          |         |           |
+| Dapper_AsyncStream_Dto             | Default         | 16           | A_UnbufferedDto,B_UnbufferedDto | 4,618.36 μs | 179.6875 |        - |       - | 1521471 B |
+|                                    |                 |              |                                 |             |          |          |         |           |
+| B_Nextorm_Cached_ToList_Dto        | Default         | 16           | B_BufferedDto                   | 3,853.70 μs | 160.1563 | 113.2813 |       - | 1362772 B |
+| B_Linq2Db_ToList_Dto               | Default         | 16           | B_BufferedDto                   | 5,708.97 μs | 218.7500 | 210.9375 | 54.6875 | 1547471 B |
+| B_EFCore_ToList_Dto                | Default         | 16           | B_BufferedDto                   | 7,897.60 μs | 515.6250 | 312.5000 | 78.1250 | 3794279 B |
+|                                    |                 |              |                                 |             |          |          |         |           |
+| B_Nextorm_Cached_AsyncStream_Dto   | Default         | 16           | B_UnbufferedDto                 | 3,978.29 μs | 148.4375 |        - |       - | 1284143 B |
+| B_Linq2Db_AsyncStream_Dto          | Default         | 16           | B_UnbufferedDto                 | 4,471.51 μs | 148.4375 |        - |       - | 1284639 B |
+| B_EFCore_AsyncStream_Dto           | Default         | 16           | B_UnbufferedDto                 | 4,870.53 μs | 421.8750 |   7.8125 |       - | 3531151 B |
+|                                    |                 |              |                                 |             |          |          |         |           |
+| A_Nextorm_Prepared_ToDataReader    | 1               | 1            | A_RawReader                     | 4,143.88 μs |        - |        - |       - |  971208 B |
+|                                    |                 |              |                                 |             |          |          |         |           |
+| Provider_Direct_ToDataReader       | 1               | 1            | B_RawReader                     | 3,605.14 μs |        - |        - |       - |  965696 B |
+| Linq2Db_ToDataReader               | 1               | 1            | B_RawReader                     | 3,646.18 μs |        - |        - |       - |  965960 B |
+| Dapper_ToDataReader                | 1               | 1            | B_RawReader                     | 3,670.37 μs |        - |        - |       - |  965728 B |
+| B_Nextorm_ToDataReader             | 1               | 1            | B_RawReader                     | 3,824.31 μs |        - |        - |       - |  973768 B |
+|                                    |                 |              |                                 |             |          |          |         |           |
+| Linq2Db_ToDataReader_Empty         | 1               | 1            | B_RawReader_Empty               |    59.84 μs |        - |        - |       - |         - |
+| Dapper_ToDataReader_Empty          | 1               | 1            | B_RawReader_Empty               |    71.28 μs |        - |        - |       - |         - |
+| Provider_Direct_ToDataReader_Empty | 1               | 1            | B_RawReader_Empty               |   100.73 μs |        - |        - |       - |         - |
+| B_Nextorm_ToDataReader_Empty       | 1               | 1            | B_RawReader_Empty               |   269.28 μs |        - |        - |       - |   16160 B |
+
+### SqliteBenchmarkWriteJson
+
+| Method                             | RowCount | Mean         | Ratio | Gen0       | Gen1      | Gen2     | Allocated    | Alloc Ratio |
+|----------------------------------- |--------- |-------------:|------:|-----------:|----------:|---------:|-------------:|------------:|
+| WriteJson_Array_Scalar             | 1000     |     294.6 μs |  0.78 |     0.9766 |    0.4883 |        - |      9.12 KB |        0.11 |
+| WriteJsonAsync_Array_Scalar        | 1000     |     319.2 μs |  0.84 |     0.9766 |    0.4883 |        - |      9.33 KB |        0.12 |
+| ToList_Dto                         | 1000     |     379.3 μs |  1.00 |     9.7656 |    1.4648 |        - |     80.53 KB |        1.00 |
+| Nextorm_ToList_Dto_Json            | 1000     |     471.1 μs |  1.24 |     9.7656 |    1.4648 |        - |     80.84 KB |        1.00 |
+| Linq2Db_ToList_Json                | 1000     |     544.1 μs |  1.43 |    10.7422 |    1.9531 |        - |     90.37 KB |        1.12 |
+| Dapper_ToList_Json                 | 1000     |     584.2 μs |  1.54 |    13.6719 |    1.9531 |        - |    119.21 KB |        1.48 |
+| WriteJson_Array_Dto                | 1000     |     585.7 μs |  1.54 |     5.8594 |    0.9766 |        - |     50.84 KB |        0.63 |
+| WriteJson_Array_ScalarPayload      | 1000     |     609.8 μs |  1.61 |   140.6250 |    0.9766 |        - |    1155.4 KB |       14.35 |
+| EFCore_ToList_Json                 | 1000     |     621.4 μs |  1.64 |    38.0859 |    7.8125 |        - |    316.18 KB |        3.93 |
+| WriteJsonAsync_Array_ScalarPayload | 1000     |     623.7 μs |  1.64 |   140.6250 |    0.9766 |        - |   1155.61 KB |       14.35 |
+| WriteJson_Array_WideDto            | 1000     |     839.8 μs |  2.21 |   141.6016 |    0.9766 |        - |   1158.18 KB |       14.38 |
+|                                    |          |              |       |            |           |          |              |             |
+| WriteJson_Array_Scalar             | 10000    |   4,497.4 μs |  0.77 |          - |         - |        - |      9.16 KB |        0.01 |
+| WriteJsonAsync_Array_Scalar        | 10000    |   4,970.3 μs |  0.85 |          - |         - |        - |      9.35 KB |        0.01 |
+| ToList_Dto                         | 10000    |   5,827.8 μs |  1.00 |    93.7500 |   54.6875 |        - |     783.7 KB |        1.00 |
+| Nextorm_ToList_Dto_Json            | 10000    |   6,665.9 μs |  1.14 |    93.7500 |   54.6875 |        - |       784 KB |        1.00 |
+| WriteJson_Array_Dto                | 10000    |   7,568.0 μs |  1.30 |    46.8750 |         - |        - |    402.47 KB |        0.51 |
+| Linq2Db_ToList_Json                | 10000    |   8,106.5 μs |  1.39 |   125.0000 |  109.3750 |  31.2500 |    963.65 KB |        1.23 |
+| WriteJson_Array_ScalarPayload      | 10000    |   8,139.6 μs |  1.40 |  1406.2500 |         - |        - |  11492.53 KB |       14.66 |
+| WriteJsonAsync_Array_ScalarPayload | 10000    |   8,530.9 μs |  1.46 |  1406.2500 |         - |        - |  11492.74 KB |       14.66 |
+| Dapper_ToList_Json                 | 10000    |   9,072.8 μs |  1.56 |   156.2500 |  109.3750 |  31.2500 |   1273.68 KB |        1.63 |
+| EFCore_ToList_Json                 | 10000    |  10,032.8 μs |  1.72 |   406.2500 |  171.8750 |  46.8750 |   3158.24 KB |        4.03 |
+| WriteJson_Array_WideDto            | 10000    |  10,598.8 μs |  1.82 |  1406.2500 |         - |        - |  11495.31 KB |       14.67 |
+|                                    |          |              |       |            |           |          |              |             |
+| WriteJson_Array_Scalar             | 100000   |  47,799.5 μs |  0.68 |          - |         - |        - |      9.65 KB |       0.001 |
+| WriteJsonAsync_Array_Scalar        | 100000   |  49,307.7 μs |  0.70 |          - |         - |        - |     10.13 KB |       0.001 |
+| ToList_Dto                         | 100000   |  70,538.5 μs |  1.00 |  1142.8571 | 1000.0000 | 285.7143 |   7817.52 KB |       1.000 |
+| WriteJson_Array_Dto                | 100000   |  74,839.0 μs |  1.06 |   428.5714 |         - |        - |   3919.06 KB |       0.501 |
+| Nextorm_ToList_Dto_Json            | 100000   |  77,094.7 μs |  1.09 |  1142.8571 | 1000.0000 | 285.7143 |   7818.01 KB |       1.000 |
+| WriteJson_Array_ScalarPayload      | 100000   |  81,042.6 μs |  1.15 | 14000.0000 |         - |        - | 114851.34 KB |      14.692 |
+| Linq2Db_ToList_Json                | 100000   |  82,821.7 μs |  1.18 |  1142.8571 | 1000.0000 | 285.7143 |   9087.01 KB |       1.162 |
+| WriteJsonAsync_Array_ScalarPayload | 100000   |  89,164.4 μs |  1.27 | 14000.0000 |         - |        - | 114852.11 KB |      14.692 |
+| Dapper_ToList_Json                 | 100000   |  91,727.2 μs |  1.30 |  1166.6667 |  666.6667 | 166.6667 |  12207.86 KB |       1.562 |
+| EFCore_ToList_Json                 | 100000   |  99,844.7 μs |  1.42 |  4000.0000 | 1500.0000 | 500.0000 |  30970.33 KB |       3.962 |
+| WriteJson_Array_WideDto            | 100000   | 104,448.9 μs |  1.48 | 14000.0000 |         - |        - | 114854.42 KB |      14.692 |
+
+### SqliteBenchmarkCsv
+
+| Method                            | Mean      | Ratio | Gen0     | Gen1     | Gen2    | Allocated  | Alloc Ratio |
+|---------------------------------- |----------:|------:|---------:|---------:|--------:|-----------:|------------:|
+| Nextorm_StringProjection_ToList   |  2.671 ms |  0.34 | 121.0938 |  70.3125 |       - | 1018.11 KB |        0.45 |
+| Nextorm_StringProjection_WriteCsv |  3.174 ms |  0.40 | 113.2813 |        - |       - |  948.55 KB |        0.42 |
+| Nextorm_ToList                    |  7.881 ms |  1.00 | 265.6250 | 156.2500 |       - | 2266.71 KB |        1.00 |
+| Nextorm_ToList_ManualCsv          |  9.249 ms |  1.17 | 531.2500 | 421.8750 |       - | 4375.39 KB |        1.93 |
+| Nextorm_WriteCsv                  |  9.594 ms |  1.22 | 203.1250 |        - |       - | 1733.23 KB |        0.76 |
+| Linq2Db_ToList_ManualCsv          | 11.833 ms |  1.50 | 562.5000 | 281.2500 | 78.1250 | 4087.41 KB |        1.80 |
+| Dapper_ToList_ManualCsv           | 12.389 ms |  1.57 | 687.5000 | 359.3750 | 93.7500 | 5100.42 KB |        2.25 |
+| EFCore_ToList_ManualCsv           | 13.504 ms |  1.71 | 890.6250 | 359.3750 | 93.7500 |  6750.9 KB |        2.98 |
+
+### SqliteBenchmarkCsvFixedCost
+
+| Method                | Categories           | Rows  | Mean         | Ratio | Gen0     | Gen1     | Allocated  | Alloc Ratio |
+|---------------------- |--------------------- |------ |-------------:|------:|---------:|---------:|-----------:|------------:|
+| Nextorm_ToList_3Col   | csv-fixed            | 1     |     17.00 μs |  1.00 |   0.4578 |        - |    3.95 KB |        1.00 |
+| Nextorm_WriteCsv_1Col | csv-fixed            | 1     |     34.94 μs |  2.05 |   1.3428 |   0.1221 |   10.99 KB |        2.79 |
+| Nextorm_WriteCsv_3Col | acceptance,csv-fixed | 1     |     50.66 μs |  2.98 |   2.1362 |   0.0610 |   17.82 KB |        4.52 |
+| Nextorm_WriteCsv_8Col | csv-fixed            | 1     |     67.84 μs |  3.99 |   4.8828 |   0.1221 |   40.19 KB |       10.19 |
+|                       |                      |       |              |       |          |          |            |             |
+| Nextorm_ToList_3Col   | csv-fixed            | 10    |     24.29 μs |  1.00 |   0.7324 |        - |    5.98 KB |        1.00 |
+| Nextorm_WriteCsv_1Col | csv-fixed            | 10    |     39.07 μs |  1.61 |   1.4038 |   0.1221 |   11.84 KB |        1.98 |
+| Nextorm_WriteCsv_3Col | acceptance,csv-fixed | 10    |     59.85 μs |  2.46 |   2.3193 |   0.0610 |   19.36 KB |        3.24 |
+| Nextorm_WriteCsv_8Col | csv-fixed            | 10    |     95.57 μs |  3.93 |   5.4932 |   0.1221 |   45.54 KB |        7.61 |
+|                       |                      |       |              |       |          |          |            |             |
+| Nextorm_WriteCsv_1Col | csv-fixed            | 100   |     67.31 μs |  0.70 |   2.4414 |   0.1221 |   20.29 KB |        0.77 |
+| Nextorm_ToList_3Col   | csv-fixed            | 100   |     95.53 μs |  1.00 |   3.1738 |   0.1221 |   26.36 KB |        1.00 |
+| Nextorm_WriteCsv_3Col | acceptance,csv-fixed | 100   |    145.91 μs |  1.53 |   4.1504 |   0.2441 |   34.83 KB |        1.32 |
+| Nextorm_WriteCsv_8Col | csv-fixed            | 100   |    354.35 μs |  3.71 |  11.7188 |   0.4883 |   98.92 KB |        3.75 |
+|                       |                      |       |              |       |          |          |            |             |
+| Nextorm_WriteCsv_1Col | csv-fixed            | 1000  |    353.63 μs |  0.44 |  12.6953 |   0.4883 |  104.68 KB |        0.45 |
+| Nextorm_ToList_3Col   | csv-fixed            | 1000  |    809.15 μs |  1.00 |  27.3438 |   6.8359 |  230.24 KB |        1.00 |
+| Nextorm_WriteCsv_3Col | acceptance,csv-fixed | 1000  |  1,024.12 μs |  1.27 |  21.4844 |   1.9531 |  189.51 KB |        0.82 |
+| Nextorm_WriteCsv_8Col | csv-fixed            | 1000  |  2,885.17 μs |  3.57 |  74.2188 |   3.9063 |  633.25 KB |        2.75 |
+|                       |                      |       |              |       |          |          |            |             |
+| Nextorm_WriteCsv_1Col | csv-fixed            | 10000 |  3,229.85 μs |  0.41 | 113.2813 |        - |  948.55 KB |        0.42 |
+| Nextorm_ToList_3Col   | csv-fixed            | 10000 |  7,891.46 μs |  1.00 | 265.6250 | 171.8750 | 2268.74 KB |        1.00 |
+| Nextorm_WriteCsv_3Col | acceptance,csv-fixed | 10000 |  9,487.49 μs |  1.20 | 203.1250 |        - | 1735.99 KB |        0.77 |
+| Nextorm_WriteCsv_8Col | csv-fixed            | 10000 | 28,434.27 μs |  3.60 | 718.7500 |        - | 5975.07 KB |        2.63 |

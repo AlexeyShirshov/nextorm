@@ -15,12 +15,12 @@ public class RawResultSetTraversalTests
     private static (IDataContext Context, string Path) CreateDb()
     {
         var path = Path.Combine(Path.GetTempPath(), $"nextorm-sets-{Guid.NewGuid():N}.db");
-        using (var connection = new SqliteConnection($"Data Source={path}"))
+        using (var connection = new SqliteConnection($"Data Source={path};Pooling=False"))
         {
             connection.Open();
         }
 
-        return (new SqliteDataContext($"Data Source={path}", new DataContextBuilder()), path);
+        return (new SqliteDataContext($"Data Source={path};Pooling=False", new DataContextBuilder()), path);
     }
 
     [Fact]

@@ -88,9 +88,6 @@ public class AviasalesBenchmarks
     public async Task Nextorm_DelayPercentilesByModel() => await AviasalesQueries.DelayPercentilesByModel(_nextorm, default);
 
     [Benchmark]
-    public async Task Linq2Db_DelayPercentilesByModel() => await Linq2DbQueries.DelayPercentilesByModel(_linq2db, default);
-
-    [Benchmark]
     public async Task Nextorm_FrequentFlyers() => await AviasalesQueries.FrequentFlyers(_nextorm, default);
 
     [Benchmark]

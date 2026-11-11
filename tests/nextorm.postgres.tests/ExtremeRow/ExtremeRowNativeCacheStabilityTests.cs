@@ -24,7 +24,7 @@ public class ExtremeRowNativeCacheStabilityTests
         using var ctx = PostgresTestContext.Create();
         ctx.PurgeQueryCache();
 
-        var command = ctx.From<ExtremeNativeEntity>().SelectWhereMax(x => x.Int).ToCommand();
+        var command = ctx.From<ExtremeNativeEntity>().SelectWhereMaxOld(x => x.Int).ToCommand();
         command.Cache.Should().BeTrue("the command starts cacheable");
 
         var first = (DbPreparedQueryCommand<ExtremeNativeEntity>)Prepare(ctx, command);
@@ -44,7 +44,7 @@ public class ExtremeRowNativeCacheStabilityTests
         ctx.PurgeQueryCache();
 
         QueryCommand<ExtremeNativeEntity> Build()
-            => ctx.From<ExtremeNativeEntity>().SelectWhereMax(x => x.Int).ToCommand();
+            => ctx.From<ExtremeNativeEntity>().SelectWhereMaxOld(x => x.Int).ToCommand();
 
         var first = Prepare(ctx, Build());
         var second = Prepare(ctx, Build());
@@ -61,7 +61,7 @@ public class ExtremeRowNativeCacheStabilityTests
 
         // Warm the native extrema path first: the risk is that it leaks a sticky cache disable onto the
         // shared command or the context, which would then force every later query to rebuild.
-        var extrema = ctx.From<ExtremeNativeEntity>().SelectWhereMax(x => x.Int).ToCommand();
+        var extrema = ctx.From<ExtremeNativeEntity>().SelectWhereMaxOld(x => x.Int).ToCommand();
         Prepare(ctx, extrema);
         extrema.Cache.Should().BeTrue();
 

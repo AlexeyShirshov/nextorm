@@ -1,0 +1,31 @@
+#nullable enable
+NextORM.MariaDb.MariaDbDataContext
+NextORM.MariaDb.MariaDbDataContext.MariaDbDataContext(string! connectionString, NextORM.Core.DataContextBuilder! optionsBuilder) -> void
+NextORM.MariaDb.MariaDbDataContext.MariaDbDataContext(string! connectionString, NextORM.Core.DataContextBuilder! optionsBuilder, System.Version? serverVersion) -> void
+NextORM.MariaDb.MariaDbDataContext.MariaDbDataContext(System.Data.Common.DbConnection! connection, NextORM.Core.DataContextBuilder! optionsBuilder) -> void
+NextORM.MariaDb.MariaDbDataContext.MariaDbDataContext(System.Data.Common.DbConnection! connection, NextORM.Core.DataContextBuilder! optionsBuilder, System.Version? serverVersion) -> void
+NextORM.MariaDb.MariaDbDataContextOptionsBuilderExtensions
+NextORM.MariaDb.MariaDbDialect
+NextORM.MariaDb.MariaDbDialect.MariaDbDialect() -> void
+NextORM.MariaDb.MariaDbDialect.MariaDbDialect(System.Version? serverVersion) -> void
+override NextORM.MariaDb.MariaDbDataContext.Dialect.get -> NextORM.Core.ISqlDialect!
+override NextORM.MariaDb.MariaDbDataContext.TimeOnlyProjectionRefusal.get -> string?
+override NextORM.MariaDb.MariaDbDialect.Lock.get -> NextORM.Core.ILockRenderer!
+override NextORM.MariaDb.MariaDbDialect.MakeRegexMatch(string! value, string! pattern, bool ignoreCase) -> string!
+override NextORM.MariaDb.MariaDbDialect.MakeRegexReplace(string! value, string! pattern, string! replacement, bool ignoreCase) -> string!
+override NextORM.MariaDb.MariaDbDialect.MySqlFunctions.get -> NextORM.Core.IMySqlFunctions!
+override NextORM.MariaDb.MariaDbDialect.SupportsAnyValueAggregate.get -> bool
+override NextORM.MariaDb.MariaDbDialect.SupportsApply.get -> bool
+override NextORM.MariaDb.MariaDbDialect.SupportsBulkCopy.get -> bool
+override NextORM.MariaDb.MariaDbDialect.SupportsIntersectExceptAll.get -> bool
+override NextORM.MariaDb.MariaDbDialect.SupportsJson.get -> bool
+override NextORM.MariaDb.MariaDbDialect.SupportsPercentileWindow.get -> bool
+override NextORM.MariaDb.MariaDbDialect.SupportsRegex.get -> bool
+override NextORM.MariaDb.MariaDbDialect.SupportsSelectWhereMinMax.get -> bool
+override NextORM.MariaDb.MariaDbDialect.SupportsTemporalKind(NextORM.Core.TemporalKind kind) -> bool
+override NextORM.MariaDb.MariaDbDialect.SupportsTemporalTable.get -> bool
+override NextORM.MariaDb.MariaDbDialect.SupportsUpdateReturning.get -> bool
+override NextORM.MariaDb.MariaDbDialect.UuidGenerators.get -> NextORM.Core.IUuidGenerators!
+static NextORM.MariaDb.MariaDbDataContextOptionsBuilderExtensions.UseMariaDb(this NextORM.Core.DataContextBuilder! builder, string! connectionString) -> NextORM.Core.DataContextBuilder!
+static NextORM.MariaDb.MariaDbDataContextOptionsBuilderExtensions.UseMariaDb(this NextORM.Core.DataContextBuilder! builder, System.Data.Common.DbConnection! connection) -> NextORM.Core.DataContextBuilder!
+static readonly NextORM.MariaDb.MariaDbDialect.Instance -> NextORM.MariaDb.MariaDbDialect!

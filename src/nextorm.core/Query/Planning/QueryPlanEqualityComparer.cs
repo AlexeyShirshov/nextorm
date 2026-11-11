@@ -1,0 +1,648 @@
+using Microsoft.Extensions.Logging;
+using System.Diagnostics.CodeAnalysis;
+using System.Linq.Expressions;
+
+namespace NextORM.Core;
+
+/// <summary>
+/// Equality comparer that keys a whole <see cref="QueryCommand"/> plan (shape flags, expressions,
+/// joins, paging, ...) in the plan cache.
+/// </summary>
+public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
+{
+    // private readonly IDictionary<ExpressionKey, Delegate> _cache;
+    // private readonly ILogger? _logger;
+    private readonly ExpressionPlanEqualityComparer _expComparer;
+    private readonly SelectExpressionPlanEqualityComparer _selectComparer;
+    private readonly FromExpressionPlanEqualityComparer _fromComparer;
+    private readonly JoinExpressionPlanEqualityComparer _joinComparer;
+    private readonly SortingExpressionPlanEqualityComparer _sortComparer;
+    //private readonly IQueryRegistry _queryProvider;
+
+    // public PreciseExpressionEqualityComparer()
+    //     : this(new ExpressionCache<Delegate>())
+    // {
+    // }
+    /// <summary>Creates a comparer that reuses the registry's expression and shape comparers.</summary>
+    /// <param name="queryProvider">The registry owning the nested comparers.</param>
+    public QueryPlanEqualityComparer(IQueryRegistry queryProvider)
+    {
+        //_queryProvider = queryProvider;
+        _expComparer = queryProvider.GetExpressionPlanEqualityComparer();
+        _selectComparer = queryProvider.GetSelectExpressionPlanEqualityComparer();
+        _fromComparer = queryProvider.GetFromExpressionPlanEqualityComparer();
+        _joinComparer = queryProvider.GetJoinExpressionPlanEqualityComparer();
+        _sortComparer = queryProvider.GetSortingExpressionPlanEqualityComparer();
+    }
+    // private QueryPlanEqualityComparer() { }
+    // public static QueryPlanEqualityComparer Instance => new();
+    /// <summary>Determines whether two commands would produce the same cached plan.</summary>
+    /// <param name="x">The first command.</param>
+    /// <param name="y">The second command.</param>
+    /// <returns><c>true</c> when both commands are logically equal.</returns>
+    public bool Equals(QueryCommand? x, QueryCommand? y)
+    {
+        if (x == y) return true;
+        if (x is null || y is null) return false;
+
+        return EqualsCore(x, y, includeCtes: true);
+    }
+
+    /// <summary>
+    /// Compares two CTE bodies for the plan key. A body built as a nested <c>With(...).From(...)</c>
+    /// carries the declarations of its own <c>WITH</c>, but those are hoisted into the enclosing
+    /// statement's top-level list (<see cref="CteHoister"/>) and are compared there, so they are ignored
+    /// here; otherwise the nested form and the equivalent flat <c>With(...).With(...)</c> chain would key
+    /// different plans.
+    /// </summary>
+    internal bool CteBodiesEqual(QueryCommand? x, QueryCommand? y)
+    {
+        if (x == y) return true;
+        if (x is null || y is null) return false;
+
+        return EqualsCore(x, y, includeCtes: false);
+    }
+
+    private bool EqualsCore(QueryCommand x, QueryCommand y, bool includeCtes)
+    {
+        if (x.EntityType != y.EntityType) return false;
+
+        if (x.ResultType != y.ResultType) return false;
+
+        if (x.SingleRow != y.SingleRow) return false;
+
+        if (x.IsDistinct != y.IsDistinct) return false;
+
+        if (x.GroupByWithTotals != y.GroupByWithTotals) return false;
+
+
+        var xLimitBy = x.LimitBy;
+        var yLimitBy = y.LimitBy;
+        if (xLimitBy is not null || yLimitBy is not null)
+        {
+            if (xLimitBy is null || yLimitBy is null) return false;
+
+            if (xLimitBy.Limit != yLimitBy.Limit || xLimitBy.Offset != yLimitBy.Offset) return false;
+
+            if (!_expComparer.Equals(xLimitBy.Expression, yLimitBy.Expression)) return false;
+        }
+
+        var xDistinctOn = x.DistinctOn;
+        var yDistinctOn = y.DistinctOn;
+        if (xDistinctOn is not null || yDistinctOn is not null)
+        {
+            if (xDistinctOn is null || yDistinctOn is null) return false;
+
+            if (!_expComparer.Equals(xDistinctOn.Expression, yDistinctOn.Expression)) return false;
+        }
+
+        var xExtremeRow = x.ExtremeRow;
+        var yExtremeRow = y.ExtremeRow;
+        if (xExtremeRow is not null || yExtremeRow is not null)
+        {
+            if (xExtremeRow is null || yExtremeRow is null) return false;
+
+            if (xExtremeRow.Kind != yExtremeRow.Kind) return false;
+
+            if (xExtremeRow.Ties != yExtremeRow.Ties) return false;
+
+            if (!_expComparer.Equals(xExtremeRow.ValueSelector, yExtremeRow.ValueSelector)) return false;
+
+            if (!_expComparer.Equals(xExtremeRow.GroupBy, yExtremeRow.GroupBy)) return false;
+
+            if (!_expComparer.Equals(xExtremeRow.Projection, yExtremeRow.Projection)) return false;
+        }
+
+        if (!WindowsEqual(x.Windows, y.Windows)) return false;
+
+        if (x.TableSample != y.TableSample) return false;
+
+        if (x.Temporal != y.Temporal) return false;
+
+        if (x.RowLock != y.RowLock) return false;
+
+        if (x.Final != y.Final) return false;
+
+        if (x.SampleRatio != y.SampleRatio || x.SampleOffset != y.SampleOffset) return false;
+
+        if (!KeyValueListsEqual(x.Settings, y.Settings)) return false;
+
+        if (!_expComparer.Equals(x.PreparedPreWhere, y.PreparedPreWhere)) return false;
+
+        if (x.PreWhereShapeHash != y.PreWhereShapeHash) return false;
+
+        if (x.ArrayJoinKind != y.ArrayJoinKind) return false;
+
+        if (x.BindArrayJoinElement != y.BindArrayJoinElement) return false;
+
+        if (!ExpressionListsEqual(x.ArrayJoinExpressions, y.ArrayJoinExpressions)) return false;
+
+        if (x.GroupingType != y.GroupingType) return false;
+
+        if (!GroupingSetsEqual(x.GroupingSets, y.GroupingSets)) return false;
+
+        if (!StringListsEqual(x.TableHints, y.TableHints)) return false;
+
+        if (!StringListsEqual(x.IndexHints, y.IndexHints)) return false;
+
+        if (x.IndexHintKind != y.IndexHintKind) return false;
+
+        if (!StringListsEqual(x.TablesInScopeHints, y.TablesInScopeHints)) return false;
+
+        if (x.ForJsonClause != y.ForJsonClause) return false;
+
+        if (x.ForXmlClause != y.ForXmlClause) return false;
+
+        // The document terminals (ForJson/ForXml) read the result as a scalar with no row mapper while
+        // a WithForJson/WithForXml command built for the same SQL keeps its mapper. Both can project
+        // the same result type, so the flag must be part of the key or a cached null-mapper plan would
+        // be reused by a ToList/First call (and vice versa).
+        if (x.DocumentMode != y.DocumentMode) return false;
+
+        if (x.Paging.Limit != y.Paging.Limit || x.Paging.Offset != y.Paging.Offset || x.Paging.HasWithTies != y.Paging.HasWithTies) return false;
+
+        // A per-parent eager top-N child lowers to a ranked derived table keyed by its partition
+        // selector, so the flag and the partition selector must be part of the plan key: otherwise a
+        // cached plain plan (or one partitioned on a different key) could be reused.
+        if (x.PerParentPaging != y.PerParentPaging) return false;
+        if (x.PerParentPaging && !_expComparer.Equals(x.PerParentPartition, y.PerParentPartition)) return false;
+        // Embedded (nested derived join source) vs top-level (split statement) render different SQL
+        // from the same ranked shape, so the rendering mode must not share a cached plan.
+        if (x.PerParentPaging && x.PerParentPagingEmbedded != y.PerParentPagingEmbedded) return false;
+
+        // First vs FirstOrDefault (and Single vs SingleOrDefault) share SQL and Paging.Limit, so the
+        // terminal flags must be part of the key; otherwise the cached plan's materializer would
+        // default-on-null for the wrong terminal (or throw for the other one).
+        if (x.DefaultOnEmpty != y.DefaultOnEmpty) return false;
+
+        if (x.SingleScalar != y.SingleScalar) return false;
+
+        if (x.UnionType != y.UnionType) return false;
+
+        if (!_fromComparer.Equals(x.From, y.From)) return false;
+
+        if (!_selectComparer.Equals(x.SelectList, y.SelectList)) return false;
+
+        if (!_expComparer.Equals(x.PreparedCondition, y.PreparedCondition)) return false;
+
+        // The condition expression alone cannot distinguish captured collections of different lengths
+        // (the closure access is shape independent), so the evaluated value-list shape is compared
+        // explicitly to keep a shorter/longer list from reusing a stale plan.
+        if (x.InValuesShapeHash != y.InValuesShapeHash) return false;
+
+        if (!_joinComparer.Equals(x.Joins, y.Joins)) return false;
+
+        if (!_sortComparer.ValueEquals(x.Sorting, y.Sorting)) return false;
+
+        if (!_selectComparer.Equals(x.GroupingList, y.GroupingList)) return false;
+
+        if (!_expComparer.Equals(x.Having, y.Having)) return false;
+
+        if (!Equals(x.UnionQuery, y.UnionQuery)) return false;
+
+        if (includeCtes && !CteDefinitionsEqual(x.Ctes, y.Ctes)) return false;
+
+        if (!StringListsEqual(x.Hints, y.Hints)) return false;
+
+        if (!string.Equals(x.Tag, y.Tag, StringComparison.Ordinal)) return false;
+
+        if (x.ResolvedQuoteIdentifiers != y.ResolvedQuoteIdentifiers) return false;
+
+        if (!ReferenceEquals(x.ResolvedNamingConvention, y.ResolvedNamingConvention)) return false;
+
+        if (x.ResolvedKeywordCase != y.ResolvedKeywordCase) return false;
+
+        if (x.ResolvedCommandTimeout != y.ResolvedCommandTimeout) return false;
+
+        // The resolved eager-load strategy and the structural eager-load graph change what is executed
+        // and materialized, so two commands that differ in either must not share a cached plan. An
+        // Auto->Split command and an explicit Split command with the same resolved graph compare equal.
+        if (x.ResolvedEagerLoadMode != y.ResolvedEagerLoadMode) return false;
+
+        if (!x.EagerLoadShape.Equals(y.EagerLoadShape)) return false;
+
+        // The collection-valued projection slot graph changes what is executed and projected in memory even
+        // when the SQL is identical, so two variants must never share a plan entry (#249 / T353).
+        if (!x.CollectionSlotShape.Equals(y.CollectionSlotShape)) return false;
+
+        if (!ComponentsEqual(x.Components, y.Components, x, y)) return false;
+
+        if (!IEqualityComparerExtensions.Equals(this, x.ReferencedQueries, y.ReferencedQueries)) return false;
+
+        // The outer references are the actual expressions a correlated subquery points at (for
+        // example `it.Id`). Two commands that differ only in that target share the same marker
+        // indices and the same referenced-query SQL, so without comparing the targets a cached
+        // plan for `o.A` would be reused for `o.B` and emit the wrong column.
+        if (!_expComparer.Equals(x.OuterReferences, y.OuterReferences)) return false;
+
+        return true;
+    }
+
+    private static bool StringListsEqual(IReadOnlyList<string>? x, IReadOnlyList<string>? y)
+    {
+        if (ReferenceEquals(x, y)) return true;
+        if (x is null || y is null) return false;
+        if (x.Count != y.Count) return false;
+
+        for (var (i, cnt) = (0, x.Count); i < cnt; i++)
+        {
+            if (!string.Equals(x[i], y[i], StringComparison.Ordinal)) return false;
+        }
+
+        return true;
+    }
+
+    private static bool ComponentsEqual(IReadOnlyList<IQueryComponent>? x, IReadOnlyList<IQueryComponent>? y, QueryCommand? xCommand, QueryCommand? yCommand)
+    {
+        // Prefer the prepared descriptors when both commands have them: they carry the full
+        // structural state that the component contract requires to be part of the key. The branch
+        // mirrors the hash, which only consumes descriptors when the list is non-empty, so an empty
+        // prepared list can never compare equal to a non-empty one (Equals ⇒ same hash).
+        var xPrepared = xCommand?.PreparedComponents;
+        var yPrepared = yCommand?.PreparedComponents;
+        if (xPrepared is { Count: > 0 } || yPrepared is { Count: > 0 })
+        {
+            if (xPrepared is not { Count: > 0 } || yPrepared is not { Count: > 0 }) return false;
+            if (xPrepared.Count != yPrepared.Count) return false;
+            for (var i = 0; i < xPrepared.Count; i++)
+            {
+                if (!xPrepared[i].StructurallyEquals(yPrepared[i])) return false;
+            }
+            return true;
+        }
+
+        if (ReferenceEquals(x, y)) return true;
+        if (x is null || y is null) return false;
+        if (x.Count != y.Count) return false;
+
+        for (var i = 0; i < x.Count; i++)
+        {
+            var a = x[i];
+            var b = y[i];
+            if (a is null || b is null) return false;
+            if (a.Slot != b.Slot) return false;
+            if (a.Contribution != b.Contribution) return false;
+            if (!a.Equals(b)) return false;
+        }
+
+        return true;
+    }
+
+    private bool WindowsEqual(IReadOnlyList<WindowDefinition>? x, IReadOnlyList<WindowDefinition>? y)
+    {
+        if (ReferenceEquals(x, y)) return true;
+        if (x is null || y is null) return false;
+        if (x.Count != y.Count) return false;
+
+        for (var (i, cnt) = (0, x.Count); i < cnt; i++)
+        {
+            var a = x[i];
+            var b = y[i];
+
+            if (!string.Equals(a.Name, b.Name, StringComparison.Ordinal)) return false;
+
+            if (a.PartitionBy.Count != b.PartitionBy.Count) return false;
+            for (var p = 0; p < a.PartitionBy.Count; p++)
+            {
+                if (!_expComparer.Equals(a.PartitionBy[p], b.PartitionBy[p])) return false;
+            }
+
+            if (a.OrderBy.Count != b.OrderBy.Count) return false;
+            for (var o = 0; o < a.OrderBy.Count; o++)
+            {
+                if (a.OrderBy[o].Direction != b.OrderBy[o].Direction) return false;
+                if (!_expComparer.Equals(a.OrderBy[o].Expression, b.OrderBy[o].Expression)) return false;
+            }
+
+            if (a.Frame?.Type != b.Frame?.Type
+                || a.Frame?.Start.Kind != b.Frame?.Start.Kind
+                || a.Frame?.Start.Offset != b.Frame?.Start.Offset
+                || a.Frame?.End.Kind != b.Frame?.End.Kind
+                || a.Frame?.End.Offset != b.Frame?.End.Offset
+                || a.Frame?.Exclusion != b.Frame?.Exclusion)
+                return false;
+        }
+
+        return true;
+    }
+
+    private static bool KeyValueListsEqual(IReadOnlyList<KeyValuePair<string, string>>? x, IReadOnlyList<KeyValuePair<string, string>>? y)
+    {
+        if (ReferenceEquals(x, y)) return true;
+        if (x is null || y is null) return false;
+        if (x.Count != y.Count) return false;
+
+        for (var (i, cnt) = (0, x.Count); i < cnt; i++)
+        {
+            if (!string.Equals(x[i].Key, y[i].Key, StringComparison.Ordinal)) return false;
+            if (!string.Equals(x[i].Value, y[i].Value, StringComparison.Ordinal)) return false;
+        }
+
+        return true;
+    }
+
+    private bool ExpressionListsEqual(IReadOnlyList<Expression>? x, IReadOnlyList<Expression>? y)
+    {
+        if (ReferenceEquals(x, y)) return true;
+        if (x is null || y is null) return false;
+        if (x.Count != y.Count) return false;
+
+        for (var (i, cnt) = (0, x.Count); i < cnt; i++)
+        {
+            if (!_expComparer.Equals(x[i], y[i])) return false;
+        }
+
+        return true;
+    }
+
+    private static bool GroupingSetsEqual(IReadOnlyList<int[]>? x, IReadOnlyList<int[]>? y)
+    {
+        if (ReferenceEquals(x, y)) return true;
+        if (x is null || y is null) return false;
+        if (x.Count != y.Count) return false;
+
+        for (var (s, cnt) = (0, x.Count); s < cnt; s++)
+        {
+            var a = x[s];
+            var b = y[s];
+            if (a.Length != b.Length) return false;
+
+            for (var i = 0; i < a.Length; i++)
+            {
+                if (a[i] != b[i]) return false;
+            }
+        }
+
+        return true;
+    }
+
+    private bool CteDefinitionsEqual(IReadOnlyList<CteDefinition>? x, IReadOnlyList<CteDefinition>? y)
+    {
+        if (ReferenceEquals(x, y)) return true;
+        if (x is null || y is null) return false;
+        if (x.Count != y.Count) return false;
+
+        for (var (i, cnt) = (0, x.Count); i < cnt; i++)
+        {
+            var a = x[i];
+            var b = y[i];
+
+            if (a.Name != b.Name) return false;
+            if (a.Recursive != b.Recursive) return false;
+            if (a.MaxRecursion != b.MaxRecursion) return false;
+            // A data-modifying CTE's plan is never cached (its insert body is not part of the query
+            // shape), so compare the bodies by reference and the read CTE queries structurally.
+            if (a.IsDataModifying || b.IsDataModifying)
+            {
+                if (!ReferenceEquals(a.Mutation, b.Mutation)) return false;
+                continue;
+            }
+
+            if (!CteBodiesEqual(a.Query, b.Query)) return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Returns the plan-cache hash of <paramref name="obj"/>, combining the precomputed sub-plan
+    /// hashes with the plan-shape flags, paging and outer references.
+    /// </summary>
+    /// <param name="obj">The command to hash.</param>
+    /// <returns>The plan hash, or <c>0</c> when <paramref name="obj"/> is <c>null</c>.</returns>
+    public int GetHashCode(QueryCommand? obj)
+    {
+        if (obj is null)
+            return 0;
+
+        return GetHashCodeCore(obj, includeCtes: true);
+    }
+
+    /// <summary>
+    /// Hash of a CTE body that ignores the body's own nested declarations; see
+    /// <see cref="CteBodiesEqual"/>. Must stay consistent with its equality counterpart.
+    /// </summary>
+    internal int GetCteBodyHashCode(QueryCommand? obj)
+    {
+        if (obj is null)
+            return 0;
+
+        return GetHashCodeCore(obj, includeCtes: false);
+    }
+
+    private int GetHashCodeCore(QueryCommand obj, bool includeCtes)
+    {
+        // #if PLAN_CACHE
+        //         if (obj.PlanHash.HasValue)
+        //             return obj.PlanHash.Value;
+        // #endif
+        unchecked
+        {
+            XxHash32 hash = new();
+
+            if (obj.FromPlanHash != 0)
+                hash.Add(obj.FromPlanHash);
+
+            if (obj.EntityType is not null)
+                hash.Add(obj.EntityType);
+
+            if (obj.ResultPlanHash != 0)
+                hash.Add(obj.ResultPlanHash);
+
+            hash.Add(obj.SingleRow);
+
+            hash.Add(obj.IsDistinct);
+
+            hash.Add(obj.GroupByWithTotals);
+
+            if (obj.GroupingType != GroupingType.None)
+                hash.Add(obj.GroupingType);
+
+            if (obj.GroupingSets is { Count: > 0 })
+            {
+                foreach (var set in obj.GroupingSets)
+                {
+                    hash.Add(set.Length);
+                    foreach (var index in set)
+                        hash.Add(index);
+                }
+            }
+
+            if (obj.TableHints is { Count: > 0 })
+                foreach (var hint in obj.TableHints)
+                    hash.Add(hint);
+
+            if (obj.IndexHints is { Count: > 0 })
+                foreach (var index in obj.IndexHints)
+                    hash.Add(index);
+
+            hash.Add(obj.IndexHintKind);
+
+            if (obj.TablesInScopeHints is { Count: > 0 })
+                foreach (var scopeHint in obj.TablesInScopeHints)
+                    hash.Add(scopeHint);
+
+            if (obj.ForJsonClause is { } forJson)
+                hash.Add(forJson);
+
+            if (obj.ForXmlClause is { } forXml)
+                hash.Add(forXml);
+
+            hash.Add(obj.DocumentMode);
+
+            if (obj.WherePlanHash != 0)
+                hash.Add(obj.WherePlanHash);
+
+            hash.Add(obj.InValuesShapeHash);
+
+            if (obj.ColumnsPlanHash != 0)
+                hash.Add(obj.ColumnsPlanHash);
+
+            if (obj.JoinPlanHash != 0)
+                hash.Add(obj.JoinPlanHash);
+
+            if (obj.SortingPlanHash != 0)
+                hash.Add(obj.SortingPlanHash);
+
+            hash.Add(obj.Paging.Limit);
+            hash.Add(obj.Paging.Offset);
+            hash.Add(obj.Paging.HasWithTies);
+
+            hash.Add(obj.PerParentPaging);
+            if (obj.PerParentPaging && obj.PerParentPartition is { } perParentPartition)
+                hash.Add(perParentPartition, _expComparer);
+            if (obj.PerParentPaging && obj.PerParentPagingEmbedded)
+                hash.Add(true);
+
+            hash.Add(obj.DefaultOnEmpty);
+            hash.Add(obj.SingleScalar);
+
+            if (obj.GroupingPlanHash != 0)
+                hash.Add(obj.GroupingPlanHash);
+
+            if (obj.LimitBy is { } limitBy)
+            {
+                hash.Add(limitBy.Limit);
+                hash.Add(limitBy.Offset);
+                hash.Add(limitBy.Expression, _expComparer);
+            }
+
+            if (obj.DistinctOn is { } distinctOn)
+            {
+                hash.Add(distinctOn.Expression, _expComparer);
+            }
+
+            if (obj.ExtremeRow is { } extremeRow)
+            {
+                hash.Add((int)extremeRow.Kind);
+                hash.Add((int)extremeRow.Ties);
+                hash.Add(extremeRow.ValueSelector, _expComparer);
+
+                if (extremeRow.GroupBy is { } extremeGroupBy)
+                    hash.Add(extremeGroupBy, _expComparer);
+
+                if (extremeRow.Projection is { } extremeProjection)
+                    hash.Add(extremeProjection, _expComparer);
+            }
+
+            if (obj.TableSample is { } tablesample)
+            {
+                hash.Add(tablesample.Method);
+                hash.Add(tablesample.Percent);
+                hash.Add(tablesample.Seed);
+            }
+
+            if (obj.Temporal is { } temporal)
+            {
+                hash.Add(temporal.Kind);
+                hash.Add(temporal.From);
+                hash.Add(temporal.To);
+            }
+
+            if (obj.RowLock is { } rowLock)
+            {
+                hash.Add(rowLock.Mode);
+                hash.Add(rowLock.Wait);
+            }
+
+            hash.Add(obj.Final);
+            hash.Add(obj.SampleRatio);
+            hash.Add(obj.SampleOffset);
+
+            if (obj.Settings is { Count: > 0 } settings)
+                foreach (var setting in settings)
+                {
+                    hash.Add(setting.Key);
+                    hash.Add(setting.Value);
+                }
+
+            if (obj.PreparedPreWhere is not null)
+                hash.Add(obj.PreparedPreWhere, _expComparer);
+
+            hash.Add(obj.PreWhereShapeHash);
+
+            hash.Add(obj.ArrayJoinKind);
+
+            hash.Add(obj.BindArrayJoinElement);
+
+            if (obj.ArrayJoinExpressions is { Count: > 0 } arrayJoinExpressions)
+            {
+                for (var (i, cnt) = (0, arrayJoinExpressions.Count); i < cnt; i++)
+                    hash.Add(arrayJoinExpressions[i], _expComparer);
+            }
+
+            if (obj.UnionPlanHash != 0)
+                hash.Add(obj.UnionPlanHash);
+
+            if (obj.ReferencedQueriesPlanHash != 0)
+                hash.Add(obj.ReferencedQueriesPlanHash);
+
+            if (obj.OuterReferences is { Count: > 0 } outerReferences)
+            {
+                for (var (i, cnt) = (0, outerReferences.Count); i < cnt; i++)
+                    hash.Add(outerReferences[i], _expComparer);
+            }
+
+            if (includeCtes && obj.CtesPlanHash != 0)
+                hash.Add(obj.CtesPlanHash);
+
+            if (obj.HintsPlanHash != 0)
+                hash.Add(obj.HintsPlanHash);
+
+            if (obj.Tag is { Length: > 0 } tag)
+                hash.Add(tag);
+
+            hash.Add(obj.ResolvedQuoteIdentifiers);
+
+            hash.Add(obj.ResolvedNamingConvention);
+
+            hash.Add(obj.ResolvedKeywordCase);
+
+            hash.Add(obj.ResolvedCommandTimeout);
+
+            hash.Add((int)obj.ResolvedEagerLoadMode);
+
+            obj.EagerLoadShape.AddTo(ref hash);
+
+            obj.CollectionSlotShape.AddTo(ref hash);
+
+            if (obj.PreparedComponents is { Count: > 0 } preparedComponents)
+            {
+                hash.Add(preparedComponents.Count);
+                foreach (var descriptor in preparedComponents)
+                    hash.Add(descriptor.StructuralHash);
+            }
+            else if (obj.Components is { Count: > 0 } components)
+            {
+                hash.Add(components.Count);
+                foreach (var component in components)
+                    hash.Add(component.GetHashCode());
+            }
+
+            if (obj.WindowsPlanHash != 0)
+                hash.Add(obj.WindowsPlanHash);
+
+            return hash.ToHashCode();
+        }
+    }
+}

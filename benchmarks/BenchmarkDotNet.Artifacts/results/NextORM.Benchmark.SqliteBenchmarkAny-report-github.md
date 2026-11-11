@@ -1,20 +1,20 @@
 ```
 
-BenchmarkDotNet v0.15.8, Linux Ubuntu 22.04.5 LTS (Jammy Jellyfish)
-AMD Ryzen 7 5800HS with Radeon Graphics 3.19GHz, 1 CPU, 8 logical and 4 physical cores
-.NET SDK 10.0.401
-  [Host] : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+BenchmarkDotNet v0.15.8, Linux Ubuntu 26.04.1 LTS (Resolute Raccoon)
+AMD EPYC 7763 3.13GHz, 1 CPU, 4 logical and 2 physical cores
+.NET SDK 11.0.100
+  [Host] : .NET 11.0.0 (11.0.0, 11.0.26.53018), X64 RyuJIT x86-64-v3
 
 Job=ShortRun  Toolchain=InProcessEmitToolchain  IterationCount=3  
 LaunchCount=1  WarmupCount=3  
 
 ```
-| Method           | Categories | Mean       | Error       | StdDev   | Gen0     | Gen1    | Allocated  |
-|----------------- |----------- |-----------:|------------:|---------:|---------:|--------:|-----------:|
-| Nextorm_Prepared |            |   889.9 μs |    37.86 μs |  2.07 μs |   9.7656 |       - |   85.16 KB |
-| Dapper           |            | 1,399.7 μs |   182.27 μs |  9.99 μs |  15.6250 |       - |  139.07 KB |
-| Linq2Db_Compiled |            | 1,498.9 μs |   118.96 μs |  6.52 μs |  27.3438 |       - |   233.6 KB |
-| Nextorm_Cached   | acceptance | 1,839.6 μs |   149.21 μs |  8.18 μs |  64.4531 |       - |  533.63 KB |
-| Linq2Db          |            | 2,672.7 μs |   526.45 μs | 28.86 μs |  46.8750 |       - |  401.58 KB |
-| EFCore_Compiled  |            | 3,620.0 μs |   855.35 μs | 46.88 μs |  97.6563 | 46.8750 |  807.05 KB |
-| EFCore           |            | 6,133.7 μs | 1,046.21 μs | 57.35 μs | 140.6250 | 46.8750 | 1211.83 KB |
+| Method           | Categories | Mean       | Error        | StdDev      | Gen0    | Gen1    | Allocated  |
+|----------------- |----------- |-----------:|-------------:|------------:|--------:|--------:|-----------:|
+| Nextorm_Prepared |            |   923.5 μs |     32.33 μs |     1.77 μs |  4.8828 |       - |   84.38 KB |
+| Nextorm_Cached   | acceptance | 1,262.2 μs |    118.68 μs |     6.51 μs | 11.7188 |  3.9063 |  193.78 KB |
+| Dapper           |            | 1,421.9 μs |    164.90 μs |     9.04 μs |  7.8125 |       - |  138.29 KB |
+| Linq2Db_Compiled |            | 1,523.8 μs |    117.87 μs |     6.46 μs | 13.6719 |       - |  232.82 KB |
+| Linq2Db          |            | 2,561.0 μs |    450.57 μs |    24.70 μs | 23.4375 |       - |  400.02 KB |
+| EFCore_Compiled  |            | 3,742.6 μs |    516.71 μs |    28.32 μs | 42.9688 | 19.5313 |   763.3 KB |
+| EFCore           |            | 7,168.9 μs | 27,767.30 μs | 1,522.02 μs | 62.5000 | 31.2500 | 1163.44 KB |

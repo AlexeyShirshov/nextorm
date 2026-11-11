@@ -1,0 +1,133 @@
+using Microsoft.Extensions.Logging;
+
+namespace NextORM.Core;
+
+/// <summary>
+/// A physical source carrying a source-level row lock, paired with the quoted SQL alias the alias
+/// provider assigned it during rendering. Used to emit the trailing <c>FOR UPDATE OF &lt;alias&gt;</c>
+/// clauses of a non-table-hint dialect.
+/// </summary>
+/// <param name="Alias">The quoted SQL alias of the locked source.</param>
+/// <param name="Lock">The lock requested for that source.</param>
+internal readonly record struct SourceLockTarget(string Alias, LockClause Lock);
+
+/// <summary>
+/// The collaborators a SQL build needs for one command, bundled so that statement assembly
+/// (<c>SqlBuilder</c>) and source rendering (<see cref="SqlSourceRenderer"/>) share them
+/// without either type owning the other's concerns. Immutable: a build only reads these and mutates
+/// the referenced <see cref="Params"/> / <see cref="ColumnsProvider"/> state. Derive a variant with
+/// <c>with</c> (for example a CTE rendered with a fresh columns provider).
+/// </summary>
+internal readonly record struct SqlBuildContext
+{
+    /// <summary>Creates a context from a visitor's construction-time options.</summary>
+    internal SqlBuildContext(VisitorOptions options)
+    {
+        Dialect = options.Dialect;
+        ParamMode = options.ParamMode;
+        Params = options.Params;
+        ColumnsProvider = options.ColumnsProvider;
+        QueryProvider = options.QueryProvider;
+        ParameterProvider = options.ParameterProvider;
+        AliasProvider = options.AliasProvider;
+        Logger = options.Logger;
+        QuoteIdentifiers = options.QuoteIdentifiers;
+        NamingConvention = options.NamingConvention;
+        IncludeNestedSources = options.IncludeNestedSources;
+        this.KeywordCase = options.KeywordCase;
+        ParameterNamePrefix = options.ParameterNamePrefix;
+        Capture = options.Capture;
+        MutationLowering = options.MutationLowering;
+    }
+
+    internal ISqlDialect Dialect { get; init; }
+    internal bool ParamMode { get; init; }
+    internal bool SequentialAccess { get; init; }
+    /// <summary>
+    /// When <see langword="true"/> the renderer must not append the dialect's LOB locator column
+    /// (SQLite's <c>rowid</c>) to a single-column projection even though <see cref="SequentialAccess"/>
+    /// is set. Requested only by the CSV terminal, whose bounded binary read does not need the locator
+    /// and whose SELECT must stay byte-identical to the buffered path; the streaming LOB terminals
+    /// (<c>ToStream</c>/<c>ToTextReader</c>) keep the default <see langword="false"/>.
+    /// </summary>
+    internal bool SuppressLobLocator { get; init; }
+    internal List<Parameter> Params { get; init; }
+    internal IColumnsProvider ColumnsProvider { get; init; }
+    internal IQueryRegistry QueryProvider { get; init; }
+    internal IParameterProvider ParameterProvider { get; init; }
+    internal IAliasProvider? AliasProvider { get; init; }
+    internal ILogger? Logger { get; init; }
+    internal bool QuoteIdentifiers { get; init; }
+    internal INamingConvention? NamingConvention { get; init; }
+    internal bool IncludeNestedSources { get; init; }
+    /// <summary>
+    /// When <see langword="true"/> the command being rendered must not emit its own <c>WITH</c>: its
+    /// declarations have already been hoisted into the enclosing statement's top-level <c>WITH</c>
+    /// (see <see cref="CteHoister"/>). Set only while rendering the body of a hoisted declaration.
+    /// </summary>
+    internal bool SuppressCtes { get; init; }
+
+    /// <summary>
+    /// When <see langword="true"/> the rendered select list is a typed CTE declaration body: every
+    /// projected column must carry an explicit alias matching its projection property name, compared
+    /// case-sensitively. A typed read resolves members to those property names, so a mapped column
+    /// differing from the property name only by case (for example <c>id</c> vs <c>Id</c>) still needs
+    /// the alias — PostgreSQL folded unquoted names are otherwise unreachable under the quoted name.
+    /// </summary>
+    internal bool ExactProjectionAliases { get; init; }
+
+    /// <summary>
+    /// When <see langword="true"/> the select list being rendered is a boundary that an enclosing query
+    /// addresses by column identifier: a derived subquery/derived table body or a CTAS source projection.
+    /// Such a boundary must declare the generated output name (see <see cref="SelectExpression.OutputName"/>)
+    /// of an unaliased computed scalar, because the enclosing query and its ORDER BY already reference that
+    /// identifier (<c>c0</c>). Every occurrence is supplied through <c>with</c> on a copy scoped to that one
+    /// render, so the prior value is restored by construction and no shared command state is mutated. It
+    /// never grants a public naming guarantee and leaves the named, physical, typed-CTE and JSON policies
+    /// untouched; elsewhere it stays <see langword="false"/>.
+    /// </summary>
+    internal bool RequireDerivedScalarOutputName { get; init; }
+
+    /// <summary>
+    /// Renders the body of a data-modifying CTE whose command is a single-table <c>UPDATE</c> or
+    /// <c>DELETE</c> (an <c>INSERT</c> body is rendered directly by <see cref="SqlSourceRenderer"/>).
+    /// Set on the context that renders a statement which may declare such a CTE, so the body is emitted
+    /// with the enclosing statement's parameter provider and accumulator. When it is <see langword="null"/>
+    /// the renderer rejects an UPDATE/DELETE body rather than emitting invalid SQL.
+    /// </summary>
+    internal Func<CteMutation, SqlBuildContext, string>? RenderMutationBody { get; init; }
+
+    internal KeywordCase KeywordCase { get; init; }
+    internal string ParameterNamePrefix { get; init; }
+
+    /// <summary>
+    /// The render-local capture of planner-owned parameter occurrences, or <see langword="null"/> when
+    /// the render is not producing a template (parameter extraction, caller-owned text). Carried through
+    /// every derived context and visitor so an emission anywhere in the render records into the same
+    /// statement.
+    /// </summary>
+    internal SqlParameterTemplateCapture? Capture { get; init; }
+
+    /// <summary>
+    /// The lowering of the mutation statement whose <c>SET</c>/<c>WHERE</c> fragment this context renders,
+    /// or <see langword="null"/> when the context does not render a mutation fragment. It is the same
+    /// instance the mutation builder projects the statement's parameters with, so a lowered occurrence in a
+    /// fragment is accounted for exactly like one the builder emits itself (D4g).
+    /// </summary>
+    internal MutationParameterLowering? MutationLowering { get; init; }
+
+    /// <summary>
+    /// Collects the already-resolved aliases of the physical sources carrying a source-level row lock
+    /// while a statement is rendered, so the trailing <c>FOR UPDATE OF &lt;alias&gt;</c> clauses can be
+    /// emitted after the <c>FROM</c>/<c>JOIN</c> section. Created per rendered statement and used only by
+    /// non-table-hint dialects (a table-hint dialect renders the lock on the source itself). Null in
+    /// parameter mode and when no source lock is present.
+    /// </summary>
+    internal List<SourceLockTarget>? SourceLocks { get; init; }
+
+    internal WhereExpressionVisitor CreateWhereVisitor(Type entityType, int dim, bool dontNeedAlias = false)
+        => new(new VisitorOptions(entityType, Dialect, ColumnsProvider, dim, AliasProvider, ParameterProvider, QueryProvider, dontNeedAlias, ParamMode, Params, Logger) { QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention, IncludeNestedSources = IncludeNestedSources, KeywordCase = KeywordCase, ParameterNamePrefix = ParameterNamePrefix, Capture = Capture, MutationLowering = MutationLowering });
+
+    internal BaseExpressionVisitor CreateColumnVisitor(Type entityType, int dim, bool dontNeedAlias)
+        => new(new VisitorOptions(entityType, Dialect, ColumnsProvider, dim, AliasProvider, ParameterProvider, QueryProvider, dontNeedAlias, ParamMode, Params, Logger) { QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention, IncludeNestedSources = IncludeNestedSources, KeywordCase = KeywordCase, ParameterNamePrefix = ParameterNamePrefix, Capture = Capture, MutationLowering = MutationLowering });
+}

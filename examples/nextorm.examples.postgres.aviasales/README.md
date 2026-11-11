@@ -17,7 +17,7 @@ next to its two implementations and you can translate your own queries in either
 | [`Sql/*.sql`](Sql) | Original model queries — the reference both arms are verified against |
 | [`AviasalesQueries.cs`](AviasalesQueries.cs) | nextorm implementation of the 5 demo queries + 6 course-style exercises |
 | [`Entities.cs`](Entities.cs) | nextorm `[SqlTable]` / `[Column]` entity interfaces for the `bookings` schema |
-| [`Linq2DbQueries.cs`](Linq2DbQueries.cs) | linq2db implementation of the same eleven queries |
+| [`Linq2DbQueries.cs`](Linq2DbQueries.cs) | linq2db implementation of ten of the eleven queries (`DelayPercentilesByModel` is nextorm-only) |
 | [`Linq2DbEntities.cs`](Linq2DbEntities.cs) | linq2db `[Table]` / `[Column]` POCOs for the same tables |
 | [`Comparison.cs`](Comparison.cs) | Runs both arms, prints `[ OK ]`/`[FAIL]`/`[DIFF]`, compares row counts |
 | [`Benchmarks.cs`](Benchmarks.cs) | BenchmarkDotNet class: one `[Benchmark]` per arm and query |
@@ -45,7 +45,7 @@ exception still aborts the run. See [`../README.md`](../README.md) for the share
 
 `--benchmark` provisions the database once (the same named volume as the plain run) and then runs
 BenchmarkDotNet in-process (`Job.ShortRun` + `InProcessEmitToolchain`, `[MemoryDiagnoser]`). Every
-query has a `Nextorm_*` baseline and a `Linq2Db_*` arm; the measured code is only "build + execute +
+each comparable query has a `Nextorm_*` baseline and a `Linq2Db_*` arm; `DelayPercentilesByModel` is nextorm-only because its former comparison used whole-query `FromSql`. The measured code is only "build + execute +
 materialise" (no printing, no JSON). A full filtered example:
 
 ```bash
@@ -61,10 +61,8 @@ Set `NEXTORM_EXAMPLES_BENCH_FULL=1` for the full out-of-process BenchmarkDotNet 
 
 The linq2db queries mirror the SQL structurally as well: typed CTEs use `AsCte`/`From`, window
 functions use `Sql.Window.*`, `STDDEV` uses `AnalyticFunctions.StdDevSamp`, and `string_agg` uses
-`Sql.StringAggregate(...).ToValue()`. Two constructs have no linq2db LINQ surface and are issued
-through `FromSql` (still inside linq2db, not a separate driver): the ordered-set
-`percentile_disc(...) WITHIN GROUP (...)` in query 8, and nothing else — the `jsonb ->>` operator uses
-`Sql.Expr`. Both are annotated in [`Linq2DbQueries.cs`](Linq2DbQueries.cs).
+`Sql.StringAggregate(...).ToValue()`. Whole-query raw SQL comparisons are not included; partial
+`Sql.Expr(...)` fragments within native LINQ are allowed. `DelayPercentilesByModel` is nextorm-only.
 
 ## SQL → nextorm: general rules
 
@@ -78,7 +76,7 @@ SQL clause order: `From().Join().Where().GroupBy().Having().OrderBy().Limit().Se
 | `SELECT a AS x` | `.Select(t => new { x = t.A })` (anonymous type = result row) |
 | `JOIN u ON a = b` / `LEFT JOIN` | `.Join<IU>((t, u) => …)` / `.LeftJoin<IU>((t, u) => …)`; joined items are `p.Item1`, `p.Item2`, … |
 | `WHERE c` | `.Where(t => c)` |
-| `GROUP BY a, b` | `.GroupBy(t => new { t.A, t.B })` |
+| `GROUP BY a, b` | `.GroupBy(t => new { t.A, t.B })`, or `.SelectGroup(t => new { t.A, t.B, total = SqlFunctions.Sql.sum(t.X) })` to infer the keys from the projection (query 5) |
 | `HAVING c` | `.Having(g => c)` (repeat the aggregate) or a derived query + `.Where(...)` |
 | `ORDER BY a, b DESC` | `.OrderBy(t => t.A).OrderByDescending(t => t.B)` (chained calls = multiple keys) |
 | `LIMIT n` | `.Limit(n)` |
@@ -106,12 +104,19 @@ Two nextorm-specific rules that trip people up:
   `Select` lambda is still typed over the *source entity*, not over the key, so
   `GroupBy(b => new { D = date_trunc("day", b.BookDate) })` must be followed by
   `Select(b => new { D = date_trunc("day", b.BookDate), … })`.
-* **A derived query cannot yet be the primary `FROM` source while joined** — `ctx.From(derived).Join(...)`
-  fails during preparation (known gap 10 in
-  [`sql-capabilities-gap-analysis.md`](../../docs/specs/roadmap/sql-capabilities-gap-analysis.md)).
-  The reference queries declare their subqueries as CTEs, so the example uses the typed `query.AsCte(name)` /
-  `ctx.From(cte)` API (see rule 1); queries 1–5 are expressed this way and are all **WORKING**.
+* **A derived query can be the primary `FROM` source while joined** — `ctx.From(derived).Join(...)` is
+  supported (a `Where` before the join is pushed onto the derived query). The reference queries declare
+  their subqueries as CTEs, so the example uses the typed `query.AsCte(name)` / `ctx.From(cte)` API
+  (see rule 1); queries 1–5 are expressed this way and are all **WORKING**.
   Every method carries a `WORKING` / `NOT WORKING` comment saying which it is and, when it fails, why.
+* **Named joins are opt-in and need a named projection.** A chain names its slots with
+  `ctx.From(...).WithAlias(Alias.Root)` plus a trailing `Alias.<Name>` on each join, and reads them as
+  `p.Root`/`p.Name` instead of `p.ItemN`. Two constraints come with it: a joined **entity** uses the
+  source-less form (`.Join<IEntity>((l, r) => …, Alias.X)`), while a joined **CTE** passes its
+  descriptor (`.Join(cte, …, Alias.X)`), and the chain's **whole projection must be a named type**,
+  because the alias generator renders that concrete type and reports `NORMGEN009` for an anonymous one
+  (#229). Every query in this example names its joins; the `route_monthly_revenue` chain of query 5 needs
+  no DTO because its root is the mapped `ITimetable` table.
 
 ## Demo queries: SQL file → method
 
@@ -120,11 +125,11 @@ Markers: **OK** — expressed with the regular LINQ API; **≡** — same result
 
 | # | SQL | Method | Coverage | Notes |
 |---|---|---|---|---|
-| 1 | [`aircraft_delay_chains.sql`](Sql/aircraft_delay_chains.sql) | `AviasalesQueries.AircraftDelayChains` | OK | two **typed** CTEs (`AsCte`: `flight_delays`, `delay_chains` reading the first); `LAG(...) OVER` → `lag(...).Over(...)`; `->> 'ru'` → `json_get_text`; `EXTRACT(EPOCH)/60` → `date_diff("second",…)/60.0`; final `JOIN airplanes_data` on the CTE |
-| 2 | [`business_occupancy_matrix.sql`](Sql/business_occupancy_matrix.sql) | `AviasalesQueries.BusinessOccupancyMatrix` | OK | two CTEs joined to each other and to `airplanes_data`; `EXTRACT(ISODOW…)` → `date_diff("day", date_trunc("week",…),…)+1`; `AVG(CASE WHEN day=n THEN ratio END)` → conditional `avg(day == n ? ratio : null)`; `NULLIF` → `nullif` |
+| 1 | [`aircraft_delay_chains.sql`](Sql/aircraft_delay_chains.sql) | `AviasalesQueries.AircraftDelayChains` | OK | two **typed** CTEs (`AsCte`: `flight_delays`, `delay_chains` reading the first and projected into the named `DelayChainRow`); the outer chain is aliased — `WithAlias(Alias.DelayChain)` + `Alias.Airplane` — and read as `p.DelayChain`/`p.Airplane`; `LAG(...) OVER` → `lag(...).Over(...)`; `->> 'ru'` → `json_get_text`; `EXTRACT(EPOCH)/60` → `date_diff("second",…)/60.0` |
+| 2 | [`business_occupancy_matrix.sql`](Sql/business_occupancy_matrix.sql) | `AviasalesQueries.BusinessOccupancyMatrix` | OK | two CTEs joined to each other and to `airplanes_data`, both projected into named rows (`FlightOccupancyRow`, `BusinessCapacityRow`) and all three slots named — `WithAlias(Alias.Occupancy)` + `Alias.Capacity`/`Alias.Airplane`; `EXTRACT(ISODOW…)` → `date_diff("day", date_trunc("week",…),…)+1`; `AVG(CASE WHEN day=n THEN ratio END)` → conditional `avg(day == n ? ratio : null)`; `NULLIF` → `nullif` |
 | 3 | [`passenger_noshow_analysis.sql`](Sql/passenger_noshow_analysis.sql) | `AviasalesQueries.PassengerNoShowAnalysis` | OK | `passenger_stats` typed CTE groups `passenger_flight_history` with member access; `CASE WHEN bp.seat_no IS NULL THEN 1 ELSE 0 END` → `x == null ? 1 : 0`; `total_booked = total_noshows` in the outer `Where` |
 | 4 | [`rolling_revenue_metrics.sql`](Sql/rolling_revenue_metrics.sql) | `AviasalesQueries.RollingRevenueMetrics` | OK | CTE `daily_revenue`; `DATE_TRUNC('day')` → `date_trunc("day",…)`; `SUM OVER (ROWS UNBOUNDED PRECEDING)` → `sum_over(...).Over(..., RowsUnboundedPrecedingToCurrentRow)`; `AVG OVER (6 PRECEDING)` → `avg_over(...).Over(..., Rows(Preceding(6), CurrentRow))` |
-| 5 | [`route_network_abc_xyz.sql`](Sql/route_network_abc_xyz.sql) | `AviasalesQueries.RouteNetworkAbcXyz` | OK | three chained **typed** CTEs (`AsCte`: `route_monthly_revenue`, `route_aggregates`, `abc_analys`); `STDDEV` → `stdev` (projected `(decimal?)`, so the one-month-per-route case stays distinct from zero); `SUM(...) OVER() / SUM(...) OVER()` → `sum_over(...).Over()`; `city ->> 'ru' \|\| ' -> '` → `json_get_text(...) + " -> " + …`; ABC/XYZ `CASE` → ternary chain |
+| 5 | [`route_network_abc_xyz.sql`](Sql/route_network_abc_xyz.sql) | `AviasalesQueries.RouteNetworkAbcXyz` | OK | three chained **typed** CTEs (`AsCte`: `route_monthly_revenue`, `route_aggregates`, `abc_analys`); the two grouped CTEs use `SelectGroup`, so the keys (`route` + `flight_month`, then `route`) are inferred from the projection instead of a separate `GroupBy`; the four-table join of `route_monthly_revenue` names every slot — `WithAlias(Alias.Timetable)` + `Alias.Departure`/`Arrival`/`Segment`/`Ticket` — and needs no DTO because its root is a mapped table; `STDDEV` → `stdev` (projected `(decimal?)`, so the one-month-per-route case stays distinct from zero); `SUM(...) OVER() / SUM(...) OVER()` → `sum_over(...).Over()`; `city ->> 'ru' \|\| ' -> '` → `json_get_text(...) + " -> " + …`; ABC/XYZ `CASE` → ternary chain |
 
 ## Course exercises (6–11)
 

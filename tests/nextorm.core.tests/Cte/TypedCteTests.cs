@@ -1109,8 +1109,7 @@ public class TypedCteTests
         public long Id { get; set; }
     }
 
-    [SqlTableFunction("typed_cte_tvf")]
-    private static IQueryable<TypedCteEntity> TypedCteRows() => throw new NotSupportedException();
+    private static TvfEntityBuilder<TypedCteEntity> TypedCteRows() => new("typed_cte_tvf");
 
     [Fact]
     public void TypedCte_TableAliasReceiver_PlainTypedJoin_ShouldUseEntityMetadata()
@@ -1182,7 +1181,7 @@ public class TypedCteTests
     {
         using var ctx = new TestContext();
 
-        var tvf = ctx.FromTableFunction(() => TypedCteRows());
+        var tvf = ctx.From(() => TypedCteRows());
 
         var cmd = ctx.From("typed_cte_entity")
             .Join(tvf, (t, b) => t.GetInt64("Id") == b.Id)

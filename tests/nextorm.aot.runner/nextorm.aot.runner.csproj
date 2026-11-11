@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <PublishAot>true</PublishAot>
+    <TrimmerSingleWarn>false</TrimmerSingleWarn>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <WarningsNotAsErrors>IL2*;IL3*</WarningsNotAsErrors>
+    <IlcTreatWarningsAsErrors>false</IlcTreatWarningsAsErrors>
+    <StackTraceSupport>true</StackTraceSupport>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Update="Microsoft.DotNet.ILCompiler" Version="11.0.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <KnownILCompilerPack Update="Microsoft.DotNet.ILCompiler">
+      <ILCompilerPackVersion>11.0.0</ILCompilerPackVersion>
+    </KnownILCompilerPack>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/nextorm.core/nextorm.core.csproj" />
+    <ProjectReference Include="../../src/nextorm.sqlite/nextorm.sqlite.csproj" />
+    <ProjectReference Include="../../src/nextorm.extensions/nextorm.extensions.csproj" />
+  </ItemGroup>
+</Project>

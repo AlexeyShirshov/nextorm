@@ -1,0 +1,260 @@
+{
+  "authoritative_session": "session-2",
+  "validator_sha256": "1a7d68e9366bca1ee6810994e34518a36e3950797a418598e1b13076fcdb09ca",
+  "protocol_deviations": [
+    "session-2 ran 12 BDN processes (4 acceptance, 4 baseline public-json, 4 duplicate candidate public-json) instead of 8; compute_verdict evaluates only the 4 baseline public-json legs and the candidate legs were not used in any verdict.",
+    "Provenance gaps: session.json recorded pre/post git checks and db_sha_before/db_sha_after at all four round boundaries; run.log recorded git worktree list but not worktree add/remove executions, did not record exact per-leg finish timestamps, and used a constant host HOST_HEAD (verified live post-hoc in audit-receipt.json)."
+  ],
+  "authoritative_session_id": "t311-20261101T111315Z",
+  "invalidated_sessions": [
+    {
+      "name": "session-1-invalid",
+      "exit_code": 2,
+      "status": "INVALID_INPUT",
+      "reasons": [
+        "ROUND2_EXECUTION_ORDER_VIOLATION",
+        "MISSING_ROUND_BOUNDARY_IDENTITY_TRANSCRIPT"
+      ]
+    }
+  ],
+  "exit_code": 0,
+  "generated_utc": "2026-11-01T11:33:13Z",
+  "limits": {
+    "1k": 1.2,
+    "10k": 1.0,
+    "100k": 0.95
+  },
+  "alloc_limit_10k": 446095,
+  "acceptance_control_threshold": 1.2,
+  "acceptance_round_timeout_s": 240.0,
+  "sizes": {
+    "1k": {
+      "size_rows": 1000,
+      "limit": 1.2,
+      "rounds": [
+        {
+          "round": 1,
+          "nextorm_mean_ns": 590104.67578125,
+          "linq2db_mean_ns": 528945.5348307291,
+          "d_i": 0.10941446991609077,
+          "ratio_exp_d_i": 1.1156246473847118
+        },
+        {
+          "round": 2,
+          "nextorm_mean_ns": 572401.853515625,
+          "linq2db_mean_ns": 541811.7076822916,
+          "d_i": 0.054922747543432016,
+          "ratio_exp_d_i": 1.0564589974701522
+        }
+      ],
+      "exp_mean_d": 1.085638842584883,
+      "direction_agreement": true,
+      "noise_s": 0.3,
+      "instability_factor_threshold": 1.3,
+      "unstable": false,
+      "min_nextorm_over_min_linq2db": 1.0821565091740544,
+      "verdict": "PASS",
+      "nextorm_alloc_bytes_10k": null,
+      "alloc_limit_10k": null,
+      "alloc_ok": true
+    },
+    "10k": {
+      "size_rows": 10000,
+      "limit": 1.0,
+      "rounds": [
+        {
+          "round": 1,
+          "nextorm_mean_ns": 7748377.091145833,
+          "linq2db_mean_ns": 8297155.205729167,
+          "d_i": -0.06842929591158652,
+          "ratio_exp_d_i": 0.9338594854529895
+        },
+        {
+          "round": 2,
+          "nextorm_mean_ns": 7428037.158854167,
+          "linq2db_mean_ns": 8124639.958333333,
+          "d_i": -0.08963976839724339,
+          "ratio_exp_d_i": 0.9142604714729949
+        }
+      ],
+      "exp_mean_d": 0.9240080159066687,
+      "direction_agreement": true,
+      "noise_s": 0.3,
+      "instability_factor_threshold": 1.3,
+      "unstable": false,
+      "min_nextorm_over_min_linq2db": 0.9142604714729949,
+      "verdict": "PASS",
+      "nextorm_alloc_bytes_10k": [
+        412748.0,
+        412748.0
+      ],
+      "alloc_limit_10k": 446095,
+      "alloc_ok": true
+    },
+    "100k": {
+      "size_rows": 100000,
+      "limit": 0.95,
+      "rounds": [
+        {
+          "round": 1,
+          "nextorm_mean_ns": 74532572.42857142,
+          "linq2db_mean_ns": 82699176.71428572,
+          "d_i": -0.10397340325112413,
+          "ratio_exp_d_i": 0.9012492674028812
+        },
+        {
+          "round": 2,
+          "nextorm_mean_ns": 73202814.0,
+          "linq2db_mean_ns": 80511721.09523809,
+          "d_i": -0.09516891464156843,
+          "ratio_exp_d_i": 0.9092193410374085
+        }
+      ],
+      "exp_mean_d": 0.9052255326814942,
+      "direction_agreement": true,
+      "noise_s": 0.3,
+      "instability_factor_threshold": 1.3,
+      "unstable": false,
+      "min_nextorm_over_min_linq2db": 0.9092193410374085,
+      "verdict": "PASS",
+      "nextorm_alloc_bytes_10k": null,
+      "alloc_limit_10k": null,
+      "alloc_ok": true
+    }
+  },
+  "acceptance_controls": {
+    "all_controls_pass": true,
+    "all_rounds_within_240s": true,
+    "rows": [
+      {
+        "round": 1,
+        "case": "InMemoryBenchmarkAggregates.Nextorm_Count",
+        "baseline_mean_ns": 2230064.8111979165,
+        "candidate_mean_ns": 2184036.69921875,
+        "ratio": 0.9793601909020565,
+        "threshold": 1.2,
+        "pass": true
+      },
+      {
+        "round": 1,
+        "case": "InMemoryBenchmarkGroupBy.Nextorm_GroupByCount",
+        "baseline_mean_ns": 60656632.629629634,
+        "candidate_mean_ns": 59729364.7037037,
+        "ratio": 0.9847128354192056,
+        "threshold": 1.2,
+        "pass": true
+      },
+      {
+        "round": 1,
+        "case": "SqliteBenchmarkAny.Nextorm_Cached",
+        "baseline_mean_ns": 2114751.9505208335,
+        "candidate_mean_ns": 2111547.4986979165,
+        "ratio": 0.9984847150408691,
+        "threshold": 1.2,
+        "pass": true
+      },
+      {
+        "round": 1,
+        "case": "SqliteBenchmarkCachedPlan.Prepared_ToList",
+        "baseline_mean_ns": 898763.4440104166,
+        "candidate_mean_ns": 897928.1500651041,
+        "ratio": 0.9990706186918492,
+        "threshold": 1.2,
+        "pass": true
+      },
+      {
+        "round": 1,
+        "case": "SqliteBenchmarkCachedPlan.Cached_ToList",
+        "baseline_mean_ns": 1535478.3365885417,
+        "candidate_mean_ns": 1545551.9401041667,
+        "ratio": 1.006560563751102,
+        "threshold": 1.2,
+        "pass": true
+      },
+      {
+        "round": 1,
+        "case": "SqliteBenchmarkCachedPlan.Cached_PlanOnly_Param",
+        "baseline_mean_ns": 421549.1520182292,
+        "candidate_mean_ns": 405135.16878255206,
+        "ratio": 0.9610627060756908,
+        "threshold": 1.2,
+        "pass": true
+      },
+      {
+        "round": 1,
+        "case": "SqliteBenchmarkWhere.Nextorm_Cached_ToListAsync",
+        "baseline_mean_ns": 2098922.9368489585,
+        "candidate_mean_ns": 2137681.4986979165,
+        "ratio": 1.0184659289621871,
+        "threshold": 1.2,
+        "pass": true
+      },
+      {
+        "round": 2,
+        "case": "InMemoryBenchmarkAggregates.Nextorm_Count",
+        "baseline_mean_ns": 2161473.05859375,
+        "candidate_mean_ns": 2160699.2447916665,
+        "ratio": 0.9996419970172624,
+        "threshold": 1.2,
+        "pass": true
+      },
+      {
+        "round": 2,
+        "case": "InMemoryBenchmarkGroupBy.Nextorm_GroupByCount",
+        "baseline_mean_ns": 57566910.25925926,
+        "candidate_mean_ns": 57879139.44444445,
+        "ratio": 1.0054237613896426,
+        "threshold": 1.2,
+        "pass": true
+      },
+      {
+        "round": 2,
+        "case": "SqliteBenchmarkAny.Nextorm_Cached",
+        "baseline_mean_ns": 2129551.8072916665,
+        "candidate_mean_ns": 2160066.3268229165,
+        "ratio": 1.0143290806200473,
+        "threshold": 1.2,
+        "pass": true
+      },
+      {
+        "round": 2,
+        "case": "SqliteBenchmarkCachedPlan.Prepared_ToList",
+        "baseline_mean_ns": 894330.7666015625,
+        "candidate_mean_ns": 896680.9554036459,
+        "ratio": 1.0026278742606765,
+        "threshold": 1.2,
+        "pass": true
+      },
+      {
+        "round": 2,
+        "case": "SqliteBenchmarkCachedPlan.Cached_ToList",
+        "baseline_mean_ns": 1614632.3893229167,
+        "candidate_mean_ns": 1567353.6881510417,
+        "ratio": 0.9707185973200371,
+        "threshold": 1.2,
+        "pass": true
+      },
+      {
+        "round": 2,
+        "case": "SqliteBenchmarkCachedPlan.Cached_PlanOnly_Param",
+        "baseline_mean_ns": 415823.4541015625,
+        "candidate_mean_ns": 394611.0260416667,
+        "ratio": 0.9489869370025608,
+        "threshold": 1.2,
+        "pass": true
+      },
+      {
+        "round": 2,
+        "case": "SqliteBenchmarkWhere.Nextorm_Cached_ToListAsync",
+        "baseline_mean_ns": 2124073.7721354165,
+        "candidate_mean_ns": 2131410.8255208335,
+        "ratio": 1.0034542366097015,
+        "threshold": 1.2,
+        "pass": true
+      }
+    ]
+  },
+  "alloc_ok": true,
+  "capture_basis": "All benchmark builds and 2-round paired ABBA measurements were executed in a clean detached worktree at the retained commit 2ea3ef45 (tree b3026856..., zero diff across src/, tests/, benchmarks/), while collector orchestration, evidence storage (.pdca/T311/rv4/) and versioned receipts (docs/specs/performance/t311-oracle-rv4/) reside on branch 1.0.9-rc5 at HEAD 9e7fb4b3.",
+  "job_fingerprint": "ShortRun/InProcessEmitToolchain"
+}

@@ -6,7 +6,7 @@ namespace NextORM.Integration.Tests;
 
 /// <summary>
 /// T217 (#217) executed regression for the cached-path parameter-refresh fallback that reaches the
-/// previously uncovered true arm at <c>src/nextorm.core/Visitors/MemberTranslator.cs:135</c> — a
+/// previously uncovered true arm at <c>src/nextorm.core/Visitors/Functions/MemberTranslator.cs:135</c> — a
 /// <see cref="DateTimeOffset"/> date part rendered while <c>BaseExpressionVisitor.IsParamMode</c> is
 /// true. A query that carries a sort has no <c>ParamRefreshRecipe</c>, so a plan-cache hit re-renders
 /// the WHERE through <c>QueryPlanner.ExtractParams</c> (the only <c>ParamMode=true</c> render root);

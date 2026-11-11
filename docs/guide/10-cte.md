@@ -54,7 +54,7 @@ with recent as (select id
  from recent
 ```
 
-The `Output:` tables below show the rows returned by each example against the integration-test seed data (`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).
+The `Output:` tables below show the rows returned by each example against the integration-test seed data (`tests/nextorm.integration.tests/Providers/TestProviders/SqliteTestProvider.cs`).
 
 Output:
 
@@ -97,8 +97,8 @@ replace `t["id"]` / `t.GetInt64("id")`. A CTE is a **typed projection source, no
 whole-entity `TResult` does not make the outer source a table, and members resolve to the defining
 projection's output aliases, carrying its aliases and configured converters/provider types — no DTO remapping.
 
-The string API is unchanged: `With`/`WithRecursive`/`From(string)`/`From(CteDefinition)` still declare and
-read CTEs by name and remain available. A recursive CTE can also be declared through the typed
+The string API declares and reads CTEs by name: `With`/`WithRecursive`/`From(string)`/`From(CteDefinition)`
+remain available alongside the typed surface. A recursive CTE can also be declared through the typed
 `AsRecursiveCte` surface described below.
 
 Typed declaration reuses the same machinery, so heterogeneous descriptors and a self-join compose normally.
@@ -291,8 +291,8 @@ anchor/step contract.
 The two-argument overload emits **no** depth hint: SQL Server uses its own default (`100`). The
 three-argument overload takes a required `int` (there is no nullable default) and emits
 `option (maxrecursion n)` on SQL Server only; `0` means "no limit" and a positive value is the maximum
-recursion depth. Every other provider ignores the hint and uses its own default, exactly as the legacy
-string API does.
+recursion depth. Every other provider ignores the hint and uses its own default, exactly as the string API
+does.
 
 When a recursive CTE is hoisted into another statement — `INSERT … SELECT`, `MERGE`, `CTAS` /
 `SELECT … INTO`, or a batch step — the explicit limit travels with it: SQL Server appends
@@ -335,12 +335,12 @@ with nums as (select id as [Id]
 | ClickHouse | **Excluded**: a typed recursive CTE throws `NotSupportedException` before any SQL is emitted. An ordinary (non-recursive) typed CTE still works on ClickHouse. |
 | In-memory | Not applicable: recursion is rendered by the SQL dialects. |
 
-The legacy string `WithRecursive` is **not** gated by this capability check and keeps its existing behavior on
-every provider, with one SQL Server restriction described below.
+The string `WithRecursive` is **not** gated by this capability check and works on every provider, with one
+SQL Server restriction described below.
 
-### SQL Server: legacy recursive CTE must use `UNION ALL`
+### SQL Server: recursive CTE must use `UNION ALL`
 
-A legacy `WithRecursive` declaration whose body is a distinct `UNION` (`anchor.Union(step)`) is not a valid
+A `WithRecursive` declaration whose body is a distinct `UNION` (`anchor.Union(step)`) is not a valid
 SQL Server recursive CTE — the server answers *"does not contain a top-level UNION ALL operator"*. nextorm
 rejects it locally while the query is prepared, **before** it is executed and before it is placed in the plan
 cache, with a `NotSupportedException` naming SQL Server and both supported forms:
@@ -350,12 +350,12 @@ cache, with a `NotSupportedException` naming SQL Server and both supported forms
 var body = anchor.Union(step);
 
 // Supported alternatives:
-var body = anchor.UnionAll(step);                        // legacy API, explicit UNION ALL
+var body = anchor.UnionAll(step);                        // string API, explicit UNION ALL
 var nums = anchor.AsRecursiveCte("nums", self => ...);   // typed API, always UNION ALL
 ```
 
 PostgreSQL, SQLite, MySQL and MariaDB keep accepting a distinct `UNION` in a recursive CTE and emit it
-byte-for-byte as before.
+byte-for-byte.
 
 Every example above is bounded by a terminating predicate in the step; never build an unbounded recursive
 CTE.
@@ -782,11 +782,11 @@ For the general `UPDATE` surface see [Data modification (UPDATE)](19-update-stat
 
 ---
 
-Source: `src/nextorm.core/Builders/CteQuery.cs:7`, `src/nextorm.core/DataContext/DataContextExtensions.cs:9`;
+Source: `src/nextorm.core/Builders/Cte/CteQuery.cs:7`, `src/nextorm.core/DataContext/DataContextExtensions.cs:9`;
 `tests/nextorm.integration.tests/CommonTestSuite/Cte/CommonTestSuite.Cte.cs:14`, `tests/nextorm.integration.tests/CommonTestSuite/Cte/CommonTestSuite.Cte.cs:33`;
 `tests/nextorm.core.tests/Cte/CteQueryTests.cs:8`;
-typed recursive CTE: `src/nextorm.core/Cte.cs:15`, `src/nextorm.core/Query/QueryCommand.TResult.cs:1100`,
-`src/nextorm.core/DataContext/SqlSourceRenderer.cs:35`, `src/nextorm.core/Query/QueryCommand.QueryPreparer.cs:981`;
+typed recursive CTE: `src/nextorm.core/Cte.cs:15`, `src/nextorm.core/Query/Commands/QueryCommand.TResult.cs:1100`,
+`src/nextorm.core/DataContext/Sql/SqlSourceRenderer.cs:35`, `src/nextorm.core/Query/Commands/QueryCommand.QueryPreparer.cs:981`;
 `tests/nextorm.core.tests/Cte/TypedCteTests.cs:1057`, `tests/nextorm.sqlite.tests/Cte/TypedCteTests.cs:718`;
 `tests/nextorm.sqlite.tests/PlanCache/PlanCacheTests.cs:190`, `tests/nextorm.sqlite.tests/PlanCache/PlanCacheTests.cs:343`;
 generated SQL: `tests/nextorm.sqlite.tests/SqlGeneration/SqlGenerationTests.cs:1188`, `:1202`, `:1216`, `:1231`, `:1248`;

@@ -103,7 +103,7 @@ public class SqliteBenchmarkFeatures
         _nextormExcept = _ctx.SimpleEntity.Select(s => s.Id).Except(_ctx.ComplexEntity.Select(c => (int)c.Id)).Prepare();
 
         _nextormUdf = _ctx.ComplexEntity.Where(c => c.Id == 2).Select(c => Udf.ToUpper(c.String!)).Prepare();
-        _nextormTvf = _db.FromTableFunction(() => Tvf.JsonEach("[1,2,3]")).Select(r => r.Value).Prepare();
+        _nextormTvf = _db.From(() => Tvf.JsonEach("[1,2,3]")).Select(r => r.Value).Prepare();
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
         efBuilder.UseSqlite(@$"Filename={BenchDb.FilePath}");
@@ -124,8 +124,7 @@ public class SqliteBenchmarkFeatures
 
     private static class Tvf
     {
-        [SqlTableFunction("json_each")]
-        public static IQueryable<JsonEachRow> JsonEach(string json) => throw new NotSupportedException();
+        public static TvfEntityBuilder<JsonEachRow> JsonEach(string json) => new("json_each");
     }
 
     #region LEFT JOIN

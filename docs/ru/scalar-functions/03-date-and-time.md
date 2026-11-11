@@ -94,6 +94,13 @@ Nullable-значения и `DateTimeOffset?` в `Where`/`Select`/`OrderBy` п�
   следующего релиза;
 * дробные `.AddYears`/`.AddMonths` — параметр CLR имеет тип `int`.
 
+Отказ не зависит от формы проекции: анонимная проекция, DTO, предикат и простой скаляр
+(`Select(e => e.Value.DayOfWeek)`, включая `.First()`/`.Single()` поверх него) сообщают одно и то же
+сообщение при подготовке, до отправки любого SQL. Он также ограничен провайдерами с маппингом строк
+(`IContextEnvironment.NeedMapping`); in-memory-провайдер продолжает вычислять такие члены на клиенте.
+Члены, у которых трансляция есть (`.Year` … `.DayOfYear`, семейство `Add*`, `Now`/`UtcNow`), работают
+в любой форме проекции.
+
 `value.ToString(format)` и `string.Format` по-прежнему транслируются (см.
 [Форматирование дат и чисел в строки](#форматирование-дат-и-чисел-в-строки)). Колонка табличного
 параметра и элемент PostgreSQL-массива типа `DateTimeOffset` отображаются на форму timestamp with
@@ -125,7 +132,7 @@ time) и материализуют `DateTimeOffset` с нулевым offset'о
 |---|---|
 | `SqlFunctions.Postgres.make_interval(y, mo, d, h, mi, s)` | `make_interval(y, mo, 0, d, h, mi, s)` (параметр `weeks` у PostgreSQL зафиксирован в `0`) |
 | `SqlFunctions.Postgres.make_time(h, mi, sec)` / `make_timestamp(y, mo, d, h, mi, sec)` | `make_time(...)` / `make_timestamp(...)` |
-| `SqlFunctions.Postgres.age(a, b)` | `age(a, b)` (результат — `interval`; целая часть в месяцах читается как 30 дней) |
+| `SqlFunctions.Postgres.age(a, b)` | `age(a, b)` (результат — `interval`; при материализации в колонку `TimeSpan` бросается `InvalidCastException`, если возвращённое значение несёт ненулевую месячную составляющую — любого знака, — с указанием календарных месяцев, поэтому месяц никогда не читается как 30 дней; значение с нулевыми месяцами конвертируется точно) |
 | `SqlFunctions.Postgres.date_bin(stride, source, origin)` | `date_bin(cast(stride as interval), source, origin)` |
 | `SqlFunctions.Postgres.justify_days(interval)` / `justify_hours(interval)` | `justify_days(interval)` / `justify_hours(interval)` |
 | `SqlFunctions.Postgres.to_char(value, format)` | `to_char(value, format)` |
@@ -136,9 +143,56 @@ time) и материализуют `DateTimeOffset` с нулевым offset'о
 | `SqlFunctions.Postgres.current_date()` / `current_time()` / `localtime()` / `localtimestamp()` | те же ключевые слова |
 | `SqlFunctions.Postgres.pg_typeof(x)` | `cast(pg_typeof(x) as text)` |
 
+Остаточное семейство даты/времени #281 живёт на той же поверхности, один член на серверную
+перегрузку, и каждое имя гейтится **отдельно** через
+[`IScalarFunctions.Supports`](xref:NextORM.Core.IScalarFunctions.Supports(System.String)), а не общим
+флагом семейства:
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.Postgres.date_subtract(value, interval)` | `date_subtract(value, interval)` → `timestamptz` |
+| `SqlFunctions.Postgres.date_subtract(value, interval, zone)` | `date_subtract(value, interval, zone)` → `timestamptz` |
+| `SqlFunctions.Postgres.justify_interval(interval)` | `justify_interval(interval)` → `interval` |
+| `SqlFunctions.Postgres.make_timestamptz(y, mo, d, h, mi, sec)` | `make_timestamptz(y, mo, d, h, mi, sec)` → `timestamptz` |
+| `SqlFunctions.Postgres.make_timestamptz(y, mo, d, h, mi, sec, zone)` | `make_timestamptz(..., zone)` → `timestamptz` |
+| `SqlFunctions.Postgres.clock_timestamp()` | `clock_timestamp()` → `timestamptz` |
+| `SqlFunctions.Postgres.statement_timestamp()` | `statement_timestamp()` → `timestamptz` |
+| `SqlFunctions.Postgres.transaction_timestamp()` | `transaction_timestamp()` → `timestamptz` |
+| `SqlFunctions.Postgres.timeofday()` | `timeofday()` → `text` |
+| `SqlFunctions.Postgres.isfinite(value)` (`DateOnly?`) | `isfinite(value)` → `boolean` (форма `date`) |
+| `SqlFunctions.Postgres.isfinite(value)` (`DateTime?`) | `isfinite(value)` → `boolean` (форма `timestamp`) |
+| `SqlFunctions.Postgres.isfinite(value)` (`TimeSpan?`) | `isfinite(value)` → `boolean` (форма `interval`) |
+
+`clock_timestamp()` вычисляется на каждую строку и меняется внутри одного запроса, а
+`statement_timestamp()` фиксируется на старте запроса, `transaction_timestamp()` — на старте
+транзакции. Обе формы `date_subtract` возвращают `timestamp with time zone` (поставляемые сигнатуры
+возвращают `DateTime?`, а не `interval`), а `justify_interval` возвращает `interval` и потому идёт
+через обработку interval провайдера: вернувшийся interval с ненулевой месячной составляющей
+отклоняется через `InvalidCastException` на пути смэппированных колонок. NULL-аргумент даёт NULL, а
+каждое имя гейтится по имени, поэтому провайдер без `IScalarFunctions` закрывается отказом
+`NotSupportedException`.
+
+Три члена отклоняются во время подготовки запроса: каждый возвращает `void`, а у модели выражений
+нет проекции типа `void`, поэтому достоверного CLR-результата не существует и SQL не отправляется:
+
+| Отклонённый член | Проверенная причина |
+|---|---|
+| `SqlFunctions.Postgres.pg_sleep(seconds)` | `pg_sleep` возвращает `void`; сфабрикованное значение никогда не возвращается. |
+| `SqlFunctions.Postgres.pg_sleep_for(interval)` | `pg_sleep_for` возвращает `void`; сфабрикованное значение никогда не возвращается. |
+| `SqlFunctions.Postgres.pg_sleep_until(timestamptz)` | `pg_sleep_until` возвращает `void`; сфабрикованное значение никогда не возвращается. |
+
 Для построения дат и арифметики в остальном используется переносимый набор: `date_from_parts`
 (рендерит PostgreSQL `make_date`), `date_add`, `date_diff`, `date_trunc` и члены `DateTime` (см.
 [Арифметику дат](#арифметика-дат) ниже).
+
+Oracle-совместимые конверсии MariaDB **зависят от версии** и не входят в переносимую поверхность:
+`months_between` (12.2.1), `to_date` (12.3) и `to_number` (семейство 12.2, принудительный минимум 12.2.1)
+отклоняются с `NotSupportedException` контекстом `MariaDbDataContext` без версии; `add_months`/`to_char`
+доступны с MariaDB 10.6. См.
+[MySQL и MariaDB-специфичный SQL](../guide/provider-specific-sql/mysql.md#mariadb).
+
+Поддержка функций даты и времени в MariaDB и оговорки к их поведению перечислены в
+[каталоге MariaDB](08-reference.md#mariadb-catalogue).
 
 ## Форматирование дат и чисел в строки
 
@@ -230,15 +284,18 @@ select dateTrunc('month', dt) as `Month`
 SQL Server отрисовывает `dateadd(field, amount, value)` и `eomonth(value)`, сворачивая
 `decade`/`century`/`millennium` в масштабированное прибавление `year`; PostgreSQL отрисовывает
 интервальную арифметику; ClickHouse отрисовывает выделенные функции
-`addDays`/`addMonths`/…/`addSeconds` (сворачивая три крупные части в масштабированный `addYears`) и
+`addDays`/`addMonths`/…/`addSeconds` (сворачивая `decade` и `century` в масштабированный `addYears`) и
 `toLastDayOfMonth(value)`; MySQL/MariaDB отрисовывают `date_add(value, interval n unit)` и
 `last_day(value)`; SQLite настраивает дату через строку-модификатор `datetime`/`strftime`.
 `SqlFunctions.Sql.date_diff(field, start, end)` возвращает число границ `<field>` между двумя отметками
-времени (SQL Server `datediff`, ClickHouse `dateDiff`, MySQL/MariaDB `timestampdiff`); резервные
-реализации PostgreSQL и SQLite считают части даты границами, а части времени — целыми единицами.
-`SqlFunctions.Sql.date_diff_big(field, start, end)` — 64-битный вариант (SQL Server `datediff_big`;
-остальные расширяют результат) для промежутка в `millisecond`/`microsecond`, который переполнил бы
-32-битный `date_diff`. Sub-day `date_add`/`DateTime.Add*` продвигает `date`-операнд к дробному
+времени 32-битным счётчиком (`int?`; SQL Server `datediff`, ClickHouse `dateDiff`, MySQL/MariaDB
+`timestampdiff`); резервные реализации PostgreSQL и SQLite считают части даты границами, а части
+времени — целыми единицами. Ширина 32 бита ограничивает диапазон: промежуток, число границ в котором не
+укладывается в Int32, выходит за контракт узкой функции — для него используйте `date_diff_big`.
+`SqlFunctions.Sql.date_diff_big(field, start, end)` — 64-битный вариант (`long?`; SQL Server
+`datediff_big`, остальные расширяют результат), он сохраняет знаковые промежутки, счётчик которых
+превышает Int32, например длинный промежуток в `millisecond`/`microsecond`.
+Sub-day `date_add`/`DateTime.Add*` продвигает `date`-операнд к дробному
 timestamp (SQL Server `datetime2`, ClickHouse `DateTime`/`DateTime64`), чтобы время суток не терялось.
 `SqlFunctions.Sql.date_from_parts(year, month, day)` строит дату. `DateTime.AddDays`/`AddMonths`/… внутри
 проекции или предиката идут через тот же хук:
@@ -271,10 +328,17 @@ select datetime(dt, (1) || ' days') as 'NextDay', date(dt, 'start of month', '+1
  from complex_entity
 ```
 
+В ClickHouse сложение `year`, `decade` и `century` использует `DateTime64(6)`: операнд продвигается
+через `toDateTime64(x, 6)` перед масштабированным `addYears`. Тип SQL-результата для этих трёх
+единиц — `DateTime64(6)`, при этом CLR-API не меняется. `millennium` не поддерживается и бросает
+исключение до выполнения. На закреплённом ClickHouse 25.8 поддерживаемые результаты лежат в
+диапазоне 1900–2299; арифметика за его пределами не поддерживается. Входные значения нормализуются
+до микросекунд, более тонкая точность отбрасывается.
+
 | C# | SQL Server | PostgreSQL | ClickHouse | MySQL/MariaDB | SQLite |
 |---|---|---|---|---|---|
 | `SqlFunctions.Sql.date_add("day", n, x)` | `dateadd(day, n, x)` | `x + (n * interval '1 day')` | `addDays(x, n)` | `date_add(x, interval n day)` | `datetime(x, (n) \|\| ' days')` |
-| `SqlFunctions.Sql.date_add("decade", n, x)` | `dateadd(year, (n) * 10, x)` | `x + (n * interval '10 years')` | `addYears(x, (n) * 10)` | `date_add(x, interval (n) * 10 year)` | `datetime(x, ((n) * 10) \|\| ' years')` |
+| `SqlFunctions.Sql.date_add("decade", n, x)` | `dateadd(year, (n) * 10, x)` | `x + (n * interval '10 years')` | `addYears(toDateTime64(x, 6), (n) * 10)` | `date_add(x, interval (n) * 10 year)` | `datetime(x, ((n) * 10) \|\| ' years')` |
 | `SqlFunctions.Sql.end_of_month(x)` | `eomonth(x)` | `date_trunc('month', x) + interval '1 month - 1 day'` | `toLastDayOfMonth(x)` | `last_day(x)` | `date(x, 'start of month', '+1 month', '-1 day')` |
 | `SqlFunctions.Sql.date_diff("day", a, b)` | `datediff(day, a, b)` | `cast(b as date) - cast(a as date)` | `dateDiff('day', a, b)` | `timestampdiff(day, a, b)` | `(strftime('%s', b) - strftime('%s', a)) / 86400` |
 | `SqlFunctions.Sql.date_diff_big("milliseconds", a, b)` | `datediff_big(millisecond, a, b)` | `cast(trunc(extract(epoch from (b - a)) * 1000) as bigint)` | `dateDiff('millisecond', a, b)` | `cast((timestampdiff(microsecond, a, b) / 1000) as signed)` | `((strftime('%s', b) - strftime('%s', a)) * 1000)` |
@@ -335,6 +399,26 @@ select sysdatetime() as [Now], sysdatetimeoffset() as [NowOffset], sysutcdatetim
 скалярной поверхности, специфичной для SQL Server; остальные T-SQL-скаляры описаны на
 соответствующих категорийных страницах.
 
+Чтение нативного `time` не меняет тип хранения. Вычисленный результат `timefromparts`/`cast` и
+физическая колонка `time`, `time(3)` или `time(7)` читаются как `TimeSpan` построчно, с сохранением
+точности значения. Свойство-**длительность** (свойство `TimeSpan` с `[Duration(...)]` или fluent
+`Duration(...)`) по-прежнему хранится как `bigint` в SQL Server и по-прежнему масштабируется через
+свой `DurationUnit`; оно может быть отрицательным или не меньше 24 ч, что нативный `time` представить
+не может. Спроецированный `TimeOnly` сохраняет собственное значение времени суток и полученную точность
+без потерь на **SQL Server** (`time` читается через `TimeSpan` драйвера, 100 нс) и на **PostgreSQL** (`time`,
+микросекунды); значение вне диапазона `[00:00:00, 24:00:00)` отклоняется через `NotSupportedException`, а не
+заворачивается и не обрезается. **MySQL** и **MariaDB** такую проекцию отклоняют: `TIME` — это
+длительность, которая бывает отрицательной и не меньше 24 ч, а **SQLite** и **ClickHouse** — потому что
+нативного типа «время суток» у них нет (`TimeOnly` в ClickHouse привязывается как `String`). **Явно
+объявленный** конвертер значений имеет приоритет над этой политикой: ветка `TimeOnly` в маппере
+применяется только к колонке **без** конвертера, поэтому при явном конвертере отображение принадлежит
+конвертеру на **любом** провайдере. Это проверено чтением `TIME` в `TimeOnly` на **MySQL** и **MariaDB**;
+на **SQLite** (целые тики или текст) и **ClickHouse** (`String`) такому конвертеру приходится
+переинтерпретировать или разбирать хранимое значение — это явное решение вызывающего кода, и отказа здесь
+нет: политика отказа относится только к проекциям **без** конвертера.
+Потоки JSON и CSV-терминал по-прежнему не принимают `TimeOnly`, каждый со своим `NotSupportedException`,
+возникающим на этапе планирования формы, а поведение `TimeSpan`, `DateTime` и `DateOnly` не изменилось.
+
 ## Приведение и части даты (ClickHouse)
 
 ClickHouse предоставляет свои `to*`-функции даты/времени через `SqlFunctions.ClickHouse`
@@ -364,3 +448,35 @@ var rows = dataContext.From<IComplexEntity>()
 select toInt32(toYear(dt)) as `Year`, toStartOfMonth(dt) as `MonthStart`
  from complex_entity
 ```
+
+### Поставленные функции даты и времени (#286, T286b)
+
+Остальной каталог даты/времени ClickHouse типизирован на `ClickHouseFunctions`. Результаты объявлены
+явно: `make_date`/`make_date32`/`to_modified_julian_day`/`to_time` возвращают целые,
+`make_date_time` — `DateTime`, `server_timezone`/`timezone_of`/`date_name` — `string`, семейство
+`timezone_offset` — `int`, а `now64`/`time_slot`/`from_unix_timestamp*` сохраняют точность
+`DateTime64` вендора.
+
+| Функция | SQL |
+|---|---|
+| `SqlFunctions.ClickHouse.make_date(y, m, d)` / `make_date32(y, m, d)` | `makeDate` / `makeDate32` |
+| `SqlFunctions.ClickHouse.make_date_time(y, m, d, h, mi, s)` | `makeDateTime(...)` |
+| `SqlFunctions.ClickHouse.now64([scale[, timezone]])` | `now64(...)` |
+| `SqlFunctions.ClickHouse.now_in_block([scale[, timezone]])` | `nowInBlock(...)` |
+| `SqlFunctions.ClickHouse.time_slot(ts)` / `time_slots(start, duration)` | `timeSlot` / `timeSlots` |
+| `SqlFunctions.ClickHouse.to_start_of_five_minutes(ts)` / `_ten` / `_fifteen` | `toStartOfFiveMinutes` / `Ten` / `FifteenMinutes` |
+| `SqlFunctions.ClickHouse.to_start_of_interval(ts, seconds[, origin])` | `toStartOfInterval(ts, INTERVAL ...)` |
+| `SqlFunctions.ClickHouse.to_iso_year(ts)` / `to_week` / `to_year_week` / `to_last_day_of_week` | `toISOYear` / `toWeek` / `toYearWeek` / `toLastDayOfWeek` |
+| `SqlFunctions.ClickHouse.to_days_in_month(ts)` | `toDaysInMonth(ts)` |
+| `SqlFunctions.ClickHouse.to_modified_julian_day(ts)` | `toModifiedJulianDay(ts)` |
+| `SqlFunctions.ClickHouse.age(ts1, ts2)` | `age(ts1, ts2)` |
+| `SqlFunctions.ClickHouse.date_name(part, ts)` | `dateName(part, ts)` |
+| `SqlFunctions.ClickHouse.server_timezone()` / `timezone_of(ts)` / `timezone_offset(ts)` | `serverTimezone` / `timezoneOf` / `timezoneOffset` |
+| `SqlFunctions.ClickHouse.to_time(ts)` | `toTime(ts)` |
+| `SqlFunctions.ClickHouse.timestamp(ts)` | `timestamp(ts)` |
+| `SqlFunctions.ClickHouse.from_unix_timestamp(ts[, tz])` / `_64_milli` / `_64_micro` | `fromUnixTimestamp` / `fromUnixTimestamp64Milli` / `Micro` |
+
+Три члена остаются отклонёнными с проверенной причиной: `from_utc_timestamp` (пара «настенное время,
+зона» непредставима в `System.DateTime`), `to_time64` (`Time64(scale)` не имеет CLR-носителя) и
+`from_unix_timestamp64_nano` (`DateTime64(9)` превышает разрешение `DateTime` в 100 нс). См.
+[ClickHouse-specific SQL › Пока не поддерживается](../guide/provider-specific-sql/clickhouse.md#пока-не-поддерживается).

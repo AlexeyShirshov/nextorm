@@ -117,6 +117,7 @@ public abstract partial class CommonTestSuite
 /// ClickHouse does not derive <see cref="CommonTestSuite"/> (it owns its own container harness), so
 /// the shared type-only join facts are re-pinned here against a real ClickHouse server.
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class ClickHouseJoinByTypeIntegrationTests : IDisposable
 {
     private readonly IDataContext _ctx;

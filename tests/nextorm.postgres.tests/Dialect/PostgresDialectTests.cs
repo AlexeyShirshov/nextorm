@@ -177,6 +177,7 @@ public class PostgresDialectTests
         Dialect.SupportsSequentialAccess.Should().BeTrue();
         // No trailing locator: Npgsql streams the payload without a rowid, so no "<payload>, rowid" SQL.
         Dialect.LobLocatorColumn.Should().BeNull();
+        Dialect.SupportsSavepoints.Should().BeTrue();
         Dialect.SupportsApply.Should().BeTrue();
         Dialect.SupportsQueryHints.Should().BeTrue();
         Dialect.SupportsArrays.Should().BeTrue();
@@ -250,9 +251,18 @@ public class PostgresDialectTests
     {
         Dialect.UuidGenerators.Should().NotBeNull();
         Dialect.UuidGenerators!.Supports("gen_random_uuid").Should().BeTrue();
-        Dialect.UuidGenerators!.Supports("uuidv7").Should().BeTrue();
         Dialect.UuidGenerators!.Render("gen_random_uuid").Should().Be("gen_random_uuid()");
-        Dialect.UuidGenerators!.Render("uuidv7").Should().Be("uuidv7()");
+
+        // T260 (#260): uuidv7() arrived in PostgreSQL 18. The unversioned shared dialect must refuse it
+        // (capability and renderer agree) instead of emitting SQL the server rejects with 42883.
+        Dialect.UuidGenerators!.Supports("uuidv7").Should().BeFalse();
+        var unset = () => Dialect.UuidGenerators!.Render("uuidv7");
+        unset.Should().Throw<NotSupportedException>()
+            .WithMessage("The uuidv7 function is not supported by this provider.");
+
+        var pg18 = new PostgresDialect(new Version(18, 0));
+        pg18.UuidGenerators!.Supports("uuidv7").Should().BeTrue();
+        pg18.UuidGenerators!.Render("uuidv7").Should().Be("uuidv7()");
     }
 
     [Fact]

@@ -28,7 +28,7 @@ public sealed class EagerLoadPerParentPagingTests
     private static (SqliteDataContext Ctx, string Path) CreateDb()
     {
         var path = Path.Combine(Path.GetTempPath(), $"nextorm-perparent-{Guid.NewGuid():N}.db");
-        using (var conn = new SqliteConnection($"Data Source={path}"))
+        using (var conn = new SqliteConnection($"Data Source={path};Pooling=False"))
         {
             conn.Open();
             using var cmd = conn.CreateCommand();
@@ -60,7 +60,7 @@ public sealed class EagerLoadPerParentPagingTests
             cmd.ExecuteNonQuery();
         }
 
-        return (new SqliteDataContext($"Data Source={path}", new DataContextBuilder()), path);
+        return (new SqliteDataContext($"Data Source={path};Pooling=False", new DataContextBuilder()), path);
     }
 
     [Fact]
@@ -592,7 +592,7 @@ public sealed class EagerLoadPerParentPagingTests
     private static (SqliteDataContext Ctx, string Path) CreateOrdinalDb()
     {
         var path = Path.Combine(Path.GetTempPath(), $"nextorm-perparent-ordinal-{Guid.NewGuid():N}.db");
-        using (var conn = new SqliteConnection($"Data Source={path}"))
+        using (var conn = new SqliteConnection($"Data Source={path};Pooling=False"))
         {
             conn.Open();
             using var cmd = conn.CreateCommand();
@@ -607,7 +607,7 @@ public sealed class EagerLoadPerParentPagingTests
                 " (22, 2, 5, 2, 1), (21, 2, 50, 1, 1);";
             cmd.ExecuteNonQuery();
         }
-        return (new SqliteDataContext($"Data Source={path}", new DataContextBuilder()), path);
+        return (new SqliteDataContext($"Data Source={path};Pooling=False", new DataContextBuilder()), path);
     }
 
     [Fact]
@@ -1608,7 +1608,7 @@ public sealed class EagerLoadPerParentPagingOracleTests
     private static (SqliteDataContext Ctx, string Path) CreateDb()
     {
         var path = Path.Combine(Path.GetTempPath(), $"nextorm-perparent-oracle-{Guid.NewGuid():N}.db");
-        using (var conn = new SqliteConnection($"Data Source={path}"))
+        using (var conn = new SqliteConnection($"Data Source={path};Pooling=False"))
         {
             conn.Open();
             using var cmd = conn.CreateCommand();
@@ -1621,14 +1621,14 @@ public sealed class EagerLoadPerParentPagingOracleTests
                 " (21, 2, 50, 1, 1), (22, 2, 5, 2, 1);";
             cmd.ExecuteNonQuery();
         }
-        return (new SqliteDataContext($"Data Source={path}", new DataContextBuilder()), path);
+        return (new SqliteDataContext($"Data Source={path};Pooling=False", new DataContextBuilder()), path);
     }
 
     /// <summary>Reads the child table over a plain ADO connection — no ORM, no SQL builder, no window.</summary>
     private static List<RawChild> ReadRawChildren(string dbPath)
     {
         var rows = new List<RawChild>();
-        using var conn = new SqliteConnection($"Data Source={dbPath}");
+        using var conn = new SqliteConnection($"Data Source={dbPath};Pooling=False");
         conn.Open();
         using var cmd = conn.CreateCommand();
         cmd.CommandText = "select id, parent_id, sort_key, group_key, flag from per_page_child order by id";

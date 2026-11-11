@@ -1,0 +1,122 @@
+{
+  "round-1": {
+    "pre": {
+      "phase": "pre",
+      "utc": "2026-11-01T11:13:18Z",
+      "checks": {
+        "wt_head": {
+          "ok": true,
+          "detail": "2ea3ef452711ae452ceacbd1f6d462655bd8d577"
+        },
+        "wt_tree": {
+          "ok": true,
+          "detail": "b30268568aaa997e8ba105c766fc4d46d9c25e97"
+        },
+        "wt_diff": {
+          "ok": true,
+          "detail": ""
+        },
+        "wt_status": {
+          "ok": true,
+          "detail": ""
+        },
+        "host_json_surface": {
+          "ok": true,
+          "detail": ""
+        }
+      },
+      "git_ok": true,
+      "db_sha256": "32bf10a08291f25afff934f42c378215b6e8f76b8568d6afd519a53a92d72295"
+    },
+    "post": {
+      "phase": "post",
+      "utc": "2026-11-01T11:17:03Z",
+      "checks": {
+        "wt_head": {
+          "ok": true,
+          "detail": "2ea3ef452711ae452ceacbd1f6d462655bd8d577"
+        },
+        "wt_tree": {
+          "ok": true,
+          "detail": "b30268568aaa997e8ba105c766fc4d46d9c25e97"
+        },
+        "wt_diff": {
+          "ok": true,
+          "detail": ""
+        },
+        "wt_status": {
+          "ok": true,
+          "detail": ""
+        },
+        "host_json_surface": {
+          "ok": true,
+          "detail": ""
+        }
+      },
+      "git_ok": true,
+      "db_sha256": "32bf10a08291f25afff934f42c378215b6e8f76b8568d6afd519a53a92d72295"
+    },
+    "db_sha_before": "32bf10a08291f25afff934f42c378215b6e8f76b8568d6afd519a53a92d72295",
+    "db_sha_after": "32bf10a08291f25afff934f42c378215b6e8f76b8568d6afd519a53a92d72295"
+  },
+  "round-2": {
+    "pre": {
+      "phase": "pre",
+      "utc": "2026-11-01T11:17:03Z",
+      "checks": {
+        "wt_head": {
+          "ok": true,
+          "detail": "2ea3ef452711ae452ceacbd1f6d462655bd8d577"
+        },
+        "wt_tree": {
+          "ok": true,
+          "detail": "b30268568aaa997e8ba105c766fc4d46d9c25e97"
+        },
+        "wt_diff": {
+          "ok": true,
+          "detail": ""
+        },
+        "wt_status": {
+          "ok": true,
+          "detail": ""
+        },
+        "host_json_surface": {
+          "ok": true,
+          "detail": ""
+        }
+      },
+      "git_ok": true,
+      "db_sha256": "32bf10a08291f25afff934f42c378215b6e8f76b8568d6afd519a53a92d72295"
+    },
+    "post": {
+      "phase": "post",
+      "utc": "2026-11-01T11:20:43Z",
+      "checks": {
+        "wt_head": {
+          "ok": true,
+          "detail": "2ea3ef452711ae452ceacbd1f6d462655bd8d577"
+        },
+        "wt_tree": {
+          "ok": true,
+          "detail": "b30268568aaa997e8ba105c766fc4d46d9c25e97"
+        },
+        "wt_diff": {
+          "ok": true,
+          "detail": ""
+        },
+        "wt_status": {
+          "ok": true,
+          "detail": ""
+        },
+        "host_json_surface": {
+          "ok": true,
+          "detail": ""
+        }
+      },
+      "git_ok": true,
+      "db_sha256": "32bf10a08291f25afff934f42c378215b6e8f76b8568d6afd519a53a92d72295"
+    },
+    "db_sha_before": "32bf10a08291f25afff934f42c378215b6e8f76b8568d6afd519a53a92d72295",
+    "db_sha_after": "32bf10a08291f25afff934f42c378215b6e8f76b8568d6afd519a53a92d72295"
+  }
+}

@@ -29,7 +29,7 @@ public class ExtremeRowNativeCacheStabilityTests
         using var ctx = ClickHouseTestContext.Create();
         ctx.PurgeQueryCache();
 
-        var command = ctx.From<ExtremeNativeEntity>().SelectWhereMax(x => x.K1).ToCommand();
+        var command = ctx.From<ExtremeNativeEntity>().SelectWhereMaxOld(x => x.K1).ToCommand();
         command.Cache.Should().BeTrue("the command starts cacheable");
 
         var first = (DbPreparedQueryCommand<ExtremeNativeEntity>)Prepare(ctx, command);
@@ -49,7 +49,7 @@ public class ExtremeRowNativeCacheStabilityTests
         ctx.PurgeQueryCache();
 
         QueryCommand<ExtremeNativeEntity> Build()
-            => ctx.From<ExtremeNativeEntity>().SelectWhereMax(x => x.K1).ToCommand();
+            => ctx.From<ExtremeNativeEntity>().SelectWhereMaxOld(x => x.K1).ToCommand();
 
         var first = Prepare(ctx, Build());
         var second = Prepare(ctx, Build());
@@ -64,7 +64,7 @@ public class ExtremeRowNativeCacheStabilityTests
         using var ctx = ClickHouseTestContext.Create();
         ctx.PurgeQueryCache();
 
-        var extrema = ctx.From<ExtremeNativeEntity>().SelectWhereMax(x => x.K1).ToCommand();
+        var extrema = ctx.From<ExtremeNativeEntity>().SelectWhereMaxOld(x => x.K1).ToCommand();
         Prepare(ctx, extrema);
         extrema.Cache.Should().BeTrue();
 

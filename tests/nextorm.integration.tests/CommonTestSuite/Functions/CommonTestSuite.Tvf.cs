@@ -5,7 +5,7 @@ using NextORM.Core;
 namespace NextORM.Integration.Tests;
 
 /// <summary>
-/// Exercises <see cref="SqlTableFunctionAttribute"/> against a real database. The portable
+/// Exercises the runtime <see cref="TvfEntityBuilder{T}"/> factory against a real database. The portable
 /// row-returning function used here is SQLite's bundled <c>json_each</c>; providers that do not
 /// expose an equivalent FROM table-valued function are skipped via
 /// <see cref="ITestProvider.SupportsTableValuedFunctions"/>.
@@ -26,8 +26,7 @@ public abstract partial class CommonTestSuite
 
     private static class Tvf
     {
-        [SqlTableFunction("json_each")]
-        public static IQueryable<IJsonEachRow> JsonEach(string json) => throw new NotSupportedException();
+        public static TvfEntityBuilder<IJsonEachRow> JsonEach(string json) => new("json_each");
     }
 
     [Fact]
@@ -36,7 +35,7 @@ public abstract partial class CommonTestSuite
         Assert.SkipUnless(Provider.SupportsTableValuedFunctions, Provider.TableValuedFunctionSkipReason);
 
         var values = _sut.DataProvider
-            .FromTableFunction(() => Tvf.JsonEach("[1,2,3]"))
+            .From(() => Tvf.JsonEach("[1,2,3]"))
             .Select(r => r.Value)
             .ToList();
 
@@ -49,7 +48,7 @@ public abstract partial class CommonTestSuite
         Assert.SkipUnless(Provider.SupportsTableValuedFunctions, Provider.TableValuedFunctionSkipReason);
 
         var rows = _sut.DataProvider
-            .FromTableFunction(() => Tvf.JsonEach("[1,2,3]"))
+            .From(() => Tvf.JsonEach("[1,2,3]"))
             .Join(_sut.SimpleEntity, (j, s) => j.Value == s.Id)
             .Select(p => p.Item2.Id)
             .ToList();
@@ -63,7 +62,7 @@ public abstract partial class CommonTestSuite
         Assert.SkipUnless(Provider.SupportsTableValuedFunctions, Provider.TableValuedFunctionSkipReason);
 
         var values = _sut.DataProvider
-            .FromTableFunction(() => Tvf.JsonEach("[3,1,2]"))
+            .From(() => Tvf.JsonEach("[3,1,2]"))
             .Where(r => r.Value > 1)
             .OrderByDescending(r => r.Value)
             .Select(r => r.Value)
@@ -78,7 +77,7 @@ public abstract partial class CommonTestSuite
         Assert.SkipUnless(Provider.SupportsTableValuedFunctions, Provider.TableValuedFunctionSkipReason);
 
         var rows = _sut.DataProvider
-            .FromTableFunction(() => Tvf.JsonEach("[1,1,2]"))
+            .From(() => Tvf.JsonEach("[1,1,2]"))
             .GroupBy(r => new { r.Value })
             .Select(g => new { g.Value, Cnt = SqlFunctions.Sql.count() })
             .ToList();

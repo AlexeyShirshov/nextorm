@@ -31,8 +31,8 @@ public class InMemoryBenchmarkIteration
         _ctx = new InMemoryDataRepository(_provider);
         _ctx.SimpleEntity.WithData(_data);
 
-        _cmd = _ctx.SimpleEntity.Select(entity => new Tuple<int>(entity.Id)).Prepare(false);
-        _cmdToList = _ctx.SimpleEntity.Select(entity => new Tuple<int>(entity.Id)).Prepare(true);
+        _cmd = _ctx.SimpleEntity.Select(entity => new Tuple<int>(entity.Id)).Prepare(new PrepareOptions { Streaming = true });
+        _cmdToList = _ctx.SimpleEntity.Select(entity => new Tuple<int>(entity.Id)).Prepare();
     }
 
     private EFInMemoryDataContext EfContext => _efCtx ??= EfInMemory.Create(10_000);

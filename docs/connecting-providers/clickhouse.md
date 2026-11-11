@@ -33,8 +33,12 @@ and returns [`Instance`](xref:NextORM.ClickHouse.ClickHouseDialect.Instance) fro
 - `stdev`/`stdevp`/`var`/`varp` as `stddevSamp`/`stddevPop`/`varSamp`/`varPop`;
 - `date_trunc(field, x)` as `dateTrunc('field', x)` (the plural ANSI sub-second parts are singularised;
   `decade`/`century`/`millennium` throw), and `date_add`/`DateTime.Add*` as the dedicated
-  `addYears`/`addQuarters`/…/`addSeconds` functions (`decade`/`century`/`millennium` fold onto a scaled
-  `addYears`), `end_of_month` as `toLastDayOfMonth(x)`;
+  `addYears`/`addQuarters`/…/`addSeconds` functions (`year`/`decade`/`century` promote the operand to
+  `DateTime64(6)` and scale `addYears`, so the SQL result type of those units is `DateTime64(6)` while
+  the CLR API is unchanged; `millennium` throws before execution — on pinned ClickHouse 25.8 the
+  supported year-family results stay within 1900–2299, arithmetic outside that range is unsupported,
+  and inputs are normalized to microseconds, discarding finer precision),
+  `end_of_month` as `toLastDayOfMonth(x)`;
 - the date conversion/part surface `SqlFunctions.ClickHouse.to_*` (gated by
   [`DateConversion`](xref:NextORM.Core.ISqlDialect.DateConversion)):
   `to_date`/`to_date_time`/`to_date32` as `toDate`/`toDateTime`/`toDate32`, the `to_year`/`to_quarter`/
@@ -57,12 +61,16 @@ and returns [`Instance`](xref:NextORM.ClickHouse.ClickHouseDialect.Instance) fro
   the same way — to `toInt32(...)` for the `int`-returning variants and `toInt64(...)` for the 64-bit
   ones; the
   parameterised quantile aggregates `quantile(level)(value)`/`quantileExact`/`quantileTiming` and
-  `median` wrapped in `toFloat64(...)` (so every variant materialises as a CLR `double`); the
+  `median` wrapped in `toFloat64(...)` (so every variant materialises as a CLR `double`); `median` is a
+  plain aggregate (one row per group), and the generic `SqlFunctions.ClickHouse.percentile` has no native
+  spelling and throws `NotSupportedException` rather than aliasing `quantile`/`median`; the
   arbitrary-value aggregate `any_agg` as `any` (cross-provider: `ANY_VALUE(x)` on MySQL) and the
   last-row aggregate `any_last` as `anyLast`; the array-returning aggregates `group_array`/`group_uniq_array`
   as `groupArray`/`groupUniqArray` (materialised as a CLR `T[]`); the sequence/funnel aggregates
   `window_funnel`/`sequence_match`/`retention` as `windowFunnel`/`sequenceMatch`/`retention`
-  (`windowFunnel`/`sequenceMatch` are wrapped in `toInt32(...)`; `retention` returns `Array(UInt8)` as `byte[]`);
+  (`windowFunnel`/`sequenceMatch` are wrapped in `toInt32(...)`; `retention` is normalised server-side to the
+  declared `int[]`, and `top_k`, `top_k_weighted`, `group_array`, `group_uniq_array`, `array_map` and all
+  three `range` overloads likewise return their declared CLR array type);
 - the string-JSON extractors `json_extract_string`/`json_extract_int`/`json_extract_float`/
   `json_extract_bool`/`json_extract_raw`/`json_has`/`json_type` as `JSONExtractString`/`JSONExtractInt`/
   `JSONExtractFloat`/`JSONExtractBool`/`JSONExtractRaw`/`JSONHas`/`JSONType`, `json_length` as
@@ -126,6 +134,20 @@ and returns [`Instance`](xref:NextORM.ClickHouse.ClickHouseDialect.Instance) fro
   [`JoinOptions.Global`](xref:NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.Global(NextORM.Core.JoinOptions)) and combines with strictness
   (`global left any join`, [`SupportsGlobalJoin`](xref:NextORM.Core.ISqlDialect.SupportsGlobalJoin)).
 
+The declared contract for the variability aggregates is the shared one: `Stdev`/`Var` are `null` for
+zero or one contributing value, `Stdevp`/`Varp` are `null` for zero and `0.0` for one. For this change the
+ClickHouse arm was verified at SQL generation only (`stddevSamp`/`stddevPop`/`varSamp`/`varPop` above),
+not against a live server: no live result is claimed and no NaN/Inf normalization is implied. The live
+arms of this change were SQLite and PostgreSQL.
+
+The `avg` result follows the SQL-standard contract on ClickHouse: over an empty input or an input whose
+values are all `NULL` it is SQL `NULL`, not ClickHouse's native `nan`. The dialect restores that with a
+row-eligibility check around the aggregate — `if(count(x)=0, cast(null as Nullable(Float64)), avg(x))`,
+`if(countIf(isNotNull(x) AND p)=0, ..., avgIf(x, p))` for a filtered AVG and the same `count(x) over (...)`
+check for a window AVG (with the identical partition/order/frame). No `nan`/`isFinite` test is involved:
+the check counts eligible rows, not the result, so a genuine `NaN` or ±infinity produced by non-empty
+data is returned unchanged. This applies to ordinary, `DISTINCT`, filtered and window AVG alike.
+
 ClickHouse has no recursive CTE support, so the dialect declares every CTE with plain `with`.
 
 ## Registering the provider
@@ -152,6 +174,49 @@ using NextORM.ClickHouse;
 using IDataContext ctx = new ClickHouseDataContext(
     "Host=localhost;Username=default;Database=app", new DataContextBuilder());
 ```
+
+### Declaring the server version
+
+The server version is a caller declaration, never probed: without one the provider keeps the pinned
+25.8 baseline and refuses every function introduced later. When the deployment provably runs a newer
+server, declare it through the versioned constructor (the connection-string and caller-connection
+overloads both accept it):
+
+```csharp
+using var ctx = new ClickHouseDataContext(
+    new Version(25, 9),
+    "Host=localhost;Username=default;Database=app",
+    new DataContextBuilder());
+```
+
+A declared version of 25.9 or later enables the native `arrayExcept` behind
+`SqlFunctions.ClickHouse.array_except`; the two-array call renders as `arrayExcept(...)` (the native
+function takes exactly two arrays, so any other arity is refused before SQL). An undeclared context
+keeps the historical refusal — the shared `ClickHouseDialect.Instance` never enables a 25.9 function —
+and a context declaring an older version (for example `25.8`) still refuses the call, but the
+`NotSupportedException` names both the required `25.9` and the declared version and is thrown before
+any SQL is emitted.
+
+A concrete context type carries one immutable declaration, because the plan cache is keyed by the
+context type. Declare each version through its own subclass:
+
+```csharp
+// One context type = one immutable declaration.
+public sealed class Declared25Context : ClickHouseDataContext
+{
+    public Declared25Context(string connectionString, DataContextBuilder optionsBuilder)
+        : base(new Version(25, 9), connectionString, optionsBuilder)
+    {
+    }
+}
+
+var builder = new DataContextBuilder();
+builder.Factory = b => new Declared25Context(connectionString, b);   // the DI path
+```
+
+A second, different declaration for the same type throws `InvalidOperationException` before any query
+is prepared. The client and data-source constructors are unversioned: they always create the
+pinned-baseline dialect.
 
 ## String concatenation
 
@@ -197,6 +262,32 @@ public sealed class TvpRow
 
 The `format(JSONEachRow, ...)`, `values()` and `input()` forms are **not** used for a bound parameter — `format`/`values` require a literal structure and `input` is valid only in `INSERT ... SELECT`, so the array form is the supported emulation. ClickHouse has **no stored procedures** ([`SupportsStoredProcedures`](xref:NextORM.Core.ISqlDialect.SupportsStoredProcedures) is `false`, and `ExecuteProcedure` throws `NotSupportedException`), so the parameter is consumed by `ExecuteRaw`/`ExecuteRawAsync` SQL that calls `arrayJoin` itself. `TypeName` is SQL Server only and is rejected with `ArgumentException`. An empty set binds an empty array, and null elements, nullable columns and empty sets are covered by the provider tests. Only CLR types with a ClickHouse mapping are supported — the scalar column set (the integer types, `float`/`double`, `decimal` as the declared `Decimal(p, s)` or `Decimal(38, 10)`, `bool`, `string`/`char`, `Guid`, `DateTime`/`DateTimeOffset`/`DateOnly`, an enum as its underlying number; `TimeOnly` as `String` formatted invariantly as `HH:mm:ss.fffffff`, `TimeSpan` as `Int64` in its mapped duration unit (ticks by default), and `byte[]` as `String`); any other column type throws `NotSupportedException`. A `byte[]` column is bound as `String`, so the row reader returns a `string`, not a `byte[]` — do not rely on a `byte[]` round-trip. The set is sent as one array parameter, not streamed or copied, so use the driver's binary insert API for very large sets. See [Raw SQL: table-valued parameters](../guide/14-raw-sql.md#table-valued-parameters).
 
+## Bulk insert
+
+The native path is `ClickHouseClient.InsertBinaryAsync` through the context's own client, so it needs a
+`ClickHouse.Driver` client (`ClickHouseClient`/`ClickHouseDataSource` — the `UseClickHouse` overloads). Client
+settings are copied for the insert; the caller's settings object and the connection's settings are never
+mutated.
+
+- `ClickHouse(new ClickHouseBulkInsertOptions { ... })` carries `MaxDegreeOfParallelism` and `UseSession`:
+  `null` preserves the configured value/session, `true` requires an actual session id, and `false` explicitly
+  requests a sessionless non-temporary insert. A parallelism above one cannot be combined with a session
+  (ClickHouse allows one concurrent query per session) and is refused by name; a non-positive parallelism is an
+  argument error.
+- The adapter reads the source in bounded chunks (`MaxBatchSize`, default 10 000 rows), awaits every driver
+  call before pulling the next chunk, and reports progress only after a chunk completes.
+- Only ordinary and `DEFAULT` columns are writable: a mapped ALIAS or MATERIALIZED column is refused by name
+  (the catalog is read once per target). `KeepIdentity` writes the explicit value.
+- `IgnoreDuplicates`, `Returning*`, `TableLock`, `FireTriggers` and `CheckConstraints=false` are refused;
+  `KeepNulls=false` needs a default-equivalent shape.
+- `DatabaseName` renders `db.table`; `ServerName` is refused (no rerouting). `Timeout` is one
+  whole-invocation budget with a linked cancellation; an expired budget is a `TimeoutException` and
+  cancellation wins.
+
+`ClickHouse.Driver` 1.4.0's `ClickHouseBulkCopy` class is **not** obsolete — only its `InitAsync` method is —
+so the class is not why nextorm uses `InsertBinaryAsync`: the binary insert API is what carries the
+per-insert settings copy and the session/parallelism contract. See [Bulk insert](../guide/22-bulk-insert.md).
+
 ## Provider differences
 
 | Aspect | ClickHouse |
@@ -220,7 +311,7 @@ The `format(JSONEachRow, ...)`, `values()` and `input()` forms are **not** used 
 | Boolean aggregates | not supported (`bool_and`/`bool_or`/`every` are PostgreSQL-only) |
 | Filtered aggregate | the `-If` combinator `countIf`/`sumIf`/`avgIf`/`minIf`/`maxIf`, emitted from the shared filter API (no ANSI `filter (where ...)`) |
 | ArgMin / ArgMax | `argMin`/`argMax` |
-| quantile / median | `quantile(0.5)(x)`, `quantileExact(0.9)(x)`, `quantileTiming(0.5)(x)`, `median(x)` (as `toFloat64(...)`) |
+| quantile / median | `quantile(0.5)(x)`, `quantileExact(0.9)(x)`, `quantileTiming(0.5)(x)`, `median(x)` (as `toFloat64(...)`, aggregate: one row per group); generic `percentile` and the window `percentile_cont`/`percentile_disc` throw `NotSupportedException` |
 | any_agg (arbitrary value) | `any(x)` (cross-provider; `ANY_VALUE(x)` on MySQL) |
 | any_last (last row) | `anyLast(x)` |
 | Conditional function | `iif(cond, a, b)` → `if(cond, a, b)`; `multi_if(when(c1, v1), ..., otherwise(v))` → `multiIf(c1, v1, ..., v)` |
@@ -238,13 +329,35 @@ The `format(JSONEachRow, ...)`, `values()` and `input()` forms are **not** used 
 | Native JSON column type | a native object-rooted `JSON` type: a `[JsonColumn]` property (`Auto`/`Native`: object-root POCO/`JsonObject`/`JsonDocument`/`JsonElement`) and a bare `JsonObject`/`JsonDocument`/`JsonElement` property (read and parameter) map to it; arrays/scalar roots fail closed. A bare top-level scalar `Select(x => x.Doc)` is not handled by the core projection classifier — use an anonymous type or a DTO. `Text` keeps a `String` column; a bare `string` and the legacy `Object('json')` alias are not supported. See [JSON support](../guide/16-json.md#map-a-clr-object-to-a-native-json-column) |
 | LOB streaming (`ToStream`/`ToTextReader`) | `NotSupportedException` (the driver exposes no streaming getters) |
 
+### String literals and LIKE escapes
+
+An inline string literal is single-quoted with apostrophes and backslashes doubled and the other C0
+characters written as `\xNN`. An `ESCAPE` clause is **never** emitted: the engine rejects every
+spelling of it, and the `LIKE` pattern literal already carries `\%`/`\_`. A custom `LIKE` escape
+character (the third argument of `SqlFunctions.Sql.like`) therefore fails closed with
+`NotSupportedException` naming ClickHouse.
+
+```sql
+select `Id` as `Id`
+ from simple_entity
+ where `Name` like 'a\%b'
+```
+
 ## Notes and limitations
 
+- The native `arrayExcept` exists only from ClickHouse 25.9. `SqlFunctions.ClickHouse.array_except`
+  stays in the public API: an undeclared context keeps the pinned 25.8 refusal
+  (`NotSupportedException` at translation time, no SQL), a context declaring 25.9 or later renders
+  `arrayExcept(...)`, and a context declaring an older version refuses with a message naming the
+  required `25.9` and the declared version. See
+  [Declaring the server version](#declaring-the-server-version).
 - `GROUP BY ... WITH TOTALS` renders correctly, but the official `ClickHouse.Driver` returns the totals
   row in a separate response block it does not expose through `IDataReader`, so only the group rows are
   materialised. Use it if your driver surfaces totals; nextorm itself only emits the modifier.
-- ClickHouse parameters are sent as HTTP query parameters. Bulk inserts should use the driver's binary
-  insert API rather than parameterized `INSERT` statements, which is outside the query builder.
+- ClickHouse parameters are sent as HTTP query parameters. A bulk insert should use the provider's native
+  binary path (see [Bulk insert](#bulk-insert)), which the query builder exposes through
+  `CreateBulkInsertBuilder`; an `INSERT ... VALUES` statement remains the portable fallback
+  (`Mode.Portable`).
 - Null parameter values cannot have their ClickHouse type inferred from the CLR value alone. When a
   query binds a `null` parameter, set an explicit parameter type at the driver level (for example with
   a custom resolver) or cast the placeholder in SQL.

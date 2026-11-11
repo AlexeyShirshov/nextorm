@@ -30,7 +30,8 @@ empty or inconsistent.
 A navigation query computes a scalar/cardinality or projects one declared reference or collection — it
 never materializes a nested object graph. To fill a nested collection graph (level 2 and deeper), use
 `LoadWith` with a child query that declares its own `LoadWith` (see
-[Nested graphs](eager-loading.md#nested-graphs-level-2-and-deeper)).
+[Nested graphs](eager-loading.md#nested-graphs-level-2-and-deeper)); to return the per-parent collections
+*inside a projected result*, use a [collection-valued projection slot](collection-projection.md).
 
 ## Reference navigation
 
@@ -127,6 +128,76 @@ Null compensation is consistent across predicates and bool/value projections, in
 semantics — it is **included** in `!=`/negated/`OR` comparisons — rather than being silently dropped or
 compared against a default value.
 
+### References inside a correlated predicate
+
+A reference navigation can also be used **inside a correlated subquery** — an `EXISTS`/`IN` body or a
+correlated scalar subquery — where the hop is resolved on the outer query and the nested body compares
+against the joined alias:
+
+```csharp
+var inner = ctx.From<Child>();
+
+var hop1 = ctx.From<Parent>()
+    .Where(p => SqlFunctions.Sql.exists(inner.Where(c => c.ParentId == p.Id && c.GroupCode == p.Group!.Code)))
+    .Select(p => p.Id)
+    .ToList();
+
+// select t1.id
+// from parent as t1
+// left join group as t2 on t1.group_id = t2.id
+// where exists(select * from child as t3 where (t3.parent_id = t1.id and t3.group_code = t2.code))
+```
+
+The expansion belongs to the **outer** command: its join is emitted once on the outer query and the
+joined alias is registered as an outer reference of the nested command, so the correlated body reads
+`t2.code` instead of carrying the navigation as a free parameter. A deeper chain
+(`c.Group!.Root!.Label`, hop 2+) adds one `LEFT JOIN` per hop on the outer command and reads the deepest
+alias inside the body — hop depth is not a special case:
+
+```csharp
+var hop2 = ctx.From<Parent>()
+    .Where(p => SqlFunctions.Sql.exists(inner.Where(c => c.ParentId == p.Id && c.GroupCode == p.Group!.Root!.Label)))
+    .Select(p => p.Id)
+    .ToList();
+
+// ... left join group as t2 on t1.group_id = t2.id
+//     left join root as t3 on t2.root_id = t3.id
+// ... exists(select * from child as t4 where (t4.parent_id = t1.id and t4.group_code = t3.label))
+```
+
+All three reference forms work in this position:
+
+* a **scalar comparison** against a reference member (`c.GroupCode == p.Group!.Code`);
+* a **presence check** on the bare reference (`p.Group != null` / `p.Group == null`, rendered as
+  `t2.id is not null` / `t2.id is null` on the joined principal key);
+* a **scalar projection** by the correlated subquery (`.Select(c => p.Group!.Code)`) — a scalar
+  reference value, **not** whole-object eager loading.
+
+The same reference path used by two correlated predicates of one command reuses one joined alias (one
+`LEFT JOIN`, both correlated bodies reading it). Null semantics follow the outer `LEFT JOIN`: a dangling
+foreign key produces a `NULL` joined key, so the correlated comparison is unknown and the row does not
+match; a nullable foreign key with a `NULL` value never matches either; and an absent row at an
+intermediate hop of a 2+ chain makes the whole hop absent. A presence check inside the body tests the
+non-nullable identifying principal key of the deepest hop, exactly as it does outside a correlated
+predicate, so `!=`/`==` and a nullable-FK chain stay mutually consistent.
+
+This is a **predicate/scalar** form: it adds no collection capability and no new join form, and it
+never falls back to a per-parent `APPLY`/`LATERAL`. The emitted shape is a portable `LEFT JOIN` plus a
+correlated `EXISTS`/scalar subquery on every SQL provider:
+
+| Provider | Reference hop inside a correlated predicate | Disposition |
+|---|---|---|
+| SQLite | yes | SQL shape + live (incl. no `APPLY`) |
+| PostgreSQL | yes | SQL shape + shared live |
+| SQL Server | yes | SQL shape + shared live |
+| MySQL | yes | SQL shape + shared live |
+| MariaDB | yes | SQL shape; live deferred (trigger: dedicated live harness or MySQL divergence) |
+| ClickHouse | yes | SQL shape (no `APPLY`); live deferred (trigger: correlated-`EXISTS` live fixture or shape change) |
+
+[ClickHouse's collection-through-reference limitation](#collection-navigation) is unchanged: the
+reference hop itself is supported, and a *collection* reached through a reference stays rejected. The
+in-memory provider is not part of this matrix — the form is a server-side predicate translation.
+
 ## Collection navigation
 
 A declared collection supports exactly **four** parameterless terminals. They lower to a correlated
@@ -202,6 +273,17 @@ called with an explicit generic argument so that it never steals collection infe
 it is absent — exactly like `c.Parent != null`. Projecting the adapted **marker itself** (rather than one
 of those terminals) and composing LINQ operators after the adapter remain unsupported and fail closed.
 
+The adapter is a **query** surface: it answers presence and count inside a query. Filling a navigation on
+already materialized parents is the job of [`LoadWith`](eager-loading.md): its declared-metadata form
+(`LoadWith(navigation)` / `LoadWith(navigation, childQuery)`) reads the same declared relationship this
+page translates and returns entities with the navigation populated (see
+[Declared-metadata form](eager-loading.md#declared-metadata-form)). A collection-valued `Select` slot and the
+`AsEntityBuilder … Where/OrderBy/Limit/Select(...).ToList()` composition are a **separate projection surface**:
+they are delivered, with their own v1 limits, in [Collection-valued projection slots](collection-projection.md)
+— a projection returns the per-parent collections inside the result shape and is not a loading alternative to
+`LoadWith`. The prohibitions below describe the query-construct adapter (`Any`/`Count`/`LongCount`); the
+projection adapter follows the rules of its own page.
+
 ## Providers
 
 | Provider | Reference chains / presence | Whole-reference | Collection terminals | In-memory |
@@ -247,16 +329,15 @@ client-side evaluation:
   `p.Children.Count(c => ...)`, `p.Children.LongCount(c => ...)`).
 * **Direct LINQ composition** on a collection navigation — `Where`, `OrderBy`/`OrderByDescending`,
   `Select`, `Skip`, `Take`, `Distinct`, `GroupBy`, `GroupJoin`, `SelectMany`, joins, set operations
-  (`Union`/`Except`/`Intersect`) and materialisation (`ToArray`/`ToList`).
+  (`Union`/`Except`/`Intersect`) and materialisation (`ToArray`/`ToList`). Compose them through the
+  `AsEntityBuilder<T>` adapter of a [collection-valued projection slot](collection-projection.md) instead
+  (supported subset only).
 * **Extra terminals** — `First`/`First(predicate)`, `Single`/`SingleOrDefault`, `Last`/`LastOrDefault`,
   `Contains`, `Sum`, `Average` and other aggregates.
 * **Captured or outside markers** — a captured enumerable is not a navigation, and `AsEntityBuilder`
   outside a query expression always throws.
 * **Undeclared navigations** — a reference- or collection-typed member with no declared relationship is
   not inferred from a convention.
-* **Composite relationship keys** — implicit navigation resolves only single-column
-  foreign/principal/junction keys and rejects a composite key; use an explicit
-  [`JoinInto`](relationships.md), which joins and groups on every declared component.
 * **Navigation in grouping/paging modifier keys** — `GROUP BY`, `DISTINCT ON`, `LIMIT BY` and
   extreme-row keys do not evaluate navigation (use explicit joins there).
 * **Temp-table / table-valued (TVP) navigation** — navigation over a temp-table/TVP source is
@@ -265,11 +346,34 @@ client-side evaluation:
   source combined with a temp-table/TVP path. Navigation declared **before** the temp-table boundary is
   still expanded into the materialising `CREATE TEMPORARY TABLE ... AS SELECT`; build a navigation over
   the temp-table rows from an explicit join or from the mapped source instead.
-* **Adapter LINQ composition** — chaining query operators after `AsEntityBuilder<T>` is not delivered;
-  only the direct terminals are recognised.
+* **Adapter LINQ composition outside a projection slot** — chaining query operators after
+  `AsEntityBuilder<T>` is not a query construct: as a navigation query the adapter recognises only the direct
+  terminals. The one composition that *is* delivered is the
+  [collection-valued projection slot](collection-projection.md), where the adapter continues into a per-parent
+  `Where`/`OrderBy`/`ThenBy`/`Limit`/`Select` pipeline terminated by `ToList()`/`ToArray()`.
 * **Bare reference-adapter projection** — projecting the reference marker itself
   (`Select(c => new { X = c.Parent!.AsEntityBuilder<Parent>() })`) is not a column and is rejected; use
   the `Any`/`Count`/`LongCount` terminals instead.
+* **Not a loading surface** — the adapter and the composition forms above never fill a navigation.
+  Loading a declared navigation is done with [`LoadWith`](eager-loading.md) on the parent query, whose
+  declared-metadata form reads the same declared relationship. A
+  [collection-valued projection slot](collection-projection.md) is the third, projection-shaped form: it
+  returns the per-parent collection inside the projected result instead of filling the entity's navigation.
+
+### Composite relationship keys
+
+A relationship may span several components. The reference, collection and many-to-many SQL routes
+correlate on **every** declared component, in declaration order — not on one column and not on the
+first component alone. Per-component null semantics follow SQL: any null foreign-key component yields
+no relationship (a presence check reports the related row as absent, and a scalar chain yields `null`),
+and there is **no `null == null`** match — a null foreign-key component never matches a null principal
+component. Components are paired positionally, and the component lists come from the relationship
+metadata (see [Ordered key selectors](relationships.md#ordered-key-selectors)).
+
+This composite scope is the SQL routes only. The in-memory provider keeps its previous boundary: a
+composite relationship key is still refused by its navigation path with `NotSupportedException` (the
+declaration and the metadata are provider-neutral, but no component-wise in-memory matching is added).
+Use a SQL provider for composite implicit navigation.
 
 For the explicit, fully-featured relationship surface use [`JoinInto`](relationships.md) and
 the explicit join operators; see [Limitations](../advanced/limitations.md) for the general boundaries.
@@ -278,6 +382,7 @@ the explicit join operators; see [Limitations](../advanced/limitations.md) for t
 
 - [Relationships and single-query loading (`JoinInto`)](relationships.md) — declaring the metadata this page builds on.
 - [Nested graphs in eager loading](eager-loading.md#nested-graphs-level-2-and-deeper) — the level 2+ `LoadWith` graph, a different surface from a navigation query.
+- [Collection-valued projection slots](collection-projection.md) — the same adapter as a per-parent projection pipeline.
 - [Per-parent paging in eager loading](eager-loading-per-parent-paging.md) — where a child `Take`/`Skip` is applied independently per parent.
 - [Joins](../guide/04-joins.md) — the explicit join surface.
 - [Subqueries](../guide/07-subqueries.md) — the correlated forms nextorm renders.

@@ -16,6 +16,7 @@ namespace NextORM.Sqlite.Tests;
 /// keeps its existing behaviour for a plain <c>LoadWith</c>, and an inherited (context-default)
 /// <c>Correlated</c> does not trigger the terminal guard.
 /// </summary>
+[Collection("Query plan cache")] // asserts plan-store contents; see PlanCache/QueryPlanCacheCollection
 public class EagerTerminalGuardTests
 {
     private sealed class SqlRecordingInterceptor : IQueryInterceptor
@@ -38,7 +39,7 @@ public class EagerTerminalGuardTests
     private static (SqliteDataContext Ctx, string Path) CreateDb(EagerLoadMode? contextMode = null)
     {
         var path = Path.Combine(Path.GetTempPath(), $"nextorm-terminal-guard-{Guid.NewGuid():N}.db");
-        using (var conn = new SqliteConnection($"Data Source={path}"))
+        using (var conn = new SqliteConnection($"Data Source={path};Pooling=False"))
         {
             conn.Open();
             using var cmd = conn.CreateCommand();
@@ -55,7 +56,7 @@ public class EagerTerminalGuardTests
         var builder = new DataContextBuilder();
         if (contextMode is { } mode)
             builder.UseEagerLoadMode(mode);
-        var ctx = new SqliteDataContext($"Data Source={path}", builder);
+        var ctx = new SqliteDataContext($"Data Source={path};Pooling=False", builder);
         // Declare the relationships so JoinInto can resolve the collection navigation.
         ctx.From<TerminalGuardParent>(b => b
             .HasMany(p => p.Children, c => c.ParentId)
@@ -122,7 +123,7 @@ public class EagerTerminalGuardTests
             case "Max": builder.Max(p => p.Id); break;
             case "Sum": builder.Sum(p => p.Id); break;
             case "Avg": builder.Avg(p => p.Id); break;
-            case "Prepare": builder.Prepare(cancellationToken: CancellationToken.None); break;
+            case "Prepare": builder.Prepare(default, CancellationToken.None); break;
             case "WriteJson": builder.WriteJson(new MemoryStream()); break;
             case "WriteCsv": builder.WriteCsv(new MemoryStream()); break;
             case "FirstProjection": builder.FirstOrFirstOrDefaultCommand(p => p.Id); break;

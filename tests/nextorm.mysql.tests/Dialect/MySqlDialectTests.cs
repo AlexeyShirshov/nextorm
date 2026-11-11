@@ -134,6 +134,7 @@ public class MySqlDialectTests
         Dialect.SupportsFullJoin.Should().BeFalse();
         Dialect.SupportsIntersectExceptAll.Should().BeFalse();
         Dialect.SupportsSequentialAccess.Should().BeFalse();
+        Dialect.SupportsSavepoints.Should().BeTrue();
         Dialect.SupportsApply.Should().BeTrue();
         Dialect.SupportsQueryHints.Should().BeTrue();
         Dialect.SupportsCube.Should().BeFalse();
@@ -189,10 +190,14 @@ public class MySqlDialectTests
     }
 
     [Fact]
-    public void MakeLikeEscape_ShouldDoubleTheBackslash()
+    public void MakeLikeEscape_ShouldRenderModeIndependentHexTokens()
     {
-        Dialect.MakeLikeEscape("\\").Should().Be(" escape '\\\\'");
-        Dialect.MakeLikeEscape("!").Should().Be(" escape '!'");
+        // A charset-introduced hex literal is spelled the same way with and without NO_BACKSLASH_ESCAPES,
+        // so the escape operand never depends on the session mode or on driver string escaping.
+        Dialect.MakeLikeEscape("\\").Should().Be(" escape _utf8mb4 X'5c'");
+        Dialect.MakeLikeEscape("!").Should().Be(" escape _utf8mb4 X'21'");
+        Dialect.MakeLikeEscape("'").Should().Be(" escape _utf8mb4 X'27'",
+            "the apostrophe is carried as its byte, never as a doubled quote");
     }
 
     [Fact]
@@ -242,5 +247,21 @@ public class MySqlDialectTests
         Dialect.MySqlFunctions!.Supports("next_value_for").Should().BeFalse();
         var act = () => Dialect.MySqlFunctions!.Render("nvl", ["a", "b"]);
         act.Should().Throw<NotSupportedException>();
+    }
+
+    [Fact]
+    public void MariaDbCapability_ShouldClaimTheT349CatalogueThatT350Proved()
+    {
+        // #284 (T350 S1 evidence: MariaDB 11.4.13 accepted every one of these names) resolves the
+        // temporary #283 exclusion, so the MySQL strings/numeric/bit catalogue is now claimed on MariaDB.
+        var mariadb = NextORM.MariaDb.MariaDbDialect.Instance.MySqlFunctions!;
+        string[] delivered = ["bin", "weight_string", "bit_and", "crc32"];
+
+        foreach (var name in delivered)
+            mariadb.Supports(name).Should().BeTrue($"'{name}' is delivered on MariaDB since #284");
+
+        // The pre-existing inherited surface stays delegated.
+        mariadb.Supports("find_in_set").Should().BeTrue();
+        mariadb.Render("find_in_set", ["a", "'b,c'"]).Should().Be("find_in_set(a, 'b,c')");
     }
 }

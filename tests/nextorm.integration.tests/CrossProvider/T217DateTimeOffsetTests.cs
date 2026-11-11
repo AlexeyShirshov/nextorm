@@ -366,6 +366,7 @@ public sealed class SqlServerT217DateTimeOffsetTests : T217DateTimeOffsetTestsBa
 /// ClickHouse stores a DateTimeOffset as a UTC-normalised <c>DateTime64</c>; the provider-local reader
 /// adaptation materialises it as an offset-zero DateTimeOffset without losing the microseconds.
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class ClickHouseT217DateTimeOffsetTests : T217DateTimeOffsetTestsBase
 {
     protected override ITestProvider Provider => ClickHouseTestProvider.Instance;

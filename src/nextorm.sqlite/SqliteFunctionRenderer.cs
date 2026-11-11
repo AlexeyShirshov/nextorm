@@ -14,14 +14,14 @@ internal sealed class SqliteFunctionRenderer : ISqliteFunctions
     private static readonly HashSet<string> SupportedNames = new(StringComparer.Ordinal)
     {
         "printf", "format", "hex", "unhex", "random", "randomblob", "quote", "typeof", "glob",
-        "unicode", "char", "soundex", "octet_length", "ifnull", "if",
+        "unicode", "char", "octet_length", "ifnull", "if",
         "acos", "acosh", "asin", "asinh", "atan", "atan2", "atanh", "cosh",
         "log10", "log2", "mod", "sinh", "tanh",
         "timediff", "unixepoch", "julianday",
         "json", "jsonb", "json_extract", "json_get", "json_get_text", "json_array",
         "json_array_insert", "json_insert", "json_replace", "json_set", "json_object",
         "json_patch", "json_pretty", "json_quote", "json_remove", "json_type", "json_valid",
-        "json_group_array", "json_group_object",
+        "json_group_array", "json_group_object", "total",
         // FTS3/4/5 (SQL-only; the query surface renders the hidden columns and the auxiliary functions).
         "Match", "Rank", "RowId", "FTS5bm25", "Highlight", "Snippet",
         "FTS3Offsets", "FTS3MatchInfo", "FTS3Snippet"

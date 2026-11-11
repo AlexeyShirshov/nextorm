@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using FluentAssertions;
+using NextORM.Core;
 using NextORM.Postgres;
 
 namespace NextORM.Integration.Tests;
@@ -241,17 +242,45 @@ public sealed class SqliteBuilderGuardCoverageTests : ProviderTestSuite
     }
 
     [Fact]
-    public void CorrelatedApply_AfterJoin_ShouldBeRejected()
+    public void CorrelatedApply_AfterJoin_ShouldBeRejected_BecauseSqliteHasNoLateral()
     {
         var ctx = _sut.DataProvider;
         SeedIsLive();
 
+        // #324: a correlated APPLY after a join binds to the flat transition and is refused by the dialect
+        // capability gate (no lateral/APPLY source), not by the removed "join projection" refusal.
         var joined = _sut.SimpleEntityAsClass.Join(_sut.ComplexEntity, (s, c) => s.Id == c.Id);
 
-        FluentActions
-            .Invoking(() => joined.CrossApply<SimpleEntity>(_ => ctx.From<SimpleEntity>()))
-            .Should().Throw<NotSupportedException>()
-            .WithMessage("*cannot reference a join projection*");
+        var command = joined
+            .CrossApply((Projection<SimpleEntity, IComplexEntity> p) =>
+                ctx.From<SimpleEntity>().Where(x => x.Id == p.Item1.Id))
+            .Select(q => new { Left = q.Item1.Id, Applied = q.Item3.Id });
+
+        var exception = FluentActions
+            .Invoking(() => ctx.GetPreparedQueryCommand(command, false, false, CancellationToken.None))
+            .Should().Throw<NotSupportedException>("the refusal happens while the command is prepared")
+            .Which;
+
+        exception.Message.Should().Contain("CrossApply");
+        exception.Message.Should().Contain("not supported by this SQL dialect");
+        exception.Message.Should().NotContain(
+            "join projection", "the left source being a projection is not the failure reason");
+    }
+
+    [Fact]
+    public void CorrelatedApply_AfterJoin_Control_JoinedProjectionWithoutApply_ShouldExecute()
+    {
+        SeedIsLive();
+
+        // Control for the negative above: the same joined projection without an APPLY is valid SQLite and
+        // executes, so the refusal is the missing lateral capability and nothing about the projection shape.
+        var joined = _sut.SimpleEntityAsClass.Join(_sut.ComplexEntity, (s, c) => s.Id == c.Id);
+
+        var rows = joined
+            .Select(p => new { Left = p.Item1.Id, Right = p.Item2.Id })
+            .ToList();
+
+        rows.Should().NotBeEmpty();
     }
 
     [Fact]

@@ -29,7 +29,7 @@ public class InMemoryBenchmarkAny
         _ctx = new InMemoryDataRepository(provider);
         _ctx.SimpleEntity.WithData(_data);
 
-        _cmd = _ctx.SimpleEntity.AnyCommand().Prepare(true);
+        _cmd = _ctx.SimpleEntity.AnyCommand().Prepare();
     }
 
     private EFInMemoryDataContext EfContext => _efCtx ??= EfInMemory.Create(10_000);

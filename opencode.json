@@ -16,5 +16,11 @@
       "/home/alex/.config/opencode/**": "allow",
       "/tmp/nextorm*/**": "allow"
     }
+  },
+  "agent": {
+    "nextorm-brains": { "model": "openai/gpt-6.1-sol", "variant": "high" },
+    "nextorm-scout": { "model": "deepseek/deepseek-flash" },
+    "nextorm-db-perf-analyst": { "model": "deepseek/deepseek-flash" },
+    "nextorm-inmemory-perf-analyst": { "model": "deepseek/deepseek-flash" }
   }
 }

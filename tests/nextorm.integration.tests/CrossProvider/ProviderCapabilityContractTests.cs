@@ -10,7 +10,13 @@ namespace NextORM.Integration.Tests;
 /// removes coverage instead of turning a test red — and a skip is easy to miss in the run summary.
 /// This test makes every change to the matrix a deliberate edit of the pinned table below.
 /// </para>
+/// <para>
+/// The class carried no collection attribute, so it ran in parallel with every ClickHouse test class
+/// while instantiating <c>ClickHouseTestProvider</c> contexts. It now joins the shared ClickHouse
+/// collection, per the convention documented on <see cref="ClickHouseCollectionDefinition"/>.
+/// </para>
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class ProviderCapabilityContractTests
 {
     private static readonly ITestProvider[] AllProviders =
@@ -44,6 +50,7 @@ public sealed class ProviderCapabilityContractTests
                 ["SupportsStoredProcedures"] = false,
                 ["SupportsTableValuedParameters"] = true,
                 ["SupportsTransactions"] = true,
+                ["SupportsSavepoints"] = true,
                 ["SupportsRegex"] = true,
                 ["SupportsLobStreaming"] = true,
                 ["SupportsLobDataReader"] = true,
@@ -71,6 +78,7 @@ public sealed class ProviderCapabilityContractTests
                 ["SupportsStoredProcedures"] = true,
                 ["SupportsTableValuedParameters"] = true,
                 ["SupportsTransactions"] = true,
+                ["SupportsSavepoints"] = true,
                 ["SupportsRegex"] = true,
                 ["SupportsLobStreaming"] = true,
                 ["SupportsLobDataReader"] = true,
@@ -82,7 +90,9 @@ public sealed class ProviderCapabilityContractTests
             ["sqlserver"] = new Dictionary<string, bool>(StringComparer.Ordinal)
             {
                 ["SupportsFullJoin"] = true,
-                ["SupportsFractionalAverage"] = false,
+                // T291 (#291): SQL Server widens an integral AVG argument to float inside the
+                // aggregate, so the fractional result holds and the shared AVG facts are live.
+                ["SupportsFractionalAverage"] = true,
                 ["SupportsIntersectExceptAll"] = false,
                 ["SupportsVarianceAggregates"] = true,
                 ["SupportsTableValuedFunctions"] = false,
@@ -98,6 +108,7 @@ public sealed class ProviderCapabilityContractTests
                 ["SupportsStoredProcedures"] = true,
                 ["SupportsTableValuedParameters"] = true,
                 ["SupportsTransactions"] = true,
+                ["SupportsSavepoints"] = true,
                 ["SupportsRegex"] = true,
                 ["SupportsLobStreaming"] = true,
                 ["SupportsLobDataReader"] = true,
@@ -125,6 +136,7 @@ public sealed class ProviderCapabilityContractTests
                 ["SupportsStoredProcedures"] = true,
                 ["SupportsTableValuedParameters"] = true,
                 ["SupportsTransactions"] = true,
+                ["SupportsSavepoints"] = true,
                 ["SupportsRegex"] = true,
                 ["SupportsLobStreaming"] = false,
                 ["SupportsLobDataReader"] = false,
@@ -152,6 +164,7 @@ public sealed class ProviderCapabilityContractTests
                 ["SupportsStoredProcedures"] = false,
                 ["SupportsTableValuedParameters"] = true,
                 ["SupportsTransactions"] = false,
+                ["SupportsSavepoints"] = false,
                 ["SupportsRegex"] = true,
                 ["SupportsLobStreaming"] = false,
                 ["SupportsLobDataReader"] = false,
@@ -199,6 +212,31 @@ public sealed class ProviderCapabilityContractTests
             provider.TableValuedFunctionSkipReason.Should().NotBeNullOrWhiteSpace();
     }
 
+    /// <summary>
+    /// T289: the savepoint capability is pinned once and must agree on both surfaces — the harness flag
+    /// that gates the shared live facts and the dialect capability the context injects into the
+    /// transaction manager. A mismatch would let the harness skip a provider whose dialect reports
+    /// support (or execute facts against a dialect that reports none).
+    /// </summary>
+    [Theory]
+    [InlineData("sqlite")]
+    [InlineData("postgres")]
+    [InlineData("sqlserver")]
+    [InlineData("mysql")]
+    [InlineData("clickhouse")]
+    public void SavepointCapability_ShouldMatchThePinnedMatrixOnBothSurfaces(string providerName)
+    {
+        var provider = AllProviders.Single(p => p.Name == providerName);
+        var pinned = Pinned[providerName][nameof(ITestProvider.SupportsSavepoints)];
+
+        provider.SupportsSavepoints.Should().Be(pinned, "the harness flag is pinned per provider");
+
+        using var context = (DataContext)provider.CreateContext();
+        context.Dialect.SupportsSavepoints.Should().Be(pinned,
+            "the dialect capability the context injects must equal the harness flag");
+        provider.SupportsSavepoints.Should().Be(context.Dialect.SupportsSavepoints);
+    }
+
     private static Dictionary<string, bool> ReadCapabilities(ITestProvider provider) =>
         new(StringComparer.Ordinal)
         {
@@ -219,6 +257,7 @@ public sealed class ProviderCapabilityContractTests
             [nameof(ITestProvider.SupportsStoredProcedures)] = provider.SupportsStoredProcedures,
             [nameof(ITestProvider.SupportsTableValuedParameters)] = provider.SupportsTableValuedParameters,
             [nameof(ITestProvider.SupportsTransactions)] = provider.SupportsTransactions,
+            [nameof(ITestProvider.SupportsSavepoints)] = provider.SupportsSavepoints,
             [nameof(ITestProvider.SupportsRegex)] = provider.SupportsRegex,
             [nameof(ITestProvider.SupportsLobStreaming)] = provider.SupportsLobStreaming,
             [nameof(ITestProvider.SupportsLobDataReader)] = provider.SupportsLobDataReader,

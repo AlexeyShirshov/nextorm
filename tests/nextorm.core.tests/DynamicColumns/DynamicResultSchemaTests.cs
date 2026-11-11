@@ -20,56 +20,70 @@ public class DynamicResultSchemaTests
 
     private static class LeadingTvf
     {
-        [SqlTableFunction("values", ResultSchema = TableFunctionSchema.LeadingArgument)]
-        public static IQueryable<ILeadingRow> Values(string tuples) => throw new NotSupportedException();
+        public static TvfEntityBuilder<ILeadingRow> Values(string tuples) => new("values", null, null, null, Array.Empty<int>(), TableFunctionSchema.LeadingArgument);
     }
 
     private static class AliasTvf
     {
-        [SqlTableFunction("jsonb_to_record", ResultSchema = TableFunctionSchema.AliasColumnList)]
-        public static IQueryable<IAliasRow> Record(object? json) => throw new NotSupportedException();
+        public static TvfEntityBuilder<IAliasRow> Record(object? json) => new("jsonb_to_record", null, null, null, Array.Empty<int>(), TableFunctionSchema.AliasColumnList);
     }
 
     [Fact]
     public void ResultSchema_ShouldDefaultToNone()
     {
-        var attribute = new SqlTableFunctionAttribute("tvf");
+        var descriptor = new TvfEntityBuilder<ILeadingRow>("tvf");
 
-        attribute.ResultSchema.Should().Be(TableFunctionSchema.None);
+        descriptor.ResultSchema.Should().Be(TableFunctionSchema.None);
     }
 
     [Fact]
-    public void ResultSchema_ShouldBeSettable()
+    public void Descriptor_ShouldCarryTheResultSchema()
     {
-        var attribute = new SqlTableFunctionAttribute("values")
-        {
-            ResultSchema = TableFunctionSchema.LeadingArgument
-        };
+        var descriptor = new TvfEntityBuilder<ILeadingRow>(
+            "values", null, null, null, Array.Empty<int>(), TableFunctionSchema.LeadingArgument);
 
-        attribute.ResultSchema.Should().Be(TableFunctionSchema.LeadingArgument);
+        descriptor.ResultSchema.Should().Be(TableFunctionSchema.LeadingArgument);
     }
 
     [Fact]
-    public void Create_WithLeadingSchema_ShouldResolveRowTypeAndPlacement()
+    public void CreateRuntime_WithLeadingSchema_ShouldCarryRowTypeAndPlacement()
     {
         var call = (MethodCallExpression)Expression.Call(
             typeof(LeadingTvf).GetMethod(nameof(LeadingTvf.Values))!,
             Expression.Constant("(1)"));
+        var descriptor = LeadingTvf.Values("(1)");
 
-        var function = TableFunctionExpression.Create(call);
+        var function = TableFunctionExpression.CreateRuntime(
+            descriptor.Name,
+            descriptor.Schema,
+            descriptor.WithClause,
+            descriptor.CallClause,
+            null,
+            call,
+            typeof(ILeadingRow),
+            descriptor.ResultSchema);
 
         function.ResultType.Should().Be(typeof(ILeadingRow));
         function.ResultSchema.Should().Be(TableFunctionSchema.LeadingArgument);
     }
 
     [Fact]
-    public void Create_WithAliasSchema_ShouldResolveRowTypeAndPlacement()
+    public void CreateRuntime_WithAliasSchema_ShouldCarryRowTypeAndPlacement()
     {
         var call = (MethodCallExpression)Expression.Call(
             typeof(AliasTvf).GetMethod(nameof(AliasTvf.Record))!,
             Expression.Constant(null, typeof(object)));
+        var descriptor = AliasTvf.Record(null);
 
-        var function = TableFunctionExpression.Create(call);
+        var function = TableFunctionExpression.CreateRuntime(
+            descriptor.Name,
+            descriptor.Schema,
+            descriptor.WithClause,
+            descriptor.CallClause,
+            null,
+            call,
+            typeof(IAliasRow),
+            descriptor.ResultSchema);
 
         function.ResultType.Should().Be(typeof(IAliasRow));
         function.ResultSchema.Should().Be(TableFunctionSchema.AliasColumnList);

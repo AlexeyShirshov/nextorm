@@ -1,85 +1,81 @@
-# TODO: Заморозка и трекинг публичного API (IF6 / Шаг 5)
+# TODO: Заморозка и трекинг публичного API (IF6 / Шаг 5) — ✅ выполнено
 
 > Рабочий план (design RFC). Источник: GitHub issue
 > [#53 «IF6: Заморозка и трекинг публичного API»](https://github.com/AlexeyShirshov/nextorm/issues/53),
 > реестр [`docs/specs/design/API-NAMING-REVIEW.md`](../design/API-NAMING-REVIEW.md) (находки
 > IF6/DC3/DC8, «Список заморозки»). Это **единственный незакрытый пункт закрытой фичи
-> «capability-объекты диалекта» (Фазы 1–3)**: поверхность сформирована (capability-объекты),
-> но её состав в `PublicAPI.*.txt` не зафиксирован.
+> «capability-объекты диалекта» (Фазы 1–3)**.
+>
+> **Статус: закрыто 2026-11-11.** Файл сохранён как запись о выполнении — на него ссылается реестр.
 
 ## Пункт и цель
 
-- Проблема: `PublicAPI.Shipped.txt`/`PublicAPI.Unshipped.txt` отсутствуют, `PublicApiAnalyzers`
-  не подключён, `ApiCompat`/API-approval-теста нет; `CS1591` — в `<NoWarn>` всех библиотечных
-  `.csproj`. Новые публичные члены (capability-интерфейсы, DIM/`virtual`-свойства, class-B/C
-  `Supports*`) не трекаются — `RS0016`/`RS0017`/`RS0025` не срабатывают.
-- Цель: подключить `PublicApiAnalyzers`, зафиксировать текущую поверхность в `PublicAPI.Shipped.txt`,
-  завести `ApiCompat`/approval-тест в CI, чтобы дальнейшие изменения публичного API были явными.
-- Критерий приёмки: `dotnet build nextorm.sln -c Release` с `PublicApiAnalyzers` — 0/0;
-  `PublicAPI.Shipped.txt` содержит текущую поверхность; CI-шаг падает при незаявленном
-  добавлении/удалении публичного члена.
+- Проблема: `PublicAPI.Shipped.txt`/`PublicAPI.Unshipped.txt` отсутствовали, `PublicApiAnalyzers`
+  не подключён, `ApiCompat`/API-approval-теста нет. Новые публичные члены (capability-интерфейсы,
+  DIM/`virtual`-свойства, class-B/C `Supports*`) не трекались — `RS0016`/`RS0017` не срабатывали.
+- Цель: подключить `PublicApiAnalyzers`, зафиксировать текущую поверхность, включить
+  `EnablePackageValidation`, чтобы дальнейшие изменения публичного API были явными.
 
-## Статус сопутствующего блокера размещения (join-alias)
+## Что сделано (2026-11-11)
 
-- ✅ **Размещение генератора join-alias закрыто (2026-10-01).** `src/nextorm.core/nextorm.core.csproj`
-  упаковывает `nextorm.core.sourcegenerator` в `analyzers/dotnet/cs` пакета `nextorm`
-  (`TargetsForTfmSpecificContentInPackage` → `_AddSourceGeneratorToPackage`, целевой путь
-  `TfmSpecificPackageFile PackagePath="analyzers/dotnet/cs"`), поэтому блокер «непривязанный stub /
-  изменение графа пакета» из `docs/specs/status/join-alias-113-1.md` (пункт 1) снят: потребителю не
-  нужна дополнительная ссылка. Новый публичный член `NextORM.Core.JoinSlotAttribute` внести в
-  `PublicAPI.Unshipped.txt` при заморозке (ср. IF6/DC3).
+1. **Пакет.** `Microsoft.CodeAnalysis.PublicApiAnalyzers` 5.6.0 добавлен в `Directory.Packages.props`
+   (CPM). PackageReference без версии, `PrivateAssets="all"`, плюс `AdditionalFiles` на оба файла —
+   в 9 библиотечных `.csproj` и в `src/nextorm.core.sourcegenerator` (у генератора публичного API
+   нет: оба типа `internal`, поэтому его `PublicAPI.Shipped.txt` — только заголовок; файл держит
+   инвариант на будущее).
+2. **Файлы.** В каждом из 10 проектов — `PublicAPI.Shipped.txt`/`PublicAPI.Unshipped.txt` с первой
+   строкой `#nullable enable` (иначе nullability не трекается). Baseline сгенерирован анализатором
+   (`dotnet format analyzers --diagnostics RS0016`) — не написан руками, поэтому он точно совпадает
+   с деревом: `nextorm` — 6355 подписей, `nextorm.clickhouse` — 224, `nextorm.sqlserver` — 187,
+   `nextorm.postgres` — 156, `nextorm.mysql` — 117, `nextorm.sqlite` — 88, `nextorm.mariadb` — 30,
+   `nextorm.extensions` — 36, `nextorm.entityframeworkcore` — 12.
+3. **Заморозка.** Baseline лежит в `Shipped` (решение владельца 2026-11-11: первая прод-версия —
+   1.0.9, релиз сразу после вливания), `Unshipped` пуст. Новые члены после 1.0.9 пишутся в
+   `Unshipped` и переносятся в `Shipped` следующим релизом.
+4. **Гейт.** RS0016/RS0017 закреплены `error` в `.editorconfig` — падают независимо от
+   `TreatWarningsAsErrors` в конкретном проекте. Пробы: публичный тип без объявления → RS0016;
+   объявление без типа → RS0017; после правки файла — зелёно. Build Debug и Release — 0/0.
+5. **Пакетная проверка.** `EnablePackageValidation=true` в `src/Directory.Build.props`;
+   `dotnet pack -c Release` публикуемых проектов проходит с включённой валидацией. Baseline-сравнение
+   с предыдущим релизом включается свойством `PackageValidationBaselineVersion=1.0.9` сразу после
+   публикации 1.0.9 (против prerelease-baseline SDK сравнение пропускает: проверено на 1.0.8-b и
+   1.0.9-rc5 — ни одного CP-диагностика на заведомо ломающем переименовании). Отслеживается
+   отдельным тикетом [#389](https://github.com/AlexeyShirshov/nextorm/issues/389) (milestone `1.0.10-a.1`).
+6. **Отложенные переименования.** XP3 выполнено (`ISqlDialect.SupportsAnyAggregates` →
+   `SupportsAnyLastAggregate` с обновлением диалектов, транслятора, тестов, XML-доков и
+   `docs/**` + `docs/ru/**`); XP6 дописан (два оставшихся вызова `SqlFunctions.ClickHouse.any_agg`
+   переведены на `SqlFunctions.Sql.any_agg`). **UG1** (`gen_random_uuid` → `uuidv4`) и **JP2**
+   (`MakeJsonExtract` → нейтральное имя) сознательно отложены и внесены в baseline под текущими
+   именами — это не механические переименования, они меняют документированный контракт.
 
-## Что вносить (не дублировать удалённое)
+## Открытые вопросы — решения
 
-- **Новое (Фазы 1–2):** 16 capability-интерфейсов `NextORM.Core.I*` и 16 nullable DIM-свойств
-  `ISqlDialect.<Prop>.get` + одноимённые `SqlDialectBase.<Prop>.get` — точный перечень ведёт
-  `API-NAMING-REVIEW.md` (блоки IF6/DC3/DC8).
-- **Остаточная не-объектная поверхность** класса B/C (`Supports*`-флаги без собственного
-  `Make*`-хука) — критерий и перечень зафиксированы в `API-NAMING-REVIEW.md` («Отложенные
-  ANSI-гейты (класс C, остались `bool`)»).
-- **НЕ вносить** 41 дублирующий `Supports*`/`Make*`-член, удалённый Фазой 3 (перечень —
-  в `API-NAMING-REVIEW.md`, блок «Фаза 3»).
-- Файл `PublicAPI.Shipped.txt` — с `#nullable enable` (nullable-аннотации `?` обязательны).
+1. *Один общий файл или по файлу на проект?* — по паре на проект (сборочная единица анализатора).
+2. *Hard-gate или warning-only?* — hard-gate (`error`); правка `PublicAPI.*.txt` — часть каждого
+   API-изменения.
+3. *ApiCompat против пакета или approval-тест?* — `EnablePackageValidation`; baseline — первый
+   стабильный релиз, не prerelease.
+4. ~~Убирать ли `CS1591` из `NoWarn`?~~ — убран 22.09.2026, вся публичная поверхность
+   задокументирована (шаг 3 плана).
 
-## Шаги
+## Файлы
 
-1. Подключить `Microsoft.CodeAnalysis.PublicApiAnalyzers` (версия в `Directory.Packages.props`,
-   по CPM) и завести `PublicAPI.Shipped.txt`/`PublicAPI.Unshipped.txt` в библиотечных проектах.
-2. Сгенерировать содержимое `PublicAPI.Shipped.txt` точным выводом анализатора по текущему дереву.
-3. ✅ **Выполнено 22.09.2026:** `CS1591` убран из `<NoWarn>` всех 7 библиотечных `.csproj`;
-   задокументированы все 1283 публичных члена (покрытие 100 %), сборка Debug `0/0`.
-4. Добавить `Microsoft.DotNet.ApiCompat`/approval-тест публичной поверхности и включить в CI.
-5. Закрыть находки IF6/DC3/DC8 в `API-NAMING-REVIEW.md`, удалить этот файл (по скиллу
-   `implementing-todo-features`).
+- `Directory.Packages.props`, `src/Directory.Build.props`, `.editorconfig`, 10 пар
+  `PublicAPI.Shipped/Unshipped.txt`, 10 `src/**/*.csproj`, `docs/specs/design/API-NAMING-REVIEW.md`
+  (IF6/DC3/DC8/XP3), `docs/specs/comparison/capability-matrix.md`, `docs/guide/05-grouping-and-aggregates.md`
+  (+RU).
+- CI правок не требует: `dotnet build` в job `build` уже валит сборку на RS0016/RS0017.
 
-## Открытые вопросы
+## Дизайн-ревью (nextorm-design-engineer, 2026-09-24) — как учтено
 
-1. Один общий `PublicAPI.*.txt` на solution или по файлу на проект?
-2. `PublicApiAnalyzers` как hard-gate в CI или сначала warning-only?
-3. `ApiCompat` против последнего опубликованного пакета (нужен baseline) или достаточно
-   approval-теста поверхности решения?
-4. ~~Убирать ли `CS1591` из `NoWarn` глобально или только для capability-поверхности?~~
-   **Решено 22.09.2026:** убран глобально во всех 7 библиотечных `.csproj` (шаг 3); вся публичная
-   поверхность задокументирована.
-
-## Файлы к изменению
-
-- `Directory.Packages.props`, `Directory.Build.props`, библиотечные `src/nextorm.*/*.csproj`,
-  новые `PublicAPI.Shipped.txt`/`PublicAPI.Unshipped.txt`, `.github/workflows/dotnet.yml`.
-- Документация: `docs/specs/design/API-NAMING-REVIEW.md` (IF6/DC3/DC8 → закрыто).
-
-## Дизайн-ревью (nextorm-design-engineer, 2026-09-24)
-
-> Прогон сабагента `nextorm-design-engineer` по плану (read-only). `file:line` — по дереву на момент ревью.
-> Вердикт: **нужен пересмотр шагов 2/4 — 2 блокера**; механика заморозки не согласована с build-дисциплиной.
-
-- **[SRP] 🔴** Hard-gate конфликтует с alpha-политикой и build-дисциплиной: `TreatWarningsAsErrors=true` (`Directory.Build.props:40`) делает RS0016/RS0017/RS0025 ошибками сборки, а критерий `:18-20` хочет падения только на «незаявленном» изменении; это противоречит принятому «alpha допускает слом» (`docs/specs/design/code-smells-review.md:3125`). Fix: зафиксировать политику (правка `PublicAPI.*.txt` — часть каждого API-изменения) либо до заморозки держать анализатор warning-only.
-- **[DRY] 🔴** Генерация `Shipped` в один проход (`:38`) благословляет всю поверхность как shipped и обходит курированный перечень «Что вносить» (`:22-32`, исключающий 41 удалённый член); RS0017 не сработает — предыдущего файла нет. Fix: генерировать в `PublicAPI.Unshipped.txt`, сверить diff с IF6/DC3/DC8, затем промоутировать.
-- **[TYPE]/[ISP] 🟡** Путь `ApiCompat` неверен (`:41`): `Microsoft.DotNet.ApiCompat` — не `PackageReference`; штатно `EnablePackageValidation` + `PackageValidationBaselineVersion` (или таск `Microsoft.DotNet.ApiCompat.Task`). Baseline не решён (`:49`), текущая версия `Directory.Build.props:56` = `1.0.5-alpha`. Fix.
-- **[TYPE] 🟡** Место подключения анализатора (`:57`, `Directory.Build.props`) применится к `nextorm.core.sourcegenerator` (`netstandard2.0`, `IsPackable=false`) и ко всем `tests/**`/`benchmarks/**` → поток RS0016. Fix: `src/Directory.Build.props` под `IsPackable` либо 7 библиотечных `.csproj`.
-- **[DRY] 🟡** Перечень 16+16 интерфейсов/свойств дублирует `API-NAMING-REVIEW.md` (IF6/DC3/DC8); источники разъедутся. Fix: реестр — единственный источник, план — ссылка.
-- **[BUILD] 🟡** CRLF сгенерированных `PublicAPI.*.txt` ничем не гейтится: нет `.gitattributes` и `end_of_line` в `.editorconfig`. Fix: добавить и нормализовать.
-- **[SRP] ℹ️** В критерии `:18` команда `nextorm.sln` — в репозитории `nextorm.slnx`. Fix.
-- **[SRP] ℹ️** Шаг 4 (`:41,49-50`) не выполним без решения: кто/где заводит baseline/approval. Fix: выбрать (рекомендуется approval-тест по snapshot `PublicAPI.*.txt`).
-- **[ISP]/[TYPE] ℹ️** Трекируемая поверхность `ISqlDialect` — принятый долг F12 (`:24-29`). Не переоткрывать; поставить ссылку на F12.
-- **[DRY] ℹ️** 16 capability-типов (`Supports`+`Render`) — кандидат на обобщение, но унификация конфликтует с ISP. Deferred.
+- **[SRP] Hard-gate vs alpha-политика** — политика зафиксирована: правка `PublicAPI.*.txt` входит в
+  каждое API-изменение; `TreatWarningsAsErrors` не ослабляется.
+- **[DRY] Генерация `Shipped` в один проход** — baseline сгенерирован анализатором в `Unshipped`,
+  сверен с курированным перечнем IF6/DC3/DC8 (удалённых Фазой 3 пар в файлах нет) и только затем
+  промоутирован в `Shipped`.
+- **[TYPE]/[ISP] `Microsoft.DotNet.ApiCompat` как PackageReference** — не используется; штатный путь
+  `EnablePackageValidation` + `PackageValidationBaselineVersion`.
+- **[TYPE] Место подключения анализатора** — по `.csproj`, не в корневом `Directory.Build.props`
+  (иначе течёт в `tests/**`/`benchmarks/**`).
+- **[BUILD] CRLF** — сгенерированные файлы в CRLF (`core.autocrlf=true`), как остальные `.cs`/`.md`.
+- **[SRP] `nextorm.sln` vs `.slnx`** — везде `nextorm.slnx`.

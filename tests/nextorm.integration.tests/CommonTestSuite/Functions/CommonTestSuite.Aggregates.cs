@@ -72,17 +72,14 @@ public abstract partial class CommonTestSuite
     }
 
     [Fact]
-    public void Avg_ShouldReturn6()
+    public void Avg_ShouldReturn5_5()
     {
-        // PostgreSQL and SQLite keep the fractional part of an integer AVG (5.5 rounds to 6 when
-        // projected as int); SQL Server evaluates AVG over an integer column as an integer, so the
-        // assertion below only applies where the provider supports fractional results.
-        Assert.SkipUnless(Provider.SupportsFractionalAverage,
-            "This provider evaluates AVG over an integer column as an integer.");
-
+        // T291: an integer AVG now exposes the fractional mean on every provider; SQL Server widens
+        // the argument inside the aggregate instead of truncating the result, so no capability gate
+        // is needed here.
         var cnt = _sut.SimpleEntity.Select(e => SqlFunctions.Sql.avg(e.Id)).First();
 
-        cnt.Should().Be(6);
+        cnt.Should().Be(5.5);
 
         _sut.SimpleEntity.Avg(e => e.Id).Should().Be(cnt);
     }
@@ -204,14 +201,12 @@ public abstract partial class CommonTestSuite
     }
 
     [Fact]
-    public async Task AvgAsync_ShouldReturn6()
+    public async Task AvgAsync_ShouldReturn5_5()
     {
-        Assert.SkipUnless(Provider.SupportsFractionalAverage,
-            "This provider evaluates AVG over an integer column as an integer.");
-
+        // T291: the asynchronous terminal shares the fractional result contract on every provider.
         var cnt = _sut.SimpleEntity.Select(e => SqlFunctions.Sql.avg(e.Id)).First();
 
-        cnt.Should().Be(6);
+        cnt.Should().Be(5.5);
 
         (await _sut.SimpleEntity.AvgAsync(e => e.Id)).Should().Be(cnt);
     }
@@ -387,5 +382,102 @@ public abstract partial class CommonTestSuite
     public void LastOrDefault_OnDescending_ShouldReturnFirstRow()
     {
         _sut.SimpleEntity.OrderByDescending(e => e.Id).Select(e => e.Id).LastOrDefault().Should().Be(1);
+    }
+
+    // T292 (#292): the variability aggregates return a structurally nullable result. Cardinality
+    // counts contributing non-null values: n = 0 is undefined for all four families, n = 1 is
+    // undefined for the sample flavours and zero for the population ones, and the established
+    // multi-row results are unchanged. SimpleEntity holds ids 1..10; a negative id filter selects no
+    // rows, and `Id == 1` selects exactly one.
+
+    [Fact]
+    public void T292_VariabilityZeroContributingRows_ShouldBeNull()
+    {
+        var empty = _sut.SimpleEntity.Where(e => e.Id < 0);
+
+        empty.Stdev(e => e.Id).Should().BeNull("an undefined sample deviation is null, not zero");
+        empty.Stdevp(e => e.Id).Should().BeNull("an undefined population deviation is null, not zero");
+        empty.Var(e => e.Id).Should().BeNull("an undefined sample variance is null, not zero");
+        empty.Varp(e => e.Id).Should().BeNull("an undefined population variance is null, not zero");
+    }
+
+    [Fact]
+    public void T292_VariabilitySingleContributingRow_ShouldMatchCardinality()
+    {
+        var single = _sut.SimpleEntity.Where(e => e.Id == 1);
+
+        single.Stdev(e => e.Id).Should().BeNull("a one-row sample has no sample deviation");
+        single.Var(e => e.Id).Should().BeNull("a one-row sample has no sample variance");
+        single.Stdevp(e => e.Id).Should().Be(0, "a one-row population deviation is defined and zero");
+        single.Varp(e => e.Id).Should().Be(0, "a one-row population variance is defined and zero");
+    }
+
+    [Fact]
+    public void T292_VariabilityMultipleContributingRows_ShouldReturnEstablishedValues()
+    {
+        // The sample variance of 1..10 is 82.5 / 9, the population variance 82.5 / 10.
+        _sut.SimpleEntity.Stdev(e => (double)e.Id).Should().BeApproximately(Math.Sqrt(82.5 / 9), 1e-12);
+        _sut.SimpleEntity.Stdevp(e => (double)e.Id).Should().BeApproximately(Math.Sqrt(8.25), 1e-12);
+        _sut.SimpleEntity.Var(e => (double)e.Id).Should().BeApproximately(82.5 / 9, 1e-12);
+        _sut.SimpleEntity.Varp(e => (double)e.Id).Should().BeApproximately(8.25, 1e-12);
+    }
+
+    [Fact]
+    public void T292_VariabilityNullableSelector_ShouldIgnoreNulls()
+    {
+        var empty = _sut.SimpleEntity.Where(e => e.Id < 0);
+
+        empty.Stdev(e => (double?)e.Id).Should().BeNull();
+        empty.Var(e => (double?)e.Id).Should().BeNull();
+        empty.Stdevp(e => (double?)e.Id).Should().BeNull();
+        empty.Varp(e => (double?)e.Id).Should().BeNull();
+    }
+
+    [Fact]
+    public void T292_VariabilityFacadeForms_ShouldReturnEstablishedValues()
+    {
+        // The eight SQL facade forms are semantically nullable; the distinct forms of 1..10 agree
+        // with the plain forms because the values are already distinct.
+        _sut.SimpleEntity.Select(e => SqlFunctions.Sql.stdev((double)e.Id)).First()
+            .Should().BeApproximately(Math.Sqrt(82.5 / 9), 1e-12);
+        _sut.SimpleEntity.Select(e => SqlFunctions.Sql.stdevp((double)e.Id)).First()
+            .Should().BeApproximately(Math.Sqrt(8.25), 1e-12);
+
+        // The MySQL/MariaDB server grammar rejects DISTINCT inside STDDEV_SAMP/STDDEV_POP/VAR_SAMP/
+        // VAR_POP ("You have an error in your SQL syntax ... near 'distinct cast(id as double))'"),
+        // i.e. `stddev_samp(distinct x)` is not executable there. That is a pre-existing limitation of
+        // the shared renderer's `_distinct` spelling, unrelated to the nullable result; the SQL
+        // generation tests keep asserting that spelling for every provider, and the live distinct
+        // forms run on the providers whose grammar accepts them.
+        if (Provider.Name is not ("mysql" or "mariadb"))
+        {
+            _sut.SimpleEntity.Select(e => SqlFunctions.Sql.stdev_distinct((double)e.Id)).First()
+                .Should().BeApproximately(Math.Sqrt(82.5 / 9), 1e-12);
+            _sut.SimpleEntity.Select(e => SqlFunctions.Sql.stdevp_distinct((double)e.Id)).First()
+                .Should().BeApproximately(Math.Sqrt(8.25), 1e-12);
+        }
+    }
+
+    [Fact]
+    public async Task T292_VariabilityAsyncZeroContributingRows_ShouldBeNull()
+    {
+        using var cts = new CancellationTokenSource();
+        var empty = _sut.SimpleEntity.Where(e => e.Id < 0);
+
+        (await empty.StdevAsync(e => e.Id)).Should().BeNull();
+        (await empty.StdevpAsync(e => e.Id)).Should().BeNull();
+        (await empty.VarAsync(e => e.Id, cts.Token)).Should().BeNull();
+        (await empty.VarpAsync(e => e.Id, cts.Token)).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task T292_VariabilityAsyncMultipleContributingRows_ShouldReturnEstablishedValues()
+    {
+        using var cts = new CancellationTokenSource();
+
+        (await _sut.SimpleEntity.StdevAsync(e => (double)e.Id)).Should().BeApproximately(Math.Sqrt(82.5 / 9), 1e-12);
+        (await _sut.SimpleEntity.StdevpAsync(e => (double)e.Id, cts.Token)).Should().BeApproximately(Math.Sqrt(8.25), 1e-12);
+        (await _sut.SimpleEntity.VarAsync(e => (double)e.Id, cts.Token)).Should().BeApproximately(82.5 / 9, 1e-12);
+        (await _sut.SimpleEntity.VarpAsync(e => (double)e.Id)).Should().BeApproximately(8.25, 1e-12);
     }
 }

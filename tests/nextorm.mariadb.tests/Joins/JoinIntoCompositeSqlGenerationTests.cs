@@ -21,6 +21,9 @@ public class JoinIntoCompositeSqlGenerationTests
     private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd)
         => ((DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(cmd, false, false, CancellationToken.None)).DbCommand.CommandText;
 
+    private static string SqlOf(IDataContext ctx, QueryCommand cmd)
+        => ((DbPreparedQueryCommand<object?>)((DataContext)ctx).GetPreparedQueryCommand(cmd, false, false, CancellationToken.None)).DbCommand.CommandText;
+
     private static string Canon(string sql)
     {
         var s = sql

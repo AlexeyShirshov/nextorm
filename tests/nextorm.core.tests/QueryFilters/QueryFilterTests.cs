@@ -9,6 +9,7 @@ namespace NextORM.Core.Tests;
 /// declarations, the per-context predicate reading <see cref="IDataContext.Properties"/>, joins,
 /// <c>IgnoreFilters</c>, the no-filter fast path and the plan-key shape shared between two contexts.
 /// </summary>
+[Collection("Query cache controls")]
 public class QueryFilterTests
 {
     private const string TenantKey = "tenant";

@@ -50,6 +50,94 @@ public interface ITransactionManager
     void UseTransaction(DbTransaction? transaction);
 
     /// <summary>
+    /// Creates a savepoint with the given name on the active (or enlisted) transaction, so a later
+    /// <see cref="RollbackToSavepoint"/> can undo only the work done after it.
+    /// </summary>
+    /// <remarks>
+    /// The call is delegated to the provider's ADO.NET transaction. Savepoints are not tracked by
+    /// nextorm: name uniqueness and nesting are the caller's responsibility, and a duplicate valid
+    /// name is passed to the provider unchanged.
+    /// <para>
+    /// Declared as a default interface method so existing implementations keep compiling; an
+    /// implementation that does not support savepoints throws <see cref="NotSupportedException"/>.
+    /// </para>
+    /// </remarks>
+    /// <param name="name">
+    /// The savepoint name: 1-32 characters, ASCII <c>[A-Za-z_][A-Za-z0-9_]*</c>. Any other name
+    /// throws <see cref="ArgumentException"/>.
+    /// </param>
+    /// <exception cref="NotSupportedException">The provider does not support transactions or savepoints.</exception>
+    /// <exception cref="InvalidOperationException">No transaction is active on the context.</exception>
+    /// <exception cref="ArgumentException">The name is not a valid savepoint name.</exception>
+    public void CreateSavepoint(string name) =>
+        throw new NotSupportedException("CreateSavepoint is not supported by this ITransactionManager implementation.");
+
+    /// <summary>Asynchronously creates a savepoint with the given name on the active (or enlisted) transaction.</summary>
+    /// <remarks>Declared as a default interface method so existing implementations keep compiling.</remarks>
+    /// <param name="name">The savepoint name: 1-32 ASCII identifier characters.</param>
+    /// <param name="cancellationToken">Token passed to the provider's asynchronous savepoint call.</param>
+    /// <returns>A task that completes once the savepoint has been created.</returns>
+    /// <exception cref="NotSupportedException">The provider does not support transactions or savepoints.</exception>
+    /// <exception cref="InvalidOperationException">No transaction is active on the context.</exception>
+    /// <exception cref="ArgumentException">The name is not a valid savepoint name.</exception>
+    public Task CreateSavepointAsync(string name, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("CreateSavepointAsync is not supported by this ITransactionManager implementation.");
+
+    /// <summary>
+    /// Rolls the active (or enlisted) transaction back to the savepoint with the given name, discarding
+    /// only the work done after it.
+    /// </summary>
+    /// <remarks>
+    /// Declared as a default interface method so existing implementations keep compiling. Rolling back
+    /// to a savepoint does not end the transaction and does not release the savepoint unless the
+    /// provider does so.
+    /// </remarks>
+    /// <param name="name">The savepoint name: 1-32 ASCII identifier characters.</param>
+    /// <exception cref="NotSupportedException">The provider does not support transactions or savepoints.</exception>
+    /// <exception cref="InvalidOperationException">No transaction is active on the context.</exception>
+    /// <exception cref="ArgumentException">The name is not a valid savepoint name.</exception>
+    public void RollbackToSavepoint(string name) =>
+        throw new NotSupportedException("RollbackToSavepoint is not supported by this ITransactionManager implementation.");
+
+    /// <summary>Asynchronously rolls the active (or enlisted) transaction back to the savepoint with the given name.</summary>
+    /// <remarks>Declared as a default interface method so existing implementations keep compiling.</remarks>
+    /// <param name="name">The savepoint name: 1-32 ASCII identifier characters.</param>
+    /// <param name="cancellationToken">Token passed to the provider's asynchronous rollback call.</param>
+    /// <returns>A task that completes once the rollback has been applied.</returns>
+    /// <exception cref="NotSupportedException">The provider does not support transactions or savepoints.</exception>
+    /// <exception cref="InvalidOperationException">No transaction is active on the context.</exception>
+    /// <exception cref="ArgumentException">The name is not a valid savepoint name.</exception>
+    public Task RollbackToSavepointAsync(string name, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("RollbackToSavepointAsync is not supported by this ITransactionManager implementation.");
+
+    /// <summary>
+    /// Releases the savepoint with the given name on the active (or enlisted) transaction. Releasing
+    /// does not commit: the surrounding transaction still owns the work.
+    /// </summary>
+    /// <remarks>
+    /// Declared as a default interface method so existing implementations keep compiling. The call is
+    /// delegated to the provider, so a provider whose release is a no-op (SQL Server) keeps that
+    /// behaviour instead of nextorm synthesising SQL.
+    /// </remarks>
+    /// <param name="name">The savepoint name: 1-32 ASCII identifier characters.</param>
+    /// <exception cref="NotSupportedException">The provider does not support transactions or savepoints.</exception>
+    /// <exception cref="InvalidOperationException">No transaction is active on the context.</exception>
+    /// <exception cref="ArgumentException">The name is not a valid savepoint name.</exception>
+    public void ReleaseSavepoint(string name) =>
+        throw new NotSupportedException("ReleaseSavepoint is not supported by this ITransactionManager implementation.");
+
+    /// <summary>Asynchronously releases the savepoint with the given name on the active (or enlisted) transaction.</summary>
+    /// <remarks>Declared as a default interface method so existing implementations keep compiling.</remarks>
+    /// <param name="name">The savepoint name: 1-32 ASCII identifier characters.</param>
+    /// <param name="cancellationToken">Token passed to the provider's asynchronous release call.</param>
+    /// <returns>A task that completes once the savepoint has been released.</returns>
+    /// <exception cref="NotSupportedException">The provider does not support transactions or savepoints.</exception>
+    /// <exception cref="InvalidOperationException">No transaction is active on the context.</exception>
+    /// <exception cref="ArgumentException">The name is not a valid savepoint name.</exception>
+    public Task ReleaseSavepointAsync(string name, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("ReleaseSavepointAsync is not supported by this ITransactionManager implementation.");
+
+    /// <summary>
     /// Starts a transaction only when none is active, without throwing when one already is.
     /// </summary>
     /// <remarks>

@@ -1,0 +1,2739 @@
+﻿using System.Linq.Expressions;
+using System.Reflection;
+using System.Text;
+using Microsoft.Extensions.Logging;
+
+namespace NextORM.Core;
+
+/// <summary>
+/// Builds SQL text and collects parameters for one command using the active dialect and providers.
+/// Statement assembly lives here; source/condition rendering is delegated to
+/// <see cref="SqlSourceRenderer"/>.
+/// </summary>
+/// <remarks>
+/// Implementation detail (note the nine-parameter constructor), intentionally kept <c>internal</c>.
+/// See <c>docs/specs/design/API-NAMING-REVIEW.md</c> finding P1-18.
+/// </remarks>
+internal readonly struct SqlBuilder
+{
+    private readonly SqlBuildContext _ctx;
+
+    public SqlBuilder(VisitorOptions options)
+        : this(new SqlBuildContext(options))
+    {
+    }
+
+    public SqlBuilder(in SqlBuildContext ctx)
+    {
+        ArgumentNullException.ThrowIfNull(ctx.Params);
+
+        _ctx = ctx;
+    }
+
+    public ILogger? Logger => _ctx.Logger;
+
+    public string? MakeSelect(QueryCommand cmd, string? selectInto = null)
+    {
+        if (cmd.Components is { Count: > 0 } components)
+        {
+            // Render-time half of the engine-side rejection boundary: the prepared select list is
+            // available here, so the window-function rule is observable too.
+            QueryComponentCompatibility.EnsureExclusiveReshapeCompatible(cmd);
+
+            // The parameter-refresh pass re-renders the same command to re-extract parameter values,
+            // reaching this method outside the cache-hit fast path. Reusing the shape the miss render
+            // built keeps that pass from re-running every component's BuildQuery: the parameter set is
+            // identical because the shape is identical, and a captured closure read at render time still
+            // yields the current value.
+            if (_ctx.ParamMode && cmd.ComponentRenderShape is { } builtShape)
+                return new SqlBuilder(_ctx).MakeSelect(builtShape, selectInto);
+
+            var rebuilt = cmd.Clone();
+            rebuilt.Components = null;
+            rebuilt.PreparedComponents = cmd.PreparedComponents;
+            foreach (var component in components)
+                component.BuildQuery(new QueryComponentContext(rebuilt));
+
+            if (!_ctx.ParamMode)
+                cmd.ComponentRenderShape = rebuilt;
+
+            return new SqlBuilder(_ctx).MakeSelect(rebuilt, selectInto);
+        }
+
+#if DEBUG
+        if (!cmd.IsPrepared)
+            throw new InvalidOperationException("Command not prepared");
+
+        if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Making sql with param mode {mode}", _ctx.ParamMode);
+#endif
+        var entityType = cmd.EntityType;
+        ArgumentNullException.ThrowIfNull(entityType);
+
+        // The eleven refused SQL Server functions are rejected at the command boundary, before any
+        // clause is rendered: the diagnostic names the member and the reason, and arguments are never
+        // visited (they would be evaluated by a later translation step). A subquery is preflighted by
+        // its own MakeSelect, so the walk stops at nested lambdas.
+        SqlServerFunctionRefusals.ValidateCommand(cmd);
+
+        // A SelectWhereMax/SelectWhereMin command is lowered to a portable window-function derived
+        // table (see MakeExtremeRowSelect) instead of the plain single-statement rendering below.
+        if (cmd.ExtremeRow is not null)
+            return MakeExtremeRowSelect(cmd, selectInto);
+
+        // A per-parent eager top-N child is lowered to a ranked derived table whose page bounds apply
+        // inside each partition of the eager load's child key, instead of the global paging below.
+        if (cmd.PerParentPaging)
+            return MakePerParentPagingSelect(cmd, selectInto);
+
+        var selectList = cmd.SelectList;
+        var from = cmd.From;
+        // A command whose declarations were hoisted into the enclosing statement's top-level WITH must
+        // not emit a WITH of its own (see CteHoister); only the root of the render emits it.
+        var ctes = _ctx.SuppressCtes ? null : cmd.Ctes;
+
+        // Unsupported ClickHouse ON null predicates are refused here, at the earliest point of the
+        // render that sees this command's join tree and before the first SQL character is written.
+        // The check cannot live inside MakeJoin: by the time a join is rendered the FROM clause is
+        // already in `sqlBuilder`, so the guard would fire after a partial statement was assembled.
+        // Every nested statement (a CTE body, a UNION branch, a derived source, a correlated subquery)
+        // reaches this same entry point and is therefore validated on its own join tree.
+        SqlSourceRenderer.ValidateClickHouseJoinOnPredicates(in _ctx, cmd);
+
+        var sqlBuilder = _ctx.ParamMode ? null : StringBuilderPool.Shared.Get();
+        var selectBuilder = _ctx.ParamMode ? null : StringBuilderPool.Shared.Get();
+        string? topStmt = null;
+        string? withClause = null;
+        string? maxRecursionStmt = null;
+
+        // The statement-level recorder of planner-owned parameter occurrences (D4b-1). It is created only
+        // when the render is producing a template (the planner attached a capture); it is fed by the
+        // clause renderers that append parameter-bearing fragments to `sqlBuilder` at the current end,
+        // and the two leading inserts below relocate those spans to their final statement offsets.
+        var capture = _ctx.Capture;
+        var root = capture is null ? null : new SqlParameterTemplateRecorder();
+
+        // Select-list expressions are rendered into their own builder (SqlSourceRenderer.MakeColumn) and
+        // inserted at the head of the statement afterwards. Their placeholder occurrences therefore live
+        // in the column fragment's recorder, not in `root`; they are merged at their final statement
+        // offsets after both head insertions (select list, then WITH) have been relocated. Without this
+        // a captured value used only as a projected column has no template occurrence and the
+        // MySQL-family execution specialization cannot lower it.
+        List<(int Offset, SqlParameterTemplateRecorder Recorder)>? selectFragments = capture is null ? null : [];
+
+        // Only the source entries this command adds may satisfy its own alias lookups. Without the
+        // boundary a nested command over the same entity type as a sibling (or as the outer query)
+        // resolves to that earlier alias (e.g. "from x as 't3' where t2.id = ...").
+        _ctx.ColumnsProvider.PushSourceScope();
+
+        // #324: record which projection this frame renders, so a SELECT projection item and the same
+        // left row used as a correlated-APPLY source resolve through one frame-local slot map (and a
+        // frame that belongs to another command keeps its existing type/occurrence resolution).
+        if (_ctx.ColumnsProvider is IOuterSlotSourceRegistry slotFrames)
+            slotFrames.BindFrameProjection(cmd.EntityType is { } frameType && typeof(IProjection).IsAssignableFrom(frameType) ? frameType : null);
+
+        try
+        {
+            // CTEs are rendered (or, in parameter mode, only walked for parameters) before the outer
+            // statement so both SQL and parameter passes see the CTE parameters first and in the same order.
+            if (ctes is { Count: > 0 })
+                withClause = SqlSourceRenderer.MakeWithClause(in _ctx, ctes, out maxRecursionStmt);
+
+            if (cmd.Paging.HasWithTies && !_ctx.Dialect.SupportsWithTies)
+                throw new NotSupportedException("The WITH TIES page modifier is not supported by this SQL dialect");
+
+            if (cmd.Paging.HasWithTies && cmd.Paging.Limit <= 0)
+                throw new BuildSqlCommandException("WITH TIES requires a positive page limit.");
+
+            if (cmd.Paging.HasWithTies && (cmd.IsDistinct || cmd.DistinctOn is not null))
+                throw new BuildSqlCommandException("WITH TIES cannot be combined with DISTINCT or DISTINCT ON.");
+
+            var pageApplied = !_ctx.ParamMode && !(cmd.IgnoreColumns || selectList is null) && cmd.Paging.IsTop && _ctx.Dialect.MakeTop(cmd.Paging.Limit, cmd.Paging.HasWithTies, out topStmt, _ctx.KeywordCase);
+
+            var joins = cmd.Joins;
+            var hasJoins = joins?.Length > 0;
+            // A dynamic-columns store projection appends an unqualified "*" after the mapped columns. On
+            // MySQL/MariaDB that is a syntax error unless the star is qualified with the source alias, so
+            // such a dialect needs the source aliased even without joins (see RequiresQualifiedSelectStar).
+            var hasDynamicStore = !cmd.IgnoreColumns && selectList is not null
+                && Array.Exists(selectList, static item => item.IsDynamicColumnsStore);
+            var needAlias = hasJoins || _ctx.QueryProvider.OuterReferences?.Count > 0
+                || (hasDynamicStore && _ctx.Dialect.RequiresQualifiedSelectStar)
+                || from?.SourceLock is not null
+                || from?.DerivedFragment is not null;
+
+            // Source-level row locking is fail-closed: a dialect whose lock renderer does not opt in
+            // (MariaDB, SQLite, ClickHouse, in-memory) must reject it instead of silently emitting a
+            // whole-query or no lock. A table-hint dialect renders the lock on each source itself; a
+            // trailing-clause dialect collects the resolved aliases to emit FOR UPDATE OF after FROM/JOIN.
+            var hasAnySourceLock = from?.SourceLock is not null
+                || (joins is not null && Array.Exists(joins, static j => j.From.SourceLock is not null));
+            if (hasAnySourceLock && _ctx.Dialect.Lock is not { SupportsSourceLocks: true })
+                throw new NotSupportedException("Source-level row locking (FOR UPDATE OF) is not supported by this SQL dialect.");
+
+            var sourceLocks = !_ctx.ParamMode && hasAnySourceLock && _ctx.Dialect.Lock is { UsesTableHints: false }
+                ? new List<SourceLockTarget>()
+                : null;
+            var fromCtx = sourceLocks is null ? _ctx : _ctx with { SourceLocks = sourceLocks };
+
+            // Whether the FROM source is rendered with an alias. A bare physical table with no joins and
+            // no column shape stays unaliased; every derived/raw/shaped source is aliased even without
+            // joins. Predicates and sort keys must be table-qualified whenever the source is aliased (a
+            // projection item over a derived root resolves through that alias), and must stay unqualified
+            // over an unaliased physical source. This mirrors the alias decision in MakeFrom; keep the
+            // two in sync. A source lock forces an alias so the OF target can be declared.
+            var dontNeedAlias = !needAlias
+                && from is not null
+                && from.SourceLock is null
+                && from.ColumnShape is null
+                && from.SubQuery is null
+                && from.TableExpressionOverride is null
+                && from.Pivot is null
+                && from.XmlNodes is null
+                && from.DerivedFragment is null
+                && !((from.RawSqlSource is not null || from.TableFunction is not null) && _ctx.Dialect.RequireSubqueryAlias);
+
+            // Tables-in-scope hints are structural on SQL Server (a WITH(...) on every physical table)
+            // and part of the statement-level comment elsewhere. A dialect that supports neither rejects
+            // them here, before any SQL is assembled.
+            var scopeHints = _ctx.Dialect.SupportsTablesInScopeHints ? cmd.TablesInScopeHints : null;
+            if (cmd.TablesInScopeHints is { Count: > 0 }
+                && !_ctx.Dialect.SupportsInlineHints
+                && !_ctx.Dialect.SupportsTablesInScopeHints)
+                throw new NotSupportedException("Tables-in-scope hints are not supported by this SQL dialect");
+
+            // Join/subquery/tables-in-scope hints on an inline-comment dialect are folded into one
+            // statement-level /*+ ... */ comment rather than rendered structurally.
+            var inlineHints = _ctx.Dialect.SupportsInlineHints ? CollectInlineHints(cmd) : null;
+
+            // The alias assigned to the FROM source (null for non-aliased or non-physical sources); the
+            // dynamic-columns star uses it to qualify the appended "*" on dialects that require it.
+            string? fromAlias = null;
+
+            if (from is not null)
+            {
+                if (cmd.Temporal is { } temporal)
+                {
+                    if (!_ctx.Dialect.SupportsTemporalTable)
+                        throw new NotSupportedException("The FOR SYSTEM_TIME clause is not supported by this SQL dialect");
+
+                    if (!_ctx.Dialect.SupportsTemporalKind(temporal.Kind))
+                        throw new NotSupportedException($"The FOR SYSTEM_TIME {temporal.Kind} clause is not supported by this SQL dialect");
+                }
+
+                var fromStr = SqlSourceRenderer.MakeFrom(in fromCtx, from, new FromRenderOptions(needAlias, entityType, hasJoins, cmd.TableHints, cmd.Temporal, cmd.IndexHints, cmd.IndexHintKind, scopeHints, GlobalLock: cmd.RowLock), out fromAlias);
+                if (!_ctx.ParamMode)
+                {
+                    sqlBuilder!.Append(SqlText.NewLine).Append(Kw(" from ")).Append(fromStr);
+
+                    if (cmd.TableSample is { } tablesample)
+                    {
+                        if (_ctx.Dialect.TableSample is not { } tableSample)
+                            throw new NotSupportedException("The TABLESAMPLE modifier is not supported by this SQL dialect");
+
+                        if (!tableSample.Supports(tablesample.Method))
+                            throw new NotSupportedException($"The TABLESAMPLE {tablesample.Method} sampling method is not supported by this SQL dialect");
+
+                        sqlBuilder.Append(tableSample.Render(tablesample.Method, tablesample.Percent, tablesample.Seed, _ctx.KeywordCase));
+                    }
+
+                    if (cmd.Final)
+                    {
+                        if (!_ctx.Dialect.SupportsFinal)
+                            throw new NotSupportedException("The FINAL modifier is not supported by this SQL dialect");
+
+                        sqlBuilder.Append(_ctx.Dialect.MakeFinal(_ctx.KeywordCase));
+                    }
+
+                    if (cmd.SampleRatio is { } sampleRatio)
+                    {
+                        if (!_ctx.Dialect.SupportsSample)
+                            throw new NotSupportedException("The SAMPLE modifier is not supported by this SQL dialect");
+
+                        sqlBuilder.Append(_ctx.Dialect.MakeSample(sampleRatio, cmd.SampleOffset, _ctx.KeywordCase));
+                    }
+                }
+
+                if (hasJoins)
+                {
+                    for (var (idx, cnt) = (0, joins!.Length); idx < cnt; idx++)
+                    {
+                        var joinSql = SqlSourceRenderer.MakeJoin(in fromCtx, joins[idx], entityType!, scopeHints, cmd.RowLock);
+                        if (!_ctx.ParamMode) sqlBuilder!.Append(SqlText.NewLine).Append(joinSql);
+                    }
+                }
+
+                if (cmd.ArrayJoinExpressions is { Count: > 0 } arrayJoinExpressions)
+                {
+                    if (_ctx.Dialect.ArrayJoinClause is not { } arrayJoinClause)
+                        throw new NotSupportedException("The ARRAY JOIN clause is not supported by this SQL dialect");
+
+                    var renderedArrayJoins = _ctx.ParamMode ? null : new string[arrayJoinExpressions.Count];
+
+                    for (var i = 0; i < arrayJoinExpressions.Count; i++)
+                    {
+                        var expressionSql = SqlSourceRenderer.MakeArrayJoin(in _ctx, entityType, arrayJoinExpressions[i]);
+                        if (!_ctx.ParamMode)
+                        {
+                            // The bound element is referenced by the projection (p.Element), so the
+                            // last expression of the clause carries the alias the translator emits.
+                            renderedArrayJoins![i] = cmd.BindArrayJoinElement && i == arrayJoinExpressions.Count - 1
+                                ? expressionSql + Kw(" as ") + ArrayJoinNames.ElementAlias
+                                : expressionSql;
+                        }
+                    }
+
+                    if (!_ctx.ParamMode)
+                        sqlBuilder!.Append(SqlText.NewLine).Append(arrayJoinClause.Render(cmd.ArrayJoinKind, renderedArrayJoins!, _ctx.KeywordCase));
+                }
+
+                if (cmd.PreparedPreWhere is not null)
+                {
+                    if (!_ctx.Dialect.SupportsPreWhere)
+                        throw new NotSupportedException("The PREWHERE clause is not supported by this SQL dialect");
+
+                    if (!_ctx.ParamMode) sqlBuilder!.Append(SqlText.NewLine).Append(Kw(" prewhere "));
+                    SqlSourceRenderer.MakeWhere(in _ctx, sqlBuilder, entityType, cmd.PreparedPreWhere, 0, dontNeedAlias, root);
+                }
+
+                // A key-less constant projection has no group, so a validated row-independent HAVING is a
+                // pre-group filter and belongs in the WHERE position of that statement. Every other mode
+                // (including the legacy ungrouped HAVING, which stays dropped) keeps its WHERE rendering.
+                var preGroupHaving = IsConstantProjection(cmd)
+                    ? (cmd.EffectiveHaving ?? cmd.PreparedHaving ?? cmd.Having)
+                    : null;
+
+                if (cmd.PreparedCondition is not null)
+                {
+                    if (!_ctx.ParamMode) sqlBuilder!.Append(SqlText.NewLine).Append(Kw(" where "));
+
+                    if (preGroupHaving is null)
+                    {
+                        SqlSourceRenderer.MakeWhere(in _ctx, sqlBuilder, entityType, cmd.PreparedCondition, 0, dontNeedAlias, root);
+                    }
+                    else
+                    {
+                        AppendParenthesisedCondition(sqlBuilder, entityType, cmd.PreparedCondition, dontNeedAlias, root);
+                        if (!_ctx.ParamMode) sqlBuilder!.Append(Kw(" and "));
+                        AppendParenthesisedCondition(sqlBuilder, entityType, preGroupHaving, dontNeedAlias, root);
+                    }
+                }
+                else if (preGroupHaving is not null)
+                {
+                    if (!_ctx.ParamMode) sqlBuilder!.Append(SqlText.NewLine).Append(Kw(" where "));
+                    AppendParenthesisedCondition(sqlBuilder, entityType, preGroupHaving, dontNeedAlias, root);
+                }
+
+                // The SQL Server GROUPING_ID function is only valid in the SELECT list, HAVING or
+                // ORDER BY of a grouped command, and every argument must be a grouping expression.
+                // The server reports Msg 8161, but the library refuses before execution.
+                ValidateGroupingId(cmd);
+
+                var grouping = cmd.GroupingList;
+                if (grouping?.Length > 0)
+                {
+                    if (cmd.GroupingType == GroupingType.Rollup && !_ctx.Dialect.SupportsRollup)
+                        throw new NotSupportedException("The ROLLUP grouping modifier is not supported by this SQL dialect");
+
+                    if (cmd.GroupingType == GroupingType.Cube && !_ctx.Dialect.SupportsCube)
+                        throw new NotSupportedException("The CUBE grouping modifier is not supported by this SQL dialect");
+
+                    if (cmd.GroupingType == GroupingType.GroupingSets && !_ctx.Dialect.SupportsGroupingSets)
+                        throw new NotSupportedException("The GROUPING SETS modifier is not supported by this SQL dialect");
+
+                    var groupingListCount = grouping.Length;
+                    var columns = _ctx.ParamMode ? null : new string[groupingListCount];
+
+                    for (var i = 0; i < groupingListCount; i++)
+                    {
+                        var item = grouping[i];
+
+                        // GROUP BY repeats the grouping expression; an `AS alias` is not valid here on
+                        // any supported dialect (the alias belongs to the SELECT list only). A zero-join
+                        // source is unaliased, so a projection-item key must resolve unqualified.
+                        var (_, column) = SqlSourceRenderer.MakeColumn(in _ctx, item, entityType, dontNeedAlias);
+
+                        if (!_ctx.ParamMode)
+                            columns![i] = column;
+                    }
+
+                    if (!_ctx.ParamMode)
+                    {
+                        if (cmd.GroupByWithTotals)
+                        {
+                            if (!_ctx.Dialect.SupportsGroupByWithTotals)
+                                throw new NotSupportedException("The GROUP BY ... WITH TOTALS modifier is not supported by this SQL dialect");
+
+                            if (cmd.GroupingType == GroupingType.GroupingSets)
+                                throw new NotSupportedException("GROUP BY ... WITH TOTALS cannot be combined with GROUPING SETS.");
+                        }
+
+                        sqlBuilder!.Append(SqlText.NewLine).Append(Kw(" group by "));
+
+                        string groupingSql;
+                        if (cmd.GroupingType == GroupingType.GroupingSets)
+                        {
+                            var sets = cmd.GroupingSets
+                                ?? throw new BuildSqlCommandException("GROUPING SETS requires at least one set.");
+
+                            var rendered = new string[sets.Count];
+                            for (var s = 0; s < sets.Count; s++)
+                            {
+                                var set = sets[s];
+                                var parts = new string[set.Length];
+                                for (var i = 0; i < set.Length; i++)
+                                {
+                                    if (set[i] < 0 || set[i] >= groupingListCount)
+                                        throw new BuildSqlCommandException($"Grouping set index {set[i]} is out of range 0..{groupingListCount - 1}.");
+
+                                    parts[i] = columns![set[i]];
+                                }
+
+                                rendered[s] = "(" + string.Join(", ", parts) + ")";
+                            }
+
+                            groupingSql = _ctx.Dialect.MakeGroupingSets(rendered, _ctx.KeywordCase);
+                        }
+                        else
+                        {
+                            groupingSql = _ctx.Dialect.MakeGrouping(string.Join(", ", columns!), cmd.GroupingType, _ctx.KeywordCase);
+                        }
+
+                        if (cmd.GroupByWithTotals)
+                            groupingSql = _ctx.Dialect.MakeGroupByTotals(groupingSql, _ctx.KeywordCase);
+
+                        sqlBuilder.Append(groupingSql);
+                    }
+
+                    var having = cmd.EffectiveHavingMode == QueryPreparationHavingMode.Replace && cmd.EffectiveHaving is not null
+                        ? cmd.EffectiveHaving
+                        : (cmd.PreparedHaving ?? cmd.Having);
+                    if (having is not null)
+                    {
+                        if (!_ctx.ParamMode) sqlBuilder!.Append(SqlText.NewLine).Append(Kw(" having "));
+                        SqlSourceRenderer.MakeWhere(in _ctx, sqlBuilder, entityType, having, 0, dontNeedAlias, root);
+                    }
+                }
+                else if (cmd.EffectiveGroupingKeys is not null
+                    && cmd.EffectiveGroupingKeys.Count == 0
+                    && cmd.EffectiveHavingMode != QueryPreparationHavingMode.Clear
+                    && cmd.EffectiveHavingMode != QueryPreparationHavingMode.Unchanged
+                    && cmd.EffectiveHaving is { } effGlobalHaving)
+                {
+                    if (!_ctx.ParamMode) sqlBuilder!.Append(SqlText.NewLine).Append(Kw(" having "));
+                    SqlSourceRenderer.MakeWhere(in _ctx, sqlBuilder, entityType, effGlobalHaving, 0, dontNeedAlias, root);
+                }
+                else if (cmd.EffectiveGroupingKeys is not null
+                    && cmd.EffectiveGroupingKeys.Count == 0
+                    && cmd.EffectiveHavingMode == QueryPreparationHavingMode.Unchanged
+                    && (cmd.PreparedHaving ?? cmd.Having) is { } effUnchangedHaving)
+                {
+                    if (!_ctx.ParamMode) sqlBuilder!.Append(SqlText.NewLine).Append(Kw(" having "));
+                    SqlSourceRenderer.MakeWhere(in _ctx, sqlBuilder, entityType, effUnchangedHaving, 0, dontNeedAlias, root);
+                }
+
+                var windows = cmd.Windows;
+                if (windows is { Count: > 0 })
+                {
+                    if (!_ctx.Dialect.SupportsNamedWindows)
+                        throw new NotSupportedException("Named windows (the WINDOW clause) are not supported by this SQL dialect");
+
+                    var renderedWindows = _ctx.ParamMode ? null : new string[windows.Count];
+
+                    for (var wi = 0; wi < windows.Count; wi++)
+                    {
+                        var window = windows[wi];
+                        var windowSpec = MakeNamedWindow(in _ctx, entityType, window);
+
+                        if (!_ctx.ParamMode)
+                            renderedWindows![wi] = window.Name + Kw(" as (") + windowSpec + ")";
+                    }
+
+                    if (!_ctx.ParamMode)
+                        sqlBuilder!.Append(SqlText.NewLine).Append(Kw(" window ")).Append(string.Join(", ", renderedWindows!));
+                }
+
+                if (cmd.UnionQuery is not null)
+                {
+                    if (cmd.UnionType is UnionType.IntersectAll or UnionType.ExceptAll && !_ctx.Dialect.SupportsIntersectExceptAll)
+                        throw new NotSupportedException($"The {cmd.UnionType} set operation is not supported by this SQL dialect");
+
+                    if (!_ctx.ParamMode)
+                    {
+                        sqlBuilder!.Append(SqlText.NewLine).Append(cmd.UnionType switch
+                        {
+                            UnionType.Distinct => Kw(" union "),
+                            UnionType.All => Kw(" union all "),
+                            UnionType.Intersect => Kw(" intersect "),
+                            UnionType.IntersectAll => Kw(" intersect all "),
+                            UnionType.Except => Kw(" except "),
+                            UnionType.ExceptAll => Kw(" except all "),
+                            _ => throw new NotSupportedException(cmd.UnionType.ToString("G"))
+                        }).Append(SqlText.NewLine);
+                    }
+
+                    var builder = new SqlBuilder(_ctx with { AliasProvider = new DefaultAliasProvider() });
+                    var sql = builder.MakeSelect(cmd.UnionQuery);
+                    if (!_ctx.ParamMode) sqlBuilder!.Append(sql);
+                }
+
+                var sortingList = cmd.Sorting;
+                if (sortingList is not null)
+                {
+                    EnsureNullPlacementIsRenderable(cmd, sortingList);
+
+                    if (!_ctx.ParamMode) sqlBuilder!.Append(SqlText.NewLine).Append(Kw(" order by "));
+
+                    for (var (i, cnt) = (0, sortingList.Length); i < cnt; i++)
+                    {
+                        var sorting = sortingList[i];
+                        if (sorting.PreparedExpression is not null)
+                        {
+                            if (!_ctx.ParamMode)
+                            {
+                                var sortingSql = SqlSourceRenderer.MakeSort(in _ctx, entityType, sorting.PreparedExpression, 0, dontNeedAlias);
+                                if (sorting.NullsPosition == NullsPosition.Default)
+                                {
+                                    sqlBuilder!.Append(sortingSql);
+                                    if (sorting.Direction == OrderDirection.Desc)
+                                        sqlBuilder.Append(Kw(" desc"));
+                                }
+                                else
+                                {
+                                    // The dialect decides between native NULLS FIRST/LAST and the CASE
+                                    // emulation; the key fragment is already qualified and quoted.
+                                    sqlBuilder!.Append(_ctx.Dialect.RenderOrderBy(sortingSql, sorting.Direction, sorting.NullsPosition));
+                                }
+
+                                sqlBuilder.Append(", ");
+                            }
+                            else
+                            {
+                                // Parameter mode mirrors the emitted occurrences: the CASE emulation repeats
+                                // the key, so it is walked twice; Default and native placement walk it once.
+                                var occurrences = sorting.NullsPosition != NullsPosition.Default && !_ctx.Dialect.SupportsNullsOrdering ? 2 : 1;
+                                for (var n = 0; n < occurrences; n++)
+                                    SqlSourceRenderer.MakeSort(in _ctx, entityType, sorting.PreparedExpression, 0, dontNeedAlias);
+                            }
+                        }
+                        else if (sorting.ColumnIndex.HasValue)
+                        {
+                            if (!_ctx.ParamMode)
+                            {
+                                if (sorting.NullsPosition == NullsPosition.Default)
+                                {
+                                    sqlBuilder!.Append(sorting.ColumnIndex);
+                                    if (sorting.Direction == OrderDirection.Desc)
+                                        sqlBuilder.Append(Kw(" desc"));
+                                }
+                                else
+                                {
+                                    // An ordinal cannot carry a CASE (that would test the literal ordinal), so
+                                    // the actual selected key expression is resolved first.
+                                    var sortKey = ResolveSortKeyExpression(cmd, entityType, in sorting);
+                                    var sortingSql = SqlSourceRenderer.MakeSort(in _ctx, entityType, sortKey, 0, dontNeedAlias);
+                                    sqlBuilder!.Append(_ctx.Dialect.RenderOrderBy(sortingSql, sorting.Direction, sorting.NullsPosition));
+                                }
+
+                                sqlBuilder.Append(", ");
+                            }
+                            else if (sorting.NullsPosition != NullsPosition.Default && !_ctx.Dialect.SupportsNullsOrdering)
+                            {
+                                // The CASE emulation repeats the resolved key, so the parameter walk visits
+                                // it twice (the plain ordinal path visits nothing).
+                                var sortKey = ResolveSortKeyExpression(cmd, entityType, in sorting);
+                                SqlSourceRenderer.MakeSort(in _ctx, entityType, sortKey, 0, dontNeedAlias);
+                                SqlSourceRenderer.MakeSort(in _ctx, entityType, sortKey, 0, dontNeedAlias);
+                            }
+                        }
+                    }
+
+                    if (!_ctx.ParamMode) sqlBuilder!.Length -= 2;
+                }
+                else if (!pageApplied && !_ctx.ParamMode && _ctx.Dialect.GetPagingOrderBy(cmd) is { } pagingOrderBy)
+                {
+                    sqlBuilder!.Append(SqlText.NewLine).Append(Kw(" order by ")).Append(pagingOrderBy);
+                }
+
+                if (cmd.LimitBy is { } limitBy)
+                {
+                    if (_ctx.Dialect.LimitBy is not { } limitByRenderer)
+                        throw new NotSupportedException("The LIMIT BY clause is not supported by this SQL dialect");
+
+                    var limitByColumns = cmd.LimitByColumns;
+                    var renderedLimitBy = _ctx.ParamMode ? null : new string[limitByColumns?.Length ?? 0];
+
+                    if (limitByColumns is not null)
+                    {
+                        for (var i = 0; i < limitByColumns.Length; i++)
+                        {
+                            // LIMIT BY takes an expression list, not a select list, so no column alias.
+                            var (_, column) = SqlSourceRenderer.MakeColumn(in _ctx, limitByColumns[i], entityType, false);
+                            if (!_ctx.ParamMode)
+                                renderedLimitBy![i] = column;
+                        }
+                    }
+
+                    if (!_ctx.ParamMode)
+                    {
+                        sqlBuilder!.Append(SqlText.NewLine);
+                        sqlBuilder.Append(limitByRenderer.Render(limitBy.Limit, limitBy.Offset, renderedLimitBy!, _ctx.KeywordCase));
+                    }
+                }
+
+                if (!pageApplied && !_ctx.ParamMode && !cmd.Paging.IsEmpty)
+                {
+                    sqlBuilder!.Append(SqlText.NewLine);
+                    _ctx.Dialect.MakePage(cmd.Paging, sqlBuilder, _ctx.KeywordCase);
+                }
+
+                if (cmd.Settings is { Count: > 0 } settings)
+                {
+                    if (!_ctx.Dialect.SupportsSettings)
+                        throw new NotSupportedException("The SETTINGS clause is not supported by this SQL dialect");
+
+                    if (!_ctx.ParamMode)
+                    {
+                        sqlBuilder!.Append(SqlText.NewLine);
+                        sqlBuilder.Append(_ctx.Dialect.MakeSettings(settings, _ctx.KeywordCase));
+                    }
+                }
+            }
+            else if (!_ctx.ParamMode && sqlBuilder!.Length > 0)
+                sqlBuilder.Length -= 2;
+
+            if (!_ctx.ParamMode && cmd.RowLock is { } rowLock)
+            {
+                if (_ctx.Dialect.Lock is not { } lockRenderer)
+                    throw new NotSupportedException("The FOR UPDATE/FOR SHARE clause is not supported by this SQL dialect");
+
+                // Table-hint dialects already rendered the lock on every physical source.
+                if (!lockRenderer.UsesTableHints)
+                    sqlBuilder!.Append(SqlText.NewLine).Append(lockRenderer.Render(rowLock.Mode, rowLock.Wait, _ctx.KeywordCase));
+            }
+
+            // A source-level lock renders one targeted clause per locked source, after FROM/JOIN.
+            if (!_ctx.ParamMode && sourceLocks is { Count: > 0 })
+            {
+                if (_ctx.Dialect.Lock is not { } sourceLockRenderer)
+                    throw new NotSupportedException("Source-level row locking (FOR UPDATE OF) is not supported by this SQL dialect");
+
+                foreach (var target in sourceLocks)
+                    sqlBuilder!.Append(SqlText.NewLine).Append(sourceLockRenderer.Render(target.Lock.Mode, target.Lock.Wait, _ctx.KeywordCase, target.Alias));
+            }
+
+
+            if (!_ctx.ParamMode)
+            {
+                selectBuilder!.Append(Kw("select "));
+
+                if (cmd.Tag is { Length: > 0 } tag)
+                    selectBuilder.Append(MakeTagComment(tag)).Append(' ');
+
+                if (cmd.DistinctOn is not null)
+                {
+                    if (_ctx.Dialect.DistinctOn is not { } distinctOn)
+                        throw new NotSupportedException("The DISTINCT ON clause is not supported by this SQL dialect");
+
+                    var distinctOnColumns = cmd.DistinctOnColumns;
+                    var renderedDistinctOn = new string[distinctOnColumns?.Length ?? 0];
+
+                    if (distinctOnColumns is not null)
+                    {
+                        for (var i = 0; i < distinctOnColumns.Length; i++)
+                        {
+                            // DISTINCT ON takes an expression list, not a select list, so no column alias.
+                            var (_, column) = SqlSourceRenderer.MakeColumn(in _ctx, distinctOnColumns[i], entityType, false);
+                            renderedDistinctOn[i] = column;
+                        }
+                    }
+
+                    selectBuilder.Append(distinctOn.Render(renderedDistinctOn, _ctx.KeywordCase));
+                }
+                // SQL Server renders the limit as TOP(n); DISTINCT has to precede it
+                // ("select distinct top(n) ..."), so the flag is emitted before the select-list branch.
+                // A key-less constant projection is rendered through DISTINCT without mutating the
+                // command's own IsDistinct (which is source state and part of the plan key).
+                else if (cmd.IsDistinct || IsConstantProjection(cmd) || cmd.EffectiveRequireDistinct)
+                    selectBuilder.Append(Kw("distinct "));
+            }
+            if (cmd.IgnoreColumns || selectList is null)
+            {
+                if (!_ctx.ParamMode) selectBuilder!.Append("*, ");
+            }
+            else
+            {
+                if (!_ctx.ParamMode && !string.IsNullOrEmpty(topStmt))
+                {
+                    selectBuilder!.Append(topStmt).Append(' ');
+                }
+
+                var selectListCount = selectList.Length;
+                for (var i = 0; i < selectListCount; i++)
+                {
+                    var item = selectList[i];
+                    if (item.IsDynamicColumnsStore)
+                    {
+                        if (!_ctx.ParamMode)
+                        {
+                            // MySQL/MariaDB reject an unqualified "*" next to explicit columns, so the
+                            // star is qualified with the FROM alias on dialects that require it. Other
+                            // dialects and the plain-star path keep emitting the bare "*".
+                            if (_ctx.Dialect.RequiresQualifiedSelectStar)
+                            {
+                                // The qualifier must be the same token the FROM rendered (see
+                                // SqlSourceRenderer's MakeTableAlias call), escaping included. Fail closed:
+                                // the flag is set only for dialects that cannot emit a bare star, so a
+                                // source without an alias is a bug, not a reason to silently fall back to
+                                // SQL that would be rejected (or, worse, accepted against the wrong source).
+                                if (fromAlias is null)
+                                    throw new BuildSqlCommandException(
+                                        "A dynamic-columns store projection requires an aliased physical FROM source on this dialect.");
+
+                                selectBuilder!.Append(_ctx.Dialect.Escape(fromAlias)).Append(".*, ");
+                            }
+                            else
+                                selectBuilder!.Append("*").Append(", ");
+                        }
+
+                        continue;
+                    }
+
+                    var (needAliasForColumn, column) = SqlSourceRenderer.MakeColumn(in _ctx, item, entityType, !needAlias, renameAware: true, selectList: true);
+
+                    if (!_ctx.ParamMode)
+                    {
+                        var columnOffset = selectBuilder!.Length;
+                        if (selectFragments is not null
+                            && _ctx.Capture is { } selectCapture
+                            && selectCapture.TryGetFragment(column, out var columnRecorder))
+                        {
+                            selectFragments.Add((columnOffset, columnRecorder));
+                        }
+
+                        selectBuilder!.Append(column);
+
+                        if (needAliasForColumn
+                            || (_ctx.RequireDerivedScalarOutputName && item.PropertyName is null && item.OutputName is not null))
+                        {
+                            // A generated output name (an unaliased computed scalar) is an alias only for
+                            // a typed-CTE declaration body and for a boundary an enclosing query addresses
+                            // by identifier (a derived subquery or a CTAS source): those consumers reference
+                            // the generated name, so it must be declared exactly once. Anywhere else the
+                            // column keeps its implicit name (the alias text was null before, and
+                            // MakeColumnAlias emits nothing).
+                            var alias = item.PropertyName
+                                ?? ((_ctx.ExactProjectionAliases || _ctx.RequireDerivedScalarOutputName) ? item.OutputName : null);
+                            selectBuilder.Append(_ctx.Dialect.MakeColumnAlias(alias, _ctx.KeywordCase));
+                        }
+
+                        selectBuilder.Append(", ");
+                    }
+                }
+
+                // A LOB-only projection may need a trailing locator (SQLite's rowid) to switch the
+                // driver to a seekable streaming blob; the payload keeps ordinal 0. The locator is
+                // appended with the loop's ", " separator so the trailing-trim below drops it again.
+                // The CSV terminal sets SuppressLobLocator so its bounded binary read keeps the SQL
+                // (and the reader's field set) identical to the buffered path.
+                if (!_ctx.ParamMode && !_ctx.SuppressLobLocator && _ctx.SequentialAccess && _ctx.Dialect.LobLocatorColumn is { } lobLocator)
+                    selectBuilder!.Append(lobLocator).Append(", ");
+            }
+
+
+            string? r = null;
+            if (!_ctx.ParamMode)
+            {
+                // An empty (non-null) prepared select list only truncates the render when the projection
+                // shape itself has no output columns to render: a whole-object read (a bare source
+                // parameter, optionally converted), a zero-argument construction or a zero-binding
+                // member init. That is the one case where no later stage has a diagnostic to raise, so
+                // the renderer fails closed with the typed build exception instead of emitting the
+                // malformed "selec" head. Any other empty list means column classification failed for a
+                // projection that does declare output: the row mapper or the JSON projection validation
+                // owns that diagnostic and this check must not pre-empt it. A null list means
+                // "wildcard" (the arm above); IgnoreColumns keeps its wildcard too.
+                if (!cmd.IgnoreColumns
+                    && selectList is { Length: 0 }
+                    && IsColumnlessProjection(cmd.ProjectionExpression))
+                    throw new BuildSqlCommandException(
+                        "The prepared select list is empty: the projection resolved no columns to render. Use a mapped source or specify an explicit Select with named columns.");
+
+                selectBuilder!.Length -= 2;
+                if (selectInto is not null)
+                    selectBuilder.Append(selectInto);
+
+                var selectLength = selectBuilder.Length;
+                var selectText = selectBuilder.ToString();
+                sqlBuilder!.Insert(0, selectText);
+                root?.RelocateInsertion(0, selectLength);
+
+                if (withClause is not null)
+                {
+                    sqlBuilder!.Insert(0, withClause);
+                    root?.RelocateInsertion(0, withClause.Length);
+                }
+
+                // The select-list fragments are now at their final offsets: the select text starts at 0
+                // and the WITH clause (when present) precedes it. Their occurrences are merged without
+                // moving the cursor (the recorded length already spans the finished statement).
+                if (root is not null && selectFragments is { Count: > 0 })
+                {
+                    var statementOffset = withClause?.Length ?? 0;
+                    foreach (var (offset, recorder) in selectFragments)
+                        root.AppendOccurrences(recorder, statementOffset + offset);
+                }
+
+                // FOR JSON / FOR XML come after ORDER BY but before the trailing OPTION clause.
+                if (cmd.ForJsonClause is not null && cmd.ForXmlClause is not null)
+                    throw new NotSupportedException("FOR JSON and FOR XML cannot be combined.");
+
+                if (cmd.ForJsonClause is { } forJson)
+                {
+                    if (!_ctx.Dialect.SupportsForJson)
+                        throw new NotSupportedException("FOR JSON is not supported by this SQL dialect");
+
+                    sqlBuilder!.Append(' ').Append(_ctx.Dialect.MakeForJson(forJson, _ctx.KeywordCase));
+                }
+
+                if (cmd.ForXmlClause is { } forXml)
+                {
+                    if (!_ctx.Dialect.SupportsForXml)
+                        throw new NotSupportedException("FOR XML is not supported by this SQL dialect");
+
+                    sqlBuilder!.Append(' ').Append(_ctx.Dialect.MakeForXml(forXml, _ctx.KeywordCase));
+                }
+
+                var hints = MergeHints(cmd.Hints, inlineHints);
+                if (hints is { Count: > 0 })
+                {
+                    if (!_ctx.Dialect.SupportsQueryHints)
+                        throw new NotSupportedException("Query hints are not supported by this SQL dialect");
+
+                    // The dialect owns the final placement. It also receives the CTE maxrecursion
+                    // option so a dialect that must coalesce it into one trailing OPTION clause
+                    // (SQL Server) can do so instead of the caller appending a second clause.
+                    var composed = sqlBuilder!.ToString();
+                    r = _ctx.Dialect.RenderQueryHints(composed, hints, maxRecursionStmt, _ctx.KeywordCase);
+
+                    // A dialect that rewrites the statement (rather than only appending) can move the
+                    // recorded spans anywhere, so the capture is dropped instead of producing a wrong
+                    // template; the emitted SQL and the parameter list are unaffected.
+                    if (capture is not null && !string.Equals(r, composed, StringComparison.Ordinal))
+                        capture.NotifyUnresolved();
+                }
+                else
+                {
+                    if (maxRecursionStmt is not null)
+                        sqlBuilder!.Append(' ').Append(maxRecursionStmt);
+
+                    r = sqlBuilder!.ToString();
+                }
+
+                if (capture is not null && root is not null && r is not null)
+                    capture.RegisterFragment(r, root);
+            }
+
+            if (!_ctx.ParamMode && cmd.From?.RawSqlSource is not null)
+                EnsureUniqueParameterNames(_ctx.Params);
+
+#if DEBUG
+            if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Generated sql with param mode {mode}: {sql}", _ctx.ParamMode, r);
+#endif
+
+            return r;
+        }
+        finally
+        {
+            _ctx.ColumnsProvider.PopSourceScope();
+
+            if (selectBuilder is not null)
+                StringBuilderPool.Shared.Return(selectBuilder);
+
+            if (sqlBuilder is not null)
+                StringBuilderPool.Shared.Return(sqlBuilder);
+        }
+    }
+
+    /// <summary>
+    /// Renders the child command of a per-parent eager load. The command's own
+    /// <c>Limit</c>/<c>Offset</c>/<c>Page</c> is applied independently to each partition of the eager
+    /// load's child key by lowering the command to a <c>row_number()</c> ranked derived table:
+    /// <code>
+    /// select &lt;entity columns&gt; from (
+    ///     select *, row_number() over (partition by &lt;child key&gt; order by &lt;sorting&gt;) as rn
+    ///     from &lt;source&gt; where &lt;condition&gt;
+    /// ) t1 where t1.rn &gt; &lt;offset&gt; and t1.rn &lt;= &lt;offset + limit&gt;
+    /// </code>
+    /// Mirrors the portable <see cref="MakePortableExtremeRowSelect"/> lowering, but keeps the page
+    /// bounds instead of <c>rn = 1</c> and drops the synthetic rank column from the projection.
+    /// </summary>
+    private string? MakePerParentPagingSelect(QueryCommand cmd, string? selectInto)
+    {
+        if (selectInto is not null)
+            throw new BuildSqlCommandException("A per-parent eager top-N child cannot be rendered as a SELECT ... INTO source.");
+
+        if (cmd.From is null || cmd.From.SubQuery is not null)
+            throw new BuildSqlCommandException("A per-parent eager top-N child requires a single physical-table source.");
+
+        var entityType = cmd.EntityType!;
+        var from = cmd.From!;
+        var rankColumn = MakeExtremeRowRankName(entityType);
+        var innerSql = MakePerParentPagingInner(cmd, entityType, from, rankColumn);
+        return MakePerParentPagingOuter(cmd, entityType, innerSql, rankColumn);
+    }
+
+    /// <summary>
+    /// Builds the inner derived table of the per-parent paging lowering: the filtered child rows plus
+    /// the synthetic <c>row_number()</c> partition rank.
+    /// </summary>
+    private string? MakePerParentPagingInner(QueryCommand cmd, Type entityType, FromExpression from, string rankColumn)
+    {
+        string? innerSql = null;
+        _ctx.ColumnsProvider.PushSourceScope();
+        try
+        {
+            var inner = _ctx.ParamMode ? null : StringBuilderPool.Shared.Get();
+            try
+            {
+                var fromSql = SqlSourceRenderer.MakeFrom(in _ctx, from, new FromRenderOptions(false, entityType, false));
+                var rankSql = MakePerParentRankExpression(cmd, entityType, rankColumn);
+
+                if (!_ctx.ParamMode)
+                    inner!.Append(Kw("select ")).Append('*').Append(", ").Append(rankSql).Append(SqlText.NewLine).Append(Kw(" from ")).Append(fromSql);
+
+                if (cmd.PreparedCondition is { } condition)
+                {
+                    if (!_ctx.ParamMode)
+                        inner!.Append(SqlText.NewLine).Append(Kw(" where "));
+
+                    SqlSourceRenderer.MakeWhere(in _ctx, inner, entityType, condition, 0);
+                }
+
+                innerSql = inner?.ToString();
+            }
+            finally
+            {
+                if (inner is not null) StringBuilderPool.Shared.Return(inner);
+            }
+        }
+        finally
+        {
+            _ctx.ColumnsProvider.PopSourceScope();
+        }
+
+        return innerSql;
+    }
+
+    /// <summary>
+    /// Renders <c>row_number() over (partition by &lt;child key&gt; order by &lt;child sorting&gt;)</c>.
+    /// The window order follows the child query's own <c>ORDER BY</c>. A page with no window ordering is
+    /// rejected (a <c>row_number()</c> window without <c>ORDER BY</c> is invalid on providers such as
+    /// SQL Server), and a per-parent page without a partition key is rejected too. Parameter mode visits
+    /// the partition and sort expressions but emits nothing.
+    /// </summary>
+    private string MakePerParentRankExpression(QueryCommand cmd, Type entityType, string rankColumn)
+    {
+        var partition = cmd.PerParentPartitionColumns ?? [];
+        var sorting = cmd.Sorting ?? [];
+
+        // Shape validation is mode-independent, so it runs before and regardless of whether a SQL string
+        // is being built (it must also hold in the parameter pass). A partition key is mandatory: without
+        // one the emitted rank is global rather than per parent. An actual page also needs a window
+        // ordering, because a row_number() window with no ORDER BY is invalid on providers such as
+        // SQL Server; an unordered page must be rejected instead of emitting an invalid window.
+        if (partition.Length == 0)
+            throw new BuildSqlCommandException("A per-parent eager top-N child requires a partition key.");
+
+        if (sorting.Length == 0)
+            throw new BuildSqlCommandException(
+                "A per-parent eager top-N child requires a window ordering: a row_number() window with no " +
+                "ORDER BY is invalid on providers such as SQL Server.");
+
+        var builder = _ctx.ParamMode ? null : StringBuilderPool.Shared.Get();
+        try
+        {
+            if (builder is not null)
+                builder.Append("row_number()").Append(Kw(" over ("));
+
+            // Partition first, matching the window grammar.
+            var wrotePartition = false;
+            for (var i = 0; i < partition.Length; i++)
+            {
+                if (builder is not null)
+                {
+                    builder.Append(i == 0 ? Kw("partition by ") : ", ");
+                    wrotePartition = true;
+                }
+
+                var (_, column) = SqlSourceRenderer.MakeColumn(in _ctx, partition[i], entityType, dontNeedAlias: true);
+                if (builder is not null) builder.Append(column);
+            }
+
+            for (var i = 0; i < sorting.Length; i++)
+            {
+                var nullsPosition = NullsOrderingRenderer.Validate(sorting[i].NullsPosition);
+
+                if (nullsPosition != NullsPosition.Default)
+                {
+                    var sortKey = ResolveSortKeyExpression(cmd, entityType, in sorting[i]);
+                    if (builder is not null)
+                    {
+                        if (i == 0)
+                            builder.Append(wrotePartition ? Kw(" order by ") : Kw("order by "));
+                        else
+                            builder.Append(", ");
+
+                        var sort = SqlSourceRenderer.MakeSort(in _ctx, entityType, sortKey, 0);
+                        builder.Append(_ctx.Dialect.RenderOrderBy(sort, sorting[i].Direction, nullsPosition));
+                    }
+                    else
+                    {
+                        // Mirror the emitted key occurrences: native placement emits the key once, the
+                        // CASE emulation twice.
+                        var occurrences = _ctx.Dialect.SupportsNullsOrdering ? 1 : 2;
+                        for (var n = 0; n < occurrences; n++)
+                            SqlSourceRenderer.MakeSort(in _ctx, entityType, sortKey, 0);
+                    }
+
+                    continue;
+                }
+
+                if (builder is not null)
+                {
+                    if (i == 0)
+                        builder.Append(wrotePartition ? Kw(" order by ") : Kw("order by "));
+                    else
+                        builder.Append(", ");
+                }
+
+                if (sorting[i].PreparedExpression is { } prepared)
+                {
+                    var sort = SqlSourceRenderer.MakeSort(in _ctx, entityType, prepared, 0);
+                    if (builder is not null) builder.Append(sort);
+                }
+                else if (builder is not null)
+                {
+                    builder.Append(sorting[i].ColumnIndex);
+                }
+
+                if (builder is not null && sorting[i].Direction == OrderDirection.Desc)
+                    builder.Append(Kw(" desc"));
+            }
+
+            if (builder is not null)
+                builder.Append(')').Append(_ctx.Dialect.MakeColumnAlias(rankColumn, _ctx.KeywordCase));
+
+            return builder?.ToString() ?? string.Empty;
+        }
+        finally
+        {
+            if (builder is not null) StringBuilderPool.Shared.Return(builder);
+        }
+    }
+
+    /// <summary>
+    /// Wraps the ranked inner source in the outer statement: the entity projection (dropping the
+    /// synthetic rank column), the per-partition page-bound filter and the child's output ordering.
+    /// </summary>
+    private string? MakePerParentPagingOuter(QueryCommand cmd, Type entityType, string? innerSql, string rankColumn)
+    {
+        string? result = null;
+        _ctx.ColumnsProvider.PushSourceScope();
+        try
+        {
+            string? alias = null;
+            if (!_ctx.ParamMode)
+            {
+                // Register the derived table as a physical-shaped source so member access of the
+                // command's select list resolves to its aliased columns.
+                _ctx.ColumnsProvider.Add(entityType, false);
+                alias = _ctx.AliasProvider!.GetNextAlias(new FromExpression(entityType));
+            }
+
+            var outer = _ctx.ParamMode ? null : StringBuilderPool.Shared.Get();
+            try
+            {
+                var entityColumns = BuildExtremeRowEntitySelectList(entityType);
+
+                if (!_ctx.ParamMode)
+                {
+                    outer!.Append(Kw("select "));
+                    if (cmd.Tag is { Length: > 0 } tag)
+                        outer.Append(MakeTagComment(tag)).Append(' ');
+
+                    for (var i = 0; i < entityColumns.Length; i++)
+                    {
+                        if (i > 0) outer.Append(", ");
+
+                        var item = entityColumns[i];
+                        var (needAliasForColumn, column) = SqlSourceRenderer.MakeColumn(in _ctx, item, entityType, dontNeedAlias: false, renameAware: true);
+                        outer.Append(column);
+
+                        if (needAliasForColumn)
+                            outer.Append(_ctx.Dialect.MakeColumnAlias(item.PropertyName, _ctx.KeywordCase));
+                    }
+
+                    outer.Append(SqlText.NewLine).Append(Kw(" from ")).Append('(').Append(innerSql).Append(')')
+                        .Append(_ctx.Dialect.MakeTableAlias(alias!, _ctx.KeywordCase));
+
+                    AppendPerParentRankFilter(cmd, outer, alias!, rankColumn);
+                    // A nested derived source (the embedded single-query join) cannot carry a
+                    // statement-level ORDER BY: SQL Server rejects one inside a derived table, and the
+                    // order is instead applied on the outer pair command, which resolves the child keys
+                    // against this source's join alias. A top-level split child statement keeps it so the
+                    // loaded children preserve the child query's order.
+                    if (!cmd.PerParentPagingEmbedded)
+                        AppendOrderBy(cmd, entityType, outer);
+                }
+                else
+                {
+                    // Parameter pass: walk the same expressions in the same order as the SQL pass.
+                    for (var i = 0; i < entityColumns.Length; i++)
+                        SqlSourceRenderer.MakeColumn(in _ctx, entityColumns[i], entityType, dontNeedAlias: false, renameAware: true);
+
+                    if (!cmd.PerParentPagingEmbedded && cmd.Sorting is { Length: > 0 } sorting)
+                        WalkOrderByParameters(cmd, entityType, sorting);
+                }
+
+                result = outer?.ToString();
+            }
+            finally
+            {
+                if (outer is not null) StringBuilderPool.Shared.Return(outer);
+            }
+        }
+        finally
+        {
+            _ctx.ColumnsProvider.PopSourceScope();
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Appends the per-partition page-bound filter on the ranked derived table. Only the bounds the
+    /// command actually requests are emitted, and the inclusive upper bound is computed in
+    /// <see cref="long"/> arithmetic so a near-<see cref="int.MaxValue"/> offset plus limit cannot
+    /// overflow into a wrong window.
+    /// </summary>
+    private void AppendPerParentRankFilter(QueryCommand cmd, StringBuilder outer, string alias, string rankColumn)
+    {
+        var offset = cmd.Paging.Offset;
+        var limit = cmd.Paging.Limit;
+        var hasLower = offset > 0;
+        var hasUpper = limit > 0;
+
+        if (!hasLower && !hasUpper)
+        {
+            // Paging.IsEmpty would not have routed here, but keep the renderer total: with no bound the
+            // ranked source is filtered to its first row's rank (never removes a partition).
+            outer.Append(SqlText.NewLine).Append(Kw(" where ")).Append(alias).Append('.')
+                .Append(_ctx.Dialect.MakeColumnReference(rankColumn)).Append(" >= 1");
+            return;
+        }
+
+        outer.Append(SqlText.NewLine).Append(Kw(" where "));
+
+        if (hasLower)
+        {
+            outer.Append(alias).Append('.').Append(_ctx.Dialect.MakeColumnReference(rankColumn))
+                .Append(" > ").Append(offset);
+        }
+
+        if (hasLower && hasUpper)
+            outer.Append(Kw(" and "));
+
+        if (hasUpper)
+        {
+            outer.Append(alias).Append('.').Append(_ctx.Dialect.MakeColumnReference(rankColumn))
+                .Append(" <= ").Append((long)offset + limit);
+        }
+    }
+
+    /// <summary>
+    /// Renders a <c>SelectWhereMax</c>/<c>SelectWhereMin</c> command. Compatibility is validated first,
+    /// then the dialect's optional <see cref="ISqlDialect.ExtremeRowRenderer"/> decides - from a
+    /// prepared description, before any side effect - whether to render natively; otherwise the command
+    /// is lowered to the portable window-function query:
+    /// <code>
+    /// select &lt;projection&gt; from (
+    ///     select *, row_number() | rank() over (partition by ... order by ... desc|asc) as rn
+    ///     from &lt;source&gt; where &lt;condition&gt;
+    /// ) t1 where t1.rn = 1
+    /// </code>
+    /// The source rows plus the synthetic rank column form the derived table; the outer statement
+    /// projects the command's select list over it. The rank column is dropped by the projection and is
+    /// named to avoid colliding with a mapped source column. Works on every provider whose dialect
+    /// reports <see cref="ISqlDialect.SupportsSelectWhereMinMax"/>.
+    /// </summary>
+    private string? MakeExtremeRowSelect(QueryCommand cmd, string? selectInto)
+    {
+        if (!_ctx.Dialect.SupportsSelectWhereMinMax)
+            throw new NotSupportedException($"{_ctx.Dialect.GetType().Name} does not support SelectWhereMax/SelectWhereMin.");
+
+        EnsureExtremeRowCompatible(cmd, selectInto);
+
+        // S1: All global scalar (Ties == All, no grouping, one value key) is lowered to an aggregate
+        // command E joined back to the source O through the common MakeSelect pipeline. S2 extends the
+        // same topology to the grouped scalar form (one value key, one or more group keys, null-safe
+        // OR-join per nullable key). S3 extends it to composite value keys (two or more components) as
+        // a staged aggregate chain E_1..E_n + O, which is the only shape that keeps lexicographic
+        // semantics without a window function. All other shapes (One) keep the existing paths.
+        //
+        // A floating value key on ClickHouse keeps the rank() lowering: the aggregate form there
+        // disagrees with the ordering the extreme-row contract is defined by (see
+        // KeepRankLoweringForFloatingAll).
+        if (cmd.ExtremeRow is { Ties: ExtremeRowTies.All } extremeRow
+            && cmd.ExtremeRowColumns is { Length: > 0 } valueColumns
+            && !KeepRankLoweringForFloatingAll(valueColumns))
+        {
+            // ClickHouse refuses a bare IS NULL residual in JOIN ON (#296) but accepts its native
+            // isNotDistinctFrom there; the lowering emits an internal marker for that case and the
+            // renderer chooses the form, so every other dialect keeps the byte-identical OR-form.
+            var nativeNullSafeJoin = SqlSourceRenderer.IsClickHouseDialect(_ctx.Dialect);
+            var lowered = valueColumns.Length == 1
+                ? extremeRow.GroupBy is null
+                    ? ExtremeRowLowering.BuildAllGlobalScalar(cmd)
+                    : ExtremeRowLowering.BuildAllGroupedScalar(cmd, nativeNullSafeJoin)
+                : ExtremeRowLowering.BuildAllComposite(cmd, nativeNullSafeJoin);
+            return new SqlBuilder(_ctx).MakeSelect(lowered, selectInto);
+        }
+
+        // Native generation is an optional dialect capability, limited to the single-row One form: All
+        // keeps every tied winner and stays on the portable rank lowering. The eligibility decision is
+        // made from a side-effect-free description BEFORE any build-context/parameter/alias work; a
+        // missing capability or a negative answer keeps the portable window-function lowering. A
+        // renderer failure propagates as an error and never falls back late.
+        var renderer = _ctx.Dialect.ExtremeRowRenderer;
+        if (renderer is not null
+            && cmd.ExtremeRow!.Ties == ExtremeRowTies.One
+            // A source without mapped metadata (a name-addressed or temporary table) cannot provide the
+            // canonical payload aliases and column types the native renderer decides on. Such a source
+            // keeps the portable lowering instead of failing the read on a native-capable provider.
+            && DataContextCache.Metadata.TryGetValue(cmd.EntityType!, out var entityMeta))
+        {
+            // Build the entity projection once for the whole native preparation: the eligibility
+            // description resolves its payload lazily from this list (a renderer that only reads
+            // Keys/Groups never builds it), and the alias and outer stages reuse the same instance.
+            var (entitySelectList, _) = EntitySelectListBuilder.Build(
+                cmd.EntityType!,
+                entityMeta,
+                CancellationToken.None);
+
+            var description = MakeExtremeRowDescription(cmd, entitySelectList);
+            if (renderer.CanRender(description))
+                return MakeNativeExtremeRowSelect(cmd, renderer, entitySelectList, description.Keys);
+        }
+
+        return MakePortableExtremeRowSelect(cmd);
+    }
+
+    /// <summary>
+    /// Whether a <see cref="ExtremeRowTies.All"/> command must keep the portable <c>rank()</c> lowering
+    /// instead of the aggregate + join-back form. ClickHouse is the only dialect where the two forms
+    /// disagree: its <c>max()</c>/<c>min()</c> return <c>NaN</c> as the extremum while its <c>ORDER BY</c>
+    /// ranks <c>NaN</c> last (and its hash join distinguishes <c>+0.0</c> from <c>-0.0</c>). The
+    /// extreme-row contract is defined by that ordering (the native <c>One</c> renderer adapts its key so
+    /// NaN ranks last), so a floating value key keeps the rank lowering there; every other provider keeps
+    /// the aggregate form, where the aggregate and the ordering agree.
+    /// </summary>
+    private bool KeepRankLoweringForFloatingAll(SelectExpression[] valueColumns)
+    {
+        if (!SqlSourceRenderer.IsClickHouseDialect(_ctx.Dialect))
+            return false;
+
+        for (var i = 0; i < valueColumns.Length; i++)
+        {
+            var type = Nullable.GetUnderlyingType(valueColumns[i].PropertyType) ?? valueColumns[i].PropertyType;
+            if (type == typeof(float) || type == typeof(double))
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Builds the portable lowering: the ranked inner derived table plus the outer statement that
+    /// projects the select list and keeps <c>rn = 1</c>.
+    /// </summary>
+    private string? MakePortableExtremeRowSelect(QueryCommand cmd)
+    {
+        var entityType = cmd.EntityType!;
+        var from = cmd.From!;
+        var rankColumn = MakeExtremeRowRankName(entityType);
+
+        // Keep the inner derived table's rendering unchanged, but expose it as an opaque fragment
+        // source so the outer statement is rendered through the common MakeSelect pipeline.
+        var self = this;
+        var fragment = new DerivedFragmentExpression(entityType, ctx => self.MakePortableExtremeRowInner(cmd, entityType, from, rankColumn));
+
+        var oCommand = cmd.Clone();
+        oCommand.ExtremeRow = null;
+        oCommand.From = new FromExpression(fragment);
+
+        var oParameter = Expression.Parameter(entityType, "o");
+        var columnMethod = typeof(SqlFunctions).GetMethod(nameof(SqlFunctions.Column))!.MakeGenericMethod(typeof(int));
+        var columnCall = Expression.Call(null, columnMethod, oParameter, Expression.Constant(rankColumn));
+        oCommand.PreparedCondition = Expression.Lambda(Expression.Equal(columnCall, Expression.Constant(1)), oParameter);
+
+        if (cmd.IgnoreColumns || cmd.SelectList is null || cmd.SelectList.Length == 0)
+            oCommand.SetSelectList(BuildExtremeRowEntitySelectList(entityType));
+
+        return new SqlBuilder(_ctx).MakeSelect(oCommand);
+    }
+
+    /// <summary>
+    /// Builds the inner derived table of the portable lowering: the filtered source rows plus the
+    /// synthetic window-rank column. The filter (key components <c>IS NOT NULL</c> ANDed with the
+    /// source condition) is shared with the native source builder.
+    /// </summary>
+    private string? MakePortableExtremeRowInner(QueryCommand cmd, Type entityType, FromExpression from, string rankColumn)
+    {
+        // --- inner derived table: the source rows plus the window rank ---
+        string? innerSql = null;
+        _ctx.ColumnsProvider.PushSourceScope();
+        try
+        {
+            var inner = _ctx.ParamMode ? null : StringBuilderPool.Shared.Get();
+            try
+            {
+                var fromSql = SqlSourceRenderer.MakeFrom(in _ctx, from, new FromRenderOptions(false, entityType, false));
+                var rankSql = MakeExtremeRowRankExpression(cmd, entityType, rankColumn);
+
+                if (!_ctx.ParamMode)
+                    inner!.Append(Kw("select ")).Append('*').Append(", ").Append(rankSql).Append(SqlText.NewLine).Append(Kw(" from ")).Append(fromSql);
+
+                AppendExtremeRowSourceFilter(cmd, entityType, inner);
+
+                innerSql = inner?.ToString();
+            }
+            finally
+            {
+                if (inner is not null) StringBuilderPool.Shared.Return(inner);
+            }
+        }
+        finally
+        {
+            _ctx.ColumnsProvider.PopSourceScope();
+        }
+
+        return innerSql;
+    }
+
+    /// <summary>
+    /// Appends the source filter shared by the portable inner derived table and the native source: an
+    /// <c>IS NOT NULL</c> predicate per extreme-key component (comparison nulls must not win the
+    /// extremum and would surface an all-null group) ANDed with the source's own condition. In
+    /// parameter mode it walks the same expressions in the same order and emits nothing; a
+    /// condition-only source still opens the <c>where</c>.
+    /// </summary>
+    private void AppendExtremeRowSourceFilter(QueryCommand cmd, Type entityType, StringBuilder? inner)
+    {
+        var valueColumns = cmd.ExtremeRowColumns ?? [];
+        var hasNotNullFilter = valueColumns.Length > 0;
+        var hasCondition = cmd.PreparedCondition is not null;
+
+        if (!hasNotNullFilter && !hasCondition)
+            return;
+
+        if (!_ctx.ParamMode)
+            inner!.Append(SqlText.NewLine).Append(Kw(" where "));
+
+        if (hasNotNullFilter)
+        {
+            for (var i = 0; i < valueColumns.Length; i++)
+            {
+                if (!_ctx.ParamMode && i > 0)
+                    inner!.Append(Kw(" and "));
+
+                var (_, valueColumn) = SqlSourceRenderer.MakeColumn(in _ctx, valueColumns[i], entityType, dontNeedAlias: true);
+                if (!_ctx.ParamMode)
+                    inner!.Append(valueColumn).Append(' ').Append(Kw("is not null"));
+            }
+
+            if (hasCondition && !_ctx.ParamMode)
+                inner!.Append(Kw(" and "));
+        }
+
+        if (cmd.PreparedCondition is { } condition)
+            SqlSourceRenderer.MakeWhere(in _ctx, inner, entityType, condition, 0);
+    }
+
+    /// <summary>
+    /// Renders the command through the dialect's optional native extreme-row capability. The shared
+    /// path builds the same filtered source as the portable lowering (without the rank), hands it to
+    /// the renderer together with the canonical payload/key/group aliases, and wraps the returned
+    /// winning-row source in the same outer projection/order statement. A renderer exception
+    /// propagates unchanged.
+    /// </summary>
+    private string? MakeNativeExtremeRowSelect(
+        QueryCommand cmd,
+        IExtremeRowRenderer renderer,
+        SelectExpression[] entitySelectList,
+        IReadOnlyList<ExtremeRowRenderColumn> keyColumns)
+    {
+        var entityType = cmd.EntityType!;
+        var from = cmd.From!;
+
+        // Keep the native winner's SQL production (source filter + renderer) inside an opaque fragment
+        // so the outer statement is rendered through the common MakeSelect pipeline, mirroring the
+        // portable lowering. The fragment delegate walks the source expressions in both modes; the
+        // renderer is invoked in SQL mode only.
+        var self = this;
+        var fragment = new DerivedFragmentExpression(entityType, ctx => self.MakeNativeExtremeRowWinner(
+            cmd, renderer, entityType, from, entitySelectList, keyColumns));
+
+        var oCommand = cmd.Clone();
+        oCommand.ExtremeRow = null;
+        oCommand.From = new FromExpression(fragment);
+        oCommand.PreparedCondition = null;
+
+        if (oCommand.IgnoreColumns || oCommand.SelectList is null || oCommand.SelectList.Length == 0)
+            oCommand.SetSelectList(BuildExtremeRowEntitySelectList(entityType));
+
+        return new SqlBuilder(_ctx).MakeSelect(oCommand);
+    }
+
+    /// <summary>
+    /// Builds the native strategy's winning-row source: the same filtered source as the portable
+    /// lowering (without the rank), handed to the renderer. Returns the rendered winner SQL in SQL
+    /// mode and performs the source expression walk in parameter mode, emitting nothing.
+    /// </summary>
+    private string? MakeNativeExtremeRowWinner(
+        QueryCommand cmd,
+        IExtremeRowRenderer renderer,
+        Type entityType,
+        FromExpression from,
+        SelectExpression[] entitySelectList,
+        IReadOnlyList<ExtremeRowRenderColumn> keyColumns)
+    {
+        var sourceSql = MakeNativeExtremeRowSource(cmd, entityType, from);
+
+        // Parameter mode emits no SQL; the source walk has already happened above.
+        if (_ctx.ParamMode || sourceSql is null)
+            return null;
+
+        var (payloadAliases, keyAliases, groupAliases) = MakeExtremeRowAliases(cmd, entitySelectList);
+        var winnerSql = renderer.Render(new ExtremeRowRenderRequest(
+            default(ExtremeRowTrustedConstruction),
+            sourceSql,
+            cmd.ExtremeRow!.Kind == ExtremeKind.Max,
+            payloadAliases,
+            keyAliases,
+            keyColumns,
+            groupAliases,
+            _ctx.KeywordCase));
+
+        return winnerSql;
+    }
+
+    /// <summary>
+    /// Builds the native strategy's filtered source: <c>select * from &lt;source&gt; where
+    /// &lt;key-component IS NOT NULL&gt; [and &lt;condition&gt;]</c> - the portable inner minus the
+    /// synthetic rank. The renderer turns this into the winning-row source. Parameter mode walks the
+    /// same expressions in the same order and emits nothing.
+    /// </summary>
+    private string? MakeNativeExtremeRowSource(QueryCommand cmd, Type entityType, FromExpression from)
+    {
+        string? sourceSql = null;
+        _ctx.ColumnsProvider.PushSourceScope();
+        try
+        {
+            var source = _ctx.ParamMode ? null : StringBuilderPool.Shared.Get();
+            try
+            {
+                var fromSql = SqlSourceRenderer.MakeFrom(in _ctx, from, new FromRenderOptions(false, entityType, false));
+
+                if (!_ctx.ParamMode)
+                    source!.Append(Kw("select ")).Append('*').Append(SqlText.NewLine).Append(Kw(" from ")).Append(fromSql);
+
+                AppendExtremeRowSourceFilter(cmd, entityType, source);
+
+                sourceSql = source?.ToString();
+            }
+            finally
+            {
+                if (source is not null) StringBuilderPool.Shared.Return(source);
+            }
+        }
+        finally
+        {
+            _ctx.ColumnsProvider.PopSourceScope();
+        }
+
+        return sourceSql;
+    }
+
+    /// <summary>
+    /// Resolves the canonical payload aliases (every mapped source column, in declaration order) and
+    /// the key/group aliases (the physical column names of the direct mapped key components) from the
+    /// projection built once by the native dispatch. Only reached after
+    /// <see cref="IExtremeRowRenderer.CanRender"/> accepted the description, which constraints the
+    /// key/group components to direct mapped columns.
+    /// </summary>
+    private (string[] Payload, string[] Keys, string[] Groups) MakeExtremeRowAliases(QueryCommand cmd, SelectExpression[] entityColumns)
+    {
+        var payload = new string[entityColumns.Length];
+        for (var i = 0; i < entityColumns.Length; i++)
+        {
+            var column = entityColumns[i];
+            payload[i] = column.RangeColumns is not null
+                ? column.PropertyName!
+                : column.PropertyInfo!.GetPropertyColumnName(_ctx.NamingConvention);
+        }
+
+        return (payload, MakeExtremeRowKeyAliases(cmd.ExtremeRowColumns), MakeExtremeRowKeyAliases(cmd.ExtremeRowGroupByColumns));
+    }
+
+    private string[] MakeExtremeRowKeyAliases(SelectExpression[]? columns)
+    {
+        if (columns is null || columns.Length == 0)
+            return [];
+
+        var aliases = new string[columns.Length];
+        for (var i = 0; i < columns.Length; i++)
+        {
+            if (columns[i].Expression is not MemberExpression { Member: PropertyInfo property })
+                throw new InvalidOperationException("The native extreme-row renderer requires direct mapped key columns.");
+
+            aliases[i] = property.GetPropertyColumnName(_ctx.NamingConvention);
+        }
+
+        return aliases;
+    }
+
+    /// <summary>
+    /// Builds the side-effect-free description the dialect's optional native renderer decides on. It
+    /// reads only prepared metadata: it never renders SQL, allocates an alias or touches the parameter
+    /// list, so a rejected candidate leaves no state behind for the portable lowering. The payload is
+    /// projected lazily from the prebuilt <paramref name="entitySelectList"/>, so a renderer that only
+    /// reads <see cref="ExtremeRowDescription.Keys"/>/<see cref="ExtremeRowDescription.Groups"/> never
+    /// materializes it.
+    /// </summary>
+    private static ExtremeRowDescription MakeExtremeRowDescription(QueryCommand cmd, SelectExpression[] entitySelectList)
+        => new(
+            cmd.ExtremeRow!.Kind == ExtremeKind.Max,
+            MakeExtremeRowDescriptionColumns(cmd.ExtremeRowColumns),
+            MakeExtremeRowDescriptionColumns(cmd.ExtremeRowGroupByColumns),
+            () => MakeExtremeRowPayloadDescription(entitySelectList));
+
+    private static ExtremeRowRenderColumn[] MakeExtremeRowDescriptionColumns(SelectExpression[]? columns)
+    {
+        if (columns is null || columns.Length == 0)
+            return [];
+
+        var result = new ExtremeRowRenderColumn[columns.Length];
+        for (var i = 0; i < columns.Length; i++)
+        {
+            var expression = columns[i].Expression;
+            var property = (expression as MemberExpression)?.Member as PropertyInfo;
+            IPropertyMetadata? metadata = null;
+            var hasMetadata = property is not null
+                && DataContextCache.Metadata.TryGetValue(property.DeclaringType!, property, out metadata);
+
+            result[i] = new ExtremeRowRenderColumn(
+                columns[i].PropertyType,
+                columns[i].Nullable,
+                hasMetadata && metadata!.Converter is null && !metadata.IsComputed,
+                hasMetadata && metadata!.Converter is not null);
+        }
+
+        return result;
+    }
+
+    private static ExtremeRowRenderColumn[] MakeExtremeRowPayloadDescription(SelectExpression[] columns)
+    {
+        var result = new ExtremeRowRenderColumn[columns.Length];
+        for (var i = 0; i < columns.Length; i++)
+        {
+            var column = columns[i];
+
+            // EntitySelectListBuilder stores the property access wrapped in a LambdaExpression, unlike
+            // the key/group columns (which carry the bare member-access body), so the lambda must be
+            // unwrapped before the direct-mapped test. A Range<T> property expands into two physical
+            // columns and a computed property is not a plain mapped column, so neither is native-eligible
+            // as payload; both keep the portable lowering.
+            var body = column.Expression is LambdaExpression lambda ? lambda.Body : column.Expression;
+            IPropertyMetadata? metadata = null;
+            var hasMetadata = body is MemberExpression { Member: PropertyInfo property }
+                && DataContextCache.Metadata.TryGetValue(property.DeclaringType!, property, out metadata);
+
+            result[i] = new ExtremeRowRenderColumn(
+                column.PropertyType,
+                column.Nullable,
+                hasMetadata && metadata!.Converter is null && !metadata.IsComputed && column.RangeColumns is null,
+                hasMetadata && metadata!.Converter is not null);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Builds the entity projection on demand for the outer expansion when the native dispatch did not
+    /// already hand one in (the portable lowering). Throws for a source without mapped metadata.
+    /// </summary>
+    private static SelectExpression[] BuildExtremeRowEntitySelectList(Type entityType)
+    {
+        if (!DataContextCache.Metadata.TryGetValue(entityType, out var entityMeta))
+            throw new BuildSqlCommandException(ExtremeRowCompatibility.MappedEntitySourceMessage);
+
+        var (columns, _) = EntitySelectListBuilder.Build(entityType, entityMeta, CancellationToken.None);
+        return columns;
+    }
+
+    /// <summary>
+    /// Validates the requested NULL placements and fails closed on shapes where the portable <c>CASE</c>
+    /// emulation would repeat an ordering key illegally. Called from both the SQL and the parameter pass,
+    /// so an unsupported shape is rejected before anything is executed. A dialect with native
+    /// <c>NULLS FIRST</c>/<c>NULLS LAST</c> never repeats the key and is not restricted.
+    /// </summary>
+    /// <param name="cmd">The command whose ordering is about to be rendered.</param>
+    /// <param name="sortingList">Its sort keys.</param>
+    /// <exception cref="BuildSqlCommandException">An explicit placement meets a DISTINCT or LIMIT BY shape that cannot carry the emulation.</exception>
+    private void EnsureNullPlacementIsRenderable(QueryCommand cmd, Sorting[] sortingList)
+    {
+        var hasExplicitPlacement = false;
+        for (var i = 0; i < sortingList.Length; i++)
+        {
+            NullsOrderingRenderer.Validate(sortingList[i].NullsPosition);
+            if (sortingList[i].NullsPosition != NullsPosition.Default)
+                hasExplicitPlacement = true;
+        }
+
+        if (!hasExplicitPlacement || _ctx.Dialect.SupportsNullsOrdering)
+            return;
+
+        // The emulation emits `CASE WHEN <key> ... END ASC, <key>`, so the ordering key is repeated. A
+        // DISTINCT query requires every ORDER BY expression to be in the select list, which the CASE
+        // prefix is not (SQL Server and PostgreSQL both reject it), and LIMIT BY evaluates its own
+        // ordering keys. Both would change semantics or fail at execution, so they fail closed instead.
+        if (cmd.IsDistinct || cmd.DistinctOn is not null)
+            throw new BuildSqlCommandException(
+                "Explicit NULL placement cannot be emulated on a DISTINCT query: the emulation repeats the ordering " +
+                "key inside a CASE expression, which DISTINCT does not permit. Use the provider default or a provider " +
+                "with native NULLS FIRST/NULLS LAST support.");
+
+        if (cmd.LimitBy is not null)
+            throw new BuildSqlCommandException(
+                "Explicit NULL placement cannot be emulated together with LIMIT BY: the emulation repeats the ordering " +
+                "key, which LIMIT BY does not permit. Use the provider default or a provider with native NULLS " +
+                "FIRST/NULLS LAST support.");
+    }
+
+    /// <summary>
+    /// Resolves the real SQL key behind a sort entry. A prepared expression is used as-is; a column index
+    /// is resolved to the expression of the selected column (<c>ORDER BY &lt;ordinal&gt;</c> cannot be
+    /// wrapped in a CASE, which would test the literal ordinal). An unresolvable index fails closed rather
+    /// than silently dropping the requested placement.
+    /// </summary>
+    /// <param name="cmd">The command whose select list resolves an ordinal key.</param>
+    /// <param name="entityType">The entity type the column visitor renders against.</param>
+    /// <param name="sorting">The sort entry.</param>
+    /// <returns>The key expression to render.</returns>
+    /// <exception cref="BuildSqlCommandException">The entry has neither a prepared expression nor a resolvable selected column.</exception>
+    private Expression ResolveSortKeyExpression(QueryCommand cmd, Type entityType, in Sorting sorting)
+    {
+        if (sorting.PreparedExpression is { } prepared)
+            return prepared;
+
+        if (sorting.ColumnIndex is int columnIndex)
+        {
+            var selectList = cmd.SelectList;
+            if (selectList is null || columnIndex < 1 || columnIndex > selectList.Length)
+                throw new BuildSqlCommandException(
+                    $"The ORDER BY column index {columnIndex} does not resolve to a selected column, so an explicit " +
+                    "NULL placement cannot be rendered for it.");
+
+            var column = selectList[columnIndex - 1];
+            if (column.Expression is { } expression)
+                return expression is LambdaExpression { Parameters.Count: 1 } lambda ? lambda.Body : expression;
+
+            if (column.PropertyInfo is { } property)
+                return Expression.Property(Expression.Parameter(entityType, "e"), property);
+
+            throw new BuildSqlCommandException(
+                $"The ORDER BY column index {columnIndex} has no renderable key expression, so an explicit NULL " +
+                "placement cannot be rendered for it.");
+        }
+
+        throw new BuildSqlCommandException("An ORDER BY key must carry either a prepared expression or a column index.");
+    }
+
+    /// <summary>
+    /// Walks the parameters of an <see cref="AppendOrderBy"/> ordering in the same occurrence order as the
+    /// SQL pass: an explicit placement that the dialect emulates with CASE repeats the key, so its
+    /// expression is walked twice; native placement and the default path walk it once. The plain ordinal
+    /// path contributes no parameters.
+    /// </summary>
+    /// <param name="cmd">The command whose select list resolves an ordinal key.</param>
+    /// <param name="entityType">The entity type the column visitor renders against.</param>
+    /// <param name="sorting">The sort keys being rendered.</param>
+    private void WalkOrderByParameters(QueryCommand cmd, Type entityType, Sorting[] sorting)
+    {
+        for (var i = 0; i < sorting.Length; i++)
+        {
+            if (sorting[i].NullsPosition != NullsPosition.Default)
+            {
+                var key = ResolveSortKeyExpression(cmd, entityType, in sorting[i]);
+                var occurrences = _ctx.Dialect.SupportsNullsOrdering ? 1 : 2;
+                for (var n = 0; n < occurrences; n++)
+                    SqlSourceRenderer.MakeSort(in _ctx, entityType, key, 0);
+            }
+            else if (sorting[i].PreparedExpression is { } prepared)
+            {
+                SqlSourceRenderer.MakeSort(in _ctx, entityType, prepared, 0);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Renders the <c>order by</c> of the surviving rows on the outer statement. Mirrors the plain
+    /// select-list ordering: a prepared expression is rendered through the column visitor, an ordinal
+    /// is emitted verbatim. A parameter-mode caller walks the expressions separately. An explicit NULL
+    /// placement routes through the dialect renderer (native or CASE emulation); the default placement
+    /// keeps the plain direction-only rendering byte-for-byte.
+    /// </summary>
+    private void AppendOrderBy(QueryCommand cmd, Type entityType, StringBuilder target)
+    {
+        if (cmd.Sorting is not { Length: > 0 } sorting)
+            return;
+
+        target.Append(SqlText.NewLine).Append(Kw("order by "));
+        for (var i = 0; i < sorting.Length; i++)
+        {
+            if (i > 0) target.Append(", ");
+
+            if (sorting[i].NullsPosition != NullsPosition.Default)
+            {
+                var key = ResolveSortKeyExpression(cmd, entityType, in sorting[i]);
+                var keySql = SqlSourceRenderer.MakeSort(in _ctx, entityType, key, 0);
+                target.Append(_ctx.Dialect.RenderOrderBy(keySql, sorting[i].Direction, sorting[i].NullsPosition));
+                continue;
+            }
+
+            if (sorting[i].PreparedExpression is { } prepared)
+                target.Append(SqlSourceRenderer.MakeSort(in _ctx, entityType, prepared, 0));
+            else
+                target.Append(sorting[i].ColumnIndex);
+
+            if (sorting[i].Direction == OrderDirection.Desc)
+                target.Append(Kw(" desc"));
+        }
+    }
+
+    /// <summary>
+    /// Renders <c>row_number()</c> (single survivor) or <c>rank()</c> (every tied survivor) over the
+    /// optional group partition and the value ordering. <c>Max</c> orders the value descending,
+    /// <c>Min</c> ascending (the default direction). Multiple keys of a composite selector are emitted
+    /// in order. Parameter mode visits the keys but emits nothing.
+    /// </summary>
+    private string MakeExtremeRowRankExpression(QueryCommand cmd, Type entityType, string rankColumn)
+    {
+        var extreme = cmd.ExtremeRow!;
+        var valueColumns = cmd.ExtremeRowColumns ?? [];
+        var groupColumns = cmd.ExtremeRowGroupByColumns ?? [];
+
+        var builder = _ctx.ParamMode ? null : StringBuilderPool.Shared.Get();
+        try
+        {
+            if (builder is not null)
+                builder.Append(extreme.Ties == ExtremeRowTies.All ? "rank()" : "row_number()").Append(Kw(" over ("));
+
+            for (var i = 0; i < groupColumns.Length; i++)
+            {
+                if (builder is not null)
+                    builder.Append(i == 0 ? Kw("partition by ") : ", ");
+
+                var (_, column) = SqlSourceRenderer.MakeColumn(in _ctx, groupColumns[i], entityType, dontNeedAlias: true);
+                if (builder is not null) builder.Append(column);
+            }
+
+            for (var i = 0; i < valueColumns.Length; i++)
+            {
+                if (builder is not null)
+                {
+                    if (i == 0)
+                        builder.Append(groupColumns.Length > 0 ? Kw(" order by ") : Kw("order by "));
+                    else
+                        builder.Append(", ");
+                }
+
+                var (_, column) = SqlSourceRenderer.MakeColumn(in _ctx, valueColumns[i], entityType, dontNeedAlias: true);
+                if (builder is not null)
+                {
+                    builder.Append(column);
+                    if (extreme.Kind == ExtremeKind.Max)
+                        builder.Append(Kw(" desc"));
+                }
+            }
+
+            if (builder is not null)
+                builder.Append(')').Append(_ctx.Dialect.MakeColumnAlias(rankColumn, _ctx.KeywordCase));
+
+            return builder?.ToString() ?? string.Empty;
+        }
+        finally
+        {
+            if (builder is not null) StringBuilderPool.Shared.Return(builder);
+        }
+    }
+
+    /// <summary>
+    /// Returns a rank-column name that no mapped column of <paramref name="entityType"/> uses, so the
+    /// synthetic column cannot shadow or be shadowed by a source column when the derived table selects
+    /// <c>*</c> plus the rank.
+    /// </summary>
+    private static string MakeExtremeRowRankName(Type entityType)
+    {
+        const string seed = "__nextorm_rn";
+        if (!DataContextCache.Metadata.TryGetValue(entityType, out var metadata))
+            return seed;
+
+        var properties = metadata.Properties;
+        var name = seed;
+        while (true)
+        {
+            var collides = false;
+            for (var i = 0; i < properties.Count; i++)
+            {
+                if (string.Equals(properties[i].ColumnName, name, StringComparison.OrdinalIgnoreCase))
+                {
+                    collides = true;
+                    break;
+                }
+            }
+
+            if (!collides) return name;
+            name += "_";
+        }
+    }
+
+    /// <summary>
+    /// Rejects the combinations the derived-table lowering cannot express, before any SQL is assembled.
+    /// The modifier checks are shared with the in-memory evaluator (see
+    /// <see cref="ExtremeRowCompatibility.EnsureModifiersCompatible"/>); only the SQL-only source shape
+    /// and the SELECT ... INTO wrapper are checked here.
+    /// </summary>
+    private static void EnsureExtremeRowCompatible(QueryCommand cmd, string? selectInto)
+    {
+        if (selectInto is not null)
+            throw new BuildSqlCommandException("SelectWhereMax/SelectWhereMin cannot be rendered as a SELECT ... INTO source.");
+
+        ExtremeRowCompatibility.EnsureModifiersCompatible(cmd);
+
+        if (cmd.From is null || cmd.From.SubQuery is not null)
+            throw new BuildSqlCommandException("SelectWhereMax/SelectWhereMin requires a single physical-table source.");
+    }
+
+    /// <summary>
+    /// Whether a projection declares no output column at all, so an empty prepared select list is its
+    /// complete rendering rather than a failed column classification: a whole-object read of the source
+    /// (a bare parameter expression, optionally converted) or a construction / member init with no
+    /// members. The empty-select-list guard uses it to fail closed instead of rendering the truncated
+    /// "selec" head, while leaving a projection that does declare output to its later diagnostic.
+    /// </summary>
+    private static bool IsColumnlessProjection(LambdaExpression? projection)
+        => projection?.Body is { } body
+            && (TypeFacts.UnwrapConvert(body) is ParameterExpression
+                || body is NewExpression { Arguments.Count: 0 }
+                || body is MemberInitExpression { Bindings.Count: 0 });
+
+    /// <summary>
+    /// Whether the command is a key-less constant projection: no inferred grouping key and no aggregate,
+    /// so every output is row-independent and the statement renders as <c>select distinct ...</c>.
+    /// </summary>
+    private static bool IsConstantProjection(QueryCommand cmd)
+        => cmd.EffectiveGroupingKeys is not null
+            && cmd.EffectiveGroupingKeys.Count == 0
+            && cmd.EffectiveHavingMode == QueryPreparationHavingMode.Clear;
+
+    /// <summary>
+    /// Renders one predicate of a composed <c>WHERE</c> clause inside parentheses. Used only by the
+    /// key-less constant-projection path, where the projection's own filter and a pre-group <c>HAVING</c>
+    /// share the one <c>WHERE</c>: the wrapping stops a top-level <c>OR</c> in either predicate from
+    /// changing the composed meaning, and the parenthesised rendering walks the parameters in the same
+    /// order as the SQL pass (nothing is emitted in parameter mode).
+    /// </summary>
+    private void AppendParenthesisedCondition(
+        StringBuilder? target,
+        Type entityType,
+        Expression condition,
+        bool dontNeedAlias,
+        SqlParameterTemplateRecorder? recorder)
+    {
+        if (!_ctx.ParamMode) target!.Append('(');
+        SqlSourceRenderer.MakeWhere(in _ctx, target, entityType, condition, 0, dontNeedAlias, recorder);
+        if (!_ctx.ParamMode) target!.Append(')');
+    }
+
+    /// <summary>
+    /// Renders a query tag as a single-line block comment. Line breaks are folded to spaces and both
+    /// comment delimiters are neutralised: SQL Server nests block comments, so a literal <c>/*</c> in
+    /// the tag would open a nested comment that the closing <c>*/</c> could not close. The comment opens
+    /// with a space (<c>/* </c>) so a tag starting with <c>!</c> or <c>+</c> cannot turn into a
+    /// MySQL/MariaDB executable comment or optimizer hint.
+    /// </summary>
+    /// <param name="tag">The non-empty tag text.</param>
+    /// <returns>The SQL block comment.</returns>
+    private static string MakeTagComment(string tag)
+    {
+        var sb = new StringBuilder(tag.Length + 6);
+        sb.Append("/* ");
+
+        for (var i = 0; i < tag.Length; i++)
+        {
+            var c = tag[i];
+            switch (c)
+            {
+                case '\r':
+                    sb.Append(' ');
+                    if (i + 1 < tag.Length && tag[i + 1] == '\n') i++;
+                    break;
+                case '\n':
+                    sb.Append(' ');
+                    break;
+                case '*':
+                    if (i + 1 < tag.Length && tag[i + 1] == '/')
+                    {
+                        sb.Append("* /");
+                        i++;
+                    }
+                    else
+                    {
+                        sb.Append('*');
+                    }
+                    break;
+                case '/':
+                    if (i + 1 < tag.Length && tag[i + 1] == '*')
+                    {
+                        sb.Append("/ *");
+                        i++;
+                    }
+                    else
+                    {
+                        sb.Append('/');
+                    }
+                    break;
+                default:
+                    sb.Append(c);
+                    break;
+            }
+        }
+
+        sb.Append(" */");
+        return sb.ToString();
+    }
+
+    public (bool NeedAliasForColumn, string Column) MakeColumn(SelectExpression selExp, Type entityType, bool dontNeedAlias, bool renameAware = false)
+        => SqlSourceRenderer.MakeColumn(in _ctx, selExp, entityType, dontNeedAlias, renameAware);
+
+    /// <summary>
+    /// Renders a multi-table <c>DELETE</c> over the prepared joined source of <paramref name="cmd"/>.
+    /// The target is the first table of the chain; the join conditions and the optional user filter are
+    /// rendered by the shared <c>SELECT</c> source pipeline, so column aliasing matches the equivalent
+    /// <c>SELECT</c>. The dialect composes its native form (SQL Server/MySQL
+    /// <c>DELETE &lt;alias&gt; FROM ... JOIN</c>, PostgreSQL <c>DELETE ... USING</c>).
+    /// </summary>
+    internal (string Sql, List<Parameter> Parameters) MakeDeleteJoin(DeleteJoinCommand cmd)
+    {
+        if (!_ctx.Dialect.SupportsDeleteJoin)
+            throw new NotSupportedException($"{_ctx.Dialect.GetType().Name} cannot render a multi-table DELETE.");
+
+        var source = cmd.Source;
+
+        if (source.EntityType is not { } entityType)
+            throw new BuildSqlCommandException("A multi-table DELETE command is missing its source entity type.");
+
+        if (source.Joins is not { Length: > 0 } joins)
+            throw new BuildSqlCommandException("A multi-table DELETE needs at least one join.");
+
+        if (source.From is not { } targetFrom)
+            throw new BuildSqlCommandException("A multi-table DELETE is missing its target source.");
+
+        // Scope hints are structural on SQL Server (a WITH(...) on every physical table) and part of the
+        // statement-level comment elsewhere. A dialect that supports neither rejects them here, before any
+        // SQL is assembled — the same capability rule the SELECT pipeline applies (MakeSelect).
+        var scopeHints = _ctx.Dialect.SupportsTablesInScopeHints ? source.TablesInScopeHints : null;
+        if (source.TablesInScopeHints is { Count: > 0 }
+            && !_ctx.Dialect.SupportsInlineHints
+            && !_ctx.Dialect.SupportsTablesInScopeHints)
+            throw new NotSupportedException("Tables-in-scope hints are not supported by this SQL dialect");
+
+        var inlineHints = _ctx.Dialect.SupportsInlineHints ? MergeHints(source.Hints, CollectInlineHints(source)) : null;
+        if (inlineHints is { Count: > 0 } && !_ctx.Dialect.SupportsQueryHints)
+            throw new NotSupportedException("Query hints are not supported by this SQL dialect");
+
+        _ctx.ColumnsProvider.PushSourceScope();
+        try
+        {
+            var fromAndJoins = StringBuilderPool.Shared.Get();
+            var usingSources = StringBuilderPool.Shared.Get();
+            var joinConditions = StringBuilderPool.Shared.Get();
+            var whereSql = StringBuilderPool.Shared.Get();
+            try
+            {
+                var targetSql = SqlSourceRenderer.MakeFrom(in _ctx, targetFrom, new FromRenderOptions(true, entityType, true, TablesInScopeHints: scopeHints), out var targetAlias);
+                if (string.IsNullOrEmpty(targetAlias))
+                    throw new NotSupportedException("A multi-table DELETE can only target a physical table, not a derived or function source.");
+
+                // Table aliases are always escaped for the dialect (even when identifier quoting is off).
+                var targetAliasToken = _ctx.Dialect.Escape(targetAlias);
+
+                // The target without an alias, used by the PostgreSQL USING form (its DELETE target must
+                // stay unaliased while the join conditions reference the target alias).
+                var target = SqlSourceRenderer.MakeFrom(in _ctx, targetFrom, new FromRenderOptions(false, null, false, TablesInScopeHints: scopeHints));
+
+                if (_ctx.Dialect.DeleteJoinRequiresUsing)
+                {
+                    for (var i = 0; i < joins.Length; i++)
+                    {
+                        var (fromSql, conditionSql) = SqlSourceRenderer.MakeJoinParts(in _ctx, joins[i], entityType, scopeHints);
+
+                        if (i > 0)
+                        {
+                            usingSources.Append(", ");
+                            joinConditions.Append(Kw(" and "));
+                        }
+
+                        usingSources.Append(fromSql);
+                        joinConditions.Append(conditionSql);
+                    }
+                }
+                else
+                {
+                    fromAndJoins.Append(targetSql);
+                    for (var i = 0; i < joins.Length; i++)
+                        fromAndJoins.Append(SqlSourceRenderer.MakeJoin(in _ctx, joins[i], entityType, scopeHints));
+                }
+
+                if (source.PreparedCondition is { } condition)
+                    SqlSourceRenderer.MakeWhere(in _ctx, whereSql, entityType, condition, 0);
+
+                var sql = _ctx.Dialect.MakeDeleteJoin(
+                    target,
+                    targetAliasToken,
+                    fromAndJoins.ToString(),
+                    usingSources.ToString(),
+                    joinConditions.ToString(),
+                    whereSql.Length == 0 ? null : whereSql.ToString(),
+                    _ctx.KeywordCase);
+
+                if (inlineHints is { Count: > 0 })
+                    sql = ApplyInlineHints(sql, inlineHints);
+
+                var returning = MakeJoinReturning(cmd.ReturningColumns, cmd.ReturningProjection, _ctx.Dialect.SupportsDeleteJoinReturning, "removed");
+                if (returning is not null)
+                    sql += _ctx.Dialect.MakeReturning(returning, _ctx.KeywordCase);
+
+                return (sql, _ctx.Params);
+            }
+            finally
+            {
+                StringBuilderPool.Shared.Return(whereSql);
+                StringBuilderPool.Shared.Return(joinConditions);
+                StringBuilderPool.Shared.Return(usingSources);
+                StringBuilderPool.Shared.Return(fromAndJoins);
+            }
+        }
+        finally
+        {
+            _ctx.ColumnsProvider.PopSourceScope();
+        }
+    }
+
+    /// <summary>
+    /// Renders a multi-table <c>UPDATE</c> over the prepared joined source of <paramref name="cmd"/>. The
+    /// target is the first table of the chain; the <c>SET</c> list and the join conditions are rendered
+    /// through the shared <c>SELECT</c> source pipeline, so column aliasing matches the equivalent
+    /// <c>SELECT</c>. The dialect composes its native form (PostgreSQL/SQLite <c>UPDATE ... FROM</c>,
+    /// SQL Server <c>UPDATE &lt;alias&gt; ... FROM ... JOIN</c>, MySQL/MariaDB <c>UPDATE ... JOIN ... SET</c>).
+    /// </summary>
+    internal (string Sql, List<Parameter> Parameters) MakeUpdateJoin(UpdateJoinCommand cmd)
+    {
+        if (!_ctx.Dialect.SupportsUpdateJoin)
+            throw new NotSupportedException($"{_ctx.Dialect.GetType().Name} cannot render a multi-table UPDATE.");
+
+        var source = cmd.Source;
+
+        if (source.EntityType is not { } entityType)
+            throw new BuildSqlCommandException("A multi-table UPDATE command is missing its source entity type.");
+
+        if (source.Joins is not { Length: > 0 } joins)
+            throw new BuildSqlCommandException("A multi-table UPDATE needs at least one join.");
+
+        if (source.From is not { } targetFrom)
+            throw new BuildSqlCommandException("A multi-table UPDATE is missing its target source.");
+
+        // Scope hints are structural on SQL Server (a WITH(...) on every physical table) and part of the
+        // statement-level comment elsewhere. A dialect that supports neither rejects them here, before any
+        // SQL is assembled — the same capability rule the SELECT pipeline applies (MakeSelect).
+        var scopeHints = _ctx.Dialect.SupportsTablesInScopeHints ? source.TablesInScopeHints : null;
+        if (source.TablesInScopeHints is { Count: > 0 }
+            && !_ctx.Dialect.SupportsInlineHints
+            && !_ctx.Dialect.SupportsTablesInScopeHints)
+            throw new NotSupportedException("Tables-in-scope hints are not supported by this SQL dialect");
+
+        var inlineHints = _ctx.Dialect.SupportsInlineHints ? MergeHints(source.Hints, CollectInlineHints(source)) : null;
+        if (inlineHints is { Count: > 0 } && !_ctx.Dialect.SupportsQueryHints)
+            throw new NotSupportedException("Query hints are not supported by this SQL dialect");
+
+        _ctx.ColumnsProvider.PushSourceScope();
+        try
+        {
+            var fromAndJoins = StringBuilderPool.Shared.Get();
+            var usingSources = StringBuilderPool.Shared.Get();
+            var joinConditions = StringBuilderPool.Shared.Get();
+            var whereSql = StringBuilderPool.Shared.Get();
+            try
+            {
+                var targetSql = SqlSourceRenderer.MakeFrom(in _ctx, targetFrom, new FromRenderOptions(true, entityType, true, TablesInScopeHints: scopeHints), out var targetAlias);
+                if (string.IsNullOrEmpty(targetAlias))
+                    throw new NotSupportedException("A multi-table UPDATE can only target a physical table, not a derived or function source.");
+
+                // Table aliases are always escaped for the dialect (even when identifier quoting is off).
+                var targetAliasToken = _ctx.Dialect.Escape(targetAlias);
+
+                // The target without an alias, used by the FROM form (its UPDATE target must stay
+                // unaliased in the source list while the assignments and conditions reference the alias).
+                var target = SqlSourceRenderer.MakeFrom(in _ctx, targetFrom, new FromRenderOptions(false, null, false, TablesInScopeHints: scopeHints));
+
+                if (_ctx.Dialect.UpdateJoinRequiresFrom)
+                {
+                    for (var i = 0; i < joins.Length; i++)
+                    {
+                        var (fromSql, conditionSql) = SqlSourceRenderer.MakeJoinParts(in _ctx, joins[i], entityType, scopeHints);
+
+                        if (i > 0)
+                        {
+                            usingSources.Append(", ");
+                            joinConditions.Append(Kw(" and "));
+                        }
+
+                        usingSources.Append(fromSql);
+                        joinConditions.Append(conditionSql);
+                    }
+                }
+                else
+                {
+                    fromAndJoins.Append(targetSql);
+                    for (var i = 0; i < joins.Length; i++)
+                        fromAndJoins.Append(SqlSourceRenderer.MakeJoin(in _ctx, joins[i], entityType, scopeHints));
+                }
+
+                // Rendered after the sources so each table alias is already registered. PostgreSQL and
+                // SQLite keep the SET target unqualified (their UPDATE ... FROM target is implicit); the
+                // alias-style dialects qualify it by the target alias.
+                var assignments = SqlSourceRenderer.MakeUpdateAssignments(in _ctx, entityType, cmd.Assignments, qualifyTarget: !_ctx.Dialect.UpdateJoinRequiresFrom);
+
+                if (source.PreparedCondition is { } condition)
+                    SqlSourceRenderer.MakeWhere(in _ctx, whereSql, entityType, condition, 0);
+
+                var sql = _ctx.Dialect.MakeUpdateJoin(
+                    target,
+                    targetAliasToken,
+                    assignments,
+                    fromAndJoins.ToString(),
+                    usingSources.ToString(),
+                    joinConditions.ToString(),
+                    whereSql.Length == 0 ? null : whereSql.ToString(),
+                    _ctx.KeywordCase);
+
+                if (inlineHints is { Count: > 0 })
+                    sql = ApplyInlineHints(sql, inlineHints);
+
+                var returning = MakeJoinReturning(cmd.ReturningColumns, cmd.ReturningProjection, _ctx.Dialect.SupportsUpdateJoinReturning, "updated");
+                if (returning is not null)
+                    sql += _ctx.Dialect.MakeReturning(returning, _ctx.KeywordCase);
+
+                return (sql, _ctx.Params);
+            }
+            finally
+            {
+                StringBuilderPool.Shared.Return(whereSql);
+                StringBuilderPool.Shared.Return(joinConditions);
+                StringBuilderPool.Shared.Return(usingSources);
+                StringBuilderPool.Shared.Return(fromAndJoins);
+            }
+        }
+        finally
+        {
+            _ctx.ColumnsProvider.PopSourceScope();
+        }
+    }
+
+    /// <summary>Resolves a lower-case keyword fragment (keywords and separators only) to the configured <see cref="KeywordCase"/>.</summary>
+    private string Kw(string text) => SqlKeywords.Of(_ctx.KeywordCase, text);
+
+    /// <summary>
+    /// Renders the <c>RETURNING</c> list of a multi-table mutation, qualifying every returned column by
+    /// the alias of the joined table that owns it. The selector runs over the positional join projection,
+    /// so a selected member may reference any joined source
+    /// (<c>p =&gt; new { p.Item1.Id, p.Item2.Name }</c>). Returns <see langword="null"/> when the mutation
+    /// returns nothing.
+    /// </summary>
+    /// <param name="columns">The mapped columns the mutation returns, or <see langword="null"/> for a plain mutation.</param>
+    /// <param name="projection">The selector that defines the returned columns, or <see langword="null"/>.</param>
+    /// <param name="returningSupported">Whether the dialect can return rows from this multi-table mutation.</param>
+    /// <param name="operation">The past-tense operation name used in the rejection message.</param>
+    /// <returns>The rendered returning expressions, or <see langword="null"/>.</returns>
+    /// <exception cref="NotSupportedException">Rows were requested but the dialect cannot return them.</exception>
+    private IReadOnlyList<string>? MakeJoinReturning(
+        IReadOnlyList<IPropertyMetadata>? columns,
+        LambdaExpression? projection,
+        bool returningSupported,
+        string operation)
+    {
+        if (columns is not { Count: > 0 } || projection is null)
+            return null;
+
+        if (!returningSupported)
+            throw new NotSupportedException($"{_ctx.Dialect.GetType().Name} cannot return {operation} rows from a multi-table mutation.");
+
+        var parameter = projection.Parameters[0];
+        _ctx.ColumnsProvider.PushScope(projection.Parameters);
+        try
+        {
+            var items = EnumerateReturningMembers(projection);
+            var rendered = new List<string>(items.Count);
+            var isIdentity = TypeFacts.UnwrapConvert(projection.Body) is ParameterExpression;
+            for (var i = 0; i < items.Count; i++)
+            {
+                using var visitor = _ctx.CreateColumnVisitor(parameter.Type, 0, dontNeedAlias: false);
+                try
+                {
+                    visitor.Visit(items[i].Expression);
+                }
+                catch (BuildSqlCommandException ex) when (isIdentity && TryGetIdentityAddress(items[i].Expression, out var addressSlot, out var addressMember))
+                {
+                    // A joined source that exposes only a partial shape cannot satisfy the full returned
+                    // item; fail before the database with the slot/member identity rather than the raw
+                    // column-resolution error.
+                    var itemOrdinal = addressSlot + 1;
+                    throw new QueryPreparationException(
+                        $"The identity multi-table RETURNING form cannot resolve member '{addressMember}' of item {itemOrdinal} ({projection.Parameters[0].Type.GetProperty("Item" + itemOrdinal)?.PropertyType.Name ?? "item"}) against the joined source shape; add the member to the joined source projection or drop it from the returned item.", ex);
+                }
+
+                // The outer CTE read addresses a derived-style member under the name the body exposes:
+                // a projection member that keeps its source name (p.Item1.Id -> "Id") is read back under
+                // the mapped column name ("id"), so aliasing it to the CLR name would make the outer
+                // reference miss it. Only a renamed member (TargetId = p.Item1.Id) exposes the alias and
+                // must be aliased with the dialect's quoted-identifier style.
+                //
+                // An identity member's name IS the deterministic per-slot alias the
+                // outer CTE shape stores, so it must be emitted unconditionally — including on a derived
+                // joined slot, where the visitor exposes no physical column name to compare against.
+                var renamed = isIdentity
+                    || (visitor.ColumnName is { } physical
+                        && !string.Equals(physical, items[i].Name, StringComparison.OrdinalIgnoreCase));
+                rendered.Add(renamed
+                    ? visitor.ToString() + _ctx.Dialect.MakeColumnAlias(items[i].Name, _ctx.KeywordCase)
+                    : visitor.ToString());
+            }
+
+            return rendered;
+        }
+        finally
+        {
+            _ctx.ColumnsProvider.PopScope();
+        }
+    }
+
+    // Expands a joined returning selector into the member expressions whose column references are
+    // qualified in the RETURNING list, paired with the projection member name the outer CTE read
+    // addresses.
+    private static List<(Expression Expression, string Name)> EnumerateReturningMembers(LambdaExpression projection)
+    {
+        var body = TypeFacts.UnwrapConvert(projection.Body);
+        List<(Expression, string)> members;
+
+        // The identity form expands every mapped property of every slot and exposes
+        // each under a deterministic per-slot alias, so a self-join of the same type keeps its Item1/Item2
+        // columns distinct in the RETURNING list and in the outer CTE read.
+        if (body is ParameterExpression)
+            return EnumerateIdentityMembers(projection);
+
+        switch (body)
+        {
+            case NewExpression { Arguments.Count: > 0 } newExpression:
+            {
+                var newMembers = newExpression.Members;
+                members = new List<(Expression, string)>(newExpression.Arguments.Count);
+                for (var i = 0; i < newExpression.Arguments.Count; i++)
+                {
+                    var name = newMembers is not null && i < newMembers.Count
+                        ? newMembers[i].Name
+                        : newExpression.Constructor!.GetParameters()[i].Name!;
+                    members.Add((newExpression.Arguments[i], name));
+                }
+
+                break;
+            }
+
+            case MemberInitExpression { Bindings.Count: > 0 } memberInit:
+            {
+                members = new List<(Expression, string)>(memberInit.Bindings.Count);
+                for (var i = 0; i < memberInit.Bindings.Count; i++)
+                {
+                    if (memberInit.Bindings[i] is MemberAssignment assignment)
+                        members.Add((assignment.Expression, assignment.Member.Name));
+                }
+
+                break;
+            }
+
+            case MemberExpression memberExpression:
+                members = [(body, memberExpression.Member.Name)];
+                break;
+
+            default:
+                throw new NotSupportedException(
+                    $"A joined RETURNING projection member of node kind '{body.NodeType}' is not supported; select a mapped member. Project the returned columns explicitly, for example p => new {{ p.Item1.Id, p.Item2.Name }}.");
+        }
+
+        // Fail closed: an empty RETURNING list is never valid, so a selector that expands to zero members
+        // throws instead of emitting a bare RETURNING.
+        if (members.Count == 0)
+        {
+            throw new NotSupportedException(
+                "A joined RETURNING projection selected no mapped members; project at least one explicitly, for example p => new { p.Item1.Id, p.Item2.Name }.");
+        }
+
+        return members;
+    }
+
+    // Expands the identity selector into p.ItemN.Property expressions, one per
+    // mapped property of every slot, paired with the deterministic per-slot alias the outer CTE read
+    // addresses. Mirrors JoinedReturningProjection.ParseIdentity's slot/property order.
+    private static List<(Expression Expression, string Name)> EnumerateIdentityMembers(LambdaExpression projection)
+    {
+        var projectionType = projection.Parameters[0].Type;
+        var entityTypes = projectionType.GetGenericArguments();
+        var parameter = projection.Parameters[0];
+        var entries = new List<(Expression Expression, int Slot, string Column)>();
+
+        for (var slot = 0; slot < entityTypes.Length; slot++)
+        {
+            // Same eligibility as JoinedReturningProjection.ParseIdentity: registered metadata when it
+            // exists, otherwise the slot's readable CLR surface (a metadata-less derived/read-CTE joined
+            // side). Keeping the two in lockstep is what lets the parse-accepted slot render instead of
+            // throwing only at ToSql()/Single().
+            IReadOnlyList<IPropertyMetadata> slotProperties;
+            if (DataContextCache.Metadata.TryGetValue(entityTypes[slot], out var metadata) && metadata.Properties.Count > 0)
+            {
+                slotProperties = metadata.Properties;
+            }
+            else
+            {
+                slotProperties = JoinedReturningProjection.ShapeColumns(entityTypes[slot]);
+                if (slotProperties.Count == 0)
+                    throw new QueryPreparationException(
+                        $"No metadata is registered for {entityTypes[slot].Name} and it exposes no readable columns, so the identity multi-table RETURNING form cannot expand item {slot + 1} ('{projectionType.GetProperty("Item" + (slot + 1))?.Name ?? "Item" + (slot + 1)}' of {projectionType.Name}). Register every joined entity with From<T>/Join<T> on the same data context.");
+            }
+
+            var itemAccess = Expression.Property(parameter, "Item" + (slot + 1));
+            foreach (var property in slotProperties)
+            {
+                if (property.RangeColumns is not null)
+                    throw RangeColumnPairs.NotReturnable(property);
+
+                entries.Add((Expression.Property(itemAccess, property.PropertyInfo), slot, property.ColumnName));
+            }
+        }
+
+        // Allocate across the whole flattened output so a repeated column or an alias-shaped column name
+        // cannot collapse two slots onto one alias. The same ordered pairs drive the prepared CTE shape
+        // (see MutationCteQuery.BuildShape), so the RETURNING list and the outer read always agree.
+        var pairs = new (int Slot, string Column)[entries.Count];
+        for (var i = 0; i < entries.Count; i++)
+            pairs[i] = (entries[i].Slot, entries[i].Column);
+
+        var aliases = ProjectionAliasCache.AllocateIdentityAliases(pairs);
+        var members = new List<(Expression, string)>(entries.Count);
+        for (var i = 0; i < entries.Count; i++)
+            members.Add((entries[i].Expression, aliases[i]));
+
+        return members;
+    }
+
+    /// <summary>
+    /// Recognizes an identity member access of the form <c>p.ItemN.Member</c> and yields the zero-based
+    /// item slot (<c>ItemN</c> is one-based, so <c>slot = ordinal - 1</c>) and the CLR member name. Used
+    /// to report a member of a returned identity item that the joined source shape cannot resolve, with
+    /// the slot/member address instead of the raw column-resolution error.
+    /// </summary>
+    /// <param name="expression">The returning member expression to inspect.</param>
+    /// <param name="slot">The zero-based item slot when the expression addresses an identity member.</param>
+    /// <param name="member">The CLR member name when the expression addresses an identity member.</param>
+    /// <returns><see langword="true"/> when the expression is a <c>p.ItemN.Member</c> access.</returns>
+    private static bool TryGetIdentityAddress(Expression expression, out int slot, out string member)
+    {
+        slot = -1;
+        member = string.Empty;
+
+        if (expression is not MemberExpression memberAccess || memberAccess.Member is not PropertyInfo memberProperty)
+            return false;
+
+        var target = memberAccess.Expression;
+        while (target is UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked } unary)
+            target = unary.Operand;
+
+        if (target is not MemberExpression itemAccess || itemAccess.Member is not PropertyInfo itemProperty)
+            return false;
+
+        var itemName = itemProperty.Name;
+        if (itemName.Length <= 4
+            || !itemName.StartsWith("Item", StringComparison.Ordinal)
+            || !int.TryParse(itemName.AsSpan(4), out var ordinal)
+            || ordinal < 1)
+        {
+            return false;
+        }
+
+        slot = ordinal - 1;
+        member = memberProperty.Name;
+        return true;
+    }
+
+    /// <summary>
+    /// Collects the join-level, subquery-level and tables-in-scope hints carried by a command into the
+    /// single hint list an inline-comment dialect renders as one <c>/*+ ... */</c> comment. Returns
+    /// <c>null</c> when the command carries none of them.
+    /// </summary>
+    private static IReadOnlyList<string>? CollectInlineHints(QueryCommand cmd)
+    {
+        List<string>? list = null;
+
+        if (cmd.TablesInScopeHints is { Count: > 0 } scope)
+            list = [.. scope];
+
+        if (cmd.Joins is { Length: > 0 } joins)
+        {
+            for (var i = 0; i < joins.Length; i++)
+            {
+                var join = joins[i];
+
+                if (join.JoinHint is { } joinHint)
+                    (list ??= []).Add(joinHint);
+
+                if (join.From.SubQueryHint is { } joinSubQueryHint)
+                    (list ??= []).Add(joinSubQueryHint);
+            }
+        }
+
+        if (cmd.From?.SubQueryHint is { } subQueryHint)
+            (list ??= []).Add(subQueryHint);
+
+        return list;
+    }
+
+    /// <summary>
+    /// Merges the statement-level hints with the collected inline variant hints. Returns
+    /// <paramref name="statementHints"/> when there is nothing to add, so the common no-variant path
+    /// does not allocate.
+    /// </summary>
+    private static IReadOnlyList<string>? MergeHints(IReadOnlyList<string>? statementHints, IReadOnlyList<string>? inlineHints)
+    {
+        if (inlineHints is not { Count: > 0 })
+            return statementHints;
+
+        if (statementHints is not { Count: > 0 })
+            return inlineHints;
+
+        var combined = new string[statementHints.Count + inlineHints.Count];
+        for (var i = 0; i < statementHints.Count; i++)
+            combined[i] = statementHints[i];
+        for (var i = 0; i < inlineHints.Count; i++)
+            combined[statementHints.Count + i] = inlineHints[i];
+        return combined;
+    }
+
+    /// <summary>
+    /// Inserts the statement-level <c>/*+ ... */</c> hint comment immediately after the DML statement's
+    /// leading keyword (<c>DELETE</c>/<c>UPDATE</c>) — the position PostgreSQL <c>pg_hint_plan</c> and
+    /// MySQL optimizer hints read. The multi-table DML renderers never emit a leading <c>WITH</c> here
+    /// (the planner prepends a hoisted <c>WITH</c> afterwards), so the first token is always the verb.
+    /// </summary>
+    private static string ApplyInlineHints(string sql, IReadOnlyList<string> hints)
+    {
+        var keywordEnd = 0;
+        while (keywordEnd < sql.Length && !char.IsWhiteSpace(sql[keywordEnd]))
+            keywordEnd++;
+
+        return sql.Insert(keywordEnd, " /*+ " + string.Join(" ", hints) + " */");
+    }
+
+    /// <summary>
+    /// Renders the inner specification of a named window (<c>partition by ... order by ... frame</c>).
+    /// In parameter mode it renders nothing but still walks every key so captured constants become
+    /// parameters in the same order as the SQL pass.
+    /// </summary>
+    private static string MakeNamedWindow(in SqlBuildContext ctx, Type entityType, WindowDefinition window)
+    {
+        var spec = StringBuilderPool.Shared.Get();
+
+        try
+        {
+            for (var i = 0; i < window.PartitionBy.Count; i++)
+            {
+                if (i == 0)
+                {
+                    if (!ctx.ParamMode) spec.Append(SqlKeywords.Of(ctx.KeywordCase, "partition by "));
+                }
+                else if (!ctx.ParamMode)
+                {
+                    spec.Append(", ");
+                }
+
+                var (_, column) = SqlSourceRenderer.MakeColumn(
+                    in ctx,
+                    new SelectExpression(window.PartitionBy[i].ReturnType) { Expression = window.PartitionBy[i] },
+                    entityType,
+                    dontNeedAlias: true);
+
+                if (!ctx.ParamMode)
+                    spec.Append(column);
+            }
+
+            for (var i = 0; i < window.OrderBy.Count; i++)
+            {
+                if (i == 0)
+                {
+                    if (!ctx.ParamMode)
+                        spec.Append(window.PartitionBy.Count > 0 ? SqlKeywords.Of(ctx.KeywordCase, " order by ") : SqlKeywords.Of(ctx.KeywordCase, "order by "));
+                }
+                else if (!ctx.ParamMode)
+                {
+                    spec.Append(", ");
+                }
+
+                var key = window.OrderBy[i];
+                var (_, column) = SqlSourceRenderer.MakeColumn(
+                    in ctx,
+                    new SelectExpression(key.Expression.ReturnType) { Expression = key.Expression },
+                    entityType,
+                    dontNeedAlias: true);
+
+                if (!ctx.ParamMode)
+                {
+                    spec.Append(column);
+
+                    if (key.Direction == OrderDirection.Desc)
+                        spec.Append(SqlKeywords.Of(ctx.KeywordCase, " desc"));
+                }
+            }
+
+            if (window.Frame is { } frame)
+            {
+                if (frame.Type == WindowFrameType.Groups && !ctx.Dialect.SupportsWindowFrameGroups)
+                    throw new NotSupportedException("The GROUPS window frame unit is not supported by this SQL dialect");
+
+                if (frame.Exclusion is not null && !ctx.Dialect.SupportsWindowFrameExclusion)
+                    throw new NotSupportedException("The EXCLUDE window frame clause is not supported by this SQL dialect");
+
+                if (!ctx.ParamMode)
+                {
+                    if (window.PartitionBy.Count > 0 || window.OrderBy.Count > 0)
+                        spec.Append(' ');
+
+                    spec.Append(WindowSql.RenderWindowFrame(frame, ctx.KeywordCase));
+                }
+            }
+
+            return ctx.ParamMode ? string.Empty : spec.ToString();
+        }
+        finally
+        {
+            StringBuilderPool.Shared.Return(spec);
+        }
+    }
+
+    private const string GroupingIdContextMessage =
+        "The GROUPING_ID function requires a GROUP BY context.";
+
+    private const string GroupingIdArgumentMessage =
+        "The GROUPING_ID function requires every argument to match a GROUP BY expression.";
+
+    /// <summary>
+    /// Enforces the SQL Server <c>GROUPING_ID</c> grouping-context obligation before SQL is built and
+    /// therefore before execution. The allowed placements are the SELECT list, <c>HAVING</c> and
+    /// <c>ORDER BY</c> of a command that has a non-empty <see cref="QueryCommand.GroupingList"/>; the
+    /// WHERE/PREWHERE, JOIN <c>ON</c> and GROUP BY clauses reject the call. Each flattened argument must
+    /// match a grouping expression under the existing
+    /// <see cref="ExpressionPlanEqualityComparer"/> (the prepared clauses use different parameter
+    /// instances, so identity cannot be used). The engine would report Msg 8161 for both violations;
+    /// the stable pre-execution messages are the library's contract.
+    /// </summary>
+    private void ValidateGroupingId(QueryCommand cmd)
+    {
+        // The validation is a SQL Server concern; other dialects refuse the member through their
+        // capability gate before this point.
+        if (!_ctx.Dialect.SupportsGroupingIdAggregate)
+            return;
+
+        if (ContainsGroupingId(cmd.PreparedCondition ?? cmd.Condition)
+            || ContainsGroupingId(cmd.PreparedPreWhere ?? cmd.PreWhere)
+            || ContainsGroupingIdInJoins(cmd.Joins)
+            || ContainsGroupingIdInGroupingList(cmd.GroupingList))
+            throw new BuildSqlCommandException(GroupingIdContextMessage);
+
+        var calls = new List<MethodCallExpression>();
+        if (cmd.SelectList is { } selectList)
+        {
+            for (var i = 0; i < selectList.Length; i++)
+                CollectGroupingIdCalls(selectList[i].Expression, calls);
+        }
+
+        CollectGroupingIdCalls(cmd.PreparedHaving ?? cmd.Having, calls);
+
+        if (cmd.Sorting is { } sorting)
+        {
+            for (var i = 0; i < sorting.Length; i++)
+                CollectGroupingIdCalls(sorting[i].PreparedExpression ?? sorting[i].SortExpression, calls);
+        }
+
+        if (calls.Count == 0)
+            return;
+
+        var grouping = cmd.GroupingList;
+        if (grouping is null || grouping.Length == 0)
+            throw new BuildSqlCommandException(GroupingIdContextMessage);
+
+        var comparer = cmd.GetExpressionPlanEqualityComparer();
+
+        for (var c = 0; c < calls.Count; c++)
+        {
+            var call = calls[c];
+
+            if (ArgumentFlattener.IsRuntimeArray(call.Arguments, 0))
+                throw new BuildSqlCommandException(GroupingIdArgumentMessage);
+
+            var arguments = ArgumentFlattener.Flatten(call.Arguments, 0);
+            if (arguments.Count == 0)
+                throw new BuildSqlCommandException(GroupingIdArgumentMessage);
+
+            for (var a = 0; a < arguments.Count; a++)
+            {
+                var argument = UnwrapGroupingExpression(arguments[a]);
+                var matched = false;
+
+                for (var g = 0; g < grouping.Length; g++)
+                {
+                    if (grouping[g].Expression is not { } key)
+                        continue;
+
+                    if (comparer.Equals(argument, UnwrapGroupingExpression(key)))
+                    {
+                        matched = true;
+                        break;
+                    }
+                }
+
+                if (!matched)
+                    throw new BuildSqlCommandException(GroupingIdArgumentMessage);
+            }
+        }
+    }
+
+    private static bool ContainsGroupingIdInJoins(JoinExpression[]? joins)
+    {
+        if (joins is null)
+            return false;
+
+        for (var i = 0; i < joins.Length; i++)
+        {
+            if (ContainsGroupingId(joins[i].JoinCondition))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool ContainsGroupingIdInGroupingList(SelectExpression[]? grouping)
+    {
+        if (grouping is null)
+            return false;
+
+        for (var i = 0; i < grouping.Length; i++)
+        {
+            if (ContainsGroupingId(grouping[i].Expression))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool ContainsGroupingId(Expression? expression)
+    {
+        if (expression is null)
+            return false;
+
+        var collector = new GroupingIdCallCollector();
+        collector.Visit(UnwrapClauseLambda(expression));
+        return collector.Calls.Count > 0;
+    }
+
+    private static void CollectGroupingIdCalls(Expression? expression, List<MethodCallExpression> calls)
+    {
+        if (expression is null)
+            return;
+
+        var collector = new GroupingIdCallCollector();
+        collector.Visit(UnwrapClauseLambda(expression));
+        calls.AddRange(collector.Calls);
+    }
+
+    /// <summary>Unwraps the quote/lambda wrapper of a prepared clause (HAVING, PREWHERE) and of a sort key.</summary>
+    private static Expression UnwrapClauseLambda(Expression expression)
+    {
+        if (expression is UnaryExpression { NodeType: ExpressionType.Quote } quote)
+            expression = quote.Operand;
+
+        return expression is LambdaExpression lambda ? lambda.Body : expression;
+    }
+
+    /// <summary>
+    /// Unwraps the object boxing of a <c>params object?[]</c> element and any lambda wrapper, so the
+    /// plan-equality comparer sees the grouping expression itself.
+    /// </summary>
+    private static Expression UnwrapGroupingExpression(Expression expression)
+        => TypeFacts.UnwrapConvert(UnwrapClauseLambda(TypeFacts.UnwrapConvert(expression)));
+
+    /// <summary>
+    /// Collects <c>GROUPING_ID</c> calls inside one clause. Nested lambdas mark another command's
+    /// scope (a subquery is validated by its own <c>MakeSelect</c>), so the walk stops at them.
+    /// </summary>
+    private sealed class GroupingIdCallCollector : ExpressionVisitor
+    {
+        internal List<MethodCallExpression> Calls { get; } = [];
+
+        protected override Expression VisitMethodCall(MethodCallExpression node)
+        {
+            if (node.Method.DeclaringType == typeof(SqlServerFunctions)
+                && node.Method.Name == nameof(SqlServerFunctions.grouping_id))
+            {
+                Calls.Add(node);
+                return node;
+            }
+
+            return base.VisitMethodCall(node);
+        }
+
+        protected override Expression VisitLambda<T>(Expression<T> node) => node;
+    }
+
+    // A raw SQL FROM source adds its parameters by property name; a captured variable of the same name
+    // in the surrounding query would add a second parameter with that name, which most providers reject
+    // at execution. Fail at build time with an actionable message instead.
+    private static void EnsureUniqueParameterNames(List<Parameter> @params)
+    {
+        for (var i = 0; i < @params.Count; i++)
+        {
+            for (var j = i + 1; j < @params.Count; j++)
+            {
+                if (string.Equals(@params[i].Name, @params[j].Name, StringComparison.Ordinal))
+                    throw new BuildSqlCommandException(
+                        $"The raw SQL source and the query produced two parameters named '{@params[i].Name}'. Rename the colliding captured variable or raw-SQL parameter.");
+            }
+        }
+    }
+}

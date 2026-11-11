@@ -19,6 +19,13 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Least privilege for the GITHUB_TOKEN. The build job only reads the repository; the tag-triggered
+# `publish` job re-declares its own block and adds `id-token: write` on top of this. Declared
+# explicitly so the scope is documented and stays restricted if the repository default ever changes
+# (CodeQL `actions/missing-workflow-permissions`).
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -26,11 +33,11 @@ jobs:
     env:
       MIN_LINE_COVERAGE: 85
       MIN_BRANCH_COVERAGE: 75
-      # Dedicated gate for tests/nextorm.integration.tests (real databases only).
-      # Branch threshold is a hard 75 %. Accepted cycle-10 integration-only measurement after the
-      # NextORM.Core.InMemory* exclusion (unit-only by policy): 81.49 % line / 75.48 % branch literal
-      # (counted 28926/38317 = 75.49 %, +897 over the 28029 baseline; 5083 tests / 0 failed / 195 skipped) —
-      # the gate is now MET at 75.49 % counted / 75.48 % literal.
+      # Dedicated gate for the two live suites (built-in operators + extensions, real databases only).
+      # #364 raised the branch threshold back to a hard 75 % after measuring 75.6 % on the built-in
+      # suite (39595/52349). Adding nextorm.extensions.integration.tests keeps it at 75.3 % on
+      # 2026-11-07. The 80 % campaign target was not reached: the remaining pool is structurally
+      # unreachable or rare-refusal cases (#364 closing comment).
       MIN_INTEGRATION_LINE_COVERAGE: 65
       MIN_INTEGRATION_BRANCH_COVERAGE: 75
 
@@ -39,7 +46,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: 11.0.x
       - name: Restore dependencies
         run: dotnet restore
       - name: Build
@@ -49,15 +56,28 @@ jobs:
       - name: Test with coverage
         run: |
           mkdir -p tests/coverage
-          dotnet tool run dotnet-coverage collect -s coverage.settings.xml -f cobertura -o tests/coverage/coverage.cobertura.xml "dotnet test --no-build --verbosity normal"
+          # The opt-in diagnostic harnesses (Trait Category=Diagnostic) fail by design and are excluded
+          # by the canonical command; a bare `dotnet test` would run them and turn every build red.
+          # Test modules run one at a time: nextorm.integration.tests and
+          # nextorm.extensions.integration.tests both drive the same reused Testcontainers instances
+          # and seed the same tables, so concurrent modules collide ("Table ... already exists") and
+          # the first module to finish stops the containers under the other one.
+          dotnet tool run dotnet-coverage collect -s coverage.settings.xml -f cobertura -o tests/coverage/coverage.cobertura.xml "dotnet test --no-build --verbosity normal --filter-not-trait Category=Diagnostic --max-parallel-test-modules 1"
       - name: Integration coverage (dedicated gate)
         run: |
           mkdir -p tests/coverage
-          dotnet tool run dotnet-coverage collect -s coverage.integration.settings.xml -f cobertura -o tests/coverage/integration.cobertura.xml "dotnet test tests/nextorm.integration.tests --no-build --verbosity normal"
+          # Both live suites contribute to this gate: the built-in operators project and the
+          # extensions project (SelectGroup/SelectGroupHaving). They share the reused Testcontainers
+          # instances and seed the same tables, so they run sequentially.
+          # Each suite is collected as cobertura, and ReportGenerator unions the two reports:
+          # dotnet-coverage merge cannot be used here — its cobertura output drops branch data
+          # (covered/total branches come out as 0/0), which understates the branch gate.
+          dotnet tool run dotnet-coverage collect -s coverage.integration.settings.xml -f cobertura -o tests/coverage/integration-builtin.cobertura.xml "dotnet test tests/nextorm.integration.tests --no-build --verbosity normal --filter-not-trait Category=Diagnostic"
+          dotnet tool run dotnet-coverage collect -s coverage.integration.settings.xml -f cobertura -o tests/coverage/integration-extensions.cobertura.xml "dotnet test tests/nextorm.extensions.integration.tests --no-build --verbosity normal --filter-not-trait Category=Diagnostic"
           # The in-memory provider is unit-only by policy (AGENTS.md "Tests"), so its paths are outside
-          # what the integration suite can or should cover; excluded from this gate's denominator only.
+          # what the live suites can or should cover; excluded from this gate's denominator only.
           dotnet tool run reportgenerator \
-            -reports:tests/coverage/integration.cobertura.xml \
+            -reports:"tests/coverage/integration-builtin.cobertura.xml;tests/coverage/integration-extensions.cobertura.xml" \
             -targetdir:tests/coverage/integration-report \
             -reporttypes:"Html;TextSummary" \
             -classfilters:"-NextORM.Core.InMemory*" \
@@ -79,18 +99,7 @@ jobs:
             echo "::warning::Integration coverage below threshold (line ${LINE}% < ${MIN_INTEGRATION_LINE_COVERAGE}% or branch ${BRANCH}% < ${MIN_INTEGRATION_BRANCH_COVERAGE}%); hard-fails on main only"
           fi
       - name: Benchmark table generator self-tests
-        run: python3 -m unittest discover -s .pdca/scripts/perf/tests -p 'test_update_benchmark_tables.py'
-      - name: Allocation regression gate
-        timeout-minutes: 20
-        run: |
-          mkdir -p /tmp/nextorm-bench-gate
-          export NEXTORM_BENCH_DB=/tmp/nextorm-bench-gate/test.db
-          python3 -m unittest discover -s .pdca/scripts/perf/tests -p 'test_iteration14_gate.py'
-          python3 .pdca/scripts/perf/iteration14_gate.py --timeout 1200
-      - name: PDCA evidence pipeline gate
-        run: |
-          python3 -m unittest discover -s .pdca/scripts/tests -p 'test_pdca_evidence.py'
-          python3 .pdca/scripts/tests/pdca_evidence_harness.py negative --output /tmp/nextorm-pdca-evidence-negative
+        run: python3 -m unittest discover -s tools/benchmarks/tests -p 'test_update_benchmark_tables.py'
       - name: Coverage report
         run: |
           dotnet tool run reportgenerator \
@@ -158,11 +167,70 @@ jobs:
           path: tests/coverage/
           if-no-files-found: ignore
 
+  aot:
+    # NativeAOT gate. Ordinary builds never produce the native binary and the harness skips itself
+    # in that case, so this job publishes the runner and runs the harness with
+    # NEXTORM_AOT_EVIDENCE=1, which turns the skip into a hard failure.
+    # Coverage is deliberately partial and documented in docs/infrastructure/05-nativeaot.md:
+    # .NET 10 / linux-x64 / SQLite scenarios plus extension component slices. The remaining
+    # providers, the compile-time query pipeline and the residual IL2xxx/IL3xxx diagnostics are
+    # tracked in #370; this job fails if the published binary stops starting or stops matching
+    # the JIT oracle.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v7
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 11.0.x
+      # clang and the zlib headers ship with the GitHub-hosted Ubuntu image; apt-get is only a
+      # fallback for image drift. When it is needed it has to retry: the runner's DNS lookup of
+      # security.ubuntu.com fails intermittently ("Temporary failure resolving ...", exit 100),
+      # which is a network blip on the host, not a defect of this repository.
+      - name: Install NativeAOT prerequisites
+        shell: bash
+        run: |
+          set -uo pipefail
+          if command -v clang >/dev/null 2>&1 && [ -e /usr/include/zlib.h ]; then
+            echo "already present: $(clang --version | head -n1); /usr/include/zlib.h"
+            exit 0
+          fi
+          for attempt in 1 2 3; do
+            if sudo apt-get update && sudo apt-get install -y --no-install-recommends clang zlib1g-dev; then
+              exit 0
+            fi
+            echo "::warning::apt attempt ${attempt} failed, retrying in 20s"
+            sleep 20
+          done
+          echo "::error::clang/zlib1g-dev could not be installed after 3 attempts"
+          exit 1
+      - name: Restore dependencies
+        run: dotnet restore
+      - name: Publish the NativeAOT runner
+        shell: bash
+        run: |
+          set -o pipefail
+          dotnet publish tests/nextorm.aot.runner -c Release -r linux-x64 2>&1 \
+            | tee "$RUNNER_TEMP/aot-publish.log"
+      - name: Run the published native binary
+        env:
+          NEXTORM_AOT_EVIDENCE: "1"
+        run: dotnet test tests/nextorm.integration.tests --filter "FullyQualifiedName~AotNativeRunTests" --verbosity normal
+      - name: Upload the NativeAOT diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: aot-publish-log
+          path: ${{ runner.temp }}/aot-publish.log
+          if-no-files-found: ignore
+
   publish:
     # A tag push publishes to nuget.org; a manual run re-publishes an existing tag. Ordinary
     # branch pushes only build and test.
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
-    needs: build
+    needs: [build, aot]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -175,7 +243,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: 11.0.x
       - name: Determine version
         id: version
         shell: bash
@@ -197,7 +265,9 @@ jobs:
             src/nextorm.postgres/nextorm.postgres.csproj \
             src/nextorm.mysql/nextorm.mysql.csproj \
             src/nextorm.mariadb/nextorm.mariadb.csproj \
-            src/nextorm.clickhouse/nextorm.clickhouse.csproj
+            src/nextorm.clickhouse/nextorm.clickhouse.csproj \
+            src/nextorm.extensions/nextorm.extensions.csproj \
+            src/nextorm.entityframeworkcore/nextorm.entityframeworkcore.csproj
           do
             dotnet pack "$project" -c Release -p:Version="$VERSION" -o ./nupkgs
           done

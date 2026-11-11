@@ -132,43 +132,66 @@ public class JoinIntoRejectionTests
         act.Should().NotThrow();
     }
 
+    public sealed class CompositeJunctionParent
+    {
+        public int TenantId { get; set; }
+        public int Id { get; set; }
+        public ICollection<CompositeJunctionChild> Children { get; set; } = new List<CompositeJunctionChild>();
+    }
+
+    public sealed class CompositeJunctionChild
+    {
+        public int Id { get; set; }
+    }
+
+    public sealed class CompositeJunctionLink
+    {
+        public int ParentTenantId { get; set; }
+        public int ParentId { get; set; }
+        public int ChildId { get; set; }
+    }
+
     [Fact]
     public void CompositeJunctionRelationshipKey_ShouldResolve()
     {
-        var parentProperties = new EntityMetadataBuilder<JunctionParent>().Build().Properties;
-        var childProperties = new EntityMetadataBuilder<JunctionChild>().Build().Properties;
-        var linkProperties = new EntityMetadataBuilder<JunctionLink>().Build().Properties;
-        var parentKey = parentProperties.First(p => p.PropertyInfo.Name == nameof(JunctionParent.Id)).PropertyInfo;
-        var childKey = childProperties.First(p => p.PropertyInfo.Name == nameof(JunctionChild.Id)).PropertyInfo;
-        var junctionParentForeignKey = linkProperties.First(p => p.PropertyInfo.Name == nameof(JunctionLink.ParentId)).PropertyInfo;
-        var junctionChildForeignKey = linkProperties.First(p => p.PropertyInfo.Name == nameof(JunctionLink.ChildId)).PropertyInfo;
+        var parentProperties = new EntityMetadataBuilder<CompositeJunctionParent>().Build().Properties;
+        var childProperties = new EntityMetadataBuilder<CompositeJunctionChild>().Build().Properties;
+        var linkProperties = new EntityMetadataBuilder<CompositeJunctionLink>().Build().Properties;
+        var parentTenantKey = parentProperties.First(p => p.PropertyInfo.Name == nameof(CompositeJunctionParent.TenantId)).PropertyInfo;
+        var parentKey = parentProperties.First(p => p.PropertyInfo.Name == nameof(CompositeJunctionParent.Id)).PropertyInfo;
+        var childKey = childProperties.First(p => p.PropertyInfo.Name == nameof(CompositeJunctionChild.Id)).PropertyInfo;
+        var junctionParentTenantForeignKey = linkProperties.First(p => p.PropertyInfo.Name == nameof(CompositeJunctionLink.ParentTenantId)).PropertyInfo;
+        var junctionParentForeignKey = linkProperties.First(p => p.PropertyInfo.Name == nameof(CompositeJunctionLink.ParentId)).PropertyInfo;
+        var junctionChildForeignKey = linkProperties.First(p => p.PropertyInfo.Name == nameof(CompositeJunctionLink.ChildId)).PropertyInfo;
 
-        DataContextCache.Metadata[typeof(JunctionParent)] = MetadataWithRelationship<JunctionParent>(
+        DataContextCache.Metadata[typeof(CompositeJunctionParent)] = MetadataWithRelationship<CompositeJunctionParent>(
             new RelationshipMetadata(
                 RelationshipKind.ManyToMany,
-                typeof(JunctionParent),
-                typeof(JunctionChild),
-                typeof(JunctionParent).GetProperty(nameof(JunctionParent.Children)),
+                typeof(CompositeJunctionParent),
+                typeof(CompositeJunctionChild),
+                typeof(CompositeJunctionParent).GetProperty(nameof(CompositeJunctionParent.Children)),
                 isCollection: true,
-                childKey,
-                parentKey,
-                typeof(JunctionChild),
-                typeof(JunctionParent),
+                [childKey],
+                [parentTenantKey, parentKey],
+                typeof(CompositeJunctionChild),
+                typeof(CompositeJunctionParent),
                 new RelationshipJunctionDeclaration
                 {
-                    JunctionType = typeof(JunctionLink),
-                    ParentKey = [parentKey],
+                    JunctionType = typeof(CompositeJunctionLink),
+                    // #213: a genuinely composite junction key — every key leg declares the same number of
+                    // distinct components and each one pairs positionally with its junction foreign key.
+                    // The former fixture repeated one junction column as a two-component stand-in, which the
+                    // shared structural validator correctly rejects as a duplicate component.
+                    ParentKey = [parentTenantKey, parentKey],
                     ChildKey = [childKey],
-                    // #213: a composite junction foreign key is now supported; the extra junction column is
-                    // not referenced by the single-column parent key and is not part of the join.
-                    JunctionParentForeignKey = [junctionParentForeignKey, junctionParentForeignKey],
+                    JunctionParentForeignKey = [junctionParentTenantForeignKey, junctionParentForeignKey],
                     JunctionChildForeignKey = [junctionChildForeignKey],
                 }));
 
         using var ctx = new InMemoryDataContext();
 
-        Action act = () => ctx.From<JunctionParent>()
-            .JoinInto(ctx.From<JunctionChild>(), (p, c) => p.Id == c.Id, p => p.Children);
+        Action act = () => ctx.From<CompositeJunctionParent>()
+            .JoinInto(ctx.From<CompositeJunctionChild>(), (p, c) => p.Id == c.Id, p => p.Children);
 
         act.Should().NotThrow("a composite junction foreign key is supported since #213");
     }
@@ -198,21 +221,40 @@ public class JoinIntoRejectionTests
         act.Should().Throw<NotSupportedException>().WithMessage("*expects a OneToMany relationship*");
     }
 
+    public sealed class CompositeRelationshipParent
+    {
+        public int TenantId { get; set; }
+        public int Id { get; set; }
+        public ICollection<CompositeRelationshipChild> Children { get; set; } = new List<CompositeRelationshipChild>();
+    }
+
+    public sealed class CompositeRelationshipChild
+    {
+        public int Id { get; set; }
+        public int ParentTenantId { get; set; }
+        public int ParentId { get; set; }
+    }
+
     [Fact]
     public void CompositeRelationshipKey_ShouldResolve()
     {
-        var parentProperties = new EntityMetadataBuilder<RejectParent>().Build().Properties;
-        var childProperties = new EntityMetadataBuilder<RejectChild>().Build().Properties;
-        var parentKey = parentProperties.First(p => p.PropertyInfo.Name == nameof(RejectParent.Id));
-        var childKey = childProperties.First(p => p.PropertyInfo.Name == nameof(RejectChild.ParentId));
+        var parentProperties = new EntityMetadataBuilder<CompositeRelationshipParent>().Build().Properties;
+        var childProperties = new EntityMetadataBuilder<CompositeRelationshipChild>().Build().Properties;
+        var parentTenantKey = parentProperties.First(p => p.PropertyInfo.Name == nameof(CompositeRelationshipParent.TenantId));
+        var parentKey = parentProperties.First(p => p.PropertyInfo.Name == nameof(CompositeRelationshipParent.Id));
+        var childTenantForeignKey = childProperties.First(p => p.PropertyInfo.Name == nameof(CompositeRelationshipChild.ParentTenantId));
+        var childForeignKey = childProperties.First(p => p.PropertyInfo.Name == nameof(CompositeRelationshipChild.ParentId));
 
-        DataContextCache.Metadata[typeof(RejectParent)] = MetadataWithRelationship<RejectParent>(
-            new CompositeKeyRelationship(parentKey, childKey));
+        // A genuinely composite declared key: two distinct properties on each side. The former fixture
+        // repeated one property twice, which the shared structural validator now rejects as a duplicate
+        // component instead of treating it as a multi-component stand-in.
+        DataContextCache.Metadata[typeof(CompositeRelationshipParent)] = MetadataWithRelationship<CompositeRelationshipParent>(
+            new CompositeKeyRelationship([parentTenantKey, parentKey], [childTenantForeignKey, childForeignKey]));
 
         using var ctx = new InMemoryDataContext();
 
-        Action act = () => ctx.From<RejectParent>()
-            .JoinInto(ctx.From<RejectChild>(), (p, c) => p.Id == c.ParentId, p => p.Children);
+        Action act = () => ctx.From<CompositeRelationshipParent>()
+            .JoinInto(ctx.From<CompositeRelationshipChild>(), (p, c) => p.Id == c.ParentId, p => p.Children);
 
         act.Should().NotThrow("a composite declared relationship key is supported since #213");
     }
@@ -365,15 +407,40 @@ public class JoinIntoRejectionTests
         act.Should().Throw<NotSupportedException>().WithMessage("*at most 7 child collections*");
     }
 
+    // Own metadata identities for the join-combination rejections below. They must NOT reuse the
+    // top-level StitchParent/StitchChild/StitchNote fixtures: ResolveMetadata returns an existing
+    // non-empty entry and never re-runs a later configEntity, so registering StitchParent here with
+    // only the Children mapping permanently poisons the stitching regression tests (which need both
+    // Children and Notes). The parent still declares Notes but maps only Children, which is exactly
+    // the partial-mapping shape these rejection tests need.
+    public sealed class RejectionStitchParent
+    {
+        public int Id { get; set; }
+        public ICollection<RejectionStitchChild> Children { get; set; } = new List<RejectionStitchChild>();
+        public ICollection<RejectionStitchNote> Notes { get; set; } = new List<RejectionStitchNote>();
+    }
+
+    public sealed class RejectionStitchChild
+    {
+        public int Id { get; set; }
+        public int ParentId { get; set; }
+    }
+
+    public sealed class RejectionStitchNote
+    {
+        public int Id { get; set; }
+        public int ParentId { get; set; }
+    }
+
     [Fact]
     public void SemiJoinThenJoinInto_ShouldBeRejectedAtBuildTime()
     {
         using var ctx = new InMemoryDataContext();
-        ctx.From<StitchParent>(b => b.HasMany(p => p.Children, c => c.ParentId));
+        ctx.From<RejectionStitchParent>(b => b.HasMany(p => p.Children, c => c.ParentId));
 
-        Action act = () => ctx.From<StitchParent>()
-            .SemiJoin(ctx.From<StitchNote>(), (p, n) => p.Id == n.ParentId)
-            .JoinInto(ctx.From<StitchChild>(), (p, c) => p.Id == c.ParentId, p => p.Children);
+        Action act = () => ctx.From<RejectionStitchParent>()
+            .SemiJoin(ctx.From<RejectionStitchNote>(), (p, n) => p.Id == n.ParentId)
+            .JoinInto(ctx.From<RejectionStitchChild>(), (p, c) => p.Id == c.ParentId, p => p.Children);
 
         act.Should().Throw<NotSupportedException>().WithMessage("*cannot be combined with other joins*");
     }
@@ -382,11 +449,11 @@ public class JoinIntoRejectionTests
     public void JoinIntoThenAntiJoin_ShouldBeRejectedAtBuildTime()
     {
         using var ctx = new InMemoryDataContext();
-        ctx.From<StitchParent>(b => b.HasMany(p => p.Children, c => c.ParentId));
+        ctx.From<RejectionStitchParent>(b => b.HasMany(p => p.Children, c => c.ParentId));
 
-        Action act = () => ctx.From<StitchParent>()
-            .JoinInto(ctx.From<StitchChild>(), (p, c) => p.Id == c.ParentId, p => p.Children)
-            .AntiJoin(ctx.From<StitchNote>(), (p, n) => p.Id == n.ParentId);
+        Action act = () => ctx.From<RejectionStitchParent>()
+            .JoinInto(ctx.From<RejectionStitchChild>(), (p, c) => p.Id == c.ParentId, p => p.Children)
+            .AntiJoin(ctx.From<RejectionStitchNote>(), (p, n) => p.Id == n.ParentId);
 
         act.Should().Throw<NotSupportedException>().WithMessage("*cannot be combined with other joins*");
     }
@@ -395,11 +462,11 @@ public class JoinIntoRejectionTests
     public void JoinIntoThenJoin_ShouldBeRejectedAtBuildTime()
     {
         using var ctx = new InMemoryDataContext();
-        ctx.From<StitchParent>(b => b.HasMany(p => p.Children, c => c.ParentId));
+        ctx.From<RejectionStitchParent>(b => b.HasMany(p => p.Children, c => c.ParentId));
 
-        Action act = () => ctx.From<StitchParent>()
-            .JoinInto(ctx.From<StitchChild>(), (p, c) => p.Id == c.ParentId, p => p.Children)
-            .Join(ctx.From<StitchNote>(), (p, n) => p.Id == n.ParentId);
+        Action act = () => ctx.From<RejectionStitchParent>()
+            .JoinInto(ctx.From<RejectionStitchChild>(), (p, c) => p.Id == c.ParentId, p => p.Children)
+            .Join(ctx.From<RejectionStitchNote>(), (p, n) => p.Id == n.ParentId);
 
         act.Should().Throw<NotSupportedException>().WithMessage("*cannot be combined with other joins*");
     }
@@ -414,16 +481,18 @@ public class JoinIntoRejectionTests
 
     private sealed class CompositeKeyRelationship : IRelationshipMetadata
     {
-        public CompositeKeyRelationship(IPropertyMetadata parentKey, IPropertyMetadata childKey)
+        public CompositeKeyRelationship(
+            IReadOnlyList<IPropertyMetadata> principalKey,
+            IReadOnlyList<IPropertyMetadata> foreignKey)
         {
-            ForeignKey = [childKey, childKey];
-            PrincipalKey = [parentKey, parentKey];
+            PrincipalKey = principalKey;
+            ForeignKey = foreignKey;
         }
 
         public RelationshipKind Kind => RelationshipKind.OneToMany;
-        public Type DeclaringType => typeof(RejectParent);
-        public Type RelatedType => typeof(RejectChild);
-        public PropertyInfo? Navigation => typeof(RejectParent).GetProperty(nameof(RejectParent.Children));
+        public Type DeclaringType => typeof(CompositeRelationshipParent);
+        public Type RelatedType => typeof(CompositeRelationshipChild);
+        public PropertyInfo? Navigation => typeof(CompositeRelationshipParent).GetProperty(nameof(CompositeRelationshipParent.Children));
         public bool IsCollection => true;
         public IReadOnlyList<IPropertyMetadata> ForeignKey { get; }
         public IReadOnlyList<IPropertyMetadata> PrincipalKey { get; }

@@ -49,7 +49,7 @@ public sealed class BuilderValidationSweepTests : ProviderTestSuite
     public void ExtremeRow_ShouldSelectTheMaxRow()
     {
         var ids = _sut.ComplexEntity
-            .SelectWhereMax(x => x.Id)
+            .SelectWhereMaxOld(x => x.Id)
             .Select(x => x.Id)
             .ToList();
 
@@ -167,10 +167,9 @@ public sealed class BuilderValidationSweepTests : ProviderTestSuite
 
     /// <summary>
     /// The whole-row extreme-row form over a name-addressed source cannot prepare: the source type has
-    /// no mapped metadata, so the projection builder yields no select list and the preparer rejects it
-    /// before any SQL is rendered. The mapped <see cref="IComplexEntity"/> extreme-row query executes
-    /// and returns the winner. The render-time mapped-source guard in SqlBuilder (see
-    /// <c>unreachable.txt</c>) is therefore not reached through this public route.
+    /// no mapped metadata, so the projection builder yields no select list and the preparer reports the
+    /// mapped-source contract before any SQL is rendered. The mapped <see cref="IComplexEntity"/>
+    /// extreme-row query executes and returns the winner.
     /// </summary>
     [Fact]
     public void ExtremeRowOverUnmappedSource_ShouldFailPreparation()
@@ -178,11 +177,28 @@ public sealed class BuilderValidationSweepTests : ProviderTestSuite
         var ctx = _sut.DataProvider;
 
         FluentActions
-            .Invoking(() => ctx.From("simple_entity").SelectWhereMax(t => t["id"].AsInt).ToList())
-            .Should().Throw<QueryPreparationException>()
-            .WithMessage("*Select must return new anonymous type*");
+            .Invoking(() => ctx.From("simple_entity").SelectWhereMaxOld(t => t["id"].AsInt).ToList())
+            .Should().Throw<BuildSqlCommandException>()
+            .WithMessage("SelectWhereMax/SelectWhereMin requires a mapped entity source.");
 
-        _sut.ComplexEntity.SelectWhereMax(x => x.Id).Select(x => x.Id).ToList().Should().Equal(3L);
+        _sut.ComplexEntity.SelectWhereMaxOld(x => x.Id).Select(x => x.Id).ToList().Should().Equal(3L);
+    }
+
+    /// <summary>
+    /// #294: a bare read over the same name-addressed source reaches the projection-shape refusal with
+    /// no mapped columns and no derived subquery projection to reuse, so it reports the source message —
+    /// never the derived-source one. The projection-less extreme-row form above is reported earlier by
+    /// its own mapped-source guard (#315), which is why it keeps a different message.
+    /// </summary>
+    [Fact]
+    public void BareReadOverUnmappedSource_ShouldReportNoReusableProjection()
+    {
+        var ctx = _sut.DataProvider;
+
+        FluentActions
+            .Invoking(() => ctx.From("simple_entity").ToList())
+            .Should().Throw<QueryPreparationException>()
+            .WithMessage("Cannot materialize this source because it has no mapped columns or reusable projection. Use a mapped source or specify an explicit Select with named columns.");
     }
 
     /// <summary>SqlBuilder.cs:1509 — an extreme-row query over a derived source is rejected.</summary>
@@ -193,11 +209,11 @@ public sealed class BuilderValidationSweepTests : ProviderTestSuite
         var derived = ctx.From(ctx.From<IComplexEntity>());
 
         FluentActions
-            .Invoking(() => derived.SelectWhereMax(x => x.Id).ToList())
+            .Invoking(() => derived.SelectWhereMaxOld(x => x.Id).ToList())
             .Should().Throw<BuildSqlCommandException>()
             .WithMessage("*requires a single physical-table source*");
 
-        _sut.ComplexEntity.SelectWhereMax(x => x.Id).Select(x => x.Id).ToList().Should().Equal(3L);
+        _sut.ComplexEntity.SelectWhereMaxOld(x => x.Id).Select(x => x.Id).ToList().Should().Equal(3L);
     }
 
     /// <summary>EntityBuilder.cs:3851 — a blank tables-in-scope hint list is rejected.</summary>

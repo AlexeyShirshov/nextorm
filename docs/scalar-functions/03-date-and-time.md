@@ -93,6 +93,13 @@ built, before any client evaluation or constant folding:
   release;
 * a fractional `.AddYears`/`.AddMonths` — the CLR amount is an `int`.
 
+The refusal does not depend on the projection form: an anonymous projection, a DTO, a predicate and a
+bare scalar (`Select(e => e.Value.DayOfWeek)`, including `.First()`/`.Single()` over it) all report the
+same message during preparation, before any SQL is sent. It is also limited to row-mapping providers
+(`IContextEnvironment.NeedMapping`); the in-memory provider keeps evaluating those members client-side.
+Members that do have a translation (`.Year` … `.DayOfYear`, the `Add*` family, `Now`/`UtcNow`) keep
+working in every projection form.
+
 `value.ToString(format)` and `string.Format` are still translated (see
 [Formatting dates and numbers to strings](#formatting-dates-and-numbers-to-strings)). A
 `DateTimeOffset` table-valued-parameter column and a PostgreSQL array element map to the
@@ -124,7 +131,7 @@ PostgreSQL only):
 |---|---|
 | `SqlFunctions.Postgres.make_interval(y, mo, d, h, mi, s)` | `make_interval(y, mo, 0, d, h, mi, s)` (PostgreSQL's `weeks` is pinned to `0`) |
 | `SqlFunctions.Postgres.make_time(h, mi, sec)` / `make_timestamp(y, mo, d, h, mi, sec)` | `make_time(...)` / `make_timestamp(...)` |
-| `SqlFunctions.Postgres.age(a, b)` | `age(a, b)` (the result is an `interval`; a whole-month part is read back as 30 days) |
+| `SqlFunctions.Postgres.age(a, b)` | `age(a, b)` (the result is an `interval`; materialising it into a `TimeSpan` column throws `InvalidCastException` when the returned value carries a non-zero month component — either sign — naming calendar months, so a month is never read back as 30 days; a zero-month value converts exactly) |
 | `SqlFunctions.Postgres.date_bin(stride, source, origin)` | `date_bin(cast(stride as interval), source, origin)` |
 | `SqlFunctions.Postgres.justify_days(interval)` / `justify_hours(interval)` | `justify_days(interval)` / `justify_hours(interval)` |
 | `SqlFunctions.Postgres.to_char(value, format)` | `to_char(value, format)` |
@@ -135,9 +142,54 @@ PostgreSQL only):
 | `SqlFunctions.Postgres.current_date()` / `current_time()` / `localtime()` / `localtimestamp()` | the same key words |
 | `SqlFunctions.Postgres.pg_typeof(x)` | `cast(pg_typeof(x) as text)` |
 
+The residual date/time family of #281 sits on the same surface, one member per server overload, each
+name gated **individually** by
+[`IScalarFunctions.Supports`](xref:NextORM.Core.IScalarFunctions.Supports(System.String)) rather than by
+the family flag:
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.Postgres.date_subtract(value, interval)` | `date_subtract(value, interval)` → `timestamptz` |
+| `SqlFunctions.Postgres.date_subtract(value, interval, zone)` | `date_subtract(value, interval, zone)` → `timestamptz` |
+| `SqlFunctions.Postgres.justify_interval(interval)` | `justify_interval(interval)` → `interval` |
+| `SqlFunctions.Postgres.make_timestamptz(y, mo, d, h, mi, sec)` | `make_timestamptz(y, mo, d, h, mi, sec)` → `timestamptz` |
+| `SqlFunctions.Postgres.make_timestamptz(y, mo, d, h, mi, sec, zone)` | `make_timestamptz(..., zone)` → `timestamptz` |
+| `SqlFunctions.Postgres.clock_timestamp()` | `clock_timestamp()` → `timestamptz` |
+| `SqlFunctions.Postgres.statement_timestamp()` | `statement_timestamp()` → `timestamptz` |
+| `SqlFunctions.Postgres.transaction_timestamp()` | `transaction_timestamp()` → `timestamptz` |
+| `SqlFunctions.Postgres.timeofday()` | `timeofday()` → `text` |
+| `SqlFunctions.Postgres.isfinite(value)` (`DateOnly?`) | `isfinite(value)` → `boolean` (the `date` form) |
+| `SqlFunctions.Postgres.isfinite(value)` (`DateTime?`) | `isfinite(value)` → `boolean` (the `timestamp` form) |
+| `SqlFunctions.Postgres.isfinite(value)` (`TimeSpan?`) | `isfinite(value)` → `boolean` (the `interval` form) |
+
+`clock_timestamp()` is evaluated per row and advances inside a statement, while `statement_timestamp()`
+is fixed at the start of the statement and `transaction_timestamp()` at the start of the transaction.
+Both `date_subtract` forms return `timestamp with time zone` (the shipped signatures return
+`DateTime?`, not `interval`), and `justify_interval` returns an `interval`, so it is mapped through the
+provider's interval handling: a returned interval carrying a non-zero month component is rejected with
+`InvalidCastException` on the mapped-column path. A NULL argument yields NULL, and every name is gated
+individually, so a provider without `IScalarFunctions` fails closed with `NotSupportedException`.
+
+Three members are refused while the query is prepared, because each returns `void` and the expression
+model has no `void`-typed projection, so no faithful CLR result exists and no SQL is emitted:
+
+| Refused member | Tested reason |
+|---|---|
+| `SqlFunctions.Postgres.pg_sleep(seconds)` | `pg_sleep` returns `void`; a fabricated value is never returned. |
+| `SqlFunctions.Postgres.pg_sleep_for(interval)` | `pg_sleep_for` returns `void`; a fabricated value is never returned. |
+| `SqlFunctions.Postgres.pg_sleep_until(timestamptz)` | `pg_sleep_until` returns `void`; a fabricated value is never returned. |
+
 Date construction and arithmetic otherwise use the portable surface: `date_from_parts` (which renders
 PostgreSQL `make_date`), `date_add`, `date_diff`, `date_trunc` and the `DateTime` members (see
 [Date arithmetic](#date-arithmetic) below).
+
+MariaDB's Oracle-compatible conversions are **version-gated**, not part of the portable surface:
+`months_between` (12.2.1), `to_date` (12.3) and `to_number` (12.2 family, enforced minimum 12.2.1) are refused
+with `NotSupportedException` by an unversioned `MariaDbDataContext`; `add_months`/`to_char` are available from
+MariaDB 10.6. See [MySQL and MariaDB-specific SQL](../guide/provider-specific-sql/mysql.md#mariadb).
+
+MariaDB date/time function support and behaviour qualifications are listed in the
+[MariaDB catalogue](08-reference.md#mariadb-catalogue).
 
 ## Formatting dates and numbers to strings
 
@@ -228,14 +280,17 @@ PostgreSQL, SQL Server, ClickHouse, MySQL/MariaDB and SQLite opt in). The field 
 string; the provider validates which parts it accepts ([`SupportsDateAddField`](xref:NextORM.Core.ISqlDialect.SupportsDateAddField(System.String)) and friends).
 SQL Server renders `dateadd(field, amount, value)` and `eomonth(value)`, folding
 `decade`/`century`/`millennium` onto a scaled `year` add; PostgreSQL renders interval arithmetic;
-ClickHouse renders the dedicated `addDays`/`addMonths`/…/`addSeconds` functions (folding the three
-large parts onto a scaled `addYears`) and `toLastDayOfMonth(value)`; MySQL/MariaDB render
+ClickHouse renders the dedicated `addDays`/`addMonths`/…/`addSeconds` functions (folding `decade` and
+`century` onto a scaled `addYears`) and `toLastDayOfMonth(value)`; MySQL/MariaDB render
 `date_add(value, interval n unit)` and `last_day(value)`; SQLite adjusts through a `datetime`/`strftime`
 modifier string. `SqlFunctions.Sql.date_diff(field, start, end)` returns the number of `<field>` boundaries
-between two timestamps (SQL Server `datediff`, ClickHouse `dateDiff`, MySQL/MariaDB `timestampdiff`);
-the PostgreSQL and SQLite fallbacks count date parts as boundaries and time parts as whole units.
-`SqlFunctions.Sql.date_diff_big(field, start, end)` is the 64-bit variant (SQL Server `datediff_big`; the
-others widen the result) for a `millisecond`/`microsecond` span that would overflow the 32-bit `date_diff`.
+between two timestamps as a 32-bit count (`int?`; SQL Server `datediff`, ClickHouse `dateDiff`,
+MySQL/MariaDB `timestampdiff`); the PostgreSQL and SQLite fallbacks count date parts as boundaries and time
+parts as whole units. The 32-bit width limits the usable range: a span whose boundary count does not fit
+Int32 is outside the contract of the narrow function — use `date_diff_big` for it.
+`SqlFunctions.Sql.date_diff_big(field, start, end)` is the 64-bit variant (`long?`; SQL Server
+`datediff_big`, the others widen the result) and preserves signed spans whose count exceeds Int32, such as
+a long `millisecond`/`microsecond` span.
 A sub-day `date_add`/`DateTime.Add*` promotes a `date`-only operand to a fractional timestamp (SQL Server
 `datetime2`, ClickHouse `DateTime`/`DateTime64`) so the time of day is not lost.
 `SqlFunctions.Sql.date_from_parts(year, month, day)` builds a date. `DateTime.AddDays`/`AddMonths`/… inside a
@@ -269,10 +324,16 @@ select datetime(dt, (1) || ' days') as 'NextDay', date(dt, 'start of month', '+1
  from complex_entity
 ```
 
+ClickHouse `year`, `decade` and `century` addition uses `DateTime64(6)`: the operand is promoted
+with `toDateTime64(x, 6)` before the scaled `addYears`. The SQL result type for those three units is
+`DateTime64(6)`, while the CLR API is unchanged. `millennium` is unsupported and throws before
+execution. On pinned ClickHouse 25.8, supported results are within 1900–2299; arithmetic outside that
+range is unsupported. Inputs are normalized to microseconds, discarding finer precision.
+
 | C# | SQL Server | PostgreSQL | ClickHouse | MySQL/MariaDB | SQLite |
 |---|---|---|---|---|---|
 | `SqlFunctions.Sql.date_add("day", n, x)` | `dateadd(day, n, x)` | `x + (n * interval '1 day')` | `addDays(x, n)` | `date_add(x, interval n day)` | `datetime(x, (n) \|\| ' days')` |
-| `SqlFunctions.Sql.date_add("decade", n, x)` | `dateadd(year, (n) * 10, x)` | `x + (n * interval '10 years')` | `addYears(x, (n) * 10)` | `date_add(x, interval (n) * 10 year)` | `datetime(x, ((n) * 10) \|\| ' years')` |
+| `SqlFunctions.Sql.date_add("decade", n, x)` | `dateadd(year, (n) * 10, x)` | `x + (n * interval '10 years')` | `addYears(toDateTime64(x, 6), (n) * 10)` | `date_add(x, interval (n) * 10 year)` | `datetime(x, ((n) * 10) \|\| ' years')` |
 | `SqlFunctions.Sql.end_of_month(x)` | `eomonth(x)` | `date_trunc('month', x) + interval '1 month - 1 day'` | `toLastDayOfMonth(x)` | `last_day(x)` | `date(x, 'start of month', '+1 month', '-1 day')` |
 | `SqlFunctions.Sql.date_diff("day", a, b)` | `datediff(day, a, b)` | `cast(b as date) - cast(a as date)` | `dateDiff('day', a, b)` | `timestampdiff(day, a, b)` | `(strftime('%s', b) - strftime('%s', a)) / 86400` |
 | `SqlFunctions.Sql.date_diff_big("milliseconds", a, b)` | `datediff_big(millisecond, a, b)` | `cast(trunc(extract(epoch from (b - a)) * 1000) as bigint)` | `dateDiff('millisecond', a, b)` | `cast((timestampdiff(microsecond, a, b) / 1000) as signed)` | `((strftime('%s', b) - strftime('%s', a)) * 1000)` |
@@ -332,6 +393,25 @@ like the native function. `timefromparts` materialises as a `TimeSpan`, the `sma
 `DateTimeOffset` matching the T-SQL result type. This is the date half of the SQL Server-only scalar
 surface; the other T-SQL scalars are documented on the matching category pages.
 
+Reading a native `time` does not change the mapped storage type. A computed `timefromparts`/`cast`
+result and a physical `time`, `time(3)` or `time(7)` column are read as a `TimeSpan` per row, keeping
+the precision the value carries. A mapped **duration property** — a `TimeSpan` property with
+`[Duration(...)]` or the fluent `Duration(...)` — still stores `bigint` on SQL Server and still scales
+through its `DurationUnit`; it can hold negative values and values of 24 h or more, neither of which a
+native `time` can represent. A mapped `TimeOnly` projection keeps the native time-of-day value and its exact
+ticks on **SQL Server** (`time`, read through the driver's `TimeSpan`, 100 ns) and **PostgreSQL** (`time`,
+microseconds); a returned value outside `[00:00:00, 24:00:00)` is refused with `NotSupportedException`
+instead of being wrapped or truncated. **MySQL** and **MariaDB** refuse the projection because `TIME` is a
+duration that can be negative or 24 h or more, and **SQLite** and **ClickHouse** refuse it because there is
+no native time-of-day type (ClickHouse binds `TimeOnly` as `String`). A **declared** value converter takes
+precedence over that policy: the mapper's `TimeOnly` arm is applied only when the column has **no** converter,
+so with an explicit converter the converter owns the mapping on **every** provider. This was observed reading
+`TIME` into `TimeOnly` on **MySQL** and **MariaDB**; on **SQLite** (integer ticks or text) and **ClickHouse**
+(`String`) such a converter has to reinterpret or parse the stored value, which is the caller's explicit
+decision and therefore not refused — the policy refusal applies to **unconverted** projections only. JSON streaming shapes and the CSV terminal still reject `TimeOnly`,
+each with its own `NotSupportedException` raised while the shape is planned, and
+`TimeSpan`/`DateTime`/`DateOnly` behaviour is unchanged.
+
 ## Date conversion and parts (ClickHouse)
 
 ClickHouse exposes its `to*` date/time functions through `SqlFunctions.ClickHouse`
@@ -361,3 +441,34 @@ var rows = dataContext.From<IComplexEntity>()
 select toInt32(toYear(dt)) as `Year`, toStartOfMonth(dt) as `MonthStart`
  from complex_entity
 ```
+
+### Delivered date/time functions (#286, T286b)
+
+The remaining ClickHouse date/time catalogue is typed on `ClickHouseFunctions`. Results are explicit:
+`make_date`/`make_date32`/`to_modified_julian_day`/`to_time` return integers, `make_date_time` returns
+`DateTime`, `server_timezone`/`timezone_of`/`date_name` return `string`, the `timezone_offset` family
+returns `int`, and `now64`/`time_slot`/`from_unix_timestamp*` keep the vendor's `DateTime64` precision.
+
+| Function | SQL |
+|---|---|
+| `SqlFunctions.ClickHouse.make_date(y, m, d)` / `make_date32(y, m, d)` | `makeDate` / `makeDate32` |
+| `SqlFunctions.ClickHouse.make_date_time(y, m, d, h, mi, s)` | `makeDateTime(...)` |
+| `SqlFunctions.ClickHouse.now64([scale[, timezone]])` | `now64(...)` |
+| `SqlFunctions.ClickHouse.now_in_block([scale[, timezone]])` | `nowInBlock(...)` |
+| `SqlFunctions.ClickHouse.time_slot(ts)` / `time_slots(start, duration)` | `timeSlot` / `timeSlots` |
+| `SqlFunctions.ClickHouse.to_start_of_five_minutes(ts)` / `_ten` / `_fifteen` | `toStartOfFiveMinutes` / `Ten` / `FifteenMinutes` |
+| `SqlFunctions.ClickHouse.to_start_of_interval(ts, seconds[, origin])` | `toStartOfInterval(ts, INTERVAL ...)` |
+| `SqlFunctions.ClickHouse.to_iso_year(ts)` / `to_week` / `to_year_week` / `to_last_day_of_week` | `toISOYear` / `toWeek` / `toYearWeek` / `toLastDayOfWeek` |
+| `SqlFunctions.ClickHouse.to_days_in_month(ts)` | `toDaysInMonth(ts)` |
+| `SqlFunctions.ClickHouse.to_modified_julian_day(ts)` | `toModifiedJulianDay(ts)` |
+| `SqlFunctions.ClickHouse.age(ts1, ts2)` | `age(ts1, ts2)` |
+| `SqlFunctions.ClickHouse.date_name(part, ts)` | `dateName(part, ts)` |
+| `SqlFunctions.ClickHouse.server_timezone()` / `timezone_of(ts)` / `timezone_offset(ts)` | `serverTimezone` / `timezoneOf` / `timezoneOffset` |
+| `SqlFunctions.ClickHouse.to_time(ts)` | `toTime(ts)` |
+| `SqlFunctions.ClickHouse.timestamp(ts)` | `timestamp(ts)` |
+| `SqlFunctions.ClickHouse.from_unix_timestamp(ts[, tz])` / `_64_milli` / `_64_micro` | `fromUnixTimestamp` / `fromUnixTimestamp64Milli` / `Micro` |
+
+Three members stay refused with a tested reason: `from_utc_timestamp` (the wall-clock/zone pair is not
+representable in `System.DateTime`), `to_time64` (`Time64(scale)` has no CLR carrier) and
+`from_unix_timestamp64_nano` (`DateTime64(9)` exceeds `DateTime`'s 100 ns tick resolution). See
+[ClickHouse-specific SQL › Not yet supported](../guide/provider-specific-sql/clickhouse.md#not-yet-supported).

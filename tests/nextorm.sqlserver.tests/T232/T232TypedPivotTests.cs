@@ -246,11 +246,13 @@ public class T232TypedPivotTests
             .Select(x => new { x.Category, x.Q1 }))
             .Should().Contain(oneValueSelect);
 
-        // scalar: no member name is invented, so no rename alias is emitted for the cell.
+        // scalar: no member name is invented, so no rename alias is emitted for the cell; the derived
+        // boundary still declares the generated output identifier the consumer references (`[c0]`), so
+        // the scalar cell carries that declaration (T312).
         SqlOf(ctx, ctx.From<ISalesEntity>()
             .Pivot(PivotAggregate.Sum, s => s.Margin, s => s.Quarter, (m, pv) => pv.Value<decimal?>("1"))
             .Select(x => x))
-            .Should().Contain("from (select [1]\n from sales pivot (sum(margin) for quarter in ([1])) as [t1]) as [t2]");
+            .Should().Contain("from (select [1] as [c0]\n from sales pivot (sum(margin) for quarter in ([1])) as [t1]) as [t2]");
     }
 
     [Fact]

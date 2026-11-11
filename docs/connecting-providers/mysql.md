@@ -23,8 +23,9 @@ property. [`MySqlDialect`](xref:NextORM.MySql.MySqlDialect) (`src/nextorm.mysql/
   `double`, `decimal`, `char`, `datetime`) rather than the ANSI `bigint`/`integer`;
 - the integer ones-complement renders as `(-(x) - 1)`, because MySQL's `~` yields an unsigned 64-bit
   value that overflows the signed CLR integer;
-- the `ESCAPE` character of a `LIKE` predicate is written as `'\\'`, since MySQL also treats the
-  backslash as a string-literal escape;
+- the `ESCAPE` character of a `LIKE` predicate is emitted as the mode-independent `_utf8mb4 X'5c'`
+  token, so `NO_BACKSLASH_ESCAPES`, `ANSI_QUOTES` and the driver's `NoBackslashEscapes` cannot
+  change its meaning;
 - paging is `limit n` / `limit n offset m`; an offset without a limit becomes
   `limit 18446744073709551615 offset m`, because MySQL only accepts `offset` together with `limit`;
 - the session/information family ([`SessionInfoFunctions`](xref:NextORM.Core.ISqlDialect.SessionInfoFunctions)) renders
@@ -34,6 +35,13 @@ property. [`MySqlDialect`](xref:NextORM.MySql.MySqlDialect) (`src/nextorm.mysql/
   `ANY_VALUE(x)` ([`SupportsAnyValueAggregate`](xref:NextORM.Core.ISqlDialect.SupportsAnyValueAggregate), MySQL 5.7+);
 - the portable conditional [`SqlFunctions.Sql.iif`](xref:NextORM.Core.CommonFunctions.iif``1(System.Boolean,``0,``0)) renders as
   `if(condition, a, b)` ([`Iif`](xref:NextORM.Core.ISqlDialect.Iif), [`IIifRenderer.Render`](xref:NextORM.Core.IIifRenderer.Render(System.String,System.String,System.String))).
+
+The variability aggregates follow the shared cardinality contract: `Stdev`/`Var` are `null` for zero or
+one contributing value, `Stdevp`/`Varp` are `null` for zero and `0.0` for one. One provider limitation is
+independent of the nullable result: MySQL 8.4 rejects `DISTINCT` inside
+`STDDEV_SAMP`/`STDDEV_POP`/`VAR_SAMP`/`VAR_POP` (`stddev_samp(distinct x)` fails with a syntax error).
+The renderer keeps emitting that spelling for the `*_distinct` forms, so only the SQL text is guaranteed
+and a live distinct variance query is not claimed as supported on MySQL 8.4.
 
 ## Registering the provider
 
@@ -83,6 +91,67 @@ ctx.From<ISimpleEntity>().Page(5, 10).Select(x => x.Id);   // limit 5 offset 10
 ctx.From<ISimpleEntity>().Offset(10).Select(x => x.Id);    // limit 18446744073709551615 offset 10
 ```
 
+## String literals and parameters
+
+Every inline text value — including an operand in a position where the grammar accepts only a
+literal — is rendered as the mode-independent `_utf8mb4 X'…'` form, an uppercase UTF-8 hex string,
+so neither `sql_mode` nor `ANSI_QUOTES`, `NO_BACKSLASH_ESCAPES` or the driver's
+`NoBackslashEscapes` can change its meaning. An ORM-owned text **parameter slot** in a read query
+keeps its `@name` placeholder in the cached command and is lowered to the same `_utf8mb4 X'…'`
+literal at execution time: the driver parameter is omitted for that execution, and the command is
+restored to its canonical text and bindings before the next one. Mutations
+(`INSERT`/`UPDATE`/`DELETE`) are never prepared, so their text values are lowered at render time and
+no template is kept.
+
+`GROUP_CONCAT ... SEPARATOR` is a grammar-token position where the engine accepts only a text
+literal. A **constant** separator is rendered as a bare apostrophe-doubled literal from the accepted
+set `U+0020`–`U+007E` excluding the backslash; a non-constant, `null`, backslash-containing,
+NUL-containing or otherwise non-printable-ASCII separator fails closed with `NotSupportedException`
+naming MySQL/MariaDB — no placeholder, no invalid SQL, and the value is never echoed.
+
+```csharp
+var query = ctx.From<IComplexEntity>().Where(e => e.String == "O'Brien").Select(e => e.Id);
+```
+
+```sql
+-- the text parameter slot is lowered to a literal for this execution
+select `Id` as `Id`
+ from complex_entity
+ where `String` = _utf8mb4 X'4F27427269656E'
+```
+
+A constant `SEPARATOR` keeps the literal form:
+
+```csharp
+var names = ctx.From<IComplexEntity>().Select(e => SqlFunctions.Sql.string_agg(e.String, ","));
+```
+
+```sql
+select group_concat(`String` separator ',')
+ from complex_entity
+```
+
+## Bulk insert
+
+The native path is `MySqlBulkCopy`, a `LOAD DATA LOCAL INFILE` load, and it needs **both** prerequisites:
+`AllowLoadLocalInfile=true` on the connection string (client side) and `local_infile=1` as the server variable
+`@@GLOBAL.local_infile`. The server value is read with a read-only preflight (`select @@global.local_infile`),
+and nextorm never enables either one. Without them `Auto` falls back only when the portable path honours the
+whole request and `Native` refuses by name; a runtime `LOAD` failure is never replayed through the SQL path.
+
+- The source is read in bounded chunks (`MaxBatchSize`, default 10 000 rows); each chunk is one load.
+- `KeepIdentity` writes the explicit identity column under a scoped `NO_AUTO_VALUE_ON_ZERO` guard, so an
+  explicit `0` is not replaced by a generated value.
+- `IgnoreDuplicates` maps to `ConflictOption.Ignore` on the native load and `INSERT IGNORE` on the portable
+  statement.
+- `KeepNulls=false` needs a default-equivalent shape; `CheckConstraints=false`, `TableLock` and `FireTriggers`
+  are refused (MySQL always checks constraints), and `Returning*` is refused — read keys with
+  `CreateInsertBuilder`.
+- `DatabaseName` renders `db.table`; `ServerName` is refused (no rerouting). `Timeout` is one
+  whole-invocation budget; an expired budget is a `TimeoutException` and cancellation wins.
+
+See [Bulk insert](../guide/22-bulk-insert.md).
+
 ## Provider differences
 
 | Aspect | MySQL |
@@ -100,7 +169,9 @@ ctx.From<ISimpleEntity>().Offset(10).Select(x => x.Id);    // limit 184467440737
 | Session/info functions | `current_user()`, `session_user()`, `schema()`, `database()`, `version()` |
 | Arbitrary-value aggregate | `ANY_VALUE(x)` |
 | Conditional function | `iif(cond, a, b)` → `if(cond, a, b)` |
-| Window percentiles | not supported (`PERCENTILE_CONT` is MariaDB-only) |
+| Window percentiles | not supported: `percentile_cont`/`percentile_disc` on a window throw `NotSupportedException` (MySQL has neither the functions nor `WITHIN GROUP`; `PERCENTILE_CONT` is MariaDB-only) |
+| Median (analytic) | not supported: `SqlFunctions.MySql.median(v).Over(...)` throws `NotSupportedException("The median function is not supported by MySQL.")` |
+| Generic percentile | not supported: `SqlFunctions.MySql.percentile(fraction, v)` throws `NotSupportedException("The percentile function is not supported by MySQL.")` |
 | LOB streaming (`ToStream`/`ToTextReader`) | `NotSupportedException` |
 
 MySQL 8.0.31 and later support `INTERSECT`/`EXCEPT`; the dialect rejects the `*ALL` variants with a

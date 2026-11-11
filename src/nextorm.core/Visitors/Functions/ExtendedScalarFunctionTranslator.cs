@@ -1,0 +1,437 @@
+using System.Linq.Expressions;
+
+namespace NextORM.Core;
+
+/// <summary>
+/// Translates the extended scalar function library of <see cref="CommonFunctions"/>: the additional
+/// math functions (<c>asin</c>, <c>cbrt</c>, <c>mod</c>, ...), the string
+/// functions (<c>split_part</c>, <c>lpad</c>, <c>initcap</c>, ...), the POSIX regular-expression
+/// functions (<c>regexp_replace</c>/<c>regexp_like</c>/<c>regexp_substr</c>/...), the date/time
+/// functions (<c>age</c>, <c>make_time</c>/<c>make_timestamp</c>, <c>date_bin</c>, <c>to_char</c>,
+/// <c>extract</c>, ...), the cryptographic hashes
+/// (<c>digest</c>/<c>sha224</c>/<c>sha256</c>/<c>sha384</c>/<c>sha512</c>), the runtime settings
+/// (<c>current_setting</c>/<c>set_config</c>), the sequence functions
+/// (<c>nextval</c>/<c>setval</c>/<c>currval</c>/<c>lastval</c>) and <c>num_nulls</c>/<c>num_nonnulls</c>.
+/// <para>
+/// The whole surface is guarded by <see cref="ISqlDialect.SupportsExtendedScalarFunctions"/>
+/// (PostgreSQL opts in today); a provider that does not support it fails with a clear message instead
+/// of emitting invalid SQL.
+/// </para>
+/// </summary>
+internal static class ExtendedScalarFunctionTranslator
+{
+    /// <summary>
+    /// Members refused for a demonstrated server limitation. The refusal is raised before the dialect
+    /// gate, so every provider gets the precise technical reason instead of SQL the pinned PostgreSQL
+    /// server would reject. <c>casefold</c> arrived in PostgreSQL 18; <c>gamma</c>, <c>tgamma</c> and
+    /// <c>lgamma</c> exist in no PostgreSQL release — all four are absent from <c>pg_proc</c> on 17.11
+    /// and fail with <c>42883</c>. The one-argument <c>to_ascii</c> exists but raises <c>0A000</c> from
+    /// a UTF8 database, so only the two-argument (explicit-encoding) forms are delivered. <c>crc32</c>
+    /// and <c>crc32c</c> are PostgreSQL 18 functions, absent from 17.11; <c>pg_sleep</c>,
+    /// <c>pg_sleep_for</c> and <c>pg_sleep_until</c> return <c>void</c>, for which the expression model
+    /// has no faithful projection. <c>jsonb_populate_record_valid</c> takes an <c>anyelement</c> base row
+    /// whose composite type a CLR type cannot name. The key is the member name together with its arity,
+    /// because <c>to_ascii</c> is refused for one shape only.
+    /// </summary>
+    private static readonly Dictionary<(string Name, int Arity), string> Refused = new()
+    {
+        [(nameof(PostgresFunctions.casefold), 1)] =
+            "The casefold function is refused: it was introduced in PostgreSQL 18 and does not exist on the " +
+            "pinned 17.11 server (absent from pg_proc; the name fails with 42883), so no SQL that executes " +
+            "on the target server can be emitted.",
+        [(nameof(PostgresFunctions.gamma), 1)] =
+            "The gamma function is refused: it does not exist on the pinned PostgreSQL 17.11 server (absent " +
+            "from pg_proc and from the PG17 mathematical-functions table; the name fails with 42883), so no " +
+            "SQL that executes on the target server can be emitted.",
+        [(nameof(PostgresFunctions.tgamma), 1)] =
+            "The tgamma function is refused: it does not exist on the pinned PostgreSQL 17.11 server (absent " +
+            "from pg_proc and from the PG17 mathematical-functions table; the name fails with 42883), so no " +
+            "SQL that executes on the target server can be emitted.",
+        [(nameof(PostgresFunctions.lgamma), 1)] =
+            "The lgamma function is refused: it does not exist on the pinned PostgreSQL 17.11 server (absent " +
+            "from pg_proc and from the PG17 mathematical-functions table; the name fails with 42883), so no " +
+            "SQL that executes on the target server can be emitted.",
+        [(nameof(PostgresFunctions.to_ascii), 1)] =
+            "The one-argument to_ascii function is refused: PostgreSQL 17 supports the conversion only " +
+            "from LATIN1, LATIN2, LATIN9 and WIN1250, and the pinned fixture database is UTF8, so the " +
+            "form raises 0A000; use to_ascii(value, encoding).",
+        [(nameof(PostgresFunctions.crc32), 1)] =
+            "The crc32 function is refused: it was introduced in PostgreSQL 18 and does not exist on " +
+            "the pinned 17.11 server (absent from pg_proc; the name fails with 42883), so no SQL that " +
+            "executes on the target server can be emitted.",
+        [(nameof(PostgresFunctions.crc32c), 1)] =
+            "The crc32c function is refused: it was introduced in PostgreSQL 18 and does not exist on " +
+            "the pinned 17.11 server (absent from pg_proc; the name fails with 42883), so no SQL that " +
+            "executes on the target server can be emitted.",
+        [(nameof(PostgresFunctions.pg_sleep), 1)] =
+            "The pg_sleep function is refused: it returns void, and the expression model has no " +
+            "void-typed projection, so no faithful CLR result exists; a fabricated value is never " +
+            "returned.",
+        [(nameof(PostgresFunctions.pg_sleep_for), 1)] =
+            "The pg_sleep_for function is refused: it returns void, and the expression model has no " +
+            "void-typed projection, so no faithful CLR result exists; a fabricated value is never " +
+            "returned.",
+        [(nameof(PostgresFunctions.pg_sleep_until), 1)] =
+            "The pg_sleep_until function is refused: it returns void, and the expression model has no " +
+            "void-typed projection, so no faithful CLR result exists; a fabricated value is never " +
+            "returned.",
+        [(nameof(PostgresFunctions.jsonb_populate_record_valid), 2)] =
+            "The jsonb_populate_record_valid function is refused: its first argument is an anyelement " +
+            "base row that a CLR type cannot name, and without a base row the server raises 0A000 " +
+            "(could not determine row type for result of jsonb_populate_record).",
+        [(nameof(PostgresFunctions.pg_get_expr), 2)] = PostgresFunctions.GetExprRefusal,
+        [(nameof(PostgresFunctions.pg_get_expr), 3)] = PostgresFunctions.GetExprRefusal,
+        [(nameof(PostgresFunctions.pg_get_constraintdef), 1)] = PostgresFunctions.GetConstraintdefRefusal,
+        [(nameof(PostgresFunctions.pg_get_constraintdef), 2)] = PostgresFunctions.GetConstraintdefRefusal
+    };
+
+    private static readonly HashSet<string> MathFunctions = new(StringComparer.Ordinal)
+    {
+        nameof(PostgresFunctions.asin), nameof(PostgresFunctions.acos), nameof(PostgresFunctions.atan),
+        nameof(PostgresFunctions.atan2), nameof(PostgresFunctions.cbrt), nameof(PostgresFunctions.sinh),
+        nameof(PostgresFunctions.cosh), nameof(PostgresFunctions.tanh), nameof(PostgresFunctions.asinh),
+        nameof(PostgresFunctions.acosh), nameof(PostgresFunctions.atanh), nameof(PostgresFunctions.random),
+        nameof(PostgresFunctions.log), nameof(PostgresFunctions.gcd),
+        nameof(PostgresFunctions.lcm), nameof(PostgresFunctions.factorial), nameof(PostgresFunctions.width_bucket)
+    };
+
+    private static readonly HashSet<string> DirectFunctions = new(StringComparer.Ordinal)
+    {
+        nameof(PostgresFunctions.split_part), nameof(PostgresFunctions.strpos),
+        nameof(PostgresFunctions.initcap),
+        nameof(PostgresFunctions.overlay), nameof(PostgresFunctions.md5),
+        nameof(PostgresFunctions.regexp_replace), nameof(PostgresFunctions.regexp_like),
+        nameof(PostgresFunctions.regexp_split_to_array), nameof(PostgresFunctions.regexp_count),
+        nameof(PostgresFunctions.regexp_instr), nameof(PostgresFunctions.regexp_substr),
+        nameof(PostgresFunctions.justify_days),
+        nameof(PostgresFunctions.justify_hours), nameof(PostgresFunctions.to_char), nameof(PostgresFunctions.to_date),
+        nameof(PostgresFunctions.to_number), nameof(PostgresFunctions.to_timestamp), nameof(PostgresFunctions.timezone),
+        nameof(PostgresFunctions.make_time), nameof(PostgresFunctions.make_timestamp),
+        nameof(PostgresFunctions.age), nameof(PostgresFunctions.current_setting),
+        nameof(PostgresFunctions.set_config)
+    };
+
+    private static readonly HashSet<string> KeywordFunctions = new(StringComparer.Ordinal)
+    {
+        nameof(PostgresFunctions.current_date), nameof(PostgresFunctions.current_time),
+        nameof(PostgresFunctions.localtime), nameof(PostgresFunctions.localtimestamp),
+        nameof(PostgresFunctions.current_role), nameof(PostgresFunctions.current_catalog)
+    };
+
+    private static readonly HashSet<string> VariadicFunctions = new(StringComparer.Ordinal)
+    {
+        nameof(PostgresFunctions.format),
+        nameof(PostgresFunctions.num_nulls), nameof(PostgresFunctions.num_nonnulls)
+    };
+
+    private static readonly HashSet<string> TextSearchFunctions = new(StringComparer.Ordinal)
+    {
+        nameof(PostgresFunctions.to_tsvector), nameof(PostgresFunctions.to_tsquery),
+        nameof(PostgresFunctions.plainto_tsquery), nameof(PostgresFunctions.phraseto_tsquery),
+        nameof(PostgresFunctions.websearch_to_tsquery), nameof(PostgresFunctions.ts_rank),
+        nameof(PostgresFunctions.ts_rank_cd), nameof(PostgresFunctions.ts_headline)
+    };
+
+    /// <summary>Translates an extended scalar call; returns <c>false</c> when it is not one of them.</summary>
+    internal static bool TryTranslate(BaseExpressionVisitor visitor, MethodCallExpression node)
+    {
+        var name = node.Method.Name;
+
+        ThrowIfRefused(node);
+
+        if (MathFunctions.Contains(name))
+        {
+            RequireExtended(visitor);
+            EmitMath(visitor, name, node.Arguments);
+            return true;
+        }
+
+        if (KeywordFunctions.Contains(name))
+        {
+            RequireExtended(visitor);
+            if (!visitor.IsParamMode)
+            {
+                visitor.NeedAliasForColumn = true;
+                visitor.Builder!.Append(name);
+            }
+
+            return true;
+        }
+
+        if (name == nameof(PostgresFunctions.pg_typeof))
+        {
+            RequireExtended(visitor);
+            EmitPgTypeOf(visitor, node.Arguments);
+            return true;
+        }
+
+        if (VariadicFunctions.Contains(name))
+        {
+            RequireExtended(visitor);
+            var leading = name is nameof(PostgresFunctions.concat_ws) or nameof(PostgresFunctions.format) ? 1 : 0;
+            SqlOperandTranslator.EmitFunction(visitor, name, ArgumentFlattener.Flatten(node.Arguments, leading));
+            return true;
+        }
+
+        if (name == nameof(PostgresFunctions.make_interval))
+        {
+            RequireExtended(visitor);
+            EmitMakeInterval(visitor, node.Arguments);
+            return true;
+        }
+
+        if (name == nameof(PostgresFunctions.date_bin))
+        {
+            RequireExtended(visitor);
+            EmitCastArgument(visitor, "date_bin", node.Arguments, 0, "interval");
+            return true;
+        }
+
+        if (name is nameof(PostgresFunctions.nextval) or nameof(PostgresFunctions.setval)
+            or nameof(PostgresFunctions.currval))
+        {
+            RequireExtended(visitor);
+            EmitCastArgument(visitor, name, node.Arguments, 0, "regclass");
+            return true;
+        }
+
+        if (name == nameof(PostgresFunctions.lastval))
+        {
+            RequireExtended(visitor);
+            SqlOperandTranslator.EmitFunction(visitor, "lastval", node.Arguments);
+            return true;
+        }
+
+        if (DirectFunctions.Contains(name))
+        {
+            RequireExtended(visitor);
+            SqlOperandTranslator.EmitFunction(visitor, name, node.Arguments);
+            return true;
+        }
+
+        if (TextSearchFunctions.Contains(name))
+        {
+            RequireTextSearch(visitor);
+            SqlOperandTranslator.EmitFunction(visitor, name, node.Arguments);
+            return true;
+        }
+
+        if (name == nameof(PostgresFunctions.ts_match))
+        {
+            RequireTextSearch(visitor);
+            SqlOperandTranslator.EmitOperator(visitor, "@@", node.Arguments[0], node.Arguments[1]);
+            return true;
+        }
+
+        if (name == nameof(PostgresFunctions.setseed))
+        {
+            if (!visitor.Dialect.SupportsRandomSeed)
+                throw new NotSupportedException("The random seed function (setseed) requires PostgreSQL.");
+
+            SqlOperandTranslator.EmitFunction(visitor, "setseed", node.Arguments);
+            return true;
+        }
+
+        if (name is nameof(PostgresFunctions.digest) or nameof(PostgresFunctions.sha256)
+            or nameof(PostgresFunctions.sha224) or nameof(PostgresFunctions.sha384)
+            or nameof(PostgresFunctions.sha512))
+        {
+            if (!visitor.Dialect.SupportsCryptoFunctions)
+                throw new NotSupportedException("The cryptographic hash functions (digest/sha256/sha224/sha384/sha512) require PostgreSQL.");
+
+            EmitCrypto(visitor, name, node.Arguments);
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// <c>pg_typeof(value)</c> returns the <c>regtype</c> OID type, which the driver cannot read as a
+    /// string, so it is cast to the dialect's text type.
+    /// </summary>
+    private static void EmitPgTypeOf(BaseExpressionVisitor visitor, IReadOnlyList<Expression> args)
+    {
+        if (visitor.IsParamMode)
+        {
+            for (var (i, cnt) = (0, args.Count); i < cnt; i++)
+                visitor.Visit(args[i]);
+
+            return;
+        }
+
+        visitor.NeedAliasForColumn = true;
+        visitor.Builder!.Append(visitor.Kw("cast(pg_typeof(")).Append(visitor.VisitToString(args[0]))
+            .Append(visitor.Kw(") as ")).Append(visitor.Dialect.MakeTypeName(typeof(string))).Append(')');
+    }
+
+    /// <summary>
+    /// Renders <c>make_interval(years, months, weeks, days, hours, mins, secs)</c>. The C# surface has no
+    /// <c>weeks</c> parameter, so a literal <c>0</c> is inserted in its position; otherwise the remaining
+    /// arguments would shift and denote different units.
+    /// </summary>
+    private static void EmitMakeInterval(BaseExpressionVisitor visitor, IReadOnlyList<Expression> args)
+    {
+        if (visitor.IsParamMode)
+        {
+            for (var (i, cnt) = (0, args.Count); i < cnt; i++)
+                visitor.Visit(args[i]);
+
+            return;
+        }
+
+        visitor.NeedAliasForColumn = true;
+        var builder = visitor.Builder!;
+        builder.Append("make_interval(");
+
+        for (var (i, cnt) = (0, args.Count); i < cnt; i++)
+        {
+            if (i == 2)
+                builder.Append(", 0");
+
+            if (i > 0)
+                builder.Append(", ");
+
+            builder.Append(visitor.VisitToString(args[i]));
+        }
+
+        builder.Append(')');
+    }
+
+    /// <summary>
+    /// Renders <c>digest(data, type)</c>/<c>sha256(data)</c>. An inline <c>byte[]</c> construction is
+    /// bound as one whole-array parameter through <see cref="SqlOperandTranslator.AppendArrayOperand"/>
+    /// (ordinary traversal would emit its bytes as concatenated integer literals); every other argument
+    /// — a captured array, a runtime parameter, a column, a text value or the digest algorithm — is
+    /// rendered directly, so its existing emission is preserved.
+    /// </summary>
+    private static void EmitCrypto(BaseExpressionVisitor visitor, string name, IReadOnlyList<Expression> args)
+    {
+        if (visitor.IsParamMode)
+        {
+            for (var (i, cnt) = (0, args.Count); i < cnt; i++)
+            {
+                if (IsInlineByteArrayArgument(args, i))
+                    SqlOperandTranslator.AppendArrayOperand(visitor, args[i]);
+                else
+                    visitor.Visit(args[i]);
+            }
+
+            return;
+        }
+
+        visitor.NeedAliasForColumn = true;
+        var builder = visitor.Builder!;
+        builder.Append(name).Append('(');
+
+        for (var (i, cnt) = (0, args.Count); i < cnt; i++)
+        {
+            if (i > 0) builder.Append(", ");
+
+            if (IsInlineByteArrayArgument(args, i))
+                SqlOperandTranslator.AppendArrayOperand(visitor, args[i]);
+            else
+                builder.Append(visitor.VisitToString(args[i]));
+        }
+
+        builder.Append(')');
+    }
+
+    /// <summary>
+    /// True for an inline <c>byte[]</c> construction — an array initializer or an array-bounds
+    /// <c>new byte[n]</c>, possibly wrapped in a conversion — in a binary crypto position. Only the
+    /// first argument qualifies, which is the sole argument of the SHA functions and the data argument
+    /// of <c>digest(data, type)</c>; the algorithm argument and <c>digest(string, string)</c> keep
+    /// their current emission.
+    /// </summary>
+    private static bool IsInlineByteArrayArgument(IReadOnlyList<Expression> args, int index)
+    {
+        if (index != 0)
+            return false;
+
+        var argument = TypeFacts.UnwrapConvert(args[index]);
+        return argument is NewArrayExpression && argument.Type == typeof(byte[]);
+    }
+
+    /// <summary>
+    /// Renders <c>name(arg, ...)</c> with one argument wrapped in <c>cast(arg as type)</c>. Used for
+    /// the sequence functions (<c>regclass</c>) and <c>date_bin</c> (<c>interval</c>), whose text
+    /// operands are not implicitly coerced by PostgreSQL.
+    /// </summary>
+    private static void EmitCastArgument(BaseExpressionVisitor visitor, string name, IReadOnlyList<Expression> args, int index, string castType)
+    {
+        if (visitor.IsParamMode)
+        {
+            for (var (i, cnt) = (0, args.Count); i < cnt; i++)
+                visitor.Visit(args[i]);
+
+            return;
+        }
+
+        visitor.NeedAliasForColumn = true;
+        var builder = visitor.Builder!;
+        builder.Append(name).Append('(');
+
+        for (var (i, cnt) = (0, args.Count); i < cnt; i++)
+        {
+            if (i > 0) builder.Append(", ");
+
+            if (i == index)
+            {
+                builder.Append(visitor.Kw("cast("));
+                SqlOperandTranslator.AppendArgument(visitor, args[i]);
+                builder.Append(visitor.Kw(" as ")).Append(castType).Append(')');
+            }
+            else
+            {
+                SqlOperandTranslator.AppendArgument(visitor, args[i]);
+            }
+        }
+
+        builder.Append(')');
+    }
+
+    private static void EmitMath(BaseExpressionVisitor visitor, string name, IReadOnlyList<Expression> args)
+    {
+        if (visitor.IsParamMode)
+        {
+            for (var (i, cnt) = (0, args.Count); i < cnt; i++)
+                visitor.Visit(args[i]);
+
+            return;
+        }
+
+        visitor.NeedAliasForColumn = true;
+        var sqlArgs = new string[args.Count];
+        for (var (i, cnt) = (0, args.Count); i < cnt; i++)
+            sqlArgs[i] = visitor.VisitToString(args[i]);
+
+        visitor.Builder!.Append(visitor.Dialect.MakeMathFunction(name, sqlArgs));
+    }
+
+    /// <summary>
+    /// Raises the recorded refusal for a <see cref="PostgresFunctions"/> member whose name and arity are
+    /// listed in <see cref="Refused"/>. Called by every translator that can reach such a member, so the
+    /// failure happens while the query is prepared and no SQL is emitted.
+    /// </summary>
+    internal static void ThrowIfRefused(MethodCallExpression node)
+    {
+        if (node.Method.DeclaringType == typeof(PostgresFunctions)
+            && Refused.TryGetValue((node.Method.Name, node.Arguments.Count), out var refusal))
+            throw new NotSupportedException(refusal);
+    }
+
+    private static void RequireExtended(BaseExpressionVisitor visitor)
+    {
+        if (!visitor.Dialect.SupportsExtendedScalarFunctions)
+            throw new NotSupportedException(
+                "The extended scalar function library is not supported by this provider: these functions require PostgreSQL.");
+    }
+
+    private static void RequireTextSearch(BaseExpressionVisitor visitor)
+    {
+        if (!visitor.Dialect.SupportsTextSearchFunctions)
+            throw new NotSupportedException(
+                "The native text-search functions (to_tsvector/to_tsquery/ts_rank/ts_headline/@@) require PostgreSQL.");
+    }
+}

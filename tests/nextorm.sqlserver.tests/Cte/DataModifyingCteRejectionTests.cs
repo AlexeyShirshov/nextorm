@@ -119,4 +119,30 @@ public class DataModifyingCteRejectionTests
 
         act.Should().Throw<NotSupportedException>().WithMessage("*cannot return removed rows*");
     }
+
+    [Fact]
+    public void T266_BatchCapture_IsRefused()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        using var foreignCtx = SqlServerTestContext.Create();
+
+        // The batch capture itself is supported on SQL Server, so the refused form here is the ownership
+        // one: a mutation built from a different context than the batch's is refused before any SQL is
+        // rendered and no command is built or executed.
+        var act = () => ctx.CreateBatchBuilder().OutputIntoTableVariable(
+            foreignCtx.CreateInsertBuilder<IComplexEntity>()
+                .Value(x => x.String, "a")
+                .Returning(x => new { x.Id }),
+            "@t",
+            "id bigint");
+
+        act.Should().Throw<ArgumentException>().WithMessage("*batch output source*");
+
+        // The old data-modifying CTE path stays rejected on SQL Server; the batch capture does not open it.
+        var cteAct = () => ctx.With("ins", ctx.CreateInsertBuilder<IComplexEntity>()
+            .Value(x => x.String, "a")
+            .Returning(x => new { x.Id }));
+
+        cteAct.Should().Throw<NotSupportedException>().WithMessage("*data-modifying*");
+    }
 }

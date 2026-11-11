@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1880 900" role="img" aria-labelledby="svg-title svg-desc">
+  <title id="svg-title">SelectWhereMin: как это работает сейчас</title>
+  <desc id="svg-desc">Текущий поток специального оператора SelectWhereMin: пользовательский вызов, описание операции в EntityBuilder и QueryCommand, подготовка выражений и отдельная ветка генерации SQL с переносимым или нативным путём.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L10,5 L0,10 z" fill="#8da2c0"/></marker>
+    <marker id="arrow-cyan" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L10,5 L0,10 z" fill="#55d6e8"/></marker>
+    <style>
+      text { font-family: "Segoe UI", Roboto, Arial, sans-serif; fill: #e7edf7; }
+      .mono { font-family: Consolas, "Liberation Mono", monospace; }
+      .muted { fill: #9aabc3; }
+      .small { font-size: 14px; }
+      .body { font-size: 17px; }
+      .box-title { font-size: 21px; font-weight: 700; }
+    </style>
+  </defs>
+  <rect width="1880" height="900" rx="24" fill="#0b1220"/>
+  <text x="52" y="57" font-size="31" font-weight="700">SelectWhereMin: как это работает сейчас</text>
+  <text x="54" y="87" font-size="18" class="muted">Это специальный оператор ядра, а не готовая композиция обычных Where / Select / Join.</text>
+
+  <rect x="390" y="105" width="1100" height="78" rx="14" fill="#121e32" stroke="#344763" stroke-width="1.5"/>
+  <text x="415" y="129" class="small" fill="#7ee0b4" font-weight="700">Код пользователя</text>
+  <text x="415" y="158" class="mono" font-size="20">ctx.From&lt;Order&gt;().SelectWhereMin(x =&gt; x.Price).ToCommand()</text>
+  <text x="1510" y="151" class="body muted">Здесь SQL ещё нет</text>
+  <path d="M940 183 V211" fill="none" stroke="#8da2c0" stroke-width="2.5" marker-end="url(#arrow)"/>
+
+  <rect x="30" y="215" width="1820" height="580" rx="20" fill="#0e1729" stroke="#2b3a55" stroke-width="2"/>
+  <text x="58" y="250" font-size="16" letter-spacing="1.2" font-weight="700" fill="#9aabc3">СЕЙЧАС ВСЕ ЧЕТЫРЕ ЭТАПА ЖИВУТ В NEXTORM.CORE</text>
+
+  <!-- Stage cards -->
+  <rect x="55" y="270" width="400" height="190" rx="15" fill="#17172d" stroke="#9276e8" stroke-width="2"/>
+  <rect x="72" y="284" width="185" height="26" rx="13" fill="#253c39"/>
+  <text x="84" y="302" class="small" fill="#7ee0b4" font-weight="700">public метод</text>
+  <text x="270" y="302" class="small" fill="#d7c8ff">→ private реализация</text>
+  <text x="75" y="339" class="box-title" fill="#c9b8ff">1. EntityBuilder&lt;TEntity&gt;</text>
+  <text x="75" y="369" class="body">Клонирует билдер и сохраняет запрос:</text>
+  <text x="75" y="397" class="mono" font-size="16">_extremeRow = ExtremeRowClause(...)</text>
+  <text x="75" y="424" class="body">Min • селектор Price • группы • One / All</text>
+  <text x="75" y="448" class="small" fill="#d7c8ff">ExtremeRowClause — internal</text>
+
+  <rect x="505" y="270" width="400" height="190" rx="15" fill="#121e32" stroke="#5b8fe6" stroke-width="2"/>
+  <rect x="522" y="284" width="155" height="26" rx="13" fill="#493b20"/>
+  <text x="535" y="302" class="small" fill="#ffd27d" font-weight="700">internal состояние</text>
+  <text x="525" y="339" class="box-title" fill="#a9c8ff">2. QueryCommand</text>
+  <text x="525" y="374" class="body">ApplyCommandOptions переносит</text>
+  <text x="525" y="405" class="mono" font-size="17">_extremeRow → cmd.ExtremeRow</text>
+  <text x="525" y="433" class="body muted">Пока это только описание операции.</text>
+  <text x="525" y="453" class="small muted">Не подзапрос и не SQL.</text>
+
+  <rect x="955" y="270" width="400" height="190" rx="15" fill="#121e32" stroke="#5b8fe6" stroke-width="2"/>
+  <rect x="972" y="284" width="180" height="26" rx="13" fill="#493b20"/>
+  <text x="985" y="302" class="small" fill="#ffd27d" font-weight="700">внутренняя обработка</text>
+  <text x="975" y="339" class="box-title" fill="#a9c8ff">3. Подготовка команды</text>
+  <text x="975" y="375" class="mono" font-size="17">PrepareExtremeRow</text>
+  <text x="975" y="405" class="body">Разбирает селекторы значений</text>
+  <text x="975" y="430" class="body">и групп в подготовленные</text>
+  <text x="975" y="453" class="body">выражения колонок.</text>
+
+  <rect x="1405" y="270" width="400" height="190" rx="15" fill="#10212b" stroke="#42bfd1" stroke-width="2"/>
+  <rect x="1422" y="284" width="170" height="26" rx="13" fill="#493b20"/>
+  <text x="1435" y="302" class="small" fill="#ffd27d" font-weight="700">internal SQL-сборщик</text>
+  <text x="1425" y="339" class="box-title" fill="#82e4ee">4. SqlBuilder</text>
+  <text x="1425" y="375" class="mono" font-size="17">if (cmd.ExtremeRow != null)</text>
+  <text x="1425" y="405" class="mono" font-size="17">    MakeExtremeRowSelect(cmd)</text>
+  <text x="1425" y="438" class="body muted">Отдельная ветка для этого оператора.</text>
+
+  <!-- Stage arrows and labels -->
+  <path d="M455 365 H495" fill="none" stroke="#8da2c0" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <text x="475" y="348" text-anchor="middle" class="small muted">описание</text>
+  <path d="M905 365 H945" fill="none" stroke="#8da2c0" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <text x="925" y="348" text-anchor="middle" class="small muted">селекторы</text>
+  <path d="M1355 365 H1395" fill="none" stroke="#8da2c0" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <text x="1375" y="348" text-anchor="middle" class="small muted">колонки</text>
+
+  <!-- Extraction explanation -->
+  <rect x="60" y="520" width="835" height="185" rx="15" fill="#2a2116" stroke="#d59b3e" stroke-width="2"/>
+  <text x="85" y="555" font-size="21" font-weight="700" fill="#ffd27d">Что мешает просто вынести метод в другую DLL</text>
+  <text x="85" y="590" class="body">Метод только записывает внутреннее описание.</text>
+  <text x="85" y="618" class="body">Без подготовки и специальной SQL-ветки это описание</text>
+  <text x="85" y="646" class="body">не превращается в исполняемый запрос.</text>
+  <text x="85" y="678" class="body" fill="#ffd27d">Эти зависимости не доступны сторонней сборке.</text>
+
+  <!-- SQL branch area -->
+  <rect x="955" y="500" width="850" height="225" rx="15" fill="#10212b" stroke="#42bfd1" stroke-width="2"/>
+  <text x="980" y="531" font-size="20" font-weight="700" fill="#82e4ee">SQL появляется только здесь</text>
+  <path d="M1605 460 V483 H1170 V535" fill="none" stroke="#55d6e8" stroke-width="2.2" marker-end="url(#arrow-cyan)"/>
+  <path d="M1605 483 H1588 V535" fill="none" stroke="#55d6e8" stroke-width="2.2" marker-end="url(#arrow-cyan)"/>
+  <rect x="975" y="545" width="390" height="145" rx="12" fill="#14243a" stroke="#456b99" stroke-width="1.5"/>
+  <text x="995" y="575" font-size="18" font-weight="700" fill="#b7d3ff">Переносимый путь</text>
+  <text x="995" y="606" class="body">Подзапрос с rank() / row_number()</text>
+  <text x="995" y="632" class="body">Внешний фильтр: ранг = 1</text>
+  <text x="995" y="662" class="body muted">Для One и All</text>
+  <rect x="1395" y="545" width="390" height="145" rx="12" fill="#142a32" stroke="#3a8d98" stroke-width="1.5"/>
+  <text x="1415" y="575" font-size="18" font-weight="700" fill="#9ce9ed">Нативный путь (если подходит)</text>
+  <text x="1415" y="606" class="mono" font-size="15">ISqlDialect.ExtremeRowRenderer</text>
+  <text x="1415" y="632" class="body">PostgreSQL / ClickHouse</text>
+  <text x="1415" y="658" class="body">Только One; иначе переносимый путь</text>
+  <text x="1415" y="680" class="small muted">Расширение рендеринга, не общая поддержка custom operators.</text>
+
+  <text x="52" y="834" font-size="23" font-weight="700" fill="#f2f5fb">Перенести можно, но не один метод: нужно отделить алгоритм от внутренних зависимостей.</text>
+  <text x="54" y="859" class="small muted">Показан поток описания оператора, не полный порядок исполнения; кэш и чтение результатов опущены.</text>
+  <text x="54" y="883" class="small muted">Код: EntityBuilder.cs:2961–2993, 472 • QueryCommand.QueryPreparer.cs:3712–3727 • SqlBuilder.cs:54–55, 1131–1216</text>
+</svg>

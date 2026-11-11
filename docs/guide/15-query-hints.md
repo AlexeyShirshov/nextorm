@@ -324,6 +324,25 @@ where (b = true)
 settings max_threads = 2
 ```
 
+`Settings` is the trailer of the clause order: it is emitted after `LIMIT ... BY` and after
+`LIMIT`/`OFFSET`, and ClickHouse rejects a `LIMIT` placed after `SETTINGS` (server Code 62). A scalar
+terminal adds paging — `First`/`FirstOrDefault` render `limit 1`, `Single`/`SingleOrDefault` render
+`limit 2` — so the settings clause follows it:
+
+```csharp
+var count = dataContext.From<IComplexEntity>()
+    .Settings(("max_threads", "2"))
+    .Select(c => SqlFunctions.Sql.count())
+    .First();
+```
+
+```sql
+select toInt32(count(*))
+ from complex_entity
+limit 1
+ settings max_threads = 2
+```
+
 `Final()` forces the merge of a ReplacingMergeTree/CollapsingMergeTree before the read; `Sample` reads a
 fraction `[0, 1]` of the rows; `PreWhere` filters before the regular `WHERE` so the read can skip other
 columns; `Settings` appends a trailing clause whose values are rendered verbatim (only pass trusted
@@ -344,9 +363,9 @@ both.
 
 ---
 
-Source: `src/nextorm.core/Query/QueryCommand.TResult.cs` ([`Hint`](xref:NextORM.Core.QueryCommand`1.Hint(System.String[]))),
-`src/nextorm.core/DataContext/FromOptions.cs` (`WithTableHint`/`WithIndex`/`WithoutIndex`),
-`src/nextorm.core/Builders/JoinOptions.cs` (`WithJoinTableHint`/`WithJoinHint`), `src/nextorm.core/DataContext/FromOptions.cs` (`WithSubQueryHint`), `src/nextorm.core/Builders/EntityBuilder.cs` (`WithTablesInScopeHint`),
+Source: `src/nextorm.core/Query/Commands/QueryCommand.TResult.cs` ([`Hint`](xref:NextORM.Core.QueryCommand`1.Hint(System.String[]))),
+`src/nextorm.core/DataContext/Sql/FromOptions.cs` (`WithTableHint`/`WithIndex`/`WithoutIndex`),
+`src/nextorm.core/Builders/JoinOptions.cs` (`WithJoinTableHint`/`WithJoinHint`), `src/nextorm.core/DataContext/Sql/FromOptions.cs` (`WithSubQueryHint`), `src/nextorm.core/Builders/Entity/EntityBuilder.cs` (`WithTablesInScopeHint`),
 `src/nextorm.core/DataContext/Dialect/ISqlDialect.cs` ([`SupportsQueryHints`](xref:NextORM.Core.ISqlDialect.SupportsQueryHints) / [`RenderQueryHints`](xref:NextORM.Core.ISqlDialect.RenderQueryHints(System.String,System.Collections.Generic.IReadOnlyList{System.String},System.String,NextORM.Core.KeywordCase))),
 `src/nextorm.sqlserver/SqlServerDialect.cs`, `src/nextorm.postgres/PostgresDialect.cs`,
 `src/nextorm.mysql/MySqlDialect.cs` (MariaDB inherits).

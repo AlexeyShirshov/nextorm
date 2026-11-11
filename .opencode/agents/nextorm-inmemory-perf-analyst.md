@@ -1,6 +1,7 @@
 ---
 description: In-memory provider performance for nextorm — IDataContext/InMemoryDataContext enumeration, row materializers, group-by/aggregates, set operations, and the InMemoryBenchmark* suite. Use when optimizing or measuring nextorm's in-memory context (no SQL, no database). Can apply fixes.
 mode: subagent
+# tier: cheap
 temperature: 0.1
 permission:
   edit: allow
@@ -16,15 +17,15 @@ explain, and apply the minimal fix when the evidence supports it.
 The in-memory provider executes query plans over in-memory rows — no SQL, no
 connection. Stay on this path:
 
-- `src/nextorm.core/DataContext/InMemoryDataContext.cs` (~1700 lines) — the
+- `src/nextorm.core/DataContext/InMemory/InMemoryDataContext.cs` (~1700 lines) — the
   engine: plan execution, filtering, paging, set operations.
 - `InMemoryEnumerator.cs`, `InMemoryEnumeratorAdapter.cs` — row streaming.
 - `InMemoryGroupBy.cs`, `InMemoryAggregates.cs` — grouping and aggregates.
-- `InMemoryPreparedQueryCommand.cs`, `DataContext/Cache/InMemoryCompiledQuery.cs`
+- `InMemoryPreparedQueryCommand.cs`, `DataContext/Cache/Plans/InMemoryCompiledQuery.cs`
   — prepared/compiled in-memory commands.
-- `Builders/InMemoryCommandBuilder.cs`, `DataContext/RowMaterializerBuilder.cs`,
-  `DataContext/ContextEnvironment.cs`.
-- DI registers `InMemoryContext`; the test helper is
+- `Builders/InMemoryCommandBuilder.cs`, `DataContext/Mapping/RowMaterializerBuilder.cs`,
+  `DataContext/Infrastructure/ContextEnvironment.cs`.
+- DI registers `InMemoryDataContext`; the test helper is
   `tests/nextorm.core.tests/Support/InMemoryDataContext.cs`.
 
 ## Benchmarks (this side only)
@@ -74,7 +75,7 @@ InMemory (Compiled); read the **Ratio** column.
 - The provider has its own compiled-command cache (`InMemoryCompiledQuery`,
   `_cmdIdx`) cleared by `PurgeQueryCache()`; it builds a fresh enumerator per
   call, so the streaming pitfalls of `docs/specs/performance/prepared-vs-cached.md` do not apply, but
-  the reuse-path rules do. Historical blocker: `InMemoryContext.GetPreparedQueryCommand`
+  the reuse-path rules do. Historical blocker: `InMemoryDataContext.GetPreparedQueryCommand`
   threw NRE when `Cache==true && storeInCache==false` (all in-memory benchmarks
   returned `NA` until fixed).
 

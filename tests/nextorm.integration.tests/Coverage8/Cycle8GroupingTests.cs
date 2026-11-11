@@ -19,7 +19,7 @@ public sealed class Cycle8GroupingCollectionDefinition;
 /// that a warmed plan re-binds a changed captured value.
 ///
 /// <para>
-/// Targeted arms of <c>src/nextorm.core/DataContext/SqlBuilder.cs</c>: the out-of-range grouping-set
+/// Targeted arms of <c>src/nextorm.core/DataContext/Sql/SqlBuilder.cs</c>: the out-of-range grouping-set
 /// index guard (:294-295, both operands of the range test) and the parameter pass of the portable
 /// extreme-row outer statement (:1351-1367 — the select-list walk and the sort walk, reached only when
 /// <c>SqlContext.ParamMode</c> is true), together with the parameter-mode rank-expression walk it
@@ -293,7 +293,7 @@ public sealed class Cycle8GroupingTests : ProviderTestSuite
                 var threshold = floor;
                 return context.From<C8gMarker>()
                     .Where(x => x.Num >= threshold)
-                    .SelectWhereMax(x => x.Num, ExtremeRowTies.All)
+                    .SelectWhereMaxOld(x => x.Num, ExtremeRowTies.All)
                     .OrderBy(x => x.Id)
                     .ToList()
                     .Select(row => row.Id)
@@ -318,7 +318,7 @@ public sealed class Cycle8GroupingTests : ProviderTestSuite
                 var limit = ceiling;
                 return context.From<C8gMarker>()
                     .Where(x => x.Num <= limit)
-                    .SelectWhereMin(x => x.Num, x => new { x.Id, x.Num }, ExtremeRowTies.All)
+                    .SelectWhereMinOld(x => x.Num, x => new { x.Id, x.Num }, ExtremeRowTies.All)
                     .OrderBy(1, OrderDirection.Asc)
                     .ToList()
                     .Select(row => row.Id)

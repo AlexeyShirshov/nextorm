@@ -2,7 +2,9 @@
   href: index.md
 - name: Возможности
   href: capabilities.md
+- name: Функции провайдеров
+  href: provider-features.md
 - name: Бенчмарки
   href: benchmarks.md
-- name: Feature-бенчмарки (2026-10-17)
-  href: feature-benchmarks-2026-10-17.md
+- name: Feature-бенчмарки
+  href: feature-benchmarks.md

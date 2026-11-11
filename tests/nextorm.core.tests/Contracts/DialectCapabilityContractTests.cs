@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text;
 using FluentAssertions;
 
 namespace NextORM.Core.Tests;
@@ -157,6 +158,23 @@ public sealed class DialectCapabilityContractTests
                 }
             }
 
+            // T282 (#282): a capability flag and its renderer agree, and an absent capability fails
+            // closed instead of emitting SQL the provider cannot execute.
+            if (dialect.SupportsBase64Encode)
+                dialect.MakeBase64Encode("[x]").Should().NotBeNullOrEmpty();
+            else
+                FluentActions.Invoking(() => dialect.MakeBase64Encode("[x]")).Should().Throw<NotSupportedException>();
+
+            if (dialect.SupportsBase64Decode)
+                dialect.MakeBase64Decode("[x]").Should().NotBeNullOrEmpty();
+            else
+                FluentActions.Invoking(() => dialect.MakeBase64Decode("[x]")).Should().Throw<NotSupportedException>();
+
+            if (dialect.SupportsCryptGenRandom)
+                dialect.MakeCryptGenRandom("[n]").Should().NotBeNullOrEmpty();
+            else
+                FluentActions.Invoking(() => dialect.MakeCryptGenRandom("[n]")).Should().Throw<NotSupportedException>();
+
             if (dialect.StringSplit is { } split)
                 split.Render("','", "[x]").Should().NotBeNullOrEmpty();
 
@@ -278,6 +296,53 @@ public sealed class DialectCapabilityContractTests
         dialects.Should().Contain(d => d.SupportsCollation);
         dialects.Should().Contain(d => d.SupportsOrdinalComparison);
         dialects.Should().Contain(d => d.SupportsRegex);
+        dialects.Should().Contain(d => d.SupportsSavepoints);
+    }
+
+    /// <summary>
+    /// <see cref="ISqlDialect.SupportsSavepoints"/> is a default interface method, so it cannot be
+    /// implemented by a member declared in a derived class: an interface DIM stays in force for the
+    /// interface dispatch even when the class declares a same-named member. The base class therefore
+    /// carries a <c>virtual</c> member as well, and a third-party dialect opts in with
+    /// <c>override</c>. Both shapes are pinned here so a regression to the class-member-only form
+    /// fails loudly instead of silently reporting <c>false</c> through the interface.
+    /// </summary>
+    [Fact]
+    public void SupportsSavepoints_ThirdPartyDialectDerivedFromBase_ReadsThroughTheInterface()
+    {
+        ISqlDialect optingIn = SavepointCapableThirdPartyDialect.Instance;
+        ISqlDialect defaulted = SavepointlessThirdPartyDialect.Instance;
+
+        optingIn.SupportsTransactions.Should().BeTrue();
+        optingIn.SupportsSavepoints.Should().BeTrue();
+        defaulted.SupportsTransactions.Should().BeTrue();
+        defaulted.SupportsSavepoints.Should().BeFalse("the base-class default is fail-closed");
+    }
+
+    /// <summary>A third-party-style dialect deriving from <see cref="SqlDialectBase"/> and opting in.</summary>
+    private sealed class SavepointCapableThirdPartyDialect : SqlDialectBase
+    {
+        internal static readonly SavepointCapableThirdPartyDialect Instance = new();
+
+        public override bool SupportsSavepoints => true;
+
+        public override string MakeParam(string name) => "@" + name;
+
+        public override void MakePage(Paging paging, StringBuilder sqlBuilder, KeywordCase keywordCase = KeywordCase.Lower)
+        {
+        }
+    }
+
+    /// <summary>A third-party-style dialect deriving from <see cref="SqlDialectBase"/> that declares nothing.</summary>
+    private sealed class SavepointlessThirdPartyDialect : SqlDialectBase
+    {
+        internal static readonly SavepointlessThirdPartyDialect Instance = new();
+
+        public override string MakeParam(string name) => "@" + name;
+
+        public override void MakePage(Paging paging, StringBuilder sqlBuilder, KeywordCase keywordCase = KeywordCase.Lower)
+        {
+        }
     }
 
     /// <summary>
@@ -367,6 +432,66 @@ public sealed class DialectCapabilityContractTests
                 var act = () => lockRenderer.Render(LockMode.Update, LockWaitMode.Wait, KeywordCase.Lower, "\"t1\"");
                 act.Should().Throw<NotSupportedException>($"{dialect.GetType().Name} must reject a source lock");
             }
+        }
+    }
+
+    /// <summary>
+    /// T348 (#282) U1: the SQL Server version gates are version-only and fail closed. Every dialect
+    /// constructed without a declaration (including the parameterless <c>SqlServerDialect.Instance</c>)
+    /// reports all three flags false; an edition declaration never substitutes for a major version.
+    /// </summary>
+    [Fact]
+    [Trait("PDCA", "T348")]
+    public void SqlServerVersionCapabilities_ShouldStayClosedOnEveryUnversionedDialect()
+    {
+        var dialects = AllDialects().ToList();
+        dialects.Should().NotBeEmpty("the provider dialect assemblies must be loaded");
+
+        foreach (var dialect in dialects)
+        {
+            dialect.SupportsSqlServer2025Functions.Should().BeFalse(
+                $"{dialect.GetType().Name} must not assume a SQL Server 2025 declaration");
+            dialect.SupportsSqlServer2022Functions.Should().BeFalse(
+                $"{dialect.GetType().Name} must not assume a SQL Server 2022 declaration");
+            dialect.SupportsProductAggregate.Should().BeFalse(
+                $"{dialect.GetType().Name} must not assume the PRODUCT aggregate");
+        }
+    }
+
+    /// <summary>
+    /// T348 (#282) M4: the SQL Server aggregates are provider opt-ins on top of a closed base default.
+    /// A dialect that is not the SQL Server dialect must keep all five name-specific aggregate flags
+    /// false, so defaulting any base member to <c>true</c> cannot silently enable a T-SQL-only
+    /// aggregate on another provider.
+    /// </summary>
+    [Fact]
+    [Trait("PDCA", "T348")]
+    public void SqlServerAggregateCapabilities_ShouldStayClosedOnEveryNonSqlServerDialect()
+    {
+        var dialects = AllDialects().ToList();
+        var nonSqlServer = dialects
+            .Where(d => d.GetType().Assembly.GetName().Name != "nextorm.sqlserver")
+            .ToList();
+
+        dialects.Should().Contain(
+            d => d.GetType().Assembly.GetName().Name == "nextorm.sqlserver",
+            "the SQL Server dialect must be loaded, otherwise the exclusion proves nothing");
+        nonSqlServer.Should().NotBeEmpty("the other provider dialects must be loaded");
+
+        foreach (var dialect in nonSqlServer)
+        {
+            var name = dialect.GetType().Name;
+
+            dialect.SupportsApproxCountDistinctAggregate.Should().BeFalse(
+                $"{name} must not claim the APPROX_COUNT_DISTINCT aggregate");
+            dialect.SupportsChecksumAggregate.Should().BeFalse(
+                $"{name} must not claim the CHECKSUM_AGG aggregate");
+            dialect.SupportsGroupingIdAggregate.Should().BeFalse(
+                $"{name} must not claim the GROUPING_ID aggregate");
+            dialect.SupportsApproxPercentileCont.Should().BeFalse(
+                $"{name} must not claim the APPROX_PERCENTILE_CONT aggregate");
+            dialect.SupportsApproxPercentileDisc.Should().BeFalse(
+                $"{name} must not claim the APPROX_PERCENTILE_DISC aggregate");
         }
     }
 

@@ -15,7 +15,7 @@ public class PlanCacheTests
     private static (IDataContext Ctx, string Path) CreateDb()
     {
         var path = Path.Combine(Path.GetTempPath(), $"nextorm-plancache-{Guid.NewGuid():N}.db");
-        using (var conn = new SqliteConnection($"Data Source={path}"))
+        using (var conn = new SqliteConnection($"Data Source={path};Pooling=False"))
         {
             conn.Open();
             using var cmd = conn.CreateCommand();
@@ -26,7 +26,7 @@ public class PlanCacheTests
             cmd.ExecuteNonQuery();
         }
 
-        var ctx = new SqliteDataContext($"Data Source={path}", new DataContextBuilder());
+        var ctx = new SqliteDataContext($"Data Source={path};Pooling=False", new DataContextBuilder());
         ctx.EnsureConnectionOpen();
         return (ctx, path);
     }
@@ -103,9 +103,9 @@ public class PlanCacheTests
         {
             ctx.PurgeQueryCache();
 
-            // Prepare(nonStreamUsing: false) is the only way to get a streamable prepared command.
+            // Prepare(new PrepareOptions { Streaming = true }) is the only way to get a streamable prepared command.
             var prepared = ctx.From<ISimpleEntity>().Select(x => x.Id)
-                .Prepare(nonStreamUsing: false, TestContext.Current.CancellationToken);
+                .Prepare(new PrepareOptions { Streaming = true }, TestContext.Current.CancellationToken);
 
             var rows = await DrainAsync(
                 prepared.ToAsyncEnumerable(ctx, TestContext.Current.CancellationToken),
@@ -128,9 +128,9 @@ public class PlanCacheTests
         {
             ctx.PurgeQueryCache();
 
-            // Prepare() defaults to nonStreamUsing: true (buffered/scalar only).
+            // Prepare() defaults to buffered (PrepareOptions.Streaming = false, scalar/buffered only).
             var prepared = ctx.From<ISimpleEntity>().Select(x => x.Id)
-                .Prepare(cancellationToken: TestContext.Current.CancellationToken);
+                .Prepare(default, TestContext.Current.CancellationToken);
 
             prepared.ToList(ctx).Should().Equal(42);
             prepared.ToList(ctx).Should().Equal(42);
@@ -157,7 +157,7 @@ public class PlanCacheTests
             ctx.PurgeQueryCache();
 
             var prepared = ctx.From<ISimpleEntity>().Select(x => x.Id)
-                .Prepare(cancellationToken: TestContext.Current.CancellationToken);
+                .Prepare(default, TestContext.Current.CancellationToken);
 
             // Buffered terminals are fine with the very same command.
             prepared.ToList(ctx).Should().Equal(42);
@@ -167,13 +167,13 @@ public class PlanCacheTests
                 TestContext.Current.CancellationToken);
 
             (await asyncAct.Should().ThrowAsync<InvalidOperationException>())
-                .WithMessage("*nonStreamUsing: false*");
+                .WithMessage("*Prepare(new PrepareOptions { Streaming = true })*");
 
             // ToEnumerable is a lazy iterator, so the failure surfaces on enumeration, not on the call.
             var syncAct = () => prepared.ToEnumerable(ctx).ToList();
 
             syncAct.Should().Throw<InvalidOperationException>()
-                .WithMessage("*nonStreamUsing: false*");
+                .WithMessage("*Prepare(new PrepareOptions { Streaming = true })*");
         }
         finally
         {
@@ -401,7 +401,7 @@ public class PlanCacheTests
 
             // Prepare() passes storeInCache: false, so it must not add an entry to the plan cache.
             var prepared = ctx.From<ISimpleEntity>().Select(x => x.Id)
-                .Prepare(cancellationToken: TestContext.Current.CancellationToken);
+                .Prepare(default, TestContext.Current.CancellationToken);
             prepared.ToList(ctx).Should().Equal(42);
 
             var first = prepared.ToList(ctx);

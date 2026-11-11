@@ -22,7 +22,7 @@ internal readonly record struct LoggingOptions(
 internal readonly record struct ProviderHooks(
     Func<SelectExpression, Expression, Expression> MapColumn,
     Func<DbCommand, string, object?, DbParameter> CreateParam,
-    Func<string, DbCommand> CreateCommand);
+    Func<string, object?, DbParameter> CreateParamSimple);
 
 /// <summary>
 /// The provider hooks the connection axis invokes: how to create a connection and how to initialise

@@ -1,10 +1,12 @@
 ﻿using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Data;
+using System.Data.Common;
 using System.Text;
 using FluentAssertions;
 using NextORM.Core;
 using Npgsql;
+using NpgsqlTypes;
 using System.Text.Json;
 
 namespace NextORM.Integration.Tests;
@@ -148,6 +150,441 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
         hashes.B.Should().Equal(expected);
     }
 
+    // -----------------------------------------------------------------------------------------
+    // T261 (#261): an inline byte[] must reach a PostgreSQL crypto function as one whole bytea
+    // operand, not as concatenated integer literals. The three inline shapes (non-empty
+    // initializer, empty initializer, empty bounds) are separate cases: they are distinct
+    // expression shapes and must never be collapsed. Every expected digest below is an
+    // independent oracle (Python hashlib over the same bytes, recorded in the cycle's
+    // scenarios.json), never a value produced by the translator under test.
+    // -----------------------------------------------------------------------------------------
+
+    public static TheoryData<string> T261ByteArrayFunctions => new()
+    {
+        "sha256", "sha224", "sha384", "sha512", "digest"
+    };
+
+    public static TheoryData<string> T261ReassignmentFunctions => new() { "sha256", "digest" };
+
+    private static byte[] T261AbcOracle(string function) => Convert.FromHexString(function switch
+    {
+        "sha256" or "digest" => "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        "sha224" => "23097d223405d8228642a477bda255b32aadbce4bda0b3f7e36c9da7",
+        "sha384" => "cb00753f45a35e8bb5a03d699ac65007272c32ab0eded1631a8b605a43ff5bed8086072ba1e7cc2358baeca134c825a7",
+        "sha512" => "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f",
+        _ => throw new ArgumentOutOfRangeException(nameof(function), function, "unknown T261 byte-array function"),
+    });
+
+    private static byte[] T261EmptyOracle(string function) => Convert.FromHexString(function switch
+    {
+        "sha256" or "digest" => "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "sha224" => "d14a028c2a3a2bc9476102bb288234c415a2b01f828ea62ac5b3e42f",
+        "sha384" => "38b060a751ac96384cd9327eb1b1e36a21fdb71114be07434c0cc7bf63f6e1da274edebfe76f65fbd51ad2f14898b95b",
+        "sha512" => "cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e",
+        _ => throw new ArgumentOutOfRangeException(nameof(function), function, "unknown T261 byte-array function"),
+    });
+
+    private static byte[] T261XyzOracle(string function) => Convert.FromHexString(function switch
+    {
+        "sha256" or "digest" => "3608bca1e44ea6c4d268eb6db02260269892c0b42b86bbf1e77a6fa16c3c9282",
+        "sha224" => "30e90f1cd0ceff8eb3dd6a540a605c0666f841d35de63c57e4dd2877",
+        "sha384" => "edcb0f4721e6578d900e4c24ad4b19e194ab6c87f8243bfc6b11754dd8b0bbde4f30b1d18197932b6376da004dcd97c4",
+        "sha512" => "4a3ed8147e37876adc8f76328e5abcc1b470e6acfc18efea0135f983604953a58e183c1a6086e91ba3e821d926f5fdeb37761c7ca0328a963f5e92870675b728",
+        _ => throw new ArgumentOutOfRangeException(nameof(function), function, "unknown T261 byte-array function"),
+    });
+
+    private QueryCommand<byte[]?> T261InlineNonEmptyQuery(string function)
+    {
+        var e = _sut.SimpleEntity.Where(x => x.Id == 1);
+
+        return function switch
+        {
+            "sha256" => e.Select(x => SqlFunctions.Postgres.sha256(new byte[] { 0x61, 0x62, 0x63 })),
+            "sha224" => e.Select(x => SqlFunctions.Postgres.sha224(new byte[] { 0x61, 0x62, 0x63 })),
+            "sha384" => e.Select(x => SqlFunctions.Postgres.sha384(new byte[] { 0x61, 0x62, 0x63 })),
+            "sha512" => e.Select(x => SqlFunctions.Postgres.sha512(new byte[] { 0x61, 0x62, 0x63 })),
+            "digest" => e.Select(x => SqlFunctions.Postgres.digest(new byte[] { 0x61, 0x62, 0x63 }, "sha256")),
+            _ => throw new ArgumentOutOfRangeException(nameof(function), function, "unknown T261 byte-array function"),
+        };
+    }
+
+    private QueryCommand<byte[]?> T261InlineEmptyInitializerQuery(string function)
+    {
+        var e = _sut.SimpleEntity.Where(x => x.Id == 1);
+
+        return function switch
+        {
+            "sha256" => e.Select(x => SqlFunctions.Postgres.sha256(new byte[] { })),
+            "sha224" => e.Select(x => SqlFunctions.Postgres.sha224(new byte[] { })),
+            "sha384" => e.Select(x => SqlFunctions.Postgres.sha384(new byte[] { })),
+            "sha512" => e.Select(x => SqlFunctions.Postgres.sha512(new byte[] { })),
+            "digest" => e.Select(x => SqlFunctions.Postgres.digest(new byte[] { }, "sha256")),
+            _ => throw new ArgumentOutOfRangeException(nameof(function), function, "unknown T261 byte-array function"),
+        };
+    }
+
+    private QueryCommand<byte[]?> T261InlineEmptyBoundsQuery(string function)
+    {
+        var e = _sut.SimpleEntity.Where(x => x.Id == 1);
+
+        return function switch
+        {
+            "sha256" => e.Select(x => SqlFunctions.Postgres.sha256(new byte[0])),
+            "sha224" => e.Select(x => SqlFunctions.Postgres.sha224(new byte[0])),
+            "sha384" => e.Select(x => SqlFunctions.Postgres.sha384(new byte[0])),
+            "sha512" => e.Select(x => SqlFunctions.Postgres.sha512(new byte[0])),
+            "digest" => e.Select(x => SqlFunctions.Postgres.digest(new byte[0], "sha256")),
+            _ => throw new ArgumentOutOfRangeException(nameof(function), function, "unknown T261 byte-array function"),
+        };
+    }
+
+    [Theory]
+    [MemberData(nameof(T261ByteArrayFunctions))]
+    public void T261_InlineNonEmpty_ShouldMatchAbcOracle(string function)
+        => T261InlineNonEmptyQuery(function).First().Should().Equal(T261AbcOracle(function));
+
+    [Theory]
+    [MemberData(nameof(T261ByteArrayFunctions))]
+    public void T261_InlineEmptyInitializer_ShouldMatchEmptyOracle(string function)
+        => T261InlineEmptyInitializerQuery(function).First().Should().Equal(T261EmptyOracle(function));
+
+    [Theory]
+    [MemberData(nameof(T261ByteArrayFunctions))]
+    public void T261_InlineEmptyBounds_ShouldMatchEmptyOracle(string function)
+        => T261InlineEmptyBoundsQuery(function).First().Should().Equal(T261EmptyOracle(function));
+
+    [Fact]
+    public void T261_NullByteArray_ShouldProduceSqlNullForAllFunctions()
+    {
+        var r = _sut.SimpleEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Sha256 = SqlFunctions.Postgres.sha256((byte[]?)null),
+                Sha224 = SqlFunctions.Postgres.sha224((byte[]?)null),
+                Sha384 = SqlFunctions.Postgres.sha384((byte[]?)null),
+                Sha512 = SqlFunctions.Postgres.sha512((byte[]?)null),
+                Digest = SqlFunctions.Postgres.digest((byte[]?)null, "sha256")
+            })
+            .First();
+
+        // Null must stay distinct from the empty input: every hash is SQL NULL, not the empty digest.
+        r.Sha256.Should().BeNull();
+        r.Sha224.Should().BeNull();
+        r.Sha384.Should().BeNull();
+        r.Sha512.Should().BeNull();
+        r.Digest.Should().BeNull();
+    }
+
+    [Fact]
+    public void T261_CapturedByteArray_ShouldMatchAbcOracleForAllFunctions()
+    {
+        var data = new byte[] { 0x61, 0x62, 0x63 };
+
+        var r = _sut.SimpleEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Sha256 = SqlFunctions.Postgres.sha256(data),
+                Sha224 = SqlFunctions.Postgres.sha224(data),
+                Sha384 = SqlFunctions.Postgres.sha384(data),
+                Sha512 = SqlFunctions.Postgres.sha512(data),
+                Digest = SqlFunctions.Postgres.digest(data, "sha256")
+            })
+            .First();
+
+        r.Sha256.Should().Equal(T261AbcOracle("sha256"));
+        r.Sha224.Should().Equal(T261AbcOracle("sha224"));
+        r.Sha384.Should().Equal(T261AbcOracle("sha384"));
+        r.Sha512.Should().Equal(T261AbcOracle("sha512"));
+        r.Digest.Should().Equal(T261AbcOracle("digest"));
+    }
+
+    [Fact]
+    public void T261_ExplicitParameterByteArray_ShouldMatchAbcOracleForAllFunctions()
+    {
+        var r = _sut.SimpleEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Sha256 = SqlFunctions.Postgres.sha256(SqlFunctions.Parameter<byte[]>(0)),
+                Sha224 = SqlFunctions.Postgres.sha224(SqlFunctions.Parameter<byte[]>(0)),
+                Sha384 = SqlFunctions.Postgres.sha384(SqlFunctions.Parameter<byte[]>(0)),
+                Sha512 = SqlFunctions.Postgres.sha512(SqlFunctions.Parameter<byte[]>(0)),
+                Digest = SqlFunctions.Postgres.digest(SqlFunctions.Parameter<byte[]>(0), "sha256")
+            })
+            .First(new byte[] { 0x61, 0x62, 0x63 });
+
+        r.Sha256.Should().Equal(T261AbcOracle("sha256"));
+        r.Sha224.Should().Equal(T261AbcOracle("sha224"));
+        r.Sha384.Should().Equal(T261AbcOracle("sha384"));
+        r.Sha512.Should().Equal(T261AbcOracle("sha512"));
+        r.Digest.Should().Equal(T261AbcOracle("digest"));
+    }
+
+    [Fact]
+    public void T261_ByteaColumn_ShouldHashStoredBytes()
+    {
+        // The seeded binary_entity row 1 stores 0x01020304; the oracle is hashlib over those bytes.
+        var r = _sut.BinaryEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Sha256 = SqlFunctions.Postgres.sha256(x.Data),
+                Sha224 = SqlFunctions.Postgres.sha224(x.Data),
+                Sha384 = SqlFunctions.Postgres.sha384(x.Data),
+                Sha512 = SqlFunctions.Postgres.sha512(x.Data),
+                Digest = SqlFunctions.Postgres.digest(x.Data, "sha256")
+            })
+            .First();
+
+        r.Sha256.Should().Equal(Convert.FromHexString("9f64a747e1b97f131fabb6b447296c9b6f0201e79fb3c5356e6c77e89b6a806a"));
+        r.Sha224.Should().Equal(Convert.FromHexString("fe19672fa20acdc6a794f7ed68dd7563c27f647920164b991f1ad037"));
+        r.Sha384.Should().Equal(Convert.FromHexString("5a667d62430a8c253ebae433333904dc6e1d41dcdc479704773159b905a3ad82d2bad7762d81a366cc46fbb2e2327f5c"));
+        r.Sha512.Should().Equal(Convert.FromHexString("a7c976db1723adb41274178dc82e9b777941ab201c69de61d0f2bc6d27a3598f594fa748e50d88d3c2bf1e2c2e72c3cfef78c3c6d4afa90391f7e33ababca48e"));
+        r.Digest.Should().Equal(Convert.FromHexString("9f64a747e1b97f131fabb6b447296c9b6f0201e79fb3c5356e6c77e89b6a806a"));
+    }
+
+    [Fact]
+    public void T261_NullByteaColumn_ShouldProduceSqlNullForAllFunctions()
+    {
+        // The seeded binary_entity row 2 stores SQL NULL; a column must never be materialised
+        // client-side into an empty array, so every function returns NULL.
+        var r = _sut.BinaryEntity.Where(x => x.Id == 2)
+            .Select(x => new
+            {
+                Sha256 = SqlFunctions.Postgres.sha256(x.Data),
+                Sha224 = SqlFunctions.Postgres.sha224(x.Data),
+                Sha384 = SqlFunctions.Postgres.sha384(x.Data),
+                Sha512 = SqlFunctions.Postgres.sha512(x.Data),
+                Digest = SqlFunctions.Postgres.digest(x.Data, "sha256")
+            })
+            .First();
+
+        r.Sha256.Should().BeNull();
+        r.Sha224.Should().BeNull();
+        r.Sha384.Should().BeNull();
+        r.Sha512.Should().BeNull();
+        r.Digest.Should().BeNull();
+    }
+
+    [Fact]
+    public void T261_DigestStringForms_ShouldKeepTextRoute()
+    {
+        var data = "abc";
+        var algorithm = "sha256";
+
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Inline = SqlFunctions.Postgres.digest("abc", "sha256"),
+                EmptyString = SqlFunctions.Postgres.digest("", "sha256"),
+                Captured = SqlFunctions.Postgres.digest(data, "sha256"),
+                CapturedAlgorithm = SqlFunctions.Postgres.digest("abc", algorithm),
+                Parameter = SqlFunctions.Postgres.digest(SqlFunctions.Parameter<string>(0), "sha256"),
+                Column = SqlFunctions.Postgres.digest(x.String, "sha256")
+            })
+            .First("abc");
+
+        r.Inline.Should().Equal(T261AbcOracle("digest"));
+        r.EmptyString.Should().Equal(T261EmptyOracle("digest"));
+        r.Captured.Should().Equal(T261AbcOracle("digest"));
+        r.CapturedAlgorithm.Should().Equal(T261AbcOracle("digest"));
+        r.Parameter.Should().Equal(T261AbcOracle("digest"));
+
+        // complex_entity row 1 stores 'dadfasd'.
+        r.Column.Should().Equal(Convert.FromHexString("6110e528398f5c4137446fbdcb506e0a2f0b7d426c501f47c01657a2d3d3a9ce"));
+    }
+
+    [Theory]
+    [MemberData(nameof(T261ByteArrayFunctions))]
+    public void T261_RefreshInlineCapturedElements_ShouldUseCurrentValues(string function)
+    {
+        byte a = 0x61, b = 0x62, c = 0x63;
+        var ctx = (DataContext)_sut.DataProvider;
+        var ct = TestContext.Current.CancellationToken;
+
+        var command = function switch
+        {
+            "sha256" => _sut.SimpleEntity.Where(x => x.Id == 1)
+                .Select(x => SqlFunctions.Postgres.sha256(new byte[] { a, b, c })),
+            "sha224" => _sut.SimpleEntity.Where(x => x.Id == 1)
+                .Select(x => SqlFunctions.Postgres.sha224(new byte[] { a, b, c })),
+            "sha384" => _sut.SimpleEntity.Where(x => x.Id == 1)
+                .Select(x => SqlFunctions.Postgres.sha384(new byte[] { a, b, c })),
+            "sha512" => _sut.SimpleEntity.Where(x => x.Id == 1)
+                .Select(x => SqlFunctions.Postgres.sha512(new byte[] { a, b, c })),
+            "digest" => _sut.SimpleEntity.Where(x => x.Id == 1)
+                .Select(x => SqlFunctions.Postgres.digest(new byte[] { a, b, c }, "sha256")),
+            _ => throw new ArgumentOutOfRangeException(nameof(function), function, "unknown T261 byte-array function"),
+        };
+
+        var prepared = (DbPreparedQueryCommand<byte[]?>)ctx.GetPreparedQueryCommand(command, false, true, ct);
+
+        ctx.ToList(prepared).Single().Should().Equal(T261AbcOracle(function));
+
+        a = 0x78; b = 0x79; c = 0x7a;
+
+        // Re-preparing the same command on the same context is a plan-cache hit: the refreshed array
+        // must carry the current captured elements, not the values bound on the first execution.
+        var refreshed = (DbPreparedQueryCommand<byte[]?>)ctx.GetPreparedQueryCommand(command, false, true, ct);
+
+        ctx.ToList(refreshed).Single().Should().Equal(T261XyzOracle(function));
+    }
+
+    [Theory]
+    [MemberData(nameof(T261ReassignmentFunctions))]
+    public void T261_RefreshCapturedArrayReassignment_ShouldUseCurrentArray(string function)
+    {
+        var data = new byte[] { 0x61, 0x62, 0x63 };
+        var ctx = (DataContext)_sut.DataProvider;
+        var ct = TestContext.Current.CancellationToken;
+
+        var command = function switch
+        {
+            "sha256" => _sut.SimpleEntity.Where(x => x.Id == 1)
+                .Select(x => SqlFunctions.Postgres.sha256(data)),
+            "digest" => _sut.SimpleEntity.Where(x => x.Id == 1)
+                .Select(x => SqlFunctions.Postgres.digest(data, "sha256")),
+            _ => throw new ArgumentOutOfRangeException(nameof(function), function, "unknown T261 refresh function"),
+        };
+
+        var prepared = (DbPreparedQueryCommand<byte[]?>)ctx.GetPreparedQueryCommand(command, false, true, ct);
+
+        ctx.ToList(prepared).Single().Should().Equal(T261AbcOracle(function));
+
+        data = new byte[] { 0x01, 0x02, 0x03 };
+
+        // Same command, same context: the cache hit must re-read the reassigned captured array.
+        var refreshed = (DbPreparedQueryCommand<byte[]?>)ctx.GetPreparedQueryCommand(command, false, true, ct);
+
+        ctx.ToList(refreshed).Single().Should().Equal(
+            Convert.FromHexString(function switch
+            {
+                "sha256" => "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81",
+                "digest" => "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81",
+                _ => throw new ArgumentOutOfRangeException(nameof(function), function, "unknown T261 refresh function"),
+            }));
+    }
+
+    [Fact]
+    public void T261_SqlControls_ShouldBindWholeByteArray()
+    {
+        var data = new byte[] { 0x61, 0x62, 0x63 };
+        var text = "abc";
+
+        var capturedBytesSql = T261SqlOf(
+            _sut.SimpleEntity.Where(x => x.Id == 1).Select(x => new { H = SqlFunctions.Postgres.sha256(data) }),
+            out var capturedBytesCommand);
+
+        var capturedDigestSql = T261SqlOf(
+            _sut.SimpleEntity.Where(x => x.Id == 1).Select(x => new { H = SqlFunctions.Postgres.digest(data, "sha256") }),
+            out var capturedDigestCommand);
+
+        var explicitBytesSql = T261SqlOf(
+            _sut.SimpleEntity.Where(x => x.Id == 1)
+                .Select(x => new { H = SqlFunctions.Postgres.sha256(SqlFunctions.Parameter<byte[]>(0)) }),
+            out var explicitBytesCommand);
+
+        var capturedTextSql = T261SqlOf(
+            _sut.SimpleEntity.Where(x => x.Id == 1).Select(x => new { H = SqlFunctions.Postgres.digest(text, "sha256") }),
+            out var capturedTextCommand);
+
+        var parameterTextSql = T261SqlOf(
+            _sut.SimpleEntity.Where(x => x.Id == 1)
+                .Select(x => new { H = SqlFunctions.Postgres.digest(SqlFunctions.Parameter<string>(0), "sha256") }),
+            out var parameterTextCommand);
+
+        // Pre-change SQL/parameter baseline for the later exact comparison (AC04/AC05). Captured
+        // first, so a failing assertion can never hide the recorded baseline.
+        T261DumpSql("captured-byte-array.sha256", capturedBytesSql, capturedBytesCommand);
+        T261DumpSql("captured-byte-array.digest", capturedDigestSql, capturedDigestCommand);
+        T261DumpSql("explicit-parameter-byte-array.sha256", explicitBytesSql, explicitBytesCommand);
+        T261DumpSql("captured-string.digest", capturedTextSql, capturedTextCommand);
+        T261DumpSql("explicit-parameter-string.digest", parameterTextSql, parameterTextCommand);
+
+        // A captured array stays one whole bytea parameter; the algorithm of digest stays a literal.
+        capturedBytesSql.Should().Contain("sha256(@");
+        T261AssertCapturedByteaParameter(capturedBytesCommand);
+
+        capturedDigestSql.Should().Contain("digest(@");
+        capturedDigestSql.Should().Contain("'sha256'");
+        T261AssertCapturedByteaParameter(capturedDigestCommand);
+
+        explicitBytesSql.Should().Contain("sha256(@norm_p0)");
+        T261AssertExplicitPlaceholder(explicitBytesCommand, "norm_p0");
+
+        // The text route is unchanged: a binary-array parameter must never appear here.
+        capturedTextSql.Should().Contain("digest(@");
+        capturedTextSql.Should().Contain("'sha256'");
+        T261AssertCapturedTextParameter(capturedTextCommand, "abc");
+
+        parameterTextSql.Should().Contain("digest(@norm_p0, E'sha256')");
+        T261AssertExplicitPlaceholder(parameterTextCommand, "norm_p0");
+    }
+
+    private string T261SqlOf<TResult>(QueryCommand<TResult> command, out DbCommand dbCommand)
+    {
+        var prepared = (DbPreparedQueryCommand<TResult>)((DataContext)_sut.DataProvider)
+            .GetPreparedQueryCommand(command, false, false, TestContext.Current.CancellationToken);
+        dbCommand = prepared.DbCommand;
+
+        return prepared.DbCommand.CommandText.Replace("\r\n", "\n");
+    }
+
+    private static void T261AssertCapturedByteaParameter(DbCommand command)
+    {
+        var parameters = command.Parameters.Cast<DbParameter>().ToList();
+
+        parameters.Should().ContainSingle();
+        parameters[0].Should().BeOfType<NpgsqlParameter>();
+        parameters[0].ParameterName.Should().Be("data");
+        parameters[0].DbType.Should().Be(DbType.Binary);
+        ((NpgsqlParameter)parameters[0]).NpgsqlDbType.Should().Be(NpgsqlDbType.Bytea);
+        (parameters[0].Value as byte[]).Should().Equal(0x61, 0x62, 0x63);
+    }
+
+    private static void T261AssertExplicitPlaceholder(DbCommand command, string expectedName)
+    {
+        var parameters = command.Parameters.Cast<DbParameter>().ToList();
+
+        parameters.Should().ContainSingle();
+        parameters[0].Should().BeOfType<NpgsqlParameter>();
+        parameters[0].ParameterName.Should().Be(expectedName);
+        // SqlFunctions.Parameter<T> is a runtime placeholder: the executing terminal binds the value,
+        // so the prepared command still holds DBNull (T261_ExplicitParameterByteArray covers the
+        // bound bytea result).
+        parameters[0].Value.Should().Be(DBNull.Value);
+    }
+
+    private static void T261AssertCapturedTextParameter(DbCommand command, string expected)
+    {
+        var parameters = command.Parameters.Cast<DbParameter>().ToList();
+
+        parameters.Should().ContainSingle();
+        parameters[0].Should().BeOfType<NpgsqlParameter>();
+        parameters[0].ParameterName.Should().Be("text");
+        parameters[0].DbType.Should().Be(DbType.String);
+        ((NpgsqlParameter)parameters[0]).NpgsqlDbType.Should().Be(NpgsqlDbType.Text);
+        parameters[0].Value.Should().Be(expected);
+    }
+
+    private static void T261DumpSql(string scenario, string sql, DbCommand command)
+    {
+        var parameters = command.Parameters.Cast<DbParameter>().Select(p => new
+        {
+            name = p.ParameterName,
+            db_type = p.DbType.ToString(),
+            npgsql_type = p is NpgsqlParameter np ? np.NpgsqlDbType.ToString() : null,
+            value = p.Value switch
+            {
+                byte[] bytes => "0x" + Convert.ToHexString(bytes).ToLowerInvariant(),
+                DBNull => null,
+                null => null,
+                var other => other.ToString()
+            }
+        }).ToList();
+
+        TestContext.Current.TestOutputHelper?.WriteLine(
+            "T261SQL " + JsonSerializer.Serialize(new { scenario, sql, parameters }));
+    }
+
     [Fact]
     public void LastIndexOf_ShouldReturnZeroBasedLastPosition()
     {
@@ -178,7 +615,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
         var flags = "g";
 
         var groups = _sut.DataProvider
-            .FromTableFunction(() => SqlFunctions.Postgres.regexp_matches(source, pattern, flags))
+            .From(() => SqlFunctions.Postgres.regexp_matches(source, pattern, flags))
             .Select(r => new { r.Matches })
             .ToList();
 
@@ -193,7 +630,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
         var pattern = ",";
 
         var fragments = _sut.DataProvider
-            .FromTableFunction(() => SqlFunctions.Postgres.regexp_split_to_table(source, pattern))
+            .From(() => SqlFunctions.Postgres.regexp_split_to_table(source, pattern))
             .Select(r => r.Value)
             .ToList();
 
@@ -206,7 +643,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
         using var json = JsonDocument.Parse("[1,2,3]");
 
         var values = _sut.DataProvider
-            .FromTableFunction(() => SqlFunctions.Postgres.jsonb_array_elements_text(json))
+            .From(() => SqlFunctions.Postgres.jsonb_array_elements_text(json))
             .Select(r => r.Value)
             .ToList();
 
@@ -219,7 +656,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
         using var json = JsonDocument.Parse("""{"a":1,"b":2}""");
 
         var rows = _sut.DataProvider
-            .FromTableFunction(() => SqlFunctions.Postgres.jsonb_each_text(json))
+            .From(() => SqlFunctions.Postgres.jsonb_each_text(json))
             .OrderBy(r => r.Key)
             .Select(r => new { r.Key, r.Value })
             .ToList();
@@ -233,7 +670,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
         using var json = JsonDocument.Parse("""{"a":1,"b":"x"}""");
 
         var row = _sut.DataProvider
-            .FromTableFunction(() => SqlFunctions.Postgres.jsonb_to_record<IDynamicRecordRow>(json))
+            .From(() => SqlFunctions.Postgres.jsonb_to_record<IDynamicRecordRow>(json))
             .Select(r => new { r.A, r.B })
             .First();
 
@@ -246,7 +683,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
         using var json = JsonDocument.Parse("""[{"a":1,"b":"x"},{"a":2,"b":"y"}]""");
 
         var rows = _sut.DataProvider
-            .FromTableFunction(() => SqlFunctions.Postgres.jsonb_to_recordset<IDynamicRecordRow>(json))
+            .From(() => SqlFunctions.Postgres.jsonb_to_recordset<IDynamicRecordRow>(json))
             .OrderBy(r => r.A)
             .Select(r => new { r.A, r.B })
             .ToList();
@@ -260,7 +697,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
         using var json = JsonDocument.Parse("""{"a":1,"b":2}""");
 
         var keys = _sut.DataProvider
-            .FromTableFunction(() => SqlFunctions.Postgres.jsonb_object_keys(json))
+            .From(() => SqlFunctions.Postgres.jsonb_object_keys(json))
             .OrderBy(r => r.Key)
             .Select(r => r.Key)
             .ToList();
@@ -275,7 +712,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
         var path = "$.a[*]";
 
         var values = _sut.DataProvider
-            .FromTableFunction(() => SqlFunctions.Postgres.jsonb_path_query(json, SqlFunctions.Postgres.jsonpath(path)))
+            .From(() => SqlFunctions.Postgres.jsonb_path_query(json, SqlFunctions.Postgres.jsonpath(path)))
             .Select(r => r.Value)
             .ToList();
 
@@ -288,7 +725,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
         var query = "select to_tsvector('cat dog cat')";
 
         var stats = _sut.DataProvider
-            .FromTableFunction(() => SqlFunctions.Postgres.ts_stat(query))
+            .From(() => SqlFunctions.Postgres.ts_stat(query))
             .OrderBy(r => r.Word)
             .Select(r => new { r.Word, r.Ndoc, r.Nentry })
             .ToList();
@@ -2632,6 +3069,96 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
         var row = result.Read<PgNullProbe>().Single();
         row.Addr.Should().BeNull();
         row.Port.Should().BeNull();
+    }
+
+    /// <summary>
+    /// R04/R06 + §7 PostgreSQL <c>BEFORE INSERT</c> trigger proof: the proposed row is the row the server
+    /// would insert, so a trigger rewrite of an inserted column is part of <c>excluded</c>. The insert arm
+    /// omits <c>total</c> (column default <c>500</c>) and supplies the marker; the trigger overwrites the
+    /// proposed <c>total</c> with <c>777</c>; the update arm stores <c>excluded.Total</c>. The stored value
+    /// is therefore <c>777</c> — not the column default <c>500</c>, not the source <c>Total</c> (<c>0</c>,
+    /// which a source↔proposed substitution would store) and not the pre-update target (<c>1000</c>) — in
+    /// one statement. PostgreSQL only (PL/pgSQL DDL plus the <c>ON CONFLICT</c> proposed row), which is why
+    /// the fact lives here and not in the shared provider matrix.
+    /// </summary>
+    [Fact]
+    public void MergeAssignments_KeyUpsert_ExcludedShouldCarryTheBeforeInsertTriggerRewrite()
+    {
+        const int targetId = 7311;
+        const int triggerTotal = 777;
+        const int defaultTotal = 500;
+        var ctx = _sut.DataProvider;
+
+        // Each DDL step is a separate command, so no batch protocol behaviour is assumed.
+        Execute(ctx, "drop table if exists t301b_trigger");
+        Execute(ctx, "create table t301b_trigger (id int not null primary key, a int not null, b int not null, total int not null default 500, marker int not null default 0)");
+        Execute(ctx, """
+            create or replace function t301b_trigger_fn() returns trigger language plpgsql as $t301b$
+            begin
+                if new.marker <> 0 then
+                    new.total := 777;
+                end if;
+                return new;
+            end
+            $t301b$;
+            """);
+        Execute(ctx, "create trigger t301b_before_insert before insert on t301b_trigger for each row execute function t301b_trigger_fn()");
+        Execute(ctx, $"insert into t301b_trigger (id, a, b, total) values ({targetId}, 7, 3, 1000)");
+
+        var recorder = new MergeCommandRecorder();
+        ((DataContext)ctx).AddInterceptor(recorder);
+
+        // The original source row: marker set, so the insert path rewrites "total".
+        var source = new MergeTriggerTarget { Id = targetId, A = 1, B = 10, Total = 0, Marker = 1 };
+
+        ctx.CreateMergeBuilder<MergeTriggerTarget>()
+            .Using(source)
+            .OnKeys()
+            .WhenMatchedUpdate((t, s, excluded) => new { Total = excluded.Total })
+            .WhenNotMatchedInsert(s => new { Id = s.Id, A = s.A, B = s.B, Marker = s.Marker })
+            .Merge();
+
+        var command = recorder.Commands.Should().ContainSingle(c => c.Sql.Contains("t301b_trigger")).Which;
+        recorder.Executing.Should().Be(1, "the expression statement executes exactly once (no read-modify-write)");
+        var executedStatements = recorder.Executing;
+        var parameters = string.Join(", ", command.Parameters.Select(p => $"{p.Name}={p.Value ?? "null"}"));
+        T301MatrixLog.Write($"[T301:PostgresDialect] key-upsert before-insert trigger | executes | {command.Sql} | {parameters}");
+        command.Sql.Should().ContainEquivalentOf(
+            "on conflict (id) do update set total = excluded.total",
+            "the update arm reads the proposed row through excluded.<column>");
+
+        var stored = ctx.From<MergeTriggerTarget>().Where(x => x.Id == targetId).Single();
+        T301MatrixLog.Write($"[T301:PostgresDialect] before-insert trigger | values | stored={stored.Total} source={source.Total} previousTarget=1000 columnDefault={defaultTotal} marker={stored.Marker} executedStatements={executedStatements}");
+        stored.Total.Should().Be(triggerTotal, "excluded carries the BEFORE INSERT trigger's rewrite of the proposed row");
+        stored.Total.Should().NotBe(defaultTotal, "the column default alone is not the trigger-written proposed value");
+        stored.Total.Should().NotBe(0, "the excluded value is not the original source row's total");
+        stored.Total.Should().NotBe(1000, "the excluded value is not the pre-update target row's total");
+        stored.Marker.Should().Be(0, "the update arm writes only the assigned column; the marker shaped only the proposed row");
+    }
+
+    /// <summary>
+    /// The E13 PostgreSQL trigger fixture: <c>marker</c> makes the table's <c>BEFORE INSERT</c> trigger rewrite
+    /// <c>total</c> on the proposed row, so the proposed-row role can be told apart from the column default,
+    /// the original source row and the pre-update target row.
+    /// </summary>
+    [SqlTable("t301b_trigger")]
+    internal sealed class MergeTriggerTarget
+    {
+        [Key]
+        [Column("id")]
+        public int Id { get; set; }
+
+        [Column("a")]
+        public int A { get; set; }
+
+        [Column("b")]
+        public int B { get; set; }
+
+        [Column("total")]
+        public int Total { get; set; }
+
+        [Column("marker")]
+        public int Marker { get; set; }
     }
 
     private sealed class PgIdentityProbe

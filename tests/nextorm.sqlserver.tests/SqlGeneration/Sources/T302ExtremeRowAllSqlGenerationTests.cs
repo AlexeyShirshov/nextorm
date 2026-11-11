@@ -1,0 +1,1099 @@
+﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+using System.Data.Common;
+using FluentAssertions;
+using NextORM.Core;
+using NextORM.SqlServer.Tests;
+
+namespace NextORM.SqlServer.Tests.SqlGeneration;
+
+public class T302ExtremeRowAllSqlGenerationTests
+{
+    private static string Normalize(string sql) => sql.Replace("\r\n", "\n");
+
+    private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd)
+        => Normalize(((DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(cmd, false, false, CancellationToken.None))
+            .DbCommand.CommandText);
+
+    private static DbPreparedQueryCommand<T> Prepared<T>(IDataContext ctx, QueryCommand<T> cmd)
+        => (DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(cmd, false, false, CancellationToken.None);
+
+    [Fact]
+    public void Max_All_Global()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<T302ExtremeAllEntity>().Where(x => x.Score > 5);
+
+        var sql = SqlOf(ctx, e.SelectWhereMaxOld(x => x.Score, ExtremeRowTies.All).ToCommand());
+        var norm = sql.ToLowerInvariant();
+
+        norm.Should().Contain("max(");
+        norm.Should().Contain("__nextorm_ext_1_0");
+        norm.Should().Contain("from t302_extreme_all");
+        norm.Should().Contain("join");
+        norm.Should().NotContain("rank(");
+        norm.Should().NotContain("row_number(");
+        norm.Should().Contain("is not null");
+        (norm.Split(new[] { "score > 5" }, StringSplitOptions.None).Length - 1).Should().Be(2);
+    }
+
+    [Fact]
+    public void FluentMappedColumns_GroupedComposite_All()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<T302ExtremeFluentEntity>(cfg =>
+        {
+            cfg.Property(x => x.Id).HasColumnName("f_id");
+            cfg.Property(x => x.Score!).HasColumnName("f_score");
+            cfg.Property(x => x.Cat!).HasColumnName("f_cat");
+            cfg.Property(x => x.Payload!).HasColumnName("f_payload");
+        });
+
+        // The entity also declares [Column("a_*")] attributes, so the fluent mapping must win for the
+        // group key, the value key and the payload alike; a stage that fell back to the attribute name
+        // (or emitted an empty identifier) fails here.
+        var norm = SqlOf(ctx,
+                e.SelectWhereMaxOld(x => new { x.Score, x.Id }, ExtremeRowTies.All, x => x.Cat).ToCommand())
+            .ToLowerInvariant();
+
+        Matches(norm, @"max\(\W*?f_score\W*?\)").Should().BeTrue(norm);
+        Matches(norm, @"max\(\W*?f_id\W*?\)").Should().BeTrue(norm);
+        Matches(norm, @"where\W+?f_score\W+?is not null").Should().BeTrue(norm);
+        Matches(norm, @"group by\W+?f_cat").Should().BeTrue(norm);
+        norm.Should().Contain("f_payload");
+        norm.Should().Contain("join");
+        norm.Should().NotContain("a_id");
+        norm.Should().NotContain("a_score");
+        norm.Should().NotContain("a_cat");
+        norm.Should().NotContain("a_payload");
+        norm.Should().NotContain("rank(");
+        norm.Should().NotContain("row_number(");
+    }
+
+    private static bool Matches(string sql, string pattern)
+        => System.Text.RegularExpressions.Regex.IsMatch(sql, pattern);
+
+    [Fact]
+    public void Min_All_Global()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<T302ExtremeAllEntity>().Where(x => x.Score > 5);
+
+        var sql = SqlOf(ctx, e.SelectWhereMinOld(x => x.Score, ExtremeRowTies.All).ToCommand());
+        var norm = sql.ToLowerInvariant();
+
+        norm.Should().Contain("min(");
+        norm.Should().Contain("__nextorm_ext_1_0");
+        norm.Should().Contain("from t302_extreme_all");
+        norm.Should().Contain("join");
+        norm.Should().NotContain("rank(");
+        norm.Should().NotContain("row_number(");
+        norm.Should().Contain("is not null");
+        (norm.Split(new[] { "score > 5" }, StringSplitOptions.None).Length - 1).Should().Be(2);
+    }
+    [Fact]
+    public void Projections_All_Global_Entity_Dto_Anonymous_Record_Scalar()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<T302ExtremeAllEntity>().Where(x => x.Score > 5);
+
+        var entitySql = SqlOf(ctx, e.SelectWhereMaxOld(x => x.Score, ExtremeRowTies.All).ToCommand()).ToLowerInvariant();
+        var dtoSql = SqlOf(ctx, e.SelectWhereMaxOld(x => x.Score,
+            x => new T302ExtremeAllDto { Id = x.Id, Cat = x.Cat }, ExtremeRowTies.All)).ToLowerInvariant();
+        var anonSql = SqlOf(ctx, e.SelectWhereMaxOld(x => x.Score,
+            x => new { x.Id, x.Cat }, ExtremeRowTies.All)).ToLowerInvariant();
+        var recordSql = SqlOf(ctx, e.SelectWhereMaxOld(x => x.Score,
+            x => new T302ExtremeAllRecord(x.Id, x.Cat), ExtremeRowTies.All)).ToLowerInvariant();
+        var scalarSql = SqlOf(ctx, e.SelectWhereMaxOld(x => x.Score,
+            x => x.Cat, ExtremeRowTies.All)).ToLowerInvariant();
+
+        foreach (var norm in new[] { entitySql, dtoSql, anonSql, recordSql, scalarSql })
+        {
+            norm.Should().Contain("max(");
+            norm.Should().Contain("__nextorm_ext_1_0");
+            norm.Should().Contain("from t302_extreme_all");
+            norm.Should().Contain("join");
+            norm.Should().NotContain("rank(");
+            norm.Should().NotContain("row_number(");
+            norm.Should().Contain("is not null");
+        }
+
+        dtoSql.Should().Contain("cat");
+        anonSql.Should().Contain("cat");
+        recordSql.Should().Contain("cat");
+        scalarSql.Should().Contain("cat");
+    }
+
+    [Fact]
+    public void NullablePayload_Distinct_OrderBy_All_Global()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<T302ExtremeAllEntity>().Where(x => x.Score > 5);
+
+        var norm = SqlOf(ctx, e.SelectWhereMaxOld(x => x.Score, ExtremeRowTies.All)
+            .Distinct()
+            .OrderBy(x => x.Cat)
+            .ThenBy(x => x.Id)
+            .ToCommand()).ToLowerInvariant();
+
+        norm.Should().Contain("distinct");
+        norm.Should().Contain("order by");
+        // ThenBy renders as a second key of the same outer ORDER BY, after the primary key (VM-S4-16).
+        var orderBy = norm[norm.LastIndexOf("order by", StringComparison.Ordinal)..];
+        var catIdx = orderBy.IndexOf("cat", StringComparison.Ordinal);
+        var idIdx = orderBy.IndexOf("id", StringComparison.Ordinal);
+        catIdx.Should().BeGreaterThanOrEqualTo(0);
+        idIdx.Should().BeGreaterThan(catIdx);
+        norm.Should().Contain("max(");
+        norm.Should().Contain("__nextorm_ext_1_0");
+        norm.Should().Contain("join");
+        norm.Should().NotContain("rank(");
+        norm.Should().NotContain("row_number(");
+    }
+
+    [Fact]
+    public void HiddenAliasCollision_All_Global()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<T302ExtremeAllCollisionEntity>();
+
+        var norm = SqlOf(ctx, e.SelectWhereMaxOld(x => x.Score, ExtremeRowTies.All).ToCommand()).ToLowerInvariant();
+
+        norm.Should().Contain("max(");
+        norm.Should().Contain("join");
+        norm.Should().NotContain("rank(");
+        norm.Should().NotContain("row_number(");
+
+        // A physical column named like the lowering alias and the derived aggregate column must stay
+        // distinguishable: at least two distinct qualifiers carry the alias name.
+        var qualifiers = System.Text.RegularExpressions.Regex
+            .Matches(norm, "([a-z0-9_\\[\\]`\"]+)\\.[\\[`\"]*__nextorm_ext_1_0")
+            .Select(m => m.Groups[1].Value)
+            .Distinct()
+            .Count();
+        qualifiers.Should().BeGreaterThanOrEqualTo(2);
+    }
+    [Fact]
+    public void Max_All_Grouped_SingleNullableKey()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<T302ExtremeAllEntity>().Where(x => x.Score > 5);
+
+        var norm = SqlOf(ctx, e.SelectWhereMaxOld(x => x.Score, ExtremeRowTies.All, x => x.Cat).ToCommand()).ToLowerInvariant();
+
+        // Aggregate E: max(score) as __nextorm_ext_1_0, group key cat as __nextorm_ext_1_1, GROUP BY cat;
+        // O joins the aggregate back on the null-safe OR-form of the nullable group key and the value alias.
+        norm.Should().Contain("max(");
+        norm.Should().Contain("__nextorm_ext_1_0");
+        norm.Should().Contain("__nextorm_ext_1_1");
+        norm.Should().Contain("group by");
+        norm.Should().Contain("join");
+        norm.Should().Contain("is null");
+        norm.Should().Contain(" or ");
+        norm.Should().NotContain("rank(");
+        norm.Should().NotContain("row_number(");
+        norm.Should().NotContain("partition by");
+        // The user condition C is duplicated into E and O deliberately.
+        (norm.Split(new[] { "score > 5" }, StringSplitOptions.None).Length - 1).Should().Be(2);
+    }
+
+    [Fact]
+    public void Min_All_Grouped_SingleNonNullableKey()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<T302ExtremeAllEntity>();
+
+        var norm = SqlOf(ctx, e.SelectWhereMinOld(x => x.Score, ExtremeRowTies.All, x => x.Id).ToCommand()).ToLowerInvariant();
+
+        norm.Should().Contain("min(");
+        norm.Should().Contain("group by");
+        norm.Should().Contain("join");
+        norm.Should().Contain("__nextorm_ext_1_0");
+        norm.Should().Contain("__nextorm_ext_1_1");
+        // A non-nullable group key joins with plain equality - no null-safe OR arm.
+        norm.Should().NotContain(" or ");
+        norm.Should().NotContain("rank(");
+        norm.Should().NotContain("row_number(");
+    }
+
+    [Fact]
+    public void Max_All_Grouped_CompositeKey_WithNullableComponent()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<T302ExtremeAllEntity>().Where(x => x.Score > 5);
+
+        var norm = SqlOf(ctx, e.SelectWhereMaxOld(x => x.Score, ExtremeRowTies.All, x => new { x.Cat, x.Id }).ToCommand()).ToLowerInvariant();
+
+        norm.Should().Contain("max(");
+        norm.Should().Contain("__nextorm_ext_1_0");
+        norm.Should().Contain("__nextorm_ext_1_1");
+        norm.Should().Contain("__nextorm_ext_1_2");
+        norm.Should().Contain("group by");
+        norm.Should().Contain("join");
+        // Only the nullable component contributes the OR-form.
+        norm.Should().Contain(" or ");
+        norm.Should().Contain("is null");
+        norm.Should().NotContain("rank(");
+        norm.Should().NotContain("row_number(");
+    }
+
+    [Fact]
+    public void Max_All_Grouped_CompositeNonNullableKey()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<T302ExtremeCompositeEntity>().Where(x => x.Score > 5);
+
+        // Composite non-nullable group key (grp, id): the aggregate E emits both group aliases and
+        // groups by both columns; O joins the aggregate back on both keys with plain equality, so no
+        // null-safe OR arm appears anywhere.
+        var norm = SqlOf(ctx,
+                e.SelectWhereMaxOld(x => x.Score, ExtremeRowTies.All, x => new { x.Grp, x.Id }).ToCommand())
+            .ToLowerInvariant();
+
+        norm.Should().Contain("max(");
+        norm.Should().Contain("__nextorm_ext_1_0");
+        norm.Should().Contain("__nextorm_ext_1_1");
+        norm.Should().Contain("__nextorm_ext_1_2");
+        norm.Should().Contain("group by");
+        norm.Should().Contain("join");
+        norm.Should().NotContain(" or ");
+        norm.Should().NotContain("rank(");
+        norm.Should().NotContain("row_number(");
+
+        // GROUP BY names both key columns, not only the first.
+        var groupBy = norm.Substring(norm.IndexOf("group by", StringComparison.Ordinal));
+        groupBy = groupBy.Substring(0, groupBy.IndexOf(')'));
+        groupBy.Should().Contain("grp").And.Contain("id");
+
+        // The join-back matches both keys against their own aliases - and the value alias.
+        var onClause = norm.Substring(norm.IndexOf(" on ", norm.IndexOf("join", StringComparison.Ordinal), StringComparison.Ordinal));
+        System.Text.RegularExpressions.Regex
+            .IsMatch(onClause, "grp\\s*=\\s*[a-z0-9_\\[\\]`\"]+\\.[\\[`\"]*__nextorm_ext_1_1")
+            .Should().BeTrue("the first composite key must be joined back on __nextorm_ext_1_1");
+        System.Text.RegularExpressions.Regex
+            .IsMatch(onClause, "\\.id\\s*=\\s*[a-z0-9_\\[\\]`\"]+\\.[\\[`\"]*__nextorm_ext_1_2")
+            .Should().BeTrue("the second composite key must be joined back on __nextorm_ext_1_2");
+        onClause.Should().Contain("__nextorm_ext_1_0");
+    }
+
+    [Fact]
+    public void Projection_Distinct_OrderBy_All_Grouped()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<T302ExtremeAllEntity>().Where(x => x.Score > 5);
+
+        var norm = SqlOf(ctx, e.SelectWhereMaxOld(
+                x => x.Score,
+                x => new T302ExtremeAllDto { Id = x.Id, Cat = x.Cat },
+                ExtremeRowTies.All,
+                x => x.Cat)
+            .Distinct()
+            .OrderBy(x => x.Cat)).ToLowerInvariant();
+
+        norm.Should().Contain("distinct");
+        norm.Should().Contain("order by");
+        norm.Should().Contain("group by");
+        norm.Should().Contain("join");
+        norm.Should().Contain("__nextorm_ext_1_0");
+        norm.Should().Contain("__nextorm_ext_1_1");
+        norm.Should().NotContain("rank(");
+        norm.Should().NotContain("row_number(");
+        (norm.Split(new[] { "score > 5" }, StringSplitOptions.None).Length - 1).Should().Be(2);
+    }
+
+    [Fact]
+    public void MappedColumns_HiddenAlias_All_Grouped()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<T302ExtremeAllCollisionEntity>();
+
+        // The value key's physical column is itself named like the lowering's aggregate alias; the
+        // group key is non-nullable, so the join is plain equality apart from that collision.
+        var norm = SqlOf(ctx, e.SelectWhereMaxOld(x => x.Collide, ExtremeRowTies.All, x => x.Id).ToCommand()).ToLowerInvariant();
+
+        norm.Should().Contain("max(");
+        norm.Should().Contain("__nextorm_ext_1_0");
+        norm.Should().Contain("__nextorm_ext_1_1");
+        norm.Should().Contain("group by");
+        norm.Should().NotContain("rank(");
+        norm.Should().NotContain("row_number(");
+        var qualifiers = System.Text.RegularExpressions.Regex
+            .Matches(norm, "([a-z0-9_\\[\\]`\"]+)\\.[\\[`\"]*__nextorm_ext_1_0")
+            .Select(m => m.Groups[1].Value)
+            .Distinct()
+            .Count();
+        qualifiers.Should().BeGreaterThanOrEqualTo(2);
+    }
+
+    [Fact]
+    public void Max_All_Composite_Global_Arity2()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<T302ExtremeCompositeEntity>().Where(x => x.Score > 5);
+
+        var norm = SqlOf(ctx, e.SelectWhereMaxOld(x => new { x.Score, x.Sub }, ExtremeRowTies.All).ToCommand()).ToLowerInvariant();
+
+        // E_1 aggregates v1 inside C; E_2 aggregates v2 inside the v1 prefix E_1 selected, so the
+        // result is lexicographic ((9,2) beats (8,100)) instead of component-wise.
+        norm.Should().Contain("max(score)");
+        norm.Should().Contain("max(sub)");
+        norm.Should().Contain("__nextorm_ext_1_v1");
+        norm.Should().Contain("__nextorm_ext_2_v1");
+        norm.Should().Contain("__nextorm_ext_2_v2");
+
+        // Every stage output carries an explicit alias, and the next stage / O reads that alias
+        // through a qualified reference - never the physical column name.
+        System.Text.RegularExpressions.Regex.IsMatch(norm, "as\\s*.{0,3}__nextorm_ext_1_v1").Should().BeTrue();
+        System.Text.RegularExpressions.Regex.IsMatch(norm, "as\\s*.{0,3}__nextorm_ext_2_v1").Should().BeTrue();
+        System.Text.RegularExpressions.Regex.IsMatch(norm, "as\\s*.{0,3}__nextorm_ext_2_v2").Should().BeTrue();
+        System.Text.RegularExpressions.Regex.IsMatch(norm, "\\.{1}.{0,3}__nextorm_ext_2_v1").Should().BeTrue();
+        System.Text.RegularExpressions.Regex.IsMatch(norm, "\\.{1}.{0,3}__nextorm_ext_2_v2").Should().BeTrue();
+
+        norm.Should().Contain("is not null");
+        norm.Should().NotContain("rank(");
+        norm.Should().NotContain("row_number(");
+        // C is rendered into E_1, E_2 and O deliberately (n + 1 occurrences).
+        (norm.Split(new[] { "score > 5" }, StringSplitOptions.None).Length - 1).Should().Be(3);
+    }
+
+    [Fact]
+    public void Min_All_Composite_Global_Arity2()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<T302ExtremeCompositeEntity>().Where(x => x.Score > 5);
+
+        var norm = SqlOf(ctx, e.SelectWhereMinOld(x => new { x.Score, x.Sub }, ExtremeRowTies.All).ToCommand()).ToLowerInvariant();
+
+        norm.Should().Contain("min(score)");
+        norm.Should().Contain("min(sub)");
+        norm.Should().Contain("__nextorm_ext_1_v1");
+        norm.Should().Contain("__nextorm_ext_2_v1");
+        norm.Should().Contain("__nextorm_ext_2_v2");
+        System.Text.RegularExpressions.Regex.IsMatch(norm, "as\\s*.{0,3}__nextorm_ext_2_v1").Should().BeTrue();
+        System.Text.RegularExpressions.Regex.IsMatch(norm, "as\\s*.{0,3}__nextorm_ext_2_v2").Should().BeTrue();
+        System.Text.RegularExpressions.Regex.IsMatch(norm, "\\.{1}.{0,3}__nextorm_ext_2_v2").Should().BeTrue();
+        norm.Should().Contain("is not null");
+        norm.Should().NotContain("rank(");
+        norm.Should().NotContain("row_number(");
+        (norm.Split(new[] { "score > 5" }, StringSplitOptions.None).Length - 1).Should().Be(3);
+    }
+
+    [Fact]
+    public void Min_All_Composite_Global_Arity3_Staged_Aliased_PrefixAggregation()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<T302ExtremeCompositeEntity>().Where(x => x.Score > 5);
+
+        var norm = SqlOf(ctx, e.SelectWhereMinOld(x => new { x.Score, x.Sub, x.Flag }, ExtremeRowTies.All).ToCommand()).ToLowerInvariant();
+
+        // Prefix-only aggregation with MIN: each component is aggregated exactly once, by its own stage,
+        // and the surviving prefix is carried forward as an explicitly aliased pass-through.
+        (norm.Split(new[] { "min(score)" }, StringSplitOptions.None).Length - 1).Should().Be(1);
+        (norm.Split(new[] { "min(sub)" }, StringSplitOptions.None).Length - 1).Should().Be(1);
+        (norm.Split(new[] { "min(flag)" }, StringSplitOptions.None).Length - 1).Should().Be(1);
+
+        foreach (var alias in new[]
+                 {
+                     "__nextorm_ext_1_v1",
+                     "__nextorm_ext_2_v1", "__nextorm_ext_2_v2",
+                     "__nextorm_ext_3_v1", "__nextorm_ext_3_v2", "__nextorm_ext_3_v3",
+                 })
+        {
+            System.Text.RegularExpressions.Regex.IsMatch(norm, "as\\s*.{0,3}" + alias).Should().BeTrue($"{alias} must be declared explicitly");
+        }
+
+        // O joins the final stage back on all three value aliases.
+        System.Text.RegularExpressions.Regex.IsMatch(norm, "\\.{1}.{0,3}__nextorm_ext_3_v1").Should().BeTrue();
+        System.Text.RegularExpressions.Regex.IsMatch(norm, "\\.{1}.{0,3}__nextorm_ext_3_v2").Should().BeTrue();
+        System.Text.RegularExpressions.Regex.IsMatch(norm, "\\.{1}.{0,3}__nextorm_ext_3_v3").Should().BeTrue();
+
+        norm.Should().NotContain("rank(");
+        norm.Should().NotContain("row_number(");
+        // E_1, E_2, E_3 and O each render C (n + 1 occurrences).
+        (norm.Split(new[] { "score > 5" }, StringSplitOptions.None).Length - 1).Should().Be(4);
+    }
+
+    [Fact]
+    public void Min_All_Composite_Grouped_Arity3_CompositeKey()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<T302ExtremeCompositeEntity>().Where(x => x.Score > 5);
+
+        // Composite non-nullable group key (grp, id): every stage carries both group aliases, groups by
+        // them plus the surviving prefix, and joins back with plain equality.
+        var norm = SqlOf(ctx, e.SelectWhereMinOld(x => new { x.Score, x.Sub, x.Flag }, ExtremeRowTies.All, x => new { x.Grp, x.Id }).ToCommand()).ToLowerInvariant();
+
+        norm.Should().Contain("__nextorm_ext_1_g0");
+        norm.Should().Contain("__nextorm_ext_1_g1");
+        norm.Should().Contain("__nextorm_ext_1_v1");
+        norm.Should().Contain("__nextorm_ext_3_g0");
+        norm.Should().Contain("__nextorm_ext_3_g1");
+        norm.Should().Contain("__nextorm_ext_3_v1");
+        norm.Should().Contain("__nextorm_ext_3_v2");
+        norm.Should().Contain("__nextorm_ext_3_v3");
+        (norm.Split(new[] { "min(score)" }, StringSplitOptions.None).Length - 1).Should().Be(1);
+        (norm.Split(new[] { "min(sub)" }, StringSplitOptions.None).Length - 1).Should().Be(1);
+        (norm.Split(new[] { "min(flag)" }, StringSplitOptions.None).Length - 1).Should().Be(1);
+        norm.Should().Contain("group by");
+        norm.Should().Contain("join");
+        var groupBy = norm.Substring(norm.IndexOf("group by", StringComparison.Ordinal));
+        groupBy = groupBy.Substring(0, groupBy.IndexOf(')'));
+        groupBy.Should().Contain("grp").And.Contain("id");
+        norm.Should().NotContain(" or ");
+        norm.Should().NotContain("rank(");
+        norm.Should().NotContain("row_number(");
+        (norm.Split(new[] { "score > 5" }, StringSplitOptions.None).Length - 1).Should().Be(4);
+    }
+
+    [Fact]
+    public void Max_All_Composite_Global_Arity3_Staged_Aliased_PrefixAggregation()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<T302ExtremeCompositeEntity>().Where(x => x.Score > 5);
+
+        var norm = SqlOf(ctx, e.SelectWhereMaxOld(x => new { x.Score, x.Sub, x.Flag }, ExtremeRowTies.All).ToCommand()).ToLowerInvariant();
+
+        // Prefix-only aggregation: each component is aggregated exactly once, by its own stage, and the
+        // surviving prefix is carried forward as an explicitly aliased pass-through.
+        (norm.Split(new[] { "max(score)" }, StringSplitOptions.None).Length - 1).Should().Be(1);
+        (norm.Split(new[] { "max(sub)" }, StringSplitOptions.None).Length - 1).Should().Be(1);
+        (norm.Split(new[] { "max(flag)" }, StringSplitOptions.None).Length - 1).Should().Be(1);
+
+        foreach (var alias in new[]
+                 {
+                     "__nextorm_ext_1_v1",
+                     "__nextorm_ext_2_v1", "__nextorm_ext_2_v2",
+                     "__nextorm_ext_3_v1", "__nextorm_ext_3_v2", "__nextorm_ext_3_v3",
+                 })
+        {
+            System.Text.RegularExpressions.Regex.IsMatch(norm, "as\\s*.{0,3}" + alias).Should().BeTrue($"{alias} must be declared explicitly");
+        }
+
+        // O joins the final stage back on all three value aliases.
+        System.Text.RegularExpressions.Regex.IsMatch(norm, "\\.{1}.{0,3}__nextorm_ext_3_v1").Should().BeTrue();
+        System.Text.RegularExpressions.Regex.IsMatch(norm, "\\.{1}.{0,3}__nextorm_ext_3_v2").Should().BeTrue();
+        System.Text.RegularExpressions.Regex.IsMatch(norm, "\\.{1}.{0,3}__nextorm_ext_3_v3").Should().BeTrue();
+
+        norm.Should().NotContain("rank(");
+        norm.Should().NotContain("row_number(");
+        // E_1, E_2, E_3 and O each render C (n + 1 occurrences).
+        (norm.Split(new[] { "score > 5" }, StringSplitOptions.None).Length - 1).Should().Be(4);
+    }
+
+    [Fact]
+    public void Max_All_Composite_Grouped_Arity2_NonNullableKey()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<T302ExtremeCompositeEntity>().Where(x => x.Score > 5);
+
+        var norm = SqlOf(ctx, e.SelectWhereMaxOld(x => new { x.Score, x.Sub }, ExtremeRowTies.All, x => x.Grp).ToCommand()).ToLowerInvariant();
+
+        norm.Should().Contain("max(score)");
+        norm.Should().Contain("max(sub)");
+        norm.Should().Contain("__nextorm_ext_1_g0");
+        norm.Should().Contain("__nextorm_ext_1_v1");
+        norm.Should().Contain("__nextorm_ext_2_g0");
+        norm.Should().Contain("__nextorm_ext_2_v1");
+        norm.Should().Contain("__nextorm_ext_2_v2");
+        norm.Should().Contain("group by");
+        norm.Should().Contain("join");
+        // A non-nullable group key joins with plain equality - no null-safe OR arm.
+        norm.Should().NotContain(" or ");
+        norm.Should().NotContain("rank(");
+        norm.Should().NotContain("row_number(");
+        (norm.Split(new[] { "score > 5" }, StringSplitOptions.None).Length - 1).Should().Be(3);
+    }
+
+    [Fact]
+    public void Min_All_Composite_Grouped_Arity2_NonNullableKey()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<T302ExtremeCompositeEntity>().Where(x => x.Score > 5);
+
+        var norm = SqlOf(ctx, e.SelectWhereMinOld(x => new { x.Score, x.Sub }, ExtremeRowTies.All, x => x.Grp).ToCommand()).ToLowerInvariant();
+
+        norm.Should().Contain("min(score)");
+        norm.Should().Contain("min(sub)");
+        norm.Should().Contain("__nextorm_ext_1_g0");
+        norm.Should().Contain("__nextorm_ext_2_g0");
+        norm.Should().Contain("__nextorm_ext_2_v1");
+        norm.Should().Contain("__nextorm_ext_2_v2");
+        norm.Should().Contain("group by");
+        norm.Should().Contain("join");
+        norm.Should().NotContain(" or ");
+        norm.Should().NotContain("rank(");
+        norm.Should().NotContain("row_number(");
+        (norm.Split(new[] { "score > 5" }, StringSplitOptions.None).Length - 1).Should().Be(3);
+    }
+
+    [Fact]
+    public void Max_All_Composite_Grouped_Arity3_CompositeKey()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<T302ExtremeCompositeEntity>().Where(x => x.Score > 5);
+
+        // Composite non-nullable group key (grp, id): every stage carries both group aliases, groups by
+        // them plus the surviving prefix, and joins back with plain equality.
+        var norm = SqlOf(ctx, e.SelectWhereMaxOld(x => new { x.Score, x.Sub, x.Flag }, ExtremeRowTies.All, x => new { x.Grp, x.Id }).ToCommand()).ToLowerInvariant();
+
+        norm.Should().Contain("__nextorm_ext_1_g0");
+        norm.Should().Contain("__nextorm_ext_1_g1");
+        norm.Should().Contain("__nextorm_ext_1_v1");
+        norm.Should().Contain("__nextorm_ext_3_g0");
+        norm.Should().Contain("__nextorm_ext_3_g1");
+        norm.Should().Contain("__nextorm_ext_3_v1");
+        norm.Should().Contain("__nextorm_ext_3_v2");
+        norm.Should().Contain("__nextorm_ext_3_v3");
+        norm.Should().Contain("group by");
+        norm.Should().Contain("join");
+        var groupBy = norm.Substring(norm.IndexOf("group by", StringComparison.Ordinal));
+        groupBy = groupBy.Substring(0, groupBy.IndexOf(')'));
+        groupBy.Should().Contain("grp").And.Contain("id");
+        norm.Should().NotContain(" or ");
+        norm.Should().NotContain("rank(");
+        norm.Should().NotContain("row_number(");
+        (norm.Split(new[] { "score > 5" }, StringSplitOptions.None).Length - 1).Should().Be(4);
+    }
+
+    [Fact]
+    public void Max_All_Composite_Grouped_NullableKey_OrForm()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<T302ExtremeAllEntity>().Where(x => x.Score > 5);
+
+        var norm = SqlOf(ctx, e.SelectWhereMaxOld(x => new { x.Score, x.Id }, ExtremeRowTies.All, x => x.Cat).ToCommand()).ToLowerInvariant();
+
+        norm.Should().Contain("__nextorm_ext_1_g0");
+        norm.Should().Contain("__nextorm_ext_2_g0");
+        norm.Should().Contain("__nextorm_ext_2_v1");
+        norm.Should().Contain("__nextorm_ext_2_v2");
+        // One null-safe OR arm per join level: E_2 and O both match the nullable group key.
+        (norm.Split(new[] { " or " }, StringSplitOptions.None).Length - 1).Should().Be(2);
+        norm.Should().Contain("is null");
+        norm.Should().Contain("group by");
+        norm.Should().Contain("join");
+        norm.Should().NotContain("rank(");
+        norm.Should().NotContain("row_number(");
+        (norm.Split(new[] { "score > 5" }, StringSplitOptions.None).Length - 1).Should().Be(3);
+    }
+
+    [Fact]
+    public void MappedColumns_HiddenAliasCollision_All_Composite()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<T302ExtremeAllCollisionEntity>();
+
+        // The first value component's physical column is itself named like an S1 lowering alias; the
+        // S3 stage aliases stay distinct and the join-back reads those aliases, never the collision name.
+        var norm = SqlOf(ctx, e.SelectWhereMaxOld(x => new { x.Collide, x.Score }, ExtremeRowTies.All, x => x.Id).ToCommand()).ToLowerInvariant();
+
+        norm.Should().Contain("__nextorm_ext_1_0");
+        norm.Should().Contain("__nextorm_ext_1_v1");
+        norm.Should().Contain("__nextorm_ext_2_v1");
+        norm.Should().Contain("__nextorm_ext_2_v2");
+        System.Text.RegularExpressions.Regex.IsMatch(norm, "as\\s*.{0,3}__nextorm_ext_2_v2").Should().BeTrue();
+        System.Text.RegularExpressions.Regex.IsMatch(norm, "\\.{1}.{0,3}__nextorm_ext_2_v2").Should().BeTrue();
+        norm.Should().Contain("is not null");
+        norm.Should().NotContain("rank(");
+        norm.Should().NotContain("row_number(");
+    }
+
+    [Fact]
+    public void Projection_Distinct_OrderBy_All_Composite()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<T302ExtremeCompositeEntity>().Where(x => x.Score > 5);
+
+        var norm = SqlOf(ctx, e.SelectWhereMaxOld(
+                x => new { x.Score, x.Sub },
+                x => new T302ExtremeAllDto { Id = x.Id, Cat = x.Cat },
+                ExtremeRowTies.All,
+                x => x.Grp)
+            .Distinct()
+            .OrderBy(x => x.Cat)).ToLowerInvariant();
+
+        norm.Should().Contain("distinct");
+        norm.Should().Contain("order by");
+        norm.Should().Contain("group by");
+        norm.Should().Contain("join");
+        norm.Should().Contain("__nextorm_ext_2_g0");
+        norm.Should().Contain("__nextorm_ext_2_v1");
+        norm.Should().Contain("__nextorm_ext_2_v2");
+        // A projected command registers its projection source before the join source, so the stage
+        // aliases must resolve by parameter identity: every back-reference keeps its table qualifier.
+        System.Text.RegularExpressions.Regex.IsMatch(norm, "\\.{1}.{0,3}__nextorm_ext_1_g0").Should().BeTrue();
+        System.Text.RegularExpressions.Regex.IsMatch(norm, "\\.{1}.{0,3}__nextorm_ext_2_v1").Should().BeTrue();
+        System.Text.RegularExpressions.Regex.IsMatch(norm, "\\.{1}.{0,3}__nextorm_ext_2_v2").Should().BeTrue();
+        norm.Should().NotContain("rank(");
+        norm.Should().NotContain("row_number(");
+        (norm.Split(new[] { "score > 5" }, StringSplitOptions.None).Length - 1).Should().Be(3);
+    }
+    [Fact]
+    public void Max_All_Composite_Global_ConvertedValueKey()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        // The value component carries a registered ValueConverter (enum -> text). The constant it is
+        // compared with is bound in the provider representation, so the predicate never compares the
+        // text column with the enum's numeric form.
+        var e = ctx.From<T302ExtremeConvertedEntity>().Where(x => x.State == T302ExtremeConvertedState.Active);
+
+        var prepared = Prepared(ctx, e.SelectWhereMaxOld(x => new { x.State, x.Sub }, ExtremeRowTies.All).ToCommand());
+        var norm = Normalize(prepared.DbCommand.CommandText).ToLowerInvariant();
+
+        // Every stage aggregates/reads the physical (provider) storage column and the join-back reads
+        // the stage alias of that same storage.
+        norm.Should().Contain("max(state)");
+        norm.Should().Contain("max(sub)");
+        norm.Should().Contain("__nextorm_ext_1_v1");
+        norm.Should().Contain("__nextorm_ext_2_v1");
+        norm.Should().Contain("__nextorm_ext_2_v2");
+        System.Text.RegularExpressions.Regex.IsMatch(norm, "as\\s*.{0,3}__nextorm_ext_2_v2").Should().BeTrue();
+        System.Text.RegularExpressions.Regex.IsMatch(norm, "state\\s*=\\s*[a-z0-9_\\[\\]`\"]+\\.[\\[`\"]*__nextorm_ext_2_v1").Should().BeTrue();
+        norm.Should().NotContain("rank(");
+        norm.Should().NotContain("row_number(");
+
+        // C is rendered into E_1, E_2 and O (n + 1); each occurrence binds the converted provider value.
+        prepared.DbCommand.Parameters.Count.Should().Be(3);
+        prepared.DbCommand.Parameters.Cast<DbParameter>().Should().OnlyContain(p => (string?)p.Value == "Active");
+    }
+
+    [Fact]
+    public void Max_All_Composite_Grouped_ConvertedGroupKey()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        // The group key is a converted enum (stored as text): the stages group by and join back on the
+        // physical column, and the non-nullable model enum keeps the plain equality form.
+        var e = ctx.From<T302ExtremeConvertedEntity>();
+
+        var norm = SqlOf(ctx, e.SelectWhereMaxOld(x => new { x.State, x.Sub }, ExtremeRowTies.All, x => x.Grp).ToCommand()).ToLowerInvariant();
+
+        norm.Should().Contain("max(state)");
+        norm.Should().Contain("max(sub)");
+        norm.Should().Contain("__nextorm_ext_1_g0");
+        norm.Should().Contain("__nextorm_ext_2_g0");
+        norm.Should().Contain("__nextorm_ext_2_v1");
+        norm.Should().Contain("__nextorm_ext_2_v2");
+        norm.Should().Contain("group by");
+        norm.Should().Contain("join");
+        norm.Should().NotContain(" or ");
+        System.Text.RegularExpressions.Regex.IsMatch(norm, "grp\\s*=\\s*[a-z0-9_\\[\\]`\"]+\\.[\\[`\"]*__nextorm_ext_2_g0").Should().BeTrue();
+        norm.Should().NotContain("rank(");
+        norm.Should().NotContain("row_number(");
+    }
+
+    [Fact]
+    public void Max_All_Composite_Grouped_BoolComponent_ConvertedKey()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<T302ExtremeBitEntity>();
+
+        // A bool/bit value component is aggregated through its order-preserving integer form in every
+        // stage that touches it; a raw max/min over a bit column is rejected by SQL Server.
+        var norm = SqlOf(ctx, e.SelectWhereMaxOld(x => new { x.Ok, x.Sub }, ExtremeRowTies.All, x => x.Grp).ToCommand()).ToLowerInvariant();
+
+        (norm.Split(new[] { "case when" }, StringSplitOptions.None).Length - 1).Should().BeGreaterThanOrEqualTo(2);
+        norm.Should().Contain("then 1 else 0 end");
+        norm.Should().NotContain("max(ok)");
+        norm.Should().Contain("__nextorm_ext_1_g0");
+        norm.Should().Contain("__nextorm_ext_2_v1");
+        norm.Should().Contain("__nextorm_ext_2_v2");
+        norm.Should().Contain("group by");
+        norm.Should().Contain("join");
+        norm.Should().Contain("is not null");
+        norm.Should().NotContain("rank(");
+        norm.Should().NotContain("row_number(");
+    }
+
+    [Fact]
+    public void Max_All_Scalar_PlainBool_BitNotNull()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<T302ExtremePlainBoolEntity>();
+
+        // A plain non-nullable bool (bit NOT NULL) scalar value key must also aggregate through the
+        // integer form: SQL Server rejects max(bit) outright.
+        var sql = SqlOf(ctx, e.SelectWhereMaxOld(x => x.Ok, ExtremeRowTies.All).ToCommand());
+        var norm = sql.ToLowerInvariant();
+
+        norm.Should().Contain("max(case when");
+        norm.Should().Contain("then 1 else 0 end");
+        norm.Should().NotContain("max(ok)");
+        norm.Should().Contain("__nextorm_ext_1_0");
+        norm.Should().Contain("from t302_extreme_plain_bit");
+        norm.Should().Contain("join");
+        norm.Should().NotContain("is not null");
+        norm.Should().NotContain("rank(");
+        norm.Should().NotContain("row_number(");
+
+        var min = SqlOf(ctx, e.SelectWhereMinOld(x => x.Ok, ExtremeRowTies.All).ToCommand()).ToLowerInvariant();
+        min.Should().Contain("min(case when");
+        min.Should().Contain("then 1 else 0 end");
+        min.Should().NotContain("min(ok)");
+    }
+
+    [Fact]
+    public void Min_All_Grouped_Scalar_PlainBool_BitNotNull()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<T302ExtremePlainBoolEntity>();
+
+        var norm = SqlOf(ctx,
+                e.SelectWhereMinOld(x => x.Ok, ExtremeRowTies.All, x => x.Grp).ToCommand())
+            .ToLowerInvariant();
+
+        norm.Should().Contain("min(case when");
+        norm.Should().Contain("then 1 else 0 end");
+        norm.Should().NotContain("min(ok)");
+        norm.Should().Contain("__nextorm_ext_1_0");
+        norm.Should().Contain("__nextorm_ext_1_1");
+        norm.Should().Contain("group by");
+        norm.Should().Contain("join");
+        // A plain non-nullable bool key contributes no non-null guard.
+        norm.Should().NotContain("is not null");
+        norm.Should().NotContain(" or ");
+        norm.Should().NotContain("rank(");
+        norm.Should().NotContain("row_number(");
+    }
+
+    [Fact]
+    public void Max_All_Scalar_NullableBool_BitNull()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<T302ExtremeBitEntity>();
+
+        var norm = SqlOf(ctx, e.SelectWhereMaxOld(x => x.Ok, ExtremeRowTies.All).ToCommand()).ToLowerInvariant();
+
+        norm.Should().Contain("max(case when");
+        norm.Should().Contain("then 1 else 0 end");
+        norm.Should().NotContain("max(ok)");
+        norm.Should().Contain("__nextorm_ext_1_0");
+        norm.Should().Contain("is not null");
+        norm.Should().Contain("join");
+        norm.Should().NotContain("rank(");
+        norm.Should().NotContain("row_number(");
+    }
+
+    [Fact]
+    public void Max_All_Composite_PlainBoolComponent_Global()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<T302ExtremePlainBoolEntity>();
+
+        var norm = SqlOf(ctx,
+                e.SelectWhereMaxOld(x => new { x.Ok, x.Sub }, ExtremeRowTies.All).ToCommand())
+            .ToLowerInvariant();
+
+        (norm.Split(new[] { "case when" }, StringSplitOptions.None).Length - 1).Should().BeGreaterThanOrEqualTo(2);
+        norm.Should().Contain("then 1 else 0 end");
+        norm.Should().NotContain("max(ok)");
+        norm.Should().Contain("__nextorm_ext_1_v1");
+        norm.Should().Contain("__nextorm_ext_2_v1");
+        norm.Should().Contain("__nextorm_ext_2_v2");
+        norm.Should().Contain("join");
+        // A non-nullable component contributes no non-null guard.
+        norm.Should().NotContain("is not null");
+        norm.Should().NotContain("rank(");
+        norm.Should().NotContain("row_number(");
+    }
+
+    [Fact]
+    public void Min_All_Grouped_Scalar_NullableBool_BitNull()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<T302ExtremeBitEntity>();
+
+        // AC-S4-3 shape not covered before: a nullable bool (bit NULL) as a grouped scalar value key,
+        // for both directions. The ordered integer form is aggregated by the stage and the non-null
+        // guard N stays on the nullable value component, so a NULL value key can never join the
+        // false (0) winner back in the outer query.
+        var norm = SqlOf(ctx,
+                e.SelectWhereMinOld(x => x.Ok, ExtremeRowTies.All, x => x.Grp).ToCommand())
+            .ToLowerInvariant();
+
+        norm.Should().Contain("min(case when");
+        norm.Should().Contain("then 1 else 0 end");
+        norm.Should().NotContain("min(ok)");
+        norm.Should().Contain("__nextorm_ext_1_0");
+        norm.Should().Contain("__nextorm_ext_1_1");
+        norm.Should().Contain("group by");
+        norm.Should().Contain("join");
+        norm.Should().Contain("is not null");
+        // The group key is non-nullable, so no null-safe OR arm is needed for it.
+        norm.Should().NotContain(" or ");
+        norm.Should().NotContain("rank(");
+        norm.Should().NotContain("row_number(");
+
+        var max = SqlOf(ctx,
+                e.SelectWhereMaxOld(x => x.Ok, ExtremeRowTies.All, x => x.Grp).ToCommand())
+            .ToLowerInvariant();
+
+        max.Should().Contain("max(case when");
+        max.Should().Contain("then 1 else 0 end");
+        max.Should().NotContain("max(ok)");
+        max.Should().Contain("__nextorm_ext_1_0");
+        max.Should().Contain("__nextorm_ext_1_1");
+        max.Should().Contain("group by");
+        max.Should().Contain("join");
+        max.Should().Contain("is not null");
+        max.Should().NotContain("rank(");
+        max.Should().NotContain("row_number(");
+    }
+
+    [Fact]
+    public void Min_All_Composite_PlainBoolComponent_Global_And_Grouped()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<T302ExtremePlainBoolEntity>();
+
+        // AC-S4-3 shape not covered before: Min over a composite value key whose first component is a
+        // plain bool, global and grouped. Each component is aggregated by its own stage, so (false, 5)
+        // wins over (true, any) and the staging is never collapsed into a component-wise mix.
+        var global = SqlOf(ctx,
+                e.SelectWhereMinOld(x => new { x.Ok, x.Sub }, ExtremeRowTies.All).ToCommand())
+            .ToLowerInvariant();
+
+        (global.Split(new[] { "case when" }, StringSplitOptions.None).Length - 1)
+            .Should().BeGreaterThanOrEqualTo(2, "every stage that touches the bool component resumes its integer form");
+        global.Should().Contain("then 1 else 0 end");
+        global.Should().NotContain("min(ok)");
+        global.Should().Contain("__nextorm_ext_1_v1");
+        global.Should().Contain("__nextorm_ext_2_v1");
+        global.Should().Contain("__nextorm_ext_2_v2");
+        global.Should().Contain("join");
+        global.Should().NotContain("is not null");
+        global.Should().NotContain("rank(");
+        global.Should().NotContain("row_number(");
+
+        var grouped = SqlOf(ctx,
+                e.SelectWhereMinOld(x => new { x.Ok, x.Sub }, ExtremeRowTies.All, x => x.Grp).ToCommand())
+            .ToLowerInvariant();
+
+        grouped.Should().Contain("min(case when");
+        grouped.Should().NotContain("min(ok)");
+        grouped.Should().Contain("__nextorm_ext_1_g0");
+        grouped.Should().Contain("__nextorm_ext_2_g0");
+        grouped.Should().Contain("__nextorm_ext_2_v1");
+        grouped.Should().Contain("__nextorm_ext_2_v2");
+        grouped.Should().Contain("group by");
+        grouped.Should().Contain("join");
+        grouped.Should().NotContain("is not null");
+        grouped.Should().NotContain(" or ");
+        grouped.Should().NotContain("rank(");
+        grouped.Should().NotContain("row_number(");
+    }
+
+    [Fact]
+    public void ConvertedBool_All_Global_Scalar_And_Composite()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<T302ExtremeConvertedBoolEntity>();
+
+        // AC-S4-3 shape not covered before: a model bool stored as an int through a ValueConverter.
+        // The provider representation is already order-preserving (false = 0 < true = 1), so the
+        // ordered integer form is applied over the converted storage and the join-back reads the
+        // stage alias of that storage.
+        var scalar = SqlOf(ctx, e.SelectWhereMaxOld(x => x.Ok, ExtremeRowTies.All).ToCommand()).ToLowerInvariant();
+
+        scalar.Should().Contain("max(case when");
+        scalar.Should().Contain("then 1 else 0 end");
+        scalar.Should().NotContain("max(ok)");
+        scalar.Should().Contain("__nextorm_ext_1_0");
+        scalar.Should().Contain("join");
+        scalar.Should().NotContain("is not null");
+        scalar.Should().NotContain("rank(");
+        scalar.Should().NotContain("row_number(");
+
+        var scalarMin = SqlOf(ctx, e.SelectWhereMinOld(x => x.Ok, ExtremeRowTies.All).ToCommand()).ToLowerInvariant();
+
+        scalarMin.Should().Contain("min(case when");
+        scalarMin.Should().NotContain("min(ok)");
+        scalarMin.Should().Contain("join");
+
+        var composite = SqlOf(ctx,
+                e.SelectWhereMaxOld(x => new { x.Ok, x.Sub }, ExtremeRowTies.All).ToCommand())
+            .ToLowerInvariant();
+
+        (composite.Split(new[] { "case when" }, StringSplitOptions.None).Length - 1)
+            .Should().BeGreaterThanOrEqualTo(2);
+        composite.Should().Contain("then 1 else 0 end");
+        composite.Should().NotContain("max(ok)");
+        composite.Should().Contain("__nextorm_ext_1_v1");
+        composite.Should().Contain("__nextorm_ext_2_v1");
+        composite.Should().Contain("__nextorm_ext_2_v2");
+        composite.Should().Contain("join");
+        // S4-G04: the stage repeats the prefix key in its GROUP BY, and for a converted column the two
+        // renders must not differ by a folded parameter instance — SQL Server rejects a select-list CASE
+        // whose own GROUP BY carries a different parameter ("not contained in either an aggregate
+        // function or the GROUP BY clause"). The stage therefore groups by the raw converted column.
+        composite.Should().Contain("group by ok");
+        composite.Should().NotContain("rank(");
+        composite.Should().NotContain("row_number(");
+    }
+
+    [Fact]
+    public void ConvertedBool_All_Grouped_Scalar_And_Composite()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<T302ExtremeConvertedBoolEntity>();
+
+        // AC-S4-3 shape not covered before: a converted bool (model bool, int column) as a *grouped*
+        // value key, scalar and composite, for both directions. The user group key is non-nullable, so
+        // the group join is plain equality, while the ordered integer form is aggregated by the stage.
+        var scalar = SqlOf(ctx,
+                e.SelectWhereMaxOld(x => x.Ok, ExtremeRowTies.All, x => x.Grp).ToCommand())
+            .ToLowerInvariant();
+
+        scalar.Should().Contain("max(case when");
+        scalar.Should().Contain("then 1 else 0 end");
+        scalar.Should().NotContain("max(ok)");
+        scalar.Should().Contain("__nextorm_ext_1_0");
+        scalar.Should().Contain("__nextorm_ext_1_1");
+        scalar.Should().Contain("group by");
+        scalar.Should().Contain("join");
+        scalar.Should().NotContain(" or ");
+        scalar.Should().NotContain("rank(");
+        scalar.Should().NotContain("row_number(");
+
+        var scalarMin = SqlOf(ctx,
+                e.SelectWhereMinOld(x => x.Ok, ExtremeRowTies.All, x => x.Grp).ToCommand())
+            .ToLowerInvariant();
+
+        scalarMin.Should().Contain("min(case when");
+        scalarMin.Should().NotContain("min(ok)");
+        scalarMin.Should().Contain("group by");
+        scalarMin.Should().Contain("join");
+
+        var composite = SqlOf(ctx,
+                e.SelectWhereMinOld(x => new { x.Ok, x.Sub }, ExtremeRowTies.All, x => x.Grp).ToCommand())
+            .ToLowerInvariant();
+
+        composite.Should().Contain("min(case when");
+        composite.Should().Contain("then 1 else 0 end");
+        composite.Should().NotContain("min(ok)");
+        composite.Should().Contain("__nextorm_ext_1_g0");
+        composite.Should().Contain("__nextorm_ext_2_g0");
+        composite.Should().Contain("__nextorm_ext_2_v1");
+        composite.Should().Contain("__nextorm_ext_2_v2");
+        composite.Should().Contain("join");
+        // S4-G04, grouped form: every stage group-by must name the raw converted column and never its
+        // storage CASE (whose folded parameter differs from the SELECT list's one, which SQL Server
+        // rejects as "not contained in either an aggregate function or the GROUP BY clause").
+        var groupBys = System.Text.RegularExpressions.Regex
+            .Matches(composite, "group by ([^)]*)")
+            .Select(m => m.Groups[1].Value)
+            .ToList();
+        groupBys.Should().NotBeEmpty();
+        groupBys.Should().OnlyContain(g => !g.Contains("case when"),
+            "a stage must group the prefix on the raw converted column, not on its storage form");
+        groupBys.Should().Contain(g => g.Contains("ok"));
+        composite.Should().NotContain(" or ");
+        composite.Should().NotContain("rank(");
+        composite.Should().NotContain("row_number(");
+    }
+}
+
+[SqlTable("t302_extreme_all")]
+public sealed class T302ExtremeAllEntity
+{
+    [Key][Column("id")] public int Id { get; set; }
+    [Column("score")] public int? Score { get; set; }
+    [Column("cat")] public string? Cat { get; set; }
+}
+
+public sealed class T302ExtremeAllDto
+{
+    public int Id { get; set; }
+    public string? Cat { get; set; }
+}
+
+public sealed record T302ExtremeAllRecord(int Id, string? Cat);
+
+[SqlTable("t302_extreme_composite")]
+public sealed class T302ExtremeCompositeEntity
+{
+    [Key][Column("id")] public int Id { get; set; }
+    [Column("grp")] public int Grp { get; set; }
+    [Column("score")] public int? Score { get; set; }
+    [Column("sub")] public long Sub { get; set; }
+    [Column("flag")] public int Flag { get; set; }
+    [Column("cat")] public string? Cat { get; set; }
+}
+
+[SqlTable("t302_extreme_all")]
+public sealed class T302ExtremeAllCollisionEntity
+{
+    [Key][Column("id")] public int Id { get; set; }
+    [Column("score")] public int? Score { get; set; }
+    [Column("__nextorm_ext_1_0")] public int? Collide { get; set; }
+}
+
+public enum T302ExtremeConvertedState
+{
+    Unknown,
+    Active,
+    Closed,
+}
+
+[SqlTable("t302_extreme_converted")]
+public sealed class T302ExtremeConvertedEntity
+{
+    [Key][Column("id")] public int Id { get; set; }
+    [Column("state")]
+    [ValueConverter(typeof(EnumToStringConverter<T302ExtremeConvertedState>))]
+    public T302ExtremeConvertedState State { get; set; }
+    [Column("sub")] public int Sub { get; set; }
+    [Column("grp")]
+    [ValueConverter(typeof(EnumToStringConverter<T302ExtremeConvertedState>))]
+    public T302ExtremeConvertedState Grp { get; set; }
+    [Column("payload")] public int Payload { get; set; }
+}
+
+[SqlTable("t302_extreme_bit")]
+public sealed class T302ExtremeBitEntity
+{
+    [Key][Column("id")] public int Id { get; set; }
+    [Column("grp")] public int Grp { get; set; }
+    [Column("ok")] public bool? Ok { get; set; }
+    [Column("sub")] public int Sub { get; set; }
+}
+
+[SqlTable("t302_extreme_plain_bit")]
+public sealed class T302ExtremePlainBoolEntity
+{
+    [Key][Column("id")] public int Id { get; set; }
+    [Column("grp")] public int Grp { get; set; }
+    [Column("ok")] public bool Ok { get; set; }
+    [Column("sub")] public int Sub { get; set; }
+    [Column("payload")] public int? Payload { get; set; }
+}
+
+[SqlTable("t302_extreme_fluent")]
+public sealed class T302ExtremeFluentEntity
+{
+    [Key][Column("a_id")] public int Id { get; set; }
+    [Column("a_score")] public int? Score { get; set; }
+    [Column("a_cat")] public string? Cat { get; set; }
+    [Column("a_payload")] public int? Payload { get; set; }
+}
+
+/// <summary>
+/// AC-S4-3 "converted boolean": a model <c>bool</c> stored in an <c>int</c> column, so the provider
+/// representation itself carries the <c>false &lt; true</c> order.
+/// </summary>
+public sealed class T302ExtremeBoolToIntConverter : ValueConverter<bool, int>
+{
+    public override int ConvertToProvider(bool model) => model ? 1 : 0;
+
+    public override bool ConvertFromProvider(int provider) => provider == 1;
+}
+
+[SqlTable("t302_extreme_converted_bool")]
+public sealed class T302ExtremeConvertedBoolEntity
+{
+    [Key][Column("id")] public int Id { get; set; }
+    [Column("grp")] public int Grp { get; set; }
+    [Column("ok")]
+    [ValueConverter(typeof(T302ExtremeBoolToIntConverter))]
+    public bool Ok { get; set; }
+    [Column("sub")] public int Sub { get; set; }
+}

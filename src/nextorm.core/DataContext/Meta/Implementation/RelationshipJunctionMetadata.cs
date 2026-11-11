@@ -5,11 +5,13 @@ namespace NextORM.Core;
 /// and the four mapped key members that connect the two principal sides through the junction.
 /// </summary>
 /// <remarks>
-/// The two principal sides each declare a key (<see cref="ParentKey"/>, <see cref="ChildKey"/>); the
-/// junction declares the two foreign keys pointing at them (<see cref="JunctionParentForeignKey"/>,
-/// <see cref="JunctionChildForeignKey"/>). The lists mirror <see cref="IRelationshipMetadata"/>'s
-/// single-column key shape and stay one-element until composite junction keys are supported. An instance
-/// is published through <see cref="IRelationshipMetadata.Junction"/> and read concurrently.
+/// The two principal sides each declare an ordered key (<see cref="ParentKey"/>, <see cref="ChildKey"/>);
+/// the junction declares the two foreign keys pointing at them (<see cref="JunctionParentForeignKey"/>,
+/// <see cref="JunctionChildForeignKey"/>). Every list keeps its declaration/selector order, and each
+/// junction foreign-key component at position <c>i</c> pairs positionally with the component at
+/// position <c>i</c> of the key it references; the two lists of a leg have the same arity after
+/// resolution. An instance is published through <see cref="IRelationshipMetadata.Junction"/> and read
+/// concurrently.
 /// </remarks>
 public sealed class RelationshipJunctionMetadata
 {

@@ -39,10 +39,10 @@ public class ExtremeRowPayloadLazinessTests
     public void GlobalNative_ShouldRenderIdenticalSqlAndMaterializePayload()
     {
         using var real = ClickHouseTestContext.Create();
-        var realSql = SqlOf(real, real.From<ExtremeNativeEntity>().SelectWhereMax(x => x.K1).ToCommand());
+        var realSql = SqlOf(real, real.From<ExtremeNativeEntity>().SelectWhereMaxOld(x => x.K1).ToCommand());
 
         using var ctx = new CapturingClickHouseDataContext(PlaceholderConnectionString);
-        var sql = SqlOf(ctx, ctx.From<ExtremeNativeEntity>().SelectWhereMax(x => x.K1).ToCommand());
+        var sql = SqlOf(ctx, ctx.From<ExtremeNativeEntity>().SelectWhereMaxOld(x => x.K1).ToCommand());
 
         sql.Should().Be(realSql, "the transparent wrapper must not change the native SQL");
         ctx.CapturingDialect.Renderer.CanRenderCalls.Should().Be(1);
@@ -63,13 +63,13 @@ public class ExtremeRowPayloadLazinessTests
         var realSql = SqlOf(
             real,
             real.From<ExtremeNativeEntity>()
-                .SelectWhereMax(x => x.K1, ExtremeRowTies.One, x => new { x.Id }).ToCommand());
+                .SelectWhereMaxOld(x => x.K1, ExtremeRowTies.One, x => new { x.Id }).ToCommand());
 
         using var ctx = new CapturingClickHouseDataContext(PlaceholderConnectionString);
         var sql = SqlOf(
             ctx,
             ctx.From<ExtremeNativeEntity>()
-                .SelectWhereMax(x => x.K1, ExtremeRowTies.One, x => new { x.Id }).ToCommand());
+                .SelectWhereMaxOld(x => x.K1, ExtremeRowTies.One, x => new { x.Id }).ToCommand());
 
         sql.Should().Be(realSql);
         ctx.CapturingDialect.Renderer.CanRenderCalls.Should().Be(1);
@@ -84,10 +84,10 @@ public class ExtremeRowPayloadLazinessTests
         // payload projection on this rejected native candidate. Floating keys are now eligible, so the
         // string key carries the "rejected before the payload" guard.
         using var real = ClickHouseTestContext.Create();
-        var realSql = SqlOf(real, real.From<IStringKeyNativeEntity>().SelectWhereMax(x => x.Name, x => new { x.Id }));
+        var realSql = SqlOf(real, real.From<IStringKeyNativeEntity>().SelectWhereMaxOld(x => x.Name, x => new { x.Id }));
 
         using var ctx = new CapturingClickHouseDataContext(PlaceholderConnectionString);
-        var sql = SqlOf(ctx, ctx.From<IStringKeyNativeEntity>().SelectWhereMax(x => x.Name, x => new { x.Id }));
+        var sql = SqlOf(ctx, ctx.From<IStringKeyNativeEntity>().SelectWhereMaxOld(x => x.Name, x => new { x.Id }));
 
         sql.Should().Be(realSql);
         ctx.CapturingDialect.Renderer.CanRenderCalls.Should().Be(1);
@@ -102,10 +102,10 @@ public class ExtremeRowPayloadLazinessTests
         // #154 value/reference coverage: a value-type-only payload must still be materialized exactly
         // once by the ClickHouse eligibility decision (which reads Payload) and memoized for later reads.
         using var real = ClickHouseTestContext.Create();
-        var realSql = SqlOf(real, real.From<ExtremeValuePayloadEntity>().SelectWhereMax(x => x.K1).ToCommand());
+        var realSql = SqlOf(real, real.From<ExtremeValuePayloadEntity>().SelectWhereMaxOld(x => x.K1).ToCommand());
 
         using var ctx = new CapturingClickHouseDataContext(PlaceholderConnectionString);
-        var sql = SqlOf(ctx, ctx.From<ExtremeValuePayloadEntity>().SelectWhereMax(x => x.K1).ToCommand());
+        var sql = SqlOf(ctx, ctx.From<ExtremeValuePayloadEntity>().SelectWhereMaxOld(x => x.K1).ToCommand());
 
         sql.Should().Be(realSql, "the transparent wrapper must not change the native SQL");
         ctx.CapturingDialect.Renderer.CanRenderCalls.Should().Be(1);

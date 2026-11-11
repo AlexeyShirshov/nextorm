@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Query;
@@ -380,10 +381,28 @@ public static class NextOrmQueryableExtensions
             if (declaringType == typeof(DbFunctions) || (declaringType is not null && typeof(DbFunctions).IsAssignableFrom(declaringType)))
                 throw Unsupported("EF.Functions");
 
+            if (IsDbFunctionsExtension(node.Method))
+                throw Unsupported("EF.Functions");
+
             if (node.Object is MemberExpression { Member.DeclaringType: var owner } && owner == typeof(EF))
                 throw Unsupported("EF.Functions");
 
             return base.VisitMethodCall(node);
+        }
+
+        // EF.Functions itself is the formal receiver of the static extension methods declared on
+        // DbFunctionsExtensions and its relational/SQLite/provider variants. Such a call carries no
+        // Object node and its declaring type is the extension class, so it is recognised structurally
+        // from the first (receiver) parameter instead of from the receiver expression.
+        private static bool IsDbFunctionsExtension(MethodInfo method)
+        {
+            if (!method.IsStatic)
+                return false;
+
+            var parameters = method.GetParameters();
+
+            return parameters.Length > 0
+                && typeof(DbFunctions).IsAssignableFrom(parameters[0].ParameterType);
         }
 
         protected override Expression VisitMember(MemberExpression node)

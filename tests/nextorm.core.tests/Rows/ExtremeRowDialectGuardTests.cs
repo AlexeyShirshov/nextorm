@@ -39,7 +39,7 @@ public class ExtremeRowDialectGuardTests
     public void SelectWhereMax_OnDialectWithoutSupport_ShouldThrowBeforeSql()
     {
         using var ctx = new TestContext();
-        var command = ctx.From<ExtremeRowEntity>().SelectWhereMax(it => it.Score, it => new { it.Id });
+        var command = ctx.From<ExtremeRowEntity>().SelectWhereMaxOld(it => it.Score, it => new { it.Id });
 
         var act = () => ctx.GetPreparedQueryCommand(command, false, false, CancellationToken.None);
 

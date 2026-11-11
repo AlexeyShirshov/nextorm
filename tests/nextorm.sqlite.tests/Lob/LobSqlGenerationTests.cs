@@ -35,7 +35,7 @@ public class LobSqlGenerationTests
     /// prepared command so its <see cref="DbPreparedQueryCommand{TResult}.Behavior"/> can be asserted.
     /// </summary>
     private static DbPreparedQueryCommand<TResult> SequentialCommand<TResult>(IDataContext ctx, ISqlDialect dialect, QueryCommand<TResult> command)
-        => (DbPreparedQueryCommand<TResult>)CreatePlanner(ctx, dialect).GetPreparedQueryCommand(command, false, false, true, CancellationToken.None);
+        => (DbPreparedQueryCommand<TResult>)CreatePlanner(ctx, dialect).GetPreparedQueryCommand(command, false, false, PreparedCommandCache.Connection, true, CancellationToken.None);
 
     /// <summary>
     /// Prepares a command through the real context the way the <c>ToAsyncEnumerable</c> terminal does:
@@ -54,9 +54,8 @@ public class LobSqlGenerationTests
             new ProviderHooks(
                 (column, param) => param,
                 (_, name, value) => new SqliteParameter(name, value ?? DBNull.Value),
-                sql => new SqliteCommand(sql)),
-            new LoggingOptions(null),
-            new InterceptorHooks([], []));
+                (name, value) => new SqliteParameter(name, value ?? DBNull.Value)),
+            new LoggingOptions(null));
 
     [Fact]
     public void LobBinaryCommand_ShouldAppendTrailingRowidAfterPayload()

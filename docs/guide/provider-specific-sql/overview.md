@@ -69,6 +69,12 @@ Portable functions that are spelled differently on every database live on
 `iif(condition, a, b)`, `gen_random_uuid()`/`uuidv7()`, and session/info functions such as
 `current_user()`/`session_user()`/`current_schema()`/`version()`.
 
+Null-safe comparison is one of them and is documented once, on the concept page: the portable
+`SqlFunctions.Sql.is_not_distinct_from`/`is_distinct_from` become PostgreSQL `IS [NOT] DISTINCT FROM`,
+SQLite `IS`/`IS NOT` and MySQL/MariaDB `<=>`, and are emulated with a guarded `is null`/`=` predicate on
+SQL Server and ClickHouse. See
+[Null-safe comparison](../../scalar-functions/04-conditionals-and-conversion.md#null-safe-comparison-is-not-distinct-from).
+
 ## See also
 
 * [Limitations and out-of-scope features](../../advanced/limitations.md)

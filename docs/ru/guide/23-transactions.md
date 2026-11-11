@@ -17,6 +17,12 @@ public interface ITransactionManager
     Task<DbTransaction> BeginTransactionAsync(CancellationToken cancellationToken = default);
     Task<DbTransaction> BeginTransactionAsync(IsolationLevel isolationLevel, CancellationToken cancellationToken = default);
     void UseTransaction(DbTransaction? transaction);
+    void CreateSavepoint(string name);
+    Task CreateSavepointAsync(string name, CancellationToken cancellationToken = default);
+    void RollbackToSavepoint(string name);
+    Task RollbackToSavepointAsync(string name, CancellationToken cancellationToken = default);
+    void ReleaseSavepoint(string name);
+    Task ReleaseSavepointAsync(string name, CancellationToken cancellationToken = default);
 }
 ```
 
@@ -111,33 +117,64 @@ await payment.ChargeAsync(order, cancellationToken);
 `UseTransaction(externalTx)` — это хук для разделения *внешне принадлежащей* транзакции (EF Core,
 Dapper, сырой ADO.NET): он привязывает контекст к этой транзакции, а не способ вложенности.
 
-**Savepoints.** Savepoint позволил бы откатить внутренний шаг, не теряя внешнюю работу, но API их не
-моделирует. Если они нужны, выполняйте инструкции провайдера сами через
-[сырые команды](14-raw-sql.md) — они идут по тому же соединению и привязаны к активной транзакции:
+**Savepoints.** Savepoint позволяет внутреннему шагу откатить только свою работу, не закрывая внешнюю
+транзакцию. Роль предоставляет все три операции ADO.NET, каждую с асинхронным близнецом:
 
 ```csharp
-void Raw(string sql) { using (ctx.ExecuteRaw(sql)) { } }
+var transactions = (ITransactionManager)ctx;
 
-Raw("savepoint before_batch");
+await using var tx = await transactions.BeginTransactionAsync();
+await transactions.CreateSavepointAsync("before_batch");
 try
 {
     // ... шаг, которому может понадобиться частичный откат ...
-    Raw("release savepoint before_batch");
+    await transactions.ReleaseSavepointAsync("before_batch");
 }
 catch
 {
-    Raw("rollback to savepoint before_batch");
-    throw;
+    await transactions.RollbackToSavepointAsync("before_batch");
+    throw;                                        // внешняя транзакция всё ещё открыта
 }
+await tx.CommitAsync();
 ```
 
-В PostgreSQL, SQLite, MySQL и MariaDB синтаксис — `SAVEPOINT` / `RELEASE SAVEPOINT` /
-`ROLLBACK TO SAVEPOINT`; в SQL Server — `SAVE TRANSACTION <name>` / `ROLLBACK TRANSACTION <name>`.
-nextorm savepoints не создаёт и не отслеживает — уникальность имён и вложенность на вызывающем.
+`CreateSavepoint`, `RollbackToSavepoint` и `ReleaseSavepoint` (и их `*Async` формы) уходят напрямую в
+[`DbTransaction`](https://learn.microsoft.com/dotnet/api/system.data.common.dbtransaction) провайдера:
+nextorm создаёт именованные savepoints, откатывается к ним и освобождает их через `ITransactionManager`;
+уникальность имён и вложенность по-прежнему остаются за вызывающим. Реестра и стека savepoints нет,
+транзакция никогда не коммитится и не откатывается целиком, состояние команд не меняется, а владение
+транзакцией не меняется тем более — поэтому встроенная через `UseTransaction` транзакция получает
+savepoints наравне с собственной.
+
+**Имена.** Правило имён — портируемая политика API, а не ограничение драйвера: 1–32 ASCII-символа
+идентификатора — `[A-Za-z_][A-Za-z0-9_]*` — проверяются ординально (читаются только ASCII-диапазоны,
+поэтому культура на результат не влияет). Null, пустое имя, имя с ведущей цифрой, пробелом, кавычкой,
+пунктуацией, не-ASCII или длиннее 32 символов бросает `ArgumentException` до вызова драйвера; предел в 32
+символа заодно исключает обрезание в SQL Server. Дубликаты имён делегируются без изменений — guard'а
+уникальности нет, — а вложенные savepoints работают, потому что каждый новый savepoint отмечает свою точку.
+
+**Guard'ы.** Проверки идут в фиксированном порядке, и первая применимая побеждает, не трогая драйвер:
+поддержка транзакций → поддержка savepoints → наличие активной транзакции → валидное имя. Поэтому вызов
+savepoint без активной транзакции бросает `InvalidOperationException` даже у провайдера, который savepoints
+поддерживает.
+
+**Особенности провайдеров.**
+
+* SQLite, PostgreSQL, SQL Server, MySQL и MariaDB поддерживают savepoints: `ISqlDialect.SupportsSavepoints`
+  там `true`, а MariaDB наследует значение MySQL. Сторонний диалект по умолчанию получает `false`.
+* В SQL Server `ReleaseSavepoint` всё равно вызывает драйвер, и там это **не бросающий no-op, сохраняющий
+  данные**: инструкции `RELEASE SAVEPOINT` в T-SQL нет. Откат *после* release определяется провайдером и в
+  поддерживаемый контракт не входит.
+* PostgreSQL (Npgsql) применяет savepoint сразу: create-then-rollback работает даже без промежуточной
+  команды.
+* В ClickHouse ADO.NET-транзакции нет вовсе, поэтому `BeginTransaction*` падает раньше любого
+  savepoint-guard, а любой вызов savepoint бросает `NotSupportedException`.
+* Откат к savepoint сохраняет строки и значения `NULL`, записанные до него, и отбрасывает последующую
+  работу; судьбу транзакции решают только внешние commit или rollback.
 
 ## Поддержка провайдеров
 
-`ITransactionManager` реализован для SQLite, PostgreSQL, SQL Server и MySQL/MariaDB, и контекст выставляет `DbCommand.Transaction` на всех путях исполнения (буфер, стриминг и мутации). ClickHouse работает по HTTP и не имеет ADO.NET-транзакций: его диалект сообщает [`SupportsTransactions`](xref:NextORM.Core.ISqlDialect.SupportsTransactions) как `false`, а `BeginTransaction*`/`UseTransaction` бросают `NotSupportedException`. Провайдер in-memory роль не реализует.
+`ITransactionManager` реализован для SQLite, PostgreSQL, SQL Server и MySQL/MariaDB, и контекст выставляет `DbCommand.Transaction` на всех путях исполнения (буфер, стриминг и мутации). Savepoints доступны на всех пяти — release в SQL Server это no-op, сохраняющий данные, — а ClickHouse отклоняет их на guard'е транзакций. ClickHouse работает по HTTP и не имеет ADO.NET-транзакций: его диалект сообщает [`SupportsTransactions`](xref:NextORM.Core.ISqlDialect.SupportsTransactions) как `false`, а `BeginTransaction*`/`UseTransaction` бросают `NotSupportedException`. Провайдер in-memory роль не реализует.
 
 ## См. также
 

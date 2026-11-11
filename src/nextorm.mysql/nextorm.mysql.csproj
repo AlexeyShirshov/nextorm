@@ -3,7 +3,8 @@
   <PropertyGroup>
     <PackageId>nextorm.mysql</PackageId>
     <Title>Nextorm MySQL provider</Title>
-    <Description>MySQL provider for Nextorm</Description>
+    <Description>MySQL provider for Nextorm, a zero-SQL ORM for .NET: adds the MySQL dialect (ON DUPLICATE KEY upserts, native index hints, MySqlBatch batching) and UseMySql() over MySqlConnector.</Description>
+    <PackageTags>$(PackageTags);mysql;mysqlconnector</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>
@@ -14,8 +15,27 @@
     <PackageReference Include="MySqlConnector" />
   </ItemGroup>
 
+  <!-- The provider's SQL-generation tests drive the bulk-insert shape guard without a server, so they
+       supply the catalog facts through the internal seam instead of opening a connection (the same
+       mechanism nextorm.postgres exposes to its own test project). -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="nextorm.mysql.tests" />
+    <InternalsVisibleTo Include="nextorm.mariadb.tests" />
+  </ItemGroup>
+
   <ItemGroup>
     <None Include="readme.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Public API tracking (issue #53, IF6). Every change to the public surface must be declared in
+      PublicAPI.Unshipped.txt: RS0016 (member missing from the file) and RS0017 (stale entry) are
+      build errors here, because the repository treats warnings as errors everywhere.
+    -->
+    <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
+    <AdditionalFiles Include="PublicAPI.Shipped.txt" />
+    <AdditionalFiles Include="PublicAPI.Unshipped.txt" />
   </ItemGroup>
 
 </Project>

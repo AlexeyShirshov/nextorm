@@ -33,6 +33,7 @@ namespace NextORM.Core.Tests;
 /// <c>capture</c> block (tree identity, command, wall time) and records the file hash of the artifact.
 /// </para>
 /// </summary>
+[Collection("Query cache controls")] // clears the process-wide plan store; see Caching/QueryCacheControlsTests
 public sealed class CachedPreparationRecipeTests
 {
     private const string ExportPathEnv = "T201_API_EXPORT_PATH";
@@ -424,6 +425,40 @@ public sealed class CachedPreparationRecipeTests
     private static QueryCommand<int> DistinctShape(IDataContext ctx)
         => ctx.From<SimpleEntity>().Where(x => x.Id > 0).Select(x => x.Id).Distinct();
 
+    /// <summary>
+    /// The fingerprint must hash the RAW sort key. A fresh command's <c>Sorting.PreparedExpression</c>
+    /// is still null, so hashing the prepared form would put two different <c>ORDER BY</c> members into
+    /// one bucket and let an invalid member match a valid plan.
+    /// </summary>
+    [Fact]
+    public void Fingerprint_DistinguishesDifferentOrderByMembers()
+    {
+        using var ctx = CreateSqlServerContext();
+        _ = ctx.From<SortProbeEntity>();
+
+        var byId = QueryCommand.ComputeRawFingerprint(ctx.From<SortProbeEntity>().Select(x => new { x.Id }).OrderBy(x => x.Id));
+        var byName = QueryCommand.ComputeRawFingerprint(ctx.From<SortProbeEntity>().Select(x => new { Name = x.Name }).OrderBy(x => x.Name));
+
+        byId.Should().NotBeNull();
+        byName.Should().NotBeNull();
+        byId.Should().NotBe(byName, "two different ORDER BY members are two different raw graphs");
+    }
+
+    /// <summary>Probe entity with two sortable columns (the shared test entity has only <c>Id</c>).</summary>
+    private sealed class SortProbeEntity
+    {
+        public int Id { get; set; }
+        public string? Name { get; set; }
+    }
+
+    /// <summary>The T7 paging arm shape: projection + ORDER BY + OFFSET/LIMIT.</summary>
+    private static QueryCommand<int> SortedPageShape(IDataContext ctx)
+        => ctx.From<SimpleEntity>()
+            .Select(x => x.Id)
+            .OrderBy(x => x)
+            .Offset(10)
+            .Limit(5);
+
     // --- 1. RawDescriptorDifferential ----------------------------------------------------------------
 
     [Fact]
@@ -517,6 +552,30 @@ public sealed class CachedPreparationRecipeTests
         QueryPlanner.RecipeApplyMismatches.Should().Be(0);
         QueryPlanner.RecipeReuses.Should().Be(1);
         second.Should().Be(first);
+    }
+
+    /// <summary>
+    /// A sorted query must reuse its raw recipe like an unsorted one. Preparation fills
+    /// <c>Sorting.PreparedExpression</c> in place, and that field is part of the normalized plan key, so
+    /// a staged apply that left the fresh command's raw sort keys in place would produce a key that
+    /// differs from the stored one and reject the candidate on every call.
+    /// </summary>
+    [Fact]
+    public void Recipe_SortedPageShape_ReusesInsteadOfRejectingTheStagedKey()
+    {
+        ResetRecipeCache();
+        using var ctx = CreateSqlServerContext();
+
+        var first = PrepareSql(ctx, SortedPageShape(ctx));
+        QueryPlanner.RecipePublishes.Should().Be(1);
+
+        var second = PrepareSql(ctx, SortedPageShape(ctx));
+
+        QueryPlanner.RecipeReuses.Should().Be(1);
+        QueryPlanner.RecipeApplyMismatches.Should().Be(0,
+            "the staged apply must adopt the prepared sort keys, or the reconciled key can never match");
+        second.Should().Be(first);
+        second.Should().ContainEquivalentOf("order by").And.ContainEquivalentOf("offset 10");
     }
 
     /// <summary>
@@ -637,18 +696,51 @@ public sealed class CachedPreparationRecipeTests
         var first = PrepareCommand(ctx, ctx.From<SimpleEntity>().Where(x => x.Id > threshold).Select(x => x.Id));
         first.DbCommand.Parameters[0].Value.Should().Be(10);
 
-        // A closure-bearing shape is ineligible: the captured value can never be served from a
-        // value-independent descriptor, so it keeps the ordinary route and binds the fresh value.
-        QueryPlanner.RecipePublishes.Should().Be(0);
+        // P5a policy: a closure-bearing graph is a provable raw identity — the shape carries the closure
+        // instances, so a hit is possible only for those very instances and the captured members are read
+        // live. This test still protects FRESHNESS: the reused statement must carry the new value.
+        QueryPlanner.RecipePublishes.Should().Be(1);
         QueryPlanner.RecipeReuses.Should().Be(0);
         QueryCommand.CaptureRawShape(ctx.From<SimpleEntity>().Where(x => x.Id > threshold).Select(x => x.Id))
-            .Should().BeNull("a captured member access is not a provable raw identity");
+            .Should().NotBeNull("the closure identity is a provable raw identity");
 
         threshold = 99;
         var second = PrepareCommand(ctx, ctx.From<SimpleEntity>().Where(x => x.Id > threshold).Select(x => x.Id));
-        second.DbCommand.Parameters[0].Value.Should().Be(99);
+        QueryPlanner.RecipeReuses.Should().Be(1, "the same closure instance reuses the published recipe");
+        second.Should().BeSameAs(first, "the raw hit serves the published prepared command");
+        second.DbCommand.Parameters[0].Value.Should().Be(
+            99, "the hit must rebind the fresh captured value, never serve the stale one");
+    }
+
+    /// <summary>
+    /// Safety boundary of the P5a policy: a plan is published with a captured closure only when every
+    /// refreshed parameter is a captured member (<c>Parameter.CapturedKey</c>), because only those can be
+    /// rebound by reading the same closure instance on a hit. A client-evaluated method call is folded
+    /// into one parameter with no captured key and is re-evaluated on every render, so the plan must stay
+    /// out of the raw store even though the shape carries the closure identity of its argument.
+    /// </summary>
+    [Fact]
+    public void Recipe_RefreshParameterWithoutCapturedKey_IsNotPublished()
+    {
+        ResetRecipeCache();
+        using var ctx = CreateSqlServerContext();
+
+        var offset = 5;
+        var first = PrepareCommand(ctx, ctx.From<SimpleEntity>().Where(x => x.Id > ThresholdPlus(offset)).Select(x => x.Id));
+        first.DbCommand.Parameters[0].Value.Should().Be(6);
+        QueryCommand.CaptureRawShape(ctx.From<SimpleEntity>().Where(x => x.Id > ThresholdPlus(offset)).Select(x => x.Id))
+            .Should().NotBeNull("the closure identity alone is a provable raw identity");
+        QueryPlanner.RecipePublishes.Should().Be(
+            0, "a refresh parameter with no captured key cannot be rebound by identity");
+
+        offset = 50;
+        var second = PrepareCommand(ctx, ctx.From<SimpleEntity>().Where(x => x.Id > ThresholdPlus(offset)).Select(x => x.Id));
+        second.DbCommand.Parameters[0].Value.Should().Be(51);
         QueryPlanner.RecipeReuses.Should().Be(0);
     }
+
+    /// <summary>A client-evaluated call: folded into one parameter with no captured key.</summary>
+    private static int ThresholdPlus(int offset) => offset + 1;
 
     // --- 4. lifetime: Clear and thread separation -----------------------------------------------------
 

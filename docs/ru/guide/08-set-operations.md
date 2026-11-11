@@ -9,19 +9,21 @@
 Каждый [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) предоставляет шесть методов операций над множествами, которые
 принимают другой запрос и возвращают новый запрос:
 
-| Метод | Ключевое слово SQL | Сохраняет дубликаты |
-|---|---|---|
-| `Union(query)` | `union` | нет |
-| `UnionAll(query)` | `union all` | да |
-| `Intersect(query)` | `intersect` | нет |
-| `IntersectAll(query)` | `intersect all` | да |
-| `Except(query)` | `except` | нет |
-| `ExceptAll(query)` | `except all` | да |
+| Метод | Ключевое слово SQL | Сохраняет дубликаты | Правая сторона по селектору |
+|---|---|---|---|
+| `Union(query)` / `Union<TEntity>(selector)` | `union` | нет | `Union<TEntity>(selector)` |
+| `UnionAll(query)` / `UnionAll<TEntity>(selector)` | `union all` | да | `UnionAll<TEntity>(selector)` |
+| `Intersect(query)` / `Intersect<TEntity>(selector)` | `intersect` | нет | `Intersect<TEntity>(selector)` |
+| `IntersectAll(query)` / `IntersectAll<TEntity>(selector)` | `intersect all` | да | `IntersectAll<TEntity>(selector)` |
+| `Except(query)` / `Except<TEntity>(selector)` | `except` | нет | `Except<TEntity>(selector)` |
+| `ExceptAll(query)` / `ExceptAll<TEntity>(selector)` | `except all` | да | `ExceptAll<TEntity>(selector)` |
 
 Правый запрос может проецировать другой тип элемента: метод является обобщённым по другой стороне
 (`Union<T>(QueryCommand<T>)`), поэтому
 `SimpleEntity.Select(it => it.Id).Union(ComplexEntity.Select(it => (int)it.Id))`
-допустим, пока формы совпадают.
+допустим, пока формы совпадают. Селекторная форма (`Union<TEntity>(selector)` и аналоги) фиксирует тип
+элемента правой стороны как `TResult` левой стороны и проецирует `TEntity` в `TResult` через селектор;
+явную форму `Union<T>(QueryCommand<T>)` используйте, когда правая сторона имеет другой тип CLR.
 
 Результат сам является [`QueryCommand`](xref:NextORM.Core.QueryCommand), поэтому его можно выполнить через `From(result)` или
 применить к нему ещё одну операцию над множествами. **Цепочка применяется слева направо**: каждая
@@ -67,11 +69,11 @@ select id
 ```csharp
 var distinctCount = dataContext.From(
     dataContext.From<ISimpleEntity>().Select(it => it.Id)
-        .Union(dataContext.From<IComplexEntity>().Select(it => (int)it.Id))).Count(); // 10
+        .Union<IComplexEntity>(it => (int)it.Id)).Count(); // 10
 
 var allCount = dataContext.From(
     dataContext.From<ISimpleEntity>().Select(it => it.Id)
-        .UnionAll(dataContext.From<IComplexEntity>().Select(it => (int)it.Id))).Count(); // 13
+        .UnionAll<IComplexEntity>(it => (int)it.Id)).Count(); // 13
 ```
 
 ## Intersect и Except
@@ -164,6 +166,24 @@ var count = dataContext.From(
     .Count();
 ```
 
+### Прямое чтение одного скалярного столбца
+
+Когда обе стороны проецируют один скалярный столбец, `From(cmd)` материализует строки напрямую, а не
+объекты, и `UnionAll` сохраняет дубликаты:
+
+```csharp
+var left = dataContext.From<ISimpleEntity>().Where(it => it.Id <= 2).Select(it => it.Id);
+var right = dataContext.From<ISimpleEntity>().Where(it => it.Id >= 2 && it.Id <= 3).Select(it => it.Id);
+
+var rows = dataContext.From(left.UnionAll(right)).ToList(); // 1, 2, 2, 3
+```
+
+Результат одинаков независимо от того, пуст ли process-wide кэш select-list для типа или он уже был
+заполнен более ранним скалярным чтением: производное чтение строит собственную одностолбцовую форму и
+не читает и не перезаписывает эту запись кэша. Производный источник более чем с одним столбцом
+по-прежнему требует явного внешнего `Select` (см.
+[Подзапросы](07-subqueries.md#подзапрос-как-источник-from)).
+
 ## Различия между провайдерами
 
 | Провайдер | `union` / `union all` | `intersect` / `except` | `intersect all` / `except all` |
@@ -188,7 +208,7 @@ var count = dataContext.From(
 
 ---
 
-Source: `tests/nextorm.integration.tests/CommonTestSuite/Queries/CommonTestSuite.SetOperations.cs:8`,
+Source: `tests/nextorm.integration.tests/CommonTestSuite/Queries/Rows/CommonTestSuite.SetOperations.cs:8`,
 `tests/nextorm.integration.tests/CommonTestSuite/Raw/CommonTestSuite.SqlCommand.cs:743,761`,
 `tests/nextorm.sqlite.tests/SqlGeneration/SqlGenerationTests.cs:49,69,89`,
 `tests/nextorm.sqlserver.tests/SqlGeneration/SqlGenerationTests.cs:62,102`,

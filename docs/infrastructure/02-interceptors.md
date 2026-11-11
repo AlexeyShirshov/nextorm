@@ -140,5 +140,5 @@ The connection is opened lazily and reused, so `ConnectionOpening`/`ConnectionOp
 Source: `src/nextorm.core/Interceptors/IQueryInterceptor.cs`,
 `src/nextorm.core/Interceptors/IConnectionInterceptor.cs`,
 `src/nextorm.core/DataContext/QueryExecutor.cs`,
-`src/nextorm.core/DataContext/DbConnectionManager.cs`,
+`src/nextorm.core/DataContext/Infrastructure/DbConnectionManager.cs`,
 `tests/nextorm.sqlite.tests/Interceptors/InterceptorTests.cs`.

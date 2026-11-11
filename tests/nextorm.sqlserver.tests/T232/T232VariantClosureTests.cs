@@ -30,8 +30,7 @@ public class T232VariantV05Tests
     /// <summary>A deterministic SQL Server table-valued function used as the PIVOT inner.</summary>
     private static class SalesTvf
     {
-        [SqlTableFunction("t232_sales_tvf")]
-        public static IQueryable<ITvfSalesRow> Sales() => throw new NotSupportedException();
+        public static TvfEntityBuilder<ITvfSalesRow> Sales() => new("t232_sales_tvf");
     }
 
     private static string Normalize(string sql) => sql.Replace("\r\n", "\n");
@@ -41,7 +40,7 @@ public class T232VariantV05Tests
 
     private static EntityBuilder<TShape> TypedTvfPivot<TShape>(
         IDataContext ctx, System.Linq.Expressions.Expression<System.Func<ITvfSalesRow, PivotValues, TShape>> projection)
-        => ctx.FromTableFunction(() => SalesTvf.Sales())
+        => ctx.From(() => SalesTvf.Sales())
             .Pivot(PivotAggregate.Sum, r => r.Margin, r => r.Quarter, projection);
 
     [Fact]

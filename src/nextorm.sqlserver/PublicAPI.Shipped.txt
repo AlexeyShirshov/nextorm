@@ -1,0 +1,188 @@
+#nullable enable
+NextORM.SqlServer.SqlServerDataContext
+NextORM.SqlServer.SqlServerDataContext.SqlServerDataContext(NextORM.SqlServer.SqlServerEngineEdition engineEdition, string! connectionString) -> void
+NextORM.SqlServer.SqlServerDataContext.SqlServerDataContext(NextORM.SqlServer.SqlServerEngineEdition engineEdition, System.Data.Common.DbConnection! connection) -> void
+NextORM.SqlServer.SqlServerDataContext.SqlServerDataContext(string! connectionString, NextORM.Core.DataContextBuilder! optionsBuilder) -> void
+NextORM.SqlServer.SqlServerDataContext.SqlServerDataContext(System.Data.Common.DbConnection! connection, NextORM.Core.DataContextBuilder! optionsBuilder) -> void
+NextORM.SqlServer.SqlServerDataContext.SqlServerDataContext(System.Version! serverVersion, NextORM.SqlServer.SqlServerEngineEdition engineEdition, string! connectionString) -> void
+NextORM.SqlServer.SqlServerDataContext.SqlServerDataContext(System.Version! serverVersion, NextORM.SqlServer.SqlServerEngineEdition engineEdition, System.Data.Common.DbConnection! connection) -> void
+NextORM.SqlServer.SqlServerDataContext.SqlServerDataContext(System.Version! serverVersion, string! connectionString) -> void
+NextORM.SqlServer.SqlServerDataContext.SqlServerDataContext(System.Version! serverVersion, System.Data.Common.DbConnection! connection) -> void
+NextORM.SqlServer.SqlServerDataContextOptionsBuilderExtensions
+NextORM.SqlServer.SqlServerDialect
+NextORM.SqlServer.SqlServerDialect.SqlServerDialect() -> void
+NextORM.SqlServer.SqlServerEngineEdition
+NextORM.SqlServer.SqlServerEngineEdition.AzureSqlEdge = 9 -> NextORM.SqlServer.SqlServerEngineEdition
+NextORM.SqlServer.SqlServerEngineEdition.AzureSqlManagedInstance = 8 -> NextORM.SqlServer.SqlServerEngineEdition
+NextORM.SqlServer.SqlServerEngineEdition.AzureSynapseAnalytics = 6 -> NextORM.SqlServer.SqlServerEngineEdition
+NextORM.SqlServer.SqlServerEngineEdition.AzureSynapseServerlessSqlPoolOrMicrosoftFabric = 11 -> NextORM.SqlServer.SqlServerEngineEdition
+NextORM.SqlServer.SqlServerEngineEdition.Enterprise = 3 -> NextORM.SqlServer.SqlServerEngineEdition
+NextORM.SqlServer.SqlServerEngineEdition.Express = 4 -> NextORM.SqlServer.SqlServerEngineEdition
+NextORM.SqlServer.SqlServerEngineEdition.MicrosoftFabricSqlDatabase = 12 -> NextORM.SqlServer.SqlServerEngineEdition
+NextORM.SqlServer.SqlServerEngineEdition.PersonalOrDesktop = 1 -> NextORM.SqlServer.SqlServerEngineEdition
+NextORM.SqlServer.SqlServerEngineEdition.SqlDatabase = 5 -> NextORM.SqlServer.SqlServerEngineEdition
+NextORM.SqlServer.SqlServerEngineEdition.Standard = 2 -> NextORM.SqlServer.SqlServerEngineEdition
+NextORM.SqlServer.SqlServerEntityBuilderExtensions
+override NextORM.SqlServer.SqlServerDataContext.BulkInsertRows(string! tableName, System.Collections.Generic.IReadOnlyList<string!>! columnNames, System.Collections.Generic.IReadOnlyList<NextORM.Core.IPropertyMetadata!>! columns, System.Collections.Generic.IEnumerable<object?[]!>! rows, int? commandTimeoutSeconds, int? maxBatchSize, System.Action<int>? progress, int notifyEvery, NextORM.Core.BulkCopyFlags bulkCopy) -> int
+override NextORM.SqlServer.SqlServerDataContext.BulkInsertRowsAsync(string! tableName, System.Collections.Generic.IReadOnlyList<string!>! columnNames, System.Collections.Generic.IReadOnlyList<NextORM.Core.IPropertyMetadata!>! columns, System.Collections.Generic.IAsyncEnumerable<object?[]!>! rows, int? commandTimeoutSeconds, int? maxBatchSize, System.Action<int>? progress, int notifyEvery, NextORM.Core.BulkCopyFlags bulkCopy, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<int>!
+override NextORM.SqlServer.SqlServerDataContext.CreateDbConnection(string? connectionString) -> System.Data.Common.DbConnection!
+override NextORM.SqlServer.SqlServerDataContext.CreateParam(string! name, object? value) -> System.Data.Common.DbParameter!
+override NextORM.SqlServer.SqlServerDataContext.CreateProcedureParameter(NextORM.Core.ProcedureParameter parameter) -> System.Data.Common.DbParameter!
+override NextORM.SqlServer.SqlServerDataContext.Dialect.get -> NextORM.Core.ISqlDialect!
+override NextORM.SqlServer.SqlServerDataContext.MapColumnExpression(NextORM.Core.SelectExpression! column, System.Linq.Expressions.Expression! param) -> System.Linq.Expressions.Expression!
+override NextORM.SqlServer.SqlServerDataContext.MapTypedColumnExpression(NextORM.Core.SelectExpression! column, System.Linq.Expressions.Expression! record, System.Type! storageType) -> System.Linq.Expressions.Expression!
+override NextORM.SqlServer.SqlServerDataContext.SupportsTypedColumnMapping(NextORM.Core.SelectExpression! column) -> bool
+override NextORM.SqlServer.SqlServerDataContext.TimeOnlyProjectionRefusal.get -> string?
+override NextORM.SqlServer.SqlServerDialect.BatchUsesJoinedCommand.get -> bool
+override NextORM.SqlServer.SqlServerDialect.CreateTableAsSelectUsesSelectInto.get -> bool
+override NextORM.SqlServer.SqlServerDialect.Escape(string! keyword) -> string!
+override NextORM.SqlServer.SqlServerDialect.GetPagingOrderBy(NextORM.Core.QueryCommand! queryCommand) -> string?
+override NextORM.SqlServer.SqlServerDialect.Iif.get -> NextORM.Core.IIifRenderer!
+override NextORM.SqlServer.SqlServerDialect.IndexHints.get -> NextORM.Core.IIndexHintRenderer?
+override NextORM.SqlServer.SqlServerDialect.Lock.get -> NextORM.Core.ILockRenderer!
+override NextORM.SqlServer.SqlServerDialect.MakeApply(NextORM.Core.JoinType applyType, string! source, NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> string!
+override NextORM.SqlServer.SqlServerDialect.MakeAverageArgument(string! argument, System.Type! inputType) -> string!
+override NextORM.SqlServer.SqlServerDialect.MakeBase64Decode(string! value) -> string!
+override NextORM.SqlServer.SqlServerDialect.MakeBase64Encode(string! value) -> string!
+override NextORM.SqlServer.SqlServerDialect.MakeBoolCoalesce(string! v1, string! v2) -> string!
+override NextORM.SqlServer.SqlServerDialect.MakeBooleanPredicate(string! predicate, bool asPredicate) -> string!
+override NextORM.SqlServer.SqlServerDialect.MakeBooleanValuePredicate(string! value) -> string!
+override NextORM.SqlServer.SqlServerDialect.MakeCase(string! caseExpression, bool isBooleanResult, bool asPredicate, NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> string!
+override NextORM.SqlServer.SqlServerDialect.MakeCoalesce(string! v1, string! v2) -> string!
+override NextORM.SqlServer.SqlServerDialect.MakeCollate(string! value, string! collation, NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> string!
+override NextORM.SqlServer.SqlServerDialect.MakeColumnReference(string! name) -> string!
+override NextORM.SqlServer.SqlServerDialect.MakeCount(bool distinct, bool big) -> string!
+override NextORM.SqlServer.SqlServerDialect.MakeCreateTableAsSelectInto(NextORM.Core.CreateTableAsClause clause, NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> string!
+override NextORM.SqlServer.SqlServerDialect.MakeCryptGenRandom(string! length) -> string!
+override NextORM.SqlServer.SqlServerDialect.MakeDateAdd(string! field, string! amount, string! value) -> string!
+override NextORM.SqlServer.SqlServerDialect.MakeDateAdd(string! field, string! amount, string! value, bool isDateTimeOffset) -> string!
+override NextORM.SqlServer.SqlServerDialect.MakeDateDiff(string! field, string! start, string! end) -> string!
+override NextORM.SqlServer.SqlServerDialect.MakeDateDiffBig(string! field, string! start, string! end) -> string!
+override NextORM.SqlServer.SqlServerDialect.MakeDateFromParts(string! year, string! month, string! day) -> string!
+override NextORM.SqlServer.SqlServerDialect.MakeDatePart(string! part, string! value) -> string!
+override NextORM.SqlServer.SqlServerDialect.MakeDateTimeOffsetNow(bool utc) -> string!
+override NextORM.SqlServer.SqlServerDialect.MakeDateTrunc(string! field, string! value) -> string!
+override NextORM.SqlServer.SqlServerDialect.MakeEndOfMonth(string! value) -> string!
+override NextORM.SqlServer.SqlServerDialect.MakeForJson(NextORM.Core.ForJsonClause clause, NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> string!
+override NextORM.SqlServer.SqlServerDialect.MakeForXml(NextORM.Core.ForXmlClause clause, NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> string!
+override NextORM.SqlServer.SqlServerDialect.MakeFullText(string! functionName, string! column, string! search) -> string!
+override NextORM.SqlServer.SqlServerDialect.MakeIdentityFunction(NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> string!
+override NextORM.SqlServer.SqlServerDialect.MakeIsJson(string! value, bool asPredicate) -> string!
+override NextORM.SqlServer.SqlServerDialect.MakeJoinKeyword(NextORM.Core.JoinType joinType, NextORM.Core.JoinStrictness strictness, bool isGlobal, string? hint, NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> string!
+override NextORM.SqlServer.SqlServerDialect.MakeMathFunction(string! name, System.Collections.Generic.IReadOnlyList<string!>! args) -> string!
+override NextORM.SqlServer.SqlServerDialect.MakeMaxRecursion(int maxRecursion, NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> string?
+override NextORM.SqlServer.SqlServerDialect.MakeMerge(string! target, System.Collections.Generic.IReadOnlyList<string!>! columns, System.Collections.Generic.IReadOnlyList<string!>! keys, System.Collections.Generic.IReadOnlyList<string!>! updateColumns, string! valuesRows, NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower, System.Collections.Generic.IReadOnlyList<string!>? returningColumns = null) -> string!
+override NextORM.SqlServer.SqlServerDialect.MakeMergeStatementTerminator(NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> string!
+override NextORM.SqlServer.SqlServerDialect.MakeNow(bool utc) -> string!
+override NextORM.SqlServer.SqlServerDialect.MakeOrdinal(string! value, bool ignoreCase) -> string!
+override NextORM.SqlServer.SqlServerDialect.MakePage(NextORM.Core.Paging paging, System.Text.StringBuilder! sqlBuilder, NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> void
+override NextORM.SqlServer.SqlServerDialect.MakeParam(string! name) -> string!
+override NextORM.SqlServer.SqlServerDialect.MakeQualifiedTableName(string? server, string? database, string? schema, string! table) -> string!
+override NextORM.SqlServer.SqlServerDialect.MakeRegexMatch(string! value, string! pattern, bool ignoreCase) -> string!
+override NextORM.SqlServer.SqlServerDialect.MakeRegexReplace(string! value, string! pattern, string! replacement, bool ignoreCase) -> string!
+override NextORM.SqlServer.SqlServerDialect.MakeRepeat(string! value, string! count) -> string!
+override NextORM.SqlServer.SqlServerDialect.MakeStringLength(string! value) -> string!
+override NextORM.SqlServer.SqlServerDialect.MakeStuff(string! value, string! start, string? count, string! newValue) -> string!
+override NextORM.SqlServer.SqlServerDialect.MakeSubqueryPredicate(string! keyword, string! query, bool asPredicate) -> string!
+override NextORM.SqlServer.SqlServerDialect.MakeTableHints(System.Collections.Generic.IReadOnlyList<string!>! hints, NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> string!
+override NextORM.SqlServer.SqlServerDialect.MakeTablesInScopeHints(System.Collections.Generic.IReadOnlyList<string!>! hints, NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> string!
+override NextORM.SqlServer.SqlServerDialect.MakeTop(int limit, bool withTies, out string? topStmt, NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> bool
+override NextORM.SqlServer.SqlServerDialect.MakeTryCast(string! expression, System.Type! targetType) -> string!
+override NextORM.SqlServer.SqlServerDialect.MakeTryConvert(string! expression, System.Type! targetType, string? style) -> string!
+override NextORM.SqlServer.SqlServerDialect.MakeTypeName(System.Type! type) -> string!
+override NextORM.SqlServer.SqlServerDialect.MakeUpdateJoin(string! target, string! targetAlias, string! assignments, string! fromAndJoins, string! usingSources, string! joinConditions, string? whereSql, NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> string!
+override NextORM.SqlServer.SqlServerDialect.MakeWith(bool recursive, NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> string!
+override NextORM.SqlServer.SqlServerDialect.NativeJsonProviderType.get -> System.Type!
+override NextORM.SqlServer.SqlServerDialect.NullSafeComparison.get -> NextORM.Core.INullSafeComparisonRenderer?
+override NextORM.SqlServer.SqlServerDialect.Pivot.get -> NextORM.Core.IPivotRenderer!
+override NextORM.SqlServer.SqlServerDialect.PromoteDateOperand(string! field, string! value) -> string!
+override NextORM.SqlServer.SqlServerDialect.QuoteIdentifier(string! name) -> string!
+override NextORM.SqlServer.SqlServerDialect.RenderQueryHints(string! sql, System.Collections.Generic.IReadOnlyList<string!>! hints, string? maxRecursionOption, NextORM.Core.KeywordCase keywordCase = NextORM.Core.KeywordCase.Lower) -> string!
+override NextORM.SqlServer.SqlServerDialect.RequiresIdentityInsertToggle.get -> bool
+override NextORM.SqlServer.SqlServerDialect.RequiresRecursiveCteUnionAll.get -> bool
+override NextORM.SqlServer.SqlServerDialect.RequireSubqueryAlias.get -> bool
+override NextORM.SqlServer.SqlServerDialect.ScalarFunctions.get -> NextORM.Core.IScalarFunctions!
+override NextORM.SqlServer.SqlServerDialect.SessionInfoFunctions.get -> NextORM.Core.ISessionInfoFunctions!
+override NextORM.SqlServer.SqlServerDialect.SqlServerFunctions.get -> NextORM.Core.ISqlServerFunctions?
+override NextORM.SqlServer.SqlServerDialect.StringFormats.get -> NextORM.Core.IStringFormatFunctions?
+override NextORM.SqlServer.SqlServerDialect.SupportsAnyValueAggregate.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsApply.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsApplyOnPlainTable.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsApproxCountDistinctAggregate.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsApproxPercentileCont.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsApproxPercentileDisc.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsBase64Decode.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsBase64Encode.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsBatch.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsBulkCopy.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsChecksumAggregate.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsChoose.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsCollation.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsColumnDefault.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsCreateTableAsSelect.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsCreateTableAsSelectIfNotExists.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsCrossDatabase.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsCryptGenRandom.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsCube.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsDateArithmetic.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsDatePart(string! part) -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsDateTimeOffsetTranslation.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsDateTrunc.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsDateTruncField(string! field) -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsDefaultValues.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsDeleteJoin.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsForJson.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsForXml.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsFullText.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsGreatestLeast.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsGroupingIdAggregate.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsGroupingSets.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsIdentityFunction.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsJoinHints.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsJson.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsLinkedServer.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsMerge.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsMergeBySourceDelete.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsMergeConditionalBranches.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsMergeDelete.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsMergeStatement.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsOrdinalComparison.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsOutput.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsOutputInto.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsPercentileWindow.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsPercentRankCumeDist.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsProductAggregate.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsQueryHints.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsRangeColumns.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsRawSqlSource.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsRegex.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsRollup.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsSavepoints.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsSelectWhereMinMax.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsSequentialAccess.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsSqlServer2022Functions.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsSqlServer2025Functions.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsStoredProcedures.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsStringAgg.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsTableFunction(string! name) -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsTableHints.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsTablesInScopeHints.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsTableValuedParameters.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsTemporalKind(NextORM.Core.TemporalKind kind) -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsTemporalTable.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsTemporaryCreateTableAsSelect.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsTextJson.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsTruncate.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsUpdateJoin.get -> bool
+override NextORM.SqlServer.SqlServerDialect.SupportsWithTies.get -> bool
+override NextORM.SqlServer.SqlServerDialect.TableSample.get -> NextORM.Core.ITableSampleMethods!
+override NextORM.SqlServer.SqlServerDialect.UuidGenerators.get -> NextORM.Core.IUuidGenerators!
+override NextORM.SqlServer.SqlServerDialect.WrapTableFunction(string! name, string! call, System.Collections.Generic.IReadOnlyList<string!>! arguments) -> string!
+override NextORM.SqlServer.SqlServerDialect.XmlFunctions.get -> NextORM.Core.IXmlFunctions!
+static NextORM.SqlServer.SqlServerDataContextOptionsBuilderExtensions.UseSqlServer(this NextORM.Core.DataContextBuilder! builder, string! connectionString) -> NextORM.Core.DataContextBuilder!
+static NextORM.SqlServer.SqlServerDataContextOptionsBuilderExtensions.UseSqlServer(this NextORM.Core.DataContextBuilder! builder, System.Data.Common.DbConnection! connection) -> NextORM.Core.DataContextBuilder!
+static NextORM.SqlServer.SqlServerEntityBuilderExtensions.Pivot<TEntity, TShape>(this NextORM.Core.EntityBuilder<TEntity>! builder, NextORM.Core.PivotAggregate aggregate, System.Linq.Expressions.Expression<System.Func<TEntity, object?>!>! aggregateColumn, System.Linq.Expressions.Expression<System.Func<TEntity, object?>!>! forColumn, System.Linq.Expressions.Expression<System.Func<TEntity, NextORM.Core.PivotValues!, TShape>!>! projection) -> NextORM.Core.EntityBuilder<TShape>!
+static NextORM.SqlServer.SqlServerEntityBuilderExtensions.Pivot<TEntity>(this NextORM.Core.EntityBuilder<TEntity>! builder, NextORM.Core.PivotAggregate aggregate, System.Linq.Expressions.Expression<System.Func<TEntity, object?>!>! aggregateColumn, System.Linq.Expressions.Expression<System.Func<TEntity, object?>!>! forColumn, params NextORM.Core.PivotValue![]! values) -> NextORM.Core.EntityBuilder<NextORM.Core.TableAlias!>!
+static NextORM.SqlServer.SqlServerEntityBuilderExtensions.Unpivot<TEntity, TShape>(this NextORM.Core.EntityBuilder<TEntity>! builder, System.Linq.Expressions.Expression<System.Func<TEntity, NextORM.Core.UnpivotValues!, TShape>!>! projection, params NextORM.Core.UnpivotColumn![]! columns) -> NextORM.Core.EntityBuilder<TShape>!
+static NextORM.SqlServer.SqlServerEntityBuilderExtensions.Unpivot<TEntity>(this NextORM.Core.EntityBuilder<TEntity>! builder, string! valueColumnName, string! nameColumnName, params NextORM.Core.UnpivotColumn![]! columns) -> NextORM.Core.EntityBuilder<NextORM.Core.TableAlias!>!
+static readonly NextORM.SqlServer.SqlServerDialect.Instance -> NextORM.SqlServer.SqlServerDialect!

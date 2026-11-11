@@ -24,9 +24,9 @@ predicate. They are named exactly as follows:
 |---|---|---|---|
 | `count()` | `int` | `count_distinct(...)` | `int` |
 | `count_big()` | `long` | `count_big_distinct(...)` | `long` |
-| `min(x)` | same as `x` | `avg_distinct(x)` | same as `x` |
+| `min(x)` | same as `x` | `avg_distinct(x)` | same as `avg(x)` |
 | `max(x)` | same as `x` | `sum_distinct(x)` | same as `x` |
-| `avg(x)` | same as `x` | `stdev_distinct(x)` | same as `x` |
+| `avg(x)` | `double?` / `float?` / `decimal?` (by input type) | `stdev_distinct(x)` | same as `x` |
 | `sum(x)` | same as `x` | `stdevp_distinct(x)` | same as `x` |
 | `stdev(x)` | same as `x` | `var_distinct(x)` | same as `x` |
 | `stdevp(x)` | same as `x` | `varp_distinct(x)` | same as `x` |
@@ -40,6 +40,41 @@ The common aggregates also have convenience terminals on `EntityBuilder<T>`: [`C
 `Avg(x)`, `Sum(x)`, `Stdev(x)`, `Stdevp(x)`, `Var(x)` and `Varp(x)`, each with an `...Async` twin and
 an overload that accepts positional parameters. `count`, `count_big`, `count_distinct` and
 `count_big_distinct` have no entity terminal and are used through ``
+
+## AVG result types and argument policy
+
+`avg` does not return its input type: an integral column produces a fractional result, so `avg` over
+`[1, 2]` is `1.5` instead of the integral value earlier versions returned (`2`; `1` on SQL Server,
+where native integer `AVG` truncates). The result is nullable on every provider, so an empty or
+all-`NULL` input yields `null` rather than an unguarded read.
+
+| Input | `avg(x)` result |
+|---|---|
+| `byte`, `sbyte`, `short`, `ushort`, `int`, `uint`, `long`, `ulong` and their nullable forms | `double?` |
+| `float`, `float?` | `float?` |
+| `double`, `double?` | `double?` |
+| `decimal`, `decimal?` | `decimal?` |
+
+The argument policy is per provider. SQL Server evaluates `AVG` over a non-floating argument as an
+integer, so the argument is widened *inside* the aggregate; the other dialects keep the native
+argument. The policy applies to `avg`, `avg_distinct` and the windowed `avg_over` alike:
+
+| Provider | Rendered argument |
+|---|---|
+| SQLite, PostgreSQL, MySQL, MariaDB, ClickHouse | `avg(id)` |
+| SQL Server | `avg(cast(id as float))` |
+
+The result is nullable: `Avg` returns `double?` (or `float?`/`decimal?` for those inputs). Keep the
+nullable result or unwrap it explicitly; an integral target does not compile:
+
+```csharp
+int average = dataContext.From<ISimpleEntity>().Avg(e => e.Id);        // does not compile
+var average = dataContext.From<ISimpleEntity>().Avg(e => e.Id);        // double?
+var direct  = dataContext.From<ISimpleEntity>().Select(e => SqlFunctions.Sql.avg(e.Id)).First(); // double?
+```
+
+Let overload resolution pick the declaration from the selector type rather than naming the generic
+arguments explicitly.
 
 ## GroupBy
 
@@ -66,7 +101,7 @@ var rows = dataContext.From<IComplexEntity>()
     .ToList();
 ```
 
-The `Output:` tables below show the rows returned by each example against the integration-test seed data (`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).
+The `Output:` tables below show the rows returned by each example against the integration-test seed data (`tests/nextorm.integration.tests/Providers/TestProviders/SqliteTestProvider.cs`).
 
 Output:
 
@@ -158,6 +193,133 @@ Output:
 Note that `NULL` ordering differs between providers (PostgreSQL sorts `NULL`s first on a descending
 sort, SQLite last), which is why the sort example excludes the `NULL` group.
 
+## Grouping inferred from the projection: SelectGroup
+
+`SelectGroup` is shipped in the `NextORM.Extensions` package (`using NextORM.Extensions;`). It takes
+the same projection lambda as `Select`, but instead of requiring an explicit
+`GroupBy` it infers the grouping keys from that projection. Every row-dependent expression that
+contains no aggregate becomes a key; the aggregate calls fold each group. The projection keeps its
+exact shape - there is no client-side grouping, no dynamic type and no reflection-emit merging of a
+flat result type. The projection is typed on the source entity: call it with both generic arguments
+(`.SelectGroup<TEntity, TResult>(...)`) or omit them. A quarterly example:
+
+```csharp
+ctx.From<Product>()
+   .SelectGroup(p => new
+   {
+       ProductID        = p.Item1.ProductId,
+       ProductName      = p.Item3.Name,
+       SalesQuarter     = SqlFunctions.Sql.date_trunc("quarter", p.Item2.OrderDate),
+       QuarterlyRevenue = SqlFunctions.Sql.sum(p.Item1.LineTotal),
+       QuarterlyQty     = SqlFunctions.Sql.sum(p.Item1.OrderQty),
+   });
+```
+
+`ProductID`, `ProductName` and the whole `date_trunc('quarter', OrderDate)` call become `GROUP BY`
+keys, while the two `sum` calls stay aggregates. Results and SQL are equivalent to the explicit
+`GroupBy(...).Select(...)` form with the same keys. A compact example and its SQL:
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .SelectGroup(e => new { e.Int, Total = SqlFunctions.Sql.sum(e.Id) })
+    .ToList();
+```
+
+```sql
+select nullableint as 'Int', sum(id) as 'Total'
+ from complex_entity
+ group by nullableint
+```
+
+The only key became `nullableint` while `sum(id)` stayed an aggregate - no explicit `GroupBy` is needed.
+
+Inference rules:
+
+* **Maximal row-dependent subexpressions.** The analyzer collects the largest aggregate-free
+  subexpression of each output that depends on the current row, instead of descending to individual
+  columns.
+* **First-appearance order.** Keys are emitted in the order their expressions first appear in the
+  projection, which makes the rendered `GROUP BY` deterministic.
+* **Constants and captured values are not keys.** A literal or a captured local neither groups nor
+  shifts the key order.
+* **Duplicates collapse structurally.** Two structurally equal key expressions produce one key.
+* **A whole scalar function stays one key.** `date_trunc('quarter', OrderDate)` is the key; the raw
+  `OrderDate` is not added beside it.
+* **Subexpression granularity is preserved.** `sum(Amount) + Adjustment` infers `Adjustment`;
+  `sum(Amount) + Price * Qty` infers `Price * Qty`, not `Price` and `Qty` separately.
+* **Aggregate calls are opaque.** The arguments of an aggregate, its `DISTINCT` input and its
+  `FILTER` predicate never leak into the grouping keys.
+* **The projection is preserved.** The original projection is rendered as written; no key is
+  rewritten, no value is folded on the client and the result shape is unchanged.
+
+Degenerate projections resolve without inventing a grouping:
+
+* **Keys without aggregates** return the unique key combinations through `GROUP BY`; it is not a
+  row-by-row select.
+* **Aggregates without keys** is a global aggregation: no `GROUP BY`, exactly one row, and the
+  provider's existing empty-input behaviour for `count`, `sum` and `NULL` is preserved.
+* **A row-independent projection without aggregates** is DISTINCT-like: each distinct value is
+  returned once and an empty source returns zero rows instead of an invalid empty `GROUP BY`.
+
+`Having` and an expression `OrderBy` are validated against the inferred keys: every row expression
+they mention must be covered by an inferred key, be an aggregate, or be a captured/constant value.
+An uncovered row member throws `QueryPreparationException` before the command reaches the database -
+the grouping is never widened silently and functional dependencies are not inferred. A captured
+threshold is therefore valid, a bare outer-row column is not. An `OrderBy` by ordinal keeps its
+existing bounds validation and adds no keys. `Where` stays a pre-group filter and takes no part in
+inference.
+
+The following combinations throw `QueryPreparationException`:
+
+* an existing explicit `GroupBy`, `GroupByRollup`, `GroupByCube`, `GroupByGroupingSets` or
+  `WithTotals` - the two grouping mechanisms are never merged or overridden;
+* window functions in the projection, `Having` or an expression `OrderBy`;
+* scalar or correlated subqueries in those expressions, including inside aggregate arguments and
+  inside a `FILTER` predicate. That rejection is unconditional and independent of key inference; a
+  subquery in `Where` remains supported.
+
+The in-memory provider is not supported: both operators throw `NotSupportedException` before any plan is built, so inferred grouping always runs on a real database.
+
+### SelectGroupHaving
+
+`SelectGroupHaving(projection, condition)` uses the same key inference as `SelectGroup` and ANDs
+`condition` into the effective `HAVING`. `condition` is typed on the projection result (`TResult`),
+never on the source entity: every member of the result is rebound to the projection expression that
+produces it before validation, so `r => r.Rows > 1` becomes the same `HAVING` as the underlying
+`count(...) > 1`, while a scalar projection makes the condition parameter the projected value itself
+(`f => f > 5`). Keys are inferred **only** from `projection`; `condition` never adds a key.
+An existing source `Having` is AND-ed with `condition` before validation. A condition member the
+projection does not bind (or the result as a whole), and an uncovered row expression in `projection` or
+in the effective `HAVING`, fail with `QueryPreparationException` before the database is reached. The
+three outcomes (keyed grouping, global aggregation, constant projection) are the same as for
+`SelectGroup`.
+
+For example, `r => r.Count > 1` becomes a `HAVING` over the underlying `count(*)`, while the key is
+still inferred from the projection only:
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .SelectGroupHaving(
+        e => new { e.Int, Count = SqlFunctions.Sql.count() },
+        r => r.Count > 1)
+    .ToList();
+```
+
+```sql
+select nullableint as 'Int', count(*) as 'Count'
+ from complex_entity
+ group by nullableint
+ having (count(*) > 1)
+```
+
+Both operators throw `NotSupportedException` (message contains `in-memory`) when executed against an
+`InMemoryDataContext`.
+
+The packaged operators are themselves ordinary query components built on the public
+[`IQueryComponent`](xref:NextORM.Core.IQueryComponent) contract: a third-party package can add its own
+structural operator the same way, without friend access, a registry or raw SQL. See
+[Extending query construction with query components](../advanced/extensibility.md#extending-query-construction-with-query-components).
+
 ## ROLLUP and CUBE
 
 `GroupByRollup(...)` and `GroupByCube(...)` attach the ANSI super-aggregate modifiers. `ROLLUP` adds
@@ -239,6 +401,149 @@ match it. [`DistinctOn`](xref:NextORM.Postgres.PostgresEntityBuilderExtensions.D
 other provider rejects it at SQL build time. See [SELECT DISTINCT](09-distinct.md#distinct-on-postgresql)
 for the full surface.
 
+## Keeping the extreme row (`SelectWhereMax` / `SelectWhereMin`)
+
+> **Operator names.** The built-in operators are `SelectWhereMinOld` / `SelectWhereMaxOld`; they cover the
+> compatibility path, including the in-memory provider. `SelectWhereMin` / `SelectWhereMax` from the
+> [extensions package](../advanced/extensions-package.md) are built on the public query-component layer.
+
+[`SelectWhereMax`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMaxOld``1(System.Linq.Expressions.Expression{System.Func{`0,``0}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) and
+[`SelectWhereMin`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMinOld``1(System.Linq.Expressions.Expression{System.Func{`0,``0}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) keep the row (or rows)
+whose value under a selector is the greatest or smallest in the source. They are a row filter, not an
+aggregate: a surviving row keeps every column.
+
+**Global vs per-group.** Without a group key the extremum is taken over the whole source; with a group
+key the extreme row(s) are selected within each distinct group. A `null` key is a group of its own.
+
+```csharp
+// Global: the single row with the greatest score.
+var top = dataContext.From<ExtremaEntity>()
+    .SelectWhereMax(e => e.Score)
+    .ToList();
+
+// Per group: one extreme row per category.
+var perGroup = dataContext.From<ExtremaEntity>()
+    .SelectWhereMax(e => e.Score, ExtremeRowTies.One, e => e.Category)
+    .ToList();
+```
+
+```sql
+-- PostgreSQL
+-- global: an eligible integral key renders the native ORDER BY ... LIMIT 1
+select t1.id, t1.score, t1.category, t1.label
+ from (select *
+ from extrema_entity
+ where score is not null order by "score" desc limit 1) as "t1"
+
+-- per group: a string group key is not native-eligible, so the portable window lowering is kept
+select t1.id, t1.score, t1.category, t1.label
+ from (select *, row_number() over (partition by category order by score desc) as "__nextorm_rn"
+ from extrema_entity
+ where score is not null) as "t1"
+ where t1."__nextorm_rn" = 1
+```
+
+[`ExtremeRowTies`](xref:NextORM.Core.ExtremeRowTies) controls ties. [`One`](xref:NextORM.Core.ExtremeRowTies.One) (the default) keeps a single
+row — when values tie the provider picks one — while [`All`](xref:NextORM.Core.ExtremeRowTies.All) keeps every row tied on the extreme
+value. Ties are decided only by the selector, so an `All` result contains all of them and a `One`
+result exactly one arbitrary member.
+
+**Projection form.** The
+[`SelectWhereMax`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMaxOld``2(System.Linq.Expressions.Expression{System.Func{`0,``0}},System.Linq.Expressions.Expression{System.Func{`0,``1}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) /
+[`SelectWhereMin`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMinOld``2(System.Linq.Expressions.Expression{System.Func{`0,``0}},System.Linq.Expressions.Expression{System.Func{`0,``1}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) overloads take a
+projection and apply it to each surviving row, returning a typed query command:
+
+```csharp
+var projected = dataContext.From<ExtremaEntity>()
+    .SelectWhereMax(e => e.Score, e => new { e.Id, e.Label })
+    .ToList();
+```
+
+```sql
+-- PostgreSQL
+select t1.id, t1.label
+ from (select *
+ from extrema_entity
+ where score is not null order by "score" desc limit 1) as "t1"
+```
+
+**Mapped source.** The projection-less overloads return whole entity rows, so their source must be a
+mapped entity type (`From<TEntity>()`, or another source that carries entity metadata). A name-addressed
+raw source such as `From("orders")` has no mapped columns to materialise, so preparation rejects it with
+`BuildSqlCommandException` ("SelectWhereMax/SelectWhereMin requires a mapped entity source.") instead of a
+misleading projection error. For a raw named source use the projected overloads above — the projection
+supplies the result shape — wherever the dialect supports the operation.
+
+**NULL semantics.** `null` comparison values are ignored, so they never win the extremum and never
+appear in a result. A group whose comparison value is always `null` yields no rows at all, and the
+global form returns nothing when every value is `null`.
+
+**How the request is lowered.** `SelectWhereMax`/`SelectWhereMin` are SQL-side syntactic sugar: the
+logical request is lowered inside the shared query pipeline, and the shape depends on the tie policy.
+
+[`One`](xref:NextORM.Core.ExtremeRowTies.One) lowers to a window-function derived table —
+`row_number()` over `(partition by <group> order by <value> [desc])` — filtered to `1`, with the source
+condition ANDed with an `is not null` filter on the value. On PostgreSQL and ClickHouse a native-eligible
+`One` request is rendered natively instead, automatically, from the provider and the query form — see
+[Native extreme-row strategies](../advanced/select-where-extrema-native.md) — and every other provider
+or shape keeps the portable window.
+
+[`All`](xref:NextORM.Core.ExtremeRowTies.All) lowers to an **aggregate** form. It never uses a ranking
+window: no `rank()`, no `row_number()` and no window `over (...)` appears in an `All` statement, with one
+exception — a floating-point value key on ClickHouse keeps the ranking window, because that server's
+`max()`/`min()` treat `NaN` as the extreme value while its `ORDER BY` ranks `NaN` last, and the ranking
+window is the reference the contract is defined by. Per
+group it is `GROUP BY <group>` selecting the extreme value (plus the null-safe group key) and joined
+back to the source; globally it is a single scalar aggregate subquery joined back; a composite key is
+resolved component by component, lexicographically — each component's extremum is taken over the rows
+that already match the selected prefix — so `(9, 2)` beats `(8, 100)`.
+
+```sql
+-- All, global: one scalar aggregate, joined back to the source
+select t1.id, t1.score, t1.category, t1.label
+ from extrema_entity as "t1"
+ join (select max(score) as "__nextorm_ext_1_0"
+ from extrema_entity) as "t2" on t1.score = t2."__nextorm_ext_1_0"
+
+-- All, per group: the null-safe group key and the extreme value, grouped and joined back
+select t1.id, t1.score, t1.category, t1.label
+ from extrema_entity as "t1"
+ join (select category as "__nextorm_ext_1_1", max(score) as "__nextorm_ext_1_0"
+ from extrema_entity
+ group by category) as "t2" on ((t1.category = t2."__nextorm_ext_1_1" or (t1.category is null and t2."__nextorm_ext_1_1" is null)) and t1.score = t2."__nextorm_ext_1_0")
+
+-- One, per group (portable): rank the source rows, then keep rank 1
+select t1.id, t1.score, t1.category, t1.label
+ from (select *, row_number() over (partition by category order by score desc) as "__nextorm_rn"
+ from extrema_entity
+ where score is not null) as "t1"
+ where t1."__nextorm_rn" = 1
+```
+
+Both shapes keep the caller's source condition and the `null` semantics: a `null` comparison value never
+wins the extremum. The window form filters with `is not null` before ranking; the aggregate form relies on
+the aggregate and the key comparison discarding `null`, and renders that same `is not null` filter inside
+the aggregate when the key is nullable:
+
+```sql
+-- All, global, nullable key: the aggregate filters nulls itself
+select t1.id, t1.score, t1.category
+ from extrema_nullable as "t1"
+ join (select max(score) as "__nextorm_ext_1_0"
+ from extrema_nullable
+ where score is not null) as "t2" on t1.score = t2."__nextorm_ext_1_0"
+```
+
+Both shapes are produced by the same pipeline step, so the result contract above — whole-entity rows, the
+projection overloads, the mapped-source requirement and the `null` semantics — is identical for every tie
+policy and every SQL provider (SQLite, SQL Server, PostgreSQL, MySQL, MariaDB and ClickHouse). The
+in-memory provider evaluates the same contract directly over its own enumerator and renders no SQL at
+all.
+
+The request is rejected at SQL build time when combined with another row-shaping modifier the
+derived-table lowering cannot express: [`DistinctOn`](xref:NextORM.Postgres.PostgresEntityBuilderExtensions.DistinctOn``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}})), [`GroupBy`](xref:NextORM.Core.EntityBuilder`1.GroupBy``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), a join, `Having`, named windows,
+`LimitBy`, `ArrayJoin`, `PreWhere`, paging, a set operation or a non-physical source.
+
 ## Aggregates without grouping
 
 An aggregate over the whole table is a projection without [`GroupBy`](xref:NextORM.Core.EntityBuilder`1.GroupBy``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})):
@@ -271,8 +576,10 @@ Output:
 |-----|
 | 55 |
 
-`avg` keeps the fractional part on SQLite and PostgreSQL; SQL Server evaluates `AVG` over an integer
-column as an integer. Every aggregate also has an entity terminal that forwards to the same function:
+`avg` returns a fractional nullable result for every numeric input (see
+[AVG result types and argument policy](#avg-result-types-and-argument-policy)), so `[1, 2]` is `1.5`
+on every provider, SQL Server included. Every aggregate also has an entity terminal that forwards to
+the same function:
 `Sum`, `Avg`, `Min` and `Max` are equivalent to `Select(...)` followed by `First()`, and `Count()` to
 `Select(e => SqlFunctions.Sql.count()).First()`:
 
@@ -373,7 +680,7 @@ Output:
 
 | Avg |
 |-----|
-| 6 |
+| 5.5 |
 
 Output:
 
@@ -458,6 +765,25 @@ Projecting through `double` avoids the lossy integer conversion:
 var variance = dataContext.From<ISimpleEntity>().Select(x => SqlFunctions.Sql.varp((double)x.Id)).First();
 ```
 
+### Nullable results and cardinality
+
+The four variability families are structurally nullable: `Stdev`, `Stdevp`, `Var` and `Varp`, and
+the eight `Sql.stdev*`/`Sql.var*` facade forms, return `T?`. Cardinality counts the contributing
+non-null values after `DISTINCT`:
+
+| Contributing values | `Stdev` / `Var` (sample) | `Stdevp` / `Varp` (population) |
+|---|---|---|
+| 0 | `null` | `null` |
+| 1 | `null` | `0.0` |
+| 2 or more | the established formula | the established formula |
+
+A defined zero stays zero: two or more identical values fold to `0.0`, and a one-row population
+result is `0.0`. Only an undefined result is `null` — it is never replaced by an invented zero.
+
+The result is a real `Nullable<T>`: keep it (`double?`) or unwrap it explicitly. Assigning the
+terminal to a non-nullable `int`/`double` does not compile. Use `?? 0` only where zero genuinely
+means "no spread": it substitutes a zero for the undefined case.
+
 ## Boolean, bitwise, statistical and ordered-set aggregates
 
 Beyond `count`/`min`/`max`/`sum`/`avg`/`stdev`/`var`, [`Sql`](xref:NextORM.Core.SqlFunctions.Sql) exposes several aggregate families,
@@ -480,10 +806,10 @@ its own dialect capability; PostgreSQL and ClickHouse opt into different subsets
 | Quantile / median | `SqlFunctions.ClickHouse.quantile(0.5, x)`, `quantile_exact(0.9, x)`, `quantile_timing(0.5, x)`, `quantiles(new[] { 0.25, 0.5, 0.75 }, x)`, `median(x)` | `toFloat64(quantile(0.5)(x))`, `quantiles(0.25, 0.5, 0.75)(x)`, `toFloat64(median(x))`, ... | [`QuantileAggregates`](xref:NextORM.Core.ISqlDialect.QuantileAggregates) | ClickHouse |
 | Most frequent (top-K) | `SqlFunctions.ClickHouse.top_k(3, x)`, `top_k_weighted(2, x, w)` | `topK(3)(x)`, `topKWeighted(2)(x, w)` | [`TopKAggregates`](xref:NextORM.Core.ISqlDialect.TopKAggregates) | ClickHouse |
 | Arbitrary value | `SqlFunctions.Sql.any_agg(x)` | `ANY_VALUE(x)` / `any(x)` | [`SupportsAnyValueAggregate`](xref:NextORM.Core.ISqlDialect.SupportsAnyValueAggregate) | MySQL, ClickHouse |
-| Last row | `SqlFunctions.ClickHouse.any_last(x)` | `anyLast(x)` | [`SupportsAnyAggregates`](xref:NextORM.Core.ISqlDialect.SupportsAnyAggregates) | ClickHouse |
+| Last row | `SqlFunctions.ClickHouse.any_last(x)` | `anyLast(x)` | [`SupportsAnyLastAggregate`](xref:NextORM.Core.ISqlDialect.SupportsAnyLastAggregate) | ClickHouse |
 | Filtered aggregate | `SqlFunctions.Sql.count(() => p)`, `sum(x, () => p)`, `avg(x, () => p)`, `min(x, () => p)`, `max(x, () => p)` | `count(*) filter (where p)`, ... / `countIf(p)`, `sumIf(x, p)`, ... | [`AggregateFilterStyle`](xref:NextORM.Core.ISqlDialect.AggregateFilterStyle) | PostgreSQL (9.4+), SQLite (ANSI `FILTER`), ClickHouse (`-If`) |
 | Sequence / funnel | `SqlFunctions.ClickHouse.window_funnel(window, ts, c1, c2)` , `sequence_match(pattern, ts, c1, c2)`, `retention(c1, c2)` | `toInt32(windowFunnel(window)(ts, c1, c2))`, `toInt32(sequenceMatch(pattern)(ts, c1, c2))`, `retention(c1, c2)` | [`SequenceAggregates`](xref:NextORM.Core.ISqlDialect.SequenceAggregates) | ClickHouse |
-| Ordered-set | `SqlFunctions.Postgres.percentile_cont(fraction, () => x)`, `percentile_disc(fraction, () => x)`, `mode(() => x)` | `percentile_cont(f) within group (order by x)`, ... | [`SupportsOrderedAggregates`](xref:NextORM.Core.ISqlDialect.SupportsOrderedAggregates) | PostgreSQL |
+| Ordered-set | `SqlFunctions.Postgres.percentile_cont(fraction, () => x)`, `percentile_disc(fraction, () => x)`, `median(() => x)`, `mode(() => x)` | `percentile_cont(f) within group (order by x)`, `percentile_cont(0.5) within group (order by x)`, ... | [`SupportsOrderedAggregates`](xref:NextORM.Core.ISqlDialect.SupportsOrderedAggregates) (`mode`), [`SupportsOrderedPercentiles`](xref:NextORM.Core.ISqlDialect.SupportsOrderedPercentiles) (percentiles, `median`) | PostgreSQL |
 
 MariaDB does **not** support `any_agg`: it has no `ANY_VALUE` in 10.4–12.x (the SQL-2023 `T626` feature
 is still pending, targeted for 13.2), so [`SupportsAnyValueAggregate`](xref:NextORM.Core.ISqlDialect.SupportsAnyValueAggregate) is `false` and the call is rejected with `NotSupportedException`.
@@ -531,11 +857,22 @@ The ordered-set aggregates take the ordering key as a quoted lambda that closes 
 parameter; the key becomes `order by <key>`. Calling one on a provider without the capability throws
 `NotSupportedException`.
 
+On PostgreSQL the median is not a server function: `SqlFunctions.Postgres.median(() => x)` renders
+`percentile_cont(0.5) within group (order by x)` and is an **aggregate** (one row per group), gated by
+[`SupportsOrderedPercentiles`](xref:NextORM.Core.ISqlDialect.SupportsOrderedPercentiles). The continuous
+forms interpolate and return `double precision`, so `percentile_cont` and `median` require a floating-point
+sort expression — an integer/numeric key is refused with
+`The percentile_cont function on PostgreSQL requires a floating-point sort expression.` —
+while `percentile_disc` keeps the sort expression's type. A fraction is a `double` in `[0, 1]`, not a
+percentage; it must be finite and constant (a literal or a captured variable), and a row-dependent fraction
+is refused at SQL generation. The generic `SqlFunctions.Postgres.percentile(fraction, () => x)` is refused:
+it never becomes an alias of the continuous form.
+
 The ClickHouse sequence/funnel aggregates take the conditions as inline boolean expressions (the
 `timestamp` column first). `window_funnel` returns the longest consecutive chain in a sliding window,
 `sequence_match` returns `1`/`0` for the pattern; both materialise as a CLR `int` (the dialect casts
-the native unsigned result with `toInt32(...)`). `retention` returns a `UInt8` mask as an array,
-materialised as `byte[]` (project it directly or use it inside another array function):
+the native unsigned result with `toInt32(...)`). `retention` returns a `UInt8` mask that the dialect
+normalises to the declared `int[]` (project it directly or use it inside another array function):
 
 ```csharp
 var funnel = dataContext.From<IEventEntity>()
@@ -553,9 +890,17 @@ var funnel = dataContext.From<IEventEntity>()
 -- ClickHouse
 select toInt32(windowFunnel(600)(ts, (event = 1), (event = 2))) as `Level`,
        toInt32(sequenceMatch('(?1).*(?2)')(ts, (event = 1), (event = 2))) as `Matched`,
-       arrayStringConcat(retention((event = 1), (event = 2)), ',') as `Mask`
+       arrayStringConcat(cast(retention((event = 1), (event = 2)) as Array(Int32)), ',') as `Mask`
  from event_entity
 ```
+
+Array-returning aggregates follow the **declared CLR element type**, not the server-inferred one:
+`top_k`/`top_k_weighted`/`group_array`/`group_uniq_array` declare a nullable element type when the input is
+nullable (`int?[]` → `Array(Nullable(Int32))`), while `retention` stays `int[]` and `array_map`/`range`
+follow their own declared types (`int[]`, `long[]`). Nullability describes the **result type** only:
+ClickHouse still elides `NULL` aggregate **inputs**, so `group_array`/`group_uniq_array` over a nullable
+column omit the nulls instead of retaining them — the declared element type is nullable, the aggregate does
+not keep nulls.
 
 ## Filtered aggregates
 
@@ -609,12 +954,12 @@ See [Scalar functions](../scalar-functions/05-aggregates.md#aggregate-filter) fo
 | Provider | `count_big` | Aggregate names | Integer `AVG` | `var` / `varp` |
 |---|---|---|---|---|
 | SQLite | emits `count(*)` (already 64-bit) | kept as written; `stdev`/`var` come from the custom aggregates registered by the provider | fractional (5.5 stays 5.5) | supported through those custom aggregates |
-| SQL Server | emits `count_big(...)` | kept as written; `stdev`/`var` are native | integer (5.5 becomes 5) | native |
+| SQL Server | emits `count_big(...)` | kept as written; `stdev`/`var` are native | fractional; the argument is widened (`avg(cast(id as float))`) | native |
 | PostgreSQL | emits `count(*)` (already 64-bit) | `stdev` → `stddev`, `stdevp` → `stddev_pop`, `var` → `variance`, `varp` → `var_pop` | fractional | native |
 | MySQL | emits `count(*)` (already 64-bit) | `stdev` → `stddev_samp`, `stdevp` → `stddev_pop`, `var` → `var_samp`, `varp` → `var_pop` | fractional | native (`var_samp` / `var_pop`) |
 | MariaDB | emits `count(*)` (already 64-bit) | same mapping as MySQL (`stddev_samp` / `stddev_pop` / `var_samp` / `var_pop`) | fractional | native (`var_samp` / `var_pop`) |
 | ClickHouse | casts `count`/`count_distinct` (and the filtered `countIf`) to `toInt32(...)` and `count_big`/`count_big_distinct` to `toInt64(...)` (native `UInt64` is not materialisable) | `stdev` → `stddevSamp`, `stdevp` → `stddevPop`, `var` → `varSamp`, `varp` → `varPop`, `covar_*` → `covarPop`/`covarSamp`, `bit_*` → `groupBit*`, an aggregate filter → the `<fn>If` combinator (`sumIf`, `countIf`) | fractional | `varSamp` / `varPop` |
-| In-memory | not covered by the in-memory test suite | not covered | not covered | not covered |
+| In-memory | not covered by the in-memory test suite | not covered | fractional (`double?` for integral inputs) | not covered |
 
 Group ordering is not defined by SQL; assert by group key, not by position. PostgreSQL and SQLite
 differ on `NULL` ordering (PostgreSQL first, SQLite last).
@@ -635,8 +980,11 @@ it as well as `ROLLUP`/`CUBE`.
 
 ---
 
-Source: `tests/nextorm.integration.tests/CommonTestSuite/Queries/CommonTestSuite.GroupBy.cs:9`,
+Source: `tests/nextorm.integration.tests/CommonTestSuite/Queries/Rows/CommonTestSuite.GroupBy.cs:9`,
 `tests/nextorm.integration.tests/CommonTestSuite/Functions/CommonTestSuite.Aggregates.cs:9`,
 `tests/nextorm.sqlite.tests/SqlGeneration/SqlGenerationTests.cs:185`,
 `tests/nextorm.sqlserver.tests/SqlGeneration/SqlGenerationTests.cs:240`,
-`tests/nextorm.postgres.tests/SqlGeneration/SqlGenerationTests.cs:181`.
+`tests/nextorm.postgres.tests/SqlGeneration/SqlGenerationTests.cs:181`,
+`tests/nextorm.integration.tests/CommonTestSuite/Queries/Rows/CommonTestSuite.SelectWhereExtrema.cs:41`,
+`tests/nextorm.sqlite.tests/SqlGeneration/Sources/T302ExtremeRowAllSqlGenerationTests.cs:27`,
+`tests/nextorm.integration.tests/ClickHouse/Integration/ClickHouseIntegrationTests.cs:1353`.
