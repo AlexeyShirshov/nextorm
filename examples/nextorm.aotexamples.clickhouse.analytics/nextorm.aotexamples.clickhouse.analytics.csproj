@@ -1,0 +1,34 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>nextorm.aotexamples.clickhouse.analytics</AssemblyName>
+    <RootNamespace>NextORM.AotExamples.ClickHouse.Analytics</RootNamespace>
+    <!--
+      NativeAOT probe for the ClickHouse provider: the analytics queries with the nextorm arm only —
+      no Testcontainers, no BenchmarkDotNet, no linq2db. The database is never provisioned here;
+      pass a connection string or set CLICKHOUSE_ANALYTICS_CONNECTION.
+    -->
+    <PublishAot>true</PublishAot>
+    <!--
+      Repository policy, not nextorm configuration: this repository sets TreatWarningsAsErrors=true,
+      so ILC and trim-analyzer diagnostics are exempted from the build gate here. An application
+      outside this repository needs none of these properties.
+    -->
+    <IlcTreatWarningsAsErrors>false</IlcTreatWarningsAsErrors>
+    <WarningsNotAsErrors>IL2*;IL3*;IL2026;IL3050</WarningsNotAsErrors>
+    <!-- Deterministic row formatting keeps the JIT and native digests comparable. -->
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      Published packages, like the other two probes: every construct the analytics queries use
+      (including `SelectGroup` from `nextorm.extensions`) is part of the shipped 1.0.9 surface.
+    -->
+    <PackageReference Include="nextorm" />
+    <PackageReference Include="nextorm.extensions" />
+    <PackageReference Include="nextorm.clickhouse" />
+  </ItemGroup>
+
+</Project>

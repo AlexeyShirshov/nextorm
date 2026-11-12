@@ -1,4 +1,4 @@
-# NativeAOT (частичная поддержка)
+﻿# NativeAOT (частичная поддержка)
 
 > Публикуйте приложения с `PublishAot=true` на .NET 11 для `linux-x64` и провайдера SQLite.
 > Поддержка **частичная и экспериментальная**: нативно исполняется измеренное подмножество
@@ -26,11 +26,35 @@ CI-job `aot` публикует и запускает его на каждый p
 ## Что не проверено
 
 - SQL Server, PostgreSQL, MySQL, MariaDB и ClickHouse: поддержка AOT драйверами и нативные
-  ассеты не проверены;
+  ассеты не проверены, кроме трёх пробников ниже —
+  [`examples/nextorm.aotexamples.*`](../../examples/README.md);
 - мост EF Core (`nextorm.entityframeworkcore`);
 - конвертеры `System.Text.Json` через сгенерированный `JsonTypeInfo<T>`: сериализация остаётся
   рефлексионной, поэтому потребителю по-прежнему нужен обычный `JsonSerializerContext`;
 - trimming сверх настроек провайдера по умолчанию.
+
+### Пробники провайдеров
+
+Три воспроизводителя в `examples/` запускают nextorm-арм каждого примера-сравнения без linq2db,
+Testcontainers и BenchmarkDotNet, поэтому процесс публикуется нативно и сравнивается с JIT-прогоном
+по количеству строк и digest'ам строк (замер 2026-11-12, `linux-x64`):
+
+| Пробник | Нативный бинарник | Результат |
+|---|---|---|
+| [`nextorm.aotexamples.postgres.aviasales`](../../examples/nextorm.aotexamples.postgres.aviasales/README.md) (пакеты `1.0.9`) | 18 МБ | **5/10** запросов доходят до конца, digest'ы совпадают с JIT |
+| [`nextorm.aotexamples.mssql.adventureworks`](../../examples/nextorm.aotexamples.mssql.adventureworks/README.md) (пакеты `1.0.9`) | 28 МБ | **3/11** |
+| [`nextorm.aotexamples.clickhouse.analytics`](../../examples/nextorm.aotexamples.clickhouse.analytics/README.md) (пакеты `1.0.9`) | 16 МБ | **0/9** |
+
+Все падения происходят в подготовке запроса, не доходя до SQL, и делятся на три класса:
+
+| Сбой | Запросы | Природа |
+|---|---|---|
+| `InvalidOperationException: The binary operator Divide/Multiply/LessThanOrEqual/GreaterThan is not defined for the types 'System.Decimal' and 'System.Decimal'` | PostgreSQL ×4, SQL Server ×6 | numeric promotion ищет операторы `decimal` рефлексией, trimming их вырезает |
+| `InvalidOperationException: System.Tuple`2[System.Double,System.Double] has no constructor matching its element types` | ClickHouse ×6 | конструктор кортежа ищется рефлексией |
+| `NotSupportedException: 'Expression<…>' is missing native code or metadata` | PostgreSQL ×1, SQL Server ×1, ClickHouse ×3 | компиляция деревьев выражений в рантайме |
+
+Все три класса относятся к работе #370 (рантайм-типы и деревья выражений в конвейере); пробники
+нужны, чтобы исправление можно было измерить.
 
 Канонический publish нативного раннера сейчас даёт **230 уникальных AOT/trim-диагностик**
 (236 сырых; измерено 2026-11-07). Они не подавлены и не заroot'ены:

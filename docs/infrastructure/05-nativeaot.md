@@ -1,4 +1,4 @@
-# NativeAOT (partial support)
+﻿# NativeAOT (partial support)
 
 > Publish applications with `PublishAot=true` on .NET 11 for `linux-x64` and the SQLite provider.
 > Support is **partial and experimental**: a measured subset of the engine runs natively, and the
@@ -26,11 +26,35 @@ The output is a self-contained native executable. The packages do **not** carry 
 ## What is not verified
 
 - SQL Server, PostgreSQL, MySQL, MariaDB and ClickHouse: driver AOT support and native assets are
-  unverified;
+  unverified, except for the three probes below — see
+  [`examples/nextorm.aotexamples.*`](../../examples/README.md);
 - the EF Core bridge (`nextorm.entityframeworkcore`);
 - `System.Text.Json` converters through a generated `JsonTypeInfo<T>`: serialization remains
   reflection-based, so a consumer still needs the usual `JsonSerializerContext` setup;
 - trimming beyond the provider defaults.
+
+### Provider probes
+
+Three reproducers under `examples/` run the nextorm arm of each comparison example without linq2db,
+Testcontainers or BenchmarkDotNet, so the process can be published natively and compared with a JIT
+run by row counts and row digests (measured 2026-11-12, `linux-x64`):
+
+| Probe | Native binary | Result |
+|---|---|---|
+| [`nextorm.aotexamples.postgres.aviasales`](../../examples/nextorm.aotexamples.postgres.aviasales/README.md) (published `1.0.9`) | 18 MB | **5/10** queries complete with digests equal to JIT |
+| [`nextorm.aotexamples.mssql.adventureworks`](../../examples/nextorm.aotexamples.mssql.adventureworks/README.md) (published `1.0.9`) | 28 MB | **3/11** |
+| [`nextorm.aotexamples.clickhouse.analytics`](../../examples/nextorm.aotexamples.clickhouse.analytics/README.md) (published `1.0.9`) | 16 MB | **0/9** |
+
+All failures happen in query preparation, before SQL is sent, and fall into three classes:
+
+| Failure | Queries | Nature |
+|---|---|---|
+| `InvalidOperationException: The binary operator Divide/Multiply/LessThanOrEqual/GreaterThan is not defined for the types 'System.Decimal' and 'System.Decimal'` | PostgreSQL ×4, SQL Server ×6 | numeric promotion resolves `decimal` operators through reflection; trimming removes them |
+| `InvalidOperationException: System.Tuple`2[System.Double,System.Double] has no constructor matching its element types` | ClickHouse ×6 | tuple construction discovered through reflection |
+| `NotSupportedException: 'Expression<…>' is missing native code or metadata` | PostgreSQL ×1, SQL Server ×1, ClickHouse ×3 | runtime expression-tree compilation for captured predicates/projections |
+
+All three classes belong to the #370 work (runtime types and expression trees in the pipeline); the
+probes exist so a fix can be measured.
 
 The canonical publish of the native runner currently reports **230 unique AOT/trim diagnostics**
 (236 raw; measured 2026-11-07). They are neither suppressed nor rooted:

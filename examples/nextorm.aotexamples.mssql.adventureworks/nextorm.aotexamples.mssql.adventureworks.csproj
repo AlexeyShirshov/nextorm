@@ -1,0 +1,38 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>nextorm.aotexamples.mssql.adventureworks</AssemblyName>
+    <RootNamespace>NextORM.AotExamples.SqlServer.AdventureWorks</RootNamespace>
+    <!--
+      NativeAOT probe for the SQL Server provider: the AdventureWorks queries with the nextorm arm
+      only — no Testcontainers, no BenchmarkDotNet, no linq2db. The database is never provisioned
+      here; pass a connection string or set ADVENTUREWORKS_CONNECTION.
+    -->
+    <PublishAot>true</PublishAot>
+    <!--
+      Repository policy, not nextorm configuration: this repository sets TreatWarningsAsErrors=true,
+      so ILC and trim-analyzer diagnostics are exempted from the build gate here. An application
+      outside this repository needs none of these properties.
+    -->
+    <IlcTreatWarningsAsErrors>false</IlcTreatWarningsAsErrors>
+    <WarningsNotAsErrors>IL2*;IL3*;IL2026;IL3050</WarningsNotAsErrors>
+    <!--
+      InvariantGlobalization stays off: Microsoft.Data.SqlClient refuses to run in invariant mode
+      ("Globalization Invariant Mode is not supported."). Row formatting is pinned to the invariant
+      culture in Program.cs instead, which is what the digest needs.
+    -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      Published packages, like the PostgreSQL probe: the typed `Pivot` overload is part of the
+      shipped `nextorm.sqlserver` surface since 1.0.9 (`PublicAPI.Shipped.txt` lists both overloads),
+      so nothing here needs the source projects.
+    -->
+    <PackageReference Include="nextorm" />
+    <PackageReference Include="nextorm.extensions" />
+    <PackageReference Include="nextorm.sqlserver" />
+  </ItemGroup>
+
+</Project>

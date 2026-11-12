@@ -1,4 +1,4 @@
-<Project>
+﻿<Project>
 
   <!--
     Nested Directory.Packages.props stops NuGet's upward search, so the repository-wide package
@@ -20,6 +20,7 @@
   <ItemGroup>
     <PackageVersion Include="nextorm" Version="$(NextOrmVersion)" />
     <PackageVersion Include="nextorm.clickhouse" Version="$(NextOrmVersion)" />
+    <PackageVersion Include="nextorm.extensions" Version="$(NextOrmVersion)" />
     <PackageVersion Include="nextorm.postgres" Version="$(NextOrmVersion)" />
     <PackageVersion Include="nextorm.sqlserver" Version="$(NextOrmVersion)" />
     <PackageVersion Include="nextorm.sqlite" Version="$(NextOrmVersion)" />

@@ -1,10 +1,13 @@
-<Solution>
+﻿<Solution>
   <Configurations>
     <Platform Name="Any CPU" />
     <Platform Name="x64" />
     <Platform Name="x86" />
   </Configurations>
   <Folder Name="/examples/">
+    <Project Path="examples/nextorm.aotexamples.postgres.aviasales/nextorm.aotexamples.postgres.aviasales.csproj" />
+    <Project Path="examples/nextorm.aotexamples.mssql.adventureworks/nextorm.aotexamples.mssql.adventureworks.csproj" />
+    <Project Path="examples/nextorm.aotexamples.clickhouse.analytics/nextorm.aotexamples.clickhouse.analytics.csproj" />
     <Project Path="examples/nextorm.examples.clickhouse.analytics/nextorm.examples.clickhouse.analytics.csproj" />
     <Project Path="examples/nextorm.examples.mssql.adventureworks/nextorm.examples.mssql.adventureworks.csproj" />
     <Project Path="examples/nextorm.examples.oc-report/nextorm.examples.oc-report.csproj" />

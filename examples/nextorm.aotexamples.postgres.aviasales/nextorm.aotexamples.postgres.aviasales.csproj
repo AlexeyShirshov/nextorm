@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>nextorm.aotexamples.postgres.aviasales</AssemblyName>
+    <RootNamespace>NextORM.AotExamples.Postgres.Aviasales</RootNamespace>
+    <!--
+      This project exists to run the PostgreSQL provider natively: it consumes the published
+      packages only (no Testcontainers, no BenchmarkDotNet, no linq2db), so PublishAot compiles a
+      single arm and the native binary is the whole example. The database is never provisioned
+      here — pass a connection string or set AVIASALES_CONNECTION.
+    -->
+    <PublishAot>true</PublishAot>
+    <!--
+      Repository policy, not nextorm configuration: this repository sets TreatWarningsAsErrors=true,
+      so ILC and trim-analyzer diagnostics are exempted from the build gate here. An application
+      outside this repository needs none of these properties.
+    -->
+    <IlcTreatWarningsAsErrors>false</IlcTreatWarningsAsErrors>
+    <WarningsNotAsErrors>IL2*;IL3*;IL2026;IL3050</WarningsNotAsErrors>
+    <!-- Deterministic row formatting keeps the JIT and native digests comparable. -->
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="nextorm" />
+    <PackageReference Include="nextorm.extensions" />
+    <PackageReference Include="nextorm.postgres" />
+  </ItemGroup>
+
+</Project>

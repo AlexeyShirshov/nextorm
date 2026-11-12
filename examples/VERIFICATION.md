@@ -1,4 +1,4 @@
-# Examples verification report
+﻿# Examples verification report
 
 > **Last verified: 2026-11-11** (the examples are now **comparison projects**: native comparison queries have
 > nextorm and linq2db arms, and both are executed against the same dataset; BenchmarkDotNet runs
@@ -39,8 +39,10 @@ as `FAIL`; any other exception aborts the run. Comparison arms must be native on
 `nextorm.examples.oc-report` is not a two-arm comparison: it is the NativeAOT reference app, and since
 `1.0.9-rc5` it builds against the published `nextorm` / `nextorm.sqlite` packages instead of `src/`
 (now `1.0.9`). Re-verified 2026-11-11 against `1.0.9`: Release build 0W/0E and the 3-day report over the
-synthetic database exits 0. The earlier publish check on the synthetic database produced a
-8,414,024-byte native binary with JIT and NativeAOT output byte-identical. The
+synthetic database exits 0. The NativeAOT reference publish was re-run on 2026-11-12 against `1.0.9`
+(`dotnet publish -c Release -r linux-x64`, clang-15): the native binary is 8,555,136 bytes, the 3-day
+report over the synthetic database exits 0 in 0.24 s (JIT 0.59 s for the same report), and the two
+outputs are identical apart from the `window:` line, which echoes the current timestamp. The
 real-world numbers (13 GB `opencode.db`, 3-day window, warm page cache, median of three runs) remain
 JIT 0.42 s → NativeAOT 0.12 s, 30 MB RSS, byte-identical against the app's Python twin and against the
 EF Core / Dapper.AOT arms. See its [README](nextorm.examples.oc-report/README.md).
@@ -54,6 +56,24 @@ for mssql and clickhouse):
 * mssql: 146, 364, 0, 266, 4, 12, 40, 20, 14, 364, 40 — identical in both arms.
 * clickhouse: array analytics 10, funnel 3, sessions 100, daily traffic 7, top landing pages 10, device
   split 2, top referrers 10, session depth 5, rolling activity 7; `Retention` (nextorm-only) is excluded from comparison; `Incremental` was removed with the whole-query `FromSql` cleanup.
+
+## NativeAOT provider probes (2026-11-12)
+
+Three connection-free AOT probes run the nextorm arm of each comparison example: `nextorm.aotexamples.postgres.aviasales`
+(published `1.0.9`), `nextorm.aotexamples.mssql.adventureworks` (published `1.0.9`) and
+`nextorm.aotexamples.clickhouse.analytics` (published `1.0.9`). Each query prints a row count and a
+digest, so a native run is compared with the JIT run directly:
+
+| Probe | Native binary | Native result |
+|---|---|---|
+| postgres | 18 MB | **5/10** complete, digests equal to JIT |
+| mssql | 28 MB | **3/11** |
+| clickhouse | 16 MB | **0/9** |
+
+Failures happen in query preparation: `decimal` operators resolved by reflection and removed by
+trimming, `Tuple<T1,T2>` constructors discovered by reflection, and runtime expression-tree
+compilation (`Expression<…> is missing native code or metadata`). The per-class table is in
+[`docs/infrastructure/05-nativeaot.md`](../docs/infrastructure/05-nativeaot.md).
 
 ## Failures and their tracked cause
 

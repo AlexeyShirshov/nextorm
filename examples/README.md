@@ -1,12 +1,14 @@
-# nextorm examples
+﻿# nextorm examples
 
 Three runnable **comparison** console applications over realistic demo databases, plus a **NativeAOT
-reference application**. Each query in a comparison project is implemented twice — with nextorm and with
+reference application** and a **NativeAOT PostgreSQL probe**. Each query in a comparison project is
+implemented twice — with nextorm and with
 [linq2db](https://github.com/linq2db/linq2db) — and both arms are executed against the same provisioned
-database, then benchmarked with BenchmarkDotNet. Each example provisions its database with
+database, then benchmarked with BenchmarkDotNet. Each comparison example provisions its database with
 [Testcontainers](https://dotnet.testcontainers.org/) on first run (downloading and caching the official
 dataset into a named Docker volume); the examples only read, so the loaded database is reused on later
-runs. The AOT reference reads a local SQLite file (or a synthetic one) and needs no container.
+runs. The AOT reference reads a local SQLite file (or a synthetic one) and needs no container; the AOT
+probe runs the nextorm arm only against a PostgreSQL server you point it at.
 
 The model SQL lives next to the code, in each project's `Sql/` folder, and every C# method pair names
 the file it models. Each project README maps every SQL construct to the nextorm construct that replaces
@@ -18,8 +20,12 @@ it — start there to understand how to translate a query in either direction.
 | [`nextorm.examples.mssql.adventureworks`](nextorm.examples.mssql.adventureworks/README.md) | `nextorm.sqlserver` | AdventureWorks 2022 | [Sql/](nextorm.examples.mssql.adventureworks/Sql) |
 | [`nextorm.examples.clickhouse.analytics`](nextorm.examples.clickhouse.analytics/README.md) | `nextorm.clickhouse` | ClickHouse `datasets.hits_v1` | [Sql/](nextorm.examples.clickhouse.analytics/Sql) |
 | [`nextorm.examples.oc-report`](nextorm.examples.oc-report/README.md) | `nextorm.sqlite` | OpenCode `opencode.db` (or [`seed.sql`](nextorm.examples.oc-report/seed.sql)) | — (NativeAOT reference, no linq2db arm) |
+| [`nextorm.aotexamples.postgres.aviasales`](nextorm.aotexamples.postgres.aviasales/README.md) | `nextorm.postgres` | PostgreSQL Pro demo «Авиаперевозки» (schema `bookings`), 2025-09-01 | — (NativeAOT probe, no linq2db arm, no container) |
+| [`nextorm.aotexamples.mssql.adventureworks`](nextorm.aotexamples.mssql.adventureworks/README.md) | `nextorm.sqlserver` | AdventureWorks 2022 | — (NativeAOT probe, no linq2db arm, no container) |
+| [`nextorm.aotexamples.clickhouse.analytics`](nextorm.aotexamples.clickhouse.analytics/README.md) | `nextorm.clickhouse` | ClickHouse `datasets.hits_v1` | — (NativeAOT probe, no linq2db arm, no container) |
 
-> The postgres, clickhouse and oc-report projects consume the **published `nextorm.*` NuGet packages**
+> The postgres, clickhouse, oc-report and both `aotexamples` probes consume the
+> **published `nextorm.*` NuGet packages**
 > (version pinned by `NextOrmVersion` in [`Directory.Packages.props`](../Directory.Packages.props))
 > instead of referencing `src/` directly, so they double as a real consumer of what ships on nuget.org.
 > **`nextorm.examples.mssql.adventureworks` is an explicit exception** (#232): it references

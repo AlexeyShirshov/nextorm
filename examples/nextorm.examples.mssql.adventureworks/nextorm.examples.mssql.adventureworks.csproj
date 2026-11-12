@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -17,9 +17,10 @@
 
   <ItemGroup>
     <!--
-      Intentional exception to the other examples' published-package model (#232): this example
-      demonstrates the current-checkout typed PIVOT/UNPIVOT surface, which is not in a published
-      package yet, so it references the source projects instead of the `nextorm` NuGet metapackage.
+      Intentional exception to the other examples' published-package model: this example tracks the
+      current checkout so it exercises the PIVOT/UNPIVOT surface as it evolves. The typed overload
+      itself has been shipped since 1.0.9 (issue #232, `nextorm.sqlserver`), so a published-package
+      variant is possible now — see `examples/nextorm.aotexamples.mssql.adventureworks`.
     -->
     <ProjectReference Include="../../src/nextorm.core/nextorm.core.csproj" />
     <ProjectReference Include="../../src/nextorm.sqlserver/nextorm.sqlserver.csproj" />
