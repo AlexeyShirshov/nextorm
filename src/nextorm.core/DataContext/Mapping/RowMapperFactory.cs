@@ -173,11 +173,20 @@ internal static class RowMapperFactory
                 Expression.Constant(default(JsonDocumentOptions), typeof(JsonDocumentOptions)));
         }
 
-        var method = column.GetDataRecordMethod(readType);
+        var method = column.GetReaderAccessorMethod(readType);
+        var ordinal = Expression.Constant(column.Index);
+        if (method.IsStatic)
+        {
+            // A typed accessor that is not expressible as a non-generic IDataRecord getter travels as a
+            // non-generic static wrapper (SelectExpression.ReadFieldValue*) whose compile-time body calls
+            // DbDataReader.GetFieldValue<T>; a static call keeps the instantiation out of the mapper.
+            return Expression.Call(method, Expression.Convert(param, typeof(DbDataReader)), ordinal);
+        }
+
         var accessor = method.DeclaringType == typeof(IDataRecord)
             ? param
             : Expression.Convert(param, method.DeclaringType!);
-        return Expression.Call(accessor, method, Expression.Constant(column.Index));
+        return Expression.Call(accessor, method, ordinal);
     }
 
     private static Expression MapConvertedColumn(SelectExpression column, Expression param, IPropertyValueConverter converter, ISqlDialect? dialect)

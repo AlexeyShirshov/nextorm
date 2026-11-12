@@ -183,32 +183,71 @@ public sealed class SelectExpression //: IEquatable<SelectExpression>
     private readonly static MethodInfo GetInt16MI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetInt16))!;
     private readonly static MethodInfo GetByteMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetByte))!;
     private readonly static MethodInfo GetGuidMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetGuid))!;
+    // Two accessor tables share the simple (non-generic) getters below. The internal one that the shared
+    // row mapper consumes gives the eight GetFieldValue<T> types a non-generic static reader that closes
+    // the instantiation at compile time (NativeAOT has no JIT for a runtime instantiation). The public
+    // accessor keeps returning the closed generic DbDataReader.GetFieldValue<T> member it always returned,
+    // so no public contract changes; replacing that member is a separate, user-approved design proposal.
     private readonly static MethodInfo GetFieldValueMI = typeof(DbDataReader).GetMethod(nameof(DbDataReader.GetFieldValue))!;
+    private readonly static MethodInfo GetFieldValueTimeSpanMI = ((Func<DbDataReader, int, TimeSpan>)ReadFieldValueTimeSpan).Method;
+    private readonly static MethodInfo GetFieldValueDateTimeOffsetMI = ((Func<DbDataReader, int, DateTimeOffset>)ReadFieldValueDateTimeOffset).Method;
+    private readonly static MethodInfo GetFieldValueUInt64MI = ((Func<DbDataReader, int, ulong>)ReadFieldValueUInt64).Method;
+    private readonly static MethodInfo GetFieldValueUInt32MI = ((Func<DbDataReader, int, uint>)ReadFieldValueUInt32).Method;
+    private readonly static MethodInfo GetFieldValueJsonDocumentMI = ((Func<DbDataReader, int, JsonDocument>)ReadFieldValueJsonDocument).Method;
+    private readonly static MethodInfo GetFieldValueJsonElementMI = ((Func<DbDataReader, int, JsonElement>)ReadFieldValueJsonElement).Method;
+    private readonly static MethodInfo GetFieldValueJsonObjectMI = ((Func<DbDataReader, int, JsonObject>)ReadFieldValueJsonObject).Method;
+    private readonly static MethodInfo GetFieldValueByteArrayMI = ((Func<DbDataReader, int, byte[]>)ReadFieldValueByteArray).Method;
     private readonly static MethodInfo GetValueMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetValue))!;
     // internal int XxHash32;
     internal int PlanHashCode;
 
     /// <summary>Gets the reader accessor that reads a value of this column's type from a data record.</summary>
     /// <returns>The <see cref="MethodInfo"/> of the matching <see cref="IDataRecord"/> getter.</returns>
-    public MethodInfo GetDataRecordMethod() => GetDataRecordMethod(ProviderType ?? _realType);
+    public MethodInfo GetDataRecordMethod() => GetLegacyDataRecordMethod(ProviderType ?? _realType);
 
-    internal MethodInfo GetDataRecordMethod(Type readType)
+    /// <summary>
+    /// The accessor the shared row mapper emits for a column. It matches
+    /// <see cref="GetDataRecordMethod()"/> except for the eight types whose typed accessor is a
+    /// <c>DbDataReader.GetFieldValue&lt;T&gt;</c> instantiation: the mapper receives a non-generic static
+    /// reader that pins the instantiation at compile time, so the AOT compiler never has to materialise a
+    /// generic method from a runtime type.
+    /// </summary>
+    internal MethodInfo GetReaderAccessorMethod(Type readType)
     {
         readType = System.Nullable.GetUnderlyingType(readType) ?? readType;
 
-        if (readType == typeof(int))
-        {
-            return GetInt32MI;
-        }
-        else if (readType == typeof(long))
-        {
-            return GetInt64MI;
-        }
-        else if (readType == typeof(DateTime))
-        {
-            return GetDateTimeMI;
-        }
-        else if (readType == typeof(TimeSpan))
+        if (ResolveSimpleAccessor(readType) is { } simple)
+            return simple;
+
+        if (readType == typeof(TimeSpan))
+            return GetFieldValueTimeSpanMI;
+        if (readType == typeof(DateTimeOffset))
+            return GetFieldValueDateTimeOffsetMI;
+        if (readType == typeof(ulong))
+            return GetFieldValueUInt64MI;
+        if (readType == typeof(uint))
+            return GetFieldValueUInt32MI;
+        if (readType == typeof(JsonDocument))
+            return GetFieldValueJsonDocumentMI;
+        if (readType == typeof(JsonElement))
+            return GetFieldValueJsonElementMI;
+        if (readType == typeof(JsonObject))
+            return GetFieldValueJsonObjectMI;
+        if (readType == typeof(byte[]))
+            return GetFieldValueByteArrayMI;
+
+        throw UnsupportedAccessor(readType);
+    }
+
+    /// <summary>The public accessor table: unchanged pre-S3 shape, including the closed generic members.</summary>
+    private MethodInfo GetLegacyDataRecordMethod(Type readType)
+    {
+        readType = System.Nullable.GetUnderlyingType(readType) ?? readType;
+
+        if (ResolveSimpleAccessor(readType) is { } simple)
+            return simple;
+
+        if (readType == typeof(TimeSpan))
         {
             // Native durations/intervals are exposed by the provider driver as System.TimeSpan.
             // Providers without a native type store the value in an integer column and are read by a
@@ -216,61 +255,23 @@ public sealed class SelectExpression //: IEquatable<SelectExpression>
             // supportsNativeDuration == false).
             return GetFieldValueMI.MakeGenericMethod(typeof(TimeSpan));
         }
-        else if (readType == typeof(DateTimeOffset))
-        {
+        if (readType == typeof(DateTimeOffset))
             return GetFieldValueMI.MakeGenericMethod(typeof(DateTimeOffset));
-        }
-        else if (readType == typeof(string))
-        {
-            return GetStringMI;
-        }
-        else if (readType == typeof(bool))
-        {
-            return GetBooleanMI;
-        }
-        else if (readType == typeof(double))
-        {
-            return GetDoubleMI;
-        }
-        else if (readType == typeof(decimal))
-        {
-            return GetDecimalMI;
-        }
-        else if (readType == typeof(float))
-        {
-            return GetFloatMI;
-        }
-        else if (readType == typeof(short))
-        {
-            return GetInt16MI;
-        }
-        else if (readType == typeof(byte))
-        {
-            return GetByteMI;
-        }
-        else if (readType == typeof(Guid))
-        {
-            return GetGuidMI;
-        }
-        else if (readType == typeof(ulong))
-        {
+        if (readType == typeof(ulong))
             return GetFieldValueMI.MakeGenericMethod(typeof(ulong));
-        }
-        else if (readType == typeof(uint))
+        if (readType == typeof(uint))
         {
             // PostgreSQL xid/xmin are 32-bit unsigned integers exposed as System.UInt32.
             return GetFieldValueMI.MakeGenericMethod(typeof(uint));
         }
-        else if (readType == typeof(JsonDocument))
+        if (readType == typeof(JsonDocument))
         {
             // A provider-native JSON column (PostgreSQL jsonb) is read as System.Text.Json.JsonDocument.
             return GetFieldValueMI.MakeGenericMethod(typeof(JsonDocument));
         }
-        else if (readType == typeof(JsonElement))
-        {
+        if (readType == typeof(JsonElement))
             return GetFieldValueMI.MakeGenericMethod(typeof(JsonElement));
-        }
-        else if (readType == typeof(JsonObject))
+        if (readType == typeof(JsonObject))
         {
             // ClickHouse's native JSON is materialized by the driver as a JsonObject; the typed accessor
             // reads it without boxing. The accessor selector only reaches this branch for a dialect whose
@@ -278,34 +279,83 @@ public sealed class SelectExpression //: IEquatable<SelectExpression>
             // every other dialect keep their previous not-supported rejection.
             return GetFieldValueMI.MakeGenericMethod(typeof(JsonObject));
         }
-        else if (readType == typeof(byte[]))
+        if (readType == typeof(byte[]))
         {
             // A binary column is read through the generic typed accessor so the value is not boxed
             // through GetValue; the caller receives the array directly.
             return GetFieldValueMI.MakeGenericMethod(typeof(byte[]));
         }
-        else if (readType.IsArray)
-        {
-            // Other array columns and array-returning expressions (PostgreSQL text[]/int[],
-            // ClickHouse Array(T) including nested arrays) have no typed reader getter; read the
-            // value through GetValue and let the caller cast it to the declared array type.
-            return GetValueMI;
-        }
-        else if (TypeFacts.IsTupleType(readType))
-        {
-            // A ClickHouse Tuple(...) column is read as System.Tuple<...> by the driver; read the
-            // value through GetValue and let the caller cast it.
-            return GetValueMI;
-        }
-        else if (readType == typeof(Dictionary<string, string>))
-        {
-            // A native ClickHouse Map(String, String) has no typed reader getter; read the value
-            // through GetValue and let the caller cast it to Dictionary<string, string>.
-            return GetValueMI;
-        }
-        else
-            throw new NotSupportedException($"Property '{PropertyName}' with index ({Index}) has type {readType} which is not supported");
+
+        throw UnsupportedAccessor(readType);
     }
+
+    /// <summary>The getters both accessor tables share, or <see langword="null"/> for a special or unsupported type.</summary>
+    private static MethodInfo? ResolveSimpleAccessor(Type readType)
+    {
+        if (readType == typeof(int))
+            return GetInt32MI;
+        if (readType == typeof(long))
+            return GetInt64MI;
+        if (readType == typeof(DateTime))
+            return GetDateTimeMI;
+        if (readType == typeof(string))
+            return GetStringMI;
+        if (readType == typeof(bool))
+            return GetBooleanMI;
+        if (readType == typeof(double))
+            return GetDoubleMI;
+        if (readType == typeof(decimal))
+            return GetDecimalMI;
+        if (readType == typeof(float))
+            return GetFloatMI;
+        if (readType == typeof(short))
+            return GetInt16MI;
+        if (readType == typeof(byte))
+            return GetByteMI;
+        if (readType == typeof(Guid))
+            return GetGuidMI;
+
+        // Other array columns and array-returning expressions (PostgreSQL text[]/int[],
+        // ClickHouse Array(T) including nested arrays), ClickHouse Tuple(...) columns and a native
+        // ClickHouse Map(String, String) have no typed reader getter; read the value through GetValue
+        // and let the caller cast it to the declared shape. A byte[] column is not one of them: it has a
+        // typed accessor and is handled by the special branches.
+        if ((readType.IsArray && readType != typeof(byte[]))
+            || TypeFacts.IsTupleType(readType)
+            || readType == typeof(Dictionary<string, string>))
+            return GetValueMI;
+
+        return null;
+    }
+
+    private NotSupportedException UnsupportedAccessor(Type readType)
+        => new($"Property '{PropertyName}' with index ({Index}) has type {readType} which is not supported");
+
+    // Non-generic accessor bodies behind the GetFieldValue*MI fields above. Each pins one
+    // DbDataReader.GetFieldValue<T> instantiation at compile time so the accessor table never has to
+    // instantiate a generic method from a runtime type (NativeAOT has no JIT for that path).
+    private static TimeSpan ReadFieldValueTimeSpan(DbDataReader reader, int ordinal) => reader.GetFieldValue<TimeSpan>(ordinal);
+
+    private static DateTimeOffset ReadFieldValueDateTimeOffset(DbDataReader reader, int ordinal) => reader.GetFieldValue<DateTimeOffset>(ordinal);
+
+    private static ulong ReadFieldValueUInt64(DbDataReader reader, int ordinal) => reader.GetFieldValue<ulong>(ordinal);
+
+    private static uint ReadFieldValueUInt32(DbDataReader reader, int ordinal) => reader.GetFieldValue<uint>(ordinal);
+
+    private static JsonDocument ReadFieldValueJsonDocument(DbDataReader reader, int ordinal) => reader.GetFieldValue<JsonDocument>(ordinal);
+
+    private static JsonElement ReadFieldValueJsonElement(DbDataReader reader, int ordinal) => reader.GetFieldValue<JsonElement>(ordinal);
+
+    private static JsonObject ReadFieldValueJsonObject(DbDataReader reader, int ordinal) => reader.GetFieldValue<JsonObject>(ordinal);
+
+    private static byte[] ReadFieldValueByteArray(DbDataReader reader, int ordinal) => reader.GetFieldValue<byte[]>(ordinal);
+
+    /// <summary>
+    /// The static accessor that reads a <c>byte[]</c> column through
+    /// <see cref="DbDataReader.GetFieldValue{T}(int)"/>. Consumption sites that need to recognise a
+    /// direct binary read compare against this member instead of pattern-matching the accessor shape.
+    /// </summary>
+    internal static MethodInfo ByteArrayFieldValueReader => GetFieldValueByteArrayMI;
 
     // public override int GetHashCode()
     // {

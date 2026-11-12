@@ -381,9 +381,9 @@ internal static class CsvStreamWriter
             && !metadata!.IsComputed;
 
     /// <summary>
-    /// True when the mapped accessor is the direct generic byte[] reader. A reference-type projection is
-    /// wrapped in a null guard (<c>IsDBNull(index) ? null : GetFieldValue&lt;byte[]&gt;(index)</c>), so the
-    /// guard is unwrapped before the getter shape is checked.
+    /// True when the mapped accessor is the direct typed byte[] reader. A reference-type projection is
+    /// wrapped in a null guard (<c>IsDBNull(index) ? null : &lt;typed byte[] read&gt;(index)</c>), so the
+    /// guard is unwrapped before the accessor is checked.
     /// </summary>
     private static bool IsDirectByteArrayRead(Expression mappedValue)
     {
@@ -391,11 +391,7 @@ internal static class CsvStreamWriter
             mappedValue = condition.IfFalse;
 
         return mappedValue is MethodCallExpression call
-            && call.Method.Name == nameof(DbDataReader.GetFieldValue)
-            && call.Method.DeclaringType == typeof(DbDataReader)
-            && call.Method.IsGenericMethod
-            && call.Method.GetGenericArguments() is [var readType]
-            && readType == typeof(byte[]);
+            && call.Method == SelectExpression.ByteArrayFieldValueReader;
     }
 
     private static string Header(SelectExpression column)

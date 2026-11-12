@@ -13,29 +13,65 @@ namespace NextORM.Core.Tests;
 public class SelectExpressionTests
 {
     [Fact]
-    public void GetDataRecordMethod_ForByteArray_ShouldReadThroughGetFieldValue()
+    public void GetDataRecordMethod_ForByteArray_ShouldKeepThePublicGenericAccessor()
     {
         var column = new SelectExpression(typeof(byte[])) { PropertyName = "Data", Index = 0 };
 
         var method = column.GetDataRecordMethod();
 
         method.Name.Should().Be(nameof(DbDataReader.GetFieldValue));
+        method.DeclaringType.Should().Be(typeof(DbDataReader));
         method.ReturnType.Should().Be(typeof(byte[]));
+        method.IsStatic.Should().BeFalse();
         method.IsGenericMethod.Should().BeTrue();
         method.GetGenericArguments().Should().ContainSingle().Which.Should().Be(typeof(byte[]));
     }
 
     [Fact]
-    public void GetDataRecordMethod_ForUInt64_ShouldReadThroughGetFieldValue()
+    public void GetReaderAccessorMethod_ForByteArray_ShouldReadThroughTheStaticWrapper()
+    {
+        var column = new SelectExpression(typeof(byte[])) { PropertyName = "Data", Index = 0 };
+
+        var method = column.GetReaderAccessorMethod(typeof(byte[]));
+
+        method.IsStatic.Should().BeTrue("the mapper receives a compile-time-closed reader, not a runtime generic instantiation");
+        method.IsGenericMethod.Should().BeFalse();
+        method.ReturnType.Should().Be(typeof(byte[]));
+
+        var reader = new RecordingFieldValueReader(new byte[] { 1, 2, 3 });
+        CompileMapper(column)(reader).Should().BeEquivalentTo(new byte[] { 1, 2, 3 });
+        reader.RequestedTypes.Should().Equal(typeof(byte[]));
+    }
+
+    [Fact]
+    public void GetDataRecordMethod_ForUInt64_ShouldKeepThePublicGenericAccessor()
     {
         var column = new SelectExpression(typeof(ulong)) { PropertyName = "Big", Index = 0 };
 
         var method = column.GetDataRecordMethod();
 
         method.Name.Should().Be(nameof(DbDataReader.GetFieldValue));
+        method.DeclaringType.Should().Be(typeof(DbDataReader));
         method.ReturnType.Should().Be(typeof(ulong));
+        method.IsStatic.Should().BeFalse();
         method.IsGenericMethod.Should().BeTrue();
         method.GetGenericArguments().Should().ContainSingle().Which.Should().Be(typeof(ulong));
+    }
+
+    [Fact]
+    public void GetReaderAccessorMethod_ForUInt64_ShouldReadThroughTheStaticWrapper()
+    {
+        var column = new SelectExpression(typeof(ulong)) { PropertyName = "Big", Index = 0 };
+
+        var method = column.GetReaderAccessorMethod(typeof(ulong));
+
+        method.IsStatic.Should().BeTrue("the mapper receives a compile-time-closed reader, not a runtime generic instantiation");
+        method.IsGenericMethod.Should().BeFalse();
+        method.ReturnType.Should().Be(typeof(ulong));
+
+        var reader = new RecordingFieldValueReader(7UL);
+        CompileMapper(column)(reader).Should().Be(7UL);
+        reader.RequestedTypes.Should().Equal(typeof(ulong));
     }
 
     [Fact]
@@ -47,16 +83,34 @@ public class SelectExpressionTests
     }
 
     [Fact]
-    public void GetDataRecordMethod_ForUInt32_ShouldReadThroughGetFieldValue()
+    public void GetDataRecordMethod_ForUInt32_ShouldKeepThePublicGenericAccessor()
     {
         var column = new SelectExpression(typeof(uint)) { PropertyName = "Revision", Index = 0 };
 
         var method = column.GetDataRecordMethod();
 
         method.Name.Should().Be(nameof(DbDataReader.GetFieldValue));
+        method.DeclaringType.Should().Be(typeof(DbDataReader));
         method.ReturnType.Should().Be(typeof(uint));
+        method.IsStatic.Should().BeFalse();
         method.IsGenericMethod.Should().BeTrue();
         method.GetGenericArguments().Should().ContainSingle().Which.Should().Be(typeof(uint));
+    }
+
+    [Fact]
+    public void GetReaderAccessorMethod_ForUInt32_ShouldReadThroughTheStaticWrapper()
+    {
+        var column = new SelectExpression(typeof(uint)) { PropertyName = "Revision", Index = 0 };
+
+        var method = column.GetReaderAccessorMethod(typeof(uint));
+
+        method.IsStatic.Should().BeTrue("the mapper receives a compile-time-closed reader, not a runtime generic instantiation");
+        method.IsGenericMethod.Should().BeFalse();
+        method.ReturnType.Should().Be(typeof(uint));
+
+        var reader = new RecordingFieldValueReader(7U);
+        CompileMapper(column)(reader).Should().Be(7U);
+        reader.RequestedTypes.Should().Equal(typeof(uint));
     }
 
     [Fact]
@@ -198,23 +252,21 @@ public class SelectExpressionTests
     }
 
     [Fact]
-    public void MapColumn_ForJsonDocumentAndJsonElement_ShouldKeepGenericAccessors()
+    public void MapColumn_ForJsonDocumentAndJsonElement_ShouldReadThroughTypedAccessors()
     {
-        var param = Expression.Parameter(typeof(DbDataReader), "reader");
+        var document = JsonDocument.Parse("{\"a\":1}");
+        var documentColumn = new SelectExpression(typeof(JsonDocument)) { PropertyName = "Data", Index = 0 };
+        documentColumn.GetDataRecordMethod().IsGenericMethod.Should().BeTrue("the public accessor keeps its pre-S3 shape");
+        var documentReader = new RecordingFieldValueReader(document);
+        CompileMapper(documentColumn)(documentReader).Should().BeSameAs(document);
+        documentReader.RequestedTypes.Should().Equal(typeof(JsonDocument));
 
-        var documentCollector = new MethodCallCollector();
-        documentCollector.Visit(RowMapperFactory.MapColumn(
-            new SelectExpression(typeof(JsonDocument)) { PropertyName = "Data", Index = 0 }, param));
-        documentCollector.Methods.Should().Contain(m => m.Name == nameof(DbDataReader.GetFieldValue)
-            && m.IsGenericMethod
-            && m.GetGenericArguments()[0] == typeof(JsonDocument));
-
-        var elementCollector = new MethodCallCollector();
-        elementCollector.Visit(RowMapperFactory.MapColumn(
-            new SelectExpression(typeof(JsonElement)) { PropertyName = "Data", Index = 0 }, param));
-        elementCollector.Methods.Should().Contain(m => m.Name == nameof(DbDataReader.GetFieldValue)
-            && m.IsGenericMethod
-            && m.GetGenericArguments()[0] == typeof(JsonElement));
+        var element = JsonDocument.Parse("42").RootElement;
+        var elementColumn = new SelectExpression(typeof(JsonElement)) { PropertyName = "Data", Index = 0 };
+        elementColumn.GetDataRecordMethod().IsGenericMethod.Should().BeTrue("the public accessor keeps its pre-S3 shape");
+        var elementReader = new RecordingFieldValueReader(element);
+        CompileMapper(elementColumn)(elementReader).Should().Be(element);
+        elementReader.RequestedTypes.Should().Equal(typeof(JsonElement));
     }
 
     [Fact]
@@ -235,6 +287,25 @@ public class SelectExpressionTests
             RowMapperFactory.MapColumn(new SelectExpression(typeof(JsonNode)) { PropertyName = "Data", Index = 0 }, param), param).Compile();
         for (var i = 0; i < 3; i++)
             JsonNode.DeepEquals(mapper(new RecordingJsonReader("{\"a\":1}")), JsonNode.Parse("{\"a\":1}")).Should().BeTrue();
+    }
+
+    private static Func<DbDataReader, object?> CompileMapper(SelectExpression column)
+    {
+        var param = Expression.Parameter(typeof(DbDataReader), "reader");
+        var body = RowMapperFactory.MapColumn(column, param);
+        return Expression.Lambda<Func<DbDataReader, object?>>(
+            Expression.Convert(body, typeof(object)), param).Compile();
+    }
+
+    private sealed class RecordingFieldValueReader(object? value) : SingleColumnReader(value)
+    {
+        public List<Type> RequestedTypes { get; } = [];
+
+        public override T GetFieldValue<T>(int ordinal)
+        {
+            RequestedTypes.Add(typeof(T));
+            return base.GetFieldValue<T>(ordinal);
+        }
     }
 
     private sealed class MethodCallCollector : ExpressionVisitor
