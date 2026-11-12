@@ -83,6 +83,20 @@ public sealed class AotNativeRunTests
         var childDatabasePath = Path.Combine(Path.GetDirectoryName(databasePath)!, $"nextorm.integration.{childPid}.db");
         var nativeReports = scenarioLines.ToDictionary(ParseScenarioId, ParseReport, StringComparer.Ordinal);
         var jitResults = RunJitScenarios(databasePath);
+        // Fail-closed gate: a native scenario that fails or diverges from its JIT control fails this
+        // test, not only the written oracle. Without this a native-only preparation failure would still
+        // leave the harness green.
+        foreach (var id in ScenarioIds)
+        {
+            var native = nativeReports[id];
+            native.GetValueOrDefault("status").Should().Be(
+                "pass",
+                $"native scenario '{id}' must pass; message: {native.GetValueOrDefault("message")}");
+            native.GetValueOrDefault("values").Should().Be(
+                jitResults[id].Values,
+                $"scenario '{id}' must match its JIT control");
+        }
+
         var oracle = BuildOracle(repositoryRoot, databasePath, childPid, jitResults, nativeReports);
 
         var evidenceDirectory = Environment.GetEnvironmentVariable("NEXTORM_AOT_EVIDENCE_DIR");

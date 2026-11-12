@@ -1729,7 +1729,9 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
             return scalar;
 
         var p = Expression.Parameter(typeof(IQueryRegistry));
-        return Expression.Lambda(
+        // The delegate type is compile-time here (the body is the bool `exists` call over the registry),
+        // so close it explicitly instead of letting the non-generic overload infer it at run time.
+        return Expression.Lambda<Func<IQueryRegistry, bool>>(
             Expression.Call(Expression.Property(null, SQLPI), CommonFunctions.ExistsMI,
                 Expression.Property(Expression.Property(p, ReferencedQueriesPI), ItemPI, Expression.Constant(idx))),
             p);
@@ -1750,7 +1752,9 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
         idx = _queryProvider!.AddCommand(cmd);
 
         var p = Expression.Parameter(typeof(IQueryRegistry));
-        return Expression.Lambda(Expression.Property(Expression.Property(p, ReferencedQueriesPI), ItemPI, Expression.Constant(idx)), p);
+        // The body is the QueryCommand at the registered index, so the delegate type is compile-time.
+        return Expression.Lambda<Func<IQueryRegistry, QueryCommand>>(
+            Expression.Property(Expression.Property(p, ReferencedQueriesPI), ItemPI, Expression.Constant(idx)), p);
     }
 
     /// <summary>Prepares, registers and returns the typed scalar-subquery placeholder for <paramref name="cmd"/>.</summary>
