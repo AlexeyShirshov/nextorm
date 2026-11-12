@@ -103,6 +103,13 @@ internal static class PivotProjectionRewriter
     /// <param name="projection">The typed projection lambda.</param>
     /// <param name="aliasParameter">The replacement <see cref="TableAlias"/> parameter.</param>
     /// <param name="markerType">The marker type of the projection (<see cref="PivotValues"/> or <see cref="UnpivotValues"/>).</param>
+    /// <param name="createMarker">
+    /// Creates the marker instance captured for a surviving marker-parameter reference. The factory is a
+    /// compile-time delegate from the typed caller (<c>static () =&gt; new PivotValues()</c>), so the
+    /// parameterless constructor is statically visible instead of being looked up through
+    /// <see cref="Activator"/> on a run-time <see cref="Type"/> — the lookup a trimmed/native image
+    /// cannot satisfy (<c>MissingMethodException</c>).
+    /// </param>
     /// <param name="resolveGroupingColumn">Resolves a grouping member's effective SQL column name, or <c>null</c> when it is not registered.</param>
     /// <param name="formatValueName">Formats an output-column reference (the PIVOT value escaped to its SQL identifier, the UNPIVOT role verbatim).</param>
     /// <returns>The rewritten projection body over <paramref name="aliasParameter"/>.</returns>
@@ -110,12 +117,13 @@ internal static class PivotProjectionRewriter
         LambdaExpression projection,
         ParameterExpression aliasParameter,
         Type markerType,
+        Func<object> createMarker,
         Func<MemberInfo, string?> resolveGroupingColumn,
         Func<string, string> formatValueName)
     {
         var entityParameter = projection.Parameters[0];
         var markerParameter = projection.Parameters.Count > 1 ? projection.Parameters[1] : null;
-        var markerInstance = markerParameter is null ? null : Activator.CreateInstance(markerType);
+        var markerInstance = markerParameter is null ? null : createMarker();
 
         var visitor = new ProjectionVisitor(
             entityParameter, markerParameter, markerInstance, aliasParameter, markerType, resolveGroupingColumn, formatValueName);

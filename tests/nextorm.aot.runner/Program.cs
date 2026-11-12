@@ -67,6 +67,36 @@ Run("groupby-aggregates", () =>
         .ToList();
     return string.Join(";", groups.Select(group => $"int={group.Int?.ToString() ?? "null"},count={group.Count},sum={group.Sum}"));
 });
+Run("selectgroup-keyed", () =>
+{
+    // Regression gate for the class-3 defect in the AOT probes (issue #370, 2026-11-12 comments): the
+    // packaged SelectGroup infers its GROUP BY keys at preparation and used to wrap each key body in the
+    // non-generic Expression.Lambda, which closes Expression<Func<TEntity, TKey>> at run time — a
+    // generic instantiation NativeAOT never sees. The delegate type is now closed by the compile-time
+    // entity type. If the run-time close comes back, this scenario throws on a native publish.
+    var groups = context.From<IComplexEntity>()
+        .SelectGroup(x => new { x.Int, Count = SqlFunctions.Sql.count() })
+        .ToList();
+    return string.Join(";", groups
+        .OrderBy(group => group.Int is null ? 1 : 0)
+        .ThenBy(group => group.Int)
+        .Select(group => $"int={group.Int?.ToString() ?? "null"},count={group.Count}"));
+});
+Run("selectgroup-having", () =>
+{
+    // Same gate for the SelectGroupHaving path: the condition is rebound onto the source entity, and
+    // both the rebind and the HAVING combination used to close Expression<Func<TEntity, bool>> at run
+    // time. The delegate type is now closed by the compile-time entity type.
+    var groups = context.From<IComplexEntity>()
+        .SelectGroupHaving(
+            x => new { x.Int, Count = SqlFunctions.Sql.count() },
+            result => result.Count > 1)
+        .ToList();
+    return string.Join(";", groups
+        .OrderBy(group => group.Int is null ? 1 : 0)
+        .ThenBy(group => group.Int)
+        .Select(group => $"int={group.Int?.ToString() ?? "null"},count={group.Count}"));
+});
 RunComponentSlices(args[0]);
 return 0;
 

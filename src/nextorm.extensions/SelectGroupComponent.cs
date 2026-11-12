@@ -111,7 +111,7 @@ public sealed class SelectGroupComponent<TEntity> : IQueryComponent, IQueryCompo
         // joins the effective HAVING, so validation and rendering see an ordinary entity predicate.
         var condition = _condition is null
             ? null
-            : SelectGroupConditionBinder.Bind(projection, _condition);
+            : SelectGroupConditionBinder.Bind<TEntity>(projection, _condition);
         // Combine existing source Having with the contributed condition before validation.
         LambdaExpression? combinedHaving = cmd.Having;
         if (condition is not null)
@@ -128,7 +128,16 @@ public sealed class SelectGroupComponent<TEntity> : IQueryComponent, IQueryCompo
         switch (mode)
         {
             case SelectGroupMode.Keyed:
-                var keyLambdas = keys.Select(k => (LambdaExpression)Expression.Lambda(k, projection.Parameters)).ToList();
+                // The key's scalar type is a run-time value, so the non-generic Expression.Lambda overload
+                // would close Expression<Func<TEntity, TKey>> at run time — a generic instantiation the
+                // NativeAOT compiler never sees, which throws "missing native code or metadata". The
+                // delegate type here is closed by the component's own compile-time TEntity instead: the
+                // key body is boxed to object (a convert the SQL renderer unwraps), so no run-time
+                // generic type is ever created. See docs/specs/design/D370-stream-a-class3-selectgroup.md.
+                var keyLambdas = keys
+                    .Select(k => (LambdaExpression)Expression.Lambda<Func<TEntity, object?>>(
+                        Expression.Convert(k, typeof(object)), projection.Parameters))
+                    .ToList();
                 contribution = new QueryPreparationContribution(
                     keyLambdas,
                     QueryPreparationHavingMode.Replace,
@@ -184,7 +193,9 @@ public sealed class SelectGroupComponent<TEntity> : IQueryComponent, IQueryCompo
         var rightBody = right.Parameters.Count > 0
             ? new ParameterReplacer(right.Parameters[0], param).Visit(right.Body)
             : right.Body;
-        return Expression.Lambda(Expression.AndAlso(leftBody!, rightBody!), param);
+        // Both sides are entity-typed predicates; close the delegate type with the component's
+        // compile-time TEntity so no run-time Expression<Func<TEntity, bool>> is created.
+        return Expression.Lambda<Func<TEntity, bool>>(Expression.AndAlso(leftBody!, rightBody!), param);
     }
 
     private sealed class ParameterReplacer : ExpressionVisitor

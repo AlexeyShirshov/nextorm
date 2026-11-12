@@ -32,6 +32,15 @@ public class ClickHouseDataContext : DataContext, IBulkInsertExecutor, IBulkInse
     private static readonly MethodInfo ToJsonElementMI = typeof(ClickHouseDataContext).GetMethod(nameof(ToJsonElement), BindingFlags.NonPublic | BindingFlags.Static)!;
     private static readonly MethodInfo ToDateTimeOffsetMI = typeof(ClickHouseDataContext).GetMethod(nameof(ToDateTimeOffset), BindingFlags.NonPublic | BindingFlags.Static)!;
 
+    /// <summary>
+    /// Declares the driver's parameter-type-resolution reflection dependency before any command runs.
+    /// See <see cref="ClickHouseTrimContracts"/>.
+    /// </summary>
+    static ClickHouseDataContext()
+    {
+        ClickHouseTrimContracts.PreserveParameterTupleRegistration();
+    }
+
     // The settings of a client/data-source-built context: the context creates its own connection from a
     // copy so the ADO connection and the client share one actual ClickHouse session id. Null for the
     // connection-string and caller-connection constructors, where the connection itself is the source.
@@ -231,6 +240,14 @@ public class ClickHouseDataContext : DataContext, IBulkInsertExecutor, IBulkInse
     public override Expression MapColumnExpression(SelectExpression column, Expression param)
     {
         var realType = Nullable.GetUnderlyingType(column.PropertyType) ?? column.PropertyType;
+
+        // Fail closed before the reader is opened. ClickHouse.Driver materializes a native Tuple(...)
+        // column into System.Tuple<...> by looking up the closed generic constructor at run time
+        // (TupleType.Read -> Activator.CreateInstance), which a trimmed/native image does not keep;
+        // the raw outcome is an opaque driver TypeInitializationException before any row is mapped.
+        // Under JIT the same shape works, so only the dynamic-code-free runtime is refused.
+        ThrowIfDriverTuple(column, realType, System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported);
+
         // A converter (for example [JsonColumn]) keeps its own storage policy; the native-mapping
         // shortcut applies to a bare JSON projection only.
         if (column.Converter is null
@@ -241,6 +258,52 @@ public class ClickHouseDataContext : DataContext, IBulkInsertExecutor, IBulkInse
             return MapDateTimeOffsetColumn(column, param);
 
         return base.MapColumnExpression(column, param);
+    }
+
+    /// <summary>
+    /// Whether a projected column must be refused before the reader opens because the driver can only
+    /// produce it through its run-time tuple construction. Split from
+    /// <see cref="MapColumnExpression"/> so both branches are unit-testable: the refusal applies only when
+    /// the runtime has no dynamic code (a trimmed/native image).
+    /// </summary>
+    /// <param name="propertyType">The column's declared CLR type (already nullable-unwrapped).</param>
+    /// <param name="dynamicCodeSupported"><see cref="System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported"/>.</param>
+    /// <returns><see langword="true"/> when the column must be refused.</returns>
+    internal static bool ShouldRefuseDriverTuple(Type propertyType, bool dynamicCodeSupported)
+        => !dynamicCodeSupported && IsDriverMaterializedTupleShape(propertyType);
+
+    /// <summary>Throws the actionable pre-reader refusal for a tuple column the driver cannot materialize.</summary>
+    /// <param name="column">The projected column being mapped.</param>
+    /// <param name="realType">The column's declared CLR type (already nullable-unwrapped).</param>
+    /// <param name="dynamicCodeSupported">Whether the runtime can compile code at run time.</param>
+    /// <exception cref="NotSupportedException">The column is a tuple shape and the runtime cannot compile code.</exception>
+    internal static void ThrowIfDriverTuple(SelectExpression column, Type realType, bool dynamicCodeSupported)
+    {
+        if (column.Converter is not null || !ShouldRefuseDriverTuple(realType, dynamicCodeSupported))
+            return;
+
+        throw new NotSupportedException(
+            $"ClickHouse Tuple column '{column.PropertyName ?? $"#{column.Index}"}' cannot be materialized in a trimmed or native image: "
+            + "ClickHouse.Driver builds System.Tuple<...> for a Tuple(...) column through a run-time constructor lookup "
+            + "(TupleType.Read -> Activator.CreateInstance) that trimming removes. "
+            + "Project the tuple elements as separate scalar columns (tupleElement(tuple, 1), ...) or read the whole tuple as text (toString(tuple)) "
+            + "and parse it on the client; the declared Tuple property cannot be read natively.");
+    }
+
+    // The CLR shapes ClickHouse.Driver can only produce through its run-time tuple construction: the
+    // reference and value tuple families (arity 1..8), directly or as the element of an array column.
+    private static bool IsDriverMaterializedTupleShape(Type type)
+    {
+        while (type.IsArray)
+            type = type.GetElementType()!;
+
+        if (!type.IsGenericType)
+            return false;
+
+        var name = type.GetGenericTypeDefinition().FullName;
+        return name is not null
+            && (name.StartsWith("System.Tuple`", StringComparison.Ordinal)
+                || name.StartsWith("System.ValueTuple`", StringComparison.Ordinal));
     }
 
     // The ClickHouse.Driver surfaces DateTime64 as System.DateTime, so the generic typed reader's

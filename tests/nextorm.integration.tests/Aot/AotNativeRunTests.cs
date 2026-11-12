@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text;
 using FluentAssertions;
 using NextORM.Core;
+using NextORM.Extensions;
 using NextORM.Sqlite;
 
 namespace NextORM.Integration.Tests;
@@ -17,7 +18,9 @@ public sealed class AotNativeRunTests
         "nullable-scalar",
         "sqlite-json",
         "aot-numeric-operator",
-        "groupby-aggregates"
+        "groupby-aggregates",
+        "selectgroup-keyed",
+        "selectgroup-having"
     ];
 
     [Fact]
@@ -190,6 +193,28 @@ public sealed class AotNativeRunTests
                     .ToList();
                 return string.Join(";", groups.Select(group =>
                     $"int={group.Int?.ToString() ?? "null"},count={group.Count},sum={group.Sum}"));
+            }),
+            ["selectgroup-keyed"] = CaptureJit(() =>
+            {
+                var groups = context.From<IComplexEntity>()
+                    .SelectGroup(x => new { x.Int, Count = SqlFunctions.Sql.count() })
+                    .ToList();
+                return string.Join(";", groups
+                    .OrderBy(group => group.Int is null ? 1 : 0)
+                    .ThenBy(group => group.Int)
+                    .Select(group => $"int={group.Int?.ToString() ?? "null"},count={group.Count}"));
+            }),
+            ["selectgroup-having"] = CaptureJit(() =>
+            {
+                var groups = context.From<IComplexEntity>()
+                    .SelectGroupHaving(
+                        x => new { x.Int, Count = SqlFunctions.Sql.count() },
+                        result => result.Count > 1)
+                    .ToList();
+                return string.Join(";", groups
+                    .OrderBy(group => group.Int is null ? 1 : 0)
+                    .ThenBy(group => group.Int)
+                    .Select(group => $"int={group.Int?.ToString() ?? "null"},count={group.Count}"));
             })
         };
         return results;
@@ -238,7 +263,7 @@ public sealed class AotNativeRunTests
             "",
             $"Parent SQLite DatabasePath: `{databasePath}`.",
             $"Native child PID: `{childPid}`; child-specific database `{childDatabasePath}` exists: `{File.Exists(childDatabasePath)}`.",
-            "The JIT control executes the same seven query shapes in the adapter against the same seeded parent SQLite file. Comparison uses scenario status and escaped `values`; native failure is never relabeled as success.",
+            "The JIT control executes the same query shapes in the adapter against the same seeded parent SQLite file. Comparison uses scenario status and escaped `values`; native failure is never relabeled as success.",
             "",
             "| scenario | JIT expected status / values | native status / values | equivalence |",
             "|---|---|---|---|"

@@ -21,12 +21,15 @@ internal static class SelectGroupConditionBinder
     /// <exception cref="QueryPreparationException">
     /// The condition references the result as a whole, or a member the projection does not bind.
     /// </exception>
-    internal static LambdaExpression Bind(LambdaExpression projection, LambdaExpression condition)
+    internal static LambdaExpression Bind<TEntity>(LambdaExpression projection, LambdaExpression condition)
     {
         var body = AggregateClassification.UnwrapConvert(projection.Body);
         var members = BuildMemberMap(body);
         var rebound = new MemberSubstitution(condition.Parameters[0], body, members).Visit(condition.Body)!;
-        return Expression.Lambda(rebound, projection.Parameters[0]);
+        // The entity type is the component's compile-time TEntity: closing the delegate type here keeps the
+        // run-time generic Expression<Func<TEntity, bool>> out of a trimmed/native image (the non-generic
+        // Expression.Lambda overload infers and closes it at run time, which NativeAOT cannot compile).
+        return Expression.Lambda<Func<TEntity, bool>>(rebound, projection.Parameters[0]);
     }
 
     /// <summary>

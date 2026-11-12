@@ -149,6 +149,7 @@ public static class SqlServerEntityBuilderExtensions
             spec,
             projection,
             typeof(PivotValues),
+            static () => new PivotValues(),
             static name => name);
     }
 
@@ -200,7 +201,13 @@ public static class SqlServerEntityBuilderExtensions
         var (valueColumn, nameColumn) = PivotProjectionRewriter.ExtractUnpivotRoles(projection);
         var spec = PivotExpression.ForUnpivot(ResolvePivotInner(builder), typeof(TEntity), valueColumn, nameColumn, columns);
 
-        return BuildTypedSource<TEntity, TShape>(builder, spec, projection, typeof(UnpivotValues), static name => name);
+        return BuildTypedSource<TEntity, TShape>(
+            builder,
+            spec,
+            projection,
+            typeof(UnpivotValues),
+            static () => new UnpivotValues(),
+            static name => name);
     }
 
     /// <summary>
@@ -213,6 +220,7 @@ public static class SqlServerEntityBuilderExtensions
         PivotExpression spec,
         LambdaExpression projection,
         Type markerType,
+        Func<object> createMarker,
         Func<string, string> formatValueName)
     {
         var aliasParameter = Expression.Parameter(typeof(TableAlias), "t");
@@ -220,6 +228,7 @@ public static class SqlServerEntityBuilderExtensions
             projection,
             aliasParameter,
             markerType,
+            createMarker,
             member => ResolveGroupingColumn(builder, member),
             formatValueName);
 
