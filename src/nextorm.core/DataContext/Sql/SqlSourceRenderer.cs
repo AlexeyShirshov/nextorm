@@ -1566,14 +1566,15 @@ internal static class SqlSourceRenderer
             column = ctx.Dialect.MakeBooleanPredicate(column, asPredicate: false);
         else if (selectList && bridgeVectorToText
             && (Nullable.GetUnderlyingType(selExp.PropertyType) ?? selExp.PropertyType) is { } projectionType
-            && string.Equals(ctx.Dialect.MakeTypeName(projectionType), "vector", StringComparison.Ordinal))
+            && TypeFacts.IsPostgresVectorProjection(ctx.Dialect, projectionType, out var vectorArray))
         {
             // Npgsql does not expose PostgreSQL extension types as CLR values unless the caller
-            // registers a data-source plugin. Keep the public PgVector API plugin-free by projecting
+            // registers a data-source plugin. Keep the public pgvector API plugin-free by projecting
             // vector-valued SELECT expressions through PostgreSQL's text representation; the provider
-            // materializer parses that text back into PgVector. Restrict this bridge to select-list
-            // values so vector operands in predicates and ordering retain their native PostgreSQL type.
-            column = $"CAST({column} AS text)";
+            // materializer parses that text back into the provider-owned CLR type. Restrict this bridge
+            // to select-list values so vector operands in predicates and ordering retain their native
+            // PostgreSQL type.
+            column = vectorArray ? $"CAST({column} AS text[])" : $"CAST({column} AS text)";
         }
         if (!visitor.BooleanSelectProjection && ctx.Capture is not null && visitor.Recorder is { } columnRecorder)
         {

@@ -1,12 +1,56 @@
 #nullable enable
+NextORM.Postgres.PgBit
+NextORM.Postgres.PgBit.Equals(NextORM.Postgres.PgBit other) -> bool
+NextORM.Postgres.PgBit.Length.get -> int
+NextORM.Postgres.PgBit.PgBit() -> void
+NextORM.Postgres.PgBit.PgBit(System.Collections.Generic.IEnumerable<bool>! bits) -> void
+NextORM.Postgres.PgBit.PgBit(string! bits) -> void
+NextORM.Postgres.PgBit.ToArray() -> bool[]!
+NextORM.Postgres.PgBit.this[int index].get -> bool
+NextORM.Postgres.PgHalfVector
+NextORM.Postgres.PgHalfVector.Dimensions.get -> int
+NextORM.Postgres.PgHalfVector.Equals(NextORM.Postgres.PgHalfVector other) -> bool
+NextORM.Postgres.PgHalfVector.PgHalfVector() -> void
+NextORM.Postgres.PgHalfVector.PgHalfVector(System.Collections.Generic.IEnumerable<System.Half>! values) -> void
+NextORM.Postgres.PgHalfVector.PgHalfVector(System.Collections.Generic.IEnumerable<float>! values) -> void
+NextORM.Postgres.PgHalfVector.ToArray() -> System.Half[]!
+NextORM.Postgres.PgHalfVector.this[int index].get -> System.Half
+NextORM.Postgres.PgSparseVector
+NextORM.Postgres.PgSparseVector.Count.get -> int
+NextORM.Postgres.PgSparseVector.Dimensions.get -> int
+NextORM.Postgres.PgSparseVector.Equals(NextORM.Postgres.PgSparseVector other) -> bool
+NextORM.Postgres.PgSparseVector.Indices.get -> System.ReadOnlyMemory<int>
+NextORM.Postgres.PgSparseVector.PgSparseVector() -> void
+NextORM.Postgres.PgSparseVector.PgSparseVector(System.Collections.Generic.IEnumerable<float>! dense) -> void
+NextORM.Postgres.PgSparseVector.PgSparseVector(int dimensions, System.Collections.Generic.IEnumerable<int>! indices, System.Collections.Generic.IEnumerable<float>! values) -> void
+NextORM.Postgres.PgSparseVector.ToArray() -> float[]!
+NextORM.Postgres.PgSparseVector.Values.get -> System.ReadOnlyMemory<float>
 NextORM.Postgres.PgVector
+NextORM.Postgres.PgVector.Dimensions.get -> int
+NextORM.Postgres.PgVector.Equals(NextORM.Postgres.PgVector other) -> bool
+NextORM.Postgres.PgVector.Normalize() -> NextORM.Postgres.PgVector
 NextORM.Postgres.PgVector.PgVector() -> void
 NextORM.Postgres.PgVector.PgVector(System.Collections.Generic.IEnumerable<float>! values) -> void
-NextORM.Postgres.PgVector.Dimensions.get -> int
-NextORM.Postgres.PgVector.this[int index].get -> float
 NextORM.Postgres.PgVector.ToArray() -> float[]!
-override NextORM.Postgres.PgVector.ToString() -> string!
-static NextORM.Postgres.PgVector.Parse(string! text) -> NextORM.Postgres.PgVector
-NextORM.Postgres.PgVector.Equals(NextORM.Postgres.PgVector other) -> bool
+NextORM.Postgres.PgVector.this[int index].get -> float
+override NextORM.Postgres.PgBit.Equals(object? obj) -> bool
+override NextORM.Postgres.PgBit.GetHashCode() -> int
+override NextORM.Postgres.PgBit.ToString() -> string!
+override NextORM.Postgres.PgHalfVector.Equals(object? obj) -> bool
+override NextORM.Postgres.PgHalfVector.GetHashCode() -> int
+override NextORM.Postgres.PgHalfVector.ToString() -> string!
+override NextORM.Postgres.PgSparseVector.Equals(object? obj) -> bool
+override NextORM.Postgres.PgSparseVector.GetHashCode() -> int
+override NextORM.Postgres.PgSparseVector.ToString() -> string!
 override NextORM.Postgres.PgVector.Equals(object? obj) -> bool
 override NextORM.Postgres.PgVector.GetHashCode() -> int
+override NextORM.Postgres.PgVector.ToString() -> string!
+static NextORM.Postgres.PgBit.Parse(string! text) -> NextORM.Postgres.PgBit
+static NextORM.Postgres.PgHalfVector.Parse(string! text) -> NextORM.Postgres.PgHalfVector
+static NextORM.Postgres.PgSparseVector.Parse(string! text) -> NextORM.Postgres.PgSparseVector
+static NextORM.Postgres.PgVector.Parse(string! text) -> NextORM.Postgres.PgVector
+static NextORM.Postgres.PgVector.operator *(NextORM.Postgres.PgVector left, NextORM.Postgres.PgVector right) -> NextORM.Postgres.PgVector
+static NextORM.Postgres.PgVector.operator *(NextORM.Postgres.PgVector value, float scalar) -> NextORM.Postgres.PgVector
+static NextORM.Postgres.PgVector.operator *(float scalar, NextORM.Postgres.PgVector value) -> NextORM.Postgres.PgVector
+static NextORM.Postgres.PgVector.operator +(NextORM.Postgres.PgVector left, NextORM.Postgres.PgVector right) -> NextORM.Postgres.PgVector
+static NextORM.Postgres.PgVector.operator -(NextORM.Postgres.PgVector left, NextORM.Postgres.PgVector right) -> NextORM.Postgres.PgVector

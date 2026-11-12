@@ -511,31 +511,78 @@ select a, b
 Варианты `json_populate_record(set)` (заполняющие переданную вызывающим базовую запись, а не
 свободный список колонок) остаются вне области охвата. См.
 [Ограничения и возможности вне области охвата](../../advanced/limitations.md).
+## Значения pgvector
+
+Провайдер предоставляет четыре собственных типа `readonly struct` для расширения pgvector. Они передаются
+через текстовое представление PostgreSQL, поэтому плагин источника данных (`UseVector()`) не нужен: подходит
+любое соединение `NpgsqlConnection`.
+
+| Тип CLR | Тип PostgreSQL | Текстовый вид |
+|---|---|---|
+| `NextORM.Postgres.PgVector` | `vector` | `[1,2.5]` |
+| `NextORM.Postgres.PgHalfVector` | `halfvec` | `[1,2.5]` (полуточность) |
+| `NextORM.Postgres.PgSparseVector` | `sparsevec` | `{1:1,3:2}/5` (индексы с единицы) |
+| `NextORM.Postgres.PgBit` | `bit` | `10110` |
+
+Координаты должны быть конечными: `NaN` и `±Infinity` отклоняются при создании и разборе значения.
+`PgSparseVector` хранит строго возрастающие индексы с нуля и конечные ненулевые значения, принимает плотный
+список координат (нули отбрасываются) и разворачивается обратно через `ToArray()`. Каждый тип предоставляет
+размерность (`Dimensions`, у `PgBit` — `Length`), индексатор с нуля, `ToArray()`, текстовый формат PostgreSQL
+в `ToString()` и разбор `Parse(string)`. `PgVector` дополнительно реализует поэлементные `+`, `-` и `*`
+(размерности должны совпадать, иначе `ArgumentException`), умножение на `float` и `Normalize()`, который
+бросает исключение для нулевого вектора.
+
+Nullable-свойства (`PgVector?` и т.д.) сохраняют SQL `NULL`. Массивы этих типов отображаются на `vector[]`,
+`halfvec[]`, `sparsevec[]` и `bit[]` и проходят туда-обратно через сущность, скалярную, анонимную и
+DTO-проекции. `NULL`-элемент массива PostgreSQL завершается детерминированной ошибкой: массив значимого типа
+CLR не может его представить. Столбец `bit` в PostgreSQL имеет фиксированную ширину (`bit(n)`): ширину задаёт
+схема, тип CLR хранит только биты.
+
+### Операторы и функции
+
+| Маркер (`SqlFunctions.Postgres`) | SQL | Типы pgvector |
+|---|---|---|
+| `l2_distance(a, b)` | `a <-> b` | `vector`, `halfvec`, `sparsevec` |
+| `cosine_distance(a, b)` | `a <=> b` | `vector`, `halfvec`, `sparsevec` |
+| `negative_inner_product(a, b)` | `a <#> b` | `vector`, `halfvec`, `sparsevec` |
+| `l1_distance(a, b)` | `a <+> b` | `vector`, `halfvec`, `sparsevec` |
+| `hamming_distance(a, b)` | `a <~> b` | `bit` |
+| `jaccard_distance(a, b)` | `a <%> b` | `bit` |
+| `vector_add` / `vector_subtract` / `vector_multiply` | `+` / `-` / `*` | `vector`, `halfvec` |
+| `vector_concat(a, b)` | `a \|\| b` | `vector`, `halfvec` |
+| `vector_dims(v)` | `vector_dims(v)` | `vector`, `halfvec` |
+| `vector_norm(v)` | `vector_norm(v)` | `vector` |
+| `l2_norm(v)` | `l2_norm(v)` | `halfvec`, `sparsevec` |
+| `l2_normalize(v)` | `l2_normalize(v)` | `vector`, `halfvec`, `sparsevec` |
+| `subvector(v, start, count)` | `subvector(v, start, count)` | `vector`, `halfvec` |
+| `binary_quantize<T, TResult>(v)` | `binary_quantize(v)` | `vector`, `halfvec` |
+
+Каждый маркер переводится из LINQ в `SELECT`, `WHERE` и `ORDER BY … Take(k)` (k ближайших соседей) и
+отклоняется при подготовке запроса на всех остальных провайдерах, до обращения к базе. Векторный операнд,
+являющийся константой или захваченной переменной, приводится к своему типу PostgreSQL, поэтому
+нетипизированный параметр драйвера не делает перегрузку неоднозначной. `binary_quantize` указывает тип
+результата явно, потому что тип `bit` живёт в сборке провайдера:
+`SqlFunctions.Postgres.binary_quantize<PgVector, PgBit>(x.Value)`.
+
+```csharp
+var nearest = ctx.From<Document>()
+    .OrderBy(x => SqlFunctions.Postgres.cosine_distance(x.Embedding, target))
+    .Limit(10)
+    .Select(x => new { x.Id, Distance = SqlFunctions.Postgres.cosine_distance(x.Embedding, target) });
+```
+
+Агрегаты PostgreSQL `avg`/`sum` над векторами и их полуточными формами пока не представлены LINQ-маркерами.
+DDL вне области охвата nextorm: расширение, столбцы и индексы (HNSW/IVFFlat, `vector_l2_ops` и т.п.) создаёт
+приложение. Операции расстояния с разными размерностями и операции `bit` с разной длиной завершаются ошибкой
+PostgreSQL.
 
 ## См. также
-
-## `vector` (pgvector)
-
-Провайдер PostgreSQL предоставляет `NextORM.Postgres.PgVector` — `readonly struct`, реализующий
-`IEquatable<PgVector>`, для значений pgvector. Координаты должны быть конечными; размерность и индексатор
-с нулевой индексацией описывают форму вектора. `ToArray()` копирует координаты, `ToString()` возвращает
-формат PostgreSQL в квадратных скобках с разделением запятыми, а `Parse(string)` читает этот формат.
-Тип и SQL-операции относятся только к PostgreSQL; установку расширения pgvector и создание схемы/колонок
-выполняет приложение. Nullable-свойства `PgVector` сохраняют SQL `NULL`; операции расстояния с разными
-размерностями завершаются ошибкой PostgreSQL.
-
-Методы-маркеры доступны через `SqlFunctions.Postgres` и переводят эти операции из LINQ-выражений.
-Для параметризованных векторных операций используйте параметр `PgVector`; при этом расширение pgvector
-всё равно необходимо установить/включить, а столбцы vector — создать самостоятельно.
-
-См. также [провайдер PostgreSQL](../../connecting-providers/postgres.md#pgvector) и
-[справочник API](../../advanced/api-reference.md).
-
 
 * [Провайдер PostgreSQL](../../connecting-providers/postgres.md)
 * [Специфичный для провайдеров SQL](overview.md)
 
 ---
 
-Source: `src/nextorm.postgres/PostgresDialect.cs`, `src/nextorm.core/Query/SqlFunctions/SqlFunctions.Postgres.cs`,
-`tests/nextorm.postgres.tests/SqlGeneration/SqlGenerationTests.cs`.
+Source: `src/nextorm.postgres/PostgresDialect.cs`, `src/nextorm.postgres/Vector/`,
+`src/nextorm.core/Query/SqlFunctions/SqlFunctions.Postgres.cs`,
+`tests/nextorm.postgres.tests/PgVector/`.

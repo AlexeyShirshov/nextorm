@@ -3086,4 +3086,45 @@ namespace NextORM.Core;
 
         /// <summary>Returns the L2-normalized pgvector value.</summary>
         public T l2_normalize<T>(T value) => default!;
+
+        /// <summary>Hamming distance between two pgvector bit strings (<c>&lt;~&gt;</c>).</summary>
+        public double? hamming_distance<T>(T left, T right) => default!;
+
+        /// <summary>Jaccard distance between two pgvector bit strings (<c>&lt;%&gt;</c>).</summary>
+        public double? jaccard_distance<T>(T left, T right) => default!;
+
+        /// <summary>
+        /// Euclidean norm of a half-precision or sparse pgvector value (<c>l2_norm</c>). PostgreSQL names
+        /// the norm of a plain <c>vector</c> <c>vector_norm</c>, so that function is used for
+        /// <c>vector</c> and this one for <c>halfvec</c>/<c>sparsevec</c>.
+        /// </summary>
+        public double? l2_norm<T>(T value) => default!;
+
+        /// <summary>
+        /// Extracts a contiguous slice of a pgvector value (<c>subvector(value, start, count)</c>). The
+        /// start is one-based, as in PostgreSQL; supported for <c>vector</c> and <c>halfvec</c>.
+        /// </summary>
+        public T subvector<T>(T value, int start, int count) => default!;
+
+        /// <summary>Element-wise addition of two vectors (pgvector's <c>+</c> operator).</summary>
+        public T vector_add<T>(T left, T right) => default!;
+
+        /// <summary>Element-wise subtraction of two vectors (pgvector's <c>-</c> operator).</summary>
+        public T vector_subtract<T>(T left, T right) => default!;
+
+        /// <summary>Element-wise multiplication of two vectors (pgvector's <c>*</c> operator).</summary>
+        public T vector_multiply<T>(T left, T right) => default!;
+
+        /// <summary>Concatenation of two vectors (pgvector's <c>||</c> operator).</summary>
+        public T vector_concat<T>(T left, T right) => default!;
+
+        /// <summary>
+        /// Binary quantization of a vector into a PostgreSQL <c>bit</c> string (<c>binary_quantize</c>).
+        /// The result is the provider's <c>bit</c> type (<c>NextORM.Postgres.PgBit</c>), which core cannot
+        /// name, so the result type is supplied explicitly:
+        /// <c>binary_quantize&lt;PgVector, PgBit&gt;(value)</c>.
+        /// </summary>
+        /// <typeparam name="T">The source vector type.</typeparam>
+        /// <typeparam name="TResult">The provider's <c>bit</c> type; use <c>NextORM.Postgres.PgBit</c>.</typeparam>
+        public TResult? binary_quantize<T, TResult>(T value) => default!;
     }

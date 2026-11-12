@@ -205,22 +205,6 @@ var varp  = ctx.From<IComplexEntity>().Select(x => SqlFunctions.Sql.varp((double
 
 ## Массивы
 
-## pgvector
-
-`NextORM.Postgres.PgVector` — PostgreSQL-only `readonly struct`, реализующий `IEquatable<PgVector>`. Он принимает
-только конечные координаты, предоставляет размерность и индексатор с нулевой индексацией, а также
-`ToArray()`, `ToString()` и `Parse(string)`; текстовое представление заключено в квадратные скобки, элементы
-разделены запятыми. Nullable-вариант преобразует SQL `NULL` в `null`. Для операций расстояния размерности
-векторов должны совпадать; при несовпадении PostgreSQL возвращает ошибку. Установка расширения pgvector и
-подготовка схемы/колонок — ответственность приложения.
-
-Методы-маркеры PostgreSQL в `SqlFunctions.Postgres` переводят из LINQ-выражений операторы расстояния
-`<->`, `<=>`, `<#>`, `<+>` и функции `vector_dims`, `vector_norm`, `l2_normalize`. Они доступны только на
-PostgreSQL; расширение pgvector и столбцы vector в схеме настраивает приложение.
-
-См. [SQL PostgreSQL](../guide/provider-specific-sql/postgresql.md#vector-pgvector).
-
-
 PostgreSQL — единственный поддерживаемый провайдер с нативными массивами, и array-поверхность
 находится в [`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres) ([`Sql`](xref:NextORM.Core.SqlFunctions.Sql) остаётся кросс-провайдерным). Массив передаётся одним
 параметром, поэтому `column = any(@array)` работает и с runtime-параметром, и с захваченным массивом,
@@ -244,6 +228,27 @@ select id
 отклоняются при подготовке даже на PostgreSQL: `array_reverse` (ни один релиз её не предоставляет) и
 `array_sort` ниже явной 18+. Остальные провайдеры отклоняют поверхность массивов с
 `NotSupportedException`.
+
+## pgvector
+
+Провайдер предоставляет четыре типа значений pgvector: `NextORM.Postgres.PgVector` (`vector`),
+`PgHalfVector` (`halfvec`), `PgSparseVector` (`sparsevec`) и `PgBit` (`bit`). Каждый — `readonly struct` с
+конечными координатами (`PgBit` хранит биты), `Dimensions` (или `Length`), индексатором с нуля,
+`ToArray()`, текстовым форматом PostgreSQL в `ToString()` и разбором `Parse(string)`; `PgVector`
+дополнительно реализует поэлементные `+`/`-`/`*`, умножение на `float` и `Normalize()`. Значения
+передаются как текст PostgreSQL, поэтому плагин источника данных `UseVector()` не нужен. Массивы этих
+типов отображаются на `vector[]`, `halfvec[]`, `sparsevec[]` и `bit[]`, а nullable-варианты преобразуют
+SQL `NULL` в `null`.
+
+Методы-маркеры в `SqlFunctions.Postgres` переводят из LINQ-выражений операторы расстояния `<->`, `<=>`,
+`<#>`, `<+>`, `<~>` и `<%>`, поэлементные операторы `+`/`-`/`*`/`||` и функции `vector_dims`,
+`vector_norm`, `l2_norm`, `l2_normalize`, `subvector`, `binary_quantize`, `hamming_distance` и
+`jaccard_distance` в `SELECT`, `WHERE` и `ORDER BY … Take(k)`. Они доступны только на PostgreSQL и
+отклоняются при подготовке на всех остальных провайдерах. Для операций расстояния размерности должны
+совпадать, для операций `bit` — длины; иначе PostgreSQL возвращает ошибку. Расширение pgvector, столбцы и
+индексы создаёт приложение, а не nextorm.
+
+См. [SQL PostgreSQL](../guide/provider-specific-sql/postgresql.md#значения-pgvector).
 
 ## Range-типы
 

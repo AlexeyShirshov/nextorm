@@ -504,32 +504,77 @@ functions. Schema-less scenarios are covered by the existing paths instead:
 The `json_populate_record(set)` variants (which populate a caller-supplied base record instead of a
 free-form column list) remain out of scope. See
 [Limitations and out-of-scope features](../../advanced/limitations.md).
+## pgvector values
+
+The provider owns four `readonly struct` types for the pgvector extension. They travel through
+PostgreSQL's text representation, so no data-source plugin (`UseVector()`) is required: any
+`NpgsqlConnection` works.
+
+| CLR type | PostgreSQL type | Text form |
+|---|---|---|
+| `NextORM.Postgres.PgVector` | `vector` | `[1,2.5]` |
+| `NextORM.Postgres.PgHalfVector` | `halfvec` | `[1,2.5]` (half precision) |
+| `NextORM.Postgres.PgSparseVector` | `sparsevec` | `{1:1,3:2}/5` (one-based indices) |
+| `NextORM.Postgres.PgBit` | `bit` | `10110` |
+
+Coordinates must be finite: `NaN` and `±Infinity` are rejected when a value is constructed or parsed.
+`PgSparseVector` keeps strictly ascending zero-based indices with finite non-zero values, accepts a dense
+coordinate list (zero coordinates are dropped) and expands back with `ToArray()`. Every type exposes its
+shape (`Dimensions`, or `Length` for `PgBit`), a zero-based indexer, `ToArray()`, the PostgreSQL text form
+through `ToString()` and `Parse(string)`. `PgVector` also implements element-wise `+`, `-` and `*`
+(operands must have equal dimensions; a mismatch throws `ArgumentException`), scaling by `float` and
+`Normalize()`, which throws for a zero vector.
+
+Nullable properties (`PgVector?` and so on) preserve SQL `NULL`. Arrays of the same types map to
+`vector[]`, `halfvec[]`, `sparsevec[]` and `bit[]` and round-trip through entity, scalar, anonymous and
+DTO projections. A PostgreSQL `NULL` array element fails with a deterministic error, because a CLR array
+of a value type cannot represent it. A `bit` column is fixed-width in PostgreSQL (`bit(n)`): declare the
+width in the schema; the CLR type carries only the bits.
+
+### Operators and functions
+
+| Marker (`SqlFunctions.Postgres`) | SQL | pgvector types |
+|---|---|---|
+| `l2_distance(a, b)` | `a <-> b` | `vector`, `halfvec`, `sparsevec` |
+| `cosine_distance(a, b)` | `a <=> b` | `vector`, `halfvec`, `sparsevec` |
+| `negative_inner_product(a, b)` | `a <#> b` | `vector`, `halfvec`, `sparsevec` |
+| `l1_distance(a, b)` | `a <+> b` | `vector`, `halfvec`, `sparsevec` |
+| `hamming_distance(a, b)` | `a <~> b` | `bit` |
+| `jaccard_distance(a, b)` | `a <%> b` | `bit` |
+| `vector_add` / `vector_subtract` / `vector_multiply` | `+` / `-` / `*` | `vector`, `halfvec` |
+| `vector_concat(a, b)` | `a \|\| b` | `vector`, `halfvec` |
+| `vector_dims(v)` | `vector_dims(v)` | `vector`, `halfvec` |
+| `vector_norm(v)` | `vector_norm(v)` | `vector` |
+| `l2_norm(v)` | `l2_norm(v)` | `halfvec`, `sparsevec` |
+| `l2_normalize(v)` | `l2_normalize(v)` | `vector`, `halfvec`, `sparsevec` |
+| `subvector(v, start, count)` | `subvector(v, start, count)` | `vector`, `halfvec` |
+| `binary_quantize<T, TResult>(v)` | `binary_quantize(v)` | `vector`, `halfvec` |
+
+Every marker translates from LINQ in `SELECT`, `WHERE` and `ORDER BY … Take(k)` (k-nearest-neighbour) and
+is refused during query preparation on every other provider, before any database access. A vector operand
+that is a constant or a captured variable is cast to its PostgreSQL type, so an untyped driver parameter
+never makes the overload ambiguous. `binary_quantize` names its result type explicitly because the `bit`
+type lives in the provider assembly: `SqlFunctions.Postgres.binary_quantize<PgVector, PgBit>(x.Value)`.
+
+```csharp
+var nearest = ctx.From<Document>()
+    .OrderBy(x => SqlFunctions.Postgres.cosine_distance(x.Embedding, target))
+    .Limit(10)
+    .Select(x => new { x.Id, Distance = SqlFunctions.Postgres.cosine_distance(x.Embedding, target) });
+```
+
+The PostgreSQL `avg`/`sum` aggregates over vectors and their half-precision forms are not exposed as LINQ
+markers yet. DDL is out of scope for nextorm as a whole: install the extension and create the columns and
+indexes (HNSW/IVFFlat, `vector_l2_ops` and friends) yourself. Distance operations with unequal dimensions
+fail on the PostgreSQL server, as do `bit` operations with unequal lengths.
 
 ## See also
-
-## `vector` (pgvector)
-
-The PostgreSQL provider exposes `NextORM.Postgres.PgVector`, a `readonly struct` implementing
-`IEquatable<PgVector>`, for pgvector values. Coordinates must be finite; dimensions and the zero-based
-indexer expose the vector shape. `ToArray()` copies the coordinates, `ToString()` emits the PostgreSQL
-bracketed, comma-separated representation, and `Parse(string)` reads that representation. This type and
-its SQL operators are PostgreSQL-specific; install/enable the pgvector extension and provision the
-column yourself. Nullable `PgVector` properties preserve SQL `NULL`; distance operations with unequal
-dimensions fail on the PostgreSQL server.
-
-The tested SQL operations are pgvector distance operators `<->`, `<=>`, `<#>`, `<+>` and functions
-`vector_dims`, `vector_norm`, `l2_normalize`. The PostgreSQL marker methods are exposed through `SqlFunctions.Postgres` and translate these operations
-from LINQ expressions. Use a `PgVector` parameter for parameterized vector operations; this does not
-replace the requirement to install/enable the pgvector extension and provision vector columns.
-
-See also [PostgreSQL provider](../../connecting-providers/postgres.md#pgvector) and
-[API reference](../../advanced/api-reference.md).
-
 
 * [PostgreSQL provider](../../connecting-providers/postgres.md)
 * [Provider-specific SQL](overview.md)
 
 ---
 
-Source: `src/nextorm.postgres/PostgresDialect.cs`, `src/nextorm.core/Query/SqlFunctions/SqlFunctions.Postgres.cs`,
-`tests/nextorm.postgres.tests/SqlGeneration/SqlGenerationTests.cs`.
+Source: `src/nextorm.postgres/PostgresDialect.cs`, `src/nextorm.postgres/Vector/`,
+`src/nextorm.core/Query/SqlFunctions/SqlFunctions.Postgres.cs`,
+`tests/nextorm.postgres.tests/PgVector/`.

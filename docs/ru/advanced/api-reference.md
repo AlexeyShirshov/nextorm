@@ -17,7 +17,12 @@
 
 | Тип | Описание |
 |---|---|
-| [`PgVector`](xref:NextORM.Postgres.PgVector) | Значение PostgreSQL pgvector в виде `readonly struct`, реализующего `IEquatable<PgVector>`; конечные координаты, размерность, индексатор с нумерацией от нуля, `ToArray()`, формат `ToString()` и разбор `Parse(string)` в квадратных скобках со значениями через запятую. Методы-маркеры PostgreSQL переводят операции pgvector из LINQ. См. [SQL для PostgreSQL](../guide/provider-specific-sql/postgresql.md#vector-pgvector). |
+| [`PgVector`](xref:NextORM.Postgres.PgVector) | Значение PostgreSQL `vector` в виде `readonly struct`, реализующего `IEquatable<PgVector>`; конечные координаты, размерность, индексатор с нумерацией от нуля, `ToArray()`, формат `ToString()` и разбор `Parse(string)` в квадратных скобках, поэлементные `+`/`-`/`*`, умножение на `float` и `Normalize()`. |
+| [`PgHalfVector`](xref:NextORM.Postgres.PgHalfVector) | Значение PostgreSQL `halfvec` с полуточными координатами и той же поверхностью формы и текста, что у `PgVector`. |
+| [`PgSparseVector`](xref:NextORM.Postgres.PgSparseVector) | Значение PostgreSQL `sparsevec`: размерность, возрастающие индексы с нуля и конечные ненулевые значения, разворачивание в плотный массив через `ToArray()` и текстовый вид `{index:value,...}/dimensions`. |
+| [`PgBit`](xref:NextORM.Postgres.PgBit) | Битовая строка PostgreSQL `bit`: биты, `Length`, индексатор с нуля, `ToArray()` и двоичный текстовый вид. |
+
+Методы-маркеры PostgreSQL переводят операции pgvector из LINQ: расстояния `<->`, `<=>`, `<#>`, `<+>`, `<~>` и `<%>`, поэлементные операторы `+`/`-`/`*`/`||` и функции `vector_dims`, `vector_norm`, `l2_norm`, `l2_normalize`, `subvector`, `binary_quantize`, `hamming_distance` и `jaccard_distance`. Массивы этих четырёх типов отображаются на `vector[]`, `halfvec[]`, `sparsevec[]` и `bit[]`. См. [SQL для PostgreSQL](../guide/provider-specific-sql/postgresql.md#значения-pgvector).
 
 ## Пространство имён [`NextORM.Core`](xref:NextORM.Core)
 
