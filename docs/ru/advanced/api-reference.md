@@ -13,6 +13,12 @@
 Типы перечислены под своим определяющим пространством имён. Весь API запросов находится в [`NextORM.Core`](xref:NextORM.Core); каждый пакет провайдера
 добавляет контекст, диалект и класс расширения [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder) в своём собственном пространстве имён.
 
+## Пространство имён [`NextORM.Postgres`](xref:NextORM.Postgres)
+
+| Тип | Описание |
+|---|---|
+| [`PgVector`](xref:NextORM.Postgres.PgVector) | Значение PostgreSQL pgvector в виде `readonly struct`, реализующего `IEquatable<PgVector>`; конечные координаты, размерность, индексатор с нумерацией от нуля, `ToArray()`, формат `ToString()` и разбор `Parse(string)` в квадратных скобках со значениями через запятую. Методы-маркеры PostgreSQL переводят операции pgvector из LINQ. См. [SQL для PostgreSQL](../guide/provider-specific-sql/postgresql.md#vector-pgvector). |
+
 ## Пространство имён [`NextORM.Core`](xref:NextORM.Core)
 
 ### Контекст и роли

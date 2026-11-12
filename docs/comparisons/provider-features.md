@@ -55,6 +55,7 @@ wider on SQL Server scalar-function breadth and hint variety (issue [#182](https
 
 | Feature | Nextorm | linq2db |
 |---|---|---|
+| pgvector value type and operations | supported (PostgreSQL-only `PgVector` and LINQ marker translation) | no dedicated API found |
 | Arrays + `any`/`all` quantifiers | yes | yes |
 | Range / multirange (operators, mapping) | yes | partial (type mapping only) |
 | Full-text `tsvector`/`tsquery` | yes | no |

@@ -85,6 +85,7 @@ claim tested here is width of the *dedicated provider API*.
 
 | Feature | nextorm | linq2db | nextorm evidence | linq2db evidence |
 |---|---|---|---|---|
+| pgvector value / operators and functions | yes | no | `PgVector`; LINQ marker translation for `<->`, `<=>`, `<#>`, `<+>`, `vector_dims`, `vector_norm`, `l2_normalize` | No dedicated pgvector type/operator/function API identified in `PostgreSQLExtensions.cs`. |
 | Arrays + `any`/`all` quantifiers | yes | yes | `PostgresDialect.cs:297`; `SqlFunctions.Postgres.cs:19-103` | `PostgreSQLExtensions.cs` (`ARRAY_*`, `CARDINALITY`, `= ANY(...)`, `&&`, `@>`, `<@`) |
 | Range / multirange (operators, mapping) | yes | partial | `PostgresDialect.cs:301,182-187`; `SqlFunctions.Postgres.cs:738-1148` | type mapping only; no range operators in `PostgreSQLExtensions.cs` |
 | Full-text `tsvector`/`tsquery` | yes | no | `PostgresDialect.cs:428,431,465`; `SqlFunctions.Postgres.cs:519-563` | no `to_tsvector`/`tsquery` API found in `PostgreSQLExtensions.cs` |
@@ -105,9 +106,9 @@ claim tested here is width of the *dedicated provider API*.
 | Table functions / set-returning functions (`generate_series`, `unnest`, `regexp_matches`, `regexp_split_to_table`, `jsonb_array_elements(_text)`, `jsonb_each(_text)`, `jsonb_object_keys`, `jsonb_path_query`, `ts_stat`) | yes | partial | `SqlFunctions.Postgres.cs:628+` (`[SqlTableFunction]` on `PostgresFunctions`; row shapes `SqlFunctions.cs:105-199`), auto-mapped as a `FROM` source | `PostgreSQLExtensions.cs` (`Unnest`, `UnnestWithOrdinality`, `GenerateSeries`, `GenerateSubscripts`); no `jsonb_*`/`regexp_matches`/`ts_stat` helper |
 | Row locking (`FOR UPDATE` / `FOR SHARE`, per-source `OF`, `LockWaitMode`) | yes | yes | `FromOptions.ForUpdate/ForShare` (`DataContext/FromOptions.cs:182-214`); `ISqlDialect.Lock` / `ILockRenderer` | `PostgreSQLHints.generated.cs` (`ForUpdateHint`, `ForNoKeyUpdate*`, `ForShare*`, `ForKeyShare*`, plus `*NoWait`/`*SkipLocked`) |
 | Session/server identity (`pg_backend_pid`, `inet_server_addr/port`, `inet_client_addr/port`) | yes (5; `connection_id`/`user` are MySQL/ClickHouse-only) | no dedicated API found | `SqlFunctions.cs:464,472,479,486,493`; `PostgresDialect.cs:638` | `PostgreSQLExtensions.cs` exposes only `Version`/`Current*` |
-| **Total** | yes 20<br>partial 0<br>no 0<br>n/a 0 | yes 8<br>partial 5<br>no 7<br>n/a 0 | — | — |
+| **Total** | yes 21<br>partial 0<br>no 0<br>n/a 0 | yes 8<br>partial 5<br>no 8<br>n/a 0 | — | — |
 
-Net: **nextorm leads** — full-text, regex, `jsonb_path_*`, range operators, data-modifying CTE,
+Net: **nextorm leads** — pgvector, full-text, regex, `jsonb_path_*`, range operators, data-modifying CTE,
 sequences/settings, TVP and the aggregate families have dedicated nextorm APIs but no linq2db ones.
 
 ---

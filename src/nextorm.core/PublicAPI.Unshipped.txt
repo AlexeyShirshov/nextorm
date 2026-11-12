@@ -1,1 +1,8 @@
 #nullable enable
+NextORM.Core.PostgresFunctions.cosine_distance<T>(T left, T right) -> double?
+NextORM.Core.PostgresFunctions.l1_distance<T>(T left, T right) -> double?
+NextORM.Core.PostgresFunctions.l2_distance<T>(T left, T right) -> double?
+NextORM.Core.PostgresFunctions.l2_normalize<T>(T value) -> T
+NextORM.Core.PostgresFunctions.negative_inner_product<T>(T left, T right) -> double?
+NextORM.Core.PostgresFunctions.vector_dims<T>(T value) -> int?
+NextORM.Core.PostgresFunctions.vector_norm<T>(T value) -> double?

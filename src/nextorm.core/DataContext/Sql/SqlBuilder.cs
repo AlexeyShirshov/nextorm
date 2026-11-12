@@ -698,7 +698,11 @@ internal readonly struct SqlBuilder
                         continue;
                     }
 
-                    var (needAliasForColumn, column) = SqlSourceRenderer.MakeColumn(in _ctx, item, entityType, !needAlias, renameAware: true, selectList: true);
+                    var (needAliasForColumn, column) = SqlSourceRenderer.MakeColumn(
+                        in _ctx, item, entityType, !needAlias, renameAware: true, selectList: true,
+                        bridgeVectorToText: selectInto is null
+                            && !_ctx.RequireDerivedScalarOutputName
+                            && !_ctx.SuppressCtes);
 
                     if (!_ctx.ParamMode)
                     {

@@ -137,6 +137,34 @@ internal static class ExtendedScalarFunctionTranslator
     {
         var name = node.Method.Name;
 
+        if (name is nameof(PostgresFunctions.l2_distance) or nameof(PostgresFunctions.cosine_distance)
+            or nameof(PostgresFunctions.negative_inner_product) or nameof(PostgresFunctions.l1_distance)
+            or nameof(PostgresFunctions.vector_dims) or nameof(PostgresFunctions.vector_norm)
+            or nameof(PostgresFunctions.l2_normalize))
+        {
+            if (!visitor.Dialect.SupportsExtendedScalarFunctions)
+                throw new NotSupportedException("pgvector functions require PostgreSQL.");
+
+            if (name is nameof(PostgresFunctions.l2_distance) or nameof(PostgresFunctions.cosine_distance)
+                or nameof(PostgresFunctions.negative_inner_product) or nameof(PostgresFunctions.l1_distance))
+            {
+                var sqlOperator = name switch
+                {
+                    nameof(PostgresFunctions.l2_distance) => "<->",
+                    nameof(PostgresFunctions.cosine_distance) => "<=>",
+                    nameof(PostgresFunctions.negative_inner_product) => "<#>",
+                    _ => "<+>"
+                };
+                SqlOperandTranslator.EmitOperator(visitor, sqlOperator, node.Arguments[0], node.Arguments[1]);
+            }
+            else
+            {
+                SqlOperandTranslator.EmitFunction(visitor, name, node.Arguments);
+            }
+
+            return true;
+        }
+
         ThrowIfRefused(node);
 
         if (MathFunctions.Contains(name))

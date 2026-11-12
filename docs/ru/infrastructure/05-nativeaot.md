@@ -26,8 +26,7 @@ CI-job `aot` публикует и запускает его на каждый p
 ## Что не проверено
 
 - SQL Server, PostgreSQL, MySQL, MariaDB и ClickHouse: поддержка AOT драйверами и нативные
-  ассеты не проверены, кроме трёх пробников ниже —
-  [`examples/nextorm.aotexamples.*`](../../examples/README.md);
+  ассеты не проверены, кроме трёх пробников ниже — см. `examples/README.md`;
 - мост EF Core (`nextorm.entityframeworkcore`);
 - конвертеры `System.Text.Json` через сгенерированный `JsonTypeInfo<T>`: сериализация остаётся
   рефлексионной, поэтому потребителю по-прежнему нужен обычный `JsonSerializerContext`;
@@ -41,9 +40,9 @@ Testcontainers и BenchmarkDotNet, поэтому процесс публику�
 
 | Пробник | Нативный бинарник | Результат |
 |---|---|---|
-| [`nextorm.aotexamples.postgres.aviasales`](../../examples/nextorm.aotexamples.postgres.aviasales/README.md) (пакеты `1.0.9`) | 18 МБ | **5/10** запросов доходят до конца, digest'ы совпадают с JIT |
-| [`nextorm.aotexamples.mssql.adventureworks`](../../examples/nextorm.aotexamples.mssql.adventureworks/README.md) (пакеты `1.0.9`) | 28 МБ | **3/11** |
-| [`nextorm.aotexamples.clickhouse.analytics`](../../examples/nextorm.aotexamples.clickhouse.analytics/README.md) (пакеты `1.0.9`) | 16 МБ | **0/9** |
+| `nextorm.aotexamples.postgres.aviasales` (`examples/nextorm.aotexamples.postgres.aviasales/README.md`, пакеты `1.0.9`) | 18 МБ | **5/10** запросов доходят до конца, digest'ы совпадают с JIT |
+| `nextorm.aotexamples.mssql.adventureworks` (`examples/nextorm.aotexamples.mssql.adventureworks/README.md`, пакеты `1.0.9`) | 28 МБ | **3/11** |
+| `nextorm.aotexamples.clickhouse.analytics` (`examples/nextorm.aotexamples.clickhouse.analytics/README.md`, пакеты `1.0.9`) | 16 МБ | **0/9** |
 
 Все падения происходят в подготовке запроса, не доходя до SQL, и делятся на три класса:
 

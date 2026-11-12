@@ -113,7 +113,9 @@
     -->
     <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
     <AdditionalFiles Include="PublicAPI.Shipped.txt" />
-    <AdditionalFiles Include="PublicAPI.Unshipped.txt" />
+    <!-- Public API analyzer input is unnecessary while DocFX is loading API metadata; omitting it
+         there avoids treating the non-source snapshot as a duplicate project source document. -->
+    <AdditionalFiles Include="PublicAPI.Unshipped.txt" Condition="'$(DocFxMetadata)' != 'true'" />
   </ItemGroup>
 
 </Project>

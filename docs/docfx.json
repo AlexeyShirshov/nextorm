@@ -18,6 +18,10 @@
         }
       ],
       "dest": "api",
+      "properties": {
+        "TargetFramework": "net11.0",
+        "DocFxMetadata": "true"
+      },
       "memberLayout": "samePage",
       "namespaceLayout": "flattened"
     }

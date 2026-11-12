@@ -211,6 +211,9 @@ internal static class TypeFacts
         || type == typeof(decimal)
         || type == typeof(Guid)
         || type == typeof(JsonNode)
+        // PgVector is a provider-owned scalar stored in one PostgreSQL column; keep core independent
+        // of the provider assembly while recognizing its stable public type identity.
+        || type.FullName == "NextORM.Postgres.PgVector"
         || (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>))
         || type.IsArray;
 

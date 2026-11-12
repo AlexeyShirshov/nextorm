@@ -514,6 +514,24 @@ select a, b
 
 ## См. также
 
+## `vector` (pgvector)
+
+Провайдер PostgreSQL предоставляет `NextORM.Postgres.PgVector` — `readonly struct`, реализующий
+`IEquatable<PgVector>`, для значений pgvector. Координаты должны быть конечными; размерность и индексатор
+с нулевой индексацией описывают форму вектора. `ToArray()` копирует координаты, `ToString()` возвращает
+формат PostgreSQL в квадратных скобках с разделением запятыми, а `Parse(string)` читает этот формат.
+Тип и SQL-операции относятся только к PostgreSQL; установку расширения pgvector и создание схемы/колонок
+выполняет приложение. Nullable-свойства `PgVector` сохраняют SQL `NULL`; операции расстояния с разными
+размерностями завершаются ошибкой PostgreSQL.
+
+Методы-маркеры доступны через `SqlFunctions.Postgres` и переводят эти операции из LINQ-выражений.
+Для параметризованных векторных операций используйте параметр `PgVector`; при этом расширение pgvector
+всё равно необходимо установить/включить, а столбцы vector — создать самостоятельно.
+
+См. также [провайдер PostgreSQL](../../connecting-providers/postgres.md#pgvector) и
+[справочник API](../../advanced/api-reference.md).
+
+
 * [Провайдер PostgreSQL](../../connecting-providers/postgres.md)
 * [Специфичный для провайдеров SQL](overview.md)
 

@@ -1,1 +1,12 @@
 #nullable enable
+NextORM.Postgres.PgVector
+NextORM.Postgres.PgVector.PgVector() -> void
+NextORM.Postgres.PgVector.PgVector(System.Collections.Generic.IEnumerable<float>! values) -> void
+NextORM.Postgres.PgVector.Dimensions.get -> int
+NextORM.Postgres.PgVector.this[int index].get -> float
+NextORM.Postgres.PgVector.ToArray() -> float[]!
+override NextORM.Postgres.PgVector.ToString() -> string!
+static NextORM.Postgres.PgVector.Parse(string! text) -> NextORM.Postgres.PgVector
+NextORM.Postgres.PgVector.Equals(NextORM.Postgres.PgVector other) -> bool
+override NextORM.Postgres.PgVector.Equals(object? obj) -> bool
+override NextORM.Postgres.PgVector.GetHashCode() -> int

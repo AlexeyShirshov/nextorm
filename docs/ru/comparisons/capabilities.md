@@ -12,6 +12,7 @@
 
 | Область | Nextorm | linq2db | EF Core |
 |---|---|---|---|
+| Вектор pgvector (`PgVector`) и операции расстояния | supported (тип PgVector и перевод LINQ-маркеров PostgreSQL) | partial (поддержка зависит от провайдера) | partial (поддержка провайдера Npgsql; не перевод nextorm) |
 | Проекции (сущность, DTO, anonymous, record, tuple, скаляр; несопоставленные колонки через `SqlFunctions.Column`) | yes | yes | yes |
 | Предикаты (`WHERE`: сравнение, `and`/`or`/`!`, арифметика, битовые операции/сдвиг) | yes | yes | yes |
 | Null-safe-сравнение (`IS [NOT] DISTINCT FROM`; `SqlFunctions.Sql.is_distinct_from` / `is_not_distinct_from`) | yes (нативно на PostgreSQL, SQLite и MySQL/MariaDB; эмуляция в SQL Server и ClickHouse) | yes (`Sql.Is[Not]DistinctFrom`; покрытие зависит от провайдера) | no |
