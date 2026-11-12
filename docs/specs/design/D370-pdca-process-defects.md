@@ -70,3 +70,12 @@
 - Effect: three minor CHECK findings; no effect on the verdict after correction.
 - Evidence: `.pdca/status/T370.md` §Step S5 `CHECK record (r2)` finding `T370-S5-RECORD`; `suites-s5.md` corrected pointers.
 - Prevention: evidence pointers are copied from the produced path, scans enumerate changed *and new* files, and a persisted report replaces its `pending` marker in the same write.
+
+## T370-S7-RECORD
+
+- Stable key: `T370-S7-RECORD`.
+- Symptom: the S7 CHECK report was dispatched and answered but the status section still said `pending` while the next dispatch cited it as persisted.
+- Root cause: the report was held in the conversation and not written until after the following dispatch.
+- Effect: one minor CHECK finding; no effect on the verdict after reconciliation.
+- Evidence: `.pdca/status/T370.md` §Step S7 `CHECK record (r1)` (previously `pending`).
+- Prevention: persist every CHECK report in the same write that advances the step's phase, before dispatching the next role.
