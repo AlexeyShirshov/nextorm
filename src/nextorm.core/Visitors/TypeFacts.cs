@@ -12,6 +12,13 @@ namespace NextORM.Core;
 /// </summary>
 internal static class TypeFacts
 {
+    /// <summary>
+    /// Every query preparation reaches this type, so its initialization is where the trimming
+    /// requirement for the decimal operators the binary-node rebuild resolves by reflection is declared
+    /// (see <see cref="NumericOperators"/>).
+    /// </summary>
+    static TypeFacts() => NumericOperators.Preserve();
+
     /// <summary>True for a value whose SQL rendering has to be a boolean scalar.</summary>
     internal static bool IsBoolean(Type type) => type == typeof(bool) || type == typeof(bool?);
 

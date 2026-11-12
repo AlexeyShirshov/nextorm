@@ -44,6 +44,21 @@ Run("sqlite-json", () =>
         }).First();
     return $"extract={value.Extract},text={value.Text}";
 });
+Run("aot-numeric-operator", () =>
+{
+    // Regression gate for the decimal-operator defect reported by the AOT probes (issue #370, 2026-11-12
+    // comments): the pipeline rebuilds binary nodes from operands whose types are only known at run time,
+    // and Expression.MakeBinary resolves a decimal operator through reflection. If the trimmer removed
+    // the operators, this build throws — so the scenario fails and the native harness reports it.
+    var left = System.Linq.Expressions.Expression.Parameter(typeof(decimal?), "a");
+    var right = System.Linq.Expressions.Expression.Parameter(typeof(decimal?), "b");
+    var body = System.Linq.Expressions.Expression.MakeBinary(
+        System.Linq.Expressions.ExpressionType.Divide, left, right);
+    var divide = System.Linq.Expressions.Expression
+        .Lambda<Func<decimal?, decimal?, decimal?>>(body, left, right)
+        .Compile();
+    return $"decimalOperatorResolution=available;divide={divide(3m, 2m)?.ToString() ?? "null"}";
+});
 Run("groupby-aggregates", () =>
 {
     var groups = context.From<IComplexEntity>().GroupBy(x => x.Int)

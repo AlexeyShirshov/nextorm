@@ -16,6 +16,7 @@ public sealed class AotNativeRunTests
         "anonymous-projection",
         "nullable-scalar",
         "sqlite-json",
+        "aot-numeric-operator",
         "groupby-aggregates"
     ];
 
@@ -170,6 +171,17 @@ public sealed class AotNativeRunTests
                     }).First();
                 return $"extract={value.Extract},text={value.Text}";
             }),
+            ["aot-numeric-operator"] = CaptureJit(() =>
+            {
+                var left = System.Linq.Expressions.Expression.Parameter(typeof(decimal?), "a");
+                var right = System.Linq.Expressions.Expression.Parameter(typeof(decimal?), "b");
+                var body = System.Linq.Expressions.Expression.MakeBinary(
+                    System.Linq.Expressions.ExpressionType.Divide, left, right);
+                var divide = System.Linq.Expressions.Expression
+                    .Lambda<Func<decimal?, decimal?, decimal?>>(body, left, right)
+                    .Compile();
+                return $"decimalOperatorResolution=available;divide={divide(3m, 2m)?.ToString() ?? "null"}";
+            }),
             ["groupby-aggregates"] = CaptureJit(() =>
             {
                 var groups = context.From<IComplexEntity>().GroupBy(x => x.Int)
@@ -226,7 +238,7 @@ public sealed class AotNativeRunTests
             "",
             $"Parent SQLite DatabasePath: `{databasePath}`.",
             $"Native child PID: `{childPid}`; child-specific database `{childDatabasePath}` exists: `{File.Exists(childDatabasePath)}`.",
-            "The JIT control executes the same six query shapes in the adapter against the same seeded parent SQLite file. Comparison uses scenario status and escaped `values`; native failure is never relabeled as success.",
+            "The JIT control executes the same seven query shapes in the adapter against the same seeded parent SQLite file. Comparison uses scenario status and escaped `values`; native failure is never relabeled as success.",
             "",
             "| scenario | JIT expected status / values | native status / values | equivalence |",
             "|---|---|---|---|"
