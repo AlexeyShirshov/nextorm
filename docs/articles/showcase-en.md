@@ -73,3 +73,5 @@ app.MapGet("/orders", async (HttpContext http, DateTime from, decimal minTotal, 
 ```
 
 I'd appreciate your comments, suggestions, and criticism. I'm especially interested in how convenient you find the API and which features you feel are missing for your use cases.
+
+*Note: This article was originally written in Russian by the author and translated into English with the assistance of AI.*
