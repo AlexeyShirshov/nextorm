@@ -1,6 +1,6 @@
 ﻿# NativeAOT (partial support)
 
-> Publish applications with `PublishAot=true` on .NET 11 for `linux-x64` and the SQLite provider.
+> Publish applications with `PublishAot=true` on .NET 11 for `linux-x64`.
 > Support is **partial and experimental**: a measured subset of the engine runs natively, and the
 > rest is tracked in [#370](https://github.com/AlexeyShirshov/nextorm/issues/370).
 
@@ -8,68 +8,89 @@
 
 ## What is verified
 
-A published native binary runs against a real SQLite database and is compared with the JIT oracle
-row by row (`tests/nextorm.aot.runner` driven by `AotNativeRunTests`). The CI job `aot` publishes
-and executes it on every push, and the `publish` job requires that gate.
+A published native binary runs against a real database and is compared with the JIT oracle
+row by row. Two harnesses do this: the SQLite runner (`tests/nextorm.aot.runner`, driven by
+`AotNativeRunTests`) and the provider probes under `examples/` plus the self-provisioning
+`tests/nextorm.aot.sqlprobe` for MySQL and MariaDB. The harness is **fail-closed**: a native
+scenario that fails, or whose row count/digest differs from its JIT control, fails the test.
 
 | Area | Status |
 |---|---|
 | Target | `net11.0`, `linux-x64` |
-| Providers | SQLite |
-| Query surface | interface entities, captured predicates, anonymous projections, nullable scalar materialization, SQLite JSON functions (`json_extract`/`json_get_text`), `GROUP BY` with aggregates and `HAVING` |
-| `nextorm.extensions` | `SelectWhereMin`/`SelectWhereMax` and `SelectGroup`/`SelectGroupHaving` component slices |
-| Parity | every scenario is also executed under JIT and the results are compared |
+| Providers | SQLite, PostgreSQL, SQL Server, MySQL, MariaDB, ClickHouse (the measured surface differs per provider, see below) |
+| Query surface | typed and anonymous projections, filters, ordering, paging, aggregates, `GROUP BY`/`HAVING`, joins, CTEs, window functions (where the provider supports them), SQLite JSON functions, ClickHouse arrays, `SelectGroup`/`SelectGroupHaving`, `SelectWhereMin`/`SelectWhereMax`, prepared-command reuse |
+| Parity | every scenario is also executed under JIT; the harness fails on any status or value divergence |
+
+Measured native results (JIT values are equal in every case):
+
+| Provider | Instrument | Native result |
+|---|---|---|
+| SQLite | `tests/nextorm.aot.runner`, 12 scenarios + 4 component slices | **12/12** |
+| PostgreSQL | `examples/nextorm.aotexamples.postgres.aviasales`, 10 queries | **10/10** |
+| SQL Server | `examples/nextorm.aotexamples.mssql.adventureworks`, 11 queries | **11/11** |
+| MySQL | `tests/nextorm.aot.sqlprobe --provider mysql`, 7 shapes | **7/7** |
+| MariaDB | `tests/nextorm.aot.sqlprobe --provider mariadb`, 7 shapes | **7/7** |
+| ClickHouse | `examples/nextorm.aotexamples.clickhouse.analytics`, 9 queries | **9/9** |
 
 The output is a self-contained native executable. The packages do **not** carry an
 `IsAotCompatible` marker yet, and this page is not a zero-configuration guarantee.
 
 ## What is not verified
 
-- SQL Server, PostgreSQL, MySQL, MariaDB and ClickHouse: driver AOT support and native assets are
-  unverified, except for the three probes below — see `examples/README.md`;
-- the EF Core bridge (`nextorm.entityframeworkcore`);
-- `System.Text.Json` converters through a generated `JsonTypeInfo<T>`: serialization remains
-  reflection-based, so a consumer still needs the usual `JsonSerializerContext` setup;
-- trimming beyond the provider defaults.
+- **Correlated subqueries are not native-ready.** A correlated `Any`/`Count`/projection over a
+  captured context prepares correctly under JIT but fails in a native image (a preparation-time
+  coercion and a trimmed projection-method lookup). This is a recorded defect for the Stream A
+  work, not a supported shape.
+- A **tuple-typed ClickHouse result column** whose element types fall outside the driver's fixed
+  registration sample fails closed with a clear `NotSupportedException` at preparation; project the
+  tuple elements as separate columns or read the tuple as text instead.
+- EF Core bridge (`nextorm.entityframeworkcore`), `System.Text.Json` converters through a generated
+  `JsonTypeInfo<T>` (serialization remains reflection-based, so a consumer still needs the usual
+  `JsonSerializerContext` setup), bulk insert, raw SQL row mapping and DML builders are not part of
+  the measured native surface.
+- Trimming beyond the provider defaults.
 
 ### Provider probes
 
-Three reproducers under `examples/` run the nextorm arm of each comparison example without linq2db,
+The probes under `examples/` run the nextorm arm of each comparison example without linq2db,
 Testcontainers or BenchmarkDotNet, so the process can be published natively and compared with a JIT
-run by row counts and row digests (measured 2026-11-12, `linux-x64`):
+run by row counts and row digests. The MySQL/MariaDB probe provisions its own tiny schema and seed,
+so it needs no dataset. Measured 2026-11-13, `linux-x64`:
 
 | Probe | Native binary | Result |
 |---|---|---|
-| `nextorm.aotexamples.postgres.aviasales` (`examples/nextorm.aotexamples.postgres.aviasales/README.md`, published `1.0.9`) | 18 MB | **5/10** queries complete with digests equal to JIT |
-| `nextorm.aotexamples.mssql.adventureworks` (`examples/nextorm.aotexamples.mssql.adventureworks/README.md`, published `1.0.9`) | 28 MB | **3/11** |
-| `nextorm.aotexamples.clickhouse.analytics` (`examples/nextorm.aotexamples.clickhouse.analytics/README.md`, published `1.0.9`) | 16 MB | **0/9** |
+| `nextorm.aotexamples.postgres.aviasales` | 18 MB | **10/10** queries, digests equal to JIT |
+| `nextorm.aotexamples.mssql.adventureworks` | 28 MB | **11/11** |
+| `nextorm.aotexamples.clickhouse.analytics` | 16 MB | **9/9** |
+| `tests/nextorm.aot.sqlprobe` (MySQL / MariaDB) | — | **7/7** each |
 
-All failures happen in query preparation, before SQL is sent, and fall into three classes:
+The three failure classes that the probes originally reported — `decimal` operators removed by
+trimming, `System.Tuple` construction discovered through reflection, and runtime expression-tree
+compilation — are fixed and are no longer observed in any probe.
 
-| Failure | Queries | Nature |
-|---|---|---|
-| `InvalidOperationException: The binary operator Divide/Multiply/LessThanOrEqual/GreaterThan is not defined for the types 'System.Decimal' and 'System.Decimal'` | PostgreSQL ×4, SQL Server ×6 | numeric promotion resolves `decimal` operators through reflection; trimming removes them |
-| `InvalidOperationException: System.Tuple`2[System.Double,System.Double] has no constructor matching its element types` | ClickHouse ×6 | tuple construction discovered through reflection |
-| `NotSupportedException: 'Expression<…>' is missing native code or metadata` | PostgreSQL ×1, SQL Server ×1, ClickHouse ×3 | runtime expression-tree compilation for captured predicates/projections |
+## Residual diagnostics
 
-All three classes belong to the #370 work (runtime types and expression trees in the pipeline); the
-probes exist so a fix can be measured.
-
-The canonical publish of the native runner currently reports **230 unique AOT/trim diagnostics**
-(236 raw; measured 2026-11-07). They are neither suppressed nor rooted:
+The canonical publish of the native runner reports **205 unique AOT/trim diagnostics** (211 raw;
+measured 2026-11-13). They are neither suppressed nor rooted:
 
 | Code | Count | Nature |
 |---|---|---|
-| `IL3050` | 124 | runtime code generation — `Expression.Lambda`, `Type.MakeGenericType`, `MethodInfo.MakeGenericMethod`, `Expression.NewArrayInit`, one `Reflection.Emit`, `System.Text.Json` |
-| `IL2070` | 30 | reflection over a runtime-typed `Type` |
-| `IL2026` | 26 | `RequiresUnreferencedCode` APIs |
-| `IL2060` | 22 | statically unanalyzable generic instantiation |
-| `IL2055`/`IL2067`/`IL2072`/`IL2075`/`IL2090`/`IL2111` | 28 | metadata that may be trimmed |
+| `IL3050` | 111 | runtime code generation — `Expression.Lambda`, `Type.MakeGenericType`, `MethodInfo.MakeGenericMethod`, `Expression.NewArrayInit`, `System.Text.Json` |
+| `IL2026` | 29 | `RequiresUnreferencedCode` APIs |
+| `IL2070` | 28 | reflection over a runtime-typed `Type` |
+| `IL2075` | 16 | member access on a runtime-typed value |
+| `IL2060` | 15 | statically unanalyzable generic instantiation |
+| `IL2090` | 5 | generic parameter with `DynamicallyAccessedMembers` requirements |
+| `IL2072` | 3 | `DynamicallyAccessedMembers` requirement not satisfied |
+| `IL2055` | 2 | `MakeGenericType` over a runtime type |
+| `IL2111` | 1 | reflection over a type with annotations |
+| `IL2067` | 1 | parameter annotated with `DynamicallyAccessedMembers` |
 
 The remaining work is architectural: the query pipeline carries result and projection types as a
-runtime `Type` (`QueryCommand.ResultType`, `ProjectionEntityItem.EntityType`), so annotations alone
-cannot remove these rows. The compile-time pipeline and the per-provider native matrix are the scope
-of [#370](https://github.com/AlexeyShirshov/nextorm/issues/370).
+runtime `Type` (`QueryCommand.ResultType`, `ProjectionEntityItem.EntityType`), and correlated
+subqueries dispatch through reflection over a runtime-closed builder. Annotations alone cannot
+remove these rows; the compile-time pipeline and the per-provider native matrix are the scope of
+[#370](https://github.com/AlexeyShirshov/nextorm/issues/370).
 
 ## Real-world check
 
@@ -98,8 +119,8 @@ dotnet publish -c Release
 ```
 
 The standard NativeAOT prerequisites apply (`clang`, `zlib1g-dev`, a RID-specific native
-toolchain). Use the SQLite provider and stay inside the verified query surface above. A query
-outside it may fail at runtime; that is expected at this stage.
+toolchain). Use one of the verified providers and stay inside the measured query surface above. A
+query outside it may fail at runtime; that is expected at this stage.
 
 ## Reporting a failure
 

@@ -72,6 +72,8 @@ EF Core 10.0.14 and Dapper 2.1.89 + Dapper.AOT 1.1.0; all three produced byte-id
 | EF Core 10.0.14 | 1.03 s | 0.23 s | 17.3 MB | 42 MB | compiled model + `Microsoft.EntityFrameworkCore.Tasks` (query precompilation) + `InterceptorsNamespaces`; non-sealed entities outside a CLR namespace to avoid two EF 10.0.14 codegen bugs |
 | Dapper 2.1.89 + Dapper.AOT 1.1.0 | 0.26 s | **0.12 s** | 3.5 MB | 19 MB | `Dapper.AOT` + `[module: DapperAot]` + `InterceptorsNamespaces`; statically known SQL only |
 
-The full contract, the residual diagnostics (230 unique / 236 raw for the AOT runner) and the provider
-coverage are on the [NativeAOT guide](../../docs/infrastructure/05-nativeaot.md). The comparison lives
+The full contract, the residual diagnostics (205 unique / 211 raw for the AOT runner: `IL3050` 111,
+`IL2026` 29, `IL2070` 28, `IL2075` 16, `IL2060` 15, `IL2090` 5, `IL2072` 3, `IL2055` 2, `IL2111` 1,
+`IL2067` 1) and the provider coverage are on the
+[NativeAOT guide](../../docs/infrastructure/05-nativeaot.md). The comparison lives
 under [Comparisons → Benchmarks](../../docs/comparisons/benchmarks.md).

@@ -1,6 +1,6 @@
 ﻿# NativeAOT (частичная поддержка)
 
-> Публикуйте приложения с `PublishAot=true` на .NET 11 для `linux-x64` и провайдера SQLite.
+> Публикуйте приложения с `PublishAot=true` на .NET 11 для `linux-x64`.
 > Поддержка **частичная и экспериментальная**: нативно исполняется измеренное подмножество
 > движка, остаток отслеживается в [#370](https://github.com/AlexeyShirshov/nextorm/issues/370).
 
@@ -8,68 +8,89 @@
 
 ## Что проверено
 
-Опубликованный нативный бинарник работает с реальной базой SQLite, а его результат построчно
-сравнивается с JIT-оракулом (`tests/nextorm.aot.runner` под управлением `AotNativeRunTests`).
-CI-job `aot` публикует и запускает его на каждый push, а job `publish` требует этот гейт.
+Опубликованный нативный бинарник работает с реальной базой, а его результат построчно сравнивается
+с JIT-оракулом. Это делают два инструмента: SQLite-раннер (`tests/nextorm.aot.runner` под
+управлением `AotNativeRunTests`) и пробники провайдеров в `examples/` плюс самопровижнящий
+`tests/nextorm.aot.sqlprobe` для MySQL и MariaDB. Гейт **fail-closed**: нативный сценарий, который
+упал или чьи количество строк/digest расходятся с JIT-контролем, валит тест.
 
 | Область | Статус |
 |---|---|
 | Цель | `net11.0`, `linux-x64` |
-| Провайдеры | SQLite |
-| Поверхность запросов | сущности-интерфейсы, захваченные предикаты, анонимные проекции, материализация nullable-скаляров, JSON-функции SQLite (`json_extract`/`json_get_text`), `GROUP BY` с агрегатами и `HAVING` |
-| `nextorm.extensions` | компонентные срезы `SelectWhereMin`/`SelectWhereMax` и `SelectGroup`/`SelectGroupHaving` |
-| Паритет | каждый сценарий исполняется ещё и под JIT, результаты сравниваются |
+| Провайдеры | SQLite, PostgreSQL, SQL Server, MySQL, MariaDB, ClickHouse (измеренная поверхность различается, см. ниже) |
+| Поверхность запросов | типизированные и анонимные проекции, фильтры, сортировка, пейджинг, агрегаты, `GROUP BY`/`HAVING`, join'ы, CTE, оконные функции (где провайдер их поддерживает), JSON-функции SQLite, массивы ClickHouse, `SelectGroup`/`SelectGroupHaving`, `SelectWhereMin`/`SelectWhereMax`, повторное использование подготовленных команд |
+| Паритет | каждый сценарий исполняется ещё и под JIT; гейт падает при любом расхождении статуса или значений |
+
+Измеренные нативные результаты (значения JIT совпадают везде):
+
+| Провайдер | Инструмент | Нативный результат |
+|---|---|---|
+| SQLite | `tests/nextorm.aot.runner`, 12 сценариев + 4 компонентных среза | **12/12** |
+| PostgreSQL | `examples/nextorm.aotexamples.postgres.aviasales`, 10 запросов | **10/10** |
+| SQL Server | `examples/nextorm.aotexamples.mssql.adventureworks`, 11 запросов | **11/11** |
+| MySQL | `tests/nextorm.aot.sqlprobe --provider mysql`, 7 форм | **7/7** |
+| MariaDB | `tests/nextorm.aot.sqlprobe --provider mariadb`, 7 форм | **7/7** |
+| ClickHouse | `examples/nextorm.aotexamples.clickhouse.analytics`, 9 запросов | **9/9** |
 
 На выходе — самодостаточный нативный исполняемый файл. Пакеты пока **не** несут маркер
 `IsAotCompatible`, и эта страница не является гарантией zero-configuration.
 
 ## Что не проверено
 
-- SQL Server, PostgreSQL, MySQL, MariaDB и ClickHouse: поддержка AOT драйверами и нативные
-  ассеты не проверены, кроме трёх пробников ниже — см. `examples/README.md`;
-- мост EF Core (`nextorm.entityframeworkcore`);
-- конвертеры `System.Text.Json` через сгенерированный `JsonTypeInfo<T>`: сериализация остаётся
-  рефлексионной, поэтому потребителю по-прежнему нужен обычный `JsonSerializerContext`;
-- trimming сверх настроек провайдера по умолчанию.
+- **Коррелированные подзапросы не готовы к нативу.** Коррелированный `Any`/`Count`/проекция по
+  захваченному контексту корректно готовится под JIT, но падает в нативном образе (приведение при
+  подготовке и вырезанный поиск метода проекции). Это записанный дефект для работы Stream A, а не
+  поддерживаемая форма.
+- **Tuple-колонка ClickHouse** с типами элементов вне фиксированной регистрации драйвера
+  закрывается fail-closed понятным `NotSupportedException` на подготовке; проецируйте элементы
+  кортежа отдельными колонками или читайте кортеж текстом.
+- Мост EF Core (`nextorm.entityframeworkcore`), конвертеры `System.Text.Json` через
+  сгенерированный `JsonTypeInfo<T>` (сериализация остаётся рефлексионной, поэтому потребителю
+  по-прежнему нужен обычный `JsonSerializerContext`), bulk insert, маппинг сырого SQL и DML-билдеры
+  не входят в измеренную нативную поверхность.
+- Trimming сверх настроек провайдера по умолчанию.
 
 ### Пробники провайдеров
 
-Три воспроизводителя в `examples/` запускают nextorm-арм каждого примера-сравнения без linq2db,
-Testcontainers и BenchmarkDotNet, поэтому процесс публикуется нативно и сравнивается с JIT-прогоном
-по количеству строк и digest'ам строк (замер 2026-11-12, `linux-x64`):
+Пробники в `examples/` запускают nextorm-арм каждого примера-сравнения без linq2db, Testcontainers и
+BenchmarkDotNet, поэтому процесс публикуется нативно и сравнивается с JIT-прогоном по количеству
+строк и digest'ам строк. Пробник MySQL/MariaDB сам создаёт крошечную схему и наполнение, поэтому
+набор данных ему не нужен. Замер 2026-11-13, `linux-x64`:
 
 | Пробник | Нативный бинарник | Результат |
 |---|---|---|
-| `nextorm.aotexamples.postgres.aviasales` (`examples/nextorm.aotexamples.postgres.aviasales/README.md`, пакеты `1.0.9`) | 18 МБ | **5/10** запросов доходят до конца, digest'ы совпадают с JIT |
-| `nextorm.aotexamples.mssql.adventureworks` (`examples/nextorm.aotexamples.mssql.adventureworks/README.md`, пакеты `1.0.9`) | 28 МБ | **3/11** |
-| `nextorm.aotexamples.clickhouse.analytics` (`examples/nextorm.aotexamples.clickhouse.analytics/README.md`, пакеты `1.0.9`) | 16 МБ | **0/9** |
+| `nextorm.aotexamples.postgres.aviasales` | 18 МБ | **10/10** запросов, digest'ы совпадают с JIT |
+| `nextorm.aotexamples.mssql.adventureworks` | 28 МБ | **11/11** |
+| `nextorm.aotexamples.clickhouse.analytics` | 16 МБ | **9/9** |
+| `tests/nextorm.aot.sqlprobe` (MySQL / MariaDB) | — | **7/7** каждый |
 
-Все падения происходят в подготовке запроса, не доходя до SQL, и делятся на три класса:
+Три класса сбоев, которые изначально показывали пробники — операторы `decimal`, вырезанные
+trimming'ом, конструктор `System.Tuple`, найденный рефлексией, и компиляция деревьев выражений в
+рантайме — исправлены и больше не наблюдаются ни в одном пробнике.
 
-| Сбой | Запросы | Природа |
-|---|---|---|
-| `InvalidOperationException: The binary operator Divide/Multiply/LessThanOrEqual/GreaterThan is not defined for the types 'System.Decimal' and 'System.Decimal'` | PostgreSQL ×4, SQL Server ×6 | numeric promotion ищет операторы `decimal` рефлексией, trimming их вырезает |
-| `InvalidOperationException: System.Tuple`2[System.Double,System.Double] has no constructor matching its element types` | ClickHouse ×6 | конструктор кортежа ищется рефлексией |
-| `NotSupportedException: 'Expression<…>' is missing native code or metadata` | PostgreSQL ×1, SQL Server ×1, ClickHouse ×3 | компиляция деревьев выражений в рантайме |
+## Остаточные диагностики
 
-Все три класса относятся к работе #370 (рантайм-типы и деревья выражений в конвейере); пробники
-нужны, чтобы исправление можно было измерить.
-
-Канонический publish нативного раннера сейчас даёт **230 уникальных AOT/trim-диагностик**
-(236 сырых; измерено 2026-11-07). Они не подавлены и не заroot'ены:
+Канонический publish нативного раннера даёт **205 уникальных AOT/trim-диагностик** (211 сырых;
+измерено 2026-11-13). Они не подавлены и не заroot'ены:
 
 | Код | Кол-во | Природа |
 |---|---|---|
-| `IL3050` | 124 | генерация кода в рантайме — `Expression.Lambda`, `Type.MakeGenericType`, `MethodInfo.MakeGenericMethod`, `Expression.NewArrayInit`, один `Reflection.Emit`, `System.Text.Json` |
-| `IL2070` | 30 | рефлексия по `Type`, известному только в рантайме |
-| `IL2026` | 26 | API с `RequiresUnreferencedCode` |
-| `IL2060` | 22 | статически неанализируемая generic-инстанциация |
-| `IL2055`/`IL2067`/`IL2072`/`IL2075`/`IL2090`/`IL2111` | 28 | метаданные, которые могут быть вырезаны |
+| `IL3050` | 111 | генерация кода в рантайме — `Expression.Lambda`, `Type.MakeGenericType`, `MethodInfo.MakeGenericMethod`, `Expression.NewArrayInit`, `System.Text.Json` |
+| `IL2026` | 29 | API с `RequiresUnreferencedCode` |
+| `IL2070` | 28 | рефлексия по `Type`, известному только в рантайме |
+| `IL2075` | 16 | доступ к члену значения, типизированного в рантайме |
+| `IL2060` | 15 | статически неанализируемая generic-инстанциация |
+| `IL2090` | 5 | generic-параметр с требованиями `DynamicallyAccessedMembers` |
+| `IL2072` | 3 | требование `DynamicallyAccessedMembers` не выполнено |
+| `IL2055` | 2 | `MakeGenericType` по типу, известному в рантайме |
+| `IL2111` | 1 | рефлексия по типу с аннотациями |
+| `IL2067` | 1 | параметр с аннотацией `DynamicallyAccessedMembers` |
 
 Остаток архитектурный: пайплайн запросов носит тип результата и проекции как `Type`, известный
-только в рантайме (`QueryCommand.ResultType`, `ProjectionEntityItem.EntityType`), поэтому одними
-аннотациями эти строки не убрать. Compile-time пайплайн и нативная матрица провайдеров — область
-задачи [#370](https://github.com/AlexeyShirshov/nextorm/issues/370).
+только в рантайме (`QueryCommand.ResultType`, `ProjectionEntityItem.EntityType`), а коррелированные
+подзапросы диспетчеризуются рефлексией по закрытому в рантайме builder'у. Одними аннотациями эти
+строки не убрать; compile-time пайплайн и нативная матрица провайдеров — область задачи
+[#370](https://github.com/AlexeyShirshov/nextorm/issues/370).
 
 ## Проверка на реальном приложении
 
@@ -98,8 +119,8 @@ dotnet publish -c Release
 ```
 
 Действуют стандартные требования NativeAOT (`clang`, `zlib1g-dev`, нативный тулчейн под RID).
-Используйте провайдер SQLite и оставайтесь в проверенной поверхности запросов выше. Запрос вне её
-может упасть в рантайме — на этом этапе это ожидаемо.
+Используйте одного из проверенных провайдеров и оставайтесь в измеренной поверхности запросов выше.
+Запрос вне её может упасть в рантайме — на этом этапе это ожидаемо.
 
 ## Как сообщить о проблеме
 
