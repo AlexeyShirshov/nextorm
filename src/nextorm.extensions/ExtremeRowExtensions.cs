@@ -40,7 +40,9 @@ internal static class ExtremeRowReflection
     internal static readonly MethodInfo ColumnDefinition =
         RequireMethod(typeof(SqlFunctions), "Column", BindingFlags.Public | BindingFlags.Static);
 
-    internal static readonly MethodInfo ColumnOfInt = ColumnDefinition.MakeGenericMethod(typeof(int));
+    // The closed instantiation is referenced as a method group, so the compiler and NativeAOT see it
+    // statically: no run-time MakeGenericMethod over a Type the trimmer cannot follow.
+    internal static readonly MethodInfo ColumnOfInt = ((Func<object, string, int>)SqlFunctions.Column<int>).Method;
 
     internal static readonly MethodInfo Over = RequireMethod(
         typeof(WindowFunction<int>),
@@ -417,7 +419,7 @@ public sealed class ExtremeRowComponent<[DynamicallyAccessedMembers(DynamicallyA
         {
             innerFilter = innerFilter is null ? existingCondition : Expression.AndAlso(innerFilter, existingCondition);
         }
-        inner.SetComponentPreparedCondition(innerFilter is null ? null : Expression.Lambda(innerFilter, entityParam));
+        inner.SetComponentPreparedCondition(innerFilter is null ? null : Expression.Lambda<Func<TEntity, bool>>(innerFilter, entityParam));
 
         var sqlProperty = Expression.Property(null, typeof(SqlFunctions), "Sql");
         var rankMethod = _ties == ExtremeRowTies.All
@@ -484,7 +486,7 @@ public sealed class ExtremeRowComponent<[DynamicallyAccessedMembers(DynamicallyA
 
         var outerParam = Expression.Parameter(entityType, "o");
         var columnCall = Expression.Call(null, ExtremeRowReflection.ColumnOfInt, outerParam, Expression.Constant(rankAlias));
-        var rankFilter = Expression.Lambda(Expression.Equal(columnCall, Expression.Constant(1)), outerParam);
+        var rankFilter = Expression.Lambda<Func<TEntity, bool>>(Expression.Equal(columnCall, Expression.Constant(1)), outerParam);
         cmd.SetComponentPreparedCondition(rankFilter);
     }
 
@@ -610,7 +612,7 @@ public sealed class ExtremeRowComponent<[DynamicallyAccessedMembers(DynamicallyA
         var preparedCondition = cmd.GetComponentPreparedCondition();
         LambdaExpression? userLambda = preparedCondition as LambdaExpression;
         if (userLambda is null && preparedCondition is not null)
-            userLambda = Expression.Lambda(preparedCondition, xParam);
+            userLambda = Expression.Lambda<Func<TEntity, bool>>(preparedCondition, xParam);
         // The condition belongs to the aggregated source only. Leaving it on the outer command would
         // render the same predicate a second time around the reshape, duplicating its parameters; the
         // rank-window path replaces the outer condition the same way.
@@ -693,7 +695,7 @@ public sealed class ExtremeRowComponent<[DynamicallyAccessedMembers(DynamicallyA
                     : userLambda.Body;
                 stageCombined = stageCombined is null ? userOverX : Expression.AndAlso(stageCombined, userOverX);
             }
-            var stageConditionLambda = stageCombined is null ? null : Expression.Lambda(stageCombined, xParam);
+            var stageConditionLambda = stageCombined is null ? null : Expression.Lambda<Func<TEntity, bool>>(stageCombined, xParam);
 
             JoinExpression[]? joins = null;
             if (k > 1 && lastStage is not null)
@@ -719,7 +721,7 @@ public sealed class ExtremeRowComponent<[DynamicallyAccessedMembers(DynamicallyA
                     joinBody = joinBody is null ? cond : Expression.AndAlso(joinBody, cond);
                 }
 
-                var joinLambda = Expression.Lambda(joinBody!, xParam, prevParam);
+                var joinLambda = Expression.Lambda<Func<TEntity, TEntity, bool>>(joinBody!, xParam, prevParam);
                 var join = new JoinExpression(joinLambda, JoinType.Inner)
                 {
                     From = new FromExpression(lastStage),
@@ -763,7 +765,7 @@ public sealed class ExtremeRowComponent<[DynamicallyAccessedMembers(DynamicallyA
             outerBody = outerBody is null ? cond : Expression.AndAlso(outerBody, cond);
         }
 
-        var outerJoinLambda = Expression.Lambda(outerBody!, outerX, outerP);
+        var outerJoinLambda = Expression.Lambda<Func<TEntity, TEntity, bool>>(outerBody!, outerX, outerP);
         var outerJoin = new JoinExpression(outerJoinLambda, JoinType.Inner)
         {
             From = new FromExpression(lastStage!),

@@ -20,7 +20,10 @@ public sealed class AotNativeRunTests
         "aot-numeric-operator",
         "groupby-aggregates",
         "selectgroup-keyed",
-        "selectgroup-having"
+        "selectgroup-having",
+        "extreme-min",
+        "extreme-max",
+        "extreme-group"
     ];
 
     [Fact]
@@ -215,6 +218,27 @@ public sealed class AotNativeRunTests
                     .OrderBy(group => group.Int is null ? 1 : 0)
                     .ThenBy(group => group.Int)
                     .Select(group => $"int={group.Int?.ToString() ?? "null"},count={group.Count}"));
+            }),
+            ["extreme-min"] = CaptureJit(() =>
+            {
+                var rows = context.From<SimpleEntity>()
+                    .SelectWhereMin(row => row.Id)
+                    .ToList();
+                return string.Join(";", rows.OrderBy(row => row.Id).Select(row => row.Id));
+            }),
+            ["extreme-max"] = CaptureJit(() =>
+            {
+                var rows = context.From<SimpleEntity>()
+                    .SelectWhereMax(row => row.Id)
+                    .ToList();
+                return string.Join(";", rows.OrderBy(row => row.Id).Select(row => row.Id));
+            }),
+            ["extreme-group"] = CaptureJit(() =>
+            {
+                var rows = context.From<SimpleEntity>()
+                    .SelectWhereMin(row => row.Id, groupBy: row => row.Id % 2)
+                    .ToList();
+                return string.Join(";", rows.OrderBy(row => row.Id).Select(row => row.Id));
             })
         };
         return results;

@@ -97,6 +97,30 @@ Run("selectgroup-having", () =>
         .ThenBy(group => group.Int)
         .Select(group => $"int={group.Int?.ToString() ?? "null"},count={group.Count}"));
 });
+Run("extreme-min", () =>
+{
+    // Native/JIT comparator for the packaged extreme-row component: the globally minimal row of the
+    // seeded simple_entity rows.
+    var rows = context.From<SimpleEntity>()
+        .SelectWhereMin(row => row.Id)
+        .ToList();
+    return string.Join(";", rows.OrderBy(row => row.Id).Select(row => row.Id));
+});
+Run("extreme-max", () =>
+{
+    var rows = context.From<SimpleEntity>()
+        .SelectWhereMax(row => row.Id)
+        .ToList();
+    return string.Join(";", rows.OrderBy(row => row.Id).Select(row => row.Id));
+});
+Run("extreme-group", () =>
+{
+    // Per-group extreme rows: one row per parity group of the seeded ids.
+    var rows = context.From<SimpleEntity>()
+        .SelectWhereMin(row => row.Id, groupBy: row => row.Id % 2)
+        .ToList();
+    return string.Join(";", rows.OrderBy(row => row.Id).Select(row => row.Id));
+});
 RunComponentSlices(args[0]);
 return 0;
 
