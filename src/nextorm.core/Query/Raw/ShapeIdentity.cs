@@ -180,6 +180,11 @@ internal sealed class ShapeKey
 /// </summary>
 internal sealed class NativeBinder
 {
+    // Resolved once: the member is a fixed property of the closed BCL DbParameter type, so this is a
+    // static reflection lookup, not a per-shape one.
+    private static readonly PropertyInfo ValueProperty =
+        typeof(DbParameter).GetProperty(nameof(DbParameter.Value))!;
+
     private readonly int[] _slotStarts;
     private readonly int[] _parameterIndices;
     private readonly Action<object?, DbParameter>[] _writers;
@@ -273,7 +278,10 @@ internal sealed class NativeBinder
             var boxed = Expression.Convert(value, typeof(object));
             var normalized = Expression.Coalesce(boxed, Expression.Constant(DBNull.Value, typeof(object)));
             var assign = Expression.Assign(
-                Expression.Property(parameter, nameof(DbParameter.Value)),
+                // The PropertyInfo overload, not the name-based one: the latter is annotated
+                // RequiresUnreferencedCode because it resolves the member by string. The member here is a
+                // fixed BCL property on the closed DbParameter type, resolved once at static init.
+                Expression.Property(parameter, ValueProperty),
                 normalized);
             return Expression.Lambda<Action<object?, DbParameter>>(assign, closure, parameter).Compile();
         }

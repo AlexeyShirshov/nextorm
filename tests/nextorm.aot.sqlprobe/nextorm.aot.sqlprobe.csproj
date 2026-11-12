@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>nextorm.aot.sqlprobe</AssemblyName>
+    <RootNamespace>NextORM.AotSqlProbe</RootNamespace>
+    <!--
+      NativeAOT probe for the MySQL and MariaDB providers. Unlike the dataset-backed examples, this probe
+      provisions its own tiny schema and seeds it deterministically (raw ADO, not nextorm), then runs a
+      fixed set of query shapes through the provider under test. A native run and a JIT run of the same
+      binary/source print the same count + digest per shape, so the two arms are directly comparable.
+    -->
+    <PublishAot>true</PublishAot>
+    <!--
+      Repository policy, not nextorm configuration: this repository sets TreatWarningsAsErrors=true, so
+      trim-analyzer and ILC diagnostics are exempted from the build gate here. A consumer outside this
+      repository needs none of these properties.
+    -->
+    <IlcTreatWarningsAsErrors>false</IlcTreatWarningsAsErrors>
+    <WarningsNotAsErrors>IL2*;IL3*;IL2026;IL3050</WarningsNotAsErrors>
+    <!-- Deterministic row formatting keeps the JIT and native digests comparable. -->
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/nextorm.core/nextorm.core.csproj" />
+    <ProjectReference Include="../../src/nextorm.extensions/nextorm.extensions.csproj" />
+    <ProjectReference Include="../../src/nextorm.mysql/nextorm.mysql.csproj" />
+    <ProjectReference Include="../../src/nextorm.mariadb/nextorm.mariadb.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -21,6 +21,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/nextorm.aot.runner/nextorm.aot.runner.csproj" />
+    <Project Path="tests/nextorm.aot.sqlprobe/nextorm.aot.sqlprobe.csproj" />
     <Project Path="tests/nextorm.clickhouse.extensions.tests/nextorm.clickhouse.extensions.tests.csproj" />
     <Project Path="tests/nextorm.clickhouse.tests/nextorm.clickhouse.tests.csproj" />
     <Project Path="tests/nextorm.mariadb.tests/nextorm.mariadb.tests.csproj" />
