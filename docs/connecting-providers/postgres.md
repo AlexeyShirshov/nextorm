@@ -203,6 +203,22 @@ integer.
 
 ## Arrays
 
+## pgvector
+
+`NextORM.Postgres.PgVector` is a PostgreSQL-only `readonly struct` implementing `IEquatable<PgVector>`. It
+accepts finite coordinates, exposes dimensions and a zero-based indexer, and provides `ToArray()`,
+`ToString()` and `Parse(string)`; its textual representation is bracketed and comma-separated. The
+nullable form maps database `NULL` to `null`. Distance operations require equal vector dimensions;
+PostgreSQL reports a dimension-mismatch error when they differ. The pgvector extension and schema/column
+setup are managed by the application, not nextorm.
+
+The PostgreSQL marker methods in `SqlFunctions.Postgres` translate the distance operators `<->`, `<=>`,
+`<#>`, `<+>` and functions `vector_dims`, `vector_norm`, `l2_normalize` from LINQ expressions. They are
+PostgreSQL-only; configure the pgvector extension and vector columns in the database schema yourself.
+
+See [PostgreSQL-specific SQL](../guide/provider-specific-sql/postgresql.md#vector-pgvector).
+
+
 PostgreSQL is the only supported provider with native arrays, and the array surface lives on
 [`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres) ([`Sql`](xref:NextORM.Core.SqlFunctions.Sql) stays cross-provider). An array operand is passed as a single parameter, so
 `column = any(@array)` works with a runtime parameter or a captured array, and the SQL does not depend

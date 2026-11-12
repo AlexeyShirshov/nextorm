@@ -3065,4 +3065,25 @@ namespace NextORM.Core;
         /// <param name="multirange">The multirange to inspect.</param>
         /// <returns><see langword="true"/> when the upper side is unbounded.</returns>
         public bool upper_inf<T>(Range<T>[] multirange) where T : struct, IComparable<T> => default!;
+
+        /// <summary>Euclidean distance between two pgvector values (<c>&lt;-&gt;</c>).</summary>
+        public double? l2_distance<T>(T left, T right) => default!;
+
+        /// <summary>Cosine distance between two pgvector values (<c>&lt;=&gt;</c>).</summary>
+        public double? cosine_distance<T>(T left, T right) => default!;
+
+        /// <summary>Negative inner product between two pgvector values (<c>&lt;#&gt;</c>).</summary>
+        public double? negative_inner_product<T>(T left, T right) => default!;
+
+        /// <summary>L1 distance between two pgvector values (<c>&lt;+&gt;</c>).</summary>
+        public double? l1_distance<T>(T left, T right) => default!;
+
+        /// <summary>Returns the dimensionality of a pgvector value.</summary>
+        public int? vector_dims<T>(T value) => default!;
+
+        /// <summary>Returns the Euclidean norm of a pgvector value.</summary>
+        public double? vector_norm<T>(T value) => default!;
+
+        /// <summary>Returns the L2-normalized pgvector value.</summary>
+        public T l2_normalize<T>(T value) => default!;
     }

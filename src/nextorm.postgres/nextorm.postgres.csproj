@@ -33,7 +33,8 @@
     -->
     <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
     <AdditionalFiles Include="PublicAPI.Shipped.txt" />
-    <AdditionalFiles Include="PublicAPI.Unshipped.txt" />
+    <!-- The Public API snapshot is analyzer-only and is not a DocFX source document. -->
+    <AdditionalFiles Include="PublicAPI.Unshipped.txt" Condition="'$(DocFxMetadata)' != 'true'" />
   </ItemGroup>
 
 </Project>

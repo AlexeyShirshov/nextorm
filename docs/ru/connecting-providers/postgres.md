@@ -205,6 +205,22 @@ var varp  = ctx.From<IComplexEntity>().Select(x => SqlFunctions.Sql.varp((double
 
 ## Массивы
 
+## pgvector
+
+`NextORM.Postgres.PgVector` — PostgreSQL-only `readonly struct`, реализующий `IEquatable<PgVector>`. Он принимает
+только конечные координаты, предоставляет размерность и индексатор с нулевой индексацией, а также
+`ToArray()`, `ToString()` и `Parse(string)`; текстовое представление заключено в квадратные скобки, элементы
+разделены запятыми. Nullable-вариант преобразует SQL `NULL` в `null`. Для операций расстояния размерности
+векторов должны совпадать; при несовпадении PostgreSQL возвращает ошибку. Установка расширения pgvector и
+подготовка схемы/колонок — ответственность приложения.
+
+Методы-маркеры PostgreSQL в `SqlFunctions.Postgres` переводят из LINQ-выражений операторы расстояния
+`<->`, `<=>`, `<#>`, `<+>` и функции `vector_dims`, `vector_norm`, `l2_normalize`. Они доступны только на
+PostgreSQL; расширение pgvector и столбцы vector в схеме настраивает приложение.
+
+См. [SQL PostgreSQL](../guide/provider-specific-sql/postgresql.md#vector-pgvector).
+
+
 PostgreSQL — единственный поддерживаемый провайдер с нативными массивами, и array-поверхность
 находится в [`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres) ([`Sql`](xref:NextORM.Core.SqlFunctions.Sql) остаётся кросс-провайдерным). Массив передаётся одним
 параметром, поэтому `column = any(@array)` работает и с runtime-параметром, и с захваченным массивом,

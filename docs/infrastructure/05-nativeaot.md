@@ -26,8 +26,7 @@ The output is a self-contained native executable. The packages do **not** carry 
 ## What is not verified
 
 - SQL Server, PostgreSQL, MySQL, MariaDB and ClickHouse: driver AOT support and native assets are
-  unverified, except for the three probes below — see
-  [`examples/nextorm.aotexamples.*`](../../examples/README.md);
+  unverified, except for the three probes below — see `examples/README.md`;
 - the EF Core bridge (`nextorm.entityframeworkcore`);
 - `System.Text.Json` converters through a generated `JsonTypeInfo<T>`: serialization remains
   reflection-based, so a consumer still needs the usual `JsonSerializerContext` setup;
@@ -41,9 +40,9 @@ run by row counts and row digests (measured 2026-11-12, `linux-x64`):
 
 | Probe | Native binary | Result |
 |---|---|---|
-| [`nextorm.aotexamples.postgres.aviasales`](../../examples/nextorm.aotexamples.postgres.aviasales/README.md) (published `1.0.9`) | 18 MB | **5/10** queries complete with digests equal to JIT |
-| [`nextorm.aotexamples.mssql.adventureworks`](../../examples/nextorm.aotexamples.mssql.adventureworks/README.md) (published `1.0.9`) | 28 MB | **3/11** |
-| [`nextorm.aotexamples.clickhouse.analytics`](../../examples/nextorm.aotexamples.clickhouse.analytics/README.md) (published `1.0.9`) | 16 MB | **0/9** |
+| `nextorm.aotexamples.postgres.aviasales` (`examples/nextorm.aotexamples.postgres.aviasales/README.md`, published `1.0.9`) | 18 MB | **5/10** queries complete with digests equal to JIT |
+| `nextorm.aotexamples.mssql.adventureworks` (`examples/nextorm.aotexamples.mssql.adventureworks/README.md`, published `1.0.9`) | 28 MB | **3/11** |
+| `nextorm.aotexamples.clickhouse.analytics` (`examples/nextorm.aotexamples.clickhouse.analytics/README.md`, published `1.0.9`) | 16 MB | **0/9** |
 
 All failures happen in query preparation, before SQL is sent, and fall into three classes:
 

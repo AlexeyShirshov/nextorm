@@ -13,6 +13,15 @@ type, a one-line description and, through the type name itself, a link to its ge
 Types are listed under their defining namespace. All of the query API is in [`NextORM.Core`](xref:NextORM.Core); each provider
 package adds a context, a dialect and a [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder) extension class in its own namespace.
 
+## Namespace [`NextORM.Postgres`](xref:NextORM.Postgres)
+
+## PostgreSQL vector type
+
+| Type | Description |
+|---|---|
+| [`PgVector`](xref:NextORM.Postgres.PgVector) | PostgreSQL pgvector value as a `readonly struct` implementing `IEquatable<PgVector>`; finite coordinates, dimensions, zero-based indexer, `ToArray()`, bracketed comma-separated `ToString()` and `Parse(string)`. PostgreSQL marker methods translate pgvector operations from LINQ. See [PostgreSQL-specific SQL](../guide/provider-specific-sql/postgresql.md#vector-pgvector). |
+
+
 ## Namespace [`NextORM.Core`](xref:NextORM.Core)
 
 ### Context and roles

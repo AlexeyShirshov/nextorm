@@ -507,6 +507,25 @@ free-form column list) remain out of scope. See
 
 ## See also
 
+## `vector` (pgvector)
+
+The PostgreSQL provider exposes `NextORM.Postgres.PgVector`, a `readonly struct` implementing
+`IEquatable<PgVector>`, for pgvector values. Coordinates must be finite; dimensions and the zero-based
+indexer expose the vector shape. `ToArray()` copies the coordinates, `ToString()` emits the PostgreSQL
+bracketed, comma-separated representation, and `Parse(string)` reads that representation. This type and
+its SQL operators are PostgreSQL-specific; install/enable the pgvector extension and provision the
+column yourself. Nullable `PgVector` properties preserve SQL `NULL`; distance operations with unequal
+dimensions fail on the PostgreSQL server.
+
+The tested SQL operations are pgvector distance operators `<->`, `<=>`, `<#>`, `<+>` and functions
+`vector_dims`, `vector_norm`, `l2_normalize`. The PostgreSQL marker methods are exposed through `SqlFunctions.Postgres` and translate these operations
+from LINQ expressions. Use a `PgVector` parameter for parameterized vector operations; this does not
+replace the requirement to install/enable the pgvector extension and provision vector columns.
+
+See also [PostgreSQL provider](../../connecting-providers/postgres.md#pgvector) and
+[API reference](../../advanced/api-reference.md).
+
+
 * [PostgreSQL provider](../../connecting-providers/postgres.md)
 * [Provider-specific SQL](overview.md)
 

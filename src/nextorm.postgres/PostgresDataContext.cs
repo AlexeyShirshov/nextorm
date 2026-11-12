@@ -136,6 +136,9 @@ public class PostgresDataContext : DataContext, IBulkInsertExecutor, IBulkInsert
     /// <returns>A new PostgreSQL parameter.</returns>
     public override DbParameter CreateParam(string name, object? value)
     {
+        if (value is PgVector vector)
+            return new NpgsqlParameter(name, vector.ToString()) { NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Unknown };
+
         // A provider-agnostic Range<T> is bound as the matching Npgsql range type so that the range
         // operators and columns accept it without a cast.
         if (value is not null && value.GetType().IsGenericType && value.GetType().GetGenericTypeDefinition() == typeof(Range<>))
@@ -265,6 +268,9 @@ public class PostgresDataContext : DataContext, IBulkInsertExecutor, IBulkInsert
     public override Expression MapColumnExpression(SelectExpression column, Expression param)
     {
         var realType = Nullable.GetUnderlyingType(column.PropertyType) ?? column.PropertyType;
+        if (realType == typeof(PgVector))
+            return MapVectorColumn(column, param);
+
         if (realType.IsGenericType && realType.GetGenericTypeDefinition() == typeof(Range<>))
             return MapRangeColumn(column, param, realType);
 
@@ -279,6 +285,18 @@ public class PostgresDataContext : DataContext, IBulkInsertExecutor, IBulkInsert
             return MapIntervalTimeSpanColumn(column, param);
 
         return base.MapColumnExpression(column, param);
+    }
+
+    private static Expression MapVectorColumn(SelectExpression column, Expression param)
+    {
+        var index = Expression.Constant(column.Index);
+        var getter = Expression.Call(param, typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetString))!, index);
+        var parsed = Expression.Call(typeof(PgVector).GetMethod(nameof(PgVector.Parse))!, getter);
+        if (column.Nullable)
+            return Expression.Condition(Expression.Call(param, IsDBNullMI, index), Expression.Constant(null, column.PropertyType), Expression.Convert(parsed, column.PropertyType));
+        if (column.DefaultOnNull)
+            return Expression.Condition(Expression.Call(param, IsDBNullMI, index), Expression.Default(column.PropertyType), parsed);
+        return parsed;
     }
 
     /// <summary>

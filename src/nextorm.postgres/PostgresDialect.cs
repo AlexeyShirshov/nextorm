@@ -205,6 +205,9 @@ public class PostgresDialect : SqlDialectBase
     /// <returns>The PostgreSQL type name.</returns>
     public override string MakeTypeName(Type type)
     {
+        if (type == typeof(PgVector))
+            return "vector";
+
         if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Range<>))
             return PostgresRangeTypes.NameFor(type.GetGenericArguments()[0]);
 

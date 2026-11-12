@@ -16,9 +16,9 @@ internal static class PostgresContainer
 {
     public const string ConnectionStringVariable = "NEXTORM_POSTGRES_CONNECTION";
 
-    private const string DefaultImage = "postgres:17-alpine";
+    private const string DefaultImage = "pgvector/pgvector:pg17";
 
-    private const string ReuseLabel = "reuse-id";
+    private const string ReuseLabel = "nextorm-pgvector-reuse-id";
 
     private static readonly object Gate = new();
 
@@ -88,6 +88,14 @@ internal static class PostgresContainer
                     .Build();
 
                 container.StartAsync().GetAwaiter().GetResult();
+
+                using (var connection = new Npgsql.NpgsqlConnection(container.GetConnectionString()))
+                {
+                    connection.Open();
+                    using var command = connection.CreateCommand();
+                    command.CommandText = "create extension if not exists vector;";
+                    command.ExecuteNonQuery();
+                }
 
                 _container = container;
                 _connectionString = container.GetConnectionString();

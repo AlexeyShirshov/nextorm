@@ -1539,7 +1539,7 @@ internal static class SqlSourceRenderer
         return visitor.ToString();
     }
 
-    internal static (bool NeedAliasForColumn, string Column) MakeColumn(in SqlBuildContext ctx, SelectExpression selExp, Type entityType, bool dontNeedAlias, bool renameAware = false, bool selectList = false)
+    internal static (bool NeedAliasForColumn, string Column) MakeColumn(in SqlBuildContext ctx, SelectExpression selExp, Type entityType, bool dontNeedAlias, bool renameAware = false, bool selectList = false, bool bridgeVectorToText = true)
     {
         // A consumer-side reference to a projection source's output identifier (an unaliased computed
         // scalar has no member name to re-resolve): render the source's output column directly instead
@@ -1564,7 +1564,18 @@ internal static class SqlSourceRenderer
         var column = visitor.ToString();
         if (visitor.BooleanSelectProjection)
             column = ctx.Dialect.MakeBooleanPredicate(column, asPredicate: false);
-        else if (ctx.Capture is not null && visitor.Recorder is { } columnRecorder)
+        else if (selectList && bridgeVectorToText
+            && (Nullable.GetUnderlyingType(selExp.PropertyType) ?? selExp.PropertyType) is { } projectionType
+            && string.Equals(ctx.Dialect.MakeTypeName(projectionType), "vector", StringComparison.Ordinal))
+        {
+            // Npgsql does not expose PostgreSQL extension types as CLR values unless the caller
+            // registers a data-source plugin. Keep the public PgVector API plugin-free by projecting
+            // vector-valued SELECT expressions through PostgreSQL's text representation; the provider
+            // materializer parses that text back into PgVector. Restrict this bridge to select-list
+            // values so vector operands in predicates and ordering retain their native PostgreSQL type.
+            column = $"CAST({column} AS text)";
+        }
+        if (!visitor.BooleanSelectProjection && ctx.Capture is not null && visitor.Recorder is { } columnRecorder)
         {
             // The column was rendered by its own visitor; register the fragment so a caller that appends
             // this exact text can merge the parameter occurrences it recorded at emission time. The
